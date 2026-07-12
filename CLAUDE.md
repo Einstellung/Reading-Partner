@@ -19,6 +19,10 @@
 
 AI 陪读软件。设计共识在 `docs/`。阅读引擎用 zotero/reader（`vendor/reader` submodule）。
 
+## 坑
+
+踩到"实测才知道的意外行为"必须记进 `docs/pitfall/`：一坑一文件（现象/原因/解法），并加进该目录 README 的索引。写代码碰引擎/Tauri 之前先扫一遍这个目录。
+
 ## 工具链
 
 - 包管理器用 bun(壳工程);vendor/reader 内部构建保持上游的 npm,不改。
