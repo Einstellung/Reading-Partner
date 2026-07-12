@@ -3,7 +3,7 @@
 // (src/common/components/sidebar/annotations-view.js + _preview.scss), reduced to
 // a read-only list with a star toggle. Pure and controlled.
 
-import { IconArea, IconHighlight, IconStar, IconUnderline } from './icons';
+import { IconArea, IconHighlight, IconSparkle, IconStar, IconUnderline } from './icons';
 import type { Annotation } from './types';
 import './TraceList.css';
 
@@ -12,6 +12,7 @@ interface TraceListProps {
 	selectedId?: string | null;
 	onSelect(id: string): void;
 	onToggleStar(id: string, starred: boolean): void;
+	onOpenThread?(id: string): void;
 }
 
 function TypeMark({ annotation }: { annotation: Annotation }) {
@@ -29,7 +30,7 @@ function TypeMark({ annotation }: { annotation: Annotation }) {
 	);
 }
 
-export default function TraceList({ annotations, selectedId, onSelect, onToggleStar }: TraceListProps) {
+export default function TraceList({ annotations, selectedId, onSelect, onToggleStar, onOpenThread }: TraceListProps) {
 	// sortIndex is the engine's document-order key; lexicographic order is document order.
 	const items = [...annotations].sort((a, b) => {
 		const sa = a.sortIndex ?? '';
@@ -45,6 +46,7 @@ export default function TraceList({ annotations, selectedId, onSelect, onToggleS
 				const text = typeof a.text === 'string' ? a.text : '';
 				const comment = typeof a.comment === 'string' ? a.comment : '';
 				const pageLabel = typeof a.pageLabel === 'string' ? a.pageLabel : '';
+				const hasThread = typeof a.aiThreadId === 'string' && a.aiThreadId !== '';
 				return (
 					<div
 						key={a.id}
@@ -60,7 +62,23 @@ export default function TraceList({ annotations, selectedId, onSelect, onToggleS
 						<div className="trace-body">
 							{text && <div className="trace-text">{text}</div>}
 							{comment && <div className="trace-comment">{comment}</div>}
-							{pageLabel && <div className="trace-page">Page {pageLabel}</div>}
+							<div className="trace-meta">
+								{pageLabel && <span className="trace-page">Page {pageLabel}</span>}
+								{hasThread && (
+									<button
+										type="button"
+										className="trace-thread"
+										title="Open AI thread"
+										aria-label="Open AI thread"
+										onClick={(e) => {
+											e.stopPropagation();
+											onOpenThread?.(a.id);
+										}}
+									>
+										<IconSparkle size={14} />
+									</button>
+								)}
+							</div>
 						</div>
 
 						<button

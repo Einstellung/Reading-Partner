@@ -3,7 +3,7 @@
 // the current Tool (including sticky behaviour); this renders it and reports changes.
 
 import { useEffect, useRef, useState } from 'react';
-import { IconArea, IconColorSwatch, IconHighlight, IconPointer, IconUnderline } from './icons';
+import { IconArea, IconColorSwatch, IconHighlight, IconPointer, IconSparkle, IconUnderline } from './icons';
 import type { ColorEntry, Tool, ToolType } from './types';
 import './PenToolbar.css';
 
@@ -18,6 +18,7 @@ const TOOLS: { type: ToolType; label: string; Icon: (p: { size?: number }) => JS
 	{ type: 'highlight', label: 'Highlight', Icon: IconHighlight },
 	{ type: 'underline', label: 'Underline', Icon: IconUnderline },
 	{ type: 'image', label: 'Area', Icon: IconArea },
+	{ type: 'ai', label: 'AI pen', Icon: IconSparkle },
 ];
 
 export default function PenToolbar({ tool, colors, onToolChange }: PenToolbarProps) {
@@ -50,7 +51,7 @@ export default function PenToolbar({ tool, colors, onToolChange }: PenToolbarPro
 				<button
 					key={type}
 					type="button"
-					className={'pen-tool' + (tool.type === type ? ' active' : '')}
+					className={'pen-tool' + (type === 'ai' ? ' pen-ai' : '') + (tool.type === type ? ' active' : '')}
 					title={label}
 					aria-label={label}
 					aria-pressed={tool.type === type}
@@ -60,6 +61,9 @@ export default function PenToolbar({ tool, colors, onToolChange }: PenToolbarPro
 				</button>
 			))}
 
+			{/* AI pen has a fixed, parent-managed color, so the picker has no role while it's active. */}
+			{tool.type !== 'ai' && (
+			<>
 			<div className="pen-toolbar-sep" />
 
 			<div className="pen-color" ref={paletteRef}>
@@ -93,6 +97,8 @@ export default function PenToolbar({ tool, colors, onToolChange }: PenToolbarPro
 					</div>
 				)}
 			</div>
+			</>
+			)}
 		</div>
 	);
 }

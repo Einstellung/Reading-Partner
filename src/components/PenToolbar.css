@@ -42,6 +42,20 @@
 	color: var(--pt-active-fg);
 }
 
+/* The AI pen reads as its own thing: violet accent, gradient fill when active. */
+.pen-ai {
+	color: #7c5cff;
+}
+
+.pen-ai.active {
+	color: #ffffff;
+	background: linear-gradient(135deg, #7c5cff, #9b6bff);
+}
+
+.pen-ai:not(.active) {
+	box-shadow: inset 0 0 0 1px rgba(124, 92, 255, 0.35);
+}
+
 .pen-toolbar-sep {
 	width: 22px;
 	height: 1px;

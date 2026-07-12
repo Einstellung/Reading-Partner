@@ -28,16 +28,40 @@ import {
   sortedFiles,
   type Topic,
 } from "./topics";
+import {
+  appendMessage,
+  createThread,
+  getThread,
+  loadThreads,
+  onThreadSaveError,
+  type ThreadMessage,
+} from "./threads";
 import PenToolbar from "./components/PenToolbar";
 import AnnotationPopup from "./components/AnnotationPopup";
 import TraceList from "./components/TraceList";
+import CallBubble from "./components/CallBubble";
+import AICallPanel from "./components/AICallPanel";
 import type { Annotation as PopupAnnotation, ToolType } from "./components/types";
 
 const HOST_SRC = "/reader/reader-host.html";
+// The AI pen maps to the engine's underline tool in a fixed purple. Owning this
+// one color for the AI pen is a v1 implementation convenience, not a semantic in
+// the color palette; the host identifies AI-pen strokes by the active tool, not
+// the color. Value is `general-purple` from vendor/reader defines.js.
+const AI_PEN_COLOR = "#a28ae5";
 
 interface PopupState {
   annotation: Annotation;
   anchor: { x: number; y: number };
+}
+
+// A live AI "call" — one thread anchored on one AI-pen underline (docs/03).
+interface CallState {
+  threadId: string;
+  annotationId: string;
+  view: "bubble" | "panel";
+  anchor: { x: number; y: number };
+  messages: ThreadMessage[];
 }
 
 export default function App() {
@@ -49,6 +73,11 @@ export default function App() {
 
   // Annotations for the open document, keyed by id for merge-on-save.
   const annsRef = useRef<Map<string, Annotation>>(new Map());
+  // Whether the active pen is the AI pen (host-owned; not inferred from color).
+  const aiPenRef = useRef(false);
+  // Last pen-lift position inside the pdf iframe — the AI-pen bubble anchor,
+  // since drawing a pen stroke yields no popup coordinates (pitfall: see report).
+  const penUpRef = useRef<{ clientX: number; clientY: number } | null>(null);
 
   const [topics, setTopics] = useState<Topic[]>([]);
   const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
@@ -66,6 +95,7 @@ export default function App() {
   const [traceAnns, setTraceAnns] = useState<Annotation[]>([]);
   const [selectedAnnId, setSelectedAnnId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [call, setCall] = useState<CallState | null>(null);
 
   const activeTopic = useMemo(
     () => topics.find((t) => t.id === activeTopicId) ?? null,
@@ -82,14 +112,24 @@ export default function App() {
       console.error("failed to persist annotations", e);
       setStatus("Warning: annotations could not be saved");
     });
+    onThreadSaveError((e) => {
+      console.error("failed to persist thread", e);
+      setStatus("Warning: AI conversation could not be saved");
+    });
   }, [refreshTopics]);
 
   // Apply the tool once the view is initialized (setTool before the pdf viewer
-  // is ready throws — PDFViewerApplication null, pitfall 11).
+  // is ready throws — PDFViewerApplication null, pitfall 11). The AI pen is the
+  // underline tool in a fixed purple.
   useEffect(() => {
+    aiPenRef.current = toolType === "ai";
     if (!viewReady) return;
     const tool =
-      toolType === "pointer" ? { type: "pointer" as const } : { type: toolType, color: penColor };
+      toolType === "pointer"
+        ? { type: "pointer" as const }
+        : toolType === "ai"
+          ? { type: "underline" as const, color: AI_PEN_COLOR }
+          : { type: toolType, color: penColor };
     viewRef.current?.setTool(tool);
   }, [toolType, penColor, viewReady]);
 
@@ -129,16 +169,47 @@ export default function App() {
   }, []);
 
   // Engine created/modified annotations (drag-to-highlight, image select, etc.).
+  // A brand-new annotation drawn while the AI pen is active starts a thread and
+  // opens the call bubble.
   const onSaveAnnotations = useCallback(
     (incoming: Annotation[]) => {
+      let aiCreated: { annotation: Annotation; threadId: string } | null = null;
       for (const a of incoming) {
         const { onlyTextOrComment, ...clean } = a as Annotation & { onlyTextOrComment?: boolean };
         void onlyTextOrComment;
+        const isNew = !annsRef.current.has(clean.id);
         const prev = annsRef.current.get(clean.id);
-        annsRef.current.set(clean.id, prev ? { ...prev, ...clean } : clean);
+        let entry = prev ? { ...prev, ...clean } : clean;
+        if (isNew && aiPenRef.current && !entry.aiThreadId) {
+          const threadId = crypto.randomUUID();
+          entry = { ...entry, aiThreadId: threadId };
+          aiCreated = { annotation: entry, threadId };
+        }
+        annsRef.current.set(clean.id, entry);
       }
       persistAnnotations();
       syncTraceList();
+
+      if (aiCreated) {
+        // Persist the aiThreadId into the engine model, open the thread + bubble.
+        viewRef.current?.setAnnotations([aiCreated.annotation]);
+        const path = pathRef.current;
+        if (path) createThread(path, aiCreated.annotation.id, aiCreated.threadId);
+        const rect = iframeRef.current?.getBoundingClientRect();
+        const up = penUpRef.current;
+        const anchor =
+          up && rect
+            ? { x: rect.left + up.clientX, y: rect.top + up.clientY }
+            : { x: (rect?.left ?? 0) + 240, y: (rect?.top ?? 0) + 240 };
+        setPopup(null);
+        setCall({
+          threadId: aiCreated.threadId,
+          annotationId: aiCreated.annotation.id,
+          view: "bubble",
+          anchor,
+          messages: [],
+        });
+      }
     },
     [persistAnnotations, syncTraceList],
   );
@@ -153,8 +224,9 @@ export default function App() {
     [syncTraceList],
   );
 
-  // Popup anchor is in the shell's viewport; the engine rect is iframe-local,
-  // so add the iframe's offset.
+  // Clicking a mark. Anchor is in the shell's viewport (engine rect is
+  // iframe-local, add the iframe offset). An AI-pen mark (has aiThreadId) opens
+  // its call bubble with history instead of the annotation editor.
   const onSetAnnotationPopup = useCallback((params?: AnnotationPopupParams) => {
     if (!params) {
       setPopup(null);
@@ -164,7 +236,17 @@ export default function App() {
     const dx = rect?.left ?? 0;
     const dy = rect?.top ?? 0;
     const [l, , r, bottom] = params.rect;
-    setPopup({ annotation: params.annotation, anchor: { x: dx + (l + r) / 2, y: dy + bottom } });
+    const anchor = { x: dx + (l + r) / 2, y: dy + bottom };
+    const ann = params.annotation;
+    const threadId = ann.aiThreadId as string | undefined;
+    if (threadId) {
+      const path = pathRef.current;
+      const thread = path ? getThread(path, threadId) : undefined;
+      setPopup(null);
+      setCall({ threadId, annotationId: ann.id, view: "bubble", anchor, messages: thread?.messages ?? [] });
+    } else {
+      setPopup({ annotation: ann, anchor });
+    }
   }, []);
 
   const reloadFrame = useCallback(async () => {
@@ -181,10 +263,34 @@ export default function App() {
     return iframe;
   }, []);
 
+  // The pen stroke gives the host no coordinates, so track the last pen-lift
+  // inside the same-origin pdf iframe as the AI-pen bubble anchor. Re-installed
+  // per open (the pdf iframe may not exist yet when the view initializes).
+  const installPenUpAnchor = useCallback(() => {
+    const attach = (attempt: number) => {
+      const host = iframeRef.current?.contentDocument;
+      const pdf = host?.querySelector("#view iframe") as HTMLIFrameElement | null;
+      const doc = pdf?.contentDocument;
+      if (!doc) {
+        if (attempt < 20) window.setTimeout(() => attach(attempt + 1), 150);
+        return;
+      }
+      doc.addEventListener(
+        "pointerup",
+        (e) => {
+          penUpRef.current = { clientX: (e as PointerEvent).clientX, clientY: (e as PointerEvent).clientY };
+        },
+        true,
+      );
+    };
+    attach(0);
+  }, []);
+
   const openInReader = useCallback(
     async (path: string, name: string, bytes: Uint8Array) => {
       setStatus("Rendering…");
       setPopup(null);
+      setCall(null);
       setSelectedAnnId(null);
       const state = await getViewState(path);
       let saved: Annotation[] = [];
@@ -193,6 +299,12 @@ export default function App() {
       } catch (e) {
         console.error("failed to load annotations", e);
         setStatus("Warning: saved annotations could not be loaded");
+      }
+      try {
+        await loadThreads(path);
+      } catch (e) {
+        console.error("failed to load threads", e);
+        setStatus("Warning: saved AI conversations could not be loaded");
       }
       annsRef.current = new Map(saved.map((a) => [a.id, a]));
       setTraceAnns(saved);
@@ -218,12 +330,13 @@ export default function App() {
         onInitialized: () => {
           setStatus("");
           setViewReady(true);
+          installPenUpAnchor();
         },
       });
       viewRef.current = view;
       setTitle(name);
     },
-    [reloadFrame, persist, onSaveAnnotations, onDeleteAnnotations, onSetAnnotationPopup],
+    [reloadFrame, persist, onSaveAnnotations, onDeleteAnnotations, onSetAnnotationPopup, installPenUpAnchor],
   );
 
   const openFile = useCallback(
@@ -282,6 +395,53 @@ export default function App() {
     viewRef.current?.selectAnnotations([id]);
     viewRef.current?.navigate({ annotationID: id });
     setSelectedAnnId(id);
+  }, []);
+
+  // Call handlers. Sending appends the user line plus a placeholder AI reply
+  // (the model is wired in a later milestone) and persists both.
+  const sendCallMessage = useCallback((text: string) => {
+    const path = pathRef.current;
+    if (!path || !text.trim()) return;
+    setCall((c) => {
+      if (!c) return c;
+      const now = Date.now();
+      const userMsg: ThreadMessage = { role: "user", text: text.trim(), ts: now };
+      const aiMsg: ThreadMessage = {
+        role: "ai",
+        text: "[Placeholder] AI reply will appear here once the model is wired in.",
+        ts: now + 1,
+      };
+      appendMessage(path, c.threadId, userMsg);
+      appendMessage(path, c.threadId, aiMsg);
+      return { ...c, messages: [...c.messages, userMsg, aiMsg] };
+    });
+  }, []);
+
+  const expandCall = useCallback(() => setCall((c) => (c ? { ...c, view: "panel" } : c)), []);
+  // Closing the bubble or hanging up the panel ends the view; the thread stays
+  // on its mark and can be reopened by clicking the mark (docs/03).
+  const endCall = useCallback(() => setCall(null), []);
+
+  const openThreadForAnnotation = useCallback((annotationId: string) => {
+    const ann = annsRef.current.get(annotationId);
+    const threadId = ann?.aiThreadId as string | undefined;
+    const path = pathRef.current;
+    if (!threadId || !path) return;
+    const thread = getThread(path, threadId);
+    viewRef.current?.selectAnnotations([annotationId]);
+    viewRef.current?.navigate({ annotationID: annotationId });
+    setSelectedAnnId(annotationId);
+    setCall({ threadId, annotationId, view: "panel", anchor: { x: 0, y: 0 }, messages: thread?.messages ?? [] });
+  }, []);
+
+  const onPositionClick = useCallback(() => {
+    setCall((c) => {
+      if (c) {
+        viewRef.current?.selectAnnotations([c.annotationId]);
+        viewRef.current?.navigate({ annotationID: c.annotationId });
+      }
+      return c;
+    });
   }, []);
 
   const closeReader = useCallback(() => {
@@ -345,6 +505,7 @@ export default function App() {
               selectedId={selectedAnnId}
               onSelect={onTraceSelect}
               onToggleStar={(id, starred) => patchAnnotation(id, { starred })}
+              onOpenThread={openThreadForAnnotation}
             />
           </aside>
         )}
@@ -420,9 +581,43 @@ export default function App() {
             onClose={() => setPopup(null)}
           />
         )}
+
+        {call?.view === "bubble" && (
+          <CallBubble
+            anchor={call.anchor}
+            messages={call.messages}
+            onSend={sendCallMessage}
+            onExpand={expandCall}
+            onClose={endCall}
+          />
+        )}
+
+        {/* Docked right column — the desktop three-column call state (docs/03). */}
+        {call?.view === "panel" && (
+          <div className="flex-none">
+            <AICallPanel
+              position={{
+                fileName: title ?? "",
+                pageLabel: stats?.pageLabel ?? null,
+                excerpt: callExcerpt(annsRef.current.get(call.annotationId)) || null,
+              }}
+              messages={call.messages}
+              onSend={sendCallMessage}
+              onHangUp={endCall}
+              onPositionClick={onPositionClick}
+            />
+          </div>
+        )}
       </main>
     </div>
   );
+}
+
+function callExcerpt(ann: Annotation | undefined): string {
+  if (!ann) return "";
+  if (typeof ann.text === "string" && ann.text) return ann.text;
+  if (typeof ann.comment === "string" && ann.comment) return ann.comment;
+  return "";
 }
 
 function TopicLibrary(props: {

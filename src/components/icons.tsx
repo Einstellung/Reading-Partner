@@ -96,6 +96,34 @@ export function IconClose({ size = 16 }: IconProps) {
 	);
 }
 
+// Drawn here: sparkle for the AI pen and the AI-thread marker.
+export function IconSparkle({ size = 20 }: IconProps) {
+	return (
+		<svg {...svgProps(size)}>
+			<path
+				d="M10 2.5L11.4 7.1C11.6 7.7 12.1 8.2 12.7 8.4L17.3 9.8L12.7 11.2C12.1 11.4 11.6 11.9 11.4 12.5L10 17.1L8.6 12.5C8.4 11.9 7.9 11.4 7.3 11.2L2.7 9.8L7.3 8.4C7.9 8.2 8.4 7.7 8.6 7.1L10 2.5Z"
+				fill="currentColor"
+			/>
+			<path d="M15.75 2.5L16.3 4.2L18 4.75L16.3 5.3L15.75 7L15.2 5.3L13.5 4.75L15.2 4.2L15.75 2.5Z" fill="currentColor" />
+		</svg>
+	);
+}
+
+// Drawn here: expand/maximize glyph for the call bubble.
+export function IconExpand({ size = 16 }: IconProps) {
+	return (
+		<svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+			<path
+				d="M6 2.5H2.5V6M10 2.5H13.5V6M13.5 10V13.5H10M6 13.5H2.5V10"
+				stroke="currentColor"
+				strokeWidth="1.3"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			/>
+		</svg>
+	);
+}
+
 // Drawn here: star for the trace-list star toggle.
 export function IconStar({ filled = false, size = 16 }: { filled?: boolean; size?: number }) {
 	const d = 'M8 1.75L9.94 5.68L14.28 6.31L11.14 9.37L11.88 13.69L8 11.65L4.12 13.69L4.86 9.37L1.72 6.31L6.06 5.68L8 1.75Z';

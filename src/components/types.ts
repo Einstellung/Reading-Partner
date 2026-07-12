@@ -7,7 +7,7 @@ export interface ColorEntry {
 	color: string;
 }
 
-export type ToolType = 'pointer' | 'highlight' | 'underline' | 'image';
+export type ToolType = 'pointer' | 'highlight' | 'underline' | 'image' | 'ai';
 
 export interface Tool {
 	type: ToolType;
@@ -21,4 +21,16 @@ export interface Annotation {
 	comment?: string;
 	text?: string;
 	[k: string]: unknown;
+}
+
+export interface ThreadMessage {
+	role: 'user' | 'ai';
+	text: string;
+	ts: number;
+}
+
+export interface Thread {
+	id: string;
+	annotationId: string;
+	messages: ThreadMessage[];
 }

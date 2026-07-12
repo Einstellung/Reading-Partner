@@ -14,3 +14,4 @@
 - [10-cross-realm-uint8array](./10-cross-realm-uint8array.md) — iframe 跨 realm 的 Uint8Array instanceof
 - [11-engine-calls-before-init](./11-engine-calls-before-init.md) — 引擎方法必须等 onInitialized 之后调
 - [12-webkitgtk-drag-latency](./12-webkitgtk-drag-latency.md) — WebKitGTK 拖选高亮时选区滞后于鼠标
+- [13-pen-stroke-no-popup-coords](./13-pen-stroke-no-popup-coords.md) — 笔工具划完不给浮窗坐标,气泡锚点靠 pointerup 兜底

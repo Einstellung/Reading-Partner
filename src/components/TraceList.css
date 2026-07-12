@@ -94,9 +94,31 @@
 	overflow: hidden;
 }
 
+.trace-meta {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
 .trace-page {
 	color: var(--tl-muted);
 	font-size: 11px;
+}
+
+.trace-thread {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 1px;
+	border: none;
+	border-radius: 4px;
+	background: transparent;
+	color: #7c5cff;
+	cursor: pointer;
+}
+
+.trace-thread:hover {
+	background: rgba(124, 92, 255, 0.14);
 }
 
 .trace-star {
