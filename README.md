@@ -31,3 +31,7 @@ The shell uses Bun; `vendor/reader` builds with its own upstream npm toolchain (
 - `public/reader/` — engine build output plus `reader-host.html`, loaded by the shell in an iframe. All UI around it (toolbar, annotations list, AI) is the shell's.
 - `src/` — the shell (React). `src-tauri/` — Tauri 2 app, no custom Rust commands so far.
 - `docs/04` — the engine integration contract: callback shapes, navigation API, and known traps.
+
+## License
+
+[AGPL-3.0](./LICENSE). This application embeds [zotero/reader](https://github.com/zotero/reader), which is AGPL-3.0 licensed.
