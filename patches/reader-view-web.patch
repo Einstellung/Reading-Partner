@@ -1,7 +1,16 @@
 diff --git a/webpack.config.js b/webpack.config.js
-index 2973701..6f29ac6 100644
+index 2973701..e65d671 100644
 --- a/webpack.config.js
 +++ b/webpack.config.js
+@@ -177,7 +177,7 @@ function generateViewConfig(build) {
+ 			},
+ 		},
+ 		optimization: {
+-			minimize: build === 'web',
++			minimize: build === 'web' || build === 'view-web',
+ 			minimizer: [new CssMinimizerPlugin(), '...'], // ... is for built-in TerserPlugin https://webpack.js.org/configuration/optimization/#optimizationminimizer
+ 		},
+ 		module: {
 @@ -203,7 +203,7 @@ function generateViewConfig(build) {
  		],
  	};

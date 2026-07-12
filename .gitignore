@@ -7,10 +7,9 @@ build/
 src-tauri/target/
 src-tauri/gen/
 
-# 第三方源码的本地副本，只用于阅读分析，不入库。
-# vendor/reader = github.com/zotero/reader（AGPL-3.0），见 docs/00-项目共识.md 第五节。
-# 将来正式嵌入时会把它转成 git submodule（路径不变），届时解除这条 ignore。
-/vendor/
+# reader 构建产物（view-web 输出），不入库；reader-host.html 例外，要入库
+/public/reader/*
+!/public/reader/reader-host.html
 
 # 密钥：BYOK 模式，API key 只存本地，绝不入库
 .env
@@ -27,3 +26,6 @@ src-tauri/gen/
 # 日志
 *.log
 npm-debug.log*
+
+# Local test fixture, not shipped
+/public/demo.pdf
