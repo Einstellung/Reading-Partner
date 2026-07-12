@@ -26,6 +26,29 @@ export interface Annotation {
   [key: string]: unknown;
 }
 
+// Engine tool types (src/common/types.ts). M2 uses pointer/highlight/underline/image.
+export type ToolType =
+  | "pointer"
+  | "highlight"
+  | "underline"
+  | "image"
+  | "note"
+  | "text"
+  | "ink"
+  | "eraser";
+
+export interface Tool {
+  type: ToolType;
+  color?: string;
+}
+
+// Viewport-space rect [left, top, right, bottom] plus the annotation it belongs
+// to. Emitted on annotation click; called with no argument on close.
+export interface AnnotationPopupParams {
+  rect: [number, number, number, number];
+  annotation: Annotation;
+}
+
 export interface CreateViewOptions {
   type: "pdf" | "epub" | "snapshot";
   annotations?: Annotation[];
@@ -36,7 +59,7 @@ export interface CreateViewOptions {
   onDeleteAnnotations?: (ids: string[]) => void;
   onSelectAnnotations?: (ids: string[]) => void;
   onSetSelectionPopup?: (params: unknown) => void;
-  onSetAnnotationPopup?: (params: unknown) => void;
+  onSetAnnotationPopup?: (params?: AnnotationPopupParams) => void;
   onChangeViewState?: (state: ViewState) => void;
   onChangeViewStats?: (stats: ViewStats) => void;
   onSetOutline?: (outline: unknown) => void;
@@ -47,12 +70,20 @@ export interface CreateViewOptions {
   onFindResult?: (result: unknown) => void;
 }
 
-// The engine `view` instance (subset used in M1).
+// The engine `view` instance (subset used through M2).
 export interface ViewInstance {
   zoomIn: () => void;
   zoomOut: () => void;
   zoomReset: () => void;
   navigate: (target: { pageIndex?: number; annotationID?: string }) => void;
+  // undefined deactivates the active tool (reverts to pointer).
+  setTool: (tool?: Tool) => void;
+  // Upsert by id and re-render; does not fire onSaveAnnotations (host is source
+  // of truth), so use it to reflect host-side color/comment edits.
+  setAnnotations: (annotations: Annotation[]) => void;
+  // Remove by id and re-render.
+  unsetAnnotations: (ids: string[]) => void;
+  selectAnnotations: (ids: string[]) => void;
 }
 
 // reader-host.html (owned by the reader pipeline) loads view.js, which defines

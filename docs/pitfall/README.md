@@ -12,3 +12,4 @@
 - [08-build-network-dependency](./08-build-network-dependency.md) — reader 构建期要联网下语言文件
 - [09-appdata-glob-capability](./09-appdata-glob-capability.md) — Tauri 权限 glob 不匹配目录本身
 - [10-cross-realm-uint8array](./10-cross-realm-uint8array.md) — iframe 跨 realm 的 Uint8Array instanceof
+- [11-engine-calls-before-init](./11-engine-calls-before-init.md) — 引擎方法必须等 onInitialized 之后调

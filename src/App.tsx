@@ -3,6 +3,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import {
   createPdfView,
+  type Annotation,
+  type AnnotationPopupParams,
   type ViewInstance,
   type ViewState,
   type ViewStats,
@@ -13,8 +15,23 @@ import {
   upsertEntry,
   type FileEntry,
 } from "./storage";
+import {
+  ANNOTATION_COLORS,
+  deleteAnnotations,
+  loadAnnotations,
+  onSaveError,
+  saveAnnotations,
+} from "./annotations";
+import PenToolbar from "./components/PenToolbar";
+import AnnotationPopup from "./components/AnnotationPopup";
+import type { Annotation as PopupAnnotation, ToolType } from "./components/types";
 
 const HOST_SRC = "/reader/reader-host.html";
+
+interface PopupState {
+  annotation: Annotation;
+  anchor: { x: number; y: number };
+}
 
 export default function App() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -22,14 +39,35 @@ export default function App() {
   const pathRef = useRef<string | null>(null);
   const saveTimer = useRef<number | null>(null);
 
+  // Annotations for the open document, keyed by id for merge-on-save.
+  const annsRef = useRef<Map<string, Annotation>>(new Map());
+
   const [recents, setRecents] = useState<FileEntry[]>([]);
   const [stats, setStats] = useState<ViewStats | null>(null);
   const [title, setTitle] = useState<string | null>(null);
   const [status, setStatus] = useState("Open a PDF to start reading");
+  const [toolType, setToolType] = useState<ToolType>("pointer");
+  const [penColor, setPenColor] = useState(ANNOTATION_COLORS[0].color);
+  const [popup, setPopup] = useState<PopupState | null>(null);
+  const [viewReady, setViewReady] = useState(false);
 
   useEffect(() => {
     getRecents().then(setRecents).catch(() => {});
+    onSaveError((e) => {
+      console.error("failed to persist annotations", e);
+      setStatus("Warning: annotations could not be saved");
+    });
   }, []);
+
+  // Apply the tool to the engine — but only once the view is initialized;
+  // setTool before the pdf viewer is ready throws (PDFViewerApplication null).
+  // Runs on tool change and when a freshly opened view becomes ready.
+  useEffect(() => {
+    if (!viewReady) return;
+    const tool =
+      toolType === "pointer" ? { type: "pointer" as const } : { type: toolType, color: penColor };
+    viewRef.current?.setTool(tool);
+  }, [toolType, penColor, viewReady]);
 
   // Debounced persist of the reading position, keyed by file path.
   // A save failure must be visible: silently losing positions looks like
@@ -51,7 +89,6 @@ export default function App() {
     }, 500);
   }, []);
 
-  // Best-effort flush of a pending (debounced) save when the window closes.
   useEffect(() => {
     const flush = () => {
       const path = pathRef.current;
@@ -63,7 +100,51 @@ export default function App() {
     return () => window.removeEventListener("pagehide", flush);
   }, []);
 
-  // Reload the iframe fresh (resets any prior view) and resolve on load.
+  const persistAnnotations = useCallback(() => {
+    const path = pathRef.current;
+    if (path) saveAnnotations(path, [...annsRef.current.values()]);
+  }, []);
+
+  // Engine created/modified annotations (drag-to-highlight, image select, etc.).
+  const onSaveAnnotations = useCallback(
+    (incoming: Annotation[]) => {
+      for (const a of incoming) {
+        const { onlyTextOrComment, ...clean } = a as Annotation & { onlyTextOrComment?: boolean };
+        void onlyTextOrComment;
+        const prev = annsRef.current.get(clean.id);
+        annsRef.current.set(clean.id, prev ? { ...prev, ...clean } : clean);
+      }
+      persistAnnotations();
+    },
+    [persistAnnotations],
+  );
+
+  const onDeleteAnnotations = useCallback(
+    (ids: string[]) => {
+      for (const id of ids) annsRef.current.delete(id);
+      const path = pathRef.current;
+      if (path) deleteAnnotations(path, ids);
+    },
+    [],
+  );
+
+  // Popup anchor is in the shell's viewport; the engine rect is iframe-local,
+  // so add the iframe's offset.
+  const onSetAnnotationPopup = useCallback((params?: AnnotationPopupParams) => {
+    if (!params) {
+      setPopup(null);
+      return;
+    }
+    const rect = iframeRef.current?.getBoundingClientRect();
+    const dx = rect?.left ?? 0;
+    const dy = rect?.top ?? 0;
+    const [l, , r, bottom] = params.rect;
+    setPopup({
+      annotation: params.annotation,
+      anchor: { x: dx + (l + r) / 2, y: dy + bottom },
+    });
+  }, []);
+
   const reloadFrame = useCallback(async () => {
     const iframe = iframeRef.current;
     if (!iframe) throw new Error("no iframe");
@@ -81,24 +162,45 @@ export default function App() {
   const openInReader = useCallback(
     async (path: string, bytes: Uint8Array) => {
       setStatus("Rendering…");
+      setPopup(null);
       const entry = await getEntry(path);
+      let saved: Annotation[] = [];
+      try {
+        saved = await loadAnnotations(path);
+      } catch (e) {
+        console.error("failed to load annotations", e);
+        setStatus("Warning: saved annotations could not be loaded");
+      }
+      annsRef.current = new Map(saved.map((a) => [a.id, a]));
+
+      setViewReady(false);
       const iframe = await reloadFrame();
       pathRef.current = path;
-      viewRef.current = await createPdfView(iframe, bytes.buffer as ArrayBuffer, {
+      const view = await createPdfView(iframe, bytes.buffer as ArrayBuffer, {
         type: "pdf",
-        annotations: [],
+        annotations: saved,
         authorName: "Reading-Partner",
         viewState: entry?.viewState ?? null,
         onChangeViewState: persist,
         onChangeViewStats: setStats,
-        onInitialized: () => setStatus(""),
+        onSaveAnnotations,
+        onDeleteAnnotations,
+        // The engine opens the annotation popup only after the selection is fed
+        // back; without this, clicking a highlight never shows the popup.
+        onSelectAnnotations: (ids) => viewRef.current?.selectAnnotations(ids),
+        onSetAnnotationPopup,
+        // The active tool is applied once ready (setTool before init throws).
+        onInitialized: () => {
+          setStatus("");
+          setViewReady(true);
+        },
       });
-      const name = path.split(/[/\\]/).pop() || path;
-      setTitle(name);
+      viewRef.current = view;
+      setTitle(path.split(/[/\\]/).pop() || path);
       await upsertEntry(path, entry?.viewState ?? null);
       setRecents(await getRecents());
     },
-    [reloadFrame, persist],
+    [reloadFrame, persist, onSaveAnnotations, onDeleteAnnotations, onSetAnnotationPopup],
   );
 
   const openViaDialog = useCallback(async () => {
@@ -123,6 +225,28 @@ export default function App() {
     [openInReader],
   );
 
+  // Host-side edit of an existing annotation: patch, re-render, persist.
+  const patchAnnotation = useCallback(
+    (id: string, patch: Partial<Annotation>) => {
+      const prev = annsRef.current.get(id);
+      if (!prev) return;
+      const updated: Annotation = { ...prev, ...patch, dateModified: new Date().toISOString() };
+      annsRef.current.set(id, updated);
+      viewRef.current?.setAnnotations([updated]);
+      persistAnnotations();
+      setPopup((p) => (p && p.annotation.id === id ? { ...p, annotation: updated } : p));
+    },
+    [persistAnnotations],
+  );
+
+  const removeAnnotation = useCallback((id: string) => {
+    viewRef.current?.unsetAnnotations([id]);
+    annsRef.current.delete(id);
+    const path = pathRef.current;
+    if (path) deleteAnnotations(path, [id]);
+    setPopup(null);
+  }, []);
+
   const pageText = stats ? `${stats.pageIndex + 1} / ${stats.pagesCount}` : "— / —";
 
   return (
@@ -135,31 +259,30 @@ export default function App() {
         {title && status && <span className="status-inline">{status}</span>}
         <span className="spacer" />
         <div className="zoom">
-          <button
-            className="btn"
-            disabled={!stats?.canZoomOut}
-            onClick={() => viewRef.current?.zoomOut()}
-          >
+          <button className="btn" disabled={!stats?.canZoomOut} onClick={() => viewRef.current?.zoomOut()}>
             −
           </button>
           <span className="page">{pageText}</span>
-          <button
-            className="btn"
-            disabled={!stats?.canZoomIn}
-            onClick={() => viewRef.current?.zoomIn()}
-          >
+          <button className="btn" disabled={!stats?.canZoomIn} onClick={() => viewRef.current?.zoomIn()}>
             +
           </button>
         </div>
       </header>
 
       <main className="body">
-        <iframe
-          ref={iframeRef}
-          className="reader"
-          src={HOST_SRC}
-          title="reader"
-        />
+        <iframe ref={iframeRef} className="reader" src={HOST_SRC} title="reader" />
+        {title && (
+          <div className="pen-rail">
+            <PenToolbar
+              tool={{ type: toolType, color: penColor }}
+              colors={ANNOTATION_COLORS}
+              onToolChange={(t) => {
+                setToolType(t.type);
+                setPenColor(t.color);
+              }}
+            />
+          </div>
+        )}
         {!title && (
           <div className="overlay">
             <p className="status">{status}</p>
@@ -178,6 +301,16 @@ export default function App() {
               </div>
             )}
           </div>
+        )}
+        {popup && (
+          <AnnotationPopup
+            annotation={popup.annotation as unknown as PopupAnnotation}
+            anchor={popup.anchor}
+            colors={ANNOTATION_COLORS}
+            onChange={(id, patch) => patchAnnotation(id, patch)}
+            onDelete={(id) => removeAnnotation(id)}
+            onClose={() => setPopup(null)}
+          />
         )}
       </main>
     </div>
