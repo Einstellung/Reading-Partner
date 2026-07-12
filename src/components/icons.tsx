@@ -96,6 +96,22 @@ export function IconClose({ size = 16 }: IconProps) {
 	);
 }
 
+// Drawn here: star for the trace-list star toggle.
+export function IconStar({ filled = false, size = 16 }: { filled?: boolean; size?: number }) {
+	const d = 'M8 1.75L9.94 5.68L14.28 6.31L11.14 9.37L11.88 13.69L8 11.65L4.12 13.69L4.86 9.37L1.72 6.31L6.06 5.68L8 1.75Z';
+	return (
+		<svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+			<path
+				d={d}
+				fill={filled ? 'currentColor' : 'none'}
+				stroke="currentColor"
+				strokeWidth="1.2"
+				strokeLinejoin="round"
+			/>
+		</svg>
+	);
+}
+
 // Drawn here: trash can for the delete action.
 export function IconTrash({ size = 16 }: IconProps) {
 	return (

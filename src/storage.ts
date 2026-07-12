@@ -1,5 +1,6 @@
-// Reading-state + recent-files persistence in a single JSON file under appdata.
-// Keyed by a hash of the absolute file path so reopening restores position.
+// Reading-position persistence, keyed by a hash of the absolute file path so
+// reopening a document restores where you were. Recency is tracked per-topic
+// (see topics.ts), so this no longer keeps a global recents list.
 
 import {
   BaseDirectory,
@@ -8,25 +9,14 @@ import {
   readTextFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
-// Note: capability globs like $APPDATA/** do not match $APPDATA itself;
-// capabilities/default.json must also allow the bare $APPDATA path.
+// Capability globs like $APPDATA/** do not match $APPDATA itself, so
+// capabilities/default.json must also allow the bare $APPDATA path (pitfall 09).
 import type { ViewState } from "./reader";
 
-const LIBRARY_FILE = "library.json";
-const RECENT_LIMIT = 5;
+const STATE_FILE = "reading-state.json";
 
-export interface FileEntry {
-  path: string;
-  name: string;
-  viewState: ViewState | null;
-  updatedAt: number;
-}
-
-interface Library {
-  files: Record<string, FileEntry>;
-}
-
-// djb2 — stable key from an absolute path, avoids filesystem-unsafe chars.
+// djb2 — stable key from an absolute path, filesystem-safe. Shared by topics
+// and annotation storage so a file maps to one key everywhere.
 export function hashPath(path: string): string {
   let h = 5381;
   for (let i = 0; i < path.length; i++) {
@@ -40,67 +30,48 @@ export function basename(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
-// Recent files: most-recently-updated first, capped at RECENT_LIMIT.
-export function recentEntries(lib: Library): FileEntry[] {
-  return Object.values(lib.files)
-    .sort((a, b) => b.updatedAt - a.updatedAt)
-    .slice(0, RECENT_LIMIT);
+interface Store {
+  states: Record<string, ViewState>;
 }
 
 async function ensureDir(): Promise<void> {
-  // recursive mkdir is a no-op on an existing directory; if it fails for
-  // another reason, the subsequent write surfaces the real error anyway
   try {
-    await mkdir("", { baseDir: BaseDirectory.AppData, recursive: true });
-  } catch {
-    // ignore
-  }
-}
-
-async function loadLibrary(): Promise<Library> {
-  try {
-    if (!(await exists(LIBRARY_FILE, { baseDir: BaseDirectory.AppData }))) {
-      return { files: {} };
+    if (!(await exists("", { baseDir: BaseDirectory.AppData }))) {
+      await mkdir("", { baseDir: BaseDirectory.AppData, recursive: true });
     }
-    const text = await readTextFile(LIBRARY_FILE, {
-      baseDir: BaseDirectory.AppData,
-    });
-    const parsed = JSON.parse(text) as Library;
-    return parsed.files ? parsed : { files: {} };
   } catch {
-    return { files: {} };
+    // A real problem resurfaces on the write below.
   }
 }
 
-async function saveLibrary(lib: Library): Promise<void> {
+async function load(): Promise<Store> {
+  try {
+    if (!(await exists(STATE_FILE, { baseDir: BaseDirectory.AppData }))) {
+      return { states: {} };
+    }
+    const parsed = JSON.parse(
+      await readTextFile(STATE_FILE, { baseDir: BaseDirectory.AppData }),
+    ) as Store;
+    return parsed.states ? parsed : { states: {} };
+  } catch {
+    return { states: {} };
+  }
+}
+
+async function save(store: Store): Promise<void> {
   await ensureDir();
-  await writeTextFile(LIBRARY_FILE, JSON.stringify(lib, null, 2), {
+  await writeTextFile(STATE_FILE, JSON.stringify(store, null, 2), {
     baseDir: BaseDirectory.AppData,
   });
 }
 
-export async function getRecents(): Promise<FileEntry[]> {
-  return recentEntries(await loadLibrary());
+export async function getViewState(path: string): Promise<ViewState | null> {
+  const store = await load();
+  return store.states[hashPath(path)] ?? null;
 }
 
-export async function getEntry(path: string): Promise<FileEntry | null> {
-  const lib = await loadLibrary();
-  return lib.files[hashPath(path)] ?? null;
-}
-
-// Record an open (or a view-state change) for a file.
-export async function upsertEntry(
-  path: string,
-  viewState: ViewState | null,
-): Promise<void> {
-  const lib = await loadLibrary();
-  const key = hashPath(path);
-  const prev = lib.files[key];
-  lib.files[key] = {
-    path,
-    name: basename(path),
-    viewState: viewState ?? prev?.viewState ?? null,
-    updatedAt: Date.now(),
-  };
-  await saveLibrary(lib);
+export async function saveViewState(path: string, state: ViewState): Promise<void> {
+  const store = await load();
+  store.states[hashPath(path)] = state;
+  await save(store);
 }

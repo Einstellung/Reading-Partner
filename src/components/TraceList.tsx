@@ -1,0 +1,84 @@
+// TraceList: the right-hand trace column — every mark the reader left on the
+// document, in document order. Adapted from zotero/reader's annotations sidebar
+// (src/common/components/sidebar/annotations-view.js + _preview.scss), reduced to
+// a read-only list with a star toggle. Pure and controlled.
+
+import { IconArea, IconHighlight, IconStar, IconUnderline } from './icons';
+import type { Annotation } from './types';
+import './TraceList.css';
+
+interface TraceListProps {
+	annotations: Annotation[];
+	selectedId?: string | null;
+	onSelect(id: string): void;
+	onToggleStar(id: string, starred: boolean): void;
+}
+
+function TypeMark({ annotation }: { annotation: Annotation }) {
+	if (annotation.type === 'image') {
+		const image = typeof annotation.image === 'string' ? annotation.image : undefined;
+		return image
+			? <img className="trace-thumb" src={image} alt="" />
+			: <span className="trace-icon" style={{ color: annotation.color }}><IconArea size={18} /></span>;
+	}
+	const Icon = annotation.type === 'underline' ? IconUnderline : IconHighlight;
+	return (
+		<span className="trace-icon" style={{ color: annotation.color }}>
+			<Icon size={18} />
+		</span>
+	);
+}
+
+export default function TraceList({ annotations, selectedId, onSelect, onToggleStar }: TraceListProps) {
+	// sortIndex is the engine's document-order key; lexicographic order is document order.
+	const items = [...annotations].sort((a, b) => {
+		const sa = a.sortIndex ?? '';
+		const sb = b.sortIndex ?? '';
+		return sa < sb ? -1 : sa > sb ? 1 : 0;
+	});
+
+	return (
+		<div className="trace-list" role="listbox" aria-label="Traces">
+			{items.map((a) => {
+				const starred = a.starred === true;
+				const selected = a.id === selectedId;
+				const text = typeof a.text === 'string' ? a.text : '';
+				const comment = typeof a.comment === 'string' ? a.comment : '';
+				const pageLabel = typeof a.pageLabel === 'string' ? a.pageLabel : '';
+				return (
+					<div
+						key={a.id}
+						role="option"
+						aria-selected={selected}
+						className={'trace-item' + (selected ? ' selected' : '') + (starred ? ' starred' : '')}
+						onClick={() => onSelect(a.id)}
+					>
+						<div className="trace-mark">
+							<TypeMark annotation={a} />
+						</div>
+
+						<div className="trace-body">
+							{text && <div className="trace-text">{text}</div>}
+							{comment && <div className="trace-comment">{comment}</div>}
+							{pageLabel && <div className="trace-page">Page {pageLabel}</div>}
+						</div>
+
+						<button
+							type="button"
+							className="trace-star"
+							title={starred ? 'Unstar' : 'Star'}
+							aria-label={starred ? 'Unstar' : 'Star'}
+							aria-pressed={starred}
+							onClick={(e) => {
+								e.stopPropagation();
+								onToggleStar(a.id, !starred);
+							}}
+						>
+							<IconStar filled={starred} size={16} />
+						</button>
+					</div>
+				);
+			})}
+		</div>
+	);
+}

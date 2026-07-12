@@ -1,0 +1,147 @@
+/* Visual variables adapted from zotero/reader (_preview.scss, _annotations-view.scss). */
+.trace-list {
+	--tl-bg: #ffffff;
+	--tl-fg: #2b2b2b;
+	--tl-secondary: #55585c;
+	--tl-muted: #8a8f95;
+	--tl-hover: rgba(0, 0, 0, 0.04);
+	--tl-border: rgba(0, 0, 0, 0.09);
+	--tl-selected-bg: #e9f1fd;
+	--tl-accent: #2e69d2;
+	--tl-star: #f0a91b;
+
+	height: 100%;
+	overflow-y: auto;
+	background: var(--tl-bg);
+	color: var(--tl-fg);
+	font-size: 13px;
+	user-select: none;
+}
+
+.trace-item {
+	position: relative;
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 8px 10px 8px 12px;
+	border-bottom: 1px solid var(--tl-border);
+	cursor: pointer;
+}
+
+.trace-item:hover {
+	background: var(--tl-hover);
+}
+
+.trace-item.selected {
+	background: var(--tl-selected-bg);
+}
+
+.trace-item.selected::before {
+	content: "";
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 3px;
+	background: var(--tl-accent);
+}
+
+.trace-mark {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	padding-top: 1px;
+}
+
+.trace-icon {
+	display: flex;
+}
+
+.trace-thumb {
+	width: 20px;
+	height: 20px;
+	object-fit: cover;
+	border-radius: 3px;
+	border: 1px solid var(--tl-border);
+}
+
+.trace-body {
+	flex: 1 1 auto;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+
+.trace-text {
+	color: var(--tl-fg);
+	line-height: 1.4;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+.trace-comment {
+	color: var(--tl-secondary);
+	line-height: 1.35;
+	font-size: 12px;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+.trace-page {
+	color: var(--tl-muted);
+	font-size: 11px;
+}
+
+.trace-star {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: none;
+	border-radius: 5px;
+	background: transparent;
+	color: var(--tl-muted);
+	cursor: pointer;
+	opacity: 0;
+	transition: opacity 0.1s;
+}
+
+.trace-item:hover .trace-star,
+.trace-star:focus-visible {
+	opacity: 1;
+}
+
+.trace-star:hover {
+	background: var(--tl-hover);
+	color: var(--tl-star);
+}
+
+/* A set star stays visible and colored regardless of hover. */
+.trace-item.starred .trace-star {
+	opacity: 1;
+	color: var(--tl-star);
+}
+
+@media (prefers-color-scheme: dark) {
+	.trace-list {
+		--tl-bg: #24272c;
+		--tl-fg: #e6e8eb;
+		--tl-secondary: #b6bbc1;
+		--tl-muted: #868b91;
+		--tl-hover: rgba(255, 255, 255, 0.06);
+		--tl-border: rgba(255, 255, 255, 0.1);
+		--tl-selected-bg: #2d3a52;
+		--tl-accent: #7aa7ee;
+		--tl-star: #f2b530;
+	}
+}
