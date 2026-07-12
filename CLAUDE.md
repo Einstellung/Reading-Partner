@@ -26,3 +26,5 @@ AI 陪读软件。设计共识在 `docs/`。阅读引擎用 zotero/reader（`ven
 ## 工具链
 
 - 包管理器用 bun(壳工程);vendor/reader 内部构建保持上游的 npm,不改。
+
+- 样式:壳用 Tailwind v4(只引 utilities,不引 preflight);从 zotero/reader 移植的组件 CSS(PenToolbar/AnnotationPopup/TraceList/AnnotationPopup 等)冻结不迁,新 UI 一律用 Tailwind。
