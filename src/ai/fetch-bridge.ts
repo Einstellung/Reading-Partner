@@ -27,6 +27,19 @@ function requestUrl(input: RequestInfo | URL): string {
 	return input.url;
 }
 
+// The Anthropic SDK adds this header in browser environments; requests routed
+// through the Rust side are not browser requests, and subscription (OAuth)
+// organizations reject any request carrying it ("CORS requests are not
+// allowed for this Organization").
+const BROWSER_MARKER = "anthropic-dangerous-direct-browser-access";
+
+function stripBrowserMarker(headers: HeadersInit | undefined): Headers | undefined {
+	if (!headers) return undefined;
+	const h = new Headers(headers);
+	h.delete(BROWSER_MARKER);
+	return h;
+}
+
 let installed = false;
 
 export function installFetchBridge(): void {
@@ -36,7 +49,14 @@ export function installFetchBridge(): void {
 		try {
 			const host = new URL(requestUrl(input), window.location.href).hostname;
 			if (BRIDGED_HOSTS.has(host)) {
-				return tauriFetch(input as Parameters<typeof tauriFetch>[0], init);
+				let bridgedInput = input;
+				let bridgedInit = init;
+				if (init?.headers) {
+					bridgedInit = { ...init, headers: stripBrowserMarker(init.headers) };
+				} else if (input instanceof Request) {
+					bridgedInput = new Request(input, { headers: stripBrowserMarker(input.headers) });
+				}
+				return tauriFetch(bridgedInput as Parameters<typeof tauriFetch>[0], bridgedInit);
 			}
 		} catch {
 			// Unparseable URL: let the native fetch produce the error.
