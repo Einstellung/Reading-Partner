@@ -41,6 +41,9 @@
         { "url": "https://api.deepseek.com/*" }
       ]
     },
-    "opener:allow-open-url"
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "https://claude.ai/*" }]
+    }
   ]
 }
