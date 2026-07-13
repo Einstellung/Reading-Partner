@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:capped": "bash scripts/dev.sh",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "tauri": "tauri"
