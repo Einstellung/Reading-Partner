@@ -80,6 +80,9 @@ export default function App() {
   const annsRef = useRef<Map<string, Annotation>>(new Map());
   // Whether the active pen is the AI pen (host-owned; not inferred from color).
   const aiPenRef = useRef(false);
+  // Current call view, mirrored for the pdf-iframe pointerdown listener (which
+  // can't read React state directly).
+  const callViewRef = useRef<"none" | "bubble" | "chat-main" | "chat-pip">("none");
   // Last pen-lift position inside the pdf iframe — the AI-pen bubble anchor,
   // since drawing a pen stroke yields no popup coordinates (pitfall: see report).
   const penUpRef = useRef<{ clientX: number; clientY: number } | null>(null);
@@ -101,6 +104,11 @@ export default function App() {
   const [selectedAnnId, setSelectedAnnId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [call, setCall] = useState<CallState | null>(null);
+
+  // Mirror the call view into a ref for the pdf-iframe pointerdown listener.
+  useEffect(() => {
+    callViewRef.current = call?.view ?? "none";
+  }, [call]);
 
   const activeTopic = useMemo(
     () => topics.find((t) => t.id === activeTopicId) ?? null,
@@ -287,6 +295,20 @@ export default function App() {
         },
         true,
       );
+      // Touching the book dismisses the bubble / chat corner card (docs/03).
+      // A pdf-area click stays inside the iframe, so B's outside-click listeners
+      // never see it — this is the only place that catches it. chat-main is not
+      // dismissable this way (CallView covers the reader). AI-pen draws and
+      // mark clicks fire this on pointerdown, then re-open on save/pointerup.
+      doc.addEventListener(
+        "pointerdown",
+        () => {
+          if (callViewRef.current === "bubble" || callViewRef.current === "chat-pip") {
+            setCall(null);
+          }
+        },
+        true,
+      );
     };
     attach(0);
   }, []);
@@ -424,13 +446,11 @@ export default function App() {
 
   // Bubble → full-window chat (reading shrinks to the corner card).
   const expandCall = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-main" } : c)), []);
-  // Clicking outside the bubble keeps reading but the call stays alive as the
-  // corner chat card — not a hang-up (docs/03 correction).
-  const bubbleToPip = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-pip" } : c)), []);
   // The two picture-in-picture swaps.
   const swapToReading = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-pip" } : c)), []);
   const swapToChat = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-main" } : c)), []);
-  // ✕ hangs up: the view goes away, the thread stays on its mark.
+  // ✕ hangs up, and touching the book dismisses too: the view goes away, the
+  // thread stays on its mark and is recalled by clicking the mark / ✨ (docs/03).
   const endCall = useCallback(() => setCall(null), []);
 
   const openThreadForAnnotation = useCallback((annotationId: string) => {
@@ -600,7 +620,7 @@ export default function App() {
             messages={call.messages}
             onSend={sendCallMessage}
             onExpand={expandCall}
-            onClose={bubbleToPip}
+            onClose={endCall}
           />
         )}
 
