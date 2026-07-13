@@ -5,7 +5,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconExpand } from './icons';
 import { Composer, MessageList } from './chat';
-import type { ThreadMessage } from './types';
+import type { ChatImage, ThreadMessage } from './types';
 
 interface CallBubbleProps {
 	anchor: { x: number; y: number };
@@ -13,13 +13,25 @@ interface CallBubbleProps {
 	onSend(text: string): void;
 	onExpand(): void;
 	onClose(): void;
+	pendingImages?: ChatImage[];
+	onRemoveImage?(index: number): void;
+	hint?: string;
 }
 
 const WIDTH = 360;
 const GAP = 10;
 const MARGIN = 8;
 
-export default function CallBubble({ anchor, messages, onSend, onExpand, onClose }: CallBubbleProps) {
+export default function CallBubble({
+	anchor,
+	messages,
+	onSend,
+	onExpand,
+	onClose,
+	pendingImages,
+	onRemoveImage,
+	hint,
+}: CallBubbleProps) {
 	const ref = useRef<HTMLDivElement>(null);
 	const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
 
@@ -72,7 +84,13 @@ export default function CallBubble({ anchor, messages, onSend, onExpand, onClose
 
 			{messages.length > 0 && <MessageList messages={messages} className="max-h-64 pr-0.5" />}
 
-			<Composer onSend={onSend} placeholder="Ask about this passage…" />
+			<Composer
+				onSend={onSend}
+				placeholder="Ask about this passage…"
+				pendingImages={pendingImages}
+				onRemoveImage={onRemoveImage}
+				hint={hint}
+			/>
 		</div>
 	);
 }

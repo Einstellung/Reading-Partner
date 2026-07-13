@@ -3,7 +3,7 @@
 // the current Tool (including sticky behaviour); this renders it and reports changes.
 
 import { useEffect, useRef, useState } from 'react';
-import { IconArea, IconColorSwatch, IconHighlight, IconPointer, IconSparkle, IconUnderline } from './icons';
+import { IconColorSwatch, IconHighlight, IconPointer, IconSparkle, IconUnderline } from './icons';
 import type { ColorEntry, Tool, ToolType } from './types';
 import './PenToolbar.css';
 
@@ -17,7 +17,6 @@ const TOOLS: { type: ToolType; label: string; Icon: (p: { size?: number }) => JS
 	{ type: 'pointer', label: 'Select', Icon: IconPointer },
 	{ type: 'highlight', label: 'Highlight', Icon: IconHighlight },
 	{ type: 'underline', label: 'Underline', Icon: IconUnderline },
-	{ type: 'image', label: 'Area', Icon: IconArea },
 	{ type: 'ai', label: 'AI pen', Icon: IconSparkle },
 ];
 

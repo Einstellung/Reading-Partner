@@ -6,16 +6,27 @@
 
 import { IconClose } from './icons';
 import { Composer, MessageList } from './chat';
-import type { ThreadMessage } from './types';
+import type { ChatImage, ThreadMessage } from './types';
 
 interface CallViewProps {
 	messages: ThreadMessage[];
 	onSend(text: string): void;
 	onHangUp(): void;
+	pendingImages?: ChatImage[];
+	onRemoveImage?(index: number): void;
+	hint?: string;
 }
 
-export default function CallView({ messages, onSend, onHangUp }: CallViewProps) {
+export default function CallView({
+	messages,
+	onSend,
+	onHangUp,
+	pendingImages,
+	onRemoveImage,
+	hint,
+}: CallViewProps) {
 	const empty = messages.length === 0;
+	const imageProps = { pendingImages, onRemoveImage, hint };
 
 	return (
 		<div className="relative flex h-full w-full flex-col bg-white dark:bg-neutral-900">
@@ -35,7 +46,7 @@ export default function CallView({ messages, onSend, onHangUp }: CallViewProps) 
 						Ask about this passage
 					</h1>
 					<div className="w-full max-w-3xl">
-						<Composer onSend={onSend} placeholder="Ask about this passage…" pill />
+						<Composer onSend={onSend} placeholder="Ask about this passage…" pill {...imageProps} />
 					</div>
 				</div>
 			) : (
@@ -45,7 +56,7 @@ export default function CallView({ messages, onSend, onHangUp }: CallViewProps) 
 					</div>
 					<div className="px-4 pb-6">
 						<div className="mx-auto w-full max-w-3xl">
-							<Composer onSend={onSend} placeholder="Reply…" pill />
+							<Composer onSend={onSend} placeholder="Reply…" pill {...imageProps} />
 						</div>
 					</div>
 				</>

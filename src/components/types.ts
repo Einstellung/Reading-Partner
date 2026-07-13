@@ -7,11 +7,18 @@ export interface ColorEntry {
 	color: string;
 }
 
-export type ToolType = 'pointer' | 'highlight' | 'underline' | 'image' | 'ai';
+export type ToolType = 'pointer' | 'highlight' | 'underline' | 'ai';
 
 export interface Tool {
 	type: ToolType;
 	color: string;
+}
+
+// A chat image in display form: raw base64 + MIME type, ready for a data: URL.
+// (Persistence keeps filename references instead; see threads.ts.)
+export interface ChatImage {
+	data: string;
+	mediaType: string;
 }
 
 export interface Annotation {
@@ -27,6 +34,7 @@ export interface ThreadMessage {
 	role: 'user' | 'ai';
 	text: string;
 	ts: number;
+	images?: ChatImage[];
 }
 
 export interface Thread {

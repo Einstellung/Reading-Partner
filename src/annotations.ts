@@ -8,9 +8,7 @@ import {
   BaseDirectory,
   exists,
   mkdir,
-  readFile,
   readTextFile,
-  writeFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
 import { hashPath } from "./storage";
@@ -37,44 +35,9 @@ function fileFor(path: string): string {
 
 // Last known full set per file hash, so a delete can recompute without the
 // caller re-supplying everything and both paths share one debounced writer.
-// The cache always holds image-stripped objects (what gets written to JSON).
 const cache = new Map<string, Annotation[]>();
 const timers = new Map<string, number>();
 const dirty = new Set<string>();
-// Image annotations whose PNG is already on disk ("<pathHash>/<id>"), so we
-// don't re-decode and rewrite the same snapshot on every save.
-const extracted = new Set<string>();
-
-// Image annotations carry the selected region as a base64 PNG data URI. It
-// bloats the JSON (~tens of KB each, pitfall 07) and the document render does
-// not use it (only position), so it lives in its own file and is re-inlined
-// on load for the trace-list thumbnail.
-function imagePath(key: string, id: string): string {
-  return `images/${key}/${id}.png`;
-}
-
-function dataUriToBytes(uri: string): Uint8Array {
-  const bin = atob(uri.slice(uri.indexOf(",") + 1));
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return bytes;
-}
-
-function bytesToDataUri(bytes: Uint8Array): string {
-  let bin = "";
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-  return `data:image/png;base64,${btoa(bin)}`;
-}
-
-async function writeImage(key: string, id: string, uri: string): Promise<void> {
-  await mkdir(`images/${key}`, { baseDir: BaseDirectory.AppData, recursive: true });
-  await writeFile(imagePath(key, id), dataUriToBytes(uri), { baseDir: BaseDirectory.AppData });
-}
-
-async function readImage(key: string, id: string): Promise<string | null> {
-  if (!(await exists(imagePath(key, id), { baseDir: BaseDirectory.AppData }))) return null;
-  return bytesToDataUri(await readFile(imagePath(key, id), { baseDir: BaseDirectory.AppData }));
-}
 
 let onError: (e: unknown) => void = () => {};
 export function onSaveError(handler: (e: unknown) => void): void {
@@ -129,9 +92,9 @@ function schedule(key: string): void {
 }
 
 // Load a document's saved annotations. A missing file is normal (returns []);
-// a genuine read/parse error is rethrown so the caller can warn. Image
-// annotations get their PNG re-inlined for the trace-list thumbnail; the cache
-// keeps the stripped versions (what stays on disk).
+// a genuine read/parse error is rethrown so the caller can warn. Legacy image
+// annotations load as-is (region-select is retired) — the engine still renders
+// them; they just can't be created anymore.
 export async function loadAnnotations(path: string): Promise<Annotation[]> {
   const key = hashPath(path);
   const name = fileFor(path);
@@ -144,33 +107,13 @@ export async function loadAnnotations(path: string): Promise<Annotation[]> {
   ) as Annotation[];
   const list = Array.isArray(parsed) ? parsed : [];
   cache.set(key, list.map((a) => ({ ...a })));
-  return Promise.all(
-    list.map(async (a) => {
-      if (a.type !== "image") return a;
-      const uri = await readImage(key, a.id).catch(() => null);
-      if (!uri) return a; // no PNG yet; leave any inline image so a save extracts it
-      extracted.add(`${key}/${a.id}`); // PNG confirmed on disk
-      return { ...a, image: uri };
-    }),
-  );
+  return list;
 }
 
-// Replace the full set for a document and schedule a debounced write. Image
-// data URIs are peeled off to PNG files (once) and stripped from the JSON.
+// Replace the full set for a document and schedule a debounced write.
 export function saveAnnotations(path: string, annotations: Annotation[]): void {
   const key = hashPath(path);
-  const stripped = annotations.map((a) => {
-    if (typeof a.image !== "string" || !a.image.startsWith("data:image/")) return a;
-    const tag = `${key}/${a.id}`;
-    if (!extracted.has(tag)) {
-      extracted.add(tag);
-      void writeImage(key, a.id, a.image).catch((e) => onError(e));
-    }
-    const { image: _image, ...rest } = a;
-    void _image;
-    return rest as Annotation;
-  });
-  cache.set(key, stripped);
+  cache.set(key, annotations.map((a) => ({ ...a })));
   schedule(key);
 }
 

@@ -34,11 +34,21 @@ import {
   getThread,
   loadThreads,
   onThreadSaveError,
+  readThreadImages,
+  saveThreadImages,
   type ThreadMessage,
 } from "./threads";
+import { compressImage, type CompressedImage } from "./ai/image-utils";
 import { loadSettings, onSettingsSaveError, saveSettings, type Settings } from "./settings";
 import { buildSystemPrompt } from "./context";
-import { installFetchBridge, listProviders, streamChat, type ProviderId, type ProviderInfo } from "./aiClient";
+import {
+  installFetchBridge,
+  listProviders,
+  modelSupportsImages,
+  streamChat,
+  type ProviderId,
+  type ProviderInfo,
+} from "./aiClient";
 import PenToolbar from "./components/PenToolbar";
 import AnnotationPopup from "./components/AnnotationPopup";
 import TraceList from "./components/TraceList";
@@ -57,6 +67,8 @@ const EXPLAIN_KICKOFF = "Please explain the passage I just marked, using the rea
 // the color palette; the host identifies AI-pen strokes by the active tool, not
 // the color. Value is `general-purple` from vendor/reader defines.js.
 const AI_PEN_COLOR = "#a28ae5";
+// Cap on images attached to one chat turn (docs/03: paste screenshots to ask).
+const MAX_PENDING_IMAGES = 3;
 
 // Shared utility-class strings for the shell chrome (migrated from styles.css).
 // Split so variant overrides never collide with base padding/border utilities.
@@ -78,8 +90,23 @@ interface PopupState {
   anchor: { x: number; y: number };
 }
 
-// Display message = persisted message + transient streaming/failed flags.
-type CallMessage = ThreadMessage & { streaming?: boolean; failed?: boolean };
+// Display message. Unlike the persisted ThreadMessage (which stores images as
+// on-disk filenames), the display form carries the image bytes as base64 so a
+// bubble can render them directly; App loads them from disk on thread open.
+type CallMessage = {
+  role: "user" | "ai";
+  text: string;
+  ts: number;
+  images?: { data: string; mediaType: string }[];
+  streaming?: boolean;
+  failed?: boolean;
+};
+
+// Persisted thread messages -> display messages. Image bytes are loaded
+// separately (hydrateThreadImages), so images start absent here.
+function toDisplayMessages(msgs: ThreadMessage[]): CallMessage[] {
+  return msgs.map((m) => ({ role: m.role, text: m.text, ts: m.ts }));
+}
 
 // A live AI "call" — one thread anchored on one AI-pen underline (docs/03).
 interface CallState {
@@ -141,6 +168,17 @@ export default function App() {
   const [settings, setSettings] = useState<Settings>({ defaultProviderId: null, defaultModelId: null });
   const [showSettings, setShowSettings] = useState(false);
   const [providersInfo, setProvidersInfo] = useState<ProviderInfo[]>([]);
+
+  // Images pasted into the composer, awaiting send. Mirrored to a ref so the
+  // stable send handler reads the current list. A single document-level paste
+  // listener (below) fills these; the composer only renders them (controlled).
+  const [pendingImages, setPendingImages] = useState<CompressedImage[]>([]);
+  const pendingImagesRef = useRef<CompressedImage[]>([]);
+  useEffect(() => {
+    pendingImagesRef.current = pendingImages;
+  }, [pendingImages]);
+  // Inline note under the composer when a paste is rejected (model can't see it).
+  const [imageHint, setImageHint] = useState("");
 
   // Mirror the call (view for the pdf listener, whole thing for send handlers).
   const callRef = useRef<CallState | null>(null);
@@ -252,6 +290,27 @@ export default function App() {
     if (path) saveAnnotations(path, [...annsRef.current.values()]);
   }, []);
 
+  // Load a thread's stored images (filenames -> base64) and patch them into the
+  // open call so the bubbles show them. Async so opening a thread stays instant.
+  const hydrateThreadImages = useCallback((threadId: string, msgs: ThreadMessage[]) => {
+    const withImages = msgs.filter((m) => m.images && m.images.length > 0);
+    if (withImages.length === 0) return;
+    void (async () => {
+      const loaded = new Map<number, { data: string; mediaType: string }[]>();
+      for (const m of withImages) {
+        loaded.set(m.ts, await readThreadImages(threadId, m.images as string[]));
+      }
+      setCall((c) =>
+        c && c.threadId === threadId
+          ? {
+              ...c,
+              messages: c.messages.map((m) => (loaded.has(m.ts) ? { ...m, images: loaded.get(m.ts) } : m)),
+            }
+          : c,
+      );
+    })();
+  }, []);
+
   // Run one assistant turn for a thread: assemble the reading context, stream the
   // reply into the bubble, persist on done. Stable (reads refs). No-ops (leaving
   // the bubble empty for the guidance) when no provider is configured.
@@ -286,9 +345,6 @@ export default function App() {
       selectionText: typeof ann?.text === "string" ? ann.text : "",
       selectionComment: typeof ann?.comment === "string" ? ann.comment : undefined,
     });
-    const prior = (getThread(path, threadId)?.messages ?? []).map((m) => ({ role: m.role, text: m.text }));
-    const apiMessages = [{ role: "user" as const, text: EXPLAIN_KICKOFF }, ...prior];
-
     const ts = Date.now();
     setCall((c) => {
       if (!c || c.threadId !== threadId) return c;
@@ -296,29 +352,44 @@ export default function App() {
       return { ...c, error: false, messages: [...kept, { role: "ai", text: "", ts, streaming: true }] };
     });
 
-    streamChat({
-      providerId: s.defaultProviderId as ProviderId,
-      modelId: s.defaultModelId,
-      systemPrompt,
-      messages: apiMessages,
-      signal: controller.signal,
-      onDelta: (chunk) => patch((m) => ({ ...m, text: m.text + chunk }), ts),
-      onDone: (full) => {
-        patch(() => ({ role: "ai", text: full, ts }), ts);
-        appendMessage(path, threadId, { role: "ai", text: full, ts });
-        if (abortRef.current === controller) abortRef.current = null;
-      },
-      onError: (message: string) => {
-        if (abortRef.current === controller) abortRef.current = null;
-        if (controller.signal.aborted) return; // switch/hangup, not a failure
-        console.error("stream failed", message);
-        setStatus("Warning: AI reply failed");
-        patch(() => ({ role: "ai", text: `⚠️ Couldn't reach the model. ${message}`, ts, failed: true }), ts, true);
-      },
-    });
+    // Thread messages store images as filenames; the model needs base64, so read
+    // them back before streaming. Kept out of render so the placeholder shows
+    // immediately.
+    void (async () => {
+      const prior = await Promise.all(
+        (getThread(path, threadId)?.messages ?? []).map(async (m) => ({
+          role: m.role,
+          text: m.text,
+          images: m.images?.length ? await readThreadImages(threadId, m.images) : undefined,
+        })),
+      );
+      if (controller.signal.aborted) return;
+      const apiMessages = [{ role: "user" as const, text: EXPLAIN_KICKOFF }, ...prior];
+
+      streamChat({
+        providerId: s.defaultProviderId as ProviderId,
+        modelId: s.defaultModelId as string,
+        systemPrompt,
+        messages: apiMessages,
+        signal: controller.signal,
+        onDelta: (chunk) => patch((m) => ({ ...m, text: m.text + chunk }), ts),
+        onDone: (full) => {
+          patch(() => ({ role: "ai", text: full, ts }), ts);
+          appendMessage(path, threadId, { role: "ai", text: full, ts });
+          if (abortRef.current === controller) abortRef.current = null;
+        },
+        onError: (message: string) => {
+          if (abortRef.current === controller) abortRef.current = null;
+          if (controller.signal.aborted) return; // switch/hangup, not a failure
+          console.error("stream failed", message);
+          setStatus("Warning: AI reply failed");
+          patch(() => ({ role: "ai", text: `⚠️ Couldn't reach the model. ${message}`, ts, failed: true }), ts, true);
+        },
+      });
+    })();
   }, []);
 
-  // Engine created/modified annotations (drag-to-highlight, image select, etc.).
+  // Engine created/modified annotations (drag-to-highlight, AI-pen underline, etc.).
   // A brand-new annotation drawn while the AI pen is active starts a thread and
   // opens the call bubble.
   const onSaveAnnotations = useCallback(
@@ -397,13 +468,15 @@ export default function App() {
       const thread = path ? getThread(path, threadId) : undefined;
       abortRef.current?.abort(); // stop any stream from a previously open thread
       setPopup(null);
-      setCall({ threadId, annotationId: ann.id, view: "bubble", anchor, messages: thread?.messages ?? [] });
+      const msgs = thread?.messages ?? [];
+      setCall({ threadId, annotationId: ann.id, view: "bubble", anchor, messages: toDisplayMessages(msgs) });
+      hydrateThreadImages(threadId, msgs);
       // Empty thread (e.g. created before a provider was configured) → explain now.
-      if ((thread?.messages ?? []).length === 0) runTurn(threadId, ann.id);
+      if (msgs.length === 0) runTurn(threadId, ann.id);
     } else {
       setPopup({ annotation: ann, anchor });
     }
-  }, [runTurn]);
+  }, [runTurn, hydrateThreadImages]);
 
   const reloadFrame = useCallback(async () => {
     const iframe = iframeRef.current;
@@ -567,18 +640,105 @@ export default function App() {
     setSelectedAnnId(id);
   }, []);
 
-  // Sending appends the user line (persisted) then streams the assistant reply.
+  // Compress a pasted image and stage it for the next send (capped at 3).
+  const addPastedImage = useCallback(async (blob: Blob) => {
+    try {
+      const img = await compressImage(blob);
+      setPendingImages((cur) => (cur.length >= MAX_PENDING_IMAGES ? cur : [...cur, img]));
+    } catch (e) {
+      console.error("failed to process pasted image", e);
+      setStatus(e instanceof Error ? e.message : "Couldn't process that image");
+    }
+  }, []);
+
+  const removePendingImage = useCallback((index: number) => {
+    setPendingImages((cur) => cur.filter((_, i) => i !== index));
+  }, []);
+
+  const clearPendingImages = useCallback(() => {
+    setPendingImages([]);
+    setImageHint("");
+  }, []);
+
+  // One global paste path (docs: single owner, focus-independent). While a call
+  // is open, an image on the clipboard is staged; a plain-text paste is left
+  // untouched so typing is normal. Rejected up front if the model can't see
+  // images, with an inline note rather than a silent drop downstream.
+  useEffect(() => {
+    if (!call) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const blobs: Blob[] = [];
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.kind === "file" && item.type.startsWith("image/")) {
+          const f = item.getAsFile();
+          if (f) blobs.push(f);
+        }
+      }
+      if (blobs.length === 0) return; // plain text: keep default paste
+      e.preventDefault();
+      const s = settingsRef.current;
+      const canAttach = !!(
+        s.defaultProviderId &&
+        s.defaultModelId &&
+        modelSupportsImages(s.defaultProviderId as ProviderId, s.defaultModelId)
+      );
+      if (!canAttach) {
+        setImageHint("This model can't read images. Switch to a vision model in Settings.");
+        return;
+      }
+      setImageHint("");
+      for (const b of blobs) void addPastedImage(b);
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [call, addPastedImage]);
+
+  // Sending appends the user line (with any staged images, persisted to disk)
+  // then streams the assistant reply. An empty message with images is allowed.
   const sendCallMessage = useCallback(
     (text: string) => {
       const c = callRef.current;
       const path = pathRef.current;
-      if (!c || !path || !text.trim()) return;
-      const userMsg: ThreadMessage = { role: "user", text: text.trim(), ts: Date.now() };
-      appendMessage(path, c.threadId, userMsg);
-      setCall((cur) =>
-        cur && cur.threadId === c.threadId ? { ...cur, messages: [...cur.messages, userMsg] } : cur,
-      );
-      runTurn(c.threadId, c.annotationId);
+      const images = pendingImagesRef.current;
+      const trimmed = text.trim();
+      if (!c || !path || (!trimmed && images.length === 0)) return;
+      const ts = Date.now();
+      setPendingImages([]);
+      setImageHint("");
+      void (async () => {
+        let imageNames: string[] = [];
+        if (images.length > 0) {
+          try {
+            imageNames = await saveThreadImages(c.threadId, images);
+          } catch (e) {
+            console.error("failed to persist pasted images", e);
+            setStatus("Warning: pasted image could not be saved");
+            setPendingImages(images); // give them back so the send can be retried
+            return;
+          }
+        }
+        // Persist filenames; display the base64 we already have in hand.
+        const persistMsg: ThreadMessage = {
+          role: "user",
+          text: trimmed,
+          ts,
+          ...(imageNames.length ? { images: imageNames } : {}),
+        };
+        appendMessage(path, c.threadId, persistMsg);
+        const displayMsg: CallMessage = {
+          role: "user",
+          text: trimmed,
+          ts,
+          ...(images.length ? { images } : {}),
+        };
+        setCall((cur) =>
+          cur && cur.threadId === c.threadId ? { ...cur, messages: [...cur.messages, displayMsg] } : cur,
+        );
+        runTurn(c.threadId, c.annotationId);
+      })();
     },
     [runTurn],
   );
@@ -600,7 +760,8 @@ export default function App() {
     abortRef.current?.abort();
     abortRef.current = null;
     setCall(null);
-  }, []);
+    clearPendingImages();
+  }, [clearPendingImages]);
 
   const openThreadForAnnotation = useCallback(
     (annotationId: string) => {
@@ -613,10 +774,12 @@ export default function App() {
       viewRef.current?.selectAnnotations([annotationId]);
       viewRef.current?.navigate({ annotationID: annotationId });
       setSelectedAnnId(annotationId);
-      setCall({ threadId, annotationId, view: "chat-main", anchor: { x: 0, y: 0 }, messages: thread?.messages ?? [] });
-      if ((thread?.messages ?? []).length === 0) runTurn(threadId, annotationId);
+      const msgs = thread?.messages ?? [];
+      setCall({ threadId, annotationId, view: "chat-main", anchor: { x: 0, y: 0 }, messages: toDisplayMessages(msgs) });
+      hydrateThreadImages(threadId, msgs);
+      if (msgs.length === 0) runTurn(threadId, annotationId);
     },
-    [runTurn],
+    [runTurn, hydrateThreadImages],
   );
 
   // Jump the reading back to the thread's mark (from the reading corner card).
@@ -634,11 +797,12 @@ export default function App() {
     abortRef.current?.abort();
     abortRef.current = null;
     setCall(null);
+    clearPendingImages();
     setTitle(null);
     setPopup(null);
     pathRef.current = null;
     viewRef.current = null;
-  }, []);
+  }, [clearPendingImages]);
 
   const pageText = stats ? `${stats.pageIndex + 1} / ${stats.pagesCount}` : "— / —";
   const inReader = !!title;
@@ -787,6 +951,9 @@ export default function App() {
             onSend={sendCallMessage}
             onExpand={expandCall}
             onClose={endCall}
+            pendingImages={pendingImages}
+            onRemoveImage={removePendingImage}
+            hint={imageHint}
           />
         )}
 
@@ -826,7 +993,14 @@ export default function App() {
         {call?.view === "chat-main" && (
           <>
             <div className="absolute inset-0 z-40">
-              <CallView messages={call.messages} onSend={sendCallMessage} onHangUp={endCall} />
+              <CallView
+                messages={call.messages}
+                onSend={sendCallMessage}
+                onHangUp={endCall}
+                pendingImages={pendingImages}
+                onRemoveImage={removePendingImage}
+                hint={imageHint}
+              />
             </div>
             <div className="absolute right-3 top-3 z-50">
               <ReadingPipCard
@@ -852,6 +1026,7 @@ export default function App() {
             />
           </div>
         )}
+
       </main>
 
       {showSettings && (

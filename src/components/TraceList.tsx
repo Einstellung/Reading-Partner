@@ -16,11 +16,10 @@ interface TraceListProps {
 }
 
 function TypeMark({ annotation }: { annotation: Annotation }) {
+	// Region-select is retired; legacy image annotations still render on the page
+	// (engine draws them) and list here with a placeholder icon, not a thumbnail.
 	if (annotation.type === 'image') {
-		const image = typeof annotation.image === 'string' ? annotation.image : undefined;
-		return image
-			? <img className="trace-thumb" src={image} alt="" />
-			: <span className="trace-icon" style={{ color: annotation.color }}><IconArea size={18} /></span>;
+		return <span className="trace-icon" style={{ color: annotation.color }}><IconArea size={18} /></span>;
 	}
 	const Icon = annotation.type === 'underline' ? IconUnderline : IconHighlight;
 	return (

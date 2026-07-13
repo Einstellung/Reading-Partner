@@ -14,6 +14,7 @@ export interface ProviderInfo {
 export interface ChatMessage {
   role: "user" | "ai";
   text: string;
+  images?: { data: string; mediaType: string }[];
 }
 
 export interface StreamChatOptions {
@@ -73,6 +74,12 @@ export function getModels(id: ProviderId): { id: string; label: string }[] {
   return MODELS[id] ?? [];
 }
 
+// Mirrors the real contract: anthropic/openai are vision, deepseek is text-only.
+export function modelSupportsImages(id: ProviderId, _modelId: string): boolean {
+  void _modelId;
+  return id !== "deepseek";
+}
+
 export async function anthropicLogin(): Promise<void> {
   await delay(400); // simulate the loopback browser round-trip
   configured.anthropic = true;
@@ -95,7 +102,11 @@ export async function getValidAnthropicAuth(): Promise<string | null> {
 
 // Streams a deterministic reply chunk-by-chunk, honoring the abort signal.
 export async function streamChat(options: StreamChatOptions): Promise<void> {
-  const { messages, signal, onDelta, onDone, onError } = options;
+  const { providerId, modelId, messages, signal, onDelta, onDone, onError } = options;
+  if (messages.some((m) => m.images?.length) && !modelSupportsImages(providerId, modelId)) {
+    onError(`${modelId} can't read images. Switch to a vision-capable model to send pictures.`);
+    return;
+  }
   const lastUser = [...messages].reverse().find((m) => m.role === "user");
   const reply =
     `Here is a mock explanation. You asked: "${(lastUser?.text ?? "").slice(0, 40)}". ` +

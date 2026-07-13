@@ -24,6 +24,8 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
     "- Follow the user's language: if they write in Chinese, answer in Chinese.",
     "- You can see the passage below, so refer to it naturally rather than",
     "  quoting it in full.",
+    "- Your replies render as Markdown: write math as LaTeX delimited by $...$",
+    "  (inline) or $$...$$ (block), and put code in fenced code blocks.",
     "",
     "Current reading context:",
     `- Topic: ${ctx.topicName}`,

@@ -22,6 +22,10 @@ export interface ProviderInfo {
 export interface ChatMessage {
 	role: "user" | "ai";
 	text: string;
+	// Attached images for a user turn. `data` is raw base64 (no data: prefix),
+	// `mediaType` is the MIME type (e.g. "image/png"). Only vision models accept
+	// these — streamChat rejects images for a model whose input lacks "image".
+	images?: { data: string; mediaType: string }[];
 }
 
 export interface StreamChatOptions {
@@ -80,10 +84,27 @@ async function resolveApiKey(id: ProviderId): Promise<string> {
 	return cred.key;
 }
 
+// A model whose input modalities include "image" can be sent picture content.
+// pi's Model metadata carries `input: ("text" | "image")[]`; DeepSeek is
+// text-only, Anthropic claude is vision, OpenAI depends on the model.
+export function modelSupportsImages(providerId: ProviderId, modelId: string): boolean {
+	const model = providers[providerId]?.getModels().find((m) => m.id === modelId);
+	return !!model?.input.includes("image");
+}
+
 function toPiMessages(messages: ChatMessage[]): Message[] {
 	return messages.map((m): Message => {
 		if (m.role === "user") {
-			return { role: "user", content: m.text, timestamp: Date.now() };
+			if (!m.images?.length) {
+				return { role: "user", content: m.text, timestamp: Date.now() };
+			}
+			// Mixed text + image goes as a content array. pi maps image items to
+			// each provider's shape (Anthropic base64 source / OpenAI data URL).
+			const content = [
+				...(m.text ? [{ type: "text" as const, text: m.text }] : []),
+				...m.images.map((im) => ({ type: "image" as const, data: im.data, mimeType: im.mediaType })),
+			];
+			return { role: "user", content, timestamp: Date.now() };
 		}
 		// Replaying history only needs role + content; the rest of AssistantMessage
 		// is response metadata pi fills on output, not required as input.
@@ -97,6 +118,14 @@ export async function streamChat(options: StreamChatOptions): Promise<void> {
 		const provider = providers[providerId];
 		const model = provider.getModels().find((m) => m.id === modelId);
 		if (!model) throw new Error(`unknown model '${modelId}' for ${provider.name}`);
+
+		// Gate images up front: pi would silently downgrade them to a text
+		// placeholder for a non-vision model, so the user's picture would vanish
+		// without a word. Fail loudly instead.
+		if (messages.some((m) => m.images?.length) && !model.input.includes("image")) {
+			onError(`${model.name || modelId} can't read images. Switch to a vision-capable model to send pictures.`);
+			return;
+		}
 
 		const apiKey = await resolveApiKey(providerId);
 		const stream = provider.stream(
