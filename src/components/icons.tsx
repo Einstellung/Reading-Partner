@@ -109,6 +109,15 @@ export function IconSparkle({ size = 20 }: IconProps) {
 	);
 }
 
+// Drawn here: send arrow for the chat composer.
+export function IconSend({ size = 16 }: IconProps) {
+	return (
+		<svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+			<path d="M8 13V3M8 3L4 7M8 3L12 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+		</svg>
+	);
+}
+
 // Drawn here: expand/maximize glyph for the call bubble.
 export function IconExpand({ size = 16 }: IconProps) {
 	return (

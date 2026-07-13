@@ -40,7 +40,9 @@ import PenToolbar from "./components/PenToolbar";
 import AnnotationPopup from "./components/AnnotationPopup";
 import TraceList from "./components/TraceList";
 import CallBubble from "./components/CallBubble";
-import AICallPanel from "./components/AICallPanel";
+import CallView from "./components/CallView";
+import ReadingPipCard from "./components/ReadingPipCard";
+import ChatPipCard from "./components/ChatPipCard";
 import type { Annotation as PopupAnnotation, ToolType } from "./components/types";
 
 const HOST_SRC = "/reader/reader-host.html";
@@ -59,7 +61,10 @@ interface PopupState {
 interface CallState {
   threadId: string;
   annotationId: string;
-  view: "bubble" | "panel";
+  // Picture-in-picture call states (docs/03): the bubble, chat taking the whole
+  // window (reading shrunk to a corner card), and reading with chat shrunk to a
+  // corner card. `null` call = no active call.
+  view: "bubble" | "chat-main" | "chat-pip";
   anchor: { x: number; y: number };
   messages: ThreadMessage[];
 }
@@ -417,9 +422,15 @@ export default function App() {
     });
   }, []);
 
-  const expandCall = useCallback(() => setCall((c) => (c ? { ...c, view: "panel" } : c)), []);
-  // Closing the bubble or hanging up the panel ends the view; the thread stays
-  // on its mark and can be reopened by clicking the mark (docs/03).
+  // Bubble → full-window chat (reading shrinks to the corner card).
+  const expandCall = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-main" } : c)), []);
+  // Clicking outside the bubble keeps reading but the call stays alive as the
+  // corner chat card — not a hang-up (docs/03 correction).
+  const bubbleToPip = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-pip" } : c)), []);
+  // The two picture-in-picture swaps.
+  const swapToReading = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-pip" } : c)), []);
+  const swapToChat = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-main" } : c)), []);
+  // ✕ hangs up: the view goes away, the thread stays on its mark.
   const endCall = useCallback(() => setCall(null), []);
 
   const openThreadForAnnotation = useCallback((annotationId: string) => {
@@ -431,9 +442,10 @@ export default function App() {
     viewRef.current?.selectAnnotations([annotationId]);
     viewRef.current?.navigate({ annotationID: annotationId });
     setSelectedAnnId(annotationId);
-    setCall({ threadId, annotationId, view: "panel", anchor: { x: 0, y: 0 }, messages: thread?.messages ?? [] });
+    setCall({ threadId, annotationId, view: "chat-main", anchor: { x: 0, y: 0 }, messages: thread?.messages ?? [] });
   }, []);
 
+  // Jump the reading back to the thread's mark (from the reading corner card).
   const onPositionClick = useCallback(() => {
     setCall((c) => {
       if (c) {
@@ -588,23 +600,38 @@ export default function App() {
             messages={call.messages}
             onSend={sendCallMessage}
             onExpand={expandCall}
-            onClose={endCall}
+            onClose={bubbleToPip}
           />
         )}
 
-        {/* Docked right column — the desktop three-column call state (docs/03). */}
-        {call?.view === "panel" && (
-          <div className="flex-none">
-            <AICallPanel
-              position={{
-                fileName: title ?? "",
-                pageLabel: stats?.pageLabel ?? null,
-                excerpt: callExcerpt(annsRef.current.get(call.annotationId)) || null,
-              }}
-              messages={call.messages}
-              onSend={sendCallMessage}
+        {/* chat-main: chat takes the whole window over the still-mounted reader
+            (z-cover, reading state kept), reading shrinks to the corner card. */}
+        {call?.view === "chat-main" && (
+          <>
+            <div className="absolute inset-0 z-40">
+              <CallView messages={call.messages} onSend={sendCallMessage} onHangUp={endCall} />
+            </div>
+            <div className="absolute right-3 top-3 z-50">
+              <ReadingPipCard
+                fileName={title ?? ""}
+                pageLabel={stats?.pageLabel ?? null}
+                excerpt={callExcerpt(annsRef.current.get(call.annotationId)) || null}
+                onClick={() => {
+                  onPositionClick();
+                  swapToReading();
+                }}
+              />
+            </div>
+          </>
+        )}
+
+        {/* chat-pip: reading is back; the call persists as the corner chat card. */}
+        {call?.view === "chat-pip" && (
+          <div className="absolute right-3 top-3 z-50">
+            <ChatPipCard
+              lastMessage={call.messages.length ? call.messages[call.messages.length - 1].text : null}
+              onClick={swapToChat}
               onHangUp={endCall}
-              onPositionClick={onPositionClick}
             />
           </div>
         )}
