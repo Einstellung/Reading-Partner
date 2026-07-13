@@ -30,6 +30,17 @@
     {
       "identifier": "fs:allow-exists",
       "allow": [{ "path": "$APPDATA" }, { "path": "$APPDATA/**" }]
-    }
+    },
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://api.anthropic.com/*" },
+        { "url": "https://platform.claude.com/*" },
+        { "url": "https://claude.ai/*" },
+        { "url": "https://api.openai.com/*" },
+        { "url": "https://api.deepseek.com/*" }
+      ]
+    },
+    "opener:allow-open-url"
   ]
 }

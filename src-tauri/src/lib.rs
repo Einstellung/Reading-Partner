@@ -1,9 +1,17 @@
-// M1 needs no custom commands: the dialog and fs plugins cover file open,
-// and reading-state JSON is written from the frontend via the fs plugin.
+mod oauth_callback;
+
+// Plugins: dialog + fs (M1 file open / reading state), http (AI provider requests
+// routed through Rust to bypass CORS), opener (open the system browser for OAuth).
+// Custom command: the one-shot OAuth loopback listener.
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_opener::init())
+        .invoke_handler(tauri::generate_handler![
+            oauth_callback::start_oauth_callback_listener
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -36,6 +36,9 @@ import {
   onThreadSaveError,
   type ThreadMessage,
 } from "./threads";
+import { loadSettings, onSettingsSaveError, saveSettings, type Settings } from "./settings";
+import { buildSystemPrompt } from "./context";
+import { installFetchBridge, listProviders, streamChat, type ProviderId, type ProviderInfo } from "./aiClient";
 import PenToolbar from "./components/PenToolbar";
 import AnnotationPopup from "./components/AnnotationPopup";
 import TraceList from "./components/TraceList";
@@ -43,9 +46,12 @@ import CallBubble from "./components/CallBubble";
 import CallView from "./components/CallView";
 import ReadingPipCard from "./components/ReadingPipCard";
 import ChatPipCard from "./components/ChatPipCard";
+import SettingsView from "./components/SettingsView";
 import type { Annotation as PopupAnnotation, ToolType } from "./components/types";
 
 const HOST_SRC = "/reader/reader-host.html";
+// Auto-explanation kickoff (docs/03: the bubble starts explaining, unprompted).
+const EXPLAIN_KICKOFF = "Please explain the passage I just marked, using the reading context above.";
 // The AI pen maps to the engine's underline tool in a fixed purple. Owning this
 // one color for the AI pen is a v1 implementation convenience, not a semantic in
 // the color palette; the host identifies AI-pen strokes by the active tool, not
@@ -57,6 +63,7 @@ const AI_PEN_COLOR = "#a28ae5";
 const BTN_BASE =
   "leading-none border rounded-md bg-white cursor-pointer enabled:hover:bg-[#f0f0f0] disabled:opacity-40 disabled:cursor-default";
 const BTN = `${BTN_BASE} text-sm px-3 py-1.5 border-[#dcdcdc]`;
+const BTN_PRIMARY = "text-sm leading-none px-3 py-1.5 rounded-md bg-[#6c4fd0] text-white cursor-pointer enabled:hover:bg-[#5a3fbf] disabled:opacity-40";
 const BTN_SM = `${BTN_BASE} text-xs px-2 py-1 border-[#dcdcdc]`;
 const BTN_SM_DANGER = `${BTN_BASE} text-xs px-2 py-1 border-[#f0c8c8] text-[#b91c1c]`;
 const INPUT = "flex-1 px-2.5 py-2 border border-[#dcdcdc] rounded-md [font:inherit]";
@@ -71,6 +78,9 @@ interface PopupState {
   anchor: { x: number; y: number };
 }
 
+// Display message = persisted message + transient streaming/failed flags.
+type CallMessage = ThreadMessage & { streaming?: boolean; failed?: boolean };
+
 // A live AI "call" — one thread anchored on one AI-pen underline (docs/03).
 interface CallState {
   threadId: string;
@@ -80,7 +90,8 @@ interface CallState {
   // corner card. `null` call = no active call.
   view: "bubble" | "chat-main" | "chat-pip";
   anchor: { x: number; y: number };
-  messages: ThreadMessage[];
+  messages: CallMessage[];
+  error?: boolean; // last turn failed (offer retry)
 }
 
 export default function App() {
@@ -100,6 +111,15 @@ export default function App() {
   // Last pen-lift position inside the pdf iframe — the AI-pen bubble anchor,
   // since drawing a pen stroke yields no popup coordinates (pitfall: see report).
   const penUpRef = useRef<{ clientX: number; clientY: number } | null>(null);
+  // Abort controller for the in-flight stream (cancelled on hangup / switch).
+  const abortRef = useRef<AbortController | null>(null);
+  // Refs read by the stable runTurn callback (avoids dependency churn).
+  const settingsRef = useRef<Settings>({ defaultProviderId: null, defaultModelId: null });
+  const ctxRef = useRef<{ topicName: string; fileName: string; pageLabel: string | null }>({
+    topicName: "",
+    fileName: "",
+    pageLabel: null,
+  });
 
   const [topics, setTopics] = useState<Topic[]>([]);
   const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
@@ -118,11 +138,48 @@ export default function App() {
   const [selectedAnnId, setSelectedAnnId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [call, setCall] = useState<CallState | null>(null);
+  const [settings, setSettings] = useState<Settings>({ defaultProviderId: null, defaultModelId: null });
+  const [showSettings, setShowSettings] = useState(false);
+  const [providersInfo, setProvidersInfo] = useState<ProviderInfo[]>([]);
 
-  // Mirror the call view into a ref for the pdf-iframe pointerdown listener.
+  // Mirror the call (view for the pdf listener, whole thing for send handlers).
+  const callRef = useRef<CallState | null>(null);
   useEffect(() => {
     callViewRef.current = call?.view ?? "none";
+    callRef.current = call;
   }, [call]);
+
+  // Install the Tauri fetch bridge + load settings once.
+  useEffect(() => {
+    installFetchBridge();
+    loadSettings().then(setSettings).catch(() => {});
+    onSettingsSaveError((e) => {
+      console.error("failed to persist settings", e);
+      setStatus("Warning: settings could not be saved");
+    });
+  }, []);
+
+  // Refresh provider connection state on mount and whenever Settings closes.
+  useEffect(() => {
+    if (!showSettings) listProviders().then(setProvidersInfo).catch(() => {});
+  }, [showSettings]);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
+  useEffect(() => {
+    ctxRef.current = {
+      topicName: activeTopic?.name ?? "",
+      fileName: title ?? "",
+      pageLabel: stats?.pageLabel ?? null,
+    };
+  });
+
+  const applySettings = useCallback((next: Settings) => {
+    setSettings(next);
+    saveSettings(next);
+  }, []);
 
   const activeTopic = useMemo(
     () => topics.find((t) => t.id === activeTopicId) ?? null,
@@ -195,6 +252,72 @@ export default function App() {
     if (path) saveAnnotations(path, [...annsRef.current.values()]);
   }, []);
 
+  // Run one assistant turn for a thread: assemble the reading context, stream the
+  // reply into the bubble, persist on done. Stable (reads refs). No-ops (leaving
+  // the bubble empty for the guidance) when no provider is configured.
+  const runTurn = useCallback((threadId: string, annotationId: string) => {
+    const path = pathRef.current;
+    const s = settingsRef.current;
+    if (!path || !s.defaultProviderId || !s.defaultModelId) return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    const patch = (
+      fn: (m: CallMessage) => CallMessage,
+      ts: number,
+      error?: boolean,
+    ) =>
+      setCall((c) =>
+        !c || c.threadId !== threadId
+          ? c
+          : {
+              ...c,
+              error: error ?? c.error,
+              messages: c.messages.map((m) => (m.ts === ts && m.role === "ai" ? fn(m) : m)),
+            },
+      );
+
+    const ann = annsRef.current.get(annotationId);
+    const systemPrompt = buildSystemPrompt({
+      topicName: ctxRef.current.topicName,
+      fileName: ctxRef.current.fileName,
+      pageLabel: ctxRef.current.pageLabel,
+      selectionText: typeof ann?.text === "string" ? ann.text : "",
+      selectionComment: typeof ann?.comment === "string" ? ann.comment : undefined,
+    });
+    const prior = (getThread(path, threadId)?.messages ?? []).map((m) => ({ role: m.role, text: m.text }));
+    const apiMessages = [{ role: "user" as const, text: EXPLAIN_KICKOFF }, ...prior];
+
+    const ts = Date.now();
+    setCall((c) => {
+      if (!c || c.threadId !== threadId) return c;
+      const kept = c.messages.filter((m) => !(m.role === "ai" && (m.failed || m.streaming)));
+      return { ...c, error: false, messages: [...kept, { role: "ai", text: "", ts, streaming: true }] };
+    });
+
+    streamChat({
+      providerId: s.defaultProviderId as ProviderId,
+      modelId: s.defaultModelId,
+      systemPrompt,
+      messages: apiMessages,
+      signal: controller.signal,
+      onDelta: (chunk) => patch((m) => ({ ...m, text: m.text + chunk }), ts),
+      onDone: (full) => {
+        patch(() => ({ role: "ai", text: full, ts }), ts);
+        appendMessage(path, threadId, { role: "ai", text: full, ts });
+        if (abortRef.current === controller) abortRef.current = null;
+      },
+      onError: (message: string) => {
+        if (abortRef.current === controller) abortRef.current = null;
+        if (controller.signal.aborted) return; // switch/hangup, not a failure
+        console.error("stream failed", message);
+        setStatus("Warning: AI reply failed");
+        patch(() => ({ role: "ai", text: `⚠️ Couldn't reach the model. ${message}`, ts, failed: true }), ts, true);
+      },
+    });
+  }, []);
+
   // Engine created/modified annotations (drag-to-highlight, image select, etc.).
   // A brand-new annotation drawn while the AI pen is active starts a thread and
   // opens the call bubble.
@@ -236,9 +359,12 @@ export default function App() {
           anchor,
           messages: [],
         });
+        // The bubble starts explaining on its own (docs/03). If no provider is
+        // configured, runTurn no-ops and the empty bubble shows the guidance.
+        runTurn(aiCreated.threadId, aiCreated.annotation.id);
       }
     },
-    [persistAnnotations, syncTraceList],
+    [persistAnnotations, syncTraceList, runTurn],
   );
 
   const onDeleteAnnotations = useCallback(
@@ -269,12 +395,15 @@ export default function App() {
     if (threadId) {
       const path = pathRef.current;
       const thread = path ? getThread(path, threadId) : undefined;
+      abortRef.current?.abort(); // stop any stream from a previously open thread
       setPopup(null);
       setCall({ threadId, annotationId: ann.id, view: "bubble", anchor, messages: thread?.messages ?? [] });
+      // Empty thread (e.g. created before a provider was configured) → explain now.
+      if ((thread?.messages ?? []).length === 0) runTurn(threadId, ann.id);
     } else {
       setPopup({ annotation: ann, anchor });
     }
-  }, []);
+  }, [runTurn]);
 
   const reloadFrame = useCallback(async () => {
     const iframe = iframeRef.current;
@@ -438,46 +567,57 @@ export default function App() {
     setSelectedAnnId(id);
   }, []);
 
-  // Call handlers. Sending appends the user line plus a placeholder AI reply
-  // (the model is wired in a later milestone) and persists both.
-  const sendCallMessage = useCallback((text: string) => {
-    const path = pathRef.current;
-    if (!path || !text.trim()) return;
-    setCall((c) => {
-      if (!c) return c;
-      const now = Date.now();
-      const userMsg: ThreadMessage = { role: "user", text: text.trim(), ts: now };
-      const aiMsg: ThreadMessage = {
-        role: "ai",
-        text: "[Placeholder] AI reply will appear here once the model is wired in.",
-        ts: now + 1,
-      };
+  // Sending appends the user line (persisted) then streams the assistant reply.
+  const sendCallMessage = useCallback(
+    (text: string) => {
+      const c = callRef.current;
+      const path = pathRef.current;
+      if (!c || !path || !text.trim()) return;
+      const userMsg: ThreadMessage = { role: "user", text: text.trim(), ts: Date.now() };
       appendMessage(path, c.threadId, userMsg);
-      appendMessage(path, c.threadId, aiMsg);
-      return { ...c, messages: [...c.messages, userMsg, aiMsg] };
-    });
-  }, []);
+      setCall((cur) =>
+        cur && cur.threadId === c.threadId ? { ...cur, messages: [...cur.messages, userMsg] } : cur,
+      );
+      runTurn(c.threadId, c.annotationId);
+    },
+    [runTurn],
+  );
+
+  // Retry the last (failed) turn.
+  const retryCall = useCallback(() => {
+    const c = callRef.current;
+    if (c) runTurn(c.threadId, c.annotationId);
+  }, [runTurn]);
 
   // Bubble → full-window chat (reading shrinks to the corner card).
   const expandCall = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-main" } : c)), []);
   // The two picture-in-picture swaps.
   const swapToReading = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-pip" } : c)), []);
   const swapToChat = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-main" } : c)), []);
-  // ✕ hangs up, and touching the book dismisses too: the view goes away, the
-  // thread stays on its mark and is recalled by clicking the mark / ✨ (docs/03).
-  const endCall = useCallback(() => setCall(null), []);
-
-  const openThreadForAnnotation = useCallback((annotationId: string) => {
-    const ann = annsRef.current.get(annotationId);
-    const threadId = ann?.aiThreadId as string | undefined;
-    const path = pathRef.current;
-    if (!threadId || !path) return;
-    const thread = getThread(path, threadId);
-    viewRef.current?.selectAnnotations([annotationId]);
-    viewRef.current?.navigate({ annotationID: annotationId });
-    setSelectedAnnId(annotationId);
-    setCall({ threadId, annotationId, view: "chat-main", anchor: { x: 0, y: 0 }, messages: thread?.messages ?? [] });
+  // ✕ hangs up, and touching the book dismisses too: the view goes away (the
+  // stream is aborted), the thread stays on its mark (docs/03).
+  const endCall = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setCall(null);
   }, []);
+
+  const openThreadForAnnotation = useCallback(
+    (annotationId: string) => {
+      const ann = annsRef.current.get(annotationId);
+      const threadId = ann?.aiThreadId as string | undefined;
+      const path = pathRef.current;
+      if (!threadId || !path) return;
+      const thread = getThread(path, threadId);
+      abortRef.current?.abort();
+      viewRef.current?.selectAnnotations([annotationId]);
+      viewRef.current?.navigate({ annotationID: annotationId });
+      setSelectedAnnId(annotationId);
+      setCall({ threadId, annotationId, view: "chat-main", anchor: { x: 0, y: 0 }, messages: thread?.messages ?? [] });
+      if ((thread?.messages ?? []).length === 0) runTurn(threadId, annotationId);
+    },
+    [runTurn],
+  );
 
   // Jump the reading back to the thread's mark (from the reading corner card).
   const onPositionClick = useCallback(() => {
@@ -491,6 +631,9 @@ export default function App() {
   }, []);
 
   const closeReader = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setCall(null);
     setTitle(null);
     setPopup(null);
     pathRef.current = null;
@@ -499,6 +642,12 @@ export default function App() {
 
   const pageText = stats ? `${stats.pageIndex + 1} / ${stats.pagesCount}` : "— / —";
   const inReader = !!title;
+  const configured = !!(
+    settings.defaultProviderId &&
+    settings.defaultModelId &&
+    providersInfo.find((p) => p.id === settings.defaultProviderId)?.configured
+  );
+  const showGuidance = call?.view === "bubble" && call.messages.length === 0 && !configured;
 
   return (
     <div className="flex flex-col h-full">
@@ -539,6 +688,9 @@ export default function App() {
             <span className="flex-1" />
           </>
         )}
+        <button className={BTN} title="Settings" aria-label="Settings" onClick={() => setShowSettings(true)}>
+          ⚙
+        </button>
       </header>
 
       <main className="relative flex-1 min-h-0 flex">
@@ -628,7 +780,7 @@ export default function App() {
           />
         )}
 
-        {call?.view === "bubble" && (
+        {call?.view === "bubble" && !showGuidance && (
           <CallBubble
             anchor={call.anchor}
             messages={call.messages}
@@ -636,6 +788,37 @@ export default function App() {
             onExpand={expandCall}
             onClose={endCall}
           />
+        )}
+
+        {/* No provider configured: guide to Settings instead of chatting. */}
+        {showGuidance && call && (
+          <div
+            className="fixed z-[1000] flex w-[300px] flex-col gap-3 rounded-xl border border-black/10 bg-white p-4 shadow-[0_8px_40px_rgba(0,0,0,0.18)]"
+            style={{
+              left: Math.max(8, Math.min(call.anchor.x - 150, window.innerWidth - 308)),
+              top: Math.max(8, Math.min(call.anchor.y + 10, window.innerHeight - 160)),
+            }}
+          >
+            <p className="m-0 text-sm text-neutral-700">Configure a provider in Settings to start chatting.</p>
+            <div className="flex justify-end gap-2">
+              <button className={BTN} onClick={endCall}>
+                Dismiss
+              </button>
+              <button className={BTN_PRIMARY} onClick={() => setShowSettings(true)}>
+                Open Settings
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* A failed turn stays visible; offer a retry (docs/03: errors not swallowed). */}
+        {call?.error && (
+          <button
+            className="fixed bottom-6 left-1/2 z-[1001] -translate-x-1/2 rounded-full border border-[#dcdcdc] bg-white px-4 py-1.5 text-sm shadow-md hover:bg-[#f0f0f0]"
+            onClick={retryCall}
+          >
+            Retry
+          </button>
         )}
 
         {/* chat-main: chat takes the whole window over the still-mounted reader
@@ -670,6 +853,14 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {showSettings && (
+        <SettingsView
+          settings={settings}
+          onSettingsChange={applySettings}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
     </div>
   );
 }
