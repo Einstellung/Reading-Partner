@@ -52,6 +52,20 @@ const HOST_SRC = "/reader/reader-host.html";
 // the color. Value is `general-purple` from vendor/reader defines.js.
 const AI_PEN_COLOR = "#a28ae5";
 
+// Shared utility-class strings for the shell chrome (migrated from styles.css).
+// Split so variant overrides never collide with base padding/border utilities.
+const BTN_BASE =
+  "leading-none border rounded-md bg-white cursor-pointer enabled:hover:bg-[#f0f0f0] disabled:opacity-40 disabled:cursor-default";
+const BTN = `${BTN_BASE} text-sm px-3 py-1.5 border-[#dcdcdc]`;
+const BTN_SM = `${BTN_BASE} text-xs px-2 py-1 border-[#dcdcdc]`;
+const BTN_SM_DANGER = `${BTN_BASE} text-xs px-2 py-1 border-[#f0c8c8] text-[#b91c1c]`;
+const INPUT = "flex-1 px-2.5 py-2 border border-[#dcdcdc] rounded-md [font:inherit]";
+const LIBRARY = "w-[min(680px,100%)] mx-auto px-6 py-10";
+const TOPIC_LIST = "list-none m-0 p-0 flex flex-col gap-1.5";
+const TOPIC_ROW = "flex items-center gap-2 border border-[#dcdcdc] rounded-lg py-1 pl-1 pr-1.5";
+const TOPIC_NAME =
+  "flex-1 flex items-baseline gap-2.5 text-left px-2.5 py-2 border-0 bg-transparent cursor-pointer text-[15px] rounded-md hover:bg-[#f0f0f0]";
+
 interface PopupState {
   annotation: Annotation;
   anchor: { x: number; y: number };
@@ -487,27 +501,27 @@ export default function App() {
   const inReader = !!title;
 
   return (
-    <div className="app">
-      <header className="toolbar">
+    <div className="flex flex-col h-full">
+      <header className="flex h-11 flex-none items-center gap-3 border-b border-[#dcdcdc] bg-[#fafafa] px-3">
         {inReader ? (
           <>
-            <button className="btn" onClick={closeReader}>
+            <button className={BTN} onClick={closeReader}>
               ‹ Library
             </button>
-            <button className={`btn${sidebarOpen ? " active" : ""}`} onClick={() => setSidebarOpen((v) => !v)}>
+            <button className={BTN} onClick={() => setSidebarOpen((v) => !v)}>
               Traces
             </button>
-            <span className="crumb">
-              {activeTopic?.name} <span className="crumb-sep">›</span> {title}
+            <span className="text-[13px] text-[#1b1b1b] overflow-hidden text-ellipsis whitespace-nowrap max-w-[40vw]">
+              {activeTopic?.name} <span className="text-[#777] mx-0.5">›</span> {title}
             </span>
-            {status && <span className="status-inline">{status}</span>}
-            <span className="spacer" />
-            <div className="zoom">
-              <button className="btn" disabled={!stats?.canZoomOut} onClick={() => viewRef.current?.zoomOut()}>
+            {status && <span className="ml-3 text-xs text-[#b45309]">{status}</span>}
+            <span className="flex-1" />
+            <div className="flex items-center gap-2">
+              <button className={BTN} disabled={!stats?.canZoomOut} onClick={() => viewRef.current?.zoomOut()}>
                 −
               </button>
-              <span className="page">{pageText}</span>
-              <button className="btn" disabled={!stats?.canZoomIn} onClick={() => viewRef.current?.zoomIn()}>
+              <span className="[font-variant-numeric:tabular-nums] text-[13px] min-w-[64px] text-center">{pageText}</span>
+              <button className={BTN} disabled={!stats?.canZoomIn} onClick={() => viewRef.current?.zoomIn()}>
                 +
               </button>
             </div>
@@ -515,23 +529,23 @@ export default function App() {
         ) : (
           <>
             {activeTopic ? (
-              <button className="btn" onClick={() => setActiveTopicId(null)}>
+              <button className={BTN} onClick={() => setActiveTopicId(null)}>
                 ‹ Topics
               </button>
             ) : (
-              <span className="title">Reading Partner</span>
+              <span className="text-[13px] text-[#777] overflow-hidden text-ellipsis whitespace-nowrap max-w-[40vw]">Reading Partner</span>
             )}
-            {activeTopic && <span className="crumb">{activeTopic.name}</span>}
-            <span className="spacer" />
+            {activeTopic && <span className="text-[13px] text-[#1b1b1b] overflow-hidden text-ellipsis whitespace-nowrap max-w-[40vw]">{activeTopic.name}</span>}
+            <span className="flex-1" />
           </>
         )}
       </header>
 
-      <main className={`body${inReader && sidebarOpen ? " sidebar-open" : ""}`}>
+      <main className="relative flex-1 min-h-0 flex">
         {/* Trace panel sits on the LEFT (Zotero iPad Annotations position);
             the right side is reserved for the future AI column. */}
         {inReader && sidebarOpen && (
-          <aside className="trace-sidebar">
+          <aside className="w-[300px] shrink-0 h-full overflow-y-auto border-r border-[#dcdcdc] bg-white">
             <TraceList
               annotations={traceAnns as unknown as PopupAnnotation[]}
               selectedId={selectedAnnId}
@@ -542,10 +556,10 @@ export default function App() {
           </aside>
         )}
 
-        <iframe ref={iframeRef} className="reader" src={HOST_SRC} title="reader" />
+        <iframe ref={iframeRef} className="flex-1 min-w-0 h-full border-0 block" src={HOST_SRC} title="reader" />
 
         {inReader && (
-          <div className="pen-rail">
+          <div className={`absolute top-3 z-[5] ${sidebarOpen ? "left-[312px]" : "left-3"}`}>
             <PenToolbar
               tool={{ type: toolType, color: penColor }}
               colors={ANNOTATION_COLORS}
@@ -558,7 +572,7 @@ export default function App() {
         )}
 
         {!inReader && (
-          <div className="overlay">
+          <div className="absolute inset-0 flex flex-col items-stretch justify-start gap-6 bg-white overflow-y-auto">
             {activeTopic ? (
               <TopicDetail
                 topic={activeTopic}
@@ -681,27 +695,27 @@ function TopicLibrary(props: {
   onOpen: (t: Topic) => void;
 }) {
   return (
-    <div className="library">
-      <h1 className="library-title">Topics</h1>
-      <div className="topic-new">
+    <div className={LIBRARY}>
+      <h1 className="mt-0 mb-5 mx-0 text-[22px]">Topics</h1>
+      <div className="flex gap-2 mb-5">
         <input
-          className="input"
+          className={INPUT}
           placeholder="New topic (e.g. what makes JITs fast)"
           value={props.newTopicName}
           onChange={(e) => props.setNewTopicName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && props.onCreate()}
         />
-        <button className="btn" onClick={props.onCreate}>
+        <button className={BTN} onClick={props.onCreate}>
           Add
         </button>
       </div>
-      {props.topics.length === 0 && <p className="muted">No topics yet. Create one to start reading.</p>}
-      <ul className="topic-list">
+      {props.topics.length === 0 && <p className="text-[#777] text-sm">No topics yet. Create one to start reading.</p>}
+      <ul className={TOPIC_LIST}>
         {props.topics.map((t) => (
-          <li key={t.id} className="topic-row">
+          <li key={t.id} className={TOPIC_ROW}>
             {props.renamingId === t.id ? (
               <input
-                className="input"
+                className={INPUT}
                 autoFocus
                 value={props.renameText}
                 onChange={(e) => props.setRenameText(e.target.value)}
@@ -709,16 +723,16 @@ function TopicLibrary(props: {
                 onBlur={props.onCommitRename}
               />
             ) : (
-              <button className="topic-name" onClick={() => props.onOpen(t)}>
+              <button className={TOPIC_NAME} onClick={() => props.onOpen(t)}>
                 {t.name}
-                <span className="topic-count">{t.files.length} file{t.files.length === 1 ? "" : "s"}</span>
+                <span className="text-xs text-[#777]">{t.files.length} file{t.files.length === 1 ? "" : "s"}</span>
               </button>
             )}
-            <div className="topic-actions">
-              <button className="btn small" onClick={() => props.onStartRename(t)}>
+            <div className="flex gap-1">
+              <button className={BTN_SM} onClick={() => props.onStartRename(t)}>
                 Rename
               </button>
-              <button className="btn small danger" onClick={() => props.onDelete(t)}>
+              <button className={BTN_SM_DANGER} onClick={() => props.onDelete(t)}>
                 Delete
               </button>
             </div>
@@ -737,22 +751,22 @@ function TopicDetail(props: {
 }) {
   const files = sortedFiles(props.topic);
   return (
-    <div className="library">
-      <div className="topic-head">
-        <h1 className="library-title">{props.topic.name}</h1>
-        <button className="btn" onClick={props.onAddFile}>
+    <div className={LIBRARY}>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="m-0 text-[22px]">{props.topic.name}</h1>
+        <button className={BTN} onClick={props.onAddFile}>
           Add PDF
         </button>
       </div>
-      {files.length === 0 && <p className="muted">No files yet. Add a PDF to this topic.</p>}
-      <ul className="topic-list">
+      {files.length === 0 && <p className="text-[#777] text-sm">No files yet. Add a PDF to this topic.</p>}
+      <ul className={TOPIC_LIST}>
         {files.map((f) => (
-          <li key={f.path} className="topic-row">
-            <button className="topic-name" onClick={() => props.onOpenFile(f.path, f.name)}>
+          <li key={f.path} className={TOPIC_ROW}>
+            <button className={TOPIC_NAME} onClick={() => props.onOpenFile(f.path, f.name)}>
               {f.name}
             </button>
-            <div className="topic-actions">
-              <button className="btn small danger" onClick={() => props.onRemoveFile(f.path)}>
+            <div className="flex gap-1">
+              <button className={BTN_SM_DANGER} onClick={() => props.onRemoveFile(f.path)}>
                 Remove
               </button>
             </div>
