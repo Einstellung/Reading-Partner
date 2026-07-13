@@ -19,3 +19,9 @@ tauri-plugin-fs = "2"
 tauri-plugin-http = "2"
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
+
+# Full dev rebuilds peak at many GB of linker memory, which has triggered
+# systemd-oomd to kill the whole desktop session (docs/pitfall/14).
+[profile.dev]
+debug = "line-tables-only"
+split-debuginfo = "unpacked"
