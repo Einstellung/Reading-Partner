@@ -6,56 +6,91 @@ import { IconSend } from './icons';
 import { Markdown } from './Markdown';
 import type { ChatImage, PendingImage, ThreadMessage } from './types';
 
-// Thumbnails inside a message bubble. Constrained height so a tall screenshot
-// doesn't blow out the column; no lightbox in v1 (docs: original-size, bounded).
+// Attached images, right-aligned above a user message. Constrained height so a
+// tall screenshot doesn't blow out the column; no lightbox in v1 (docs:
+// original-size, bounded).
 function MessageImages({ images }: { images: ChatImage[] }) {
 	return (
-		<div className="flex flex-wrap gap-1.5">
+		<div className="flex flex-wrap justify-end gap-1.5">
 			{images.map((img, i) => (
 				<img
 					key={i}
 					src={`data:${img.mediaType};base64,${img.data}`}
 					alt="attachment"
-					className="max-h-60 max-w-full rounded-lg object-contain"
+					className="max-h-52 max-w-full rounded-xl object-contain"
 				/>
 			))}
 		</div>
 	);
 }
 
-// One message row. Memoized so that while the AI reply streams (the last
-// message's text grows on every delta), only that row re-parses its Markdown —
-// the earlier rows keep their rendered output.
+// The "thinking" state before the first streamed token arrives: three quiet
+// pulsing dots where the reply will appear.
+function TypingDots() {
+	return (
+		<div className="flex items-center gap-1 py-1 text-neutral-400" aria-label="Thinking">
+			<span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current [animation-delay:0ms]" />
+			<span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current [animation-delay:150ms]" />
+			<span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current [animation-delay:300ms]" />
+		</div>
+	);
+}
+
+// One message row, ChatGPT-style: the AI reply is plain body text set right on
+// the background (no bubble), carried by the Markdown typography; the user's
+// message is a compact light pill, right-aligned, with any images above it.
+// Memoized so that while the AI reply streams (the last message's text grows on
+// every delta), only that row re-parses its Markdown.
 const MessageBubble = memo(function MessageBubble({
 	role,
 	text,
 	images,
-	bubbleClass,
+	streaming,
+	failed,
+	size,
 }: {
 	role: ThreadMessage['role'];
 	text: string;
 	images?: ChatImage[];
-	bubbleClass: string;
+	streaming?: boolean;
+	failed?: boolean;
+	size: 'sm' | 'lg';
 }) {
-	const isUser = role === 'user';
-	const hasImages = !!images && images.length > 0;
-	return (
-		<div className={'flex ' + (isUser ? 'justify-end' : 'justify-start')}>
-			<div
-				className={
-					'box-border ' + bubbleClass + ' ' +
-					(isUser
-						? 'whitespace-pre-wrap bg-blue-600 text-white rounded-br-sm'
-						: 'bg-black/[0.05] text-neutral-800 rounded-bl-sm dark:bg-white/10 dark:text-neutral-100')
-				}
-			>
-				{hasImages && (
-					<div className={text ? 'mb-1.5' : ''}>
-						<MessageImages images={images!} />
+	const lg = size === 'lg';
+
+	if (role === 'user') {
+		const hasImages = !!images && images.length > 0;
+		return (
+			<div className="flex flex-col items-end gap-1.5">
+				{hasImages && <MessageImages images={images!} />}
+				{text && (
+					<div
+						className={
+							'box-border max-w-[75%] whitespace-pre-wrap break-words rounded-2xl bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100 ' +
+							(lg ? 'px-4 py-2.5 text-base leading-7' : 'px-3 py-1.5 text-[13px] leading-relaxed')
+						}
+					>
+						{text}
 					</div>
 				)}
-				{text && (isUser ? text : <Markdown text={text} />)}
 			</div>
+		);
+	}
+
+	// AI: failed turns are a muted notice, not prose; an empty streaming reply
+	// shows the thinking dots; otherwise the Markdown body fills the column.
+	if (failed) {
+		return (
+			<div className={'text-red-600/90 dark:text-red-400/90 ' + (lg ? 'text-[15px] leading-7' : 'text-[13px] leading-relaxed')}>
+				{text}
+			</div>
+		);
+	}
+	if (streaming && !text) return <TypingDots />;
+	if (!text) return null;
+	return (
+		<div className={'text-neutral-800 dark:text-neutral-100 ' + (lg ? 'text-base' : 'text-[13px]')}>
+			<Markdown text={text} />
 		</div>
 	);
 });
@@ -74,15 +109,18 @@ export function MessageList({
 		endRef.current?.scrollIntoView({ block: 'end' });
 	}, [messages.length]);
 
-	const bubble =
-		size === 'lg'
-			? 'max-w-[85%] rounded-2xl px-4 py-2.5 text-[15px] leading-relaxed'
-			: 'max-w-[80%] rounded-2xl px-3 py-1.5 text-[13px] leading-snug';
-
 	return (
-		<div className={'flex flex-col ' + (size === 'lg' ? 'gap-3 ' : 'gap-2 ') + 'overflow-y-auto ' + className}>
+		<div className={'flex flex-col ' + (size === 'lg' ? 'gap-6 ' : 'gap-3 ') + 'overflow-y-auto ' + className}>
 			{messages.map((m, i) => (
-				<MessageBubble key={i} role={m.role} text={m.text} images={m.images} bubbleClass={bubble} />
+				<MessageBubble
+					key={i}
+					role={m.role}
+					text={m.text}
+					images={m.images}
+					streaming={m.streaming}
+					failed={m.failed}
+					size={size}
+				/>
 			))}
 			<div ref={endRef} />
 		</div>

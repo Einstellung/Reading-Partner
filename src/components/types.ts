@@ -41,6 +41,10 @@ export interface ThreadMessage {
 	text: string;
 	ts: number;
 	images?: ChatImage[];
+	// Transient display flags (not persisted): the AI reply currently streaming,
+	// or a turn that failed (rendered as a muted notice, not normal prose).
+	streaming?: boolean;
+	failed?: boolean;
 }
 
 export interface Thread {
