@@ -6,7 +6,11 @@ Built on the [zotero/reader](https://github.com/zotero/reader) engine (rendering
 
 ## Status
 
-Early development. Current milestone: core reading works — open a local PDF, page through, zoom, and your reading position is restored on reopen. AI features are not wired in yet.
+Early development, PDF only. Reading works — topics and a booklist, highlights and underlines, a marks list, the document outline, and a restored reading position. The AI works: mark a passage with the AI pen and it explains it right there, and it can read further pages, search the other books in the topic, and look at your notes on them, on its own. Bring your own key (Anthropic, OpenAI, or an OpenAI-compatible endpoint).
+
+## Install
+
+Prebuilt binaries for Linux, macOS and Windows are on the [releases page](https://github.com/Einstellung/Reading-Partner/releases). They are unsigned: macOS will refuse the first launch until you right-click the app and choose Open, and Windows SmartScreen will warn once.
 
 ## Build
 
