@@ -38,7 +38,8 @@ import {
   saveThreadImages,
   type ThreadMessage,
 } from "./threads";
-import { compressImage, type CompressedImage } from "./ai/image-utils";
+import { compressImage, compressImageData, type CompressedImage } from "./ai/image-utils";
+import { isTauri, readClipboardImage } from "./clipboard";
 import { loadSettings, onSettingsSaveError, saveSettings, type Settings } from "./settings";
 import { buildSystemPrompt } from "./context";
 import {
@@ -57,7 +58,7 @@ import CallView from "./components/CallView";
 import ReadingPipCard from "./components/ReadingPipCard";
 import ChatPipCard from "./components/ChatPipCard";
 import SettingsView from "./components/SettingsView";
-import type { Annotation as PopupAnnotation, ToolType } from "./components/types";
+import type { Annotation as PopupAnnotation, PendingImage, ToolType } from "./components/types";
 
 const HOST_SRC = "/reader/reader-host.html";
 // Auto-explanation kickoff (docs/03: the bubble starts explaining, unprompted).
@@ -169,14 +170,18 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [providersInfo, setProvidersInfo] = useState<ProviderInfo[]>([]);
 
-  // Images pasted into the composer, awaiting send. Mirrored to a ref so the
-  // stable send handler reads the current list. A single document-level paste
-  // listener (below) fills these; the composer only renders them (controlled).
-  const [pendingImages, setPendingImages] = useState<CompressedImage[]>([]);
-  const pendingImagesRef = useRef<CompressedImage[]>([]);
-  useEffect(() => {
-    pendingImagesRef.current = pendingImages;
-  }, [pendingImages]);
+  // Images pasted into the composer, awaiting send: a placeholder appears while
+  // the async compression runs, then resolves to a ready preview. A single
+  // document-level paste listener fills these; the composer only renders them.
+  // The ref mirrors state synchronously so bursts of pastes and the stable send
+  // handler all see the current list without waiting for a re-render.
+  const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
+  const pendingImagesRef = useRef<PendingImage[]>([]);
+  const mutatePending = useCallback((fn: (cur: PendingImage[]) => PendingImage[]) => {
+    const next = fn(pendingImagesRef.current);
+    pendingImagesRef.current = next;
+    setPendingImages(next);
+  }, []);
   // Inline note under the composer when a paste is rejected (model can't see it).
   const [imageHint, setImageHint] = useState("");
 
@@ -640,73 +645,120 @@ export default function App() {
     setSelectedAnnId(id);
   }, []);
 
-  // Compress a pasted image and stage it for the next send (capped at 3).
-  const addPastedImage = useCallback(async (blob: Blob) => {
-    try {
-      const img = await compressImage(blob);
-      setPendingImages((cur) => (cur.length >= MAX_PENDING_IMAGES ? cur : [...cur, img]));
-    } catch (e) {
-      console.error("failed to process pasted image", e);
-      setStatus(e instanceof Error ? e.message : "Couldn't process that image");
-    }
-  }, []);
+  // Stage an image for the next send: a placeholder shows immediately, the async
+  // compression runs, then the ready preview swaps in (or it's dropped + a hint
+  // on failure). Capped at MAX_PENDING_IMAGES.
+  const stageImage = useCallback(
+    (produce: () => Promise<CompressedImage>) => {
+      if (pendingImagesRef.current.length >= MAX_PENDING_IMAGES) {
+        setImageHint(`You can attach up to ${MAX_PENDING_IMAGES} images.`);
+        return;
+      }
+      const id = crypto.randomUUID();
+      mutatePending((cur) => [...cur, { id, status: "loading" }]);
+      produce().then(
+        (img) =>
+          mutatePending((cur) =>
+            cur.map((p) => (p.id === id ? { id, status: "ready", data: img.data, mediaType: img.mediaType } : p)),
+          ),
+        (e) => {
+          console.error("failed to process pasted image", e);
+          mutatePending((cur) => cur.filter((p) => p.id !== id));
+          setImageHint(e instanceof Error ? e.message : "Couldn't process that image");
+        },
+      );
+    },
+    [mutatePending],
+  );
 
-  const removePendingImage = useCallback((index: number) => {
-    setPendingImages((cur) => cur.filter((_, i) => i !== index));
-  }, []);
+  const removePendingImage = useCallback(
+    (id: string) => mutatePending((cur) => cur.filter((p) => p.id !== id)),
+    [mutatePending],
+  );
 
   const clearPendingImages = useCallback(() => {
-    setPendingImages([]);
+    mutatePending(() => []);
     setImageHint("");
+  }, [mutatePending]);
+
+  // Does the active default model accept images? (Gates a paste up front.)
+  const modelTakesImages = useCallback(() => {
+    const s = settingsRef.current;
+    return !!(
+      s.defaultProviderId &&
+      s.defaultModelId &&
+      modelSupportsImages(s.defaultProviderId as ProviderId, s.defaultModelId)
+    );
   }, []);
 
-  // One global paste path (docs: single owner, focus-independent). While a call
-  // is open, an image on the clipboard is staged; a plain-text paste is left
-  // untouched so typing is normal. Rejected up front if the model can't see
-  // images, with an inline note rather than a silent drop downstream.
+  // One global paste path (single owner, focus-independent). While a call is
+  // open: prefer image items on the DOM clipboard event (Chrome / future iPad);
+  // if the event carries no image and no text, fall back to reading the system
+  // clipboard through Tauri (WebKitGTK drops image data from the paste event,
+  // pitfall 16). Any failure surfaces an inline hint — never a silent drop.
   useEffect(() => {
     if (!call) return;
     const onPaste = (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
-      if (!items) return;
       const blobs: Blob[] = [];
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        if (item.kind === "file" && item.type.startsWith("image/")) {
-          const f = item.getAsFile();
-          if (f) blobs.push(f);
+      if (items) {
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item.kind === "file" && item.type.startsWith("image/")) {
+            const f = item.getAsFile();
+            if (f) blobs.push(f);
+          }
         }
       }
-      if (blobs.length === 0) return; // plain text: keep default paste
-      e.preventDefault();
-      const s = settingsRef.current;
-      const canAttach = !!(
-        s.defaultProviderId &&
-        s.defaultModelId &&
-        modelSupportsImages(s.defaultProviderId as ProviderId, s.defaultModelId)
-      );
-      if (!canAttach) {
-        setImageHint("This model can't read images. Switch to a vision model in Settings.");
+      if (blobs.length > 0) {
+        e.preventDefault();
+        if (!modelTakesImages()) {
+          setImageHint("This model can't read images. Switch to a vision model in Settings.");
+          return;
+        }
+        setImageHint("");
+        for (const b of blobs) stageImage(() => compressImage(b));
         return;
       }
-      setImageHint("");
-      for (const b of blobs) void addPastedImage(b);
+      // No image in the DOM event. Text paste keeps its default behaviour.
+      const text = e.clipboardData?.getData("text") ?? "";
+      if (text.trim() !== "" || !isTauri()) return;
+      // WebKitGTK: the image never reached the event — read it from Rust.
+      e.preventDefault();
+      void (async () => {
+        const img = await readClipboardImage();
+        if (!img) {
+          setImageHint("Couldn't read an image from the clipboard.");
+          return;
+        }
+        if (!modelTakesImages()) {
+          setImageHint("This model can't read images. Switch to a vision model in Settings.");
+          return;
+        }
+        setImageHint("");
+        stageImage(() => compressImageData(img.rgba, img.width, img.height));
+      })();
     };
     document.addEventListener("paste", onPaste);
     return () => document.removeEventListener("paste", onPaste);
-  }, [call, addPastedImage]);
+  }, [call, stageImage, modelTakesImages]);
 
-  // Sending appends the user line (with any staged images, persisted to disk)
-  // then streams the assistant reply. An empty message with images is allowed.
+  // Sending appends the user line (with any ready staged images, persisted to
+  // disk) then streams the reply. Empty text with images is allowed; images
+  // still compressing block the send (the composer disables it too).
   const sendCallMessage = useCallback(
     (text: string) => {
       const c = callRef.current;
       const path = pathRef.current;
-      const images = pendingImagesRef.current;
+      const staged = pendingImagesRef.current;
       const trimmed = text.trim();
+      if (staged.some((p) => p.status === "loading")) return; // wait for compression
+      const images = staged.flatMap((p) =>
+        p.status === "ready" ? [{ data: p.data, mediaType: p.mediaType }] : [],
+      );
       if (!c || !path || (!trimmed && images.length === 0)) return;
       const ts = Date.now();
-      setPendingImages([]);
+      mutatePending(() => []);
       setImageHint("");
       void (async () => {
         let imageNames: string[] = [];
@@ -716,7 +768,7 @@ export default function App() {
           } catch (e) {
             console.error("failed to persist pasted images", e);
             setStatus("Warning: pasted image could not be saved");
-            setPendingImages(images); // give them back so the send can be retried
+            mutatePending(() => staged); // give them back so the send can be retried
             return;
           }
         }
@@ -740,7 +792,7 @@ export default function App() {
         runTurn(c.threadId, c.annotationId);
       })();
     },
-    [runTurn],
+    [runTurn, mutatePending],
   );
 
   // Retry the last (failed) turn.

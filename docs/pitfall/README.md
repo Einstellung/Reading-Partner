@@ -17,3 +17,4 @@
 - [13-pen-stroke-no-popup-coords](./13-pen-stroke-no-popup-coords.md) — 笔工具划完不给浮窗坐标,气泡锚点靠 pointerup 兜底
 - [14-dev-build-oomd-session-kill](./14-dev-build-oomd-session-kill.md) — 全量 Rust 编译触发 systemd-oomd 杀整个桌面会话
 - [15-plugin-http-forced-origin](./15-plugin-http-forced-origin.md) — Tauri http 插件强制补 Origin,Anthropic 视其为 CORS 请求
+- [16-webkitgtk-clipboard-image](./16-webkitgtk-clipboard-image.md) — WebKitGTK 的 DOM paste 事件不带图片,贴图要从 Rust 读剪贴板

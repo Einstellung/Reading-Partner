@@ -21,6 +21,9 @@ tauri-plugin-fs = "2"
 # request that looks like CORS (docs/pitfall/15).
 tauri-plugin-http = { version = "2", features = ["unsafe-headers"] }
 tauri-plugin-opener = "2"
+# Read images from the system clipboard: WebKitGTK's DOM paste event often
+# omits image data, so the shell reads the clipboard through Rust as a fallback.
+tauri-plugin-clipboard-manager = "2"
 serde = { version = "1", features = ["derive"] }
 
 # Full dev rebuilds peak at many GB of linker memory, which has triggered

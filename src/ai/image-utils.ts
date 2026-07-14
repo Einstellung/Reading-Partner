@@ -2,7 +2,9 @@
 // model-friendly size before it ever hits the wire. Anthropic downsamples
 // anything past ~1568px on the long edge and rejects a single image over 5 MB
 // (docs/05), so we do the resize ourselves to save tokens and fail early on
-// oversized input. Runs in the webview (needs canvas / createImageBitmap).
+// oversized input. Runs in the webview (canvas), decoding via createImageBitmap
+// with an <img> fallback for WebKitGTK; also accepts raw RGBA from the Tauri
+// clipboard path (compressImageData).
 
 const MAX_EDGE = 1568;
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -40,34 +42,79 @@ function hasAlpha(ctx: CanvasRenderingContext2D, width: number, height: number):
   return false;
 }
 
-// Compress a pasted image blob. Transparent source (PNG with real alpha) stays
-// PNG to keep the transparency; everything else becomes JPEG q0.85, which is far
-// smaller for photos and screenshots. Rejects images still over 5 MB after
-// compression rather than letting the provider bounce them.
-export async function compressImage(blob: Blob): Promise<CompressedImage> {
-  const bitmap = await createImageBitmap(blob);
-  const { width, height } = scaledSize(bitmap.width, bitmap.height);
+type Drawable = CanvasImageSource & { width: number; height: number };
+
+// Draw a decoded source scaled to fit MAX_EDGE and encode it. Transparent
+// content (real alpha) stays PNG to keep the transparency; everything else
+// becomes JPEG q0.85, far smaller for photos and screenshots. Rejects anything
+// still over 5 MB rather than letting the provider bounce it.
+function encodeDrawable(source: Drawable, srcW: number, srcH: number, probeAlpha: boolean): CompressedImage {
+  const { width, height } = scaledSize(srcW, srcH);
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    bitmap.close();
-    throw new Error("Could not process the image (no canvas context).");
-  }
-  ctx.drawImage(bitmap, 0, 0, width, height);
-  bitmap.close();
+  if (!ctx) throw new Error("Could not process the image (no canvas context).");
+  ctx.drawImage(source, 0, 0, width, height);
 
   const mediaType: CompressedImage["mediaType"] =
-    blob.type === "image/png" && hasAlpha(ctx, width, height) ? "image/png" : "image/jpeg";
+    probeAlpha && hasAlpha(ctx, width, height) ? "image/png" : "image/jpeg";
   const dataUrl = canvas.toDataURL(mediaType, mediaType === "image/jpeg" ? JPEG_QUALITY : undefined);
   const data = dataUrl.slice(dataUrl.indexOf(",") + 1);
 
   const bytes = base64Bytes(data);
   if (bytes > MAX_BYTES) {
-    throw new Error(
-      `Image is too large after compression (${(bytes / 1024 / 1024).toFixed(1)} MB, max 5 MB).`,
-    );
+    throw new Error(`Image is too large after compression (${(bytes / 1024 / 1024).toFixed(1)} MB, max 5 MB).`);
   }
   return { data, mediaType };
+}
+
+// Decode a blob to a drawable. Prefer createImageBitmap; fall back to an <img>
+// element, since WebKitGTK's createImageBitmap has been unreliable for pasted
+// blobs. Returns a cleanup to release the bitmap / object URL after drawing.
+async function decodeBlob(blob: Blob): Promise<{ source: Drawable; width: number; height: number; cleanup: () => void }> {
+  if (typeof createImageBitmap === "function") {
+    try {
+      const bmp = await createImageBitmap(blob);
+      return { source: bmp, width: bmp.width, height: bmp.height, cleanup: () => bmp.close() };
+    } catch {
+      // fall through to the <img> path
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = new Image();
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("Could not decode the image."));
+      img.src = url;
+    });
+    return { source: img, width: img.naturalWidth, height: img.naturalHeight, cleanup: () => URL.revokeObjectURL(url) };
+  } catch (e) {
+    URL.revokeObjectURL(url);
+    throw e;
+  }
+}
+
+// Compress a pasted image blob (the DOM clipboard path).
+export async function compressImage(blob: Blob): Promise<CompressedImage> {
+  const d = await decodeBlob(blob);
+  try {
+    return encodeDrawable(d.source, d.width, d.height, blob.type === "image/png");
+  } finally {
+    d.cleanup();
+  }
+}
+
+// Compress raw RGBA pixels (row-major, top to bottom) — the shape Tauri's
+// clipboard readImage() returns on platforms whose DOM paste event carries no
+// image data (WebKitGTK). Alpha is always probed since the source has a channel.
+export async function compressImageData(rgba: Uint8Array, width: number, height: number): Promise<CompressedImage> {
+  const src = document.createElement("canvas");
+  src.width = width;
+  src.height = height;
+  const sctx = src.getContext("2d");
+  if (!sctx) throw new Error("Could not process the image (no canvas context).");
+  sctx.putImageData(new ImageData(new Uint8ClampedArray(rgba), width, height), 0, 0);
+  return encodeDrawable(src, width, height, true);
 }

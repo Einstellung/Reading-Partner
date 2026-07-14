@@ -5,7 +5,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconExpand } from './icons';
 import { Composer, MessageList } from './chat';
-import type { ChatImage, ThreadMessage } from './types';
+import type { PendingImage, ThreadMessage } from './types';
 
 interface CallBubbleProps {
 	anchor: { x: number; y: number };
@@ -13,8 +13,8 @@ interface CallBubbleProps {
 	onSend(text: string): void;
 	onExpand(): void;
 	onClose(): void;
-	pendingImages?: ChatImage[];
-	onRemoveImage?(index: number): void;
+	pendingImages?: PendingImage[];
+	onRemoveImage?(id: string): void;
 	hint?: string;
 }
 

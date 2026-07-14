@@ -4,7 +4,7 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { IconSend } from './icons';
 import { Markdown } from './Markdown';
-import type { ChatImage, ThreadMessage } from './types';
+import type { ChatImage, PendingImage, ThreadMessage } from './types';
 
 // Thumbnails inside a message bubble. Constrained height so a tall screenshot
 // doesn't blow out the column; no lightbox in v1 (docs: original-size, bounded).
@@ -89,9 +89,41 @@ export function MessageList({
 	);
 }
 
+// Staged images inside the composer: a placeholder card with a spinner while the
+// paste compresses, then the preview. Black round ✕ at the top-right removes one.
+function StagingCards({ images, onRemove, size }: { images: PendingImage[]; onRemove?: (id: string) => void; size: number }) {
+	return (
+		<div className="flex flex-wrap gap-2">
+			{images.map((img) => (
+				<div key={img.id} className="relative shrink-0" style={{ width: size, height: size }}>
+					{img.status === 'loading' ? (
+						<div className="flex h-full w-full items-center justify-center rounded-lg bg-black/[0.06] dark:bg-white/10">
+							<span className="h-5 w-5 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-500 dark:border-neutral-600 dark:border-t-neutral-300" />
+						</div>
+					) : (
+						<img
+							src={`data:${img.mediaType};base64,${img.data}`}
+							alt="attachment"
+							className="h-full w-full rounded-lg object-cover"
+						/>
+					)}
+					<button
+						type="button"
+						aria-label="Remove image"
+						onClick={() => onRemove?.(img.id)}
+						className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black text-[10px] leading-none text-white shadow"
+					>
+						✕
+					</button>
+				</div>
+			))}
+		</div>
+	);
+}
+
 // Presentational composer. Paste is handled globally by the host (a single
-// document-level listener), so this only renders staged images + an optional
-// hint and reports text sends.
+// document-level listener), so this only renders the staged images (inside the
+// input container) + an optional hint, and reports text sends.
 export function Composer({
 	onSend,
 	placeholder,
@@ -103,16 +135,20 @@ export function Composer({
 	onSend(text: string): void;
 	placeholder: string;
 	pill?: boolean;
-	pendingImages?: ChatImage[];
-	onRemoveImage?(index: number): void;
+	pendingImages?: PendingImage[];
+	onRemoveImage?(id: string): void;
 	hint?: string;
 }) {
 	const [value, setValue] = useState('');
 
+	const hasImages = pendingImages.length > 0;
+	const hasLoading = pendingImages.some((p) => p.status === 'loading');
+	const hasReady = pendingImages.some((p) => p.status === 'ready');
+	const canSend = (!!value.trim() || hasReady) && !hasLoading;
+
 	function send() {
-		const text = value.trim();
-		if (!text && pendingImages.length === 0) return;
-		onSend(text);
+		if (!canSend) return;
+		onSend(value.trim());
 		setValue('');
 	}
 	function onKeyDown(e: React.KeyboardEvent) {
@@ -122,71 +158,44 @@ export function Composer({
 		}
 	}
 
-	const canSend = !!value.trim() || pendingImages.length > 0;
+	const cardSize = pill ? 96 : 72;
+	const container = pill
+		? 'box-border rounded-3xl border border-black/10 bg-white px-2 py-2 shadow-sm dark:border-white/15 dark:bg-neutral-800'
+		: 'box-border rounded-xl border border-black/10 bg-white p-2 focus-within:border-blue-500 dark:border-white/15 dark:bg-neutral-800';
 
-	const previews = (pendingImages.length > 0 || hint) && (
-		<div className="flex flex-col gap-1">
-			{pendingImages.length > 0 && (
-				<div className="flex flex-wrap gap-2">
-					{pendingImages.map((img, i) => (
-						<div key={i} className="relative">
-							<img
-								src={`data:${img.mediaType};base64,${img.data}`}
-								alt="attachment"
-								className="h-14 w-14 rounded-md border border-black/10 object-cover dark:border-white/15"
-							/>
-							<button
-								type="button"
-								aria-label="Remove image"
-								onClick={() => onRemoveImage?.(i)}
-								className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-black/10 bg-white text-[11px] leading-none text-neutral-600 shadow dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-200"
-							>
-								✕
-							</button>
-						</div>
-					))}
-				</div>
-			)}
-			{hint && <div className="text-[12px] leading-snug text-amber-600 dark:text-amber-400">{hint}</div>}
-		</div>
-	);
-
-	if (pill) {
-		return (
-			<div className="flex flex-col gap-2">
-				{previews}
-				<div className="box-border flex items-center gap-2 rounded-full border border-black/10 bg-white py-2 pl-5 pr-2 shadow-sm dark:border-white/15 dark:bg-neutral-800">
+	return (
+		<div className="flex flex-col gap-2">
+			<div className={container}>
+				{hasImages && (
+					<div className="mb-2 px-1">
+						<StagingCards images={pendingImages} onRemove={onRemoveImage} size={cardSize} />
+					</div>
+				)}
+				<div className={pill ? 'flex items-center gap-2 pl-3' : 'flex items-center gap-2'}>
 					<input
-						className="min-w-0 flex-1 border-0 bg-transparent text-[15px] text-neutral-800 outline-none placeholder:text-neutral-400 dark:text-neutral-100"
+						className={
+							'min-w-0 flex-1 border-0 bg-transparent outline-none placeholder:text-neutral-400 ' +
+							(pill ? 'text-[15px] text-neutral-800 dark:text-neutral-100' : 'px-1 text-[13px] text-neutral-800 dark:text-neutral-100')
+						}
 						placeholder={placeholder}
 						value={value}
 						onChange={(e) => setValue(e.target.value)}
 						onKeyDown={onKeyDown}
 					/>
-					<button
-						type="button"
-						aria-label="Send"
-						onClick={send}
-						disabled={!canSend}
-						className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white disabled:opacity-40"
-					>
-						<IconSend size={17} />
-					</button>
+					{pill && (
+						<button
+							type="button"
+							aria-label="Send"
+							onClick={send}
+							disabled={!canSend}
+							className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white disabled:opacity-40"
+						>
+							<IconSend size={17} />
+						</button>
+					)}
 				</div>
 			</div>
-		);
-	}
-
-	return (
-		<div className="flex flex-col gap-2">
-			{previews}
-			<input
-				className="box-border w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-[13px] text-neutral-800 outline-none placeholder:text-neutral-400 focus:border-blue-500 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-100"
-				placeholder={placeholder}
-				value={value}
-				onChange={(e) => setValue(e.target.value)}
-				onKeyDown={onKeyDown}
-			/>
+			{hint && <div className="px-1 text-[12px] leading-snug text-amber-600 dark:text-amber-400">{hint}</div>}
 		</div>
 	);
 }

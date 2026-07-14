@@ -44,6 +44,7 @@
     {
       "identifier": "opener:allow-open-url",
       "allow": [{ "url": "https://claude.ai/*" }]
-    }
+    },
+    "clipboard-manager:allow-read-image"
   ]
 }

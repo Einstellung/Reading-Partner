@@ -6,14 +6,14 @@
 
 import { IconClose } from './icons';
 import { Composer, MessageList } from './chat';
-import type { ChatImage, ThreadMessage } from './types';
+import type { PendingImage, ThreadMessage } from './types';
 
 interface CallViewProps {
 	messages: ThreadMessage[];
 	onSend(text: string): void;
 	onHangUp(): void;
-	pendingImages?: ChatImage[];
-	onRemoveImage?(index: number): void;
+	pendingImages?: PendingImage[];
+	onRemoveImage?(id: string): void;
 	hint?: string;
 }
 

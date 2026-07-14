@@ -21,6 +21,12 @@ export interface ChatImage {
 	mediaType: string;
 }
 
+// A staged (pre-send) image. It appears instantly as a placeholder while the
+// async compression runs, then resolves to a ready preview.
+export type PendingImage =
+	| { id: string; status: 'loading' }
+	| { id: string; status: 'ready'; data: string; mediaType: string };
+
 export interface Annotation {
 	id: string;
 	type: string;
