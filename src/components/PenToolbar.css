@@ -19,6 +19,35 @@
 	user-select: none;
 }
 
+/* Horizontal variant: the rack lives inside the header bar, so it lays the tools
+   out in a row and drops the floating-card chrome (the header is its surface). */
+.pen-toolbar.horizontal {
+	flex-direction: row;
+	gap: 2px;
+	padding: 2px;
+	background: transparent;
+	border: none;
+	border-radius: 0;
+	box-shadow: none;
+}
+
+.pen-toolbar.horizontal .pen-tool {
+	width: 30px;
+	height: 30px;
+}
+
+.pen-toolbar.horizontal .pen-toolbar-sep {
+	width: 1px;
+	height: 20px;
+	margin: 0 4px;
+}
+
+.pen-toolbar.horizontal .pen-palette {
+	left: 50%;
+	top: calc(100% + 8px);
+	transform: translateX(-50%);
+}
+
 .pen-tool {
 	display: flex;
 	align-items: center;
@@ -103,15 +132,4 @@
 
 .pen-swatch.selected {
 	box-shadow: inset 0 0 0 2px var(--pt-active-fg);
-}
-
-@media (prefers-color-scheme: dark) {
-	.pen-toolbar {
-		--pt-bg: #2b2f36;
-		--pt-fg: #e6e8eb;
-		--pt-hover: rgba(255, 255, 255, 0.08);
-		--pt-active-bg: #33415c;
-		--pt-active-fg: #7aa7ee;
-		--pt-border: rgba(255, 255, 255, 0.14);
-	}
 }

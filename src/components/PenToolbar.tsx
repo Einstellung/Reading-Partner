@@ -11,6 +11,9 @@ interface PenToolbarProps {
 	tool: Tool;
 	colors: ColorEntry[];
 	onToolChange(tool: Tool): void;
+	// 'horizontal' lays the rack out as a row for the header bar; 'vertical' is
+	// the floating rack beside the page.
+	orientation?: 'vertical' | 'horizontal';
 }
 
 const TOOLS: { type: ToolType; label: string; Icon: (p: { size?: number }) => JSX.Element }[] = [
@@ -20,7 +23,7 @@ const TOOLS: { type: ToolType; label: string; Icon: (p: { size?: number }) => JS
 	{ type: 'ai', label: 'AI pen', Icon: IconSparkle },
 ];
 
-export default function PenToolbar({ tool, colors, onToolChange }: PenToolbarProps) {
+export default function PenToolbar({ tool, colors, onToolChange, orientation = 'vertical' }: PenToolbarProps) {
 	const [paletteOpen, setPaletteOpen] = useState(false);
 	const paletteRef = useRef<HTMLDivElement>(null);
 
@@ -45,7 +48,12 @@ export default function PenToolbar({ tool, colors, onToolChange }: PenToolbarPro
 	}
 
 	return (
-		<div className="pen-toolbar" role="toolbar" aria-orientation="vertical" aria-label="Annotation tools">
+		<div
+			className={'pen-toolbar' + (orientation === 'horizontal' ? ' horizontal' : '')}
+			role="toolbar"
+			aria-orientation={orientation}
+			aria-label="Annotation tools"
+		>
 			{TOOLS.map(({ type, label, Icon }) => (
 				<button
 					key={type}

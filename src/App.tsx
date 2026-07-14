@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import {
   createPdfView,
+  SpreadMode,
   type Annotation,
   type AnnotationPopupParams,
   type ViewInstance,
@@ -11,6 +12,7 @@ import {
 } from "./reader";
 import { getViewState, hashPath, saveViewState } from "./storage";
 import { chapterAt, ensureFulltext, getFulltext, onFulltextError, type Fulltext } from "./fulltext";
+import Sidebar, { type SidebarTab } from "./components/Sidebar";
 import {
   annotationPage,
   buildReadingTools,
@@ -61,12 +63,12 @@ import {
 } from "./aiClient";
 import PenToolbar from "./components/PenToolbar";
 import AnnotationPopup from "./components/AnnotationPopup";
-import TraceList from "./components/TraceList";
 import CallBubble from "./components/CallBubble";
 import CallView from "./components/CallView";
 import ReadingPipCard from "./components/ReadingPipCard";
 import ChatPipCard from "./components/ChatPipCard";
 import SettingsView from "./components/SettingsView";
+import Toast, { useToasts } from "./components/Toast";
 import type { Annotation as PopupAnnotation, PendingImage, ToolStatus, ToolType } from "./components/types";
 
 const HOST_SRC = "/reader/reader-host.html";
@@ -88,6 +90,10 @@ const BTN = `${BTN_BASE} text-sm px-3 py-1.5 border-[#dcdcdc]`;
 const BTN_PRIMARY = "text-sm leading-none px-3 py-1.5 rounded-md bg-[#6c4fd0] text-white cursor-pointer enabled:hover:bg-[#5a3fbf] disabled:opacity-40";
 const BTN_SM = `${BTN_BASE} text-xs px-2 py-1 border-[#dcdcdc]`;
 const BTN_SM_DANGER = `${BTN_BASE} text-xs px-2 py-1 border-[#f0c8c8] text-[#b91c1c]`;
+// Pressed state for a toggle button; spelled out rather than appended to BTN_SM
+// because two background utilities in one class list resolve by stylesheet order.
+const BTN_SM_ON =
+  "text-xs leading-none px-2 py-1 border rounded-md border-[#c9c2e8] bg-[#efecfb] text-[#4a3a9e] cursor-pointer enabled:hover:bg-[#e7e3f7] disabled:opacity-40 disabled:cursor-default";
 const INPUT = "flex-1 px-2.5 py-2 border border-[#dcdcdc] rounded-md [font:inherit]";
 const LIBRARY = "w-[min(680px,100%)] mx-auto px-6 py-10";
 const TOPIC_LIST = "list-none m-0 p-0 flex flex-col gap-1.5";
@@ -152,6 +158,10 @@ export default function App() {
   const penUpRef = useRef<{ clientX: number; clientY: number } | null>(null);
   // Abort controller for the in-flight stream (cancelled on hangup / switch).
   const abortRef = useRef<AbortController | null>(null);
+  // Text streamed so far in the current turn, so stopping can keep it.
+  const partialRef = useRef("");
+  // Whether a turn is streaming, mirrored for the pdf-iframe pointerdown listener.
+  const streamingRef = useRef(false);
   // The current book's full text, extracted fire-and-forget on open. A call's
   // context assembly awaits this so the AI can see the page even if extraction
   // is still finishing; null once resolved when the book has no text layer.
@@ -186,10 +196,18 @@ export default function App() {
   const [traceAnns, setTraceAnns] = useState<Annotation[]>([]);
   const [selectedAnnId, setSelectedAnnId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("traces");
+  // The current book's extracted text (M6 AI context) and outline (Sidebar).
+  // Set from openInReader once ensureFulltext resolves; see the comment there.
+  const [fulltext, setFulltext] = useState<Fulltext | null>(null);
+  const [fulltextPending, setFulltextPending] = useState(false);
   const [call, setCall] = useState<CallState | null>(null);
   const [settings, setSettings] = useState<Settings>({ defaultProviderId: null, defaultModelId: null });
   const [showSettings, setShowSettings] = useState(false);
   const [providersInfo, setProvidersInfo] = useState<ProviderInfo[]>([]);
+  // Failure messages (save/load/network errors) live here, not in `status` —
+  // `status` is reserved for transient reader progress ("Rendering…").
+  const { toasts, push: pushToast, dismiss: dismissToast } = useToasts();
 
   // Images pasted into the composer, awaiting send: a placeholder appears while
   // the async compression runs, then resolves to a ready preview. A single
@@ -211,6 +229,8 @@ export default function App() {
   useEffect(() => {
     callViewRef.current = call?.view ?? "none";
     callRef.current = call;
+    const last = call?.messages[call.messages.length - 1];
+    streamingRef.current = !!(last?.role === "ai" && last.streaming);
   }, [call]);
 
   // Install the Tauri fetch bridge + load settings once.
@@ -219,7 +239,7 @@ export default function App() {
     loadSettings().then(setSettings).catch(() => {});
     onSettingsSaveError((e) => {
       console.error("failed to persist settings", e);
-      setStatus("Warning: settings could not be saved");
+      pushToast("warn", "Settings could not be saved");
     });
   }, []);
 
@@ -259,11 +279,11 @@ export default function App() {
     refreshTopics().catch(() => {});
     onSaveError((e) => {
       console.error("failed to persist annotations", e);
-      setStatus("Warning: annotations could not be saved");
+      pushToast("warn", "Annotations could not be saved");
     });
     onThreadSaveError((e) => {
       console.error("failed to persist thread", e);
-      setStatus("Warning: AI conversation could not be saved");
+      pushToast("warn", "AI conversation could not be saved");
     });
     // Full-text extraction is best-effort background context; a persistence
     // failure only warns (the AI falls back to the marked passage), no UI needed.
@@ -295,10 +315,10 @@ export default function App() {
     saveTimer.current = window.setTimeout(() => {
       saveViewState(path, state).catch((e) => {
         console.error("failed to persist reading position", e);
-        setStatus("Warning: reading position could not be saved");
+        pushToast("warn", "Reading position could not be saved");
       });
     }, 500);
-  }, []);
+  }, [pushToast]);
 
   useEffect(() => {
     const flush = () => {
@@ -351,6 +371,7 @@ export default function App() {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
+    partialRef.current = "";
 
     const patch = (
       fn: (m: CallMessage) => CallMessage,
@@ -369,7 +390,8 @@ export default function App() {
 
     // Push a running tool status onto the streaming reply; clearing any partial
     // text discards inter-round preamble so only the final answer shows (M6).
-    const onToolStart = (info: { name: string; args: Record<string, any> }, ts: number) =>
+    const onToolStart = (info: { name: string; args: Record<string, any> }, ts: number) => {
+      partialRef.current = "";
       patch(
         (m) => ({
           ...m,
@@ -381,6 +403,7 @@ export default function App() {
         }),
         ts,
       );
+    };
     // Resolve the matching running status: drop it on success, mark it failed on
     // error (soft-error style, left visible).
     const onToolEnd = (info: { name: string; isError: boolean }, ts: number) =>
@@ -461,24 +484,28 @@ export default function App() {
         messages: apiMessages,
         tools,
         signal: controller.signal,
-        onDelta: (chunk) => patch((m) => ({ ...m, text: m.text + chunk }), ts),
+        onDelta: (chunk) => {
+          partialRef.current += chunk;
+          patch((m) => ({ ...m, text: m.text + chunk }), ts);
+        },
         onToolStart: (info) => onToolStart(info, ts),
         onToolEnd: (info) => onToolEnd(info, ts),
         onDone: (full) => {
+          if (abortRef.current === controller) abortRef.current = null;
+          if (controller.signal.aborted) return; // stopTurn already kept the partial
           patch((m) => ({ role: "ai", text: full, ts, tools: (m.tools ?? []).filter((t) => t.state === "error") }), ts);
           appendMessage(path, threadId, { role: "ai", text: full, ts });
-          if (abortRef.current === controller) abortRef.current = null;
         },
         onError: (message: string) => {
           if (abortRef.current === controller) abortRef.current = null;
           if (controller.signal.aborted) return; // switch/hangup, not a failure
           console.error("agent turn failed", message);
-          setStatus("Warning: AI reply failed");
+          pushToast("error", "AI reply failed");
           patch(() => ({ role: "ai", text: `⚠️ Couldn't reach the model. ${message}`, ts, failed: true }), ts, true);
         },
       });
     })();
-  }, []);
+  }, [pushToast]);
 
   // Engine created/modified annotations (drag-to-highlight, AI-pen underline, etc.).
   // A brand-new annotation drawn while the AI pen is active starts a thread and
@@ -610,6 +637,10 @@ export default function App() {
       doc.addEventListener(
         "pointerdown",
         () => {
+          // A streaming reply is not dismissable this way: the click would abort
+          // the turn and throw the half-written answer away. Stop it, or dismiss
+          // once it lands.
+          if (streamingRef.current) return;
           if (callViewRef.current === "bubble" || callViewRef.current === "chat-pip") {
             setCall(null);
           }
@@ -632,13 +663,13 @@ export default function App() {
         saved = await loadAnnotations(path);
       } catch (e) {
         console.error("failed to load annotations", e);
-        setStatus("Warning: saved annotations could not be loaded");
+        pushToast("warn", "Saved annotations could not be loaded");
       }
       try {
         await loadThreads(path);
       } catch (e) {
         console.error("failed to load threads", e);
-        setStatus("Warning: saved AI conversations could not be loaded");
+        pushToast("warn", "Saved AI conversations could not be loaded");
       }
       annsRef.current = new Map(saved.map((a) => [a.id, a]));
       setTraceAnns(saved);
@@ -651,12 +682,19 @@ export default function App() {
       // transfers `bytes.buffer` to its worker (detaching it), and extraction's
       // own copy happens after several awaits — too late. Copy synchronously
       // here so extraction never races the engine for the bytes.
+      setFulltextPending(true);
+      setFulltext(null);
       currentFulltextRef.current = ensureFulltext(path, bytes.slice().buffer as ArrayBuffer).catch(
         (e) => {
           console.warn("failed to extract fulltext", e);
           return null;
         },
       );
+      currentFulltextRef.current.then((ft) => {
+        if (pathRef.current !== path) return; // stale: the user switched books
+        setFulltext(ft);
+        setFulltextPending(false);
+      });
       const view = await createPdfView(iframe, bytes.buffer as ArrayBuffer, {
         type: "pdf",
         annotations: saved,
@@ -681,7 +719,7 @@ export default function App() {
       viewRef.current = view;
       setTitle(name);
     },
-    [reloadFrame, persist, onSaveAnnotations, onDeleteAnnotations, onSetAnnotationPopup, installPenUpAnchor],
+    [reloadFrame, persist, onSaveAnnotations, onDeleteAnnotations, onSetAnnotationPopup, installPenUpAnchor, pushToast],
   );
 
   const openFile = useCallback(
@@ -693,10 +731,10 @@ export default function App() {
         await markOpened(activeTopicId, path);
         await refreshTopics();
       } catch {
-        setStatus("Can't open this file — it may have been moved or deleted.");
+        pushToast("error", "Can't open this file — it may have been moved or deleted.");
       }
     },
-    [activeTopicId, openInReader, refreshTopics],
+    [activeTopicId, openInReader, refreshTopics, pushToast],
   );
 
   const addFile = useCallback(async () => {
@@ -864,7 +902,7 @@ export default function App() {
             imageNames = await saveThreadImages(c.threadId, images);
           } catch (e) {
             console.error("failed to persist pasted images", e);
-            setStatus("Warning: pasted image could not be saved");
+            pushToast("warn", "Pasted image could not be saved");
             mutatePending(() => staged); // give them back so the send can be retried
             return;
           }
@@ -889,7 +927,7 @@ export default function App() {
         runTurn(c.threadId, c.annotationId);
       })();
     },
-    [runTurn, mutatePending],
+    [runTurn, mutatePending, pushToast],
   );
 
   // Retry the last (failed) turn.
@@ -897,6 +935,33 @@ export default function App() {
     const c = callRef.current;
     if (c) runTurn(c.threadId, c.annotationId);
   }, [runTurn]);
+
+  // Stop a streaming turn and keep what it wrote: the abort silences the agent
+  // (no onDone/onError follows), so persisting the partial here is the only way
+  // it survives a reopen. Nothing generated yet → drop the empty reply.
+  const stopTurn = useCallback(() => {
+    const c = callRef.current;
+    const path = pathRef.current;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    if (!c || !path) return;
+    const streamingMsg = [...c.messages].reverse().find((m) => m.role === "ai" && m.streaming);
+    if (!streamingMsg) return;
+    const { ts } = streamingMsg;
+    const partial = partialRef.current.trim();
+    partialRef.current = "";
+    setCall((cur) =>
+      !cur || cur.threadId !== c.threadId
+        ? cur
+        : {
+            ...cur,
+            messages: partial
+              ? cur.messages.map((m) => (m.ts === ts && m.role === "ai" ? { role: "ai", text: partial, ts } : m))
+              : cur.messages.filter((m) => !(m.ts === ts && m.role === "ai")),
+          },
+    );
+    if (partial) appendMessage(path, c.threadId, { role: "ai", text: partial, ts });
+  }, []);
 
   // Bubble → full-window chat (reading shrinks to the corner card).
   const expandCall = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-main" } : c)), []);
@@ -949,11 +1014,41 @@ export default function App() {
     clearPendingImages();
     setTitle(null);
     setPopup(null);
+    setFulltext(null);
+    setFulltextPending(false);
     pathRef.current = null;
     viewRef.current = null;
   }, [clearPendingImages]);
 
+  // Escape closes whatever is topmost (Settings, else the open call — same path
+  // as the hang-up button, else the annotation popup); Ctrl/Cmd+\ toggles the
+  // sidebar. Escape works even while a composer has focus; the sidebar toggle is
+  // ignored while typing so it doesn't fight text input. callRef (not `call`)
+  // keeps this listener stable across a streaming reply's frequent state churn.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      if (e.key === "Escape") {
+        if (showSettings) setShowSettings(false);
+        else if (callRef.current) endCall();
+        else if (popup) setPopup(null);
+        return;
+      }
+      const target = e.target as HTMLElement | null;
+      const typing =
+        !!target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+      if (typing) return;
+      if ((e.ctrlKey || e.metaKey) && e.key === "\\") {
+        e.preventDefault();
+        setSidebarOpen((v) => !v);
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [showSettings, popup, endCall]);
+
   const pageText = stats ? `${stats.pageIndex + 1} / ${stats.pagesCount}` : "— / —";
+  const twoPage = !!stats && stats.spreadMode !== SpreadMode.None;
   const inReader = !!title;
   const configured = !!(
     settings.defaultProviderId &&
@@ -961,17 +1056,33 @@ export default function App() {
     providersInfo.find((p) => p.id === settings.defaultProviderId)?.configured
   );
   const showGuidance = call?.view === "bubble" && call.messages.length === 0 && !configured;
+  const lastCallMsg = call?.messages[call.messages.length - 1];
+  const streaming = !!(lastCallMsg?.role === "ai" && lastCallMsg.streaming);
 
   return (
     <div className="flex flex-col h-full">
-      <header className="flex h-11 flex-none items-center gap-3 border-b border-[#dcdcdc] bg-[#fafafa] px-3">
+      {/* z-10: the color palette drops out of the header into the reader area,
+          and <main> is positioned too — without this it would paint over it. */}
+      <header className="relative z-10 flex h-11 flex-none items-center gap-3 border-b border-[#dcdcdc] bg-[#fafafa] px-3">
+        {/* The pen rack is centered on the window, independent of how long the
+            file path or the zoom controls are. */}
+        {inReader && (
+          <div className="absolute left-1/2 top-0 z-[1] flex h-11 -translate-x-1/2 items-center">
+            <PenToolbar
+              orientation="horizontal"
+              tool={{ type: toolType, color: penColor }}
+              colors={ANNOTATION_COLORS}
+              onToolChange={(t) => {
+                setToolType(t.type);
+                setPenColor(t.color);
+              }}
+            />
+          </div>
+        )}
         {inReader ? (
           <>
             <button className={BTN} onClick={closeReader}>
               ‹ Library
-            </button>
-            <button className={BTN} onClick={() => setSidebarOpen((v) => !v)}>
-              Traces
             </button>
             <span className="text-[13px] text-[#1b1b1b] overflow-hidden text-ellipsis whitespace-nowrap max-w-[40vw]">
               {activeTopic?.name} <span className="text-[#777] mx-0.5">›</span> {title}
@@ -985,6 +1096,26 @@ export default function App() {
               <span className="[font-variant-numeric:tabular-nums] text-[13px] min-w-[64px] text-center">{pageText}</span>
               <button className={BTN} disabled={!stats?.canZoomIn} onClick={() => viewRef.current?.zoomIn()}>
                 +
+              </button>
+              <span className="h-5 w-px bg-[#dcdcdc]" />
+              <button
+                className={BTN_SM}
+                title="Fit page width"
+                disabled={!stats?.canZoomReset}
+                onClick={() => viewRef.current?.zoomReset()}
+              >
+                Fit width
+              </button>
+              <button
+                className={twoPage ? BTN_SM_ON : BTN_SM}
+                title="Two-page spread"
+                aria-pressed={twoPage}
+                disabled={!viewReady}
+                onClick={() =>
+                  viewRef.current?.setSpreadMode(twoPage ? SpreadMode.None : SpreadMode.Odd)
+                }
+              >
+                Two pages
               </button>
             </div>
           </>
@@ -1007,34 +1138,33 @@ export default function App() {
       </header>
 
       <main className="relative flex-1 min-h-0 flex">
-        {/* Trace panel sits on the LEFT (Zotero iPad Annotations position);
-            the right side is reserved for the future AI column. */}
-        {inReader && sidebarOpen && (
-          <aside className="w-[300px] shrink-0 h-full overflow-y-auto border-r border-[#dcdcdc] bg-white">
-            <TraceList
-              annotations={traceAnns as unknown as PopupAnnotation[]}
-              selectedId={selectedAnnId}
-              onSelect={onTraceSelect}
-              onToggleStar={(id, starred) => patchAnnotation(id, { starred })}
-              onOpenThread={openThreadForAnnotation}
-            />
-          </aside>
+        {/* Sidebar sits on the LEFT (Zotero iPad Annotations position); the
+            right side is reserved for the future AI column. */}
+        {inReader && (
+          <Sidebar
+            open={sidebarOpen}
+            tab={sidebarTab}
+            onToggle={() => setSidebarOpen((v) => !v)}
+            onSelectTab={(t) => {
+              if (t === sidebarTab && sidebarOpen) {
+                setSidebarOpen(false);
+              } else {
+                setSidebarTab(t);
+                setSidebarOpen(true);
+              }
+            }}
+            fulltext={fulltext}
+            fulltextPending={fulltextPending}
+            onNavigatePage={(page) => viewRef.current?.navigate({ pageIndex: page - 1 })}
+            annotations={traceAnns as unknown as PopupAnnotation[]}
+            selectedId={selectedAnnId}
+            onSelectAnnotation={onTraceSelect}
+            onToggleStar={(id, starred) => patchAnnotation(id, { starred })}
+            onOpenThread={openThreadForAnnotation}
+          />
         )}
 
         <iframe ref={iframeRef} className="flex-1 min-w-0 h-full border-0 block" src={HOST_SRC} title="reader" />
-
-        {inReader && (
-          <div className={`absolute top-3 z-[5] ${sidebarOpen ? "left-[312px]" : "left-3"}`}>
-            <PenToolbar
-              tool={{ type: toolType, color: penColor }}
-              colors={ANNOTATION_COLORS}
-              onToolChange={(t) => {
-                setToolType(t.type);
-                setPenColor(t.color);
-              }}
-            />
-          </div>
-        )}
 
         {!inReader && (
           <div className="absolute inset-0 flex flex-col items-stretch justify-start gap-6 bg-white overflow-y-auto">
@@ -1103,6 +1233,8 @@ export default function App() {
             pendingImages={pendingImages}
             onRemoveImage={removePendingImage}
             hint={imageHint}
+            streaming={streaming}
+            onStop={stopTurn}
           />
         )}
 
@@ -1149,6 +1281,8 @@ export default function App() {
                 pendingImages={pendingImages}
                 onRemoveImage={removePendingImage}
                 hint={imageHint}
+                streaming={streaming}
+                onStop={stopTurn}
               />
             </div>
             <div className="absolute right-3 top-3 z-50">
@@ -1177,6 +1311,8 @@ export default function App() {
         )}
 
       </main>
+
+      <Toast toasts={toasts} onDismiss={dismissToast} />
 
       {showSettings && (
         <SettingsView
@@ -1307,6 +1443,40 @@ function TopicLibrary(props: {
   );
 }
 
+// Per-book reading metadata. `page`/`pages` are absent until the book has been
+// opened at least once (no reading position, no full-text cache).
+interface BookMeta {
+  page?: number; // 1-based
+  pages?: number;
+  marks: number;
+}
+
+function plural(n: number, unit: string): string {
+  return `${n} ${unit}${n === 1 ? "" : "s"}`;
+}
+
+function relativeTime(ts: number): string {
+  const minutes = Math.floor((Date.now() - ts) / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${plural(minutes, "minute")} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${plural(hours, "hour")} ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${plural(days, "day")} ago`;
+  return new Date(ts).toLocaleDateString();
+}
+
+// Empty for a book that was never opened, which renders as no second line.
+function metaLine(meta: BookMeta | undefined, lastOpenedAt?: number): string {
+  const parts: string[] = [];
+  if (meta?.page) {
+    parts.push(meta.pages ? `Page ${meta.page} of ${meta.pages}` : `Page ${meta.page}`);
+  }
+  if (meta?.marks) parts.push(plural(meta.marks, "mark"));
+  if (lastOpenedAt) parts.push(relativeTime(lastOpenedAt));
+  return parts.join(" · ");
+}
+
 function TopicDetail(props: {
   topic: Topic;
   onAddFile: () => void;
@@ -1314,6 +1484,38 @@ function TopicDetail(props: {
   onRemoveFile: (path: string) => void;
 }) {
   const files = sortedFiles(props.topic);
+  const [meta, setMeta] = useState<Record<string, BookMeta>>({});
+
+  // Loaded off the render path, per file. Every read is optional: a book that
+  // was never opened has no state, no full-text cache and no annotation file,
+  // and that is the normal case, not an error.
+  useEffect(() => {
+    let cancelled = false;
+    const paths = props.topic.files.map((f) => f.path);
+    void Promise.all(
+      paths.map(async (path): Promise<[string, BookMeta]> => {
+        const [state, fulltext, annotations] = await Promise.all([
+          getViewState(path).catch(() => null),
+          getFulltext(hashPath(path)).catch(() => null),
+          loadAnnotations(path).catch(() => []),
+        ]);
+        return [
+          path,
+          {
+            page: state ? state.pageIndex + 1 : undefined,
+            pages: fulltext?.pages.length || undefined,
+            marks: annotations.length,
+          },
+        ];
+      }),
+    ).then((entries) => {
+      if (!cancelled) setMeta(Object.fromEntries(entries));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [props.topic]);
+
   return (
     <div className={LIBRARY}>
       <div className="flex items-center justify-between mb-4">
@@ -1324,18 +1526,24 @@ function TopicDetail(props: {
       </div>
       {files.length === 0 && <p className="text-[#777] text-sm">No files yet. Add a PDF to this topic.</p>}
       <ul className={TOPIC_LIST}>
-        {files.map((f) => (
-          <li key={f.path} className={TOPIC_ROW}>
-            <button className={TOPIC_NAME} onClick={() => props.onOpenFile(f.path, f.name)}>
-              {f.name}
-            </button>
-            <div className="flex gap-1">
-              <button className={BTN_SM_DANGER} onClick={() => props.onRemoveFile(f.path)}>
-                Remove
+        {files.map((f) => {
+          const line = metaLine(meta[f.path], f.lastOpenedAt);
+          return (
+            <li key={f.path} className={TOPIC_ROW}>
+              <button className={TOPIC_NAME} onClick={() => props.onOpenFile(f.path, f.name)}>
+                <span className="flex min-w-0 flex-col gap-0.5">
+                  <span className="truncate">{f.name}</span>
+                  {line && <span className="text-xs text-[#777]">{line}</span>}
+                </span>
               </button>
-            </div>
-          </li>
-        ))}
+              <div className="flex gap-1">
+                <button className={BTN_SM_DANGER} onClick={() => props.onRemoveFile(f.path)}>
+                  Remove
+                </button>
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

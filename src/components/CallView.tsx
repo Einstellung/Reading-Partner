@@ -15,6 +15,8 @@ interface CallViewProps {
 	pendingImages?: PendingImage[];
 	onRemoveImage?(id: string): void;
 	hint?: string;
+	streaming?: boolean;
+	onStop?(): void;
 }
 
 export default function CallView({
@@ -24,29 +26,31 @@ export default function CallView({
 	pendingImages,
 	onRemoveImage,
 	hint,
+	streaming,
+	onStop,
 }: CallViewProps) {
 	const empty = messages.length === 0;
-	const imageProps = { pendingImages, onRemoveImage, hint };
+	const composerProps = { pendingImages, onRemoveImage, hint, streaming, onStop };
 
 	return (
-		<div className="relative flex h-full w-full flex-col bg-white dark:bg-neutral-900">
+		<div className="relative flex h-full w-full flex-col bg-white">
 			<button
 				type="button"
 				title="Hang up"
 				aria-label="Hang up"
 				onClick={onHangUp}
-				className="absolute left-4 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 hover:bg-black/5 dark:hover:bg-white/10"
+				className="absolute left-4 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 hover:bg-black/5"
 			>
 				<IconClose size={18} />
 			</button>
 
 			{empty ? (
 				<div className="flex flex-1 flex-col items-center justify-center px-4">
-					<h1 className="mb-8 text-center text-2xl font-medium text-neutral-700 dark:text-neutral-200">
+					<h1 className="mb-8 text-center text-2xl font-medium text-neutral-700">
 						Ask about this passage
 					</h1>
 					<div className="w-full max-w-3xl">
-						<Composer onSend={onSend} placeholder="Ask about this passage…" pill {...imageProps} />
+						<Composer onSend={onSend} placeholder="Ask about this passage…" pill {...composerProps} />
 					</div>
 				</div>
 			) : (
@@ -56,7 +60,7 @@ export default function CallView({
 					</div>
 					<div className="px-4 pb-6">
 						<div className="mx-auto w-full max-w-3xl">
-							<Composer onSend={onSend} placeholder="Reply…" pill {...imageProps} />
+							<Composer onSend={onSend} placeholder="Reply…" pill {...composerProps} />
 						</div>
 					</div>
 				</>

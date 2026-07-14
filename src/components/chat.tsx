@@ -1,10 +1,62 @@
 // Shared chat pieces for the call UI (CallBubble, CallView). Tailwind-only.
 // No preflight in this project, so box-sizing and control resets are explicit.
 
-import { memo, useEffect, useRef, useState } from 'react';
-import { IconSend } from './icons';
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { IconCheck, IconCopy, IconSend, IconStop } from './icons';
 import { Markdown } from './Markdown';
 import type { ChatImage, PendingImage, ThreadMessage, ToolStatus } from './types';
+
+// The async clipboard API is unreliable in WebKitGTK (pitfall 16), so a failure
+// falls back to the legacy execCommand path on an offscreen textarea.
+async function copyText(text: string): Promise<boolean> {
+	try {
+		await navigator.clipboard.writeText(text);
+		return true;
+	} catch {
+		const ta = document.createElement('textarea');
+		ta.value = text;
+		ta.style.position = 'fixed';
+		ta.style.top = '-1000px';
+		ta.style.opacity = '0';
+		document.body.appendChild(ta);
+		ta.select();
+		let ok = false;
+		try {
+			ok = document.execCommand('copy');
+		} catch {
+			ok = false;
+		}
+		ta.remove();
+		return ok;
+	}
+}
+
+// Copy the reply's Markdown source. Hidden until the row is hovered or the
+// button itself is focused; confirms for a moment, then returns.
+function CopyButton({ text }: { text: string }) {
+	const [copied, setCopied] = useState(false);
+	const timer = useRef<number | null>(null);
+	useEffect(() => () => window.clearTimeout(timer.current ?? undefined), []);
+
+	async function copy() {
+		if (!(await copyText(text))) return;
+		setCopied(true);
+		window.clearTimeout(timer.current ?? undefined);
+		timer.current = window.setTimeout(() => setCopied(false), 1500);
+	}
+
+	return (
+		<button
+			type="button"
+			aria-label={copied ? 'Copied' : 'Copy'}
+			onClick={copy}
+			className="flex w-fit items-center gap-1 rounded-md px-1.5 py-1 text-[12px] leading-none text-neutral-400 opacity-0 transition-opacity hover:bg-black/5 hover:text-neutral-600 focus-visible:opacity-100 group-hover:opacity-100"
+		>
+			{copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
+			{copied && 'Copied'}
+		</button>
+	);
+}
 
 // Attached images, right-aligned above a user message. Constrained height so a
 // tall screenshot doesn't blow out the column; no lightbox in v1 (docs:
@@ -44,11 +96,11 @@ function ToolTrace({ tools, size }: { tools: ToolStatus[]; size: 'sm' | 'lg' }) 
 		<div className="flex flex-col gap-0.5">
 			{tools.map((t, i) =>
 				t.state === 'error' ? (
-					<div key={i} className={'text-red-600/90 dark:text-red-400/90 ' + text}>
+					<div key={i} className={'text-red-600/90 ' + text}>
 						{t.label} — failed
 					</div>
 				) : (
-					<div key={i} className={'text-neutral-400 dark:text-neutral-500 ' + text}>
+					<div key={i} className={'text-neutral-400 ' + text}>
 						{t.label}…
 					</div>
 				),
@@ -89,7 +141,7 @@ const MessageBubble = memo(function MessageBubble({
 				{text && (
 					<div
 						className={
-							'box-border max-w-[75%] whitespace-pre-wrap break-words rounded-2xl bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100 ' +
+							'box-border max-w-[75%] whitespace-pre-wrap break-words rounded-2xl bg-neutral-100 text-neutral-900 ' +
 							(lg ? 'px-4 py-2.5 text-base leading-7' : 'px-3 py-1.5 text-[13px] leading-relaxed')
 						}
 					>
@@ -104,7 +156,7 @@ const MessageBubble = memo(function MessageBubble({
 	// shows the thinking dots; otherwise the Markdown body fills the column.
 	if (failed) {
 		return (
-			<div className={'text-red-600/90 dark:text-red-400/90 ' + (lg ? 'text-[15px] leading-7' : 'text-[13px] leading-relaxed')}>
+			<div className={'text-red-600/90 ' + (lg ? 'text-[15px] leading-7' : 'text-[13px] leading-relaxed')}>
 				{text}
 			</div>
 		);
@@ -116,11 +168,12 @@ const MessageBubble = memo(function MessageBubble({
 	}
 	if (!text) return trace;
 	return (
-		<div className="flex flex-col gap-2">
+		<div className="group flex flex-col gap-2">
 			{trace}
-			<div className={'text-neutral-800 dark:text-neutral-100 ' + (lg ? 'text-base' : 'text-[13px]')}>
+			<div className={'text-neutral-800 ' + (lg ? 'text-base' : 'text-[13px]')}>
 				<Markdown text={text} />
 			</div>
+			{!streaming && <CopyButton text={text} />}
 		</div>
 	);
 });
@@ -166,8 +219,8 @@ function StagingCards({ images, onRemove, size }: { images: PendingImage[]; onRe
 			{images.map((img) => (
 				<div key={img.id} className="relative shrink-0" style={{ width: size, height: size }}>
 					{img.status === 'loading' ? (
-						<div className="flex h-full w-full items-center justify-center rounded-lg bg-black/[0.06] dark:bg-white/10">
-							<span className="h-5 w-5 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-500 dark:border-neutral-600 dark:border-t-neutral-300" />
+						<div className="flex h-full w-full items-center justify-center rounded-lg bg-black/[0.06]">
+							<span className="h-5 w-5 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-500" />
 						</div>
 					) : (
 						<img
@@ -200,6 +253,8 @@ export function Composer({
 	pendingImages = [],
 	onRemoveImage,
 	hint,
+	streaming = false,
+	onStop,
 }: {
 	onSend(text: string): void;
 	placeholder: string;
@@ -207,8 +262,21 @@ export function Composer({
 	pendingImages?: PendingImage[];
 	onRemoveImage?(id: string): void;
 	hint?: string;
+	streaming?: boolean;
+	onStop?(): void;
 }) {
 	const [value, setValue] = useState('');
+	const taRef = useRef<HTMLTextAreaElement>(null);
+	const maxHeight = pill ? 160 : 100;
+
+	// Auto-grow: collapse to one row, then take the content height up to the cap
+	// (past it the textarea scrolls).
+	useLayoutEffect(() => {
+		const el = taRef.current;
+		if (!el) return;
+		el.style.height = 'auto';
+		el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
+	}, [value, maxHeight]);
 
 	const hasImages = pendingImages.length > 0;
 	const hasLoading = pendingImages.some((p) => p.status === 'loading');
@@ -220,7 +288,10 @@ export function Composer({
 		onSend(value.trim());
 		setValue('');
 	}
-	function onKeyDown(e: React.KeyboardEvent) {
+	function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+		// An Enter that commits an IME composition must not send (keyCode 229 is
+		// the pre-standard signal some engines still use).
+		if (e.nativeEvent.isComposing || e.keyCode === 229) return;
 		if (e.key === 'Enter' && !e.shiftKey) {
 			e.preventDefault();
 			send();
@@ -229,8 +300,16 @@ export function Composer({
 
 	const cardSize = pill ? 96 : 72;
 	const container = pill
-		? 'box-border rounded-3xl border border-black/10 bg-white px-2 py-2 shadow-sm dark:border-white/15 dark:bg-neutral-800'
-		: 'box-border rounded-xl border border-black/10 bg-white p-2 focus-within:border-blue-500 dark:border-white/15 dark:bg-neutral-800';
+		? 'box-border rounded-3xl border border-black/10 bg-white px-2 py-2 shadow-sm'
+		: 'box-border rounded-xl border border-black/10 bg-white p-2 focus-within:border-blue-500';
+	// box-border: the auto-grow sets height from scrollHeight, which includes the
+	// padding. Hidden scrollbar: an appearing gutter would reflow the text mid-typing.
+	const field =
+		'box-border min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent outline-none placeholder:text-neutral-400 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ' +
+		(pill
+			? 'py-1.5 text-[15px] leading-6 text-neutral-800'
+			: 'px-1 py-1 text-[13px] leading-5 text-neutral-800');
+	const stopBtn = 'flex shrink-0 items-center justify-center rounded-full bg-neutral-800 text-white';
 
 	return (
 		<div className="flex flex-col gap-2">
@@ -240,31 +319,40 @@ export function Composer({
 						<StagingCards images={pendingImages} onRemove={onRemoveImage} size={cardSize} />
 					</div>
 				)}
-				<div className={pill ? 'flex items-center gap-2 pl-3' : 'flex items-center gap-2'}>
-					<input
-						className={
-							'min-w-0 flex-1 border-0 bg-transparent outline-none placeholder:text-neutral-400 ' +
-							(pill ? 'text-[15px] text-neutral-800 dark:text-neutral-100' : 'px-1 text-[13px] text-neutral-800 dark:text-neutral-100')
-						}
+				<div className={pill ? 'flex items-end gap-2 pl-3' : 'flex items-end gap-2'}>
+					<textarea
+						ref={taRef}
+						rows={1}
+						className={field}
 						placeholder={placeholder}
 						value={value}
 						onChange={(e) => setValue(e.target.value)}
 						onKeyDown={onKeyDown}
 					/>
-					{pill && (
-						<button
-							type="button"
-							aria-label="Send"
-							onClick={send}
-							disabled={!canSend}
-							className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white disabled:opacity-40"
-						>
-							<IconSend size={17} />
+					{pill &&
+						(streaming ? (
+							<button type="button" aria-label="Stop" onClick={onStop} className={`${stopBtn} h-9 w-9`}>
+								<IconStop size={16} />
+							</button>
+						) : (
+							<button
+								type="button"
+								aria-label="Send"
+								onClick={send}
+								disabled={!canSend}
+								className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white disabled:opacity-40"
+							>
+								<IconSend size={17} />
+							</button>
+						))}
+					{!pill && streaming && (
+						<button type="button" aria-label="Stop" onClick={onStop} className={`${stopBtn} mb-0.5 h-6 w-6`}>
+							<IconStop size={12} />
 						</button>
 					)}
 				</div>
 			</div>
-			{hint && <div className="px-1 text-[12px] leading-snug text-amber-600 dark:text-amber-400">{hint}</div>}
+			{hint && <div className="px-1 text-[12px] leading-snug text-amber-600">{hint}</div>}
 		</div>
 	);
 }

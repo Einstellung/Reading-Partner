@@ -16,8 +16,20 @@ export interface ViewStats {
   pagesCount: number;
   canZoomIn: boolean;
   canZoomOut: boolean;
+  // False once the scale is already page-width, since zoomReset() *is* fit-width
+  // on a PDF view (pdf-view.js: zoomReset -> zoomPageWidth).
   canZoomReset: boolean;
+  spreadMode: SpreadMode;
 }
+
+// pdf.js SpreadMode (pdfjs/web/ui_utils.js); the engine passes it through
+// untyped as a number.
+export const SpreadMode = {
+  None: 0,
+  Odd: 1,
+  Even: 2,
+} as const;
+export type SpreadMode = (typeof SpreadMode)[keyof typeof SpreadMode];
 
 // Minimal annotation shape; the engine round-trips unknown fields untouched.
 export interface Annotation {
@@ -74,7 +86,11 @@ export interface CreateViewOptions {
 export interface ViewInstance {
   zoomIn: () => void;
   zoomOut: () => void;
+  // Fit-width, not 100%. The engine's View wrapper exposes no other zoom target:
+  // zoomPageHeight/zoomAuto and setScrollMode exist on PDFView but are not
+  // forwarded, and there is no setScale.
   zoomReset: () => void;
+  setSpreadMode: (mode: SpreadMode) => void;
   navigate: (target: { pageIndex?: number; annotationID?: string }) => void;
   // undefined deactivates the active tool (reverts to pointer).
   setTool: (tool?: Tool) => void;

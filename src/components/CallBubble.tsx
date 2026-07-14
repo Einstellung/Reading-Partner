@@ -16,6 +16,8 @@ interface CallBubbleProps {
 	pendingImages?: PendingImage[];
 	onRemoveImage?(id: string): void;
 	hint?: string;
+	streaming?: boolean;
+	onStop?(): void;
 }
 
 const WIDTH = 360;
@@ -31,6 +33,8 @@ export default function CallBubble({
 	pendingImages,
 	onRemoveImage,
 	hint,
+	streaming,
+	onStop,
 }: CallBubbleProps) {
 	const ref = useRef<HTMLDivElement>(null);
 	const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
@@ -67,7 +71,7 @@ export default function CallBubble({
 			role="dialog"
 			aria-label="AI conversation"
 			style={{ width: WIDTH, left: pos?.left, top: pos?.top, visibility: pos ? 'visible' : 'hidden' }}
-			className="fixed z-[1000] box-border flex flex-col gap-2 rounded-xl border border-black/10 bg-white p-3 shadow-[0_8px_40px_rgba(0,0,0,0.18)] dark:border-white/15 dark:bg-neutral-900"
+			className="fixed z-[1000] box-border flex flex-col gap-2 rounded-xl border border-black/10 bg-white p-3 shadow-[0_8px_40px_rgba(0,0,0,0.18)]"
 		>
 			<div className="flex items-center justify-between">
 				<span className="text-[11px] font-medium uppercase tracking-wide text-neutral-400">Reading with AI</span>
@@ -76,7 +80,7 @@ export default function CallBubble({
 					title="Expand"
 					aria-label="Expand"
 					onClick={onExpand}
-					className="flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 hover:bg-black/5 dark:hover:bg-white/10"
+					className="flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 hover:bg-black/5"
 				>
 					<IconExpand size={15} />
 				</button>
@@ -90,6 +94,8 @@ export default function CallBubble({
 				pendingImages={pendingImages}
 				onRemoveImage={onRemoveImage}
 				hint={hint}
+				streaming={streaming}
+				onStop={onStop}
 			/>
 		</div>
 	);

@@ -15,14 +15,14 @@ export default function ReadingPipCard({ fileName, pageLabel, excerpt, onClick }
 			type="button"
 			onClick={onClick}
 			title="Back to reading"
-			className="group box-border flex h-[120px] w-60 flex-col gap-1.5 rounded-xl border border-black/10 bg-white p-3 text-left shadow-[0_6px_24px_rgba(0,0,0,0.16)] hover:border-black/20 hover:shadow-[0_10px_32px_rgba(0,0,0,0.22)] dark:border-white/10 dark:bg-neutral-800"
+			className="group box-border flex h-[120px] w-60 flex-col gap-1.5 rounded-xl border border-black/10 bg-white p-3 text-left shadow-[0_6px_24px_rgba(0,0,0,0.16)] hover:border-black/20 hover:shadow-[0_10px_32px_rgba(0,0,0,0.22)]"
 		>
 			<div className="flex items-baseline justify-between gap-2">
-				<span className="truncate text-[13px] font-medium text-neutral-800 dark:text-neutral-100">{fileName}</span>
+				<span className="truncate text-[13px] font-medium text-neutral-800">{fileName}</span>
 				{pageLabel && <span className="shrink-0 text-[11px] text-neutral-400">p. {pageLabel}</span>}
 			</div>
 			{excerpt && (
-				<span className="line-clamp-3 text-[12px] italic leading-snug text-neutral-500 dark:text-neutral-400">
+				<span className="line-clamp-3 text-[12px] italic leading-snug text-neutral-500">
 					“{excerpt}”
 				</span>
 			)}

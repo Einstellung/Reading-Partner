@@ -119,15 +119,3 @@
 .ap-delete:hover {
 	background: rgba(214, 69, 69, 0.1);
 }
-
-@media (prefers-color-scheme: dark) {
-	.annotation-popup {
-		--ap-bg: #2b2f36;
-		--ap-fg: #e6e8eb;
-		--ap-muted: #a4a9b0;
-		--ap-hover: rgba(255, 255, 255, 0.08);
-		--ap-border: rgba(255, 255, 255, 0.14);
-		--ap-active-fg: #7aa7ee;
-		--ap-danger: #e77;
-	}
-}

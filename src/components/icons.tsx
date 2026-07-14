@@ -128,6 +128,39 @@ export function IconSend({ size = 16 }: IconProps) {
 	);
 }
 
+// Drawn here: filled square to stop a streaming reply.
+export function IconStop({ size = 16 }: IconProps) {
+	return (
+		<svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+			<rect x="4.5" y="4.5" width="7" height="7" rx="1.5" fill="currentColor" />
+		</svg>
+	);
+}
+
+// Drawn here: copy glyph (two sheets) for the message copy action.
+export function IconCopy({ size = 16 }: IconProps) {
+	return (
+		<svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+			<rect x="5.75" y="5.75" width="7.5" height="7.5" rx="1.75" stroke="currentColor" strokeWidth="1.2" />
+			<path
+				d="M10.25 3.75C10.25 3.06 9.69 2.5 9 2.5H4.25C3.28 2.5 2.5 3.28 2.5 4.25V9C2.5 9.69 3.06 10.25 3.75 10.25"
+				stroke="currentColor"
+				strokeWidth="1.2"
+				strokeLinecap="round"
+			/>
+		</svg>
+	);
+}
+
+// Drawn here: check mark for the "copied" confirmation.
+export function IconCheck({ size = 16 }: IconProps) {
+	return (
+		<svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+			<path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+		</svg>
+	);
+}
+
 // Drawn here: expand/maximize glyph for the call bubble.
 export function IconExpand({ size = 16 }: IconProps) {
 	return (
@@ -155,6 +188,46 @@ export function IconStar({ filled = false, size = 16 }: { filled?: boolean; size
 				strokeWidth="1.2"
 				strokeLinejoin="round"
 			/>
+		</svg>
+	);
+}
+
+// Drawn here: panel glyph for the sidebar collapse/expand toggle.
+export function IconSidebar({ size = 20 }: IconProps) {
+	return (
+		<svg
+			width={size}
+			height={size}
+			viewBox="0 0 20 20"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinejoin="round"
+			xmlns="http://www.w3.org/2000/svg"
+		>
+			<rect x="2.75" y="3.75" width="14.5" height="12.5" rx="2.5" />
+			<path d="M8 3.75V16.25" />
+		</svg>
+	);
+}
+
+// Drawn here: table-of-contents glyph for the outline tab.
+export function IconOutline({ size = 20 }: IconProps) {
+	return (
+		<svg
+			width={size}
+			height={size}
+			viewBox="0 0 20 20"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			xmlns="http://www.w3.org/2000/svg"
+		>
+			<path d="M3.5 5H16.5" />
+			<path d="M6.75 8.75H16.5" />
+			<path d="M6.75 12.25H16.5" />
+			<path d="M3.5 16H16.5" />
 		</svg>
 	);
 }

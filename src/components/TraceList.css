@@ -153,17 +153,3 @@
 	opacity: 1;
 	color: var(--tl-star);
 }
-
-@media (prefers-color-scheme: dark) {
-	.trace-list {
-		--tl-bg: #24272c;
-		--tl-fg: #e6e8eb;
-		--tl-secondary: #b6bbc1;
-		--tl-muted: #868b91;
-		--tl-hover: rgba(255, 255, 255, 0.06);
-		--tl-border: rgba(255, 255, 255, 0.1);
-		--tl-selected-bg: #2d3a52;
-		--tl-accent: #7aa7ee;
-		--tl-star: #f2b530;
-	}
-}
