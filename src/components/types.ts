@@ -36,6 +36,15 @@ export interface Annotation {
 	[k: string]: unknown;
 }
 
+// A tool call surfaced in the chat flow while the AI turn runs (M6). 'running'
+// shows a subdued status line; 'error' reuses the soft-error style. Successful
+// tools are dropped from the list once their result is folded into the answer.
+export interface ToolStatus {
+	name: string;
+	label: string;
+	state: 'running' | 'error';
+}
+
 export interface ThreadMessage {
 	role: 'user' | 'ai';
 	text: string;
@@ -45,6 +54,8 @@ export interface ThreadMessage {
 	// or a turn that failed (rendered as a muted notice, not normal prose).
 	streaming?: boolean;
 	failed?: boolean;
+	// Transient tool-call trace shown above the streaming reply (M6).
+	tools?: ToolStatus[];
 }
 
 export interface Thread {

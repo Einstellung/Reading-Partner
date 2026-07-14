@@ -9,7 +9,16 @@ import {
   type ViewState,
   type ViewStats,
 } from "./reader";
-import { getViewState, saveViewState } from "./storage";
+import { getViewState, hashPath, saveViewState } from "./storage";
+import { chapterAt, ensureFulltext, getFulltext, onFulltextError, type Fulltext } from "./fulltext";
+import {
+  annotationPage,
+  buildReadingTools,
+  surroundingText,
+  toolStatusLabel,
+  type AnnotationLite,
+  type TopicMaterial,
+} from "./ai/reading-context";
 import {
   ANNOTATION_COLORS,
   deleteAnnotations,
@@ -41,12 +50,12 @@ import {
 import { compressImage, compressImageData, type CompressedImage } from "./ai/image-utils";
 import { isTauri, readClipboardImage } from "./clipboard";
 import { loadSettings, onSettingsSaveError, saveSettings, type Settings } from "./settings";
-import { buildSystemPrompt } from "./context";
+import { buildSystemPrompt, type BooklistItem } from "./context";
 import {
   installFetchBridge,
   listProviders,
   modelSupportsImages,
-  streamChat,
+  runAgentTurn,
   type ProviderId,
   type ProviderInfo,
 } from "./aiClient";
@@ -58,7 +67,7 @@ import CallView from "./components/CallView";
 import ReadingPipCard from "./components/ReadingPipCard";
 import ChatPipCard from "./components/ChatPipCard";
 import SettingsView from "./components/SettingsView";
-import type { Annotation as PopupAnnotation, PendingImage, ToolType } from "./components/types";
+import type { Annotation as PopupAnnotation, PendingImage, ToolStatus, ToolType } from "./components/types";
 
 const HOST_SRC = "/reader/reader-host.html";
 // Auto-explanation kickoff (docs/03: the bubble starts explaining, unprompted).
@@ -101,6 +110,8 @@ type CallMessage = {
   images?: { data: string; mediaType: string }[];
   streaming?: boolean;
   failed?: boolean;
+  // Transient tool-call trace for a streaming AI turn (M6); never persisted.
+  tools?: ToolStatus[];
 };
 
 // Persisted thread messages -> display messages. Image bytes are loaded
@@ -141,12 +152,22 @@ export default function App() {
   const penUpRef = useRef<{ clientX: number; clientY: number } | null>(null);
   // Abort controller for the in-flight stream (cancelled on hangup / switch).
   const abortRef = useRef<AbortController | null>(null);
+  // The current book's full text, extracted fire-and-forget on open. A call's
+  // context assembly awaits this so the AI can see the page even if extraction
+  // is still finishing; null once resolved when the book has no text layer.
+  const currentFulltextRef = useRef<Promise<Fulltext | null> | null>(null);
   // Refs read by the stable runTurn callback (avoids dependency churn).
   const settingsRef = useRef<Settings>({ defaultProviderId: null, defaultModelId: null });
-  const ctxRef = useRef<{ topicName: string; fileName: string; pageLabel: string | null }>({
+  const ctxRef = useRef<{
+    topicName: string;
+    fileName: string;
+    pageLabel: string | null;
+    files: { path: string; name: string }[];
+  }>({
     topicName: "",
     fileName: "",
     pageLabel: null,
+    files: [],
   });
 
   const [topics, setTopics] = useState<Topic[]>([]);
@@ -216,6 +237,7 @@ export default function App() {
       topicName: activeTopic?.name ?? "",
       fileName: title ?? "",
       pageLabel: stats?.pageLabel ?? null,
+      files: activeTopic?.files.map((f) => ({ path: f.path, name: f.name })) ?? [],
     };
   });
 
@@ -243,6 +265,9 @@ export default function App() {
       console.error("failed to persist thread", e);
       setStatus("Warning: AI conversation could not be saved");
     });
+    // Full-text extraction is best-effort background context; a persistence
+    // failure only warns (the AI falls back to the marked passage), no UI needed.
+    onFulltextError((e) => console.warn("failed to persist fulltext cache", e));
   }, [refreshTopics]);
 
   // Apply the tool once the view is initialized (setTool before the pdf viewer
@@ -342,14 +367,36 @@ export default function App() {
             },
       );
 
+    // Push a running tool status onto the streaming reply; clearing any partial
+    // text discards inter-round preamble so only the final answer shows (M6).
+    const onToolStart = (info: { name: string; args: Record<string, any> }, ts: number) =>
+      patch(
+        (m) => ({
+          ...m,
+          text: "",
+          tools: [
+            ...(m.tools ?? []),
+            { name: info.name, label: toolStatusLabel(info.name, info.args), state: "running" as const },
+          ],
+        }),
+        ts,
+      );
+    // Resolve the matching running status: drop it on success, mark it failed on
+    // error (soft-error style, left visible).
+    const onToolEnd = (info: { name: string; isError: boolean }, ts: number) =>
+      patch((m) => {
+        const tools = [...(m.tools ?? [])];
+        let idx = -1;
+        for (let i = 0; i < tools.length; i++) {
+          if (tools[i].state === "running" && tools[i].name === info.name) idx = i;
+        }
+        if (idx < 0) return m;
+        if (info.isError) tools[idx] = { ...tools[idx], state: "error" };
+        else tools.splice(idx, 1);
+        return { ...m, tools };
+      }, ts);
+
     const ann = annsRef.current.get(annotationId);
-    const systemPrompt = buildSystemPrompt({
-      topicName: ctxRef.current.topicName,
-      fileName: ctxRef.current.fileName,
-      pageLabel: ctxRef.current.pageLabel,
-      selectionText: typeof ann?.text === "string" ? ann.text : "",
-      selectionComment: typeof ann?.comment === "string" ? ann.comment : undefined,
-    });
     const ts = Date.now();
     setCall((c) => {
       if (!c || c.threadId !== threadId) return c;
@@ -357,10 +404,46 @@ export default function App() {
       return { ...c, error: false, messages: [...kept, { role: "ai", text: "", ts, streaming: true }] };
     });
 
-    // Thread messages store images as filenames; the model needs base64, so read
-    // them back before streaming. Kept out of render so the placeholder shows
-    // immediately.
     void (async () => {
+      // Assemble the live reading context and topic-scoped tools (M6). The
+      // current book's extraction may still be running; await it so the AI can
+      // see the page. Thread images (stored as filenames) are read back too.
+      const currentFulltext = (await currentFulltextRef.current) ?? null;
+      const { topicName, fileName, pageLabel, files } = ctxRef.current;
+      const materials = await gatherTopicMaterials(
+        files,
+        path,
+        currentFulltext,
+        [...annsRef.current.values()],
+      );
+      const page = annotationPage(ann as { position?: { pageIndex?: number } } | undefined);
+      const chapterTitle =
+        currentFulltext && page ? chapterAt(currentFulltext, page)?.title ?? null : null;
+      const surrounding =
+        currentFulltext && page ? surroundingText(currentFulltext, page) : "";
+      const booklist: BooklistItem[] = materials
+        .filter((m) => m.path !== path)
+        .map((m) => ({
+          label: m.label,
+          pageCount: m.fulltext?.pages.length ?? 0,
+          annotationCount: m.annotations.length,
+          fulltextAvailable: m.fulltext?.status === "ok",
+          isCurrent: false,
+        }));
+      const tools = buildReadingTools({ currentFulltext, materials });
+      const systemPrompt = buildSystemPrompt({
+        topicName,
+        fileName,
+        pageLabel,
+        selectionText: typeof ann?.text === "string" ? ann.text : "",
+        selectionComment: typeof ann?.comment === "string" ? ann.comment : undefined,
+        chapterTitle,
+        surroundingText: surrounding,
+        fulltextAvailable: currentFulltext?.status === "ok",
+        materials: booklist,
+        hasTools: tools.length > 0,
+      });
+
       const prior = await Promise.all(
         (getThread(path, threadId)?.messages ?? []).map(async (m) => ({
           role: m.role,
@@ -371,22 +454,25 @@ export default function App() {
       if (controller.signal.aborted) return;
       const apiMessages = [{ role: "user" as const, text: EXPLAIN_KICKOFF }, ...prior];
 
-      streamChat({
+      void runAgentTurn({
         providerId: s.defaultProviderId as ProviderId,
         modelId: s.defaultModelId as string,
         systemPrompt,
         messages: apiMessages,
+        tools,
         signal: controller.signal,
         onDelta: (chunk) => patch((m) => ({ ...m, text: m.text + chunk }), ts),
+        onToolStart: (info) => onToolStart(info, ts),
+        onToolEnd: (info) => onToolEnd(info, ts),
         onDone: (full) => {
-          patch(() => ({ role: "ai", text: full, ts }), ts);
+          patch((m) => ({ role: "ai", text: full, ts, tools: (m.tools ?? []).filter((t) => t.state === "error") }), ts);
           appendMessage(path, threadId, { role: "ai", text: full, ts });
           if (abortRef.current === controller) abortRef.current = null;
         },
         onError: (message: string) => {
           if (abortRef.current === controller) abortRef.current = null;
           if (controller.signal.aborted) return; // switch/hangup, not a failure
-          console.error("stream failed", message);
+          console.error("agent turn failed", message);
           setStatus("Warning: AI reply failed");
           patch(() => ({ role: "ai", text: `⚠️ Couldn't reach the model. ${message}`, ts, failed: true }), ts, true);
         },
@@ -560,6 +646,17 @@ export default function App() {
       setViewReady(false);
       const iframe = await reloadFrame();
       pathRef.current = path;
+      // Extract the full text in the background so the AI can see the book
+      // (M6). Fire-and-forget: never blocks rendering. The engine's pdf.js
+      // transfers `bytes.buffer` to its worker (detaching it), and extraction's
+      // own copy happens after several awaits — too late. Copy synchronously
+      // here so extraction never races the engine for the bytes.
+      currentFulltextRef.current = ensureFulltext(path, bytes.slice().buffer as ArrayBuffer).catch(
+        (e) => {
+          console.warn("failed to extract fulltext", e);
+          return null;
+        },
+      );
       const view = await createPdfView(iframe, bytes.buffer as ArrayBuffer, {
         type: "pdf",
         annotations: saved,
@@ -1097,6 +1194,55 @@ function callExcerpt(ann: Annotation | undefined): string {
   if (typeof ann.text === "string" && ann.text) return ann.text;
   if (typeof ann.comment === "string" && ann.comment) return ann.comment;
   return "";
+}
+
+// An annotation flattened for the read_annotations tool: 1-based page + selected
+// text + comment. Skips annotations with neither text nor comment (e.g. legacy
+// image regions).
+function toAnnotationLite(ann: Annotation): AnnotationLite | null {
+  const text = typeof ann.text === "string" ? ann.text.trim() : "";
+  const comment = typeof ann.comment === "string" ? ann.comment.trim() : "";
+  if (!text && !comment) return null;
+  return { page: annotationPage(ann as { position?: { pageIndex?: number } }), text, comment };
+}
+
+// Assemble the topic's materials for a call (M6): each file's cached full text
+// and its annotations, scoped to the active topic. The current book uses the
+// in-memory annotations and the just-extracted full text; other books read from
+// the cache/disk (never re-extracted here, so they show only if opened before).
+async function gatherTopicMaterials(
+  files: { path: string; name: string }[],
+  currentPath: string,
+  currentFulltext: Fulltext | null,
+  currentAnns: Annotation[],
+): Promise<(TopicMaterial & { path: string })[]> {
+  const out: (TopicMaterial & { path: string })[] = [];
+  for (const f of files) {
+    const isCurrent = f.path === currentPath;
+    let fulltext: Fulltext | null;
+    if (isCurrent) fulltext = currentFulltext;
+    else {
+      try {
+        fulltext = await getFulltext(hashPath(f.path));
+      } catch {
+        fulltext = null;
+      }
+    }
+    let anns: Annotation[];
+    if (isCurrent) anns = currentAnns;
+    else {
+      try {
+        anns = await loadAnnotations(f.path);
+      } catch {
+        anns = [];
+      }
+    }
+    const annotations = anns
+      .map(toAnnotationLite)
+      .filter((a): a is AnnotationLite => a !== null);
+    out.push({ path: f.path, label: f.name, fulltext, annotations });
+  }
+  return out;
 }
 
 function TopicLibrary(props: {

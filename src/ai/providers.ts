@@ -45,7 +45,9 @@ const AUTH_KIND: Record<ProviderId, "oauth" | "apiKey"> = {
 	deepseek: "apiKey",
 };
 
-const providers: Record<ProviderId, Provider> = {
+// Exported so the agent loop (src/ai/agent.ts) reuses the exact same provider
+// instances, model lookup, and OAuth/api-key resolution as streamChat.
+export const providers: Record<ProviderId, Provider> = {
 	anthropic: anthropicProvider(),
 	openai: openaiProvider(),
 	deepseek: deepseekProvider(),
@@ -72,7 +74,7 @@ export function getModels(id: ProviderId): { id: string; label: string }[] {
 	return providers[id].getModels().map((m) => ({ id: m.id, label: m.name || m.id }));
 }
 
-async function resolveApiKey(id: ProviderId): Promise<string> {
+export async function resolveApiKey(id: ProviderId): Promise<string> {
 	if (id === "anthropic") {
 		const token = await getValidAnthropicAuth();
 		if (!token) throw new Error("Anthropic is not connected. Sign in first.");
@@ -92,7 +94,7 @@ export function modelSupportsImages(providerId: ProviderId, modelId: string): bo
 	return !!model?.input.includes("image");
 }
 
-function toPiMessages(messages: ChatMessage[]): Message[] {
+export function toPiMessages(messages: ChatMessage[]): Message[] {
 	return messages.map((m): Message => {
 		if (m.role === "user") {
 			if (!m.images?.length) {

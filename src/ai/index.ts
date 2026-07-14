@@ -18,3 +18,10 @@ export {
 	type ChatMessage,
 	type StreamChatOptions,
 } from "./providers";
+export {
+	runAgentTurn,
+	type AgentTool,
+	type AgentToolStart,
+	type AgentToolEnd,
+	type RunAgentTurnOptions,
+} from "./agent";

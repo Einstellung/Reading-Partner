@@ -1,7 +1,16 @@
-// Context assembly v1 (docs/02, first segment: live reading context). Pure
-// function: given where the reader is and what they just marked, produce the
-// system prompt. Later segments (topic snapshot, recalled memory, evidence)
-// attach here as they come online.
+// Context assembly (docs/02, first segment: live reading context). Pure
+// function: given where the reader is, what they just marked, and — for M6 — the
+// surrounding text, chapter, topic booklist, and whether tools are available,
+// produce the system prompt. Later segments (memory recall, evidence) attach here.
+
+// One material in the topic booklist injected into the prompt.
+export interface BooklistItem {
+  label: string;
+  pageCount: number;
+  annotationCount: number;
+  fulltextAvailable: boolean;
+  isCurrent: boolean;
+}
 
 export interface ReadingContext {
   topicName: string;
@@ -9,6 +18,22 @@ export interface ReadingContext {
   pageLabel: string | null;
   selectionText: string;
   selectionComment?: string | null;
+  // M6 additions (all optional so older call sites are unaffected).
+  chapterTitle?: string | null;
+  surroundingText?: string | null;
+  // Explicitly false only when the current book has no usable text layer; adds a
+  // line telling the model it can't page through or search this book.
+  fulltextAvailable?: boolean;
+  materials?: BooklistItem[];
+  // Whether any reading tool was wired for this call; gates the tools paragraph.
+  hasTools?: boolean;
+}
+
+function booklistLine(m: BooklistItem): string {
+  const pages = m.fulltextAvailable ? `${m.pageCount} pages` : "full text not available";
+  const anns = `${m.annotationCount} annotation${m.annotationCount === 1 ? "" : "s"}`;
+  const current = m.isCurrent ? " (current)" : "";
+  return `- ${m.label} — ${pages}, ${anns}${current}`;
 }
 
 export function buildSystemPrompt(ctx: ReadingContext): string {
@@ -32,9 +57,46 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
     `- File: ${ctx.fileName}`,
   ];
   if (ctx.pageLabel) lines.push(`- Page: ${ctx.pageLabel}`);
+  if (ctx.chapterTitle) lines.push(`- Chapter: ${ctx.chapterTitle}`);
   lines.push(`- Marked passage: "${ctx.selectionText.trim()}"`);
   if (ctx.selectionComment && ctx.selectionComment.trim()) {
     lines.push(`- The user's note on it: "${ctx.selectionComment.trim()}"`);
   }
+
+  if (ctx.surroundingText && ctx.surroundingText.trim()) {
+    lines.push("", "Text around the marked passage:", '"""', ctx.surroundingText.trim(), '"""');
+  }
+  if (ctx.fulltextAvailable === false) {
+    lines.push(
+      "",
+      "Note: the full text of this book is not machine-readable, so you can't page",
+      "through it or search it. Work from the marked passage and what the user tells you.",
+    );
+  }
+
+  if (ctx.materials && ctx.materials.length > 0) {
+    lines.push("", "Other materials in this topic:");
+    for (const m of ctx.materials) lines.push(booklistLine(m));
+  }
+
+  if (ctx.hasTools) {
+    lines.push(
+      "",
+      "Tools:",
+      "You can call tools to look past the marked passage: read_pages(from, to) pulls",
+      "a page range from the current book; search_topic(query) keyword-searches every",
+      "material in this topic; read_annotations(material) lists the user's highlights",
+      "and notes on a named material.",
+      "",
+      "Answer from the current passage by default. Consult other books only when the",
+      "user brings them up or the question plainly needs them — don't wander off to",
+      "compare materials unprompted. When you quote something a tool returned, cite the",
+      "book and page.",
+      "",
+      "When you need more context, call the tools directly — never ask the user for",
+      "permission to read. Reading is always allowed.",
+    );
+  }
+
   return lines.join("\n");
 }

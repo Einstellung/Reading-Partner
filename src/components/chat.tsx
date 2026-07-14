@@ -4,7 +4,7 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { IconSend } from './icons';
 import { Markdown } from './Markdown';
-import type { ChatImage, PendingImage, ThreadMessage } from './types';
+import type { ChatImage, PendingImage, ThreadMessage, ToolStatus } from './types';
 
 // Attached images, right-aligned above a user message. Constrained height so a
 // tall screenshot doesn't blow out the column; no lightbox in v1 (docs:
@@ -36,6 +36,27 @@ function TypingDots() {
 	);
 }
 
+// Tool-call trace above a streaming AI reply (M6): a running tool is a subdued
+// line ending in an ellipsis; a failed one reuses the soft-error red.
+function ToolTrace({ tools, size }: { tools: ToolStatus[]; size: 'sm' | 'lg' }) {
+	const text = size === 'lg' ? 'text-sm' : 'text-xs';
+	return (
+		<div className="flex flex-col gap-0.5">
+			{tools.map((t, i) =>
+				t.state === 'error' ? (
+					<div key={i} className={'text-red-600/90 dark:text-red-400/90 ' + text}>
+						{t.label} — failed
+					</div>
+				) : (
+					<div key={i} className={'text-neutral-400 dark:text-neutral-500 ' + text}>
+						{t.label}…
+					</div>
+				),
+			)}
+		</div>
+	);
+}
+
 // One message row, ChatGPT-style: the AI reply is plain body text set right on
 // the background (no bubble), carried by the Markdown typography; the user's
 // message is a compact light pill, right-aligned, with any images above it.
@@ -47,6 +68,7 @@ const MessageBubble = memo(function MessageBubble({
 	images,
 	streaming,
 	failed,
+	tools,
 	size,
 }: {
 	role: ThreadMessage['role'];
@@ -54,6 +76,7 @@ const MessageBubble = memo(function MessageBubble({
 	images?: ChatImage[];
 	streaming?: boolean;
 	failed?: boolean;
+	tools?: ToolStatus[];
 	size: 'sm' | 'lg';
 }) {
 	const lg = size === 'lg';
@@ -86,11 +109,18 @@ const MessageBubble = memo(function MessageBubble({
 			</div>
 		);
 	}
-	if (streaming && !text) return <TypingDots />;
-	if (!text) return null;
+	const trace = tools && tools.length > 0 ? <ToolTrace tools={tools} size={size} /> : null;
+	// While a tool runs with no reply text yet, the trace stands in for the dots.
+	if (streaming && !text) {
+		return trace ?? <TypingDots />;
+	}
+	if (!text) return trace;
 	return (
-		<div className={'text-neutral-800 dark:text-neutral-100 ' + (lg ? 'text-base' : 'text-[13px]')}>
-			<Markdown text={text} />
+		<div className="flex flex-col gap-2">
+			{trace}
+			<div className={'text-neutral-800 dark:text-neutral-100 ' + (lg ? 'text-base' : 'text-[13px]')}>
+				<Markdown text={text} />
+			</div>
 		</div>
 	);
 });
@@ -119,6 +149,7 @@ export function MessageList({
 					images={m.images}
 					streaming={m.streaming}
 					failed={m.failed}
+					tools={m.tools}
 					size={size}
 				/>
 			))}
