@@ -1,6 +1,6 @@
 [package]
 name = "reading-partner"
-version = "0.1.0"
+version = "0.2.0"
 description = "AI reading partner"
 authors = ["Reading-Partner"]
 edition = "2021"
