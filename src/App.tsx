@@ -1049,6 +1049,18 @@ export default function App() {
     viewRef.current = null;
   }, [clearPendingImages]);
 
+  // Stable handlers for the EmbedPDF pane so its React.memo actually holds: any
+  // new prop identity here would re-render the whole engine subtree on every
+  // shell state change (e.g. AI streaming), which is the popup-jank regression.
+  const onEmbedView = useCallback((v: ViewInstance) => {
+    viewRef.current = v;
+  }, []);
+  const onEmbedInitialized = useCallback(() => {
+    setStatus("");
+    setViewReady(true);
+  }, []);
+  const onEmbedSelect = useCallback((ids: string[]) => setSelectedAnnId(ids[0] ?? null), []);
+
   // Escape closes whatever is topmost (Settings, else the open call — same path
   // as the hang-up button, else the annotation popup); Ctrl/Cmd+\ toggles the
   // sidebar. Escape works even while a composer has focus; the sidebar toggle is
@@ -1202,20 +1214,15 @@ export default function App() {
               authorName="Reading-Partner"
               viewState={embedDoc.viewState}
               className="flex-1 min-w-0 h-full block"
-              onView={(v) => {
-                viewRef.current = v;
-              }}
-              onInitialized={() => {
-                setStatus("");
-                setViewReady(true);
-              }}
+              onView={onEmbedView}
+              onInitialized={onEmbedInitialized}
               onChangeViewState={persist}
               onChangeViewStats={setStats}
               onSaveAnnotations={onSaveAnnotations}
               onDeleteAnnotations={onDeleteAnnotations}
               // Native selection already happened — just reflect it (no echo,
               // which would loop through the engine's own selection state).
-              onSelectAnnotations={(ids) => setSelectedAnnId(ids[0] ?? null)}
+              onSelectAnnotations={onEmbedSelect}
               onSetAnnotationPopup={onSetAnnotationPopup}
             />
           ) : (

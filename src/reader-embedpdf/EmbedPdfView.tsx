@@ -21,6 +21,7 @@ import { ViewportPluginPackage, Viewport } from "@embedpdf/plugin-viewport/react
 import { ScrollPluginPackage, Scroller } from "@embedpdf/plugin-scroll/react";
 import type { ScrollCapability } from "@embedpdf/plugin-scroll";
 import { RenderPluginPackage, RenderLayer } from "@embedpdf/plugin-render/react";
+import { TilingPluginPackage, TilingLayer } from "@embedpdf/plugin-tiling/react";
 import { ZoomPluginPackage, ZoomMode } from "@embedpdf/plugin-zoom/react";
 import type { ZoomCapability } from "@embedpdf/plugin-zoom";
 import { SpreadPluginPackage, SpreadMode } from "@embedpdf/plugin-spread/react";
@@ -126,6 +127,10 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
       createPluginRegistration(ViewportPluginPackage),
       createPluginRegistration(ScrollPluginPackage),
       createPluginRegistration(RenderPluginPackage),
+      // Tiling: keeps zoom responsive. The base layer is a fixed low-res raster
+      // that only gets CSS-scaled; only the visible high-res tiles re-render on
+      // zoom, instead of re-rasterizing the whole page every zoom step.
+      createPluginRegistration(TilingPluginPackage),
       createPluginRegistration(ZoomPluginPackage, { defaultZoomLevel: ZoomMode.FitWidth }),
       createPluginRegistration(SpreadPluginPackage),
       createPluginRegistration(InteractionManagerPluginPackage),
@@ -159,9 +164,15 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
             <Viewport documentId={activeDocumentId} style={{ height: "100%", width: "100%", backgroundColor: "#f1f3f5" }}>
               <Scroller
                 documentId={activeDocumentId}
-                renderPage={({ pageIndex }) => (
+                renderPage={({ pageIndex, width, height }) => (
                   <PagePointerProvider documentId={activeDocumentId} pageIndex={pageIndex}>
-                    <RenderLayer documentId={activeDocumentId} pageIndex={pageIndex} style={{ pointerEvents: "none" }} />
+                    {/* Base raster fixed at scale 1 (CSS-scaled by the page box);
+                        tiles carry the crisp high-res for the visible area only.
+                        Both are non-interactive so pointer events reach selection. */}
+                    <div style={{ position: "absolute", inset: 0, width, height, pointerEvents: "none" }}>
+                      <RenderLayer documentId={activeDocumentId} pageIndex={pageIndex} scale={1} />
+                      <TilingLayer documentId={activeDocumentId} pageIndex={pageIndex} />
+                    </div>
                     <SelectionLayer documentId={activeDocumentId} pageIndex={pageIndex} />
                     <AnnotationLayer documentId={activeDocumentId} pageIndex={pageIndex} />
                   </PagePointerProvider>

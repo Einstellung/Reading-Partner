@@ -18,6 +18,7 @@
         "@embedpdf/plugin-scroll": "2.14.4",
         "@embedpdf/plugin-selection": "2.14.4",
         "@embedpdf/plugin-spread": "2.14.4",
+        "@embedpdf/plugin-tiling": "2.14.4",
         "@embedpdf/plugin-viewport": "2.14.4",
         "@embedpdf/plugin-zoom": "2.14.4",
         "@tailwindcss/vite": "^4.3.2",
@@ -179,6 +180,8 @@
     "@embedpdf/plugin-selection": ["@embedpdf/plugin-selection@2.14.4", "https://registry.npmmirror.com/@embedpdf/plugin-selection/-/plugin-selection-2.14.4.tgz", { "dependencies": { "@embedpdf/models": "2.14.4", "@embedpdf/utils": "2.14.4" }, "peerDependencies": { "@embedpdf/core": "2.14.4", "@embedpdf/plugin-interaction-manager": "2.14.4", "preact": "^10.26.4", "react": ">=16.8.0", "react-dom": ">=16.8.0", "svelte": ">=5 <6", "vue": ">=3.2.0" } }, "sha512-8w6ZUdwRcBhNCQjlS8mFvsMXI/wr1Q7DljwlFmKaEQyM9vXm2rI9WGN0z9ffjKHlsYn0yg98pqyPLtTevH1P7Q=="],
 
     "@embedpdf/plugin-spread": ["@embedpdf/plugin-spread@2.14.4", "https://registry.npmmirror.com/@embedpdf/plugin-spread/-/plugin-spread-2.14.4.tgz", { "dependencies": { "@embedpdf/models": "2.14.4" }, "peerDependencies": { "@embedpdf/core": "2.14.4", "preact": "^10.26.4", "react": ">=16.8.0", "react-dom": ">=16.8.0", "svelte": ">=5 <6", "vue": ">=3.2.0" } }, "sha512-ybJNbOMXBciD9cS+wwAUM1L5ZZMgF0+8Tpi78MaXGwnwH1wJUSx1Tx90YNsO9DxIKKckDsxUQREwUtTTcwFLEA=="],
+
+    "@embedpdf/plugin-tiling": ["@embedpdf/plugin-tiling@2.14.4", "https://registry.npmmirror.com/@embedpdf/plugin-tiling/-/plugin-tiling-2.14.4.tgz", { "dependencies": { "@embedpdf/models": "2.14.4" }, "peerDependencies": { "@embedpdf/core": "2.14.4", "@embedpdf/plugin-render": "2.14.4", "@embedpdf/plugin-scroll": "2.14.4", "@embedpdf/plugin-viewport": "2.14.4", "preact": "^10.26.4", "react": ">=16.8.0", "react-dom": ">=16.8.0", "svelte": ">=5 <6", "vue": ">=3.2.0" } }, "sha512-++1bzvU0Xqi6a1XeUOLAHU7D/FVUNobC/behSSn3WZnY/wIpYG3dXs5NbhNzeomIGXYHC4jCXbKGBPe5TNdoSw=="],
 
     "@embedpdf/plugin-viewport": ["@embedpdf/plugin-viewport@2.14.4", "https://registry.npmmirror.com/@embedpdf/plugin-viewport/-/plugin-viewport-2.14.4.tgz", { "dependencies": { "@embedpdf/models": "2.14.4" }, "peerDependencies": { "@embedpdf/core": "2.14.4", "preact": "^10.26.4", "react": ">=16.8.0", "react-dom": ">=16.8.0", "svelte": ">=5 <6", "vue": ">=3.2.0" } }, "sha512-ZhbDITPZ/h1Vd9cUbCPShSbH5RXd/biCw9w6fneTItruMauYIcTNUS2eWLJC0Yovhw7nu0TjRVYuTQ71jzs0dg=="],
 

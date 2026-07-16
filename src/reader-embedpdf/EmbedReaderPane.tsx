@@ -4,7 +4,7 @@
 // lets App switch engines without rewriting its annotation / thread / storage
 // handlers. Used only when USE_EMBEDPDF is set.
 
-import { useCallback, useRef } from "react";
+import { memo, useCallback, useRef } from "react";
 import EmbedPdfView, {
   type EmbedPdfHandle,
   type EmbedSpread,
@@ -45,7 +45,11 @@ export interface EmbedReaderPaneProps {
   className?: string;
 }
 
-export default function EmbedReaderPane(props: EmbedReaderPaneProps) {
+// Memoized so the shell's frequent re-renders (AI streaming updates App state
+// many times a second) never reach the EmbedPDF provider subtree — the same
+// isolation the old iframe engine had for free. All props from App must be
+// stable (App passes useCallback'd handlers + the stable embedDoc object).
+function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
   const handleRef = useRef<EmbedPdfHandle | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const annById = useRef<Map<string, Annotation>>(new Map());
@@ -161,3 +165,6 @@ export default function EmbedReaderPane(props: EmbedReaderPaneProps) {
     </div>
   );
 }
+
+const EmbedReaderPane = memo(EmbedReaderPaneImpl);
+export default EmbedReaderPane;

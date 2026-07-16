@@ -35,3 +35,20 @@
 ## 开关
 
 `VITE_ENGINE=embedpdf`（环境变量）走 EmbedPDF，默认（不设）走 zotero iframe。见 `src/reader-embedpdf/engine-flag.ts`。zotero 路径未改动。
+
+## 性能迭代（2026-07-16，真机 WebKitGTK 反馈"缩放和 AI 弹窗卡"后）
+
+两处卡顿根因不同，分别处理。
+
+AI 弹窗卡 = 同一棵 React 树的重渲染回归。老 zotero 引擎在 iframe 里，壳的 state 变化天然到不了引擎；换 EmbedPDF 后引擎和壳同树，AI 流式回复每秒几十次 setState 会把整个 EmbedPDF provider 子树跟着重渲。修法：`EmbedReaderPane` 套 `React.memo` + App 传给它的 handler 全部 `useCallback` 稳定。量化（Chromium，父组件 churn 60 次）：
+
+| | 引擎子树重渲次数 |
+|---|---|
+| 修前（memo off） | 60 |
+| 修后（memo on） | 0 |
+
+缩放卡 = 整页重光栅化。原来 renderPage 直接用 `<RenderLayer>`，每变一档缩放就把整页按新 scale 重栅一遍。改成官方推荐的双层：base `<RenderLayer scale={1}>`（固定低清，只被 CSS 缩放）+ `<TilingLayer>`（只栅格可视区高清 tile）。实测缩放时 img 数量随可视 tile 增减（10↔12），不再整页重栅，seed 批注仍在。注意：这个卡顿是 WebKitGTK 合成路径特有（对比 pitfall 12），headless Chromium 复现不出来（zoom 一步 longtask 计数为 0），所以缩放这项只能给"改对了渲染策略"的定性结论 + tile 行为验证，给不出 WebKitGTK 下的前后毫秒数——要真机 tauri dev 才量得到（pitfall 14 OOM 顾虑没跑）。
+
+worker 引擎（本想拿它把光栅化挪出主线程）实测在 openDocument 处永久挂起（25s 仍卡），根因见 pitfall 21，暂时走不通；直连引擎 + tiling 是当前落地路径。
+
+指针路由：tiling 加了层后确认划词仍到 SelectionLayer（`elementFromPoint` 命中 pointerEvents:auto 的交互 div，不是 tile img）。live 拖选在 headless 下因 Playwright + 持续 tile 渲染的组合会把 `page.mouse` 卡住（工具侧假死，非应用问题），未在 tiling 下重跑 live 拖选；程序化建注/改/删、缩放、seed 渲染均在 tiling 下验过。

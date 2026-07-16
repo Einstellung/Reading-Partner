@@ -4,13 +4,26 @@
 // doc's open items 3-8 with real measurements. Served by Vite in dev at
 // /embedpdf-spike.html.
 
+import { memo, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { flushSync } from "react-dom";
 import EmbedPdfView, {
   type EmbedPdfHandle,
+  type EmbedPdfViewProps,
   type EmbedViewState,
   type EmbedViewStats,
 } from "./EmbedPdfView";
 import { embedToZotero, type ZoteroAnnotation } from "./convert";
+
+// Render counter to measure re-render isolation (perf item #3). A parent churn
+// (window.__churn(n)) mimics the shell's AI-streaming state updates; with the
+// memoized wrapper + stable props the engine subtree must not re-render.
+let embedRenders = 0;
+function CountingView(props: EmbedPdfViewProps) {
+  embedRenders++;
+  return <EmbedPdfView {...props} />;
+}
+const MemoView = memo(CountingView);
 
 declare global {
   interface Window {
@@ -65,39 +78,48 @@ window.__spike = {
 };
 
 function Harness() {
-  const buf = (window as any).__buf as ArrayBuffer;
+  const [, setTick] = useState(0);
   const q = new URLSearchParams(location.search);
-  const initial: EmbedViewState | null = q.has("page")
-    ? { pageIndex: Number(q.get("page")), zoom: Number(q.get("zoom") ?? "1") }
-    : ((window as any).__initialViewState as EmbedViewState | null);
-  return (
-    <EmbedPdfView
-      buffer={buf}
-      annotations={[SEED_HIGHLIGHT]}
-      authorName="Reading-Partner"
-      initialViewState={initial ?? null}
-      style={{ flex: 1 }}
-      onReady={(h) => {
+  const memoized = q.get("memo") !== "0"; // ?memo=0 to measure the un-isolated baseline
+  // Props built once; identity stable across churn so the memo can bail.
+  const props = useMemo<EmbedPdfViewProps>(() => {
+    const initial: EmbedViewState | null = q.has("page")
+      ? { pageIndex: Number(q.get("page")), zoom: Number(q.get("zoom") ?? "1") }
+      : ((window as any).__initialViewState as EmbedViewState | null);
+    (window as any).__churn = (n: number) => {
+      for (let i = 0; i < n; i++) flushSync(() => setTick((t) => t + 1));
+    };
+    (window as any).__embedRenders = () => embedRenders;
+    return {
+      buffer: (window as any).__buf as ArrayBuffer,
+      annotations: [SEED_HIGHLIGHT],
+      authorName: "Reading-Partner",
+      initialViewState: initial ?? null,
+      style: { flex: 1 },
+      onReady: (h: EmbedPdfHandle) => {
         window.__spike.handle = h;
         window.__spike.ready = true;
-      }}
-      onError={(e) => {
+      },
+      onError: (e: Error) => {
         window.__spike.error = String(e?.message ?? e);
-      }}
-      onSaveAnnotations={(anns) => {
+      },
+      onSaveAnnotations: (anns: ZoteroAnnotation[]) => {
         window.__spike.saves.push(...anns);
-      }}
-      onDeleteAnnotations={(ids) => {
+      },
+      onDeleteAnnotations: (ids: string[]) => {
         window.__spike.deletes.push(...ids);
-      }}
-      onViewState={(s) => {
+      },
+      onViewState: (s: EmbedViewState) => {
         window.__spike.lastState = s;
-      }}
-      onViewStats={(s) => {
+      },
+      onViewStats: (s: EmbedViewStats) => {
         window.__spike.lastStats = s;
-      }}
-    />
-  );
+      },
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const View = memoized ? MemoView : CountingView;
+  return <View {...props} />;
 }
 
 async function boot() {
@@ -126,7 +148,7 @@ async function boot() {
       const task = engine.openDocumentBuffer({ id: "d", content: buf });
       const doc = await Promise.race([
         task.toPromise(),
-        new Promise((_, rej) => setTimeout(() => rej(new Error("timeout-8s")), 8000)),
+        new Promise((_, rej) => setTimeout(() => rej(new Error("timeout-25s")), 25000)),
       ]);
       out[label] = { ok: true, pageCount: (doc as any)?.pageCount };
     } catch (e: any) {

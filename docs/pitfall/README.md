@@ -22,3 +22,4 @@
 - [18-embedpdf-load-hangs-progress-zero](./18-embedpdf-load-hangs-progress-zero.md) — EmbedPDF 文档加载静默卡 progress 0,需跨源隔离头 + 直连引擎(worker:false)
 - [19-embedpdf-initialdocuments-hang](./19-embedpdf-initialdocuments-hang.md) — EmbedPDF initialDocuments 卡 loading,改成 init 后显式 openDocumentBuffer
 - [20-embedpdf-renderlayer-eats-pointer](./20-embedpdf-renderlayer-eats-pointer.md) — EmbedPDF RenderLayer 的 img 吃指针事件,划词失效,需 pointerEvents:none
+- [21-embedpdf-worker-engine-hangs](./21-embedpdf-worker-engine-hangs.md) — EmbedPDF worker 引擎 openDocument 永久挂起(blob worker 里 pthread 辅助 worker 解析不了),暂用直连引擎 + tiling
