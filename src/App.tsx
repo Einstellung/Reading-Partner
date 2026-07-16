@@ -61,6 +61,9 @@ import {
   type ProviderId,
   type ProviderInfo,
 } from "./aiClient";
+import { USE_EMBEDPDF } from "./reader-embedpdf/engine-flag";
+import { prewarmPdfiumEngine } from "./reader-embedpdf/engine-singleton";
+import EmbedReaderPane from "./reader-embedpdf/EmbedReaderPane";
 import PenToolbar from "./components/PenToolbar";
 import AnnotationPopup from "./components/AnnotationPopup";
 import CallBubble from "./components/CallBubble";
@@ -186,6 +189,16 @@ export default function App() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameText, setRenameText] = useState("");
 
+  // EmbedPDF engine (spike, behind USE_EMBEDPDF). Holds the bytes + saved state
+  // for the open book so EmbedReaderPane can mount; null on the zotero path.
+  const [embedDoc, setEmbedDoc] = useState<{
+    path: string;
+    name: string;
+    buffer: ArrayBuffer;
+    annotations: Annotation[];
+    viewState: ViewState | null;
+  } | null>(null);
+
   const [stats, setStats] = useState<ViewStats | null>(null);
   const [title, setTitle] = useState<string | null>(null);
   const [status, setStatus] = useState("");
@@ -232,6 +245,12 @@ export default function App() {
     const last = call?.messages[call.messages.length - 1];
     streamingRef.current = !!(last?.role === "ai" && last.streaming);
   }, [call]);
+
+  // Prewarm the PDFium engine (EmbedPDF path) so the wasm is compiled before the
+  // first book open, not on its critical path.
+  useEffect(() => {
+    if (USE_EMBEDPDF) prewarmPdfiumEngine();
+  }, []);
 
   // Install the Tauri fetch bridge + load settings once.
   useEffect(() => {
@@ -675,7 +694,6 @@ export default function App() {
       setTraceAnns(saved);
 
       setViewReady(false);
-      const iframe = await reloadFrame();
       pathRef.current = path;
       // Extract the full text in the background so the AI can see the book
       // (M6). Fire-and-forget: never blocks rendering. The engine's pdf.js
@@ -695,6 +713,23 @@ export default function App() {
         setFulltext(ft);
         setFulltextPending(false);
       });
+
+      if (USE_EMBEDPDF) {
+        // EmbedPDF engine (spike): mount EmbedReaderPane with the bytes. It calls
+        // back onView (sets viewRef) and onInitialized once ready. A fresh copy of
+        // the bytes is handed over so nothing detaches the shell's original.
+        setEmbedDoc({
+          path,
+          name,
+          buffer: bytes.slice().buffer as ArrayBuffer,
+          annotations: saved,
+          viewState: state,
+        });
+        setTitle(name);
+        return;
+      }
+
+      const iframe = await reloadFrame();
       const view = await createPdfView(iframe, bytes.buffer as ArrayBuffer, {
         type: "pdf",
         annotations: saved,
@@ -1016,9 +1051,22 @@ export default function App() {
     setPopup(null);
     setFulltext(null);
     setFulltextPending(false);
+    setEmbedDoc(null);
     pathRef.current = null;
     viewRef.current = null;
   }, [clearPendingImages]);
+
+  // Stable handlers for the EmbedPDF pane so its React.memo actually holds: any
+  // new prop identity here would re-render the whole engine subtree on every
+  // shell state change (e.g. AI streaming), which is the popup-jank regression.
+  const onEmbedView = useCallback((v: ViewInstance) => {
+    viewRef.current = v;
+  }, []);
+  const onEmbedInitialized = useCallback(() => {
+    setStatus("");
+    setViewReady(true);
+  }, []);
+  const onEmbedSelect = useCallback((ids: string[]) => setSelectedAnnId(ids[0] ?? null), []);
 
   // Escape closes whatever is topmost (Settings, else the open call — same path
   // as the hang-up button, else the annotation popup); Ctrl/Cmd+\ toggles the
@@ -1164,7 +1212,32 @@ export default function App() {
           />
         )}
 
-        <iframe ref={iframeRef} className="flex-1 min-w-0 h-full border-0 block" src={HOST_SRC} title="reader" />
+        {USE_EMBEDPDF ? (
+          embedDoc ? (
+            <EmbedReaderPane
+              key={embedDoc.path}
+              buffer={embedDoc.buffer}
+              annotations={embedDoc.annotations}
+              authorName="Reading-Partner"
+              viewState={embedDoc.viewState}
+              className="flex-1 min-w-0 h-full block"
+              onView={onEmbedView}
+              onInitialized={onEmbedInitialized}
+              onChangeViewState={persist}
+              onChangeViewStats={setStats}
+              onSaveAnnotations={onSaveAnnotations}
+              onDeleteAnnotations={onDeleteAnnotations}
+              // Native selection already happened — just reflect it (no echo,
+              // which would loop through the engine's own selection state).
+              onSelectAnnotations={onEmbedSelect}
+              onSetAnnotationPopup={onSetAnnotationPopup}
+            />
+          ) : (
+            <div className="flex-1 min-w-0 h-full block" />
+          )
+        ) : (
+          <iframe ref={iframeRef} className="flex-1 min-w-0 h-full border-0 block" src={HOST_SRC} title="reader" />
+        )}
 
         {!inReader && (
           <div className="absolute inset-0 flex flex-col items-stretch justify-start gap-6 bg-white overflow-y-auto">

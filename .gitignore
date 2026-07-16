@@ -29,3 +29,7 @@ npm-debug.log*
 
 # Local test fixture, not shipped
 /public/demo.pdf
+
+# EmbedPDF PDFium wasm: self-hosted from node_modules, not vendored into git.
+# Run scripts/copy-pdfium-wasm.sh (offline, sourced from @embedpdf/pdfium).
+/public/pdfium/
