@@ -9,12 +9,12 @@
 // report): the shell keeps persisting zotero-schema annotations, and this module
 // converts at the boundary via src/reader-embedpdf/convert.ts.
 
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPluginRegistration } from "@embedpdf/core";
 import { EmbedPDF } from "@embedpdf/core/react";
-import { usePdfiumEngine } from "@embedpdf/engines/react";
 import type { PluginRegistry } from "@embedpdf/core";
-import type { PdfAnnotationObject, PdfDocumentObject } from "@embedpdf/models";
+import type { PdfAnnotationObject, PdfDocumentObject, PdfEngine } from "@embedpdf/models";
+import { getPdfiumEngine } from "./engine-singleton";
 
 import { DocumentManagerPluginPackage } from "@embedpdf/plugin-document-manager/react";
 import { ViewportPluginPackage, Viewport } from "@embedpdf/plugin-viewport/react";
@@ -36,7 +36,33 @@ import type { AnnotationCapability } from "@embedpdf/plugin-annotation";
 import { embedToZotero, zoteroToEmbed, type ZoteroAnnotation } from "./convert";
 
 const DOC_ID = "main";
-const WASM_URL = "/pdfium/pdfium.wasm";
+
+// Lightweight first-occurrence phase timing (cheap perf.now marks) for the load
+// analysis. Harmless in prod; read via window.__epdfPerf.
+function perfMark(name: string): void {
+  const w = window as unknown as { __epdfPerf?: Record<string, number> };
+  w.__epdfPerf ??= {};
+  if (w.__epdfPerf[name] === undefined) w.__epdfPerf[name] = Math.round(performance.now());
+}
+
+// Resolve the app-level engine singleton (built once, reused across book opens)
+// instead of usePdfiumEngine, which re-created + destroyed the wasm engine per
+// mount. Never destroyed here — it lives for the app's lifetime.
+function useSharedEngine(): { engine: PdfEngine | null; isLoading: boolean; error: Error | null } {
+  const [engine, setEngine] = useState<PdfEngine | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    getPdfiumEngine().then(
+      (e) => !cancelled && setEngine(e),
+      (e) => !cancelled && setError(e as Error),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return { engine, isLoading: !engine && !error, error };
+}
 
 export type EmbedTool = "pointer" | "highlight" | "underline" | "ink";
 export type EmbedSpread = "none" | "odd" | "even";
@@ -111,7 +137,9 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
   // worker:false runs PDFium on the main thread. The worker engine hangs in this
   // spike's dev setup (worker asset blocked under COEP); direct works. iOS/WKWebView
   // will need its own engine-mode call — flagged in the report.
-  const { engine, isLoading, error } = usePdfiumEngine({ wasmUrl: WASM_URL, worker: false, fontFallback: null });
+  perfMark("mount");
+  const { engine, isLoading, error } = useSharedEngine();
+  if (engine) perfMark("engineReady");
   const propsRef = useRef(props);
   propsRef.current = props;
 
@@ -125,7 +153,7 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
       // hang at progress 0 when the load races the engine coming up).
       createPluginRegistration(DocumentManagerPluginPackage, {}),
       createPluginRegistration(ViewportPluginPackage),
-      createPluginRegistration(ScrollPluginPackage),
+      createPluginRegistration(ScrollPluginPackage, { defaultBufferSize: 1 }),
       createPluginRegistration(RenderPluginPackage),
       // Tiling: keeps zoom responsive. The base layer is a fixed low-res raster
       // that only gets CSS-scaled; only the visible high-res tiles re-render on
@@ -145,6 +173,7 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
   );
 
   const onInitialized = async (registry: PluginRegistry) => {
+    perfMark("providerInit");
     try {
       await wireEngine(registry, propsRef);
     } catch (e) {
@@ -222,7 +251,9 @@ async function wireEngine(
   // is passed so nothing downstream can detach the shell's original.
   const buf = propsRef.current.buffer;
   const copy = buf.slice(0);
+  perfMark("docOpenStart");
   await dm?.openDocumentBuffer({ buffer: copy, documentId: DOC_ID, name: "document.pdf", autoActivate: true }).toPromise();
+  perfMark("docOpenEnd");
 
   const doc = () => dm?.getDocument(DOC_ID) ?? null;
   const pageHeight = (pageIndex: number) => doc()?.pages[pageIndex]?.size.height ?? 0;
@@ -339,6 +370,7 @@ async function wireEngine(
   // exist). onLayoutReady fires with isInitial on the first ready.
   scroll.onLayoutReady((ev) => {
     if (!ev.isInitial) return;
+    perfMark("layoutReady");
     importAll(propsRef.current.annotations ?? []);
     const iv = propsRef.current.initialViewState;
     if (iv) {
@@ -457,5 +489,6 @@ async function wireEngine(
     } as EmbedPdfHandle["_debug"] & { registry: PluginRegistry },
   };
 
+  perfMark("handleReady");
   propsRef.current.onReady?.(handle);
 }

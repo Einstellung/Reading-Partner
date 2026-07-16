@@ -29,4 +29,10 @@ export default defineConfig({
       ignored: ["**/src-tauri/**"],
     },
   },
+  preview: { port: 1421, strictPort: true, headers: isolationHeaders },
+  // Only build the EmbedPDF spike harness into the bundle when measuring the
+  // engine (VITE_ENGINE=embedpdf); the default shell build is unaffected.
+  build: embedpdf
+    ? { rollupOptions: { input: { main: "index.html", spike: "embedpdf-spike.html" } } }
+    : {},
 });

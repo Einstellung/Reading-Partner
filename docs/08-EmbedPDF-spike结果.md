@@ -52,3 +52,27 @@ AI 弹窗卡 = 同一棵 React 树的重渲染回归。老 zotero 引擎在 ifra
 worker 引擎（本想拿它把光栅化挪出主线程）实测在 openDocument 处永久挂起（25s 仍卡），根因见 pitfall 21，暂时走不通；直连引擎 + tiling 是当前落地路径。
 
 指针路由：tiling 加了层后确认划词仍到 SelectionLayer（`elementFromPoint` 命中 pointerEvents:auto 的交互 div，不是 tile img）。live 拖选在 headless 下因 Playwright + 持续 tile 渲染的组合会把 `page.mouse` 卡住（工具侧假死，非应用问题），未在 tiling 下重跑 live 拖选；程序化建注/改/删、缩放、seed 渲染均在 tiling 下验过。
+
+## 加载性能迭代（2026-07-16，真机反馈"开书偏慢"后）
+
+在适配层埋 `performance.mark` 拆冷开书时间线（demo.pdf 14 页，headless Chromium）。发现：取字节→引擎 ready→openDocumentBuffer 解析→layout ready 全部在 ~270ms 内完成（引擎 create 90ms、解析 5ms、layout 到 268ms）；瓶颈在 layout ready 到首页可见的 ~1s 光栅化（PDFium 在主线程栅格可视 + buffer 页）。
+
+三个根因，两个修了：
+
+1. 引擎每次开书都重建。`usePdfiumEngine` 的 effect 挂载即 `createPdfiumEngine`（fetch+compile+init 4.6MB wasm）、卸载即 destroy；而 EmbedPdfView 每本书 remount，等于每次开书重付一遍 wasm 编译。改成应用级单例 `getPdfiumEngine()`（建一次、永不销毁），App 启动 `prewarmPdfiumEngine()` 预热，开书只在引擎上 open document。Chromium 里 wasm 编译才 ~90ms，省得不多；WebKitGTK 上 wasm 编译慢得多，且预热把它挪出了开书关键路径。
+
+2. 屏外 buffer 页在首屏前就栅格。scroll 插件默认 `bufferSize: 2`（可视区上下各多渲 2 页），这些页在首页可见前就占着主线程栅格。调成 `bufferSize: 1`。首屏耗时（prod build）：
+
+| bufferSize | 首页可见 |
+|---|---|
+| 2（默认，改前） | 1295ms |
+| 1（改后） | 947ms |
+| 0（更激进，供参考） | 649ms |
+
+3. dev vs prod。用户跑 `tauri dev`。冷 dev 首次加载 2940ms，其中 ~1.6s 是 Vite 首次转译/加载整个插件依赖图的一次性开销；prod build 首屏 947ms（bufferSize:1），暖 dev（模块已缓存）也 ~929ms。即 dev 首开有一大截是 dev 模式独有、prod 没有的。
+
+没帮上的：`encoderPoolSize`（栅格瓶颈不是编码，实测 1298 vs 1282ms 无变化，已回退）；worker 引擎把栅格挪出主线程本是正解，但挂起走不通（pitfall 21）。虚拟化是好的：14 页只渲可视附近 5-7 页，不是全渲。
+
+对照组（回答"是不是本来就慢"）：zotero 引擎同一本 PDF，`createView` → `onInitialized` ~1020ms（dev）。即换 EmbedPDF 前基线也在 1s 量级。用户感到的"变慢"是真回归——改前 EmbedPDF 冷 dev 首开 2.9s（每次重建引擎 + 默认 buffer），修后 prod 947ms / 暖 dev 929ms，回到与 zotero 同量级甚至更快。
+
+WebKitGTK 真机毫秒数没量（同缩放，pitfall 14 OOM 顾虑没跑 tauri dev）。埋点留在代码里（`window.__epdfPerf`，开销可忽略），真机可直接读。

@@ -62,6 +62,7 @@ import {
   type ProviderInfo,
 } from "./aiClient";
 import { USE_EMBEDPDF } from "./reader-embedpdf/engine-flag";
+import { prewarmPdfiumEngine } from "./reader-embedpdf/engine-singleton";
 import EmbedReaderPane from "./reader-embedpdf/EmbedReaderPane";
 import PenToolbar from "./components/PenToolbar";
 import AnnotationPopup from "./components/AnnotationPopup";
@@ -244,6 +245,12 @@ export default function App() {
     const last = call?.messages[call.messages.length - 1];
     streamingRef.current = !!(last?.role === "ai" && last.streaming);
   }, [call]);
+
+  // Prewarm the PDFium engine (EmbedPDF path) so the wasm is compiled before the
+  // first book open, not on its critical path.
+  useEffect(() => {
+    if (USE_EMBEDPDF) prewarmPdfiumEngine();
+  }, []);
 
   // Install the Tauri fetch bridge + load settings once.
   useEffect(() => {

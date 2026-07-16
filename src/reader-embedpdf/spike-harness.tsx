@@ -127,7 +127,18 @@ async function boot() {
     const res = await fetch("/demo.pdf");
     const buf = await res.arrayBuffer();
     (window as any).__buf = buf;
+    // Time from mount to first rendered page image ("open -> readable" proxy,
+    // covers engine create + provider/plugin init + first raster).
+    const t0 = performance.now();
     createRoot(document.getElementById("root")!).render(<Harness />);
+    const tick = () => {
+      if (document.querySelector("#root img")) {
+        (window.__spike as any).firstImgMs = Math.round(performance.now() - t0);
+      } else {
+        requestAnimationFrame(tick);
+      }
+    };
+    requestAnimationFrame(tick);
   } catch (e) {
     window.__spike.error = String(e);
   }
@@ -156,6 +167,33 @@ async function boot() {
     }
   }
   return out;
+};
+
+// Cold-open load timeline: breaks the open into its cost centers so the
+// dominant term is obvious. Engine creation is timed twice to show the
+// per-book-open cost that a shared engine would remove.
+(window as any).__loadTimeline = async () => {
+  const { createPdfiumDirectEngine } = await import("@embedpdf/engines");
+  const time = async <T,>(fn: () => Promise<T>) => {
+    const t = performance.now();
+    const v = await fn();
+    return { ms: Math.round(performance.now() - t), v };
+  };
+  const fetchPdf = await time(async () => new Uint8Array(await (await fetch("/demo.pdf")).arrayBuffer()));
+  const e1 = await time(() => createPdfiumDirectEngine("/pdfium/pdfium.wasm", { fontFallback: null }) as any);
+  const open1 = await time(() => (e1.v as any).openDocumentBuffer({ id: "t1", content: (fetchPdf.v as Uint8Array).slice().buffer }).toPromise());
+  // Second engine: fresh createPdfiumEngine again (wasm HTTP-cached, recompiled),
+  // representing the cost paid on every book open today.
+  const e2 = await time(() => createPdfiumDirectEngine("/pdfium/pdfium.wasm", { fontFallback: null }) as any);
+  const open2 = await time(() => (e2.v as any).openDocumentBuffer({ id: "t2", content: (fetchPdf.v as Uint8Array).slice().buffer }).toPromise());
+  return {
+    fetchPdfMs: fetchPdf.ms,
+    engineCreate_1stMs: e1.ms,
+    openParse_1stMs: open1.ms,
+    pageCount: (open1.v as any)?.pageCount,
+    engineCreate_2ndMs: e2.ms,
+    openParse_2ndMs: open2.ms,
+  };
 };
 
 void boot();
