@@ -8,6 +8,7 @@ import { memo, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import EmbedPdfView, {
+  type AnnotationAnchor,
   type EmbedPdfHandle,
   type EmbedPdfViewProps,
   type EmbedViewState,
@@ -33,6 +34,8 @@ declare global {
       handle: EmbedPdfHandle | null;
       saves: ZoteroAnnotation[];
       deletes: string[];
+      selects: (string | null)[];
+      anchors: { id: string; rect: AnnotationAnchor }[];
       lastState: EmbedViewState | null;
       lastStats: EmbedViewStats | null;
       // Convenience for the driver.
@@ -67,6 +70,8 @@ window.__spike = {
   handle: null,
   saves: [],
   deletes: [],
+  selects: [],
+  anchors: [],
   lastState: null,
   lastStats: null,
   dumpEmbed: () => window.__spike.handle?._debug.dumpEmbed() ?? [],
@@ -84,7 +89,11 @@ function Harness() {
   // Props built once; identity stable across churn so the memo can bail.
   const props = useMemo<EmbedPdfViewProps>(() => {
     const initial: EmbedViewState | null = q.has("page")
-      ? { pageIndex: Number(q.get("page")), zoom: Number(q.get("zoom") ?? "1") }
+      ? {
+          pageIndex: Number(q.get("page")),
+          zoom: Number(q.get("zoom") ?? "1"),
+          ...(q.has("py") ? { pageX: Number(q.get("px") ?? "0"), pageY: Number(q.get("py")) } : {}),
+        }
       : ((window as any).__initialViewState as EmbedViewState | null);
     (window as any).__churn = (n: number) => {
       for (let i = 0; i < n; i++) flushSync(() => setTick((t) => t + 1));
@@ -108,6 +117,12 @@ function Harness() {
       },
       onDeleteAnnotations: (ids: string[]) => {
         window.__spike.deletes.push(...ids);
+      },
+      onSelectAnnotation: (id: string | null) => {
+        window.__spike.selects.push(id);
+      },
+      onAnnotationAnchor: (id: string, rect: AnnotationAnchor) => {
+        window.__spike.anchors.push({ id, rect });
       },
       onViewState: (s: EmbedViewState) => {
         window.__spike.lastState = s;
