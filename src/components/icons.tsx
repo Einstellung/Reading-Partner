@@ -1,7 +1,5 @@
-// Tool and UI icons. The highlight/underline/area/note glyphs and the color
-// swatch are adapted from zotero/reader (res/icons/20 and
-// src/common/components/common/icons.js). The pointer and trash glyphs have no
-// counterpart there and are drawn here.
+// Tool and UI icons, all drawn for this project as stroke-based glyphs on
+// currentColor.
 
 interface IconProps {
 	size?: number;
@@ -17,7 +15,7 @@ function svgProps(size: number) {
 	};
 }
 
-// Drawn here: open-hand browse cursor (the classic PDF-viewer hand).
+// Open-hand browse cursor (the classic PDF-viewer hand).
 export function IconPointer({ size = 20 }: IconProps) {
 	return (
 		<svg
@@ -39,74 +37,93 @@ export function IconPointer({ size = 20 }: IconProps) {
 	);
 }
 
-// Adapted from res/icons/20/annotate-highlight.svg
+// Chisel-tip marker over the line it just highlighted.
 export function IconHighlight({ size = 20 }: IconProps) {
 	return (
-		<svg {...svgProps(size)}>
-			<path
-				fillRule="evenodd"
-				clipRule="evenodd"
-				d="M3 3H17V17H3V3ZM1.75 1.75H3H17H18.25V3V17V18.25H17H3H1.75V17V3V1.75ZM16 16L11 4H9L4 16H6.16667L7.41667 13H12.5833L13.8333 16H16ZM10 6.8L8.04167 11.5H11.9583L10 6.8Z"
-				fill="currentColor"
-			/>
+		<svg
+			width={size}
+			height={size}
+			viewBox="0 0 20 20"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			xmlns="http://www.w3.org/2000/svg"
+		>
+			<path d="M12.6 3.4L16.6 7.4L9.9 14.1L4.9 15.1L5.9 10.1L12.6 3.4Z" />
+			<path d="M4 17.8H16" strokeWidth="1.8" />
 		</svg>
 	);
 }
 
-// Adapted from res/icons/20/annotate-underline.svg
+// Text underline: a "U" over its line.
 export function IconUnderline({ size = 20 }: IconProps) {
 	return (
-		<svg {...svgProps(size)}>
-			<path
-				fillRule="evenodd"
-				clipRule="evenodd"
-				d="M16 16L11 4H9L4 16H6.16667L7.41667 13H12.5833L13.8333 16H16ZM10 6.8L8.04167 11.5H11.9583L10 6.8ZM2 17H3H17H18V17.25V18V18.25H17H3H2V18V17.25V17Z"
-				fill="currentColor"
-			/>
+		<svg
+			width={size}
+			height={size}
+			viewBox="0 0 20 20"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.5"
+			strokeLinecap="round"
+			xmlns="http://www.w3.org/2000/svg"
+		>
+			<path d="M6.2 3.6V9.2C6.2 11.3 7.9 13 10 13C12.1 13 13.8 11.3 13.8 9.2V3.6" />
+			<path d="M5 16.6H15" />
 		</svg>
 	);
 }
 
-// Adapted from res/icons/20/annotate-area.svg (used for the image/area tool)
+// Dashed marquee rectangle for the area/image capture tool.
 export function IconArea({ size = 20 }: IconProps) {
 	return (
-		<svg {...svgProps(size)}>
-			<path d="M12 1.75H8V3H12V1.75Z" fill="currentColor" />
-			<path fillRule="evenodd" clipRule="evenodd" d="M4 4V16H16V4H4ZM14.75 5.25H5.25V14.75H14.75V5.25Z" fill="currentColor" />
-			<path d="M17 14H18.25V18.25H14V17H17V14Z" fill="currentColor" />
-			<path d="M18.25 8H17V12H18.25V8Z" fill="currentColor" />
-			<path d="M1.75 8H3V12H1.75V8Z" fill="currentColor" />
-			<path d="M8 17H12V18.25H8V17Z" fill="currentColor" />
-			<path d="M14 3H17V6H18.25V1.75H14V3Z" fill="currentColor" />
-			<path d="M3 3V6H1.75L1.75 1.75H6V3H3Z" fill="currentColor" />
-			<path d="M6 17H3L3 14L1.75 14V18.25H6V17Z" fill="currentColor" />
+		<svg
+			width={size}
+			height={size}
+			viewBox="0 0 20 20"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			xmlns="http://www.w3.org/2000/svg"
+		>
+			<rect x="3.2" y="3.2" width="13.6" height="13.6" rx="1.6" strokeDasharray="2.9 2.3" />
 		</svg>
 	);
 }
 
-// Adapted from IconColor20 in src/common/components/common/icons.js
+// Round color dot with a faint rim so light colors keep an edge.
 export function IconColorSwatch({ color, size = 18 }: { color: string; size?: number }) {
 	return (
 		<svg width={size} height={size} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-			<rect x="2" y="2" width="16" height="16" rx="4" fill={color} />
-			<rect x="2.5" y="2.5" width="15" height="15" rx="3.5" stroke="currentColor" strokeOpacity="0.15" />
+			<circle cx="10" cy="10" r="7.5" fill={color} />
+			<circle cx="10" cy="10" r="7" stroke="currentColor" strokeOpacity="0.15" />
 		</svg>
 	);
 }
 
-// Adapted from res/icons/16/x-8.svg
+// Plain X.
 export function IconClose({ size = 16 }: IconProps) {
 	return (
-		<svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-			<path
-				d="M11.2923 12L12 11.292L8.70711 7.99999L12 4.70796L11.2922 4L8.00011 7.29299L4.70798 4L4 4.70774L7.29311 7.99999L4 11.2922L4.70796 12L8.00011 8.70699L11.2923 12Z"
-				fill="currentColor"
-			/>
+		<svg
+			width={size}
+			height={size}
+			viewBox="0 0 16 16"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			xmlns="http://www.w3.org/2000/svg"
+		>
+			<path d="M4.5 4.5L11.5 11.5" />
+			<path d="M11.5 4.5L4.5 11.5" />
 		</svg>
 	);
 }
 
-// Drawn here: sparkle for the AI pen and the AI-thread marker.
+// Sparkle for the AI pen and the AI-thread marker.
 export function IconSparkle({ size = 20 }: IconProps) {
 	return (
 		<svg {...svgProps(size)}>
@@ -119,7 +136,7 @@ export function IconSparkle({ size = 20 }: IconProps) {
 	);
 }
 
-// Drawn here: send arrow for the chat composer.
+// Send arrow for the chat composer.
 export function IconSend({ size = 16 }: IconProps) {
 	return (
 		<svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -128,7 +145,7 @@ export function IconSend({ size = 16 }: IconProps) {
 	);
 }
 
-// Drawn here: filled square to stop a streaming reply.
+// Filled square to stop a streaming reply.
 export function IconStop({ size = 16 }: IconProps) {
 	return (
 		<svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -137,7 +154,7 @@ export function IconStop({ size = 16 }: IconProps) {
 	);
 }
 
-// Drawn here: copy glyph (two sheets) for the message copy action.
+// Copy glyph (two sheets) for the message copy action.
 export function IconCopy({ size = 16 }: IconProps) {
 	return (
 		<svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -152,7 +169,7 @@ export function IconCopy({ size = 16 }: IconProps) {
 	);
 }
 
-// Drawn here: check mark for the "copied" confirmation.
+// Check mark for the "copied" confirmation.
 export function IconCheck({ size = 16 }: IconProps) {
 	return (
 		<svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -161,7 +178,7 @@ export function IconCheck({ size = 16 }: IconProps) {
 	);
 }
 
-// Drawn here: expand/maximize glyph for the call bubble.
+// Expand/maximize glyph for the call bubble.
 export function IconExpand({ size = 16 }: IconProps) {
 	return (
 		<svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -176,7 +193,7 @@ export function IconExpand({ size = 16 }: IconProps) {
 	);
 }
 
-// Drawn here: star for the trace-list star toggle.
+// Star for the trace-list star toggle.
 export function IconStar({ filled = false, size = 16 }: { filled?: boolean; size?: number }) {
 	const d = 'M8 1.75L9.94 5.68L14.28 6.31L11.14 9.37L11.88 13.69L8 11.65L4.12 13.69L4.86 9.37L1.72 6.31L6.06 5.68L8 1.75Z';
 	return (
@@ -192,7 +209,7 @@ export function IconStar({ filled = false, size = 16 }: { filled?: boolean; size
 	);
 }
 
-// Drawn here: panel glyph for the sidebar collapse/expand toggle.
+// Panel glyph for the sidebar collapse/expand toggle.
 export function IconSidebar({ size = 20 }: IconProps) {
 	return (
 		<svg
@@ -211,7 +228,7 @@ export function IconSidebar({ size = 20 }: IconProps) {
 	);
 }
 
-// Drawn here: table-of-contents glyph for the outline tab.
+// Table-of-contents glyph for the outline tab.
 export function IconOutline({ size = 20 }: IconProps) {
 	return (
 		<svg
@@ -232,7 +249,7 @@ export function IconOutline({ size = 20 }: IconProps) {
 	);
 }
 
-// Drawn here: trash can for the delete action.
+// Trash can for the delete action.
 export function IconTrash({ size = 16 }: IconProps) {
 	return (
 		<svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
