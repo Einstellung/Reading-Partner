@@ -38,7 +38,10 @@
         { "url": "https://platform.claude.com/*" },
         { "url": "https://claude.ai/*" },
         { "url": "https://api.openai.com/*" },
-        { "url": "https://api.deepseek.com/*" }
+        { "url": "https://api.deepseek.com/*" },
+        { "url": "https://export.arxiv.org/*" },
+        { "url": "https://arxiv.org/*" },
+        { "url": "https://api.semanticscholar.org/*" }
       ]
     },
     {

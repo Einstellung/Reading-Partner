@@ -17,6 +17,12 @@ interface CallViewProps {
 	hint?: string;
 	streaming?: boolean;
 	onStop?(): void;
+	// Classroom mode (docs/09): the toggle lives at the top of the chat window.
+	// Absent handler = no button (e.g. no book open).
+	classroomOn?: boolean;
+	onToggleClassroom?(): void;
+	// One-line prep status shown beside the toggle while classroom is on.
+	classroomStatus?: string | null;
 }
 
 export default function CallView({
@@ -28,6 +34,9 @@ export default function CallView({
 	hint,
 	streaming,
 	onStop,
+	classroomOn = false,
+	onToggleClassroom,
+	classroomStatus,
 }: CallViewProps) {
 	const empty = messages.length === 0;
 	const composerProps = { pendingImages, onRemoveImage, hint, streaming, onStop };
@@ -43,6 +52,27 @@ export default function CallView({
 			>
 				<IconClose size={18} />
 			</button>
+
+			{onToggleClassroom && (
+				<div className="absolute left-1/2 top-4 z-10 flex -translate-x-1/2 items-center gap-2">
+					<button
+						type="button"
+						aria-pressed={classroomOn}
+						onClick={onToggleClassroom}
+						className={
+							'rounded-full border px-3 py-1.5 text-sm leading-none cursor-pointer ' +
+							(classroomOn
+								? 'border-[#c9c2e8] bg-[#efecfb] text-[#4a3a9e] hover:bg-[#e7e3f7]'
+								: 'border-[#dcdcdc] bg-white text-neutral-600 hover:bg-[#f0f0f0]')
+						}
+					>
+						Classroom
+					</button>
+					{classroomOn && classroomStatus && (
+						<span className="text-xs text-neutral-400">{classroomStatus}</span>
+					)}
+				</div>
+			)}
 
 			{empty ? (
 				<div className="flex flex-1 flex-col items-center justify-center px-4">
