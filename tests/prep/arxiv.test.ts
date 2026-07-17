@@ -5,6 +5,7 @@ import { expect, test } from "bun:test";
 import {
   arxivIdUrl,
   arxivTitleSearchUrl,
+  fetchFromArxiv,
   normalizeArxivId,
   parseArxivAtom,
   pickArxivMatch,
@@ -70,6 +71,30 @@ test("backoffMs grows exponentially", () => {
   expect(backoffMs(0, 1000)).toBe(1000);
   expect(backoffMs(1, 1000)).toBeGreaterThanOrEqual(2000);
   expect(backoffMs(2, 1000)).toBeGreaterThanOrEqual(4000);
+});
+
+test("fetchFromArxiv falls back to the pre-colon title when the exact search misses", async () => {
+  const FULL = "RT-1: Robotics Transformer for Real-World Control at Scale";
+  const HEAD_ATOM = `<feed xmlns="http://www.w3.org/2005/Atom">
+    <entry>
+      <id>http://arxiv.org/abs/2212.06817v2</id>
+      <title>${FULL}</title>
+      <summary>We present RT-1.</summary>
+      <author><name>Anthony Brohan</name></author>
+    </entry>
+  </feed>`;
+  const queries: string[] = [];
+  const fetchFn = async (url: string) => {
+    if (url.includes("/pdf/")) return new Response(new ArrayBuffer(2), { status: 200 });
+    const decoded = decodeURIComponent(url);
+    queries.push(decoded);
+    // The head-only query carries a closing quote right after "RT-1".
+    if (decoded.includes('ti:"RT-1"')) return new Response(HEAD_ATOM, { status: 200 });
+    return new Response(`<feed xmlns="http://www.w3.org/2005/Atom"></feed>`, { status: 200 });
+  };
+  const res = await fetchFromArxiv({ title: FULL, arxivId: null }, fetchFn);
+  expect(res?.arxivId).toBe("2212.06817");
+  expect(queries.some((q) => q.includes('ti:"RT-1"'))).toBe(true); // the fallback fired
 });
 
 test("fetchWithRetry retries 429/5xx and returns the eventual success", async () => {

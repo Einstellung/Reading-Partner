@@ -121,7 +121,17 @@ export async function fetchFromArxiv(
   const res = await fetchWithRetry(url, undefined, opts);
   if (!res.ok) return null;
   const entries = parseArxivAtom(await res.text());
-  const entry = id ? entries[0] ?? null : pickArxivMatch(entries, paper.title);
+  let entry = id ? entries[0] ?? null : pickArxivMatch(entries, paper.title);
+  // Titles like "RT-1: Robotics Transformer ..." often carry a subtitle the
+  // exact phrase search won't match. Retry once on the pre-colon part; the
+  // contains-matching in pickArxivMatch keeps a wrong hit from slipping through.
+  if (!entry && !id && paper.title.includes(":")) {
+    const head = paper.title.slice(0, paper.title.indexOf(":")).trim();
+    if (head) {
+      const retry = await fetchWithRetry(arxivTitleSearchUrl(head), undefined, opts);
+      if (retry.ok) entry = pickArxivMatch(parseArxivAtom(await retry.text()), paper.title);
+    }
+  }
   if (!entry) return null;
 
   let pdfBytes: ArrayBuffer | null = null;

@@ -42,8 +42,13 @@ export const PLAN_SYSTEM_PROMPT = [
   "  discusses the work in its own paragraph or subsection rather than a",
   "  passing citation.",
   "- nominations: the 15-20 load-bearing papers, chosen because they are cited",
-  "  across several chapters and/or expanded individually. reason is one",
-  "  sentence, from the survey's point of view.",
+  "  across several chapters and/or expanded individually. Each nomination is a",
+  "  key that exists in references above — an actual entry of the survey's",
+  "  reference list, with its real full title copied verbatim (and its arXiv id",
+  "  when the reference text shows one). Never invent a canonical or concept",
+  "  name for a method (e.g. \"JEPA: Joint-Embedding Predictive Architecture\")",
+  "  as a title; use the reference's own title. reason is one sentence, from",
+  "  the survey's point of view.",
 ].join("\n");
 
 // The survey text with explicit page markers so citedInChapters/startPage can
