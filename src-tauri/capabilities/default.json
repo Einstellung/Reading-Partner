@@ -32,6 +32,14 @@
       "allow": [{ "path": "$APPDATA" }, { "path": "$APPDATA/**" }]
     },
     {
+      "identifier": "fs:allow-read-dir",
+      "allow": [{ "path": "$APPDATA" }, { "path": "$APPDATA/**" }]
+    },
+    {
+      "identifier": "fs:allow-remove",
+      "allow": [{ "path": "$APPDATA" }, { "path": "$APPDATA/**" }]
+    },
+    {
       "identifier": "http:default",
       "allow": [
         { "url": "https://api.anthropic.com/*" },
