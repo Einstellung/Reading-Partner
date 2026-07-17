@@ -187,7 +187,7 @@ export default function App() {
   // is still finishing; null once resolved when the book has no text layer.
   const currentFulltextRef = useRef<Promise<Fulltext | null> | null>(null);
   // Refs read by the stable runTurn callback (avoids dependency churn).
-  const settingsRef = useRef<Settings>({ defaultProviderId: null, defaultModelId: null });
+  const settingsRef = useRef<Settings>({ defaultProviderId: null, defaultModelId: null, semanticScholarApiKey: null });
   const ctxRef = useRef<{
     topicName: string;
     fileName: string;
@@ -244,7 +244,7 @@ export default function App() {
   const [classroomOn, setClassroomOn] = useState(false);
   const [prepSnap, setPrepSnap] = useState<PrepSnapshot | null>(null);
   const [selectedPrepSlug, setSelectedPrepSlug] = useState<string | null>(null);
-  const [settings, setSettings] = useState<Settings>({ defaultProviderId: null, defaultModelId: null });
+  const [settings, setSettings] = useState<Settings>({ defaultProviderId: null, defaultModelId: null, semanticScholarApiKey: null });
   const [showSettings, setShowSettings] = useState(false);
   const [providersInfo, setProvidersInfo] = useState<ProviderInfo[]>([]);
   // Failure messages (save/load/network errors) live here, not in `status` —

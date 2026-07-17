@@ -73,7 +73,11 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
                   className={FIELD}
                   value={settings.defaultProviderId ?? ""}
                   onChange={(e) =>
-                    onSettingsChange({ defaultProviderId: e.target.value || null, defaultModelId: null })
+                    onSettingsChange({
+                      ...settings,
+                      defaultProviderId: e.target.value || null,
+                      defaultModelId: null,
+                    })
                   }
                 >
                   <option value="">Select…</option>
@@ -104,6 +108,26 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
               </label>
             </div>
           )}
+        </div>
+
+        <h2 className="mb-2 mt-8 text-sm font-semibold text-[#777]">Lesson prep</h2>
+        <div className={CARD}>
+          <label className="flex flex-col gap-1.5 text-sm">
+            Semantic Scholar API key
+            <input
+              type="password"
+              className={FIELD}
+              placeholder="Optional"
+              value={settings.semanticScholarApiKey ?? ""}
+              onChange={(e) =>
+                onSettingsChange({ ...settings, semanticScholarApiKey: e.target.value.trim() || null })
+              }
+            />
+          </label>
+          <p className="m-0 text-xs text-[#777]">
+            A free key from semanticscholar.org avoids the shared rate limits that make paper
+            fetching stall.
+          </p>
         </div>
       </div>
     </div>

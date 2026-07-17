@@ -53,16 +53,20 @@ export function pickS2Match(papers: S2Paper[], title: string): S2Paper | null {
 export async function fetchFromS2(
   paper: { title: string; arxivId: string | null },
   fetchFn?: FetchFn,
+  apiKey?: string,
 ): Promise<S2Result | null> {
   const opts = fetchFn ? { fetchFn } : undefined;
+  // A personal API key gets its own rate budget instead of the shared free
+  // pool. Sent per request; never logged.
+  const init: RequestInit | undefined = apiKey ? { headers: { "x-api-key": apiKey } } : undefined;
 
   let match: S2Paper | null = null;
   if (paper.arxivId) {
-    const res = await fetchWithRetry(s2ArxivUrl(paper.arxivId), undefined, opts);
+    const res = await fetchWithRetry(s2ArxivUrl(paper.arxivId), init, opts);
     if (res.ok) match = (await res.json()) as S2Paper;
   }
   if (!match) {
-    const res = await fetchWithRetry(s2SearchUrl(paper.title), undefined, opts);
+    const res = await fetchWithRetry(s2SearchUrl(paper.title), init, opts);
     if (!res.ok) return null;
     const body = (await res.json()) as { data?: S2Paper[] };
     match = pickS2Match(body.data ?? [], paper.title);

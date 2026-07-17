@@ -16,9 +16,16 @@ const SAVE_DEBOUNCE = 500;
 export interface Settings {
   defaultProviderId: string | null;
   defaultModelId: string | null;
+  // Optional Semantic Scholar API key. When set, prep fetches use it instead of
+  // the shared free rate-limit pool.
+  semanticScholarApiKey: string | null;
 }
 
-const DEFAULTS: Settings = { defaultProviderId: null, defaultModelId: null };
+const DEFAULTS: Settings = {
+  defaultProviderId: null,
+  defaultModelId: null,
+  semanticScholarApiKey: null,
+};
 
 let timer: number | null = null;
 let onError: (e: unknown) => void = () => {};
