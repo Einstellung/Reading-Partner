@@ -91,7 +91,17 @@ import {
 import { logEvent } from "./events";
 import { prewarmPdfiumEngine } from "./reader-embedpdf/engine-singleton";
 import EmbedReaderPane from "./reader-embedpdf/EmbedReaderPane";
-import { CitationContext } from "./components/Markdown";
+import { CitationContext, FigureContext, type FigureHost } from "./components/Markdown";
+import {
+  buildFigureCatalog,
+  buildFigureTools,
+  clearFigureCache,
+  ensureFigures,
+  findFigureById,
+  renderFigure,
+  type Figure,
+  type FiguresIndex,
+} from "./figures";
 import PrepPanel from "./components/PrepPanel";
 import MemoryPanel from "./components/MemoryPanel";
 import PenToolbar from "./components/PenToolbar";
@@ -211,6 +221,15 @@ export default function App() {
   // context assembly awaits this so the AI can see the page even if extraction
   // is still finishing; null once resolved when the book has no text layer.
   const currentFulltextRef = useRef<Promise<Fulltext | null> | null>(null);
+  // The current book's figure index (M9), extracted fire-and-forget on open like
+  // the full text. The ref is awaited during context assembly; `figures` mirrors
+  // the resolved list for the inline-card host.
+  const currentFiguresRef = useRef<Promise<FiguresIndex | null> | null>(null);
+  // The open book's bytes, kept for figure rasterization (M9). renderFigure
+  // copies before handing to pdf.js, so sharing this reference is safe.
+  const bufferRef = useRef<ArrayBuffer | null>(null);
+  // Mirror of the resolved figure list for the stable onCitation callback.
+  const figuresRef = useRef<Figure[]>([]);
   // Refs read by the stable runTurn callback (avoids dependency churn).
   const settingsRef = useRef<Settings>({ defaultProviderId: null, defaultModelId: null, semanticScholarApiKey: null });
   const ctxRef = useRef<{
@@ -271,6 +290,9 @@ export default function App() {
   // Set from openInReader once ensureFulltext resolves; see the comment there.
   const [fulltext, setFulltext] = useState<Fulltext | null>(null);
   const [fulltextPending, setFulltextPending] = useState(false);
+  // Resolved figure list for the current book (M9), feeding the inline [fig:N]
+  // card host and empty until extraction finishes.
+  const [figures, setFigures] = useState<Figure[]>([]);
   const [call, setCall] = useState<CallState | null>(null);
   // Classroom mode + lesson prep (docs/09). classroomOn is per open book and
   // resets on open/close; prepSnap mirrors the pipeline for the panel.
@@ -539,14 +561,19 @@ export default function App() {
   const onCitation = useCallback((c: Citation) => {
     const topicId = ctxRef.current.topicId;
     if (topicId) {
-      logEvent(
-        topicId,
-        "citation-click",
-        c.kind === "page" ? { kind: "page", page: c.page } : { kind: "paper", slug: c.slug },
-      );
+      const detail: Record<string, string | number> =
+        c.kind === "page"
+          ? { kind: "page", page: c.page }
+          : c.kind === "figure"
+            ? { kind: "figure", id: c.id }
+            : { kind: "paper", slug: c.slug };
+      logEvent(topicId, "citation-click", detail);
     }
     if (c.kind === "page") {
       viewRef.current?.navigate({ pageIndex: c.page - 1 });
+    } else if (c.kind === "figure") {
+      const fig = findFigureById(figuresRef.current, c.id);
+      if (fig) viewRef.current?.navigate({ pageIndex: fig.page - 1 });
     } else {
       setSelectedPrepSlug(c.slug);
       setSidebarTab("prep");
@@ -723,6 +750,32 @@ export default function App() {
         tools = [...tools, ...buildMemoryTools(memory, { onWrite: () => notifyMemoryChange(topicId) })];
         memorySection = memoryPromptSection(buildMemorySnapshot(observations), true);
       }
+      // Figure catalog + view_figure tool (M9): the model can cite figures as
+      // [fig:N] (rendered inline in chat) and open one to actually see it.
+      const figuresIndex = (await currentFiguresRef.current)?.figures ?? [];
+      const figureCatalog = figuresIndex.length
+        ? buildFigureCatalog(figuresIndex, { currentPage: page ?? currentPage ?? null })
+        : "";
+      if (figuresIndex.length) {
+        const supportsImages = modelSupportsImages(
+          s.defaultProviderId as ProviderId,
+          s.defaultModelId as string,
+        );
+        const buf = bufferRef.current;
+        const figHash = hashPath(path);
+        tools = [
+          ...tools,
+          ...buildFigureTools({
+            figures: figuresIndex,
+            modelSupportsImages: supportsImages,
+            renderImage: async (fig) => {
+              if (!buf) return null;
+              const r = await renderFigure(figHash, buf, fig, "view");
+              return r ? { base64: r.base64, mimeType: r.mimeType } : null;
+            },
+          }),
+        ];
+      }
       const prepState = pipelineRef.current?.snapshot().state ?? null;
       if (classroomRef.current && currentFulltext?.status === "ok") {
         const here = page ?? (pageIndex !== null ? pageIndex + 1 : 1);
@@ -748,6 +801,7 @@ export default function App() {
           notes,
           prep: prepState,
           hasTools: tools.length > 0,
+          figureCatalog,
         });
       } else {
         systemPrompt = buildSystemPrompt({
@@ -760,6 +814,7 @@ export default function App() {
           surroundingText: surrounding,
           fulltextAvailable: currentFulltext?.status === "ok",
           materials: booklist,
+          figureCatalog,
           hasTools: tools.length > 0,
           bookLevel: isBook,
         });
@@ -975,6 +1030,21 @@ export default function App() {
       // own synchronous copy here and never races the engine for the bytes.
       setFulltextPending(true);
       setFulltext(null);
+      // Reset the figure index + cached crops for the new book (M9).
+      setFigures([]);
+      figuresRef.current = [];
+      clearFigureCache();
+      bufferRef.current = bytes.slice().buffer as ArrayBuffer;
+      currentFiguresRef.current = ensureFigures(path, bytes.slice().buffer as ArrayBuffer).catch((e) => {
+        console.warn("failed to extract figures", e);
+        return null;
+      });
+      currentFiguresRef.current.then((idx) => {
+        if (pathRef.current !== path) return; // stale: the user switched books
+        const list = idx?.figures ?? [];
+        figuresRef.current = list;
+        setFigures(list);
+      });
       currentFulltextRef.current = ensureFulltext(path, bytes.slice().buffer as ArrayBuffer).catch(
         (e) => {
           console.warn("failed to extract fulltext", e);
@@ -1438,8 +1508,26 @@ export default function App() {
     return `${ready}/${s.papers.length} papers ready`;
   })();
 
+  // Host for inline [fig:N] cards (M9): resolve/raster/jump against the open
+  // book. Null when the book has no figures, so cards fall back to text chips.
+  const figureHost = useMemo<FigureHost | null>(() => {
+    if (figures.length === 0) return null;
+    return {
+      getFigure: (id) => findFigureById(figures, id),
+      renderCard: async (figure) => {
+        const buf = bufferRef.current;
+        const path = pathRef.current;
+        if (!buf || !path) return null;
+        const r = await renderFigure(hashPath(path), buf, figure, "card");
+        return r ? r.dataUrl : null;
+      },
+      onJump: (figure) => onCitation({ kind: "figure", id: figure.id }),
+    };
+  }, [figures, onCitation]);
+
   return (
     <CitationContext.Provider value={onCitation}>
+    <FigureContext.Provider value={figureHost}>
     <div className="flex flex-col h-full">
       {/* z-10: the color palette drops out of the header into the reader area,
           and <main> is positioned too — without this it would paint over it. */}
@@ -1757,6 +1845,7 @@ export default function App() {
         />
       )}
     </div>
+    </FigureContext.Provider>
     </CitationContext.Provider>
   );
 }

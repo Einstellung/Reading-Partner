@@ -293,6 +293,38 @@ test("round cap surfaces a clear error", async () => {
 	expect(script.calls()).toBe(2);
 });
 
+test("a tool result with images is fed back as image content (M9)", async () => {
+	const viewFigure: AgentTool = {
+		name: "view_figure",
+		description: "returns a figure image",
+		parameters: Type.Object({ id: Type.String() }),
+		execute: async () => ({ text: "Figure 3", images: [{ data: "ABCD", mimeType: "image/jpeg" }] }),
+	};
+	const script = scriptStream([
+		{ calls: [{ name: "view_figure", args: { id: "3" }, id: "t1" }] },
+		{ text: "it shows a pipeline" },
+	]);
+	const c = collectCallbacks();
+
+	await runAgentLoop({
+		stream: script.fn,
+		model: MODEL,
+		messages: [{ role: "user", content: "what is figure 3", timestamp: 0 }],
+		tools: [viewFigure],
+		maxRounds: 8,
+		...c.cb,
+	});
+
+	expect(c.done).toBe("it shows a pipeline");
+	// The trace preview uses the text; the image rides the tool-result content.
+	expect(c.toolEnds).toEqual([{ name: "view_figure", resultPreview: "Figure 3", isError: false }]);
+	const results = script.contexts[1].messages.filter((m) => m.role === "toolResult");
+	expect(results[0].content).toEqual([
+		{ type: "text", text: "Figure 3" },
+		{ type: "image", data: "ABCD", mimeType: "image/jpeg" },
+	]);
+});
+
 test("plain answer with no tools calls onDone directly", async () => {
 	const script = scriptStream([{ text: "hello world" }]);
 	const c = collectCallbacks();

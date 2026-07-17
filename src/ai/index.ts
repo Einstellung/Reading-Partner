@@ -24,4 +24,6 @@ export {
 	type AgentToolStart,
 	type AgentToolEnd,
 	type RunAgentTurnOptions,
+	type ToolResult,
+	type ToolResultImage,
 } from "./agent";

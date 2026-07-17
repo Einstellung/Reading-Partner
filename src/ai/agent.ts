@@ -30,15 +30,31 @@ import type {
 import { validateToolCall } from "@earendil-works/pi-ai";
 import { providers, resolveApiKey, toPiMessages, type ChatMessage, type ProviderId } from "./providers";
 
+// An image block a tool can return alongside its text (e.g. view_figure hands
+// the model a cropped figure). `data` is bare base64, `mimeType` the MIME type;
+// pi-ai carries these to the provider as tool-result image content (verified for
+// the Anthropic path — see docs/12 landing note).
+export interface ToolResultImage {
+	data: string;
+	mimeType: string;
+}
+
+// A richer tool result: text (also used as the UI trace preview) plus optional
+// images. A tool may still return a plain string, which becomes { text }.
+export interface ToolResult {
+	text: string;
+	images?: ToolResultImage[];
+}
+
 // A tool the model can call. `parameters` is a TypeBox schema (e.g.
 // Type.Object({...}) / StringEnum(...)) — the same shape pi's Tool expects.
 // `execute` receives arguments already validated/coerced against that schema and
-// returns the tool result as a string that is fed back to the model.
+// returns the tool result: a string, or { text, images } to attach pictures.
 export interface AgentTool {
 	name: string;
 	description: string;
 	parameters: TSchema;
-	execute(args: Record<string, any>): Promise<string>;
+	execute(args: Record<string, any>): Promise<string | ToolResult>;
 }
 
 export interface AgentToolStart {
@@ -171,6 +187,7 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 				onToolStart({ name: call.name, args: call.arguments });
 
 				let resultText: string;
+				let images: ToolResultImage[] | undefined;
 				let isError = false;
 				try {
 					const tool = byName.get(call.name);
@@ -179,7 +196,13 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 					// throw here (bad args or a throwing execute) becomes a tool-result
 					// error the model can react to, not a crashed turn.
 					const args = validateToolCall(piTools, call) as Record<string, any>;
-					resultText = await tool.execute(args);
+					const raw = await tool.execute(args);
+					if (typeof raw === "string") {
+						resultText = raw;
+					} else {
+						resultText = raw.text;
+						images = raw.images;
+					}
 				} catch (e) {
 					isError = true;
 					resultText = e instanceof Error ? e.message : String(e);
@@ -187,11 +210,15 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 
 				onToolEnd({ name: call.name, resultPreview: preview(resultText), isError });
 
+				const content: ToolResultMessage["content"] = [{ type: "text", text: resultText }];
+				if (images) {
+					for (const im of images) content.push({ type: "image", data: im.data, mimeType: im.mimeType });
+				}
 				const result: ToolResultMessage = {
 					role: "toolResult",
 					toolCallId: call.id,
 					toolName: call.name,
-					content: [{ type: "text", text: resultText }],
+					content,
 					isError,
 					timestamp: Date.now(),
 				};

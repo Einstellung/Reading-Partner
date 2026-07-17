@@ -148,8 +148,10 @@ function ensurePromiseWithResolvers(): void {
 }
 
 // Loaded lazily and cached so pdf.js and its worker stay out of the initial
-// bundle (a separate chunk fetched on the first book open).
-async function loadPdfjs() {
+// bundle (a separate chunk fetched on the first book open). Exported so the
+// figure-index extractor (src/figures) reuses the exact same pinned pdf.js and
+// worker rather than loading a second copy.
+export async function loadPdfjs() {
   ensurePromiseWithResolvers();
   if (!pdfjsPromise) {
     pdfjsPromise = (async () => {

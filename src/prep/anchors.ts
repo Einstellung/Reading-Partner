@@ -6,10 +6,12 @@
 
 export type Citation =
   | { kind: "page"; page: number }
-  | { kind: "paper"; slug: string; page: number };
+  | { kind: "paper"; slug: string; page: number }
+  | { kind: "figure"; id: string };
 
 const PAGE_HREF = "#rp-page-";
 const PAPER_HREF = "#rp-paper-";
+const FIGURE_HREF = "#rp-fig-";
 
 export function pageCitationHref(page: number): string {
   return `${PAGE_HREF}${page}`;
@@ -17,6 +19,10 @@ export function pageCitationHref(page: number): string {
 
 export function paperCitationHref(slug: string, page: number): string {
   return `${PAPER_HREF}${slug}--${page}`;
+}
+
+export function figureCitationHref(id: string): string {
+  return `${FIGURE_HREF}${id}`;
 }
 
 export function parseCitationHref(href: string | undefined): Citation | null {
@@ -33,6 +39,10 @@ export function parseCitationHref(href: string | undefined): Citation | null {
     const page = Number(rest.slice(sep + 2));
     return slug && Number.isFinite(page) && page > 0 ? { kind: "paper", slug, page } : null;
   }
+  if (href.startsWith(FIGURE_HREF)) {
+    const id = href.slice(FIGURE_HREF.length);
+    return /^\d+[a-z]?$/.test(id) ? { kind: "figure", id } : null;
+  }
   return null;
 }
 
@@ -40,11 +50,17 @@ export function parseCitationHref(href: string | undefined): Citation | null {
 const SURVEY_RE = /\[(pp?\.\s?(\d+)(?:\s?[-–]\s?\d+)?)\]/g;
 // [some-slug p.3] — a paper citation. The slug charset matches slugify's output.
 const PAPER_RE = /\[([a-z0-9][a-z0-9-]*)\s+p\.\s?(\d+)\]/g;
+// [fig:3] / [fig:3a] — a figure citation (M9). The label keeps the "fig:N" text.
+const FIGURE_RE = /\[fig:\s?(\d+[a-z]?)\]/gi;
 
 // Rewrite citation shorthands into markdown links. A match already followed by
 // "(" is an existing markdown link's text — left alone.
 export function linkifyCitations(text: string): string {
-  const paperPass = text.replace(PAPER_RE, (match, slug: string, page: string, offset: number, s: string) => {
+  const figPass = text.replace(FIGURE_RE, (match, id: string, offset: number, s: string) => {
+    if (s[offset + match.length] === "(") return match;
+    return `[fig:${id.toLowerCase()}](${figureCitationHref(id.toLowerCase())})`;
+  });
+  const paperPass = figPass.replace(PAPER_RE, (match, slug: string, page: string, offset: number, s: string) => {
     if (s[offset + match.length] === "(") return match;
     return `[${slug} p.${page}](${paperCitationHref(slug, Number(page))})`;
   });

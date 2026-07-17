@@ -7,6 +7,7 @@
 import { streamChat, type ProviderId } from "../ai/providers";
 import { ensureFulltext } from "../fulltext/store";
 import type { Fulltext } from "../fulltext/types";
+import { buildFigureCatalog, ensureFigures } from "../figures";
 import { loadSettings } from "../settings";
 import { hashPath } from "../storage";
 import { fetchFromArxiv, normalizeArxivId } from "./arxiv";
@@ -139,6 +140,11 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
       }
       if (ft.status !== "ok") return { body: "", pages: ft.pages.length, thin: true };
       const model = await resolveModel();
+      // The paper's figure catalog (M9), so the note can cite key figures as
+      // [fig:N]. Extraction-only (no vision); a failure just omits the catalog.
+      const figs = await ensureFigures(paperCachePath(surveyHash, paper.slug), fetched.pdfBytes!).catch(
+        () => null,
+      );
       const body = await runDigest({
         paper,
         surveyName,
@@ -146,6 +152,7 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
         model,
         signal: opts.signal,
         onProgress: opts.onProgress,
+        figureCatalog: figs ? buildFigureCatalog(figs.figures) : "",
       });
       return { body, pages: ft.pages.length, thin: false };
     },
