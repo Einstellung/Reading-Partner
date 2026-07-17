@@ -11,17 +11,49 @@
 // KaTeX woff2 fonts as assets from the CSS url() references, alongside this
 // module's async chunk.
 
-import ReactMarkdown from 'react-markdown';
+import { useContext, useMemo, type AnchorHTMLAttributes } from 'react';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import rehypeHighlight from 'rehype-highlight';
 import 'katex/dist/katex.min.css';
 import 'highlight.js/styles/github.css';
+import { linkifyCitations, parseCitationHref } from '../prep/anchors';
+import { CitationContext, type CitationHandler } from './Markdown';
 
 // Module-level constants so the plugin arrays aren't recreated each render.
 const remarkPlugins = [remarkGfm, remarkMath];
 const rehypePlugins = [rehypeHighlight, rehypeKatex];
+
+// Citation links ([p.12] rewritten to #rp-… hrefs by linkifyCitations) render
+// as quiet chips that call back into the host instead of navigating; every
+// other link keeps the default anchor behavior.
+function makeAnchor(onCitation: CitationHandler) {
+	return function Anchor({ href, children, ...rest }: AnchorHTMLAttributes<HTMLAnchorElement>) {
+		const citation = parseCitationHref(href);
+		if (!citation) {
+			return (
+				<a href={href} {...rest}>
+					{children}
+				</a>
+			);
+		}
+		return (
+			<a
+				href={href}
+				{...rest}
+				className="!no-underline rounded bg-[#efecfb] px-1 py-0.5 !text-[#4a3a9e] text-[0.9em] hover:bg-[#e2dcf6]"
+				onClick={(e) => {
+					e.preventDefault();
+					onCitation(citation);
+				}}
+			>
+				{children}
+			</a>
+		);
+	};
+}
 
 // A quiet, chat-density typography set. Tailwind arbitrary variants keep it all
 // in one place; there's no preflight in this project, so every block element is
@@ -67,10 +99,16 @@ const MD = [
 ].join(' ');
 
 export default function MarkdownRenderer({ text }: { text: string }) {
+	const onCitation = useContext(CitationContext);
+	const source = useMemo(() => (onCitation ? linkifyCitations(text) : text), [text, onCitation]);
+	const components = useMemo<Components | undefined>(
+		() => (onCitation ? { a: makeAnchor(onCitation) } : undefined),
+		[onCitation],
+	);
 	return (
 		<div className={MD}>
-			<ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>
-				{text}
+			<ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
+				{source}
 			</ReactMarkdown>
 		</div>
 	);
