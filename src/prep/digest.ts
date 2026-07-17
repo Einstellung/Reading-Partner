@@ -95,18 +95,26 @@ export interface DigestModel {
 }
 
 // Run the digestion call(s) and resolve with the note body. Errors reject.
+// onProgress, when given, reports the cumulative received character count as
+// deltas arrive (drives the pipeline's stall watchdog and liveness counter).
 export function runDigest(params: {
   paper: PrepPaper;
   surveyName: string;
   fulltext: Fulltext;
   model: DigestModel;
   signal?: AbortSignal;
+  onProgress?: (chars: number) => void;
 }): Promise<string> {
-  const { paper, surveyName, fulltext, model, signal } = params;
+  const { paper, surveyName, fulltext, model, signal, onProgress } = params;
   const systemPrompt = digestSystemPrompt(paper, surveyName);
   const short = fulltext.pages.length <= SHORT_PAPER_MAX;
 
   return new Promise<string>((resolve, reject) => {
+    let chars = 0;
+    const onDelta = (text: string) => {
+      chars += text.length;
+      onProgress?.(chars);
+    };
     const onDone = (text: string) => {
       const t = text.trim();
       if (t) resolve(t);
@@ -121,7 +129,7 @@ export function runDigest(params: {
         systemPrompt,
         messages: [{ role: "user", text: inlineDigestMessage(fulltext) }],
         signal,
-        onDelta: () => {},
+        onDelta,
         onDone,
         onError,
       });
@@ -134,7 +142,7 @@ export function runDigest(params: {
         tools: buildDigestTools(fulltext),
         signal,
         maxRounds: DIGEST_MAX_ROUNDS,
-        onDelta: () => {},
+        onDelta,
         onToolStart: () => {},
         onToolEnd: () => {},
         onDone,

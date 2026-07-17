@@ -4,9 +4,34 @@
 // Plain and functional by design — visibility over polish. Tailwind-only.
 
 import { useEffect, useState } from "react";
-import type { PrepSnapshot } from "../prep/pipeline";
+import type { PrepActivity, PrepSnapshot } from "../prep/pipeline";
 import type { PaperStatus, PrepPaper } from "../prep/types";
 import { CitationContext, Markdown } from "./Markdown";
+
+// "1234" -> "1.2k", "812" -> "812". Keeps the liveness line compact.
+function compactChars(chars: number): string {
+  return chars < 1000 ? String(chars) : `${(chars / 1000).toFixed(1)}k`;
+}
+
+// A live "47s · 1.2k chars" hint for an in-flight AI call. Seconds tick locally
+// off the injected startedAt so they advance smoothly between snapshots; chars
+// come from the snapshot. `withUnit` appends " chars" (header) vs. bare (row).
+function LivenessHint({ activity, withUnit }: { activity: PrepActivity; withUnit?: boolean }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const secs = Math.max(0, Math.floor((now - activity.startedAt) / 1000));
+  const chars = `${compactChars(activity.chars)}${withUnit ? " chars" : ""}`;
+  const retry = activity.attempt > 1 ? ` · retrying (${activity.attempt}/${activity.attempts})` : "";
+  return (
+    <>
+      {secs}s · {chars}
+      {retry}
+    </>
+  );
+}
 
 const STATUS_STYLE: Record<PaperStatus, string> = {
   queued: "bg-neutral-100 text-neutral-500",
@@ -30,6 +55,8 @@ interface PrepPanelProps {
   onRequeue(slug: string): void;
   onAdd(query: string): void;
   onStartPrep(): void;
+  onRetryPlan(): void;
+  onReplan(): void;
   // Externally selected paper (a clicked [paper-slug p.N] citation).
   selectedSlug?: string | null;
 }
@@ -41,6 +68,7 @@ function PaperRow({
   onSkip,
   onRequeue,
   loadNote,
+  digestActivity,
 }: {
   paper: PrepPaper;
   expanded: boolean;
@@ -48,6 +76,8 @@ function PaperRow({
   onSkip(): void;
   onRequeue(): void;
   loadNote(slug: string): Promise<string | null>;
+  // This paper's in-flight digest, when it is the one being digested.
+  digestActivity: PrepActivity | null;
 }) {
   const [note, setNote] = useState<string | null>(null);
   const hasNote = paper.status === "done" || paper.status === "abstract-only";
@@ -83,6 +113,11 @@ function PaperRow({
             </span>
             {paper.year && <span className="text-[11px] text-neutral-400">{paper.year}</span>}
             {paper.arxivId && <span className="text-[11px] text-neutral-400">arXiv:{paper.arxivId}</span>}
+            {digestActivity && (
+              <span className="text-[11px] text-neutral-400">
+                <LivenessHint activity={digestActivity} />
+              </span>
+            )}
           </span>
         </span>
       </button>
@@ -132,6 +167,8 @@ export default function PrepPanel({
   onRequeue,
   onAdd,
   onStartPrep,
+  onRetryPlan,
+  onReplan,
   selectedSlug,
 }: PrepPanelProps) {
   const [expandedSlug, setExpandedSlug] = useState<string | null>(null);
@@ -162,6 +199,9 @@ export default function PrepPanel({
   }
 
   const doneCount = state.papers.filter((p) => p.status === "done" || p.status === "abstract-only").length;
+  const running = snapshot?.running ?? false;
+  const activity = snapshot?.activity ?? null;
+  const planActivity = activity?.kind === "plan" ? activity : null;
 
   const submitAdd = () => {
     const q = addText.trim();
@@ -173,12 +213,44 @@ export default function PrepPanel({
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-[#eee] px-3 py-2">
-        <div className="text-[13px] text-[#1b1b1b]">Lesson prep</div>
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-[13px] text-[#1b1b1b]">Lesson prep</div>
+          {state.planStatus === "done" && (
+            <button
+              type="button"
+              className="cursor-pointer border-0 bg-transparent p-0 text-[11px] text-neutral-400 hover:text-neutral-600 disabled:cursor-default disabled:opacity-50"
+              onClick={onReplan}
+              disabled={running}
+            >
+              Replan
+            </button>
+          )}
+        </div>
         <div className="mt-0.5 text-[11px] text-neutral-400">
-          {state.planStatus === "running" && "Reading the survey's references…"}
+          {state.planStatus === "running" && (
+            <>
+              Reading the survey's references…
+              {planActivity && (
+                <>
+                  {" "}
+                  <LivenessHint activity={planActivity} withUnit />
+                </>
+              )}
+            </>
+          )}
           {state.planStatus === "pending" && "Waiting to plan…"}
           {state.planStatus === "failed" && (
-            <span className="text-red-600/90">Plan failed: {state.planError}</span>
+            <span className="flex items-center gap-1.5">
+              <span className="text-red-600/90">Plan failed: {state.planError}</span>
+              <button
+                type="button"
+                className={SMALL_BTN}
+                onClick={onRetryPlan}
+                disabled={running}
+              >
+                Retry
+              </button>
+            </span>
           )}
           {state.planStatus === "done" && `${doneCount} of ${state.papers.length} papers ready`}
         </div>
@@ -194,6 +266,7 @@ export default function PrepPanel({
             onSkip={() => onSkip(p.slug)}
             onRequeue={() => onRequeue(p.slug)}
             loadNote={loadNote}
+            digestActivity={activity?.kind === "digest" && activity.slug === p.slug ? activity : null}
           />
         ))}
         {state.planStatus === "done" && state.papers.length === 0 && (

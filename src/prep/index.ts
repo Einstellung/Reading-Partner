@@ -25,7 +25,12 @@ export {
   paperPriority,
   papersForChapter,
 } from "./scheduler";
-export { PrepPipeline, type PipelineDeps, type PrepSnapshot } from "./pipeline";
+export {
+  PrepPipeline,
+  type PipelineDeps,
+  type PrepSnapshot,
+  type PrepActivity,
+} from "./pipeline";
 export { getPrepPipeline, peekPrepPipeline, hasPrepState } from "./live";
 export { readPrepNote, paperFulltextHash } from "./store";
 export { buildClassroomSystemPrompt, classroomPromptPrefix, type ClassroomNote } from "./classroom";

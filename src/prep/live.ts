@@ -36,17 +36,28 @@ async function resolveModel(): Promise<{ providerId: ProviderId; modelId: string
   return { providerId: s.defaultProviderId as ProviderId, modelId: s.defaultModelId };
 }
 
-// One plain (tool-less) model call, promisified.
-function callModel(systemPrompt: string, userText: string): Promise<string> {
+// One plain (tool-less) model call, promisified. onProgress reports the
+// cumulative received character count so the pipeline's watchdog and liveness
+// counter can track a long stream; signal aborts it.
+function callModel(
+  systemPrompt: string,
+  userText: string,
+  opts: { signal: AbortSignal; onProgress: (chars: number) => void },
+): Promise<string> {
   return resolveModel().then(
     (model) =>
       new Promise<string>((resolve, reject) => {
+        let chars = 0;
         void streamChat({
           providerId: model.providerId,
           modelId: model.modelId,
           systemPrompt,
           messages: [{ role: "user", text: userText }],
-          onDelta: () => {},
+          signal: opts.signal,
+          onDelta: (t) => {
+            chars += t.length;
+            opts.onProgress(chars);
+          },
           onDone: resolve,
           onError: (m) => reject(new Error(m)),
         });
@@ -59,8 +70,8 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
     loadState: loadPrepState,
     saveState: savePrepState,
 
-    async buildPlan() {
-      const text = await callModel(PLAN_SYSTEM_PROMPT, planUserMessage(surveyFulltext));
+    async buildPlan(opts) {
+      const text = await callModel(PLAN_SYSTEM_PROMPT, planUserMessage(surveyFulltext), opts);
       return parsePlan(text);
     },
 
@@ -116,7 +127,7 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
       return { source: "semantic-scholar", arxivId: hit.arxivId, abstract: hit.abstract, pdfBytes: hit.pdfBytes };
     },
 
-    async digestPaper(paper, fetched): Promise<DigestOutcome> {
+    async digestPaper(paper, fetched, opts): Promise<DigestOutcome> {
       // Extract (and cache) the paper's text; an unreadable PDF degrades to a
       // thin note rather than failing the paper.
       let ft: Fulltext;
@@ -128,7 +139,14 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
       }
       if (ft.status !== "ok") return { body: "", pages: ft.pages.length, thin: true };
       const model = await resolveModel();
-      const body = await runDigest({ paper, surveyName, fulltext: ft, model });
+      const body = await runDigest({
+        paper,
+        surveyName,
+        fulltext: ft,
+        model,
+        signal: opts.signal,
+        onProgress: opts.onProgress,
+      });
       return { body, pages: ft.pages.length, thin: false };
     },
 
@@ -168,6 +186,11 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
     now: () => Date.now(),
 
     sleep: (ms) => new Promise<void>((r) => setTimeout(r, ms)),
+
+    setTimer: (ms, cb) => {
+      const id = setTimeout(cb, ms);
+      return () => clearTimeout(id);
+    },
   };
 }
 
