@@ -54,7 +54,7 @@ export interface PrepPaper {
   status: PaperStatus;
   addedByUser?: boolean;
   error?: string;
-  source?: "arxiv" | "semantic-scholar" | null;
+  source?: "arxiv" | "openalex" | "semantic-scholar" | null;
   abstract?: string;
   // Page count of the fetched PDF, set after extraction.
   pages?: number | null;

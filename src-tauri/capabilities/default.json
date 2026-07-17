@@ -49,6 +49,7 @@
         { "url": "https://api.deepseek.com/*" },
         { "url": "https://export.arxiv.org/*" },
         { "url": "https://arxiv.org/*" },
+        { "url": "https://api.openalex.org/*" },
         { "url": "https://api.semanticscholar.org/*" }
       ]
     },

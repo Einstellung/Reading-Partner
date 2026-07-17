@@ -14,7 +14,7 @@ import { createPrepState, type PrepPaper, type PrepState } from "./types";
 const COOLDOWN_MS = [60_000, 300_000, 900_000];
 
 export interface FetchOutcome {
-  source: "arxiv" | "semantic-scholar" | null;
+  source: "arxiv" | "openalex" | "semantic-scholar" | null;
   arxivId: string | null;
   abstract: string;
   // Null when no full text could be fetched -> abstract-only note.
@@ -243,7 +243,7 @@ export class PrepPipeline {
 
     if (!fetched) {
       paper.status = "failed";
-      paper.error = "not found on arXiv or Semantic Scholar";
+      paper.error = "not found on arXiv, OpenAlex, or Semantic Scholar";
       await this.persist();
       return;
     }

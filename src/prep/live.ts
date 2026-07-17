@@ -10,6 +10,8 @@ import type { Fulltext } from "../fulltext/types";
 import { loadSettings } from "../settings";
 import { hashPath } from "../storage";
 import { fetchFromArxiv, normalizeArxivId } from "./arxiv";
+import { fetchFromOpenAlex } from "./openalex";
+import { fetchWithRetry } from "./http";
 import { runDigest } from "./digest";
 import { serializeNote } from "./notes";
 import { parsePlan, planUserMessage, uniqueSlug, PLAN_SYSTEM_PROMPT } from "./plan";
@@ -80,7 +82,32 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
           return { source: "arxiv", arxivId: hit.arxivId, abstract: hit.abstract, pdfBytes: hit.pdfBytes };
         }
       } catch (e) {
-        console.warn("arxiv lookup failed, trying Semantic Scholar", e);
+        console.warn("arxiv lookup failed, trying OpenAlex", e);
+      }
+      // OpenAlex (keyless polite pool) before Semantic Scholar, so keyless
+      // users almost never hit S2's shared, 429-prone pool.
+      try {
+        const oa = await fetchFromOpenAlex(paper);
+        if (oa) {
+          let pdfBytes = oa.pdfBytes;
+          // OpenAlex knew the arXiv id but had no usable PDF: one direct try at
+          // the arXiv PDF before falling through. The per-host throttle spaces it.
+          if (!pdfBytes && oa.arxivId) {
+            const id = normalizeArxivId(oa.arxivId);
+            if (id) {
+              try {
+                const res = await fetchWithRetry(`https://arxiv.org/pdf/${id}`);
+                if (res.ok) pdfBytes = await res.arrayBuffer();
+              } catch {
+                // Still abstract-only; S2 is next only if OpenAlex found nothing.
+              }
+            }
+          }
+          if (pdfBytes) await writePaperPdf(surveyHash, paper.slug, pdfBytes);
+          return { source: "openalex", arxivId: oa.arxivId, abstract: oa.abstract, pdfBytes };
+        }
+      } catch (e) {
+        console.warn("openalex lookup failed, trying Semantic Scholar", e);
       }
       const s2Key = (await loadSettings()).semanticScholarApiKey ?? undefined;
       const hit = await fetchFromS2(paper, undefined, s2Key);

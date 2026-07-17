@@ -10,7 +10,7 @@ export interface NoteMeta {
   year: number | null;
   arxivId: string | null;
   status: string; // done | abstract-only
-  source: string | null; // arxiv | semantic-scholar
+  source: string | null; // arxiv | openalex | semantic-scholar
   sourcePages: number | null; // page count of the digested PDF
   citedInChapters: number[];
 }

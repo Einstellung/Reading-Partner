@@ -1,7 +1,8 @@
 // HTTP for the prep pipeline. Inside Tauri, requests go through the http
 // plugin (same posture as the AI fetch bridge): the webview's CORS never sees
 // them, and the allowed hosts live in src-tauri/capabilities/default.json
-// (export.arxiv.org / arxiv.org / api.semanticscholar.org). Outside Tauri
+// (export.arxiv.org / arxiv.org / api.openalex.org / api.semanticscholar.org).
+// Outside Tauri
 // (plain vite dev) the native fetch is used and CORS failures surface as
 // fetch errors — the pipeline degrades those papers, it doesn't crash.
 
@@ -17,7 +18,8 @@ function isTauri(): boolean {
 // for a contactable UA). Only settable on the plugin path; the browser path
 // keeps its own UA.
 const POLITE_HEADERS = {
-  "User-Agent": "Reading-Partner/0.2 (https://github.com/xinyuan/Reading-Partner)",
+  "User-Agent":
+    "Reading-Partner/0.2 (https://github.com/Einstellung/Reading-Partner; mailto:einstellungsu@gmail.com)",
 };
 
 export const prepFetch: FetchFn = (url, init) => {
@@ -54,6 +56,8 @@ export const HOST_MIN_INTERVAL_MS: Record<string, number> = {
   "arxiv.org": 3000,
   "export.arxiv.org": 3000,
   "api.semanticscholar.org": 1500,
+  // Polite pool allows 10 req/s; stay well under it.
+  "api.openalex.org": 500,
 };
 
 export interface Clock {
