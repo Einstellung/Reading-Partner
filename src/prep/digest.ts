@@ -1,0 +1,145 @@
+// Stage d: digest one fetched paper into a prep note. The unattended version of
+// the M6 tool loop — same runAgentTurn machinery, but nobody is watching the
+// stream; the final text is the note body. Short papers (≤ SHORT_PAPER_MAX
+// pages) skip the loop and get their full text inline in one call. Pure parts
+// (prompts, tool building, thin-note body) are exported for tests.
+
+import { Type } from "@earendil-works/pi-ai";
+import type { AgentTool } from "../ai/agent";
+import { runAgentTurn } from "../ai/agent";
+import { streamChat, type ProviderId } from "../ai/providers";
+import { formatPages, formatSearch } from "../ai/reading-context";
+import type { Fulltext } from "../fulltext/types";
+import type { PrepPaper } from "./types";
+
+export const SHORT_PAPER_MAX = 10;
+const DIGEST_MAX_ROUNDS = 12;
+
+export function digestSystemPrompt(paper: PrepPaper, surveyName: string): string {
+  const lines = [
+    "You are preparing lecture notes for a reading companion. The user is",
+    `studying the survey "${surveyName}"; the paper below is one of its`,
+    "load-bearing references, and your note is what the companion will lean on",
+    "when the survey reaches it.",
+    "",
+    `Paper: ${paper.title}`,
+  ];
+  if (paper.authors.length) lines.push(`Authors: ${paper.authors.join(", ")}`);
+  if (paper.year) lines.push(`Year: ${paper.year}`);
+  if (paper.reason) lines.push(`Why the survey cites it: ${paper.reason}`);
+  if (paper.citedInChapters.length) {
+    lines.push(`Cited in survey chapters: ${paper.citedInChapters.join(", ")}`);
+  }
+  lines.push(
+    "",
+    "Write the note in English, 300-600 words of markdown. Cover: the problem",
+    "the paper attacks, its core idea/method, the key result, and what the",
+    "survey takes from it (use the citation reason above as your angle).",
+    "Anchor every factual claim to the paper with a page marker in the exact",
+    "form [p.N] (N is the paper's 1-based page). Do not add a title heading;",
+    "start directly with the content. Output only the note.",
+  );
+  return lines.join("\n");
+}
+
+// Short-paper path: the whole text with page markers, one call.
+export function inlineDigestMessage(ft: Fulltext): string {
+  const parts: string[] = ["Here is the full paper, page by page:"];
+  for (let i = 0; i < ft.pages.length; i++) {
+    parts.push(`=== Page ${i + 1} ===\n${ft.pages[i]}`);
+  }
+  parts.push("Write the prep note now.");
+  return parts.join("\n\n");
+}
+
+// Long-paper path: the loop's kickoff message; the model pulls pages itself.
+export function loopDigestMessage(ft: Fulltext): string {
+  return (
+    `The paper is ${ft.pages.length} pages. Read what you need with the tools ` +
+    "(start with the first pages and the conclusion), then write the prep note."
+  );
+}
+
+// read_pages/search_paper over the one paper being digested. Mirrors the M6
+// reading tools but scoped to a single document.
+export function buildDigestTools(ft: Fulltext): AgentTool[] {
+  return [
+    {
+      name: "read_pages",
+      description:
+        "Read a 1-based, inclusive page range of the paper (at most 10 pages per call).",
+      parameters: Type.Object({
+        from: Type.Number({ description: "First page (1-based)." }),
+        to: Type.Number({ description: "Last page (1-based, inclusive)." }),
+      }),
+      execute: async (args) =>
+        formatPages(ft, Math.round(Number(args.from)), Math.round(Number(args.to))),
+    },
+    {
+      name: "search_paper",
+      description: "Keyword-search the paper's full text. Returns ranked snippets with pages.",
+      parameters: Type.Object({
+        query: Type.String({ description: "Search terms." }),
+      }),
+      execute: async (args) =>
+        formatSearch(String(args.query), [
+          { label: "paper", fulltext: ft, annotations: [] },
+        ]),
+    },
+  ];
+}
+
+export interface DigestModel {
+  providerId: ProviderId;
+  modelId: string;
+}
+
+// Run the digestion call(s) and resolve with the note body. Errors reject.
+export function runDigest(params: {
+  paper: PrepPaper;
+  surveyName: string;
+  fulltext: Fulltext;
+  model: DigestModel;
+  signal?: AbortSignal;
+}): Promise<string> {
+  const { paper, surveyName, fulltext, model, signal } = params;
+  const systemPrompt = digestSystemPrompt(paper, surveyName);
+  const short = fulltext.pages.length <= SHORT_PAPER_MAX;
+
+  return new Promise<string>((resolve, reject) => {
+    const onDone = (text: string) => {
+      const t = text.trim();
+      if (t) resolve(t);
+      else reject(new Error("digest produced an empty note"));
+    };
+    const onError = (message: string) => reject(new Error(message));
+
+    if (short) {
+      void streamChat({
+        providerId: model.providerId,
+        modelId: model.modelId,
+        systemPrompt,
+        messages: [{ role: "user", text: inlineDigestMessage(fulltext) }],
+        signal,
+        onDelta: () => {},
+        onDone,
+        onError,
+      });
+    } else {
+      void runAgentTurn({
+        providerId: model.providerId,
+        modelId: model.modelId,
+        systemPrompt,
+        messages: [{ role: "user", text: loopDigestMessage(fulltext) }],
+        tools: buildDigestTools(fulltext),
+        signal,
+        maxRounds: DIGEST_MAX_ROUNDS,
+        onDelta: () => {},
+        onToolStart: () => {},
+        onToolEnd: () => {},
+        onDone,
+        onError,
+      });
+    }
+  });
+}

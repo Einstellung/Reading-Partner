@@ -1,0 +1,55 @@
+// Unit tests for citation anchors (src/prep/anchors.ts). Run: bun test.
+
+import { expect, test } from "bun:test";
+import {
+  linkifyCitations,
+  pageCitationHref,
+  paperCitationHref,
+  parseCitationHref,
+} from "../../src/prep/anchors";
+
+test("survey page citations become fragment links", () => {
+  expect(linkifyCitations("See [p.12] for details.")).toBe(
+    "See [p.12](#rp-page-12) for details.",
+  );
+  expect(linkifyCitations("[p. 3]")).toBe("[p. 3](#rp-page-3)");
+});
+
+test("page ranges link to the first page", () => {
+  expect(linkifyCitations("[pp.12-14]")).toBe("[pp.12-14](#rp-page-12)");
+});
+
+test("paper citations carry the slug", () => {
+  expect(linkifyCitations("Grounding in [rt-1-robotics p.3].")).toBe(
+    "Grounding in [rt-1-robotics p.3](#rp-paper-rt-1-robotics--3).",
+  );
+});
+
+test("existing markdown links are left alone", () => {
+  const already = "[p.12](https://example.com)";
+  expect(linkifyCitations(already)).toBe(already);
+  const paper = "[rt-1 p.3](#rp-paper-rt-1--3)";
+  expect(linkifyCitations(paper)).toBe(paper);
+});
+
+test("plain brackets that are not citations pass through", () => {
+  expect(linkifyCitations("array[0] and [12] and [see p.9 above]")).toBe(
+    "array[0] and [12] and [see p.9 above]",
+  );
+});
+
+test("hrefs round-trip through parseCitationHref", () => {
+  expect(parseCitationHref(pageCitationHref(12))).toEqual({ kind: "page", page: 12 });
+  expect(parseCitationHref(paperCitationHref("rt-1-robotics", 3))).toEqual({
+    kind: "paper",
+    slug: "rt-1-robotics",
+    page: 3,
+  });
+});
+
+test("parseCitationHref rejects foreign or malformed hrefs", () => {
+  expect(parseCitationHref(undefined)).toBeNull();
+  expect(parseCitationHref("https://example.com")).toBeNull();
+  expect(parseCitationHref("#rp-page-abc")).toBeNull();
+  expect(parseCitationHref("#rp-paper-noseparator")).toBeNull();
+});
