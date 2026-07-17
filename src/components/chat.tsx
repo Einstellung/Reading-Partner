@@ -4,6 +4,7 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconCheck, IconCopy, IconSend, IconStop } from './icons';
 import { Markdown } from './Markdown';
+import { useFlickerProbe } from './useFlickerProbe';
 import type { ChatImage, PendingImage, ThreadMessage, ToolStatus } from './types';
 
 // The async clipboard API is unreliable in WebKitGTK (pitfall 16), so a failure
@@ -132,6 +133,10 @@ const MessageBubble = memo(function MessageBubble({
 	size: 'sm' | 'lg';
 }) {
 	const lg = size === 'lg';
+	// Dev-only diagnostic for the streaming gray-line glitch; no-op in prod and
+	// when this row isn't a streaming AI reply. Ref is attached to the prose row.
+	const rowRef = useRef<HTMLDivElement>(null);
+	useFlickerProbe(rowRef, role, streaming);
 
 	if (role === 'user') {
 		const hasImages = !!images && images.length > 0;
@@ -168,7 +173,7 @@ const MessageBubble = memo(function MessageBubble({
 	}
 	if (!text) return trace;
 	return (
-		<div className="group flex flex-col gap-2">
+		<div ref={rowRef} className="group flex flex-col gap-2">
 			{trace}
 			<div className={'text-neutral-800 ' + (lg ? 'text-base' : 'text-[13px]')}>
 				<Markdown text={text} />
