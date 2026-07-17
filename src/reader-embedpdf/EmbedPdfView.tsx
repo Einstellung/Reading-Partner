@@ -167,9 +167,9 @@ const ENUM_TO_SPREAD: Record<string, EmbedSpread> = {
 };
 
 export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
-  // worker:false runs PDFium on the main thread. The worker engine hangs in this
-  // spike's dev setup (worker asset blocked under COEP); direct works. iOS/WKWebView
-  // will need its own engine-mode call — flagged in the report.
+  // The direct engine runs PDFium on the main thread; the worker engine hangs
+  // on openDocument (pitfall 21). iOS/WKWebView will need its own engine-mode
+  // decision when that platform lands.
   perfMark("mount");
   const { engine, isLoading, error } = useSharedEngine();
   if (engine) perfMark("engineReady");

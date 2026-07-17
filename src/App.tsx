@@ -656,10 +656,9 @@ export default function App() {
       setViewReady(false);
       pathRef.current = path;
       // Extract the full text in the background so the AI can see the book
-      // (M6). Fire-and-forget: never blocks rendering. The engine's pdf.js
-      // transfers `bytes.buffer` to its worker (detaching it), and extraction's
-      // own copy happens after several awaits — too late. Copy synchronously
-      // here so extraction never races the engine for the bytes.
+      // (M6). Fire-and-forget: never blocks rendering. Extraction's pdf.js
+      // transfers its buffer to a worker (detaching it), so extraction gets its
+      // own synchronous copy here and never races the engine for the bytes.
       setFulltextPending(true);
       setFulltext(null);
       currentFulltextRef.current = ensureFulltext(path, bytes.slice().buffer as ArrayBuffer).catch(
