@@ -40,12 +40,7 @@ jobs:
       # Overrides bundle > iOS > developmentTeam, which is unset in
       # tauri.conf.json so the team id never lives in the repository.
       APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_TEAM_ID }}
-      # iOS ships the EmbedPDF engine only; the zotero/reader engine is
-      # AGPL-blocked on the App Store (docs/06-iOS发布路线.md).
-      VITE_ENGINE: embedpdf
-
     steps:
-      # No submodules: the EmbedPDF build does not use vendor/reader.
       - uses: actions/checkout@v4
 
       # Pin Xcode so image default bumps don't change the toolchain under us.

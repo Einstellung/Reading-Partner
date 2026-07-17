@@ -66,6 +66,5 @@ Actions → iOS TestFlight → Run workflow(main 分支)。20-40 分钟。
 ## 已知限制
 
 - 没有 Mac:不能 `tauri ios dev` 真机调试,不能用 Safari 远程 inspector,一切问题只能靠 CI 日志和 TestFlight 包内表现定位。
-- iOS 首次闸门验证(EmbedPDF 的 pthread WASM 在 WKWebView 里能不能跑,依赖 SharedArrayBuffer 和跨源隔离,COOP/COEP 头已在 `tauri.ios.conf.json` 预埋)只能通过第一个 TestFlight 包完成。
-- iOS 包只含 EmbedPDF 引擎(workflow 里 `VITE_ENGINE=embedpdf`),zotero/reader 引擎因 AGPL 与 App Store 条款冲突不进 iOS 包(见 docs/06)。
+- iOS 首次闸门验证(EmbedPDF 的 pthread WASM 在 WKWebView 里能不能跑,依赖 SharedArrayBuffer 和跨源隔离,COOP/COEP 头在 `tauri.conf.json` 的 `app.security.headers` 全平台下发)只能通过第一个 TestFlight 包完成。
 - Claude 订阅 OAuth 的 loopback 回调在 iOS 不可用,走手动粘贴 code;BYOK 不受影响(见 docs/06)。
