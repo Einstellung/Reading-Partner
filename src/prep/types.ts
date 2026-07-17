@@ -34,6 +34,8 @@ export type PaperStatus =
   | "digesting"
   | "done"
   | "failed"
+  // Rate-limited: not fetched this round, waiting for retryAt to elapse.
+  | "cooldown"
   | "abstract-only"
   | "skipped";
 
@@ -56,6 +58,11 @@ export interface PrepPaper {
   abstract?: string;
   // Page count of the fetched PDF, set after extraction.
   pages?: number | null;
+  // Rate-limit bookkeeping. fetchAttempts counts the cooldown rounds a 429 has
+  // cost this paper; retryAt is when the current cooldown lifts (status
+  // "cooldown"). Both reset on a manual retry and after a successful fetch.
+  fetchAttempts?: number;
+  retryAt?: number;
 }
 
 export type PlanStatus = "pending" | "running" | "done" | "failed";

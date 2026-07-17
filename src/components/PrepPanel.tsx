@@ -15,6 +15,7 @@ const STATUS_STYLE: Record<PaperStatus, string> = {
   done: "bg-green-100 text-green-700",
   "abstract-only": "bg-sky-100 text-sky-700",
   failed: "bg-red-100 text-red-700",
+  cooldown: "bg-amber-50 text-amber-600",
   skipped: "bg-neutral-100 text-neutral-400",
 };
 
@@ -88,13 +89,16 @@ function PaperRow({
       {paper.status === "failed" && paper.error && (
         <div className="mt-1 text-[11px] text-red-600/90">{paper.error}</div>
       )}
+      {paper.status === "cooldown" && (
+        <div className="mt-1 text-[11px] text-amber-600/90">rate-limited, retrying later</div>
+      )}
       <div className="mt-1 flex gap-1.5">
         {active && (
           <button type="button" className={SMALL_BTN} onClick={onSkip}>
             Skip
           </button>
         )}
-        {(paper.status === "skipped" || paper.status === "failed") && (
+        {(paper.status === "skipped" || paper.status === "failed" || paper.status === "cooldown") && (
           <button type="button" className={SMALL_BTN} onClick={onRequeue}>
             Retry
           </button>

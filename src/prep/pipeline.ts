@@ -4,9 +4,14 @@
 // whole state machine runs in bun tests with fakes; live.ts provides the real
 // deps (Tauri fs, arXiv/S2, pi-ai).
 
+import { isRateLimitError } from "./http";
 import { abstractNoteBody } from "./notes";
-import { nextQueued, normalizeOnLoad } from "./scheduler";
+import { earliestCooldown, nextQueued, normalizeOnLoad } from "./scheduler";
 import { createPrepState, type PrepPaper, type PrepState } from "./types";
+
+// How long a rate-limited paper waits before its next attempt, by cooldown
+// round. After the last one is spent, another 429 fails the paper.
+const COOLDOWN_MS = [60_000, 300_000, 900_000];
 
 export interface FetchOutcome {
   source: "arxiv" | "semantic-scholar" | null;
@@ -40,6 +45,9 @@ export interface PipelineDeps {
   // Resolve a user-typed query (title or arXiv id) to a paper stub.
   resolveAddition(query: string, taken: Set<string>): PrepPaper;
   now(): number;
+  // Wait out a cooldown before re-checking the queue (injected so tests never
+  // touch real timers).
+  sleep(ms: number): Promise<void>;
 }
 
 export interface PrepSnapshot {
@@ -106,9 +114,11 @@ export class PrepPipeline {
 
   requeue(slug: string): void {
     const p = this.state?.papers.find((x) => x.slug === slug);
-    if (!p || (p.status !== "skipped" && p.status !== "failed")) return;
+    if (!p || (p.status !== "skipped" && p.status !== "failed" && p.status !== "cooldown")) return;
     p.status = "queued";
     p.error = undefined;
+    p.retryAt = undefined;
+    p.fetchAttempts = undefined;
     void this.persist();
     void this.run();
   }
@@ -174,11 +184,32 @@ export class PrepPipeline {
     const s = this.state!;
     if (s.planStatus !== "done") return;
     // One at a time, re-picking after each finish so chapter changes and
-    // user additions reorder the remainder.
+    // user additions reorder the remainder. When only rate-limited papers are
+    // left, wait out the earliest cooldown and release the ones whose time has
+    // come, rather than exiting the run.
     for (;;) {
       const paper = nextQueued(s.papers, this.currentChapter, s.chapters.length);
-      if (!paper) return;
-      await this.runOne(paper);
+      if (paper) {
+        await this.runOne(paper);
+        continue;
+      }
+      const next = earliestCooldown(s.papers);
+      if (next === null) return;
+      const wait = next - this.deps.now();
+      if (wait > 0) await this.deps.sleep(wait);
+      const now = this.deps.now();
+      let released = false;
+      for (const p of s.papers) {
+        if (p.status === "cooldown" && typeof p.retryAt === "number" && p.retryAt <= now) {
+          p.status = "queued";
+          p.retryAt = undefined;
+          released = true;
+        }
+      }
+      // Nothing became ready (a no-op sleep that didn't advance time) — stop
+      // instead of spinning.
+      if (!released) return;
+      await this.persist();
     }
   }
 
@@ -196,13 +227,19 @@ export class PrepPipeline {
       fetched = await this.deps.fetchPaper(paper);
     } catch (e) {
       if (!this.skippedMeanwhile(paper)) {
-        paper.status = "failed";
-        paper.error = e instanceof Error ? e.message : String(e);
+        if (isRateLimitError(e)) this.cooldown(paper, e.message);
+        else {
+          paper.status = "failed";
+          paper.error = e instanceof Error ? e.message : String(e);
+        }
       }
       await this.persist();
       return;
     }
     if (this.skippedMeanwhile(paper)) return;
+    // A successful fetch clears any rate-limit history.
+    paper.fetchAttempts = undefined;
+    paper.retryAt = undefined;
 
     if (!fetched) {
       paper.status = "failed";
@@ -234,6 +271,22 @@ export class PrepPipeline {
       }
     }
     await this.persist();
+  }
+
+  // A terminal 429: cool the paper down for a growing interval instead of
+  // failing it. After the cooldown rounds are spent, give up with the 429
+  // message so the paper reads as failed for a real reason.
+  private cooldown(paper: PrepPaper, message: string): void {
+    const round = paper.fetchAttempts ?? 0;
+    if (round >= COOLDOWN_MS.length) {
+      paper.status = "failed";
+      paper.error = message;
+      return;
+    }
+    paper.fetchAttempts = round + 1;
+    paper.status = "cooldown";
+    paper.retryAt = this.deps.now() + COOLDOWN_MS[round];
+    paper.error = undefined;
   }
 
   private async finishThin(paper: PrepPaper): Promise<void> {

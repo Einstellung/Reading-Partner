@@ -9,6 +9,7 @@ import {
   type PipelineDeps,
   type PlanOutcome,
 } from "../../src/prep/pipeline";
+import { RateLimitError } from "../../src/prep/http";
 import type { PrepPaper, PrepState } from "../../src/prep/types";
 
 function paper(slug: string, chapters: number[]): PrepPaper {
@@ -45,6 +46,9 @@ interface FakeOptions {
 function makeFakes(opts: FakeOptions = {}) {
   const saved: PrepState[] = [];
   const notes = new Map<string, string>();
+  // A fake clock: sleeping advances virtual time so cooldown waits resolve
+  // deterministically without touching real timers.
+  const clock = { t: 1000 };
   const deps: PipelineDeps = {
     loadState: async () => opts.initial ?? null,
     saveState: async (s) => {
@@ -63,9 +67,12 @@ function makeFakes(opts: FakeOptions = {}) {
       addedByUser: true,
       slug: taken.has(query) ? `${query}-2` : query.toLowerCase().replace(/\s+/g, "-"),
     }),
-    now: () => 1000,
+    now: () => clock.t,
+    sleep: async (ms) => {
+      clock.t += ms;
+    },
   };
-  return { deps, saved, notes };
+  return { deps, saved, notes, clock };
 }
 
 function statuses(p: PrepPipeline): Record<string, string> {
@@ -169,6 +176,64 @@ test("addPaper queues a user paper and requeue revives a skipped one", async () 
   // Let the async loop drain.
   for (let i = 0; i < 10 && p.snapshot().running; i++) await new Promise((r) => setTimeout(r, 1));
   expect(statuses(p).extra).toBe("done");
+});
+
+test("a 429 cools the paper down, auto-retries, and fails only after 3 rounds", async () => {
+  let alphaFetches = 0;
+  const { deps } = makeFakes({
+    fetch: async (pp) => {
+      if (pp.slug === "alpha") {
+        alphaFetches++;
+        throw new RateLimitError("api.semanticscholar.org");
+      }
+      return { source: "arxiv", arxivId: null, abstract: "", pdfBytes: PDF };
+    },
+  });
+  const p = new PrepPipeline("h", "s", deps);
+  await p.ensureStarted();
+  const st = statuses(p);
+  expect(st.beta).toBe("done"); // an unaffected paper still completes
+  expect(st.alpha).toBe("failed");
+  expect(alphaFetches).toBe(4); // 3 cooldown rounds + the attempt that gives up
+  const alpha = p.snapshot().state?.papers.find((x) => x.slug === "alpha");
+  expect(alpha?.error).toContain("HTTP 429");
+  expect(p.snapshot().running).toBe(false);
+});
+
+test("a paper that recovers after one cooldown completes with reset bookkeeping", async () => {
+  let n = 0;
+  const { deps } = makeFakes({
+    fetch: async (pp) => {
+      if (pp.slug === "alpha" && ++n === 1) throw new RateLimitError("api.semanticscholar.org");
+      return { source: "arxiv", arxivId: null, abstract: "abs", pdfBytes: PDF };
+    },
+  });
+  const p = new PrepPipeline("h", "s", deps);
+  await p.ensureStarted();
+  expect(statuses(p).alpha).toBe("done");
+  const alpha = p.snapshot().state?.papers.find((x) => x.slug === "alpha");
+  expect(alpha?.fetchAttempts).toBeUndefined();
+  expect(alpha?.retryAt).toBeUndefined();
+});
+
+test("manual retry resets a rate-limited paper so it can complete", async () => {
+  let fail = true;
+  const { deps } = makeFakes({
+    fetch: async (pp) => {
+      if (pp.slug === "alpha" && fail) throw new RateLimitError("api.semanticscholar.org");
+      return { source: "arxiv", arxivId: null, abstract: "abs", pdfBytes: PDF };
+    },
+  });
+  const p = new PrepPipeline("h", "s", deps);
+  await p.ensureStarted();
+  expect(statuses(p).alpha).toBe("failed");
+
+  fail = false;
+  p.requeue("alpha");
+  for (let i = 0; i < 20 && p.snapshot().running; i++) await new Promise((r) => setTimeout(r, 1));
+  expect(statuses(p).alpha).toBe("done");
+  const alpha = p.snapshot().state?.papers.find((x) => x.slug === "alpha");
+  expect(alpha?.fetchAttempts).toBeUndefined();
 });
 
 test("chapter ordering: papers for the current chapter run first", async () => {

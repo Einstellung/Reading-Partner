@@ -51,15 +51,29 @@ export function nextQueued(
   return best;
 }
 
+// The earliest retryAt among papers still cooling down, or null when none are.
+// Drives how long the run loop waits before re-checking the cooldown queue.
+export function earliestCooldown(papers: PrepPaper[]): number | null {
+  let min = Infinity;
+  for (const p of papers) {
+    if (p.status === "cooldown" && typeof p.retryAt === "number") min = Math.min(min, p.retryAt);
+  }
+  return min === Infinity ? null : min;
+}
+
 // Recover a persisted state at load: statuses that only make sense mid-run
 // ("fetching"/"digesting") go back to "queued", and an interrupted plan call
-// back to "pending", so a restart resumes instead of hanging.
+// back to "pending", so a restart resumes instead of hanging. Papers that were
+// cooling down are requeued so a restart re-attempts them immediately. Old
+// states predate the retry fields; they simply lack them and load unchanged.
 export function normalizeOnLoad(state: PrepState): PrepState {
   return {
     ...state,
     planStatus: state.planStatus === "running" ? "pending" : state.planStatus,
     papers: state.papers.map((p) =>
-      p.status === "fetching" || p.status === "digesting" ? { ...p, status: "queued" as const } : p,
+      p.status === "fetching" || p.status === "digesting" || p.status === "cooldown"
+        ? { ...p, status: "queued" as const, retryAt: undefined }
+        : p,
     ),
   };
 }

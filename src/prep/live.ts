@@ -82,7 +82,8 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
       } catch (e) {
         console.warn("arxiv lookup failed, trying Semantic Scholar", e);
       }
-      const hit = await fetchFromS2(paper);
+      const s2Key = (await loadSettings()).semanticScholarApiKey ?? undefined;
+      const hit = await fetchFromS2(paper, undefined, s2Key);
       if (!hit) return null;
       if (hit.pdfBytes) await writePaperPdf(surveyHash, paper.slug, hit.pdfBytes);
       return { source: "semantic-scholar", arxivId: hit.arxivId, abstract: hit.abstract, pdfBytes: hit.pdfBytes };
@@ -138,6 +139,8 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
     },
 
     now: () => Date.now(),
+
+    sleep: (ms) => new Promise<void>((r) => setTimeout(r, ms)),
   };
 }
 

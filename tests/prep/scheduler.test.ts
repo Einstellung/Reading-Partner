@@ -76,6 +76,19 @@ test("normalizeOnLoad requeues in-flight work and restarts an interrupted plan",
   expect(normalizeOnLoad({ ...state, planStatus: "done" }).planStatus).toBe("done");
 });
 
+test("normalizeOnLoad requeues cooldown papers and tolerates pre-retry state", () => {
+  const state = createPrepState("h", "s.pdf", 0);
+  state.planStatus = "done";
+  state.papers = [
+    { ...paper("a", [1], "cooldown"), retryAt: 999, fetchAttempts: 2 },
+    paper("b", [1], "queued"), // old persisted state: no retry fields at all
+  ];
+  const out = normalizeOnLoad(state);
+  expect(out.papers[0].status).toBe("queued");
+  expect(out.papers[0].retryAt).toBeUndefined();
+  expect(out.papers[1].status).toBe("queued");
+});
+
 test("papersForChapter returns only noted papers cited in that chapter", () => {
   const papers = [
     paper("a", [1], "done"),
