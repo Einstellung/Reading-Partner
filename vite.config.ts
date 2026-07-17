@@ -2,24 +2,18 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
-// EmbedPDF's PDFium wasm needs SharedArrayBuffer, granted only to a
-// cross-origin-isolated page. Apply COOP/COEP only when the EmbedPDF engine is
-// selected so the default zotero path is untouched.
-const embedpdf = process.env.VITE_ENGINE === "embedpdf";
-const isolationHeaders = embedpdf
-  ? {
-      "Cross-Origin-Opener-Policy": "same-origin",
-      "Cross-Origin-Embedder-Policy": "require-corp",
-    }
-  : {};
+// The PDFium wasm is a pthread build: it needs SharedArrayBuffer, which the
+// browser grants only to a cross-origin-isolated page (pitfall 18). Production
+// gets the same headers from tauri.conf.json (app.security.headers).
+const isolationHeaders = {
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Embedder-Policy": "require-corp",
+};
 
 // Tauri expects a fixed port and no clearing of the terminal.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   clearScreen: false,
-  // Only scan the app entry; vendor/ holds the reader's own pdf.js sources
-  // whose bare imports must not be pulled into the shell's dep graph.
-  optimizeDeps: { entries: ["index.html"] },
   server: {
     port: 1420,
     strictPort: true,
@@ -30,9 +24,6 @@ export default defineConfig({
     },
   },
   preview: { port: 1421, strictPort: true, headers: isolationHeaders },
-  // Only build the EmbedPDF spike harness into the bundle when measuring the
-  // engine (VITE_ENGINE=embedpdf); the default shell build is unaffected.
-  build: embedpdf
-    ? { rollupOptions: { input: { main: "index.html", spike: "embedpdf-spike.html" } } }
-    : {},
+  // The engine test harness (embedpdf-spike.html) is dev-only: Vite serves it
+  // on demand, but it is not built into the production bundle.
 });

@@ -2,14 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import {
-  createPdfView,
   SpreadMode,
   type Annotation,
   type AnnotationPopupParams,
   type ViewInstance,
   type ViewState,
   type ViewStats,
-} from "./reader";
+} from "./reader-contract";
 import { getViewState, hashPath, saveViewState } from "./storage";
 import { chapterAt, ensureFulltext, getFulltext, onFulltextError, type Fulltext } from "./fulltext";
 import Sidebar, { type SidebarTab } from "./components/Sidebar";
@@ -61,7 +60,6 @@ import {
   type ProviderId,
   type ProviderInfo,
 } from "./aiClient";
-import { USE_EMBEDPDF } from "./reader-embedpdf/engine-flag";
 import { prewarmPdfiumEngine } from "./reader-embedpdf/engine-singleton";
 import EmbedReaderPane from "./reader-embedpdf/EmbedReaderPane";
 import PenToolbar from "./components/PenToolbar";
@@ -74,13 +72,12 @@ import SettingsView from "./components/SettingsView";
 import Toast, { useToasts } from "./components/Toast";
 import type { Annotation as PopupAnnotation, PendingImage, ToolStatus, ToolType } from "./components/types";
 
-const HOST_SRC = "/reader/reader-host.html";
 // Auto-explanation kickoff (docs/03: the bubble starts explaining, unprompted).
 const EXPLAIN_KICKOFF = "Please explain the passage I just marked, using the reading context above.";
-// The AI pen maps to the engine's underline tool in a fixed purple. Owning this
-// one color for the AI pen is a v1 implementation convenience, not a semantic in
-// the color palette; the host identifies AI-pen strokes by the active tool, not
-// the color. Value is `general-purple` from vendor/reader defines.js.
+// The AI pen maps to the engine's underline tool in a fixed purple (the palette's
+// Purple). Owning this one color for the AI pen is a v1 implementation
+// convenience, not a semantic in the color palette; the host identifies AI-pen
+// strokes by the active tool, not the color.
 const AI_PEN_COLOR = "#a28ae5";
 // Cap on images attached to one chat turn (docs/03: paste screenshots to ask).
 const MAX_PENDING_IMAGES = 3;
@@ -143,7 +140,10 @@ interface CallState {
 }
 
 export default function App() {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  // The reader pane's DOM container: anchor fallbacks measure against it, and
+  // its capture-phase pointer handlers implement pen-lift tracking + the
+  // touch-the-book dismissal (the engine lives in the same document now).
+  const readerPaneRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<ViewInstance | null>(null);
   const pathRef = useRef<string | null>(null);
   const saveTimer = useRef<number | null>(null);
@@ -153,12 +153,12 @@ export default function App() {
   const annsRef = useRef<Map<string, Annotation>>(new Map());
   // Whether the active pen is the AI pen (host-owned; not inferred from color).
   const aiPenRef = useRef(false);
-  // Current call view, mirrored for the pdf-iframe pointerdown listener (which
-  // can't read React state directly).
+  // Current call view, mirrored for the reader pane's pointerdown handler
+  // (which can't read React state directly).
   const callViewRef = useRef<"none" | "bubble" | "chat-main" | "chat-pip">("none");
-  // Last pen-lift position inside the pdf iframe — the AI-pen bubble anchor,
-  // since drawing a pen stroke yields no popup coordinates (pitfall: see report).
-  const penUpRef = useRef<{ clientX: number; clientY: number } | null>(null);
+  // Last pen-lift position over the reader pane (viewport coordinates) — the
+  // AI-pen bubble anchor, since drawing a pen stroke yields no popup coordinates.
+  const penUpRef = useRef<{ x: number; y: number } | null>(null);
   // Abort controller for the in-flight stream (cancelled on hangup / switch).
   const abortRef = useRef<AbortController | null>(null);
   // Text streamed so far in the current turn, so stopping can keep it.
@@ -189,8 +189,7 @@ export default function App() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameText, setRenameText] = useState("");
 
-  // EmbedPDF engine (spike, behind USE_EMBEDPDF). Holds the bytes + saved state
-  // for the open book so EmbedReaderPane can mount; null on the zotero path.
+  // The open book: bytes + saved state for EmbedReaderPane; null in the library.
   const [embedDoc, setEmbedDoc] = useState<{
     path: string;
     name: string;
@@ -246,10 +245,10 @@ export default function App() {
     streamingRef.current = !!(last?.role === "ai" && last.streaming);
   }, [call]);
 
-  // Prewarm the PDFium engine (EmbedPDF path) so the wasm is compiled before the
-  // first book open, not on its critical path.
+  // Prewarm the PDFium engine so the wasm is compiled before the first book
+  // open, not on its critical path.
   useEffect(() => {
-    if (USE_EMBEDPDF) prewarmPdfiumEngine();
+    prewarmPdfiumEngine();
   }, []);
 
   // Install the Tauri fetch bridge + load settings once.
@@ -553,12 +552,11 @@ export default function App() {
         viewRef.current?.setAnnotations([aiCreated.annotation]);
         const path = pathRef.current;
         if (path) createThread(path, aiCreated.annotation.id, aiCreated.threadId);
-        const rect = iframeRef.current?.getBoundingClientRect();
         const up = penUpRef.current;
-        const anchor =
-          up && rect
-            ? { x: rect.left + up.clientX, y: rect.top + up.clientY }
-            : { x: (rect?.left ?? 0) + 240, y: (rect?.top ?? 0) + 240 };
+        const rect = readerPaneRef.current?.getBoundingClientRect();
+        const anchor = up
+          ? { x: up.x, y: up.y }
+          : { x: (rect?.left ?? 0) + (rect?.width ?? 480) / 2, y: (rect?.top ?? 0) + 240 };
         setPopup(null);
         setCall({
           threadId: aiCreated.threadId,
@@ -585,19 +583,16 @@ export default function App() {
     [syncTraceList],
   );
 
-  // Clicking a mark. Anchor is in the shell's viewport (engine rect is
-  // iframe-local, add the iframe offset). An AI-pen mark (has aiThreadId) opens
-  // its call bubble with history instead of the annotation editor.
+  // Clicking a mark. The engine shares the shell's document, so the rect is
+  // already in viewport coordinates. An AI-pen mark (has aiThreadId) opens its
+  // call bubble with history instead of the annotation editor.
   const onSetAnnotationPopup = useCallback((params?: AnnotationPopupParams) => {
     if (!params) {
       setPopup(null);
       return;
     }
-    const rect = iframeRef.current?.getBoundingClientRect();
-    const dx = rect?.left ?? 0;
-    const dy = rect?.top ?? 0;
     const [l, , r, bottom] = params.rect;
-    const anchor = { x: dx + (l + r) / 2, y: dy + bottom };
+    const anchor = { x: (l + r) / 2, y: bottom };
     const ann = params.annotation;
     const threadId = ann.aiThreadId as string | undefined;
     if (threadId) {
@@ -615,59 +610,24 @@ export default function App() {
     }
   }, [runTurn, hydrateThreadImages]);
 
-  const reloadFrame = useCallback(async () => {
-    const iframe = iframeRef.current;
-    if (!iframe) throw new Error("no iframe");
-    await new Promise<void>((resolve) => {
-      const onLoad = () => {
-        iframe.removeEventListener("load", onLoad);
-        resolve();
-      };
-      iframe.addEventListener("load", onLoad);
-      iframe.src = `${HOST_SRC}?n=${Date.now()}`;
-    });
-    return iframe;
+  // The pen stroke gives the host no coordinates, so track the last pen-lift
+  // over the reader pane as the AI-pen bubble anchor (capture phase, so nothing
+  // inside the engine can swallow it).
+  const onPanePointerUp = useCallback((e: React.PointerEvent) => {
+    penUpRef.current = { x: e.clientX, y: e.clientY };
   }, []);
 
-  // The pen stroke gives the host no coordinates, so track the last pen-lift
-  // inside the same-origin pdf iframe as the AI-pen bubble anchor. Re-installed
-  // per open (the pdf iframe may not exist yet when the view initializes).
-  const installPenUpAnchor = useCallback(() => {
-    const attach = (attempt: number) => {
-      const host = iframeRef.current?.contentDocument;
-      const pdf = host?.querySelector("#view iframe") as HTMLIFrameElement | null;
-      const doc = pdf?.contentDocument;
-      if (!doc) {
-        if (attempt < 20) window.setTimeout(() => attach(attempt + 1), 150);
-        return;
-      }
-      doc.addEventListener(
-        "pointerup",
-        (e) => {
-          penUpRef.current = { clientX: (e as PointerEvent).clientX, clientY: (e as PointerEvent).clientY };
-        },
-        true,
-      );
-      // Touching the book dismisses the bubble / chat corner card (docs/03).
-      // A pdf-area click stays inside the iframe, so B's outside-click listeners
-      // never see it — this is the only place that catches it. chat-main is not
-      // dismissable this way (CallView covers the reader). AI-pen draws and
-      // mark clicks fire this on pointerdown, then re-open on save/pointerup.
-      doc.addEventListener(
-        "pointerdown",
-        () => {
-          // A streaming reply is not dismissable this way: the click would abort
-          // the turn and throw the half-written answer away. Stop it, or dismiss
-          // once it lands.
-          if (streamingRef.current) return;
-          if (callViewRef.current === "bubble" || callViewRef.current === "chat-pip") {
-            setCall(null);
-          }
-        },
-        true,
-      );
-    };
-    attach(0);
+  // Touching the book dismisses the bubble / chat corner card (docs/03).
+  // chat-main is not dismissable this way (CallView covers the reader). AI-pen
+  // draws and mark clicks fire this on pointerdown, then re-open on save/select.
+  const onPanePointerDown = useCallback(() => {
+    // A streaming reply is not dismissable this way: the click would abort the
+    // turn and throw the half-written answer away. Stop it, or dismiss once it
+    // lands.
+    if (streamingRef.current) return;
+    if (callViewRef.current === "bubble" || callViewRef.current === "chat-pip") {
+      setCall(null);
+    }
   }, []);
 
   const openInReader = useCallback(
@@ -714,47 +674,19 @@ export default function App() {
         setFulltextPending(false);
       });
 
-      if (USE_EMBEDPDF) {
-        // EmbedPDF engine (spike): mount EmbedReaderPane with the bytes. It calls
-        // back onView (sets viewRef) and onInitialized once ready. A fresh copy of
-        // the bytes is handed over so nothing detaches the shell's original.
-        setEmbedDoc({
-          path,
-          name,
-          buffer: bytes.slice().buffer as ArrayBuffer,
-          annotations: saved,
-          viewState: state,
-        });
-        setTitle(name);
-        return;
-      }
-
-      const iframe = await reloadFrame();
-      const view = await createPdfView(iframe, bytes.buffer as ArrayBuffer, {
-        type: "pdf",
+      // Mount EmbedReaderPane with the bytes. It calls back onView (sets
+      // viewRef) and onInitialized once ready. A fresh copy of the bytes is
+      // handed over so nothing detaches the shell's original.
+      setEmbedDoc({
+        path,
+        name,
+        buffer: bytes.slice().buffer as ArrayBuffer,
         annotations: saved,
-        authorName: "Reading-Partner",
         viewState: state,
-        onChangeViewState: persist,
-        onChangeViewStats: setStats,
-        onSaveAnnotations,
-        onDeleteAnnotations,
-        // Feed the selection back or the click-to-open popup never fires (pitfall 05).
-        onSelectAnnotations: (ids) => {
-          viewRef.current?.selectAnnotations(ids);
-          setSelectedAnnId(ids[0] ?? null);
-        },
-        onSetAnnotationPopup,
-        onInitialized: () => {
-          setStatus("");
-          setViewReady(true);
-          installPenUpAnchor();
-        },
       });
-      viewRef.current = view;
       setTitle(name);
     },
-    [reloadFrame, persist, onSaveAnnotations, onDeleteAnnotations, onSetAnnotationPopup, installPenUpAnchor, pushToast],
+    [pushToast],
   );
 
   const openFile = useCallback(
@@ -1212,15 +1144,20 @@ export default function App() {
           />
         )}
 
-        {USE_EMBEDPDF ? (
-          embedDoc ? (
+        <div
+          ref={readerPaneRef}
+          className="flex-1 min-w-0 h-full"
+          onPointerDownCapture={onPanePointerDown}
+          onPointerUpCapture={onPanePointerUp}
+        >
+          {embedDoc && (
             <EmbedReaderPane
               key={embedDoc.path}
               buffer={embedDoc.buffer}
               annotations={embedDoc.annotations}
               authorName="Reading-Partner"
               viewState={embedDoc.viewState}
-              className="flex-1 min-w-0 h-full block"
+              className="h-full w-full block"
               onView={onEmbedView}
               onInitialized={onEmbedInitialized}
               onChangeViewState={persist}
@@ -1232,12 +1169,8 @@ export default function App() {
               onSelectAnnotations={onEmbedSelect}
               onSetAnnotationPopup={onSetAnnotationPopup}
             />
-          ) : (
-            <div className="flex-1 min-w-0 h-full block" />
-          )
-        ) : (
-          <iframe ref={iframeRef} className="flex-1 min-w-0 h-full border-0 block" src={HOST_SRC} title="reader" />
-        )}
+          )}
+        </div>
 
         {!inReader && (
           <div className="absolute inset-0 flex flex-col items-stretch justify-start gap-6 bg-white overflow-y-auto">
