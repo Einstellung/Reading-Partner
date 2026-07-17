@@ -27,7 +27,13 @@ export interface ThreadMessage {
 
 export interface Thread {
   id: string;
+  // The AI-pen mark this thread is anchored on. Empty string for the one
+  // book-level thread (docs/03: the top-bar AI button, no selection), which is
+  // marked by `book` instead.
   annotationId: string;
+  // The single persistent per-book thread reached from the top-bar AI button.
+  // Absent (undefined) on ordinary mark-anchored threads.
+  book?: boolean;
   path: string;
   createdAt: number;
   messages: ThreadMessage[];
@@ -147,6 +153,9 @@ function bindPagehide(): void {
 function schedule(key: string): void {
   dirty.add(key);
   bindPagehide();
+  // Headless (tests): no window timer to debounce on; the cache is the source of
+  // truth and a real run always has a window.
+  if (typeof window === "undefined") return;
   const existing = timers.get(key);
   if (existing) clearTimeout(existing);
   timers.set(
@@ -193,6 +202,34 @@ export function createThread(path: string, annotationId: string, threadId: strin
   cache.set(key, map);
   schedule(key);
   return thread;
+}
+
+// Create the book-level thread (docs/03: the top-bar AI button's selection-free
+// entry). No annotation anchor; the `book` marker is how it's found again.
+export function createBookThread(path: string, threadId: string): Thread {
+  const key = hashPath(path);
+  const map = cache.get(key) ?? {};
+  const thread: Thread = {
+    id: threadId,
+    annotationId: "",
+    book: true,
+    path,
+    createdAt: Date.now(),
+    messages: [],
+  };
+  map[threadId] = thread;
+  cache.set(key, map);
+  schedule(key);
+  return thread;
+}
+
+// The book-level thread for a document, if one has ever been created. There is
+// at most one per book (the top-bar button reopens it rather than making more).
+export function getBookThread(path: string): Thread | undefined {
+  const map = cache.get(hashPath(path));
+  if (!map) return undefined;
+  for (const t of Object.values(map)) if (t.book) return t;
+  return undefined;
 }
 
 export function appendMessage(path: string, threadId: string, message: ThreadMessage): Thread | undefined {

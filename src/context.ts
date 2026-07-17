@@ -27,6 +27,10 @@ export interface ReadingContext {
   materials?: BooklistItem[];
   // Whether any reading tool was wired for this call; gates the tools paragraph.
   hasTools?: boolean;
+  // The book-level thread (docs/03: top-bar AI button). No passage was marked,
+  // so every selection-derived part (marked passage, its note, surrounding text)
+  // is dropped and the intro changes; position, chapter, booklist, tools stay.
+  bookLevel?: boolean;
 }
 
 function booklistLine(m: BooklistItem): string {
@@ -37,34 +41,51 @@ function booklistLine(m: BooklistItem): string {
 }
 
 export function buildSystemPrompt(ctx: ReadingContext): string {
-  const lines: string[] = [
-    "You are a reading companion embedded in a PDF reader. The user is reading",
-    "closely and pulls you in by marking a passage with an AI pen; you answer",
-    "right there, beside the text.",
+  const bookLevel = ctx.bookLevel === true;
+  const lines: string[] = bookLevel
+    ? [
+        "You are a reading companion embedded in a PDF reader. The user opened a",
+        "conversation about the book as a whole — no passage is marked — to ask",
+        'something like "what is this chapter about" or "where should I start".',
+      ]
+    : [
+        "You are a reading companion embedded in a PDF reader. The user is reading",
+        "closely and pulls you in by marking a passage with an AI pen; you answer",
+        "right there, beside the text.",
+      ];
+  lines.push(
     "",
     "How to answer:",
-    "- Get to the point. Explain the marked passage directly; no preamble, no",
-    "  restating the whole passage back to them.",
+    bookLevel
+      ? "- Get to the point. Answer directly; no preamble."
+      : "- Get to the point. Explain the marked passage directly; no preamble, no\n  restating the whole passage back to them.",
     "- Be concise and concrete. A few sentences usually beats a lecture.",
     "- Follow the user's language: if they write in Chinese, answer in Chinese.",
-    "- You can see the passage below, so refer to it naturally rather than",
-    "  quoting it in full.",
+  );
+  if (!bookLevel) {
+    lines.push(
+      "- You can see the passage below, so refer to it naturally rather than",
+      "  quoting it in full.",
+    );
+  }
+  lines.push(
     "- Your replies render as Markdown: write math as LaTeX delimited by $...$",
     "  (inline) or $$...$$ (block), and put code in fenced code blocks.",
     "",
     "Current reading context:",
     `- Topic: ${ctx.topicName}`,
     `- File: ${ctx.fileName}`,
-  ];
+  );
   if (ctx.pageLabel) lines.push(`- Page: ${ctx.pageLabel}`);
   if (ctx.chapterTitle) lines.push(`- Chapter: ${ctx.chapterTitle}`);
-  lines.push(`- Marked passage: "${ctx.selectionText.trim()}"`);
-  if (ctx.selectionComment && ctx.selectionComment.trim()) {
-    lines.push(`- The user's note on it: "${ctx.selectionComment.trim()}"`);
-  }
-
-  if (ctx.surroundingText && ctx.surroundingText.trim()) {
-    lines.push("", "Text around the marked passage:", '"""', ctx.surroundingText.trim(), '"""');
+  if (!bookLevel) {
+    lines.push(`- Marked passage: "${ctx.selectionText.trim()}"`);
+    if (ctx.selectionComment && ctx.selectionComment.trim()) {
+      lines.push(`- The user's note on it: "${ctx.selectionComment.trim()}"`);
+    }
+    if (ctx.surroundingText && ctx.surroundingText.trim()) {
+      lines.push("", "Text around the marked passage:", '"""', ctx.surroundingText.trim(), '"""');
+    }
   }
   if (ctx.fulltextAvailable === false) {
     lines.push(

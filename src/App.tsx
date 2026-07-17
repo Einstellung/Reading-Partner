@@ -40,7 +40,9 @@ import {
 } from "./topics";
 import {
   appendMessage,
+  createBookThread,
   createThread,
+  getBookThread,
   getThread,
   loadThreads,
   onThreadSaveError,
@@ -93,6 +95,7 @@ import { CitationContext } from "./components/Markdown";
 import PrepPanel from "./components/PrepPanel";
 import MemoryPanel from "./components/MemoryPanel";
 import PenToolbar from "./components/PenToolbar";
+import { IconSparkle } from "./components/icons";
 import AnnotationPopup from "./components/AnnotationPopup";
 import CallBubble from "./components/CallBubble";
 import CallView from "./components/CallView";
@@ -165,7 +168,10 @@ function toDisplayMessages(msgs: ThreadMessage[]): CallMessage[] {
 // A live AI "call" — one thread anchored on one AI-pen underline (docs/03).
 interface CallState {
   threadId: string;
+  // The AI-pen mark hosting this call. Empty string for the book-level thread
+  // (docs/03: top-bar AI button), flagged by `isBook`.
   annotationId: string;
+  isBook?: boolean;
   // Picture-in-picture call states (docs/03): the bubble, chat taking the whole
   // window (reading shrunk to a corner card), and reading with chat shrunk to a
   // corner card. `null` call = no active call.
@@ -363,10 +369,10 @@ export default function App() {
     const id = call?.threadId ?? null;
     if (id && id !== lastCallThreadRef.current) {
       const topicId = ctxRef.current.topicId;
-      if (topicId) logEvent(topicId, "call-start", { threadId: id });
+      if (topicId) logEvent(topicId, "call-start", { threadId: id, book: call?.isBook ?? false });
     }
     lastCallThreadRef.current = id;
-  }, [call?.threadId]);
+  }, [call?.threadId, call?.isBook]);
 
   // Lazy prep follows the reader: on every page change, tell the scheduler
   // which chapter the user is in so its papers prep first.
@@ -677,11 +683,18 @@ export default function App() {
         currentFulltext,
         [...annsRef.current.values()],
       );
-      const page = annotationPage(ann as { position?: { pageIndex?: number } } | undefined);
+      // The book-level thread (top-bar AI button) has no mark: its position is
+      // wherever the reader currently is, and it carries no selection-derived
+      // context (marked passage / surrounding text).
+      const isBook = annotationId === "";
+      const currentPage = pageIndex !== null ? pageIndex + 1 : null;
+      const page = isBook
+        ? currentPage
+        : annotationPage(ann as { position?: { pageIndex?: number } } | undefined);
       const chapterTitle =
         currentFulltext && page ? chapterAt(currentFulltext, page)?.title ?? null : null;
       const surrounding =
-        currentFulltext && page ? surroundingText(currentFulltext, page) : "";
+        !isBook && currentFulltext && page ? surroundingText(currentFulltext, page) : "";
       const booklist: BooklistItem[] = materials
         .filter((m) => m.path !== path)
         .map((m) => ({
@@ -746,6 +759,7 @@ export default function App() {
           fulltextAvailable: currentFulltext?.status === "ok",
           materials: booklist,
           hasTools: tools.length > 0,
+          bookLevel: isBook,
         });
       }
       if (memorySection) systemPrompt += "\n\n" + memorySection;
@@ -1250,9 +1264,9 @@ export default function App() {
   const captureHangup = useCallback(() => {
     const c = callRef.current;
     const path = pathRef.current;
-    const { topicId, topicName, fileName } = ctxRef.current;
+    const { topicId, topicName, fileName, pageIndex } = ctxRef.current;
     if (!c || !path || !topicId) return;
-    logEvent(topicId, "call-end", { threadId: c.threadId });
+    logEvent(topicId, "call-end", { threadId: c.threadId, book: c.isBook ?? false });
     const msgs = getThread(path, c.threadId)?.messages ?? [];
     const ann = annsRef.current.get(c.annotationId);
     void distillThread({
@@ -1261,8 +1275,13 @@ export default function App() {
       bookName: fileName,
       threadId: c.threadId,
       annotationId: c.annotationId,
-      page: annotationPage(ann as { position?: { pageIndex?: number } } | undefined),
-      markedText: typeof ann?.text === "string" ? ann.text : "",
+      // The book-level thread has no mark: pin its position to the current page.
+      page: c.isBook
+        ? pageIndex !== null
+          ? pageIndex + 1
+          : null
+        : annotationPage(ann as { position?: { pageIndex?: number } } | undefined),
+      markedText: c.isBook ? "" : typeof ann?.text === "string" ? ann.text : "",
       messages: msgs.map(({ role, text, ts }) => ({ role, text, ts })),
     });
   }, []);
@@ -1296,10 +1315,35 @@ export default function App() {
     [runTurn, hydrateThreadImages],
   );
 
+  // Top-bar AI button: the selection-free entry (docs/03). One persistent
+  // book-level thread per book — created on first press, reopened with its
+  // history on later presses (and after hangup), the way a mark hosts its
+  // thread. It has no anchor, so it never joins the trace list; this button is
+  // its only way back. Opens straight to the main call view, skipping the bubble.
+  const openBookThread = useCallback(() => {
+    const path = pathRef.current;
+    if (!path) return;
+    const thread = getBookThread(path) ?? createBookThread(path, crypto.randomUUID());
+    abortRef.current?.abort();
+    setPopup(null);
+    const msgs = thread.messages;
+    setCall({
+      threadId: thread.id,
+      annotationId: "",
+      isBook: true,
+      view: "chat-main",
+      anchor: { x: 0, y: 0 },
+      messages: toDisplayMessages(msgs),
+    });
+    hydrateThreadImages(thread.id, msgs);
+    if (msgs.length === 0) runTurn(thread.id, "");
+  }, [runTurn, hydrateThreadImages]);
+
   // Jump the reading back to the thread's mark (from the reading corner card).
+  // The book-level thread has no mark, so there is nothing to jump to.
   const onPositionClick = useCallback(() => {
     setCall((c) => {
-      if (c) {
+      if (c && c.annotationId) {
         viewRef.current?.selectAnnotations([c.annotationId]);
         viewRef.current?.navigate({ annotationID: c.annotationId });
       }
@@ -1424,6 +1468,15 @@ export default function App() {
             {status && <span className="ml-3 text-xs text-[#b45309]">{status}</span>}
             <span className="flex-1" />
             <div className="flex items-center gap-2">
+              <button
+                className="flex items-center justify-center rounded-md border border-[#c9c2e8] bg-[#efecfb] px-2.5 py-1.5 text-[#4a3a9e] cursor-pointer hover:bg-[#e7e3f7]"
+                title="Talk about this book"
+                aria-label="Talk about this book"
+                onClick={openBookThread}
+              >
+                <IconSparkle size={16} />
+              </button>
+              <span className="h-5 w-px bg-[#dcdcdc]" />
               <button className={BTN} disabled={!stats?.canZoomOut} onClick={() => viewRef.current?.zoomOut()}>
                 −
               </button>
@@ -1659,6 +1712,8 @@ export default function App() {
                 classroomOn={classroomOn}
                 onToggleClassroom={toggleClassroom}
                 classroomStatus={prepStatusLine}
+                emptyTitle={call.isBook ? title ?? "This book" : undefined}
+                placeholder={call.isBook ? "Ask about this book…" : undefined}
               />
             </div>
             <div className="absolute right-3 top-3 z-50">

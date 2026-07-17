@@ -23,6 +23,11 @@ interface CallViewProps {
 	onToggleClassroom?(): void;
 	// One-line prep status shown beside the toggle while classroom is on.
 	classroomStatus?: string | null;
+	// The empty-state heading and composer placeholder. Default to the passage
+	// wording; the book-level thread (docs/03: top-bar AI button) passes the book
+	// title and "Ask about this book…".
+	emptyTitle?: string;
+	placeholder?: string;
 }
 
 export default function CallView({
@@ -37,6 +42,8 @@ export default function CallView({
 	classroomOn = false,
 	onToggleClassroom,
 	classroomStatus,
+	emptyTitle = 'Ask about this passage',
+	placeholder = 'Ask about this passage…',
 }: CallViewProps) {
 	const empty = messages.length === 0;
 	const composerProps = { pendingImages, onRemoveImage, hint, streaming, onStop };
@@ -76,11 +83,11 @@ export default function CallView({
 
 			{empty ? (
 				<div className="flex flex-1 flex-col items-center justify-center px-4">
-					<h1 className="mb-8 text-center text-2xl font-medium text-neutral-700">
-						Ask about this passage
+					<h1 className="mb-8 max-w-3xl text-center text-2xl font-medium text-neutral-700">
+						{emptyTitle}
 					</h1>
 					<div className="w-full max-w-3xl">
-						<Composer onSend={onSend} placeholder="Ask about this passage…" pill {...composerProps} />
+						<Composer onSend={onSend} placeholder={placeholder} pill {...composerProps} />
 					</div>
 				</div>
 			) : (
