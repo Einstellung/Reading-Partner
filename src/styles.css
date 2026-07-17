@@ -1,6 +1,6 @@
 /* Tailwind v4, utilities only — preflight (base reset) is deliberately NOT
-   imported so the CSS ported from zotero/reader keeps rendering unchanged.
-   All shell UI is Tailwind utility classes; ported component CSS stays frozen. */
+   imported (components style their own controls explicitly, e.g. border-0 /
+   bg-transparent on buttons). All UI is Tailwind utility classes. */
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
 

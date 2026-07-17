@@ -1,11 +1,9 @@
 // TraceList: the right-hand trace column — every mark the reader left on the
-// document, in document order. Adapted from zotero/reader's annotations sidebar
-// (src/common/components/sidebar/annotations-view.js + _preview.scss), reduced to
-// a read-only list with a star toggle. Pure and controlled.
+// document, in document order. A read-only list with a star toggle and an AI
+// thread shortcut. Pure and controlled; styled with Tailwind utilities.
 
 import { IconArea, IconHighlight, IconSparkle, IconStar, IconUnderline } from './icons';
 import type { Annotation } from './types';
-import './TraceList.css';
 
 interface TraceListProps {
 	annotations: Annotation[];
@@ -15,22 +13,29 @@ interface TraceListProps {
 	onOpenThread?(id: string): void;
 }
 
+const ITEM =
+	'group relative flex cursor-pointer items-start gap-2 border-b border-black/10 py-2 pl-3 pr-2 hover:bg-black/5';
+const ITEM_SELECTED =
+	"bg-sky-50 before:content-[''] before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-sky-600";
+const ICON_BTN =
+	'flex cursor-pointer items-center justify-center border-0 bg-transparent p-0.5 rounded';
+
 function TypeMark({ annotation }: { annotation: Annotation }) {
 	// Region-select is retired; legacy image annotations still render on the page
 	// (engine draws them) and list here with a placeholder icon, not a thumbnail.
 	if (annotation.type === 'image') {
-		return <span className="trace-icon" style={{ color: annotation.color }}><IconArea size={18} /></span>;
+		return <span className="flex" style={{ color: annotation.color }}><IconArea size={18} /></span>;
 	}
 	const Icon = annotation.type === 'underline' ? IconUnderline : IconHighlight;
 	return (
-		<span className="trace-icon" style={{ color: annotation.color }}>
+		<span className="flex" style={{ color: annotation.color }}>
 			<Icon size={18} />
 		</span>
 	);
 }
 
 export default function TraceList({ annotations, selectedId, onSelect, onToggleStar, onOpenThread }: TraceListProps) {
-	// sortIndex is the engine's document-order key; lexicographic order is document order.
+	// sortIndex is the document-order key; lexicographic order is document order.
 	const items = [...annotations].sort((a, b) => {
 		const sa = a.sortIndex ?? '';
 		const sb = b.sortIndex ?? '';
@@ -38,7 +43,7 @@ export default function TraceList({ annotations, selectedId, onSelect, onToggleS
 	});
 
 	return (
-		<div className="trace-list" role="listbox" aria-label="Traces">
+		<div className="h-full overflow-y-auto bg-white text-[13px] text-neutral-800 select-none" role="listbox" aria-label="Traces">
 			{items.map((a) => {
 				const starred = a.starred === true;
 				const selected = a.id === selectedId;
@@ -51,22 +56,22 @@ export default function TraceList({ annotations, selectedId, onSelect, onToggleS
 						key={a.id}
 						role="option"
 						aria-selected={selected}
-						className={'trace-item' + (selected ? ' selected' : '') + (starred ? ' starred' : '')}
+						className={ITEM + (selected ? ' ' + ITEM_SELECTED : '')}
 						onClick={() => onSelect(a.id)}
 					>
-						<div className="trace-mark">
+						<div className="flex w-5 flex-none items-center justify-center pt-0.5">
 							<TypeMark annotation={a} />
 						</div>
 
-						<div className="trace-body">
-							{text && <div className="trace-text">{text}</div>}
-							{comment && <div className="trace-comment">{comment}</div>}
-							<div className="trace-meta">
-								{pageLabel && <span className="trace-page">Page {pageLabel}</span>}
+						<div className="flex min-w-0 flex-1 flex-col gap-1">
+							{text && <div className="line-clamp-2 leading-snug">{text}</div>}
+							{comment && <div className="line-clamp-2 text-xs leading-snug text-neutral-500">{comment}</div>}
+							<div className="flex items-center gap-1.5">
+								{pageLabel && <span className="text-[11px] text-neutral-400">Page {pageLabel}</span>}
 								{hasThread && (
 									<button
 										type="button"
-										className="trace-thread"
+										className={`${ICON_BTN} text-violet-500 hover:bg-violet-500/10`}
 										title="Open AI thread"
 										aria-label="Open AI thread"
 										onClick={(e) => {
@@ -82,7 +87,12 @@ export default function TraceList({ annotations, selectedId, onSelect, onToggleS
 
 						<button
 							type="button"
-							className="trace-star"
+							className={
+								'flex h-6 w-6 flex-none cursor-pointer items-center justify-center rounded border-0 bg-transparent p-0 transition-opacity hover:bg-black/5 focus-visible:opacity-100' +
+								(starred
+									? ' text-amber-500 opacity-100'
+									: ' text-neutral-400 opacity-0 group-hover:opacity-100 hover:text-amber-500')
+							}
 							title={starred ? 'Unstar' : 'Star'}
 							aria-label={starred ? 'Unstar' : 'Star'}
 							aria-pressed={starred}

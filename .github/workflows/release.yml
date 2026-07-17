@@ -7,33 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  # The reader engine is plain JS: build it once on Linux and hand the artifact
-  # to every platform. Building it per-platform would mean running its bash +
-  # webpack + pdf.js pipeline under Windows' Git Bash for no gain.
-  reader:
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      # The webpack build fetches Zotero locale files over the network, and the
-      # mobile pdf.js build needs Node's legacy OpenSSL provider (docs/pitfall/08).
-      - name: Build the reader engine
-        run: ./scripts/build-reader.sh
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: reader
-          path: public/reader
-          retention-days: 1
-
   app:
-    needs: reader
     strategy:
       fail-fast: false
       matrix:
@@ -53,14 +27,7 @@ jobs:
       contents: write
 
     steps:
-      # No submodules: the shell only needs public/reader, which arrives as an
-      # artifact.
       - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: reader
-          path: public/reader
 
       - uses: oven-sh/setup-bun@v2
 
@@ -79,6 +46,12 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libxdo-dev
 
       - run: bun install --frozen-lockfile
+
+      # Stage the self-hosted PDFium wasm (gitignored; sourced offline from the
+      # @embedpdf/pdfium package installed above).
+      - name: Copy PDFium wasm
+        shell: bash
+        run: bun run wasm
 
       - uses: tauri-apps/tauri-action@v0
         env:

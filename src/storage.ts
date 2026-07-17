@@ -11,7 +11,7 @@ import {
 } from "@tauri-apps/plugin-fs";
 // Capability globs like $APPDATA/** do not match $APPDATA itself, so
 // capabilities/default.json must also allow the bare $APPDATA path (pitfall 09).
-import type { ViewState } from "./reader";
+import type { ViewState } from "./reader-contract";
 
 const STATE_FILE = "reading-state.json";
 

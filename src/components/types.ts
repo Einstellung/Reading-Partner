@@ -1,6 +1,5 @@
 // Shared prop contracts for the presentational reader-annotation components.
-// Colors mirror ANNOTATION_COLORS from vendor/reader/src/common/defines.js
-// (the shell's annotations module re-exports the same values in this shape).
+// Colors come from ANNOTATION_COLORS in src/annotations.ts (single source).
 
 export interface ColorEntry {
 	name: string;

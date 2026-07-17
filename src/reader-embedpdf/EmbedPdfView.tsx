@@ -1,15 +1,14 @@
-// EmbedPDF engine adapter (spike). A self-contained React viewer that renders a
-// PDF from an in-memory buffer through @embedpdf's headless core + PdfiumEngine,
+// EmbedPDF engine adapter. A self-contained React viewer that renders a PDF
+// from an in-memory buffer through @embedpdf's headless core + PdfiumEngine,
 // and exposes the shell's functional needs through an imperative handle. The
 // pdfium.wasm is self-hosted (/pdfium/pdfium.wasm) and font fallback is disabled
 // so the build stays offline (no CDN fetch).
 //
-// This intentionally follows EmbedPDF's native API shape rather than replicating
-// zotero/reader's createView contract verbatim (see the scope note in the spike
-// report): the shell keeps persisting zotero-schema annotations, and this module
-// converts at the boundary via src/reader-embedpdf/convert.ts.
+// This follows EmbedPDF's native API shape; the shell keeps persisting its
+// original annotation JSON schema (position.rects in PDF points, bottom-left
+// origin), and this module converts at the boundary via convert.ts.
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPluginRegistration } from "@embedpdf/core";
 import { EmbedPDF } from "@embedpdf/core/react";
 import type { PluginRegistry } from "@embedpdf/core";
@@ -26,6 +25,7 @@ import { ZoomPluginPackage, ZoomMode } from "@embedpdf/plugin-zoom/react";
 import type { ZoomCapability } from "@embedpdf/plugin-zoom";
 import { SpreadPluginPackage, SpreadMode } from "@embedpdf/plugin-spread/react";
 import type { SpreadCapability } from "@embedpdf/plugin-spread";
+import type { ViewportCapability } from "@embedpdf/plugin-viewport";
 import { InteractionManagerPluginPackage, PagePointerProvider } from "@embedpdf/plugin-interaction-manager/react";
 import { SelectionPluginPackage, SelectionLayer } from "@embedpdf/plugin-selection/react";
 import type { SelectionCapability } from "@embedpdf/plugin-selection";
@@ -70,6 +70,19 @@ export type EmbedSpread = "none" | "odd" | "even";
 export interface EmbedViewState {
   pageIndex: number;
   zoom: number;
+  // Top-left of the visible region within the current page, in unscaled page
+  // coordinates (top-left origin) — enables exact in-page position restore.
+  pageX?: number;
+  pageY?: number;
+}
+
+// Viewport-space rect of an annotation, reported when it gets selected — the
+// precise anchor for the shell's popup/bubble.
+export interface AnnotationAnchor {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
 }
 
 export interface EmbedViewStats {
@@ -116,10 +129,30 @@ export interface EmbedPdfViewProps {
   onSaveAnnotations?: (anns: ZoteroAnnotation[]) => void;
   onDeleteAnnotations?: (ids: string[]) => void;
   onSelectAnnotation?: (id: string | null) => void;
+  // Fired (after onSelectAnnotation) with the selected annotation's measured
+  // viewport rect, via the AnnotationLayer selectionMenu slot. Once per
+  // selection — re-renders while selected do not re-fire.
+  onAnnotationAnchor?: (id: string, rect: AnnotationAnchor) => void;
   onViewState?: (s: EmbedViewState) => void;
   onViewStats?: (s: EmbedViewStats) => void;
   className?: string;
   style?: React.CSSProperties;
+}
+
+// Rendered into the AnnotationLayer's selectionMenu slot: measures the menu
+// wrapper (absolutely positioned over the selected annotation) and reports the
+// annotation's viewport rect. Mount-only by design — a re-render while the same
+// annotation stays selected must not re-open a popup the user dismissed.
+function AnchorProbe(props: { id: string; onAnchor: (id: string, rect: AnnotationAnchor) => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current?.parentElement;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    props.onAnchor(props.id, { left: r.left, top: r.top, right: r.right, bottom: r.bottom });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.id]);
+  return <div ref={ref} style={{ display: "none" }} />;
 }
 
 const SPREAD_TO_ENUM: Record<EmbedSpread, SpreadMode> = {
@@ -134,9 +167,9 @@ const ENUM_TO_SPREAD: Record<string, EmbedSpread> = {
 };
 
 export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
-  // worker:false runs PDFium on the main thread. The worker engine hangs in this
-  // spike's dev setup (worker asset blocked under COEP); direct works. iOS/WKWebView
-  // will need its own engine-mode call — flagged in the report.
+  // The direct engine runs PDFium on the main thread; the worker engine hangs
+  // on openDocument (pitfall 21). iOS/WKWebView will need its own engine-mode
+  // decision when that platform lands.
   perfMark("mount");
   const { engine, isLoading, error } = useSharedEngine();
   if (engine) perfMark("engineReady");
@@ -181,6 +214,34 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
     }
   };
 
+  const onAnchor = useCallback((id: string, rect: AnnotationAnchor) => {
+    propsRef.current.onAnnotationAnchor?.(id, rect);
+  }, []);
+
+  // Selection menu slot on the native AnnotationLayer: instead of a menu, it
+  // hosts the probe that measures the selected annotation's viewport rect (the
+  // wrapper div is absolutely positioned over the annotation by the layer).
+  const selectionMenu = useCallback(
+    ({
+      selected,
+      context,
+      menuWrapperProps,
+    }: {
+      selected: boolean;
+      context: { type: string; annotation: { object: PdfAnnotationObject } };
+      menuWrapperProps: { style: React.CSSProperties; ref: (el: HTMLDivElement | null) => void };
+    }) => {
+      if (!selected || context.type !== "annotation") return null;
+      const id = context.annotation.object.id;
+      return (
+        <div ref={menuWrapperProps.ref} style={menuWrapperProps.style}>
+          <AnchorProbe key={id} id={id} onAnchor={onAnchor} />
+        </div>
+      );
+    },
+    [onAnchor],
+  );
+
   if (isLoading || !engine) {
     return <div style={props.style} className={props.className} />;
   }
@@ -203,7 +264,11 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
                       <TilingLayer documentId={activeDocumentId} pageIndex={pageIndex} />
                     </div>
                     <SelectionLayer documentId={activeDocumentId} pageIndex={pageIndex} />
-                    <AnnotationLayer documentId={activeDocumentId} pageIndex={pageIndex} />
+                    <AnnotationLayer
+                      documentId={activeDocumentId}
+                      pageIndex={pageIndex}
+                      selectionMenu={selectionMenu}
+                    />
                   </PagePointerProvider>
                 )}
               />
@@ -334,13 +399,35 @@ async function wireEngine(
     propsRef.current.onSelectAnnotation?.(ids[0] ?? null);
   });
 
-  // Reading position + nav/zoom stats -> host.
-  const emitState = () => {
+  // Reading position + nav/zoom stats -> host. The in-page offset comes from
+  // the scroll metrics: the visible region's top-left within the current page,
+  // in unscaled page coordinates — exactly what scrollToPage's pageCoordinates
+  // takes on restore.
+  const currentState = (): EmbedViewState => {
     const st: EmbedViewState = {
       pageIndex: scrollScope.getCurrentPage() - 1,
       zoom: zoomScope.getState().currentZoomLevel,
     };
-    propsRef.current.onViewState?.(st);
+    try {
+      // Anchor on the topmost visible page, not the "current" (most visible)
+      // page: the topmost page's visible-region origin IS the viewport
+      // top-left in its page coordinates, so restoring it reproduces the exact
+      // scroll position. The current page can start mid-viewport, where its
+      // visible-region origin is 0/0 and the offset would be lost.
+      const vis = scrollScope.getMetrics().pageVisibilityMetrics;
+      if (vis.length > 0) {
+        const top = vis.reduce((a, b) => (b.pageNumber < a.pageNumber ? b : a));
+        st.pageIndex = top.pageNumber - 1;
+        st.pageX = top.original.pageX;
+        st.pageY = top.original.pageY;
+      }
+    } catch {
+      // Metrics unavailable (layout not ready): position falls back to page top.
+    }
+    return st;
+  };
+  const emitState = () => {
+    propsRef.current.onViewState?.(currentState());
   };
   const emitStats = () => {
     const z = zoomScope.getState().currentZoomLevel;
@@ -375,7 +462,24 @@ async function wireEngine(
     const iv = propsRef.current.initialViewState;
     if (iv) {
       zoomScope.requestZoom(iv.zoom);
-      scrollScope.scrollToPage({ pageNumber: iv.pageIndex + 1, behavior: "instant" });
+      // Restore the exact in-page position when the saved state carries one
+      // (unscaled page coordinates; the plugin scales them at scroll time).
+      // scrollToPage adds the viewport gap on top of the target point, while the
+      // captured pageX/pageY (visibility metrics) measure the actual visible
+      // offset — subtract the gap (unscaled) so the round trip is exact.
+      let pageCoordinates: { x: number; y: number } | undefined;
+      if (typeof iv.pageY === "number") {
+        const gap = cap<ViewportCapability>(registry, "viewport").getViewportGap() / iv.zoom;
+        pageCoordinates = {
+          x: Math.max(0, (iv.pageX ?? 0) - gap),
+          y: Math.max(0, iv.pageY - gap),
+        };
+      }
+      scrollScope.scrollToPage({
+        pageNumber: iv.pageIndex + 1,
+        ...(pageCoordinates ? { pageCoordinates } : {}),
+        behavior: "instant",
+      });
     }
     emitStats();
     emitState();
@@ -477,10 +581,7 @@ async function wireEngine(
       const pageIndex = pageOf.get(id);
       if (pageIndex !== undefined) annScope.selectAnnotation(pageIndex, id);
     },
-    getState: () => ({
-      pageIndex: scrollScope.getCurrentPage() - 1,
-      zoom: zoomScope.getState().currentZoomLevel,
-    }),
+    getState: currentState,
     _debug: {
       dumpEmbed: () => annScope.getAnnotations().map((t) => t.object),
       pageHeight,

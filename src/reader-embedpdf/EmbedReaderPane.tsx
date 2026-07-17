@@ -1,11 +1,10 @@
-// Bridges the EmbedPDF adapter (EmbedPdfView) to the shell's existing engine
-// contract (src/reader.ts): it renders the viewer and hands App a ViewInstance
-// plus the same callbacks it already wires for the zotero engine. This is what
-// lets App switch engines without rewriting its annotation / thread / storage
-// handlers. Used only when USE_EMBEDPDF is set.
+// Bridges the EmbedPDF adapter (EmbedPdfView) to the shell's engine contract
+// (src/reader-contract.ts): it renders the viewer and hands App a ViewInstance
+// plus the callbacks App wires for annotations, threads and storage.
 
-import { memo, useCallback, useRef } from "react";
+import { memo, useCallback, useEffect, useRef } from "react";
 import EmbedPdfView, {
+  type AnnotationAnchor,
   type EmbedPdfHandle,
   type EmbedSpread,
   type EmbedViewState,
@@ -20,7 +19,7 @@ import {
   type ViewInstance,
   type ViewState,
   type ViewStats,
-} from "../reader";
+} from "../reader-contract";
 
 const SPREAD_NUM_TO_EMBED: Record<number, EmbedSpread> = { 0: "none", 1: "odd", 2: "even" };
 const EMBED_TO_SPREAD_NUM: Record<EmbedSpread, SpreadMode> = {
@@ -53,16 +52,81 @@ function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
   const handleRef = useRef<EmbedPdfHandle | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const annById = useRef<Map<string, Annotation>>(new Map());
-  const initialViewState: EmbedViewState | null =
-    props.viewState && typeof props.viewState.scale === "number"
-      ? { pageIndex: props.viewState.pageIndex, zoom: props.viewState.scale }
-      : props.viewState
-        ? { pageIndex: props.viewState.pageIndex, zoom: 1 }
-        : null;
+  // Selection whose precise anchor (AnchorProbe) hasn't arrived yet; the timer
+  // opens the popup at a viewport-center fallback if it never does.
+  const pendingAnchor = useRef<{ id: string; timer: number } | null>(null);
+  const propsRef = useRef(props);
+  propsRef.current = props;
+  useEffect(
+    () => () => {
+      if (pendingAnchor.current) window.clearTimeout(pendingAnchor.current.timer);
+    },
+    [],
+  );
+  const initialViewState: EmbedViewState | null = props.viewState
+    ? {
+        pageIndex: props.viewState.pageIndex,
+        zoom: typeof props.viewState.scale === "number" ? props.viewState.scale : 1,
+        // In-page offset (only present in states saved by this engine; legacy
+        // files restore to the page top).
+        ...(typeof props.viewState.pageY === "number"
+          ? { pageX: props.viewState.pageX, pageY: props.viewState.pageY }
+          : {}),
+      }
+    : null;
 
   // Seed the id->annotation map from the initial set so click selection can
   // resolve the full object for the popup.
   for (const a of props.annotations) annById.current.set(a.id, a as Annotation);
+
+  // Viewport-center fallback anchor, used only when the precise anchor never
+  // arrives (an annotation shape the layer renders without a container).
+  const openPopupFallback = useCallback((id: string) => {
+    const ann = annById.current.get(id);
+    if (!ann) return;
+    const box = containerRef.current?.getBoundingClientRect();
+    const cx = (box?.left ?? 0) + (box?.width ?? window.innerWidth) / 2;
+    const cy = (box?.top ?? 0) + (box?.height ?? window.innerHeight) / 3;
+    propsRef.current.onSetAnnotationPopup({ rect: [cx - 1, cy - 1, cx + 1, cy + 2], annotation: ann });
+  }, []);
+
+  const onSelectAnnotation = useCallback(
+    (id: string | null) => {
+      propsRef.current.onSelectAnnotations(id ? [id] : []);
+      if (pendingAnchor.current) {
+        window.clearTimeout(pendingAnchor.current.timer);
+        pendingAnchor.current = null;
+      }
+      if (!id) {
+        propsRef.current.onSetAnnotationPopup(undefined);
+        return;
+      }
+      // Wait briefly for the precise anchor (AnchorProbe reports right after
+      // the selection renders), then fall back.
+      pendingAnchor.current = {
+        id,
+        timer: window.setTimeout(() => {
+          pendingAnchor.current = null;
+          openPopupFallback(id);
+        }, 150),
+      };
+    },
+    [openPopupFallback],
+  );
+
+  // Precise path: the selected annotation's measured viewport rect.
+  const onAnnotationAnchor = useCallback((id: string, r: AnnotationAnchor) => {
+    if (pendingAnchor.current?.id === id) {
+      window.clearTimeout(pendingAnchor.current.timer);
+      pendingAnchor.current = null;
+    }
+    const ann = annById.current.get(id);
+    if (!ann) return;
+    propsRef.current.onSetAnnotationPopup({
+      rect: [r.left, r.top, r.right, r.bottom],
+      annotation: ann,
+    });
+  }, []);
 
   const buildViewInstance = useCallback(
     (h: EmbedPdfHandle): ViewInstance => ({
@@ -124,30 +188,15 @@ function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
           for (const id of ids) annById.current.delete(id);
           props.onDeleteAnnotations(ids);
         }}
-        onSelectAnnotation={(id) => {
-          props.onSelectAnnotations(id ? [id] : []);
-          if (!id) {
-            props.onSetAnnotationPopup(undefined);
-            return;
-          }
-          const ann = annById.current.get(id);
-          if (!ann) return;
-          // Best-effort anchor: the shell popup/bubble opens near the viewport
-          // center (EmbedPDF selection does not hand us a viewport rect here;
-          // the native selectionMenu would be the exact-anchor path).
-          const box = containerRef.current?.getBoundingClientRect();
-          const cx = (box?.left ?? 0) + (box?.width ?? window.innerWidth) / 2;
-          const cy = (box?.top ?? 0) + (box?.height ?? window.innerHeight) / 3;
-          props.onSetAnnotationPopup({ rect: [cx - 1, cy - 1, cx + 1, cy + 2], annotation: ann });
-        }}
+        onSelectAnnotation={onSelectAnnotation}
+        onAnnotationAnchor={onAnnotationAnchor}
         onViewState={(s: EmbedViewState) =>
           props.onChangeViewState({
             pageIndex: s.pageIndex,
             scale: s.zoom,
-            top: 0,
-            left: 0,
             scrollMode: 0,
             spreadMode: 0,
+            ...(typeof s.pageY === "number" ? { pageX: s.pageX, pageY: s.pageY } : {}),
           })
         }
         onViewStats={(s: EmbedViewStats) =>
