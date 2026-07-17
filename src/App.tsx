@@ -75,10 +75,23 @@ import {
 } from "./prep";
 import type { PrepPipeline } from "./prep/pipeline";
 import type { ClassroomNote } from "./prep/classroom";
+import {
+  buildMemorySnapshot,
+  buildMemoryTools,
+  distillThread,
+  getLastDistillation,
+  getMemoryAdapter,
+  memoryPromptSection,
+  notifyMemoryChange,
+  onMemoryChange,
+  type MemoryEntry,
+} from "./memory";
+import { logEvent } from "./events";
 import { prewarmPdfiumEngine } from "./reader-embedpdf/engine-singleton";
 import EmbedReaderPane from "./reader-embedpdf/EmbedReaderPane";
 import { CitationContext } from "./components/Markdown";
 import PrepPanel from "./components/PrepPanel";
+import MemoryPanel from "./components/MemoryPanel";
 import PenToolbar from "./components/PenToolbar";
 import AnnotationPopup from "./components/AnnotationPopup";
 import CallBubble from "./components/CallBubble";
@@ -98,6 +111,12 @@ const EXPLAIN_KICKOFF = "Please explain the passage I just marked, using the rea
 const AI_PEN_COLOR = "#a28ae5";
 // Cap on images attached to one chat turn (docs/03: paste screenshots to ask).
 const MAX_PENDING_IMAGES = 3;
+// Replayed thread history is trimmed to this many messages per turn; crossing
+// the cap fires the fallback memory distillation before older turns fall out
+// of context (docs/02: hangup is the main trigger, trimming the backstop).
+const HISTORY_KEEP = 40;
+// The trim-triggered distillation re-fires only after this many new messages.
+const TRIM_DISTILL_MIN_NEW = 20;
 
 // Shared utility-class strings for the shell chrome (migrated from styles.css).
 // Split so variant overrides never collide with base padding/border utilities.
@@ -189,12 +208,14 @@ export default function App() {
   // Refs read by the stable runTurn callback (avoids dependency churn).
   const settingsRef = useRef<Settings>({ defaultProviderId: null, defaultModelId: null, semanticScholarApiKey: null });
   const ctxRef = useRef<{
+    topicId: string | null;
     topicName: string;
     fileName: string;
     pageLabel: string | null;
     pageIndex: number | null;
     files: { path: string; name: string }[];
   }>({
+    topicId: null,
     topicName: "",
     fileName: "",
     pageLabel: null,
@@ -207,6 +228,12 @@ export default function App() {
   // ref only tracks which one the UI is looking at) and its unsubscribe.
   const pipelineRef = useRef<PrepPipeline | null>(null);
   const prepUnsubRef = useRef<(() => void) | null>(null);
+  // Event-log instrumentation (M8). Dwell: the page being read and when it was
+  // entered. lastCallThread: the thread a call-start was last logged for.
+  // prepStatuses: paper statuses already seen, so only transitions are logged.
+  const pageDwellRef = useRef<{ page: number; since: number } | null>(null);
+  const lastCallThreadRef = useRef<string | null>(null);
+  const prepStatusesRef = useRef<Map<string, string>>(new Map());
 
   const [topics, setTopics] = useState<Topic[]>([]);
   const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
@@ -302,6 +329,7 @@ export default function App() {
 
   useEffect(() => {
     ctxRef.current = {
+      topicId: activeTopic?.id ?? null,
       topicName: activeTopic?.name ?? "",
       fileName: title ?? "",
       pageLabel: stats?.pageLabel ?? null,
@@ -313,6 +341,32 @@ export default function App() {
   useEffect(() => {
     classroomRef.current = classroomOn;
   }, [classroomOn]);
+
+  // Page-navigation events, with the dwell time on the page being left. The
+  // ref makes this idempotent under StrictMode's double effect runs.
+  useEffect(() => {
+    if (!stats) return;
+    const page = stats.pageIndex + 1;
+    const prev = pageDwellRef.current;
+    if (prev?.page === page) return;
+    const now = Date.now();
+    const topicId = ctxRef.current.topicId;
+    if (prev && topicId) {
+      logEvent(topicId, "page-nav", { from: prev.page, to: page, dwellMs: now - prev.since });
+    }
+    pageDwellRef.current = { page, since: now };
+  }, [stats]);
+
+  // Conversation-start events: whenever a call opens on a thread it wasn't
+  // already logged for (fresh mark, reopened mark, thread switch).
+  useEffect(() => {
+    const id = call?.threadId ?? null;
+    if (id && id !== lastCallThreadRef.current) {
+      const topicId = ctxRef.current.topicId;
+      if (topicId) logEvent(topicId, "call-start", { threadId: id });
+    }
+    lastCallThreadRef.current = id;
+  }, [call?.threadId]);
 
   // Lazy prep follows the reader: on every page change, tell the scheduler
   // which chapter the user is in so its papers prep first.
@@ -429,7 +483,21 @@ export default function App() {
     const pipeline = getPrepPipeline(path, name, ft);
     pipelineRef.current = pipeline;
     prepUnsubRef.current?.();
-    const sync = () => setPrepSnap(pipeline.snapshot());
+    prepStatusesRef.current = new Map();
+    const sync = () => {
+      const snap = pipeline.snapshot();
+      // Log paper status transitions (not the initial statuses on attach).
+      const topicId = ctxRef.current.topicId;
+      for (const p of snap.state?.papers ?? []) {
+        const prev = prepStatusesRef.current.get(p.slug);
+        if (prev === p.status) continue;
+        prepStatusesRef.current.set(p.slug, p.status);
+        if (prev !== undefined && topicId) {
+          logEvent(topicId, "prep-status", { slug: p.slug, status: p.status });
+        }
+      }
+      setPrepSnap(snap);
+    };
     prepUnsubRef.current = pipeline.subscribe(sync);
     sync();
     void pipeline.ensureStarted();
@@ -450,17 +518,27 @@ export default function App() {
   }, [attachPipeline, pushToast]);
 
   const toggleClassroom = useCallback(() => {
-    setClassroomOn((on) => {
-      const next = !on;
-      if (next) void startPrep();
-      return next;
-    });
+    // Outside the state updater: StrictMode double-invokes updaters, which
+    // would double-log the event.
+    const next = !classroomRef.current;
+    const topicId = ctxRef.current.topicId;
+    if (topicId) logEvent(topicId, "classroom-toggle", { on: next });
+    if (next) void startPrep();
+    setClassroomOn(next);
   }, [startPrep]);
 
   // A clicked citation chip in a chat reply. Survey pages jump the reader (and
   // un-cover it when chat is full-window); paper citations open that paper's
   // note in the prep panel (v1: the note, not the paper PDF).
   const onCitation = useCallback((c: Citation) => {
+    const topicId = ctxRef.current.topicId;
+    if (topicId) {
+      logEvent(
+        topicId,
+        "citation-click",
+        c.kind === "page" ? { kind: "page", page: c.page } : { kind: "paper", slug: c.slug },
+      );
+    }
     if (c.kind === "page") {
       viewRef.current?.navigate({ pageIndex: c.page - 1 });
     } else {
@@ -478,6 +556,43 @@ export default function App() {
     const raw = await readPrepNote(hashPath(path), slug);
     return raw ? parseNote(raw).body : null;
   }, []);
+
+  // Memory panel data (M8): loaded when the tab shows, refreshed when a
+  // background write (distillation or an in-chat memory_update) lands.
+  const [memEntries, setMemEntries] = useState<MemoryEntry[] | null>(null);
+  const [memLastDistill, setMemLastDistill] = useState<number | null>(null);
+  const refreshMemory = useCallback(() => {
+    const topicId = activeTopicId;
+    if (!topicId) return;
+    void (async () => {
+      try {
+        const entries = await getMemoryAdapter(topicId).listObservations();
+        const last = await getLastDistillation(topicId);
+        setMemEntries(entries);
+        setMemLastDistill(last);
+      } catch (e) {
+        console.warn("failed to load memory", e);
+        setMemEntries([]);
+      }
+    })();
+  }, [activeTopicId]);
+
+  useEffect(() => {
+    setMemEntries(null);
+    setMemLastDistill(null);
+  }, [activeTopicId]);
+
+  useEffect(() => {
+    if (title && sidebarOpen && sidebarTab === "memory") refreshMemory();
+  }, [title, sidebarOpen, sidebarTab, refreshMemory]);
+
+  useEffect(
+    () =>
+      onMemoryChange((topicId) => {
+        if (topicId === activeTopicId) refreshMemory();
+      }),
+    [activeTopicId, refreshMemory],
+  );
 
   const prepSkip = useCallback((slug: string) => pipelineRef.current?.skip(slug), []);
   const prepRequeue = useCallback((slug: string) => pipelineRef.current?.requeue(slug), []);
@@ -555,7 +670,7 @@ export default function App() {
       // current book's extraction may still be running; await it so the AI can
       // see the page. Thread images (stored as filenames) are read back too.
       const currentFulltext = (await currentFulltextRef.current) ?? null;
-      const { topicName, fileName, pageLabel, pageIndex, files } = ctxRef.current;
+      const { topicId, topicName, fileName, pageLabel, pageIndex, files } = ctxRef.current;
       const materials = await gatherTopicMaterials(
         files,
         path,
@@ -584,6 +699,15 @@ export default function App() {
       // paper tools join the M6 reading tools. Companion mode is untouched.
       let systemPrompt: string;
       let tools = buildReadingTools({ currentFulltext, materials });
+      // Per-topic memory (M8): the memory tools join the same loop as the
+      // reading tools; the opening snapshot rides the system prompt below.
+      let memorySection = "";
+      if (topicId) {
+        const memory = getMemoryAdapter(topicId);
+        const observations = await memory.listObservations().catch((): MemoryEntry[] => []);
+        tools = [...tools, ...buildMemoryTools(memory, { onWrite: () => notifyMemoryChange(topicId) })];
+        memorySection = memoryPromptSection(buildMemorySnapshot(observations), true);
+      }
       const prepState = pipelineRef.current?.snapshot().state ?? null;
       if (classroomRef.current && currentFulltext?.status === "ok") {
         const here = page ?? (pageIndex !== null ? pageIndex + 1 : 1);
@@ -624,16 +748,40 @@ export default function App() {
           hasTools: tools.length > 0,
         });
       }
+      if (memorySection) systemPrompt += "\n\n" + memorySection;
 
+      const threadMsgs = getThread(path, threadId)?.messages ?? [];
       const prior = await Promise.all(
-        (getThread(path, threadId)?.messages ?? []).map(async (m) => ({
+        threadMsgs.map(async (m) => ({
           role: m.role,
           text: m.text,
           images: m.images?.length ? await readThreadImages(threadId, m.images) : undefined,
         })),
       );
       if (controller.signal.aborted) return;
-      const apiMessages = [{ role: "user" as const, text: EXPLAIN_KICKOFF }, ...prior];
+      // Replay only the tail of a long thread, and before the older turns fall
+      // out of context, run the fallback distillation (docs/02: hangup is the
+      // main trigger, the trim is the backstop).
+      let history = prior;
+      if (prior.length > HISTORY_KEEP) {
+        history = prior.slice(prior.length - HISTORY_KEEP);
+        if (topicId) {
+          void distillThread(
+            {
+              topicId,
+              topicName,
+              bookName: fileName,
+              threadId,
+              annotationId,
+              page,
+              markedText: selectionText,
+              messages: threadMsgs.map(({ role, text, ts }) => ({ role, text, ts })),
+            },
+            TRIM_DISTILL_MIN_NEW,
+          );
+        }
+      }
+      const apiMessages = [{ role: "user" as const, text: EXPLAIN_KICKOFF }, ...history];
 
       void runAgentTurn({
         providerId: s.defaultProviderId as ProviderId,
@@ -795,6 +943,8 @@ export default function App() {
 
       setViewReady(false);
       pathRef.current = path;
+      // Dwell tracking restarts per book (never a cross-book page-nav event).
+      pageDwellRef.current = null;
       // Classroom mode is per book; detach the previous book's prep panel (the
       // pipeline itself keeps running in the background as a module singleton).
       setClassroomOn(false);
@@ -1093,14 +1243,39 @@ export default function App() {
   // The two picture-in-picture swaps.
   const swapToReading = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-pip" } : c)), []);
   const swapToChat = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-main" } : c)), []);
+  // Hangup bookkeeping (docs/02, docs/03): log the end of the conversation and
+  // kick the silent memory distillation over its persisted transcript. Reads
+  // refs so it is stable; no-ops when nothing is open. Distillation runs in the
+  // background with no UI — the memory panel shows when it last ran.
+  const captureHangup = useCallback(() => {
+    const c = callRef.current;
+    const path = pathRef.current;
+    const { topicId, topicName, fileName } = ctxRef.current;
+    if (!c || !path || !topicId) return;
+    logEvent(topicId, "call-end", { threadId: c.threadId });
+    const msgs = getThread(path, c.threadId)?.messages ?? [];
+    const ann = annsRef.current.get(c.annotationId);
+    void distillThread({
+      topicId,
+      topicName,
+      bookName: fileName,
+      threadId: c.threadId,
+      annotationId: c.annotationId,
+      page: annotationPage(ann as { position?: { pageIndex?: number } } | undefined),
+      markedText: typeof ann?.text === "string" ? ann.text : "",
+      messages: msgs.map(({ role, text, ts }) => ({ role, text, ts })),
+    });
+  }, []);
+
   // ✕ hangs up, and touching the book dismisses too: the view goes away (the
   // stream is aborted), the thread stays on its mark (docs/03).
   const endCall = useCallback(() => {
+    captureHangup();
     abortRef.current?.abort();
     abortRef.current = null;
     setCall(null);
     clearPendingImages();
-  }, [clearPendingImages]);
+  }, [clearPendingImages, captureHangup]);
 
   const openThreadForAnnotation = useCallback(
     (annotationId: string) => {
@@ -1133,6 +1308,8 @@ export default function App() {
   }, []);
 
   const closeReader = useCallback(() => {
+    // Closing the book with a call open ends that conversation too.
+    captureHangup();
     abortRef.current?.abort();
     abortRef.current = null;
     setCall(null);
@@ -1151,7 +1328,8 @@ export default function App() {
     setPrepSnap(null);
     pathRef.current = null;
     viewRef.current = null;
-  }, [clearPendingImages]);
+    pageDwellRef.current = null;
+  }, [clearPendingImages, captureHangup]);
 
   // Stable handlers for the EmbedPDF pane so its React.memo actually holds: any
   // new prop identity here would re-render the whole engine subtree on every
@@ -1305,6 +1483,7 @@ export default function App() {
               if (t === sidebarTab && sidebarOpen) {
                 setSidebarOpen(false);
               } else {
+                if (t === "memory" && activeTopic) logEvent(activeTopic.id, "memory-tab-open");
                 setSidebarTab(t);
                 setSidebarOpen(true);
               }
@@ -1328,6 +1507,7 @@ export default function App() {
                 selectedSlug={selectedPrepSlug}
               />
             }
+            memoryPanel={<MemoryPanel entries={memEntries} lastDistilledAt={memLastDistill} />}
           />
         )}
 
