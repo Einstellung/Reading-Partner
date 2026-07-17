@@ -61,9 +61,26 @@ import {
   type ProviderId,
   type ProviderInfo,
 } from "./aiClient";
+import {
+  buildClassroomSystemPrompt,
+  buildClassroomTools,
+  chapterIndexForPage,
+  getPrepPipeline,
+  hasPrepState,
+  papersForChapter,
+  parseNote,
+  peekPrepPipeline,
+  readPrepNote,
+  type Citation,
+  type PrepSnapshot,
+} from "./prep";
+import type { PrepPipeline } from "./prep/pipeline";
+import type { ClassroomNote } from "./prep/classroom";
 import { USE_EMBEDPDF } from "./reader-embedpdf/engine-flag";
 import { prewarmPdfiumEngine } from "./reader-embedpdf/engine-singleton";
 import EmbedReaderPane from "./reader-embedpdf/EmbedReaderPane";
+import { CitationContext } from "./components/Markdown";
+import PrepPanel from "./components/PrepPanel";
 import PenToolbar from "./components/PenToolbar";
 import AnnotationPopup from "./components/AnnotationPopup";
 import CallBubble from "./components/CallBubble";
@@ -175,13 +192,21 @@ export default function App() {
     topicName: string;
     fileName: string;
     pageLabel: string | null;
+    pageIndex: number | null;
     files: { path: string; name: string }[];
   }>({
     topicName: "",
     fileName: "",
     pageLabel: null,
+    pageIndex: null,
     files: [],
   });
+  // Classroom mode (docs/09), mirrored for the stable runTurn callback.
+  const classroomRef = useRef(false);
+  // The lesson-prep pipeline attached to the open book (module singleton; this
+  // ref only tracks which one the UI is looking at) and its unsubscribe.
+  const pipelineRef = useRef<PrepPipeline | null>(null);
+  const prepUnsubRef = useRef<(() => void) | null>(null);
 
   const [topics, setTopics] = useState<Topic[]>([]);
   const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
@@ -215,6 +240,11 @@ export default function App() {
   const [fulltext, setFulltext] = useState<Fulltext | null>(null);
   const [fulltextPending, setFulltextPending] = useState(false);
   const [call, setCall] = useState<CallState | null>(null);
+  // Classroom mode + lesson prep (docs/09). classroomOn is per open book and
+  // resets on open/close; prepSnap mirrors the pipeline for the panel.
+  const [classroomOn, setClassroomOn] = useState(false);
+  const [prepSnap, setPrepSnap] = useState<PrepSnapshot | null>(null);
+  const [selectedPrepSlug, setSelectedPrepSlug] = useState<string | null>(null);
   const [settings, setSettings] = useState<Settings>({ defaultProviderId: null, defaultModelId: null });
   const [showSettings, setShowSettings] = useState(false);
   const [providersInfo, setProvidersInfo] = useState<ProviderInfo[]>([]);
@@ -276,9 +306,22 @@ export default function App() {
       topicName: activeTopic?.name ?? "",
       fileName: title ?? "",
       pageLabel: stats?.pageLabel ?? null,
+      pageIndex: stats?.pageIndex ?? null,
       files: activeTopic?.files.map((f) => ({ path: f.path, name: f.name })) ?? [],
     };
   });
+
+  useEffect(() => {
+    classroomRef.current = classroomOn;
+  }, [classroomOn]);
+
+  // Lazy prep follows the reader: on every page change, tell the scheduler
+  // which chapter the user is in so its papers prep first.
+  useEffect(() => {
+    const chapters = prepSnap?.state?.chapters;
+    if (!chapters || !stats) return;
+    pipelineRef.current?.setCurrentChapter(chapterIndexForPage(chapters, stats.pageIndex + 1));
+  }, [stats, prepSnap]);
 
   const applySettings = useCallback((next: Settings) => {
     setSettings(next);
@@ -380,6 +423,68 @@ export default function App() {
     })();
   }, []);
 
+  // Attach the open book's prep pipeline to the UI: subscribe the panel and
+  // (re)start the background run. Idempotent — the pipeline is a module
+  // singleton per survey, so re-attaching never restarts finished work.
+  const attachPipeline = useCallback((path: string, name: string, ft: Fulltext) => {
+    const pipeline = getPrepPipeline(path, name, ft);
+    pipelineRef.current = pipeline;
+    prepUnsubRef.current?.();
+    const sync = () => setPrepSnap(pipeline.snapshot());
+    prepUnsubRef.current = pipeline.subscribe(sync);
+    sync();
+    void pipeline.ensureStarted();
+  }, []);
+
+  // First classroom press (or the panel's Start button) kicks off lesson prep.
+  const startPrep = useCallback(async () => {
+    const path = pathRef.current;
+    const name = ctxRef.current.fileName;
+    if (!path) return;
+    const ft = await currentFulltextRef.current;
+    if (pathRef.current !== path) return; // switched books while extracting
+    if (!ft || ft.status !== "ok") {
+      pushToast("warn", "This book has no readable text layer, so prep can't run.");
+      return;
+    }
+    attachPipeline(path, name, ft);
+  }, [attachPipeline, pushToast]);
+
+  const toggleClassroom = useCallback(() => {
+    setClassroomOn((on) => {
+      const next = !on;
+      if (next) void startPrep();
+      return next;
+    });
+  }, [startPrep]);
+
+  // A clicked citation chip in a chat reply. Survey pages jump the reader (and
+  // un-cover it when chat is full-window); paper citations open that paper's
+  // note in the prep panel (v1: the note, not the paper PDF).
+  const onCitation = useCallback((c: Citation) => {
+    if (c.kind === "page") {
+      viewRef.current?.navigate({ pageIndex: c.page - 1 });
+    } else {
+      setSelectedPrepSlug(c.slug);
+      setSidebarTab("prep");
+      setSidebarOpen(true);
+    }
+    setCall((cur) => (cur && cur.view === "chat-main" ? { ...cur, view: "chat-pip" } : cur));
+  }, []);
+
+  // The prep panel reads a note's body on expand (frontmatter stripped).
+  const loadPrepNoteBody = useCallback(async (slug: string) => {
+    const path = pathRef.current;
+    if (!path) return null;
+    const raw = await readPrepNote(hashPath(path), slug);
+    return raw ? parseNote(raw).body : null;
+  }, []);
+
+  const prepSkip = useCallback((slug: string) => pipelineRef.current?.skip(slug), []);
+  const prepRequeue = useCallback((slug: string) => pipelineRef.current?.requeue(slug), []);
+  const prepAdd = useCallback((query: string) => pipelineRef.current?.addPaper(query), []);
+  const prepStart = useCallback(() => void startPrep(), [startPrep]);
+
   // Run one assistant turn for a thread: assemble the reading context, stream the
   // reply into the bubble, persist on done. Stable (reads refs). No-ops (leaving
   // the bubble empty for the guidance) when no provider is configured.
@@ -451,7 +556,7 @@ export default function App() {
       // current book's extraction may still be running; await it so the AI can
       // see the page. Thread images (stored as filenames) are read back too.
       const currentFulltext = (await currentFulltextRef.current) ?? null;
-      const { topicName, fileName, pageLabel, files } = ctxRef.current;
+      const { topicName, fileName, pageLabel, pageIndex, files } = ctxRef.current;
       const materials = await gatherTopicMaterials(
         files,
         path,
@@ -472,19 +577,54 @@ export default function App() {
           fulltextAvailable: m.fulltext?.status === "ok",
           isCurrent: false,
         }));
-      const tools = buildReadingTools({ currentFulltext, materials });
-      const systemPrompt = buildSystemPrompt({
-        topicName,
-        fileName,
-        pageLabel,
-        selectionText: typeof ann?.text === "string" ? ann.text : "",
-        selectionComment: typeof ann?.comment === "string" ? ann.comment : undefined,
-        chapterTitle,
-        surroundingText: surrounding,
-        fulltextAvailable: currentFulltext?.status === "ok",
-        materials: booklist,
-        hasTools: tools.length > 0,
-      });
+      const selectionText = typeof ann?.text === "string" ? ann.text : "";
+      const selectionComment = typeof ann?.comment === "string" ? ann.comment : undefined;
+
+      // Classroom mode swaps the context assembly (docs/09): the whole survey
+      // rides in a stable prompt prefix, this chapter's prep notes follow, and
+      // paper tools join the M6 reading tools. Companion mode is untouched.
+      let systemPrompt: string;
+      let tools = buildReadingTools({ currentFulltext, materials });
+      const prepState = pipelineRef.current?.snapshot().state ?? null;
+      if (classroomRef.current && currentFulltext?.status === "ok") {
+        const here = page ?? (pageIndex !== null ? pageIndex + 1 : 1);
+        const chapterIdx = prepState ? chapterIndexForPage(prepState.chapters, here) : 1;
+        const notePapers = prepState ? papersForChapter(prepState.papers, chapterIdx) : [];
+        const notes = (
+          await Promise.all(
+            notePapers.map(async (p): Promise<ClassroomNote | null> => {
+              const raw = await readPrepNote(hashPath(path), p.slug);
+              return raw ? { slug: p.slug, title: p.title, body: parseNote(raw).body } : null;
+            }),
+          )
+        ).filter((n): n is ClassroomNote => n !== null);
+        if (prepState) tools = [...tools, ...buildClassroomTools(prepState)];
+        systemPrompt = buildClassroomSystemPrompt({
+          topicName,
+          surveyName: fileName,
+          fulltext: currentFulltext,
+          pageLabel,
+          chapterTitle,
+          selectionText,
+          selectionComment,
+          notes,
+          prep: prepState,
+          hasTools: tools.length > 0,
+        });
+      } else {
+        systemPrompt = buildSystemPrompt({
+          topicName,
+          fileName,
+          pageLabel,
+          selectionText,
+          selectionComment,
+          chapterTitle,
+          surroundingText: surrounding,
+          fulltextAvailable: currentFulltext?.status === "ok",
+          materials: booklist,
+          hasTools: tools.length > 0,
+        });
+      }
 
       const prior = await Promise.all(
         (getThread(path, threadId)?.messages ?? []).map(async (m) => ({
@@ -695,6 +835,14 @@ export default function App() {
 
       setViewReady(false);
       pathRef.current = path;
+      // Classroom mode is per book; detach the previous book's prep panel (the
+      // pipeline itself keeps running in the background as a module singleton).
+      setClassroomOn(false);
+      setSelectedPrepSlug(null);
+      prepUnsubRef.current?.();
+      prepUnsubRef.current = null;
+      pipelineRef.current = null;
+      setPrepSnap(null);
       // Extract the full text in the background so the AI can see the book
       // (M6). Fire-and-forget: never blocks rendering. The engine's pdf.js
       // transfers `bytes.buffer` to its worker (detaching it), and extraction's
@@ -708,10 +856,21 @@ export default function App() {
           return null;
         },
       );
-      currentFulltextRef.current.then((ft) => {
+      currentFulltextRef.current.then(async (ft) => {
         if (pathRef.current !== path) return; // stale: the user switched books
         setFulltext(ft);
         setFulltextPending(false);
+        // Resume lesson prep from its persisted state (docs/09: restartable
+        // from the breakpoint) or re-attach a pipeline already running.
+        if (ft && ft.status === "ok") {
+          try {
+            if (peekPrepPipeline(path) || (await hasPrepState(path))) {
+              if (pathRef.current === path) attachPipeline(path, name, ft);
+            }
+          } catch (e) {
+            console.warn("failed to resume lesson prep", e);
+          }
+        }
       });
 
       if (USE_EMBEDPDF) {
@@ -754,7 +913,7 @@ export default function App() {
       viewRef.current = view;
       setTitle(name);
     },
-    [reloadFrame, persist, onSaveAnnotations, onDeleteAnnotations, onSetAnnotationPopup, installPenUpAnchor, pushToast],
+    [reloadFrame, persist, onSaveAnnotations, onDeleteAnnotations, onSetAnnotationPopup, installPenUpAnchor, pushToast, attachPipeline],
   );
 
   const openFile = useCallback(
@@ -1052,6 +1211,13 @@ export default function App() {
     setFulltext(null);
     setFulltextPending(false);
     setEmbedDoc(null);
+    // Detach the prep UI; the pipeline keeps prepping in the background.
+    setClassroomOn(false);
+    setSelectedPrepSlug(null);
+    prepUnsubRef.current?.();
+    prepUnsubRef.current = null;
+    pipelineRef.current = null;
+    setPrepSnap(null);
     pathRef.current = null;
     viewRef.current = null;
   }, [clearPendingImages]);
@@ -1107,7 +1273,18 @@ export default function App() {
   const lastCallMsg = call?.messages[call.messages.length - 1];
   const streaming = !!(lastCallMsg?.role === "ai" && lastCallMsg.streaming);
 
+  // One-line prep status beside the Classroom toggle.
+  const prepStatusLine = (() => {
+    const s = prepSnap?.state;
+    if (!s) return classroomOn ? "Starting prep…" : null;
+    if (s.planStatus === "pending" || s.planStatus === "running") return "Reading the references…";
+    if (s.planStatus === "failed") return "Prep failed — see the prep panel";
+    const ready = s.papers.filter((p) => p.status === "done" || p.status === "abstract-only").length;
+    return `${ready}/${s.papers.length} papers ready`;
+  })();
+
   return (
+    <CitationContext.Provider value={onCitation}>
     <div className="flex flex-col h-full">
       {/* z-10: the color palette drops out of the header into the reader area,
           and <main> is positioned too — without this it would paint over it. */}
@@ -1209,6 +1386,17 @@ export default function App() {
             onSelectAnnotation={onTraceSelect}
             onToggleStar={(id, starred) => patchAnnotation(id, { starred })}
             onOpenThread={openThreadForAnnotation}
+            prepPanel={
+              <PrepPanel
+                snapshot={prepSnap}
+                loadNote={loadPrepNoteBody}
+                onSkip={prepSkip}
+                onRequeue={prepRequeue}
+                onAdd={prepAdd}
+                onStartPrep={prepStart}
+                selectedSlug={selectedPrepSlug}
+              />
+            }
           />
         )}
 
@@ -1356,6 +1544,9 @@ export default function App() {
                 hint={imageHint}
                 streaming={streaming}
                 onStop={stopTurn}
+                classroomOn={classroomOn}
+                onToggleClassroom={toggleClassroom}
+                classroomStatus={prepStatusLine}
               />
             </div>
             <div className="absolute right-3 top-3 z-50">
@@ -1395,6 +1586,7 @@ export default function App() {
         />
       )}
     </div>
+    </CitationContext.Provider>
   );
 }
 

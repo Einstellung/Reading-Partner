@@ -1,6 +1,7 @@
 // Left sidebar: a persistent icon rail plus a collapsible panel (ChatGPT-style),
-// with two tabs — Outline and Annotations. Pure and controlled: App owns
-// `open`/`tab` state, this component only renders and forwards clicks.
+// with three tabs — Outline, Annotations, and Prep (the lesson-prep progress
+// list, docs/09). Pure and controlled: App owns `open`/`tab` state, this
+// component only renders and forwards clicks.
 //
 // The slide is a compositor-driven `transform` on a panel that floats over the
 // reader, while the in-flow spacer that reserves its slot resizes in one step.
@@ -9,13 +10,14 @@
 // runs at a few frames per second. A transform keeps painting off the main thread,
 // so the slide stays smooth even while the engine repaints the page once.
 
-import { IconHighlight, IconOutline, IconSidebar } from "./icons";
+import type { ReactNode } from "react";
+import { IconHighlight, IconOutline, IconSidebar, IconSparkle } from "./icons";
 import OutlineView from "./OutlineView";
 import TraceList from "./TraceList";
 import type { Annotation } from "./types";
 import type { Fulltext } from "../fulltext/types";
 
-export type SidebarTab = "outline" | "traces";
+export type SidebarTab = "outline" | "traces" | "prep";
 
 export const RAIL_WIDTH = 44;
 export const PANEL_WIDTH = 300;
@@ -37,6 +39,8 @@ interface SidebarProps {
 	onSelectAnnotation(id: string): void;
 	onToggleStar(id: string, starred: boolean): void;
 	onOpenThread(id: string): void;
+	// The prep tab's content, owned by App (state, callbacks, note loading).
+	prepPanel: ReactNode;
 }
 
 export default function Sidebar({
@@ -52,6 +56,7 @@ export default function Sidebar({
 	onSelectAnnotation,
 	onToggleStar,
 	onOpenThread,
+	prepPanel,
 }: SidebarProps) {
 	// Fragment: the rail and the spacer sit in the reader row, while the panel is
 	// absolutely positioned against <main> so sliding it never moves the reader.
@@ -85,6 +90,16 @@ export default function Sidebar({
 				>
 					<IconHighlight size={18} />
 				</button>
+				<button
+					type="button"
+					className={`${RAIL_BTN} ${open && tab === "prep" ? RAIL_BTN_ACTIVE : ""}`}
+					title="Lesson prep"
+					aria-label="Lesson prep"
+					aria-pressed={tab === "prep"}
+					onClick={() => onSelectTab("prep")}
+				>
+					<IconSparkle size={18} />
+				</button>
 			</div>
 
 			{/* Holds the panel's slot in the flex row. Resizes in one step: the
@@ -107,7 +122,7 @@ export default function Sidebar({
 				>
 					{tab === "outline" ? (
 						<OutlineView fulltext={fulltext} pending={fulltextPending} onNavigatePage={onNavigatePage} />
-					) : (
+					) : tab === "traces" ? (
 						<TraceList
 							annotations={annotations}
 							selectedId={selectedId}
@@ -115,6 +130,8 @@ export default function Sidebar({
 							onToggleStar={onToggleStar}
 							onOpenThread={onOpenThread}
 						/>
+					) : (
+						prepPanel
 					)}
 				</div>
 			</div>

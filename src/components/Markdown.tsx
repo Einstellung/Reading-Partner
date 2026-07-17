@@ -7,8 +7,19 @@
 // resolves, the Suspense fallback shows the untouched text (a graceful
 // degradation, not a loading skeleton); the swap is a single flip once the
 // chunk is cached.
+//
+// Citation anchors: [p.12] / [paper-slug p.3] in the text become clickable
+// links when an onCitation handler is provided (classroom mode, docs/09). The
+// handler flows through React context rather than a prop on every message row
+// so MessageBubble's memoization is undisturbed.
 
-import { lazy, memo, Suspense } from 'react';
+import { createContext, lazy, memo, Suspense } from 'react';
+import type { Citation } from '../prep/anchors';
+
+export type CitationHandler = (citation: Citation) => void;
+
+// Null = citation shorthands stay plain text.
+export const CitationContext = createContext<CitationHandler | null>(null);
 
 const MarkdownRenderer = lazy(() => import('./MarkdownRenderer'));
 
