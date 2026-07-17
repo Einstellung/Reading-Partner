@@ -6,6 +6,7 @@
 // abstract-only rather than failing the paper.
 
 import { fetchWithRetry, type FetchFn } from "./http";
+import { pickByTitle } from "./match";
 
 const S2_BASE = "https://api.semanticscholar.org/graph/v1";
 const FIELDS = "title,abstract,year,openAccessPdf,externalIds";
@@ -31,23 +32,8 @@ export interface S2Result {
   pdfBytes: ArrayBuffer | null;
 }
 
-function normalizeTitle(t: string): string {
-  return t
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[^\p{Letter}\p{Number}]+/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 export function pickS2Match(papers: S2Paper[], title: string): S2Paper | null {
-  const want = normalizeTitle(title);
-  if (!want) return null;
-  for (const p of papers) {
-    const got = normalizeTitle(p.title ?? "");
-    if (got === want || got.includes(want) || want.includes(got)) return p;
-  }
-  return null;
+  return pickByTitle(papers, title, (p) => p.title ?? "");
 }
 
 export async function fetchFromS2(

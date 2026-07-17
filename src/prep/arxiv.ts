@@ -5,6 +5,7 @@
 // we only need five fields per entry.
 
 import { fetchWithRetry, type FetchFn } from "./http";
+import { pickByTitle } from "./match";
 
 export interface ArxivEntry {
   id: string; // normalized, e.g. "2303.12345"
@@ -80,26 +81,8 @@ export function parseArxivAtom(xml: string): ArxivEntry[] {
   return out;
 }
 
-function normalizeTitle(t: string): string {
-  return t
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[^\p{Letter}\p{Number}]+/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-// The entry whose title matches (normalized equality, or one contains the
-// other for subtitle drift). Null when no entry is close enough — a wrong
-// paper is worse than no paper.
 export function pickArxivMatch(entries: ArxivEntry[], title: string): ArxivEntry | null {
-  const want = normalizeTitle(title);
-  if (!want) return null;
-  for (const e of entries) {
-    const got = normalizeTitle(e.title);
-    if (got === want || got.includes(want) || want.includes(got)) return e;
-  }
-  return null;
+  return pickByTitle(entries, title, (e) => e.title);
 }
 
 export interface ArxivResult {
