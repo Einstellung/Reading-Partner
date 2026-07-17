@@ -598,6 +598,8 @@ export default function App() {
   const prepRequeue = useCallback((slug: string) => pipelineRef.current?.requeue(slug), []);
   const prepAdd = useCallback((query: string) => pipelineRef.current?.addPaper(query), []);
   const prepStart = useCallback(() => void startPrep(), [startPrep]);
+  const prepRetryPlan = useCallback(() => pipelineRef.current?.retryPlan(), []);
+  const prepReplan = useCallback(() => pipelineRef.current?.replan(), []);
 
   // Run one assistant turn for a thread: assemble the reading context, stream the
   // reply into the bubble, persist on done. Stable (reads refs). No-ops (leaving
@@ -1504,6 +1506,8 @@ export default function App() {
                 onRequeue={prepRequeue}
                 onAdd={prepAdd}
                 onStartPrep={prepStart}
+                onRetryPlan={prepRetryPlan}
+                onReplan={prepReplan}
                 selectedSlug={selectedPrepSlug}
               />
             }
