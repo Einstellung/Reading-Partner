@@ -1,3 +1,4 @@
+mod migrate;
 mod oauth_callback;
 
 // Plugins: dialog + fs (M1 file open / reading state), http (AI provider requests
@@ -14,6 +15,11 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             oauth_callback::start_oauth_callback_listener
         ])
+        // Pick up data written under the pre-0.3 bundle identifier.
+        .setup(|app| {
+            migrate::migrate_legacy_dirs(app.handle());
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

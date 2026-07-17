@@ -1,0 +1,139 @@
+# Build a signed iOS ipa on a macOS runner and upload it to TestFlight.
+#
+# Trigger: manual (Run workflow). The marketing version comes from
+# src-tauri/tauri.conf.json; the build number (CFBundleVersion) is the
+# workflow run number, so every dispatch produces a strictly newer build.
+#
+# Required repository secrets (Settings -> Secrets and variables -> Actions):
+#   APPLE_API_ISSUER        App Store Connect API issuer ID (UUID shown on the
+#                           Users and Access -> Integrations page)
+#   APPLE_API_KEY_ID        App Store Connect API key ID (e.g. 2X9R4HXF34)
+#   APPLE_API_KEY_P8_BASE64 base64 of the downloaded AuthKey_<key id>.p8 file
+#                           (base64 -w0 AuthKey_XXXX.p8)
+#   APPLE_TEAM_ID           10-character Apple Developer Team ID
+#
+# The API key does everything: Xcode cloud-managed signing creates the
+# distribution certificate and provisioning profile on the fly, and the same
+# key authenticates the TestFlight upload. No certificates or profiles are
+# stored in the repository. See docs/11-iOS-TestFlight发布.md for the
+# one-time Apple-side setup.
+
+name: iOS TestFlight
+
+on:
+  workflow_dispatch:
+
+# One upload at a time; a second dispatch queues instead of racing the first.
+concurrency:
+  group: ios-testflight
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      # Tauri reads these three to drive xcodebuild's cloud signing
+      # (-authenticationKeyPath/-authenticationKeyID/-authenticationKeyIssuerID).
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
+      # Overrides bundle > iOS > developmentTeam, which is unset in
+      # tauri.conf.json so the team id never lives in the repository.
+      APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_TEAM_ID }}
+      # iOS ships the EmbedPDF engine only; the zotero/reader engine is
+      # AGPL-blocked on the App Store (docs/06-iOS发布路线.md).
+      VITE_ENGINE: embedpdf
+
+    steps:
+      # No submodules: the EmbedPDF build does not use vendor/reader.
+      - uses: actions/checkout@v4
+
+      # Pin Xcode so image default bumps don't change the toolchain under us.
+      # If the image drops this version, the step fails and lists what exists.
+      - name: Pin Xcode
+        env:
+          XCODE_VERSION: "26.5"
+        run: |
+          sudo xcode-select --switch "/Applications/Xcode_${XCODE_VERSION}.app" || {
+            echo "Xcode ${XCODE_VERSION} is not on this runner image. Installed:"
+            ls /Applications | grep -i '^Xcode' || true
+            exit 1
+          }
+          xcodebuild -version
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: bun install --frozen-lockfile
+
+      # Self-host pdfium.wasm from node_modules into public/, which vite
+      # copies into dist. Skipping this leaves the reader unable to start.
+      - name: Copy pdfium.wasm
+        run: bun run wasm
+
+      # Write the .p8 where Tauri (APPLE_API_KEY_PATH) and altool (searches
+      # ~/private_keys for AuthKey_<key id>.p8) both find it.
+      - name: Install the App Store Connect API key
+        run: |
+          mkdir -p ~/private_keys
+          echo "${{ secrets.APPLE_API_KEY_P8_BASE64 }}" | base64 --decode \
+            > ~/private_keys/AuthKey_${APPLE_API_KEY}.p8
+          echo "APPLE_API_KEY_PATH=$HOME/private_keys/AuthKey_${APPLE_API_KEY}.p8" >> "$GITHUB_ENV"
+
+      # src-tauri/gen/apple is not checked in; generate the Xcode project
+      # fresh. --ci answers all prompts with defaults. First run installs
+      # xcodegen (and cocoapods if missing) via Homebrew.
+      - name: Generate the Xcode project
+        run: bun tauri ios init --ci
+
+      # XcodeGen's iOS defaults set TARGETED_DEVICE_FAMILY "1,2" (iPhone +
+      # iPad) and the Tauri template allows all iPad orientations. Fail fast
+      # if a toolchain update ever drops iPad from the product.
+      - name: Assert iPad support
+        run: |
+          grep -rq 'TARGETED_DEVICE_FAMILY = "1,2"' src-tauri/gen/apple/*.xcodeproj/project.pbxproj || {
+            echo 'TARGETED_DEVICE_FAMILY "1,2" missing from the generated project:'
+            grep -r 'TARGETED_DEVICE_FAMILY' src-tauri/gen/apple/*.xcodeproj/project.pbxproj || true
+            exit 1
+          }
+
+      # Builds the frontend (beforeBuildCommand), compiles the Rust lib for
+      # aarch64-apple-ios, archives, signs with cloud-managed signing, and
+      # exports an App Store Connect ipa. The --config override stamps the
+      # run number into CFBundleVersion.
+      - name: Build the signed ipa
+        run: >-
+          bun tauri ios build
+          --export-method app-store-connect
+          --config '{"bundle":{"iOS":{"bundleVersion":"${{ github.run_number }}"}}}'
+
+      # altool is still the supported CLI for App Store uploads (it was
+      # deprecated for notarization only). Processing then continues on
+      # Apple's side; the build appears in TestFlight a few minutes later.
+      - name: Upload to TestFlight
+        run: |
+          IPA=$(find src-tauri/gen/apple/build -name '*.ipa' -print -quit)
+          if [ -z "$IPA" ]; then
+            echo "No ipa produced. Build output tree:"
+            find src-tauri/gen/apple/build -type f || true
+            exit 1
+          fi
+          echo "Uploading $IPA"
+          xcrun altool --upload-app --type ios --file "$IPA" \
+            --apiKey "$APPLE_API_KEY" --apiIssuer "$APPLE_API_ISSUER"
+
+      # Keep the ipa for post-mortems even when the upload step fails.
+      - name: Archive the ipa
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: src-tauri/gen/apple/build/**/*.ipa
+          if-no-files-found: ignore
