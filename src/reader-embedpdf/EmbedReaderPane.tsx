@@ -1,8 +1,6 @@
-// Bridges the EmbedPDF adapter (EmbedPdfView) to the shell's existing engine
-// contract (src/reader.ts): it renders the viewer and hands App a ViewInstance
-// plus the same callbacks it already wires for the zotero engine. This is what
-// lets App switch engines without rewriting its annotation / thread / storage
-// handlers. Used only when USE_EMBEDPDF is set.
+// Bridges the EmbedPDF adapter (EmbedPdfView) to the shell's engine contract
+// (src/reader-contract.ts): it renders the viewer and hands App a ViewInstance
+// plus the callbacks App wires for annotations, threads and storage.
 
 import { memo, useCallback, useEffect, useRef } from "react";
 import EmbedPdfView, {

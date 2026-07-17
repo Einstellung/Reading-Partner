@@ -1,13 +1,12 @@
-// EmbedPDF engine adapter (spike). A self-contained React viewer that renders a
-// PDF from an in-memory buffer through @embedpdf's headless core + PdfiumEngine,
+// EmbedPDF engine adapter. A self-contained React viewer that renders a PDF
+// from an in-memory buffer through @embedpdf's headless core + PdfiumEngine,
 // and exposes the shell's functional needs through an imperative handle. The
 // pdfium.wasm is self-hosted (/pdfium/pdfium.wasm) and font fallback is disabled
 // so the build stays offline (no CDN fetch).
 //
-// This intentionally follows EmbedPDF's native API shape rather than replicating
-// zotero/reader's createView contract verbatim (see the scope note in the spike
-// report): the shell keeps persisting zotero-schema annotations, and this module
-// converts at the boundary via src/reader-embedpdf/convert.ts.
+// This follows EmbedPDF's native API shape; the shell keeps persisting its
+// original annotation JSON schema (position.rects in PDF points, bottom-left
+// origin), and this module converts at the boundary via convert.ts.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPluginRegistration } from "@embedpdf/core";

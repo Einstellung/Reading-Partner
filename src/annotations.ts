@@ -14,8 +14,8 @@ import {
 import { hashPath } from "./storage";
 import type { Annotation } from "./reader-contract";
 
-// From vendor/reader/src/common/defines.js (ANNOTATION_COLORS). B's UI uses the
-// same list; this export is the single source.
+// The annotation color palette. The UI components use the same list; this
+// export is the single source.
 export const ANNOTATION_COLORS: { name: string; color: string }[] = [
   { name: "Yellow", color: "#ffd400" },
   { name: "Red", color: "#ff6666" },

@@ -1,11 +1,10 @@
-// AnnotationPopup: editor shown when an existing annotation is clicked. Adapted
-// from zotero/reader's view-popup/annotation-popup.js + _view-popup.scss, reduced
-// to what M2 needs: recolor, edit comment, delete. Pure and controlled.
+// AnnotationPopup: editor shown when an existing annotation is clicked —
+// recolor, edit comment, delete. Pure and controlled; styled with Tailwind
+// utilities. The parent supplies the anchor in viewport coordinates.
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconClose, IconColorSwatch, IconTrash } from './icons';
 import type { Annotation, ColorEntry } from './types';
-import './AnnotationPopup.css';
 
 interface AnnotationPopupProps {
 	annotation: Annotation;
@@ -19,6 +18,9 @@ interface AnnotationPopupProps {
 const GAP = 10;
 const MARGIN = 8;
 const COMMENT_DEBOUNCE = 400;
+
+const ICON_BTN =
+	'flex h-6 w-6 cursor-pointer items-center justify-center rounded border-0 bg-transparent p-0 hover:bg-black/5';
 
 export default function AnnotationPopup({ annotation, anchor, colors, onChange, onDelete, onClose }: AnnotationPopupProps) {
 	const ref = useRef<HTMLDivElement>(null);
@@ -78,17 +80,17 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 	return (
 		<div
 			ref={ref}
-			className="annotation-popup"
+			className="fixed z-[1000] flex w-60 flex-col gap-2 rounded-lg border border-black/10 bg-white p-2.5 text-neutral-800 shadow-xl select-none"
 			style={pos ? { left: pos.left, top: pos.top, visibility: 'visible' } : { visibility: 'hidden' }}
 			role="dialog"
 			aria-label="Annotation"
 		>
-			<div className="ap-row ap-colors">
+			<div className="flex items-center gap-0.5">
 				{colors.map((c) => (
 					<button
 						key={c.color}
 						type="button"
-						className={'ap-swatch' + (annotation.color === c.color ? ' selected' : '')}
+						className={ICON_BTN + (annotation.color === c.color ? ' ring-2 ring-inset ring-sky-600' : '')}
 						title={c.name}
 						aria-label={c.name}
 						aria-pressed={annotation.color === c.color}
@@ -97,13 +99,19 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 						<IconColorSwatch color={c.color} size={18} />
 					</button>
 				))}
-				<button type="button" className="ap-icon-btn ap-close" title="Close" aria-label="Close" onClick={onClose}>
+				<button
+					type="button"
+					className={`${ICON_BTN} ml-auto text-neutral-500`}
+					title="Close"
+					aria-label="Close"
+					onClick={onClose}
+				>
 					<IconClose size={14} />
 				</button>
 			</div>
 
 			<textarea
-				className="ap-comment"
+				className="max-h-40 min-h-[60px] w-full resize-y rounded-md border border-black/15 bg-white px-2 py-1.5 text-[13px] text-neutral-800 select-text [font:inherit] focus:border-sky-600 focus:outline-none"
 				placeholder="Add a comment"
 				value={draft}
 				onChange={(e) => {
@@ -113,8 +121,13 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 				onBlur={() => commit(draft)}
 			/>
 
-			<div className="ap-row ap-actions">
-				<button type="button" className="ap-delete" title="Delete" onClick={() => onDelete(annotation.id)}>
+			<div className="flex items-center justify-end">
+				<button
+					type="button"
+					className="inline-flex cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-2 py-1 text-xs text-red-700 [font:inherit] hover:bg-red-700/10"
+					title="Delete"
+					onClick={() => onDelete(annotation.id)}
+				>
 					<IconTrash size={15} />
 					<span>Delete</span>
 				</button>
