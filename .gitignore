@@ -7,10 +7,6 @@ build/
 src-tauri/target/
 src-tauri/gen/
 
-# reader 构建产物（view-web 输出），不入库；reader-host.html 例外，要入库
-/public/reader/*
-!/public/reader/reader-host.html
-
 # 密钥：BYOK 模式，API key 只存本地，绝不入库
 .env
 .env.*
