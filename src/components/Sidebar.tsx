@@ -1,7 +1,7 @@
 // Left sidebar: a persistent icon rail plus a collapsible panel (ChatGPT-style),
-// with three tabs — Outline, Annotations, and Prep (the lesson-prep progress
-// list, docs/09). Pure and controlled: App owns `open`/`tab` state, this
-// component only renders and forwards clicks.
+// with four tabs — Outline, Annotations, Prep (the lesson-prep progress list,
+// docs/09), and Memory (what the AI remembers, docs/02). Pure and controlled:
+// App owns `open`/`tab` state, this component only renders and forwards clicks.
 //
 // The slide is a compositor-driven `transform` on a panel that floats over the
 // reader, while the in-flow spacer that reserves its slot resizes in one step.
@@ -11,13 +11,13 @@
 // so the slide stays smooth even while the engine repaints the page once.
 
 import type { ReactNode } from "react";
-import { IconHighlight, IconOutline, IconSidebar, IconSparkle } from "./icons";
+import { IconHighlight, IconMemory, IconOutline, IconSidebar, IconSparkle } from "./icons";
 import OutlineView from "./OutlineView";
 import TraceList from "./TraceList";
 import type { Annotation } from "./types";
 import type { Fulltext } from "../fulltext/types";
 
-export type SidebarTab = "outline" | "traces" | "prep";
+export type SidebarTab = "outline" | "traces" | "prep" | "memory";
 
 export const RAIL_WIDTH = 44;
 export const PANEL_WIDTH = 300;
@@ -41,6 +41,8 @@ interface SidebarProps {
 	onOpenThread(id: string): void;
 	// The prep tab's content, owned by App (state, callbacks, note loading).
 	prepPanel: ReactNode;
+	// The memory tab's content, owned by App (entry loading, refresh).
+	memoryPanel: ReactNode;
 }
 
 export default function Sidebar({
@@ -57,6 +59,7 @@ export default function Sidebar({
 	onToggleStar,
 	onOpenThread,
 	prepPanel,
+	memoryPanel,
 }: SidebarProps) {
 	// Fragment: the rail and the spacer sit in the reader row, while the panel is
 	// absolutely positioned against <main> so sliding it never moves the reader.
@@ -100,6 +103,16 @@ export default function Sidebar({
 				>
 					<IconSparkle size={18} />
 				</button>
+				<button
+					type="button"
+					className={`${RAIL_BTN} ${open && tab === "memory" ? RAIL_BTN_ACTIVE : ""}`}
+					title="Memory"
+					aria-label="Memory"
+					aria-pressed={tab === "memory"}
+					onClick={() => onSelectTab("memory")}
+				>
+					<IconMemory size={18} />
+				</button>
 			</div>
 
 			{/* Holds the panel's slot in the flex row. Resizes in one step: the
@@ -130,8 +143,10 @@ export default function Sidebar({
 							onToggleStar={onToggleStar}
 							onOpenThread={onOpenThread}
 						/>
-					) : (
+					) : tab === "prep" ? (
 						prepPanel
+					) : (
+						memoryPanel
 					)}
 				</div>
 			</div>

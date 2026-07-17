@@ -136,6 +136,34 @@ export function IconSparkle({ size = 20 }: IconProps) {
 	);
 }
 
+// Memory chip for the memory tab.
+export function IconMemory({ size = 20 }: IconProps) {
+	return (
+		<svg
+			width={size}
+			height={size}
+			viewBox="0 0 20 20"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			xmlns="http://www.w3.org/2000/svg"
+		>
+			<rect x="5" y="5" width="10" height="10" rx="1.5" />
+			<rect x="8" y="8" width="4" height="4" />
+			<path d="M7.5 5V2.75" />
+			<path d="M12.5 5V2.75" />
+			<path d="M7.5 17.25V15" />
+			<path d="M12.5 17.25V15" />
+			<path d="M5 7.5H2.75" />
+			<path d="M5 12.5H2.75" />
+			<path d="M17.25 7.5H15" />
+			<path d="M17.25 12.5H15" />
+		</svg>
+	);
+}
+
 // Send arrow for the chat composer.
 export function IconSend({ size = 16 }: IconProps) {
 	return (
