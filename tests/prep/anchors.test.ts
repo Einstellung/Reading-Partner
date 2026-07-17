@@ -2,6 +2,7 @@
 
 import { expect, test } from "bun:test";
 import {
+  figureCitationHref,
   linkifyCitations,
   pageCitationHref,
   paperCitationHref,
@@ -38,6 +39,19 @@ test("plain brackets that are not citations pass through", () => {
   );
 });
 
+test("figure citations become fragment links (M9)", () => {
+  expect(linkifyCitations("See [fig:3] for the pipeline.")).toBe(
+    "See [fig:3](#rp-fig-3) for the pipeline.",
+  );
+  expect(linkifyCitations("[fig:3a]")).toBe("[fig:3a](#rp-fig-3a)");
+  expect(linkifyCitations("[FIG:2]")).toBe("[fig:2](#rp-fig-2)"); // case-normalized
+});
+
+test("an already-linked figure citation is left alone", () => {
+  const already = "[fig:3](#rp-fig-3)";
+  expect(linkifyCitations(already)).toBe(already);
+});
+
 test("hrefs round-trip through parseCitationHref", () => {
   expect(parseCitationHref(pageCitationHref(12))).toEqual({ kind: "page", page: 12 });
   expect(parseCitationHref(paperCitationHref("rt-1-robotics", 3))).toEqual({
@@ -45,6 +59,7 @@ test("hrefs round-trip through parseCitationHref", () => {
     slug: "rt-1-robotics",
     page: 3,
   });
+  expect(parseCitationHref(figureCitationHref("3a"))).toEqual({ kind: "figure", id: "3a" });
 });
 
 test("parseCitationHref rejects foreign or malformed hrefs", () => {
@@ -52,4 +67,6 @@ test("parseCitationHref rejects foreign or malformed hrefs", () => {
   expect(parseCitationHref("https://example.com")).toBeNull();
   expect(parseCitationHref("#rp-page-abc")).toBeNull();
   expect(parseCitationHref("#rp-paper-noseparator")).toBeNull();
+  expect(parseCitationHref("#rp-fig-")).toBeNull();
+  expect(parseCitationHref("#rp-fig-xyz")).toBeNull();
 });

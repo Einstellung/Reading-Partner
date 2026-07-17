@@ -24,6 +24,8 @@ export interface ClassroomContext {
   notes: ClassroomNote[];
   prep: PrepState | null;
   hasTools: boolean;
+  // Compact figure catalog for the survey (M9), or "" when none detected.
+  figureCatalog?: string;
 }
 
 // The stable prefix: everything before the per-turn context. Depends only on
@@ -87,6 +89,10 @@ export function buildClassroomSystemPrompt(ctx: ClassroomContext): string {
     for (const p of ctx.prep.papers) lines.push(paperLine(p));
   }
 
+  if (ctx.figureCatalog && ctx.figureCatalog.trim()) {
+    lines.push("", ctx.figureCatalog.trim());
+  }
+
   if (ctx.hasTools) {
     lines.push(
       "",
@@ -97,6 +103,9 @@ export function buildClassroomSystemPrompt(ctx: ClassroomContext): string {
       "read_note(slug) returns a paper's whole prep note; search_topic(query)",
       "keyword-searches the topic's materials; read_annotations(material) lists",
       "the user's marks. Call tools directly — never ask permission to read.",
+      ...(ctx.figureCatalog && ctx.figureCatalog.trim()
+        ? ["view_figure(id) shows you a survey figure so you can describe what it depicts."]
+        : []),
     );
   }
 

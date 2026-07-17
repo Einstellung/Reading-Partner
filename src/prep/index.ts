@@ -16,6 +16,7 @@ export {
   parseCitationHref,
   pageCitationHref,
   paperCitationHref,
+  figureCitationHref,
   type Citation,
 } from "./anchors";
 export {

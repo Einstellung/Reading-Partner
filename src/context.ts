@@ -25,6 +25,9 @@ export interface ReadingContext {
   // line telling the model it can't page through or search this book.
   fulltextAvailable?: boolean;
   materials?: BooklistItem[];
+  // Compact figure catalog for the current book (M9), or "" when the book has no
+  // detected figures. Lets the model cite figures as [fig:N] and call view_figure.
+  figureCatalog?: string;
   // Whether any reading tool was wired for this call; gates the tools paragraph.
   hasTools?: boolean;
   // The book-level thread (docs/03: top-bar AI button). No passage was marked,
@@ -100,6 +103,10 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
     for (const m of ctx.materials) lines.push(booklistLine(m));
   }
 
+  if (ctx.figureCatalog && ctx.figureCatalog.trim()) {
+    lines.push("", ctx.figureCatalog.trim());
+  }
+
   if (ctx.hasTools) {
     lines.push(
       "",
@@ -108,6 +115,9 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
       "a page range from the current book; search_topic(query) keyword-searches every",
       "material in this topic; read_annotations(material) lists the user's highlights",
       "and notes on a named material.",
+      ...(ctx.figureCatalog && ctx.figureCatalog.trim()
+        ? ["view_figure(id) shows you a figure from the catalog above so you can describe it."]
+        : []),
       "",
       "Answer from the current passage by default. Consult other books only when the",
       "user brings them up or the question plainly needs them — don't wander off to",

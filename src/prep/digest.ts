@@ -15,7 +15,7 @@ import type { PrepPaper } from "./types";
 export const SHORT_PAPER_MAX = 10;
 const DIGEST_MAX_ROUNDS = 12;
 
-export function digestSystemPrompt(paper: PrepPaper, surveyName: string): string {
+export function digestSystemPrompt(paper: PrepPaper, surveyName: string, figureCatalog?: string): string {
   const lines = [
     "You are preparing lecture notes for a reading companion. The user is",
     `studying the survey "${surveyName}"; the paper below is one of its`,
@@ -30,6 +30,9 @@ export function digestSystemPrompt(paper: PrepPaper, surveyName: string): string
   if (paper.citedInChapters.length) {
     lines.push(`Cited in survey chapters: ${paper.citedInChapters.join(", ")}`);
   }
+  if (figureCatalog && figureCatalog.trim()) {
+    lines.push("", figureCatalog.trim());
+  }
   lines.push(
     "",
     "Write the note in English, 300-600 words of markdown. Cover: the problem",
@@ -39,6 +42,11 @@ export function digestSystemPrompt(paper: PrepPaper, surveyName: string): string
     "form [p.N] (N is the paper's 1-based page). Do not add a title heading;",
     "start directly with the content. Output only the note.",
   );
+  if (figureCatalog && figureCatalog.trim()) {
+    lines.push(
+      "When a figure listed above carries a key result, point to it as [fig:N].",
+    );
+  }
   return lines.join("\n");
 }
 
@@ -104,9 +112,11 @@ export function runDigest(params: {
   model: DigestModel;
   signal?: AbortSignal;
   onProgress?: (chars: number) => void;
+  // The paper's figure catalog (M9), so the note can cite key figures as [fig:N].
+  figureCatalog?: string;
 }): Promise<string> {
-  const { paper, surveyName, fulltext, model, signal, onProgress } = params;
-  const systemPrompt = digestSystemPrompt(paper, surveyName);
+  const { paper, surveyName, fulltext, model, signal, onProgress, figureCatalog } = params;
+  const systemPrompt = digestSystemPrompt(paper, surveyName, figureCatalog);
   const short = fulltext.pages.length <= SHORT_PAPER_MAX;
 
   return new Promise<string>((resolve, reject) => {

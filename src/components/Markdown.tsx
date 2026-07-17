@@ -15,11 +15,23 @@
 
 import { createContext, lazy, memo, Suspense } from 'react';
 import type { Citation } from '../prep/anchors';
+import type { Figure } from '../figures/types';
 
 export type CitationHandler = (citation: Citation) => void;
 
 // Null = citation shorthands stay plain text.
 export const CitationContext = createContext<CitationHandler | null>(null);
+
+// Host services for inline [fig:N] cards (M9): resolve a figure by id, rasterize
+// its crop lazily, and jump the reader to it. Null = figures render as plain
+// text chips (the fallback when no book is open or figures aren't extracted).
+export interface FigureHost {
+	getFigure(id: string): Figure | null;
+	renderCard(figure: Figure): Promise<string | null>;
+	onJump(figure: Figure): void;
+}
+
+export const FigureContext = createContext<FigureHost | null>(null);
 
 const MarkdownRenderer = lazy(() => import('./MarkdownRenderer'));
 
