@@ -51,6 +51,16 @@ export async function getFulltext(hash: string): Promise<Fulltext | null> {
   }
 }
 
+// Persist a full text that was built elsewhere (a fetched web article's single
+// "page", link ingestion in docs/09) under the same cache key a real document
+// uses, so the reading tools can serve it immediately. Overwrites any prior
+// entry for the path.
+export async function saveFulltext(path: string, ft: Fulltext): Promise<void> {
+  const hash = hashPath(path);
+  await ensureDir();
+  await writeTextFile(fileFor(hash), JSON.stringify(ft), { baseDir: BaseDirectory.AppData });
+}
+
 // Coalesce concurrent extraction requests for the same document so a double
 // open doesn't parse twice.
 const inFlight = new Map<string, Promise<Fulltext>>();

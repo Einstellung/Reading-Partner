@@ -63,11 +63,14 @@ import {
   type ProviderInfo,
 } from "./aiClient";
 import {
+  ADD_SOURCE_PROMPT,
   buildClassroomSystemPrompt,
   buildClassroomTools,
+  buildSourceTools,
   chapterIndexForPage,
   getPrepPipeline,
   hasPrepState,
+  paperFulltextHash,
   papersForChapter,
   locateQuote,
   parseNote,
@@ -800,6 +803,44 @@ export default function App() {
         ];
       }
       const prepState = pipelineRef.current?.snapshot().state ?? null;
+
+      // Link ingestion (docs/09): when a prep pipeline exists for this book, the
+      // model can ingest a user-pasted URL with add_source and read it with the
+      // paper tools — in companion mode too, so "compare this link with ch.3"
+      // works outside the classroom. Classroom mode wires the paper tools below
+      // with its own prompt; here we add them for companion mode.
+      const livePipeline = pipelineRef.current;
+      let canIngestUrl = false;
+      if (livePipeline && currentFulltext?.status === "ok") {
+        const surveyHash = hashPath(path);
+        tools = [
+          ...tools,
+          ...buildSourceTools({
+            ingest: async (url) => {
+              const paper = await livePipeline.ingestSource(url);
+              const ft = await getFulltext(paperFulltextHash(surveyHash, paper.slug));
+              const chars = ft ? ft.pages.reduce((n, pg) => n + pg.length, 0) : 0;
+              return {
+                slug: paper.slug,
+                title: paper.title,
+                kind: paper.kind ?? "pdf",
+                pages: ft?.pages.length ?? paper.pages ?? 0,
+                chars,
+                status: paper.status,
+                error: paper.error,
+              };
+            },
+          }),
+        ];
+        canIngestUrl = true;
+        if (!classroomRef.current) {
+          tools = [
+            ...tools,
+            ...buildClassroomTools(() => livePipeline.snapshot().state ?? prepState!),
+          ];
+        }
+      }
+
       if (classroomRef.current && currentFulltext?.status === "ok") {
         const here = page ?? (pageIndex !== null ? pageIndex + 1 : 1);
         const chapterIdx = prepState ? chapterIndexForPage(prepState.chapters, here) : 1;
@@ -812,7 +853,9 @@ export default function App() {
             }),
           )
         ).filter((n): n is ClassroomNote => n !== null);
-        if (prepState) tools = [...tools, ...buildClassroomTools(prepState)];
+        if (prepState) {
+          tools = [...tools, ...buildClassroomTools(() => pipelineRef.current?.snapshot().state ?? prepState)];
+        }
         systemPrompt = buildClassroomSystemPrompt({
           topicName,
           surveyName: fileName,
@@ -843,6 +886,7 @@ export default function App() {
         });
       }
       if (memorySection) systemPrompt += "\n\n" + memorySection;
+      if (canIngestUrl) systemPrompt += "\n\n" + ADD_SOURCE_PROMPT;
 
       const threadMsgs = getThread(path, threadId)?.messages ?? [];
       const prior = await Promise.all(

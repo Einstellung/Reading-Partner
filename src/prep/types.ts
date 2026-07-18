@@ -54,7 +54,11 @@ export interface PrepPaper {
   status: PaperStatus;
   addedByUser?: boolean;
   error?: string;
-  source?: "arxiv" | "openalex" | "semantic-scholar" | null;
+  source?: "arxiv" | "openalex" | "semantic-scholar" | "url" | null;
+  // A paper that originated from a user-pasted URL (docs/09 link ingestion). The
+  // URL is the fetch target; `kind` is filled in after the fetch sniffs content.
+  sourceUrl?: string;
+  kind?: "pdf" | "article";
   abstract?: string;
   // Page count of the fetched PDF, set after extraction.
   pages?: number | null;

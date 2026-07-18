@@ -12,6 +12,8 @@ const META: NoteMeta = {
   source: "arxiv",
   sourcePages: 24,
   citedInChapters: [1, 3],
+  sourceUrl: null,
+  kind: null,
 };
 
 test("serialize/parse round-trips the meta and body", () => {
@@ -32,6 +34,8 @@ test("empty optional fields are omitted and parse back as null/empty", () => {
     source: null,
     sourcePages: null,
     citedInChapters: [],
+    sourceUrl: null,
+    kind: null,
   };
   const text = serializeNote(meta, "body");
   expect(text).not.toContain("arxivId:");
@@ -51,6 +55,25 @@ test("a file without frontmatter parses as body-only", () => {
 test("a title containing a colon survives", () => {
   const text = serializeNote(META, "b");
   expect(parseNote(text).meta.title).toBe("RT-1: Robotics Transformer");
+});
+
+test("a URL source's sourceUrl and kind round-trip", () => {
+  const meta: NoteMeta = {
+    title: "A Blog Post",
+    authors: [],
+    year: null,
+    arxivId: null,
+    status: "done",
+    source: "url",
+    sourcePages: null,
+    citedInChapters: [],
+    sourceUrl: "https://blog.example.com/post",
+    kind: "article",
+  };
+  const note = parseNote(serializeNote(meta, "body [no anchors]"));
+  expect(note.meta.sourceUrl).toBe("https://blog.example.com/post");
+  expect(note.meta.kind).toBe("article");
+  expect(note.meta.source).toBe("url");
 });
 
 test("abstractNoteBody degrades gracefully", () => {

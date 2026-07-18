@@ -37,3 +37,9 @@ export { getPrepPipeline, peekPrepPipeline, hasPrepState } from "./live";
 export { readPrepNote, paperFulltextHash } from "./store";
 export { buildClassroomSystemPrompt, classroomPromptPrefix, type ClassroomNote } from "./classroom";
 export { buildClassroomTools } from "./tools";
+export {
+  buildSourceTools,
+  ADD_SOURCE_PROMPT,
+  type SourceIngestor,
+  type IngestResult,
+} from "./source-tool";

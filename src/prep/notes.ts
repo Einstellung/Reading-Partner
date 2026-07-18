@@ -10,9 +10,14 @@ export interface NoteMeta {
   year: number | null;
   arxivId: string | null;
   status: string; // done | abstract-only
-  source: string | null; // arxiv | openalex | semantic-scholar
+  source: string | null; // arxiv | openalex | semantic-scholar | url
   sourcePages: number | null; // page count of the digested PDF
   citedInChapters: number[];
+  // Link-ingestion provenance (docs/09): the URL a user-pasted source came from
+  // and whether it resolved to a PDF or a web article. Null for plan-nominated
+  // papers.
+  sourceUrl: string | null;
+  kind: string | null; // pdf | article
 }
 
 export interface PrepNote {
@@ -29,6 +34,8 @@ const EMPTY_META: NoteMeta = {
   source: null,
   sourcePages: null,
   citedInChapters: [],
+  sourceUrl: null,
+  kind: null,
 };
 
 function line(key: string, value: string | null): string | null {
@@ -45,6 +52,8 @@ export function serializeNote(meta: NoteMeta, body: string): string {
     line("source", meta.source),
     line("sourcePages", meta.sourcePages === null ? null : String(meta.sourcePages)),
     line("citedInChapters", meta.citedInChapters.length ? meta.citedInChapters.join(", ") : null),
+    line("sourceUrl", meta.sourceUrl),
+    line("kind", meta.kind),
   ].filter((l): l is string => l !== null);
   return `---\n${lines.join("\n")}\n---\n\n${body.trim()}\n`;
 }
@@ -97,6 +106,12 @@ export function parseNote(text: string): PrepNote {
         meta.citedInChapters = value
           ? value.split(",").map((s) => Number(s.trim())).filter((n) => Number.isFinite(n))
           : [];
+        break;
+      case "sourceUrl":
+        meta.sourceUrl = value || null;
+        break;
+      case "kind":
+        meta.kind = value || null;
         break;
     }
   }

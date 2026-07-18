@@ -60,6 +60,10 @@ export const HOST_MIN_INTERVAL_MS: Record<string, number> = {
   "api.openalex.org": 500,
 };
 
+// A modest default for hosts not in the table — user-pasted links (link
+// ingestion, docs/09) can point at any host, so space them out politely.
+export const DEFAULT_HOST_INTERVAL_MS = 1000;
+
 export interface Clock {
   now(): number;
   sleep(ms: number): Promise<void>;
@@ -78,11 +82,13 @@ export type Throttle = (host: string) => Promise<void>;
 export function createThrottle(
   intervals: Record<string, number> = HOST_MIN_INTERVAL_MS,
   clock: Clock = realClock,
+  // Applied to hosts not named in `intervals` (0 = no spacing).
+  defaultInterval = 0,
 ): Throttle {
   const last = new Map<string, number>();
   const tail = new Map<string, Promise<void>>();
   return (host: string) => {
-    const interval = intervals[host];
+    const interval = intervals[host] ?? defaultInterval;
     if (!interval) return Promise.resolve();
     const run = (tail.get(host) ?? Promise.resolve()).then(async () => {
       const lastAt = last.get(host);
@@ -99,7 +105,7 @@ export function createThrottle(
 }
 
 // Process-wide gate used by the real fetch path.
-const hostThrottle = createThrottle();
+const hostThrottle = createThrottle(HOST_MIN_INTERVAL_MS, realClock, DEFAULT_HOST_INTERVAL_MS);
 const noopThrottle: Throttle = () => Promise.resolve();
 
 // Exponential backoff with deterministic jitter, exported for tests.

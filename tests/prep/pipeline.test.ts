@@ -484,6 +484,118 @@ test("replan preserves user-added and same-slug done papers, requeues new, drops
   expect(bySlug.get(userSlug)?.addedByUser).toBe(true); // user paper survives
 });
 
+// --- link ingestion (docs/09) ---
+
+const ARTICLE_FT = {
+  version: 1 as const,
+  status: "ok" as const,
+  pages: ["the fetched article body text"],
+  outline: [],
+};
+
+function emptyPlannedState(): PrepState {
+  return {
+    version: 1,
+    surveyHash: "h",
+    surveyName: "s",
+    createdAt: 0,
+    planStatus: "done",
+    chapters: [],
+    references: [],
+    papers: [],
+  };
+}
+
+test("a URL source with a pre-extracted full text digests without a PDF, refining title/kind/pages", async () => {
+  const { deps } = makeFakes({
+    fetch: async () => ({
+      source: "url",
+      arxivId: null,
+      abstract: "",
+      pdfBytes: null,
+      fulltext: ARTICLE_FT,
+      kind: "article",
+      title: "Real Title",
+    }),
+    digest: async (_p, fetched) => ({
+      body: "note",
+      pages: fetched.fulltext?.pages.length ?? null,
+      thin: false,
+    }),
+  });
+  const p = new PrepPipeline("h", "s", deps);
+  await p.ensureStarted();
+  expect(statuses(p)).toEqual({ alpha: "done", beta: "done" });
+  const alpha = p.snapshot().state?.papers.find((x) => x.slug === "alpha");
+  expect(alpha?.title).toBe("Real Title");
+  expect(alpha?.kind).toBe("article");
+  expect(alpha?.pages).toBe(1);
+});
+
+test("ingestSource resolves once fetched — before the digest finishes — and reads the source back", async () => {
+  let releaseDigest: ((d: DigestOutcome) => void) | null = null;
+  const { deps } = makeFakes({
+    initial: emptyPlannedState(),
+    fetch: async () => ({
+      source: "url",
+      arxivId: null,
+      abstract: "",
+      pdfBytes: null,
+      fulltext: ARTICLE_FT,
+      kind: "article",
+      title: "Ingested Title",
+    }),
+    // A digest that stays pending, proving ingestSource returns at the fetch stage.
+    digest: () => new Promise<DigestOutcome>((res) => (releaseDigest = res)),
+  });
+  const p = new PrepPipeline("h", "s", deps);
+  const paper = await p.ingestSource("https://example.test/post");
+  expect(paper.status).toBe("digesting");
+  expect(paper.kind).toBe("article");
+  expect(paper.pages).toBe(1);
+  expect(paper.title).toBe("Ingested Title");
+  // Let the still-pending digest settle so the run loop can finish cleanly.
+  releaseDigest?.({ body: "n", pages: 1, thin: false });
+});
+
+test("ingestSource ingests a user source even before the survey plan is done", async () => {
+  const pending = emptyPlannedState();
+  pending.planStatus = "pending";
+  let planned = false;
+  const { deps } = makeFakes({
+    initial: pending,
+    plan: async () => {
+      planned = true;
+      return JSON.parse(JSON.stringify(PLAN));
+    },
+    fetch: async () => ({
+      source: "url",
+      arxivId: null,
+      abstract: "",
+      pdfBytes: null,
+      fulltext: ARTICLE_FT,
+      kind: "article",
+      title: "T",
+    }),
+  });
+  const p = new PrepPipeline("h", "s", deps);
+  const paper = await p.ingestSource("https://example.test/a");
+  // Fetched and digested without ever running the (expensive) survey plan.
+  expect(paper.status === "digesting" || paper.status === "done").toBe(true);
+  expect(planned).toBe(false);
+});
+
+test("ingestSource rejects a non-https URL via resolveAddition", async () => {
+  const { deps } = makeFakes({ initial: emptyPlannedState() });
+  // Make the fake resolveAddition enforce https like the live one does.
+  deps.resolveAddition = (query) => {
+    if (/^http:\/\//i.test(query)) throw new Error("Only https URLs can be ingested.");
+    return { ...paper("x", []), addedByUser: true, sourceUrl: query };
+  };
+  const p = new PrepPipeline("h", "s", deps);
+  await expect(p.ingestSource("http://insecure.test/x")).rejects.toThrow(/https/);
+});
+
 test("replan and retryPlan are no-ops while the pipeline is running", async () => {
   const clock = makeClock();
   let planCalls = 0;

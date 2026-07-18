@@ -13,6 +13,15 @@ function compactChars(chars: number): string {
   return chars < 1000 ? String(chars) : `${(chars / 1000).toFixed(1)}k`;
 }
 
+// Hostname of a user-pasted source URL, shown as a small provenance hint.
+function sourceHost(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
 // A live "47s · 1.2k chars" hint for an in-flight AI call. Seconds tick locally
 // off the injected startedAt so they advance smoothly between snapshots; chars
 // come from the snapshot. `withUnit` appends " chars" (header) vs. bare (row).
@@ -113,6 +122,11 @@ function PaperRow({
             </span>
             {paper.year && <span className="text-[11px] text-neutral-400">{paper.year}</span>}
             {paper.arxivId && <span className="text-[11px] text-neutral-400">arXiv:{paper.arxivId}</span>}
+            {paper.sourceUrl && (
+              <span className="text-[11px] text-neutral-400" title={paper.sourceUrl}>
+                {sourceHost(paper.sourceUrl)}
+              </span>
+            )}
             {digestActivity && (
               <span className="text-[11px] text-neutral-400">
                 <LivenessHint activity={digestActivity} />
@@ -278,7 +292,7 @@ export default function PrepPanel({
         <div className="flex gap-1.5">
           <input
             className="min-w-0 flex-1 rounded-md border border-[#dcdcdc] px-2 py-1.5 text-[12px] [font:inherit]"
-            placeholder="Add paper (title or arXiv id)"
+            placeholder="Add paper (title, arXiv id, or URL)"
             value={addText}
             onChange={(e) => setAddText(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submitAdd()}

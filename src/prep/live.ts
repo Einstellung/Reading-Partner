@@ -6,17 +6,19 @@
 
 import type { ThinkingLevel } from "@earendil-works/pi-ai";
 import { streamChat, type ProviderId } from "../ai/providers";
-import { ensureFulltext } from "../fulltext/store";
-import type { Fulltext } from "../fulltext/types";
+import { ensureFulltext, saveFulltext } from "../fulltext/store";
+import { FULLTEXT_VERSION, type Fulltext } from "../fulltext/types";
 import { buildFigureCatalog, ensureFigures } from "../figures";
 import { loadSettings, toReasoning } from "../settings";
 import { hashPath } from "../storage";
+import { extractArticle } from "./article";
 import { fetchFromArxiv, normalizeArxivId } from "./arxiv";
 import { fetchFromOpenAlex } from "./openalex";
 import { fetchWithRetry } from "./http";
 import { runDigest } from "./digest";
 import { serializeNote } from "./notes";
 import { parsePlan, planUserMessage, uniqueSlug, PLAN_SYSTEM_PROMPT } from "./plan";
+import { looksLikeHttpUrl, resolveUrlAddition, sniffContentType } from "./url";
 import {
   loadPrepState,
   paperCachePath,
@@ -80,6 +82,70 @@ function callModel(
   );
 }
 
+// Largest source a pasted link may pull; a bigger response is aborted.
+const MAX_SOURCE_BYTES = 30 * 1024 * 1024;
+
+// Fetch a user-pasted URL source (link ingestion, docs/09). GETs the URL,
+// enforces the size cap, sniffs PDF vs HTML, and returns a FetchOutcome whose
+// full text is already extracted and cached — so the chat can read it the moment
+// the fetch stage ends, before digestion. A PDF is stored and text-extracted; an
+// HTML page's main content becomes a single-"page" full text. Throws a clear
+// error on 404 / oversize / an empty article.
+async function fetchSource(surveyHash: string, paper: PrepPaper): Promise<FetchOutcome> {
+  const url = paper.sourceUrl!;
+  const res = await fetchWithRetry(url);
+  if (!res.ok) throw new Error(`could not fetch the link (HTTP ${res.status})`);
+  const declared = Number(res.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_SOURCE_BYTES) {
+    throw new Error(`the source is too large (${Math.round(declared / 1e6)}MB; the limit is 30MB)`);
+  }
+  const buf = await res.arrayBuffer();
+  if (buf.byteLength > MAX_SOURCE_BYTES) {
+    throw new Error(`the source is too large (${Math.round(buf.byteLength / 1e6)}MB; the limit is 30MB)`);
+  }
+  const bytes = new Uint8Array(buf);
+  const cachePath = paperCachePath(surveyHash, paper.slug);
+
+  if (sniffContentType(bytes, res.headers.get("content-type")) === "pdf") {
+    await writePaperPdf(surveyHash, paper.slug, buf);
+    // Extract now so the PDF is readable right after fetch; a no-text-layer PDF
+    // degrades to a thin note in the digest stage (its cache is already written).
+    let ft: Fulltext | null = null;
+    try {
+      ft = await ensureFulltext(cachePath, buf);
+    } catch (e) {
+      console.warn("source pdf extraction failed", e);
+    }
+    return {
+      source: "url",
+      arxivId: null,
+      abstract: "",
+      pdfBytes: buf,
+      fulltext: ft && ft.status === "ok" ? ft : null,
+      kind: "pdf",
+    };
+  }
+
+  const article = extractArticle(new TextDecoder("utf-8").decode(bytes));
+  if (!article.text.trim()) throw new Error("no readable article content at the link");
+  const ft: Fulltext = {
+    version: FULLTEXT_VERSION,
+    status: "ok",
+    pages: [article.text],
+    outline: [],
+  };
+  await saveFulltext(cachePath, ft);
+  return {
+    source: "url",
+    arxivId: null,
+    abstract: "",
+    pdfBytes: null,
+    fulltext: ft,
+    kind: "article",
+    title: article.title ?? undefined,
+  };
+}
+
 function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fulltext): PipelineDeps {
   return {
     loadState: loadPrepState,
@@ -91,6 +157,11 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
     },
 
     async fetchPaper(paper): Promise<FetchOutcome | null> {
+      // A user-pasted URL bypasses the arXiv/OpenAlex/S2 lookup: fetch the link
+      // directly (link ingestion, docs/09). A cached PDF still short-circuits.
+      if (paper.sourceUrl && !(await readPaperPdf(surveyHash, paper.slug))) {
+        return fetchSource(surveyHash, paper);
+      }
       // A previously downloaded PDF (e.g. a digest that failed midway) is reused.
       const cached = await readPaperPdf(surveyHash, paper.slug);
       if (cached) {
@@ -143,22 +214,32 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
     },
 
     async digestPaper(paper, fetched, opts): Promise<DigestOutcome> {
-      // Extract (and cache) the paper's text; an unreadable PDF degrades to a
-      // thin note rather than failing the paper.
+      const isArticle = fetched.kind === "article";
+      // Prefer a full text the fetch already extracted (link ingestion); else
+      // extract (and cache) the PDF's text. An unreadable PDF degrades to a thin
+      // note rather than failing the paper.
       let ft: Fulltext;
-      try {
-        ft = await ensureFulltext(paperCachePath(surveyHash, paper.slug), fetched.pdfBytes!);
-      } catch (e) {
-        console.warn("paper text extraction failed", e);
-        return { body: "", pages: null, thin: true };
+      if (fetched.fulltext) {
+        ft = fetched.fulltext;
+      } else {
+        try {
+          ft = await ensureFulltext(paperCachePath(surveyHash, paper.slug), fetched.pdfBytes!);
+        } catch (e) {
+          console.warn("paper text extraction failed", e);
+          return { body: "", pages: null, thin: true };
+        }
       }
       if (ft.status !== "ok") return { body: "", pages: ft.pages.length, thin: true };
       const model = await resolveModel();
       // The paper's figure catalog (M9), so the note can cite key figures as
-      // [fig:N]. Extraction-only (no vision); a failure just omits the catalog.
-      const figs = await ensureFigures(paperCachePath(surveyHash, paper.slug), fetched.pdfBytes!).catch(
-        () => null,
-      );
+      // [fig:N]. PDF-only (a fetched article has no figures); extraction-only (no
+      // vision); a failure just omits the catalog.
+      const figs =
+        !isArticle && fetched.pdfBytes
+          ? await ensureFigures(paperCachePath(surveyHash, paper.slug), fetched.pdfBytes).catch(
+              () => null,
+            )
+          : null;
       const body = await runDigest({
         paper,
         surveyName,
@@ -167,6 +248,7 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
         signal: opts.signal,
         onProgress: opts.onProgress,
         figureCatalog: figs ? buildFigureCatalog(figs.figures) : "",
+        isArticle,
       });
       return { body, pages: ft.pages.length, thin: false };
     },
@@ -182,6 +264,8 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
           source: paper.source ?? null,
           sourcePages: paper.pages ?? null,
           citedInChapters: paper.citedInChapters,
+          sourceUrl: paper.sourceUrl ?? null,
+          kind: paper.kind ?? null,
         },
         body,
       );
@@ -189,6 +273,10 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
     },
 
     resolveAddition(query, taken): PrepPaper {
+      // A pasted http(s) link ingests as a URL source (link ingestion, docs/09);
+      // resolveUrlAddition throws on a non-https URL. Otherwise it's a title or
+      // arXiv id, as before.
+      if (looksLikeHttpUrl(query.trim())) return resolveUrlAddition(query, taken);
       const arxivId = normalizeArxivId(query);
       const title = arxivId ? `arXiv ${arxivId}` : query.trim();
       return {

@@ -4,6 +4,7 @@
 // whole state machine runs in bun tests with fakes; live.ts provides the real
 // deps (Tauri fs, arXiv/S2, pi-ai).
 
+import type { Fulltext } from "../fulltext/types";
 import { isRateLimitError } from "./http";
 import { abstractNoteBody } from "./notes";
 import { earliestCooldown, nextQueued, normalizeOnLoad } from "./scheduler";
@@ -39,11 +40,19 @@ export interface AiCallOptions {
 }
 
 export interface FetchOutcome {
-  source: "arxiv" | "openalex" | "semantic-scholar" | null;
+  source: "arxiv" | "openalex" | "semantic-scholar" | "url" | null;
   arxivId: string | null;
   abstract: string;
   // Null when no full text could be fetched -> abstract-only note.
   pdfBytes: ArrayBuffer | null;
+  // Link ingestion (docs/09): a pre-extracted full text (a fetched web article,
+  // or a URL PDF whose text was extracted during fetch so it reads immediately).
+  // When set, digest uses it directly instead of parsing pdfBytes.
+  fulltext?: Fulltext | null;
+  // What a user-pasted source turned out to be, and its refined title (from PDF
+  // metadata / the article's <title>). Copied onto the paper after the fetch.
+  kind?: "pdf" | "article";
+  title?: string | null;
 }
 
 export interface DigestOutcome {
@@ -249,10 +258,71 @@ export class PrepPipeline {
   addPaper(query: string): void {
     if (!this.state) return;
     const taken = new Set(this.state.papers.map((p) => p.slug));
-    const paper = this.deps.resolveAddition(query, taken);
+    let paper: PrepPaper;
+    try {
+      paper = this.deps.resolveAddition(query, taken);
+    } catch (e) {
+      // A malformed entry (e.g. a non-https URL) is a no-op rather than a crash.
+      console.warn("could not add paper", e);
+      return;
+    }
     this.state.papers.push(paper);
     void this.persist();
     void this.run();
+  }
+
+  // Ingest a user-pasted URL (docs/09 link ingestion): resolve it to a queued
+  // source, start processing, and resolve once the FETCH stage finishes — the
+  // digest keeps running in the background — so the chat can read the new source
+  // in the same turn. Rejects on a non-https URL. The resolved paper reflects
+  // its post-fetch status (digesting on success, or failed/abstract-only).
+  async ingestSource(url: string): Promise<PrepPaper> {
+    await this.ensureLoaded();
+    const s = this.state!;
+    const taken = new Set(s.papers.map((p) => p.slug));
+    const paper = this.deps.resolveAddition(url, taken); // throws on non-https
+    s.papers.push(paper);
+    await this.persist();
+    const settled = this.awaitFetch(paper.slug);
+    // An active run already picks this up (user papers jump the queue); when
+    // idle, pump the papers loop without triggering a survey (re)plan.
+    void this.pump();
+    return settled;
+  }
+
+  // Resolve when a paper leaves the fetch stage: fetched (now digesting / done /
+  // abstract-only) or failed / cooled down / skipped.
+  private awaitFetch(slug: string): Promise<PrepPaper> {
+    const settled = (p: PrepPaper | undefined): p is PrepPaper =>
+      !!p && p.status !== "queued" && p.status !== "fetching";
+    return new Promise<PrepPaper>((resolve) => {
+      const current = this.state?.papers.find((p) => p.slug === slug);
+      if (settled(current)) {
+        resolve({ ...current });
+        return;
+      }
+      const unsub = this.subscribe(() => {
+        const p = this.state?.papers.find((x) => x.slug === slug);
+        if (settled(p)) {
+          unsub();
+          resolve({ ...p });
+        }
+      });
+    });
+  }
+
+  // Process queued papers if idle, without running the plan stage. Lets a pasted
+  // link start fetching immediately, even before (or without) a survey plan.
+  private async pump(): Promise<void> {
+    if (this.running || !this.state) return;
+    this.running = true;
+    this.notify();
+    try {
+      await this.runPapers();
+    } finally {
+      this.running = false;
+      this.notify();
+    }
   }
 
   // Re-run a failed plan. No-op while running; loads state first if needed. The
@@ -277,6 +347,10 @@ export class PrepPipeline {
   // exhaustion. Callers that don't want to wait fire-and-forget it; a second
   // call while a run is active is a no-op.
   async ensureStarted(): Promise<void> {
+    // Note: when the state is already loaded this must reach `this.run()` in the
+    // same synchronous tick (no await before it) so callers see `running` flip
+    // immediately after a fire-and-forget ensureStarted() — hence the inline
+    // load rather than awaiting the shared ensureLoaded() helper here.
     if (!this.state) {
       const loaded = await this.deps.loadState(this.surveyHash);
       this.state = loaded
@@ -285,6 +359,17 @@ export class PrepPipeline {
       this.notify();
     }
     await this.run();
+  }
+
+  // Load (or create) the state once. Used by ingestSource, which does not need
+  // the synchronous-run guarantee ensureStarted keeps.
+  private async ensureLoaded(): Promise<void> {
+    if (this.state) return;
+    const loaded = await this.deps.loadState(this.surveyHash);
+    this.state = loaded
+      ? normalizeOnLoad(loaded)
+      : createPrepState(this.surveyHash, this.surveyName, this.deps.now());
+    this.notify();
   }
 
   private async run(): Promise<void> {
@@ -350,18 +435,22 @@ export class PrepPipeline {
 
   private async runPapers(): Promise<void> {
     const s = this.state!;
-    if (s.planStatus !== "done") return;
+    // Before the plan is ready only user-added sources are eligible (a pasted
+    // link ingests without waiting for the survey to be planned); nominated
+    // papers wait for the plan. Once planned, everything is in play.
+    const pool = () => (s.planStatus === "done" ? s.papers : s.papers.filter((p) => p.addedByUser));
+    if (s.planStatus !== "done" && pool().length === 0) return;
     // One at a time, re-picking after each finish so chapter changes and
     // user additions reorder the remainder. When only rate-limited papers are
     // left, wait out the earliest cooldown and release the ones whose time has
     // come, rather than exiting the run.
     for (;;) {
-      const paper = nextQueued(s.papers, this.currentChapter, s.chapters.length);
+      const paper = nextQueued(pool(), this.currentChapter, s.chapters.length);
       if (paper) {
         await this.runOne(paper);
         continue;
       }
-      const next = earliestCooldown(s.papers);
+      const next = earliestCooldown(pool());
       if (next === null) return;
       const wait = next - this.deps.now();
       if (wait > 0) await this.deps.sleep(wait);
@@ -418,8 +507,14 @@ export class PrepPipeline {
     paper.source = fetched.source;
     if (fetched.arxivId) paper.arxivId = fetched.arxivId;
     paper.abstract = fetched.abstract || paper.abstract;
+    // Link ingestion: refine the provisional title/kind and set the page count
+    // now (a pre-extracted full text carries it), so add_source can report the
+    // source the moment the fetch stage finishes — before digestion.
+    if (fetched.title) paper.title = fetched.title;
+    if (fetched.kind) paper.kind = fetched.kind;
+    if (fetched.fulltext) paper.pages = fetched.fulltext.pages.length;
 
-    if (!fetched.pdfBytes) {
+    if (!fetched.pdfBytes && !fetched.fulltext) {
       await this.finishThin(paper);
       return;
     }
