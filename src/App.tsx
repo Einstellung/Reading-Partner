@@ -1552,7 +1552,7 @@ export default function App() {
             <button className={BTN} onClick={closeReader}>
               ‹ Library
             </button>
-            <span className="text-[13px] text-[#1b1b1b] overflow-hidden text-ellipsis whitespace-nowrap max-w-[40vw]">
+            <span className="text-[13px] text-[#1b1b1b] overflow-hidden text-ellipsis whitespace-nowrap max-w-[max(160px,calc(50vw-330px))]">
               {activeTopic?.name} <span className="text-[#777] mx-0.5">›</span> {title}
             </span>
             {status && <span className="ml-3 text-xs text-[#b45309]">{status}</span>}
