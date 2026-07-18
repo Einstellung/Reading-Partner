@@ -2,10 +2,11 @@
 // injected into the engine so the reconcile loop runs headless in tests.
 //
 // Sync range (docs/13): the user's own data — reading position, marks, AI
-// threads, topics, per-topic memory, lesson-prep plans and notes, and app
-// settings. Book PDFs travel the separate books channel (content-addressed
-// blobs), never the data channel. Excluded: derived caches (fulltext-*,
-// figures-*, prep-*/pdf and its caches), the local event log, sync's own local
+// threads, topics, per-topic memory, lesson-prep plans and notes, book notes
+// (docs/14), and app settings. Book PDFs travel the separate books channel
+// (content-addressed blobs), never the data channel. Excluded: derived caches
+// (fulltext-*, figures-*, prep-*/pdf and its caches), the local event log,
+// sync's own local
 // files (sync-auth.json, sync-state.json), and credentials.json — plaintext AI
 // provider tokens stay on the device rather than widening their exposure to the
 // user's Drive, and per-device tokens avoid refresh-rotation kicking the other
@@ -60,6 +61,11 @@ export function inSyncRange(path: string): boolean {
     const name = parts[1];
     return name === "state.json" || name.endsWith(".md");
   }
+  // Book notes (docs/14): the plan state and the per-chapter / overview notes.
+  if (top.startsWith("notes-") && parts.length === 2) {
+    const name = parts[1];
+    return name === "state.json" || name.endsWith(".md");
+  }
   return false;
 }
 
@@ -78,7 +84,9 @@ async function walk(dir: string, out: LocalFile[]): Promise<void> {
     const rel = dir ? `${dir}/${e.name}` : e.name;
     if (e.isDirectory) {
       // Only descend into directories that can hold in-range files.
-      if (rel.startsWith("memory-") || rel.startsWith("prep-")) await walk(rel, out);
+      if (rel.startsWith("memory-") || rel.startsWith("prep-") || rel.startsWith("notes-")) {
+        await walk(rel, out);
+      }
       continue;
     }
     if (!e.isFile || !inSyncRange(rel)) continue;

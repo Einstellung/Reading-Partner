@@ -13,7 +13,10 @@ export type EventType =
   | "call-end" // { threadId } — hangup
   | "distill-run" // { threadId, created, updated, deleted }
   | "prep-status" // { slug, status }
-  | "memory-tab-open"; // {}
+  | "memory-tab-open" // {}
+  | "notes-run" // { phase: "start" | "done" | "failed" }
+  | "notes-chapter-regenerate" // { index }
+  | "notes-tab-open"; // {}
 
 export type EventPayload = Record<string, string | number | boolean | null>;
 

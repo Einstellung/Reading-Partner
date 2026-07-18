@@ -88,6 +88,16 @@ import {
 import type { PrepPipeline } from "./prep/pipeline";
 import type { ClassroomNote } from "./prep/classroom";
 import {
+  getNotesPipeline,
+  hasNotesState,
+  peekNotesPipeline,
+  readChapterNote as readNotesChapter,
+  readOverviewNote,
+  type NotesInputs,
+  type NotesSnapshot,
+} from "./notes";
+import type { NotesPipeline } from "./notes/pipeline";
+import {
   buildMemorySnapshot,
   buildMemoryTools,
   distillThread,
@@ -113,6 +123,7 @@ import {
   type FiguresIndex,
 } from "./figures";
 import PrepPanel from "./components/PrepPanel";
+import NotesPanel from "./components/NotesPanel";
 import MemoryPanel from "./components/MemoryPanel";
 import PenToolbar from "./components/PenToolbar";
 import { IconSparkle } from "./components/icons";
@@ -266,6 +277,12 @@ export default function App() {
   // ref only tracks which one the UI is looking at) and its unsubscribe.
   const pipelineRef = useRef<PrepPipeline | null>(null);
   const prepUnsubRef = useRef<(() => void) | null>(null);
+  // The book-notes pipeline attached to the open book (docs/14), its unsubscribe,
+  // and the last-seen plan/overview phases so run start/done/failed log as
+  // transitions.
+  const notesRef = useRef<NotesPipeline | null>(null);
+  const notesUnsubRef = useRef<(() => void) | null>(null);
+  const notesPhaseRef = useRef<{ plan: string; overview: string }>({ plan: "pending", overview: "pending" });
   // Event-log instrumentation (M8). Dwell: the page being read and when it was
   // entered. lastCallThread: the thread a call-start was last logged for.
   // prepStatuses: paper statuses already seen, so only transitions are logged.
@@ -315,6 +332,7 @@ export default function App() {
   const [classroomOn, setClassroomOn] = useState(false);
   const [prepSnap, setPrepSnap] = useState<PrepSnapshot | null>(null);
   const [selectedPrepSlug, setSelectedPrepSlug] = useState<string | null>(null);
+  const [notesSnap, setNotesSnap] = useState<NotesSnapshot | null>(null);
   const [settings, setSettings] = useState<Settings>({ ...DEFAULT_SETTINGS });
   const [showSettings, setShowSettings] = useState(false);
   const [providersInfo, setProvidersInfo] = useState<ProviderInfo[]>([]);
@@ -714,6 +732,89 @@ export default function App() {
   const prepStart = useCallback(() => void startPrep(), [startPrep]);
   const prepRetryPlan = useCallback(() => pipelineRef.current?.retryPlan(), []);
   const prepReplan = useCallback(() => pipelineRef.current?.replan(), []);
+
+  // Attach the open book's notes pipeline to the UI (docs/14): subscribe the
+  // panel and (re)start the background run. Book-specific inputs (buffer, figure
+  // index, annotations) are captured now so a background run reads this book's
+  // data, not whatever book is open later. Idempotent — the pipeline is a module
+  // singleton per book, so re-attaching never restarts finished work.
+  const attachNotes = useCallback((bookId: string, name: string, ft: Fulltext) => {
+    const buffer = bufferRef.current;
+    const figuresPromise = currentFiguresRef.current;
+    const annMap = annsRef.current;
+    const inputs: NotesInputs = {
+      fulltext: ft,
+      getBuffer: () => buffer,
+      getFigures: async () => (await figuresPromise)?.figures ?? [],
+      getEmphasisSignals: () =>
+        [...annMap.values()]
+          .map((a) => ({
+            page: annotationPage(a as { position?: { pageIndex?: number } }) ?? 0,
+            text: typeof a.text === "string" ? a.text : "",
+            comment: typeof a.comment === "string" ? a.comment : undefined,
+            discussed: !!a.aiThreadId,
+          }))
+          .filter((s) => s.page > 0 && s.text.trim() !== ""),
+    };
+    const pipeline = getNotesPipeline(bookId, name, inputs);
+    notesRef.current = pipeline;
+    notesUnsubRef.current?.();
+    notesPhaseRef.current = { plan: "pending", overview: "pending" };
+    const sync = () => {
+      const snap = pipeline.snapshot();
+      const topicId = ctxRef.current.topicId;
+      const st = snap.state;
+      if (st && topicId) {
+        const prev = notesPhaseRef.current;
+        if (st.overviewStatus === "done" && prev.overview !== "done") {
+          logEvent(topicId, "notes-run", { phase: "done" });
+        }
+        if (st.planStatus === "failed" && prev.plan !== "failed") {
+          logEvent(topicId, "notes-run", { phase: "failed" });
+        }
+        notesPhaseRef.current = { plan: st.planStatus, overview: st.overviewStatus };
+      }
+      setNotesSnap(snap);
+    };
+    notesUnsubRef.current = pipeline.subscribe(sync);
+    sync();
+    void pipeline.ensureStarted();
+  }, []);
+
+  // The Notes tab's Generate / Resume button.
+  const generateNotes = useCallback(async () => {
+    const bookId = pathRef.current;
+    const name = ctxRef.current.fileName;
+    if (!bookId) return;
+    const ft = await currentFulltextRef.current;
+    if (pathRef.current !== bookId) return; // switched books while extracting
+    if (!ft || ft.status !== "ok") {
+      pushToast("warn", "This book has no readable text layer, so notes can't be generated.");
+      return;
+    }
+    const topicId = ctxRef.current.topicId;
+    if (topicId) logEvent(topicId, "notes-run", { phase: "start" });
+    attachNotes(bookId, name, ft);
+  }, [attachNotes, pushToast]);
+
+  const notesGenerate = useCallback(() => void generateNotes(), [generateNotes]);
+  const notesStop = useCallback(() => notesRef.current?.stop(), []);
+  const notesRetryPlan = useCallback(() => notesRef.current?.retryPlan(), []);
+  const notesRetryChapter = useCallback((index: number) => notesRef.current?.retryChapter(index), []);
+  const notesRegenerateChapter = useCallback((index: number, instruction?: string) => {
+    const topicId = ctxRef.current.topicId;
+    if (topicId) logEvent(topicId, "notes-chapter-regenerate", { index });
+    notesRef.current?.regenerateChapter(index, instruction);
+  }, []);
+  const notesRegenerateOverview = useCallback(() => notesRef.current?.regenerateOverview(), []);
+  const loadNotesOverview = useCallback(() => {
+    const bookId = pathRef.current;
+    return bookId ? readOverviewNote(bookId) : Promise.resolve(null);
+  }, []);
+  const loadNotesChapter = useCallback((index: number) => {
+    const bookId = pathRef.current;
+    return bookId ? readNotesChapter(bookId, index) : Promise.resolve(null);
+  }, []);
 
   // Run one assistant turn for a thread: assemble the reading context, stream the
   // reply into the bubble, persist on done. Stable (reads refs). No-ops (leaving
@@ -1147,6 +1248,13 @@ export default function App() {
       prepUnsubRef.current = null;
       pipelineRef.current = null;
       setPrepSnap(null);
+      // Notes are per book too; detach the previous book's panel (the pipeline
+      // keeps running in the background as a module singleton).
+      notesUnsubRef.current?.();
+      notesUnsubRef.current = null;
+      notesRef.current = null;
+      notesPhaseRef.current = { plan: "pending", overview: "pending" };
+      setNotesSnap(null);
       // Extract the full text in the background so the AI can see the book
       // (M6). Fire-and-forget: never blocks rendering. Extraction's pdf.js
       // transfers its buffer to a worker (detaching it), so extraction gets its
@@ -1188,6 +1296,15 @@ export default function App() {
           } catch (e) {
             console.warn("failed to resume lesson prep", e);
           }
+          // Resume book notes from persisted state (docs/14), or re-attach a
+          // pipeline already running.
+          try {
+            if (peekNotesPipeline(bookId) || (await hasNotesState(bookId))) {
+              if (pathRef.current === bookId) attachNotes(bookId, name, ft);
+            }
+          } catch (e) {
+            console.warn("failed to resume book notes", e);
+          }
         }
       });
 
@@ -1203,7 +1320,7 @@ export default function App() {
       });
       setTitle(name);
     },
-    [pushToast, attachPipeline],
+    [pushToast, attachPipeline, attachNotes],
   );
 
   // Open a topic file. If its book id is known and the library holds the
@@ -1767,6 +1884,7 @@ export default function App() {
                 setSidebarOpen(false);
               } else {
                 if (t === "memory" && activeTopic) logEvent(activeTopic.id, "memory-tab-open");
+                if (t === "notes" && activeTopic) logEvent(activeTopic.id, "notes-tab-open");
                 setSidebarTab(t);
                 setSidebarOpen(true);
               }
@@ -1790,6 +1908,19 @@ export default function App() {
                 onRetryPlan={prepRetryPlan}
                 onReplan={prepReplan}
                 selectedSlug={selectedPrepSlug}
+              />
+            }
+            notesPanel={
+              <NotesPanel
+                snapshot={notesSnap}
+                loadOverview={loadNotesOverview}
+                loadChapter={loadNotesChapter}
+                onGenerate={notesGenerate}
+                onStop={notesStop}
+                onRetryPlan={notesRetryPlan}
+                onRetryChapter={notesRetryChapter}
+                onRegenerateChapter={notesRegenerateChapter}
+                onRegenerateOverview={notesRegenerateOverview}
               />
             }
             memoryPanel={<MemoryPanel entries={memEntries} lastDistilledAt={memLastDistill} />}
