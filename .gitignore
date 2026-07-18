@@ -35,3 +35,6 @@ npm-debug.log*
 # never reloads the user's dev session.
 .claude/
 .playwright-mcp/
+
+# Legacy zotero reader build leftovers must never enter the repo
+/public/reader/
