@@ -4,11 +4,12 @@
 // the app's lifetime, so prep keeps running in the background across
 // classroom toggles.
 
+import type { ThinkingLevel } from "@earendil-works/pi-ai";
 import { streamChat, type ProviderId } from "../ai/providers";
 import { ensureFulltext } from "../fulltext/store";
 import type { Fulltext } from "../fulltext/types";
 import { buildFigureCatalog, ensureFigures } from "../figures";
-import { loadSettings } from "../settings";
+import { loadSettings, toReasoning } from "../settings";
 import { hashPath } from "../storage";
 import { fetchFromArxiv, normalizeArxivId } from "./arxiv";
 import { fetchFromOpenAlex } from "./openalex";
@@ -29,12 +30,20 @@ import type { DigestOutcome, FetchOutcome, PipelineDeps } from "./pipeline";
 import { PrepPipeline } from "./pipeline";
 import type { PrepPaper } from "./types";
 
-async function resolveModel(): Promise<{ providerId: ProviderId; modelId: string }> {
+async function resolveModel(): Promise<{
+  providerId: ProviderId;
+  modelId: string;
+  reasoning: ThinkingLevel | undefined;
+}> {
   const s = await loadSettings();
   if (!s.defaultProviderId || !s.defaultModelId) {
     throw new Error("no default AI provider configured (Settings)");
   }
-  return { providerId: s.defaultProviderId as ProviderId, modelId: s.defaultModelId };
+  return {
+    providerId: s.defaultProviderId as ProviderId,
+    modelId: s.defaultModelId,
+    reasoning: toReasoning(s.prepThinking),
+  };
 }
 
 // One plain (tool-less) model call, promisified. onProgress reports the
@@ -49,16 +58,21 @@ function callModel(
     (model) =>
       new Promise<string>((resolve, reject) => {
         let chars = 0;
+        // Both visible text and thinking count as liveness, so a model that
+        // thinks for a long stretch before answering isn't aborted as stalled.
+        const bump = (t: string) => {
+          chars += t.length;
+          opts.onProgress(chars);
+        };
         void streamChat({
           providerId: model.providerId,
           modelId: model.modelId,
           systemPrompt,
           messages: [{ role: "user", text: userText }],
           signal: opts.signal,
-          onDelta: (t) => {
-            chars += t.length;
-            opts.onProgress(chars);
-          },
+          reasoning: model.reasoning,
+          onDelta: bump,
+          onThinking: bump,
           onDone: resolve,
           onError: (m) => reject(new Error(m)),
         });

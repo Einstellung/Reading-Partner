@@ -6,7 +6,16 @@
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
 import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
 import { deepseekProvider } from "@earendil-works/pi-ai/providers/deepseek";
-import type { Message, Provider } from "@earendil-works/pi-ai";
+import type {
+	Api,
+	AssistantMessageEventStream,
+	Context,
+	Message,
+	Model,
+	Provider,
+	SimpleStreamOptions,
+	ThinkingLevel,
+} from "@earendil-works/pi-ai";
 import { getValidAnthropicAuth } from "./anthropic-oauth";
 import { loadCredentials, saveCredentials } from "./credentials";
 
@@ -34,7 +43,15 @@ export interface StreamChatOptions {
 	systemPrompt?: string;
 	messages: ChatMessage[];
 	signal?: AbortSignal;
+	// Extended-thinking effort. undefined = off. Passed to pi-ai's streamSimple,
+	// which maps it per provider and ignores it on models without reasoning. We
+	// also omit it up front when the target model's metadata says reasoning:false.
+	reasoning?: ThinkingLevel;
 	onDelta(text: string): void;
+	// Reasoning/thinking deltas, when the model streams them. Kept separate from
+	// onDelta so callers never render thinking into the visible reply; prep wires
+	// it as a watchdog liveness signal so a long think isn't seen as a stall.
+	onThinking?(delta: string): void;
 	onDone(fullText: string): void;
 	onError(message: string): void;
 }
@@ -114,8 +131,59 @@ export function toPiMessages(messages: ChatMessage[]): Message[] {
 	});
 }
 
+// The simple-stream contract, matched by Provider.streamSimple and by a scripted
+// fake in tests. Injected so the streaming core runs without a real provider.
+export type SimpleStreamFn = (
+	model: Model<Api>,
+	context: Context,
+	options: SimpleStreamOptions,
+) => AssistantMessageEventStream;
+
+export interface StreamChatCoreParams {
+	stream: SimpleStreamFn;
+	model: Model<Api>;
+	apiKey?: string;
+	systemPrompt?: string;
+	// Already converted to pi's Message shape.
+	messages: Message[];
+	signal?: AbortSignal;
+	// Already gated against the model's reasoning support; undefined = off.
+	reasoning?: ThinkingLevel;
+	onDelta(text: string): void;
+	onThinking?(delta: string): void;
+	onDone(fullText: string): void;
+	onError(message: string): void;
+}
+
+// Provider-injected streaming core. text_delta builds the visible reply;
+// thinking_delta is routed only to onThinking so raw thinking never leaks into
+// `full`. reasoning rides the streamSimple options (undefined omits thinking).
+export async function streamChatCore(params: StreamChatCoreParams): Promise<void> {
+	const { stream, model, apiKey, systemPrompt, messages, signal, reasoning } = params;
+	const { onDelta, onThinking, onDone, onError } = params;
+	try {
+		const s = stream(model, { systemPrompt, messages }, { apiKey, signal, reasoning });
+		let full = "";
+		for await (const ev of s) {
+			if (ev.type === "text_delta") {
+				full += ev.delta;
+				onDelta(ev.delta);
+			} else if (ev.type === "thinking_delta") {
+				onThinking?.(ev.delta);
+			} else if (ev.type === "error") {
+				onError(ev.error.errorMessage || "stream error");
+				return;
+			}
+		}
+		onDone(full);
+	} catch (e) {
+		onError(e instanceof Error ? e.message : String(e));
+	}
+}
+
 export async function streamChat(options: StreamChatOptions): Promise<void> {
-	const { providerId, modelId, systemPrompt, messages, signal, onDelta, onDone, onError } = options;
+	const { providerId, modelId, systemPrompt, messages, signal, reasoning } = options;
+	const { onDelta, onThinking, onDone, onError } = options;
 	try {
 		const provider = providers[providerId];
 		const model = provider.getModels().find((m) => m.id === modelId);
@@ -130,23 +198,20 @@ export async function streamChat(options: StreamChatOptions): Promise<void> {
 		}
 
 		const apiKey = await resolveApiKey(providerId);
-		const stream = provider.stream(
-			model,
-			{ systemPrompt, messages: toPiMessages(messages) },
-			{ apiKey, signal },
-		);
-
-		let full = "";
-		for await (const ev of stream) {
-			if (ev.type === "text_delta") {
-				full += ev.delta;
-				onDelta(ev.delta);
-			} else if (ev.type === "error") {
-				onError(ev.error.errorMessage || "stream error");
-				return;
-			}
-		}
-		onDone(full);
+		await streamChatCore({
+			stream: (m, ctx, opts) => provider.streamSimple(m, ctx, opts),
+			model: model as Model<Api>,
+			apiKey,
+			systemPrompt,
+			messages: toPiMessages(messages),
+			signal,
+			// Silently omit reasoning on models that don't support it.
+			reasoning: reasoning && model.reasoning ? reasoning : undefined,
+			onDelta,
+			onThinking,
+			onDone,
+			onError,
+		});
 	} catch (e) {
 		onError(e instanceof Error ? e.message : String(e));
 	}

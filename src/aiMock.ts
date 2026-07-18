@@ -23,6 +23,9 @@ export interface StreamChatOptions {
   systemPrompt?: string;
   messages: ChatMessage[];
   signal?: AbortSignal;
+  // Accepted for parity with the real streamChat; the mock ignores them.
+  reasoning?: string;
+  onThinking?(delta: string): void;
   onDelta(text: string): void;
   onDone(fullText: string): void;
   onError(message: string): void;

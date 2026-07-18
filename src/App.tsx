@@ -52,7 +52,7 @@ import {
 } from "./threads";
 import { compressImage, compressImageData, type CompressedImage } from "./ai/image-utils";
 import { isTauri, readClipboardImage } from "./clipboard";
-import { loadSettings, onSettingsSaveError, saveSettings, type Settings } from "./settings";
+import { DEFAULT_SETTINGS, loadSettings, onSettingsSaveError, saveSettings, toReasoning, type Settings } from "./settings";
 import { buildSystemPrompt, type BooklistItem } from "./context";
 import {
   installFetchBridge,
@@ -231,7 +231,7 @@ export default function App() {
   // Mirror of the resolved figure list for the stable onCitation callback.
   const figuresRef = useRef<Figure[]>([]);
   // Refs read by the stable runTurn callback (avoids dependency churn).
-  const settingsRef = useRef<Settings>({ defaultProviderId: null, defaultModelId: null, semanticScholarApiKey: null });
+  const settingsRef = useRef<Settings>({ ...DEFAULT_SETTINGS });
   const ctxRef = useRef<{
     topicId: string | null;
     topicName: string;
@@ -299,7 +299,7 @@ export default function App() {
   const [classroomOn, setClassroomOn] = useState(false);
   const [prepSnap, setPrepSnap] = useState<PrepSnapshot | null>(null);
   const [selectedPrepSlug, setSelectedPrepSlug] = useState<string | null>(null);
-  const [settings, setSettings] = useState<Settings>({ defaultProviderId: null, defaultModelId: null, semanticScholarApiKey: null });
+  const [settings, setSettings] = useState<Settings>({ ...DEFAULT_SETTINGS });
   const [showSettings, setShowSettings] = useState(false);
   const [providersInfo, setProvidersInfo] = useState<ProviderInfo[]>([]);
   // Failure messages (save/load/network errors) live here, not in `status` —
@@ -861,6 +861,7 @@ export default function App() {
         messages: apiMessages,
         tools,
         signal: controller.signal,
+        reasoning: toReasoning(s.chatThinking),
         onDelta: (chunk) => {
           partialRef.current += chunk;
           patch((m) => ({ ...m, text: m.text + chunk }), ts);

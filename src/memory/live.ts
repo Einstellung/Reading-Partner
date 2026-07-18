@@ -12,9 +12,10 @@ import {
   remove,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
+import type { ThinkingLevel } from "@earendil-works/pi-ai";
 import { runAgentTurn } from "../ai/agent";
 import type { ProviderId } from "../ai/providers";
-import { loadSettings } from "../settings";
+import { loadSettings, toReasoning } from "../settings";
 import { logEvent } from "../events";
 import { FileMemoryAdapter, type MemoryAdapter } from "./adapter";
 import { isoDate } from "./files";
@@ -99,12 +100,20 @@ export interface DistillThreadOptions {
 const distilledCounts = new Map<string, number>();
 const inFlight = new Set<string>();
 
-async function resolveModel(): Promise<{ providerId: ProviderId; modelId: string }> {
+async function resolveModel(): Promise<{
+  providerId: ProviderId;
+  modelId: string;
+  reasoning: ThinkingLevel | undefined;
+}> {
   const s = await loadSettings();
   if (!s.defaultProviderId || !s.defaultModelId) {
     throw new Error("no default AI provider configured (Settings)");
   }
-  return { providerId: s.defaultProviderId as ProviderId, modelId: s.defaultModelId };
+  return {
+    providerId: s.defaultProviderId as ProviderId,
+    modelId: s.defaultModelId,
+    reasoning: toReasoning(s.chatThinking),
+  };
 }
 
 // One silent distillation turn for a finished (or long-running) thread.
@@ -149,6 +158,7 @@ export async function distillThread(
             systemPrompt,
             messages: [{ role: "user", text: userText }],
             tools,
+            reasoning: model.reasoning,
             onDelta: () => {},
             onToolStart: () => {},
             onToolEnd: () => {},

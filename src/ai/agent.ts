@@ -21,7 +21,8 @@ import type {
 	Context,
 	Message,
 	Model,
-	StreamOptions,
+	SimpleStreamOptions,
+	ThinkingLevel,
 	Tool,
 	ToolCall,
 	ToolResultMessage,
@@ -71,6 +72,9 @@ export interface AgentToolEnd {
 
 export interface AgentCallbacks {
 	onDelta(text: string): void;
+	// Reasoning/thinking deltas, kept separate from onDelta so thinking is never
+	// rendered as the reply; the unattended digest wires it as watchdog liveness.
+	onThinking?(delta: string): void;
 	onToolStart(info: AgentToolStart): void;
 	onToolEnd(info: AgentToolEnd): void;
 	onDone(finalText: string): void;
@@ -84,6 +88,9 @@ export interface RunAgentTurnOptions extends AgentCallbacks {
 	messages: ChatMessage[];
 	tools: AgentTool[];
 	signal?: AbortSignal;
+	// Extended-thinking effort. undefined = off. Omitted silently on models whose
+	// metadata says reasoning:false.
+	reasoning?: ThinkingLevel;
 	// Max streamed model turns that request tools before the loop gives up.
 	// Default 8. Exceeding it surfaces a clear error through onError.
 	maxRounds?: number;
@@ -113,7 +120,7 @@ function toolCalls(message: AssistantMessage): ToolCall[] {
 export type StreamFn = (
 	model: Model<Api>,
 	context: Context,
-	options: StreamOptions,
+	options: SimpleStreamOptions,
 ) => AssistantMessageEventStream;
 
 export interface AgentLoopParams extends AgentCallbacks {
@@ -125,6 +132,8 @@ export interface AgentLoopParams extends AgentCallbacks {
 	messages: Message[];
 	tools: AgentTool[];
 	signal?: AbortSignal;
+	// Already gated against the model's reasoning support; undefined = off.
+	reasoning?: ThinkingLevel;
 	maxRounds: number;
 }
 
@@ -132,8 +141,8 @@ export interface AgentLoopParams extends AgentCallbacks {
 // (mid-stream or between tool calls) stop the loop silently — the caller raised
 // the signal, so it already knows; no onDone/onError fires.
 export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
-	const { stream, model, apiKey, systemPrompt, tools, signal, maxRounds } = params;
-	const { onDelta, onToolStart, onToolEnd, onDone, onError } = params;
+	const { stream, model, apiKey, systemPrompt, tools, signal, reasoning, maxRounds } = params;
+	const { onDelta, onThinking, onToolStart, onToolEnd, onDone, onError } = params;
 
 	const piTools: Tool[] = tools.map(({ name, description, parameters }) => ({
 		name,
@@ -149,12 +158,14 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 			if (signal?.aborted) return;
 
 			const context: Context = { systemPrompt, messages, tools: piTools };
-			const s = stream(model, context, { apiKey, signal });
+			const s = stream(model, context, { apiKey, signal, reasoning });
 
 			let final: AssistantMessage | undefined;
 			for await (const ev of s) {
 				if (ev.type === "text_delta") {
 					onDelta(ev.delta);
+				} else if (ev.type === "thinking_delta") {
+					onThinking?.(ev.delta);
 				} else if (ev.type === "done") {
 					final = ev.message;
 				} else if (ev.type === "error") {
@@ -244,8 +255,10 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
 		messages,
 		tools,
 		signal,
+		reasoning,
 		maxRounds = DEFAULT_MAX_ROUNDS,
 		onDelta,
+		onThinking,
 		onToolStart,
 		onToolEnd,
 		onDone,
@@ -267,15 +280,18 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
 		const apiKey = await resolveApiKey(providerId);
 
 		await runAgentLoop({
-			stream: (m, ctx, opts) => provider.stream(m, ctx, opts),
+			stream: (m, ctx, opts) => provider.streamSimple(m, ctx, opts),
 			model: model as Model<Api>,
 			apiKey,
 			systemPrompt,
 			messages: toPiMessages(messages),
 			tools,
 			signal,
+			// Silently omit reasoning on models that don't support it.
+			reasoning: reasoning && model.reasoning ? reasoning : undefined,
 			maxRounds,
 			onDelta,
+			onThinking,
 			onToolStart,
 			onToolEnd,
 			onDone,

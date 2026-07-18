@@ -4,7 +4,7 @@
 // pages) skip the loop and get their full text inline in one call. Pure parts
 // (prompts, tool building, thin-note body) are exported for tests.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type, type ThinkingLevel } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../ai/agent";
 import { runAgentTurn } from "../ai/agent";
 import { streamChat, type ProviderId } from "../ai/providers";
@@ -100,6 +100,8 @@ export function buildDigestTools(ft: Fulltext): AgentTool[] {
 export interface DigestModel {
   providerId: ProviderId;
   modelId: string;
+  // Extended-thinking effort for the digest call. undefined = off.
+  reasoning?: ThinkingLevel;
 }
 
 // Run the digestion call(s) and resolve with the note body. Errors reject.
@@ -121,10 +123,13 @@ export function runDigest(params: {
 
   return new Promise<string>((resolve, reject) => {
     let chars = 0;
+    // Visible text and thinking both count as liveness, so a long think before
+    // the note starts isn't mistaken for a stall by the pipeline watchdog.
     const onDelta = (text: string) => {
       chars += text.length;
       onProgress?.(chars);
     };
+    const onThinking = onDelta;
     const onDone = (text: string) => {
       const t = text.trim();
       if (t) resolve(t);
@@ -139,7 +144,9 @@ export function runDigest(params: {
         systemPrompt,
         messages: [{ role: "user", text: inlineDigestMessage(fulltext) }],
         signal,
+        reasoning: model.reasoning,
         onDelta,
+        onThinking,
         onDone,
         onError,
       });
@@ -151,8 +158,10 @@ export function runDigest(params: {
         messages: [{ role: "user", text: loopDigestMessage(fulltext) }],
         tools: buildDigestTools(fulltext),
         signal,
+        reasoning: model.reasoning,
         maxRounds: DIGEST_MAX_ROUNDS,
         onDelta,
+        onThinking,
         onToolStart: () => {},
         onToolEnd: () => {},
         onDone,
