@@ -5,6 +5,15 @@
 // deps (Tauri fs, arXiv/S2, pi-ai).
 
 import type { Fulltext } from "../fulltext/types";
+import {
+  DEFAULT_MAX_ATTEMPTS,
+  DEFAULT_RETRY_DELAY_MS,
+  DEFAULT_WATCHDOG_MS,
+  resolveWatchdogConfig,
+  runWithWatchdog,
+  type AiCallOptions,
+  type WatchdogConfig,
+} from "../ai/watchdog";
 import { isRateLimitError } from "./http";
 import { abstractNoteBody } from "./notes";
 import { earliestCooldown, nextQueued, normalizeOnLoad } from "./scheduler";
@@ -14,30 +23,14 @@ import { createPrepState, type PrepPaper, type PrepState } from "./types";
 // round. After the last one is spent, another 429 fails the paper.
 const COOLDOWN_MS = [60_000, 300_000, 900_000];
 
-// Long AI calls (plan, digest) stream for minutes; the stream can silently cut
-// mid-response. A watchdog aborts a call that goes WATCHDOG_MS with no delta and
-// retries it up to MAX_ATTEMPTS times total (initial + retries), waiting
-// RETRY_DELAY_MS between attempts. Overridable per-pipeline for tests.
-export const DEFAULT_WATCHDOG_MS = 60_000;
-export const DEFAULT_MAX_ATTEMPTS = 3;
-export const DEFAULT_RETRY_DELAY_MS = 2_000;
+// The stall-watchdog defaults, re-exported for callers that tuned them before.
+export { DEFAULT_WATCHDOG_MS, DEFAULT_MAX_ATTEMPTS, DEFAULT_RETRY_DELAY_MS };
+export type { AiCallOptions };
 
 // Cap on how often streaming progress re-renders React (~4/s).
 const ACTIVITY_NOTIFY_MS = 250;
 
-export interface PipelineConfig {
-  watchdogMs: number;
-  maxAttempts: number;
-  retryDelayMs: number;
-}
-
-// The invoke contract the watchdog hands to a long AI-call dep: an abort signal
-// it must honor, and a progress callback it fires with the cumulative received
-// character count as deltas arrive.
-export interface AiCallOptions {
-  signal: AbortSignal;
-  onProgress(chars: number): void;
-}
+export type PipelineConfig = WatchdogConfig;
 
 export interface FetchOutcome {
   source: "arxiv" | "openalex" | "semantic-scholar" | "url" | null;
@@ -123,11 +116,7 @@ export class PrepPipeline {
     private readonly deps: PipelineDeps,
     config: Partial<PipelineConfig> = {},
   ) {
-    this.config = {
-      watchdogMs: config.watchdogMs ?? DEFAULT_WATCHDOG_MS,
-      maxAttempts: config.maxAttempts ?? DEFAULT_MAX_ATTEMPTS,
-      retryDelayMs: config.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS,
-    };
+    this.config = resolveWatchdogConfig(config);
   }
 
   subscribe(fn: () => void): () => void {
@@ -172,51 +161,23 @@ export class PrepPipeline {
     }
   }
 
-  // Run one long AI call under a stall watchdog with auto-retry. The watchdog is
-  // an AbortController whose timer resets on every delta; WATCHDOG_MS of silence
-  // aborts the stream. A stall abort or any stream error is transient: retry a
-  // fresh attempt (new watchdog) up to maxAttempts, waiting retryDelayMs between
-  // attempts. Only the last error, after all attempts, propagates. Activity is
-  // published throughout and cleared on the way out.
+  // Run one long AI call under the shared stall watchdog (src/ai/watchdog),
+  // publishing its liveness as prep activity and clearing it on the way out.
   private async callWithWatchdog<T>(
     info: { kind: PrepActivity["kind"]; slug?: string },
     invoke: (opts: AiCallOptions) => Promise<T>,
   ): Promise<T> {
-    const startedAt = this.deps.now();
-    const { watchdogMs, maxAttempts, retryDelayMs } = this.config;
-    let lastErr: unknown;
     try {
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        const controller = new AbortController();
-        this.setActivity({ ...info, startedAt, chars: 0, attempt, attempts: maxAttempts });
-
-        let cancelTimer = this.deps.setTimer(watchdogMs, () => controller.abort());
-        const rearm = () => {
-          cancelTimer();
-          cancelTimer = this.deps.setTimer(watchdogMs, () => controller.abort());
-        };
-        const onProgress = (chars: number) => {
-          rearm();
-          this.bumpActivity(chars);
-        };
-        // The loop-based digest swallows aborts silently (no onError), so race
-        // the call against an explicit abort rejection to guarantee progress.
-        const aborted = new Promise<never>((_, reject) => {
-          const fail = () => reject(new Error("stalled: no response for 60s"));
-          if (controller.signal.aborted) fail();
-          else controller.signal.addEventListener("abort", fail, { once: true });
-        });
-
-        try {
-          return await Promise.race([invoke({ signal: controller.signal, onProgress }), aborted]);
-        } catch (e) {
-          lastErr = e;
-          if (attempt < maxAttempts) await this.deps.sleep(retryDelayMs);
-        } finally {
-          cancelTimer();
-        }
-      }
-      throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+      return await runWithWatchdog(
+        invoke,
+        this.config,
+        { now: this.deps.now, sleep: this.deps.sleep, setTimer: this.deps.setTimer },
+        {
+          onAttempt: ({ attempt, attempts, startedAt }) =>
+            this.setActivity({ ...info, startedAt, chars: 0, attempt, attempts }),
+          onProgress: (chars) => this.bumpActivity(chars),
+        },
+      );
     } finally {
       this.setActivity(null);
     }
