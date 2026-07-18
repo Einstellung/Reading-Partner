@@ -10,7 +10,6 @@ import { ensureFulltext, saveFulltext } from "../fulltext/store";
 import { FULLTEXT_VERSION, type Fulltext } from "../fulltext/types";
 import { buildFigureCatalog, ensureFigures } from "../figures";
 import { loadSettings, toReasoning } from "../settings";
-import { hashPath } from "../storage";
 import { extractArticle } from "./article";
 import { fetchFromArxiv, normalizeArxivId } from "./arxiv";
 import { fetchFromOpenAlex } from "./openalex";
@@ -21,7 +20,7 @@ import { parsePlan, planUserMessage, uniqueSlug, PLAN_SYSTEM_PROMPT } from "./pl
 import { looksLikeHttpUrl, resolveUrlAddition, sniffContentType } from "./url";
 import {
   loadPrepState,
-  paperCachePath,
+  paperFulltextHash,
   readPaperPdf,
   savePrepState,
   writePaperPdf,
@@ -104,7 +103,7 @@ async function fetchSource(surveyHash: string, paper: PrepPaper): Promise<FetchO
     throw new Error(`the source is too large (${Math.round(buf.byteLength / 1e6)}MB; the limit is 30MB)`);
   }
   const bytes = new Uint8Array(buf);
-  const cachePath = paperCachePath(surveyHash, paper.slug);
+  const cacheKey = paperFulltextHash(surveyHash, paper.slug);
 
   if (sniffContentType(bytes, res.headers.get("content-type")) === "pdf") {
     await writePaperPdf(surveyHash, paper.slug, buf);
@@ -112,7 +111,7 @@ async function fetchSource(surveyHash: string, paper: PrepPaper): Promise<FetchO
     // degrades to a thin note in the digest stage (its cache is already written).
     let ft: Fulltext | null = null;
     try {
-      ft = await ensureFulltext(cachePath, buf);
+      ft = await ensureFulltext(cacheKey, buf);
     } catch (e) {
       console.warn("source pdf extraction failed", e);
     }
@@ -134,7 +133,7 @@ async function fetchSource(surveyHash: string, paper: PrepPaper): Promise<FetchO
     pages: [article.text],
     outline: [],
   };
-  await saveFulltext(cachePath, ft);
+  await saveFulltext(cacheKey, ft);
   return {
     source: "url",
     arxivId: null,
@@ -223,7 +222,7 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
         ft = fetched.fulltext;
       } else {
         try {
-          ft = await ensureFulltext(paperCachePath(surveyHash, paper.slug), fetched.pdfBytes!);
+          ft = await ensureFulltext(paperFulltextHash(surveyHash, paper.slug), fetched.pdfBytes!);
         } catch (e) {
           console.warn("paper text extraction failed", e);
           return { body: "", pages: null, thin: true };
@@ -236,7 +235,7 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
       // vision); a failure just omits the catalog.
       const figs =
         !isArticle && fetched.pdfBytes
-          ? await ensureFigures(paperCachePath(surveyHash, paper.slug), fetched.pdfBytes).catch(
+          ? await ensureFigures(paperFulltextHash(surveyHash, paper.slug), fetched.pdfBytes).catch(
               () => null,
             )
           : null;
@@ -306,26 +305,25 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
 const pipelines = new Map<string, PrepPipeline>();
 
 export function getPrepPipeline(
-  surveyPath: string,
+  surveyHash: string,
   surveyName: string,
   surveyFulltext: Fulltext,
 ): PrepPipeline {
-  const hash = hashPath(surveyPath);
-  let p = pipelines.get(hash);
+  let p = pipelines.get(surveyHash);
   if (!p) {
-    p = new PrepPipeline(hash, surveyName, makeDeps(hash, surveyName, surveyFulltext));
-    pipelines.set(hash, p);
+    p = new PrepPipeline(surveyHash, surveyName, makeDeps(surveyHash, surveyName, surveyFulltext));
+    pipelines.set(surveyHash, p);
   }
   return p;
 }
 
 // A pipeline that may already exist for a book (no creation): lets the app
 // re-attach UI after switching books without restarting anything.
-export function peekPrepPipeline(surveyPath: string): PrepPipeline | null {
-  return pipelines.get(hashPath(surveyPath)) ?? null;
+export function peekPrepPipeline(surveyHash: string): PrepPipeline | null {
+  return pipelines.get(surveyHash) ?? null;
 }
 
 // Whether a survey has prep state on disk (drives auto-resume on book open).
-export async function hasPrepState(surveyPath: string): Promise<boolean> {
-  return (await loadPrepState(hashPath(surveyPath))) !== null;
+export async function hasPrepState(surveyHash: string): Promise<boolean> {
+  return (await loadPrepState(surveyHash)) !== null;
 }

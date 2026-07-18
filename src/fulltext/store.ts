@@ -1,7 +1,8 @@
-// Full-text cache persistence: one fulltext-<pathHash>.json per document under
-// AppData, keyed by the same djb2 path hash as annotations. Extraction is
-// skipped when a same-version cache exists. Persistence failures are surfaced
-// (console.warn + an error hook), never silently swallowed (pitfall 09).
+// Full-text cache persistence: one fulltext-<key>.json per document under
+// AppData, keyed by the book id (content hash) for real books and by a synthetic
+// prep key for downloaded papers. Extraction is skipped when a same-version
+// cache exists. Persistence failures are surfaced (console.warn + an error
+// hook), never silently swallowed (pitfall 09).
 
 import {
   BaseDirectory,
@@ -10,7 +11,6 @@ import {
   readTextFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
-import { hashPath } from "../storage";
 import { extractFulltext } from "./extract";
 import { FULLTEXT_VERSION, type Fulltext } from "./types";
 
@@ -54,11 +54,10 @@ export async function getFulltext(hash: string): Promise<Fulltext | null> {
 // Persist a full text that was built elsewhere (a fetched web article's single
 // "page", link ingestion in docs/09) under the same cache key a real document
 // uses, so the reading tools can serve it immediately. Overwrites any prior
-// entry for the path.
-export async function saveFulltext(path: string, ft: Fulltext): Promise<void> {
-  const hash = hashPath(path);
+// entry for the key.
+export async function saveFulltext(key: string, ft: Fulltext): Promise<void> {
   await ensureDir();
-  await writeTextFile(fileFor(hash), JSON.stringify(ft), { baseDir: BaseDirectory.AppData });
+  await writeTextFile(fileFor(key), JSON.stringify(ft), { baseDir: BaseDirectory.AppData });
 }
 
 // Coalesce concurrent extraction requests for the same document so a double
@@ -68,8 +67,8 @@ const inFlight = new Map<string, Promise<Fulltext>>();
 // Return the cached full text, extracting and caching it on a miss. Idempotent:
 // a second call while extraction is running joins the same job. Safe to call
 // fire-and-forget at book-open time; the pdf.js worker keeps parsing off the UI.
-export async function ensureFulltext(path: string, buffer: ArrayBuffer): Promise<Fulltext> {
-  const hash = hashPath(path);
+export async function ensureFulltext(key: string, buffer: ArrayBuffer): Promise<Fulltext> {
+  const hash = key;
   const cached = await getFulltext(hash);
   if (cached) return cached;
   const existing = inFlight.get(hash);

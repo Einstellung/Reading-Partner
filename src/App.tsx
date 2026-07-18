@@ -10,6 +10,8 @@ import {
   type ViewStats,
 } from "./reader-contract";
 import { getViewState, hashPath, saveViewState } from "./storage";
+import { importBook, libraryHas, readLibraryBook } from "./library";
+import { migrateBookLive } from "./migrate";
 import { chapterAt, ensureFulltext, getFulltext, onFulltextError, type Fulltext } from "./fulltext";
 import Sidebar, { type SidebarTab } from "./components/Sidebar";
 import {
@@ -35,7 +37,9 @@ import {
   markOpened,
   removeFileFromTopic,
   renameTopic,
+  setFileHash,
   sortedFiles,
+  type FileRef,
   type Topic,
 } from "./topics";
 import {
@@ -245,7 +249,7 @@ export default function App() {
     fileName: string;
     pageLabel: string | null;
     pageIndex: number | null;
-    files: { path: string; name: string }[];
+    files: { path: string; name: string; hash?: string }[];
   }>({
     topicId: null,
     topicName: "",
@@ -266,6 +270,9 @@ export default function App() {
   const pageDwellRef = useRef<{ page: number; since: number } | null>(null);
   const lastCallThreadRef = useRef<string | null>(null);
   const prepStatusesRef = useRef<Map<string, string>>(new Map());
+  // Guards the one-time content-hash backfill so StrictMode's double effect run
+  // doesn't start it twice.
+  const migrationRan = useRef(false);
 
   const [topics, setTopics] = useState<Topic[]>([]);
   const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
@@ -369,7 +376,7 @@ export default function App() {
       fileName: title ?? "",
       pageLabel: stats?.pageLabel ?? null,
       pageIndex: stats?.pageIndex ?? null,
-      files: activeTopic?.files.map((f) => ({ path: f.path, name: f.name })) ?? [],
+      files: activeTopic?.files.map((f) => ({ path: f.path, name: f.name, hash: f.hash })) ?? [],
     };
   });
 
@@ -438,6 +445,35 @@ export default function App() {
     // Full-text extraction is best-effort background context; a persistence
     // failure only warns (the AI falls back to the marked passage), no UI needed.
     onFulltextError((e) => console.warn("failed to persist fulltext cache", e));
+  }, [refreshTopics]);
+
+  // One-time content-hash backfill for existing topic files (docs/13, M-sync-1):
+  // import each into the library, give it a book id, and move its legacy
+  // path-hash-keyed data under that id. Runs once, in the background, and
+  // sequentially — books can be hundreds of MB, so never read several at once.
+  // Idempotent: a file that already has a book id is skipped.
+  useEffect(() => {
+    if (migrationRan.current) return;
+    migrationRan.current = true;
+    void (async () => {
+      let changed = false;
+      const all = await listTopics().catch((): Topic[] => []);
+      for (const t of all) {
+        for (const f of t.files) {
+          if (f.hash) continue;
+          try {
+            const bytes = await readFile(f.path);
+            const entry = await importBook(bytes, f.path);
+            await migrateBookLive(hashPath(f.path), entry.hash);
+            await setFileHash(t.id, f.path, entry.hash);
+            changed = true;
+          } catch (e) {
+            console.warn("library migration skipped a file", f.path, e);
+          }
+        }
+      }
+      if (changed) await refreshTopics().catch(() => {});
+    })();
   }, [refreshTopics]);
 
   // Apply the tool once the view is initialized (setTool before the pdf viewer
@@ -514,8 +550,8 @@ export default function App() {
   // Attach the open book's prep pipeline to the UI: subscribe the panel and
   // (re)start the background run. Idempotent — the pipeline is a module
   // singleton per survey, so re-attaching never restarts finished work.
-  const attachPipeline = useCallback((path: string, name: string, ft: Fulltext) => {
-    const pipeline = getPrepPipeline(path, name, ft);
+  const attachPipeline = useCallback((surveyHash: string, name: string, ft: Fulltext) => {
+    const pipeline = getPrepPipeline(surveyHash, name, ft);
     pipelineRef.current = pipeline;
     prepUnsubRef.current?.();
     prepStatusesRef.current = new Map();
@@ -540,16 +576,16 @@ export default function App() {
 
   // First classroom press (or the panel's Start button) kicks off lesson prep.
   const startPrep = useCallback(async () => {
-    const path = pathRef.current;
+    const bookId = pathRef.current;
     const name = ctxRef.current.fileName;
-    if (!path) return;
+    if (!bookId) return;
     const ft = await currentFulltextRef.current;
-    if (pathRef.current !== path) return; // switched books while extracting
+    if (pathRef.current !== bookId) return; // switched books while extracting
     if (!ft || ft.status !== "ok") {
       pushToast("warn", "This book has no readable text layer, so prep can't run.");
       return;
     }
-    attachPipeline(path, name, ft);
+    attachPipeline(bookId, name, ft);
   }, [attachPipeline, pushToast]);
 
   const toggleClassroom = useCallback(() => {
@@ -610,9 +646,9 @@ export default function App() {
 
   // The prep panel reads a note's body on expand (frontmatter stripped).
   const loadPrepNoteBody = useCallback(async (slug: string) => {
-    const path = pathRef.current;
-    if (!path) return null;
-    const raw = await readPrepNote(hashPath(path), slug);
+    const bookId = pathRef.current;
+    if (!bookId) return null;
+    const raw = await readPrepNote(bookId, slug);
     return raw ? parseNote(raw).body : null;
   }, []);
 
@@ -664,9 +700,9 @@ export default function App() {
   // reply into the bubble, persist on done. Stable (reads refs). No-ops (leaving
   // the bubble empty for the guidance) when no provider is configured.
   const runTurn = useCallback((threadId: string, annotationId: string) => {
-    const path = pathRef.current;
+    const bookId = pathRef.current;
     const s = settingsRef.current;
-    if (!path || !s.defaultProviderId || !s.defaultModelId) return;
+    if (!bookId || !s.defaultProviderId || !s.defaultModelId) return;
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -734,7 +770,7 @@ export default function App() {
       const { topicId, topicName, fileName, pageLabel, pageIndex, files } = ctxRef.current;
       const materials = await gatherTopicMaterials(
         files,
-        path,
+        bookId,
         currentFulltext,
         [...annsRef.current.values()],
       );
@@ -751,7 +787,7 @@ export default function App() {
       const surrounding =
         !isBook && currentFulltext && page ? surroundingText(currentFulltext, page) : "";
       const booklist: BooklistItem[] = materials
-        .filter((m) => m.path !== path)
+        .filter((m) => m.path !== bookId)
         .map((m) => ({
           label: m.label,
           pageCount: m.fulltext?.pages.length ?? 0,
@@ -788,7 +824,7 @@ export default function App() {
           s.defaultModelId as string,
         );
         const buf = bufferRef.current;
-        const figHash = hashPath(path);
+        const figHash = bookId;
         tools = [
           ...tools,
           ...buildFigureTools({
@@ -812,7 +848,7 @@ export default function App() {
       const livePipeline = pipelineRef.current;
       let canIngestUrl = false;
       if (livePipeline && currentFulltext?.status === "ok") {
-        const surveyHash = hashPath(path);
+        const surveyHash = bookId;
         tools = [
           ...tools,
           ...buildSourceTools({
@@ -848,7 +884,7 @@ export default function App() {
         const notes = (
           await Promise.all(
             notePapers.map(async (p): Promise<ClassroomNote | null> => {
-              const raw = await readPrepNote(hashPath(path), p.slug);
+              const raw = await readPrepNote(bookId, p.slug);
               return raw ? { slug: p.slug, title: p.title, body: parseNote(raw).body } : null;
             }),
           )
@@ -888,7 +924,7 @@ export default function App() {
       if (memorySection) systemPrompt += "\n\n" + memorySection;
       if (canIngestUrl) systemPrompt += "\n\n" + ADD_SOURCE_PROMPT;
 
-      const threadMsgs = getThread(path, threadId)?.messages ?? [];
+      const threadMsgs = getThread(bookId, threadId)?.messages ?? [];
       const prior = await Promise.all(
         threadMsgs.map(async (m) => ({
           role: m.role,
@@ -939,7 +975,7 @@ export default function App() {
           if (abortRef.current === controller) abortRef.current = null;
           if (controller.signal.aborted) return; // stopTurn already kept the partial
           patch((m) => ({ role: "ai", text: full, ts, tools: (m.tools ?? []).filter((t) => t.state === "error") }), ts);
-          appendMessage(path, threadId, { role: "ai", text: full, ts });
+          appendMessage(bookId, threadId, { role: "ai", text: full, ts });
         },
         onError: (message: string) => {
           if (abortRef.current === controller) abortRef.current = null;
@@ -1058,21 +1094,21 @@ export default function App() {
   }, []);
 
   const openInReader = useCallback(
-    async (path: string, name: string, bytes: Uint8Array) => {
+    async (bookId: string, name: string, bytes: Uint8Array) => {
       setStatus("Rendering…");
       setPopup(null);
       setCall(null);
       setSelectedAnnId(null);
-      const state = await getViewState(path);
+      const state = await getViewState(bookId);
       let saved: Annotation[] = [];
       try {
-        saved = await loadAnnotations(path);
+        saved = await loadAnnotations(bookId);
       } catch (e) {
         console.error("failed to load annotations", e);
         pushToast("warn", "Saved annotations could not be loaded");
       }
       try {
-        await loadThreads(path);
+        await loadThreads(bookId);
       } catch (e) {
         console.error("failed to load threads", e);
         pushToast("warn", "Saved AI conversations could not be loaded");
@@ -1081,7 +1117,7 @@ export default function App() {
       setTraceAnns(saved);
 
       setViewReady(false);
-      pathRef.current = path;
+      pathRef.current = bookId;
       // Dwell tracking restarts per book (never a cross-book page-nav event).
       pageDwellRef.current = null;
       // Classroom mode is per book; detach the previous book's prep panel (the
@@ -1103,32 +1139,32 @@ export default function App() {
       figuresRef.current = [];
       clearFigureCache();
       bufferRef.current = bytes.slice().buffer as ArrayBuffer;
-      currentFiguresRef.current = ensureFigures(path, bytes.slice().buffer as ArrayBuffer).catch((e) => {
+      currentFiguresRef.current = ensureFigures(bookId, bytes.slice().buffer as ArrayBuffer).catch((e) => {
         console.warn("failed to extract figures", e);
         return null;
       });
       currentFiguresRef.current.then((idx) => {
-        if (pathRef.current !== path) return; // stale: the user switched books
+        if (pathRef.current !== bookId) return; // stale: the user switched books
         const list = idx?.figures ?? [];
         figuresRef.current = list;
         setFigures(list);
       });
-      currentFulltextRef.current = ensureFulltext(path, bytes.slice().buffer as ArrayBuffer).catch(
+      currentFulltextRef.current = ensureFulltext(bookId, bytes.slice().buffer as ArrayBuffer).catch(
         (e) => {
           console.warn("failed to extract fulltext", e);
           return null;
         },
       );
       currentFulltextRef.current.then(async (ft) => {
-        if (pathRef.current !== path) return; // stale: the user switched books
+        if (pathRef.current !== bookId) return; // stale: the user switched books
         setFulltext(ft);
         setFulltextPending(false);
         // Resume lesson prep from its persisted state (docs/09: restartable
         // from the breakpoint) or re-attach a pipeline already running.
         if (ft && ft.status === "ok") {
           try {
-            if (peekPrepPipeline(path) || (await hasPrepState(path))) {
-              if (pathRef.current === path) attachPipeline(path, name, ft);
+            if (peekPrepPipeline(bookId) || (await hasPrepState(bookId))) {
+              if (pathRef.current === bookId) attachPipeline(bookId, name, ft);
             }
           } catch (e) {
             console.warn("failed to resume lesson prep", e);
@@ -1140,7 +1176,7 @@ export default function App() {
       // viewRef) and onInitialized once ready. A fresh copy of the bytes is
       // handed over so nothing detaches the shell's original.
       setEmbedDoc({
-        path,
+        path: bookId,
         name,
         buffer: bytes.slice().buffer as ArrayBuffer,
         annotations: saved,
@@ -1151,15 +1187,31 @@ export default function App() {
     [pushToast, attachPipeline],
   );
 
+  // Open a topic file. If its book id is known and the library holds the
+  // authoritative copy, open straight from the library (the original path may be
+  // gone). Otherwise read the original, import a copy into the library, migrate
+  // any legacy path-hash-keyed data to the book id, and backfill the id.
   const openFile = useCallback(
-    async (path: string, name: string) => {
+    async (file: FileRef) => {
       if (!activeTopicId) return;
       try {
-        const bytes = await readFile(path);
-        await openInReader(path, name, bytes);
-        await markOpened(activeTopicId, path);
+        let bytes: Uint8Array;
+        let bookId: string;
+        if (file.hash && (await libraryHas(file.hash))) {
+          bytes = await readLibraryBook(file.hash);
+          bookId = file.hash;
+        } else {
+          bytes = await readFile(file.path);
+          const entry = await importBook(bytes, file.path);
+          bookId = entry.hash;
+          await migrateBookLive(hashPath(file.path), bookId);
+          if (file.hash !== bookId) await setFileHash(activeTopicId, file.path, bookId);
+        }
+        await openInReader(bookId, file.name, bytes);
+        await markOpened(activeTopicId, file.path);
         await refreshTopics();
-      } catch {
+      } catch (e) {
+        console.error("failed to open file", e);
         pushToast("error", "Can't open this file — it may have been moved or deleted.");
       }
     },
@@ -1585,9 +1637,9 @@ export default function App() {
       getFigure: (id) => findFigureById(figures, id),
       renderCard: async (figure) => {
         const buf = bufferRef.current;
-        const path = pathRef.current;
-        if (!buf || !path) return null;
-        const r = await renderFigure(hashPath(path), buf, figure, "card");
+        const bookId = pathRef.current;
+        if (!buf || !bookId) return null;
+        const r = await renderFigure(bookId, buf, figure, "card");
         return r ? { src: r.dataUrl, width: r.width, height: r.height } : null;
       },
       onJump: (figure) => onCitation({ kind: "figure", id: figure.id }),
@@ -1942,28 +1994,33 @@ function toAnnotationLite(ann: Annotation): AnnotationLite | null {
 // in-memory annotations and the just-extracted full text; other books read from
 // the cache/disk (never re-extracted here, so they show only if opened before).
 async function gatherTopicMaterials(
-  files: { path: string; name: string }[],
-  currentPath: string,
+  files: { path: string; name: string; hash?: string }[],
+  currentBookId: string,
   currentFulltext: Fulltext | null,
   currentAnns: Annotation[],
 ): Promise<(TopicMaterial & { path: string })[]> {
   const out: (TopicMaterial & { path: string })[] = [];
   for (const f of files) {
-    const isCurrent = f.path === currentPath;
+    const isCurrent = f.hash === currentBookId;
+    // Other books are read from their content-hash-keyed data; a file that has
+    // never been opened since the upgrade has no book id yet, so it contributes
+    // no cached full text / annotations (it will once opened).
     let fulltext: Fulltext | null;
     if (isCurrent) fulltext = currentFulltext;
+    else if (!f.hash) fulltext = null;
     else {
       try {
-        fulltext = await getFulltext(hashPath(f.path));
+        fulltext = await getFulltext(f.hash);
       } catch {
         fulltext = null;
       }
     }
     let anns: Annotation[];
     if (isCurrent) anns = currentAnns;
+    else if (!f.hash) anns = [];
     else {
       try {
-        anns = await loadAnnotations(f.path);
+        anns = await loadAnnotations(f.hash);
       } catch {
         anns = [];
       }
@@ -1971,7 +2028,7 @@ async function gatherTopicMaterials(
     const annotations = anns
       .map(toAnnotationLite)
       .filter((a): a is AnnotationLite => a !== null);
-    out.push({ path: f.path, label: f.name, fulltext, annotations });
+    out.push({ path: f.hash ?? f.path, label: f.name, fulltext, annotations });
   }
   return out;
 }
@@ -2075,27 +2132,28 @@ function metaLine(meta: BookMeta | undefined, lastOpenedAt?: number): string {
 function TopicDetail(props: {
   topic: Topic;
   onAddFile: () => void;
-  onOpenFile: (path: string, name: string) => void;
+  onOpenFile: (file: FileRef) => void;
   onRemoveFile: (path: string) => void;
 }) {
   const files = sortedFiles(props.topic);
   const [meta, setMeta] = useState<Record<string, BookMeta>>({});
 
-  // Loaded off the render path, per file. Every read is optional: a book that
-  // was never opened has no state, no full-text cache and no annotation file,
-  // and that is the normal case, not an error.
+  // Loaded off the render path, per file, keyed by book id (content hash). Every
+  // read is optional: a book that was never opened has no state, no full-text
+  // cache and no annotation file — the normal case, not an error. A file without
+  // a book id yet (added but never opened since the upgrade) shows no meta line.
   useEffect(() => {
     let cancelled = false;
-    const paths = props.topic.files.map((f) => f.path);
     void Promise.all(
-      paths.map(async (path): Promise<[string, BookMeta]> => {
+      props.topic.files.map(async (f): Promise<[string, BookMeta]> => {
+        if (!f.hash) return [f.path, { marks: 0 }];
         const [state, fulltext, annotations] = await Promise.all([
-          getViewState(path).catch(() => null),
-          getFulltext(hashPath(path)).catch(() => null),
-          loadAnnotations(path).catch(() => []),
+          getViewState(f.hash).catch(() => null),
+          getFulltext(f.hash).catch(() => null),
+          loadAnnotations(f.hash).catch(() => []),
         ]);
         return [
-          path,
+          f.path,
           {
             page: state ? state.pageIndex + 1 : undefined,
             pages: fulltext?.pages.length || undefined,
@@ -2125,7 +2183,7 @@ function TopicDetail(props: {
           const line = metaLine(meta[f.path], f.lastOpenedAt);
           return (
             <li key={f.path} className={TOPIC_ROW}>
-              <button className={TOPIC_NAME} onClick={() => props.onOpenFile(f.path, f.name)}>
+              <button className={TOPIC_NAME} onClick={() => props.onOpenFile(f)}>
                 <span className="flex min-w-0 flex-col gap-0.5">
                   <span className="truncate">{f.name}</span>
                   {line && <span className="text-xs text-[#777]">{line}</span>}

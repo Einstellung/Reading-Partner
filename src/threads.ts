@@ -1,4 +1,5 @@
-// AI-pen conversation threads, one file per document: threads-<pathHash>.json.
+// AI-pen conversation threads, one file per document: threads-<bookId>.json,
+// keyed by the book's content hash (library.ts).
 // This is the seed of the "conversation stream" tier (docs/01 §3, first layer);
 // the format is intentionally small but the field names are the durable ones.
 // Writes are debounced and flushed on pagehide; failures are surfaced (pitfall 09).
@@ -12,7 +13,6 @@ import {
   writeFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
-import { hashPath } from "./storage";
 
 export interface ThreadMessage {
   role: "user" | "ai";
@@ -34,6 +34,8 @@ export interface Thread {
   // The single persistent per-book thread reached from the top-bar AI button.
   // Absent (undefined) on ordinary mark-anchored threads.
   book?: boolean;
+  // The book id (content hash) this thread belongs to. Kept for readability of
+  // the on-disk file; the store keys off the filename, not this field.
   path: string;
   createdAt: number;
   messages: ThreadMessage[];
@@ -169,8 +171,8 @@ function schedule(key: string): void {
 
 // Load a document's threads. Missing file is normal ({}); read/parse errors
 // rethrow so the caller can warn.
-export async function loadThreads(path: string): Promise<ThreadMap> {
-  const key = hashPath(path);
+export async function loadThreads(bookId: string): Promise<ThreadMap> {
+  const key = bookId;
   const name = `threads-${key}.json`;
   if (!(await exists(name, { baseDir: BaseDirectory.AppData }))) {
     cache.set(key, {});
@@ -184,17 +186,17 @@ export async function loadThreads(path: string): Promise<ThreadMap> {
   return threads;
 }
 
-export function getThread(path: string, threadId: string): Thread | undefined {
-  return cache.get(hashPath(path))?.[threadId];
+export function getThread(bookId: string, threadId: string): Thread | undefined {
+  return cache.get(bookId)?.[threadId];
 }
 
-export function createThread(path: string, annotationId: string, threadId: string): Thread {
-  const key = hashPath(path);
+export function createThread(bookId: string, annotationId: string, threadId: string): Thread {
+  const key = bookId;
   const map = cache.get(key) ?? {};
   const thread: Thread = {
     id: threadId,
     annotationId,
-    path,
+    path: bookId,
     createdAt: Date.now(),
     messages: [],
   };
@@ -206,14 +208,14 @@ export function createThread(path: string, annotationId: string, threadId: strin
 
 // Create the book-level thread (docs/03: the top-bar AI button's selection-free
 // entry). No annotation anchor; the `book` marker is how it's found again.
-export function createBookThread(path: string, threadId: string): Thread {
-  const key = hashPath(path);
+export function createBookThread(bookId: string, threadId: string): Thread {
+  const key = bookId;
   const map = cache.get(key) ?? {};
   const thread: Thread = {
     id: threadId,
     annotationId: "",
     book: true,
-    path,
+    path: bookId,
     createdAt: Date.now(),
     messages: [],
   };
@@ -225,15 +227,15 @@ export function createBookThread(path: string, threadId: string): Thread {
 
 // The book-level thread for a document, if one has ever been created. There is
 // at most one per book (the top-bar button reopens it rather than making more).
-export function getBookThread(path: string): Thread | undefined {
-  const map = cache.get(hashPath(path));
+export function getBookThread(bookId: string): Thread | undefined {
+  const map = cache.get(bookId);
   if (!map) return undefined;
   for (const t of Object.values(map)) if (t.book) return t;
   return undefined;
 }
 
-export function appendMessage(path: string, threadId: string, message: ThreadMessage): Thread | undefined {
-  const key = hashPath(path);
+export function appendMessage(bookId: string, threadId: string, message: ThreadMessage): Thread | undefined {
+  const key = bookId;
   const thread = cache.get(key)?.[threadId];
   if (!thread) return undefined;
   thread.messages.push(message);

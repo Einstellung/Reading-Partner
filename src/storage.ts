@@ -1,6 +1,7 @@
-// Reading-position persistence, keyed by a hash of the absolute file path so
-// reopening a document restores where you were. Recency is tracked per-topic
-// (see topics.ts), so this no longer keeps a global recents list.
+// Reading-position persistence, keyed by a book id (the content hash of the
+// file, see library.ts) so the position follows the book across a move/rename
+// and across devices. Recency is tracked per-topic (see topics.ts), so this no
+// longer keeps a global recents list.
 
 import {
   BaseDirectory,
@@ -15,8 +16,10 @@ import type { ViewState } from "./reader-contract";
 
 const STATE_FILE = "reading-state.json";
 
-// djb2 — stable key from an absolute path, filesystem-safe. Shared by topics
-// and annotation storage so a file maps to one key everywhere.
+// djb2 — stable key from an absolute path, filesystem-safe. Now only the legacy
+// key: it's what the old path-hash-keyed data was stored under, so the content
+// migration (migrate.ts) uses it to find that data. New data keys off the book
+// id (content hash).
 export function hashPath(path: string): string {
   let h = 5381;
   for (let i = 0; i < path.length; i++) {
@@ -65,13 +68,13 @@ async function save(store: Store): Promise<void> {
   });
 }
 
-export async function getViewState(path: string): Promise<ViewState | null> {
+export async function getViewState(bookId: string): Promise<ViewState | null> {
   const store = await load();
-  return store.states[hashPath(path)] ?? null;
+  return store.states[bookId] ?? null;
 }
 
-export async function saveViewState(path: string, state: ViewState): Promise<void> {
+export async function saveViewState(bookId: string, state: ViewState): Promise<void> {
   const store = await load();
-  store.states[hashPath(path)] = state;
+  store.states[bookId] = state;
   await save(store);
 }
