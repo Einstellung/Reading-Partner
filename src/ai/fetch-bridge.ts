@@ -5,7 +5,7 @@
 // native fetch: the plugin rejects origins outside its capability allowlist,
 // so bridging globally would break them. Only active inside Tauri.
 
-import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
+import { cleanTauriFetch } from "../tauri-fetch";
 
 // Must stay in sync with the http:default allowlist in
 // src-tauri/capabilities/default.json.
@@ -60,7 +60,7 @@ export function installFetchBridge(): void {
 			const host = new URL(requestUrl(input), window.location.href).hostname;
 			if (BRIDGED_HOSTS.has(host)) {
 				const bridgedInit: RequestInit = { ...init, headers: bridgedHeaders(init, input) };
-				return tauriFetch(input as Parameters<typeof tauriFetch>[0], bridgedInit);
+				return cleanTauriFetch(input, bridgedInit);
 			}
 		} catch {
 			// Unparseable URL: let the native fetch produce the error.

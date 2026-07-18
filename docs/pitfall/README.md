@@ -29,3 +29,4 @@
 - [23-embedpdf-current-page-metrics-zero](./23-embedpdf-current-page-metrics-zero.md) — "当前页"的可见区 origin 常是 0,持久化锚点要用最顶上的可见页
 - [24-pdfjs-operatorlist-needs-dom](./24-pdfjs-operatorlist-needs-dom.md) — pdf.js getOperatorList/render 要 DOMMatrix,只能在 webview 跑,bun 测试覆盖纯函数
 - [25-embedpdf-no-region-raster](./25-embedpdf-no-region-raster.md) — EmbedPDF 适配层没有区域截图,图片裁剪改用自带 pdf.js 渲染
+- [26-plugin-http-abort-resource-id-leak](./26-plugin-http-abort-resource-id-leak.md) — Tauri http 插件 abort 后 fire-and-forget 取消,泄漏 "resource id N is invalid" 未捕获拒绝
