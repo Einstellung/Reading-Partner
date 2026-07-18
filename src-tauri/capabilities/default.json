@@ -44,6 +44,10 @@
       "allow": [{ "path": "$APPDATA" }, { "path": "$APPDATA/**" }]
     },
     {
+      "identifier": "fs:allow-stat",
+      "allow": [{ "path": "$APPDATA" }, { "path": "$APPDATA/**" }]
+    },
+    {
       "identifier": "http:default",
       "allow": [
         { "url": "https://api.anthropic.com/*" },
@@ -60,7 +64,7 @@
     },
     {
       "identifier": "opener:allow-open-url",
-      "allow": [{ "url": "https://claude.ai/*" }]
+      "allow": [{ "url": "https://claude.ai/*" }, { "url": "https://accounts.google.com/*" }]
     },
     "clipboard-manager:allow-read-image"
   ]
