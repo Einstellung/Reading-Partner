@@ -6,7 +6,8 @@
 // text chip that still jumps.
 
 import { useEffect, useRef, useState } from "react";
-import type { FigureHost } from "./Markdown";
+import type { FigureHost, RenderedCard } from "./Markdown";
+import { cardDisplayWidth } from "../figures/render";
 import type { Figure } from "../figures/types";
 
 // "Fig. 3 · p.5" — the text chip label and the card's caption tag. Pure.
@@ -29,7 +30,7 @@ function Chip({ label, onClick }: { label: string; onClick?: () => void }) {
 export default function FigureCard({ host, id }: { host: FigureHost; id: string }) {
   const figure = host.getFigure(id);
   const ref = useRef<HTMLButtonElement | null>(null);
-  const [src, setSrc] = useState<string | null>(null);
+  const [card, setCard] = useState<RenderedCard | null>(null);
   const [failed, setFailed] = useState(false);
   const [visible, setVisible] = useState(false);
 
@@ -56,33 +57,43 @@ export default function FigureCard({ host, id }: { host: FigureHost; id: string 
   }, [figure]);
 
   useEffect(() => {
-    if (!figure || !visible || src || failed) return;
+    if (!figure || !visible || card || failed) return;
     let alive = true;
     host
       .renderCard(figure)
-      .then((url) => {
+      .then((res) => {
         if (!alive) return;
-        if (url) setSrc(url);
+        if (res) setCard(res);
         else setFailed(true);
       })
       .catch(() => alive && setFailed(true));
     return () => {
       alive = false;
     };
-  }, [figure, visible, src, failed, host]);
+  }, [figure, visible, card, failed, host]);
 
   if (!figure) return <Chip label={`fig:${id}`} />;
   if (failed) return <Chip label={figureChipLabel(figure)} onClick={() => host.onJump(figure)} />;
+
+  // Display at the crop's natural size (÷ dpr) so a small figure sits left-aligned
+  // at true size and is never upscaled; max-w-full still shrinks a big crop to fit.
+  const dpr = typeof window !== "undefined" ? window.devicePixelRatio : 1;
+  const displayWidth = card ? cardDisplayWidth(card.width, dpr) : undefined;
 
   return (
     <button
       ref={ref}
       type="button"
       onClick={() => host.onJump(figure)}
-      className="my-1 inline-flex max-w-full cursor-pointer flex-col items-stretch gap-1 rounded-lg border border-black/10 bg-white p-1.5 text-left align-top hover:border-[#c9bff0]"
+      className="my-1 inline-flex max-w-full cursor-pointer flex-col items-start gap-1 rounded-lg border border-black/10 bg-white p-1.5 text-left align-top hover:border-[#c9bff0]"
     >
-      {src ? (
-        <img src={src} alt={figure.caption} className="max-w-full rounded" style={{ maxHeight: 260 }} />
+      {card ? (
+        <img
+          src={card.src}
+          alt={figure.caption}
+          className="rounded"
+          style={{ width: displayWidth, maxWidth: "100%", height: "auto", maxHeight: 260, objectFit: "contain" }}
+        />
       ) : (
         <span
           className="flex items-center justify-center rounded bg-neutral-100 text-[0.8em] text-neutral-400"

@@ -1544,7 +1544,7 @@ export default function App() {
         const path = pathRef.current;
         if (!buf || !path) return null;
         const r = await renderFigure(hashPath(path), buf, figure, "card");
-        return r ? r.dataUrl : null;
+        return r ? { src: r.dataUrl, width: r.width, height: r.height } : null;
       },
       onJump: (figure) => onCitation({ kind: "figure", id: figure.id }),
     };

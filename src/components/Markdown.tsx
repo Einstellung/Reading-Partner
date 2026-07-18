@@ -25,9 +25,17 @@ export const CitationContext = createContext<CitationHandler | null>(null);
 // Host services for inline [fig:N] cards (M9): resolve a figure by id, rasterize
 // its crop lazily, and jump the reader to it. Null = figures render as plain
 // text chips (the fallback when no book is open or figures aren't extracted).
+// A rendered card crop: its data URL plus natural pixel size, so the card can
+// cap its display width to the crop's true resolution (no upscaling / stretch).
+export interface RenderedCard {
+	src: string;
+	width: number;
+	height: number;
+}
+
 export interface FigureHost {
 	getFigure(id: string): Figure | null;
-	renderCard(figure: Figure): Promise<string | null>;
+	renderCard(figure: Figure): Promise<RenderedCard | null>;
 	onJump(figure: Figure): void;
 }
 

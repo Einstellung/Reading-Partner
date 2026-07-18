@@ -6,10 +6,14 @@
 import { test, expect } from "bun:test";
 import {
   assembleIndex,
+  captionAnchoredRegion,
   captionLinesFromText,
+  clusterBoxes,
   figuresForPage,
+  graphicsBoxesFromOps,
   imageBoxesFromOps,
   pairFiguresOnPage,
+  type CaptionLine,
   type OpCodes,
   type OpList,
   type TextItem,
@@ -132,6 +136,163 @@ test("figuresForPage ties boxes and captions together", () => {
   expect(figs).toEqual([
     { id: "7", page: 5, caption: "Figure 7: end to end", bbox: { x: 100, y: 150, width: 200, height: 150 } },
   ]);
+});
+
+// --- vector-aware walk ---
+
+// Extended codes with vector fields; the sub-op numbering mirrors pdf.js 4.x but
+// is injected, so the values only need to be self-consistent here.
+const V: OpCodes = {
+  save: 1,
+  restore: 2,
+  transform: 3,
+  image: new Set([10]),
+  constructPath: 91,
+  paint: new Set([20, 22, 23]), // stroke, fill, eoFill
+  clipEnd: new Set([28, 29, 30]), // endPath, clip, eoClip
+  path: { moveTo: 13, lineTo: 14, curveTo: 15, curveTo2: 16, curveTo3: 17, rectangle: 19, closePath: 18 },
+};
+// constructPath op: pdf.js packs [subOpCodes[], flatArgs[], minMax].
+function cpath(subOps: number[], flat: number[]): [number, unknown] {
+  return [91, [subOps, flat, [0, 0, 0, 0]]];
+}
+const STROKE: [number, unknown] = [20, undefined];
+
+test("vector path box is the CTM applied to the decoded points; commits on stroke", () => {
+  // moveTo/lineTo polyline (0,0)->(100,0)->(100,50) translated up by (50,600).
+  const boxes = graphicsBoxesFromOps(
+    ops([
+      transform([1, 0, 0, 1, 50, 600]),
+      cpath([V.path!.moveTo, V.path!.lineTo, V.path!.lineTo], [0, 0, 100, 0, 100, 50]),
+      STROKE,
+    ]),
+    V,
+  );
+  expect(boxes).toEqual([{ x0: 50, y0: 600, x1: 150, y1: 650 }]);
+});
+
+test("rectangle sub-op decodes x,y,w,h (not two points)", () => {
+  const boxes = graphicsBoxesFromOps(ops([cpath([V.path!.rectangle], [10, 20, 30, 40]), STROKE]), V);
+  expect(boxes).toEqual([{ x0: 10, y0: 20, x1: 40, y1: 60 }]);
+});
+
+test("bezier control points bound the curve box", () => {
+  // curveTo: 3 points (two controls + end); the high control lifts the top.
+  const boxes = graphicsBoxesFromOps(
+    ops([cpath([V.path!.moveTo, V.path!.curveTo], [0, 0, 10, 200, 90, 200, 100, 0]), STROKE]),
+    V,
+  );
+  expect(boxes).toEqual([{ x0: 0, y0: 0, x1: 100, y1: 200 }]);
+});
+
+test("an unpainted path (clip / endPath) contributes no box", () => {
+  const boxes = graphicsBoxesFromOps(
+    ops([cpath([V.path!.moveTo, V.path!.lineTo], [0, 0, 100, 100]), [29, undefined]]),
+    V,
+  );
+  expect(boxes).toEqual([]);
+});
+
+test("consecutive constructPaths accumulate into one region until painted", () => {
+  const boxes = graphicsBoxesFromOps(
+    ops([
+      cpath([V.path!.moveTo, V.path!.lineTo], [0, 0, 20, 20]),
+      cpath([V.path!.moveTo, V.path!.lineTo], [80, 80, 100, 100]),
+      [22, undefined], // fill commits the union
+    ]),
+    V,
+  );
+  expect(boxes).toEqual([{ x0: 0, y0: 0, x1: 100, y1: 100 }]);
+});
+
+test("vector and raster boxes are both collected, save/restore scoped", () => {
+  const boxes = graphicsBoxesFromOps(
+    ops([
+      SAVE,
+      transform([100, 0, 0, 80, 50, 500]),
+      IMAGE,
+      RESTORE,
+      cpath([V.path!.moveTo, V.path!.lineTo], [10, 10, 40, 40]),
+      STROKE,
+    ]),
+    V,
+  );
+  expect(boxes).toEqual([
+    { x0: 50, y0: 500, x1: 150, y1: 580 },
+    { x0: 10, y0: 10, x1: 40, y1: 40 },
+  ]);
+});
+
+// --- clustering ---
+
+test("clustering merges near boxes and keeps far ones apart", () => {
+  const merged = clusterBoxes([
+    { x0: 0, y0: 0, x1: 10, y1: 10 },
+    { x0: 15, y0: 0, x1: 25, y1: 10 }, // 5pt gap -> merges
+  ]);
+  expect(merged).toEqual([{ x0: 0, y0: 0, x1: 25, y1: 10 }]);
+
+  const apart = clusterBoxes([
+    { x0: 0, y0: 0, x1: 10, y1: 10 },
+    { x0: 100, y0: 0, x1: 110, y1: 10 }, // 90pt gap -> stays separate
+  ]);
+  expect(apart).toHaveLength(2);
+});
+
+test("one figure's scattered strokes collapse into a single region", () => {
+  // Arrowheads / segments each a few points apart, all within the cluster gap.
+  const parts = [
+    { x0: 0, y0: 0, x1: 8, y1: 8 },
+    { x0: 10, y0: 6, x1: 18, y1: 14 },
+    { x0: 20, y0: 12, x1: 28, y1: 20 },
+    { x0: 26, y0: 18, x1: 34, y1: 26 },
+  ];
+  expect(clusterBoxes(parts)).toEqual([{ x0: 0, y0: 0, x1: 34, y1: 26 }]);
+});
+
+// --- label absorption + sanity floor (via pairFiguresOnPage) ---
+
+function capLine(str: string, x: number, y: number, width: number, height = 10): CaptionLine {
+  const [line] = captionLinesFromText([{ str, transform: [1, 0, 0, 1, x, y], width, height }]);
+  return line;
+}
+
+test("labels inside the region expand the bbox; text outside is left alone", () => {
+  const region = { x0: 100, y0: 500, x1: 300, y1: 600 };
+  const caption = capLine("Figure 8: labelled", 100, 480, 200);
+  const textBoxes = [
+    { x0: 150, y0: 580, x1: 260, y1: 605 }, // label straddling the top edge -> absorbed
+    { x0: 100, y0: 300, x1: 300, y1: 312 }, // body text far below -> ignored
+  ];
+  const figs = pairFiguresOnPage([region], [caption], 1, 800, { textBoxes, pageWidth: 600 });
+  // Top grew from y1 600 to 605 (page-space y = 800-605 = 195, height 105).
+  expect(figs[0].bbox).toEqual({ x: 100, y: 195, width: 200, height: 105 });
+});
+
+test("a bbox narrower than the caption triggers the caption-anchored fallback", () => {
+  const caption = capLine("Figure 5: a wide caption line", 100, 400, 200);
+  const sliver = { x0: 150, y0: 420, x1: 180, y1: 460 }; // width 30 << caption 200
+  const textBoxes = [
+    { x0: 100, y0: 550, x1: 300, y1: 560 }, // body line above -> caps the region
+  ];
+  const figs = pairFiguresOnPage([sliver], [caption], 1, 800, { textBoxes });
+  // Fallback: caption span (100..300) from caption top (410) up to the body line
+  // (550). page-space: y = 800-550 = 250, height = 550-410 = 140.
+  expect(figs[0].bbox).toEqual({ x: 100, y: 250, width: 200, height: 140 });
+});
+
+// --- caption-anchored fallback geometry ---
+
+test("fallback region spans the caption and caps at 60% page height with no text above", () => {
+  const caption = capLine("Figure 6: alone", 100, 90, 200); // yTop = 100
+  const r = captionAnchoredRegion(caption, [], 800);
+  // No text above -> top capped at 100 + 0.6*800 = 580.
+  expect(r).toEqual({ x0: 100, y0: 100, x1: 300, y1: 580 });
+});
+
+test("fallback returns null when it can't size the width", () => {
+  const caption = capLine("Figure 7: unknown width", 100, 90, 0);
+  expect(captionAnchoredRegion(caption, [], 800)).toBeNull();
 });
 
 test("assembleIndex dedups by id, preferring the occurrence with a bbox", () => {

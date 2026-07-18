@@ -13,16 +13,35 @@ export interface RenderedFigure {
   dataUrl: string; // "data:image/jpeg;base64,…" for an <img src>
   base64: string; // bare base64 (no prefix) for a pi-ai image block
   mimeType: "image/jpeg";
+  width: number; // natural pixel width of the crop
+  height: number; // natural pixel height of the crop
 }
 
 export type FigureTier = "card" | "view";
 
-// Target crop width in CSS pixels. The card is a chat thumbnail; the view tier
-// feeds the vision model and stays under ~1024px / ~1 MB.
-const TARGET_WIDTH: Record<FigureTier, number> = { card: 520, view: 1024 };
+// The card renders at a fixed 2x page scale for crispness; the display width is
+// then capped to the crop's natural size (see cardDisplayWidth) so a small figure
+// is shown at its true size, never upscaled. The view tier feeds the vision model
+// and scales small crops up toward ~1024px, capped so it stays legible / <~1 MB.
+const CARD_PAGE_SCALE = 2;
+const VIEW_TARGET_WIDTH = 1024;
+const VIEW_MAX_SCALE = 3;
 const MARGIN_PT = 6;
-const MAX_SCALE = 4;
 const JPEG_QUALITY = 0.82;
+
+// Render scale for a crop `rw` points wide. Card: fixed 2x. View: fill the target
+// width but never below 2x (small figures still get pixels) nor above VIEW_MAX_SCALE.
+function cropScale(tier: FigureTier, rw: number): number {
+  if (tier === "card") return CARD_PAGE_SCALE;
+  return Math.min(VIEW_MAX_SCALE, Math.max(CARD_PAGE_SCALE, VIEW_TARGET_WIDTH / Math.max(1, rw)));
+}
+
+// CSS width to display a crop at: its natural pixel width divided by the device
+// pixel ratio, so a 2x-rendered crop shows at 1x logical size and is never
+// upscaled past its own resolution. The container still caps it via max-width.
+export function cardDisplayWidth(naturalWidthPx: number, devicePixelRatio: number): number {
+  return naturalWidthPx / Math.max(1, devicePixelRatio || 1);
+}
 
 const cache = new Map<string, RenderedFigure>();
 
@@ -83,7 +102,7 @@ export async function renderFigure(
       rh = Math.min(pageH - ry, figure.bbox.height + 2 * MARGIN_PT);
     }
 
-    const scale = Math.min(MAX_SCALE, Math.max(0.2, TARGET_WIDTH[tier] / rw));
+    const scale = cropScale(tier, rw);
     const viewport = page.getViewport({ scale });
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round(rw * scale));
@@ -103,7 +122,13 @@ export async function renderFigure(
 
     const dataUrl = canvas.toDataURL("image/jpeg", JPEG_QUALITY);
     const base64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
-    const out: RenderedFigure = { dataUrl, base64, mimeType: "image/jpeg" };
+    const out: RenderedFigure = {
+      dataUrl,
+      base64,
+      mimeType: "image/jpeg",
+      width: canvas.width,
+      height: canvas.height,
+    };
     cache.set(k, out);
     return out;
   } catch (e) {
