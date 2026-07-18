@@ -19,8 +19,9 @@ export default defineConfig({
     strictPort: true,
     headers: isolationHeaders,
     watch: {
-      // src-tauri is the Rust side; Vite shouldn't watch it.
-      ignored: ["**/src-tauri/**"],
+      // src-tauri is the Rust side; .claude holds agent worktrees whose file
+      // churn must not trigger reloads in the user's dev session.
+      ignored: ["**/src-tauri/**", "**/.claude/**", "**/.playwright-mcp/**"],
     },
   },
   preview: { port: 1421, strictPort: true, headers: isolationHeaders },
