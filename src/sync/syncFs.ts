@@ -2,13 +2,16 @@
 // injected into the engine so the reconcile loop runs headless in tests.
 //
 // Sync range (docs/13): the user's own data — reading position, marks, AI
-// threads, topics, per-topic memory, lesson-prep plans and notes, app settings,
-// and AI provider credentials. Book PDFs travel the separate books channel
-// (content-addressed blobs), never the data channel. Excluded: derived caches
-// (fulltext-*, figures-*, prep-*/pdf and its caches), the local event log, and
-// sync's own local files (sync-auth.json, sync-state.json). Thread images
-// (images/**) are not synced in v1 — a screenshot pasted on one device shows as
-// a missing image on the other, which readThreadImages already tolerates.
+// threads, topics, per-topic memory, lesson-prep plans and notes, and app
+// settings. Book PDFs travel the separate books channel (content-addressed
+// blobs), never the data channel. Excluded: derived caches (fulltext-*,
+// figures-*, prep-*/pdf and its caches), the local event log, sync's own local
+// files (sync-auth.json, sync-state.json), and credentials.json — plaintext AI
+// provider tokens stay on the device rather than widening their exposure to the
+// user's Drive, and per-device tokens avoid refresh-rotation kicking the other
+// device out. Thread images (images/**) are not synced in v1 — a screenshot
+// pasted on one device shows as a missing image on the other, which
+// readThreadImages already tolerates.
 
 import {
   BaseDirectory,
@@ -39,7 +42,6 @@ const ROOT_FILES = new Set([
   "reading-state.json",
   "settings.json",
   "topics.json",
-  "credentials.json",
 ]);
 
 // Whether an AppData-relative path (forward-slash separators) is synced.
