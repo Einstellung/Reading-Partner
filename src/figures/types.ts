@@ -5,7 +5,7 @@
 // grows downward, PDF points) so they feed renderPageRect / a pdf.js crop
 // directly — the same convention as src/reader-embedpdf/convert.ts.
 
-export const FIGURES_VERSION = 1 as const;
+export const FIGURES_VERSION = 2 as const;
 
 // Tight bounding box of a figure in top-left page space (PDF points).
 export interface FigureBBox {
