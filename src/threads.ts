@@ -190,6 +190,16 @@ export function getThread(bookId: string, threadId: string): Thread | undefined 
   return cache.get(bookId)?.[threadId];
 }
 
+// Drop a book's cached threads so the next loadThreads re-reads from disk. Used
+// after sync pulls a newer threads-<bookId>.json (src/sync): the in-memory cache
+// would otherwise mask the pulled file. A book that is currently open and has
+// unflushed edits is left alone — flushing them would clobber the pull, and the
+// open view keeps its own copy anyway (v1: pulled threads take effect on reopen).
+export function dropThreadCache(bookId: string): void {
+  if (dirty.has(bookId)) return;
+  cache.delete(bookId);
+}
+
 export function createThread(bookId: string, annotationId: string, threadId: string): Thread {
   const key = bookId;
   const map = cache.get(key) ?? {};

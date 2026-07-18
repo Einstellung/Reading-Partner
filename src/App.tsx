@@ -46,6 +46,7 @@ import {
   appendMessage,
   createBookThread,
   createThread,
+  dropThreadCache,
   getBookThread,
   getThread,
   loadThreads,
@@ -54,6 +55,7 @@ import {
   saveThreadImages,
   type ThreadMessage,
 } from "./threads";
+import { initSync, onSyncPulled } from "./sync";
 import { compressImage, compressImageData, type CompressedImage } from "./ai/image-utils";
 import { isTauri, readClipboardImage } from "./clipboard";
 import { DEFAULT_SETTINGS, loadSettings, onSettingsSaveError, saveSettings, toReasoning, type Settings } from "./settings";
@@ -474,6 +476,23 @@ export default function App() {
       }
       if (changed) await refreshTopics().catch(() => {});
     })();
+  }, [refreshTopics]);
+
+  // Account sync (docs/13): start the engine if the user is signed in with
+  // auto-sync on, and react to files a pull writes. A pulled library.json or
+  // topics.json refreshes the shelf; pulled threads-<id>.json files have their
+  // in-memory cache dropped so a reopen reads the newer data.
+  useEffect(() => {
+    void initSync().catch((e) => console.warn("sync init failed", e));
+    return onSyncPulled((paths) => {
+      let refreshShelf = false;
+      for (const p of paths) {
+        if (p === "library.json" || p === "topics.json") refreshShelf = true;
+        const m = /^threads-(.+)\.json$/.exec(p);
+        if (m) dropThreadCache(m[1]);
+      }
+      if (refreshShelf) refreshTopics().catch(() => {});
+    });
   }, [refreshTopics]);
 
   // Apply the tool once the view is initialized (setTool before the pdf viewer
