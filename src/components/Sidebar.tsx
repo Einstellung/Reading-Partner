@@ -1,7 +1,8 @@
 // Left sidebar: a persistent icon rail plus a collapsible panel (ChatGPT-style),
-// with four tabs — Outline, Annotations, Prep (the lesson-prep progress list,
-// docs/09), and Memory (what the AI remembers, docs/02). Pure and controlled:
-// App owns `open`/`tab` state, this component only renders and forwards clicks.
+// with five tabs — Outline, Annotations, Prep (the lesson-prep progress list,
+// docs/09), Notes (the book's lecture notes, docs/14), and Memory (what the AI
+// remembers, docs/02). Pure and controlled: App owns `open`/`tab` state, this
+// component only renders and forwards clicks.
 //
 // The slide is a compositor-driven `transform` on a panel that floats over the
 // reader, while the in-flow spacer that reserves its slot resizes in one step.
@@ -11,13 +12,13 @@
 // so the slide stays smooth even while the engine repaints the page once.
 
 import type { ReactNode } from "react";
-import { IconHighlight, IconMemory, IconOutline, IconSidebar, IconSparkle } from "./icons";
+import { IconHighlight, IconMemory, IconNotes, IconOutline, IconSidebar, IconSparkle } from "./icons";
 import OutlineView from "./OutlineView";
 import TraceList from "./TraceList";
 import type { Annotation } from "./types";
 import type { Fulltext } from "../fulltext/types";
 
-export type SidebarTab = "outline" | "traces" | "prep" | "memory";
+export type SidebarTab = "outline" | "traces" | "prep" | "notes" | "memory";
 
 export const RAIL_WIDTH = 44;
 export const PANEL_WIDTH = 300;
@@ -41,6 +42,8 @@ interface SidebarProps {
 	onOpenThread(id: string): void;
 	// The prep tab's content, owned by App (state, callbacks, note loading).
 	prepPanel: ReactNode;
+	// The notes tab's content, owned by App (docs/14).
+	notesPanel: ReactNode;
 	// The memory tab's content, owned by App (entry loading, refresh).
 	memoryPanel: ReactNode;
 }
@@ -59,6 +62,7 @@ export default function Sidebar({
 	onToggleStar,
 	onOpenThread,
 	prepPanel,
+	notesPanel,
 	memoryPanel,
 }: SidebarProps) {
 	// Fragment: the rail and the spacer sit in the reader row, while the panel is
@@ -105,6 +109,16 @@ export default function Sidebar({
 				</button>
 				<button
 					type="button"
+					className={`${RAIL_BTN} ${open && tab === "notes" ? RAIL_BTN_ACTIVE : ""}`}
+					title="Notes"
+					aria-label="Notes"
+					aria-pressed={tab === "notes"}
+					onClick={() => onSelectTab("notes")}
+				>
+					<IconNotes size={18} />
+				</button>
+				<button
+					type="button"
 					className={`${RAIL_BTN} ${open && tab === "memory" ? RAIL_BTN_ACTIVE : ""}`}
 					title="Memory"
 					aria-label="Memory"
@@ -145,6 +159,8 @@ export default function Sidebar({
 						/>
 					) : tab === "prep" ? (
 						prepPanel
+					) : tab === "notes" ? (
+						notesPanel
 					) : (
 						memoryPanel
 					)}
