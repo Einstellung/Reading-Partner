@@ -18,6 +18,10 @@ export interface FileRef {
   name: string;
   addedAt: number;
   lastOpenedAt?: number;
+  // The book id (content hash), backfilled the first time the file is opened or
+  // by the startup migration. Absent for files added but never opened since the
+  // upgrade; the app falls back to reading `path` in that case.
+  hash?: string;
 }
 
 export interface Topic {
@@ -109,6 +113,16 @@ export async function removeFileFromTopic(id: string, path: string): Promise<voi
   const topic = store.topics.find((t) => t.id === id);
   if (!topic) return;
   topic.files = topic.files.filter((f) => f.path !== path);
+  await save(store);
+}
+
+// Record a file's book id (content hash) once known. Matched by path within the
+// topic; a no-op if already set to the same hash.
+export async function setFileHash(id: string, path: string, hash: string): Promise<void> {
+  const store = await load();
+  const file = store.topics.find((t) => t.id === id)?.files.find((f) => f.path === path);
+  if (!file || file.hash === hash) return;
+  file.hash = hash;
   await save(store);
 }
 

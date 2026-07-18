@@ -1,5 +1,6 @@
-// Per-document annotation persistence: one annotations-<pathHash>.json under
-// AppData, written in full (the reader hands us the complete object each save).
+// Per-document annotation persistence: one annotations-<bookId>.json under
+// AppData, keyed by the book's content hash (library.ts), written in full (the
+// reader hands us the complete object each save).
 // Writes are debounced and flushed on pagehide, mirroring the reading-position
 // persistence in App.tsx. Save failures are surfaced, never swallowed — a lost
 // annotation is invisible until the file is reopened.
@@ -11,7 +12,6 @@ import {
   readTextFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
-import { hashPath } from "./storage";
 import type { Annotation } from "./reader-contract";
 
 // The annotation color palette. The UI components use the same list; this
@@ -29,8 +29,8 @@ export const ANNOTATION_COLORS: { name: string; color: string }[] = [
 
 const SAVE_DEBOUNCE = 500;
 
-function fileFor(path: string): string {
-  return `annotations-${hashPath(path)}.json`;
+function fileFor(bookId: string): string {
+  return `annotations-${bookId}.json`;
 }
 
 // Last known full set per file hash, so a delete can recompute without the
@@ -95,9 +95,9 @@ function schedule(key: string): void {
 // a genuine read/parse error is rethrown so the caller can warn. Legacy image
 // annotations load as-is (region-select is retired) — the engine still renders
 // them; they just can't be created anymore.
-export async function loadAnnotations(path: string): Promise<Annotation[]> {
-  const key = hashPath(path);
-  const name = fileFor(path);
+export async function loadAnnotations(bookId: string): Promise<Annotation[]> {
+  const key = bookId;
+  const name = fileFor(bookId);
   if (!(await exists(name, { baseDir: BaseDirectory.AppData }))) {
     cache.set(key, []);
     return [];
@@ -111,15 +111,15 @@ export async function loadAnnotations(path: string): Promise<Annotation[]> {
 }
 
 // Replace the full set for a document and schedule a debounced write.
-export function saveAnnotations(path: string, annotations: Annotation[]): void {
-  const key = hashPath(path);
+export function saveAnnotations(bookId: string, annotations: Annotation[]): void {
+  const key = bookId;
   cache.set(key, annotations.map((a) => ({ ...a })));
   schedule(key);
 }
 
 // Remove annotations by id and schedule a debounced write.
-export function deleteAnnotations(path: string, ids: string[]): void {
-  const key = hashPath(path);
+export function deleteAnnotations(bookId: string, ids: string[]): void {
+  const key = bookId;
   const remaining = (cache.get(key) ?? []).filter((a) => !ids.includes(a.id));
   cache.set(key, remaining);
   schedule(key);

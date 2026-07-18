@@ -1,6 +1,6 @@
-// Figure-index cache persistence: one figures-<pathHash>.json per document under
-// AppData, beside the full-text cache and keyed by the same djb2 path hash.
-// Extraction is skipped when a same-version cache exists. An extraction failure
+// Figure-index cache persistence: one figures-<key>.json per document under
+// AppData, beside the full-text cache and keyed the same way (book id / prep
+// key). Extraction is skipped when a same-version cache exists. An extraction failure
 // degrades to an empty index (persisted, so it isn't retried every open) and is
 // reported, never thrown — a missing figure index must never break full text.
 
@@ -11,7 +11,6 @@ import {
   readTextFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
-import { hashPath } from "../storage";
 import { extractFiguresFromDocument, FIGURES_VERSION } from "./extract";
 import { loadPdfjs } from "../fulltext/extract";
 import type { FiguresIndex } from "./types";
@@ -68,8 +67,8 @@ const inFlight = new Map<string, Promise<FiguresIndex>>();
 // Return the cached figure index, extracting and caching it on a miss.
 // Fire-and-forget safe: extraction runs on the pdf.js worker off the UI thread.
 // Any extraction failure resolves to (and caches) an empty index.
-export async function ensureFigures(path: string, buffer: ArrayBuffer): Promise<FiguresIndex> {
-  const hash = hashPath(path);
+export async function ensureFigures(key: string, buffer: ArrayBuffer): Promise<FiguresIndex> {
+  const hash = key;
   const cached = await getFigures(hash);
   if (cached) return cached;
   const existing = inFlight.get(hash);
