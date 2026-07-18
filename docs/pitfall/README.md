@@ -30,3 +30,4 @@
 - [24-pdfjs-operatorlist-needs-dom](./24-pdfjs-operatorlist-needs-dom.md) — pdf.js getOperatorList/render 要 DOMMatrix,只能在 webview 跑,bun 测试覆盖纯函数
 - [25-embedpdf-no-region-raster](./25-embedpdf-no-region-raster.md) — EmbedPDF 适配层没有区域截图,图片裁剪改用自带 pdf.js 渲染
 - [26-plugin-http-abort-resource-id-leak](./26-plugin-http-abort-resource-id-leak.md) — Tauri http 插件 abort 后 fire-and-forget 取消,泄漏 "resource id N is invalid" 未捕获拒绝
+- [27-embedpdf-searchinpage-not-on-engine](./27-embedpdf-searchinpage-not-on-engine.md) — searchInPage 在 IPdfiumExecutor 不在 PdfEngine,定点搜索改用 searchAllPages 按页过滤

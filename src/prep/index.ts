@@ -19,6 +19,7 @@ export {
   figureCitationHref,
   type Citation,
 } from "./anchors";
+export { locateQuote, normalizeForMatch } from "./quote-locate";
 export {
   chapterIndexForPage,
   nextQueued,

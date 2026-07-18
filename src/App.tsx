@@ -69,6 +69,7 @@ import {
   getPrepPipeline,
   hasPrepState,
   papersForChapter,
+  locateQuote,
   parseNote,
   peekPrepPipeline,
   readPrepNote,
@@ -197,6 +198,9 @@ export default function App() {
   // touch-the-book dismissal (the engine lives in the same document now).
   const readerPaneRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<ViewInstance | null>(null);
+  // Whether a transient AI-cited-quote overlay is showing, so Escape can dismiss
+  // it before it falls through to closing the call.
+  const [quoteHlActive, setQuoteHlActive] = useState(false);
   const pathRef = useRef<string | null>(null);
   const saveTimer = useRef<number | null>(null);
   const lastState = useRef<ViewState | null>(null);
@@ -555,6 +559,23 @@ export default function App() {
     setClassroomOn(next);
   }, [startPrep]);
 
+  // A page citation carrying a source quote: confirm the quote against the
+  // page's extracted text (fulltext cache), then hand the reader the exact
+  // on-page substring to highlight. When the text layer isn't available or the
+  // quote isn't found, the reader still shows it as a banner (Tier B).
+  const jumpToQuote = useCallback(async (pageIndex: number, quote: string) => {
+    let searchText = quote;
+    try {
+      const ft = await currentFulltextRef.current;
+      const pageText = ft?.pages?.[pageIndex];
+      const located = pageText ? locateQuote(pageText, quote) : null;
+      if (located) searchText = located.text;
+    } catch {
+      // Fulltext unavailable — fall through with the model's quote as-is.
+    }
+    await viewRef.current?.highlightQuote(pageIndex, { searchText, displayText: quote });
+  }, []);
+
   // A clicked citation chip in a chat reply. Survey pages jump the reader (and
   // un-cover it when chat is full-window); paper citations open that paper's
   // note in the prep panel (v1: the note, not the paper PDF).
@@ -570,7 +591,9 @@ export default function App() {
       logEvent(topicId, "citation-click", detail);
     }
     if (c.kind === "page") {
-      viewRef.current?.navigate({ pageIndex: c.page - 1 });
+      const pageIndex = c.page - 1;
+      if (c.quote) void jumpToQuote(pageIndex, c.quote);
+      else viewRef.current?.navigate({ pageIndex });
     } else if (c.kind === "figure") {
       const fig = findFigureById(figuresRef.current, c.id);
       if (fig) viewRef.current?.navigate({ pageIndex: fig.page - 1 });
@@ -580,7 +603,7 @@ export default function App() {
       setSidebarOpen(true);
     }
     setCall((cur) => (cur && cur.view === "chat-main" ? { ...cur, view: "chat-pip" } : cur));
-  }, []);
+  }, [jumpToQuote]);
 
   // The prep panel reads a note's body on expand (frontmatter stripped).
   const loadPrepNoteBody = useCallback(async (slug: string) => {
@@ -1470,6 +1493,7 @@ export default function App() {
       if (e.repeat) return;
       if (e.key === "Escape") {
         if (showSettings) setShowSettings(false);
+        else if (quoteHlActive) viewRef.current?.clearQuoteHighlight();
         else if (callRef.current) endCall();
         else if (popup) setPopup(null);
         return;
@@ -1485,7 +1509,7 @@ export default function App() {
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [showSettings, popup, endCall]);
+  }, [showSettings, popup, endCall, quoteHlActive]);
 
   const pageText = stats ? `${stats.pageIndex + 1} / ${stats.pagesCount}` : "— / —";
   const twoPage = !!stats && stats.spreadMode !== SpreadMode.None;
@@ -1681,6 +1705,7 @@ export default function App() {
               // which would loop through the engine's own selection state).
               onSelectAnnotations={onEmbedSelect}
               onSetAnnotationPopup={onSetAnnotationPopup}
+              onQuoteHighlightChange={setQuoteHlActive}
             />
           )}
         </div>

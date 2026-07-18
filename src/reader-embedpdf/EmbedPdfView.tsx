@@ -12,7 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { createPluginRegistration } from "@embedpdf/core";
 import { EmbedPDF } from "@embedpdf/core/react";
 import type { PluginRegistry } from "@embedpdf/core";
-import type { PdfAnnotationObject, PdfDocumentObject, PdfEngine } from "@embedpdf/models";
+import type { PdfAnnotationObject, PdfDocumentObject, PdfEngine, Rect } from "@embedpdf/models";
 import { getPdfiumEngine } from "./engine-singleton";
 
 import { DocumentManagerPluginPackage } from "@embedpdf/plugin-document-manager/react";
@@ -67,6 +67,22 @@ function useSharedEngine(): { engine: PdfEngine | null; isLoading: boolean; erro
 export type EmbedTool = "pointer" | "highlight" | "underline" | "ink";
 export type EmbedSpread = "none" | "odd" | "even";
 
+// A transient, non-persistent overlay marking an AI-cited quote on a page. Two
+// tiers: `rects` draws a violet highlight over the located text (Tier A);
+// `banner` shows the quote text as a chip near the page top when the text could
+// not be located geometrically (Tier B). Never becomes a saved annotation.
+export type QuoteHighlight =
+  | { pageIndex: number; kind: "rects"; rects: Rect[] }
+  | { pageIndex: number; kind: "banner"; quote: string };
+
+// What highlightQuote takes: `searchText` is fed to the engine's text search
+// (ideally the exact on-page substring), `displayText` is the model's quote
+// shown in the Tier-B banner fallback.
+export interface QuoteRequest {
+  searchText: string;
+  displayText: string;
+}
+
 export interface EmbedViewState {
   pageIndex: number;
   zoom: number;
@@ -104,6 +120,11 @@ export interface EmbedPdfHandle {
   setSpread(mode: EmbedSpread): void;
   navigateToPage(pageIndex: number): void;
   navigateToAnnotation(id: string): void;
+  // Scroll to the page and show a transient violet overlay on the cited quote.
+  // Resolves true when the quote was located and highlighted (Tier A), false
+  // when it fell back to the quote banner (Tier B).
+  highlightQuote(pageIndex: number, req: QuoteRequest): Promise<boolean>;
+  clearQuoteHighlight(): void;
   updateAnnotation(id: string, patch: { color?: string; comment?: string; starred?: boolean }): void;
   // Host-driven upsert of full zotero annotations (reflect host edits / import
   // new). Does not re-emit onSaveAnnotations (host is the source of truth).
@@ -135,8 +156,88 @@ export interface EmbedPdfViewProps {
   onAnnotationAnchor?: (id: string, rect: AnnotationAnchor) => void;
   onViewState?: (s: EmbedViewState) => void;
   onViewStats?: (s: EmbedViewStats) => void;
+  // Fired when the transient AI-quote overlay appears (true) or is dismissed
+  // (false), so the shell can route Escape to dismiss it.
+  onQuoteHighlight?: (active: boolean) => void;
   className?: string;
   style?: React.CSSProperties;
+}
+
+// Non-interactive overlay for the transient AI-cited-quote highlight. Rendered
+// inside each page box; only paints on the cited page. pointerEvents:none so a
+// click on it still reaches the selection layer's empty-space handler (dismiss).
+function QuoteHighlightLayer(props: {
+  pageIndex: number;
+  pageWidthPx: number;
+  pageSize: { width: number; height: number } | undefined;
+  hl: QuoteHighlight | null;
+}): ReactNode {
+  const { pageIndex, pageWidthPx, pageSize, hl } = props;
+  if (!hl || hl.pageIndex !== pageIndex) return null;
+  if (hl.kind === "rects") {
+    if (!pageSize || pageSize.width <= 0) return null;
+    const scale = pageWidthPx / pageSize.width;
+    return (
+      <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 5 }}>
+        {hl.rects.map((r, i) => (
+          <div
+            key={i}
+            style={{
+              position: "absolute",
+              left: `${r.origin.x * scale}px`,
+              top: `${r.origin.y * scale}px`,
+              width: `${r.size.width * scale}px`,
+              height: `${r.size.height * scale}px`,
+              backgroundColor: "#4a3a9e",
+              opacity: 0.24,
+              borderRadius: "2px",
+            }}
+          />
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        display: "flex",
+        justifyContent: "center",
+        pointerEvents: "none",
+        zIndex: 5,
+      }}
+    >
+      <div
+        style={{
+          margin: "10px 16px",
+          maxWidth: "80%",
+          padding: "6px 10px",
+          borderRadius: "8px",
+          backgroundColor: "#efecfb",
+          color: "#4a3a9e",
+          fontSize: "13px",
+          lineHeight: 1.4,
+          boxShadow: "0 1px 4px rgba(0,0,0,0.15)",
+        }}
+      >
+        <span
+          style={{
+            fontSize: "10px",
+            textTransform: "uppercase",
+            letterSpacing: "0.5px",
+            opacity: 0.7,
+            marginRight: "6px",
+          }}
+        >
+          cited by AI
+        </span>
+        “{hl.quote}”
+      </div>
+    </div>
+  );
 }
 
 // Rendered into the AnnotationLayer's selectionMenu slot: measures the menu
@@ -176,6 +277,20 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
   const propsRef = useRef(props);
   propsRef.current = props;
 
+  // Transient AI-cited-quote overlay state. Held here (not in the annotation
+  // store) so it never persists. The setter is exposed to the imperative
+  // wiring through a ref.
+  const [quoteHl, setQuoteHl] = useState<QuoteHighlight | null>(null);
+  const setQuoteHlRef = useRef(setQuoteHl);
+  setQuoteHlRef.current = setQuoteHl;
+  // Page sizes (unscaled PDF points) so the overlay can scale page-space rects
+  // to the current page box. Filled once the document opens.
+  const pageSizesRef = useRef<{ width: number; height: number }[]>([]);
+
+  useEffect(() => {
+    propsRef.current.onQuoteHighlight?.(quoteHl !== null);
+  }, [quoteHl]);
+
   useEffect(() => {
     if (error) props.onError?.(error);
   }, [error]);
@@ -207,8 +322,11 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
 
   const onInitialized = async (registry: PluginRegistry) => {
     perfMark("providerInit");
+    // The EmbedPDF provider only mounts (and fires onInitialized) below the
+    // `!engine` guard, so engine is non-null here.
+    if (!engine) return;
     try {
-      await wireEngine(registry, propsRef);
+      await wireEngine(registry, propsRef, engine, setQuoteHlRef, pageSizesRef);
     } catch (e) {
       propsRef.current.onError?.(e as Error);
     }
@@ -269,6 +387,12 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
                       pageIndex={pageIndex}
                       selectionMenu={selectionMenu}
                     />
+                    <QuoteHighlightLayer
+                      pageIndex={pageIndex}
+                      pageWidthPx={width}
+                      pageSize={pageSizesRef.current[pageIndex]}
+                      hl={quoteHl}
+                    />
                   </PagePointerProvider>
                 )}
               />
@@ -289,9 +413,40 @@ function cap<T>(registry: PluginRegistry, id: string): T {
   return provides;
 }
 
+// Text search across the document, filtered to one page. Returns the first
+// on-page hit's page-space rects, or null. Progressively shortens the keyword
+// (a quote spanning a line break may not match whole) before giving up.
+async function findQuoteRects(
+  engine: PdfEngine,
+  doc: PdfDocumentObject,
+  pageIndex: number,
+  text: string,
+): Promise<Rect[] | null> {
+  const keyword = text.replace(/\s+/g, " ").trim();
+  if (keyword.length < 2) return null;
+  const words = keyword.split(" ");
+  const candidates = [keyword];
+  for (const n of [8, 5, 3]) {
+    if (words.length > n) candidates.push(words.slice(0, n).join(" "));
+  }
+  for (const kw of candidates) {
+    try {
+      const res = await engine.searchAllPages(doc, kw, { flags: [] }).toPromise();
+      const hit = res.results.find((r) => r.pageIndex === pageIndex && r.rects.length > 0);
+      if (hit) return hit.rects;
+    } catch {
+      // Search failed for this keyword; try the next shorter candidate.
+    }
+  }
+  return null;
+}
+
 async function wireEngine(
   registry: PluginRegistry,
   propsRef: React.MutableRefObject<EmbedPdfViewProps>,
+  engine: PdfEngine,
+  setQuoteHlRef: React.MutableRefObject<(v: QuoteHighlight | null) => void>,
+  pageSizesRef: React.MutableRefObject<{ width: number; height: number }[]>,
 ): Promise<void> {
   const annotation = cap<AnnotationCapability>(registry, "annotation");
   const selection = cap<SelectionCapability>(registry, "selection");
@@ -322,6 +477,8 @@ async function wireEngine(
 
   const doc = () => dm?.getDocument(DOC_ID) ?? null;
   const pageHeight = (pageIndex: number) => doc()?.pages[pageIndex]?.size.height ?? 0;
+  // Cache page sizes for the quote-highlight overlay's rect scaling.
+  pageSizesRef.current = doc()?.pages.map((p) => ({ width: p.size.width, height: p.size.height })) ?? [];
 
   const annScope = annotation.forDocument(DOC_ID);
   const selScope = selection.forDocument(DOC_ID);
@@ -337,6 +494,9 @@ async function wireEngine(
   // create can attach the underlying text (EmbedPDF highlights store no text —
   // spike item 6).
   let lastSelectionText = "";
+
+  // A click on blank page space dismisses the transient AI-quote overlay.
+  selScope.onEmptySpaceClick(() => setQuoteHlRef.current(null));
 
   selection.onSelectionChange((range) => {
     if (!range) return;
@@ -505,7 +665,35 @@ async function wireEngine(
       emitStats();
     },
     navigateToPage(pageIndex) {
+      // An explicit page jump is navigating away — drop any quote overlay.
+      setQuoteHlRef.current(null);
       scrollScope.scrollToPage({ pageNumber: pageIndex + 1, behavior: "smooth" });
+    },
+    async highlightQuote(pageIndex, req) {
+      const d = doc();
+      const page = d?.pages[pageIndex];
+      if (!d || !page) {
+        setQuoteHlRef.current({ pageIndex, kind: "banner", quote: req.displayText });
+        return false;
+      }
+      const rects = await findQuoteRects(engine, d, pageIndex, req.searchText);
+      if (rects && rects.length > 0) {
+        setQuoteHlRef.current({ pageIndex, kind: "rects", rects });
+        scrollScope.scrollToPage({
+          pageNumber: pageIndex + 1,
+          pageCoordinates: { x: rects[0].origin.x, y: rects[0].origin.y },
+          alignY: 60,
+          behavior: "smooth",
+        });
+        return true;
+      }
+      // Tier B: could not locate the quote geometrically — show it as a banner.
+      setQuoteHlRef.current({ pageIndex, kind: "banner", quote: req.displayText });
+      scrollScope.scrollToPage({ pageNumber: pageIndex + 1, behavior: "smooth" });
+      return false;
+    },
+    clearQuoteHighlight() {
+      setQuoteHlRef.current(null);
     },
     navigateToAnnotation(id) {
       const ta = annScope.getAnnotationById(id);
