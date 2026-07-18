@@ -17,6 +17,9 @@ test("core user-data files are in range", () => {
     "memory-topic1/meta.json",
     "prep-deadbeef/state.json",
     "prep-deadbeef/attention-is-all-you-need.md",
+    "notes-deadbeef/state.json",
+    "notes-deadbeef/overview.md",
+    "notes-deadbeef/chapter-01.md",
   ]) {
     expect(inSyncRange(p)).toBe(true);
   }
@@ -31,6 +34,7 @@ test("caches, logs, sync internals, and book blobs are out of range", () => {
     "sync-state.json",
     "credentials.json",
     "prep-deadbeef/pdf/some-paper.pdf",
+    "notes-deadbeef/cache/raster.png",
     "library/abc123.pdf",
     "images/threads/t1/photo.png",
     "random.txt",
