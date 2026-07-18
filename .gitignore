@@ -29,3 +29,9 @@ npm-debug.log*
 # EmbedPDF PDFium wasm: self-hosted from node_modules, not vendored into git.
 # Run scripts/copy-pdfium-wasm.sh (offline, sourced from @embedpdf/pdfium).
 /public/pdfium/
+
+# Agent worktrees and session tooling; also excluded from Tailwind's
+# class scan and Vite's watcher (vite.config.ts) so agent file churn
+# never reloads the user's dev session.
+.claude/
+.playwright-mcp/
