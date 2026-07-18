@@ -77,6 +77,13 @@ export interface ViewInstance {
   zoomReset: () => void;
   setSpreadMode: (mode: SpreadMode) => void;
   navigate: (target: { pageIndex?: number; annotationID?: string }) => void;
+  // Scroll to a page and paint a transient violet overlay on an AI-cited quote
+  // (not a saved annotation). searchText is located in the page's text layer;
+  // displayText is shown as a fallback banner when it can't be. Resolves true
+  // when the quote was highlighted (Tier A), false on the banner fallback.
+  highlightQuote: (pageIndex: number, req: { searchText: string; displayText: string }) => Promise<boolean>;
+  // Dismiss the transient quote overlay, if any.
+  clearQuoteHighlight: () => void;
   // undefined deactivates the active tool (reverts to pointer).
   setTool: (tool?: Tool) => void;
   // Upsert by id and re-render; does not fire onSaveAnnotations (host is source

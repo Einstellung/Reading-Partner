@@ -41,6 +41,7 @@ export interface EmbedReaderPaneProps {
   onDeleteAnnotations: (ids: string[]) => void;
   onSelectAnnotations: (ids: string[]) => void;
   onSetAnnotationPopup: (params?: AnnotationPopupParams) => void;
+  onQuoteHighlightChange?: (active: boolean) => void;
   className?: string;
 }
 
@@ -138,6 +139,8 @@ function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
         if (target.annotationID) h.navigateToAnnotation(target.annotationID);
         else if (typeof target.pageIndex === "number") h.navigateToPage(target.pageIndex);
       },
+      highlightQuote: (pageIndex, req) => h.highlightQuote(pageIndex, req),
+      clearQuoteHighlight: () => h.clearQuoteHighlight(),
       setTool: (tool?: Tool) => {
         if (!tool || tool.type === "pointer") {
           h.setTool("pointer");
@@ -190,6 +193,7 @@ function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
         }}
         onSelectAnnotation={onSelectAnnotation}
         onAnnotationAnchor={onAnnotationAnchor}
+        onQuoteHighlight={(active) => propsRef.current.onQuoteHighlightChange?.(active)}
         onViewState={(s: EmbedViewState) =>
           props.onChangeViewState({
             pageIndex: s.pageIndex,

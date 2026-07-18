@@ -72,6 +72,9 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
     );
   }
   lines.push(
+    "- Cite pages of this book as [p.N]; when a claim rests on specific words,",
+    '  quote them: [p.N "exact phrase from the page"] (verbatim from the source,',
+    "  <=120 chars) — the quote gets highlighted on the page when clicked.",
     "- Your replies render as Markdown: write math as LaTeX delimited by $...$",
     "  (inline) or $$...$$ (block), and put code in fenced code blocks.",
     "",
