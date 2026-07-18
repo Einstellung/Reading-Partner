@@ -12,9 +12,19 @@ import {
   type ProviderId,
   type ProviderInfo,
 } from "../aiClient";
-import type { Settings } from "../settings";
+import type { Settings, ThinkingSetting } from "../settings";
 
 type ModelInfo = { id: string; label: string };
+
+const THINKING_OPTIONS: { value: ThinkingSetting; label: string }[] = [
+  { value: "off", label: "Off" },
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+];
+
+const THINKING_HINT =
+  "Adaptive models decide per question how much to actually think; higher = deeper but slower.";
 
 interface SettingsViewProps {
   settings: Settings;
@@ -106,6 +116,10 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
                   ))}
                 </select>
               </label>
+              <ThinkingField
+                value={settings.chatThinking}
+                onChange={(chatThinking) => onSettingsChange({ ...settings, chatThinking })}
+              />
             </div>
           )}
         </div>
@@ -128,9 +142,44 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
             A free key from semanticscholar.org avoids the shared rate limits that make paper
             fetching stall.
           </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <ThinkingField
+              value={settings.prepThinking}
+              onChange={(prepThinking) => onSettingsChange({ ...settings, prepThinking })}
+            />
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+// A Thinking dropdown plus its shared hint. Used for both chat and lesson prep.
+function ThinkingField({
+  value,
+  onChange,
+}: {
+  value: ThinkingSetting;
+  onChange: (v: ThinkingSetting) => void;
+}) {
+  return (
+    <>
+      <label className="flex items-center gap-2 text-sm">
+        Thinking
+        <select
+          className={FIELD}
+          value={value}
+          onChange={(e) => onChange(e.target.value as ThinkingSetting)}
+        >
+          {THINKING_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="m-0 basis-full text-xs text-[#777]">{THINKING_HINT}</p>
+    </>
   );
 }
 

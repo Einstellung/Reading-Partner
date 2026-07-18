@@ -2,6 +2,7 @@
 // live in the AI layer; this only stores which provider/model a new call uses.
 // Persisted to AppData/settings.json, debounced, with failures surfaced.
 
+import type { ThinkingLevel } from "@earendil-works/pi-ai";
 import {
   BaseDirectory,
   exists,
@@ -13,19 +14,38 @@ import {
 const SETTINGS_FILE = "settings.json";
 const SAVE_DEBOUNCE = 500;
 
+// The thinking levels we expose in the UI. pi-ai supports more ("minimal",
+// "xhigh", "max"); we keep the subset small. "off" means don't pass reasoning at
+// all. On adaptive-thinking models (Claude 4.5+) the level is an effort hint —
+// the model still decides per-request whether and how much to think.
+export type ThinkingSetting = "off" | "low" | "medium" | "high";
+
+// Map a setting to pi-ai's ThinkingLevel. "off" -> undefined (omit reasoning).
+export function toReasoning(setting: ThinkingSetting): ThinkingLevel | undefined {
+  return setting === "off" ? undefined : setting;
+}
+
 export interface Settings {
   defaultProviderId: string | null;
   defaultModelId: string | null;
   // Optional Semantic Scholar API key. When set, prep fetches use it instead of
   // the shared free rate-limit pool.
   semanticScholarApiKey: string | null;
+  // How hard the model thinks for chat/distillation and for lesson prep. Omitted
+  // silently on models that don't support reasoning.
+  chatThinking: ThinkingSetting;
+  prepThinking: ThinkingSetting;
 }
 
-const DEFAULTS: Settings = {
+export const DEFAULT_SETTINGS: Settings = {
   defaultProviderId: null,
   defaultModelId: null,
   semanticScholarApiKey: null,
+  chatThinking: "low",
+  prepThinking: "medium",
 };
+
+const DEFAULTS = DEFAULT_SETTINGS;
 
 let timer: number | null = null;
 let onError: (e: unknown) => void = () => {};

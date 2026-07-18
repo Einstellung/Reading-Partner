@@ -17,6 +17,7 @@ import {
 	type Message,
 	type Model,
 	type Api,
+	type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
 import { runAgentLoop, type AgentCallbacks, type AgentTool, type StreamFn } from "../../src/ai/agent";
 
@@ -323,6 +324,73 @@ test("a tool result with images is fed back as image content (M9)", async () => 
 		{ type: "text", text: "Figure 3" },
 		{ type: "image", data: "ABCD", mimeType: "image/jpeg" },
 	]);
+});
+
+test("reasoning is forwarded to the stream options each round", async () => {
+	const seen: (SimpleStreamOptions | undefined)[] = [];
+	const stream: StreamFn = (_model, _context, options) => {
+		seen.push(options);
+		const s = createAssistantMessageEventStream();
+		const events = turnEvents(seen.length === 1
+			? { calls: [{ name: "echo", args: { value: "x" }, id: "t1" }] }
+			: { text: "done" });
+		(async () => {
+			for (const ev of events) {
+				await Promise.resolve();
+				s.push(ev);
+			}
+			s.end();
+		})();
+		return s;
+	};
+	const c = collectCallbacks();
+
+	await runAgentLoop({
+		stream,
+		model: MODEL,
+		messages: [{ role: "user", content: "go", timestamp: 0 }],
+		tools: [echoTool],
+		reasoning: "high",
+		maxRounds: 8,
+		...c.cb,
+	});
+
+	expect(c.done).toBe("done");
+	// Both the initial turn and the post-tool turn carry the reasoning level.
+	expect(seen.map((o) => o?.reasoning)).toEqual(["high", "high"]);
+});
+
+test("thinking deltas go to onThinking, never onDelta or the final answer", async () => {
+	const stream: StreamFn = (_model, _context, _options) => {
+		const s = createAssistantMessageEventStream();
+		const msg = fauxAssistantMessage("visible", { stopReason: "stop" });
+		(async () => {
+			await Promise.resolve();
+			s.push({ type: "thinking_delta", contentIndex: 0, delta: "pondering", partial: fauxAssistantMessage("") });
+			await Promise.resolve();
+			s.push({ type: "text_delta", contentIndex: 0, delta: "visible", partial: msg });
+			await Promise.resolve();
+			s.push({ type: "done", reason: "stop", message: msg });
+			s.end();
+		})();
+		return s;
+	};
+	const thinking: string[] = [];
+	const c = collectCallbacks();
+
+	await runAgentLoop({
+		stream,
+		model: MODEL,
+		messages: [{ role: "user", content: "go", timestamp: 0 }],
+		tools: [echoTool],
+		maxRounds: 8,
+		...c.cb,
+		onThinking: (t) => thinking.push(t),
+	});
+
+	expect(thinking).toEqual(["pondering"]);
+	expect(c.deltas).toEqual(["visible"]);
+	expect(c.done).toBe("visible");
 });
 
 test("plain answer with no tools calls onDone directly", async () => {

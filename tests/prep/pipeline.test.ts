@@ -3,6 +3,12 @@
 
 import { expect, test } from "bun:test";
 import {
+  createAssistantMessageEventStream,
+  fauxAssistantMessage,
+  type Api,
+  type Model,
+} from "@earendil-works/pi-ai";
+import {
   PrepPipeline,
   type AiCallOptions,
   type DigestOutcome,
@@ -11,6 +17,7 @@ import {
   type PlanOutcome,
   type PrepActivity,
 } from "../../src/prep/pipeline";
+import { streamChatCore, type SimpleStreamFn } from "../../src/ai/providers";
 import { RateLimitError } from "../../src/prep/http";
 import type { PrepPaper, PrepState } from "../../src/prep/types";
 
@@ -344,6 +351,55 @@ test("deltas reset the watchdog so a slow-but-alive plan completes", async () =>
         }
         return JSON.parse(JSON.stringify(PLAN));
       },
+    },
+    clock,
+  );
+  const p = new PrepPipeline("h", "s", deps);
+  await p.ensureStarted();
+  expect(p.snapshot().state?.planStatus).toBe("done");
+  expect(statuses(p)).toEqual({ alpha: "done", beta: "done" });
+});
+
+test("thinking deltas keep the watchdog alive: a long think before any text does not stall", async () => {
+  const clock = makeClock();
+  // A stream that thinks for 5 * 40s = 200s emitting only thinking deltas (never
+  // 60s of silence, but no visible text either), then answers in one text delta.
+  const thinkingStream: SimpleStreamFn = () => {
+    const s = createAssistantMessageEventStream();
+    (async () => {
+      for (let i = 0; i < 5; i++) {
+        await clock.sleep(40_000);
+        s.push({ type: "thinking_delta", contentIndex: 0, delta: "…", partial: fauxAssistantMessage("") });
+      }
+      const msg = fauxAssistantMessage("plan", { stopReason: "stop" });
+      s.push({ type: "text_delta", contentIndex: 0, delta: "plan", partial: msg });
+      s.end();
+    })();
+    return s;
+  };
+  const { deps } = makeFakes(
+    {
+      // Mirrors prep/live.ts callModel: both text and thinking bump onProgress,
+      // so a thinking-only stretch counts as liveness for the stall watchdog.
+      plan: (opts) =>
+        new Promise<PlanOutcome>((resolve, reject) => {
+          let chars = 0;
+          const bump = (t: string) => {
+            chars += t.length;
+            opts.onProgress(chars);
+          };
+          void streamChatCore({
+            stream: thinkingStream,
+            model: {} as Model<Api>,
+            messages: [],
+            reasoning: "medium",
+            signal: opts.signal,
+            onDelta: bump,
+            onThinking: bump,
+            onDone: () => resolve(JSON.parse(JSON.stringify(PLAN))),
+            onError: (m) => reject(new Error(m)),
+          });
+        }),
     },
     clock,
   );
