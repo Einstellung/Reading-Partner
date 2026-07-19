@@ -12,6 +12,7 @@ import {
   formatAnnotations,
   formatPages,
   formatSearch,
+  notesOverviewSection,
   surroundingText,
   toolStatusLabel,
   type TopicMaterial,
@@ -144,4 +145,30 @@ test("buildReadingTools includes only tools with usable data", async () => {
       materials: [{ label: "Scan", fulltext: ft([""], "no-text-layer"), annotations: [] }],
     }),
   ).toEqual([]);
+});
+
+test("notesOverviewSection: empty for no overview", () => {
+  expect(notesOverviewSection(null)).toBe("");
+  expect(notesOverviewSection("")).toBe("");
+  expect(notesOverviewSection("   \n  ")).toBe("");
+});
+
+test("notesOverviewSection: labels and wraps a short overview whole", () => {
+  const block = notesOverviewSection("# Framework\n\nThe book argues X then Y.");
+  expect(block).toContain("The whole-book outline from the reader's notes");
+  expect(block).toContain("The book argues X then Y.");
+  expect(block).not.toContain("…"); // short: not truncated
+});
+
+test("notesOverviewSection: truncates long text at a paragraph boundary", () => {
+  const para = (n: number) => `Paragraph ${n} ` + "x".repeat(400);
+  const body = [para(1), para(2), para(3), para(4)].join("\n\n");
+  const block = notesOverviewSection(body, 900);
+  expect(block).toContain("…");
+  expect(block).toContain("Paragraph 1");
+  expect(block).toContain("Paragraph 2"); // ~832 chars fits under 900 at the \n\n
+  expect(block).not.toContain("Paragraph 4"); // dropped past the cap
+  // The cut lands on a paragraph boundary, so no paragraph is left half-written.
+  const inner = block.split('"""')[1];
+  expect(inner.trimEnd().endsWith("…")).toBe(true);
 });

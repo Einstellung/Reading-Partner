@@ -45,6 +45,9 @@ export interface Settings {
   // SenseVoice defaults (see src/voice/config.ts).
   sttApiBase: string | null;
   sttModel: string | null;
+  // Generate chapter notes automatically from the reader's highlights (docs/14).
+  // The manual "Generate notes" button and per-chapter Regenerate work regardless.
+  autoNotes: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -57,6 +60,7 @@ export const DEFAULT_SETTINGS: Settings = {
   illustrationModel: null,
   sttApiBase: null,
   sttModel: null,
+  autoNotes: true,
 };
 
 const DEFAULTS = DEFAULT_SETTINGS;

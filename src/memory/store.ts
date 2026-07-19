@@ -33,6 +33,9 @@ export interface MemoryFs {
 
 export interface MemoryMeta {
   lastDistilledAt: number | null;
+  // When the reader's silent marks were last folded into memory (docs/02 part 2).
+  // Distillation gathers annotations created after this, then advances it.
+  lastAnnotationDistillAt: number | null;
 }
 
 const ENTRY_FILE = /^(m-[0-9a-f]{8})\.md$/;
@@ -145,11 +148,14 @@ export class MemoryFileStore {
   async getMeta(): Promise<MemoryMeta> {
     try {
       const raw = await this.fs.read(`${this.dir}/meta.json`);
-      if (raw === null) return { lastDistilledAt: null };
-      const parsed = JSON.parse(raw) as MemoryMeta;
-      return { lastDistilledAt: parsed.lastDistilledAt ?? null };
+      if (raw === null) return { lastDistilledAt: null, lastAnnotationDistillAt: null };
+      const parsed = JSON.parse(raw) as Partial<MemoryMeta>;
+      return {
+        lastDistilledAt: parsed.lastDistilledAt ?? null,
+        lastAnnotationDistillAt: parsed.lastAnnotationDistillAt ?? null,
+      };
     } catch {
-      return { lastDistilledAt: null };
+      return { lastDistilledAt: null, lastAnnotationDistillAt: null };
     }
   }
 

@@ -19,7 +19,10 @@ import { FileMemoryAdapter } from "../../src/memory/adapter";
 import {
   buildDistillSystemPrompt,
   buildDistillUserMessage,
+  formatSilentMarks,
   runDistillation,
+  selectSilentMarks,
+  type DistillAnnotation,
   type DistillInput,
   type DistillRunner,
 } from "../../src/memory/distill";
@@ -227,4 +230,64 @@ test("user message carries metadata, the marked passage, and message ids", () =>
   expect(msg).toContain('Marked passage: "the marked sentence"');
   expect(msg).toContain("[thread-1:100] reader: why is this quadratic?");
   expect(msg).toContain("[thread-1:200] you: because every token attends to every token");
+});
+
+function mark(overrides: Partial<DistillAnnotation> = {}): DistillAnnotation {
+  return { id: "a", page: 1, text: "t", comment: undefined, createdAt: 0, ...overrides };
+}
+
+test("selectSilentMarks keeps only marks after the cursor, newest first", () => {
+  const anns = [
+    mark({ id: "old", createdAt: 100, text: "old" }),
+    mark({ id: "new", createdAt: 300, text: "new" }),
+    mark({ id: "mid", createdAt: 200, text: "mid" }),
+  ];
+  const { marks, capped } = selectSilentMarks(anns, 150);
+  expect(marks.map((m) => m.id)).toEqual(["new", "mid"]); // "old" is before the cursor
+  expect(capped).toBe(false);
+});
+
+test("selectSilentMarks with a null cursor takes everything, and drops empty marks", () => {
+  const anns = [
+    mark({ id: "a", createdAt: 1, text: "has text" }),
+    mark({ id: "b", createdAt: 2, text: "", comment: "  " }), // no text, no note → dropped
+    mark({ id: "c", createdAt: 3, text: "", comment: "a note" }), // note only → kept
+  ];
+  const { marks } = selectSilentMarks(anns, null);
+  expect(marks.map((m) => m.id)).toEqual(["c", "a"]);
+});
+
+test("selectSilentMarks caps the list at the most recent N", () => {
+  const anns = Array.from({ length: 45 }, (_, i) => mark({ id: `m${i}`, createdAt: i, text: `t${i}` }));
+  const { marks, capped } = selectSilentMarks(anns, null, 40);
+  expect(marks).toHaveLength(40);
+  expect(capped).toBe(true);
+  expect(marks[0].id).toBe("m44"); // newest first
+});
+
+test("formatSilentMarks renders a pattern block with ids, pages, and the cap note", () => {
+  const block = formatSilentMarks(
+    [mark({ id: "x1", page: 7, text: "recursion", comment: "confusing" })],
+    true,
+  );
+  expect(block).toContain("since the last distillation");
+  expect(block).toContain("PATTERN");
+  expect(block).toContain("there were more"); // capped
+  expect(block).toContain('[x1] p7: "recursion" — note: confusing');
+});
+
+test("formatSilentMarks is empty when there are no marks", () => {
+  expect(formatSilentMarks([], false)).toBe("");
+});
+
+test("silent marks reach the prompts only when present", () => {
+  const withMarks = makeInput({
+    silentMarks: [mark({ id: "x1", page: 7, text: "recursion" })],
+  });
+  expect(buildDistillSystemPrompt(withMarks)).toContain("Silent marks");
+  expect(buildDistillUserMessage(withMarks)).toContain('[x1] p7: "recursion"');
+
+  const noMarks = makeInput();
+  expect(buildDistillSystemPrompt(noMarks)).not.toContain("Silent marks");
+  expect(buildDistillUserMessage(noMarks)).not.toContain("since the last distillation");
 });

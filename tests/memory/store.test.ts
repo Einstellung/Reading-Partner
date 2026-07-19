@@ -105,7 +105,7 @@ test("list skips non-entry and malformed files", async () => {
 
 test("meta round-trips and defaults to no distillation", async () => {
   const { store } = makeStore();
-  expect(await store.getMeta()).toEqual({ lastDistilledAt: null });
-  await store.setMeta({ lastDistilledAt: 123 });
-  expect(await store.getMeta()).toEqual({ lastDistilledAt: 123 });
+  expect(await store.getMeta()).toEqual({ lastDistilledAt: null, lastAnnotationDistillAt: null });
+  await store.setMeta({ lastDistilledAt: 123, lastAnnotationDistillAt: 45 });
+  expect(await store.getMeta()).toEqual({ lastDistilledAt: 123, lastAnnotationDistillAt: 45 });
 });
