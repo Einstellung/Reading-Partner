@@ -37,6 +37,14 @@ When you hang up a conversation, the AI silently distills it: where you are in t
 
 Paste a URL into the chat — an arXiv or OpenReview PDF, or a web article — and the AI ingests it: downloads, extracts, files it into the prep list, and can discuss it against the survey in the same turn. The survey is static; the field is not.
 
+## Whole-book notes
+
+The sidebar has a Notes tab: one click generates chapter-by-chapter lecture notes for the whole book. The chapter plan comes from the PDF outline, or the model reads the table of contents when there is none. Notes carry `[p.N]` and `[fig:N]` anchors that jump into the book, just like citations in chat. Regenerate any chapter on its own, with an optional instruction to steer it. Your highlights and conversations in a chapter shape how deep its note goes, and explanations you explicitly endorsed in chat get absorbed into the note.
+
+## Sync across devices
+
+Sign in with Google in Settings and everything syncs — books, reading positions, marks and highlights, conversations, and notes — through a visible "Reading Partner" folder in your own Google Drive. No accounts, no server: your data stays in your Drive, and you can open the folder and see the files. Sync runs automatically after sign-in, with a manual toggle and a Sync now button in Settings. Books are content-addressed, so the same PDF opened on two devices lines up. AI provider keys are the one thing that never leaves the device.
+
 ## Thinking levels
 
 Adaptive reasoning is on by default: low effort for conversation (fast answers, the model thinks only when the question demands it), medium for lesson prep (background work, quality first). Both are adjustable in Settings.
@@ -59,6 +67,8 @@ bun install
 bun run wasm   # stage the self-hosted PDFium wasm (from the @embedpdf/pdfium package, offline)
 bun run tauri dev
 ```
+
+Drive sync needs your own Google OAuth Desktop client: copy `.env.example` to `.env` and fill in `VITE_GOOGLE_CLIENT_ID` / `VITE_GOOGLE_CLIENT_SECRET`. Without it the app runs fine, with sync disabled.
 
 `bun test` runs the suite (no network, no AI tokens). An iOS/TestFlight pipeline is prepared in `.github/workflows/ios-testflight.yml`.
 
