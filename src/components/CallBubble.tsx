@@ -4,7 +4,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconExpand } from './icons';
-import { Composer, MessageList } from './chat';
+import { Composer, MessageList, type ComposerVoice } from './chat';
 import type { PendingImage, ThreadMessage } from './types';
 
 interface CallBubbleProps {
@@ -18,6 +18,7 @@ interface CallBubbleProps {
 	hint?: string;
 	streaming?: boolean;
 	onStop?(): void;
+	voice?: ComposerVoice;
 }
 
 const WIDTH = 360;
@@ -35,6 +36,7 @@ export default function CallBubble({
 	hint,
 	streaming,
 	onStop,
+	voice,
 }: CallBubbleProps) {
 	const ref = useRef<HTMLDivElement>(null);
 	const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
@@ -96,6 +98,7 @@ export default function CallBubble({
 				hint={hint}
 				streaming={streaming}
 				onStop={onStop}
+				voice={voice}
 			/>
 		</div>
 	);

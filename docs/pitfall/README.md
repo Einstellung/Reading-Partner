@@ -32,3 +32,4 @@
 - [26-plugin-http-abort-resource-id-leak](./26-plugin-http-abort-resource-id-leak.md) — Tauri http 插件 abort 后 fire-and-forget 取消,泄漏 "resource id N is invalid" 未捕获拒绝
 - [28-http-scope-is-unix-glob](./28-http-scope-is-unix-glob.md) — Tauri http scope 是 UNIX glob 不是 URLPattern,"任意 https 主机"写 `https://*`
 - [27-embedpdf-searchinpage-not-on-engine](./27-embedpdf-searchinpage-not-on-engine.md) — searchInPage 在 IPdfiumExecutor 不在 PdfEngine,定点搜索改用 searchAllPages 按页过滤
+- [29-voice-stt-fetch-and-ipc-bytes](./29-voice-stt-fetch-and-ipc-bytes.md) — 语音 STT 请求必须走 cleanTauriFetch(CSP+CORS 双杀直连);Rust 返回 Vec<u8> 是 JSON 数字数组

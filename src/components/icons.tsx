@@ -173,6 +173,22 @@ export function IconSend({ size = 16 }: IconProps) {
 	);
 }
 
+// Microphone glyph for push-to-talk voice input.
+export function IconMic({ size = 16 }: IconProps) {
+	return (
+		<svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+			<rect x="6" y="1.75" width="4" height="7.5" rx="2" fill="currentColor" />
+			<path
+				d="M3.75 7.25V8C3.75 10.35 5.65 12.25 8 12.25C10.35 12.25 12.25 10.35 12.25 8V7.25"
+				stroke="currentColor"
+				strokeWidth="1.4"
+				strokeLinecap="round"
+			/>
+			<path d="M8 12.5V14.25M6 14.25H10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+		</svg>
+	);
+}
+
 // Filled square to stop a streaming reply.
 export function IconStop({ size = 16 }: IconProps) {
 	return (

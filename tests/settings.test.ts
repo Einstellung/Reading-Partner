@@ -49,6 +49,8 @@ test("loadSettings round-trips a fully persisted object", async () => {
     prepThinking: "off",
     illustrationApiBase: "https://x.test",
     illustrationModel: "m",
+    sttApiBase: "https://stt.test",
+    sttModel: "sense",
   };
   fileContent = JSON.stringify(saved);
   const s = await loadSettings();

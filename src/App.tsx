@@ -60,6 +60,7 @@ import { compressImage, compressImageData, type CompressedImage } from "./ai/ima
 import { isTauri, readClipboardImage } from "./clipboard";
 import { DEFAULT_SETTINGS, loadSettings, onSettingsSaveError, saveSettings, toReasoning, type Settings } from "./settings";
 import { buildSystemPrompt, type BooklistItem } from "./context";
+import { buildGlossary } from "./voice";
 import {
   installFetchBridge,
   listProviders,
@@ -446,6 +447,24 @@ export default function App() {
   const activeTopic = useMemo(
     () => topics.find((t) => t.id === activeTopicId) ?? null,
     [topics, activeTopicId],
+  );
+
+  // Voice input for the chat composer (docs/15): the STT cleanup pass anchors on
+  // the current book's title + outline as a glossary, and runs on the default
+  // chat model (null when no provider is configured — cleanup is then skipped).
+  const callVoice = useMemo(
+    () => ({
+      glossary: buildGlossary({ title, outline: fulltext?.outline }),
+      cleanupModel:
+        settings.defaultProviderId && settings.defaultModelId
+          ? {
+              providerId: settings.defaultProviderId as ProviderId,
+              modelId: settings.defaultModelId,
+              reasoning: toReasoning(settings.chatThinking),
+            }
+          : null,
+    }),
+    [title, fulltext, settings.defaultProviderId, settings.defaultModelId, settings.chatThinking],
   );
 
   const refreshTopics = useCallback(async () => {
@@ -2043,6 +2062,7 @@ export default function App() {
             hint={imageHint}
             streaming={streaming}
             onStop={stopTurn}
+            voice={callVoice}
           />
         )}
 
@@ -2096,6 +2116,7 @@ export default function App() {
                 classroomStatus={prepStatusLine}
                 emptyTitle={call.isBook ? title ?? "This book" : undefined}
                 placeholder={call.isBook ? "Ask about this book…" : undefined}
+                voice={callVoice}
               />
             </div>
             <div className="absolute right-3 top-3 z-50">
