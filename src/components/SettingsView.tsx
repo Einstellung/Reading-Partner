@@ -12,6 +12,8 @@ import {
   type ProviderId,
   type ProviderInfo,
 } from "../aiClient";
+import { hasImageGenKey, setImageGenKey } from "../ai/credentials";
+import { DEFAULT_IMAGE_API_BASE, DEFAULT_IMAGE_MODEL } from "../slides";
 import type { Settings, ThinkingSetting } from "../settings";
 import {
   setAutoSyncEnabled,
@@ -158,6 +160,9 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
           </div>
         </div>
 
+        <h2 className="mb-2 mt-8 text-sm font-semibold text-[#777]">Illustrations</h2>
+        <IllustrationsCard settings={settings} onSettingsChange={onSettingsChange} />
+
         <h2 className="mb-2 mt-8 text-sm font-semibold text-[#777]">Sync</h2>
         <SyncCard />
       </div>
@@ -261,6 +266,81 @@ function SyncCard() {
         <p className="m-0 text-xs text-[#b91c1c]">Last sync failed: {status.lastError}</p>
       )}
       {error && <p className="m-0 text-xs text-[#b91c1c]">{error}</p>}
+    </div>
+  );
+}
+
+// Deck illustrations (docs/14): the paid image-relay key (stored with the AI
+// credentials, not synced) plus the harmless base URL / model (settings.json).
+function IllustrationsCard({
+  settings,
+  onSettingsChange,
+}: {
+  settings: Settings;
+  onSettingsChange: (next: Settings) => void;
+}) {
+  const [configured, setConfigured] = useState(false);
+  const [key, setKey] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    hasImageGenKey().then(setConfigured);
+  }, []);
+
+  const saveKey = async () => {
+    setBusy(true);
+    try {
+      await setImageGenKey(key);
+      setKey("");
+      setConfigured(await hasImageGenKey());
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className={CARD}>
+      <label className="flex flex-col gap-1.5 text-sm">
+        API key
+        <div className="flex gap-2">
+          <input
+            type="password"
+            className={FIELD}
+            placeholder={configured ? "Replace image API key" : "Image API key"}
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+          />
+          <button type="button" className={BTN} disabled={busy || !key.trim()} onClick={saveKey}>
+            Save
+          </button>
+          {configured && <span className="self-center text-xs text-[#5fb236]">Connected</span>}
+        </div>
+      </label>
+      <label className="flex flex-col gap-1.5 text-sm">
+        Model
+        <input
+          className={FIELD}
+          placeholder={DEFAULT_IMAGE_MODEL}
+          value={settings.illustrationModel ?? ""}
+          onChange={(e) =>
+            onSettingsChange({ ...settings, illustrationModel: e.target.value.trim() || null })
+          }
+        />
+      </label>
+      <label className="flex flex-col gap-1.5 text-sm">
+        Base URL
+        <input
+          className={FIELD}
+          placeholder={DEFAULT_IMAGE_API_BASE}
+          value={settings.illustrationApiBase ?? ""}
+          onChange={(e) =>
+            onSettingsChange({ ...settings, illustrationApiBase: e.target.value.trim() || null })
+          }
+        />
+      </label>
+      <p className="m-0 text-xs text-[#777]">
+        Without a key, talk decks are generated without AI illustrations.
+      </p>
     </div>
   );
 }

@@ -66,6 +66,10 @@
       "identifier": "opener:allow-open-url",
       "allow": [{ "url": "https://claude.ai/*" }, { "url": "https://accounts.google.com/*" }]
     },
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [{ "path": "$APPDATA/slides/*" }]
+    },
     "clipboard-manager:allow-read-image"
   ]
 }
