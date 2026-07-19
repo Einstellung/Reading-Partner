@@ -14,8 +14,10 @@ import type { Fulltext } from "../fulltext/types";
 import { loadSettings, toReasoning } from "../settings";
 import {
   buildChapterTools,
+  formatChatThreads,
   formatEmphasisSignals,
   runNoteChapter,
+  type ChatThread,
   type EmphasisSignal,
 } from "./chapter";
 import {
@@ -41,6 +43,10 @@ export interface NotesInputs {
   getBuffer(): ArrayBuffer | null; // book bytes for figure rasterization
   getFigures(): Promise<Figure[]>; // the book's figure index
   getEmphasisSignals(): EmphasisSignal[]; // highlights / underlines / discussed spots
+  // The book's AI-pen chat threads that carry a page anchor, resolved fresh at
+  // generation time so a regenerate picks up conversations added since. Threads
+  // with no page anchor (the book-level thread) are left out (docs/14).
+  getChatThreads(): Promise<ChatThread[]>;
 }
 
 async function resolveModel(): Promise<{
@@ -130,6 +136,11 @@ function makeDeps(bookId: string, bookName: string, inputs: NotesInputs): NotesD
         chapter.startPage,
         chapter.endPage,
       );
+      const chats = formatChatThreads(
+        await inputs.getChatThreads().catch(() => []),
+        chapter.startPage,
+        chapter.endPage,
+      );
       return runNoteChapter({
         bookName,
         chapter,
@@ -137,6 +148,7 @@ function makeDeps(bookId: string, bookName: string, inputs: NotesInputs): NotesD
         model: { providerId: model.providerId, modelId: model.modelId, reasoning: model.reasoning },
         figureCatalog,
         emphasis,
+        chats,
         instruction,
         signal: opts.signal,
         onProgress: opts.onProgress,

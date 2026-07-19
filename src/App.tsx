@@ -755,6 +755,24 @@ export default function App() {
             discussed: !!a.aiThreadId,
           }))
           .filter((s) => s.page > 0 && s.text.trim() !== ""),
+      // Chat threads carried into chapter generation: anchor each mark-anchored
+      // thread to its annotation's page; book-level threads have no anchor and
+      // are dropped (docs/14).
+      getChatThreads: async () => {
+        const threadMap = await loadThreads(bookId);
+        return Object.values(threadMap)
+          .map((t) => {
+            const ann = t.annotationId ? annMap.get(t.annotationId) : undefined;
+            const page = annotationPage(ann as { position?: { pageIndex?: number } } | undefined);
+            if (!page) return null;
+            return {
+              page,
+              createdAt: t.createdAt,
+              messages: t.messages.map((m) => ({ role: m.role, text: m.text })),
+            };
+          })
+          .filter((t): t is NonNullable<typeof t> => t !== null);
+      },
     };
     const pipeline = getNotesPipeline(bookId, name, inputs);
     notesRef.current = pipeline;
