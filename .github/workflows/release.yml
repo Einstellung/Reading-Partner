@@ -56,6 +56,11 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Baked into the Vite build; without them shipped binaries have Drive
+          # sync disabled. A Desktop OAuth client secret is not confidential
+          # (PKCE is the protection), but it still lives in repo secrets.
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
+          VITE_GOOGLE_CLIENT_SECRET: ${{ secrets.VITE_GOOGLE_CLIENT_SECRET }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Reading Partner ${{ github.ref_name }}"
