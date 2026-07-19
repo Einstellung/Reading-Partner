@@ -11,6 +11,12 @@ export const NOTES_VERSION = 1 as const;
 // normalized back to "pending" on load so a restart resumes.
 export type PhaseStatus = "pending" | "running" | "done" | "failed";
 
+// A chapter carries one more state than a phase: "skipped" — the reader marked
+// nothing in its page range, so highlight-driven auto generation passed it by
+// (docs/14). A skipped chapter is not run by the pipeline and does not block the
+// overview; the panel offers a per-chapter generate to override.
+export type ChapterStatus = PhaseStatus | "skipped";
+
 // The overview adds one more state: "stale" — the whole-book framework was
 // written, then a chapter was regenerated, so it may be out of date. It is not
 // regenerated automatically (docs/14); the panel offers a button.
@@ -23,7 +29,7 @@ export interface NoteChapter {
   title: string;
   startPage: number; // 1-based inclusive
   endPage: number; // 1-based inclusive
-  status: PhaseStatus;
+  status: ChapterStatus;
   error?: string;
 }
 

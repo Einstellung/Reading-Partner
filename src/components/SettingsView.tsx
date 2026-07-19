@@ -161,6 +161,23 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
           </div>
         </div>
 
+        <h2 className="mb-2 mt-8 text-sm font-semibold text-[#777]">Book notes</h2>
+        <div className={CARD}>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={settings.autoNotes}
+              onChange={(e) => onSettingsChange({ ...settings, autoNotes: e.target.checked })}
+            />
+            Generate chapter notes automatically from your highlights
+          </label>
+          <p className="m-0 text-xs text-[#777]">
+            As you mark up the book, notes for the chapters you have finished are written in the
+            background. Chapters you marked nothing in are skipped. The manual Generate button always
+            works too.
+          </p>
+        </div>
+
         <h2 className="mb-2 mt-8 text-sm font-semibold text-[#777]">Voice input</h2>
         <VoiceInputCard settings={settings} onSettingsChange={onSettingsChange} />
 

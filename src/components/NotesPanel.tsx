@@ -7,7 +7,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { NotesActivity, NotesSnapshot } from "../notes";
-import type { NoteChapter, PhaseStatus } from "../notes";
+import type { ChapterStatus, NoteChapter } from "../notes";
 import { Markdown } from "./Markdown";
 import SlidesDialog from "./SlidesDialog";
 
@@ -34,11 +34,12 @@ function LivenessHint({ activity, withUnit }: { activity: NotesActivity; withUni
   );
 }
 
-const STATUS_STYLE: Record<PhaseStatus, string> = {
+const STATUS_STYLE: Record<ChapterStatus, string> = {
   pending: "bg-neutral-100 text-neutral-500",
   running: "bg-amber-100 text-amber-700",
   done: "bg-green-100 text-green-700",
   failed: "bg-red-100 text-red-700",
+  skipped: "bg-neutral-100 text-neutral-400",
 };
 
 const SMALL_BTN =
@@ -53,6 +54,7 @@ interface NotesPanelProps {
   onRetryPlan(): void;
   onRetryChapter(index: number): void;
   onRegenerateChapter(index: number, instruction?: string): void;
+  onGenerateChapter(index: number): void;
   onRegenerateOverview(): void;
 }
 
@@ -63,6 +65,7 @@ function ChapterSection({
   disabled,
   onRetry,
   onRegenerate,
+  onGenerate,
 }: {
   chapter: NoteChapter;
   body: string | null;
@@ -71,6 +74,7 @@ function ChapterSection({
   disabled: boolean;
   onRetry(): void;
   onRegenerate(instruction?: string): void;
+  onGenerate(): void;
 }) {
   const [steering, setSteering] = useState(false);
   const [instruction, setInstruction] = useState("");
@@ -112,7 +116,16 @@ function ChapterSection({
             Retry
           </button>
         )}
+        {chapter.status === "skipped" && !disabled && (
+          <button type="button" className={SMALL_BTN} onClick={onGenerate}>
+            Generate
+          </button>
+        )}
       </div>
+
+      {chapter.status === "skipped" && (
+        <div className="mt-1 text-[11px] text-neutral-400">No marks — skipped</div>
+      )}
 
       {steering && (
         <div className="mt-1.5 flex gap-1.5">
@@ -152,6 +165,7 @@ export default function NotesPanel({
   onRetryPlan,
   onRetryChapter,
   onRegenerateChapter,
+  onGenerateChapter,
   onRegenerateOverview,
 }: NotesPanelProps) {
   const state = snapshot?.state ?? null;
@@ -332,6 +346,7 @@ export default function NotesPanel({
             disabled={running}
             onRetry={() => onRetryChapter(c.index)}
             onRegenerate={(instruction) => onRegenerateChapter(c.index, instruction)}
+            onGenerate={() => onGenerateChapter(c.index)}
           />
         ))}
         {state.planStatus === "done" && state.chapters.length === 0 && (

@@ -49,6 +49,27 @@ export function clip(text: string, max: number): string {
   return (sp > max * 0.6 ? cut.slice(0, sp) : cut).trimEnd() + "…";
 }
 
+// The whole-book outline from the reader's notes (docs/14), as a labeled block
+// for the opening context, or "" when there is no overview. Truncated to ~max
+// chars at a paragraph boundary so a long framework can't crowd out the prompt.
+export function notesOverviewSection(overview: string | null | undefined, max = 1500): string {
+  const body = (overview ?? "").trim();
+  if (!body) return "";
+  let text = body;
+  if (body.length > max) {
+    const cut = body.slice(0, max);
+    const para = cut.lastIndexOf("\n\n");
+    text = (para > max * 0.5 ? cut.slice(0, para) : cut).trimEnd() + "\n\n…";
+  }
+  return [
+    "The whole-book outline from the reader's notes (their own lecture notes for",
+    "this book; use it for orientation, cite the book itself for specifics):",
+    '"""',
+    text,
+    '"""',
+  ].join("\n");
+}
+
 // A short window of text around a marked page, for the kickoff context. Empty
 // when the book has no usable text layer.
 export function surroundingText(ft: Fulltext, page: number): string {

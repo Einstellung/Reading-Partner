@@ -20,7 +20,12 @@ import { logEvent } from "../events";
 import { FileMemoryAdapter, type MemoryAdapter } from "./adapter";
 import { isoDate } from "./files";
 import { MemoryFileStore, type MemoryFs } from "./store";
-import { runDistillation, type DistillMessage } from "./distill";
+import {
+  runDistillation,
+  selectSilentMarks,
+  type DistillAnnotation,
+  type DistillMessage,
+} from "./distill";
 
 const tauriFs: MemoryFs = {
   async read(path) {
@@ -92,6 +97,9 @@ export interface DistillThreadOptions {
   page: number | null;
   markedText: string;
   messages: DistillMessage[];
+  // The book's annotations, so distillation can fold in silent marks made since
+  // the last pass (docs/02 part 2). Absent/empty is fine.
+  annotations?: DistillAnnotation[];
 }
 
 // Message count per thread at its last distillation, so hangup after a trim
@@ -137,6 +145,11 @@ export async function distillThread(
     const model = await resolveModel();
     const store = getStore(opts.topicId);
     const adapter = getMemoryAdapter(opts.topicId);
+    const meta = await store.getMeta();
+    const { marks, capped } = selectSilentMarks(
+      opts.annotations ?? [],
+      meta.lastAnnotationDistillAt,
+    );
     const result = await runDistillation(
       {
         topicName: opts.topicName,
@@ -148,6 +161,8 @@ export async function distillThread(
         messages,
         indexText: await store.readIndexText(),
         today: isoDate(Date.now()),
+        silentMarks: marks,
+        silentMarksCapped: capped,
       },
       adapter,
       ({ systemPrompt, userText, tools }) =>
@@ -168,7 +183,12 @@ export async function distillThread(
         }),
     );
     distilledCounts.set(threadId, messages.length);
-    await store.setMeta({ lastDistilledAt: Date.now() });
+    // Advance both stamps only after a successful pass: the transcript's, and —
+    // when this pass actually saw the marks — the silent-marks cursor.
+    await store.setMeta({
+      lastDistilledAt: Date.now(),
+      lastAnnotationDistillAt: marks.length > 0 ? marks[0].createdAt : meta.lastAnnotationDistillAt,
+    });
     logEvent(opts.topicId, "distill-run", {
       threadId,
       created: result.created,

@@ -14,6 +14,16 @@ export interface DistillMessage {
   ts: number;
 }
 
+// A mark the reader made on the book, reduced for distillation. Most are made
+// silently (no conversation); the distiller looks for a pattern across them.
+export interface DistillAnnotation {
+  id: string;
+  page: number | null; // 1-based
+  text: string; // selected passage
+  comment?: string; // the reader's note, if any
+  createdAt: number; // ms epoch, for the "since last distillation" filter
+}
+
 export interface DistillInput {
   topicName: string;
   bookName: string;
@@ -25,6 +35,50 @@ export interface DistillInput {
   // The current memory index text (what "update, don't duplicate" checks against).
   indexText: string;
   today: string; // YYYY-MM-DD, so the model writes absolute dates
+  // The reader's silent marks since the last distillation, already filtered and
+  // capped by selectSilentMarks. Empty (or absent) when there are none.
+  silentMarks?: DistillAnnotation[];
+  // True when the marks were capped, so the prompt says the list is partial.
+  silentMarksCapped?: boolean;
+}
+
+// Trim a mark snippet so a long highlight doesn't blow up the prompt.
+function clip(text: string, max = 160): string {
+  const t = text.trim().replace(/\s+/g, " ");
+  return t.length <= max ? t : t.slice(0, max).trimEnd() + "…";
+}
+
+// The reader's marks created strictly after `since` (null = all), keeping only
+// ones with text or a note, newest first, capped. Pure — unit-tested.
+export function selectSilentMarks(
+  annotations: DistillAnnotation[],
+  since: number | null,
+  cap = 40,
+): { marks: DistillAnnotation[]; capped: boolean } {
+  const fresh = annotations
+    .filter((a) => (since === null ? true : a.createdAt > since))
+    .filter((a) => a.text.trim() !== "" || (a.comment ?? "").trim() !== "")
+    .sort((a, b) => b.createdAt - a.createdAt);
+  const capped = fresh.length > cap;
+  return { marks: capped ? fresh.slice(0, cap) : fresh, capped };
+}
+
+// The silent-marks block for the user message, or "" when there are none. Framed
+// as a pattern signal, with annotation ids so a memory can anchor to them.
+export function formatSilentMarks(marks: DistillAnnotation[], capped: boolean): string {
+  if (marks.length === 0) return "";
+  const lines = [
+    "Marks the reader made since the last distillation, most made silently (no",
+    "conversation). Look for a PATTERN across them, not one-off details:",
+  ];
+  if (capped) lines.push(`(showing the ${marks.length} most recent; there were more)`);
+  for (const a of marks) {
+    const head = a.page !== null ? `p${a.page}` : "—";
+    const quote = a.text.trim() ? `"${clip(a.text)}"` : "(no selected text)";
+    const note = (a.comment ?? "").trim() ? ` — note: ${clip(a.comment!, 80)}` : "";
+    lines.push(`- [${a.id}] ${head}: ${quote}${note}`);
+  }
+  return lines.join("\n");
 }
 
 // Runs one silent agent turn to completion. Resolves on the model's final text,
@@ -70,6 +124,16 @@ export function buildDistillSystemPrompt(input: DistillInput): string {
     "- Anchor evidence: pass the annotation id and the message ids a memory came from.",
     "- A short or shallow conversation may yield nothing worth keeping; making no",
     "  tool call at all is a fine outcome.",
+    ...((input.silentMarks?.length ?? 0) > 0
+      ? [
+          "- Silent marks: the message below lists marks the reader made since the last",
+          "  distillation, most without any conversation. Judge whether they show a",
+          "  PATTERN worth remembering (what the reader keeps marking, which themes or",
+          "  pages they lingered on). If so, write ONE aggregated memory (usually",
+          "  understood-concept, belief, or stuck-point, as fits) anchored to those",
+          "  annotation ids — never one memory per mark. Recording nothing is fine.",
+        ]
+      : []),
     "",
     "Current memory index for this topic:",
     input.indexText.trim() || "(empty)",
@@ -89,6 +153,8 @@ export function buildDistillUserMessage(input: DistillInput): string {
   for (const m of input.messages) {
     lines.push(`[${input.threadId}:${m.ts}] ${m.role === "user" ? "reader" : "you"}: ${m.text}`);
   }
+  const marksBlock = formatSilentMarks(input.silentMarks ?? [], input.silentMarksCapped ?? false);
+  if (marksBlock) lines.push("", marksBlock);
   return lines.join("\n");
 }
 

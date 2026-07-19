@@ -18,7 +18,10 @@ export { buildMemoryTools, type MemoryToolOptions, type MemoryWriteAction } from
 export {
   buildDistillSystemPrompt,
   buildDistillUserMessage,
+  formatSilentMarks,
   runDistillation,
+  selectSilentMarks,
+  type DistillAnnotation,
   type DistillInput,
   type DistillMessage,
   type DistillResult,

@@ -227,6 +227,98 @@ test("regenerateOverview refreshes a stale overview", async () => {
   expect(overviewCalls).toBe(2);
 });
 
+// A three-chapter plan with real page ranges, for the highlight-frontier tests.
+const PLAN3: PlanOutcome = {
+  chapters: [
+    { index: 1, title: "c1", startPage: 1, endPage: 10, status: "pending" },
+    { index: 2, title: "c2", startPage: 11, endPage: 20, status: "pending" },
+    { index: 3, title: "c3", startPage: 21, endPage: 30, status: "pending" },
+  ],
+  source: "ai",
+};
+const plan3 = () => Promise.resolve(JSON.parse(JSON.stringify(PLAN3)) as PlanOutcome);
+
+test("autoAdvance plans, generates marked chapters behind the frontier, skips unmarked, leaves the frontier open", async () => {
+  const { deps } = makeFakes({ plan: plan3 });
+  const p = new NotesPipeline("b", "s", deps, TEST_CONFIG);
+  // Marks in ch1 and ch3 → frontier is ch3.
+  await p.autoAdvance([{ page: 5 }, { page: 25 }]);
+  await drain(p);
+  expect(statuses(p)).toEqual({ 1: "done", 2: "skipped", 3: "pending" });
+  // ch3 still pending → the book isn't settled → no overview yet.
+  expect(p.snapshot().state?.overviewStatus).toBe("pending");
+});
+
+test("autoAdvance runs only the marked chapters, not every pending one", async () => {
+  const generated: number[] = [];
+  const { deps } = makeFakes({
+    plan: plan3,
+    chapter: async ({ chapter: c }) => {
+      generated.push(c.index);
+      return "n";
+    },
+  });
+  const p = new NotesPipeline("b", "s", deps, TEST_CONFIG);
+  await p.autoAdvance([{ page: 5 }, { page: 25 }]);
+  await drain(p);
+  expect(generated).toEqual([1]); // not ch3 (frontier), not ch2 (skipped)
+});
+
+test("autoAdvance final pass generates the last chapter and writes the overview", async () => {
+  const { deps, getOverview } = makeFakes({ plan: plan3 });
+  const p = new NotesPipeline("b", "s", deps, TEST_CONFIG);
+  await p.autoAdvance([{ page: 5 }, { page: 25 }]);
+  await drain(p);
+  expect(statuses(p)).toEqual({ 1: "done", 2: "skipped", 3: "pending" });
+  // Reader finished in ch3; the inclusive close pass settles the tail.
+  await p.autoAdvance([{ page: 5 }, { page: 25 }], { readingPage: 28 });
+  await drain(p);
+  expect(statuses(p)).toEqual({ 1: "done", 2: "skipped", 3: "done" });
+  expect(p.snapshot().state?.overviewStatus).toBe("done");
+  expect(getOverview()).toBe("the whole-book framework");
+});
+
+test("the overview skips skipped chapters but still writes once the rest are done", async () => {
+  const overviewInputs: number[] = [];
+  const { deps } = makeFakes({
+    plan: plan3,
+    overview: async (chapters) => {
+      overviewInputs.push(...chapters.map((c) => c.index));
+      return "framework";
+    },
+  });
+  const p = new NotesPipeline("b", "s", deps, TEST_CONFIG);
+  // Mark ch1 and ch3, reader done → ch2 skipped, ch1+ch3 done.
+  await p.autoAdvance([{ page: 5 }, { page: 25 }], { readingPage: 28 });
+  await drain(p);
+  expect(p.snapshot().state?.overviewStatus).toBe("done");
+  expect(overviewInputs).toEqual([1, 3]); // ch2 (skipped) not fed to the overview
+});
+
+test("autoAdvance on a failing plan surfaces the failure and generates nothing", async () => {
+  const { deps, saved } = makeFakes({
+    plan: async () => {
+      throw new Error("bad toc");
+    },
+  });
+  const p = new NotesPipeline("b", "s", deps, TEST_CONFIG);
+  await p.autoAdvance([{ page: 5 }]);
+  await drain(p);
+  expect(p.snapshot().state?.planStatus).toBe("failed");
+  expect(saved.some((s) => s.chapters.some((c) => c.status === "done"))).toBe(false);
+});
+
+test("generateChapter overrides a skipped chapter", async () => {
+  const { deps } = makeFakes({ plan: plan3 });
+  const p = new NotesPipeline("b", "s", deps, TEST_CONFIG);
+  await p.autoAdvance([{ page: 5 }, { page: 25 }]);
+  await drain(p);
+  expect(statuses(p)[2]).toBe("skipped");
+  p.generateChapter(2);
+  await drain(p);
+  expect(statuses(p)[2]).toBe("done");
+});
+
 test("stop aborts the in-flight chapter and leaves it pending", async () => {
   const { deps } = makeFakes({
     // Chapter 1 hangs until its signal aborts; chapter 2 never reached.
