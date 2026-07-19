@@ -24,6 +24,9 @@ export interface CredentialStore {
 	anthropic?: AnthropicCredential;
 	openai?: ApiKeyCredential;
 	deepseek?: ApiKeyCredential;
+	// Paid image-relay key for deck illustrations (docs/14). A credential, not a
+	// setting, so it stays on the device and out of the sync range.
+	imageGen?: ApiKeyCredential;
 }
 
 export async function loadCredentials(): Promise<CredentialStore> {
@@ -39,4 +42,25 @@ export async function loadCredentials(): Promise<CredentialStore> {
 export async function saveCredentials(store: CredentialStore): Promise<void> {
 	// writeTextFile throws on failure; let it propagate to the caller/UI.
 	await writeTextFile(FILE, JSON.stringify(store, null, 2), opts);
+}
+
+// The image-relay key, or null when unset (decks then generate without AI
+// illustrations).
+export async function getImageGenKey(): Promise<string | null> {
+	const creds = await loadCredentials();
+	return creds.imageGen?.key ?? null;
+}
+
+// Set or clear the image-relay key (empty string clears it).
+export async function setImageGenKey(key: string): Promise<void> {
+	const creds = await loadCredentials();
+	const trimmed = key.trim();
+	if (trimmed) creds.imageGen = { type: "apiKey", key: trimmed };
+	else delete creds.imageGen;
+	await saveCredentials(creds);
+}
+
+// Whether an image-relay key is configured (drives the Settings UI state).
+export async function hasImageGenKey(): Promise<boolean> {
+	return (await getImageGenKey()) !== null;
 }

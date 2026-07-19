@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { NotesActivity, NotesSnapshot } from "../notes";
 import type { NoteChapter, PhaseStatus } from "../notes";
 import { Markdown } from "./Markdown";
+import SlidesDialog from "./SlidesDialog";
 
 function compactChars(chars: number): string {
   return chars < 1000 ? String(chars) : `${(chars / 1000).toFixed(1)}k`;
@@ -161,6 +162,7 @@ export default function NotesPanel({
 
   const [overview, setOverview] = useState<string | null>(null);
   const [bodies, setBodies] = useState<Map<number, string | null>>(new Map());
+  const [showSlides, setShowSlides] = useState(false);
 
   // A signature of what is on disk, so a regenerate (status flips through
   // running back to done) reloads the affected note and the overview.
@@ -214,9 +216,23 @@ export default function NotesPanel({
 
   return (
     <div className="flex h-full flex-col">
+      {showSlides && (
+        <SlidesDialog currentBookId={state.bookId} onClose={() => setShowSlides(false)} />
+      )}
       <div className="border-b border-[#eee] px-3 py-2">
         <div className="flex items-center justify-between gap-2">
-          <div className="text-[13px] text-[#1b1b1b]">Notes</div>
+          <div className="flex items-center gap-2">
+            <div className="text-[13px] text-[#1b1b1b]">Notes</div>
+            {doneCount > 0 && (
+              <button
+                type="button"
+                className="rounded border border-[#c9c2e8] bg-[#efecfb] px-1.5 py-0.5 text-[11px] leading-none text-[#4a3a9e] cursor-pointer hover:bg-[#e7e3f7]"
+                onClick={() => setShowSlides(true)}
+              >
+                Slides
+              </button>
+            )}
+          </div>
           {running ? (
             <button
               type="button"

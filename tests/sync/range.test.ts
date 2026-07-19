@@ -35,6 +35,8 @@ test("caches, logs, sync internals, and book blobs are out of range", () => {
     "credentials.json",
     "prep-deadbeef/pdf/some-paper.pdf",
     "notes-deadbeef/cache/raster.png",
+    "slides/talks.json",
+    "slides/1737000000000-my-talk.html",
     "library/abc123.pdf",
     "images/threads/t1/photo.png",
     "random.txt",

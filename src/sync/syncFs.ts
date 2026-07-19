@@ -5,8 +5,9 @@
 // threads, topics, per-topic memory, lesson-prep plans and notes, book notes
 // (docs/14), and app settings. Book PDFs travel the separate books channel
 // (content-addressed blobs), never the data channel. Excluded: derived caches
-// (fulltext-*, figures-*, prep-*/pdf and its caches), the local event log,
-// sync's own local
+// (fulltext-*, figures-*, prep-*/pdf and its caches), generated slide decks
+// (slides/**, docs/14 — a build output, rebuildable from notes), the local
+// event log, sync's own local
 // files (sync-auth.json, sync-state.json), and credentials.json — plaintext AI
 // provider tokens stay on the device rather than widening their exposure to the
 // user's Drive, and per-device tokens avoid refresh-rotation kicking the other
