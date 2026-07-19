@@ -13,6 +13,7 @@ import {
   type ProviderInfo,
 } from "../aiClient";
 import { hasImageGenKey, setImageGenKey } from "../ai/credentials";
+import { DEFAULT_STT_BASE, DEFAULT_STT_MODEL, hasSttKey, setSttKey } from "../voice";
 import { DEFAULT_IMAGE_API_BASE, DEFAULT_IMAGE_MODEL } from "../slides";
 import type { Settings, ThinkingSetting } from "../settings";
 import {
@@ -160,6 +161,9 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
           </div>
         </div>
 
+        <h2 className="mb-2 mt-8 text-sm font-semibold text-[#777]">Voice input</h2>
+        <VoiceInputCard settings={settings} onSettingsChange={onSettingsChange} />
+
         <h2 className="mb-2 mt-8 text-sm font-semibold text-[#777]">Illustrations</h2>
         <IllustrationsCard settings={settings} onSettingsChange={onSettingsChange} />
 
@@ -266,6 +270,81 @@ function SyncCard() {
         <p className="m-0 text-xs text-[#b91c1c]">Last sync failed: {status.lastError}</p>
       )}
       {error && <p className="m-0 text-xs text-[#b91c1c]">{error}</p>}
+    </div>
+  );
+}
+
+// Voice input (docs/15): the STT key (stored with the AI credentials, not
+// synced) plus the harmless base URL / model (settings.json). Defaults point at
+// SiliconFlow's free SenseVoice tier.
+function VoiceInputCard({
+  settings,
+  onSettingsChange,
+}: {
+  settings: Settings;
+  onSettingsChange: (next: Settings) => void;
+}) {
+  const [configured, setConfigured] = useState(false);
+  const [key, setKey] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    hasSttKey().then(setConfigured);
+  }, []);
+
+  const saveKey = async () => {
+    setBusy(true);
+    try {
+      await setSttKey(key);
+      setKey("");
+      setConfigured(await hasSttKey());
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className={CARD}>
+      <label className="flex flex-col gap-1.5 text-sm">
+        API key
+        <div className="flex gap-2">
+          <input
+            type="password"
+            className={FIELD}
+            placeholder={configured ? "Replace STT API key" : "STT API key"}
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+          />
+          <button type="button" className={BTN} disabled={busy || !key.trim()} onClick={saveKey}>
+            Save
+          </button>
+          {configured && <span className="self-center text-xs text-[#5fb236]">Connected</span>}
+        </div>
+      </label>
+      <label className="flex flex-col gap-1.5 text-sm">
+        Model
+        <input
+          className={FIELD}
+          placeholder={DEFAULT_STT_MODEL}
+          value={settings.sttModel ?? ""}
+          onChange={(e) => onSettingsChange({ ...settings, sttModel: e.target.value.trim() || null })}
+        />
+      </label>
+      <label className="flex flex-col gap-1.5 text-sm">
+        Base URL
+        <input
+          className={FIELD}
+          placeholder={DEFAULT_STT_BASE}
+          value={settings.sttApiBase ?? ""}
+          onChange={(e) =>
+            onSettingsChange({ ...settings, sttApiBase: e.target.value.trim() || null })
+          }
+        />
+      </label>
+      <p className="m-0 text-xs text-[#777]">
+        Hold the mic in the chat box to talk. SiliconFlow's SenseVoice tier is free and its API key
+        works out of the box; any OpenAI-compatible transcription endpoint works too.
+      </p>
     </div>
   );
 }

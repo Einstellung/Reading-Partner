@@ -25,6 +25,11 @@ tauri-plugin-opener = "2"
 # omits image data, so the shell reads the clipboard through Rust as a fallback.
 tauri-plugin-clipboard-manager = "2"
 serde = { version = "1", features = ["derive"] }
+# Push-to-talk voice input records the mic in Rust: WebKitGTK's getUserMedia is
+# unreliable on Linux (the primary desktop), so cpal captures samples and hound
+# encodes a 16 kHz mono WAV for the STT request (docs/15).
+cpal = "0.15"
+hound = "3.5"
 
 # Full dev rebuilds peak at many GB of linker memory, which has triggered
 # systemd-oomd to kill the whole desktop session (docs/pitfall/14).

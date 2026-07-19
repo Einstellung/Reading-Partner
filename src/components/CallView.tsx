@@ -5,7 +5,7 @@
 // Tailwind-only.
 
 import { IconClose } from './icons';
-import { Composer, MessageList } from './chat';
+import { Composer, MessageList, type ComposerVoice } from './chat';
 import type { PendingImage, ThreadMessage } from './types';
 
 interface CallViewProps {
@@ -28,6 +28,7 @@ interface CallViewProps {
 	// title and "Ask about this book…".
 	emptyTitle?: string;
 	placeholder?: string;
+	voice?: ComposerVoice;
 }
 
 export default function CallView({
@@ -44,9 +45,10 @@ export default function CallView({
 	classroomStatus,
 	emptyTitle = 'Ask about this passage',
 	placeholder = 'Ask about this passage…',
+	voice,
 }: CallViewProps) {
 	const empty = messages.length === 0;
-	const composerProps = { pendingImages, onRemoveImage, hint, streaming, onStop };
+	const composerProps = { pendingImages, onRemoveImage, hint, streaming, onStop, voice };
 
 	return (
 		<div className="relative flex h-full w-full flex-col bg-white">

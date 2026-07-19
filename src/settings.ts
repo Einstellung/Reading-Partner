@@ -40,6 +40,11 @@ export interface Settings {
   // null falls back to the built-in defaults (see src/slides/imageGen.ts).
   illustrationApiBase: string | null;
   illustrationModel: string | null;
+  // Voice-input STT endpoint (docs/15). base/model sync freely; the key lives in
+  // credentials.json (not synced). null falls back to the built-in SiliconFlow
+  // SenseVoice defaults (see src/voice/config.ts).
+  sttApiBase: string | null;
+  sttModel: string | null;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -50,6 +55,8 @@ export const DEFAULT_SETTINGS: Settings = {
   prepThinking: "medium",
   illustrationApiBase: null,
   illustrationModel: null,
+  sttApiBase: null,
+  sttModel: null,
 };
 
 const DEFAULTS = DEFAULT_SETTINGS;

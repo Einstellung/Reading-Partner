@@ -4,8 +4,17 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconCheck, IconCopy, IconSend, IconStop } from './icons';
 import { Markdown } from './Markdown';
+import { MicButton } from './MicButton';
 import { useFlickerProbe } from './useFlickerProbe';
 import type { ChatImage, PendingImage, ThreadMessage, ToolStatus } from './types';
+import type { CleanupModel } from '../voice';
+
+// Voice input wiring for the composer: the book glossary for the STT cleanup
+// pass and the chat model that runs it (null = no provider, cleanup is skipped).
+export interface ComposerVoice {
+	glossary: string;
+	cleanupModel: CleanupModel | null;
+}
 
 // The async clipboard API is unreliable in WebKitGTK (pitfall 16), so a failure
 // falls back to the legacy execCommand path on an offscreen textarea.
@@ -260,6 +269,7 @@ export function Composer({
 	hint,
 	streaming = false,
 	onStop,
+	voice,
 }: {
 	onSend(text: string): void;
 	placeholder: string;
@@ -269,10 +279,19 @@ export function Composer({
 	hint?: string;
 	streaming?: boolean;
 	onStop?(): void;
+	voice?: ComposerVoice;
 }) {
 	const [value, setValue] = useState('');
+	const [voiceHint, setVoiceHint] = useState<string | null>(null);
 	const taRef = useRef<HTMLTextAreaElement>(null);
 	const maxHeight = pill ? 160 : 100;
+
+	// Drop a cleaned voice transcript into the composer for review (never
+	// auto-sent), appended after any text the user already typed.
+	function insertVoiceText(text: string) {
+		setValue((v) => (v.trim() ? v.replace(/\s+$/, '') + ' ' + text : text));
+		requestAnimationFrame(() => taRef.current?.focus());
+	}
 
 	// Auto-grow: collapse to one row, then take the content height up to the cap
 	// (past it the textarea scrolls).
@@ -334,6 +353,15 @@ export function Composer({
 						onChange={(e) => setValue(e.target.value)}
 						onKeyDown={onKeyDown}
 					/>
+					{voice && !streaming && (
+						<MicButton
+							onInsert={insertVoiceText}
+							glossary={voice.glossary}
+							cleanupModel={voice.cleanupModel}
+							onHint={setVoiceHint}
+							size={pill ? 'lg' : 'sm'}
+						/>
+					)}
 					{pill &&
 						(streaming ? (
 							<button type="button" aria-label="Stop" onClick={onStop} className={`${stopBtn} h-9 w-9`}>
@@ -358,6 +386,7 @@ export function Composer({
 				</div>
 			</div>
 			{hint && <div className="px-1 text-[12px] leading-snug text-amber-600">{hint}</div>}
+			{voiceHint && <div className="px-1 text-[12px] leading-snug text-amber-600">{voiceHint}</div>}
 		</div>
 	);
 }

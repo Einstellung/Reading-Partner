@@ -27,6 +27,9 @@ export interface CredentialStore {
 	// Paid image-relay key for deck illustrations (docs/14). A credential, not a
 	// setting, so it stays on the device and out of the sync range.
 	imageGen?: ApiKeyCredential;
+	// Speech-to-text key for voice input (docs/15). Same reasoning: on-device,
+	// never synced.
+	voiceStt?: ApiKeyCredential;
 }
 
 export async function loadCredentials(): Promise<CredentialStore> {
