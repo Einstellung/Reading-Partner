@@ -26,10 +26,51 @@ export interface EmphasisSignal {
   discussed?: boolean;
 }
 
-// Trim a signal snippet so a long highlight doesn't blow up the prompt.
+// Trim a snippet so a long highlight or chat message doesn't blow up the prompt.
 function clip(text: string, max = 160): string {
   const t = text.trim().replace(/\s+/g, " ");
   return t.length <= max ? t : t.slice(0, max).trimEnd() + "…";
+}
+
+// One thread of the reader's conversation with the AI, anchored on a mark that
+// falls on `page`. `createdAt` orders threads by recency when the block is
+// trimmed. Roles come straight from the thread store (user / ai).
+export interface ChatThread {
+  page: number; // 1-based anchor page
+  createdAt: number;
+  messages: { role: "user" | "ai"; text: string }[];
+}
+
+// Per-message, per-thread, and whole-block caps so a long chat history can't
+// crowd out the rest of the prompt (docs/14).
+const CHAT_MSG_MAX = 600;
+const CHAT_THREAD_MAX_MSGS = 6;
+const CHAT_BLOCK_MAX = 8000;
+
+// Format the reader's in-chapter conversations into a prompt block, or "" when
+// none fall in [from, to]. Most recent threads first, so when the total cap
+// trims the block it drops the oldest conversations. Each thread keeps its last
+// few messages, clipped, tagged reader: / assistant:, under its anchor [p.N].
+// The framing/instruction lives in chapterSystemPrompt; this is just the block.
+export function formatChatThreads(threads: ChatThread[], from: number, to: number): string {
+  const inRange = threads
+    .filter((t) => t.page >= from && t.page <= to && t.messages.some((m) => m.text.trim()))
+    .sort((a, b) => b.createdAt - a.createdAt);
+  if (inRange.length === 0) return "";
+
+  const blocks: string[] = [];
+  let total = 0;
+  for (const t of inRange) {
+    const msgs = t.messages.filter((m) => m.text.trim()).slice(-CHAT_THREAD_MAX_MSGS);
+    const lines = msgs.map(
+      (m) => `${m.role === "user" ? "reader" : "assistant"}: ${clip(m.text, CHAT_MSG_MAX)}`,
+    );
+    const block = `[p.${t.page}]\n${lines.join("\n")}`;
+    if (blocks.length > 0 && total + block.length + 2 > CHAT_BLOCK_MAX) break;
+    blocks.push(block);
+    total += block.length + 2;
+  }
+  return blocks.join("\n\n");
 }
 
 // The emphasis block for the chapter's page range, or "" when nothing falls in
@@ -63,9 +104,10 @@ export function chapterSystemPrompt(params: {
   chapter: NoteChapter;
   figureCatalog?: string;
   emphasis?: string;
+  chats?: string;
   instruction?: string;
 }): string {
-  const { bookName, chapter, figureCatalog, emphasis, instruction } = params;
+  const { bookName, chapter, figureCatalog, emphasis, chats, instruction } = params;
   const lines = [
     "You are writing lecture notes for a reading companion — the intermediate",
     "product a later slide deck is built from, so it must stand on its own.",
@@ -76,6 +118,19 @@ export function chapterSystemPrompt(params: {
   ];
   if (figureCatalog && figureCatalog.trim()) lines.push("", figureCatalog.trim());
   if (emphasis && emphasis.trim()) lines.push("", emphasis.trim());
+  if (chats && chats.trim()) {
+    lines.push(
+      "",
+      "The reader's conversations with you while reading this chapter follow. Where",
+      "the reader explicitly endorsed an explanation or asked for it to be recorded in",
+      "the notes, absorb that explanation's substance into the note — rewritten in the",
+      "note's own voice, never pasted as dialogue — and give it priority over your own",
+      "summary of the same material. Otherwise treat the conversations only as emphasis",
+      "signals for what to expand; do not quote them.",
+      "",
+      chats.trim(),
+    );
+  }
   if (instruction && instruction.trim()) {
     lines.push("", `The reader asked for this revision: ${instruction.trim()}`);
   }
@@ -154,13 +209,14 @@ export function runNoteChapter(params: {
   model: ChapterModel;
   figureCatalog?: string;
   emphasis?: string;
+  chats?: string;
   instruction?: string;
   signal?: AbortSignal;
   onProgress?: (chars: number) => void;
 }): Promise<string> {
-  const { bookName, chapter, tools, model, figureCatalog, emphasis, instruction, signal, onProgress } =
+  const { bookName, chapter, tools, model, figureCatalog, emphasis, chats, instruction, signal, onProgress } =
     params;
-  const systemPrompt = chapterSystemPrompt({ bookName, chapter, figureCatalog, emphasis, instruction });
+  const systemPrompt = chapterSystemPrompt({ bookName, chapter, figureCatalog, emphasis, chats, instruction });
 
   return new Promise<string>((resolve, reject) => {
     let chars = 0;
