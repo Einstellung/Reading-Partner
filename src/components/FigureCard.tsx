@@ -1,5 +1,6 @@
-// Inline figure card for [fig:N] citations in AI replies (M9). Shows the cropped
-// figure image with its caption; clicking jumps the reader to the figure's page.
+// Figure card for [fig:N] citations in AI replies (M9), rendered on its own
+// line and centered. Shows the cropped figure image with its caption; clicking
+// jumps the reader to the figure's page.
 // The crop rasters lazily — only once the card scrolls into view — and the host
 // memo-caches it, so a long reply that cites many figures doesn't raster them all
 // at once. When the figure is unknown or the crop fails, it degrades to a small
@@ -75,8 +76,9 @@ export default function FigureCard({ host, id }: { host: FigureHost; id: string 
   if (!figure) return <Chip label={`fig:${id}`} />;
   if (failed) return <Chip label={figureChipLabel(figure)} onClick={() => host.onJump(figure)} />;
 
-  // Display at the crop's natural size (÷ dpr) so a small figure sits left-aligned
-  // at true size and is never upscaled; max-w-full still shrinks a big crop to fit.
+  // Display at the crop's natural size (÷ dpr) so a small figure is never
+  // upscaled; max-w-full still shrinks a big crop to fit. The card is a block
+  // box on its own line, centered in the reply.
   const dpr = typeof window !== "undefined" ? window.devicePixelRatio : 1;
   const displayWidth = card ? cardDisplayWidth(card.width, dpr) : undefined;
 
@@ -85,7 +87,7 @@ export default function FigureCard({ host, id }: { host: FigureHost; id: string 
       ref={ref}
       type="button"
       onClick={() => host.onJump(figure)}
-      className="my-1 inline-flex max-w-full cursor-pointer flex-col items-start gap-1 rounded-lg border border-black/10 bg-white p-1.5 text-left align-top hover:border-[#c9bff0]"
+      className="mx-auto my-2 flex w-fit max-w-full cursor-pointer flex-col items-center gap-1 rounded-lg border border-black/10 bg-white p-1.5 text-left hover:border-[#c9bff0]"
     >
       {card ? (
         <img
