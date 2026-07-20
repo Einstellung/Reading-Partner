@@ -9,7 +9,7 @@ import {
   type ViewState,
   type ViewStats,
 } from "./reader-contract";
-import { getViewState, hashPath, saveViewState } from "./storage";
+import { getViewState, hashPath, saveViewState, withClassroom } from "./storage";
 import { importBook, libraryHas, readLibraryBook } from "./library";
 import { migrateBookLive } from "./migrate";
 import { chapterAt, ensureFulltext, getFulltext, onFulltextError, type Fulltext } from "./fulltext";
@@ -557,15 +557,30 @@ export default function App() {
   const persist = useCallback((state: ViewState) => {
     const path = pathRef.current;
     if (!path) return;
-    lastState.current = state;
+    // Carry the sticky classroom flag (docs/09) alongside the reader-owned
+    // position fields, which never carry it.
+    const merged = { ...state, classroom: classroomRef.current };
+    lastState.current = merged;
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
-      saveViewState(path, state).catch((e) => {
+      saveViewState(path, merged).catch((e) => {
         console.error("failed to persist reading position", e);
         pushToast("warn", "Reading position could not be saved");
       });
     }, 500);
   }, [pushToast]);
+
+  // Persist the sticky classroom flag immediately on toggle, so it survives even
+  // if the reader emits no further position change before the app closes.
+  const persistClassroom = useCallback((on: boolean) => {
+    const path = pathRef.current;
+    if (!path) return;
+    const merged = withClassroom(lastState.current, on);
+    lastState.current = merged;
+    saveViewState(path, merged).catch((e) => {
+      console.error("failed to persist classroom mode", e);
+    });
+  }, []);
 
   useEffect(() => {
     const flush = () => {
@@ -657,7 +672,8 @@ export default function App() {
     if (topicId) logEvent(topicId, "classroom-toggle", { on: next });
     if (next) void startPrep();
     setClassroomOn(next);
-  }, [startPrep]);
+    persistClassroom(next);
+  }, [startPrep, persistClassroom]);
 
   // A page citation carrying a source quote: confirm the quote against the
   // page's extracted text (fulltext cache), then hand the reader the exact
@@ -1350,11 +1366,18 @@ export default function App() {
 
       setViewReady(false);
       pathRef.current = bookId;
+      // Seed the persist base with the loaded state so an early classroom toggle
+      // (before the reader emits a position) merges onto the right book.
+      lastState.current = state;
       // Dwell tracking restarts per book (never a cross-book page-nav event).
       pageDwellRef.current = null;
-      // Classroom mode is per book; detach the previous book's prep panel (the
-      // pipeline itself keeps running in the background as a module singleton).
-      setClassroomOn(false);
+      // Classroom mode is per book and sticky (docs/09): restore its saved flag,
+      // detaching the previous book's prep panel first (the pipeline itself keeps
+      // running in the background as a module singleton). A restored "on" attaches
+      // the pipeline below once the fulltext is ready, degrading exactly like a
+      // manual toggle-on when the book has no readable text.
+      const restoreClassroom = !!state?.classroom;
+      setClassroomOn(restoreClassroom);
       setSelectedPrepSlug(null);
       prepUnsubRef.current?.();
       prepUnsubRef.current = null;
@@ -1399,10 +1422,13 @@ export default function App() {
         setFulltext(ft);
         setFulltextPending(false);
         // Resume lesson prep from its persisted state (docs/09: restartable
-        // from the breakpoint) or re-attach a pipeline already running.
+        // from the breakpoint) or re-attach a pipeline already running. A
+        // restored classroom flag also kicks a fresh pipeline when none exists
+        // yet (e.g. the book moved devices) — the same path a manual toggle-on
+        // takes via startPrep.
         if (ft && ft.status === "ok") {
           try {
-            if (peekPrepPipeline(bookId) || (await hasPrepState(bookId))) {
+            if (restoreClassroom || peekPrepPipeline(bookId) || (await hasPrepState(bookId))) {
               if (pathRef.current === bookId) attachPipeline(bookId, name, ft);
             }
           } catch (e) {
