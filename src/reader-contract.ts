@@ -20,6 +20,10 @@ export interface ViewState {
   // instead of a mirrored offset.
   pageX?: number;
   pageY?: number;
+  // Classroom mode (docs/09) is per book and sticky: persisted here so reopening
+  // the same book restores it. Absent means off. Not a reader-engine field — the
+  // shell merges it in when persisting (see storage.withClassroom).
+  classroom?: boolean;
 }
 
 export interface ViewStats {

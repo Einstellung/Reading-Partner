@@ -37,6 +37,22 @@ interface Store {
   states: Record<string, ViewState>;
 }
 
+// Base used only when persisting the classroom flag on a book with no saved
+// reading position yet; the reader overwrites the position fields as soon as it
+// emits one.
+const DEFAULT_VIEW_STATE: ViewState = {
+  pageIndex: 0,
+  scale: "auto",
+  scrollMode: 0,
+  spreadMode: 0,
+};
+
+// Pure: merge the sticky classroom flag into a view state (or a default base
+// when the book has none yet). Kept pure so the persistence logic is testable.
+export function withClassroom(state: ViewState | null, on: boolean): ViewState {
+  return { ...(state ?? DEFAULT_VIEW_STATE), classroom: on };
+}
+
 async function ensureDir(): Promise<void> {
   try {
     if (!(await exists("", { baseDir: BaseDirectory.AppData }))) {
