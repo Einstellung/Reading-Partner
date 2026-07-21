@@ -140,3 +140,17 @@ export function sortedFiles(topic: Topic): FileRef[] {
     (a, b) => (b.lastOpenedAt ?? b.addedAt) - (a.lastOpenedAt ?? a.addedAt),
   );
 }
+
+// The single most-recently-opened file across all topics (docs/16 vestibule's
+// "Continue reading"). Only files actually opened before qualify; null when
+// nothing has been read yet. Pure over the given topics.
+export function mostRecentlyOpened(topics: Topic[]): { topic: Topic; file: FileRef } | null {
+  let best: { topic: Topic; file: FileRef } | null = null;
+  for (const topic of topics) {
+    for (const file of topic.files) {
+      if (file.lastOpenedAt === undefined) continue;
+      if (!best || file.lastOpenedAt > (best.file.lastOpenedAt ?? 0)) best = { topic, file };
+    }
+  }
+  return best;
+}

@@ -36,6 +36,7 @@ import {
   deleteTopic,
   listTopics,
   markOpened,
+  mostRecentlyOpened,
   removeFileFromTopic,
   renameTopic,
   setFileHash,
@@ -99,6 +100,17 @@ import {
   type NotesSnapshot,
 } from "./notes";
 import type { NotesPipeline } from "./notes/pipeline";
+import { getInfoPipeline } from "./info/live";
+import type { InfoPipeline, InfoSnapshot } from "./info/pipeline";
+import { loadArticle, todayLocal } from "./info/store";
+import { appendFeedback } from "./info/feedback";
+import { sanitizeArticleHtml } from "./info/sanitize";
+import { articleChatSystemPrompt, briefingChatSystemPrompt } from "./info/chat";
+import type { BriefingItemMeta } from "./info/types";
+import { Vestibule } from "./components/Vestibule";
+import { BriefingPage } from "./components/BriefingPage";
+import { ArticleView } from "./components/ArticleView";
+import { InfoChat, type InfoChatAnchor } from "./components/InfoChat";
 import {
   buildMemorySnapshot,
   buildMemoryTools,
@@ -305,6 +317,18 @@ export default function App() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameText, setRenameText] = useState("");
 
+  // Info triage (docs/16). homeScreen is the launch layer in front of the
+  // library, only meaningful when not in the reader. The info pipeline is a
+  // module singleton; this ref just tracks it for the UI.
+  const [homeScreen, setHomeScreen] = useState<"vestibule" | "library" | "briefing" | "article">("vestibule");
+  const [infoSnap, setInfoSnap] = useState<InfoSnapshot | null>(null);
+  const infoRef = useRef<InfoPipeline | null>(null);
+  const [openArticleId, setOpenArticleId] = useState<string | null>(null);
+  const [articleHtml, setArticleHtml] = useState<string | null>(null);
+  const [openedItemIds, setOpenedItemIds] = useState<Set<string>>(new Set());
+  const [dismissedItemIds, setDismissedItemIds] = useState<Set<string>>(new Set());
+  const [infoChatAnchor, setInfoChatAnchor] = useState<InfoChatAnchor | null>(null);
+
   // The open book: bytes + saved state for EmbedReaderPane; null in the library.
   const [embedDoc, setEmbedDoc] = useState<{
     path: string;
@@ -374,6 +398,17 @@ export default function App() {
   // open, not on its critical path.
   useEffect(() => {
     prewarmPdfiumEngine();
+  }, []);
+
+  // Attach the info-briefing pipeline (docs/16): mirror its snapshot for the
+  // vestibule and load today's briefing if one exists.
+  useEffect(() => {
+    const p = getInfoPipeline();
+    infoRef.current = p;
+    setInfoSnap(p.snapshot());
+    const unsub = p.subscribe(() => setInfoSnap(p.snapshot()));
+    p.init().catch(() => {});
+    return unsub;
   }, []);
 
   // Install the Tauri fetch bridge + load settings once.
@@ -1471,8 +1506,11 @@ export default function App() {
   // gone). Otherwise read the original, import a copy into the library, migrate
   // any legacy path-hash-keyed data to the book id, and backfill the id.
   const openFile = useCallback(
-    async (file: FileRef) => {
-      if (!activeTopicId) return;
+    // topicId defaults to the active topic; the vestibule's "Continue reading"
+    // passes it explicitly since it opens a book without entering that topic.
+    async (file: FileRef, topicId?: string) => {
+      const tid = topicId ?? activeTopicId;
+      if (!tid) return;
       try {
         let bytes: Uint8Array;
         let bookId: string;
@@ -1484,10 +1522,10 @@ export default function App() {
           const entry = await importBook(bytes, file.path);
           bookId = entry.hash;
           await migrateBookLive(hashPath(file.path), bookId);
-          if (file.hash !== bookId) await setFileHash(activeTopicId, file.path, bookId);
+          if (file.hash !== bookId) await setFileHash(tid, file.path, bookId);
         }
         await openInReader(bookId, file.name, bytes);
-        await markOpened(activeTopicId, file.path);
+        await markOpened(tid, file.path);
         await refreshTopics();
       } catch (e) {
         console.error("failed to open file", e);
@@ -1504,6 +1542,83 @@ export default function App() {
     await addFileToTopic(activeTopicId, selected);
     await refreshTopics();
   }, [activeTopicId, refreshTopics]);
+
+  // --- Info briefing (docs/16) -------------------------------------------
+
+  const generateBriefing = useCallback(() => {
+    void infoRef.current?.generate();
+  }, []);
+  const stopBriefing = useCallback(() => {
+    infoRef.current?.stop();
+  }, []);
+
+  const continueReading = useCallback(() => {
+    const recent = mostRecentlyOpened(topics);
+    if (!recent) {
+      setHomeScreen("library");
+      return;
+    }
+    void openFile(recent.file, recent.topic.id);
+  }, [topics, openFile]);
+
+  const openArticle = useCallback(
+    async (itemId: string) => {
+      const briefing = infoRef.current?.snapshot().briefing ?? null;
+      const date = briefing?.date ?? todayLocal();
+      setOpenArticleId(itemId);
+      setArticleHtml(null);
+      setHomeScreen("article");
+      const meta = briefing?.items[itemId];
+      // Opening an article logs "opened" once per session; it also drives the
+      // read-state marker on the briefing.
+      if (meta && !openedItemIds.has(itemId)) {
+        setOpenedItemIds((s) => new Set(s).add(itemId));
+        appendFeedback({ itemId, title: meta.title, action: "opened" }).catch(() => {});
+      }
+      try {
+        const cached = await loadArticle(date, itemId);
+        setArticleHtml(cached?.contentHtml ? sanitizeArticleHtml(cached.contentHtml) : null);
+      } catch {
+        setArticleHtml(null);
+      }
+    },
+    [openedItemIds],
+  );
+
+  const dismissItem = useCallback((itemId: string, meta: BriefingItemMeta, category?: string) => {
+    setDismissedItemIds((s) => new Set(s).add(itemId));
+    appendFeedback({ itemId, title: meta.title, action: "dismissed", category }).catch(() => {});
+  }, []);
+
+  const appealItem = useCallback(
+    (itemId: string, meta: BriefingItemMeta, category: string) => {
+      appendFeedback({ itemId, title: meta.title, action: "appealed", category }).catch(() => {});
+      void openArticle(itemId);
+    },
+    [openArticle],
+  );
+
+  const askBriefing = useCallback(() => {
+    const b = infoRef.current?.snapshot().briefing;
+    if (!b) return;
+    setInfoChatAnchor({
+      threadId: "briefing",
+      title: "Today's briefing",
+      systemPrompt: briefingChatSystemPrompt(b),
+    });
+  }, []);
+
+  const askArticle = useCallback(async (itemId: string) => {
+    const b = infoRef.current?.snapshot().briefing;
+    if (!b) return;
+    const meta = b.items[itemId];
+    const cached = await loadArticle(b.date, itemId);
+    setInfoChatAnchor({
+      threadId: itemId,
+      title: meta?.title ?? "Article",
+      systemPrompt: articleChatSystemPrompt(b.overview, meta?.title ?? "", cached?.textContent ?? ""),
+    });
+  }, []);
 
   // Host-side edit of an existing annotation: patch, re-render, persist.
   const patchAnnotation = useCallback(
@@ -2011,18 +2126,22 @@ export default function App() {
               </button>
             </div>
           </>
-        ) : (
+        ) : homeScreen === "library" ? (
           <>
             {activeTopic ? (
               <button className={BTN} onClick={() => setActiveTopicId(null)}>
                 ‹ Topics
               </button>
             ) : (
-              <span className="text-[13px] text-[#777] overflow-hidden text-ellipsis whitespace-nowrap max-w-[40vw]">Reading Partner</span>
+              <button className={BTN} onClick={() => setHomeScreen("vestibule")}>
+                ‹ Today
+              </button>
             )}
             {activeTopic && <span className="text-[13px] text-[#1b1b1b] overflow-hidden text-ellipsis whitespace-nowrap max-w-[40vw]">{activeTopic.name}</span>}
             <span className="flex-1" />
           </>
+        ) : (
+          <span className="flex-1" />
         )}
         <button className={BTN} title="Settings" aria-label="Settings" onClick={() => setShowSettings(true)}>
           ⚙
@@ -2115,7 +2234,70 @@ export default function App() {
           )}
         </div>
 
-        {!inReader && (
+        {!inReader && homeScreen === "vestibule" && (
+          <div className="absolute inset-0 overflow-y-auto bg-white">
+            <Vestibule
+              continueBook={(() => {
+                const recent = mostRecentlyOpened(topics);
+                return recent ? { title: recent.file.name, topicName: recent.topic.name } : null;
+              })()}
+              snap={infoSnap}
+              configured={configured}
+              onContinue={continueReading}
+              onOpenLibrary={() => setHomeScreen("library")}
+              onGenerate={generateBriefing}
+              onStop={stopBriefing}
+              onOpenBriefing={() => setHomeScreen("briefing")}
+              onOpenSettings={() => setShowSettings(true)}
+            />
+          </div>
+        )}
+
+        {!inReader && homeScreen === "briefing" && infoSnap?.briefing && (
+          <div className="absolute inset-0 overflow-y-auto bg-white">
+            <BriefingPage
+              briefing={infoSnap.briefing}
+              openedIds={openedItemIds}
+              dismissedIds={dismissedItemIds}
+              onOpenArticle={openArticle}
+              onDismiss={dismissItem}
+              onAppeal={appealItem}
+              onAskBriefing={askBriefing}
+              onAskArticle={askArticle}
+              onBack={() => setHomeScreen("vestibule")}
+            />
+          </div>
+        )}
+
+        {!inReader && homeScreen === "article" && openArticleId && infoSnap?.briefing && (
+          <div className="absolute inset-0">
+            <ArticleView
+              meta={
+                infoSnap.briefing.items[openArticleId] ?? {
+                  title: "Article",
+                  url: "",
+                  source: "jiqizhixin",
+                  publishedAt: "",
+                }
+              }
+              contentHtml={articleHtml}
+              onBack={() => setHomeScreen("briefing")}
+              onAsk={() => askArticle(openArticleId)}
+            />
+          </div>
+        )}
+
+        {!inReader && (homeScreen === "briefing" || homeScreen === "article") && infoChatAnchor && (
+          <InfoChat
+            anchor={infoChatAnchor}
+            dateKey={infoSnap?.briefing?.date ?? todayLocal()}
+            configured={configured}
+            onClose={() => setInfoChatAnchor(null)}
+            onOpenSettings={() => setShowSettings(true)}
+          />
+        )}
+
+        {!inReader && homeScreen === "library" && (
           <div className="absolute inset-0 flex flex-col items-stretch justify-start gap-6 bg-white overflow-y-auto">
             {activeTopic ? (
               <TopicDetail
