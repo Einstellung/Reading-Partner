@@ -112,7 +112,7 @@ import type { BriefingItemMeta } from "./info/types";
 import { Vestibule } from "./components/Vestibule";
 import { BriefingPage } from "./components/BriefingPage";
 import { ArticleView } from "./components/ArticleView";
-import { InfoChat, type InfoChatAnchor } from "./components/InfoChat";
+import { InfoCall, type InfoCallAnchor } from "./components/InfoCall";
 import {
   buildMemorySnapshot,
   buildMemoryTools,
@@ -331,7 +331,7 @@ export default function App() {
   const articleInlineAbort = useRef<AbortController | null>(null);
   const [openedItemIds, setOpenedItemIds] = useState<Set<string>>(new Set());
   const [dismissedItemIds, setDismissedItemIds] = useState<Set<string>>(new Set());
-  const [infoChatAnchor, setInfoChatAnchor] = useState<InfoChatAnchor | null>(null);
+  const [infoCall, setInfoCall] = useState<InfoCallAnchor | null>(null);
 
   // The open book: bytes + saved state for EmbedReaderPane; null in the library.
   const [embedDoc, setEmbedDoc] = useState<{
@@ -1633,10 +1633,12 @@ export default function App() {
   const askBriefing = useCallback(() => {
     const b = infoRef.current?.snapshot().briefing;
     if (!b) return;
-    setInfoChatAnchor({
+    setInfoCall({
       threadId: "briefing",
-      title: "Today's briefing",
+      emptyTitle: "Today's briefing",
+      placeholder: "Ask about today's briefing…",
       systemPrompt: briefingChatSystemPrompt(b, settingsRef.current.aiLanguage),
+      position: { title: "Today's briefing", line: b.overview },
     });
   }, []);
 
@@ -1645,15 +1647,24 @@ export default function App() {
     if (!b) return;
     const meta = b.items[itemId];
     const cached = await loadArticle(b.date, itemId);
-    setInfoChatAnchor({
+    // The item's one-line reason/overview from the briefing tiers, shown on the
+    // position card so the chat window can recall what the article was about.
+    const line =
+      b.mustRead.find((r) => r.itemId === itemId)?.reason ??
+      b.oneLiners.find((r) => r.itemId === itemId)?.line ??
+      b.outOfLane.find((r) => r.itemId === itemId)?.reason ??
+      null;
+    setInfoCall({
       threadId: itemId,
-      title: meta?.title ?? "Article",
+      emptyTitle: meta?.title ?? "Article",
+      placeholder: "Ask about this article…",
       systemPrompt: articleChatSystemPrompt(
         b.overview,
         meta?.title ?? "",
         cached?.textContent ?? "",
         settingsRef.current.aiLanguage,
       ),
+      position: { title: meta?.title ?? "Article", source: meta?.source, line },
     });
   }, []);
 
@@ -2324,13 +2335,11 @@ export default function App() {
           </div>
         )}
 
-        {!inReader && (homeScreen === "briefing" || homeScreen === "article") && infoChatAnchor && (
-          <InfoChat
-            anchor={infoChatAnchor}
+        {!inReader && (homeScreen === "briefing" || homeScreen === "article") && infoCall && (
+          <InfoCall
+            anchor={infoCall}
             dateKey={infoSnap?.briefing?.date ?? todayLocal()}
-            configured={configured}
-            onClose={() => setInfoChatAnchor(null)}
-            onOpenSettings={() => setShowSettings(true)}
+            onHangUp={() => setInfoCall(null)}
           />
         )}
 
@@ -2461,15 +2470,30 @@ export default function App() {
               />
             </div>
             <div className="absolute right-3 top-3 z-50">
-              <ReadingPipCard
-                fileName={title ?? ""}
-                pageLabel={stats?.pageLabel ?? null}
-                excerpt={callExcerpt(annsRef.current.get(call.annotationId)) || null}
-                onClick={() => {
-                  onPositionClick();
-                  swapToReading();
-                }}
-              />
+              {(() => {
+                const excerpt = callExcerpt(annsRef.current.get(call.annotationId)) || null;
+                return (
+                  <ReadingPipCard
+                    title={title ?? ""}
+                    badge={
+                      stats?.pageLabel ? (
+                        <span className="shrink-0 text-[11px] text-neutral-400">p. {stats.pageLabel}</span>
+                      ) : undefined
+                    }
+                    body={
+                      excerpt ? (
+                        <span className="line-clamp-3 text-[12px] italic leading-snug text-neutral-500">
+                          “{excerpt}”
+                        </span>
+                      ) : undefined
+                    }
+                    onClick={() => {
+                      onPositionClick();
+                      swapToReading();
+                    }}
+                  />
+                );
+              })()}
             </div>
           </>
         )}
