@@ -20,6 +20,10 @@ const PROSE_CSS = `
 .info-article-body h2 { font-size: 1.3em; }
 .info-article-body h3 { font-size: 1.12em; }
 .info-article-body img { max-width: 100%; height: auto; border-radius: 8px; margin: 1em 0; display: block; }
+/* External images are blocked by the webview's CSP/COEP (docs/pitfall/30); the
+   host inlines them as data: URLs progressively. Hide any still-external img so
+   it shows no broken-image icon until its data: URL swaps in. */
+.info-article-body img[src^="http"] { display: none; }
 .info-article-body figure { margin: 1.2em 0; }
 .info-article-body figcaption { font-size: 0.85em; color: #888; text-align: center; margin-top: 0.5em; }
 .info-article-body a { color: #6d5ae0; text-decoration: underline; text-underline-offset: 2px; }

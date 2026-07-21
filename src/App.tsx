@@ -102,9 +102,11 @@ import {
 import type { NotesPipeline } from "./notes/pipeline";
 import { getInfoPipeline } from "./info/live";
 import type { InfoPipeline, InfoSnapshot } from "./info/pipeline";
-import { loadArticle, todayLocal } from "./info/store";
+import { loadArticle, saveInlinedArticleHtml, todayLocal } from "./info/store";
 import { appendFeedback } from "./info/feedback";
 import { sanitizeArticleHtml } from "./info/sanitize";
+import { extractImageSrcs, inlineArticleImages } from "./info/inline-images";
+import { fetchImageBytes } from "./info/http";
 import { articleChatSystemPrompt, briefingChatSystemPrompt } from "./info/chat";
 import type { BriefingItemMeta } from "./info/types";
 import { Vestibule } from "./components/Vestibule";
@@ -325,6 +327,8 @@ export default function App() {
   const infoRef = useRef<InfoPipeline | null>(null);
   const [openArticleId, setOpenArticleId] = useState<string | null>(null);
   const [articleHtml, setArticleHtml] = useState<string | null>(null);
+  // Aborts the previous article's background image-inlining when another opens.
+  const articleInlineAbort = useRef<AbortController | null>(null);
   const [openedItemIds, setOpenedItemIds] = useState<Set<string>>(new Set());
   const [dismissedItemIds, setDismissedItemIds] = useState<Set<string>>(new Set());
   const [infoChatAnchor, setInfoChatAnchor] = useState<InfoChatAnchor | null>(null);
@@ -1565,6 +1569,10 @@ export default function App() {
     async (itemId: string) => {
       const briefing = infoRef.current?.snapshot().briefing ?? null;
       const date = briefing?.date ?? todayLocal();
+      // Stop the previously opened article's image-inlining before starting this one.
+      articleInlineAbort.current?.abort();
+      const ac = new AbortController();
+      articleInlineAbort.current = ac;
       setOpenArticleId(itemId);
       setArticleHtml(null);
       setHomeScreen("article");
@@ -1575,11 +1583,30 @@ export default function App() {
         setOpenedItemIds((s) => new Set(s).add(itemId));
         appendFeedback({ itemId, title: meta.title, action: "opened" }).catch(() => {});
       }
+      let sanitized: string | null = null;
       try {
         const cached = await loadArticle(date, itemId);
-        setArticleHtml(cached?.contentHtml ? sanitizeArticleHtml(cached.contentHtml) : null);
+        sanitized = cached?.contentHtml ? sanitizeArticleHtml(cached.contentHtml) : null;
+        setArticleHtml(sanitized);
       } catch {
         setArticleHtml(null);
+      }
+      // External <img> loads are blocked by the webview's CSP/COEP (docs/pitfall/30):
+      // fetch each through the Tauri http route, swap in data: URLs as they arrive,
+      // then persist the rewritten HTML so later opens are instant and offline.
+      if (ac.signal.aborted || !sanitized || extractImageSrcs(sanitized).length === 0) return;
+      try {
+        const inlined = await inlineArticleImages(sanitized, fetchImageBytes, {
+          signal: ac.signal,
+          onProgress: (html) => {
+            if (!ac.signal.aborted) setArticleHtml(html);
+          },
+        });
+        if (ac.signal.aborted) return;
+        setArticleHtml(inlined);
+        await saveInlinedArticleHtml(date, itemId, inlined);
+      } catch {
+        // Leave the text-only render in place; a later open retries the images.
       }
     },
     [openedItemIds],
