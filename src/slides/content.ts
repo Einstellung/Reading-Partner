@@ -4,6 +4,7 @@
 // scripts, no external URLs). The AI call is wired in live.ts. Distill the notes
 // into talk-style points — never paste note paragraphs.
 
+import { languageInstruction, type AiLanguage } from "../settings";
 import type { SlideRun } from "./types";
 
 // The class vocabulary the shell template styles (see template.ts). Given to the
@@ -23,7 +24,8 @@ const VOCAB = [
   '- An inline <svg>…</svg> is allowed for a simple structural diagram (no external refs).',
 ];
 
-export function contentSystemPrompt(): string {
+export function contentSystemPrompt(aiLanguage: AiLanguage = "auto"): string {
+  const lang = languageInstruction(aiLanguage);
   return [
     "You are the slide-writing stage of a reading companion. You write ONE slide's",
     "body as an HTML fragment — talk-ready, spoken-style, distilled. This is a slide",
@@ -45,6 +47,7 @@ export function contentSystemPrompt(): string {
     "",
     "Keep it tight: a content slide is 3-5 bullets or one comparison; a section or",
     "title slide is a headline plus at most a line. Output the fragment only.",
+    ...(lang ? ["", lang] : []),
   ].join("\n");
 }
 

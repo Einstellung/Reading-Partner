@@ -3,6 +3,8 @@
 // surrounding text, chapter, topic booklist, and whether tools are available,
 // produce the system prompt. Later segments (memory recall, evidence) attach here.
 
+import { languageInstruction, type AiLanguage } from "./settings";
+
 // One material in the topic booklist injected into the prompt.
 export interface BooklistItem {
   label: string;
@@ -34,6 +36,10 @@ export interface ReadingContext {
   // so every selection-derived part (marked passage, its note, surrounding text)
   // is dropped and the intro changes; position, chapter, booklist, tools stay.
   bookLevel?: boolean;
+  // AI output language (docs settings). "auto" (or unset) mirrors the user's
+  // language via the "follow the user's language" line; any other value appends
+  // an instruction pinning replies to that language.
+  aiLanguage?: AiLanguage;
 }
 
 function booklistLine(m: BooklistItem): string {
@@ -131,6 +137,9 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
       "permission to read. Reading is always allowed.",
     );
   }
+
+  const lang = languageInstruction(ctx.aiLanguage ?? "auto");
+  if (lang) lines.push("", lang);
 
   return lines.join("\n");
 }

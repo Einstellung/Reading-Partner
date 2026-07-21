@@ -1,7 +1,7 @@
 // Unit tests for slide-fragment sanitization (src/slides/content.ts). Run: bun test.
 
 import { expect, test } from "bun:test";
-import { contentUserMessage, sanitizeFragment } from "../../src/slides/content";
+import { contentSystemPrompt, contentUserMessage, sanitizeFragment } from "../../src/slides/content";
 import type { SlideRun } from "../../src/slides/types";
 
 test("sanitizeFragment strips scripts, styles, and event handlers", () => {
@@ -60,4 +60,10 @@ test("contentUserMessage relays the slide meta, asset slot, and notes", () => {
 test("contentUserMessage handles a slide with no notes", () => {
   const slide: SlideRun = { index: 1, title: "Opening", kind: "title", contentStatus: "pending" };
   expect(contentUserMessage(slide, "")).toContain("No source notes");
+});
+
+test("contentSystemPrompt appends the output-language instruction only when set", () => {
+  expect(contentSystemPrompt("es")).toContain("All user-facing output must be written in Español.");
+  expect(contentSystemPrompt()).not.toContain("must be written in");
+  expect(contentSystemPrompt("auto")).not.toContain("must be written in");
 });

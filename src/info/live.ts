@@ -21,12 +21,18 @@ import {
 } from "./store";
 import {
   parseTriageResult,
+  triageSystemPrompt,
   triageUserMessage,
-  TRIAGE_SYSTEM_PROMPT,
 } from "./triage";
+import type { AiLanguage } from "../settings";
 import type { FeedbackEvent, InfoItem, TriageResult } from "./types";
 
-async function resolveModel(): Promise<{ providerId: ProviderId; modelId: string; reasoning: ThinkingLevel | undefined }> {
+async function resolveModel(): Promise<{
+  providerId: ProviderId;
+  modelId: string;
+  reasoning: ThinkingLevel | undefined;
+  aiLanguage: AiLanguage;
+}> {
   const s = await loadSettings();
   if (!s.defaultProviderId || !s.defaultModelId) {
     throw new Error("No default AI provider configured (Settings).");
@@ -36,6 +42,7 @@ async function resolveModel(): Promise<{ providerId: ProviderId; modelId: string
     modelId: s.defaultModelId,
     // Triage wants some deliberation but not a marathon; reuse the prep effort.
     reasoning: toReasoning(s.prepThinking),
+    aiLanguage: s.aiLanguage,
   };
 }
 
@@ -53,7 +60,7 @@ function callModel(userText: string, opts: AiCallOptions, extra?: string): Promi
         void streamChat({
           providerId: model.providerId,
           modelId: model.modelId,
-          systemPrompt: TRIAGE_SYSTEM_PROMPT + (extra ?? ""),
+          systemPrompt: triageSystemPrompt(model.aiLanguage) + (extra ?? ""),
           messages: [{ role: "user", text: userText }],
           signal: opts.signal,
           reasoning: model.reasoning,

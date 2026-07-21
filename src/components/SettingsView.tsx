@@ -15,7 +15,7 @@ import {
 import { hasImageGenKey, setImageGenKey } from "../ai/credentials";
 import { DEFAULT_STT_BASE, DEFAULT_STT_MODEL, hasSttKey, setSttKey } from "../voice";
 import { DEFAULT_IMAGE_API_BASE, DEFAULT_IMAGE_MODEL } from "../slides";
-import type { Settings, ThinkingSetting } from "../settings";
+import { AI_LANGUAGE_OPTIONS, type AiLanguage, type Settings, type ThinkingSetting } from "../settings";
 import {
   setAutoSyncEnabled,
   signInToGoogle,
@@ -133,6 +133,30 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
               />
             </div>
           )}
+        </div>
+
+        <h2 className="mb-2 mt-8 text-sm font-semibold text-[#777]">AI output language</h2>
+        <div className={CARD}>
+          <label className="flex items-center gap-2 text-sm">
+            Language
+            <select
+              className={FIELD}
+              value={settings.aiLanguage}
+              onChange={(e) =>
+                onSettingsChange({ ...settings, aiLanguage: e.target.value as AiLanguage })
+              }
+            >
+              {AI_LANGUAGE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="m-0 text-xs text-[#777]">
+            The language the AI writes chat replies, notes, slides, and the news briefing in. Auto
+            follows the language you write in. Voice transcription always follows what you speak.
+          </p>
         </div>
 
         <h2 className="mb-2 mt-8 text-sm font-semibold text-[#777]">Lesson prep</h2>

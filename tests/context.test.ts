@@ -94,6 +94,15 @@ test("the memory snapshot appends the same way for a book-level prompt", () => {
   expect(out).toContain("reading-position: on chapter 5");
 });
 
+test("aiLanguage appends the output-language instruction, auto adds nothing", () => {
+  const pinned = buildSystemPrompt({ ...base, aiLanguage: "ja" });
+  expect(pinned).toContain("Respond in 日本語.");
+  expect(pinned).toContain("All user-facing output must be written in 日本語.");
+  // Auto (and unset) leave the prompt without a pinning instruction.
+  expect(buildSystemPrompt({ ...base, aiLanguage: "auto" })).not.toContain("must be written in");
+  expect(buildSystemPrompt(base)).not.toContain("must be written in");
+});
+
 test("the tools paragraph and cross-book rule appear only with hasTools", () => {
   const withTools = buildSystemPrompt({ ...base, hasTools: true });
   expect(withTools).toContain("read_pages(from, to)");

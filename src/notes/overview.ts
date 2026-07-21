@@ -5,6 +5,7 @@
 // the AI call is wired in live.ts.
 
 import { type ThinkingLevel } from "@earendil-works/pi-ai";
+import { languageInstruction, type AiLanguage } from "../settings";
 
 export const OVERVIEW_SYSTEM_PROMPT = [
   "You are the note-taking stage of a reading companion. The per-chapter lecture",
@@ -19,6 +20,13 @@ export const OVERVIEW_SYSTEM_PROMPT = [
   "over. Do not add a title heading; start directly with the content. Output only",
   "the framework.",
 ].join("\n");
+
+// The overview system prompt for a given output language. "auto" keeps the
+// English default; any other value appends the pinning instruction.
+export function overviewSystemPrompt(aiLanguage: AiLanguage = "auto"): string {
+  const lang = languageInstruction(aiLanguage);
+  return lang ? `${OVERVIEW_SYSTEM_PROMPT}\n\n${lang}` : OVERVIEW_SYSTEM_PROMPT;
+}
 
 // The chapter notes, section by section, as the model's input.
 export function overviewUserMessage(chapters: { index: number; title: string; body: string }[]): string {

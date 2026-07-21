@@ -3,6 +3,7 @@
 // (that article's full text plus the day's overview). Pure string assembly so
 // the calling component stays thin; the AI call reuses streamChat.
 
+import { languageInstruction, type AiLanguage } from "../settings";
 import type { Briefing } from "./types";
 
 // How much article text the chat carries as context (chat models take a big
@@ -14,9 +15,15 @@ const BASE =
   "questions about the material below concisely and honestly, in the user's language. " +
   "If something isn't in the provided text, say so rather than inventing it.";
 
-export function articleChatSystemPrompt(overview: string, title: string, text: string): string {
+export function articleChatSystemPrompt(
+  overview: string,
+  title: string,
+  text: string,
+  aiLanguage: AiLanguage = "auto",
+): string {
+  const lang = languageInstruction(aiLanguage);
   return [
-    BASE,
+    lang ? `${BASE}\n${lang}` : BASE,
     "",
     `Today's briefing, in one line: ${overview}`,
     "",
@@ -28,10 +35,11 @@ export function articleChatSystemPrompt(overview: string, title: string, text: s
 
 // The briefing-level thread: the whole document as context (overview + every
 // tier's titles and the reasons/lines the triage wrote).
-export function briefingChatSystemPrompt(b: Briefing): string {
+export function briefingChatSystemPrompt(b: Briefing, aiLanguage: AiLanguage = "auto"): string {
   const line = (id: string) => b.items[id]?.title ?? id;
+  const lang = languageInstruction(aiLanguage);
   const parts = [
-    BASE,
+    lang ? `${BASE}\n${lang}` : BASE,
     "",
     `Overview: ${b.overview}`,
     "",
