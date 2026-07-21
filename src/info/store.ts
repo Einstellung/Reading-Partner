@@ -10,6 +10,7 @@ import {
   readTextFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
+import { mergeInlinedHtml } from "./inline-images";
 import type { Briefing } from "./types";
 
 // The full article body kept per item, split out of the briefing so the briefing
@@ -95,4 +96,18 @@ export async function loadArticles(date: string): Promise<Record<string, CachedA
 export async function loadArticle(date: string, itemId: string): Promise<CachedArticle | null> {
   const all = await loadArticles(date);
   return all[itemId] ?? null;
+}
+
+// Persist image-inlined article HTML back into the day's cache, preserving the
+// item's textContent, so later opens are instant and offline. A no-op if the
+// item is not in the cache (e.g. the day's briefing was regenerated meanwhile).
+export async function saveInlinedArticleHtml(
+  date: string,
+  itemId: string,
+  contentHtml: string,
+): Promise<void> {
+  const all = await loadArticles(date);
+  const merged = mergeInlinedHtml(all, itemId, contentHtml);
+  if (merged === all) return;
+  await saveArticles(date, merged);
 }
