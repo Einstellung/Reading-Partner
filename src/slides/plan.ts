@@ -4,6 +4,7 @@
 // a deck title and ordered slides, each tagged with a kind and optional
 // book/chapter provenance and asset slots. The AI call itself lives in live.ts.
 
+import { languageInstruction, type AiLanguage } from "../settings";
 import type { SlideKind, SlideOutline } from "./types";
 
 // The plan input for one book: its whole-book overview (or a fallback summary
@@ -57,6 +58,14 @@ export const SLIDES_PLAN_SYSTEM_PROMPT = [
   "  list, only when it carries a result worth showing. Do not invent figure ids.",
   "- A slide may have at most one of illustration or figure, not both.",
 ].join("\n");
+
+// The plan system prompt for a given output language. "auto" keeps the default;
+// any other value appends the pinning instruction so the deck title and slide
+// titles come out in that language.
+export function slidesPlanSystemPrompt(aiLanguage: AiLanguage = "auto"): string {
+  const lang = languageInstruction(aiLanguage);
+  return lang ? `${SLIDES_PLAN_SYSTEM_PROMPT}\n\n${lang}` : SLIDES_PLAN_SYSTEM_PROMPT;
+}
 
 // Build the plan call's user message: each book's material and figure list,
 // followed by the talk instruction.

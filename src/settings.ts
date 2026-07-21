@@ -25,6 +25,53 @@ export function toReasoning(setting: ThinkingSetting): ThinkingLevel | undefined
   return setting === "off" ? undefined : setting;
 }
 
+// The language the AI writes its user-facing output in. "auto" mirrors the
+// user's own language (the default, no instruction added); every other value
+// pins output to that language across chat, notes, slides, and the briefing.
+export type AiLanguage =
+  | "auto"
+  | "en"
+  | "zh-CN"
+  | "ja"
+  | "ko"
+  | "es"
+  | "fr"
+  | "de"
+  | "pt"
+  | "ru";
+
+// The native name each language is labelled with, in the UI dropdown and inside
+// the prompt instruction itself.
+const AI_LANGUAGE_NAMES: Record<Exclude<AiLanguage, "auto">, string> = {
+  en: "English",
+  "zh-CN": "简体中文",
+  ja: "日本語",
+  ko: "한국어",
+  es: "Español",
+  fr: "Français",
+  de: "Deutsch",
+  pt: "Português",
+  ru: "Русский",
+};
+
+// Options for the settings dropdown, in display order. "auto" leads.
+export const AI_LANGUAGE_OPTIONS: { value: AiLanguage; label: string }[] = [
+  { value: "auto", label: "Auto (match my language)" },
+  ...(Object.keys(AI_LANGUAGE_NAMES) as Exclude<AiLanguage, "auto">[]).map((value) => ({
+    value,
+    label: AI_LANGUAGE_NAMES[value],
+  })),
+];
+
+// One sentence appended to a system prompt to pin user-facing output to the
+// chosen language. Empty for "auto" (no instruction — the surface keeps its own
+// default, usually mirroring the user's language).
+export function languageInstruction(aiLanguage: AiLanguage): string {
+  if (aiLanguage === "auto") return "";
+  const name = AI_LANGUAGE_NAMES[aiLanguage];
+  return `Respond in ${name}. All user-facing output must be written in ${name}.`;
+}
+
 export interface Settings {
   defaultProviderId: string | null;
   defaultModelId: string | null;
@@ -48,6 +95,9 @@ export interface Settings {
   // Generate chapter notes automatically from the reader's highlights (docs/14).
   // The manual "Generate notes" button and per-chapter Regenerate work regardless.
   autoNotes: boolean;
+  // Language the AI writes its user-facing output in. "auto" mirrors the user's
+  // own language; every other value pins output to that language.
+  aiLanguage: AiLanguage;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -61,6 +111,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sttApiBase: null,
   sttModel: null,
   autoNotes: true,
+  aiLanguage: "auto",
 };
 
 const DEFAULTS = DEFAULT_SETTINGS;

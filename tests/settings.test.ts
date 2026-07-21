@@ -20,7 +20,8 @@ mock.module("@tauri-apps/plugin-fs", () => ({
   },
 }));
 
-const { DEFAULT_SETTINGS, loadSettings, toReasoning } = await import("../src/settings");
+const { AI_LANGUAGE_OPTIONS, DEFAULT_SETTINGS, languageInstruction, loadSettings, toReasoning } =
+  await import("../src/settings");
 
 test("thinking defaults are low (chat) and medium (prep)", () => {
   expect(DEFAULT_SETTINGS.chatThinking).toBe("low");
@@ -52,6 +53,7 @@ test("loadSettings round-trips a fully persisted object", async () => {
     sttApiBase: "https://stt.test",
     sttModel: "sense",
     autoNotes: false,
+    aiLanguage: "zh-CN",
   };
   fileContent = JSON.stringify(saved);
   const s = await loadSettings();
@@ -68,4 +70,25 @@ test("loadSettings fills the thinking defaults for an old file missing them", as
   expect(s.chatThinking).toBe("low");
   expect(s.prepThinking).toBe("medium");
   expect(s.defaultProviderId).toBe("openai");
+});
+
+test("aiLanguage defaults to auto and an old file without it loads as auto", async () => {
+  expect(DEFAULT_SETTINGS.aiLanguage).toBe("auto");
+  fileContent = JSON.stringify({ defaultProviderId: "openai", defaultModelId: "gpt" });
+  const s = await loadSettings();
+  expect(s.aiLanguage).toBe("auto");
+});
+
+test("languageInstruction is empty on auto and names the native language otherwise", () => {
+  expect(languageInstruction("auto")).toBe("");
+  // Every non-auto option maps to a one-sentence instruction naming its own label.
+  for (const { value, label } of AI_LANGUAGE_OPTIONS) {
+    if (value === "auto") continue;
+    const instruction = languageInstruction(value);
+    expect(instruction).toContain(label);
+    expect(instruction).toContain("All user-facing output must be written in");
+  }
+  expect(languageInstruction("ja")).toBe(
+    "Respond in 日本語. All user-facing output must be written in 日本語.",
+  );
 });

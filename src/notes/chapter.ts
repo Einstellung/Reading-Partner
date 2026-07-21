@@ -12,6 +12,7 @@ import { formatPages, formatSearch } from "../ai/reading-context";
 import { buildFigureTools, type FigureImage } from "../figures/tools";
 import type { Figure } from "../figures/types";
 import type { Fulltext } from "../fulltext/types";
+import { languageInstruction, type AiLanguage } from "../settings";
 import type { NoteChapter } from "./types";
 
 const CHAPTER_MAX_ROUNDS = 16;
@@ -106,8 +107,9 @@ export function chapterSystemPrompt(params: {
   emphasis?: string;
   chats?: string;
   instruction?: string;
+  aiLanguage?: AiLanguage;
 }): string {
-  const { bookName, chapter, figureCatalog, emphasis, chats, instruction } = params;
+  const { bookName, chapter, figureCatalog, emphasis, chats, instruction, aiLanguage } = params;
   const lines = [
     "You are writing lecture notes for a reading companion — the intermediate",
     "product a later slide deck is built from, so it must stand on its own.",
@@ -145,6 +147,8 @@ export function chapterSystemPrompt(params: {
     "Do not add a title heading; start directly with the content. Output only the",
     "note.",
   );
+  const lang = languageInstruction(aiLanguage ?? "auto");
+  if (lang) lines.push("", lang);
   return lines.join("\n");
 }
 
@@ -211,12 +215,13 @@ export function runNoteChapter(params: {
   emphasis?: string;
   chats?: string;
   instruction?: string;
+  aiLanguage?: AiLanguage;
   signal?: AbortSignal;
   onProgress?: (chars: number) => void;
 }): Promise<string> {
-  const { bookName, chapter, tools, model, figureCatalog, emphasis, chats, instruction, signal, onProgress } =
+  const { bookName, chapter, tools, model, figureCatalog, emphasis, chats, instruction, aiLanguage, signal, onProgress } =
     params;
-  const systemPrompt = chapterSystemPrompt({ bookName, chapter, figureCatalog, emphasis, chats, instruction });
+  const systemPrompt = chapterSystemPrompt({ bookName, chapter, figureCatalog, emphasis, chats, instruction, aiLanguage });
 
   return new Promise<string>((resolve, reject) => {
     let chars = 0;

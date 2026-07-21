@@ -13,14 +13,14 @@ import { getFigures } from "../figures/store";
 import { renderFigure } from "../figures/render";
 import { getLibraryEntry, readLibraryBook } from "../library";
 import { loadNotesState, readChapterNote, readOverviewNote } from "../notes/store";
-import { loadSettings, toReasoning } from "../settings";
+import { loadSettings, toReasoning, type AiLanguage } from "../settings";
 import { contentSystemPrompt, contentUserMessage, sanitizeFragment } from "./content";
 import { generateImage, resolveImageGenConfig, type ImageGenDeps } from "./imageGen";
 import { cleanTauriFetch } from "../tauri-fetch";
 import {
   parseSlidePlan,
   planUserMessage,
-  SLIDES_PLAN_SYSTEM_PROMPT,
+  slidesPlanSystemPrompt,
   type PlanBook,
 } from "./plan";
 import { SlidesPipeline, type AssembleInput, type SlidesDeps } from "./pipeline";
@@ -43,6 +43,7 @@ async function resolveModel(): Promise<{
   providerId: ProviderId;
   modelId: string;
   reasoning: ThinkingLevel | undefined;
+  aiLanguage: AiLanguage;
 }> {
   const s = await loadSettings();
   if (!s.defaultProviderId || !s.defaultModelId) {
@@ -52,6 +53,7 @@ async function resolveModel(): Promise<{
     providerId: s.defaultProviderId as ProviderId,
     modelId: s.defaultModelId,
     reasoning: toReasoning(s.prepThinking),
+    aiLanguage: s.aiLanguage,
   };
 }
 
@@ -203,14 +205,24 @@ function imageDeps(signal: AbortSignal): ImageGenDeps {
 function makeDeps(bookIds: string[], instruction: string): SlidesDeps {
   return {
     async buildPlan(opts) {
+      const { aiLanguage } = await resolveModel();
       const books = await Promise.all(bookIds.map(planMaterial));
-      const text = await callModel(SLIDES_PLAN_SYSTEM_PROMPT, planUserMessage(books, instruction), opts);
+      const text = await callModel(
+        slidesPlanSystemPrompt(aiLanguage),
+        planUserMessage(books, instruction),
+        opts,
+      );
       return parseSlidePlan(text);
     },
 
     async generateContent(slide, opts) {
+      const { aiLanguage } = await resolveModel();
       const notes = await gatherSlideNotes(slide, bookIds);
-      const text = await callModel(contentSystemPrompt(), contentUserMessage(slide, notes), opts);
+      const text = await callModel(
+        contentSystemPrompt(aiLanguage),
+        contentUserMessage(slide, notes),
+        opts,
+      );
       return sanitizeFragment(text);
     },
 

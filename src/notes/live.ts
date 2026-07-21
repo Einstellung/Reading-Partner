@@ -11,7 +11,7 @@ import { buildFigureCatalog } from "../figures/catalog";
 import { renderFigure } from "../figures/render";
 import type { Figure } from "../figures/types";
 import type { Fulltext } from "../fulltext/types";
-import { loadSettings, toReasoning } from "../settings";
+import { loadSettings, toReasoning, type AiLanguage } from "../settings";
 import {
   buildChapterTools,
   formatChatThreads,
@@ -26,7 +26,7 @@ import {
   parseNotesPlan,
   planUserMessage,
 } from "./plan";
-import { OVERVIEW_SYSTEM_PROMPT, overviewUserMessage } from "./overview";
+import { overviewSystemPrompt, overviewUserMessage } from "./overview";
 import { NotesPipeline, type NotesDeps } from "./pipeline";
 import {
   loadNotesState,
@@ -53,6 +53,7 @@ async function resolveModel(): Promise<{
   providerId: ProviderId;
   modelId: string;
   reasoning: ThinkingLevel | undefined;
+  aiLanguage: AiLanguage;
 }> {
   const s = await loadSettings();
   if (!s.defaultProviderId || !s.defaultModelId) {
@@ -62,6 +63,7 @@ async function resolveModel(): Promise<{
     providerId: s.defaultProviderId as ProviderId,
     modelId: s.defaultModelId,
     reasoning: toReasoning(s.prepThinking),
+    aiLanguage: s.aiLanguage,
   };
 }
 
@@ -150,6 +152,7 @@ function makeDeps(bookId: string, bookName: string, inputs: NotesInputs): NotesD
         emphasis,
         chats,
         instruction,
+        aiLanguage: model.aiLanguage,
         signal: opts.signal,
         onProgress: opts.onProgress,
       });
@@ -159,7 +162,8 @@ function makeDeps(bookId: string, bookName: string, inputs: NotesInputs): NotesD
     readChapterNote: (index) => readChapterNote(bookId, index),
 
     async buildOverview(chapters, opts) {
-      return callModel(OVERVIEW_SYSTEM_PROMPT, overviewUserMessage(chapters), opts);
+      const { aiLanguage } = await resolveModel();
+      return callModel(overviewSystemPrompt(aiLanguage), overviewUserMessage(chapters), opts);
     },
 
     writeOverview: (body) => writeOverviewNote(bookId, body),

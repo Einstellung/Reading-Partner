@@ -60,7 +60,7 @@ import {
 import { initSync, onSyncPulled } from "./sync";
 import { compressImage, compressImageData, type CompressedImage } from "./ai/image-utils";
 import { isTauri, readClipboardImage } from "./clipboard";
-import { DEFAULT_SETTINGS, loadSettings, onSettingsSaveError, saveSettings, toReasoning, type Settings } from "./settings";
+import { DEFAULT_SETTINGS, languageInstruction, loadSettings, onSettingsSaveError, saveSettings, toReasoning, type Settings } from "./settings";
 import { buildSystemPrompt, type BooklistItem } from "./context";
 import { buildGlossary } from "./voice";
 import {
@@ -1179,6 +1179,10 @@ export default function App() {
           hasTools: tools.length > 0,
           figureCatalog,
         });
+        // Classroom mode shares the AI output-language setting; the companion
+        // prompt gets it inside buildSystemPrompt.
+        const lang = languageInstruction(s.aiLanguage);
+        if (lang) systemPrompt += "\n\n" + lang;
       } else {
         systemPrompt = buildSystemPrompt({
           topicName,
@@ -1193,6 +1197,7 @@ export default function App() {
           figureCatalog,
           hasTools: tools.length > 0,
           bookLevel: isBook,
+          aiLanguage: s.aiLanguage,
         });
       }
       if (memorySection) systemPrompt += "\n\n" + memorySection;
@@ -1604,7 +1609,7 @@ export default function App() {
     setInfoChatAnchor({
       threadId: "briefing",
       title: "Today's briefing",
-      systemPrompt: briefingChatSystemPrompt(b),
+      systemPrompt: briefingChatSystemPrompt(b, settingsRef.current.aiLanguage),
     });
   }, []);
 
@@ -1616,7 +1621,12 @@ export default function App() {
     setInfoChatAnchor({
       threadId: itemId,
       title: meta?.title ?? "Article",
-      systemPrompt: articleChatSystemPrompt(b.overview, meta?.title ?? "", cached?.textContent ?? ""),
+      systemPrompt: articleChatSystemPrompt(
+        b.overview,
+        meta?.title ?? "",
+        cached?.textContent ?? "",
+        settingsRef.current.aiLanguage,
+      ),
     });
   }, []);
 

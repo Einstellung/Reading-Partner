@@ -111,3 +111,14 @@ test("chapterSystemPrompt omits the chat instruction when there are no chats", (
   const prompt = chapterSystemPrompt({ bookName: "Book", chapter: CHAPTER, chats: "" });
   expect(prompt).not.toMatch(/asked for it to be recorded/);
 });
+
+test("chapterSystemPrompt appends the output-language instruction only when set", () => {
+  const pinned = chapterSystemPrompt({ bookName: "Book", chapter: CHAPTER, aiLanguage: "fr" });
+  expect(pinned).toContain("All user-facing output must be written in Français.");
+  expect(chapterSystemPrompt({ bookName: "Book", chapter: CHAPTER })).not.toContain(
+    "must be written in",
+  );
+  expect(
+    chapterSystemPrompt({ bookName: "Book", chapter: CHAPTER, aiLanguage: "auto" }),
+  ).not.toContain("must be written in");
+});

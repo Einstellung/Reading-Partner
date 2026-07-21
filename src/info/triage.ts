@@ -4,6 +4,7 @@
 // watchdog. The model sorts every item into exactly one tier and writes the
 // overview/reasons/lines to the user.
 
+import { languageInstruction, type AiLanguage } from "../settings";
 import type { FeedbackEvent, InfoItem, TriageResult } from "./types";
 
 // How much of each article's text the model sees. Enough to judge substance
@@ -53,6 +54,15 @@ export const TRIAGE_SYSTEM_PROMPT = [
   '  "filtered": [{ "itemId": string, "category": string }]',
   "}",
 ].join("\n");
+
+// The triage system prompt for a given output language. On "auto" it keeps the
+// hardcoded English default (the overview/reasons/lines have no user message to
+// mirror); any other value appends the instruction, which overrides the "in
+// English" default so the reader gets the tiering in their language.
+export function triageSystemPrompt(aiLanguage: AiLanguage = "auto"): string {
+  const lang = languageInstruction(aiLanguage);
+  return lang ? `${TRIAGE_SYSTEM_PROMPT}\n\n${lang}` : TRIAGE_SYSTEM_PROMPT;
+}
 
 const SOURCE_LABEL: Record<InfoItem["source"], string> = {
   jiqizhixin: "机器之心 (jiqizhixin)",

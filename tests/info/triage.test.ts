@@ -5,6 +5,7 @@ import { expect, test } from "bun:test";
 import {
   formatFeedbackTail,
   parseTriageResult,
+  triageSystemPrompt,
   triageUserMessage,
 } from "../../src/info/triage";
 import type { FeedbackEvent, InfoItem } from "../../src/info/types";
@@ -88,4 +89,13 @@ test("parseTriageResult tolerates a markdown fence and prose", () => {
 test("parseTriageResult fails on no JSON or missing overview", () => {
   expect(parseTriageResult("no json here", new Set()).ok).toBe(false);
   expect(parseTriageResult(JSON.stringify({ mustRead: [] }), new Set()).ok).toBe(false);
+});
+
+test("triageSystemPrompt keeps the English default on auto, pins on a set language", () => {
+  const auto = triageSystemPrompt("auto");
+  expect(auto).toContain("Write the overview, reasons, and one-liners in English");
+  expect(auto).not.toContain("All user-facing output must be written in");
+  const pinned = triageSystemPrompt("ko");
+  expect(pinned).toContain("Respond in 한국어.");
+  expect(pinned).toContain("All user-facing output must be written in 한국어.");
 });
