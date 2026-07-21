@@ -1,58 +1,70 @@
-// Floating chat over the briefing / article (docs/16). Collapsed it is a small
-// pill; expanded it is a chat panel. Anchored per item: the host supplies the
-// thread id, a title, and the system prompt (article full text + overview, or
-// the whole briefing). Reuses the shared MessageList/Composer and streamChat;
-// threads persist under a pseudo-book id "info-<date>" so a day's chats survive
-// a reopen and ride the normal thread sync.
+// The info call over the briefing / article (docs/16), on the call model (docs/03).
+// It reuses the reader call's main-screen path (the top-bar AI button's
+// "直接进主画面态,不经过气泡"): clicking "ask" opens the full chat window with the
+// article/briefing shrunk to a corner position card. Tapping the card swaps
+// (content main, chat becomes the corner pip); ✕ hangs up. No bubble, no
+// auto-started take — the composer is ready and the user types.
+//
+// Context comes from the host (article full text + overview, or the whole
+// briefing); the AI call reuses streamChat. Threads persist under a pseudo-book
+// id "info-<date>" so a day's chats survive a reopen and ride the normal thread
+// sync.
 
 import { useEffect, useRef, useState } from "react";
 import { streamChat } from "../ai/providers";
 import { loadSettings, toReasoning } from "../settings";
-import {
-  appendMessage,
-  createThread,
-  getThread,
-  loadThreads,
-} from "../threads";
-import { Composer, MessageList } from "./chat";
-import { IconClose, IconSparkle } from "./icons";
+import { appendMessage, createThread, getThread, loadThreads } from "../threads";
+import CallView from "./CallView";
+import ChatPipCard from "./ChatPipCard";
+import ReadingPipCard from "./ReadingPipCard";
 import type { ChatMessage } from "../ai/providers";
+import type { InfoSource } from "../info/types";
 import type { ThreadMessage as UiMessage } from "./types";
 
-export interface InfoChatAnchor {
+const SOURCE_TAG: Record<InfoSource, string> = {
+  jiqizhixin: "机器之心",
+  qbitai: "量子位",
+};
+
+export interface InfoCallAnchor {
+  // "briefing" for the briefing-level thread, or the item id for an article.
   threadId: string;
-  title: string;
+  // The chat window's empty-state heading and composer placeholder.
+  emptyTitle: string;
+  placeholder: string;
   systemPrompt: string;
+  // The corner position card: the article/briefing shrunk to a title, an
+  // optional source tag, and a one-line reason/overview.
+  position: { title: string; source?: InfoSource; line: string | null };
 }
 
 function bookIdFor(dateKey: string): string {
   return `info-${dateKey}`;
 }
 
-export function InfoChat({
+export function InfoCall({
   anchor,
   dateKey,
-  configured,
-  onClose,
-  onOpenSettings,
+  onHangUp,
 }: {
-  anchor: InfoChatAnchor;
+  anchor: InfoCallAnchor;
   dateKey: string;
-  configured: boolean;
-  onClose: () => void;
-  onOpenSettings: () => void;
+  onHangUp: () => void;
 }) {
-  const [expanded, setExpanded] = useState(true);
+  // Two of the three call views (docs/03): the chat window main-screen, and the
+  // corner chat pip when the briefing/article is main. No bubble (the info entry
+  // goes straight to main, like the reader's top-bar AI button).
+  const [view, setView] = useState<"chat-main" | "chat-pip">("chat-main");
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const bookId = bookIdFor(dateKey);
 
   // Load (or start) the anchor's thread whenever the anchor changes. A new
-  // anchor opens expanded.
+  // anchor opens the chat window.
   useEffect(() => {
     let live = true;
-    setExpanded(true);
+    setView("chat-main");
     (async () => {
       try {
         await loadThreads(bookId);
@@ -62,9 +74,7 @@ export function InfoChat({
       if (!live) return;
       let thread = getThread(bookId, anchor.threadId);
       if (!thread) thread = createThread(bookId, "info", anchor.threadId);
-      setMessages(
-        thread.messages.map((m) => ({ role: m.role, text: m.text, ts: m.ts })),
-      );
+      setMessages(thread.messages.map((m) => ({ role: m.role, text: m.text, ts: m.ts })));
     })();
     return () => {
       live = false;
@@ -140,63 +150,48 @@ export function InfoChat({
     abortRef.current?.abort();
   }
 
-  if (!expanded) {
+  const { position } = anchor;
+  const lastMessage = messages.length ? messages[messages.length - 1].text : null;
+
+  if (view === "chat-pip") {
     return (
-      <button
-        className="fixed bottom-5 right-5 z-[900] flex items-center gap-2 rounded-full border border-[#c9c2e8] bg-[#efecfb] px-4 py-2.5 text-[13px] font-medium text-[#4a3a9e] shadow-lg hover:bg-[#e7e3f7]"
-        onClick={() => setExpanded(true)}
-      >
-        <IconSparkle size={16} /> Chat
-      </button>
+      <div className="absolute right-3 top-3 z-50">
+        <ChatPipCard lastMessage={lastMessage} onClick={() => setView("chat-main")} onHangUp={onHangUp} />
+      </div>
     );
   }
 
   return (
-    <div className="fixed bottom-5 right-5 z-[900] flex h-[70vh] max-h-[640px] w-[min(400px,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-2xl border border-black/10 bg-white shadow-[0_12px_48px_rgba(0,0,0,0.22)]">
-      <div className="flex items-center gap-2 border-b border-[#eee] px-4 py-2.5">
-        <IconSparkle size={16} />
-        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#333]">{anchor.title}</span>
-        <button
-          aria-label="Collapse"
-          title="Collapse"
-          className="flex h-7 w-7 items-center justify-center rounded-md text-[#999] hover:bg-[#f2f2f2]"
-          onClick={() => setExpanded(false)}
-        >
-          –
-        </button>
-        <button
-          aria-label="Close chat"
-          title="Close"
-          className="flex h-7 w-7 items-center justify-center rounded-md text-[#999] hover:bg-[#f2f2f2]"
-          onClick={onClose}
-        >
-          <IconClose size={14} />
-        </button>
+    <>
+      <div className="absolute inset-0 z-40">
+        <CallView
+          messages={messages}
+          onSend={send}
+          onHangUp={onHangUp}
+          streaming={streaming}
+          onStop={stop}
+          emptyTitle={anchor.emptyTitle}
+          placeholder={anchor.placeholder}
+        />
       </div>
-
-      {messages.length === 0 && (
-        <div className="px-4 pt-4 text-[13px] text-[#999]">Ask anything about this.</div>
-      )}
-      <MessageList messages={messages} size="sm" className="flex-1 px-4 py-3" />
-
-      <div className="border-t border-[#eee] p-3">
-        {configured ? (
-          <Composer
-            onSend={send}
-            placeholder="Ask…"
-            pill
-            streaming={streaming}
-            onStop={stop}
-          />
-        ) : (
-          <button
-            className="w-full rounded-lg border border-[#dcdcdc] px-3 py-2 text-[13px] text-[#555] hover:bg-[#f4f4f4]"
-            onClick={onOpenSettings}
-          >
-            Configure a provider in Settings to chat
-          </button>
-        )}
+      <div className="absolute right-3 top-3 z-50">
+        <ReadingPipCard
+          title={position.title}
+          badge={
+            position.source ? (
+              <span className="shrink-0 rounded-full bg-[#f0eefb] px-2 py-0.5 text-[11px] font-medium text-[#6d5ae0]">
+                {SOURCE_TAG[position.source]}
+              </span>
+            ) : undefined
+          }
+          body={
+            position.line ? (
+              <span className="line-clamp-3 text-[12px] leading-snug text-neutral-500">{position.line}</span>
+            ) : undefined
+          }
+          onClick={() => setView("chat-pip")}
+        />
       </div>
-    </div>
+    </>
   );
 }
