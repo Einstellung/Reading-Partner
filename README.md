@@ -6,11 +6,15 @@ An AI reading companion for academic surveys and technical books. It doesn't jus
 
 Local-first and backend-free: bring your own API key (Anthropic, OpenAI, DeepSeek, or any OpenAI-compatible endpoint). Books, annotations, notes, memory, and keys never leave your machine.
 
+## Daily briefing
+
+The app opens to a Today home: cards to continue the book you were reading, and a briefing of the day's AI news. The AI reads 机器之心 and 量子位 in full and triages every item against a profile of what you care about — into worth-reading (each with a one-line reason why it's for you), one-liners, and filtered-out (appealable when it gets one wrong). Read articles in-app with their images, and open a chat anchored to any item to dig in. Your open, dismiss, and appeal actions feed back into future triage. Profile and feedback sync across devices.
+
 ## Two modes
 
 **Companion mode** — you drive. Mark a passage with the AI pen and it explains it in place, like a video call with the book: the reply opens in a bubble you can expand, and the thread stays anchored to your highlight forever. The AI can turn pages on its own, run full-text search across the books in your topic, and read your existing highlights and notes when the conversation needs them. A button in the top bar opens a book-level thread for questions that belong to no particular passage ("what is this chapter about?").
 
-**Classroom mode** — the AI drives. Toggle it inside any conversation and the AI switches from companion to teacher: the entire survey stays resident in its context, together with lesson notes it prepared for the papers the survey actually leans on.
+**Classroom mode** — the AI drives. Toggle it inside any conversation and the AI switches from companion to teacher: the entire survey stays resident in its context, together with lesson notes it prepared for the papers the survey actually leans on. The toggle is remembered per book.
 
 ## Lesson prep
 
@@ -41,6 +45,16 @@ Paste a URL into the chat — an arXiv or OpenReview PDF, or a web article — a
 
 The sidebar has a Notes tab: one click generates chapter-by-chapter lecture notes for the whole book. The chapter plan comes from the PDF outline, or the model reads the table of contents when there is none. Notes carry `[p.N]` and `[fig:N]` anchors that jump into the book, just like citations in chat. Regenerate any chapter on its own, with an optional instruction to steer it. Your highlights and conversations in a chapter shape how deep its note goes, and explanations you explicitly endorsed in chat get absorbed into the note.
 
+Notes also accrue as you read: a chapter distills into its note once your highlights move past it, chapters you never marked are skipped, and a final pass runs when you close the book. The notes overview is part of the context each conversation opens with, so the AI knows what the book has already covered.
+
+## Slides from notes
+
+Turn your book notes into a self-contained HTML slide deck for a talk — multiple books at once, with optional AI-drawn illustrations. It opens in any browser with everything inlined, nothing to serve.
+
+## Voice input
+
+Every chat composer has a push-to-talk mic. Hold to record, release to transcribe: recording runs in Rust (WebKitGTK's getUserMedia is unreliable on Linux), speech-to-text goes through any OpenAI-compatible endpoint, and an LLM pass cleans up the transcript. It defaults to SiliconFlow's free SenseVoice tier — add a SiliconFlow key in Settings.
+
 ## Sync across devices
 
 Sign in with Google in Settings and everything syncs — books, reading positions, marks and highlights, conversations, and notes — through a visible "Reading Partner" folder in your own Google Drive. No accounts, no server: your data stays in your Drive, and you can open the folder and see the files. Sync runs automatically after sign-in, with a manual toggle and a Sync now button in Settings. Books are content-addressed, so the same PDF opened on two devices lines up. AI provider keys are the one thing that never leaves the device.
@@ -53,7 +67,7 @@ Adaptive reasoning is on by default: low effort for conversation (fast answers, 
 
 Prebuilt binaries for Linux, macOS and Windows are on the [releases page](https://github.com/Einstellung/Reading-Partner/releases). They are unsigned: macOS will refuse the first launch until you right-click the app and choose Open, and Windows SmartScreen will warn once.
 
-First run: open Settings, pick a provider, paste your API key. Optionally add a Semantic Scholar API key for lesson prep.
+First run: open Settings, pick a provider, paste your API key. Optionally add a Semantic Scholar API key for lesson prep and a SiliconFlow key for voice input. The AI's output language is set here too — nine languages, or match the book.
 
 ## Build
 
