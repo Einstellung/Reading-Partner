@@ -52,7 +52,7 @@ export function InfoCall({
   anchor: InfoCallAnchor;
   dateKey: string;
   onHangUp: () => void;
-  voice?: ComposerVoice;
+  voice?: ComposerVoice | false;
 }) {
   // Two of the three call views (docs/03): the chat window main-screen, and the
   // corner chat pip when the briefing/article is main. No bubble (the info entry

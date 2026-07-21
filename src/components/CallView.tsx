@@ -28,7 +28,7 @@ interface CallViewProps {
 	// title and "Ask about this book…".
 	emptyTitle?: string;
 	placeholder?: string;
-	voice?: ComposerVoice;
+	voice?: ComposerVoice | false;
 }
 
 export default function CallView({

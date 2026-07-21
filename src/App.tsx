@@ -493,32 +493,19 @@ export default function App() {
     [topics, activeTopicId],
   );
 
-  // Voice input for the chat composer (docs/15): the STT cleanup pass anchors on
-  // the current book's title + outline as a glossary, and runs on the default
-  // chat model (null when no provider is configured — cleanup is then skipped).
+  // Voice-input enrichment for the chat composer (docs/15): the STT cleanup pass
+  // anchors on the current book's title + outline as a glossary. The mic itself
+  // and its cleanup model are the composer's own defaults.
   const callVoice = useMemo(
-    () => ({
-      glossary: buildGlossary({ title, outline: fulltext?.outline }),
-      cleanupModel:
-        settings.defaultProviderId && settings.defaultModelId
-          ? {
-              providerId: settings.defaultProviderId as ProviderId,
-              modelId: settings.defaultModelId,
-              reasoning: toReasoning(settings.chatThinking),
-            }
-          : null,
-    }),
-    [title, fulltext, settings.defaultProviderId, settings.defaultModelId, settings.chatThinking],
+    () => ({ glossary: buildGlossary({ title, outline: fulltext?.outline }) }),
+    [title, fulltext],
   );
 
-  // Voice input for the info call composer: same cleanup model, glossary anchors
-  // on the article/briefing title (there is no book outline here).
+  // Same enrichment for the info call composer: the glossary anchors on the
+  // article/briefing title (there is no book outline here).
   const infoVoice = useMemo(
-    () => ({
-      glossary: buildGlossary({ title: infoCall?.position.title }),
-      cleanupModel: callVoice.cleanupModel,
-    }),
-    [infoCall, callVoice],
+    () => ({ glossary: buildGlossary({ title: infoCall?.position.title }) }),
+    [infoCall],
   );
 
   const refreshTopics = useCallback(async () => {
