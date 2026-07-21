@@ -17,6 +17,7 @@ import { appendMessage, createThread, getThread, loadThreads } from "../threads"
 import CallView from "./CallView";
 import ChatPipCard from "./ChatPipCard";
 import ReadingPipCard from "./ReadingPipCard";
+import type { ComposerVoice } from "./chat";
 import type { ChatMessage } from "../ai/providers";
 import type { InfoSource } from "../info/types";
 import type { ThreadMessage as UiMessage } from "./types";
@@ -46,10 +47,12 @@ export function InfoCall({
   anchor,
   dateKey,
   onHangUp,
+  voice,
 }: {
   anchor: InfoCallAnchor;
   dateKey: string;
   onHangUp: () => void;
+  voice?: ComposerVoice;
 }) {
   // Two of the three call views (docs/03): the chat window main-screen, and the
   // corner chat pip when the briefing/article is main. No bubble (the info entry
@@ -172,6 +175,7 @@ export function InfoCall({
           onStop={stop}
           emptyTitle={anchor.emptyTitle}
           placeholder={anchor.placeholder}
+          voice={voice}
         />
       </div>
       <div className="absolute right-3 top-3 z-50">

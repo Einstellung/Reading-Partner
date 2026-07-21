@@ -511,6 +511,16 @@ export default function App() {
     [title, fulltext, settings.defaultProviderId, settings.defaultModelId, settings.chatThinking],
   );
 
+  // Voice input for the info call composer: same cleanup model, glossary anchors
+  // on the article/briefing title (there is no book outline here).
+  const infoVoice = useMemo(
+    () => ({
+      glossary: buildGlossary({ title: infoCall?.position.title }),
+      cleanupModel: callVoice.cleanupModel,
+    }),
+    [infoCall, callVoice],
+  );
+
   const refreshTopics = useCallback(async () => {
     setTopics(await listTopics());
   }, []);
@@ -2340,6 +2350,7 @@ export default function App() {
             anchor={infoCall}
             dateKey={infoSnap?.briefing?.date ?? todayLocal()}
             onHangUp={() => setInfoCall(null)}
+            voice={infoVoice}
           />
         )}
 
