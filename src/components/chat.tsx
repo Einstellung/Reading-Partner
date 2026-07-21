@@ -8,12 +8,55 @@ import { MicButton } from './MicButton';
 import { useFlickerProbe } from './useFlickerProbe';
 import type { ChatImage, PendingImage, ThreadMessage, ToolStatus } from './types';
 import type { CleanupModel } from '../voice';
+import type { ProviderId } from '../ai/providers';
+import { loadSettings, toReasoning } from '../settings';
 
-// Voice input wiring for the composer: the book glossary for the STT cleanup
-// pass and the chat model that runs it (null = no provider, cleanup is skipped).
+// Optional enrichment for the composer's built-in voice input. The mic is on by
+// default; this only adds context. `glossary` seeds the STT cleanup pass with
+// the current surface's proper names (book title + outline, article title) so
+// mis-transcriptions of those terms get corrected. The cleanup model is derived
+// from settings inside the composer, not passed here.
 export interface ComposerVoice {
-	glossary: string;
-	cleanupModel: CleanupModel | null;
+	glossary?: string;
+}
+
+// Resolve the `voice` prop into what the mic needs. The mic is enabled unless a
+// caller explicitly opts out with `voice={false}`; anything else (omitted or an
+// enrichment object) enables it, with an empty glossary as the default.
+export function resolveComposerVoice(
+	voice: ComposerVoice | false | undefined,
+): { glossary: string } | null {
+	if (voice === false) return null;
+	return { glossary: voice?.glossary ?? '' };
+}
+
+// The cleanup model the composer's voice input runs on, derived from settings so
+// any composer has working voice input without the caller wiring it. Null until
+// settings load, and null when no default provider/model is configured (the mic
+// then skips the polish pass and keeps the raw transcript).
+function useDefaultCleanupModel(): CleanupModel | null {
+	const [model, setModel] = useState<CleanupModel | null>(null);
+	useEffect(() => {
+		let alive = true;
+		loadSettings()
+			.then((s) => {
+				if (!alive) return;
+				setModel(
+					s.defaultProviderId && s.defaultModelId
+						? {
+								providerId: s.defaultProviderId as ProviderId,
+								modelId: s.defaultModelId,
+								reasoning: toReasoning(s.chatThinking),
+							}
+						: null,
+				);
+			})
+			.catch(() => {});
+		return () => {
+			alive = false;
+		};
+	}, []);
+	return model;
 }
 
 // The async clipboard API is unreliable in WebKitGTK (pitfall 16), so a failure
@@ -279,12 +322,16 @@ export function Composer({
 	hint?: string;
 	streaming?: boolean;
 	onStop?(): void;
-	voice?: ComposerVoice;
+	// Voice input is on by default. Pass an enrichment object to add a glossary,
+	// or `voice={false}` to explicitly opt a surface out of the mic.
+	voice?: ComposerVoice | false;
 }) {
 	const [value, setValue] = useState('');
 	const [voiceHint, setVoiceHint] = useState<string | null>(null);
 	const taRef = useRef<HTMLTextAreaElement>(null);
 	const maxHeight = pill ? 160 : 100;
+	const resolvedVoice = resolveComposerVoice(voice);
+	const cleanupModel = useDefaultCleanupModel();
 
 	// Drop a cleaned voice transcript into the composer for review (never
 	// auto-sent), appended after any text the user already typed.
@@ -353,11 +400,11 @@ export function Composer({
 						onChange={(e) => setValue(e.target.value)}
 						onKeyDown={onKeyDown}
 					/>
-					{voice && !streaming && (
+					{resolvedVoice && !streaming && (
 						<MicButton
 							onInsert={insertVoiceText}
-							glossary={voice.glossary}
-							cleanupModel={voice.cleanupModel}
+							glossary={resolvedVoice.glossary}
+							cleanupModel={cleanupModel}
 							onHint={setVoiceHint}
 							size={pill ? 'lg' : 'sm'}
 						/>

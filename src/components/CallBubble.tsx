@@ -18,7 +18,7 @@ interface CallBubbleProps {
 	hint?: string;
 	streaming?: boolean;
 	onStop?(): void;
-	voice?: ComposerVoice;
+	voice?: ComposerVoice | false;
 }
 
 const WIDTH = 360;
