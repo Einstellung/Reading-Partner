@@ -28,6 +28,7 @@
     "@embedpdf/plugin-tiling": "2.14.4",
     "@embedpdf/plugin-viewport": "2.14.4",
     "@embedpdf/plugin-zoom": "2.14.4",
+    "@mozilla/readability": "^0.6.0",
     "@tailwindcss/vite": "^4.3.2",
     "@tauri-apps/api": "^2.9.0",
     "@tauri-apps/plugin-clipboard-manager": "^2.3.2",

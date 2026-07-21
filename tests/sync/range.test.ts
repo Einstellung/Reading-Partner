@@ -20,6 +20,9 @@ test("core user-data files are in range", () => {
     "notes-deadbeef/state.json",
     "notes-deadbeef/overview.md",
     "notes-deadbeef/chapter-01.md",
+    // Info triage (docs/16): the profile and feedback log are the user's data.
+    "info-profile.md",
+    "info-feedback.jsonl",
   ]) {
     expect(inSyncRange(p)).toBe(true);
   }
@@ -39,6 +42,9 @@ test("caches, logs, sync internals, and book blobs are out of range", () => {
     "slides/1737000000000-my-talk.html",
     "library/abc123.pdf",
     "images/threads/t1/photo.png",
+    // Info triage: the daily briefing and article cache are derived, not synced.
+    "briefing-2026-07-21.json",
+    "info-articles-2026-07-21.json",
     "random.txt",
   ]) {
     expect(inSyncRange(p)).toBe(false);

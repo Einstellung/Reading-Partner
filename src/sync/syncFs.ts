@@ -3,7 +3,8 @@
 //
 // Sync range (docs/13): the user's own data — reading position, marks, AI
 // threads, topics, per-topic memory, lesson-prep plans and notes, book notes
-// (docs/14), and app settings. Book PDFs travel the separate books channel
+// (docs/14), the info-triage profile and feedback log (docs/16), and app
+// settings. Book PDFs travel the separate books channel
 // (content-addressed blobs), never the data channel. Excluded: derived caches
 // (fulltext-*, figures-*, prep-*/pdf and its caches), generated slide decks
 // (slides/**, docs/14 — a build output, rebuildable from notes), the local
@@ -44,6 +45,11 @@ const ROOT_FILES = new Set([
   "reading-state.json",
   "settings.json",
   "topics.json",
+  // Info triage (docs/16): the reader's own profile and append-only feedback
+  // log travel between devices; the daily briefing-*.json and info-articles-*
+  // caches are derived and stay out of range (matched by nothing below).
+  "info-profile.md",
+  "info-feedback.jsonl",
 ]);
 
 // Whether an AppData-relative path (forward-slash separators) is synced.
