@@ -8,3 +8,4 @@
 - [memory](./memory.md) — 挂断蒸馏、主题快照、主动联想、查看面板、纠错
 - [companion](./companion.md) — 伴读宠物:常驻形象、逗弄、主动说话、语音开聊
 - [handwriting](./handwriting.md) — Pencil 手写:引擎已有 ink/eraser,压感和防误触要自己做,等 iPad 真机
+- [podcast-video](./podcast-video.md) — 播客与视频:info 线和读书线的交集,蒸馏两小时访谈,手动喂链接先行,等 info 源系统落地
