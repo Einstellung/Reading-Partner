@@ -1,14 +1,15 @@
-// One-shot loopback HTTP listener for the Anthropic OAuth redirect
-// (http://localhost:53692/callback). Started from the frontend right before the
-// system browser is opened; blocks until the matching redirect arrives, returns
-// the authorization code to the frontend, and shuts the listener down. std only.
+// One-shot loopback HTTP listener for an OAuth redirect. Started from the
+// frontend right before the system browser is opened; blocks until the matching
+// redirect arrives, returns the authorization code to the frontend, and shuts
+// the listener down. The port and callback path are parameterized because each
+// provider registers a different redirect URI: Anthropic and Google share
+// localhost:53692/callback, OpenAI (ChatGPT) uses localhost:1455/auth/callback.
+// std only.
 
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, TcpListener, TcpStream};
 use std::time::{Duration, Instant};
 
-const CALLBACK_PORT: u16 = 53692;
-const CALLBACK_PATH: &str = "/callback";
 const TIMEOUT_SECS: u64 = 300;
 
 #[derive(Debug, serde::Serialize)]
@@ -17,19 +18,28 @@ pub struct OAuthCallback {
     pub state: String,
 }
 
-/// Bind localhost:53692 and wait for the OAuth redirect whose `state` matches
-/// `expected_state`. Returns the captured code, or an error the frontend can
-/// fall back on (port in use, timeout, or an OAuth error in the redirect).
+/// Bind localhost:`port` and wait for the OAuth redirect on `path` whose `state`
+/// matches `expected_state`. Returns the captured code, or an error the frontend
+/// can fall back on (port in use, timeout, or an OAuth error in the redirect).
 #[tauri::command]
-pub async fn start_oauth_callback_listener(expected_state: String) -> Result<OAuthCallback, String> {
+pub async fn start_oauth_callback_listener(
+    expected_state: String,
+    port: u16,
+    path: String,
+) -> Result<OAuthCallback, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        listen_on(CALLBACK_PORT, &expected_state, Duration::from_secs(TIMEOUT_SECS))
+        listen_on(port, &expected_state, &path, Duration::from_secs(TIMEOUT_SECS))
     })
     .await
     .map_err(|e| format!("OAuth listener task failed: {e}"))?
 }
 
-fn listen_on(port: u16, expected_state: &str, timeout: Duration) -> Result<OAuthCallback, String> {
+fn listen_on(
+    port: u16,
+    expected_state: &str,
+    expected_path: &str,
+    timeout: Duration,
+) -> Result<OAuthCallback, String> {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, port))
         .map_err(|e| format!("callback port {port} unavailable: {e}"))?;
     listener
@@ -43,7 +53,7 @@ fn listen_on(port: u16, expected_state: &str, timeout: Duration) -> Result<OAuth
         }
         match listener.accept() {
             Ok((mut stream, _)) => {
-                if let Some(result) = handle_connection(&mut stream, expected_state) {
+                if let Some(result) = handle_connection(&mut stream, expected_state, expected_path) {
                     return result;
                 }
                 // Not our redirect (health check, favicon, state mismatch): keep waiting.
@@ -58,7 +68,11 @@ fn listen_on(port: u16, expected_state: &str, timeout: Duration) -> Result<OAuth
 
 /// Returns Some(Ok/Err) when this connection is the terminal redirect; None to
 /// keep listening.
-fn handle_connection(stream: &mut TcpStream, expected_state: &str) -> Option<Result<OAuthCallback, String>> {
+fn handle_connection(
+    stream: &mut TcpStream,
+    expected_state: &str,
+    expected_path: &str,
+) -> Option<Result<OAuthCallback, String>> {
     stream.set_nonblocking(false).ok();
     stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
 
@@ -72,7 +86,7 @@ fn handle_connection(stream: &mut TcpStream, expected_state: &str) -> Option<Res
         .unwrap_or("");
 
     let query = match target.split_once('?') {
-        Some((path, q)) if path == CALLBACK_PATH => q,
+        Some((path, q)) if path == expected_path => q,
         _ => {
             respond(stream, 404, "text/plain", "Not found");
             return None;
@@ -185,7 +199,7 @@ mod tests {
     #[test]
     fn captures_code_and_serves_success_page() {
         let port = 53701;
-        let handle = thread::spawn(move || listen_on(port, "st8", Duration::from_secs(5)));
+        let handle = thread::spawn(move || listen_on(port, "st8", "/callback", Duration::from_secs(5)));
         // Give the listener a moment to bind.
         thread::sleep(Duration::from_millis(150));
         let resp = send(port, "/callback?code=the-code&state=st8");
@@ -199,7 +213,7 @@ mod tests {
     #[test]
     fn ignores_state_mismatch_then_captures_match() {
         let port = 53702;
-        let handle = thread::spawn(move || listen_on(port, "good", Duration::from_secs(5)));
+        let handle = thread::spawn(move || listen_on(port, "good", "/callback", Duration::from_secs(5)));
         thread::sleep(Duration::from_millis(150));
         let bad = send(port, "/callback?code=x&state=wrong");
         assert!(bad.starts_with("HTTP/1.1 400"), "bad: {bad}");
@@ -209,10 +223,25 @@ mod tests {
     }
 
     #[test]
+    fn matches_custom_callback_path() {
+        // OpenAI (ChatGPT) uses /auth/callback on port 1455; a request to the
+        // wrong path is ignored (404) while the listener keeps waiting.
+        let port = 53704;
+        let handle =
+            thread::spawn(move || listen_on(port, "st9", "/auth/callback", Duration::from_secs(5)));
+        thread::sleep(Duration::from_millis(150));
+        let miss = send(port, "/callback?code=x&state=st9");
+        assert!(miss.starts_with("HTTP/1.1 404"), "miss: {miss}");
+        let ok = send(port, "/auth/callback?code=real&state=st9");
+        assert!(ok.starts_with("HTTP/1.1 200"), "ok: {ok}");
+        assert_eq!(handle.join().unwrap().unwrap().code, "real");
+    }
+
+    #[test]
     fn times_out_without_callback() {
         let port = 53703;
         let start = Instant::now();
-        let result = listen_on(port, "s", Duration::from_millis(300));
+        let result = listen_on(port, "s", "/callback", Duration::from_millis(300));
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("timed out"));
         assert!(start.elapsed() < Duration::from_secs(3));

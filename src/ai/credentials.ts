@@ -1,5 +1,5 @@
-// Local credential store: AppData/credentials.json. Anthropic holds the OAuth
-// triple (access/refresh/expires); OpenAI/DeepSeek hold an API key. Write
+// Local credential store: AppData/credentials.json. Anthropic and OpenAI hold
+// the OAuth triple (access/refresh/expires); DeepSeek holds an API key. Write
 // failures are surfaced, never swallowed — a silently dropped credential looks
 // like the login worked until the next request fails.
 
@@ -8,21 +8,40 @@ import { BaseDirectory, exists, readTextFile, writeTextFile } from "@tauri-apps/
 const FILE = "credentials.json";
 const opts = { baseDir: BaseDirectory.AppData } as const;
 
-export interface AnthropicCredential {
+export interface OAuthCredential {
 	type: "oauth";
 	access: string;
 	refresh: string;
 	expires: number;
 }
 
+// Anthropic and OpenAI both authenticate via subscription OAuth and share the
+// token shape.
+export type AnthropicCredential = OAuthCredential;
+export type OpenAICredential = OAuthCredential;
+
 export interface ApiKeyCredential {
 	type: "apiKey";
 	key: string;
 }
 
+// Narrows a stored credential to the OAuth shape. A legacy OpenAI API-key
+// credential (from before subscription-only auth) fails this and is ignored.
+export function isOAuthCredential(cred: unknown): cred is OAuthCredential {
+	return (
+		typeof cred === "object" &&
+		cred !== null &&
+		(cred as { type?: unknown }).type === "oauth" &&
+		typeof (cred as { access?: unknown }).access === "string" &&
+		typeof (cred as { refresh?: unknown }).refresh === "string"
+	);
+}
+
 export interface CredentialStore {
 	anthropic?: AnthropicCredential;
-	openai?: ApiKeyCredential;
+	// OAuth now, but on-disk data may still carry a legacy apiKey credential;
+	// isOAuthCredential ignores it.
+	openai?: OpenAICredential | ApiKeyCredential;
 	deepseek?: ApiKeyCredential;
 	// Paid image-relay key for deck illustrations (docs/14). A credential, not a
 	// setting, so it stays on the device and out of the sync range.

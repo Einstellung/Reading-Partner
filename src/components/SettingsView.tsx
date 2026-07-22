@@ -8,6 +8,9 @@ import {
   anthropicLogout,
   getModels,
   listProviders,
+  openaiLogin,
+  openaiLoginWithManualCode,
+  openaiLogout,
   setApiKey,
   type ProviderId,
   type ProviderInfo,
@@ -74,11 +77,24 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
 
         <h2 className="mb-2 mt-0 text-sm font-semibold text-[#777]">Providers</h2>
         <div className="flex flex-col gap-3">
-          <AnthropicCard
+          <OAuthCard
+            name="Anthropic (Claude)"
+            signInLabel="Sign in with Claude"
             provider={providers.find((p) => p.id === "anthropic")}
+            login={anthropicLogin}
+            loginWithManualCode={anthropicLoginWithManualCode}
+            logout={anthropicLogout}
             onChanged={refresh}
           />
-          <KeyCard providerId="openai" name="OpenAI" providers={providers} onChanged={refresh} />
+          <OAuthCard
+            name="OpenAI (ChatGPT)"
+            signInLabel="Sign in with ChatGPT"
+            provider={providers.find((p) => p.id === "openai")}
+            login={openaiLogin}
+            loginWithManualCode={openaiLoginWithManualCode}
+            logout={openaiLogout}
+            onChanged={refresh}
+          />
           <KeyCard providerId="deepseek" name="DeepSeek" providers={providers} onChanged={refresh} />
         </div>
 
@@ -494,7 +510,26 @@ function ThinkingField({
   );
 }
 
-function AnthropicCard({ provider, onChanged }: { provider?: ProviderInfo; onChanged: () => void }) {
+// Subscription-OAuth provider card (Anthropic Claude, OpenAI ChatGPT). Both
+// providers use the same loopback-capture flow with a manual paste fallback, so
+// the card is parameterized by the provider's login/logout functions.
+function OAuthCard({
+  name,
+  signInLabel,
+  provider,
+  login,
+  loginWithManualCode,
+  logout,
+  onChanged,
+}: {
+  name: string;
+  signInLabel: string;
+  provider?: ProviderInfo;
+  login: () => Promise<void>;
+  loginWithManualCode: (input: string) => Promise<void>;
+  logout: () => Promise<void>;
+  onChanged: () => void;
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [manual, setManual] = useState(false);
@@ -504,7 +539,7 @@ function AnthropicCard({ provider, onChanged }: { provider?: ProviderInfo; onCha
     setBusy(true);
     setError(null);
     try {
-      await anthropicLogin();
+      await login();
       onChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Sign-in failed");
@@ -518,7 +553,7 @@ function AnthropicCard({ provider, onChanged }: { provider?: ProviderInfo; onCha
     setBusy(true);
     setError(null);
     try {
-      await anthropicLoginWithManualCode(code);
+      await loginWithManualCode(code);
       setManual(false);
       setCode("");
       onChanged();
@@ -532,7 +567,7 @@ function AnthropicCard({ provider, onChanged }: { provider?: ProviderInfo; onCha
   return (
     <div className={CARD}>
       <div className="flex items-center justify-between">
-        <span className="font-medium">Anthropic (Claude)</span>
+        <span className="font-medium">{name}</span>
         {provider?.configured && <span className="text-xs text-[#5fb236]">Connected</span>}
       </div>
       {provider?.configured ? (
@@ -540,7 +575,7 @@ function AnthropicCard({ provider, onChanged }: { provider?: ProviderInfo; onCha
           type="button"
           className={BTN}
           onClick={async () => {
-            await anthropicLogout();
+            await logout();
             onChanged();
           }}
         >
@@ -549,7 +584,7 @@ function AnthropicCard({ provider, onChanged }: { provider?: ProviderInfo; onCha
       ) : (
         <>
           <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={signIn}>
-            {busy ? "Complete authorization in your browser…" : "Sign in with Claude"}
+            {busy ? "Complete authorization in your browser…" : signInLabel}
           </button>
           {manual && (
             <div className="flex gap-2">
@@ -577,7 +612,7 @@ function KeyCard({
   providers,
   onChanged,
 }: {
-  providerId: "openai" | "deepseek";
+  providerId: "deepseek";
   name: string;
   providers: ProviderInfo[];
   onChanged: () => void;

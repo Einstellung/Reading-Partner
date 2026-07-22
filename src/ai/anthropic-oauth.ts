@@ -12,7 +12,9 @@ import { loadCredentials, saveCredentials, type AnthropicCredential } from "./cr
 const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 const AUTHORIZE_URL = "https://claude.ai/oauth/authorize";
 const TOKEN_URL = "https://platform.claude.com/v1/oauth/token";
-const REDIRECT_URI = "http://localhost:53692/callback";
+const CALLBACK_PORT = 53692;
+const CALLBACK_PATH = "/callback";
+const REDIRECT_URI = `http://localhost:${CALLBACK_PORT}${CALLBACK_PATH}`;
 const SCOPES =
 	"org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload";
 
@@ -116,6 +118,8 @@ export async function anthropicLogin(): Promise<void> {
 	// Start the listener first (it binds immediately), then open the browser.
 	const listener = invoke<{ code: string; state: string }>("start_oauth_callback_listener", {
 		expectedState: state,
+		port: CALLBACK_PORT,
+		path: CALLBACK_PATH,
 	});
 	await openUrl(buildAuthUrl(challenge, state));
 

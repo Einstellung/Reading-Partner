@@ -1,10 +1,13 @@
 // Provider abstraction over pi-ai for the three configured providers. Anthropic
-// authenticates via subscription OAuth (token injected as StreamOptions.apiKey —
-// pi auto-detects the OAuth token and switches to Bearer + Claude Code headers);
-// OpenAI/DeepSeek use an API key. DeepSeek rides pi's openai-completions API.
+// and OpenAI authenticate via subscription OAuth (Claude Pro/Max, ChatGPT
+// Plus/Pro); the access token is injected as StreamOptions.apiKey — for
+// Anthropic pi switches to Bearer + Claude Code headers, for OpenAI (Codex
+// backend) pi decodes the account id out of the token and sets the
+// chatgpt-account-id header. DeepSeek uses an API key over pi's
+// openai-completions API.
 
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
-import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
+import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
 import { deepseekProvider } from "@earendil-works/pi-ai/providers/deepseek";
 import type {
 	Api,
@@ -15,9 +18,11 @@ import type {
 	Provider,
 	SimpleStreamOptions,
 	ThinkingLevel,
+	Transport,
 } from "@earendil-works/pi-ai";
 import { getValidAnthropicAuth } from "./anthropic-oauth";
-import { loadCredentials, saveCredentials } from "./credentials";
+import { getValidOpenAIAuth } from "./openai-oauth";
+import { isOAuthCredential, loadCredentials, saveCredentials } from "./credentials";
 
 export type ProviderId = "anthropic" | "openai" | "deepseek";
 
@@ -58,7 +63,7 @@ export interface StreamChatOptions {
 
 const AUTH_KIND: Record<ProviderId, "oauth" | "apiKey"> = {
 	anthropic: "oauth",
-	openai: "apiKey",
+	openai: "oauth",
 	deepseek: "apiKey",
 };
 
@@ -66,9 +71,18 @@ const AUTH_KIND: Record<ProviderId, "oauth" | "apiKey"> = {
 // instances, model lookup, and OAuth/api-key resolution as streamChat.
 export const providers: Record<ProviderId, Provider> = {
 	anthropic: anthropicProvider(),
-	openai: openaiProvider(),
+	openai: openaiCodexProvider(),
 	deepseek: deepseekProvider(),
 };
+
+// The Codex backend defaults to a WebSocket transport, which a webview cannot
+// use: the browser WebSocket API can't attach the Authorization /
+// chatgpt-account-id headers pi sets, and the CSP forbids wss anyway. Force SSE
+// (routed through the Tauri http bridge) for OpenAI. Other providers keep pi's
+// default.
+export function transportFor(providerId: ProviderId): Transport | undefined {
+	return providerId === "openai" ? "sse" : undefined;
+}
 
 export async function listProviders(): Promise<ProviderInfo[]> {
 	const creds = await loadCredentials();
@@ -77,11 +91,15 @@ export async function listProviders(): Promise<ProviderInfo[]> {
 		name: providers[id].name,
 		authKind: AUTH_KIND[id],
 		configured:
-			id === "anthropic" ? creds.anthropic !== undefined : creds[id] !== undefined,
+			id === "anthropic"
+				? creds.anthropic !== undefined
+				: id === "openai"
+					? isOAuthCredential(creds.openai)
+					: creds[id] !== undefined,
 	}));
 }
 
-export async function setApiKey(id: "openai" | "deepseek", key: string): Promise<void> {
+export async function setApiKey(id: "deepseek", key: string): Promise<void> {
 	const creds = await loadCredentials();
 	creds[id] = { type: "apiKey", key };
 	await saveCredentials(creds);
@@ -97,9 +115,14 @@ export async function resolveApiKey(id: ProviderId): Promise<string> {
 		if (!token) throw new Error("Anthropic is not connected. Sign in first.");
 		return token;
 	}
+	if (id === "openai") {
+		const token = await getValidOpenAIAuth();
+		if (!token) throw new Error("OpenAI is not connected. Sign in with ChatGPT first.");
+		return token;
+	}
 	const creds = await loadCredentials();
 	const cred = creds[id];
-	if (!cred) throw new Error(`${providers[id].name} API key is not set.`);
+	if (!cred || cred.type !== "apiKey") throw new Error(`${providers[id].name} API key is not set.`);
 	return cred.key;
 }
 
@@ -149,6 +172,8 @@ export interface StreamChatCoreParams {
 	signal?: AbortSignal;
 	// Already gated against the model's reasoning support; undefined = off.
 	reasoning?: ThinkingLevel;
+	// Provider transport preference (SSE for OpenAI; see transportFor).
+	transport?: Transport;
 	onDelta(text: string): void;
 	onThinking?(delta: string): void;
 	onDone(fullText: string): void;
@@ -159,10 +184,10 @@ export interface StreamChatCoreParams {
 // thinking_delta is routed only to onThinking so raw thinking never leaks into
 // `full`. reasoning rides the streamSimple options (undefined omits thinking).
 export async function streamChatCore(params: StreamChatCoreParams): Promise<void> {
-	const { stream, model, apiKey, systemPrompt, messages, signal, reasoning } = params;
+	const { stream, model, apiKey, systemPrompt, messages, signal, reasoning, transport } = params;
 	const { onDelta, onThinking, onDone, onError } = params;
 	try {
-		const s = stream(model, { systemPrompt, messages }, { apiKey, signal, reasoning });
+		const s = stream(model, { systemPrompt, messages }, { apiKey, signal, reasoning, transport });
 		let full = "";
 		for await (const ev of s) {
 			if (ev.type === "text_delta") {
@@ -207,6 +232,7 @@ export async function streamChat(options: StreamChatOptions): Promise<void> {
 			signal,
 			// Silently omit reasoning on models that don't support it.
 			reasoning: reasoning && model.reasoning ? reasoning : undefined,
+			transport: transportFor(providerId),
 			onDelta,
 			onThinking,
 			onDone,

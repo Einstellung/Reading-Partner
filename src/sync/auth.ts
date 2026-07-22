@@ -151,8 +151,12 @@ export async function signIn(): Promise<void> {
   const state = base64Url(crypto.getRandomValues(new Uint8Array(16)));
 
   // Bind the listener before opening the browser (it binds synchronously).
+  // Port/path come from the registered redirect URI (127.0.0.1:53692/callback).
+  const redirect = new URL(GOOGLE_REDIRECT_URI);
   const listener = invoke<{ code: string; state: string }>("start_oauth_callback_listener", {
     expectedState: state,
+    port: Number(redirect.port),
+    path: redirect.pathname,
   });
   await openUrl(buildAuthUrl(challenge, state));
 

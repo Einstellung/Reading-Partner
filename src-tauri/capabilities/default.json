@@ -54,6 +54,8 @@
         { "url": "https://platform.claude.com/*" },
         { "url": "https://claude.ai/*" },
         { "url": "https://api.openai.com/*" },
+        { "url": "https://auth.openai.com/*" },
+        { "url": "https://chatgpt.com/*" },
         { "url": "https://api.deepseek.com/*" },
         { "url": "https://export.arxiv.org/*" },
         { "url": "https://arxiv.org/*" },
@@ -64,7 +66,11 @@
     },
     {
       "identifier": "opener:allow-open-url",
-      "allow": [{ "url": "https://claude.ai/*" }, { "url": "https://accounts.google.com/*" }]
+      "allow": [
+        { "url": "https://claude.ai/*" },
+        { "url": "https://auth.openai.com/*" },
+        { "url": "https://accounts.google.com/*" }
+      ]
     },
     {
       "identifier": "opener:allow-open-path",

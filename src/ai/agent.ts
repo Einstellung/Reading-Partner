@@ -26,10 +26,11 @@ import type {
 	Tool,
 	ToolCall,
 	ToolResultMessage,
+	Transport,
 	TSchema,
 } from "@earendil-works/pi-ai";
 import { validateToolCall } from "@earendil-works/pi-ai";
-import { providers, resolveApiKey, toPiMessages, type ChatMessage, type ProviderId } from "./providers";
+import { providers, resolveApiKey, toPiMessages, transportFor, type ChatMessage, type ProviderId } from "./providers";
 
 // An image block a tool can return alongside its text (e.g. view_figure hands
 // the model a cropped figure). `data` is bare base64, `mimeType` the MIME type;
@@ -134,6 +135,8 @@ export interface AgentLoopParams extends AgentCallbacks {
 	signal?: AbortSignal;
 	// Already gated against the model's reasoning support; undefined = off.
 	reasoning?: ThinkingLevel;
+	// Provider transport preference (SSE for OpenAI; see transportFor).
+	transport?: Transport;
 	maxRounds: number;
 }
 
@@ -141,7 +144,7 @@ export interface AgentLoopParams extends AgentCallbacks {
 // (mid-stream or between tool calls) stop the loop silently — the caller raised
 // the signal, so it already knows; no onDone/onError fires.
 export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
-	const { stream, model, apiKey, systemPrompt, tools, signal, reasoning, maxRounds } = params;
+	const { stream, model, apiKey, systemPrompt, tools, signal, reasoning, transport, maxRounds } = params;
 	const { onDelta, onThinking, onToolStart, onToolEnd, onDone, onError } = params;
 
 	const piTools: Tool[] = tools.map(({ name, description, parameters }) => ({
@@ -158,7 +161,7 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 			if (signal?.aborted) return;
 
 			const context: Context = { systemPrompt, messages, tools: piTools };
-			const s = stream(model, context, { apiKey, signal, reasoning });
+			const s = stream(model, context, { apiKey, signal, reasoning, transport });
 
 			let final: AssistantMessage | undefined;
 			for await (const ev of s) {
@@ -289,6 +292,7 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
 			signal,
 			// Silently omit reasoning on models that don't support it.
 			reasoning: reasoning && model.reasoning ? reasoning : undefined,
+			transport: transportFor(providerId),
 			maxRounds,
 			onDelta,
 			onThinking,

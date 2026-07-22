@@ -14,6 +14,11 @@ const BRIDGED_HOSTS = new Set([
 	"platform.claude.com",
 	"claude.ai",
 	"api.openai.com",
+	// OpenAI subscription (ChatGPT) OAuth token endpoint + the Codex inference
+	// backend the subscription token talks to. Both are CORS-free and must not
+	// see the webview origin.
+	"auth.openai.com",
+	"chatgpt.com",
 	"api.deepseek.com",
 ]);
 

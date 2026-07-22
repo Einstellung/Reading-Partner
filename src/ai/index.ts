@@ -8,6 +8,12 @@ export {
 	getValidAnthropicAuth,
 } from "./anthropic-oauth";
 export {
+	openaiLogin,
+	openaiLoginWithManualCode,
+	openaiLogout,
+	getValidOpenAIAuth,
+} from "./openai-oauth";
+export {
 	listProviders,
 	setApiKey,
 	getModels,

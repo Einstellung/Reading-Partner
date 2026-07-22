@@ -38,19 +38,19 @@ const MODELS: Record<ProviderId, { id: string; label: string }[]> = {
     { id: "claude-opus-4-8", label: "Claude Opus 4.8" },
     { id: "claude-sonnet-5", label: "Claude Sonnet 5" },
   ],
-  openai: [{ id: "gpt-5", label: "GPT-5" }],
+  openai: [{ id: "gpt-5.5", label: "GPT-5.5" }],
   deepseek: [{ id: "deepseek-chat", label: "DeepSeek Chat" }],
 };
 
 const NAMES: Record<ProviderId, string> = {
   anthropic: "Anthropic (Claude)",
-  openai: "OpenAI",
+  openai: "OpenAI (ChatGPT)",
   deepseek: "DeepSeek",
 };
 
 const AUTH_KIND: Record<ProviderId, "oauth" | "apiKey"> = {
   anthropic: "oauth",
-  openai: "apiKey",
+  openai: "oauth",
   deepseek: "apiKey",
 };
 
@@ -68,7 +68,7 @@ export async function listProviders(): Promise<ProviderInfo[]> {
   }));
 }
 
-export async function setApiKey(id: "openai" | "deepseek", key: string): Promise<void> {
+export async function setApiKey(id: "deepseek", key: string): Promise<void> {
   await delay(40);
   configured[id] = key.trim().length > 0;
 }
@@ -101,6 +101,26 @@ export async function anthropicLogout(): Promise<void> {
 
 export async function getValidAnthropicAuth(): Promise<string | null> {
   return configured.anthropic ? "mock-token" : null;
+}
+
+export async function openaiLogin(): Promise<void> {
+  await delay(400); // simulate the loopback browser round-trip
+  configured.openai = true;
+}
+
+export async function openaiLoginWithManualCode(code: string): Promise<void> {
+  await delay(120);
+  if (!code.trim()) throw new Error("Empty authorization code");
+  configured.openai = true;
+}
+
+export async function openaiLogout(): Promise<void> {
+  await delay(40);
+  configured.openai = false;
+}
+
+export async function getValidOpenAIAuth(): Promise<string | null> {
+  return configured.openai ? "mock-token" : null;
 }
 
 // Streams a deterministic reply chunk-by-chunk, honoring the abort signal.
