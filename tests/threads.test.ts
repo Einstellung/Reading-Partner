@@ -9,7 +9,10 @@ import {
   createThread,
   getBookThread,
   getThread,
+  patchThreadMessage,
+  type PersistedPart,
   type Thread,
+  type ThreadMessage,
 } from "../src/threads";
 
 test("createBookThread marks the thread and leaves it unanchored", () => {
@@ -56,4 +59,62 @@ test("the book marker survives the JSON persistence shape", () => {
   };
   expect(restored.threads["bt-4"].book).toBe(true);
   expect(restored.threads["bt-4"].annotationId).toBe("");
+});
+
+// --- parts format (new) vs the plain { role, text, ts } shape (old) ---------
+
+test("a message's card parts round-trip through the store and JSON", () => {
+  const path = "/books/parts-a.pdf";
+  createThread(path, "info", "th-p");
+  const card: PersistedPart = {
+    type: "card",
+    id: "probe-1",
+    card: { kind: "probe-confirm", added: true, descriptor: { id: "s1", name: "Example" } },
+  };
+  appendMessage(path, "th-p", { role: "ai", text: "", ts: 5, parts: [card] });
+
+  const stored = getThread(path, "th-p")?.messages[0];
+  expect(stored?.parts?.[0]).toMatchObject({ type: "card", id: "probe-1" });
+
+  // The on-disk JSON shape preserves parts.
+  const wire = JSON.parse(JSON.stringify({ threads: { "th-p": getThread(path, "th-p") } })) as {
+    threads: Record<string, Thread>;
+  };
+  const revived = wire.threads["th-p"].messages[0];
+  expect((revived.parts?.[0] as Extract<PersistedPart, { type: "card" }>).card.kind).toBe("probe-confirm");
+});
+
+test("an old-format message (no parts) still loads and coexists with new ones", () => {
+  const path = "/books/parts-b.pdf";
+  createThread(path, "info", "th-o");
+  const old: ThreadMessage = { role: "user", text: "hi", ts: 1 }; // pre-parts shape
+  appendMessage(path, "th-o", old);
+  appendMessage(path, "th-o", {
+    role: "ai",
+    text: "",
+    ts: 2,
+    parts: [{ type: "text", text: "answer" }],
+  });
+  const msgs = getThread(path, "th-o")?.messages ?? [];
+  expect(msgs[0].parts).toBeUndefined();
+  expect(msgs[0].text).toBe("hi");
+  expect(msgs[1].parts?.[0]).toEqual({ type: "text", text: "answer" });
+});
+
+test("patchThreadMessage merges into the stored message by ts (e.g. a card flip)", () => {
+  const path = "/books/parts-c.pdf";
+  createThread(path, "info", "th-c");
+  appendMessage(path, "th-c", {
+    role: "ai",
+    text: "",
+    ts: 9,
+    parts: [{ type: "card", id: "probe-1", card: { kind: "probe-confirm", added: false } }],
+  });
+  patchThreadMessage(path, "th-c", 9, {
+    parts: [{ type: "card", id: "probe-1", card: { kind: "probe-confirm", added: true } }],
+  });
+  const part = getThread(path, "th-c")?.messages[0].parts?.[0] as Extract<PersistedPart, { type: "card" }>;
+  expect(part.card.added).toBe(true);
+  // A miss (unknown ts) is a no-op, not a throw.
+  expect(() => patchThreadMessage(path, "th-c", 999, { text: "x" })).not.toThrow();
 });
