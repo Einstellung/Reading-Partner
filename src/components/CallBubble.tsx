@@ -88,7 +88,7 @@ export default function CallBubble({
 				</button>
 			</div>
 
-			{messages.length > 0 && <MessageList messages={messages} className="max-h-64 pr-0.5" />}
+			{messages.length > 0 && <MessageList messages={messages} surface="bubble" className="max-h-64 pr-0.5" />}
 
 			<Composer
 				onSend={onSend}

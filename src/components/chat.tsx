@@ -7,7 +7,8 @@ import { Markdown } from './Markdown';
 import { MicButton } from './MicButton';
 import { useFlickerProbe } from './useFlickerProbe';
 import type { ChatImage, PendingImage, ThreadMessage, ToolStatus } from './types';
-import type { InfoCard } from '../info/cards';
+import { messageToParts, type CardActionHandler, type CardSurface } from './chatParts';
+import { CARD_REGISTRY } from './InfoCards';
 import type { CleanupModel } from '../voice';
 import type { ProviderId } from '../ai/providers';
 import { loadSettings, toReasoning } from '../settings';
@@ -163,32 +164,54 @@ function ToolTrace({ tools, size }: { tools: ToolStatus[]; size: 'sm' | 'lg' }) 
 	);
 }
 
+// Render a single card part through the registry, dispatching its actions to the
+// host's onCardAction with the card's stable id. The registry lookup is by kind,
+// so the payload cast is safe (a card kind's component always accepts its own
+// payload); the union widening is what the cast erases.
+function CardPartView({
+	part,
+	surface,
+	onCardAction,
+}: {
+	part: Extract<ReturnType<typeof messageToParts>[number], { type: 'card' }>;
+	surface: CardSurface;
+	onCardAction?: CardActionHandler;
+}) {
+	const Comp = CARD_REGISTRY[part.card.kind] as React.FC<{
+		payload: typeof part.card;
+		state?: Record<string, unknown>;
+		surface: CardSurface;
+		dispatch: (action: Parameters<CardActionHandler>[1]) => void;
+	}>;
+	return (
+		<Comp
+			payload={part.card}
+			state={part.state}
+			surface={surface}
+			dispatch={(action) => onCardAction?.(part.id, action)}
+		/>
+	);
+}
+
 // One message row, ChatGPT-style: the AI reply is plain body text set right on
 // the background (no bubble), carried by the Markdown typography; the user's
-// message is a compact light pill, right-aligned, with any images above it.
-// Memoized so that while the AI reply streams (the last message's text grows on
-// every delta), only that row re-parses its Markdown.
+// message is a compact light pill, right-aligned, with any images above it. The
+// row reads only its parts (messageToParts maps the legacy fields); role /
+// images / streaming / failed stay message-level flags. Memoized on the message
+// object, so while the AI reply streams (a new object each delta) only that row
+// re-parses its Markdown.
 const MessageBubble = memo(function MessageBubble({
-	role,
-	text,
-	images,
-	streaming,
-	failed,
-	tools,
-	card,
-	renderCard,
+	message,
 	size,
+	surface,
+	onCardAction,
 }: {
-	role: ThreadMessage['role'];
-	text: string;
-	images?: ChatImage[];
-	streaming?: boolean;
-	failed?: boolean;
-	tools?: ToolStatus[];
-	card?: InfoCard;
-	renderCard?: (card: InfoCard) => React.ReactNode;
+	message: ThreadMessage;
 	size: 'sm' | 'lg';
+	surface: CardSurface;
+	onCardAction?: CardActionHandler;
 }) {
+	const { role, images, streaming, failed } = message;
 	const lg = size === 'lg';
 	// Dev-only diagnostic for the streaming gray-line glitch; no-op in prod and
 	// when this row isn't a streaming AI reply. Ref is attached to the prose row.
@@ -200,48 +223,57 @@ const MessageBubble = memo(function MessageBubble({
 		return (
 			<div className="flex flex-col items-end gap-1.5">
 				{hasImages && <MessageImages images={images!} />}
-				{text && (
+				{message.text && (
 					<div
 						className={
 							'box-border max-w-[75%] whitespace-pre-wrap break-words rounded-2xl bg-neutral-100 text-neutral-900 ' +
 							(lg ? 'px-4 py-2.5 text-base leading-7' : 'px-3 py-1.5 text-[13px] leading-relaxed')
 						}
 					>
-						{text}
+						{message.text}
 					</div>
 				)}
 			</div>
 		);
 	}
 
-	// An inline info card (probe-confirm / briefing-ready) is rendered by the host
-	// via renderCard; it stands alone in the flow, no prose or trace.
-	if (card && renderCard) {
-		return <div className="my-1">{renderCard(card)}</div>;
-	}
+	const parts = messageToParts(message);
+	const cardParts = parts.filter((p): p is Extract<typeof p, { type: 'card' }> => p.type === 'card');
+	const toolPart = parts.find((p): p is Extract<typeof p, { type: 'tool-trace' }> => p.type === 'tool-trace');
+	const textPart = parts.find((p): p is Extract<typeof p, { type: 'text' }> => p.type === 'text' && !!p.text);
 
-	// AI: failed turns are a muted notice, not prose; an empty streaming reply
-	// shows the thinking dots; otherwise the Markdown body fills the column.
-	if (failed) {
+	// A card row (add-source flow) stands alone in the flow — no prose or trace.
+	if (cardParts.length > 0) {
 		return (
-			<div className={'text-red-600/90 ' + (lg ? 'text-[15px] leading-7' : 'text-[13px] leading-relaxed')}>
-				{text}
+			<div className="my-1 flex flex-col gap-2">
+				{cardParts.map((p) => (
+					<CardPartView key={p.id} part={p} surface={surface} onCardAction={onCardAction} />
+				))}
 			</div>
 		);
 	}
-	const trace = tools && tools.length > 0 ? <ToolTrace tools={tools} size={size} /> : null;
+
+	// AI: failed turns are a muted notice, not prose.
+	if (failed) {
+		return (
+			<div className={'text-red-600/90 ' + (lg ? 'text-[15px] leading-7' : 'text-[13px] leading-relaxed')}>
+				{message.text}
+			</div>
+		);
+	}
+	const trace = toolPart ? <ToolTrace tools={toolPart.tools} size={size} /> : null;
 	// While a tool runs with no reply text yet, the trace stands in for the dots.
-	if (streaming && !text) {
+	if (streaming && !textPart) {
 		return trace ?? <TypingDots />;
 	}
-	if (!text) return trace;
+	if (!textPart) return trace;
 	return (
 		<div ref={rowRef} className="group flex flex-col gap-2">
 			{trace}
 			<div className={'text-neutral-800 ' + (lg ? 'text-base' : 'text-[13px]')}>
-				<Markdown text={text} />
+				<Markdown text={textPart.text} />
 			</div>
-			{!streaming && <CopyButton text={text} />}
+			{!streaming && <CopyButton text={textPart.text} />}
 		</div>
 	);
 });
@@ -250,12 +282,17 @@ export function MessageList({
 	messages,
 	size = 'sm',
 	className = '',
-	renderCard,
+	surface = 'call',
+	onCardAction,
 }: {
 	messages: ThreadMessage[];
 	size?: 'sm' | 'lg';
 	className?: string;
-	renderCard?: (card: InfoCard) => React.ReactNode;
+	// The surface passed to any card component. Defaults to the call window; the
+	// reading bubble passes 'bubble'.
+	surface?: CardSurface;
+	// The card action dispatcher. Absent on chats with no cards (the reader).
+	onCardAction?: CardActionHandler;
 }) {
 	const endRef = useRef<HTMLDivElement>(null);
 	useEffect(() => {
@@ -265,18 +302,7 @@ export function MessageList({
 	return (
 		<div className={'flex flex-col ' + (size === 'lg' ? 'gap-6 ' : 'gap-3 ') + 'overflow-y-auto ' + className}>
 			{messages.map((m, i) => (
-				<MessageBubble
-					key={i}
-					role={m.role}
-					text={m.text}
-					images={m.images}
-					streaming={m.streaming}
-					failed={m.failed}
-					tools={m.tools}
-					card={m.card}
-					renderCard={renderCard}
-					size={size}
-				/>
+				<MessageBubble key={i} message={m} size={size} surface={surface} onCardAction={onCardAction} />
 			))}
 			<div ref={endRef} />
 		</div>

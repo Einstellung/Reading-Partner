@@ -164,7 +164,13 @@ export function SourcesPage(props: SourcesPageProps) {
         {error && <div className="mt-2 text-[13px] text-[#c0392b]">{error}</div>}
         {pending && (
           <div className="mt-3">
-            <ProbeConfirmCard card={pending} onAdd={() => void confirmAdd()} />
+            <ProbeConfirmCard
+              payload={pending}
+              surface="call"
+              dispatch={(a) => {
+                if (a.kind === "mutate" && a.op === "add-source") void confirmAdd();
+              }}
+            />
           </div>
         )}
       </div>

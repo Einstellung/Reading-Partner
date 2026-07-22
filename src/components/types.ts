@@ -2,6 +2,7 @@
 // Colors come from ANNOTATION_COLORS in src/annotations.ts (single source).
 
 import type { InfoCard } from "../info/cards";
+import type { ChatPart } from "./chatParts";
 
 export interface ColorEntry {
 	name: string;
@@ -58,9 +59,14 @@ export interface ThreadMessage {
 	// Transient tool-call trace shown above the streaming reply (M6).
 	tools?: ToolStatus[];
 	// Transient inline card for the info add-source flow (docs/17): a probe-confirm
-	// card, or the first-briefing readiness/failure. Rendered by the host via a
-	// renderCard callback; absent in the reader chat.
+	// card, or the first-briefing readiness/failure. Legacy field; new code uses a
+	// `card` part in `parts` instead. Absent in the reader chat.
 	card?: InfoCard;
+	// The message-parts protocol (chatParts.ts). When present it is the durable,
+	// authoritative structure of the row; the render layer reads only parts (via
+	// messageToParts, which maps the legacy text/tools/card fields when parts is
+	// absent). Optional so callers that still set the legacy fields keep working.
+	parts?: ChatPart[];
 }
 
 export interface Thread {

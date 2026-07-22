@@ -14,6 +14,17 @@ import {
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
 
+// A durable message part (the persisted projection of the UI's ChatPart, in
+// src/components/chatParts.ts). Only durable parts reach disk: text, and a card
+// whose kind is worth keeping (the confirm card, the briefing-ready card). The
+// tool trace and the transient briefing progress/failure cards are never stored.
+// The card payload is kept opaque here so persistence does not depend on the info
+// domain; the UI casts it back to its payload type on rehydrate.
+export type PersistedCardPayload = { kind: string } & Record<string, unknown>;
+export type PersistedPart =
+  | { type: "text"; text: string }
+  | { type: "card"; id: string; card: PersistedCardPayload };
+
 export interface ThreadMessage {
   role: "user" | "ai";
   text: string;
@@ -23,6 +34,10 @@ export interface ThreadMessage {
   // small (same reasoning as image annotations, pitfall 07); the base64 is read
   // back on demand for display and for resending to the model.
   images?: string[];
+  // The durable message-parts structure. Absent on plain text turns and on files
+  // written before parts existed — a reader then falls back to `text` alone, so
+  // old { role, text, ts } messages keep loading unchanged.
+  parts?: PersistedPart[];
 }
 
 export interface Thread {
@@ -251,4 +266,21 @@ export function appendMessage(bookId: string, threadId: string, message: ThreadM
   thread.messages.push(message);
   schedule(key);
   return thread;
+}
+
+// Merge a patch into the stored message identified by `ts` (used to record a
+// card's later state, e.g. a confirm card flipping to "added"). No-op when the
+// thread or message is gone.
+export function patchThreadMessage(
+  bookId: string,
+  threadId: string,
+  ts: number,
+  patch: Partial<ThreadMessage>,
+): void {
+  const thread = cache.get(bookId)?.[threadId];
+  if (!thread) return;
+  const i = thread.messages.findIndex((m) => m.ts === ts);
+  if (i < 0) return;
+  thread.messages[i] = { ...thread.messages[i], ...patch };
+  schedule(bookId);
 }

@@ -14,7 +14,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { streamChat } from "../ai/providers";
 import { runAgentTurn } from "../ai/agent";
 import { loadSettings, toReasoning } from "../settings";
-import { appendMessage, createThread, getThread, loadThreads } from "../threads";
+import { appendMessage, createThread, getThread, loadThreads, patchThreadMessage } from "../threads";
 import { buildLiveSourceTools } from "../info/source-live";
 import { sourceToolStatusLabel } from "../info/source-tools";
 import { addSource, hasSources } from "../info/source-store";
@@ -22,12 +22,23 @@ import { getInfoPipeline } from "../info/live";
 import CallView from "./CallView";
 import ChatPipCard from "./ChatPipCard";
 import ReadingPipCard from "./ReadingPipCard";
-import { BriefingFailedCard, BriefingProgressCard, BriefingReadyCard, ProbeConfirmCard } from "./InfoCards";
+import {
+  cardRow,
+  findCardPart,
+  insertBeforeLast,
+  nextCardId,
+  patchCardPayload,
+  rehydrateParts,
+  toPersistedCardPart,
+  upsertCardRow,
+  type CardAction,
+} from "./chatParts";
 import type { ComposerVoice } from "./chat";
 import type { ChatMessage } from "../ai/providers";
 import type { InfoPipeline } from "../info/pipeline";
-import type { InfoCard, ProbeConfirmCardData } from "../info/cards";
+import type { ProbeConfirmCardData } from "../info/cards";
 import type { ThreadMessage as UiMessage } from "./types";
+import type { ThreadMessage as StoredMessage } from "../threads";
 
 export interface InfoCallAnchor {
   // "briefing" for the briefing-level thread, or the item id for an article, or
@@ -53,6 +64,20 @@ function bookIdFor(dateKey: string): string {
 
 const OPENING_KICKOFF = "(The user just opened onboarding — greet them and begin.)";
 
+// The one first-briefing card's stable id: the progress card, then in place the
+// ready or failed card, all address this id through upsertCardRow.
+const BRIEFING_CARD_ID = "briefing";
+
+// Persisted thread message -> live UI message on reopen. A stored card message
+// rehydrates its parts (re-rendered through the registry by kind); an old plain
+// message (no parts) stays text-only.
+function rehydrateUiMessage(m: StoredMessage): UiMessage {
+  if (m.parts && m.parts.length) {
+    return { role: m.role, text: m.text, ts: m.ts, parts: rehydrateParts(m.parts) };
+  }
+  return { role: m.role, text: m.text, ts: m.ts };
+}
+
 export function InfoCall({
   anchor,
   dateKey,
@@ -77,11 +102,16 @@ export function InfoCall({
   const bookId = bookIdFor(dateKey);
   const isAgent = anchor.mode === "add-source";
 
-  // First-briefing tracking (add-source mode): the singleton pipeline, whether we
-  // are waiting on a generation we kicked, and the ts of the status/card message.
+  // Latest messages, mirrored to a ref so the (id-keyed) card dispatcher can look
+  // up a card's payload without being torn down and rebuilt on every delta.
+  const messagesRef = useRef<UiMessage[]>(messages);
+  messagesRef.current = messages;
+
+  // First-briefing tracking (add-source mode): the singleton pipeline and whether
+  // we are waiting on a generation we kicked. The progress -> ready/failed card
+  // rides a single stable card id, so no per-run ts bookkeeping is needed.
   const pipelineRef = useRef<InfoPipeline | null>(null);
   const awaitingBriefing = useRef(false);
-  const briefTsRef = useRef<number | null>(null);
 
   const patchLast = useCallback((patch: Partial<UiMessage> | ((m: UiMessage) => Partial<UiMessage>)) => {
     setMessages((prev) => {
@@ -91,29 +121,6 @@ export function InfoCall({
       const p = typeof patch === "function" ? patch(last) : patch;
       next[next.length - 1] = { ...last, ...p };
       return next;
-    });
-  }, []);
-
-  // Upsert a message identified by ts (the first-briefing status/card).
-  const upsertByTs = useCallback((ts: number, patch: Partial<UiMessage>) => {
-    setMessages((prev) => {
-      const i = prev.findIndex((m) => m.ts === ts);
-      if (i < 0) return [...prev, { role: "ai", text: "", ts, ...patch }];
-      const next = [...prev];
-      next[i] = { ...next[i], ...patch };
-      return next;
-    });
-  }, []);
-
-  // Insert a card as its own row just before the currently streaming reply, so a
-  // trial's confirm card appears above the AI's concluding text.
-  const insertCardBeforeStreaming = useCallback((card: ProbeConfirmCardData) => {
-    setMessages((prev) => {
-      const row: UiMessage = { role: "ai", text: "", ts: Date.now(), card };
-      if (!prev.length) return [row];
-      const copy = [...prev];
-      copy.splice(copy.length - 1, 0, row);
-      return copy;
     });
   }, []);
 
@@ -131,7 +138,7 @@ export function InfoCall({
       if (!live) return;
       let thread = getThread(bookId, anchor.threadId);
       if (!thread) thread = createThread(bookId, "info", anchor.threadId);
-      setMessages(thread.messages.map((m) => ({ role: m.role, text: m.text, ts: m.ts })));
+      setMessages(thread.messages.map(rehydrateUiMessage));
       // Onboarding: the AI opens the conversation itself when the thread is empty.
       // Gated on the on-disk thread being empty, so a reopened conversation never
       // re-greets.
@@ -149,20 +156,19 @@ export function InfoCall({
   }, [bookId, anchor.threadId]);
 
   // First-briefing generation status (add-source mode): reflect the singleton
-  // pipeline's progress and drop in the ready/failed card when it finishes.
+  // pipeline's progress and drop in the ready/failed card when it finishes. The
+  // one briefing card is addressed by BRIEFING_CARD_ID through the patchPart
+  // channel (upsertCardRow) across its whole progress -> ready/failed lifecycle.
   useEffect(() => {
     if (!isAgent) return;
     const p = getInfoPipeline();
     pipelineRef.current = p;
     const unsub = p.subscribe(() => {
       if (!awaitingBriefing.current) return;
-      const ts = briefTsRef.current;
-      if (ts == null) return;
       const s = p.snapshot();
       if (s.running) {
-        upsertByTs(ts, {
-          tools: undefined,
-          card: {
+        setMessages((prev) =>
+          upsertCardRow(prev, BRIEFING_CARD_ID, {
             kind: "briefing-progress",
             phase: s.phase === "fetching" ? "fetching" : "triaging",
             collect: s.collect,
@@ -174,53 +180,85 @@ export function InfoCall({
                   attempts: s.activity.attempts,
                 }
               : null,
-          },
-        });
+          }),
+        );
       } else {
         awaitingBriefing.current = false;
         if (s.briefing) {
           const b = s.briefing;
-          upsertByTs(ts, {
-            tools: undefined,
-            card: {
-              kind: "briefing-ready",
-              date: b.date,
-              worth: b.mustRead.length + b.outOfLane.length,
-              oneLiners: b.oneLiners.length,
-              filtered: b.filtered.length,
-            },
+          const ready = {
+            kind: "briefing-ready" as const,
+            date: b.date,
+            worth: b.mustRead.length + b.outOfLane.length,
+            oneLiners: b.oneLiners.length,
+            filtered: b.filtered.length,
+          };
+          setMessages((prev) => upsertCardRow(prev, BRIEFING_CARD_ID, ready));
+          // Ready is a durable outcome: persist it so a reopen shows the briefing
+          // exists (the progress card it replaced was never persisted).
+          appendMessage(bookId, anchor.threadId, {
+            role: "ai",
+            text: "",
+            ts: Date.now(),
+            parts: [toPersistedCardPart(BRIEFING_CARD_ID, ready)],
           });
         } else {
-          upsertByTs(ts, {
-            tools: undefined,
-            card: { kind: "briefing-failed", message: s.error || "The briefing could not be generated." },
-          });
+          // Failure is in-session only (retry needs the live pipeline); not persisted.
+          setMessages((prev) =>
+            upsertCardRow(prev, BRIEFING_CARD_ID, {
+              kind: "briefing-failed",
+              message: s.error || "The briefing could not be generated.",
+            }),
+          );
         }
       }
     });
     return unsub;
-  }, [isAgent, upsertByTs]);
+  }, [isAgent, bookId, anchor.threadId]);
 
-  // Start (or retry) the first briefing. Retry reuses the existing card row so
-  // the progress/error updates in place rather than appending a new row.
-  function startFirstBriefing(reuseTs?: number) {
+  // Start (or retry) the first briefing. Retry reuses the existing card row (same
+  // id) so the progress/error updates in place rather than appending a new row.
+  function startFirstBriefing() {
     const p = pipelineRef.current;
     if (!p) return;
     awaitingBriefing.current = true;
-    const ts = reuseTs ?? Date.now();
-    briefTsRef.current = ts;
-    upsertByTs(ts, {
-      tools: undefined,
-      card: { kind: "briefing-progress", phase: "fetching", collect: null, triage: null },
-    });
+    setMessages((prev) =>
+      upsertCardRow(prev, BRIEFING_CARD_ID, {
+        kind: "briefing-progress",
+        phase: "fetching",
+        collect: null,
+        triage: null,
+      }),
+    );
     void p.generate();
   }
 
-  // Add the trialed source when the user clicks the confirm card's button. This is
-  // the local write path (not the AI's add_source); it also notes the add in the
-  // thread so the AI knows, and starts the first briefing when it is the first.
+  // Insert a trial's confirm card as its own row just before the streaming reply,
+  // and persist it (probe-confirm is a durable card). The source tools hand back a
+  // structured payload; this host closure is the one place that turns a payload
+  // into a card part.
+  function insertProbeCard(payload: ProbeConfirmCardData) {
+    const cardId = nextCardId("probe");
+    const ts = Date.now();
+    setMessages((prev) => insertBeforeLast(prev, cardRow(cardId, payload, ts)));
+    appendMessage(bookId, anchor.threadId, {
+      role: "ai",
+      text: "",
+      ts,
+      parts: [toPersistedCardPart(cardId, payload)],
+    });
+  }
+
+  // Add the trialed source when the user clicks a confirm card's Add. One gesture,
+  // three effects: mutate (addSource, the local write path, not the AI's
+  // add_source), local (flip `added` on the card, in the UI and on disk), and
+  // reply (note the add in the thread so the AI knows). Starts the first briefing
+  // when this is the first source.
   const handleAddFromCard = useCallback(
-    async (card: ProbeConfirmCardData) => {
+    async (cardId: string) => {
+      const found = findCardPart(messagesRef.current, cardId);
+      if (!found || found.payload.kind !== "probe-confirm") return;
+      const card = found.payload;
       if (card.added) return;
       let had = true;
       try {
@@ -233,44 +271,60 @@ export function InfoCall({
       } catch {
         return;
       }
-      setMessages((prev) =>
-        prev.map((m) => (m.card === card ? { ...m, card: { ...card, added: true } } : m)),
-      );
+      // local
+      setMessages((prev) => patchCardPayload(prev, cardId, { added: true }));
+      patchThreadMessage(bookId, anchor.threadId, found.ts, {
+        parts: [toPersistedCardPart(cardId, { ...card, added: true })],
+      });
       onSourcesChanged?.();
+      // reply
       const note = `Added "${card.descriptor.name}" to my sources.`;
       const ts = Date.now();
       setMessages((prev) => [...prev, { role: "user", text: note, ts }]);
       appendMessage(bookId, anchor.threadId, { role: "user", text: note, ts });
       if (!had) startFirstBriefing();
     },
+    // startFirstBriefing reads only refs, so its per-render identity is harmless.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [bookId, anchor.threadId, onSourcesChanged],
   );
 
-  // Stable renderCard (memoized rows depend on its identity): dispatch through a
-  // ref so the callback identity never changes across streaming deltas.
-  const cardHandlers = useRef({
-    add: (_c: ProbeConfirmCardData) => {},
-    open: (_d: string) => {},
-    retry: () => {},
-  });
-  cardHandlers.current.add = (c) => void handleAddFromCard(c);
-  cardHandlers.current.open = (date) => {
-    onOpenBriefing?.(date);
-    setView("chat-pip");
-  };
-  cardHandlers.current.retry = () => startFirstBriefing(briefTsRef.current ?? undefined);
-  const renderCard = useCallback((card: InfoCard) => {
-    switch (card.kind) {
-      case "probe-confirm":
-        return <ProbeConfirmCard card={card} onAdd={() => cardHandlers.current.add(card)} />;
-      case "briefing-progress":
-        return <BriefingProgressCard card={card} />;
-      case "briefing-ready":
-        return <BriefingReadyCard card={card} onOpen={() => cardHandlers.current.open(card.date)} />;
-      case "briefing-failed":
-        return <BriefingFailedCard card={card} onRetry={() => cardHandlers.current.retry()} />;
-    }
-  }, []);
+  // The card action dispatcher wired into the message list. Stable across
+  // streaming deltas, so the memoized rows never churn. It owns orchestration:
+  // one gesture may fan out to several effects (see handleAddFromCard).
+  const onCardAction = useCallback(
+    (cardId: string, action: CardAction) => {
+      switch (action.kind) {
+        case "mutate":
+          if (action.op === "add-source") void handleAddFromCard(cardId);
+          else if (action.op === "retry-briefing") startFirstBriefing();
+          break;
+        case "navigate":
+          if (action.to === "briefing") {
+            const date = action.arg ?? (findCardPart(messagesRef.current, cardId)?.payload as { date?: string })?.date;
+            if (date) onOpenBriefing?.(date);
+            setView("chat-pip");
+          }
+          break;
+        case "local":
+          setMessages((prev) => patchCardPayload(prev, cardId, action.patch));
+          break;
+        case "reply": {
+          const role = action.role ?? "user";
+          const ts = Date.now();
+          setMessages((prev) => [...prev, { role, text: action.text, ts }]);
+          appendMessage(bookId, anchor.threadId, { role, text: action.text, ts });
+          break;
+        }
+        case "resolve":
+          // Reserved for future human-in-the-loop cards; no card dispatches it yet.
+          break;
+      }
+    },
+    // handleAddFromCard is stable; startFirstBriefing reads only refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [handleAddFromCard, onOpenBriefing, bookId, anchor.threadId],
+  );
 
   // The add-source agent turn: probe/trial/add tools, tool trace, confirm cards.
   // `seedStreaming` starts the streaming reply without a visible user message (the
@@ -288,7 +342,7 @@ export function InfoCall({
     abortRef.current = controller;
     setStreaming(true);
     let full = "";
-    const tools = buildLiveSourceTools(insertCardBeforeStreaming);
+    const tools = buildLiveSourceTools(insertProbeCard);
 
     void runAgentTurn({
       providerId: settings.defaultProviderId as "anthropic" | "openai" | "deepseek",
@@ -426,7 +480,7 @@ export function InfoCall({
           emptyTitle={anchor.emptyTitle}
           placeholder={anchor.placeholder}
           voice={voice}
-          renderCard={isAgent ? renderCard : undefined}
+          onCardAction={isAgent ? onCardAction : undefined}
         />
       </div>
       <div className="absolute right-3 top-3 z-50">
