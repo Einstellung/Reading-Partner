@@ -5,7 +5,7 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { collectSource, collectAll } from "../../src/info/engine";
+import { collectSource, collectAll, type CollectEvent } from "../../src/info/engine";
 import type { ExtractReadable, SourceDescriptor } from "../../src/info/descriptor";
 
 const extract: ExtractReadable = (_html, url) => ({
@@ -249,4 +249,51 @@ test("collectAll isolates a failing source and records health", async () => {
   expect(health.bad.lastError).toBeTruthy();
   expect(health.bad.lastErrorAt).toBe(1000);
   expect(health.off).toBeUndefined(); // disabled source not run
+});
+
+test("collectAll emits per-source progress: start for every source, done/error as they settle", async () => {
+  const good: SourceDescriptor = {
+    id: "good",
+    name: "Good",
+    line: "AI",
+    enabled: true,
+    discovery: { kind: "json-api", listUrl: "https://good/list", fields: { id: "id", title: "t", content: "c" } },
+    fulltext: { mode: "feed-field" },
+  };
+  const bad: SourceDescriptor = {
+    id: "bad",
+    name: "Bad",
+    line: "AI",
+    enabled: true,
+    discovery: { kind: "feed", url: "https://bad/feed" },
+    fulltext: { mode: "none" },
+  };
+  const disabled: SourceDescriptor = { ...good, id: "off", enabled: false };
+  const fetchFn = async (url: string) => {
+    if (url.includes("good/list"))
+      return res(JSON.stringify([{ id: "1", t: "Good one", c: "<p>body</p>" }, { id: "2", t: "Another", c: "<p>b</p>" }]));
+    return res("down", 500); // bad feed fails after 5xx retries
+  };
+
+  const events: CollectEvent[] = [];
+  await collectAll([good, bad, disabled], { fetchFn, now: () => 1000, onProgress: (e) => events.push(e) });
+
+  // Only enabled sources emit; the disabled one never starts.
+  const starts = events.filter((e) => e.kind === "source-start");
+  expect(starts.length).toBe(2);
+  expect(starts.every((e) => e.total === 2)).toBe(true);
+  expect(starts.map((e) => e.source).sort()).toEqual(["bad", "good"]);
+  expect(events.some((e) => e.source === "off")).toBe(false);
+
+  const goodDone = events.find((e) => e.kind === "source-done" && e.source === "good");
+  expect(goodDone).toBeDefined();
+  expect(goodDone!.kind === "source-done" && goodDone!.items).toBe(2);
+
+  const badErr = events.find((e) => e.kind === "source-error" && e.source === "bad");
+  expect(badErr).toBeDefined();
+  expect(badErr!.kind === "source-error" && badErr!.error).toBeTruthy();
+
+  // Exactly one settle (done|error) per enabled source.
+  const settles = events.filter((e) => e.kind !== "source-start");
+  expect(settles.length).toBe(2);
 });

@@ -11,6 +11,7 @@ import {
   type AiCallOptions,
   type WatchdogConfig,
 } from "../ai/watchdog";
+import type { CollectEvent } from "./engine";
 import type { CachedArticle } from "./store";
 import { todayLocal } from "./store";
 import type { Briefing, BriefingItemMeta, FeedbackEvent, InfoItem, TriageResult } from "./types";
@@ -23,8 +24,10 @@ export interface InfoDeps {
   loadBriefing(date: string): Promise<Briefing | null>;
   loadProfile(): Promise<string>;
   loadFeedback(): Promise<FeedbackEvent[]>;
-  // Fetch both sources fully (list + per-article bodies). Returns every item.
-  collect(): Promise<InfoItem[]>;
+  // Fetch every source fully (list + per-article bodies). Returns every item.
+  // onProgress relays per-source collection events so the pipeline can surface
+  // collection liveness in its snapshot.
+  collect(onProgress?: (e: CollectEvent) => void): Promise<InfoItem[]>;
   // The one triage AI call, wrapped by the watchdog. Validates + retries parse
   // internally; throws on a stall/error so the watchdog can retry the attempt.
   triage(
@@ -48,10 +51,22 @@ export interface InfoActivity {
   attempts: number;
 }
 
+// Live collection progress during the fetching phase: how many enabled sources
+// have finished, how many failed, how many items so far, and the last source to
+// settle (for a "Robot Report done" style caption).
+export interface CollectProgress {
+  total: number;
+  done: number;
+  failed: number;
+  items: number;
+  lastDone: string | null;
+}
+
 export interface InfoSnapshot {
   briefing: Briefing | null;
   running: boolean;
   phase: InfoPhase;
+  collect: CollectProgress | null;
   activity: InfoActivity | null;
   error: string | null;
 }
@@ -84,11 +99,12 @@ export class InfoPipeline {
   private briefing: Briefing | null = null;
   private running = false;
   private phase: InfoPhase = "idle";
+  private collect: CollectProgress | null = null;
   private activity: InfoActivity | null = null;
   private error: string | null = null;
   private lastActivityNotify = 0;
   private listeners = new Set<() => void>();
-  private snap: InfoSnapshot = { briefing: null, running: false, phase: "idle", activity: null, error: null };
+  private snap: InfoSnapshot = { briefing: null, running: false, phase: "idle", collect: null, activity: null, error: null };
   private readonly config: WatchdogConfig;
   private stopController: AbortController | null = null;
 
@@ -114,6 +130,7 @@ export class InfoPipeline {
       briefing: this.briefing,
       running: this.running,
       phase: this.phase,
+      collect: this.collect,
       activity: this.activity,
       error: this.error,
     };
@@ -150,10 +167,12 @@ export class InfoPipeline {
     this.running = true;
     this.error = null;
     this.phase = "fetching";
+    this.collect = { total: 0, done: 0, failed: 0, items: 0, lastDone: null };
+    this.activity = null;
     this.stopController = new AbortController();
     this.notify();
     try {
-      const items = await this.deps.collect();
+      const items = await this.deps.collect((e) => this.onCollectEvent(e));
       if (this.stopController.signal.aborted) throw new StoppedError();
       if (items.length === 0) throw new Error("No articles could be fetched from either source.");
       const [profile, feedback] = await Promise.all([this.deps.loadProfile(), this.deps.loadFeedback()]);
@@ -199,9 +218,25 @@ export class InfoPipeline {
     } finally {
       this.running = false;
       this.phase = "idle";
+      this.collect = null;
       this.activity = null;
       this.stopController = null;
       this.notify();
     }
+  }
+
+  // Fold a per-source collection event into the collect progress and notify.
+  // Pure accumulation: "start" only establishes the total; "done"/"error"
+  // advance the finished count (and item/failure tallies).
+  private onCollectEvent(e: CollectEvent): void {
+    const c = this.collect ?? { total: 0, done: 0, failed: 0, items: 0, lastDone: null };
+    if (e.kind === "source-start") {
+      this.collect = { ...c, total: e.total };
+    } else if (e.kind === "source-done") {
+      this.collect = { ...c, done: c.done + 1, items: c.items + e.items, lastDone: e.sourceName };
+    } else {
+      this.collect = { ...c, done: c.done + 1, failed: c.failed + 1, lastDone: e.sourceName };
+    }
+    this.notify();
   }
 }

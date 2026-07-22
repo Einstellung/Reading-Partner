@@ -8,7 +8,7 @@ import type { ThinkingLevel } from "@earendil-works/pi-ai";
 import { streamChat, type ProviderId } from "../ai/providers";
 import { loadSettings, toReasoning } from "../settings";
 import type { AiCallOptions } from "../ai/watchdog";
-import { collectAll } from "./engine";
+import { collectAll, type CollectEvent } from "./engine";
 import { extractReadable } from "./readable";
 import { loadSources, loadSourceHealth, saveSourceHealth } from "./source-store";
 import { loadFeedback } from "./feedback";
@@ -99,10 +99,10 @@ async function triage(
 // isolation lives in collectAll: one source failing degrades to no items rather
 // than failing the run (the pipeline fails only if the whole set comes back
 // empty). Each run records per-source health for a future source-list UI.
-async function collect(): Promise<InfoItem[]> {
+async function collect(onProgress?: (e: CollectEvent) => void): Promise<InfoItem[]> {
   const sources = await loadSources();
   const prior = await loadSourceHealth();
-  const { items, health } = await collectAll(sources, { extract: extractReadable }, prior);
+  const { items, health } = await collectAll(sources, { extract: extractReadable, onProgress }, prior);
   saveSourceHealth(health).catch(() => {});
   return items;
 }

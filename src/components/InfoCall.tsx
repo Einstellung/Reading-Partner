@@ -22,7 +22,7 @@ import { getInfoPipeline } from "../info/live";
 import CallView from "./CallView";
 import ChatPipCard from "./ChatPipCard";
 import ReadingPipCard from "./ReadingPipCard";
-import { BriefingFailedCard, BriefingReadyCard, ProbeConfirmCard } from "./InfoCards";
+import { BriefingFailedCard, BriefingProgressCard, BriefingReadyCard, ProbeConfirmCard } from "./InfoCards";
 import type { ComposerVoice } from "./chat";
 import type { ChatMessage } from "../ai/providers";
 import type { InfoPipeline } from "../info/pipeline";
@@ -160,11 +160,22 @@ export function InfoCall({
       if (ts == null) return;
       const s = p.snapshot();
       if (s.running) {
-        const label =
-          s.phase === "fetching"
-            ? "Building your first briefing — reading the sources"
-            : "Building your first briefing — triaging";
-        upsertByTs(ts, { tools: [{ name: "briefing", label, state: "running" }], card: undefined });
+        upsertByTs(ts, {
+          tools: undefined,
+          card: {
+            kind: "briefing-progress",
+            phase: s.phase === "fetching" ? "fetching" : "triaging",
+            collect: s.collect,
+            triage: s.activity
+              ? {
+                  startedAt: s.activity.startedAt,
+                  chars: s.activity.chars,
+                  attempt: s.activity.attempt,
+                  attempts: s.activity.attempts,
+                }
+              : null,
+          },
+        });
       } else {
         awaitingBriefing.current = false;
         if (s.briefing) {
@@ -190,14 +201,17 @@ export function InfoCall({
     return unsub;
   }, [isAgent, upsertByTs]);
 
-  function startFirstBriefing() {
+  // Start (or retry) the first briefing. Retry reuses the existing card row so
+  // the progress/error updates in place rather than appending a new row.
+  function startFirstBriefing(reuseTs?: number) {
     const p = pipelineRef.current;
     if (!p) return;
     awaitingBriefing.current = true;
-    const ts = Date.now();
+    const ts = reuseTs ?? Date.now();
     briefTsRef.current = ts;
     upsertByTs(ts, {
-      tools: [{ name: "briefing", label: "Building your first briefing — reading the sources", state: "running" }],
+      tools: undefined,
+      card: { kind: "briefing-progress", phase: "fetching", collect: null, triage: null },
     });
     void p.generate();
   }
@@ -237,20 +251,24 @@ export function InfoCall({
   const cardHandlers = useRef({
     add: (_c: ProbeConfirmCardData) => {},
     open: (_d: string) => {},
+    retry: () => {},
   });
   cardHandlers.current.add = (c) => void handleAddFromCard(c);
   cardHandlers.current.open = (date) => {
     onOpenBriefing?.(date);
     setView("chat-pip");
   };
+  cardHandlers.current.retry = () => startFirstBriefing(briefTsRef.current ?? undefined);
   const renderCard = useCallback((card: InfoCard) => {
     switch (card.kind) {
       case "probe-confirm":
         return <ProbeConfirmCard card={card} onAdd={() => cardHandlers.current.add(card)} />;
+      case "briefing-progress":
+        return <BriefingProgressCard card={card} />;
       case "briefing-ready":
         return <BriefingReadyCard card={card} onOpen={() => cardHandlers.current.open(card.date)} />;
       case "briefing-failed":
-        return <BriefingFailedCard card={card} />;
+        return <BriefingFailedCard card={card} onRetry={() => cardHandlers.current.retry()} />;
     }
   }, []);
 

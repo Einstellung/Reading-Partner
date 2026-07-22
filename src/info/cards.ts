@@ -5,6 +5,7 @@
 // one definition, matching the components -> info dependency direction.
 
 import type { SourceDescriptor } from "./descriptor";
+import type { CollectProgress } from "./pipeline";
 
 export interface TrialSample {
   title: string;
@@ -25,6 +26,21 @@ export interface ProbeConfirmCardData {
   added?: boolean;
 }
 
+// A persistent progress card shown while the first briefing generates in the
+// background: it updates in place from the pipeline snapshot (collection counts,
+// then triage liveness) so the user always sees the run is alive. It does not
+// scroll away — it stays in the flow and becomes the ready/failed card on finish.
+export interface BriefingProgressCardData {
+  kind: "briefing-progress";
+  phase: "fetching" | "triaging";
+  // Collection counts (present from the fetching phase onward).
+  collect: CollectProgress | null;
+  // Triage streaming liveness, once the AI call starts.
+  triage: { startedAt: number; chars: number; attempt: number; attempts: number } | null;
+  // Heading; onboarding uses "Building your first briefing".
+  title?: string;
+}
+
 // Shown when the first briefing finishes generating in the background.
 export interface BriefingReadyCardData {
   kind: "briefing-ready";
@@ -40,4 +56,8 @@ export interface BriefingFailedCardData {
   message: string;
 }
 
-export type InfoCard = ProbeConfirmCardData | BriefingReadyCardData | BriefingFailedCardData;
+export type InfoCard =
+  | ProbeConfirmCardData
+  | BriefingProgressCardData
+  | BriefingReadyCardData
+  | BriefingFailedCardData;

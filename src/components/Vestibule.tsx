@@ -64,6 +64,21 @@ function BriefingCardBody({
 
   if (running) {
     const phase = snap?.phase === "fetching" ? "Reading the sources" : "Triaging";
+    const detail = (() => {
+      if (snap?.phase === "fetching") {
+        const c = snap.collect;
+        if (!c || !c.total) return null;
+        const parts = [`${c.done}/${c.total} sources`];
+        if (c.items > 0) parts.push(`${c.items} items`);
+        return parts.join(" · ");
+      }
+      const items = snap?.collect?.items ?? 0;
+      const chars = snap?.activity?.chars ?? 0;
+      const parts: string[] = [];
+      if (items) parts.push(`${items} items`);
+      if (chars) parts.push(`${chars} chars`);
+      return parts.length ? parts.join(" · ") : null;
+    })();
     return (
       <div className="flex flex-1 flex-col justify-between">
         <div>
@@ -71,7 +86,9 @@ function BriefingCardBody({
             <span className="h-2 w-2 animate-pulse rounded-full bg-[#6d5ae0]" />
             {phase}…
           </div>
-          <div className="mt-1 text-[13px] tabular-nums text-[#999]">{elapsed}s</div>
+          <div className="mt-1 text-[13px] tabular-nums text-[#999]">
+            {elapsed}s{detail ? ` · ${detail}` : ""}
+          </div>
         </div>
         <button
           className="mt-4 w-fit rounded-lg border border-[#dcdcdc] px-3 py-1.5 text-[13px] text-[#555] hover:bg-[#f4f4f4]"
