@@ -36,6 +36,7 @@
     "@tauri-apps/plugin-fs": "^2.4.2",
     "@tauri-apps/plugin-http": "^2.5.9",
     "@tauri-apps/plugin-opener": "^2.5.4",
+    "defuddle": "^0.19.1",
     "highlight.js": "^11.11.1",
     "katex": "^0.17.0",
     "pdfjs-dist": "4.10.38",

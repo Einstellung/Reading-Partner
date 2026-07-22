@@ -11,7 +11,7 @@ const BRIEFING: Briefing = {
   generatedAt: 0,
   overview: "A slow day.",
   items: {
-    a1: { title: "Model X ships", url: "https://x.test", source: "qbitai", publishedAt: "2026-07-21" },
+    a1: { title: "Model X ships", url: "https://x.test", source: "qbitai", sourceName: "量子位", publishedAt: "2026-07-21" },
   },
   mustRead: [{ itemId: "a1", reason: "you track releases" }],
   oneLiners: [{ line: "Y raised a round." }],

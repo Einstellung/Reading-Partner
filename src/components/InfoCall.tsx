@@ -19,13 +19,7 @@ import ChatPipCard from "./ChatPipCard";
 import ReadingPipCard from "./ReadingPipCard";
 import type { ComposerVoice } from "./chat";
 import type { ChatMessage } from "../ai/providers";
-import type { InfoSource } from "../info/types";
 import type { ThreadMessage as UiMessage } from "./types";
-
-const SOURCE_TAG: Record<InfoSource, string> = {
-  jiqizhixin: "机器之心",
-  qbitai: "量子位",
-};
 
 export interface InfoCallAnchor {
   // "briefing" for the briefing-level thread, or the item id for an article.
@@ -35,8 +29,8 @@ export interface InfoCallAnchor {
   placeholder: string;
   systemPrompt: string;
   // The corner position card: the article/briefing shrunk to a title, an
-  // optional source tag, and a one-line reason/overview.
-  position: { title: string; source?: InfoSource; line: string | null };
+  // optional source name tag, and a one-line reason/overview.
+  position: { title: string; sourceName?: string; line: string | null };
 }
 
 function bookIdFor(dateKey: string): string {
@@ -182,9 +176,9 @@ export function InfoCall({
         <ReadingPipCard
           title={position.title}
           badge={
-            position.source ? (
+            position.sourceName ? (
               <span className="shrink-0 rounded-full bg-[#f0eefb] px-2 py-0.5 text-[11px] font-medium text-[#6d5ae0]">
-                {SOURCE_TAG[position.source]}
+                {position.sourceName}
               </span>
             ) : undefined
           }

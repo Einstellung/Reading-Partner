@@ -59,7 +59,13 @@ export interface InfoSnapshot {
 function itemsMeta(items: InfoItem[]): Record<string, BriefingItemMeta> {
   const out: Record<string, BriefingItemMeta> = {};
   for (const it of items) {
-    out[it.id] = { title: it.title, url: it.url, source: it.source, publishedAt: it.publishedAt };
+    out[it.id] = {
+      title: it.title,
+      url: it.url,
+      source: it.source,
+      sourceName: it.sourceName,
+      publishedAt: it.publishedAt,
+    };
   }
   return out;
 }

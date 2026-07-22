@@ -8,9 +8,9 @@ import type { ThinkingLevel } from "@earendil-works/pi-ai";
 import { streamChat, type ProviderId } from "../ai/providers";
 import { loadSettings, toReasoning } from "../settings";
 import type { AiCallOptions } from "../ai/watchdog";
-import { collectJiqizhixin } from "./jiqizhixin";
-import { collectQbitai } from "./qbitai";
+import { collectAll } from "./engine";
 import { extractReadable } from "./readable";
+import { loadSources, loadSourceHealth, saveSourceHealth } from "./source-store";
 import { loadFeedback } from "./feedback";
 import { loadProfile } from "./profile";
 import { InfoPipeline } from "./pipeline";
@@ -95,21 +95,16 @@ async function triage(
   throw new Error(`triage produced invalid JSON: ${reparsed.error}`);
 }
 
-// Fetch both sources fully. A source that throws (network/host down) degrades to
-// no items rather than failing the whole run; the pipeline fails only if BOTH
-// come back empty.
+// Run every enabled source through the generic engine (docs/17). Per-source
+// isolation lives in collectAll: one source failing degrades to no items rather
+// than failing the run (the pipeline fails only if the whole set comes back
+// empty). Each run records per-source health for a future source-list UI.
 async function collect(): Promise<InfoItem[]> {
-  const [jqx, qbit] = await Promise.all([
-    collectJiqizhixin({}).catch((e) => {
-      console.warn("jiqizhixin fetch failed", e);
-      return [] as InfoItem[];
-    }),
-    collectQbitai({ extract: extractReadable }).catch((e) => {
-      console.warn("qbitai fetch failed", e);
-      return [] as InfoItem[];
-    }),
-  ]);
-  return [...jqx, ...qbit];
+  const sources = await loadSources();
+  const prior = await loadSourceHealth();
+  const { items, health } = await collectAll(sources, { extract: extractReadable }, prior);
+  saveSourceHealth(health).catch(() => {});
+  return items;
 }
 
 let pipeline: InfoPipeline | null = null;

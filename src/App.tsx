@@ -1661,7 +1661,7 @@ export default function App() {
         cached?.textContent ?? "",
         settingsRef.current.aiLanguage,
       ),
-      position: { title: meta?.title ?? "Article", source: meta?.source, line },
+      position: { title: meta?.title ?? "Article", sourceName: meta?.sourceName, line },
     });
   }, []);
 
@@ -2321,7 +2321,8 @@ export default function App() {
                 infoSnap.briefing.items[openArticleId] ?? {
                   title: "Article",
                   url: "",
-                  source: "jiqizhixin",
+                  source: "",
+                  sourceName: "",
                   publishedAt: "",
                 }
               }
