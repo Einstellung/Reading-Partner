@@ -7,6 +7,7 @@
 import { IconClose } from './icons';
 import { Composer, MessageList, type ComposerVoice } from './chat';
 import type { PendingImage, ThreadMessage } from './types';
+import type { InfoCard } from '../info/cards';
 
 interface CallViewProps {
 	messages: ThreadMessage[];
@@ -29,6 +30,8 @@ interface CallViewProps {
 	emptyTitle?: string;
 	placeholder?: string;
 	voice?: ComposerVoice | false;
+	// Renders an inline info card (add-source flow) in the message list.
+	renderCard?: (card: InfoCard) => React.ReactNode;
 }
 
 export default function CallView({
@@ -46,6 +49,7 @@ export default function CallView({
 	emptyTitle = 'Ask about this passage',
 	placeholder = 'Ask about this passage…',
 	voice,
+	renderCard,
 }: CallViewProps) {
 	const empty = messages.length === 0;
 	const composerProps = { pendingImages, onRemoveImage, hint, streaming, onStop, voice };
@@ -95,7 +99,7 @@ export default function CallView({
 			) : (
 				<>
 					<div className="min-h-0 flex-1 overflow-y-auto px-4 pt-16">
-						<MessageList messages={messages} size="lg" className="mx-auto max-w-3xl pb-6" />
+						<MessageList messages={messages} size="lg" className="mx-auto max-w-3xl pb-6" renderCard={renderCard} />
 					</div>
 					<div className="px-4 pb-6">
 						<div className="mx-auto w-full max-w-3xl">

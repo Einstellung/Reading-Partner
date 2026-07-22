@@ -7,6 +7,7 @@ import { Markdown } from './Markdown';
 import { MicButton } from './MicButton';
 import { useFlickerProbe } from './useFlickerProbe';
 import type { ChatImage, PendingImage, ThreadMessage, ToolStatus } from './types';
+import type { InfoCard } from '../info/cards';
 import type { CleanupModel } from '../voice';
 import type { ProviderId } from '../ai/providers';
 import { loadSettings, toReasoning } from '../settings';
@@ -174,6 +175,8 @@ const MessageBubble = memo(function MessageBubble({
 	streaming,
 	failed,
 	tools,
+	card,
+	renderCard,
 	size,
 }: {
 	role: ThreadMessage['role'];
@@ -182,6 +185,8 @@ const MessageBubble = memo(function MessageBubble({
 	streaming?: boolean;
 	failed?: boolean;
 	tools?: ToolStatus[];
+	card?: InfoCard;
+	renderCard?: (card: InfoCard) => React.ReactNode;
 	size: 'sm' | 'lg';
 }) {
 	const lg = size === 'lg';
@@ -207,6 +212,12 @@ const MessageBubble = memo(function MessageBubble({
 				)}
 			</div>
 		);
+	}
+
+	// An inline info card (probe-confirm / briefing-ready) is rendered by the host
+	// via renderCard; it stands alone in the flow, no prose or trace.
+	if (card && renderCard) {
+		return <div className="my-1">{renderCard(card)}</div>;
 	}
 
 	// AI: failed turns are a muted notice, not prose; an empty streaming reply
@@ -239,10 +250,12 @@ export function MessageList({
 	messages,
 	size = 'sm',
 	className = '',
+	renderCard,
 }: {
 	messages: ThreadMessage[];
 	size?: 'sm' | 'lg';
 	className?: string;
+	renderCard?: (card: InfoCard) => React.ReactNode;
 }) {
 	const endRef = useRef<HTMLDivElement>(null);
 	useEffect(() => {
@@ -260,6 +273,8 @@ export function MessageList({
 					streaming={m.streaming}
 					failed={m.failed}
 					tools={m.tools}
+					card={m.card}
+					renderCard={renderCard}
 					size={size}
 				/>
 			))}

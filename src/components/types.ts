@@ -1,6 +1,8 @@
 // Shared prop contracts for the presentational reader-annotation components.
 // Colors come from ANNOTATION_COLORS in src/annotations.ts (single source).
 
+import type { InfoCard } from "../info/cards";
+
 export interface ColorEntry {
 	name: string;
 	color: string;
@@ -55,6 +57,10 @@ export interface ThreadMessage {
 	failed?: boolean;
 	// Transient tool-call trace shown above the streaming reply (M6).
 	tools?: ToolStatus[];
+	// Transient inline card for the info add-source flow (docs/17): a probe-confirm
+	// card, or the first-briefing readiness/failure. Rendered by the host via a
+	// renderCard callback; absent in the reader chat.
+	card?: InfoCard;
 }
 
 export interface Thread {
