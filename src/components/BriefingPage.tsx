@@ -5,18 +5,14 @@
 // Presentational; the host owns the pipeline, feedback log, and article opening.
 
 import { useState } from "react";
-import type { Briefing, BriefingItemMeta, InfoSource } from "../info/types";
+import type { Briefing, BriefingItemMeta } from "../info/types";
 import { IconSparkle } from "./icons";
 
-const SOURCE_TAG: Record<InfoSource, string> = {
-  jiqizhixin: "机器之心",
-  qbitai: "量子位",
-};
-
-function SourceTag({ source }: { source: InfoSource }) {
+function SourceTag({ name }: { name: string }) {
+  if (!name) return null;
   return (
     <span className="rounded-full bg-[#f0eefb] px-2 py-0.5 text-[11px] font-medium text-[#6d5ae0]">
-      {SOURCE_TAG[source]}
+      {name}
     </span>
   );
 }
@@ -98,7 +94,7 @@ export function BriefingPage(props: BriefingPageProps) {
                   <div className="flex items-start gap-3">
                     <button className="min-w-0 flex-1 text-left" onClick={() => props.onOpenArticle(r.itemId)}>
                       <div className="flex items-center gap-2">
-                        <SourceTag source={m.source} />
+                        <SourceTag name={m.sourceName} />
                         {opened && <span className="text-[11px] text-[#aaa]">Read</span>}
                       </div>
                       <div className="mt-1.5 text-[16px] font-medium leading-snug text-[#1b1b1b]">{m.title}</div>
@@ -141,7 +137,7 @@ export function BriefingPage(props: BriefingPageProps) {
                       className="text-[12px] text-[#8a7fd0] hover:underline"
                       onClick={() => props.onOpenArticle(r.itemId)}
                     >
-                      {SOURCE_TAG[m.source]} ↗
+                      {m.sourceName} ↗
                     </button>
                   </span>
                   <DismissButton onDismiss={() => props.onDismiss(r.itemId, m, "one-liner")} />
@@ -167,7 +163,7 @@ export function BriefingPage(props: BriefingPageProps) {
                       <span className="rounded-full bg-[#f2e4c4] px-2 py-0.5 text-[11px] font-medium text-[#8a6d1f]">
                         Out of your lane
                       </span>
-                      <SourceTag source={m.source} />
+                      <SourceTag name={m.sourceName} />
                     </div>
                     <div className="mt-1.5 text-[16px] font-medium leading-snug text-[#3a2f12]">{m.title}</div>
                     <div className="mt-1.5 text-[14px] leading-relaxed text-[#6b5a34]">{r.reason}</div>

@@ -45,10 +45,12 @@ const ROOT_FILES = new Set([
   "reading-state.json",
   "settings.json",
   "topics.json",
-  // Info triage (docs/16): the reader's own profile and append-only feedback
-  // log travel between devices; the daily briefing-*.json and info-articles-*
-  // caches are derived and stay out of range (matched by nothing below).
+  // Info triage (docs/16, docs/17): the reader's own profile, subscribed source
+  // list, and append-only feedback log travel between devices; the daily
+  // briefing-*.json / info-articles-* caches and the info-source-health.json
+  // sidecar are derived and stay out of range (matched by nothing below).
   "info-profile.md",
+  "info-sources.json",
   "info-feedback.jsonl",
 ]);
 

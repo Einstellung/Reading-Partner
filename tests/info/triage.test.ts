@@ -14,6 +14,7 @@ const ITEMS: InfoItem[] = [
   {
     id: "jiqizhixin-a1",
     source: "jiqizhixin",
+    sourceName: "机器之心",
     title: "World model paper",
     url: "https://x/1",
     publishedAt: "2026-07-20",
@@ -22,10 +23,12 @@ const ITEMS: InfoItem[] = [
   {
     id: "qbitai-b2",
     source: "qbitai",
+    sourceName: "量子位",
     title: "Vendor keynote recap",
     url: "https://x/2",
     publishedAt: "2026-07-20",
     summary: "recap",
+    summaryOnly: true,
   },
 ];
 
@@ -39,9 +42,26 @@ test("triageUserMessage embeds profile, feedback tail, and trims item text", () 
   expect(msg).toContain("I like papers");
   expect(msg).toContain("dismissed: \"Old vendor thing\" [vendor PR]");
   expect(msg).toContain("jiqizhixin-a1");
+  // The descriptor display name is the source label now.
+  expect(msg).toContain("机器之心");
   // Text trimmed to 100 chars, not the full 6000.
   const bodyLine = msg.split("\n").find((l) => l.startsWith("text: A long body")) ?? "";
   expect(bodyLine.length).toBeLessThan(140);
+});
+
+test("triageUserMessage flags summary-only items and not full-text ones", () => {
+  const msg = triageUserMessage("", [], ITEMS, { textChars: 100 });
+  const lines = msg.split("\n");
+  const fullHeader = lines.find((l) => l.includes("jiqizhixin-a1")) ?? "";
+  const summaryHeader = lines.find((l) => l.includes("qbitai-b2")) ?? "";
+  expect(fullHeader).not.toContain("[summary only]");
+  expect(summaryHeader).toContain("[summary only]");
+});
+
+test("triageSystemPrompt explains summary-only and cross-language merge", () => {
+  const p = triageSystemPrompt("auto");
+  expect(p).toContain("[summary only]");
+  expect(p).toContain("Merge across languages");
 });
 
 test("formatFeedbackTail caps to the last N and handles empty", () => {

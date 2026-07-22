@@ -14,13 +14,19 @@ export const TRIAGE_TEXT_CHARS = 1500;
 export const FEEDBACK_TAIL = 30;
 
 export const TRIAGE_SYSTEM_PROMPT = [
-  "You are the triage stage of a personal AI news reader. Every day you read two",
-  "Chinese AI-news sources in full and sort them for one specific reader, whose",
-  "profile and recent reactions you are given. You are ruthless on their behalf:",
-  "most items on any given day are noise, and saying so plainly is the job.",
+  "You are the triage stage of a personal news reader. Each day you read a set of",
+  "items from the reader's own subscribed sources — mixed languages (Chinese and",
+  "English), mixed depth — and sort them for one specific reader, whose profile and",
+  "recent reactions you are given. You are ruthless on their behalf: most items on",
+  "any given day are noise, and saying so plainly is the job.",
   "",
   "Write the overview, reasons, and one-liners in English (the UI language), even",
-  "though the articles are in Chinese.",
+  "when the source item is in another language.",
+  "",
+  "Some items are marked [summary only]: only their headline and a short summary",
+  "were retrieved, not the full text (a discovery-only source, a paywall, or a",
+  "failed fetch). Triage these on the headline and summary alone. Never write a",
+  "reason or one-liner that implies you read the full article when you did not.",
   "",
   "Sort EVERY item into exactly one of these tiers:",
   "",
@@ -37,9 +43,11 @@ export const TRIAGE_SYSTEM_PROMPT = [
   '- "filtered" (everything else): each with a short `category` label such as',
   '  "vendor PR", "conference recap", "funding news", "rehash", "listicle".',
   "",
-  "If the same story is covered by both sources, keep ONE entry in the tier it",
-  "belongs to and mention both outlets in its reason/line; put the other item in",
-  '"filtered" with category "duplicate coverage".',
+  "If the same story is covered by more than one source — including a Chinese",
+  "source and an English source reporting the same event — keep ONE entry in the",
+  "tier it belongs to and name both outlets in its reason/line; put the other",
+  'item(s) in "filtered" with category "duplicate coverage". Merge across languages,',
+  "not just within one language.",
   "",
   "The overview is ONE honest line about the day as a whole. It is allowed — and",
   "expected on a slow day — to say the day is mostly noise.",
@@ -64,11 +72,6 @@ export function triageSystemPrompt(aiLanguage: AiLanguage = "auto"): string {
   return lang ? `${TRIAGE_SYSTEM_PROMPT}\n\n${lang}` : TRIAGE_SYSTEM_PROMPT;
 }
 
-const SOURCE_LABEL: Record<InfoItem["source"], string> = {
-  jiqizhixin: "机器之心 (jiqizhixin)",
-  qbitai: "量子位 (qbitai)",
-};
-
 // The tail of the feedback log the model reads, formatted compactly. Most recent
 // last. Empty string when there is no history.
 export function formatFeedbackTail(events: FeedbackEvent[], max = FEEDBACK_TAIL): string {
@@ -83,12 +86,15 @@ export function formatFeedbackTail(events: FeedbackEvent[], max = FEEDBACK_TAIL)
 }
 
 // One item block for the prompt: id/source/date header + trimmed text (or the
-// summary when the full text is missing).
+// summary when the full text is missing). Summary-only items are flagged so the
+// model triages them on headline+summary and does not fake having read them.
 function formatItem(item: InfoItem, textChars: number): string {
+  const hasFull = !!item.textContent && !item.summaryOnly;
   const body = (item.textContent || item.summary || "").slice(0, textChars).trim();
   const date = item.publishedAt ? ` | ${item.publishedAt}` : "";
+  const flag = hasFull ? "" : " | [summary only]";
   return [
-    `id: ${item.id} | ${SOURCE_LABEL[item.source]}${date}`,
+    `id: ${item.id} | ${item.sourceName || item.source}${date}${flag}`,
     `title: ${item.title}`,
     body ? `text: ${body}` : "text: (no body retrieved)",
   ].join("\n");

@@ -27,16 +27,18 @@ export const infoFetch: FetchFn = (url, init) => {
 };
 
 // Fetch text with a small retry on network/5xx. Non-OK (404/403) throws so the
-// caller can degrade that one item without failing the whole run.
+// caller can degrade that one item without failing the whole run. `init` carries
+// per-source request headers (a private API key, a UA override) from the engine.
 export async function fetchText(
   url: string,
   fetchFn: FetchFn = infoFetch,
+  init?: RequestInit,
   retries = 2,
 ): Promise<string> {
   let lastErr: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const res = await fetchFn(url);
+      const res = await fetchFn(url, init);
       if (res.ok) return await res.text();
       if (res.status >= 500 && attempt < retries) {
         lastErr = new Error(`HTTP ${res.status} from ${url}`);

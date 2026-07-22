@@ -5,12 +5,7 @@
 // HTML (utilities can't reach it), a scoped <style> establishes the prose look.
 
 import { IconSparkle } from "./icons";
-import type { BriefingItemMeta, InfoSource } from "../info/types";
-
-const SOURCE_TAG: Record<InfoSource, string> = {
-  jiqizhixin: "机器之心",
-  qbitai: "量子位",
-};
+import type { BriefingItemMeta } from "../info/types";
 
 const PROSE_CSS = `
 .info-article-body { color: #222; font-size: 17px; line-height: 1.75; }
@@ -58,9 +53,11 @@ export function ArticleView({
           >
             ‹ Briefing
           </button>
-          <span className="rounded-full bg-[#f0eefb] px-2 py-0.5 text-[11px] font-medium text-[#6d5ae0]">
-            {SOURCE_TAG[meta.source]}
-          </span>
+          {meta.sourceName && (
+            <span className="rounded-full bg-[#f0eefb] px-2 py-0.5 text-[11px] font-medium text-[#6d5ae0]">
+              {meta.sourceName}
+            </span>
+          )}
           <span className="flex-1" />
           <button
             className="flex items-center gap-1.5 rounded-lg border border-[#c9c2e8] bg-[#efecfb] px-2.5 py-1 text-[13px] text-[#4a3a9e] hover:bg-[#e7e3f7]"

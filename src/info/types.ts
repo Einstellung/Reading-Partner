@@ -3,13 +3,16 @@
 // derived and rebuildable: the briefing and the article cache stay out of sync
 // range, only the profile and feedback log travel between devices.
 
-export type InfoSource = "jiqizhixin" | "qbitai";
-
 export interface InfoItem {
   // Stable hash of source + slug/url, so the same article keeps its id across
   // refetches and the feedback log can reference it (see itemId below).
   id: string;
-  source: InfoSource;
+  // The source id (descriptor id, docs/17) — no longer a closed union, since
+  // sources are user data now.
+  source: string;
+  // The source's display name (descriptor.name), denormalized so triage prompts
+  // and briefing cards render a label without the descriptor at hand.
+  sourceName: string;
   title: string;
   url: string;
   // ISO-ish string as the feed/API supplies it; may be "" if none was given.
@@ -21,6 +24,10 @@ export interface InfoItem {
   contentHtml?: string;
   // Plain text of the article, fed to triage (trimmed) and to the chat context.
   textContent?: string;
+  // True when only a summary/headline was obtained (a discovery-layer-only
+  // source, a fetch that failed, or a paywall-truncated feed body). Triage marks
+  // these so the model does not pretend to have read the full text (docs/17).
+  summaryOnly?: boolean;
 }
 
 // Each tier references an item by id; the Briefing carries a denormalized
@@ -54,7 +61,10 @@ export interface Filtered {
 export interface BriefingItemMeta {
   title: string;
   url: string;
-  source: InfoSource;
+  source: string;
+  // Display name for the source tag, denormalized so the briefing file renders
+  // without loading the source descriptors.
+  sourceName: string;
   publishedAt: string;
 }
 
