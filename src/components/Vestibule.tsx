@@ -41,17 +41,22 @@ function CardLabel({ children }: { children: React.ReactNode }) {
 function BriefingCardBody({
   snap,
   configured,
+  hasSources,
   onGenerate,
   onStop,
   onOpen,
   onOpenSettings,
+  onStartSubscribing,
 }: {
   snap: InfoSnapshot | null;
   configured: boolean;
+  // Whether the user has any source configured; null while loading.
+  hasSources: boolean | null;
   onGenerate: () => void;
   onStop: () => void;
   onOpen: () => void;
   onOpenSettings: () => void;
+  onStartSubscribing: () => void;
 }) {
   const running = !!snap?.running;
   const elapsed = useElapsed(running);
@@ -96,11 +101,35 @@ function BriefingCardBody({
     );
   }
 
-  // Not generated yet.
+  // Still resolving whether any source exists: hold the CTA to avoid a flash
+  // between "Start subscribing" and "Generate briefing".
+  if (configured && hasSources === null) {
+    return <div className="flex-1" />;
+  }
+
+  // No sources yet (and provider configured): the onboarding entry point.
+  if (configured && hasSources === false) {
+    return (
+      <div className="flex flex-1 flex-col justify-between">
+        <p className="m-0 text-[14px] leading-relaxed text-[#777]">
+          Subscribe to what you follow — AI sources, robotics, anything with a feed — and get a
+          triaged briefing each day.
+        </p>
+        <button
+          className="mt-4 w-fit rounded-lg bg-[#6d5ae0] px-4 py-2 text-[14px] font-medium text-white hover:bg-[#5d4bd0]"
+          onClick={onStartSubscribing}
+        >
+          Start subscribing
+        </button>
+      </div>
+    );
+  }
+
+  // Sources configured but no briefing yet.
   return (
     <div className="flex flex-1 flex-col justify-between">
       <p className="m-0 text-[14px] leading-relaxed text-[#777]">
-        Two sources, read in full and triaged against your profile. One briefing for today.
+        Your sources, read in full and triaged against your profile. One briefing for today.
       </p>
       {snap?.error && <p className="mt-2 text-[13px] text-[#c0392b]">{snap.error}</p>}
       {configured ? (
@@ -126,22 +155,26 @@ export function Vestibule({
   continueBook,
   snap,
   configured,
+  hasSources,
   onContinue,
   onOpenLibrary,
   onGenerate,
   onStop,
   onOpenBriefing,
   onOpenSettings,
+  onStartSubscribing,
 }: {
   continueBook: { title: string; topicName: string } | null;
   snap: InfoSnapshot | null;
   configured: boolean;
+  hasSources: boolean | null;
   onContinue: () => void;
   onOpenLibrary: () => void;
   onGenerate: () => void;
   onStop: () => void;
   onOpenBriefing: () => void;
   onOpenSettings: () => void;
+  onStartSubscribing: () => void;
 }) {
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col px-6 py-12">
@@ -179,10 +212,12 @@ export function Vestibule({
           <BriefingCardBody
             snap={snap}
             configured={configured}
+            hasSources={hasSources}
             onGenerate={onGenerate}
             onStop={onStop}
             onOpen={onOpenBriefing}
             onOpenSettings={onOpenSettings}
+            onStartSubscribing={onStartSubscribing}
           />
         </Card>
       </div>

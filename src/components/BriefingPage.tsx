@@ -43,6 +43,7 @@ export interface BriefingPageProps {
   onAppeal: (itemId: string, meta: BriefingItemMeta, category: string) => void;
   onAskBriefing: () => void;
   onAskArticle: (itemId: string) => void;
+  onOpenSources: () => void;
   onBack: () => void;
 }
 
@@ -61,6 +62,13 @@ export function BriefingPage(props: BriefingPageProps) {
         </button>
         <span className="text-[13px] text-[#999]">{b.date}</span>
         <span className="flex-1" />
+        <button
+          className="rounded-lg border border-[#dcdcdc] px-2.5 py-1 text-[13px] text-[#555] hover:bg-[#f4f4f4]"
+          onClick={props.onOpenSources}
+          title="Manage sources"
+        >
+          Sources
+        </button>
         <button
           className="flex items-center gap-1.5 rounded-lg border border-[#c9c2e8] bg-[#efecfb] px-2.5 py-1 text-[13px] text-[#4a3a9e] hover:bg-[#e7e3f7]"
           onClick={props.onAskBriefing}

@@ -108,9 +108,22 @@ import { sanitizeArticleHtml } from "./info/sanitize";
 import { extractImageSrcs, inlineArticleImages } from "./info/inline-images";
 import { fetchImageBytes } from "./info/http";
 import { articleChatSystemPrompt, briefingChatSystemPrompt } from "./info/chat";
+import { addSourceSystemPrompt } from "./info/source-skill";
+import {
+  addSource as addSourceStore,
+  hasSources,
+  loadSources,
+  loadSourceHealth,
+  removeSource,
+  setSourceEnabled,
+} from "./info/source-store";
+import { liveProbeAndTrial } from "./info/source-live";
+import type { SourceDescriptor } from "./info/descriptor";
+import type { SourceHealth } from "./info/engine";
 import type { BriefingItemMeta } from "./info/types";
 import { Vestibule } from "./components/Vestibule";
 import { BriefingPage } from "./components/BriefingPage";
+import { SourcesPage } from "./components/SourcesPage";
 import { ArticleView } from "./components/ArticleView";
 import { InfoCall, type InfoCallAnchor } from "./components/InfoCall";
 import {
@@ -322,8 +335,13 @@ export default function App() {
   // Info triage (docs/16). homeScreen is the launch layer in front of the
   // library, only meaningful when not in the reader. The info pipeline is a
   // module singleton; this ref just tracks it for the UI.
-  const [homeScreen, setHomeScreen] = useState<"vestibule" | "library" | "briefing" | "article">("vestibule");
+  const [homeScreen, setHomeScreen] = useState<"vestibule" | "library" | "briefing" | "article" | "sources">("vestibule");
   const [infoSnap, setInfoSnap] = useState<InfoSnapshot | null>(null);
+  // Whether the user has any source configured (drives onboarding), plus the
+  // source list + health for the source-list page (docs/17).
+  const [hasSourcesState, setHasSourcesState] = useState<boolean | null>(null);
+  const [sourcesList, setSourcesList] = useState<SourceDescriptor[]>([]);
+  const [sourceHealth, setSourceHealth] = useState<Record<string, SourceHealth>>({});
   const infoRef = useRef<InfoPipeline | null>(null);
   const [openArticleId, setOpenArticleId] = useState<string | null>(null);
   const [articleHtml, setArticleHtml] = useState<string | null>(null);
@@ -412,6 +430,7 @@ export default function App() {
     setInfoSnap(p.snapshot());
     const unsub = p.subscribe(() => setInfoSnap(p.snapshot()));
     p.init().catch(() => {});
+    hasSources().then(setHasSourcesState).catch(() => {});
     return unsub;
   }, []);
 
@@ -1558,6 +1577,60 @@ export default function App() {
     infoRef.current?.stop();
   }, []);
 
+  // Reload the source list + health (source-list page) and the hasSources flag.
+  const refreshSources = useCallback(async () => {
+    const [list, health] = await Promise.all([loadSources(), loadSourceHealth()]);
+    setSourcesList(list);
+    setSourceHealth(health);
+    setHasSourcesState(list.length > 0);
+  }, []);
+
+  // Open the first-run / add-source chat: the info call in add-source mode.
+  const openOnboarding = useCallback(() => {
+    setInfoCall({
+      threadId: "onboarding",
+      mode: "add-source",
+      onboarding: true,
+      emptyTitle: "Let's set up your sources",
+      placeholder: "Tell me what you follow, or paste a link…",
+      systemPrompt: addSourceSystemPrompt({ aiLanguage: settingsRef.current.aiLanguage, onboarding: true }),
+      position: { title: "Subscriptions", line: "Set up your information sources" },
+    });
+  }, []);
+
+  const openSourcesPage = useCallback(() => {
+    void refreshSources();
+    setHomeScreen("sources");
+  }, [refreshSources]);
+
+  const toggleSource = useCallback(
+    (id: string, enabled: boolean) => {
+      void (async () => {
+        await setSourceEnabled(id, enabled);
+        await refreshSources();
+      })();
+    },
+    [refreshSources],
+  );
+
+  const removeSourceById = useCallback(
+    (id: string) => {
+      void (async () => {
+        await removeSource(id);
+        await refreshSources();
+      })();
+    },
+    [refreshSources],
+  );
+
+  const confirmAddSource = useCallback(
+    async (descriptor: SourceDescriptor) => {
+      await addSourceStore(descriptor);
+      await refreshSources();
+    },
+    [refreshSources],
+  );
+
   const continueReading = useCallback(() => {
     const recent = mostRecentlyOpened(topics);
     if (!recent) {
@@ -2288,12 +2361,14 @@ export default function App() {
               })()}
               snap={infoSnap}
               configured={configured}
+              hasSources={hasSourcesState}
               onContinue={continueReading}
               onOpenLibrary={() => setHomeScreen("library")}
               onGenerate={generateBriefing}
               onStop={stopBriefing}
               onOpenBriefing={() => setHomeScreen("briefing")}
               onOpenSettings={() => setShowSettings(true)}
+              onStartSubscribing={openOnboarding}
             />
           </div>
         )}
@@ -2309,7 +2384,22 @@ export default function App() {
               onAppeal={appealItem}
               onAskBriefing={askBriefing}
               onAskArticle={askArticle}
+              onOpenSources={openSourcesPage}
               onBack={() => setHomeScreen("vestibule")}
+            />
+          </div>
+        )}
+
+        {!inReader && homeScreen === "sources" && (
+          <div className="absolute inset-0 overflow-y-auto bg-white">
+            <SourcesPage
+              sources={sourcesList}
+              health={sourceHealth}
+              onToggle={toggleSource}
+              onRemove={removeSourceById}
+              onProbeAdd={liveProbeAndTrial}
+              onConfirmAdd={confirmAddSource}
+              onBack={() => setHomeScreen("briefing")}
             />
           </div>
         )}
@@ -2333,12 +2423,14 @@ export default function App() {
           </div>
         )}
 
-        {!inReader && (homeScreen === "briefing" || homeScreen === "article") && infoCall && (
+        {!inReader && infoCall && (
           <InfoCall
             anchor={infoCall}
             dateKey={infoSnap?.briefing?.date ?? todayLocal()}
             onHangUp={() => setInfoCall(null)}
             voice={infoVoice}
+            onSourcesChanged={refreshSources}
+            onOpenBriefing={() => setHomeScreen("briefing")}
           />
         )}
 
