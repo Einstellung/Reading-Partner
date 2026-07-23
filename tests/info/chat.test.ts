@@ -54,7 +54,7 @@ test("articleChatSystemPrompt pins output only when a language is set", () => {
   expect(articleChatSystemPrompt("overview", "Title", "body", CTX)).not.toContain("must be written in");
 });
 
-test("both threads carry the profile, source roster, and the four tools", () => {
+test("both threads carry the profile, source roster, and the full tool set", () => {
   for (const prompt of [briefingChatSystemPrompt(BRIEFING, CTX), articleChatSystemPrompt("ov", "T", "b", CTX)]) {
     expect(prompt).toContain("I like hard technical substance.");
     expect(prompt).toContain("量子位");
@@ -62,12 +62,28 @@ test("both threads carry the profile, source roster, and the four tools", () => 
     expect(prompt).toContain("update_profile");
     expect(prompt).toContain("probe_source");
     expect(prompt).toContain("add_source");
+    expect(prompt).toContain("generate_briefing");
   }
+});
+
+test("the base role names the companion's fuller capabilities, not a read-only helper", () => {
+  const prompt = briefingChatSystemPrompt(BRIEFING, CTX);
+  expect(prompt).toContain("regenerate today's briefing");
+  expect(prompt).toContain("on the user's request, never on your own");
 });
 
 test("the tool guidance holds update_profile back to a stated preference", () => {
   const prompt = briefingChatSystemPrompt(BRIEFING, CTX);
   expect(prompt).toContain("Do NOT propose a profile change on your own");
+});
+
+test("the tool guidance holds generate_briefing to an explicit request and names both scopes", () => {
+  const prompt = briefingChatSystemPrompt(BRIEFING, CTX);
+  expect(prompt).toContain("Call generate_briefing ONLY when the user explicitly asks");
+  expect(prompt).toContain("not after adding a source");
+  expect(prompt).toContain("'retriage'");
+  expect(prompt).toContain("'full'");
+  expect(prompt).toContain("If a run is already in progress, say so");
 });
 
 test("the tool guidance carries the four-section skeleton and size discipline", () => {
