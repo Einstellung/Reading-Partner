@@ -14,6 +14,13 @@ export { isoDate, parseIndex, parseMemory, serializeMemory } from "./files";
 export { MemoryFileStore, type MemoryFs, type MemoryMeta } from "./store";
 export { FileMemoryAdapter, type MemoryAdapter } from "./adapter";
 export { buildMemorySnapshot, memoryPromptSection } from "./snapshot";
+export {
+  assembleIdentity,
+  assembleReadingContext,
+  assembleReadingSignal,
+  READING_SIGNAL_BUDGET,
+  type TopicMemorySignal,
+} from "./assemble";
 export { buildMemoryTools, type MemoryToolOptions, type MemoryWriteAction } from "./tools";
 export {
   buildDistillSystemPrompt,

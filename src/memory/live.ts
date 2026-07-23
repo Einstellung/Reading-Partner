@@ -20,6 +20,7 @@ import { logEvent } from "../app/events";
 import { FileMemoryAdapter, type MemoryAdapter } from "./adapter";
 import { isoDate } from "./files";
 import { MemoryFileStore, type MemoryFs } from "./store";
+import type { MemoryIndexEntry } from "./types";
 import {
   runDistillation,
   selectSilentMarks,
@@ -70,6 +71,13 @@ export function getMemoryAdapter(topicId: string): MemoryAdapter {
 
 export async function getLastDistillation(topicId: string): Promise<number | null> {
   return (await getStore(topicId).getMeta()).lastDistilledAt;
+}
+
+// The parsed memory index for one topic (what a prompt would load), read through
+// the live store. Used by the cross-scenario assembly (assemble.ts) to gather a
+// reading-episode signal across every topic.
+export function readMemoryIndex(topicId: string): Promise<MemoryIndexEntry[]> {
+  return getStore(topicId).readIndex();
 }
 
 // --- change feed (memory panel refresh after background writes) ---
