@@ -41,13 +41,30 @@ export interface BriefingProgressCardData {
   title?: string;
 }
 
-// Shown when the first briefing finishes generating in the background.
+// Shown when the first briefing finishes generating in the background, or when a
+// re-triage settles. `title`/`note` override the onboarding copy for re-triage.
 export interface BriefingReadyCardData {
   kind: "briefing-ready";
   date: string;
   worth: number;
   oneLiners: number;
   filtered: number;
+  title?: string;
+  note?: string;
+}
+
+// Shown when update_profile drafts a change to the reading profile. The user
+// sees the full proposed profile and applies it explicitly — the tool never
+// writes; Apply saves and, when today's briefing exists, offers a re-triage.
+export interface ProfileUpdateCardData {
+  kind: "profile-update";
+  // One line naming the change, written to the user (the card heading).
+  summary: string;
+  // The complete proposed profile text that Apply saves verbatim.
+  profile: string;
+  phase: "draft" | "applied";
+  // Applied state only: whether a briefing for today exists to re-triage.
+  canRetriage?: boolean;
 }
 
 // Shown when the first briefing generation fails (network / no provider).
@@ -60,4 +77,5 @@ export type InfoCard =
   | ProbeConfirmCardData
   | BriefingProgressCardData
   | BriefingReadyCardData
+  | ProfileUpdateCardData
   | BriefingFailedCardData;

@@ -5,19 +5,22 @@
 // (content main, chat becomes the corner pip); ✕ hangs up. No bubble, no
 // auto-started take — the composer is ready and the user types.
 //
-// Two modes. "chat" (default): the briefing/article companion, a tool-less
-// streamChat. "add-source" (docs/17): the add-source skill — an agent loop with
-// probe/trial/add tools, inline confirm cards, and, on the first source added,
-// a background first-briefing whose progress and readiness show as a card.
+// Every info thread runs the same agent loop with the shared companion tool set
+// (docs/16/17): probe/trial/add_source plus update_profile, surfacing inline
+// confirm cards. The anchors differ only in context: the briefing/article
+// companion, or the onboarding add-source flow (the AI opens, and on the first
+// source added a background first-briefing shows its progress/readiness as a
+// card). update_profile drafts a profile change the user Applies; applying it
+// offers a re-triage of today's cached items through the same progress card.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { streamChat } from "../ai/providers";
 import { runAgentTurn } from "../ai/agent";
 import { loadSettings, toReasoning } from "../settings";
 import { appendMessage, createThread, getThread, loadThreads, patchThreadMessage } from "../threads";
-import { buildLiveSourceTools } from "../info/source-live";
-import { sourceToolStatusLabel } from "../info/source-tools";
+import { buildLiveCompanionTools } from "../info/source-live";
+import { companionToolStatusLabel } from "../info/companion-tools";
 import { addSource, hasSources } from "../info/source-store";
+import { saveProfile } from "../info/profile";
 import { getInfoPipeline } from "../info/live";
 import CallView from "./CallView";
 import ChatPipCard from "./ChatPipCard";
@@ -36,7 +39,7 @@ import {
 import type { ComposerVoice } from "./chat";
 import type { ChatMessage } from "../ai/providers";
 import type { InfoPipeline } from "../info/pipeline";
-import type { ProbeConfirmCardData } from "../info/cards";
+import type { ProbeConfirmCardData, ProfileUpdateCardData } from "../info/cards";
 import type { ThreadMessage as UiMessage } from "./types";
 import type { ThreadMessage as StoredMessage } from "../threads";
 
@@ -51,8 +54,8 @@ export interface InfoCallAnchor {
   // The corner position card: the article/briefing shrunk to a title, an
   // optional source name tag, and a one-line reason/overview.
   position: { title: string; sourceName?: string; line: string | null };
-  // "add-source" wires the probe/trial/add tools + cards; default is the
-  // tool-less briefing/article companion.
+  // The anchor kind. Every mode carries the same tools now; this only tags the
+  // add-source flow for readers of the anchor.
   mode?: "chat" | "add-source";
   // First-run onboarding: the AI opens the conversation itself.
   onboarding?: boolean;
@@ -100,7 +103,6 @@ export function InfoCall({
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const bookId = bookIdFor(dateKey);
-  const isAgent = anchor.mode === "add-source";
 
   // Latest messages, mirrored to a ref so the (id-keyed) card dispatcher can look
   // up a card's payload without being torn down and rebuilt on every delta.
@@ -112,6 +114,9 @@ export function InfoCall({
   // rides a single stable card id, so no per-run ts bookkeeping is needed.
   const pipelineRef = useRef<InfoPipeline | null>(null);
   const awaitingBriefing = useRef(false);
+  // Which briefing job the progress/ready/failed card is tracking, so the ready
+  // copy and the failed-card retry both address the right run.
+  const lastJobRef = useRef<"first" | "retriage">("first");
 
   const patchLast = useCallback((patch: Partial<UiMessage> | ((m: UiMessage) => Partial<UiMessage>)) => {
     setMessages((prev) => {
@@ -142,7 +147,7 @@ export function InfoCall({
       // Onboarding: the AI opens the conversation itself when the thread is empty.
       // Gated on the on-disk thread being empty, so a reopened conversation never
       // re-greets.
-      if (isAgent && anchor.onboarding && thread.messages.length === 0) {
+      if (anchor.onboarding && thread.messages.length === 0) {
         void runAgent([{ role: "user", text: OPENING_KICKOFF }], { seedStreaming: true });
       }
     })();
@@ -160,12 +165,12 @@ export function InfoCall({
   // one briefing card is addressed by BRIEFING_CARD_ID through the patchPart
   // channel (upsertCardRow) across its whole progress -> ready/failed lifecycle.
   useEffect(() => {
-    if (!isAgent) return;
     const p = getInfoPipeline();
     pipelineRef.current = p;
     const unsub = p.subscribe(() => {
       if (!awaitingBriefing.current) return;
       const s = p.snapshot();
+      const isRetriage = lastJobRef.current === "retriage";
       if (s.running) {
         setMessages((prev) =>
           upsertCardRow(prev, BRIEFING_CARD_ID, {
@@ -180,6 +185,7 @@ export function InfoCall({
                   attempts: s.activity.attempts,
                 }
               : null,
+            title: isRetriage ? "Re-running today's triage" : undefined,
           }),
         );
       } else {
@@ -192,6 +198,8 @@ export function InfoCall({
             worth: b.mustRead.length + b.outOfLane.length,
             oneLiners: b.oneLiners.length,
             filtered: b.filtered.length,
+            title: isRetriage ? "Briefing updated" : undefined,
+            note: isRetriage ? "Re-triaged today's items with your updated profile." : undefined,
           };
           setMessages((prev) => upsertCardRow(prev, BRIEFING_CARD_ID, ready));
           // Ready is a durable outcome: persist it so a reopen shows the briefing
@@ -214,23 +222,28 @@ export function InfoCall({
       }
     });
     return unsub;
-  }, [isAgent, bookId, anchor.threadId]);
+  }, [bookId, anchor.threadId]);
 
-  // Start (or retry) the first briefing. Retry reuses the existing card row (same
-  // id) so the progress/error updates in place rather than appending a new row.
-  function startFirstBriefing() {
-    const p = pipelineRef.current;
-    if (!p) return;
+  // Start (or retry) a briefing job through the one BRIEFING_CARD_ID card: "first"
+  // collects + triages (onboarding); "retriage" re-triages today's cached items
+  // with the applied profile (no collection). Retry reuses the same card row so
+  // progress/error updates in place rather than appending a new row.
+  function runBriefingJob(job: "first" | "retriage") {
+    const p = pipelineRef.current ?? getInfoPipeline();
+    pipelineRef.current = p;
+    lastJobRef.current = job;
     awaitingBriefing.current = true;
     setMessages((prev) =>
       upsertCardRow(prev, BRIEFING_CARD_ID, {
         kind: "briefing-progress",
-        phase: "fetching",
+        phase: job === "retriage" ? "triaging" : "fetching",
         collect: null,
         triage: null,
+        title: job === "retriage" ? "Re-running today's triage" : undefined,
       }),
     );
-    void p.generate();
+    if (job === "retriage") void p.retriage();
+    else void p.generate();
   }
 
   // Insert a trial's confirm card as its own row just before the streaming reply,
@@ -282,11 +295,55 @@ export function InfoCall({
       const ts = Date.now();
       setMessages((prev) => [...prev, { role: "user", text: note, ts }]);
       appendMessage(bookId, anchor.threadId, { role: "user", text: note, ts });
-      if (!had) startFirstBriefing();
+      if (!had) runBriefingJob("first");
     },
-    // startFirstBriefing reads only refs, so its per-render identity is harmless.
+    // runBriefingJob reads only refs, so its per-render identity is harmless.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [bookId, anchor.threadId, onSourcesChanged],
+  );
+
+  // Insert an update_profile draft card and persist it (profile-update is durable
+  // like probe-confirm). The tool hands back the drafted payload; this closure is
+  // the one place that turns it into a card part.
+  function insertProfileCard(payload: ProfileUpdateCardData) {
+    const cardId = nextCardId("profile");
+    const ts = Date.now();
+    setMessages((prev) => insertBeforeLast(prev, cardRow(cardId, payload, ts)));
+    appendMessage(bookId, anchor.threadId, {
+      role: "ai",
+      text: "",
+      ts,
+      parts: [toPersistedCardPart(cardId, payload)],
+    });
+  }
+
+  // Apply a drafted profile change when the user clicks a card's Apply: save the
+  // new profile, flip the card to its applied state (in the UI and on disk), and
+  // note the change so the AI knows. The applied card then offers a re-triage when
+  // today's briefing exists. Apply is the only write — the tool never saves.
+  const handleApplyProfile = useCallback(
+    async (cardId: string) => {
+      const found = findCardPart(messagesRef.current, cardId);
+      if (!found || found.payload.kind !== "profile-update") return;
+      const card = found.payload;
+      if (card.phase === "applied") return;
+      try {
+        await saveProfile(card.profile);
+      } catch {
+        return;
+      }
+      const canRetriage = !!getInfoPipeline().snapshot().briefing;
+      const applied: ProfileUpdateCardData = { ...card, phase: "applied", canRetriage };
+      setMessages((prev) => patchCardPayload(prev, cardId, { phase: "applied", canRetriage }));
+      patchThreadMessage(bookId, anchor.threadId, found.ts, {
+        parts: [toPersistedCardPart(cardId, applied)],
+      });
+      const note = `Applied the profile update: ${card.summary}.`;
+      const ts = Date.now();
+      setMessages((prev) => [...prev, { role: "user", text: note, ts }]);
+      appendMessage(bookId, anchor.threadId, { role: "user", text: note, ts });
+    },
+    [bookId, anchor.threadId],
   );
 
   // The card action dispatcher wired into the message list. Stable across
@@ -297,7 +354,9 @@ export function InfoCall({
       switch (action.kind) {
         case "mutate":
           if (action.op === "add-source") void handleAddFromCard(cardId);
-          else if (action.op === "retry-briefing") startFirstBriefing();
+          else if (action.op === "apply-profile") void handleApplyProfile(cardId);
+          else if (action.op === "retriage") runBriefingJob("retriage");
+          else if (action.op === "retry-briefing") runBriefingJob(lastJobRef.current);
           break;
         case "navigate":
           if (action.to === "briefing") {
@@ -321,9 +380,9 @@ export function InfoCall({
           break;
       }
     },
-    // handleAddFromCard is stable; startFirstBriefing reads only refs.
+    // handleAddFromCard/handleApplyProfile are stable; runBriefingJob reads refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [handleAddFromCard, onOpenBriefing, bookId, anchor.threadId],
+    [handleAddFromCard, handleApplyProfile, onOpenBriefing, bookId, anchor.threadId],
   );
 
   // The add-source agent turn: probe/trial/add tools, tool trace, confirm cards.
@@ -342,7 +401,7 @@ export function InfoCall({
     abortRef.current = controller;
     setStreaming(true);
     let full = "";
-    const tools = buildLiveSourceTools(insertProbeCard);
+    const tools = buildLiveCompanionTools(insertProbeCard, insertProfileCard);
 
     void runAgentTurn({
       providerId: settings.defaultProviderId as "anthropic" | "openai" | "deepseek",
@@ -362,7 +421,7 @@ export function InfoCall({
           text: "",
           tools: [
             ...(m.tools ?? []),
-            { name: info.name, label: sourceToolStatusLabel(info.name, info.args), state: "running" as const },
+            { name: info.name, label: companionToolStatusLabel(info.name, info.args), state: "running" as const },
           ],
         }));
       },
@@ -398,48 +457,6 @@ export function InfoCall({
     });
   }
 
-  // The tool-less briefing/article companion (unchanged behavior).
-  async function runChat(history: ChatMessage[]) {
-    const settings = await loadSettings();
-    if (!settings.defaultProviderId || !settings.defaultModelId) {
-      patchLast({ text: "No AI provider configured (Settings).", failed: true, streaming: false });
-      return;
-    }
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setStreaming(true);
-    let full = "";
-    streamChat({
-      providerId: settings.defaultProviderId as "anthropic" | "openai" | "deepseek",
-      modelId: settings.defaultModelId,
-      systemPrompt: anchor.systemPrompt,
-      messages: history,
-      signal: controller.signal,
-      reasoning: toReasoning(settings.chatThinking),
-      onDelta: (t) => {
-        full += t;
-        patchLast({ text: full, streaming: true });
-      },
-      onDone: (text) => {
-        const finalText = text || full;
-        patchLast({ text: finalText, streaming: false });
-        setStreaming(false);
-        abortRef.current = null;
-        if (finalText.trim()) appendMessage(bookId, anchor.threadId, { role: "ai", text: finalText, ts: Date.now() });
-      },
-      onError: (m) => {
-        if (controller.signal.aborted) {
-          patchLast({ streaming: false });
-          if (full.trim()) appendMessage(bookId, anchor.threadId, { role: "ai", text: full, ts: Date.now() });
-        } else {
-          patchLast({ text: m || "The reply failed.", failed: true, streaming: false });
-        }
-        setStreaming(false);
-        abortRef.current = null;
-      },
-    });
-  }
-
   async function send(text: string) {
     if (!text.trim() || streaming) return;
     const now = Date.now();
@@ -449,8 +466,7 @@ export function InfoCall({
       .map((m) => ({ role: m.role, text: m.text }));
     setMessages((prev) => [...prev, userMsg, { role: "ai", text: "", ts: now + 1, streaming: true }]);
     appendMessage(bookId, anchor.threadId, { role: "user", text, ts: now });
-    if (isAgent) await runAgent(history);
-    else await runChat(history);
+    await runAgent(history);
   }
 
   function stop() {
@@ -480,7 +496,7 @@ export function InfoCall({
           emptyTitle={anchor.emptyTitle}
           placeholder={anchor.placeholder}
           voice={voice}
-          onCardAction={isAgent ? onCardAction : undefined}
+          onCardAction={onCardAction}
         />
       </div>
       <div className="absolute right-3 top-3 z-50">

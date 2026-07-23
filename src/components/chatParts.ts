@@ -180,7 +180,7 @@ export function patchCardPayload(
 // card are durable outcomes, the progress card is not (a reopened session is
 // long past it) and a failure is in-session only (retry needs the live pipeline).
 export function isPersistableCardKind(kind: CardKind): boolean {
-  return kind === "probe-confirm" || kind === "briefing-ready";
+  return kind === "probe-confirm" || kind === "briefing-ready" || kind === "profile-update";
 }
 
 export function isPersistablePart(part: ChatPart): boolean {

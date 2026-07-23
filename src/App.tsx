@@ -108,6 +108,7 @@ import { sanitizeArticleHtml } from "./info/sanitize";
 import { extractImageSrcs, inlineArticleImages } from "./info/inline-images";
 import { fetchImageBytes } from "./info/http";
 import { articleChatSystemPrompt, briefingChatSystemPrompt } from "./info/chat";
+import { loadProfile } from "./info/profile";
 import { addSourceSystemPrompt } from "./info/source-skill";
 import {
   addSource as addSourceStore,
@@ -1700,14 +1701,19 @@ export default function App() {
     [openArticle],
   );
 
-  const askBriefing = useCallback(() => {
+  const askBriefing = useCallback(async () => {
     const b = infoRef.current?.snapshot().briefing;
     if (!b) return;
+    const [profile, sources] = await Promise.all([loadProfile(), loadSources()]);
     setInfoCall({
       threadId: "briefing",
       emptyTitle: "Today's briefing",
       placeholder: "Ask about today's briefing…",
-      systemPrompt: briefingChatSystemPrompt(b, settingsRef.current.aiLanguage),
+      systemPrompt: briefingChatSystemPrompt(b, {
+        profile,
+        sources,
+        aiLanguage: settingsRef.current.aiLanguage,
+      }),
       position: { title: "Today's briefing", line: b.overview },
     });
   }, []);
@@ -1716,7 +1722,11 @@ export default function App() {
     const b = infoRef.current?.snapshot().briefing;
     if (!b) return;
     const meta = b.items[itemId];
-    const cached = await loadArticle(b.date, itemId);
+    const [cached, profile, sources] = await Promise.all([
+      loadArticle(b.date, itemId),
+      loadProfile(),
+      loadSources(),
+    ]);
     // The item's one-line reason/overview from the briefing tiers, shown on the
     // position card so the chat window can recall what the article was about.
     const line =
@@ -1728,12 +1738,11 @@ export default function App() {
       threadId: itemId,
       emptyTitle: meta?.title ?? "Article",
       placeholder: "Ask about this article…",
-      systemPrompt: articleChatSystemPrompt(
-        b.overview,
-        meta?.title ?? "",
-        cached?.textContent ?? "",
-        settingsRef.current.aiLanguage,
-      ),
+      systemPrompt: articleChatSystemPrompt(b.overview, meta?.title ?? "", cached?.textContent ?? "", {
+        profile,
+        sources,
+        aiLanguage: settingsRef.current.aiLanguage,
+      }),
       position: { title: meta?.title ?? "Article", sourceName: meta?.sourceName, line },
     });
   }, []);

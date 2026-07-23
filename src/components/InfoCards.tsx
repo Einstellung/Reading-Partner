@@ -16,6 +16,7 @@ import type {
   BriefingProgressCardData,
   BriefingReadyCardData,
   ProbeConfirmCardData,
+  ProfileUpdateCardData,
 } from "../info/cards";
 import type { CardComponentProps, CardKind, CardPayload } from "./chatParts";
 
@@ -123,20 +124,63 @@ export function BriefingReadyCard({ payload, dispatch }: CardComponentProps<Brie
     `${payload.oneLiners} one-liner${payload.oneLiners === 1 ? "" : "s"}`,
     `${payload.filtered} filtered`,
   ].join(" · ");
+  const note =
+    payload.note ?? "A first briefing from one source is thin — it gets richer as you add more.";
   return (
     <button
       type="button"
       onClick={() => dispatch({ kind: "navigate", to: "briefing", arg: payload.date })}
       className="w-full max-w-md rounded-xl border border-[#c9c2e8] bg-[#faf9ff] p-4 text-left hover:border-[#b3a8e0]"
     >
-      <div className="text-[11px] font-medium uppercase tracking-wider text-[#8a7fd0]">Briefing ready</div>
+      <div className="text-[11px] font-medium uppercase tracking-wider text-[#8a7fd0]">
+        {payload.title ?? "Briefing ready"}
+      </div>
       <div className="mt-1 text-[15px] font-medium text-[#1b1b1b]">{payload.date}</div>
       <div className="mt-1 text-[13px] text-[#666]">{counts}</div>
-      <div className="mt-2 text-[12px] leading-snug text-[#999]">
-        A first briefing from one source is thin — it gets richer as you add more.
-      </div>
+      <div className="mt-2 text-[12px] leading-snug text-[#999]">{note}</div>
       <div className="mt-2 text-[13px] font-medium text-[#6d5ae0]">Open →</div>
     </button>
+  );
+}
+
+// The profile-update confirm card: the AI drafts a complete revised profile, the
+// user reads it verbatim and Applies (which saves and, when today's briefing
+// exists, offers a re-triage). Presentational — Apply/Re-run only raise intent.
+export function ProfileUpdateCard({ payload, dispatch }: CardComponentProps<ProfileUpdateCardData>) {
+  const applied = payload.phase === "applied";
+  return (
+    <div className="w-full max-w-md rounded-xl border border-[#c9c2e8] bg-[#faf9ff] p-4">
+      <div className="text-[11px] font-medium uppercase tracking-wider text-[#8a7fd0]">
+        {applied ? "Profile updated" : "Update reading profile"}
+      </div>
+      <div className="mt-1 text-[14px] font-medium text-[#1b1b1b]">{payload.summary}</div>
+      <pre className="m-0 mt-2 max-h-52 overflow-y-auto whitespace-pre-wrap rounded-lg border border-black/10 bg-white p-3 font-sans text-[12px] leading-relaxed text-[#333]">
+        {payload.profile.trim()}
+      </pre>
+      <div className="mt-3 flex items-center justify-end gap-2">
+        {applied ? (
+          payload.canRetriage ? (
+            <button
+              type="button"
+              onClick={() => dispatch({ kind: "mutate", op: "retriage" })}
+              className="rounded-lg bg-[#6d5ae0] px-3.5 py-1.5 text-[13px] font-medium text-white hover:bg-[#5d4bd0]"
+            >
+              Re-run today's triage
+            </button>
+          ) : (
+            <span className="text-[12px] text-[#999]">Applies to your next briefing.</span>
+          )
+        ) : (
+          <button
+            type="button"
+            onClick={() => dispatch({ kind: "mutate", op: "apply-profile" })}
+            className="rounded-lg bg-[#6d5ae0] px-3.5 py-1.5 text-[13px] font-medium text-white hover:bg-[#5d4bd0]"
+          >
+            Apply
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -169,5 +213,6 @@ export const CARD_REGISTRY: CardRegistry = {
   "probe-confirm": ProbeConfirmCard,
   "briefing-progress": BriefingProgressCard,
   "briefing-ready": BriefingReadyCard,
+  "profile-update": ProfileUpdateCard,
   "briefing-failed": BriefingFailedCard,
 };
