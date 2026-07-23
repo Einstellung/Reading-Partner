@@ -3,8 +3,8 @@
 // changes. Styled with Tailwind utilities.
 
 import { useEffect, useRef, useState } from 'react';
-import { IconColorSwatch, IconHighlight, IconPointer, IconSparkle, IconUnderline } from './icons';
-import type { ColorEntry, Tool, ToolType } from './types';
+import { IconColorSwatch, IconHighlight, IconPointer, IconSparkle, IconUnderline } from '../common/icons';
+import type { ColorEntry, Tool, ToolType } from '../common/types';
 
 interface PenToolbarProps {
 	tool: Tool;

@@ -3,7 +3,7 @@
 // Run: bun test.
 
 import { test, expect } from "bun:test";
-import { figureChipLabel } from "../../src/components/FigureCard";
+import { figureChipLabel } from "../../src/components/reader/FigureCard";
 import { cardDisplayWidth } from "../../src/figures/render";
 import type { Figure } from "../../src/figures/types";
 

@@ -14,17 +14,17 @@
 // offers a re-triage of today's cached items through the same progress card.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { runAgentTurn } from "../ai/agent";
-import { loadSettings, toReasoning } from "../settings";
-import { appendMessage, createThread, getThread, loadThreads, patchThreadMessage } from "../threads";
-import { buildLiveCompanionTools } from "../info/source-live";
-import { companionToolStatusLabel } from "../info/companion-tools";
-import { addSource, hasSources } from "../info/source-store";
-import { saveProfile } from "../info/profile";
-import { getInfoPipeline } from "../info/live";
-import CallView from "./CallView";
-import ChatPipCard from "./ChatPipCard";
-import ReadingPipCard from "./ReadingPipCard";
+import { runAgentTurn } from "../../ai/agent";
+import { loadSettings, toReasoning } from "../../app/settings";
+import { appendMessage, createThread, getThread, loadThreads, patchThreadMessage } from "../../app/threads";
+import { buildLiveCompanionTools } from "../../info/sources/source-live";
+import { companionToolStatusLabel } from "../../info/companion/companion-tools";
+import { addSource, hasSources } from "../../info/sources/source-store";
+import { saveProfile } from "../../memory/profile";
+import { getInfoPipeline } from "../../info/briefing/live";
+import CallView from "../chat/CallView";
+import ChatPipCard from "../chat/ChatPipCard";
+import ReadingPipCard from "../chat/ReadingPipCard";
 import {
   cardRow,
   findCardPart,
@@ -35,13 +35,13 @@ import {
   toPersistedCardPart,
   upsertCardRow,
   type CardAction,
-} from "./chatParts";
-import type { ComposerVoice } from "./chat";
-import type { ChatMessage } from "../ai/providers";
-import type { InfoPipeline } from "../info/pipeline";
-import type { ProbeConfirmCardData, ProfileUpdateCardData } from "../info/cards";
-import type { ThreadMessage as UiMessage } from "./types";
-import type { ThreadMessage as StoredMessage } from "../threads";
+} from "../chat/chatParts";
+import type { ComposerVoice } from "../chat/chat";
+import type { ChatMessage } from "../../ai/providers";
+import type { InfoPipeline } from "../../info/briefing/pipeline";
+import type { ProbeConfirmCardData, ProfileUpdateCardData } from "../../info/briefing/cards";
+import type { ThreadMessage as UiMessage } from "../common/types";
+import type { ThreadMessage as StoredMessage } from "../../app/threads";
 
 export interface InfoCallAnchor {
   // "briefing" for the briefing-level thread, or the item id for an article, or

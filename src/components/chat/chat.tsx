@@ -2,16 +2,16 @@
 // No preflight in this project, so box-sizing and control resets are explicit.
 
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { IconCheck, IconCopy, IconSend, IconStop } from './icons';
-import { Markdown } from './Markdown';
+import { IconCheck, IconCopy, IconSend, IconStop } from '../common/icons';
+import { Markdown } from '../common/Markdown';
 import { MicButton } from './MicButton';
-import { useFlickerProbe } from './useFlickerProbe';
-import type { ChatImage, PendingImage, ThreadMessage, ToolStatus } from './types';
+import { useFlickerProbe } from '../common/useFlickerProbe';
+import type { ChatImage, PendingImage, ThreadMessage, ToolStatus } from '../common/types';
 import { messageToParts, type CardActionHandler, type CardSurface } from './chatParts';
-import { CARD_REGISTRY } from './InfoCards';
-import type { CleanupModel } from '../voice';
-import type { ProviderId } from '../ai/providers';
-import { loadSettings, toReasoning } from '../settings';
+import { CARD_REGISTRY } from '../info/InfoCards';
+import type { CleanupModel } from '../../voice';
+import type { ProviderId } from '../../ai/providers';
+import { loadSettings, toReasoning } from '../../app/settings';
 
 // Optional enrichment for the composer's built-in voice input. The mic is on by
 // default; this only adds context. `glossary` seeds the STT cleanup pass with

@@ -17,8 +17,8 @@ import type {
   BriefingReadyCardData,
   ProbeConfirmCardData,
   ProfileUpdateCardData,
-} from "../info/cards";
-import type { CardComponentProps, CardKind, CardPayload } from "./chatParts";
+} from "../../info/briefing/cards";
+import type { CardComponentProps, CardKind, CardPayload } from "../chat/chatParts";
 
 const PIPE_BADGE =
   "shrink-0 rounded-full bg-[#f0eefb] px-2 py-0.5 text-[11px] font-medium text-[#6d5ae0]";

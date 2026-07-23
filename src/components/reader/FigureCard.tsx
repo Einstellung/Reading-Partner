@@ -7,9 +7,9 @@
 // text chip that still jumps.
 
 import { useEffect, useRef, useState } from "react";
-import type { FigureHost, RenderedCard } from "./Markdown";
-import { cardDisplayWidth } from "../figures/render";
-import type { Figure } from "../figures/types";
+import type { FigureHost, RenderedCard } from "../common/Markdown";
+import { cardDisplayWidth } from "../../figures/render";
+import type { Figure } from "../../figures/types";
 
 // "Fig. 3 · p.5" — the text chip label and the card's caption tag. Pure.
 export function figureChipLabel(figure: Figure): string {

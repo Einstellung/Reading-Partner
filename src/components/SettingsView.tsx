@@ -15,11 +15,11 @@ import {
   setApiKey,
   type ProviderId,
   type ProviderInfo,
-} from "../aiClient";
+} from "../ai/aiClient";
 import { hasImageGenKey, setImageGenKey } from "../ai/credentials";
 import { DEFAULT_STT_BASE, DEFAULT_STT_MODEL, hasSttKey, setSttKey } from "../voice";
 import { DEFAULT_IMAGE_API_BASE, DEFAULT_IMAGE_MODEL } from "../slides";
-import { AI_LANGUAGE_OPTIONS, type AiLanguage, type Settings, type ThinkingSetting } from "../settings";
+import { AI_LANGUAGE_OPTIONS, type AiLanguage, type Settings, type ThinkingSetting } from "../app/settings";
 import {
   setAutoSyncEnabled,
   signInToGoogle,

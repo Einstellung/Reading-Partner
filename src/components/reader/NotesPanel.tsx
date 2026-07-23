@@ -6,9 +6,9 @@
 // Plain and functional by design. Tailwind-only.
 
 import { useEffect, useMemo, useState } from "react";
-import type { NotesActivity, NotesSnapshot } from "../notes";
-import type { ChapterStatus, NoteChapter } from "../notes";
-import { Markdown } from "./Markdown";
+import type { NotesActivity, NotesSnapshot } from "../../notes";
+import type { ChapterStatus, NoteChapter } from "../../notes";
+import { Markdown } from "../common/Markdown";
 import SlidesDialog from "./SlidesDialog";
 
 function compactChars(chars: number): string {

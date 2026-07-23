@@ -18,7 +18,7 @@ import {
   type SlidesPipeline,
   type SlidesSnapshot,
   type TalkEntry,
-} from "../slides";
+} from "../../slides";
 
 function LivenessHint({ activity }: { activity: SlidesActivity }) {
   const [now, setNow] = useState(() => Date.now());

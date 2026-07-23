@@ -14,8 +14,8 @@
 // so MessageBubble's memoization is undisturbed.
 
 import { createContext, lazy, memo, Suspense } from 'react';
-import type { Citation } from '../prep/anchors';
-import type { Figure } from '../figures/types';
+import type { Citation } from '../../prep/anchors';
+import type { Figure } from '../../figures/types';
 
 export type CitationHandler = (citation: Citation) => void;
 

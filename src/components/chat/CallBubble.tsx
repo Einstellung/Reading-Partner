@@ -3,9 +3,9 @@
 // to keep reading (close, not hang up). Tailwind-only.
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { IconExpand } from './icons';
+import { IconExpand } from '../common/icons';
 import { Composer, MessageList, type ComposerVoice } from './chat';
-import type { PendingImage, ThreadMessage } from './types';
+import type { PendingImage, ThreadMessage } from '../common/types';
 
 interface CallBubbleProps {
 	anchor: { x: number; y: number };

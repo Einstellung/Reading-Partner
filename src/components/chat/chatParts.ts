@@ -11,9 +11,9 @@
 // own `card` part. Keep it that way: do not lift inline refs into parts, and do
 // not fold a card into text.
 
-import type { InfoCard } from "../info/cards";
-import type { PersistedCardPayload, PersistedPart } from "../threads";
-import type { ThreadMessage, ToolStatus } from "./types";
+import type { InfoCard } from "../../info/briefing/cards";
+import type { PersistedCardPayload, PersistedPart } from "../../app/threads";
+import type { ThreadMessage, ToolStatus } from "../common/types";
 
 // The domain payload a card renders. Payload types stay in the domain layer
 // (info/cards.ts); this protocol only references the union, so the dependency

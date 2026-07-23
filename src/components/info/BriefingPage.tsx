@@ -5,8 +5,8 @@
 // Presentational; the host owns the pipeline, feedback log, and article opening.
 
 import { useState } from "react";
-import type { Briefing, BriefingItemMeta } from "../info/types";
-import { IconSparkle } from "./icons";
+import type { Briefing, BriefingItemMeta } from "../../info/briefing/types";
+import { IconSparkle } from "../common/icons";
 
 function SourceTag({ name }: { name: string }) {
   if (!name) return null;

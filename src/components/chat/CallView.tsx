@@ -4,9 +4,9 @@
 // in the top-right, so this leaves that corner clear (close sits top-left).
 // Tailwind-only.
 
-import { IconClose } from './icons';
+import { IconClose } from '../common/icons';
 import { Composer, MessageList, type ComposerVoice } from './chat';
-import type { PendingImage, ThreadMessage } from './types';
+import type { PendingImage, ThreadMessage } from '../common/types';
 import type { CardActionHandler } from './chatParts';
 
 interface CallViewProps {

@@ -2,8 +2,8 @@
 // document, in document order. A read-only list with a star toggle and an AI
 // thread shortcut. Pure and controlled; styled with Tailwind utilities.
 
-import { IconArea, IconHighlight, IconSparkle, IconStar, IconUnderline } from './icons';
-import type { Annotation } from './types';
+import { IconArea, IconHighlight, IconSparkle, IconStar, IconUnderline } from '../common/icons';
+import type { Annotation } from '../common/types';
 
 interface TraceListProps {
 	annotations: Annotation[];

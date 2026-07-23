@@ -12,11 +12,11 @@
 // so the slide stays smooth even while the engine repaints the page once.
 
 import type { ReactNode } from "react";
-import { IconHighlight, IconMemory, IconNotes, IconOutline, IconSidebar, IconSparkle } from "./icons";
+import { IconHighlight, IconMemory, IconNotes, IconOutline, IconSidebar, IconSparkle } from "../common/icons";
 import OutlineView from "./OutlineView";
-import TraceList from "./TraceList";
-import type { Annotation } from "./types";
-import type { Fulltext } from "../fulltext/types";
+import TraceList from "../chat/TraceList";
+import type { Annotation } from "../common/types";
+import type { Fulltext } from "../../fulltext/types";
 
 export type SidebarTab = "outline" | "traces" | "prep" | "notes" | "memory";
 

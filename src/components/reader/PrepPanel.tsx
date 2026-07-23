@@ -4,9 +4,9 @@
 // Plain and functional by design — visibility over polish. Tailwind-only.
 
 import { useEffect, useState } from "react";
-import type { PrepActivity, PrepSnapshot } from "../prep/pipeline";
-import type { PaperStatus, PrepPaper } from "../prep/types";
-import { CitationContext, Markdown } from "./Markdown";
+import type { PrepActivity, PrepSnapshot } from "../../prep/pipeline";
+import type { PaperStatus, PrepPaper } from "../../prep/types";
+import { CitationContext, Markdown } from "../common/Markdown";
 
 // "1234" -> "1.2k", "812" -> "812". Keeps the liveness line compact.
 function compactChars(chars: number): string {

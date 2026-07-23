@@ -5,7 +5,7 @@
 
 import { test, expect } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Composer, resolveComposerVoice } from "../../src/components/chat";
+import { Composer, resolveComposerVoice } from "../../src/components/chat/chat";
 
 // The mic button's title/aria-label; its presence in the markup means the mic
 // rendered.

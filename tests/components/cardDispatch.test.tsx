@@ -6,13 +6,13 @@
 
 import { expect, test } from "bun:test";
 import type { ReactElement } from "react";
-import { BriefingFailedCard, BriefingReadyCard, ProbeConfirmCard } from "../../src/components/InfoCards";
-import type { CardAction } from "../../src/components/chatParts";
+import { BriefingFailedCard, BriefingReadyCard, ProbeConfirmCard } from "../../src/components/info/InfoCards";
+import type { CardAction } from "../../src/components/chat/chatParts";
 import type {
   BriefingFailedCardData,
   BriefingReadyCardData,
   ProbeConfirmCardData,
-} from "../../src/info/cards";
+} from "../../src/info/briefing/cards";
 
 // Walk a React element tree collecting every <button> that has an onClick.
 function buttons(node: unknown, out: { props: Record<string, any> }[] = []): { props: Record<string, any> }[] {

@@ -17,9 +17,9 @@ import {
   upsertCardRow,
   type CardPayload,
   type ChatPart,
-} from "../../src/components/chatParts";
-import type { ThreadMessage } from "../../src/components/types";
-import type { ProbeConfirmCardData } from "../../src/info/cards";
+} from "../../src/components/chat/chatParts";
+import type { ThreadMessage } from "../../src/components/common/types";
+import type { ProbeConfirmCardData } from "../../src/info/briefing/cards";
 
 const probe = (added?: boolean): ProbeConfirmCardData => ({
   kind: "probe-confirm",

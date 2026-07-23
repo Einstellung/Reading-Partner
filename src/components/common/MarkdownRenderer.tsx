@@ -19,9 +19,9 @@ import rehypeKatex from 'rehype-katex';
 import rehypeHighlight from 'rehype-highlight';
 import 'katex/dist/katex.min.css';
 import 'highlight.js/styles/github.css';
-import { linkifyCitations, parseCitationHref } from '../prep/anchors';
+import { linkifyCitations, parseCitationHref } from '../../prep/anchors';
 import { CitationContext, FigureContext, type CitationHandler } from './Markdown';
-import FigureCard from './FigureCard';
+import FigureCard from '../reader/FigureCard';
 
 // Module-level constants so the plugin arrays aren't recreated each render.
 const remarkPlugins = [remarkGfm, remarkMath];

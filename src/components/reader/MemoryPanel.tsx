@@ -4,8 +4,8 @@
 // the prep panel.
 
 import { useState } from "react";
-import type { MemoryEntry, MemoryType } from "../memory";
-import { CitationContext, Markdown } from "./Markdown";
+import type { MemoryEntry, MemoryType } from "../../memory";
+import { CitationContext, Markdown } from "../common/Markdown";
 
 const TYPE_STYLE: Record<MemoryType, string> = {
   "reading-position": "bg-sky-100 text-sky-700",

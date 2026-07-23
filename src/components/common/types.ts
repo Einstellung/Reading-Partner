@@ -1,8 +1,8 @@
 // Shared prop contracts for the presentational reader-annotation components.
 // Colors come from ANNOTATION_COLORS in src/annotations.ts (single source).
 
-import type { InfoCard } from "../info/cards";
-import type { ChatPart } from "./chatParts";
+import type { InfoCard } from "../../info/briefing/cards";
+import type { ChatPart } from "../chat/chatParts";
 
 export interface ColorEntry {
 	name: string;

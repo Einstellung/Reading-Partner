@@ -4,7 +4,7 @@
 // from. Tailwind-only, English copy.
 
 import { useEffect, useRef, useState } from "react";
-import type { InfoSnapshot } from "../info/pipeline";
+import type { InfoSnapshot } from "../../info/briefing/pipeline";
 
 // Live elapsed seconds since a generation started, for the running state.
 function useElapsed(running: boolean): number {

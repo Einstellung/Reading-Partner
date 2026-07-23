@@ -2,7 +2,7 @@
 // page. The outline is available even on scanned documents with no text layer,
 // so gate only on `pending` / an empty outline — never on fulltext.status.
 
-import type { Fulltext } from "../fulltext/types";
+import type { Fulltext } from "../../fulltext/types";
 
 interface OutlineViewProps {
 	fulltext: Fulltext | null;

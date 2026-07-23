@@ -3,8 +3,8 @@
 // utilities. The parent supplies the anchor in viewport coordinates.
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { IconClose, IconColorSwatch, IconTrash } from './icons';
-import type { Annotation, ColorEntry } from './types';
+import { IconClose, IconColorSwatch, IconTrash } from '../common/icons';
+import type { Annotation, ColorEntry } from '../common/types';
 
 interface AnnotationPopupProps {
 	annotation: Annotation;

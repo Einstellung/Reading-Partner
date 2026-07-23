@@ -18,7 +18,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
-import { linkifyCitations } from '../prep/anchors';
+import { linkifyCitations } from '../../prep/anchors';
 
 const remarkPlugins = [remarkGfm, remarkMath];
 

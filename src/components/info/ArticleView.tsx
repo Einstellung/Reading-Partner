@@ -4,8 +4,8 @@
 // owns the back / ask actions. Because preflight is off and the body is injected
 // HTML (utilities can't reach it), a scoped <style> establishes the prose look.
 
-import { IconSparkle } from "./icons";
-import type { BriefingItemMeta } from "../info/types";
+import { IconSparkle } from "../common/icons";
+import type { BriefingItemMeta } from "../../info/briefing/types";
 
 const PROSE_CSS = `
 .info-article-body { color: #222; font-size: 17px; line-height: 1.75; }

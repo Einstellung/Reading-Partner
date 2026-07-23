@@ -9,7 +9,7 @@
 // button, which keeps the leave/enter cancel gesture working.
 
 import { useEffect, useRef, useState } from 'react';
-import { IconMic } from './icons';
+import { IconMic } from '../common/icons';
 import {
 	cancelRecording,
 	chatCleanupRunner,
@@ -21,7 +21,7 @@ import {
 	transcribe,
 	type CleanupModel,
 	type SttConfig,
-} from '../voice';
+} from '../../voice';
 
 type Status = 'idle' | 'recording' | 'transcribing';
 

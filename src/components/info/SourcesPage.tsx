@@ -6,11 +6,11 @@
 // triage's job. Presentational; the host owns the store writes and probing.
 
 import { useState } from "react";
-import type { SourceDescriptor } from "../info/descriptor";
-import type { SourceHealth } from "../info/engine";
-import type { ProbeConfirmCardData } from "../info/cards";
-import type { ProbeAddOutcome } from "../info/source-live";
-import { pipeLabel } from "../info/probe";
+import type { SourceDescriptor } from "../../info/sources/descriptor";
+import type { SourceHealth } from "../../info/sources/engine";
+import type { ProbeConfirmCardData } from "../../info/briefing/cards";
+import type { ProbeAddOutcome } from "../../info/sources/source-live";
+import { pipeLabel } from "../../info/sources/probe";
 import { ProbeConfirmCard } from "./InfoCards";
 
 function timeAgo(ts: number): string {
