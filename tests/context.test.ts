@@ -2,7 +2,7 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { buildSystemPrompt, type BooklistItem } from "../src/context";
+import { buildSystemPrompt, type BooklistItem } from "../src/app/context";
 
 const base = {
   topicName: "what makes JITs fast",

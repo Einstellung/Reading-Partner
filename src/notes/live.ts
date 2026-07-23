@@ -11,7 +11,7 @@ import { buildFigureCatalog } from "../figures/catalog";
 import { renderFigure } from "../figures/render";
 import type { Figure } from "../figures/types";
 import type { Fulltext } from "../fulltext/types";
-import { loadSettings, toReasoning, type AiLanguage } from "../settings";
+import { loadSettings, toReasoning, type AiLanguage } from "../app/settings";
 import {
   buildChapterTools,
   formatChatThreads,

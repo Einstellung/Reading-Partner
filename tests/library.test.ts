@@ -3,7 +3,7 @@
 // app. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { addEntry, contentHash, libraryPdfPath, type LibraryStore } from "../src/library";
+import { addEntry, contentHash, libraryPdfPath, type LibraryStore } from "../src/app/library";
 
 test("contentHash is the sha256 hex truncated to 16 bytes", async () => {
   // sha256("abc") = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad

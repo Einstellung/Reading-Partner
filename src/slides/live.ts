@@ -11,12 +11,12 @@ import { getImageGenKey } from "../ai/credentials";
 import { streamChat, type ProviderId } from "../ai/providers";
 import { getFigures } from "../figures/store";
 import { renderFigure } from "../figures/render";
-import { getLibraryEntry, readLibraryBook } from "../library";
+import { getLibraryEntry, readLibraryBook } from "../app/library";
 import { loadNotesState, readChapterNote, readOverviewNote } from "../notes/store";
-import { loadSettings, toReasoning, type AiLanguage } from "../settings";
+import { loadSettings, toReasoning, type AiLanguage } from "../app/settings";
 import { contentSystemPrompt, contentUserMessage, sanitizeFragment } from "./content";
 import { generateImage, resolveImageGenConfig, type ImageGenDeps } from "./imageGen";
-import { cleanTauriFetch } from "../tauri-fetch";
+import { cleanTauriFetch } from "../app/tauri-fetch";
 import {
   parseSlidePlan,
   planUserMessage,

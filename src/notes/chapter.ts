@@ -12,7 +12,7 @@ import { formatPages, formatSearch } from "../ai/reading-context";
 import { buildFigureTools, type FigureImage } from "../figures/tools";
 import type { Figure } from "../figures/types";
 import type { Fulltext } from "../fulltext/types";
-import { languageInstruction, type AiLanguage } from "../settings";
+import { languageInstruction, type AiLanguage } from "../app/settings";
 import type { NoteChapter } from "./types";
 
 const CHAPTER_MAX_ROUNDS = 16;

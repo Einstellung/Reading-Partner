@@ -19,7 +19,7 @@ import {
   readTextFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
-import { cleanTauriFetch } from "../tauri-fetch";
+import { cleanTauriFetch } from "../app/tauri-fetch";
 import {
   GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET,

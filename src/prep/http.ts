@@ -6,7 +6,7 @@
 // (plain vite dev) the native fetch is used and CORS failures surface as
 // fetch errors — the pipeline degrades those papers, it doesn't crash.
 
-import { cleanTauriFetch } from "../tauri-fetch";
+import { cleanTauriFetch } from "../app/tauri-fetch";
 
 export type FetchFn = (url: string, init?: RequestInit) => Promise<Response>;
 

@@ -4,7 +4,7 @@
 // a deck title and ordered slides, each tagged with a kind and optional
 // book/chapter provenance and asset slots. The AI call itself lives in live.ts.
 
-import { languageInstruction, type AiLanguage } from "../settings";
+import { languageInstruction, type AiLanguage } from "../app/settings";
 import type { SlideKind, SlideOutline } from "./types";
 
 // The plan input for one book: its whole-book overview (or a fallback summary

@@ -5,7 +5,7 @@
 // native fetch: the plugin rejects origins outside its capability allowlist,
 // so bridging globally would break them. Only active inside Tauri.
 
-import { cleanTauriFetch } from "../tauri-fetch";
+import { cleanTauriFetch } from "../app/tauri-fetch";
 
 // Must stay in sync with the http:default allowlist in
 // src-tauri/capabilities/default.json.

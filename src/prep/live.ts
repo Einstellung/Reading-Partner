@@ -9,7 +9,7 @@ import { streamChat, type ProviderId } from "../ai/providers";
 import { ensureFulltext, saveFulltext } from "../fulltext/store";
 import { FULLTEXT_VERSION, type Fulltext } from "../fulltext/types";
 import { buildFigureCatalog, ensureFigures } from "../figures";
-import { loadSettings, toReasoning } from "../settings";
+import { loadSettings, toReasoning } from "../app/settings";
 import { extractArticle } from "./article";
 import { fetchFromArxiv, normalizeArxivId } from "./arxiv";
 import { fetchFromOpenAlex } from "./openalex";

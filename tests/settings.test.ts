@@ -21,7 +21,7 @@ mock.module("@tauri-apps/plugin-fs", () => ({
 }));
 
 const { AI_LANGUAGE_OPTIONS, DEFAULT_SETTINGS, languageInstruction, loadSettings, toReasoning } =
-  await import("../src/settings");
+  await import("../src/app/settings");
 
 test("thinking defaults are low (chat) and medium (prep)", () => {
   expect(DEFAULT_SETTINGS.chatThinking).toBe("low");

@@ -11,7 +11,7 @@
 // is opaque to Drive (slashes are not path separators there). books/<hash>.pdf
 // are immutable content-addressed blobs, uploaded once and never overwritten.
 
-import { cleanTauriFetch } from "../tauri-fetch";
+import { cleanTauriFetch } from "../app/tauri-fetch";
 import type { Manifest, SyncBackend } from "./backend";
 import type { DriveIds } from "./state";
 

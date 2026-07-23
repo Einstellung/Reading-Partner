@@ -14,7 +14,7 @@ import {
   writeFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
-import { hashPath } from "../storage";
+import { hashPath } from "../app/storage";
 import { PREP_VERSION, type PrepState } from "./types";
 
 function dirFor(hash: string): string {

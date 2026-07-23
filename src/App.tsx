@@ -8,12 +8,12 @@ import {
   type ViewInstance,
   type ViewState,
   type ViewStats,
-} from "./reader-contract";
-import { getViewState, hashPath, saveViewState, withClassroom } from "./storage";
-import { importBook, libraryHas, readLibraryBook } from "./library";
-import { migrateBookLive } from "./migrate";
+} from "./app/reader-contract";
+import { getViewState, hashPath, saveViewState, withClassroom } from "./app/storage";
+import { importBook, libraryHas, readLibraryBook } from "./app/library";
+import { migrateBookLive } from "./app/migrate";
 import { chapterAt, ensureFulltext, getFulltext, onFulltextError, type Fulltext } from "./fulltext";
-import Sidebar, { type SidebarTab } from "./components/Sidebar";
+import Sidebar, { type SidebarTab } from "./components/reader/Sidebar";
 import {
   annotationPage,
   buildReadingTools,
@@ -29,7 +29,7 @@ import {
   loadAnnotations,
   onSaveError,
   saveAnnotations,
-} from "./annotations";
+} from "./app/annotations";
 import {
   addFileToTopic,
   createTopic,
@@ -43,7 +43,7 @@ import {
   sortedFiles,
   type FileRef,
   type Topic,
-} from "./topics";
+} from "./app/topics";
 import {
   appendMessage,
   createBookThread,
@@ -56,12 +56,12 @@ import {
   readThreadImages,
   saveThreadImages,
   type ThreadMessage,
-} from "./threads";
+} from "./app/threads";
 import { initSync, onSyncPulled } from "./sync";
 import { compressImage, compressImageData, type CompressedImage } from "./ai/image-utils";
-import { isTauri, readClipboardImage } from "./clipboard";
-import { DEFAULT_SETTINGS, languageInstruction, loadSettings, onSettingsSaveError, saveSettings, toReasoning, type Settings } from "./settings";
-import { buildSystemPrompt, type BooklistItem } from "./context";
+import { isTauri, readClipboardImage } from "./app/clipboard";
+import { DEFAULT_SETTINGS, languageInstruction, loadSettings, onSettingsSaveError, saveSettings, toReasoning, type Settings } from "./app/settings";
+import { buildSystemPrompt, type BooklistItem } from "./app/context";
 import { buildGlossary } from "./voice";
 import {
   installFetchBridge,
@@ -70,7 +70,7 @@ import {
   runAgentTurn,
   type ProviderId,
   type ProviderInfo,
-} from "./aiClient";
+} from "./ai/aiClient";
 import {
   ADD_SOURCE_PROMPT,
   buildClassroomSystemPrompt,
@@ -100,16 +100,16 @@ import {
   type NotesSnapshot,
 } from "./notes";
 import type { NotesPipeline } from "./notes/pipeline";
-import { getInfoPipeline } from "./info/live";
-import type { InfoPipeline, InfoSnapshot } from "./info/pipeline";
-import { loadArticle, saveInlinedArticleHtml, todayLocal } from "./info/store";
-import { appendFeedback } from "./info/feedback";
-import { sanitizeArticleHtml } from "./info/sanitize";
-import { extractImageSrcs, inlineArticleImages } from "./info/inline-images";
-import { fetchImageBytes } from "./info/http";
-import { articleChatSystemPrompt, briefingChatSystemPrompt } from "./info/chat";
-import { loadProfile } from "./info/profile";
-import { addSourceSystemPrompt } from "./info/source-skill";
+import { getInfoPipeline } from "./info/briefing/live";
+import type { InfoPipeline, InfoSnapshot } from "./info/briefing/pipeline";
+import { loadArticle, saveInlinedArticleHtml, todayLocal } from "./info/briefing/store";
+import { appendFeedback } from "./memory/feedback";
+import { sanitizeArticleHtml } from "./info/extract/sanitize";
+import { extractImageSrcs, inlineArticleImages } from "./info/extract/inline-images";
+import { fetchImageBytes } from "./info/extract/http";
+import { articleChatSystemPrompt, briefingChatSystemPrompt } from "./info/companion/chat";
+import { loadProfile } from "./memory/profile";
+import { addSourceSystemPrompt } from "./info/sources/source-skill";
 import {
   addSource as addSourceStore,
   hasSources,
@@ -117,16 +117,16 @@ import {
   loadSourceHealth,
   removeSource,
   setSourceEnabled,
-} from "./info/source-store";
-import { liveProbeAndTrial } from "./info/source-live";
-import type { SourceDescriptor } from "./info/descriptor";
-import type { SourceHealth } from "./info/engine";
-import type { BriefingItemMeta } from "./info/types";
-import { Vestibule } from "./components/Vestibule";
-import { BriefingPage } from "./components/BriefingPage";
-import { SourcesPage } from "./components/SourcesPage";
-import { ArticleView } from "./components/ArticleView";
-import { InfoCall, type InfoCallAnchor } from "./components/InfoCall";
+} from "./info/sources/source-store";
+import { liveProbeAndTrial } from "./info/sources/source-live";
+import type { SourceDescriptor } from "./info/sources/descriptor";
+import type { SourceHealth } from "./info/sources/engine";
+import type { BriefingItemMeta } from "./info/briefing/types";
+import { Vestibule } from "./components/info/Vestibule";
+import { BriefingPage } from "./components/info/BriefingPage";
+import { SourcesPage } from "./components/info/SourcesPage";
+import { ArticleView } from "./components/info/ArticleView";
+import { InfoCall, type InfoCallAnchor } from "./components/info/InfoCall";
 import {
   buildMemorySnapshot,
   buildMemoryTools,
@@ -139,10 +139,10 @@ import {
   type DistillAnnotation,
   type MemoryEntry,
 } from "./memory";
-import { logEvent } from "./events";
+import { logEvent } from "./app/events";
 import { prewarmPdfiumEngine } from "./reader-embedpdf/engine-singleton";
 import EmbedReaderPane from "./reader-embedpdf/EmbedReaderPane";
-import { CitationContext, FigureContext, type FigureHost } from "./components/Markdown";
+import { CitationContext, FigureContext, type FigureHost } from "./components/common/Markdown";
 import {
   buildFigureCatalog,
   buildFigureTools,
@@ -153,19 +153,19 @@ import {
   type Figure,
   type FiguresIndex,
 } from "./figures";
-import PrepPanel from "./components/PrepPanel";
-import NotesPanel from "./components/NotesPanel";
-import MemoryPanel from "./components/MemoryPanel";
-import PenToolbar from "./components/PenToolbar";
-import { IconSparkle } from "./components/icons";
-import AnnotationPopup from "./components/AnnotationPopup";
-import CallBubble from "./components/CallBubble";
-import CallView from "./components/CallView";
-import ReadingPipCard from "./components/ReadingPipCard";
-import ChatPipCard from "./components/ChatPipCard";
+import PrepPanel from "./components/reader/PrepPanel";
+import NotesPanel from "./components/reader/NotesPanel";
+import MemoryPanel from "./components/reader/MemoryPanel";
+import PenToolbar from "./components/reader/PenToolbar";
+import { IconSparkle } from "./components/common/icons";
+import AnnotationPopup from "./components/reader/AnnotationPopup";
+import CallBubble from "./components/chat/CallBubble";
+import CallView from "./components/chat/CallView";
+import ReadingPipCard from "./components/chat/ReadingPipCard";
+import ChatPipCard from "./components/chat/ChatPipCard";
 import SettingsView from "./components/SettingsView";
-import Toast, { useToasts } from "./components/Toast";
-import type { Annotation as PopupAnnotation, PendingImage, ToolStatus, ToolType } from "./components/types";
+import Toast, { useToasts } from "./components/common/Toast";
+import type { Annotation as PopupAnnotation, PendingImage, ToolStatus, ToolType } from "./components/common/types";
 
 // Auto-explanation kickoff (docs/03: the bubble starts explaining, unprompted).
 const EXPLAIN_KICKOFF = "Please explain the passage I just marked, using the reading context above.";

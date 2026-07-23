@@ -9,7 +9,7 @@ import {
   readTextFile,
   writeFile,
 } from "@tauri-apps/plugin-fs";
-import { libraryHas, libraryPdfPath, readLibraryBook, type LibraryStore } from "../library";
+import { libraryHas, libraryPdfPath, readLibraryBook, type LibraryStore } from "../app/library";
 
 export interface BookFs {
   // Book ids listed in library.json (the authoritative set to reconcile).

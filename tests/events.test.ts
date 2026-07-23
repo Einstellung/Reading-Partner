@@ -2,7 +2,7 @@
 // injected-append logger. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { createEventLogger, formatEventLine } from "../src/events";
+import { createEventLogger, formatEventLine } from "../src/app/events";
 
 test("formatEventLine emits one JSON line with ts and type first-class", () => {
   const line = formatEventLine("page-nav", { from: 3, to: 4, dwellMs: 1200 }, 1750000000000);

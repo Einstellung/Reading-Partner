@@ -4,7 +4,7 @@
 // underlying fetch is a fake. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { cleanTauriFetch, isPluginAbortError } from "../src/tauri-fetch";
+import { cleanTauriFetch, isPluginAbortError } from "../src/app/tauri-fetch";
 
 test("a resource-id-invalid rejection after abort surfaces as a clean AbortError", async () => {
   const controller = new AbortController();

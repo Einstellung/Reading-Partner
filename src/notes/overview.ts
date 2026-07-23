@@ -5,7 +5,7 @@
 // the AI call is wired in live.ts.
 
 import { type ThinkingLevel } from "@earendil-works/pi-ai";
-import { languageInstruction, type AiLanguage } from "../settings";
+import { languageInstruction, type AiLanguage } from "../app/settings";
 
 export const OVERVIEW_SYSTEM_PROMPT = [
   "You are the note-taking stage of a reading companion. The per-chapter lecture",

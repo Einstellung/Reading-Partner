@@ -4,7 +4,7 @@
 // scripts, no external URLs). The AI call is wired in live.ts. Distill the notes
 // into talk-style points — never paste note paragraphs.
 
-import { languageInstruction, type AiLanguage } from "../settings";
+import { languageInstruction, type AiLanguage } from "../app/settings";
 import type { SlideRun } from "./types";
 
 // The class vocabulary the shell template styles (see template.ts). Given to the

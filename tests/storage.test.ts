@@ -2,8 +2,8 @@
 // the per-book sticky Classroom mode (docs/09). Run: bun test.
 
 import { expect, test } from "bun:test";
-import { withClassroom } from "../src/storage";
-import type { ViewState } from "../src/reader-contract";
+import { withClassroom } from "../src/app/storage";
+import type { ViewState } from "../src/app/reader-contract";
 
 const base: ViewState = {
   pageIndex: 7,

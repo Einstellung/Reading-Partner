@@ -19,7 +19,7 @@ import {
   type ViewInstance,
   type ViewState,
   type ViewStats,
-} from "../reader-contract";
+} from "../app/reader-contract";
 
 const SPREAD_NUM_TO_EMBED: Record<number, EmbedSpread> = { 0: "none", 1: "odd", 2: "even" };
 const EMBED_TO_SPREAD_NUM: Record<EmbedSpread, SpreadMode> = {

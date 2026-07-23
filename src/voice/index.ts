@@ -4,7 +4,7 @@
 // unit testing.
 
 import { streamChat } from "../ai/providers";
-import { cleanTauriFetch } from "../tauri-fetch";
+import { cleanTauriFetch } from "../app/tauri-fetch";
 import type { CleanupRunner } from "./cleanup";
 import type { SttFetch } from "./stt";
 
