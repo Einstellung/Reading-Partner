@@ -109,4 +109,4 @@ Early development, PDF only, moving fast. The screenshots above come from real r
 
 ## License
 
-Copyright (c) 2026 Xinyuan ([Einstellung](https://github.com/Einstellung)). Licensed under [AGPL-3.0](./LICENSE). The PDF engine is [EmbedPDF](https://github.com/embedpdf/embed-pdf-viewer) (MIT), which renders through [PDFium](https://pdfium.googlesource.com/pdfium/) compiled to WebAssembly (Apache-2.0).
+Copyright (c) 2026 Xinyuan ([Einstellung](https://github.com/Einstellung)). Source-available under the [PolyForm Noncommercial License 1.0.0](./LICENSE): free for personal use and academic research; any commercial use needs a separate commercial license — contact einstellungsu@gmail.com. Releases up to and including v0.6.0 were published under AGPL-3.0 and stay under those terms. The PDF engine is [EmbedPDF](https://github.com/embedpdf/embed-pdf-viewer) (MIT), which renders through [PDFium](https://pdfium.googlesource.com/pdfium/) compiled to WebAssembly (Apache-2.0).

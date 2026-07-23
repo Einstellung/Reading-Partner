@@ -11,7 +11,7 @@
 
 ## 语言
 
-- 本项目面向全世界开源：README、commit message、代码注释、代码内标识符和 UI 文案一律英文。
+- 本项目源码公开（source-available，PolyForm-NC）：README、commit message、代码注释、代码内标识符和 UI 文案一律英文。
 - `docs/` 下的设计共识文档用中文（写给项目发起人自己看的）。
 - 和用户的对话用中文。
 

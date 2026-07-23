@@ -2,7 +2,7 @@
   "name": "reading-partner",
   "private": true,
   "version": "0.6.0",
-  "license": "AGPL-3.0-only",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "author": "Xinyuan (https://github.com/Einstellung)",
   "type": "module",
   "scripts": {
