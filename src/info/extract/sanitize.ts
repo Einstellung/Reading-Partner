@@ -24,45 +24,63 @@ function stripHandlersAndJs(tag: string): string {
   return out;
 }
 
-// Read an attribute's value from a raw tag (either quote style), trimmed.
-function attrValue(tag: string, name: string): string {
-  const m =
-    new RegExp(`\\s${name}\\s*=\\s*"([^"]*)"`, "i").exec(tag) ||
-    new RegExp(`\\s${name}\\s*=\\s*'([^']*)'`, "i").exec(tag);
-  return m?.[1]?.trim() ?? "";
+// Parse every name="value" / name='value' attribute pair from a raw tag,
+// preserving source order (lowercased names, trimmed values).
+function parseAttrs(tag: string): { name: string; value: string }[] {
+  const out: { name: string; value: string }[] = [];
+  const re = /([a-zA-Z_:][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(tag))) {
+    out.push({ name: m[1].toLowerCase(), value: (m[2] ?? m[3] ?? "").trim() });
+  }
+  return out;
 }
 
-// First URL of a srcset value ("url 1x, url 2x, ..." -> first url).
-function firstSrcsetUrl(value: string): string {
-  const first = value.split(",")[0]?.trim() ?? "";
-  return first.split(/\s+/)[0]?.trim() ?? "";
+// Turn one attribute value into an http(s) image URL, or "" if it isn't one.
+// Handles srcset shape ("url 640w, url2 1280w" -> first url) and normalizes a
+// protocol-relative "//host/x.jpg" to https. data:, about:blank and relative
+// paths are placeholders here and yield "".
+function toHttpUrl(value: string): string {
+  const first = value.split(",")[0]?.trim().split(/\s+/)[0]?.trim() ?? "";
+  const url = first.startsWith("//") ? `https:${first}` : first;
+  return /^https?:\/\//i.test(url) ? url : "";
 }
 
 function buildImg(url: string): string {
   return `<img src="${url.replace(/"/g, "&quot;")}" referrerpolicy="no-referrer" loading="lazy">`;
 }
 
-// Lazy-load-aware image rewrite. Pick the first legitimate http(s) URL, in
-// priority order, so mirrored WeChat/lazy pages (src is a placeholder, the real
-// image sits in data-src/srcset) keep their images instead of being blanked out.
+// Lazy-load-agnostic image rewrite. Instead of a hard-coded attribute-name list
+// (whack-a-mole across lazy-load libraries), scan every attribute and recover
+// the first value that is an http(s) image URL, so mirrored WeChat/mmbiz and any
+// lazy page keep their images instead of being blanked out. Priority:
+//   1. a real http(s) src wins outright (about:blank / data: / relative fail it);
+//   2. any *src*-named attribute (data-src, data-lazy-src, data-srcset, *-src);
+//   3. any remaining attribute whose value is an http(s) URL (covers off-list
+//      names like data-echo/data-image). On an <img>, an http URL is in practice
+//      the image or a lazy variant of it, so the risk of grabbing a stray
+//      non-image URL (e.g. a share link) is low and accepted; and this branch
+//      only fires when no src/*src* candidate exists, which a real image has.
 function keepImg(tag: string): string {
-  const src = attrValue(tag, "src");
-  // 1. A real http(s) src wins (about:blank / data: placeholders fail this).
-  if (/^https?:\/\//i.test(src)) return buildImg(src);
-  // 2. Lazy-load attributes.
-  for (const name of ["data-src", "data-original", "data-lazy-src", "data-actual-src"]) {
-    const v = attrValue(tag, name);
-    if (/^https?:\/\//i.test(v)) return buildImg(v);
+  const attrs = parseAttrs(tag);
+  const rawSrc = attrs.find((a) => a.name === "src")?.value ?? "";
+  // 1.
+  const src = toHttpUrl(rawSrc);
+  if (src) return buildImg(src);
+  // 2.
+  for (const a of attrs) {
+    if (a.name === "src" || !a.name.includes("src")) continue;
+    const u = toHttpUrl(a.value);
+    if (u) return buildImg(u);
   }
-  // 3. srcset / data-srcset first candidate.
-  for (const name of ["srcset", "data-srcset"]) {
-    const v = attrValue(tag, name);
-    if (!v) continue;
-    const u = firstSrcsetUrl(v);
-    if (/^https?:\/\//i.test(u)) return buildImg(u);
+  // 3.
+  for (const a of attrs) {
+    if (a.name === "src" || a.name.includes("src")) continue;
+    const u = toHttpUrl(a.value);
+    if (u) return buildImg(u);
   }
-  // 4. A genuine inline data: image with no lazy fallback (kept as-is).
-  if (/^data:image\//i.test(src)) return buildImg(src);
+  // 4. A genuine inline data: image with no http(s) candidate (kept as-is).
+  if (/^data:image\//i.test(rawSrc)) return buildImg(rawSrc);
   // No usable image (relative/placeholder src, tracking pixel).
   return "";
 }

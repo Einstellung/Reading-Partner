@@ -58,6 +58,35 @@ test("recovers lazy-loaded images from data-src/srcset (WeChat/mmbiz mirrors)", 
   expect(
     sanitizeArticleHtml(`<img src="https://x/real.jpg" data-src="https://x/lazy.jpg">`),
   ).toContain('src="https://x/real.jpg"');
+
+  // Protocol-relative URLs are normalized to https.
+  expect(sanitizeArticleHtml(`<img src="//cdn.x/p.jpg">`)).toContain('src="https://cdn.x/p.jpg"');
+});
+
+test("recovers images from off-list lazy attribute names (generic, not a whitelist)", () => {
+  // Names no hard-coded list would enumerate; the generic scan still finds them.
+  expect(sanitizeArticleHtml(`<img data-echo="https://x/e.jpg">`)).toContain('src="https://x/e.jpg"');
+  expect(sanitizeArticleHtml(`<img data-image="https://x/i.jpg">`)).toContain('src="https://x/i.jpg"');
+  expect(sanitizeArticleHtml(`<img data-flickity-lazyload="https://x/f.jpg">`)).toContain('src="https://x/f.jpg"');
+});
+
+test("prefers the image URL over a stray non-image link on the same img", () => {
+  // A real image URL (src or *src*) is always reached before the generic
+  // any-http-URL fallback, so a share/track link elsewhere on the tag is ignored.
+  const withSrc = sanitizeArticleHtml(
+    `<img src="https://x/photo.jpg" data-share-url="https://social.example/post/1">`,
+  );
+  expect(withSrc).toContain('src="https://x/photo.jpg"');
+  expect(withSrc).not.toContain("social.example");
+
+  const withLazySrc = sanitizeArticleHtml(
+    `<img data-lazy-src="https://x/photo.jpg" data-share-url="https://social.example/post/1">`,
+  );
+  expect(withLazySrc).toContain('src="https://x/photo.jpg"');
+  expect(withLazySrc).not.toContain("social.example");
+  // Documented tradeoff: an img carrying only a non-image http URL and no real
+  // image anywhere would grab that URL. That shape does not occur for real
+  // images, so the risk is accepted rather than guarded with a name whitelist.
 });
 
 test("neutralizes javascript: anchors, keeps http links with rel/noreferrer", () => {
