@@ -70,6 +70,15 @@ test("the tool guidance holds update_profile back to a stated preference", () =>
   expect(prompt).toContain("Do NOT propose a profile change on your own");
 });
 
+test("the tool guidance carries the four-section skeleton and size discipline", () => {
+  const prompt = briefingChatSystemPrompt(BRIEFING, CTX);
+  expect(prompt).toContain("Interests");
+  expect(prompt).toContain("Taste");
+  expect(prompt).toContain("Background");
+  expect(prompt).toContain("Now");
+  expect(prompt).toContain("under half a page");
+});
+
 test("the briefing thread names each item's source and lists every filtered clip", () => {
   const prompt = briefingChatSystemPrompt(BRIEFING, CTX);
   // must-read item carries its source name

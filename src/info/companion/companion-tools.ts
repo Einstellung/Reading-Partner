@@ -8,6 +8,7 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../ai/agent";
+import { PROFILE_SKELETON_GUIDANCE } from "../../memory/profile";
 import type { ProfileUpdateCardData } from "../briefing/cards";
 import { buildSourceTools, sourceToolStatusLabel, type SourceToolDeps } from "../sources/source-tools";
 
@@ -23,12 +24,14 @@ export function buildUpdateProfileTool(deps: Pick<CompanionToolDeps, "onProfileC
   return {
     name: "update_profile",
     description:
-      "Draft a change to the user's reading profile, which steers what the daily triage " +
-      "keeps or filters. Call this ONLY when the user states a standing preference (e.g. " +
-      "'be harsher on vendor PR', 'keep 量子位's paper explainers'), never on your own " +
-      "initiative and never from a one-off reaction to a single item. Pass the COMPLETE " +
-      "revised profile text (not a fragment) and a one-line summary of what changed. It " +
-      "does not save — it shows the user a confirm card with the new profile; they Apply it.",
+      "Draft a change to the user's profile — the cross-scenario identity that steers both " +
+      "the daily triage and the reading companion. Call this ONLY when the user states a " +
+      "standing preference (e.g. 'be harsher on vendor PR', 'keep 量子位's paper explainers'), " +
+      "never on your own initiative and never from a one-off reaction to a single item. Pass " +
+      "the COMPLETE revised profile text (not a fragment) and a one-line summary of what " +
+      "changed. It does not save — it shows the user a confirm card with the new profile; they " +
+      "Apply it.\n\n" +
+      PROFILE_SKELETON_GUIDANCE,
     parameters: Type.Object({
       profile: Type.String({
         description: "The complete revised profile text to save verbatim on Apply. Not a diff or fragment.",

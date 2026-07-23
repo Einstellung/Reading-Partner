@@ -6,6 +6,7 @@
 // Pure string assembly, like chat.ts / triage.ts.
 
 import { languageInstruction, type AiLanguage } from "../../app/settings";
+import { PROFILE_SKELETON_GUIDANCE } from "../../memory/profile";
 
 const RULES = [
   "How you work:",
@@ -27,8 +28,10 @@ const FINDING = [
 
 const ONBOARDING = [
   "This is the user's first run and they have no sources yet. Open by briefly introducing yourself as their reading companion, then ask what they care about — one or two questions, not a survey — and mention they can name any outlet or paste a link.",
-  "As soon as a concrete interest takes shape, call update_profile to draft their first reading profile in their own words — only what they actually told you, no invented taste. The confirm card lets them Apply it; do not treat it as saved until they do.",
+  "As soon as a concrete interest takes shape, call update_profile to draft their first profile in their own words — only what they actually told you, no invented taste. The confirm card lets them Apply it; do not treat it as saved until they do.",
   "After they add their first source, a briefing is generated in the background and appears as a card. When it does, tell them the first briefing is thin because it draws on one source, and it gets richer as they add more.",
+  "",
+  PROFILE_SKELETON_GUIDANCE,
 ].join("\n");
 
 export function addSourceSystemPrompt(opts: { aiLanguage?: AiLanguage; onboarding?: boolean } = {}): string {
