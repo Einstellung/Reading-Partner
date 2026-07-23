@@ -21,7 +21,7 @@ A one-line overview opens the page and is allowed to say the day is mostly noise
 
 Read any item in the app: a clean typographic page with its images, opened from the day's cache. Your reactions feed back — opening, dismissing, and appealing a filtered item are logged and shown to the next day's triage, so it learns your taste over time. The overview, reasons, and one-liners are written in your configured AI output language, even when the source article is in another.
 
-<!-- screenshot: the briefing page — the overview line, Worth your time cards, the In one line list, the Out of your lane pick, and the collapsed Filtered row -->
+![The briefing page: the day's overview and the Worth your time tier](docs/assets/briefing-day.png)
 
 ## Subscribe by talking
 
@@ -33,7 +33,8 @@ Each source is a small declarative JSON descriptor — how to discover its items
 
 The Sources page is the account of what you subscribe to: one row per source with its lane and pipe type, an on/off toggle, a health dot (green when the last run succeeded, amber when it failed — click for the last-success time and the error), and a delete. A box at the top takes a pasted site or RSS URL and probes, trials, and adds it in place, without going through the chat. There is no ordering or grouping — ranking is triage's job.
 
-<!-- screenshot: the add-source conversation with a trial confirm card — three fetched article titles, character counts, an Add source button -->
+![First run: the AI opens a conversation to set up your sources](docs/assets/subscribe-talking.png)
+
 <!-- screenshot: the Sources page — sources with health dots and on/off toggles, and the paste-a-URL box at the top -->
 
 ## The briefing companion
