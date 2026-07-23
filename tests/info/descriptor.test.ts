@@ -3,6 +3,7 @@
 
 import { expect, test } from "bun:test";
 import {
+  DESCRIPTOR_GUIDE,
   dotPath,
   pickString,
   validateDescriptor,
@@ -70,6 +71,16 @@ test("validateDescriptor accepts the reserved stream kind (format-level only)", 
     fulltext: { mode: "none" },
   });
   expect(r.ok).toBe(true);
+});
+
+test("DESCRIPTOR_GUIDE lists every discovery kind and fulltext mode, with a valid example", () => {
+  for (const kind of ["feed", "listpage", "json-api", "stream"]) expect(DESCRIPTOR_GUIDE).toContain(kind);
+  for (const mode of ["feed-field", "fetch-page", "detail-endpoint", "none"]) expect(DESCRIPTOR_GUIDE).toContain(mode);
+  // The embedded example parses and validates through the real validator.
+  const example = DESCRIPTOR_GUIDE.slice(DESCRIPTOR_GUIDE.indexOf("{ \"id\""));
+  expect(validateDescriptor(JSON.parse(example)).ok).toBe(true);
+  // Compact — a grammar, not a tutorial.
+  expect(DESCRIPTOR_GUIDE.split("\n").length).toBeLessThanOrEqual(30);
 });
 
 test("dotPath / pickString read nested fields with candidate fallback", () => {

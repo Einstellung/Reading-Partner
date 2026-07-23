@@ -7,10 +7,12 @@
 
 import { languageInstruction, type AiLanguage } from "../../app/settings";
 import { PROFILE_SKELETON_GUIDANCE } from "../../memory/profile";
+import { DESCRIPTOR_GUIDE } from "./descriptor";
 
 const RULES = [
   "How you work:",
   "- When the user names an outlet or pastes a link, call probe_source(input) to find its feed and judge whether it carries full text, then call trial_source with the descriptorJson it returns.",
+  "- You may also draft or adapt a descriptor yourself instead of relying on probe_source — change a URL, tweak a linkPattern, clone a same-site verified shape — following the grammar below. trial_source really fetches to prove it, so a wrong draft just fails; if it does, tell the user honestly.",
   "- ALWAYS trial before adding: the user must see the 3 fetched articles first.",
   "- Only call add_source AFTER the user explicitly agrees to that specific source. Never add one on your own initiative.",
   "- If a probe or trial fails, say plainly that the source can't be connected and why. Do not pretend or invent a feed.",
@@ -40,6 +42,8 @@ export function addSourceSystemPrompt(opts: { aiLanguage?: AiLanguage; onboardin
     "You help the user subscribe to information sources for their daily briefing, using the shared companion tools: probe_source, trial_source, add_source, and update_profile.",
     lang,
     RULES,
+    "",
+    DESCRIPTOR_GUIDE,
     "",
     FINDING,
   ];

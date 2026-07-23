@@ -80,7 +80,7 @@ export function sourceToolStatusLabel(name: string, args: Record<string, unknown
 // model assembled from (or received verbatim from) a probe. Always enabled.
 function resolveDescriptor(args: Record<string, unknown>): SourceDescriptor {
   const json = String(args.descriptorJson ?? "").trim();
-  if (!json) throw new Error("Provide descriptorJson (the descriptor from probe_source).");
+  if (!json) throw new Error("Provide descriptorJson (from probe_source, or one you drafted yourself).");
   let raw: unknown;
   try {
     raw = JSON.parse(json);
@@ -94,7 +94,10 @@ function resolveDescriptor(args: Record<string, unknown>): SourceDescriptor {
 
 const DESCRIPTOR_ARGS = {
   descriptorJson: Type.String({
-    description: "The source descriptor as a JSON object string, from probe_source.",
+    description:
+      "The source descriptor as a JSON object string. It may come from probe_source, or be one " +
+      "you wrote or adapted yourself (a new URL, a tweaked linkPattern, a same-site verified " +
+      "shape cloned). trial_source really fetches to prove it, so a wrong draft simply fails.",
   }),
 };
 
@@ -105,10 +108,11 @@ export function buildSourceTools(deps: SourceToolDeps): AgentTool[] {
       description:
         "Given a site URL or bare domain the user named or linked, try the common feed " +
         "paths (/feed, /rss, wp-json, …), detect RSS/Atom/RDF/JSON, judge whether the feed " +
-        "carries full text or only summaries, and — if there is no feed — inspect the " +
-        "homepage to tell an SSR list page from a browser-only app. A domain already " +
-        "covered by a verified source returns that descriptor directly. Returns a candidate " +
-        "descriptor (JSON) and the probe log.",
+        "carries full text or only summaries, and — if there is no feed — inspect the page " +
+        "to tell an SSR list page from a browser-only app. A bare domain or the exact list " +
+        "URL a verified source already covers returns that descriptor directly; a different " +
+        "path on a covered site is probed normally, with the built-in offered as a shape to " +
+        "clone. Returns a candidate descriptor (JSON) and the probe log.",
       parameters: Type.Object({
         input: Type.String({ description: "A site URL or domain, e.g. https://example.com or example.com." }),
       }),
@@ -132,9 +136,11 @@ export function buildSourceTools(deps: SourceToolDeps): AgentTool[] {
       name: "trial_source",
       description:
         "Really fetch 3 articles through the generic engine to prove a source works " +
-        "before adding it. Pass the descriptorJson from probe_source. Shows the user a " +
-        "confirmation card with the 3 titles and their character counts. Always trial " +
-        "before add_source.",
+        "before adding it. Pass a descriptorJson — from probe_source, or one you drafted or " +
+        "adapted yourself (a new URL, a tweaked linkPattern, a same-site verified shape " +
+        "cloned). This is the check: a wrong draft fails here, so just tell the user honestly " +
+        "if it does. Shows a confirmation card with the 3 titles and character counts. Always " +
+        "trial before add_source.",
       parameters: Type.Object(DESCRIPTOR_ARGS),
       execute: async (args) => {
         const descriptor = resolveDescriptor(args);
@@ -157,8 +163,8 @@ export function buildSourceTools(deps: SourceToolDeps): AgentTool[] {
       name: "add_source",
       description:
         "Add a source to the user's list. ONLY call this after you have shown a trial " +
-        "result and the user has explicitly agreed to add it. Pass the same descriptorJson " +
-        "you trialed.",
+        "result of this exact descriptor and the user has explicitly agreed to add it. Pass " +
+        "the same descriptorJson you trialed.",
       parameters: Type.Object(DESCRIPTOR_ARGS),
       execute: async (args) => {
         const descriptor = resolveDescriptor(args);

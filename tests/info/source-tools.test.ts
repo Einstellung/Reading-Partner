@@ -91,6 +91,50 @@ test("tools reject a missing or invalid descriptor JSON", async () => {
   await expect(add.execute({})).rejects.toThrow(/descriptorJson/i);
 });
 
+test("trial_source/add_source descriptions grant the AI descriptor authorship", () => {
+  const tools = buildSourceTools({
+    fetchFn: async () => res(""),
+    extract,
+    addSource: async () => {},
+    onProbeCard: () => {},
+  });
+  const trial = tools.find((t) => t.name === "trial_source")!;
+  expect(trial.description).toMatch(/drafted or adapted yourself/i);
+  // The descriptorJson param no longer says it must come from probe_source.
+  const paramDesc = String(
+    (trial.parameters as { properties: { descriptorJson: { description: string } } }).properties.descriptorJson.description,
+  );
+  expect(paramDesc).toMatch(/wrote or adapted yourself/i);
+  // add_source keeps the trial-of-this-exact-descriptor consent rule.
+  const add = tools.find((t) => t.name === "add_source")!;
+  expect(add.description).toMatch(/trial result of this exact descriptor/i);
+  expect(add.description).toMatch(/explicitly agreed/i);
+});
+
+test("a hand-drafted (non-probe) descriptor trials and adds like any other", async () => {
+  const cards: ProbeConfirmCardData[] = [];
+  const added: SourceDescriptor[] = [];
+  const fetchFn = async (url: string) => res(url.endsWith("/feed") ? FEED_XML : "<html></html>");
+  const tools = buildSourceTools({
+    fetchFn,
+    extract,
+    addSource: async (d) => void added.push(d),
+    onProbeCard: (c) => cards.push(c),
+  });
+  // A descriptor the model authored itself (never returned by probe_source).
+  const drafted: SourceDescriptor = {
+    id: "hand", name: "Hand-drafted", line: "AI", enabled: true,
+    discovery: { kind: "feed", url: "https://ex/feed" },
+    fulltext: { mode: "fetch-page" },
+  };
+  const trial = tools.find((t) => t.name === "trial_source")!;
+  await trial.execute({ descriptorJson: JSON.stringify(drafted) });
+  expect(cards.length).toBe(1);
+  const add = tools.find((t) => t.name === "add_source")!;
+  await add.execute({ descriptorJson: JSON.stringify(drafted) });
+  expect(added[0].id).toBe("hand");
+});
+
 test("sourceToolStatusLabel gives a human phrase per tool", () => {
   expect(sourceToolStatusLabel("probe_source", { input: "x.com" })).toMatch(/Probing x.com/);
   expect(sourceToolStatusLabel("trial_source", {})).toMatch(/Fetching 3 articles/);

@@ -37,6 +37,15 @@ test("onboarding drafts the first profile via update_profile from the user's own
   expect(addSourceSystemPrompt({ onboarding: false })).not.toMatch(/first run/i);
 });
 
+test("prompt grants descriptor authorship and carries the grammar", () => {
+  const p = addSourceSystemPrompt();
+  expect(p).toMatch(/draft or adapt a descriptor yourself/i);
+  expect(p).toMatch(/Source descriptor grammar/);
+  // The grammar names each pipe kind so the model can author one.
+  expect(p).toContain("listpage");
+  expect(p).toContain("fetch-page");
+});
+
 test("language instruction is included when a language is set", () => {
   expect(addSourceSystemPrompt({ aiLanguage: "zh-CN" })).toContain("简体中文");
 });

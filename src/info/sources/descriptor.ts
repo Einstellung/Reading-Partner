@@ -247,3 +247,33 @@ export function validateDescriptor(raw: unknown): ValidateOutcome {
   }
   return { ok: true, descriptor: raw as SourceDescriptor };
 }
+
+// --- descriptor grammar (for the AI) ---------------------------------------
+
+// A compact syntax reference injected into the companion prompt and the add
+// skill so the model can author or adapt a descriptor itself, not only relay one
+// from probe_source. It is a grammar, not a tutorial — validateDescriptor is the
+// runtime backstop, and trial_source really fetches to prove it works.
+export const DESCRIPTOR_GUIDE = [
+  "Source descriptor grammar (declarative JSON the engine runs):",
+  "Top level: { id, name, line, discovery, fulltext, enabled, limit?, noFetchPage?, userAgent? }.",
+  "discovery is one of:",
+  '- feed: { kind:"feed", url, format?:"rss"|"atom"|"rdf" } — a native RSS/Atom/RDF feed.',
+  '- listpage: { kind:"listpage", url, linkPattern, base? } — fetch a list page, pull article',
+  "  links whose href matches linkPattern (a JS regex source; whole match is the link); base",
+  "  resolves relative links. Must pair with fetch-page fulltext.",
+  '- json-api: { kind:"json-api", listUrl, itemsPath?, fields:{ id, title, url?, publishedAt?,',
+  "  summary?, content? }, urlTemplate?, headers? } — a JSON list; each field is a dot-path.",
+  '- stream: { kind:"stream", url, headers? } — live short items (reserved, not yet executed).',
+  "fulltext is one of:",
+  '- feed-field: { mode:"feed-field", field?, truncationMarker? } — body already in the feed/row.',
+  '- fetch-page: { mode:"fetch-page" } — fetch each article page and extract the readable body.',
+  '- detail-endpoint: { mode:"detail-endpoint", urlTemplate, contentPath, titlePath? } — fetch a',
+  "  per-item JSON endpoint ({id} filled from the row) and read the body from a dot-path.",
+  '- none: { mode:"none" } — headlines only; the user opens the origin externally.',
+  "Example (an SSR section page with no feed):",
+  '{ "id":"example-biz", "name":"Example Business", "line":"business", "enabled":true, "limit":10,',
+  '  "discovery":{ "kind":"listpage", "url":"https://example.com/section/business",',
+  '    "linkPattern":"/article/\\\\d+\\\\.html", "base":"https://example.com" },',
+  '  "fulltext":{ "mode":"fetch-page" } }',
+].join("\n");

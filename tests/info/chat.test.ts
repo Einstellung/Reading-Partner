@@ -77,6 +77,12 @@ test("the tool guidance holds update_profile back to a stated preference", () =>
   expect(prompt).toContain("Do NOT propose a profile change on your own");
 });
 
+test("the tool guidance grants descriptor authorship and carries the grammar", () => {
+  const prompt = briefingChatSystemPrompt(BRIEFING, CTX);
+  expect(prompt).toContain("write or adapt yourself");
+  expect(prompt).toContain("Source descriptor grammar");
+});
+
 test("the tool guidance holds generate_briefing to an explicit request and names both scopes", () => {
   const prompt = briefingChatSystemPrompt(BRIEFING, CTX);
   expect(prompt).toContain("Call generate_briefing ONLY when the user explicitly asks");
