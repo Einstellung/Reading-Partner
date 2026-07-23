@@ -4,11 +4,21 @@ An AI reading companion for academic surveys and technical books. It doesn't jus
 
 ![Reading a survey with the lesson-prep panel open](docs/assets/app-overview.png)
 
-Local-first and backend-free: bring your own API key (Anthropic, OpenAI, DeepSeek, or any OpenAI-compatible endpoint). Books, annotations, notes, memory, and keys never leave your machine.
+Local-first and backend-free: sign in with your Claude or ChatGPT subscription, or use a DeepSeek API key. Books, annotations, notes, memory, and credentials never leave your machine.
 
 ## Daily briefing
 
-The app opens to a Today home: cards to continue the book you were reading, and a briefing of the day's AI news. The AI reads 机器之心 and 量子位 in full and triages every item against a profile of what you care about — into worth-reading (each with a one-line reason why it's for you), one-liners, and filtered-out (appealable when it gets one wrong). Read articles in-app with their images, and open a chat anchored to any item to dig in. Your open, dismiss, and appeal actions feed back into future triage. Profile and feedback sync across devices.
+The app opens to a Today home: cards to continue the book you were reading, and a briefing of the day's news from the sources you subscribed to. There are no built-in sources — on first run the AI opens a short conversation to learn what you follow and help you add the first few.
+
+Subscribing is a conversation. Name an outlet or paste a link and the AI probes it for a usable feed, fetches three sample articles as a trial, and subscribes only after you confirm — each source is a small declarative JSON descriptor the AI writes and proves by actually fetching, so it can connect a site with no obvious feed. Read articles in-app with their images, and open a chat anchored to any item to dig in.
+
+The AI reads every item in full and triages it against your reading profile: worth reading (each with a one-line reason it's for you), one-liners, out-of-lane, and filtered-out noise (appealable when it drops something you wanted). Your open, dismiss, and appeal actions feed the next day's triage.
+
+Every briefing carries a companion chat. Ask what came in today, get per-source or filtered breakdowns, and voice a standing preference ("be harsher on vendor PR", "keep the paper explainers") — the AI drafts a profile change you Apply from a confirm card. Ask it to redo the briefing and it re-triages today's items against the updated profile, or re-collects every source from scratch; a progress card tracks the run to completion. The briefing is written in your configured AI output language.
+
+## Reading profile
+
+One profile — four short sections (interests, taste, background, what you're reading now) — steers both the briefing's triage and the reading companion, and syncs across devices. Nothing is preset: the AI drafts and revises it only from preferences you actually voice, always through a confirm card you Apply. What you have open and the questions you got stuck on feed into how relevant the briefing judges each item.
 
 ## Two modes
 
@@ -57,7 +67,7 @@ Every chat composer has a push-to-talk mic. Hold to record, release to transcrib
 
 ## Sync across devices
 
-Sign in with Google in Settings and everything syncs — books, reading positions, marks and highlights, conversations, and notes — through a visible "Reading Partner" folder in your own Google Drive. No accounts, no server: your data stays in your Drive, and you can open the folder and see the files. Sync runs automatically after sign-in, with a manual toggle and a Sync now button in Settings. Books are content-addressed, so the same PDF opened on two devices lines up. AI provider keys are the one thing that never leaves the device.
+Sign in with Google in Settings and everything syncs — books, reading positions, marks and highlights, conversations, and notes — through a visible "Reading Partner" folder in your own Google Drive. No accounts, no server: your data stays in your Drive, and you can open the folder and see the files. Sync runs automatically after sign-in, with a manual toggle and a Sync now button in Settings. Books are content-addressed, so the same PDF opened on two devices lines up. AI provider credentials are the one thing that never leaves the device.
 
 ## Thinking levels
 
@@ -67,7 +77,7 @@ Adaptive reasoning is on by default: low effort for conversation (fast answers, 
 
 Prebuilt binaries for Linux, macOS and Windows are on the [releases page](https://github.com/Einstellung/Reading-Partner/releases). They are unsigned: macOS will refuse the first launch until you right-click the app and choose Open, and Windows SmartScreen will warn once.
 
-First run: open Settings, pick a provider, paste your API key. Optionally add a Semantic Scholar API key for lesson prep and a SiliconFlow key for voice input. The AI's output language is set here too — nine languages, or match the book.
+First run: open Settings and connect one provider — Sign in with ChatGPT or Sign in with Claude uses your subscription through an OAuth flow in the browser (no API key), or paste a DeepSeek API key. Only one provider is active at a time; connecting one signs the others out. Optionally add a Semantic Scholar API key for lesson prep and a SiliconFlow key for voice input. The AI's output language is set here too and governs chat, notes, slides, and the briefing — nine languages, or auto to follow the language you write in. With no sources yet, the AI starts a guided conversation to help you subscribe to your first few.
 
 ## Build
 
