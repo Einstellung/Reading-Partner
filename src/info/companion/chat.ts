@@ -26,6 +26,9 @@ const BASE =
 // back so it never volunteers a profile edit the user did not ask for.
 const TOOL_GUIDANCE = [
   "You have tools, shared across every info chat:",
+  "- read_page(url): fetch a page and read its title, text, and full link list. Before probing a",
+  "  site, read its homepage or a section page to find the target channel's real URL from the",
+  "  navigation, rather than guessing paths like lists/{id}; also use it to confirm a page or spot a feed.",
   "- probe_source(input): inspect a site the user names or links for a usable feed.",
   "- trial_source: really fetch 3 articles to prove a source works, showing a confirm card.",
   "- add_source: subscribe a source — ONLY after a trial of that exact descriptor and the user's explicit yes.",
