@@ -259,12 +259,12 @@ function buildWpJsonDescriptor(n: SiteInput, listUrl: string): SourceDescriptor 
   };
 }
 
-function buildListpageDescriptor(n: SiteInput, linkPattern: string): SourceDescriptor {
+function buildListpageDescriptor(n: SiteInput, listUrl: string, linkPattern: string): SourceDescriptor {
   return {
     id: idFromHost(n.host),
     name: n.host.replace(/^www\./i, ""),
     line: "",
-    discovery: { kind: "listpage", url: n.origin + "/", linkPattern, base: n.origin },
+    discovery: { kind: "listpage", url: listUrl, linkPattern, base: n.origin },
     fulltext: { mode: "fetch-page" },
     enabled: true,
   };
@@ -340,6 +340,52 @@ export function matchBuiltinSource(
   return undefined;
 }
 
+// The primary discovery URL a descriptor points at (the feed/listpage/stream
+// url, or the json-api listUrl). Undefined only for a malformed descriptor.
+function discoveryUrl(d: SourceDescriptor): string | undefined {
+  const disc = d.discovery;
+  return disc.kind === "json-api" ? disc.listUrl : disc.url;
+}
+
+// A URL's path with any trailing slash dropped ("/lists/65.html", "/" for root).
+function normalizedPath(u: string): string {
+  try {
+    return new URL(u).pathname.replace(/\/+$/, "") || "/";
+  } catch {
+    return "/";
+  }
+}
+
+// Whether the probe input points at the *same pipe* a builtin already covers:
+// a bare domain / homepage (no meaningful path), or a path equal to the
+// builtin's own discovery URL path. A different concrete path on the same site
+// (jiemian.com/lists/2.html vs the builtin's /lists/65.html) is NOT the same
+// pipe — it gets probed normally, with the builtin offered as a shape to clone.
+function isBuiltinSamePipe(n: SiteInput, desc: SourceDescriptor): boolean {
+  const inPath = normalizedPath(n.url);
+  if (inPath === "/") return true;
+  const du = discoveryUrl(desc);
+  return du != null && normalizedPath(du) === inPath;
+}
+
+// A hint relayed when the input names a covered site but a different path: the
+// same-site verified descriptor, whose shape can be cloned with the URL changed.
+function sameSiteBuiltinHint(desc: SourceDescriptor): string {
+  return (
+    `same site has a verified built-in "${desc.name}" (${pipeLabel(desc)}); ` +
+    `clone its shape and change the URL to cover this path: ${JSON.stringify(desc)}`
+  );
+}
+
+// Whether a regex source matches a string, treating a bad pattern as no match.
+function safeMatch(pattern: string, s: string): boolean {
+  try {
+    return new RegExp(pattern).test(s);
+  } catch {
+    return false;
+  }
+}
+
 // --- the probe orchestrator (network injected) -----------------------------
 
 export interface ProbeDeps {
@@ -370,13 +416,20 @@ export async function probeSource(input: string, deps: ProbeDeps): Promise<Probe
   const n = normalizeSiteInput(input);
   if (!n) return { ok: false, pipeLabel: "", reason: "That is not a valid site URL or domain.", steps };
 
-  // A domain a builtin already covers short-circuits: return the verified
+  // A builtin covering the SAME pipe short-circuits: return the verified
   // descriptor rather than re-probing (the research already solved its quirks).
+  // A covered site pointed at by a DIFFERENT path is probed normally, with the
+  // builtin kept as a clonable shape to offer alongside the result.
   const builtin = matchBuiltinSource(input);
+  let sameSiteBuiltin: SourceDescriptor | undefined;
   if (builtin) {
-    const label = pipeLabel(builtin.descriptor);
-    steps.push(`${n.host} → matched the verified built-in "${builtin.descriptor.name}" (${label}); no probing needed`);
-    return { ok: true, descriptor: builtin.descriptor, pipeLabel: label, note: builtin.note, steps };
+    if (isBuiltinSamePipe(n, builtin.descriptor)) {
+      const label = pipeLabel(builtin.descriptor);
+      steps.push(`${n.host} → matched the verified built-in "${builtin.descriptor.name}" (${label}); no probing needed`);
+      return { ok: true, descriptor: builtin.descriptor, pipeLabel: label, note: builtin.note, steps };
+    }
+    sameSiteBuiltin = builtin.descriptor;
+    steps.push(sameSiteBuiltinHint(builtin.descriptor));
   }
 
   for (const url of feedCandidateUrls(input)) {
@@ -419,20 +472,33 @@ export async function probeSource(input: string, deps: ProbeDeps): Promise<Probe
     steps.push(`${url} → not a feed`);
   }
 
-  // No feed — try the homepage to tell SSR list from SPA.
+  // No feed — probe a list page to tell an SSR list from an SPA shell. When the
+  // input names a specific section (a meaningful path) that page IS the list to
+  // scrape; a bare domain falls back to the homepage.
+  const listUrl = normalizedPath(n.url) === "/" ? n.origin + "/" : n.url;
+  // A same-site listpage builtin shares one article-link shape across the whole
+  // site; borrow its linkPattern rather than re-inferring when the page confirms.
+  const borrowed =
+    sameSiteBuiltin && sameSiteBuiltin.discovery.kind === "listpage" ? sameSiteBuiltin.discovery.linkPattern : null;
   try {
-    const r = await deps.fetchFn(n.origin + "/");
+    const r = await deps.fetchFn(listUrl);
     if (r.ok) {
       const html = await r.text();
       const links = extractArticleLinks(html, n.origin);
-      const pattern = inferLinkPattern(links);
+      let pattern: string | null = null;
+      if (borrowed && links.some((l) => safeMatch(borrowed, l))) {
+        pattern = borrowed;
+        steps.push(`${listUrl} → SSR list, borrowed the same-site built-in's link pattern ${borrowed}`);
+      } else {
+        pattern = inferLinkPattern(links);
+        if (pattern) steps.push(`${listUrl} → SSR list, article links match ${pattern}`);
+      }
       if (pattern) {
-        steps.push(`homepage → SSR list, article links match ${pattern}`);
-        const d = buildListpageDescriptor(n, pattern);
+        const d = buildListpageDescriptor(n, listUrl, pattern);
         return { ok: true, descriptor: d, pipeLabel: pipeLabel(d), steps };
       }
       if (looksLikeSpa(html)) {
-        steps.push("homepage → SPA shell, no server-rendered article links");
+        steps.push(`${listUrl} → SPA shell, no server-rendered article links`);
         return {
           ok: false,
           pipeLabel: "",
@@ -440,12 +506,12 @@ export async function probeSource(input: string, deps: ProbeDeps): Promise<Probe
           steps,
         };
       }
-      steps.push("homepage → no recognizable article-link pattern");
+      steps.push(`${listUrl} → no recognizable article-link pattern`);
     } else {
-      steps.push(`homepage → HTTP ${r.status}`);
+      steps.push(`${listUrl} → HTTP ${r.status}`);
     }
   } catch (e) {
-    steps.push(`homepage → ${errMsg(e)}`);
+    steps.push(`${listUrl} → ${errMsg(e)}`);
   }
 
   return {

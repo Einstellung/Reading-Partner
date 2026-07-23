@@ -163,6 +163,53 @@ test("probeSource short-circuits to a verified builtin without fetching", async 
   expect(r.steps.some((s) => /verified built-in/i.test(s))).toBe(true);
 });
 
+test("probeSource short-circuits a bare covered domain without fetching (jiemian)", async () => {
+  let fetched = 0;
+  const fetchFn = async () => {
+    fetched += 1;
+    return res("", "text/html", 404);
+  };
+  const r = await probeSource("jiemian.com", { fetchFn });
+  expect(r.ok).toBe(true);
+  expect(r.descriptor?.id).toBe("jiemian");
+  expect(fetched).toBe(0);
+});
+
+test("probeSource short-circuits when the input path equals the builtin's list URL", async () => {
+  let fetched = 0;
+  const fetchFn = async () => {
+    fetched += 1;
+    return res("", "text/html", 404);
+  };
+  // The jiemian builtin discovers https://www.jiemian.com/lists/65.html.
+  const r = await probeSource("https://www.jiemian.com/lists/65.html", { fetchFn });
+  expect(r.ok).toBe(true);
+  expect(r.descriptor?.id).toBe("jiemian");
+  expect(fetched).toBe(0);
+});
+
+test("probeSource probes a different path on a covered site and offers the builtin shape", async () => {
+  // A sibling channel on the same SSR site: not the builtin's own list URL.
+  const listHtml = `<a href="/article/101.html">a</a><a href="/article/202.html">b</a>`;
+  let fetched = 0;
+  const fetchFn = async (url: string) => {
+    fetched += 1;
+    if (url === "https://www.jiemian.com/lists/2.html") return res(listHtml, "text/html");
+    return res("", "text/html", 404);
+  };
+  const r = await probeSource("https://www.jiemian.com/lists/2.html", { fetchFn });
+  expect(r.ok).toBe(true);
+  expect(fetched).toBeGreaterThan(0); // did NOT short-circuit
+  expect(r.descriptor?.discovery.kind).toBe("listpage");
+  // The descriptor points at the probed path, and borrows the site's link shape
+  // even though only two links are present (below the generic inference floor).
+  expect((r.descriptor?.discovery as { url: string }).url).toBe("https://www.jiemian.com/lists/2.html");
+  expect((r.descriptor?.discovery as { linkPattern: string }).linkPattern).toBe("/article/\\d+\\.html");
+  // The log offers the same-site verified built-in as a shape to clone.
+  expect(r.steps.some((s) => /verified built-in/i.test(s) && /"id":"jiemian"/.test(s))).toBe(true);
+  expect(r.steps.some((s) => /borrowed the same-site/i.test(s))).toBe(true);
+});
+
 // --- orchestrator (injected fetch) -----------------------------------------
 
 test("probeSource returns a feed descriptor from the first working path", async () => {
