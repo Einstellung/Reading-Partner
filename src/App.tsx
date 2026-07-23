@@ -61,7 +61,7 @@ import { initSync, onSyncPulled } from "./sync";
 import { compressImage, compressImageData, type CompressedImage } from "./ai/image-utils";
 import { isTauri, readClipboardImage } from "./app/clipboard";
 import { DEFAULT_SETTINGS, languageInstruction, loadSettings, onSettingsSaveError, saveSettings, toReasoning, type Settings } from "./app/settings";
-import { buildSystemPrompt, type BooklistItem } from "./app/context";
+import { buildSystemPrompt, readerProfileSection, type BooklistItem } from "./app/context";
 import { buildGlossary } from "./voice";
 import {
   installFetchBridge,
@@ -128,6 +128,7 @@ import { SourcesPage } from "./components/info/SourcesPage";
 import { ArticleView } from "./components/info/ArticleView";
 import { InfoCall, type InfoCallAnchor } from "./components/info/InfoCall";
 import {
+  assembleIdentity,
   buildMemorySnapshot,
   buildMemoryTools,
   distillThread,
@@ -1222,6 +1223,10 @@ export default function App() {
         });
       }
       if (memorySection) systemPrompt += "\n\n" + memorySection;
+      // The cross-scenario user profile: who the companion is reading with, so it
+      // pitches explanation depth to their background. Empty profile → no section.
+      const profileSection = readerProfileSection(await assembleIdentity().catch(() => ""));
+      if (profileSection) systemPrompt += "\n\n" + profileSection;
       // The whole-book outline from the reader's notes (docs/14), when they exist.
       const notesOverview = notesOverviewSection(await readOverviewNote(bookId));
       if (notesOverview) systemPrompt += "\n\n" + notesOverview;

@@ -143,3 +143,20 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
 
   return lines.join("\n");
 }
+
+// The reader's cross-scenario profile, injected into the reading companion's
+// system prompt so it knows their background and interests and pitches its
+// explanations accordingly. An empty profile yields "" (the caller skips the
+// section) — nothing is assumed about a reader who has stated nothing.
+export function readerProfileSection(profile: string): string {
+  const p = profile.trim();
+  if (!p) return "";
+  return [
+    "Who you are reading with (their profile — background, interests, taste):",
+    p,
+    "",
+    "Pitch your explanations to this: match the depth to their background in the",
+    "area at hand, and connect to interests they have stated. Do not force it in",
+    "where it is not relevant.",
+  ].join("\n");
+}

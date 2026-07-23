@@ -2,7 +2,7 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { buildSystemPrompt, type BooklistItem } from "../src/app/context";
+import { buildSystemPrompt, readerProfileSection, type BooklistItem } from "../src/app/context";
 
 const base = {
   topicName: "what makes JITs fast",
@@ -101,6 +101,14 @@ test("aiLanguage appends the output-language instruction, auto adds nothing", ()
   // Auto (and unset) leave the prompt without a pinning instruction.
   expect(buildSystemPrompt({ ...base, aiLanguage: "auto" })).not.toContain("must be written in");
   expect(buildSystemPrompt(base)).not.toContain("must be written in");
+});
+
+test("readerProfileSection injects the profile and depth guidance, empty when unset", () => {
+  const section = readerProfileSection("Background: strong in ML, new to robotics.");
+  expect(section).toContain("Background: strong in ML, new to robotics.");
+  expect(section).toMatch(/match the depth to their background/i);
+  expect(readerProfileSection("")).toBe("");
+  expect(readerProfileSection("   ")).toBe("");
 });
 
 test("the tools paragraph and cross-book rule appear only with hasTools", () => {
