@@ -19,6 +19,10 @@
 
 AI 陪读软件。设计共识在 `docs/`。阅读引擎用 EmbedPDF（PDFium WASM，`src/reader-embedpdf/` 适配层；pdfium.wasm 自托管，`bun run wasm` 从 npm 包拷出）。
 
+## 代码组织
+
+- src 下任何文件夹超过约 15 个文件就该切子域。搬家 commit 纯移动（`git mv` 保历史）加改 import，零逻辑改动。
+
 ## 坑
 
 踩到"实测才知道的意外行为"必须记进 `docs/pitfall/`：一坑一文件（现象/原因/解法），并加进该目录 README 的索引。写代码碰引擎/Tauri 之前先扫一遍这个目录。
