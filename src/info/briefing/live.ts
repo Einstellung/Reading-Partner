@@ -13,6 +13,7 @@ import { extractReadable } from "../extract/readable";
 import { loadSources, loadSourceHealth, saveSourceHealth } from "../sources/source-store";
 import { loadFeedback } from "../../memory/feedback";
 import { loadProfile } from "../../memory/profile";
+import { assembleReadingContext } from "../../memory/assemble";
 import { InfoPipeline } from "./pipeline";
 import {
   loadBriefing,
@@ -79,10 +80,12 @@ function callModel(userText: string, opts: AiCallOptions, extra?: string): Promi
 // failure with a corrective instruction. A second failure throws so the watchdog
 // treats it as a transient error and retries the whole attempt.
 async function triage(
-  input: { profile: string; feedback: FeedbackEvent[]; items: InfoItem[] },
+  input: { profile: string; feedback: FeedbackEvent[]; items: InfoItem[]; readerContext?: string },
   opts: AiCallOptions,
 ): Promise<TriageResult> {
-  const userText = triageUserMessage(input.profile, input.feedback, input.items);
+  const userText = triageUserMessage(input.profile, input.feedback, input.items, {
+    readerContext: input.readerContext,
+  });
   const validIds = new Set(input.items.map((it) => it.id));
   const first = await callModel(userText, opts);
   const parsed = parseTriageResult(first, validIds);
@@ -117,6 +120,9 @@ export function getInfoPipeline(): InfoPipeline {
       loadBriefing,
       loadProfile,
       loadFeedback,
+      // Reading-side signal for triage: assembled from per-topic memory, guarded
+      // so a failure yields "" and the section is simply omitted.
+      loadReaderContext: () => assembleReadingContext(),
       collect,
       triage,
       saveBriefing,

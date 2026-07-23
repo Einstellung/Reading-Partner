@@ -161,3 +161,38 @@ test("retriage with no cached items errors instead of producing a briefing", asy
   expect(s.briefing).toBeNull();
   expect(s.error).toBeTruthy();
 });
+
+test("the reading-side context is loaded and passed into triage", async () => {
+  let seen: string | undefined = "unset";
+  const p = new InfoPipeline(
+    makeDeps({
+      collect: async () => [item("1")],
+      loadReaderContext: async () => "Reading recently:\n- T: on ch.4",
+      triage: async (input) => {
+        seen = input.readerContext;
+        return EMPTY_TRIAGE;
+      },
+    }),
+  );
+  await p.generate();
+  expect(seen).toBe("Reading recently:\n- T: on ch.4");
+});
+
+test("a failing reader-context dep degrades to empty and still triages", async () => {
+  let seen: string | undefined = "unset";
+  const p = new InfoPipeline(
+    makeDeps({
+      collect: async () => [item("1")],
+      loadReaderContext: async () => {
+        throw new Error("boom");
+      },
+      triage: async (input) => {
+        seen = input.readerContext;
+        return { ...EMPTY_TRIAGE, overview: "ok" };
+      },
+    }),
+  );
+  await p.generate();
+  expect(seen).toBe("");
+  expect(p.snapshot().briefing?.overview).toBe("ok");
+});

@@ -25,6 +25,12 @@ export const TRIAGE_SYSTEM_PROMPT = [
   "what carries real, specific, non-obvious substance stays; PR, recaps, and",
   "rehashes go. Do not invent a preference the profile does not state.",
   "",
+  "You may also be given READER'S CURRENT CONTEXT — a short note on what they are",
+  "reading and stuck on right now, drawn from their reading sessions. Treat it as a",
+  "background relevance signal, not a taste rule: an item that speaks to what they",
+  "are actively working through (e.g. a new paper on embodied AI while they read an",
+  "embodied-AI book) earns a nudge up. Never invent a standing preference from it.",
+  "",
   "Write the overview, reasons, and one-liners in English (the UI language), even",
   "when the source item is in another language.",
   "",
@@ -109,13 +115,17 @@ export function triageUserMessage(
   profile: string,
   feedback: FeedbackEvent[],
   items: InfoItem[],
-  opts: { textChars?: number; feedbackMax?: number } = {},
+  opts: { textChars?: number; feedbackMax?: number; readerContext?: string } = {},
 ): string {
   const textChars = opts.textChars ?? TRIAGE_TEXT_CHARS;
+  const readerContext = opts.readerContext?.trim();
   return [
     "READER PROFILE",
     profile.trim() || "(no profile set)",
     "",
+    // Reading-side signal (docs/16): what the reader is reading and stuck on right
+    // now. Omitted entirely when there is none, so it never adds noise.
+    ...(readerContext ? ["READER'S CURRENT CONTEXT (from their reading)", readerContext, ""] : []),
     "RECENT REACTIONS (oldest first; learn the reader's taste from these)",
     formatFeedbackTail(feedback, opts.feedbackMax),
     "",

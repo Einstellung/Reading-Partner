@@ -75,6 +75,25 @@ test("triageUserMessage marks an empty profile as unset", () => {
   expect(msg).toContain("(no profile set)");
 });
 
+test("triageUserMessage includes the reader's current context only when present", () => {
+  const withCtx = triageUserMessage("prof", [], ITEMS, {
+    readerContext: "Reading recently:\n- Embodied AI: on ch.4",
+  });
+  expect(withCtx).toContain("READER'S CURRENT CONTEXT (from their reading)");
+  expect(withCtx).toContain("Embodied AI: on ch.4");
+  // Absent / blank context omits the whole section.
+  const noCtx = triageUserMessage("prof", [], ITEMS, { readerContext: "   " });
+  expect(noCtx).not.toContain("READER'S CURRENT CONTEXT");
+  expect(triageUserMessage("prof", [], ITEMS)).not.toContain("READER'S CURRENT CONTEXT");
+});
+
+test("triageSystemPrompt frames the current context as a relevance signal, not a rule", () => {
+  const p = triageSystemPrompt("auto");
+  expect(p).toContain("READER'S CURRENT CONTEXT");
+  expect(p).toMatch(/background relevance signal/i);
+  expect(p).toMatch(/not a taste rule/i);
+});
+
 test("formatFeedbackTail caps to the last N and handles empty", () => {
   expect(formatFeedbackTail([])).toContain("no reactions");
   const many: FeedbackEvent[] = Array.from({ length: 40 }, (_, i) => ({

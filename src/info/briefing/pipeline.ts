@@ -24,6 +24,10 @@ export interface InfoDeps {
   loadBriefing(date: string): Promise<Briefing | null>;
   loadProfile(): Promise<string>;
   loadFeedback(): Promise<FeedbackEvent[]>;
+  // Optional reading-side signal (docs/16): what the reader is reading and stuck
+  // on lately, injected into triage as background relevance context. Absent, or
+  // returning "" / throwing, simply omits the section — it never blocks a briefing.
+  loadReaderContext?(): Promise<string>;
   // Fetch every source fully (list + per-article bodies). Returns every item.
   // onProgress relays per-source collection events so the pipeline can surface
   // collection liveness in its snapshot.
@@ -31,7 +35,7 @@ export interface InfoDeps {
   // The one triage AI call, wrapped by the watchdog. Validates + retries parse
   // internally; throws on a stall/error so the watchdog can retry the attempt.
   triage(
-    input: { profile: string; feedback: FeedbackEvent[]; items: InfoItem[] },
+    input: { profile: string; feedback: FeedbackEvent[]; items: InfoItem[]; readerContext?: string },
     opts: AiCallOptions,
   ): Promise<TriageResult>;
   saveBriefing(briefing: Briefing): Promise<void>;
@@ -120,6 +124,17 @@ export class InfoPipeline {
     return this.deps.today ? this.deps.today() : todayLocal();
   }
 
+  // The reading-side signal, guarded: absent dep, an empty result, or a thrown
+  // error all resolve to "" so triage simply omits the context section.
+  private async readerContext(): Promise<string> {
+    if (!this.deps.loadReaderContext) return "";
+    try {
+      return (await this.deps.loadReaderContext()) || "";
+    } catch {
+      return "";
+    }
+  }
+
   subscribe(fn: () => void): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
@@ -179,12 +194,16 @@ export class InfoPipeline {
       const items = await this.deps.collect((e) => this.onCollectEvent(e));
       if (this.stopController.signal.aborted) throw new StoppedError();
       if (items.length === 0) throw new Error("No articles could be fetched from either source.");
-      const [profile, feedback] = await Promise.all([this.deps.loadProfile(), this.deps.loadFeedback()]);
+      const [profile, feedback, readerContext] = await Promise.all([
+        this.deps.loadProfile(),
+        this.deps.loadFeedback(),
+        this.readerContext(),
+      ]);
 
       this.phase = "triaging";
       this.notify();
       const date = this.today();
-      const briefing = await this.triageToBriefing(items, profile, feedback, date);
+      const briefing = await this.triageToBriefing(items, profile, feedback, readerContext, date);
       await this.deps.saveArticles(date, articleCache(items));
       await this.deps.saveItems(date, items);
       await this.deps.saveBriefing(briefing);
@@ -229,8 +248,12 @@ export class InfoPipeline {
       // Surface the item total so the progress card reads "triaging N items".
       this.collect = { total: 0, done: 0, failed: 0, items: items.length, lastDone: null };
       this.notify();
-      const [profile, feedback] = await Promise.all([this.deps.loadProfile(), this.deps.loadFeedback()]);
-      const briefing = await this.triageToBriefing(items, profile, feedback, date);
+      const [profile, feedback, readerContext] = await Promise.all([
+        this.deps.loadProfile(),
+        this.deps.loadFeedback(),
+        this.readerContext(),
+      ]);
+      const briefing = await this.triageToBriefing(items, profile, feedback, readerContext, date);
       await this.deps.saveBriefing(briefing);
       this.briefing = briefing;
     } catch (e) {
@@ -253,11 +276,12 @@ export class InfoPipeline {
     items: InfoItem[],
     profile: string,
     feedback: FeedbackEvent[],
+    readerContext: string,
     date: string,
   ): Promise<Briefing> {
     const validIds = new Set(items.map((it) => it.id));
     const result = await runWithWatchdog(
-      (opts) => this.deps.triage({ profile, feedback, items }, opts),
+      (opts) => this.deps.triage({ profile, feedback, items, readerContext }, opts),
       this.config,
       { now: this.deps.now, sleep: this.deps.sleep, setTimer: this.deps.setTimer },
       {
