@@ -7,6 +7,7 @@ import { expect, test } from "bun:test";
 import {
   buildCompanionTools,
   buildGenerateBriefingTool,
+  buildReadPageTool,
   buildUpdateProfileTool,
   companionToolStatusLabel,
   type BriefingScope,
@@ -46,16 +47,57 @@ test("update_profile rejects an empty profile or missing summary", async () => {
   await expect(tool.execute({ profile: "text", summary: "" })).rejects.toThrow(/summary/i);
 });
 
-test("buildCompanionTools mounts the source tools plus update_profile and generate_briefing", () => {
+test("buildCompanionTools mounts the source tools plus read_page, update_profile and generate_briefing", () => {
   const names = buildCompanionTools(deps([])).map((t) => t.name);
   expect(names).toContain("probe_source");
   expect(names).toContain("trial_source");
   expect(names).toContain("add_source");
+  expect(names).toContain("read_page");
   expect(names).toContain("update_profile");
   expect(names).toContain("generate_briefing");
 });
 
+test("read_page fetches a page and reports its title, text, and links", async () => {
+  const html = `<html><head><title>News Hub</title></head>
+    <body><nav><a href="/lists/65.html">时政</a></nav><p>Front page.</p></body></html>`;
+  const tool = buildReadPageTool({
+    fetchFn: async () => new Response(html, { headers: { "content-type": "text/html" } }),
+  });
+  const out = String(await tool.execute({ url: "jiemian.com" }));
+  expect(out).toMatch(/Title: News Hub/);
+  expect(out).toMatch(/Front page\./);
+  expect(out).toMatch(/时政 → https:\/\/jiemian\.com\/lists\/65\.html/);
+});
+
+test("read_page returns a non-HTML body raw with its content-type", async () => {
+  const feed = '<?xml version="1.0"?><rss><channel></channel></rss>';
+  const tool = buildReadPageTool({
+    fetchFn: async () => new Response(feed, { headers: { "content-type": "application/rss+xml" } }),
+  });
+  const out = String(await tool.execute({ url: "https://site.com/feed" }));
+  expect(out).toMatch(/non-HTML content \(content-type: application\/rss\+xml\)/);
+  expect(out).toMatch(/<rss>/);
+});
+
+test("read_page reports an HTTP error and a fetch failure without throwing", async () => {
+  const notFound = buildReadPageTool({ fetchFn: async () => new Response("", { status: 404 }) });
+  expect(String(await notFound.execute({ url: "https://site.com/x" }))).toMatch(/HTTP 404/);
+  const broke = buildReadPageTool({
+    fetchFn: async () => {
+      throw new Error("network down");
+    },
+  });
+  expect(String(await broke.execute({ url: "https://site.com/x" }))).toMatch(/Could not read.*network down/);
+});
+
+test("read_page rejects an empty or invalid URL", async () => {
+  const tool = buildReadPageTool({ fetchFn: async () => new Response("") });
+  await expect(tool.execute({ url: "  " })).rejects.toThrow(/needs a URL/i);
+  await expect(tool.execute({ url: "http://" })).rejects.toThrow(/valid http/i);
+});
+
 test("companionToolStatusLabel labels the companion tools and defers to source labels", () => {
+  expect(companionToolStatusLabel("read_page", { url: "https://site.com" })).toMatch(/Reading https:\/\/site\.com/);
   expect(companionToolStatusLabel("update_profile", {})).toMatch(/Drafting a profile update/);
   expect(companionToolStatusLabel("generate_briefing", { scope: "full" })).toMatch(/Regenerating the briefing/);
   expect(companionToolStatusLabel("generate_briefing", { scope: "retriage" })).toMatch(/Re-sorting today's briefing/);
