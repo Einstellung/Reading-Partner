@@ -11,6 +11,7 @@ export type EventType =
   | "page-nav" // { from, to, dwellMs } — dwell is time spent on the previous page
   | "call-start" // { threadId }
   | "call-end" // { threadId } — hangup
+  | "thread-delete" // { threadId, book } — conversation deleted (and its mark, if any)
   | "distill-run" // { threadId, created, updated, deleted }
   | "prep-status" // { slug, status }
   | "memory-tab-open" // {}

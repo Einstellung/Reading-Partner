@@ -259,6 +259,22 @@ export function getBookThread(bookId: string): Thread | undefined {
   return undefined;
 }
 
+// Remove a thread from its file by id. Generic over the file key (bookId), so it
+// serves the reading side (threads-<contentHash>.json) and the info side
+// (threads-info-<date>.json) alike. The file stays and is rewritten without this
+// thread — an in-file edit, so per-file LWW sync carries the removal to other
+// devices (unlike a whole-file deletion, which v1 sync does not propagate). The
+// thread's images under images/threads/<threadId>/ are left on disk; they are not
+// synced and a stale directory is harmless. No-op when the thread is already gone.
+export function deleteThread(bookId: string, threadId: string): boolean {
+  const key = bookId;
+  const map = cache.get(key);
+  if (!map || !(threadId in map)) return false;
+  delete map[threadId];
+  schedule(key);
+  return true;
+}
+
 export function appendMessage(bookId: string, threadId: string, message: ThreadMessage): Thread | undefined {
   const key = bookId;
   const thread = cache.get(key)?.[threadId];
