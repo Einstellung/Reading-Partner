@@ -2,6 +2,8 @@
   "name": "reading-partner",
   "private": true,
   "version": "0.6.0",
+  "license": "AGPL-3.0-only",
+  "author": "Xinyuan (https://github.com/Einstellung)",
   "type": "module",
   "scripts": {
     "dev": "vite",

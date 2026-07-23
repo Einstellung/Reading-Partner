@@ -109,4 +109,4 @@ Early development, PDF only, moving fast. The screenshots above come from real r
 
 ## License
 
-[AGPL-3.0](./LICENSE). The PDF engine is [EmbedPDF](https://github.com/embedpdf/embed-pdf-viewer) (MIT), which renders through [PDFium](https://pdfium.googlesource.com/pdfium/) compiled to WebAssembly (Apache-2.0).
+Copyright (c) 2026 Xinyuan ([Einstellung](https://github.com/Einstellung)). Licensed under [AGPL-3.0](./LICENSE). The PDF engine is [EmbedPDF](https://github.com/embedpdf/embed-pdf-viewer) (MIT), which renders through [PDFium](https://pdfium.googlesource.com/pdfium/) compiled to WebAssembly (Apache-2.0).
