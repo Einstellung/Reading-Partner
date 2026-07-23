@@ -14,7 +14,7 @@ import type { Briefing } from "./types";
 const ARTICLE_CHARS = 12_000;
 
 const BASE =
-  "You are the reading companion for a daily AI-news briefing. Answer the user's " +
+  "You are the reading companion for a daily briefing. Answer the user's " +
   "questions about the material below concisely and honestly, in the user's language. " +
   "If something isn't in the provided text, say so rather than inventing it.";
 
