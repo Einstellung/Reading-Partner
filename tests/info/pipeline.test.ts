@@ -30,6 +30,8 @@ function makeDeps(over: Partial<InfoDeps>): InfoDeps {
     triage: async () => EMPTY_TRIAGE,
     saveBriefing: async () => {},
     saveArticles: async () => {},
+    saveItems: async () => {},
+    loadItems: async () => [],
     now: () => Date.now(),
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
     setTimer: (ms, cb) => {
@@ -108,6 +110,52 @@ test("triage activity surfaces streaming char counts, then clears when finished"
 test("a collect that returns no items fails the run and leaves an error", async () => {
   const p = new InfoPipeline(makeDeps({ collect: async () => [] }));
   await p.generate();
+  const s = p.snapshot();
+  expect(s.running).toBe(false);
+  expect(s.briefing).toBeNull();
+  expect(s.error).toBeTruthy();
+});
+
+test("generate saves the day's item snapshot for a later re-triage", async () => {
+  let saved: InfoItem[] | null = null;
+  const p = new InfoPipeline(
+    makeDeps({
+      collect: async () => [item("1"), item("2")],
+      saveItems: async (_d, items) => void (saved = items),
+    }),
+  );
+  await p.generate();
+  expect(saved).not.toBeNull();
+  expect(saved!.map((i) => i.id)).toEqual(["1", "2"]);
+});
+
+test("retriage re-triages the cached snapshot without collecting, skipping the fetching phase", async () => {
+  let collected = 0;
+  const snaps: InfoSnapshot[] = [];
+  const p = new InfoPipeline(
+    makeDeps({
+      collect: async () => {
+        collected += 1;
+        return [];
+      },
+      loadItems: async () => [item("1"), item("2")],
+      triage: async () => ({ ...EMPTY_TRIAGE, overview: "re-triaged", mustRead: [{ itemId: "1", reason: "r" }] }),
+    }),
+  );
+  p.subscribe(() => snaps.push(p.snapshot()));
+  await p.retriage();
+
+  expect(collected).toBe(0); // no re-collection
+  expect(snaps.some((s) => s.phase === "fetching")).toBe(false);
+  const final = p.snapshot();
+  expect(final.running).toBe(false);
+  expect(final.briefing?.overview).toBe("re-triaged");
+  expect(final.briefing?.mustRead.map((r) => r.itemId)).toEqual(["1"]);
+});
+
+test("retriage with no cached items errors instead of producing a briefing", async () => {
+  const p = new InfoPipeline(makeDeps({ loadItems: async () => [] }));
+  await p.retriage();
   const s = p.snapshot();
   expect(s.running).toBe(false);
   expect(s.briefing).toBeNull();

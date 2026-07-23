@@ -36,6 +36,10 @@ export interface InfoDeps {
   ): Promise<TriageResult>;
   saveBriefing(briefing: Briefing): Promise<void>;
   saveArticles(date: string, articles: Record<string, CachedArticle>): Promise<void>;
+  // Persist / load the day's item snapshot so a profile change can re-triage the
+  // cached items without re-collecting.
+  saveItems(date: string, items: InfoItem[]): Promise<void>;
+  loadItems(date: string): Promise<InfoItem[]>;
   now(): number;
   sleep(ms: number): Promise<void>;
   setTimer(ms: number, cb: () => void): () => void;
@@ -179,34 +183,10 @@ export class InfoPipeline {
 
       this.phase = "triaging";
       this.notify();
-      const validIds = new Set(items.map((it) => it.id));
-      const result = await runWithWatchdog(
-        (opts) => this.deps.triage({ profile, feedback, items }, opts),
-        this.config,
-        { now: this.deps.now, sleep: this.deps.sleep, setTimer: this.deps.setTimer },
-        {
-          onAttempt: ({ attempt, attempts, startedAt }) => {
-            this.activity = { startedAt, chars: 0, attempt, attempts };
-            this.lastActivityNotify = this.deps.now();
-            this.notify();
-          },
-          onProgress: (chars) => this.bumpActivity(chars),
-        },
-        this.stopController.signal,
-      );
-      // Defensive: only keep references to items we actually have.
       const date = this.today();
-      const briefing: Briefing = {
-        date,
-        generatedAt: this.deps.now(),
-        overview: result.overview,
-        mustRead: result.mustRead.filter((r) => validIds.has(r.itemId)),
-        oneLiners: result.oneLiners.filter((r) => validIds.has(r.itemId)),
-        outOfLane: result.outOfLane.filter((r) => validIds.has(r.itemId)),
-        filtered: result.filtered.filter((r) => validIds.has(r.itemId)),
-        items: itemsMeta(items),
-      };
+      const briefing = await this.triageToBriefing(items, profile, feedback, date);
       await this.deps.saveArticles(date, articleCache(items));
+      await this.deps.saveItems(date, items);
       await this.deps.saveBriefing(briefing);
       this.briefing = briefing;
     } catch (e) {
@@ -223,6 +203,83 @@ export class InfoPipeline {
       this.stopController = null;
       this.notify();
     }
+  }
+
+  // Re-triage today's cached items with the current profile — no re-collection.
+  // Used after the user applies a profile change (docs/16): one triage call over
+  // the saved item snapshot, reusing the same running/phase/activity machinery so
+  // the briefing page and the chat progress card stay in step. A second call
+  // while running is a no-op.
+  async retriage(): Promise<void> {
+    if (this.running) return;
+    this.running = true;
+    this.error = null;
+    this.phase = "triaging";
+    this.activity = null;
+    this.collect = null;
+    this.stopController = new AbortController();
+    this.notify();
+    try {
+      const date = this.today();
+      const items = await this.deps.loadItems(date);
+      if (items.length === 0) {
+        throw new Error("No cached items to re-triage. Generate a briefing first.");
+      }
+      if (this.stopController.signal.aborted) throw new StoppedError();
+      // Surface the item total so the progress card reads "triaging N items".
+      this.collect = { total: 0, done: 0, failed: 0, items: items.length, lastDone: null };
+      this.notify();
+      const [profile, feedback] = await Promise.all([this.deps.loadProfile(), this.deps.loadFeedback()]);
+      const briefing = await this.triageToBriefing(items, profile, feedback, date);
+      await this.deps.saveBriefing(briefing);
+      this.briefing = briefing;
+    } catch (e) {
+      if (e instanceof StoppedError) this.error = null;
+      else this.error = e instanceof Error ? e.message : String(e);
+    } finally {
+      this.running = false;
+      this.phase = "idle";
+      this.collect = null;
+      this.activity = null;
+      this.stopController = null;
+      this.notify();
+    }
+  }
+
+  // The one triage call under the watchdog, folded into a Briefing. Shared by
+  // generate (after collection) and retriage (over the cached snapshot). Streams
+  // activity for the progress card; keeps only references to items we hold.
+  private async triageToBriefing(
+    items: InfoItem[],
+    profile: string,
+    feedback: FeedbackEvent[],
+    date: string,
+  ): Promise<Briefing> {
+    const validIds = new Set(items.map((it) => it.id));
+    const result = await runWithWatchdog(
+      (opts) => this.deps.triage({ profile, feedback, items }, opts),
+      this.config,
+      { now: this.deps.now, sleep: this.deps.sleep, setTimer: this.deps.setTimer },
+      {
+        onAttempt: ({ attempt, attempts, startedAt }) => {
+          this.activity = { startedAt, chars: 0, attempt, attempts };
+          this.lastActivityNotify = this.deps.now();
+          this.notify();
+        },
+        onProgress: (chars) => this.bumpActivity(chars),
+      },
+      this.stopController!.signal,
+    );
+    return {
+      date,
+      generatedAt: this.deps.now(),
+      overview: result.overview,
+      mustRead: result.mustRead.filter((r) => validIds.has(r.itemId)),
+      oneLiners: result.oneLiners.filter((r) => validIds.has(r.itemId)),
+      outOfLane: result.outOfLane.filter((r) => validIds.has(r.itemId)),
+      filtered: result.filtered.filter((r) => validIds.has(r.itemId)),
+      items: itemsMeta(items),
+    };
   }
 
   // Fold a per-source collection event into the collect progress and notify.

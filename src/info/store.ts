@@ -11,7 +11,7 @@ import {
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
 import { mergeInlinedHtml } from "./inline-images";
-import type { Briefing } from "./types";
+import type { Briefing, InfoItem } from "./types";
 
 // The full article body kept per item, split out of the briefing so the briefing
 // file stays small and the article view / chat load bodies on demand.
@@ -39,6 +39,10 @@ function briefingFile(date: string): string {
 
 function articlesFile(date: string): string {
   return `info-articles-${date}.json`;
+}
+
+function itemsFile(date: string): string {
+  return `info-items-${date}.json`;
 }
 
 async function ensureDir(): Promise<void> {
@@ -96,6 +100,37 @@ export async function loadArticles(date: string): Promise<Record<string, CachedA
 export async function loadArticle(date: string, itemId: string): Promise<CachedArticle | null> {
   const all = await loadArticles(date);
   return all[itemId] ?? null;
+}
+
+// --- day's item snapshot (for re-triage) -----------------------------------
+// The full triage inputs for the day, so a profile change can re-triage the
+// cached items without re-collecting. Heavy article HTML is dropped (triage
+// reads textContent/summary, and the article view keeps HTML in the article
+// cache) so the snapshot stays lean. Pure, unit-tested.
+export function leanItems(items: InfoItem[]): InfoItem[] {
+  return items.map((it) => {
+    const { contentHtml: _drop, ...rest } = it;
+    return rest;
+  });
+}
+
+export async function saveItems(date: string, items: InfoItem[]): Promise<void> {
+  await ensureDir();
+  await writeTextFile(itemsFile(date), JSON.stringify(leanItems(items)), {
+    baseDir: BaseDirectory.AppData,
+  });
+}
+
+export async function loadItems(date: string): Promise<InfoItem[]> {
+  try {
+    if (!(await exists(itemsFile(date), { baseDir: BaseDirectory.AppData }))) return [];
+    const parsed = JSON.parse(
+      await readTextFile(itemsFile(date), { baseDir: BaseDirectory.AppData }),
+    );
+    return Array.isArray(parsed) ? (parsed as InfoItem[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 // Persist image-inlined article HTML back into the day's cache, preserving the

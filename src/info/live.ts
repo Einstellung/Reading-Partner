@@ -16,8 +16,10 @@ import { loadProfile } from "./profile";
 import { InfoPipeline } from "./pipeline";
 import {
   loadBriefing,
+  loadItems,
   saveArticles,
   saveBriefing,
+  saveItems,
 } from "./store";
 import {
   parseTriageResult,
@@ -119,6 +121,8 @@ export function getInfoPipeline(): InfoPipeline {
       triage,
       saveBriefing,
       saveArticles,
+      saveItems,
+      loadItems,
       now: () => Date.now(),
       sleep: (ms) => new Promise<void>((r) => setTimeout(r, ms)),
       setTimer: (ms, cb) => {
