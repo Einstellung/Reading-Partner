@@ -1,11 +1,10 @@
 // The AI add-source tools (src/info/source-tools.ts): trialSource over the
-// generic engine, the confirm-card payload, catalog-id resolution, and the
+// generic engine, the confirm-card payload, descriptor resolution, and the
 // consent/validation guards. Network + extract injected; no DOM, no real fetch.
 // Run: bun test.
 
 import { expect, test } from "bun:test";
 import { buildSourceTools, sourceToolStatusLabel, trialSource } from "../../src/info/source-tools";
-import { builtinById } from "../../src/info/builtins";
 import type { ProbeConfirmCardData } from "../../src/info/cards";
 import type { ExtractReadable, SourceDescriptor } from "../../src/info/descriptor";
 
@@ -52,7 +51,6 @@ test("trial_source tool fires a confirm card and demands consent before add", as
   const tools = buildSourceTools({
     fetchFn,
     extract,
-    resolveKnown: builtinById,
     addSource: async (d) => void added.push(d),
     onProbeCard: (c) => cards.push(c),
   });
@@ -66,34 +64,31 @@ test("trial_source tool fires a confirm card and demands consent before add", as
   expect(added.length).toBe(0);
 });
 
-test("add_source resolves a catalog id and writes it enabled", async () => {
+test("add_source writes the trialed descriptor enabled", async () => {
   const added: SourceDescriptor[] = [];
   const tools = buildSourceTools({
     fetchFn: async () => res(""),
     extract,
-    resolveKnown: builtinById,
     addSource: async (d) => void added.push(d),
     onProbeCard: () => {},
   });
   const add = tools.find((t) => t.name === "add_source")!;
-  await add.execute({ knownId: "qbitai" });
+  await add.execute({ descriptorJson: JSON.stringify({ ...FEED_DESC, enabled: false }) });
   expect(added.length).toBe(1);
-  expect(added[0].id).toBe("qbitai");
+  expect(added[0].id).toBe(FEED_DESC.id);
   expect(added[0].enabled).toBe(true);
 });
 
-test("tools reject an unknown catalog id and invalid descriptor JSON", async () => {
+test("tools reject a missing or invalid descriptor JSON", async () => {
   const tools = buildSourceTools({
     fetchFn: async () => res(""),
     extract,
-    resolveKnown: builtinById,
     addSource: async () => {},
     onProbeCard: () => {},
   });
   const add = tools.find((t) => t.name === "add_source")!;
-  await expect(add.execute({ knownId: "nope" })).rejects.toThrow(/Unknown catalog/i);
   await expect(add.execute({ descriptorJson: "{ not json" })).rejects.toThrow(/valid JSON/i);
-  await expect(add.execute({})).rejects.toThrow(/knownId|descriptorJson/i);
+  await expect(add.execute({})).rejects.toThrow(/descriptorJson/i);
 });
 
 test("sourceToolStatusLabel gives a human phrase per tool", () => {

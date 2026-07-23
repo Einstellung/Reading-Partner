@@ -11,7 +11,6 @@ import { probeSource } from "./probe";
 import { buildSourceTools, trialSource } from "./source-tools";
 import { buildCompanionTools } from "./companion-tools";
 import { addSource } from "./source-store";
-import { builtinById } from "./builtins";
 import type { ProbeConfirmCardData, ProfileUpdateCardData } from "./cards";
 import type { AgentTool } from "../ai/agent";
 
@@ -21,7 +20,6 @@ export function buildLiveSourceTools(onProbeCard: (card: ProbeConfirmCardData) =
   return buildSourceTools({
     fetchFn: infoFetch,
     extract: extractReadable,
-    resolveKnown: builtinById,
     addSource: (d) => addSource(d).then(() => {}),
     onProbeCard,
   });
@@ -37,7 +35,6 @@ export function buildLiveCompanionTools(
   return buildCompanionTools({
     fetchFn: infoFetch,
     extract: extractReadable,
-    resolveKnown: builtinById,
     addSource: (d) => addSource(d).then(() => {}),
     onProbeCard,
     onProfileCard,

@@ -13,6 +13,7 @@
 
 import { parseFeed, type FeedEntry } from "./feed";
 import { htmlToText } from "./sanitize";
+import { BUILTIN_SOURCES, builtinCaveat } from "./builtins";
 import type { FetchFn } from "./http";
 import type { Fulltext, SourceDescriptor } from "./descriptor";
 
@@ -287,6 +288,58 @@ export function pipeLabel(desc: SourceDescriptor): string {
   return "Headlines only, opens in browser";
 }
 
+// --- builtin domain matching -----------------------------------------------
+// The ingestion research is sunk here rather than injected as a menu: when the
+// user names a domain a builtin already covers, the probe returns that verified
+// descriptor (with its noFetchPage/paywall/limit fixes) instead of re-probing.
+// Zero bias toward recommendation — this only fires after the user points at a
+// source by name or link.
+
+// Every hostname a descriptor references (discovery url + json-api template/base
+// + detail-endpoint template), www-stripped and lower-cased.
+function descriptorHosts(d: SourceDescriptor): string[] {
+  const urls: string[] = [];
+  const disc = d.discovery;
+  if (disc.kind === "feed" || disc.kind === "listpage" || disc.kind === "stream") urls.push(disc.url);
+  if (disc.kind === "json-api") {
+    urls.push(disc.listUrl);
+    if (disc.urlTemplate) urls.push(disc.urlTemplate);
+  }
+  if (disc.kind === "listpage" && disc.base) urls.push(disc.base);
+  if (d.fulltext.mode === "detail-endpoint") urls.push(d.fulltext.urlTemplate);
+  const hosts = new Set<string>();
+  for (const u of urls) {
+    try {
+      hosts.add(new URL(u).hostname.replace(/^www\./i, "").toLowerCase());
+    } catch {
+      // Skip an unparseable template.
+    }
+  }
+  return [...hosts];
+}
+
+// Two hosts belong to the same site when they are equal or one is a subdomain of
+// the other (www already stripped): "rss.arxiv.org" matches "arxiv.org".
+function sameSite(a: string, b: string): boolean {
+  return a === b || a.endsWith("." + b) || b.endsWith("." + a);
+}
+
+// The builtin descriptor whose site the input names, or undefined. Returned
+// enabled, paired with the source's engineering caveat when it has one.
+export function matchBuiltinSource(
+  input: string,
+): { descriptor: SourceDescriptor; note?: string } | undefined {
+  const n = normalizeSiteInput(input);
+  if (!n) return undefined;
+  const inHost = n.host.replace(/^www\./i, "").toLowerCase();
+  for (const d of BUILTIN_SOURCES) {
+    if (descriptorHosts(d).some((h) => sameSite(inHost, h))) {
+      return { descriptor: { ...d, enabled: true }, note: builtinCaveat(d.id) };
+    }
+  }
+  return undefined;
+}
+
 // --- the probe orchestrator (network injected) -----------------------------
 
 export interface ProbeDeps {
@@ -300,6 +353,8 @@ export interface ProbeResult {
   pipeLabel: string;
   // Honest reason it can't be connected when not ok.
   reason?: string;
+  // An engineering caveat to relay (a builtin match's known pitfall), if any.
+  note?: string;
   // The step-by-step probe log, one line per URL tried.
   steps: string[];
 }
@@ -314,6 +369,15 @@ export async function probeSource(input: string, deps: ProbeDeps): Promise<Probe
   const steps: string[] = [];
   const n = normalizeSiteInput(input);
   if (!n) return { ok: false, pipeLabel: "", reason: "That is not a valid site URL or domain.", steps };
+
+  // A domain a builtin already covers short-circuits: return the verified
+  // descriptor rather than re-probing (the research already solved its quirks).
+  const builtin = matchBuiltinSource(input);
+  if (builtin) {
+    const label = pipeLabel(builtin.descriptor);
+    steps.push(`${n.host} → matched the verified built-in "${builtin.descriptor.name}" (${label}); no probing needed`);
+    return { ok: true, descriptor: builtin.descriptor, pipeLabel: label, note: builtin.note, steps };
+  }
 
   for (const url of feedCandidateUrls(input)) {
     let body: string;

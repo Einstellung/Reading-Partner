@@ -12,6 +12,7 @@ import {
   idFromHost,
   inferLinkPattern,
   looksLikeSpa,
+  matchBuiltinSource,
   normalizeSiteInput,
   pipeLabel,
   probeSource,
@@ -121,6 +122,45 @@ test("pipeLabel phrases each pipe type", () => {
   expect(pipeLabel(feedFull)).toBe("Full text in feed");
   const none: SourceDescriptor = { ...feedFull, fulltext: { mode: "none" } };
   expect(pipeLabel(none)).toBe("Headlines only, opens in browser");
+});
+
+// --- builtin domain matching -----------------------------------------------
+
+test("matchBuiltinSource matches a covered domain and carries its caveat", () => {
+  const m = matchBuiltinSource("https://www.qbitai.com");
+  expect(m?.descriptor.id).toBe("qbitai");
+  expect(m?.descriptor.enabled).toBe(true);
+  expect(m?.note).toMatch(/browser UA/i);
+});
+
+test("matchBuiltinSource matches a bare domain and a subdomain of a builtin", () => {
+  expect(matchBuiltinSource("jiqizhixin.com")?.descriptor.id).toBe("jiqizhixin");
+  // The arXiv builtin's feed host is rss.arxiv.org; the bare registrable domain matches.
+  expect(matchBuiltinSource("arxiv.org")?.descriptor.id).toBe("arxiv-cs-ro");
+});
+
+test("matchBuiltinSource matches a builtin by a non-discovery host (HN item page)", () => {
+  // Hacker News discovery is hn.algolia.com; the user names news.ycombinator.com.
+  expect(matchBuiltinSource("news.ycombinator.com")?.descriptor.id).toBe("hacker-news");
+});
+
+test("matchBuiltinSource returns undefined for an uncovered domain", () => {
+  expect(matchBuiltinSource("example.com")).toBeUndefined();
+  expect(matchBuiltinSource("not a domain")).toBeUndefined();
+});
+
+test("probeSource short-circuits to a verified builtin without fetching", async () => {
+  let fetched = 0;
+  const fetchFn = async () => {
+    fetched += 1;
+    return res("", "text/html", 404);
+  };
+  const r = await probeSource("qbitai.com", { fetchFn });
+  expect(r.ok).toBe(true);
+  expect(r.descriptor?.id).toBe("qbitai");
+  expect(r.note).toMatch(/browser UA/i);
+  expect(fetched).toBe(0);
+  expect(r.steps.some((s) => /verified built-in/i.test(s))).toBe(true);
 });
 
 // --- orchestrator (injected fetch) -----------------------------------------

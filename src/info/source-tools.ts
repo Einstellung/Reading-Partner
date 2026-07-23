@@ -56,8 +56,6 @@ export async function trialSource(
 export interface SourceToolDeps {
   fetchFn: FetchFn;
   extract: ExtractReadable;
-  // Resolve a catalog id (builtins.ts) to its ready-made descriptor.
-  resolveKnown(id: string): SourceDescriptor | undefined;
   // Write a descriptor to the source store.
   addSource(descriptor: SourceDescriptor): Promise<void>;
   // Surface a confirm card in the chat after a successful trial.
@@ -78,18 +76,11 @@ export function sourceToolStatusLabel(name: string, args: Record<string, unknown
   }
 }
 
-// Resolve the descriptor a trial/add call refers to: either a catalog id (a
-// builtin, already researched) or a JSON descriptor the model assembled from a
-// probe. Always returned enabled.
-function resolveDescriptor(args: Record<string, unknown>, deps: SourceToolDeps): SourceDescriptor {
-  const knownId = args.knownId ? String(args.knownId).trim() : "";
-  if (knownId) {
-    const d = deps.resolveKnown(knownId);
-    if (!d) throw new Error(`Unknown catalog source id: "${knownId}".`);
-    return { ...d, enabled: true };
-  }
+// Resolve the descriptor a trial/add call refers to: the JSON descriptor the
+// model assembled from (or received verbatim from) a probe. Always enabled.
+function resolveDescriptor(args: Record<string, unknown>): SourceDescriptor {
   const json = String(args.descriptorJson ?? "").trim();
-  if (!json) throw new Error("Provide either knownId (a catalog source) or descriptorJson.");
+  if (!json) throw new Error("Provide descriptorJson (the descriptor from probe_source).");
   let raw: unknown;
   try {
     raw = JSON.parse(json);
@@ -102,15 +93,9 @@ function resolveDescriptor(args: Record<string, unknown>, deps: SourceToolDeps):
 }
 
 const DESCRIPTOR_ARGS = {
-  descriptorJson: Type.Optional(
-    Type.String({
-      description:
-        "The candidate source descriptor as a JSON object string (from probe_source). Omit if using knownId.",
-    }),
-  ),
-  knownId: Type.Optional(
-    Type.String({ description: "Id of a catalog source to use directly, skipping probe (see the catalog in your instructions)." }),
-  ),
+  descriptorJson: Type.String({
+    description: "The source descriptor as a JSON object string, from probe_source.",
+  }),
 };
 
 export function buildSourceTools(deps: SourceToolDeps): AgentTool[] {
@@ -118,12 +103,12 @@ export function buildSourceTools(deps: SourceToolDeps): AgentTool[] {
     {
       name: "probe_source",
       description:
-        "Given a site URL or bare domain, try the common feed paths (/feed, /rss, " +
-        "wp-json, …), detect RSS/Atom/RDF/JSON, judge whether the feed carries full " +
-        "text or only summaries, and — if there is no feed — inspect the homepage to " +
-        "tell an SSR list page from a browser-only app. Returns a candidate descriptor " +
-        "(JSON) and the probe log. Use it for a site the user names or links; for a " +
-        "catalog source, skip straight to trial_source with knownId.",
+        "Given a site URL or bare domain the user named or linked, try the common feed " +
+        "paths (/feed, /rss, wp-json, …), detect RSS/Atom/RDF/JSON, judge whether the feed " +
+        "carries full text or only summaries, and — if there is no feed — inspect the " +
+        "homepage to tell an SSR list page from a browser-only app. A domain already " +
+        "covered by a verified source returns that descriptor directly. Returns a candidate " +
+        "descriptor (JSON) and the probe log.",
       parameters: Type.Object({
         input: Type.String({ description: "A site URL or domain, e.g. https://example.com or example.com." }),
       }),
@@ -135,8 +120,9 @@ export function buildSourceTools(deps: SourceToolDeps): AgentTool[] {
         if (!r.ok || !r.descriptor) {
           return `Could not connect this source: ${r.reason ?? "no feed found."}${log}\n\nTell the user honestly it can't be added.`;
         }
+        const note = r.note ? `\n\nKnown caveat for this source: ${r.note}` : "";
         return (
-          `Found a candidate: "${r.descriptor.name}" — ${r.pipeLabel}.${log}\n\n` +
+          `Found a candidate: "${r.descriptor.name}" — ${r.pipeLabel}.${note}${log}\n\n` +
           `Descriptor (pass this as descriptorJson to trial_source; set a good name and line first):\n` +
           JSON.stringify(r.descriptor)
         );
@@ -146,12 +132,12 @@ export function buildSourceTools(deps: SourceToolDeps): AgentTool[] {
       name: "trial_source",
       description:
         "Really fetch 3 articles through the generic engine to prove a source works " +
-        "before adding it. Pass either a knownId (catalog source) or descriptorJson (from " +
-        "probe_source). Shows the user a confirmation card with the 3 titles and their " +
-        "character counts. Always trial before add_source.",
+        "before adding it. Pass the descriptorJson from probe_source. Shows the user a " +
+        "confirmation card with the 3 titles and their character counts. Always trial " +
+        "before add_source.",
       parameters: Type.Object(DESCRIPTOR_ARGS),
       execute: async (args) => {
-        const descriptor = resolveDescriptor(args, deps);
+        const descriptor = resolveDescriptor(args);
         const trial = await trialSource(descriptor, { fetchFn: deps.fetchFn, extract: deps.extract });
         if (!trial.ok) {
           throw new Error(trial.error || "The trial fetch returned nothing.");
@@ -171,11 +157,11 @@ export function buildSourceTools(deps: SourceToolDeps): AgentTool[] {
       name: "add_source",
       description:
         "Add a source to the user's list. ONLY call this after you have shown a trial " +
-        "result and the user has explicitly agreed to add it. Pass the same knownId or " +
-        "descriptorJson you trialed.",
+        "result and the user has explicitly agreed to add it. Pass the same descriptorJson " +
+        "you trialed.",
       parameters: Type.Object(DESCRIPTOR_ARGS),
       execute: async (args) => {
-        const descriptor = resolveDescriptor(args, deps);
+        const descriptor = resolveDescriptor(args);
         await deps.addSource(descriptor);
         return `Added "${descriptor.name}" to the user's sources.`;
       },

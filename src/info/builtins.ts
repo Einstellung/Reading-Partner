@@ -196,3 +196,25 @@ const BY_ID = new Map(BUILTIN_SOURCES.map((s) => [s.id, s]));
 export function builtinById(id: string): SourceDescriptor | undefined {
   return BY_ID.get(id);
 }
+
+// Per-source engineering pitfalls from the ingestion research: facts a fresh
+// generic probe cannot see (undocumented behavior, a broken feed path, a paywall
+// the descriptor already routes around). The verified descriptor above encodes
+// the fix; this text is the caveat the probe surfaces to the AI when the user
+// names a covered domain, so it can explain the source honestly. Not a
+// recommendation menu — it is read only after the user points at the source.
+const BUILTIN_CAVEATS: Record<string, string> = {
+  jiqizhixin:
+    "Undocumented internal JSON API; the official RSS is now paywalled. The URL/UA may need to stay configurable, with the WeChat mirror as a fallback.",
+  qbitai: "The feed carries only the last ~10 items and needs a browser UA (403 otherwise).",
+  interconnects: "Paid Substack posts arrive truncated with a 'Read more' CTA; the descriptor flags them via the truncation marker.",
+  "arxiv-cs-ro":
+    "Discovery-only (title + abstract; full text is PDF-only). The API endpoint 429s under frequent polling; the rss.arxiv.org feed is the daily path.",
+  "mit-tech-review":
+    "The article page is a metered paywall (the descriptor never fetches it); long features may be excerpted in the feed.",
+  xinzhiyuan: "The /feed/ path is broken (500); the descriptor uses the wp-json REST endpoint, which carries the full body inline.",
+};
+
+export function builtinCaveat(id: string): string | undefined {
+  return BUILTIN_CAVEATS[id];
+}

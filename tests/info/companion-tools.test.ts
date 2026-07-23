@@ -9,7 +9,6 @@ import {
   buildUpdateProfileTool,
   companionToolStatusLabel,
 } from "../../src/info/companion-tools";
-import { builtinById } from "../../src/info/builtins";
 import type { ProfileUpdateCardData } from "../../src/info/cards";
 import type { ExtractReadable } from "../../src/info/descriptor";
 
@@ -19,7 +18,6 @@ function deps(cards: ProfileUpdateCardData[]) {
   return {
     fetchFn: async () => new Response(""),
     extract,
-    resolveKnown: builtinById,
     addSource: async () => {},
     onProbeCard: () => {},
     onProfileCard: (c: ProfileUpdateCardData) => cards.push(c),
