@@ -39,6 +39,7 @@ import {
 import type { ComposerVoice } from "../chat/chat";
 import type { ChatMessage } from "../../ai/providers";
 import type { InfoPipeline } from "../../info/briefing/pipeline";
+import type { Briefing } from "../../info/briefing/types";
 import type { ProbeConfirmCardData, ProfileUpdateCardData } from "../../info/briefing/cards";
 import type { ThreadMessage as UiMessage } from "../common/types";
 import type { ThreadMessage as StoredMessage } from "../../app/threads";
@@ -70,6 +71,42 @@ const OPENING_KICKOFF = "(The user just opened onboarding — greet them and beg
 // The one first-briefing card's stable id: the progress card, then in place the
 // ready or failed card, all address this id through upsertCardRow.
 const BRIEFING_CARD_ID = "briefing";
+
+// The three briefing jobs the one card tracks: "first" is the onboarding first
+// briefing, "full" a user-requested full regeneration (both re-collect + triage),
+// "retriage" a re-sort of today's cached items with the current profile.
+type BriefingJob = "first" | "retriage" | "full";
+
+// Progress-card heading per job; "first" keeps the onboarding default copy.
+function progressTitle(job: BriefingJob): string | undefined {
+  if (job === "retriage") return "Re-running today's triage";
+  if (job === "full") return "Regenerating today's briefing";
+  return undefined;
+}
+
+// Ready-card heading and note per job; "first" keeps the onboarding default copy.
+function readyCopy(job: BriefingJob): { title?: string; note?: string } {
+  if (job === "retriage") return { title: "Briefing updated", note: "Re-triaged today's items with your updated profile." };
+  if (job === "full") return { title: "Briefing regenerated", note: "Re-collected every source and re-triaged." };
+  return {};
+}
+
+// The note injected into the thread when a job settles, so the AI's next turn
+// answers from the new briefing rather than the one it still has in context.
+function completionNote(job: BriefingJob, b: Briefing): string {
+  const worth = b.mustRead.length + b.outOfLane.length;
+  const verb = job === "retriage" ? "re-sorted" : job === "full" ? "regenerated" : "generated";
+  return (
+    `Today's briefing has been ${verb}. Overview: ${b.overview} — worth your time: ${worth}, ` +
+    `one-liners: ${b.oneLiners.length}, filtered: ${b.filtered.length}. Answer from this updated ` +
+    `briefing now, not the earlier one.`
+  );
+}
+
+function failureNote(job: BriefingJob, error: string | null): string {
+  const verb = job === "retriage" ? "re-triage" : "regeneration";
+  return `The briefing ${verb} failed: ${error || "unknown error"}.`;
+}
 
 // Persisted thread message -> live UI message on reopen. A stored card message
 // rehydrates its parts (re-rendered through the registry by kind); an old plain
@@ -116,7 +153,7 @@ export function InfoCall({
   const awaitingBriefing = useRef(false);
   // Which briefing job the progress/ready/failed card is tracking, so the ready
   // copy and the failed-card retry both address the right run.
-  const lastJobRef = useRef<"first" | "retriage">("first");
+  const lastJobRef = useRef<BriefingJob>("first");
 
   const patchLast = useCallback((patch: Partial<UiMessage> | ((m: UiMessage) => Partial<UiMessage>)) => {
     setMessages((prev) => {
@@ -170,7 +207,7 @@ export function InfoCall({
     const unsub = p.subscribe(() => {
       if (!awaitingBriefing.current) return;
       const s = p.snapshot();
-      const isRetriage = lastJobRef.current === "retriage";
+      const job = lastJobRef.current;
       if (s.running) {
         setMessages((prev) =>
           upsertCardRow(prev, BRIEFING_CARD_ID, {
@@ -185,7 +222,7 @@ export function InfoCall({
                   attempts: s.activity.attempts,
                 }
               : null,
-            title: isRetriage ? "Re-running today's triage" : undefined,
+            title: progressTitle(job),
           }),
         );
       } else {
@@ -198,8 +235,7 @@ export function InfoCall({
             worth: b.mustRead.length + b.outOfLane.length,
             oneLiners: b.oneLiners.length,
             filtered: b.filtered.length,
-            title: isRetriage ? "Briefing updated" : undefined,
-            note: isRetriage ? "Re-triaged today's items with your updated profile." : undefined,
+            ...readyCopy(job),
           };
           setMessages((prev) => upsertCardRow(prev, BRIEFING_CARD_ID, ready));
           // Ready is a durable outcome: persist it so a reopen shows the briefing
@@ -210,6 +246,13 @@ export function InfoCall({
             ts: Date.now(),
             parts: [toPersistedCardPart(BRIEFING_CARD_ID, ready)],
           });
+          // Re-anchor the AI: inject the new overview + tier counts as a thread
+          // note (persisted like the ready card) so the next turn answers from the
+          // fresh briefing, not the one still in its context.
+          const note = completionNote(job, b);
+          const ts = Date.now();
+          setMessages((prev) => [...prev, { role: "user", text: note, ts }]);
+          appendMessage(bookId, anchor.threadId, { role: "user", text: note, ts });
         } else {
           // Failure is in-session only (retry needs the live pipeline); not persisted.
           setMessages((prev) =>
@@ -218,6 +261,9 @@ export function InfoCall({
               message: s.error || "The briefing could not be generated.",
             }),
           );
+          // Tell the AI the run failed so it doesn't claim success next turn.
+          // In-session only, matching the failed card (a reopen shouldn't replay it).
+          setMessages((prev) => [...prev, { role: "user", text: failureNote(job, s.error), ts: Date.now() }]);
         }
       }
     });
@@ -225,10 +271,11 @@ export function InfoCall({
   }, [bookId, anchor.threadId]);
 
   // Start (or retry) a briefing job through the one BRIEFING_CARD_ID card: "first"
-  // collects + triages (onboarding); "retriage" re-triages today's cached items
-  // with the applied profile (no collection). Retry reuses the same card row so
-  // progress/error updates in place rather than appending a new row.
-  function runBriefingJob(job: "first" | "retriage") {
+  // collects + triages (onboarding); "full" does the same on the user's explicit
+  // regenerate request; "retriage" re-triages today's cached items with the current
+  // profile (no collection). Retry reuses the same card row so progress/error
+  // updates in place rather than appending a new row.
+  function runBriefingJob(job: BriefingJob) {
     const p = pipelineRef.current ?? getInfoPipeline();
     pipelineRef.current = p;
     lastJobRef.current = job;
@@ -239,7 +286,7 @@ export function InfoCall({
         phase: job === "retriage" ? "triaging" : "fetching",
         collect: null,
         triage: null,
-        title: job === "retriage" ? "Re-running today's triage" : undefined,
+        title: progressTitle(job),
       }),
     );
     if (job === "retriage") void p.retriage();
@@ -401,7 +448,12 @@ export function InfoCall({
     abortRef.current = controller;
     setStreaming(true);
     let full = "";
-    const tools = buildLiveCompanionTools(insertProbeCard, insertProfileCard);
+    // The briefing controller for generate_briefing: honest running state from the
+    // singleton pipeline, and a background job through the one card's lifecycle.
+    const tools = buildLiveCompanionTools(insertProbeCard, insertProfileCard, {
+      running: () => getInfoPipeline().snapshot().running,
+      start: (scope) => runBriefingJob(scope),
+    });
 
     void runAgentTurn({
       providerId: settings.defaultProviderId as "anthropic" | "openai" | "deepseek",
