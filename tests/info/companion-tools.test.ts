@@ -6,8 +6,10 @@
 import { expect, test } from "bun:test";
 import {
   buildCompanionTools,
+  buildGenerateBriefingTool,
   buildUpdateProfileTool,
   companionToolStatusLabel,
+  type BriefingScope,
 } from "../../src/info/companion/companion-tools";
 import type { ProfileUpdateCardData } from "../../src/info/briefing/cards";
 import type { ExtractReadable } from "../../src/info/sources/descriptor";
@@ -21,6 +23,8 @@ function deps(cards: ProfileUpdateCardData[]) {
     addSource: async () => {},
     onProbeCard: () => {},
     onProfileCard: (c: ProfileUpdateCardData) => cards.push(c),
+    briefingRunning: () => false,
+    startBriefing: () => {},
   };
 }
 
@@ -42,15 +46,60 @@ test("update_profile rejects an empty profile or missing summary", async () => {
   await expect(tool.execute({ profile: "text", summary: "" })).rejects.toThrow(/summary/i);
 });
 
-test("buildCompanionTools mounts the source tools plus update_profile", () => {
+test("buildCompanionTools mounts the source tools plus update_profile and generate_briefing", () => {
   const names = buildCompanionTools(deps([])).map((t) => t.name);
   expect(names).toContain("probe_source");
   expect(names).toContain("trial_source");
   expect(names).toContain("add_source");
   expect(names).toContain("update_profile");
+  expect(names).toContain("generate_briefing");
 });
 
-test("companionToolStatusLabel labels update_profile and defers to source labels", () => {
+test("companionToolStatusLabel labels the companion tools and defers to source labels", () => {
   expect(companionToolStatusLabel("update_profile", {})).toMatch(/Drafting a profile update/);
+  expect(companionToolStatusLabel("generate_briefing", { scope: "full" })).toMatch(/Regenerating the briefing/);
+  expect(companionToolStatusLabel("generate_briefing", { scope: "retriage" })).toMatch(/Re-sorting today's briefing/);
   expect(companionToolStatusLabel("add_source", {})).toMatch(/Adding the source/);
+});
+
+function briefingDeps() {
+  const started: BriefingScope[] = [];
+  let running = false;
+  return {
+    started,
+    setRunning: (v: boolean) => {
+      running = v;
+    },
+    deps: { briefingRunning: () => running, startBriefing: (s: BriefingScope) => started.push(s) },
+  };
+}
+
+test("generate_briefing starts a full regeneration and returns without claiming completion", async () => {
+  const h = briefingDeps();
+  const tool = buildGenerateBriefingTool(h.deps);
+  const out = String(await tool.execute({ scope: "full" }));
+  expect(h.started).toEqual(["full"]);
+  expect(out).toMatch(/re-collecting every source/i);
+  expect(out).toMatch(/do not say the briefing is done/i);
+});
+
+test("generate_briefing scope 'retriage' re-sorts without re-collecting", async () => {
+  const h = briefingDeps();
+  const out = String(await buildGenerateBriefingTool(h.deps).execute({ scope: "retriage" }));
+  expect(h.started).toEqual(["retriage"]);
+  expect(out).toMatch(/re-triage of today's items/i);
+});
+
+test("generate_briefing refuses to start a second run while one is in progress", async () => {
+  const h = briefingDeps();
+  h.setRunning(true);
+  const out = String(await buildGenerateBriefingTool(h.deps).execute({ scope: "full" }));
+  expect(h.started).toEqual([]);
+  expect(out).toMatch(/already in progress/i);
+});
+
+test("generate_briefing rejects an unknown scope", async () => {
+  const h = briefingDeps();
+  await expect(buildGenerateBriefingTool(h.deps).execute({ scope: "partial" })).rejects.toThrow(/retriage.*full|scope/i);
+  expect(h.started).toEqual([]);
 });
