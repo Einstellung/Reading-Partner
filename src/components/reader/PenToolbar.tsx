@@ -23,13 +23,16 @@ const TOOLS: { type: ToolType; label: string; Icon: (p: { size?: number }) => JS
 ];
 
 const TOOL_BTN =
-	'flex cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent p-0 text-neutral-700';
+	'flex items-center justify-center rounded-lg border-0 bg-transparent p-0 text-neutral-700';
 const CARD = 'rounded-xl border border-black/10 bg-white shadow-lg';
 
 export default function PenToolbar({ tool, colors, onToolChange, orientation = 'vertical' }: PenToolbarProps) {
 	const [paletteOpen, setPaletteOpen] = useState(false);
 	const paletteRef = useRef<HTMLDivElement>(null);
 	const horizontal = orientation === 'horizontal';
+	// Only the painting tools carry a color; the pointer and AI pen do not, so the
+	// swatch shows as a disabled placeholder to keep the rack width stable.
+	const hasColor = tool.type === 'highlight' || tool.type === 'underline';
 
 	useEffect(() => {
 		if (!paletteOpen) return;
@@ -41,6 +44,10 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 		document.addEventListener('mousedown', onDown);
 		return () => document.removeEventListener('mousedown', onDown);
 	}, [paletteOpen]);
+
+	useEffect(() => {
+		if (!hasColor) setPaletteOpen(false);
+	}, [hasColor]);
 
 	function pickTool(type: ToolType) {
 		if (type !== tool.type) onToolChange({ type, color: tool.color });
@@ -57,12 +64,15 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 		? 'inline-flex flex-row items-center gap-0.5 p-0.5 select-none'
 		: `inline-flex flex-col items-center gap-1 p-1.5 select-none ${CARD}`;
 	const toolSize = horizontal ? 'h-8 w-8' : 'h-9 w-9';
+	// The AI pen keeps violet as its theme accent, but shares the tool rack's one
+	// visual language: same size, same light-tinted-fill selected state as the
+	// blue tools — no gradient block, no size change.
 	const toolBtn = (active: boolean, ai: boolean) =>
-		`${TOOL_BTN} ${toolSize} ` +
+		`${TOOL_BTN} ${toolSize} cursor-pointer ` +
 		(ai
 			? active
-				? 'bg-gradient-to-br from-violet-500 to-purple-400 text-white'
-				: 'text-violet-500 ring-1 ring-inset ring-violet-400/50 hover:bg-black/5'
+				? 'bg-violet-100 text-violet-700'
+				: 'text-violet-500 hover:bg-black/5'
 			: active
 				? 'bg-sky-100 text-sky-700'
 				: 'hover:bg-black/5');
@@ -88,19 +98,27 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 				</button>
 			))}
 
-			{/* AI pen has a fixed, parent-managed color, so the picker has no role while it's active. */}
-			{tool.type !== 'ai' && (
-			<>
+			{/* The divider and swatch always hold their place so the rack width never
+			    jumps between tools; colorless tools (pointer, AI pen) show the swatch
+			    as a disabled placeholder rather than removing it. */}
 			<div className={horizontal ? 'mx-1 h-5 w-px bg-black/10' : 'my-0.5 h-px w-6 bg-black/10'} />
 
 			<div className="relative flex" ref={paletteRef}>
 				<button
 					type="button"
-					className={toolBtn(paletteOpen, false)}
+					className={
+						`${TOOL_BTN} ${toolSize} ` +
+						(!hasColor
+							? 'cursor-not-allowed opacity-40'
+							: paletteOpen
+								? 'cursor-pointer bg-sky-100 text-sky-700'
+								: 'cursor-pointer hover:bg-black/5')
+					}
 					title="Color"
 					aria-label="Color"
 					aria-haspopup="true"
 					aria-expanded={paletteOpen}
+					disabled={!hasColor}
 					onClick={() => setPaletteOpen((v) => !v)}
 				>
 					<IconColorSwatch color={tool.color} size={20} />
@@ -136,8 +154,6 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 					</div>
 				)}
 			</div>
-			</>
-			)}
 		</div>
 	);
 }
