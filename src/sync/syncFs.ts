@@ -3,7 +3,7 @@
 //
 // Sync range (docs/13): the user's own data — reading position, marks, AI
 // threads, topics, per-topic memory, lesson-prep plans and notes, book notes
-// (docs/14), the info-triage profile and feedback log (docs/16), and app
+// (docs/14), the cross-scenario user profile and info feedback log (docs/16), and app
 // settings. Book PDFs travel the separate books channel
 // (content-addressed blobs), never the data channel. Excluded: derived caches
 // (fulltext-*, figures-*, prep-*/pdf and its caches), generated slide decks
@@ -45,10 +45,13 @@ const ROOT_FILES = new Set([
   "reading-state.json",
   "settings.json",
   "topics.json",
-  // Info triage (docs/16, docs/17): the reader's own profile, subscribed source
-  // list, and append-only feedback log travel between devices; the daily
-  // briefing-*.json / info-articles-* caches and the info-source-health.json
-  // sidecar are derived and stay out of range (matched by nothing below).
+  // The cross-scenario user profile (both the briefing and the reading companion
+  // read it), the subscribed source list, and the append-only feedback log travel
+  // between devices; the daily briefing-*.json / info-articles-* caches and the
+  // info-source-health.json sidecar are derived and stay out of range (matched by
+  // nothing below). info-profile.md is the profile's old name — kept in range
+  // during the transition so a device still on the old build stays in step.
+  "user-profile.md",
   "info-profile.md",
   "info-sources.json",
   "info-feedback.jsonl",

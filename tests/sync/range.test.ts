@@ -20,7 +20,10 @@ test("core user-data files are in range", () => {
     "notes-deadbeef/state.json",
     "notes-deadbeef/overview.md",
     "notes-deadbeef/chapter-01.md",
-    // Info triage (docs/16): the profile and feedback log are the user's data.
+    // The cross-scenario user profile and the info feedback log are the user's
+    // data (docs/16); info-profile.md is the profile's old name, kept in range
+    // through the transition.
+    "user-profile.md",
     "info-profile.md",
     "info-feedback.jsonl",
   ]) {
