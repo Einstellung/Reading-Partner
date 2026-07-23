@@ -53,7 +53,7 @@ export function BriefingPage(props: BriefingPageProps) {
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col px-6 py-8">
-      <div className="mb-6 flex items-center gap-3">
+      <div className="sticky top-0 z-10 -mx-6 mb-6 flex items-center gap-3 border-b border-[#ececec] bg-white/85 px-6 py-3 backdrop-blur">
         <button
           className="rounded-lg border border-[#dcdcdc] px-2.5 py-1 text-[13px] text-[#555] hover:bg-[#f4f4f4]"
           onClick={props.onBack}
