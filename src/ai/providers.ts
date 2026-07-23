@@ -22,7 +22,7 @@ import type {
 } from "@earendil-works/pi-ai";
 import { getValidAnthropicAuth } from "./anthropic-oauth";
 import { getValidOpenAIAuth } from "./openai-oauth";
-import { isOAuthCredential, loadCredentials, saveCredentials } from "./credentials";
+import { activeProviderId, loadCredentials, setActiveCredential } from "./credentials";
 
 export type ProviderId = "anthropic" | "openai" | "deepseek";
 
@@ -86,43 +86,61 @@ export function transportFor(providerId: ProviderId): Transport | undefined {
 
 export async function listProviders(): Promise<ProviderInfo[]> {
 	const creds = await loadCredentials();
+	// Single-active: exactly one provider (or none) reports configured, even if a
+	// legacy file carries several — activeProviderId picks the deterministic one.
+	const active = activeProviderId(creds);
 	return (Object.keys(providers) as ProviderId[]).map((id) => ({
 		id,
 		name: providers[id].name,
 		authKind: AUTH_KIND[id],
-		configured:
-			id === "anthropic"
-				? creds.anthropic !== undefined
-				: id === "openai"
-					? isOAuthCredential(creds.openai)
-					: creds[id] !== undefined,
+		configured: id === active,
 	}));
 }
 
 export async function setApiKey(id: "deepseek", key: string): Promise<void> {
-	const creds = await loadCredentials();
-	creds[id] = { type: "apiKey", key };
-	await saveCredentials(creds);
+	// Single-active: saving the DeepSeek key signs out Anthropic and OpenAI.
+	await setActiveCredential(id, { type: "apiKey", key });
 }
 
 export function getModels(id: ProviderId): { id: string; label: string }[] {
 	return providers[id].getModels().map((m) => ({ id: m.id, label: m.name || m.id }));
 }
 
+// The model a freshly-activated provider defaults to: the first in its model
+// list. pi exposes no "recommended" flag, so first-listed is the deterministic
+// pick; the user can change it in Settings. Null only if the list is empty.
+export function defaultModelFor(id: ProviderId): string | null {
+	return providers[id].getModels()[0]?.id ?? null;
+}
+
+// Default provider/model to write after `id` becomes the active provider. Keeps
+// the existing model when it already belongs to `id` (a re-login of the same
+// provider), otherwise resets to that provider's default. Used by Settings so
+// the default conversation chain follows the last provider signed in.
+export function nextDefaultsForActive(
+	defaultProviderId: string | null,
+	defaultModelId: string | null,
+	id: ProviderId,
+): { defaultProviderId: ProviderId; defaultModelId: string | null } {
+	const keep = defaultProviderId === id && getModels(id).some((m) => m.id === defaultModelId);
+	return { defaultProviderId: id, defaultModelId: keep ? defaultModelId : defaultModelFor(id) };
+}
+
 export async function resolveApiKey(id: ProviderId): Promise<string> {
 	if (id === "anthropic") {
 		const token = await getValidAnthropicAuth();
-		if (!token) throw new Error("Anthropic is not connected. Sign in first.");
+		if (!token) throw new Error("Anthropic is not connected. Open Settings to sign in.");
 		return token;
 	}
 	if (id === "openai") {
 		const token = await getValidOpenAIAuth();
-		if (!token) throw new Error("OpenAI is not connected. Sign in with ChatGPT first.");
+		if (!token) throw new Error("OpenAI is not connected. Open Settings to sign in with ChatGPT.");
 		return token;
 	}
 	const creds = await loadCredentials();
 	const cred = creds[id];
-	if (!cred || cred.type !== "apiKey") throw new Error(`${providers[id].name} API key is not set.`);
+	if (!cred || cred.type !== "apiKey")
+		throw new Error(`${providers[id].name} is not connected. Open Settings to add an API key.`);
 	return cred.key;
 }
 

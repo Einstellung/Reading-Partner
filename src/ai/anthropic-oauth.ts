@@ -7,7 +7,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { refreshAnthropicToken } from "@earendil-works/pi-ai/oauth";
-import { loadCredentials, saveCredentials, type AnthropicCredential } from "./credentials";
+import { loadCredentials, saveCredentials, setActiveCredential, type AnthropicCredential } from "./credentials";
 
 const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 const AUTHORIZE_URL = "https://claude.ai/oauth/authorize";
@@ -96,9 +96,8 @@ async function exchangeCode(code: string, state: string, verifier: string): Prom
 }
 
 async function store(cred: AnthropicCredential): Promise<void> {
-	const s = await loadCredentials();
-	s.anthropic = cred;
-	await saveCredentials(s);
+	// Single-active: this also signs out OpenAI and DeepSeek.
+	await setActiveCredential("anthropic", cred);
 	pending = null;
 }
 

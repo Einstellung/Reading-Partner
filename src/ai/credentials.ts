@@ -51,6 +51,49 @@ export interface CredentialStore {
 	voiceStt?: ApiKeyCredential;
 }
 
+// The three model providers. At most one may hold a live credential at a time:
+// signing into (or saving a key for) one signs the others out. imageGen and
+// voiceStt are device keys, outside this set, and are never touched by it.
+export type ProviderCredentialId = "anthropic" | "openai" | "deepseek";
+
+// Priority used only to disambiguate a legacy credentials.json that carries more
+// than one provider (written before single-active). The highest-priority present
+// credential is treated as the active one; the rest are ignored on read and get
+// physically dropped the next time any provider is activated. Deterministic and
+// self-contained (no settings needed).
+const ACTIVE_PRIORITY: ProviderCredentialId[] = ["anthropic", "openai", "deepseek"];
+
+// Which provider a store counts as active. OpenAI must be a real OAuth triple; a
+// legacy OpenAI API-key credential is ignored (isOAuthCredential). Null when none
+// of the three is set.
+export function activeProviderId(store: CredentialStore): ProviderCredentialId | null {
+	for (const id of ACTIVE_PRIORITY) {
+		if (id === "openai") {
+			if (isOAuthCredential(store.openai)) return id;
+		} else if (store[id] !== undefined) {
+			return id;
+		}
+	}
+	return null;
+}
+
+// Pure single-active reducer: a copy of `store` with `id` set to `cred` and the
+// other two providers removed. Device keys pass through unchanged.
+export function withActiveCredential(
+	store: CredentialStore,
+	id: ProviderCredentialId,
+	cred: OAuthCredential | ApiKeyCredential,
+): CredentialStore {
+	const next: CredentialStore = { ...store };
+	delete next.anthropic;
+	delete next.openai;
+	delete next.deepseek;
+	if (id === "anthropic") next.anthropic = cred as AnthropicCredential;
+	else if (id === "openai") next.openai = cred as OpenAICredential;
+	else next.deepseek = cred as ApiKeyCredential;
+	return next;
+}
+
 export async function loadCredentials(): Promise<CredentialStore> {
 	if (!(await exists(FILE, opts))) return {};
 	const text = await readTextFile(FILE, opts);
@@ -64,6 +107,18 @@ export async function loadCredentials(): Promise<CredentialStore> {
 export async function saveCredentials(store: CredentialStore): Promise<void> {
 	// writeTextFile throws on failure; let it propagate to the caller/UI.
 	await writeTextFile(FILE, JSON.stringify(store, null, 2), opts);
+}
+
+// Single-active write: store one provider's credential and drop the other two,
+// so credentials.json holds at most one of the three. Every sign-in path
+// (Anthropic OAuth, OpenAI OAuth, DeepSeek key) routes here, so the mutual
+// exclusion lives in one place.
+export async function setActiveCredential(
+	id: ProviderCredentialId,
+	cred: OAuthCredential | ApiKeyCredential,
+): Promise<void> {
+	const s = await loadCredentials();
+	await saveCredentials(withActiveCredential(s, id, cred));
 }
 
 // The image-relay key, or null when unset (decks then generate without AI

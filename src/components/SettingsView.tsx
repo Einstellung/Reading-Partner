@@ -8,6 +8,7 @@ import {
   anthropicLogout,
   getModels,
   listProviders,
+  nextDefaultsForActive,
   openaiLogin,
   openaiLoginWithManualCode,
   openaiLogout,
@@ -58,6 +59,18 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
   };
   useEffect(refresh, []);
 
+  // A provider just became the active one (single-active: the others were signed
+  // out in the credential layer). Re-list the cards and point the default
+  // conversation chain at it, so chat never keeps pointing at a signed-out
+  // provider.
+  const activate = (id: ProviderId) => {
+    refresh();
+    onSettingsChange({
+      ...settings,
+      ...nextDefaultsForActive(settings.defaultProviderId, settings.defaultModelId, id),
+    });
+  };
+
   // Models for the currently chosen default provider (getModels is synchronous).
   const models: ModelInfo[] = settings.defaultProviderId
     ? getModels(settings.defaultProviderId as ProviderId)
@@ -85,6 +98,7 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
             loginWithManualCode={anthropicLoginWithManualCode}
             logout={anthropicLogout}
             onChanged={refresh}
+            onActivated={() => activate("anthropic")}
           />
           <OAuthCard
             name="OpenAI (ChatGPT)"
@@ -94,8 +108,14 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
             loginWithManualCode={openaiLoginWithManualCode}
             logout={openaiLogout}
             onChanged={refresh}
+            onActivated={() => activate("openai")}
           />
-          <KeyCard providerId="deepseek" name="DeepSeek" providers={providers} onChanged={refresh} />
+          <KeyCard
+            providerId="deepseek"
+            name="DeepSeek"
+            providers={providers}
+            onActivated={() => activate("deepseek")}
+          />
         </div>
 
         <h2 className="mb-2 mt-8 text-sm font-semibold text-[#777]">Default conversation</h2>
@@ -521,6 +541,7 @@ function OAuthCard({
   loginWithManualCode,
   logout,
   onChanged,
+  onActivated,
 }: {
   name: string;
   signInLabel: string;
@@ -529,6 +550,7 @@ function OAuthCard({
   loginWithManualCode: (input: string) => Promise<void>;
   logout: () => Promise<void>;
   onChanged: () => void;
+  onActivated: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -540,7 +562,7 @@ function OAuthCard({
     setError(null);
     try {
       await login();
-      onChanged();
+      onActivated();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Sign-in failed");
       setManual(true); // fall back to manual code paste (docs/05)
@@ -556,7 +578,7 @@ function OAuthCard({
       await loginWithManualCode(code);
       setManual(false);
       setCode("");
-      onChanged();
+      onActivated();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Invalid code");
     } finally {
@@ -599,6 +621,7 @@ function OAuthCard({
               </button>
             </div>
           )}
+          <p className="m-0 text-xs text-[#777]">Signing in here signs out other providers.</p>
         </>
       )}
       {error && <p className="m-0 text-xs text-[#b91c1c]">{error}</p>}
@@ -610,12 +633,12 @@ function KeyCard({
   providerId,
   name,
   providers,
-  onChanged,
+  onActivated,
 }: {
   providerId: "deepseek";
   name: string;
   providers: ProviderInfo[];
-  onChanged: () => void;
+  onActivated: () => void;
 }) {
   const provider = providers.find((p) => p.id === providerId);
   const [key, setKey] = useState("");
@@ -626,7 +649,7 @@ function KeyCard({
     try {
       await setApiKey(providerId, key);
       setKey("");
-      onChanged();
+      onActivated();
     } finally {
       setBusy(false);
     }
@@ -650,6 +673,7 @@ function KeyCard({
           Save
         </button>
       </div>
+      <p className="m-0 text-xs text-[#777]">Saving a key here signs out other providers.</p>
     </div>
   );
 }

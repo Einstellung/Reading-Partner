@@ -17,6 +17,8 @@ export {
 	listProviders,
 	setApiKey,
 	getModels,
+	defaultModelFor,
+	nextDefaultsForActive,
 	modelSupportsImages,
 	streamChat,
 	type ProviderId,

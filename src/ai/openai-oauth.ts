@@ -13,7 +13,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { refreshOpenAICodexToken } from "@earendil-works/pi-ai/oauth";
-import { isOAuthCredential, loadCredentials, saveCredentials, type OpenAICredential } from "./credentials";
+import { isOAuthCredential, loadCredentials, saveCredentials, setActiveCredential, type OpenAICredential } from "./credentials";
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 const AUTHORIZE_URL = "https://auth.openai.com/oauth/authorize";
@@ -114,9 +114,8 @@ async function exchangeCode(code: string, verifier: string): Promise<OpenAICrede
 }
 
 async function store(cred: OpenAICredential): Promise<void> {
-	const s = await loadCredentials();
-	s.openai = cred;
-	await saveCredentials(s);
+	// Single-active: this also signs out Anthropic and DeepSeek.
+	await setActiveCredential("openai", cred);
 	pending = null;
 }
 
