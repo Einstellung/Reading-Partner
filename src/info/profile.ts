@@ -1,6 +1,9 @@
 // The reader profile that triage reads (docs/16): a plain-English markdown file
-// the user can edit. Seeded on first run and synced between devices (it is the
-// user's own data). Persisted to AppData/info-profile.md.
+// the user can edit. It is the user's own data, synced between devices. There is
+// no factory seed — the software presets no interests. The profile is written
+// only when the user (or the onboarding update_profile draft they Apply) puts
+// taste into it; until then it is empty and triage judges on an item's own merit.
+// Persisted to AppData/info-profile.md.
 
 import {
   BaseDirectory,
@@ -12,20 +15,6 @@ import {
 
 export const PROFILE_FILE = "info-profile.md";
 
-// The first-run seed. Concrete enough that the very first briefing has taste to
-// work with; the user edits it freely from there.
-export const DEFAULT_PROFILE = `# Reading profile
-
-I want hard technical substance: papers, methods, real results, concrete
-industry signals (shipping models, benchmarks that mean something, architecture
-details). I am allergic to vendor PR, conference puff pieces, funding-round
-theater, and ceremony recaps — filter them out without apology.
-
-Right now I am deep in embodied AI, world models, and LLM research. Surface work
-in those areas first, but don't wall me off from a genuinely important result
-elsewhere.
-`;
-
 async function ensureDir(): Promise<void> {
   try {
     if (!(await exists("", { baseDir: BaseDirectory.AppData }))) {
@@ -36,17 +25,17 @@ async function ensureDir(): Promise<void> {
   }
 }
 
-// Load the profile, seeding the file on first run so the user has something to
-// edit. A read failure falls back to the seed text (never blocks a briefing).
+// Load the profile. No file means no profile yet — return empty (nothing is
+// seeded or written); triage handles an empty profile universally. A read
+// failure returns empty too, never blocking a briefing.
 export async function loadProfile(): Promise<string> {
   try {
     if (!(await exists(PROFILE_FILE, { baseDir: BaseDirectory.AppData }))) {
-      await saveProfile(DEFAULT_PROFILE);
-      return DEFAULT_PROFILE;
+      return "";
     }
     return await readTextFile(PROFILE_FILE, { baseDir: BaseDirectory.AppData });
   } catch {
-    return DEFAULT_PROFILE;
+    return "";
   }
 }
 

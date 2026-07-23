@@ -64,6 +64,17 @@ test("triageSystemPrompt explains summary-only and cross-language merge", () => 
   expect(p).toContain("Merge across languages");
 });
 
+test("triageSystemPrompt judges an empty profile universally, assuming no field", () => {
+  const p = triageSystemPrompt("auto");
+  expect(p).toMatch(/if the profile is empty/i);
+  expect(p).toMatch(/its own information value/i);
+});
+
+test("triageUserMessage marks an empty profile as unset", () => {
+  const msg = triageUserMessage("", [], ITEMS);
+  expect(msg).toContain("(no profile set)");
+});
+
 test("formatFeedbackTail caps to the last N and handles empty", () => {
   expect(formatFeedbackTail([])).toContain("no reactions");
   const many: FeedbackEvent[] = Array.from({ length: 40 }, (_, i) => ({
