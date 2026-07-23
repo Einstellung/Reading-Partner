@@ -141,11 +141,16 @@ test("parseTriageResult fails on no JSON or missing overview", () => {
   expect(parseTriageResult(JSON.stringify({ mustRead: [] }), new Set()).ok).toBe(false);
 });
 
-test("triageSystemPrompt keeps the English default on auto, pins on a set language", () => {
+test("triageSystemPrompt keeps the English default on auto, replaces it on a set language", () => {
   const auto = triageSystemPrompt("auto");
   expect(auto).toContain("Write the overview, reasons, and one-liners in English");
+  // No appended second directive to contradict the templated one.
   expect(auto).not.toContain("All user-facing output must be written in");
-  const pinned = triageSystemPrompt("ko");
-  expect(pinned).toContain("Respond in 한국어.");
-  expect(pinned).toContain("All user-facing output must be written in 한국어.");
+
+  const pinned = triageSystemPrompt("zh-CN");
+  // The hardcoded English line is gone; the single directive names the language.
+  expect(pinned).not.toContain("in English");
+  expect(pinned).toContain("Write the overview, reasons, and one-liners in 简体中文");
+  // Exactly one language directive — no appended pin.
+  expect(pinned).not.toContain("All user-facing output must be written in");
 });
