@@ -9,9 +9,10 @@ import { infoFetch } from "./http";
 import { extractReadable } from "./readable";
 import { probeSource } from "./probe";
 import { buildSourceTools, trialSource } from "./source-tools";
+import { buildCompanionTools } from "./companion-tools";
 import { addSource } from "./source-store";
 import { builtinById } from "./builtins";
-import type { ProbeConfirmCardData } from "./cards";
+import type { ProbeConfirmCardData, ProfileUpdateCardData } from "./cards";
 import type { AgentTool } from "../ai/agent";
 
 // The three add-source tools bound to the live fetch/extract/store. `onProbeCard`
@@ -23,6 +24,23 @@ export function buildLiveSourceTools(onProbeCard: (card: ProbeConfirmCardData) =
     resolveKnown: builtinById,
     addSource: (d) => addSource(d).then(() => {}),
     onProbeCard,
+  });
+}
+
+// The shared companion tool set bound live: the source tools plus update_profile.
+// Every info chat entry mounts this; the two card sinks let the chat surface the
+// trial confirm card and the profile-update confirm card.
+export function buildLiveCompanionTools(
+  onProbeCard: (card: ProbeConfirmCardData) => void,
+  onProfileCard: (card: ProfileUpdateCardData) => void,
+): AgentTool[] {
+  return buildCompanionTools({
+    fetchFn: infoFetch,
+    extract: extractReadable,
+    resolveKnown: builtinById,
+    addSource: (d) => addSource(d).then(() => {}),
+    onProbeCard,
+    onProfileCard,
   });
 }
 
