@@ -24,12 +24,47 @@ function stripHandlersAndJs(tag: string): string {
   return out;
 }
 
-function keepImg(tag: string): string {
-  const src = /\ssrc\s*=\s*"([^"]*)"/i.exec(tag) || /\ssrc\s*=\s*'([^']*)'/i.exec(tag);
-  const url = src?.[1]?.trim() ?? "";
-  // Drop an image with no http(s)/data src (lazy-load placeholders, tracking px).
-  if (!/^https?:\/\//i.test(url) && !/^data:image\//i.test(url)) return "";
+// Read an attribute's value from a raw tag (either quote style), trimmed.
+function attrValue(tag: string, name: string): string {
+  const m =
+    new RegExp(`\\s${name}\\s*=\\s*"([^"]*)"`, "i").exec(tag) ||
+    new RegExp(`\\s${name}\\s*=\\s*'([^']*)'`, "i").exec(tag);
+  return m?.[1]?.trim() ?? "";
+}
+
+// First URL of a srcset value ("url 1x, url 2x, ..." -> first url).
+function firstSrcsetUrl(value: string): string {
+  const first = value.split(",")[0]?.trim() ?? "";
+  return first.split(/\s+/)[0]?.trim() ?? "";
+}
+
+function buildImg(url: string): string {
   return `<img src="${url.replace(/"/g, "&quot;")}" referrerpolicy="no-referrer" loading="lazy">`;
+}
+
+// Lazy-load-aware image rewrite. Pick the first legitimate http(s) URL, in
+// priority order, so mirrored WeChat/lazy pages (src is a placeholder, the real
+// image sits in data-src/srcset) keep their images instead of being blanked out.
+function keepImg(tag: string): string {
+  const src = attrValue(tag, "src");
+  // 1. A real http(s) src wins (about:blank / data: placeholders fail this).
+  if (/^https?:\/\//i.test(src)) return buildImg(src);
+  // 2. Lazy-load attributes.
+  for (const name of ["data-src", "data-original", "data-lazy-src", "data-actual-src"]) {
+    const v = attrValue(tag, name);
+    if (/^https?:\/\//i.test(v)) return buildImg(v);
+  }
+  // 3. srcset / data-srcset first candidate.
+  for (const name of ["srcset", "data-srcset"]) {
+    const v = attrValue(tag, name);
+    if (!v) continue;
+    const u = firstSrcsetUrl(v);
+    if (/^https?:\/\//i.test(u)) return buildImg(u);
+  }
+  // 4. A genuine inline data: image with no lazy fallback (kept as-is).
+  if (/^data:image\//i.test(src)) return buildImg(src);
+  // No usable image (relative/placeholder src, tracking pixel).
+  return "";
 }
 
 function keepAnchor(tag: string): string {
