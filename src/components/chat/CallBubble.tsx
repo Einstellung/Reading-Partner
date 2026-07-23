@@ -5,6 +5,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconExpand } from '../common/icons';
 import { Composer, MessageList, type ComposerVoice } from './chat';
+import DeleteThreadButton from './DeleteThreadButton';
 import type { PendingImage, ThreadMessage } from '../common/types';
 
 interface CallBubbleProps {
@@ -13,6 +14,8 @@ interface CallBubbleProps {
 	onSend(text: string): void;
 	onExpand(): void;
 	onClose(): void;
+	// Delete this conversation and its anchoring mark. Absent = no delete control.
+	onDelete?(): void;
 	pendingImages?: PendingImage[];
 	onRemoveImage?(id: string): void;
 	hint?: string;
@@ -31,6 +34,7 @@ export default function CallBubble({
 	onSend,
 	onExpand,
 	onClose,
+	onDelete,
 	pendingImages,
 	onRemoveImage,
 	hint,
@@ -77,15 +81,18 @@ export default function CallBubble({
 		>
 			<div className="flex items-center justify-between">
 				<span className="text-[11px] font-medium uppercase tracking-wide text-neutral-400">Reading with AI</span>
-				<button
-					type="button"
-					title="Expand"
-					aria-label="Expand"
-					onClick={onExpand}
-					className="flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 hover:bg-black/5"
-				>
-					<IconExpand size={15} />
-				</button>
+				<div className="flex items-center gap-0.5">
+					{onDelete && <DeleteThreadButton onDelete={onDelete} />}
+					<button
+						type="button"
+						title="Expand"
+						aria-label="Expand"
+						onClick={onExpand}
+						className="flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 hover:bg-black/5"
+					>
+						<IconExpand size={15} />
+					</button>
+				</div>
 			</div>
 
 			{messages.length > 0 && <MessageList messages={messages} surface="bubble" className="max-h-64 pr-0.5" />}

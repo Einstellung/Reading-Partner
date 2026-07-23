@@ -6,6 +6,7 @@
 
 import { IconClose } from '../common/icons';
 import { Composer, MessageList, type ComposerVoice } from './chat';
+import DeleteThreadButton from './DeleteThreadButton';
 import type { PendingImage, ThreadMessage } from '../common/types';
 import type { CardActionHandler } from './chatParts';
 
@@ -13,6 +14,9 @@ interface CallViewProps {
 	messages: ThreadMessage[];
 	onSend(text: string): void;
 	onHangUp(): void;
+	// Delete this conversation (and, for a mark-anchored thread, its mark). Absent
+	// = no delete control.
+	onDelete?(): void;
 	pendingImages?: PendingImage[];
 	onRemoveImage?(id: string): void;
 	hint?: string;
@@ -38,6 +42,7 @@ export default function CallView({
 	messages,
 	onSend,
 	onHangUp,
+	onDelete,
 	pendingImages,
 	onRemoveImage,
 	hint,
@@ -56,15 +61,18 @@ export default function CallView({
 
 	return (
 		<div className="relative flex h-full w-full flex-col bg-white">
-			<button
-				type="button"
-				title="Hang up"
-				aria-label="Hang up"
-				onClick={onHangUp}
-				className="absolute left-4 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 hover:bg-black/5"
-			>
-				<IconClose size={18} />
-			</button>
+			<div className="absolute left-4 top-4 z-10 flex items-center gap-1">
+				<button
+					type="button"
+					title="Hang up"
+					aria-label="Hang up"
+					onClick={onHangUp}
+					className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 hover:bg-black/5"
+				>
+					<IconClose size={18} />
+				</button>
+				{onDelete && <DeleteThreadButton onDelete={onDelete} />}
+			</div>
 
 			{onToggleClassroom && (
 				<div className="absolute left-1/2 top-4 z-10 flex -translate-x-1/2 items-center gap-2">

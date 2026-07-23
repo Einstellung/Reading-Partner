@@ -48,6 +48,7 @@ import {
   appendMessage,
   createBookThread,
   createThread,
+  deleteThread,
   dropThreadCache,
   getBookThread,
   getThread,
@@ -2015,6 +2016,27 @@ export default function App() {
     clearPendingImages();
   }, [clearPendingImages, captureHangup]);
 
+  // Delete the open conversation. Destructive and confirmed at the button
+  // (DeleteThreadButton's two-step). Removes the thread from its threads file and,
+  // for a mark-anchored thread, its anchoring AI-pen mark too (the highlight and
+  // its trace-list entry disappear); the book-level thread has no mark, so only
+  // the thread goes. Both removals are in-file rewrites, so per-file LWW sync
+  // carries them to other devices. Unlike a hangup this does not distill — the
+  // talk is being thrown away — and any memory already distilled from it stays.
+  const deleteCallThread = useCallback(() => {
+    const c = callRef.current;
+    const path = pathRef.current;
+    if (!c || !path) return;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    deleteThread(path, c.threadId);
+    if (!c.isBook && c.annotationId) removeAnnotation(c.annotationId);
+    const topicId = ctxRef.current.topicId;
+    if (topicId) logEvent(topicId, "thread-delete", { threadId: c.threadId, book: c.isBook ?? false });
+    setCall(null);
+    clearPendingImages();
+  }, [clearPendingImages, removeAnnotation]);
+
   const openThreadForAnnotation = useCallback(
     (annotationId: string) => {
       const ann = annsRef.current.get(annotationId);
@@ -2512,6 +2534,7 @@ export default function App() {
             onSend={sendCallMessage}
             onExpand={expandCall}
             onClose={endCall}
+            onDelete={deleteCallThread}
             pendingImages={pendingImages}
             onRemoveImage={removePendingImage}
             hint={imageHint}
@@ -2561,6 +2584,7 @@ export default function App() {
                 messages={call.messages}
                 onSend={sendCallMessage}
                 onHangUp={endCall}
+                onDelete={deleteCallThread}
                 pendingImages={pendingImages}
                 onRemoveImage={removePendingImage}
                 hint={imageHint}
