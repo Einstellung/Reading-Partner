@@ -8,13 +8,43 @@ Local-first and backend-free: sign in with your Claude or ChatGPT subscription, 
 
 ## Daily briefing
 
-The app opens to a Today home: cards to continue the book you were reading, and a briefing of the day's news from the sources you subscribed to. There are no built-in sources — on first run the AI opens a short conversation to learn what you follow and help you add the first few.
+The app opens to a Today home: one card to continue the book you were reading, one for the day's briefing from the sources you follow. The briefing itself is a finite document you read top to bottom, sorted into four tiers, with a clear end.
 
-Subscribing is a conversation. Name an outlet or paste a link and the AI probes it for a usable feed, fetches three sample articles as a trial, and subscribes only after you confirm — each source is a small declarative JSON descriptor the AI writes and proves by actually fetching, so it can connect a site with no obvious feed. Read articles in-app with their images, and open a chat anchored to any item to dig in.
+The AI reads every item in full and sorts each into exactly one tier against your reading profile:
 
-The AI reads every item in full and triages it against your reading profile: worth reading (each with a one-line reason it's for you), one-liners, out-of-lane, and filtered-out noise (appealable when it drops something you wanted). Your open, dismiss, and appeal actions feed the next day's triage.
+- Worth your time — two to four items that earn opening, each with a one-line reason written to you and referencing your interests, not generic praise.
+- In one line — the items worth knowing but not opening; the line carries the actual news, what happened and the number that matters, so reading it is the whole point.
+- Out of your lane — at most one deliberate anti-echo-chamber pick: something important you would not normally follow, labeled and set apart. On a day with no honest candidate there is none.
+- Filtered — everything else, collapsed to a tally ("vendor PR ×8, conference recap ×6") that expands to the dropped titles, each with a Show anyway.
 
-Every briefing carries a companion chat. Ask what came in today, get per-source or filtered breakdowns, and voice a standing preference ("be harsher on vendor PR", "keep the paper explainers") — the AI drafts a profile change you Apply from a confirm card. Ask it to redo the briefing and it re-triages today's items against the updated profile, or re-collects every source from scratch; a progress card tracks the run to completion. The briefing is written in your configured AI output language.
+A one-line overview opens the page and is allowed to say the day is mostly noise. When the same story runs in more than one outlet — including a Chinese source and an English one reporting the same event — triage keeps one entry, names both outlets, and files the rest as duplicate coverage.
+
+Read any item in the app: a clean typographic page with its images, opened from the day's cache. Your reactions feed back — opening, dismissing, and appealing a filtered item are logged and shown to the next day's triage, so it learns your taste over time. The overview, reasons, and one-liners are written in your configured AI output language, even when the source article is in another.
+
+<!-- screenshot: the briefing page — the overview line, Worth your time cards, the In one line list, the Out of your lane pick, and the collapsed Filtered row -->
+
+## Subscribe by talking
+
+There are no built-in sources. On first run the AI introduces itself and asks what you follow — one or two questions at a time, digging before it proposes anything, never dumping a list. It suggests outlets from its own knowledge only once a concrete interest has surfaced.
+
+Adding a source is a conversation. Name an outlet or paste a link, and the AI scouts the site — reading a homepage's navigation to find the real URL of the channel you meant — then probes it for a usable feed: trying the common paths, detecting RSS/Atom/RDF/JSON, judging whether the feed carries full text or only summaries, and telling a server-rendered list page from a browser-only app when there is no feed. It then fetches three sample articles as a trial. A confirm card shows the three titles with their character counts and whether the full body came back, and the AI subscribes only after you say yes.
+
+Each source is a small declarative JSON descriptor — how to discover its items, where the body text comes from — that a generic engine runs. The AI writes or adapts it (a new URL, a tweaked link pattern, a same-site shape cloned) and proves it by actually fetching, so a wrong draft simply fails at the trial and the AI tells you. This connects sites that have no obvious feed.
+
+The Sources page is the account of what you subscribe to: one row per source with its lane and pipe type, an on/off toggle, a health dot (green when the last run succeeded, amber when it failed — click for the last-success time and the error), and a delete. A box at the top takes a pasted site or RSS URL and probes, trials, and adds it in place, without going through the chat. There is no ordering or grouping — ranking is triage's job.
+
+<!-- screenshot: the add-source conversation with a trial confirm card — three fetched article titles, character counts, an Add source button -->
+<!-- screenshot: the Sources page — sources with health dots and on/off toggles, and the paste-a-URL box at the top -->
+
+## The briefing companion
+
+Every briefing carries a chat, and every item has its own Ask that anchors a thread to that article, with its full text and the day's overview in context. The companion sees the whole document, including the full filtered list with each item's category, so it can tell you what came in today, break it down per source, or defend why something was dropped.
+
+Voice a standing preference — "be harsher on vendor PR", "keep the paper explainers", "I care more about robotics now" — and the AI drafts a complete revised profile and shows it on a confirm card. Nothing is saved until you Apply; when today's briefing already exists, applying offers to re-triage it on the spot against the new profile.
+
+Ask it to redo the briefing and it runs one of two depths: a re-triage that re-sorts today's already-collected items with the current profile (no fetching — for after a profile change or a bad sort), or a full re-collection that fetches every source again, including any you just added, and re-triages, replacing today's briefing. It starts a background job and returns at once; a progress card tracks the run — sources collected, then triage liveness — and settles into the finished briefing. The AI only regenerates when you ask, never on its own.
+
+<!-- screenshot: the briefing companion chat with a profile-update confirm card (the proposed profile and an Apply button) or a regeneration progress card -->
 
 ## Reading profile
 
