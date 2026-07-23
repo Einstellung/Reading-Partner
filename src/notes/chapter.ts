@@ -12,7 +12,7 @@ import { formatPages, formatSearch } from "../ai/reading-context";
 import { buildFigureTools, type FigureImage } from "../figures/tools";
 import type { Figure } from "../figures/types";
 import type { Fulltext } from "../fulltext/types";
-import { languageInstruction, type AiLanguage } from "../app/settings";
+import { aiLanguageName, type AiLanguage } from "../app/settings";
 import type { NoteChapter } from "./types";
 
 const CHAPTER_MAX_ROUNDS = 16;
@@ -136,10 +136,14 @@ export function chapterSystemPrompt(params: {
   if (instruction && instruction.trim()) {
     lines.push("", `The reader asked for this revision: ${instruction.trim()}`);
   }
+  // The output language is templated into the "write the note in ___" line, not
+  // pinned by an appended instruction, so the prompt holds one language directive:
+  // "auto" keeps English, a set language replaces it.
+  const lang = aiLanguageName(aiLanguage ?? "auto") ?? "English";
   lines.push(
     "",
     "Read the chapter's pages with the tools before writing (read_pages, and",
-    "search_book / view_figure as needed). Then write the note in English as",
+    `search_book / view_figure as needed). Then write the note in ${lang} as`,
     "markdown, 300-700 words. Cover: the chapter's argument and how it moves, the",
     "key terms and examples, and the figures that carry a result. Anchor every",
     "factual claim to the book with a page marker in the exact form [p.N] (N is",
@@ -147,8 +151,6 @@ export function chapterSystemPrompt(params: {
     "Do not add a title heading; start directly with the content. Output only the",
     "note.",
   );
-  const lang = languageInstruction(aiLanguage ?? "auto");
-  if (lang) lines.push("", lang);
   return lines.join("\n");
 }
 

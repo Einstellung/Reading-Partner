@@ -9,7 +9,7 @@ import { streamChat, type ProviderId } from "../ai/providers";
 import { ensureFulltext, saveFulltext } from "../fulltext/store";
 import { FULLTEXT_VERSION, type Fulltext } from "../fulltext/types";
 import { buildFigureCatalog, ensureFigures } from "../figures";
-import { loadSettings, toReasoning } from "../app/settings";
+import { loadSettings, toReasoning, type AiLanguage } from "../app/settings";
 import { extractArticle } from "./article";
 import { fetchFromArxiv, normalizeArxivId } from "./arxiv";
 import { fetchFromOpenAlex } from "./openalex";
@@ -35,6 +35,7 @@ async function resolveModel(): Promise<{
   providerId: ProviderId;
   modelId: string;
   reasoning: ThinkingLevel | undefined;
+  aiLanguage: AiLanguage;
 }> {
   const s = await loadSettings();
   if (!s.defaultProviderId || !s.defaultModelId) {
@@ -44,6 +45,7 @@ async function resolveModel(): Promise<{
     providerId: s.defaultProviderId as ProviderId,
     modelId: s.defaultModelId,
     reasoning: toReasoning(s.prepThinking),
+    aiLanguage: s.aiLanguage,
   };
 }
 
@@ -248,6 +250,7 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
         onProgress: opts.onProgress,
         figureCatalog: figs ? buildFigureCatalog(figs.figures) : "",
         isArticle,
+        aiLanguage: model.aiLanguage,
       });
       return { body, pages: ft.pages.length, thin: false };
     },

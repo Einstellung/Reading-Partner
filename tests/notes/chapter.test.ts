@@ -112,13 +112,17 @@ test("chapterSystemPrompt omits the chat instruction when there are no chats", (
   expect(prompt).not.toMatch(/asked for it to be recorded/);
 });
 
-test("chapterSystemPrompt appends the output-language instruction only when set", () => {
+test("chapterSystemPrompt templates the output language into the write line, English by default", () => {
   const pinned = chapterSystemPrompt({ bookName: "Book", chapter: CHAPTER, aiLanguage: "fr" });
-  expect(pinned).toContain("All user-facing output must be written in Français.");
-  expect(chapterSystemPrompt({ bookName: "Book", chapter: CHAPTER })).not.toContain(
-    "must be written in",
-  );
+  // The language is templated into the one "write the note in ___" line, not appended.
+  expect(pinned).toContain("write the note in Français as");
+  expect(pinned).not.toContain("write the note in English as");
+  expect(pinned).not.toContain("must be written in");
+  // Default and explicit auto both keep the English line and add no second directive.
+  const def = chapterSystemPrompt({ bookName: "Book", chapter: CHAPTER });
+  expect(def).toContain("write the note in English as");
+  expect(def).not.toContain("must be written in");
   expect(
     chapterSystemPrompt({ bookName: "Book", chapter: CHAPTER, aiLanguage: "auto" }),
-  ).not.toContain("must be written in");
+  ).toContain("write the note in English as");
 });

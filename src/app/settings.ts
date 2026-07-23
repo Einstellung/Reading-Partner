@@ -72,6 +72,15 @@ export function languageInstruction(aiLanguage: AiLanguage): string {
   return `Respond in ${name}. All user-facing output must be written in ${name}.`;
 }
 
+// The native display name for a set language, or null for "auto". Prompt
+// builders that already hardcode an output language in a sentence use this to
+// template the target language into that same sentence, instead of appending a
+// second, standalone pin that would contradict the hardcoded one. The prompt
+// then carries exactly one language directive.
+export function aiLanguageName(aiLanguage: AiLanguage): string | null {
+  return aiLanguage === "auto" ? null : AI_LANGUAGE_NAMES[aiLanguage];
+}
+
 export interface Settings {
   defaultProviderId: string | null;
   defaultModelId: string | null;
