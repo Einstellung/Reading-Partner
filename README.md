@@ -35,7 +35,7 @@ The Sources page is the account of what you subscribe to: one row per source wit
 
 ![First run: the AI opens a conversation to set up your sources](docs/assets/subscribe-talking.png)
 
-<!-- screenshot: the Sources page — sources with health dots and on/off toggles, and the paste-a-URL box at the top -->
+![The Sources page: health dots, toggles, and the paste-a-URL box](docs/assets/sources-list.png)
 
 ## The briefing companion
 
@@ -45,7 +45,7 @@ Voice a standing preference — "be harsher on vendor PR", "keep the paper expla
 
 Ask it to redo the briefing and it runs one of two depths: a re-triage that re-sorts today's already-collected items with the current profile (no fetching — for after a profile change or a bad sort), or a full re-collection that fetches every source again, including any you just added, and re-triages, replacing today's briefing. It starts a background job and returns at once; a progress card tracks the run — sources collected, then triage liveness — and settles into the finished briefing. The AI only regenerates when you ask, never on its own.
 
-<!-- screenshot: the briefing companion chat with a profile-update confirm card (the proposed profile and an Apply button) or a regeneration progress card -->
+![Asking the companion to regenerate: the finished card and the updated-briefing note](docs/assets/briefing-companion.png)
 
 ## Reading profile
 
