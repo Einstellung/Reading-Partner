@@ -6,7 +6,7 @@ import {
   dotPath,
   pickString,
   validateDescriptor,
-} from "../../src/info/descriptor";
+} from "../../src/info/sources/descriptor";
 
 const FEED_DESC = {
   id: "x",

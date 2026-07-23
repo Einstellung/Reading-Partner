@@ -6,7 +6,7 @@
 // qbitai.ts, so it runs identically in bun tests and the webview. CDATA and
 // entities are decoded. A malformed feed yields [] rather than throwing.
 
-import { decodeEntities } from "./sanitize";
+import { decodeEntities } from "../extract/sanitize";
 
 // A normalized entry: every body-bearing field the descriptor might name is
 // pulled if present, so fulltext "feed-field" can select among them.

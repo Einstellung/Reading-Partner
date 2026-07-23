@@ -2,7 +2,7 @@
 // selection. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { parseFeed, feedFieldBody } from "../../src/info/feed";
+import { parseFeed, feedFieldBody } from "../../src/info/sources/feed";
 
 const RSS = `<?xml version="1.0"?>
 <rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">

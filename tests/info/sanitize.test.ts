@@ -1,7 +1,7 @@
 // Article-HTML sanitizer (src/info/sanitize.ts). Run: bun test.
 
 import { expect, test } from "bun:test";
-import { htmlToText, sanitizeArticleHtml } from "../../src/info/sanitize";
+import { htmlToText, sanitizeArticleHtml } from "../../src/info/extract/sanitize";
 
 test("drops scripts, styles, iframes, and event handlers", () => {
   const out = sanitizeArticleHtml(

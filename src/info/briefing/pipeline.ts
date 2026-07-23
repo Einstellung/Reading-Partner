@@ -10,8 +10,8 @@ import {
   StoppedError,
   type AiCallOptions,
   type WatchdogConfig,
-} from "../ai/watchdog";
-import type { CollectEvent } from "./engine";
+} from "../../ai/watchdog";
+import type { CollectEvent } from "../sources/engine";
 import type { CachedArticle } from "./store";
 import { todayLocal } from "./store";
 import type { Briefing, BriefingItemMeta, FeedbackEvent, InfoItem, TriageResult } from "./types";

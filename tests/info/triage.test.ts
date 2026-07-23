@@ -7,8 +7,8 @@ import {
   parseTriageResult,
   triageSystemPrompt,
   triageUserMessage,
-} from "../../src/info/triage";
-import type { FeedbackEvent, InfoItem } from "../../src/info/types";
+} from "../../src/info/briefing/triage";
+import type { FeedbackEvent, InfoItem } from "../../src/info/briefing/types";
 
 const ITEMS: InfoItem[] = [
   {

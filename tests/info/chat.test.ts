@@ -10,9 +10,9 @@ import {
   formatProfile,
   formatSources,
   type CompanionContext,
-} from "../../src/info/chat";
-import type { SourceDescriptor } from "../../src/info/descriptor";
-import type { Briefing } from "../../src/info/types";
+} from "../../src/info/companion/chat";
+import type { SourceDescriptor } from "../../src/info/sources/descriptor";
+import type { Briefing } from "../../src/info/briefing/types";
 
 const SOURCES: SourceDescriptor[] = [
   {

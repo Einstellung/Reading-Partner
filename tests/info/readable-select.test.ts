@@ -3,7 +3,7 @@
 // of which result to keep, which is where the fallback policy lives. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { pickExtraction, type Extraction } from "../../src/info/readable-select";
+import { pickExtraction, type Extraction } from "../../src/info/extract/readable-select";
 
 function ex(text: string, tag = "r"): Extraction {
   return { title: tag, contentHtml: `<p>${text}</p>`, textContent: text };

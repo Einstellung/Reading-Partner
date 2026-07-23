@@ -18,9 +18,9 @@ import {
   probeSource,
   sniffFeedFormat,
   wpJsonPosts,
-} from "../../src/info/probe";
-import { parseFeed } from "../../src/info/feed";
-import type { SourceDescriptor } from "../../src/info/descriptor";
+} from "../../src/info/sources/probe";
+import { parseFeed } from "../../src/info/sources/feed";
+import type { SourceDescriptor } from "../../src/info/sources/descriptor";
 
 function res(body: string, contentType = "text/xml", status = 200): Response {
   return new Response(body, { status, headers: { "content-type": contentType } });

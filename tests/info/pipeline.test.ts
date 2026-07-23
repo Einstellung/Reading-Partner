@@ -4,9 +4,9 @@
 // streaming liveness. Deps are injected, so this runs headless. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { InfoPipeline, type InfoDeps, type InfoSnapshot } from "../../src/info/pipeline";
-import type { CollectEvent } from "../../src/info/engine";
-import type { InfoItem, TriageResult } from "../../src/info/types";
+import { InfoPipeline, type InfoDeps, type InfoSnapshot } from "../../src/info/briefing/pipeline";
+import type { CollectEvent } from "../../src/info/sources/engine";
+import type { InfoItem, TriageResult } from "../../src/info/briefing/types";
 
 function item(id: string): InfoItem {
   return { id, source: "s", sourceName: "S", title: id, url: `https://x/${id}`, publishedAt: "" };

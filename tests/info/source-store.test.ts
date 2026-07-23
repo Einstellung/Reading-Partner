@@ -3,8 +3,8 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { migratedSources, parseSources } from "../../src/info/source-store";
-import { BUILTIN_SOURCES } from "../../src/info/builtins";
+import { migratedSources, parseSources } from "../../src/info/sources/source-store";
+import { BUILTIN_SOURCES } from "../../src/info/sources/builtins";
 
 test("migratedSources: existing user gets the two original builtins, enabled", () => {
   const list = migratedSources(true);

@@ -12,9 +12,9 @@
 // are the same DOM-free helpers the engine uses.
 
 import { parseFeed, type FeedEntry } from "./feed";
-import { htmlToText } from "./sanitize";
+import { htmlToText } from "../extract/sanitize";
 import { BUILTIN_SOURCES, builtinCaveat } from "./builtins";
-import type { FetchFn } from "./http";
+import type { FetchFn } from "../extract/http";
 import type { Fulltext, SourceDescriptor } from "./descriptor";
 
 // The feed paths tried in order, most common first. wp-json is last: it is a full

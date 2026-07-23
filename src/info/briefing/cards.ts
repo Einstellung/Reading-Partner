@@ -4,7 +4,7 @@
 // layer (not components/) so both the source tools and the card components import
 // one definition, matching the components -> info dependency direction.
 
-import type { SourceDescriptor } from "./descriptor";
+import type { SourceDescriptor } from "../sources/descriptor";
 import type { CollectProgress } from "./pipeline";
 
 export interface TrialSample {

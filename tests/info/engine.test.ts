@@ -5,8 +5,8 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { collectSource, collectAll, type CollectEvent } from "../../src/info/engine";
-import type { ExtractReadable, SourceDescriptor } from "../../src/info/descriptor";
+import { collectSource, collectAll, type CollectEvent } from "../../src/info/sources/engine";
+import type { ExtractReadable, SourceDescriptor } from "../../src/info/sources/descriptor";
 
 const extract: ExtractReadable = (_html, url) => ({
   title: "Extracted title",

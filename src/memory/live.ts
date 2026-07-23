@@ -15,8 +15,8 @@ import {
 import type { ThinkingLevel } from "@earendil-works/pi-ai";
 import { runAgentTurn } from "../ai/agent";
 import type { ProviderId } from "../ai/providers";
-import { loadSettings, toReasoning } from "../settings";
-import { logEvent } from "../events";
+import { loadSettings, toReasoning } from "../app/settings";
+import { logEvent } from "../app/events";
 import { FileMemoryAdapter, type MemoryAdapter } from "./adapter";
 import { isoDate } from "./files";
 import { MemoryFileStore, type MemoryFs } from "./store";

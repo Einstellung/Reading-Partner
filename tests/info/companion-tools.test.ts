@@ -8,9 +8,9 @@ import {
   buildCompanionTools,
   buildUpdateProfileTool,
   companionToolStatusLabel,
-} from "../../src/info/companion-tools";
-import type { ProfileUpdateCardData } from "../../src/info/cards";
-import type { ExtractReadable } from "../../src/info/descriptor";
+} from "../../src/info/companion/companion-tools";
+import type { ProfileUpdateCardData } from "../../src/info/briefing/cards";
+import type { ExtractReadable } from "../../src/info/sources/descriptor";
 
 const extract: ExtractReadable = () => ({ title: "t", contentHtml: "<p>b</p>", textContent: "b" });
 

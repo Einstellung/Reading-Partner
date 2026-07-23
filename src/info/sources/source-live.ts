@@ -5,14 +5,14 @@
 // for the source-list page. Imported only in the webview (extractReadable needs a
 // DOM), never in bun tests.
 
-import { infoFetch } from "./http";
-import { extractReadable } from "./readable";
+import { infoFetch } from "../extract/http";
+import { extractReadable } from "../extract/readable";
 import { probeSource } from "./probe";
 import { buildSourceTools, trialSource } from "./source-tools";
-import { buildCompanionTools } from "./companion-tools";
+import { buildCompanionTools } from "../companion/companion-tools";
 import { addSource } from "./source-store";
-import type { ProbeConfirmCardData, ProfileUpdateCardData } from "./cards";
-import type { AgentTool } from "../ai/agent";
+import type { ProbeConfirmCardData, ProfileUpdateCardData } from "../briefing/cards";
+import type { AgentTool } from "../../ai/agent";
 
 // The three add-source tools bound to the live fetch/extract/store. `onProbeCard`
 // lets the chat surface the confirm card when trial_source succeeds.

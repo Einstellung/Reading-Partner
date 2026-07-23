@@ -3,8 +3,8 @@
 // is no built-in source list to inject. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { addSourceSystemPrompt } from "../../src/info/source-skill";
-import { BUILTIN_SOURCES } from "../../src/info/builtins";
+import { addSourceSystemPrompt } from "../../src/info/sources/source-skill";
+import { BUILTIN_SOURCES } from "../../src/info/sources/builtins";
 
 test("prompt states the consent rule and the trial-before-add rule", () => {
   const p = addSourceSystemPrompt();

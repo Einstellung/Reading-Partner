@@ -9,7 +9,7 @@ import { Readability } from "@mozilla/readability";
 import Defuddle from "defuddle";
 import { sanitizeArticleHtml, htmlToText } from "./sanitize";
 import { pickExtraction, MIN_BODY_CHARS, type Extraction } from "./readable-select";
-import type { ExtractReadable } from "./descriptor";
+import type { ExtractReadable } from "../sources/descriptor";
 
 function parseDoc(html: string, url: string): Document | null {
   if (typeof DOMParser === "undefined") return null;

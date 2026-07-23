@@ -7,9 +7,9 @@
 // rules in one place.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../ai/agent";
-import type { ProfileUpdateCardData } from "./cards";
-import { buildSourceTools, sourceToolStatusLabel, type SourceToolDeps } from "./source-tools";
+import type { AgentTool } from "../../ai/agent";
+import type { ProfileUpdateCardData } from "../briefing/cards";
+import { buildSourceTools, sourceToolStatusLabel, type SourceToolDeps } from "../sources/source-tools";
 
 export interface CompanionToolDeps extends SourceToolDeps {
   // Surface the profile-update confirm card in the chat. The host owns the Apply

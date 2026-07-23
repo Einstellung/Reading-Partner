@@ -10,7 +10,7 @@ import {
   readTextFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
-import type { FeedbackAction, FeedbackEvent } from "./types";
+import type { FeedbackAction, FeedbackEvent } from "../info/briefing/types";
 
 export const FEEDBACK_FILE = "info-feedback.jsonl";
 

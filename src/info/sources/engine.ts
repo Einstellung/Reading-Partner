@@ -6,9 +6,9 @@
 // descriptor. Fetching is injected (FetchFn) and readable extraction is injected
 // (ExtractReadable), so the whole engine is DOM-free and unit-testable in bun.
 
-import { fetchText, infoFetch, type FetchFn } from "./http";
-import { itemId } from "./id";
-import { htmlToText } from "./sanitize";
+import { fetchText, infoFetch, type FetchFn } from "../extract/http";
+import { itemId } from "../extract/id";
+import { htmlToText } from "../extract/sanitize";
 import { parseFeed, feedFieldBody } from "./feed";
 import {
   dotPath,
@@ -18,7 +18,7 @@ import {
   type JsonApiDiscovery,
   type SourceDescriptor,
 } from "./descriptor";
-import type { InfoItem } from "./types";
+import type { InfoItem } from "../briefing/types";
 
 export interface CollectDeps {
   fetchFn?: FetchFn;

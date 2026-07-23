@@ -2,7 +2,7 @@
 // Tauri plugin; the pure JSONL parse is tested here. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { parseFeedbackLog } from "../../src/info/feedback";
+import { parseFeedbackLog } from "../../src/memory/feedback";
 
 test("parseFeedbackLog reads valid lines and skips corrupt ones", () => {
   const log = [

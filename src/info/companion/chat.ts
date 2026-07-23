@@ -5,9 +5,9 @@
 // string assembly so the calling component stays thin; the AI call reuses the
 // agent loop, and the tools surface confirm cards.
 
-import { languageInstruction, type AiLanguage } from "../settings";
-import type { SourceDescriptor } from "./descriptor";
-import type { Briefing } from "./types";
+import { languageInstruction, type AiLanguage } from "../../app/settings";
+import type { SourceDescriptor } from "../sources/descriptor";
+import type { Briefing } from "../briefing/types";
 
 // How much article text the chat carries as context (chat models take a big
 // window; a very long piece still gets a sane cap).

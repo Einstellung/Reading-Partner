@@ -10,7 +10,7 @@ import {
   readTextFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
-import { mergeInlinedHtml } from "./inline-images";
+import { mergeInlinedHtml } from "../extract/inline-images";
 import type { Briefing, InfoItem } from "./types";
 
 // The full article body kept per item, split out of the briefing so the briefing

@@ -8,13 +8,13 @@
 // that runs the generic engine over a candidate descriptor.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../ai/agent";
-import type { FetchFn } from "./http";
+import type { AgentTool } from "../../ai/agent";
+import type { FetchFn } from "../extract/http";
 import type { ExtractReadable, SourceDescriptor } from "./descriptor";
 import { validateDescriptor } from "./descriptor";
 import { collectSource } from "./engine";
 import { probeSource, pipeLabel } from "./probe";
-import type { ProbeConfirmCardData, TrialSample } from "./cards";
+import type { ProbeConfirmCardData, TrialSample } from "../briefing/cards";
 
 // A body of at least this many plain-text characters counts as "full text" in a
 // trial sample (below it the fetch got a headline/teaser only).

@@ -4,7 +4,7 @@
 // watchdog. The model sorts every item into exactly one tier and writes the
 // overview/reasons/lines to the user.
 
-import { languageInstruction, type AiLanguage } from "../settings";
+import { languageInstruction, type AiLanguage } from "../../app/settings";
 import type { FeedbackEvent, InfoItem, TriageResult } from "./types";
 
 // How much of each article's text the model sees. Enough to judge substance

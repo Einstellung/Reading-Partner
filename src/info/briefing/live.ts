@@ -5,14 +5,14 @@
 // watchdog); the pure logic (adapters, triage prompt/validation) stays testable.
 
 import type { ThinkingLevel } from "@earendil-works/pi-ai";
-import { streamChat, type ProviderId } from "../ai/providers";
-import { loadSettings, toReasoning } from "../settings";
-import type { AiCallOptions } from "../ai/watchdog";
-import { collectAll, type CollectEvent } from "./engine";
-import { extractReadable } from "./readable";
-import { loadSources, loadSourceHealth, saveSourceHealth } from "./source-store";
-import { loadFeedback } from "./feedback";
-import { loadProfile } from "./profile";
+import { streamChat, type ProviderId } from "../../ai/providers";
+import { loadSettings, toReasoning } from "../../app/settings";
+import type { AiCallOptions } from "../../ai/watchdog";
+import { collectAll, type CollectEvent } from "../sources/engine";
+import { extractReadable } from "../extract/readable";
+import { loadSources, loadSourceHealth, saveSourceHealth } from "../sources/source-store";
+import { loadFeedback } from "../../memory/feedback";
+import { loadProfile } from "../../memory/profile";
 import { InfoPipeline } from "./pipeline";
 import {
   loadBriefing,
@@ -26,7 +26,7 @@ import {
   triageSystemPrompt,
   triageUserMessage,
 } from "./triage";
-import type { AiLanguage } from "../settings";
+import type { AiLanguage } from "../../app/settings";
 import type { FeedbackEvent, InfoItem, TriageResult } from "./types";
 
 async function resolveModel(): Promise<{

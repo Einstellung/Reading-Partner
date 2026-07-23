@@ -9,7 +9,7 @@ import {
   removeImage,
   rewriteImageSrc,
   type ImageBytes,
-} from "../../src/info/inline-images";
+} from "../../src/info/extract/inline-images";
 
 const IMG = (src: string) => `<img src="${src}" referrerpolicy="no-referrer" loading="lazy">`;
 

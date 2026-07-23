@@ -3,8 +3,8 @@
 // Tauri plugin. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { leanItems, localDateString, todayLocal } from "../../src/info/store";
-import type { InfoItem } from "../../src/info/types";
+import { leanItems, localDateString, todayLocal } from "../../src/info/briefing/store";
+import type { InfoItem } from "../../src/info/briefing/types";
 
 test("localDateString is local YYYY-MM-DD, zero-padded", () => {
   // Construct with local-time components so the assertion is timezone-agnostic.

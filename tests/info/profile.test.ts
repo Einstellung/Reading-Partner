@@ -24,7 +24,7 @@ mock.module("@tauri-apps/plugin-fs", () => ({
   },
 }));
 
-const { loadProfile, saveProfile } = await import("../../src/info/profile");
+const { loadProfile, saveProfile } = await import("../../src/memory/profile");
 
 test("loadProfile returns empty and writes nothing when no file exists", async () => {
   fileContent = null;

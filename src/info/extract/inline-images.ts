@@ -9,7 +9,7 @@
 // and the data-URL encoder. The fetch is injected (see fetchImageBytes in
 // http.ts); the orchestration and persist-back live in the article view host.
 
-import type { CachedArticle } from "./store";
+import type { CachedArticle } from "../briefing/store";
 
 // Caps: an article rarely has more than a handful of real images, and a data:
 // URL bloats the cache by ~4/3 of the image's bytes, so bound both counts.
