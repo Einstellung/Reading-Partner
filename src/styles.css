@@ -4,6 +4,14 @@
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
 
+/* Touch/pointer variants (iPad adaptation). `can-hover` gates hover-only
+   enhancements so a reveal-on-hover control stays visible on touch (where hover
+   never fires); `coarse` expands hit areas to the 44px touch target only on a
+   coarse pointer, leaving desktop density untouched. Used instead of a UA sniff
+   so a hybrid device answers per actual input. */
+@custom-variant can-hover (@media (hover: hover));
+@custom-variant coarse (@media (pointer: coarse));
+
 /* The only global rules: preflight is off, so box-sizing, the root sizing
    chain, and the base font/color are not otherwise established. */
 * {

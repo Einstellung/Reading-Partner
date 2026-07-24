@@ -63,7 +63,7 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 	const rack = horizontal
 		? 'inline-flex flex-row items-center gap-0.5 p-0.5 select-none'
 		: `inline-flex flex-col items-center gap-1 p-1.5 select-none ${CARD}`;
-	const toolSize = horizontal ? 'h-8 w-8' : 'h-9 w-9';
+	const toolSize = (horizontal ? 'h-8 w-8' : 'h-9 w-9') + ' coarse:h-11 coarse:w-11';
 	// The AI pen keeps violet as its theme accent, but shares the tool rack's one
 	// visual language: same size, same light-tinted-fill selected state as the
 	// blue tools — no gradient block, no size change.
@@ -142,7 +142,7 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 								role="option"
 								aria-selected={tool.color === c.color}
 								className={
-									'flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 hover:bg-black/5' +
+									'flex h-7 w-7 coarse:h-11 coarse:w-11 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 hover:bg-black/5' +
 									(tool.color === c.color ? ' ring-2 ring-inset ring-sky-600' : '')
 								}
 								title={c.name}

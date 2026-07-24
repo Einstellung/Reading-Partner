@@ -159,7 +159,7 @@ import PrepPanel from "./components/reader/PrepPanel";
 import NotesPanel from "./components/reader/NotesPanel";
 import MemoryPanel from "./components/reader/MemoryPanel";
 import PenToolbar from "./components/reader/PenToolbar";
-import { IconSparkle, IconPagedLayout, IconVerticalLayout } from "./components/common/icons";
+import { IconSidebar, IconSparkle, IconPagedLayout, IconVerticalLayout } from "./components/common/icons";
 import AnnotationPopup from "./components/reader/AnnotationPopup";
 import CallBubble from "./components/chat/CallBubble";
 import CallView from "./components/chat/CallView";
@@ -190,16 +190,19 @@ const AUTO_NOTES_DEBOUNCE = 4000;
 
 // Shared utility-class strings for the shell chrome (migrated from styles.css).
 // Split so variant overrides never collide with base padding/border utilities.
+// inline-flex + centering lets `coarse:min-h-[44px]` grow these to the 44px touch
+// target with the label centered; on a fine pointer min-h is inert, so desktop
+// density is unchanged.
 const BTN_BASE =
-  "leading-none border rounded-md bg-white cursor-pointer enabled:hover:bg-[#f0f0f0] disabled:opacity-40 disabled:cursor-default";
+  "inline-flex items-center justify-center leading-none border rounded-md bg-white cursor-pointer enabled:hover:bg-[#f0f0f0] disabled:opacity-40 disabled:cursor-default coarse:min-h-[44px]";
 const BTN = `${BTN_BASE} text-sm px-3 py-1.5 border-[#dcdcdc]`;
-const BTN_PRIMARY = "text-sm leading-none px-3 py-1.5 rounded-md bg-[#6c4fd0] text-white cursor-pointer enabled:hover:bg-[#5a3fbf] disabled:opacity-40";
+const BTN_PRIMARY = "inline-flex items-center justify-center text-sm leading-none px-3 py-1.5 rounded-md bg-[#6c4fd0] text-white cursor-pointer enabled:hover:bg-[#5a3fbf] disabled:opacity-40 coarse:min-h-[44px]";
 const BTN_SM = `${BTN_BASE} text-xs px-2 py-1 border-[#dcdcdc]`;
 const BTN_SM_DANGER = `${BTN_BASE} text-xs px-2 py-1 border-[#f0c8c8] text-[#b91c1c]`;
 // Pressed state for a toggle button; spelled out rather than appended to BTN_SM
 // because two background utilities in one class list resolve by stylesheet order.
 const BTN_SM_ON =
-  "text-xs leading-none px-2 py-1 border rounded-md border-[#c9c2e8] bg-[#efecfb] text-[#4a3a9e] cursor-pointer enabled:hover:bg-[#e7e3f7] disabled:opacity-40 disabled:cursor-default";
+  "inline-flex items-center justify-center text-xs leading-none px-2 py-1 border rounded-md border-[#c9c2e8] bg-[#efecfb] text-[#4a3a9e] cursor-pointer enabled:hover:bg-[#e7e3f7] disabled:opacity-40 disabled:cursor-default coarse:min-h-[44px]";
 // Default reading layout for a book that has never set one: paged horizontal
 // flip on touch-first devices (iPad), vertical scroll everywhere else.
 function defaultLayout(): "vertical" | "paged" {
@@ -380,7 +383,10 @@ export default function App() {
   const [viewReady, setViewReady] = useState(false);
   const [traceAnns, setTraceAnns] = useState<Annotation[]>([]);
   const [selectedAnnId, setSelectedAnnId] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // The panel is an overlay drawer, closed by default on every surface (docs:
+  // iPad adaptation). The open/closed choice persists for the session (App stays
+  // mounted across book open/close) and resets to closed on restart (reload).
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("traces");
   // The current book's extracted text (M6 AI context) and outline (Sidebar).
   // Set from openInReader once ensureFulltext resolves; see the comment there.
@@ -2168,6 +2174,7 @@ export default function App() {
         else if (quoteHlActive) viewRef.current?.clearQuoteHighlight();
         else if (callRef.current) endCall();
         else if (popup) setPopup(null);
+        else if (sidebarOpen) setSidebarOpen(false);
         return;
       }
       const target = e.target as HTMLElement | null;
@@ -2181,7 +2188,11 @@ export default function App() {
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [showSettings, popup, endCall, quoteHlActive]);
+  }, [showSettings, popup, endCall, quoteHlActive, sidebarOpen]);
+
+  // Background work the drawer would show if open (prep/notes generation): the
+  // toggle carries a status dot so progress is visible while the drawer is shut.
+  const sidebarBusy = !!(prepSnap?.running || notesSnap?.running);
 
   const pageText = stats ? `${stats.pageIndex + 1} / ${stats.pagesCount}` : "— / —";
   const twoPage = !!stats && stats.spreadMode !== SpreadMode.None;
@@ -2226,7 +2237,18 @@ export default function App() {
   return (
     <CitationContext.Provider value={onCitation}>
     <FigureContext.Provider value={figureHost}>
-    <div className="flex flex-col h-full">
+    {/* Safe-area insets (iPad, viewport-fit=cover). All env() values are 0 on
+        desktop, so this is inert there. box-sizing:border-box keeps the padding
+        inside the full-height shell. */}
+    <div
+      className="flex flex-col h-full"
+      style={{
+        paddingTop: "env(safe-area-inset-top)",
+        paddingLeft: "env(safe-area-inset-left)",
+        paddingRight: "env(safe-area-inset-right)",
+        paddingBottom: "env(safe-area-inset-bottom)",
+      }}
+    >
       {/* z-10: the color palette drops out of the header into the reader area,
           and <main> is positioned too — without this it would paint over it. */}
       <header className="relative z-10 flex h-11 flex-none items-center gap-3 border-b border-[#dcdcdc] bg-[#fafafa] px-3">
@@ -2247,6 +2269,20 @@ export default function App() {
         )}
         {inReader ? (
           <>
+            <button
+              className="relative flex h-8 w-8 items-center justify-center rounded-md border-0 bg-transparent text-[#555] cursor-pointer can-hover:hover:bg-black/5 coarse:h-11 coarse:w-11"
+              title={sidebarOpen ? "Close panel" : "Open panel"}
+              aria-label={sidebarOpen ? "Close panel" : "Open panel"}
+              aria-pressed={sidebarOpen}
+              onClick={() => setSidebarOpen((v) => !v)}
+            >
+              <IconSidebar size={18} />
+              {/* Background-work dot: prep/notes generating while the drawer is
+                  shut (docs: iPad adaptation). */}
+              {sidebarBusy && (
+                <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[#6c4fd0] ring-2 ring-[#fafafa]" />
+              )}
+            </button>
             <button className={BTN} onClick={closeReader}>
               ‹ Library
             </button>
@@ -2257,7 +2293,7 @@ export default function App() {
             <span className="flex-1" />
             <div className="flex items-center gap-2">
               <button
-                className="flex items-center justify-center rounded-md border border-[#c9c2e8] bg-[#efecfb] px-2.5 py-1.5 text-[#4a3a9e] cursor-pointer hover:bg-[#e7e3f7]"
+                className="inline-flex items-center justify-center rounded-md border border-[#c9c2e8] bg-[#efecfb] px-2.5 py-1.5 text-[#4a3a9e] cursor-pointer hover:bg-[#e7e3f7] coarse:h-11 coarse:min-w-[44px]"
                 title="Talk about this book"
                 aria-label="Talk about this book"
                 onClick={openBookThread}
@@ -2265,11 +2301,11 @@ export default function App() {
                 <IconSparkle size={16} />
               </button>
               <span className="h-5 w-px bg-[#dcdcdc]" />
-              <button className={BTN} disabled={!stats?.canZoomOut} onClick={() => viewRef.current?.zoomOut()}>
+              <button className={`${BTN} coarse:min-w-[44px]`} disabled={!stats?.canZoomOut} onClick={() => viewRef.current?.zoomOut()}>
                 −
               </button>
               <span className="[font-variant-numeric:tabular-nums] text-[13px] min-w-[64px] text-center">{pageText}</span>
-              <button className={BTN} disabled={!stats?.canZoomIn} onClick={() => viewRef.current?.zoomIn()}>
+              <button className={`${BTN} coarse:min-w-[44px]`} disabled={!stats?.canZoomIn} onClick={() => viewRef.current?.zoomIn()}>
                 +
               </button>
               <span className="h-5 w-px bg-[#dcdcdc]" />
@@ -2321,7 +2357,7 @@ export default function App() {
         ) : (
           <span className="flex-1" />
         )}
-        <button className={BTN} title="Settings" aria-label="Settings" onClick={() => setShowSettings(true)}>
+        <button className={`${BTN} coarse:min-w-[44px]`} title="Settings" aria-label="Settings" onClick={() => setShowSettings(true)}>
           ⚙
         </button>
       </header>
@@ -2333,16 +2369,11 @@ export default function App() {
           <Sidebar
             open={sidebarOpen}
             tab={sidebarTab}
-            onToggle={() => setSidebarOpen((v) => !v)}
+            onClose={() => setSidebarOpen(false)}
             onSelectTab={(t) => {
-              if (t === sidebarTab && sidebarOpen) {
-                setSidebarOpen(false);
-              } else {
-                if (t === "memory" && activeTopic) logEvent(activeTopic.id, "memory-tab-open");
-                if (t === "notes" && activeTopic) logEvent(activeTopic.id, "notes-tab-open");
-                setSidebarTab(t);
-                setSidebarOpen(true);
-              }
+              if (t === "memory" && activeTopic) logEvent(activeTopic.id, "memory-tab-open");
+              if (t === "notes" && activeTopic) logEvent(activeTopic.id, "notes-tab-open");
+              setSidebarTab(t);
             }}
             fulltext={fulltext}
             fulltextPending={fulltextPending}

@@ -1,18 +1,17 @@
-// Left sidebar: a persistent icon rail plus a collapsible panel (ChatGPT-style),
-// with five tabs — Outline, Annotations, Prep (the lesson-prep progress list,
-// docs/09), Notes (the book's lecture notes, docs/14), and Memory (what the AI
-// remembers, docs/02). Pure and controlled: App owns `open`/`tab` state, this
-// component only renders and forwards clicks.
+// Left sidebar as an overlay drawer (docs: touch/iPad adaptation). Default
+// closed on every surface (PC too); the reader top-bar button toggles it. It
+// slides in from the left over the reader, dims the page behind it, and closes
+// on a backdrop tap, Esc, or the toggle button. Five tabs live along its top:
+// Outline, Marks (annotations), Prep (docs/09), Notes (docs/14), Memory (docs/02).
 //
-// The slide is a compositor-driven `transform` on a panel that floats over the
-// reader, while the in-flow spacer that reserves its slot resizes in one step.
-// Animating the spacer's width instead would relayout the reader iframe on every
-// frame, and pdf.js re-renders its canvases on every resize — the animation then
-// runs at a few frames per second. A transform keeps painting off the main thread,
-// so the slide stays smooth even while the engine repaints the page once.
+// Pure and controlled: App owns `open`/`tab` state and the toggle; this renders
+// the backdrop, the sliding panel, and the tab row, and forwards clicks. The
+// slide is a compositor-driven transform (the reader never relayouts, so pdf.js
+// does not repaint on every frame); the panel floats over the reader rather than
+// reserving an in-flow column, so opening it costs the reader nothing.
 
 import type { ReactNode } from "react";
-import { IconHighlight, IconMemory, IconNotes, IconOutline, IconSidebar, IconSparkle } from "../common/icons";
+import { IconHighlight, IconMemory, IconNotes, IconOutline, IconSparkle } from "../common/icons";
 import OutlineView from "./OutlineView";
 import TraceList from "../chat/TraceList";
 import type { Annotation } from "../common/types";
@@ -20,18 +19,31 @@ import type { Fulltext } from "../../fulltext/types";
 
 export type SidebarTab = "outline" | "traces" | "prep" | "notes" | "memory";
 
-export const RAIL_WIDTH = 44;
+// Drawer width: the old panel width, capped so a narrow window (portrait iPad,
+// Split View) never gives it more than a reasonable slice of the viewport.
 export const PANEL_WIDTH = 300;
 
-const RAIL_BTN =
-	"flex h-8 w-8 items-center justify-center rounded-md border-0 bg-transparent cursor-pointer text-[#555] hover:bg-black/5";
-const RAIL_BTN_ACTIVE = "bg-black/[0.07] text-[#1b1b1b]";
+const TABS: { id: SidebarTab; label: string; Icon: (p: { size?: number }) => JSX.Element }[] = [
+	{ id: "outline", label: "Outline", Icon: IconOutline },
+	{ id: "traces", label: "Marks", Icon: IconHighlight },
+	{ id: "prep", label: "Prep", Icon: IconSparkle },
+	{ id: "notes", label: "Notes", Icon: IconNotes },
+	{ id: "memory", label: "Memory", Icon: IconMemory },
+];
+
+// A tab button. The active tab shows its label beside the icon so the panel is
+// self-describing without hover tooltips (which never fire on touch); inactive
+// tabs are icon-only. h-11 keeps every tab a 44px touch target.
+const TAB_BTN =
+	"flex h-11 items-center justify-center gap-1.5 rounded-md border-0 bg-transparent px-2 cursor-pointer text-[#555] can-hover:hover:bg-black/5 coarse:min-w-[44px]";
+const TAB_BTN_ACTIVE = "bg-black/[0.06] text-[#1b1b1b]";
 
 interface SidebarProps {
 	open: boolean;
 	tab: SidebarTab;
-	onToggle(): void;
 	onSelectTab(tab: SidebarTab): void;
+	// Dismiss the drawer (backdrop tap). The toggle button and Esc live in App.
+	onClose(): void;
 	fulltext: Fulltext | null;
 	fulltextPending: boolean;
 	onNavigatePage(page: number): void;
@@ -51,8 +63,8 @@ interface SidebarProps {
 export default function Sidebar({
 	open,
 	tab,
-	onToggle,
 	onSelectTab,
+	onClose,
 	fulltext,
 	fulltextPending,
 	onNavigatePage,
@@ -65,88 +77,50 @@ export default function Sidebar({
 	notesPanel,
 	memoryPanel,
 }: SidebarProps) {
-	// Fragment: the rail and the spacer sit in the reader row, while the panel is
-	// absolutely positioned against <main> so sliding it never moves the reader.
 	return (
 		<>
+			{/* Backdrop: dims the reader and catches the outside tap. Transparent and
+			    click-through while closed so it never blocks the reader. */}
 			<div
-				className="flex h-full shrink-0 flex-col items-center gap-1 border-r border-[#dcdcdc] bg-white pt-2"
-				style={{ width: RAIL_WIDTH }}
-			>
-				<button type="button" className={RAIL_BTN} title={open ? "Collapse sidebar" : "Expand sidebar"} aria-label={open ? "Collapse sidebar" : "Expand sidebar"} onClick={onToggle}>
-					<IconSidebar size={18} />
-				</button>
-				<div className="my-1 h-px w-6 bg-[#dcdcdc]" />
-				<button
-					type="button"
-					className={`${RAIL_BTN} ${open && tab === "outline" ? RAIL_BTN_ACTIVE : ""}`}
-					title="Outline"
-					aria-label="Outline"
-					aria-pressed={tab === "outline"}
-					onClick={() => onSelectTab("outline")}
-				>
-					<IconOutline size={18} />
-				</button>
-				<button
-					type="button"
-					className={`${RAIL_BTN} ${open && tab === "traces" ? RAIL_BTN_ACTIVE : ""}`}
-					title="Annotations"
-					aria-label="Annotations"
-					aria-pressed={tab === "traces"}
-					onClick={() => onSelectTab("traces")}
-				>
-					<IconHighlight size={18} />
-				</button>
-				<button
-					type="button"
-					className={`${RAIL_BTN} ${open && tab === "prep" ? RAIL_BTN_ACTIVE : ""}`}
-					title="Lesson prep"
-					aria-label="Lesson prep"
-					aria-pressed={tab === "prep"}
-					onClick={() => onSelectTab("prep")}
-				>
-					<IconSparkle size={18} />
-				</button>
-				<button
-					type="button"
-					className={`${RAIL_BTN} ${open && tab === "notes" ? RAIL_BTN_ACTIVE : ""}`}
-					title="Notes"
-					aria-label="Notes"
-					aria-pressed={tab === "notes"}
-					onClick={() => onSelectTab("notes")}
-				>
-					<IconNotes size={18} />
-				</button>
-				<button
-					type="button"
-					className={`${RAIL_BTN} ${open && tab === "memory" ? RAIL_BTN_ACTIVE : ""}`}
-					title="Memory"
-					aria-label="Memory"
-					aria-pressed={tab === "memory"}
-					onClick={() => onSelectTab("memory")}
-				>
-					<IconMemory size={18} />
-				</button>
-			</div>
+				className={
+					"absolute inset-0 z-20 bg-black/20 transition-opacity duration-200 " +
+					(open ? "opacity-100" : "pointer-events-none opacity-0")
+				}
+				onClick={onClose}
+				aria-hidden="true"
+			/>
 
-			{/* Holds the panel's slot in the flex row. Resizes in one step: the
-			    reader relayouts (and pdf.js repaints) once per toggle, not per frame. */}
-			<div className="h-full shrink-0 bg-white" style={{ width: open ? PANEL_WIDTH : 0 }} />
-
-			{/* Clips the panel while it is parked off to the left. Transparent and
-			    click-through; the panel itself takes pointer events only when open. */}
-			<div
-				className="pointer-events-none absolute top-0 z-10 h-full overflow-hidden"
-				style={{ left: RAIL_WIDTH, width: PANEL_WIDTH }}
+			{/* The sliding panel. Parked off to the left when closed; a transform
+			    keeps the slide off the main thread. */}
+			<aside
+				className={
+					"absolute left-0 top-0 z-30 flex h-full flex-col border-r border-[#dcdcdc] bg-white shadow-xl [will-change:transform] transition-transform duration-200 ease-out " +
+					(open ? "translate-x-0" : "pointer-events-none -translate-x-full")
+				}
+				style={{ width: `min(${PANEL_WIDTH}px, 85vw)` }}
+				aria-hidden={!open}
 			>
-				<div
-					className={
-						"h-full w-full border-r border-[#dcdcdc] bg-white [will-change:transform] transition-transform duration-200 ease-out " +
-						(open ? "pointer-events-auto" : "pointer-events-none")
-					}
-					style={{ transform: open ? "translateX(0)" : `translateX(-${PANEL_WIDTH}px)` }}
-					aria-hidden={!open}
-				>
+				<div className="flex flex-none items-center gap-0.5 border-b border-[#dcdcdc] px-1.5 py-1">
+					{TABS.map(({ id, label, Icon }) => {
+						const active = tab === id;
+						return (
+							<button
+								key={id}
+								type="button"
+								className={`${TAB_BTN} ${active ? TAB_BTN_ACTIVE : ""}`}
+								title={label}
+								aria-label={label}
+								aria-pressed={active}
+								onClick={() => onSelectTab(id)}
+							>
+								<Icon size={18} />
+								{active && <span className="text-[13px] font-medium">{label}</span>}
+							</button>
+						);
+					})}
+				</div>
+
+				<div className="min-h-0 flex-1">
 					{tab === "outline" ? (
 						<OutlineView fulltext={fulltext} pending={fulltextPending} onNavigatePage={onNavigatePage} />
 					) : tab === "traces" ? (
@@ -165,7 +139,7 @@ export default function Sidebar({
 						memoryPanel
 					)}
 				</div>
-			</div>
+			</aside>
 		</>
 	);
 }

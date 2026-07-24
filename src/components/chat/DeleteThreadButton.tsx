@@ -28,7 +28,7 @@ export default function DeleteThreadButton({ onDelete }: DeleteThreadButtonProps
 				title="Delete conversation"
 				aria-label="Delete conversation"
 				onClick={() => setArmed(true)}
-				className="flex h-6 w-6 items-center justify-center rounded-md text-neutral-400 hover:bg-red-700/10 hover:text-red-700"
+				className="flex h-6 w-6 coarse:h-11 coarse:w-11 items-center justify-center rounded-md text-neutral-400 hover:bg-red-700/10 hover:text-red-700"
 			>
 				<IconTrash size={15} />
 			</button>
@@ -43,7 +43,7 @@ export default function DeleteThreadButton({ onDelete }: DeleteThreadButtonProps
 			aria-label="Confirm delete"
 			onClick={onDelete}
 			onBlur={() => setArmed(false)}
-			className="rounded-md bg-red-600 px-2 py-1 text-[11px] font-medium leading-none text-white hover:bg-red-700"
+			className="rounded-md bg-red-600 px-2 py-1 text-[11px] font-medium leading-none text-white hover:bg-red-700 coarse:px-3 coarse:py-2.5"
 		>
 			Confirm delete
 		</button>

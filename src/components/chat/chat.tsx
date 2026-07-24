@@ -105,7 +105,7 @@ function CopyButton({ text }: { text: string }) {
 			type="button"
 			aria-label={copied ? 'Copied' : 'Copy'}
 			onClick={copy}
-			className="flex w-fit items-center gap-1 rounded-md px-1.5 py-1 text-[12px] leading-none text-neutral-400 opacity-0 transition-opacity hover:bg-black/5 hover:text-neutral-600 focus-visible:opacity-100 group-hover:opacity-100"
+			className="flex w-fit items-center gap-1 rounded-md px-1.5 py-1 text-[12px] leading-none text-neutral-400 can-hover:opacity-0 transition-opacity hover:bg-black/5 hover:text-neutral-600 focus-visible:opacity-100 group-hover:opacity-100 coarse:px-2.5 coarse:py-2"
 		>
 			{copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
 			{copied && 'Copied'}
@@ -452,7 +452,7 @@ export function Composer({
 					)}
 					{pill &&
 						(streaming ? (
-							<button type="button" aria-label="Stop" onClick={onStop} className={`${stopBtn} h-9 w-9`}>
+							<button type="button" aria-label="Stop" onClick={onStop} className={`${stopBtn} h-9 w-9 coarse:h-11 coarse:w-11`}>
 								<IconStop size={16} />
 							</button>
 						) : (
@@ -461,7 +461,7 @@ export function Composer({
 								aria-label="Send"
 								onClick={send}
 								disabled={!canSend}
-								className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white disabled:opacity-40"
+								className="flex h-9 w-9 coarse:h-11 coarse:w-11 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white disabled:opacity-40"
 							>
 								<IconSend size={17} />
 							</button>

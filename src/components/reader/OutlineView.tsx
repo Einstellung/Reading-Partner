@@ -26,7 +26,7 @@ export default function OutlineView({ fulltext, pending, onNavigatePage }: Outli
 				<button
 					key={i}
 					type="button"
-					className="flex w-full items-baseline gap-2 border-0 bg-transparent py-1.5 pr-3 text-left cursor-pointer hover:bg-black/5"
+					className="flex w-full items-baseline gap-2 border-0 bg-transparent py-1.5 pr-3 text-left cursor-pointer hover:bg-black/5 coarse:py-3"
 					style={{ paddingLeft: 12 + item.level * 14 }}
 					onClick={() => onNavigatePage(item.page)}
 				>

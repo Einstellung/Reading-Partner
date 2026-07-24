@@ -7,6 +7,7 @@
 import { IconClose } from '../common/icons';
 import { Composer, MessageList, type ComposerVoice } from './chat';
 import DeleteThreadButton from './DeleteThreadButton';
+import { useKeyboardInset } from '../common/useKeyboardInset';
 import type { PendingImage, ThreadMessage } from '../common/types';
 import type { CardActionHandler } from './chatParts';
 
@@ -58,16 +59,23 @@ export default function CallView({
 }: CallViewProps) {
 	const empty = messages.length === 0;
 	const composerProps = { pendingImages, onRemoveImage, hint, streaming, onStop, voice };
+	// Reserve space for the soft keyboard so the bottom composer stays above it
+	// (iPad). box-sizing:border-box shrinks the flex column by this padding, so the
+	// message list gives up the room and the composer rises. 0 on desktop.
+	const keyboardInset = useKeyboardInset();
 
 	return (
-		<div className="relative flex h-full w-full flex-col bg-white">
+		<div
+			className="relative flex h-full w-full flex-col bg-white"
+			style={{ paddingBottom: keyboardInset || undefined }}
+		>
 			<div className="absolute left-4 top-4 z-10 flex items-center gap-1">
 				<button
 					type="button"
 					title="Hang up"
 					aria-label="Hang up"
 					onClick={onHangUp}
-					className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 hover:bg-black/5"
+					className="flex h-9 w-9 coarse:h-11 coarse:w-11 items-center justify-center rounded-full text-neutral-500 hover:bg-black/5"
 				>
 					<IconClose size={18} />
 				</button>
@@ -81,7 +89,7 @@ export default function CallView({
 						aria-pressed={classroomOn}
 						onClick={onToggleClassroom}
 						className={
-							'rounded-full border px-3 py-1.5 text-sm leading-none cursor-pointer ' +
+							'rounded-full border px-3 py-1.5 text-sm leading-none cursor-pointer coarse:py-2.5 ' +
 							(classroomOn
 								? 'border-[#c9c2e8] bg-[#efecfb] text-[#4a3a9e] hover:bg-[#e7e3f7]'
 								: 'border-[#dcdcdc] bg-white text-neutral-600 hover:bg-[#f0f0f0]')

@@ -6,6 +6,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconExpand } from '../common/icons';
 import { Composer, MessageList, type ComposerVoice } from './chat';
 import DeleteThreadButton from './DeleteThreadButton';
+import { useKeyboardInset } from '../common/useKeyboardInset';
 import type { PendingImage, ThreadMessage } from '../common/types';
 
 interface CallBubbleProps {
@@ -44,13 +45,17 @@ export default function CallBubble({
 }: CallBubbleProps) {
 	const ref = useRef<HTMLDivElement>(null);
 	const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+	// Re-clamp above the soft keyboard when it opens/closes (iPad).
+	const keyboardInset = useKeyboardInset();
 
 	useLayoutEffect(() => {
 		const el = ref.current;
 		if (!el) return;
 		const { width, height } = el.getBoundingClientRect();
 		const vw = window.innerWidth;
-		const vh = window.innerHeight;
+		// The visual viewport height already excludes the keyboard; fall back to the
+		// layout height where the API is unavailable (desktop).
+		const vh = window.visualViewport?.height ?? window.innerHeight;
 
 		let left = anchor.x - width / 2;
 		left = Math.max(MARGIN, Math.min(left, vw - width - MARGIN));
@@ -61,7 +66,7 @@ export default function CallBubble({
 			top = above >= MARGIN ? above : Math.max(MARGIN, vh - height - MARGIN);
 		}
 		setPos({ left, top });
-	}, [anchor.x, anchor.y, messages.length]);
+	}, [anchor.x, anchor.y, messages.length, keyboardInset]);
 
 	useEffect(() => {
 		function onDown(e: MouseEvent) {
@@ -88,7 +93,7 @@ export default function CallBubble({
 						title="Expand"
 						aria-label="Expand"
 						onClick={onExpand}
-						className="flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 hover:bg-black/5"
+						className="flex h-6 w-6 coarse:h-11 coarse:w-11 items-center justify-center rounded-md text-neutral-500 hover:bg-black/5"
 					>
 						<IconExpand size={15} />
 					</button>
