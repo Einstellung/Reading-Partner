@@ -1,18 +1,26 @@
-// Google OAuth (Desktop): authorization code + PKCE over a loopback redirect.
-// Reuses the Rust one-shot callback listener that Anthropic login already uses
-// (oauth_callback.rs, invoked as start_oauth_callback_listener) — same fixed
-// loopback port, matched on `state` — so there is no second loopback mechanism
-// to maintain. Tokens live in AppData/sync-auth.json, which is deliberately NOT
-// in the sync range (local device credential; see syncFs.ts).
+// Google OAuth: authorization code + PKCE, forked by platform in signIn().
 //
-// access token is short-lived and refreshed from the refresh token when within
-// the expiry skew. A refresh that fails with invalid_grant (user revoked access,
-// or the 7-day testing-mode refresh expiry) clears the stored tokens and throws
-// GoogleAuthError so the engine can drop to a signed-out state and prompt for
-// re-login (docs/13).
+// Desktop (macOS/Windows/Linux): loopback redirect captured by the Rust one-shot
+// listener that Anthropic login already uses (oauth_callback.rs, invoked as
+// start_oauth_callback_listener) — same fixed port, matched on `state`. Sends a
+// client_secret alongside PKCE (Desktop client requirement; the secret is not
+// confidential, PKCE protects the exchange).
+//
+// iOS: reverse-DNS custom-scheme redirect captured by tauri-plugin-deep-link. No
+// client_secret (public iOS client, PKCE-only). The consent screen is opened in
+// the system browser via openUrl — never an embedded webview, which Google blocks
+// (disallowed_useragent). The redirect scheme is registered in tauri.conf.json
+// (deep-link plugin generates the Info.plist CFBundleURLTypes at iOS build time).
+//
+// Tokens live in AppData/sync-auth.json, deliberately NOT in the sync range
+// (local device credential; see syncFs.ts). The access token is short-lived and
+// refreshed from the refresh token within the expiry skew; a refresh that fails
+// with invalid_grant clears the stored tokens and throws GoogleAuthError so the
+// engine drops to signed-out and prompts for re-login (docs/13).
 
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import {
   BaseDirectory,
   exists,
@@ -20,20 +28,22 @@ import {
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
 import { cleanTauriFetch } from "../app/tauri-fetch";
+import { activeAuthFlow, AUTHORIZE_URL, GOOGLE_SCOPES, TOKEN_URL } from "./googleConfig";
 import {
-  GOOGLE_CLIENT_ID,
-  GOOGLE_CLIENT_SECRET,
-  GOOGLE_REDIRECT_URI,
-  GOOGLE_SCOPES,
-  isGoogleConfigured,
-} from "./googleConfig";
+  authCodeBody,
+  buildAuthUrl,
+  matchesRedirect,
+  parseCallbackParams,
+  refreshBody,
+  type AuthFlow,
+} from "./authFlow";
 
 const AUTH_FILE = "sync-auth.json";
-const AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth";
-const TOKEN_URL = "https://oauth2.googleapis.com/token";
 // Refresh this long before the real expiry so an in-flight request never races
 // the boundary.
 const EXPIRY_SKEW_MS = 5 * 60 * 1000;
+// How long to wait for the iOS deep-link redirect before giving up.
+const DEEP_LINK_TIMEOUT_MS = 5 * 60 * 1000;
 
 export class GoogleAuthError extends Error {}
 
@@ -102,23 +112,7 @@ export function parseIdTokenEmail(idToken: string | undefined): string | null {
   }
 }
 
-// --- login -----------------------------------------------------------------
-
-function buildAuthUrl(challenge: string, state: string): string {
-  const params = new URLSearchParams({
-    client_id: GOOGLE_CLIENT_ID,
-    response_type: "code",
-    redirect_uri: GOOGLE_REDIRECT_URI,
-    scope: GOOGLE_SCOPES,
-    code_challenge: challenge,
-    code_challenge_method: "S256",
-    state,
-    // Force a refresh token every time (Google only returns one with consent).
-    access_type: "offline",
-    prompt: "consent",
-  });
-  return `${AUTHORIZE_URL}?${params.toString()}`;
-}
+// --- token endpoint --------------------------------------------------------
 
 interface TokenResponse {
   access_token: string;
@@ -145,36 +139,100 @@ async function tokenRequest(body: Record<string, string>): Promise<TokenResponse
   return JSON.parse(text) as TokenResponse;
 }
 
-export async function signIn(): Promise<void> {
-  if (!isGoogleConfigured()) throw new Error("Google client not configured");
-  const { verifier, challenge } = await generatePKCE();
-  const state = base64Url(crypto.getRandomValues(new Uint8Array(16)));
+function requireFlow(): AuthFlow {
+  const flow = activeAuthFlow();
+  if (!flow) throw new Error("Google client not configured");
+  return flow;
+}
 
+// --- login: desktop loopback -----------------------------------------------
+
+async function captureLoopbackCode(flow: AuthFlow, challenge: string, state: string): Promise<string> {
   // Bind the listener before opening the browser (it binds synchronously).
   // Port/path come from the registered redirect URI (127.0.0.1:53692/callback).
-  const redirect = new URL(GOOGLE_REDIRECT_URI);
+  const redirect = new URL(flow.redirectUri);
   const listener = invoke<{ code: string; state: string }>("start_oauth_callback_listener", {
     expectedState: state,
     port: Number(redirect.port),
     path: redirect.pathname,
   });
-  await openUrl(buildAuthUrl(challenge, state));
-
-  let code: string;
+  await openUrl(buildAuthUrl(AUTHORIZE_URL, flow, GOOGLE_SCOPES, challenge, state));
   try {
-    ({ code } = await listener);
+    return (await listener).code;
   } catch (e) {
     throw new Error(`Google sign-in could not capture the redirect: ${e instanceof Error ? e.message : String(e)}`);
   }
+}
 
-  const token = await tokenRequest({
-    grant_type: "authorization_code",
-    code,
-    client_id: GOOGLE_CLIENT_ID,
-    client_secret: GOOGLE_CLIENT_SECRET,
-    redirect_uri: GOOGLE_REDIRECT_URI,
-    code_verifier: verifier,
+// --- login: iOS custom scheme ----------------------------------------------
+
+// Resolve the authorization code from a deep-link redirect URL, validating that
+// it is our scheme and that the returned state matches. Pure branch is in
+// authFlow (matchesRedirect / parseCallbackParams); this only threads the
+// pending state.
+function codeFromRedirect(url: string, flow: AuthFlow, expectedState: string): string | null {
+  if (!matchesRedirect(url, flow.redirectUri)) return null;
+  const { code, state, error } = parseCallbackParams(url);
+  if (error) throw new Error(`Google authorization error: ${error}`);
+  if (!code || state !== expectedState) return null;
+  return code;
+}
+
+async function captureSchemeCode(flow: AuthFlow, challenge: string, state: string): Promise<string> {
+  let resolve!: (code: string) => void;
+  let reject!: (err: unknown) => void;
+  const pending = new Promise<string>((res, rej) => {
+    resolve = res;
+    reject = rej;
   });
+
+  const tryUrl = (url: string): boolean => {
+    try {
+      const code = codeFromRedirect(url, flow, state);
+      if (code) {
+        resolve(code);
+        return true;
+      }
+    } catch (e) {
+      reject(e);
+      return true;
+    }
+    return false;
+  };
+
+  // Register the running-app listener before opening the browser so no redirect
+  // is missed. Also drain getCurrent() in case a cold-start URL is already queued.
+  const unlisten = await onOpenUrl((urls) => {
+    for (const url of urls) if (tryUrl(url)) break;
+  });
+  try {
+    const start = await getCurrent().catch(() => null);
+    if (start) for (const url of start) if (tryUrl(url)) break;
+
+    await openUrl(buildAuthUrl(AUTHORIZE_URL, flow, GOOGLE_SCOPES, challenge, state));
+
+    const timeout = new Promise<never>((_, rej) =>
+      setTimeout(() => rej(new Error("Google sign-in timed out waiting for the redirect")), DEEP_LINK_TIMEOUT_MS),
+    );
+    return await Promise.race([pending, timeout]);
+  } finally {
+    unlisten();
+  }
+}
+
+// --- login -----------------------------------------------------------------
+
+export async function signIn(): Promise<void> {
+  const flow = requireFlow();
+  const { verifier, challenge } = await generatePKCE();
+  const state = base64Url(crypto.getRandomValues(new Uint8Array(16)));
+
+  const code =
+    flow.kind === "ios-scheme"
+      ? await captureSchemeCode(flow, challenge, state)
+      : await captureLoopbackCode(flow, challenge, state);
+
+  const token = await tokenRequest(authCodeBody(flow, code, verifier));
   if (!token.refresh_token) {
     throw new Error("Google did not return a refresh token; try removing the app under myaccount.google.com and signing in again.");
   }
@@ -198,14 +256,10 @@ export async function getAccessToken(): Promise<string> {
   if (!auth || !auth.refresh) throw new GoogleAuthError("not signed in");
   if (Date.now() < auth.expires && auth.access) return auth.access;
 
+  const flow = requireFlow();
   let token: TokenResponse;
   try {
-    token = await tokenRequest({
-      grant_type: "refresh_token",
-      client_id: GOOGLE_CLIENT_ID,
-      client_secret: GOOGLE_CLIENT_SECRET,
-      refresh_token: auth.refresh,
-    });
+    token = await tokenRequest(refreshBody(flow, auth.refresh));
   } catch (e) {
     if (e instanceof GoogleAuthError) {
       await clearAuth();
