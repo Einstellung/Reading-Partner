@@ -2286,12 +2286,17 @@ export default function App() {
             <button className={BTN} onClick={closeReader}>
               ‹ Library
             </button>
-            <span className="text-[13px] text-[#1b1b1b] overflow-hidden text-ellipsis whitespace-nowrap max-w-[max(160px,calc(50vw-330px))]">
+            {/* The breadcrumb costs width the dense reader controls need on a
+                phone; hidden below sm, shown from iPad up. */}
+            <span className="hidden text-[13px] text-[#1b1b1b] overflow-hidden text-ellipsis whitespace-nowrap max-w-[max(160px,calc(50vw-330px))] sm:inline">
               {activeTopic?.name} <span className="text-[#777] mx-0.5">›</span> {title}
             </span>
             {status && <span className="ml-3 text-xs text-[#b45309]">{status}</span>}
             <span className="flex-1" />
-            <div className="flex items-center gap-2">
+            {/* min-w-0 + overflow-x-auto: the control cluster can never push the
+                page wider than the viewport on a phone; it scrolls within itself
+                instead. Inert on desktop/iPad, where it fits. */}
+            <div className="flex min-w-0 items-center gap-2 overflow-x-auto">
               <button
                 className="inline-flex items-center justify-center rounded-md border border-[#c9c2e8] bg-[#efecfb] px-2.5 py-1.5 text-[#4a3a9e] cursor-pointer hover:bg-[#e7e3f7] coarse:h-11 coarse:min-w-[44px]"
                 title="Talk about this book"
