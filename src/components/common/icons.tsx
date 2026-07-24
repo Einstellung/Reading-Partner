@@ -349,6 +349,104 @@ export function IconVerticalLayout({ size = 20 }: IconProps) {
 	);
 }
 
+// Down chevron for the toolbar "More" overflow menu.
+export function IconChevronDown({ size = 20 }: IconProps) {
+	return (
+		<svg
+			{...svgProps(size)}
+			stroke="currentColor"
+			strokeWidth="1.6"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<path d="M5.5 8L10 12.5L14.5 8" />
+		</svg>
+	);
+}
+
+// Gear for the settings entry.
+export function IconGear({ size = 20 }: IconProps) {
+	return (
+		<svg
+			{...svgProps(size)}
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<circle cx="10" cy="10" r="2.6" />
+			<path d="M10 2.5V4.4M10 15.6V17.5M17.5 10H15.6M4.4 10H2.5M15.3 4.7L14 6M6 14L4.7 15.3M15.3 15.3L14 14M6 6L4.7 4.7" />
+		</svg>
+	);
+}
+
+// Magnifier with a plus, for zoom-in in the overflow menu.
+export function IconZoomIn({ size = 20 }: IconProps) {
+	return (
+		<svg
+			{...svgProps(size)}
+			stroke="currentColor"
+			strokeWidth="1.5"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<circle cx="8.5" cy="8.5" r="5" />
+			<path d="M12.2 12.2L16.5 16.5" />
+			<path d="M8.5 6.5V10.5M6.5 8.5H10.5" />
+		</svg>
+	);
+}
+
+// Magnifier with a minus, for zoom-out in the overflow menu.
+export function IconZoomOut({ size = 20 }: IconProps) {
+	return (
+		<svg
+			{...svgProps(size)}
+			stroke="currentColor"
+			strokeWidth="1.5"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<circle cx="8.5" cy="8.5" r="5" />
+			<path d="M12.2 12.2L16.5 16.5" />
+			<path d="M6.5 8.5H10.5" />
+		</svg>
+	);
+}
+
+// Page with side arrows: fit-to-width.
+export function IconFitWidth({ size = 20 }: IconProps) {
+	return (
+		<svg
+			{...svgProps(size)}
+			stroke="currentColor"
+			strokeWidth="1.5"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<rect x="6" y="3.5" width="8" height="13" rx="1" />
+			<path d="M4 10H1.75M3 8.5L1.5 10L3 11.5" />
+			<path d="M16 10H18.25M17 8.5L18.5 10L17 11.5" />
+		</svg>
+	);
+}
+
+// Two side-by-side pages: the two-page spread toggle.
+export function IconTwoPage({ size = 20 }: IconProps) {
+	return (
+		<svg
+			{...svgProps(size)}
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<rect x="2.75" y="4" width="6.5" height="12" rx="1" />
+			<rect x="10.75" y="4" width="6.5" height="12" rx="1" />
+		</svg>
+	);
+}
+
 // Trash can for the delete action.
 export function IconTrash({ size = 16 }: IconProps) {
 	return (
