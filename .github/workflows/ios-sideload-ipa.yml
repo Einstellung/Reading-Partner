@@ -1,16 +1,17 @@
-# Build an UNSIGNED arm64 iOS device .ipa on a macOS runner, with no Apple
-# developer account and no signing material in the repo. The artifact is a
-# standard Payload/<App>.app ipa that a free-signing sideload tool (Sideloadly,
-# AltStore) re-signs on the user's own machine with a free Apple ID and installs
-# on their iPad. See docs/19-iOS侧载安装.md for the user-side flow.
+# Build an arm64 iOS device .ipa on a macOS runner, with no Apple developer
+# account and no signing material in the repo. The .ipa is ad-hoc signed (not
+# team-signed): a free-signing sideload tool (Sideloadly, AltStore) re-signs it
+# on the user's own machine with a free Apple ID and installs it on their iPad.
+# See docs/19-iOS侧载安装.md for the user-side flow.
 #
 # How the ipa is produced: `tauri ios build --target aarch64 --no-sign` archives
 # the device build with codesigning disabled (cargo-mobile2 passes
 # CODE_SIGNING_ALLOWED=NO / CODE_SIGNING_REQUIRED=NO / CODE_SIGN_IDENTITY="" /
 # CODE_SIGN_ENTITLEMENTS="" to xcodebuild archive, so no team or provisioning
-# profile is needed), then zips the unsigned .app into Payload/ and writes a
-# standard .ipa under src-tauri/gen/apple/build/arm64/. No manual repackaging
-# and no xcodebuild fallback is needed — tauri emits the standard ipa directly.
+# profile is needed), then zips the .app into Payload/ and writes a standard
+# .ipa under src-tauri/gen/apple/build/arm64/. A follow-up step ad-hoc signs the
+# .app so the free-signing re-signer replaces a valid signature instead of
+# adding one from scratch (which crashes on device — see the LINKEDIT step).
 #
 # This is a real product line, not the smoke build: VITE_SMOKE is NOT set, so
 # main.tsx runs the app, and the Google client ids are injected so Drive login
@@ -84,6 +85,20 @@ jobs:
       - name: Generate the Xcode project
         run: bun tauri ios init --ci
 
+      # `tauri ios init` fills AppIcon.appiconset from a bundled DEFAULT (Tauri
+      # logo) template and ignores src-tauri/icons/ios/, so a bare build ships
+      # the placeholder icon, not ours. Overwrite those PNGs with our own set;
+      # the filenames match the template's Contents.json, so it still resolves.
+      # Our committed set is RGB with no alpha (App-Store-valid, including the
+      # 1024 marketing icon). See docs/pitfall/34-ios-init-default-icon-alpha.md.
+      - name: Apply our app icon to the iOS project
+        run: |
+          set -euo pipefail
+          DEST=$(find src-tauri/gen/apple -type d -name AppIcon.appiconset -print -quit)
+          [ -n "$DEST" ] || { echo "::error::AppIcon.appiconset not found in generated project"; exit 1; }
+          cp src-tauri/icons/ios/*.png "$DEST"/
+          echo "applied $(ls src-tauri/icons/ios/*.png | wc -l | tr -d ' ') icons to $DEST"
+
       # XcodeGen's iOS defaults set TARGETED_DEVICE_FAMILY "1,2" (iPhone + iPad).
       # Fail fast if a toolchain update ever drops iPad from the product.
       - name: Assert iPad support
@@ -101,6 +116,37 @@ jobs:
       # inherits the VITE_* env above, so Drive login is wired into the bundle.
       - name: Build the unsigned device ipa
         run: bun tauri ios build --target aarch64 --no-sign
+
+      # A fully unsigned Mach-O boots in the Simulator but crashes on a real
+      # device once a free-signing tool re-signs it. Sideloadly and Dadoum
+      # Sideloader APPEND an LC_CODE_SIGNATURE and grow __LINKEDIT's filesize
+      # without growing its vmsize, so dyld aborts at launch with
+      # "segment __LINKEDIT filesize exceeds vmsize". Ad-hoc signing here gives
+      # the binary a well-formed signature and a page-aligned __LINKEDIT
+      # (vmsize >= filesize); the re-signers' replace-an-existing-signature path
+      # rewrites the layout correctly, unlike their add-from-nothing path. No
+      # entitlements are needed (the deep-link scheme is a CFBundleURLTypes
+      # entry, not an entitlement). See docs/pitfall/35-ios-unsigned-linkedit-vmsize.md.
+      - name: Ad-hoc sign the app so re-signing keeps a valid __LINKEDIT
+        run: |
+          set -euo pipefail
+          IPA=$(find src-tauri/gen/apple/build -name '*.ipa' -print -quit)
+          [ -n "$IPA" ] || { echo "::error::no ipa to sign"; exit 1; }
+          IPA_ABS="$(cd "$(dirname "$IPA")" && pwd)/$(basename "$IPA")"
+
+          WORK="$RUNNER_TEMP/ipa-adhoc"
+          rm -rf "$WORK"; mkdir -p "$WORK"
+          unzip -q "$IPA_ABS" -d "$WORK"
+          APP=$(ls -d "$WORK"/Payload/*.app 2>/dev/null | head -1)
+          [ -n "$APP" ] || { echo "::error::ipa has no Payload/*.app"; exit 1; }
+
+          codesign --force --sign - --deep "$APP"
+          codesign --verify --verbose=2 "$APP"
+
+          # Repack, preserving the Payload/ root and any symlinks (-y).
+          rm -f "$IPA_ABS"
+          ( cd "$WORK" && zip -qr -y "$IPA_ABS" Payload )
+          echo "ad-hoc signed and repacked: $IPA_ABS"
 
       # Prove the artifact is a sideloadable arm64 iOS ipa before uploading:
       # standard Payload/ layout, an arm64 *device* Mach-O (not simulator), the
@@ -168,7 +214,30 @@ jobs:
           }
           echo "$BUILD" | grep -qi 'SIMULATOR' && { echo "::error::binary is an iOS Simulator slice"; exit 1; } || true
 
-          echo "verify OK — unsigned arm64 iOS device ipa"
+          # Home-screen icon: SpringBoard resolves the icon from Assets.car via
+          # CFBundleIconName. Assert both are present, and that our own icon set
+          # (not Tauri's placeholder) was compiled in.
+          echo "=== app icon ==="
+          [ -f "$APP/Assets.car" ] || { echo "::error::Assets.car missing (app icon not compiled)"; ls -la "$APP"; exit 1; }
+          ICONNAME=$(pb CFBundleIconName)
+          echo "CFBundleIconName=$ICONNAME"
+          [ "$ICONNAME" = "AppIcon" ] || { echo "::error::CFBundleIconName is '$ICONNAME', expected AppIcon (home-screen icon will be blank)"; exit 1; }
+          # actool emits the primary iPhone/iPad icon loose in the bundle too.
+          ls "$APP"/AppIcon*.png >/dev/null 2>&1 || { echo "::error::no AppIcon*.png in the bundle"; exit 1; }
+          echo "app icon present (Assets.car + CFBundleIconName + loose PNGs)"
+
+          # Signature: a fully unsigned Mach-O makes the free-signing re-signer
+          # grow __LINKEDIT filesize past vmsize and crash on device. The ad-hoc
+          # signing step must have left a signature and a page-aligned
+          # __LINKEDIT (vmsize >= filesize).
+          echo "=== codesign ==="
+          codesign -dv "$APP" 2>&1 | sed -n '1,4p'
+          otool -l "$BIN" | grep -q LC_CODE_SIGNATURE || { echo "::error::binary has no LC_CODE_SIGNATURE (ad-hoc signing step did not run?)"; exit 1; }
+
+          echo "=== __LINKEDIT vmsize vs filesize ==="
+          python3 .github/scripts/assert-linkedit-vmsize.py "$BIN"
+
+          echo "verify OK — ad-hoc signed arm64 iOS device ipa with our app icon"
 
       # Stage the ipa under a versioned name (marketing version from
       # tauri.conf.json) so downloads self-describe.

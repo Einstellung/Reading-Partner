@@ -73,6 +73,19 @@ jobs:
       - name: Generate the Xcode project
         run: bun tauri ios init --ci
 
+      # `tauri ios init` fills AppIcon.appiconset from a bundled DEFAULT (Tauri
+      # logo) template and ignores src-tauri/icons/ios/. Overwrite those PNGs
+      # with our own set (identical filenames, so the template's Contents.json
+      # still resolves) so the simulator screenshot shows our logo, matching the
+      # sideload line. See docs/pitfall/34-ios-init-default-icon-alpha.md.
+      - name: Apply our app icon to the iOS project
+        run: |
+          set -euo pipefail
+          DEST=$(find src-tauri/gen/apple -type d -name AppIcon.appiconset -print -quit)
+          [ -n "$DEST" ] || { echo "::error::AppIcon.appiconset not found in generated project"; exit 1; }
+          cp src-tauri/icons/ios/*.png "$DEST"/
+          echo "applied $(ls src-tauri/icons/ios/*.png | wc -l | tr -d ' ') icons to $DEST"
+
       # Build for the iOS Simulator, unsigned. --target aarch64-sim (arch label
       # arm64-sim, triple aarch64-apple-ios-sim) makes the CLI emit a .app, not
       # an .ipa; --no-sign skips codesigning (2.9.0+). This runs beforeBuildCommand
