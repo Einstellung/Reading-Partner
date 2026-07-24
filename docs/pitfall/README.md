@@ -36,3 +36,4 @@
 - [30-webview-csp-coep-block-external-img](./30-webview-csp-coep-block-external-img.md) — webview 的 CSP+COEP 双杀外链图片,文章图片要走 http 路由取字节内联成 data: URL
 - [31-ios-deep-link-scheme-build-time](./31-ios-deep-link-scheme-build-time.md) — iOS 自定义 scheme 只能构建期静态注册进 tauri.conf,不能靠 env,且要和 env client id 手工对齐
 - [32-embedpdf-useviewportref-vs-element](./32-embedpdf-useviewportref-vs-element.md) — useViewportRef 每次新建 ref(挂自渲染元素用),读现有滚动容器要用 useViewportElement
+- [33-ios-no-cross-origin-isolation-still-renders](./33-ios-no-cross-origin-isolation-still-renders.md) — iOS WKWebView 自定义协议下没有跨源隔离/SAB,但 PDFium 直连引擎单线程照样渲染;闸门可在模拟器无签名验证
