@@ -24,6 +24,9 @@ export interface ViewState {
   // the same book restores it. Absent means off. Not a reader-engine field — the
   // shell merges it in when persisting (see storage.withClassroom).
   classroom?: boolean;
+  // Reading layout, per book: "vertical" continuous scroll (default) or "paged"
+  // horizontal fit-page flip (touch devices). Absent restores to vertical.
+  layout?: "vertical" | "paged";
 }
 
 export interface ViewStats {
@@ -35,6 +38,7 @@ export interface ViewStats {
   // False once the scale is already page-width (zoomReset is fit-width).
   canZoomReset: boolean;
   spreadMode: SpreadMode;
+  layout: "vertical" | "paged";
 }
 
 export const SpreadMode = {
@@ -80,6 +84,8 @@ export interface ViewInstance {
   // Fit-width, not 100%.
   zoomReset: () => void;
   setSpreadMode: (mode: SpreadMode) => void;
+  // Switch reading layout (vertical continuous vs paged horizontal flip).
+  setLayout: (mode: "vertical" | "paged") => void;
   navigate: (target: { pageIndex?: number; annotationID?: string }) => void;
   // Scroll to a page and paint a transient violet overlay on an AI-cited quote
   // (not a saved annotation). searchText is located in the page's text layer;

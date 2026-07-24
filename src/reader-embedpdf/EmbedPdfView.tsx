@@ -16,17 +16,19 @@ import type { PdfAnnotationObject, PdfDocumentObject, PdfEngine, Rect } from "@e
 import { getPdfiumEngine } from "./engine-singleton";
 
 import { DocumentManagerPluginPackage } from "@embedpdf/plugin-document-manager/react";
-import { ViewportPluginPackage, Viewport } from "@embedpdf/plugin-viewport/react";
+import { ViewportPluginPackage, Viewport, useViewportElement } from "@embedpdf/plugin-viewport/react";
 import { ScrollPluginPackage, Scroller } from "@embedpdf/plugin-scroll/react";
-import type { ScrollCapability } from "@embedpdf/plugin-scroll";
+import type { ScrollCapability, ScrollScope } from "@embedpdf/plugin-scroll";
+import { ScrollStrategy } from "@embedpdf/plugin-scroll";
 import { RenderPluginPackage, RenderLayer } from "@embedpdf/plugin-render/react";
 import { TilingPluginPackage, TilingLayer } from "@embedpdf/plugin-tiling/react";
-import { ZoomPluginPackage, ZoomMode } from "@embedpdf/plugin-zoom/react";
+import { ZoomPluginPackage, ZoomMode, ZoomGestureWrapper } from "@embedpdf/plugin-zoom/react";
 import type { ZoomCapability } from "@embedpdf/plugin-zoom";
 import { SpreadPluginPackage, SpreadMode } from "@embedpdf/plugin-spread/react";
 import type { SpreadCapability } from "@embedpdf/plugin-spread";
 import type { ViewportCapability } from "@embedpdf/plugin-viewport";
 import { InteractionManagerPluginPackage, PagePointerProvider } from "@embedpdf/plugin-interaction-manager/react";
+import type { InteractionManagerCapability } from "@embedpdf/plugin-interaction-manager";
 import { SelectionPluginPackage, SelectionLayer } from "@embedpdf/plugin-selection/react";
 import type { SelectionCapability } from "@embedpdf/plugin-selection";
 import { HistoryPluginPackage } from "@embedpdf/plugin-history/react";
@@ -34,6 +36,13 @@ import { AnnotationPluginPackage, AnnotationLayer } from "@embedpdf/plugin-annot
 import type { AnnotationCapability } from "@embedpdf/plugin-annotation";
 
 import { embedToZotero, zoteroToEmbed, type ZoteroAnnotation } from "./convert";
+import {
+  initGestureState,
+  stepGesture,
+  type GestureCommand,
+  type GestureInput,
+  type GestureState,
+} from "./paged-gesture";
 
 const DOC_ID = "main";
 
@@ -66,6 +75,9 @@ function useSharedEngine(): { engine: PdfEngine | null; isLoading: boolean; erro
 
 export type EmbedTool = "pointer" | "highlight" | "underline" | "ink";
 export type EmbedSpread = "none" | "odd" | "even";
+// Reading layout: "vertical" = the classic continuous vertical scroll; "paged" =
+// one fit-page screen at a time, flipped horizontally by touch swipe (iPad).
+export type EmbedLayout = "vertical" | "paged";
 
 // A transient, non-persistent overlay marking an AI-cited quote on a page. Two
 // tiers: `rects` draws a violet highlight over the located text (Tier A);
@@ -90,6 +102,8 @@ export interface EmbedViewState {
   // coordinates (top-left origin) — enables exact in-page position restore.
   pageX?: number;
   pageY?: number;
+  // Reading layout (per book). Absent restores to vertical.
+  layout?: EmbedLayout;
 }
 
 // Viewport-space rect of an annotation, reported when it gets selected — the
@@ -108,6 +122,7 @@ export interface EmbedViewStats {
   canZoomIn: boolean;
   canZoomOut: boolean;
   spreadMode: EmbedSpread;
+  layout: EmbedLayout;
 }
 
 export interface EmbedPdfHandle {
@@ -118,6 +133,8 @@ export interface EmbedPdfHandle {
   fitWidth(): void;
   fitPage(): void;
   setSpread(mode: EmbedSpread): void;
+  // Switch between vertical continuous scroll and paged horizontal flip.
+  setLayout(mode: EmbedLayout): void;
   navigateToPage(pageIndex: number): void;
   navigateToAnnotation(id: string): void;
   // Scroll to the page and show a transient violet overlay on the cited quote.
@@ -267,6 +284,198 @@ const ENUM_TO_SPREAD: Record<string, EmbedSpread> = {
   [SpreadMode.Even]: "even",
 };
 
+// Long press (ms) before a stationary finger in paged mode is handed to native
+// text selection instead of being watched for a page swipe.
+const PAGED_LONG_PRESS_MS = 450;
+
+// Live gesture context, shared by a ref between the imperative engine wiring
+// (which fills in the engine handles) and the PagedGestures touch component
+// (which reads the current mode each event). A ref so mode changes never
+// re-render the memoized engine subtree.
+interface PagedGestureCtx {
+  paged: boolean;
+  tool: EmbedTool;
+  zoomedIn: boolean;
+  scroll: ScrollScope | null;
+  interaction: InteractionManagerCapability | null;
+  // Set by PagedGestures so setLayout can toggle the viewport's touch-action
+  // (paged locks native pan/zoom; vertical restores it).
+  setTouchLock: ((locked: boolean) => void) | null;
+}
+
+// Touch host for paged mode: a zero-size child inside the Viewport that grabs
+// the scroll container element (via the viewport-element context) and runs the
+// pure gesture machine on its pointer events. Follow-finger drags set scrollLeft
+// directly; a committed turn snaps with scrollToPage; a zoomed-in one-finger
+// drag pans. Only finger pointers (pointerType "touch") are handled — mouse and
+// stylus fall through to the desktop / drawing paths. On a committed gesture the
+// pointer is captured to the container and the engine's pointer pipeline paused,
+// so a swipe never turns into a text selection. Two-finger pinch is left to the
+// engine's own ZoomGestureWrapper (raw-touch channel); this machine yields the
+// moment a second finger lands.
+function PagedGestures({
+  documentId,
+  ctx,
+}: {
+  documentId: string;
+  ctx: React.MutableRefObject<PagedGestureCtx>;
+}): ReactNode {
+  // The scroll container the Viewport mounted (shared through context). Its
+  // .current fills a frame or two after this effect first runs, so poll for it.
+  const vpRef = useViewportElement();
+  useEffect(() => {
+    let raf = 0;
+    let detach: (() => void) | null = null;
+    const waitForViewport = () => {
+      const el = vpRef?.current;
+      if (el) {
+        detach = attach(el);
+        return;
+      }
+      raf = requestAnimationFrame(waitForViewport);
+    };
+
+    const attach = (el: HTMLDivElement): (() => void) => {
+      let state: GestureState = initGestureState();
+      let captured = false;
+      let capturedId: number | null = null;
+      let paused = false;
+      let dragStartScrollLeft = 0;
+      let dragStartPage = 1;
+      let lpTimer = 0;
+      let activeTouches = 0;
+
+      const clearLp = () => {
+        if (lpTimer) {
+          window.clearTimeout(lpTimer);
+          lpTimer = 0;
+        }
+      };
+      const resume = () => {
+        if (paused) {
+          ctx.current.interaction?.resume();
+          paused = false;
+        }
+      };
+      const releaseCapture = () => {
+        if (capturedId !== null) {
+          try {
+            el.releasePointerCapture(capturedId);
+          } catch {
+            // The pointer may already be gone; ignore.
+          }
+          capturedId = null;
+        }
+      };
+      const setTouchLock = (locked: boolean) => {
+        el.style.touchAction = locked ? "none" : "";
+      };
+      ctx.current.setTouchLock = setTouchLock;
+      setTouchLock(ctx.current.paged);
+
+      const apply = (cmds: GestureCommand[]) => {
+        const scroll = ctx.current.scroll;
+        for (const c of cmds) {
+          if (c.type === "capture") {
+            captured = true;
+            capturedId = c.id;
+            try {
+              el.setPointerCapture(c.id);
+            } catch {
+              // Best effort — the pause() below is the real selection guard.
+            }
+            if (!paused) {
+              ctx.current.interaction?.pause();
+              paused = true;
+            }
+            dragStartScrollLeft = el.scrollLeft;
+            dragStartPage = scroll?.getCurrentPage() ?? 1;
+          } else if (c.type === "dragMove") {
+            el.scrollLeft = dragStartScrollLeft - c.dx;
+          } else if (c.type === "panMove") {
+            el.scrollLeft -= c.dx;
+            el.scrollTop -= c.dy;
+          } else if (c.type === "dragEnd") {
+            const total = scroll?.getTotalPages() ?? 1;
+            const target = Math.min(Math.max(dragStartPage + c.turn, 1), total);
+            scroll?.scrollToPage({ pageNumber: target, behavior: "smooth" });
+            captured = false;
+          }
+        }
+      };
+
+      const feed = (input: GestureInput, e?: Event) => {
+        const r = stepGesture(state, input, {
+          tool: ctx.current.tool === "pointer" ? "pointer" : "pen",
+          zoomedIn: ctx.current.zoomedIn,
+          width: el.clientWidth || window.innerWidth,
+        });
+        state = r.state;
+        if (r.commands.some((c) => c.type === "capture")) clearLp();
+        apply(r.commands);
+        if (captured && e && e.cancelable) e.preventDefault();
+        if (state.phase === "idle" || state.phase === "off") {
+          resume();
+          releaseCapture();
+        }
+      };
+
+      const onDown = (e: PointerEvent) => {
+        if (!ctx.current.paged || e.pointerType !== "touch") return;
+        activeTouches += 1;
+        feed({ type: "pointerdown", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp });
+        clearLp();
+        if (activeTouches === 1 && ctx.current.tool === "pointer" && !ctx.current.zoomedIn) {
+          const id = e.pointerId;
+          lpTimer = window.setTimeout(() => feed({ type: "longpress", id }), PAGED_LONG_PRESS_MS);
+        }
+      };
+      const onMove = (e: PointerEvent) => {
+        if (!ctx.current.paged || e.pointerType !== "touch") return;
+        feed({ type: "pointermove", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp }, e);
+      };
+      const onUp = (e: PointerEvent) => {
+        if (e.pointerType !== "touch") return;
+        activeTouches = Math.max(0, activeTouches - 1);
+        clearLp();
+        feed({ type: "pointerup", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp }, e);
+      };
+      const onCancel = (e: PointerEvent) => {
+        if (e.pointerType !== "touch") return;
+        activeTouches = Math.max(0, activeTouches - 1);
+        clearLp();
+        feed({ type: "pointercancel", id: e.pointerId }, e);
+      };
+
+      // Capture phase: see the pointer before the page's PagePointerProvider, and
+      // keep receiving moves after it (the container is an ancestor of the page,
+      // so events still travel through it even once a page captures the pointer).
+      el.addEventListener("pointerdown", onDown, { capture: true });
+      el.addEventListener("pointermove", onMove, { capture: true, passive: false });
+      el.addEventListener("pointerup", onUp, { capture: true });
+      el.addEventListener("pointercancel", onCancel, { capture: true });
+      return () => {
+        clearLp();
+        resume();
+        releaseCapture();
+        ctx.current.setTouchLock = null;
+        el.style.touchAction = "";
+        el.removeEventListener("pointerdown", onDown, { capture: true });
+        el.removeEventListener("pointermove", onMove, { capture: true });
+        el.removeEventListener("pointerup", onUp, { capture: true });
+        el.removeEventListener("pointercancel", onCancel, { capture: true });
+      };
+    };
+
+    waitForViewport();
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      detach?.();
+    };
+  }, [documentId, ctx, vpRef]);
+  return null;
+}
+
 export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
   // The direct engine runs PDFium on the main thread; the worker engine hangs
   // on openDocument (pitfall 21). iOS/WKWebView will need its own engine-mode
@@ -287,6 +496,22 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
   // to the current page box. Filled once the document opens.
   const pageSizesRef = useRef<{ width: number; height: number }[]>([]);
 
+  // Initial reading layout (paged vs vertical), decided by the shell and carried
+  // in the restored view state. Captured once at mount to seed the scroll/zoom
+  // plugin defaults so the first paint is already in the right mode.
+  const initialLayout: EmbedLayout = props.initialViewState?.layout ?? "vertical";
+  const initialLayoutRef = useRef(initialLayout);
+  // Shared touch-gesture context (see PagedGestureCtx). Seeded from the initial
+  // layout; the imperative wiring fills scroll/interaction on init.
+  const pagedRef = useRef<PagedGestureCtx>({
+    paged: initialLayoutRef.current === "paged",
+    tool: "pointer",
+    zoomedIn: false,
+    scroll: null,
+    interaction: null,
+    setTouchLock: null,
+  });
+
   useEffect(() => {
     propsRef.current.onQuoteHighlight?.(quoteHl !== null);
   }, [quoteHl]);
@@ -301,13 +526,21 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
       // hang at progress 0 when the load races the engine coming up).
       createPluginRegistration(DocumentManagerPluginPackage, {}),
       createPluginRegistration(ViewportPluginPackage),
-      createPluginRegistration(ScrollPluginPackage, { defaultBufferSize: 1 }),
+      createPluginRegistration(ScrollPluginPackage, {
+        defaultBufferSize: 1,
+        // Paged mode lays pages out in a horizontal strip so the neighbour page
+        // is already rendered adjacent for the follow-finger flip.
+        defaultStrategy:
+          initialLayoutRef.current === "paged" ? ScrollStrategy.Horizontal : ScrollStrategy.Vertical,
+      }),
       createPluginRegistration(RenderPluginPackage),
       // Tiling: keeps zoom responsive. The base layer is a fixed low-res raster
       // that only gets CSS-scaled; only the visible high-res tiles re-render on
       // zoom, instead of re-rasterizing the whole page every zoom step.
       createPluginRegistration(TilingPluginPackage),
-      createPluginRegistration(ZoomPluginPackage, { defaultZoomLevel: ZoomMode.FitWidth }),
+      createPluginRegistration(ZoomPluginPackage, {
+        defaultZoomLevel: initialLayoutRef.current === "paged" ? ZoomMode.FitPage : ZoomMode.FitWidth,
+      }),
       createPluginRegistration(SpreadPluginPackage),
       createPluginRegistration(InteractionManagerPluginPackage),
       createPluginRegistration(SelectionPluginPackage),
@@ -326,7 +559,7 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
     // `!engine` guard, so engine is non-null here.
     if (!engine) return;
     try {
-      await wireEngine(registry, propsRef, engine, setQuoteHlRef, pageSizesRef);
+      await wireEngine(registry, propsRef, engine, setQuoteHlRef, pageSizesRef, pagedRef);
     } catch (e) {
       propsRef.current.onError?.(e as Error);
     }
@@ -370,6 +603,10 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
         {({ activeDocumentId }) =>
           activeDocumentId && (
             <Viewport documentId={activeDocumentId} style={{ height: "100%", width: "100%", backgroundColor: "#f1f3f5" }}>
+              {/* enableWheel:false keeps the desktop scroll-wheel scrolling (not
+                  zooming); pinch only fires on a two-finger touch, so mouse and
+                  keyboard paths are untouched. */}
+              <ZoomGestureWrapper documentId={activeDocumentId} enableWheel={false}>
               <Scroller
                 documentId={activeDocumentId}
                 renderPage={({ pageIndex, width, height }) => (
@@ -396,6 +633,8 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
                   </PagePointerProvider>
                 )}
               />
+              </ZoomGestureWrapper>
+              <PagedGestures documentId={activeDocumentId} ctx={pagedRef} />
             </Viewport>
           )
         }
@@ -447,12 +686,14 @@ async function wireEngine(
   engine: PdfEngine,
   setQuoteHlRef: React.MutableRefObject<(v: QuoteHighlight | null) => void>,
   pageSizesRef: React.MutableRefObject<{ width: number; height: number }[]>,
+  pagedRef: React.MutableRefObject<PagedGestureCtx>,
 ): Promise<void> {
   const annotation = cap<AnnotationCapability>(registry, "annotation");
   const selection = cap<SelectionCapability>(registry, "selection");
   const scroll = cap<ScrollCapability>(registry, "scroll");
   const zoom = cap<ZoomCapability>(registry, "zoom");
   const spread = cap<SpreadCapability>(registry, "spread");
+  const interaction = cap<InteractionManagerCapability>(registry, "interaction-manager");
   const docManager = registry.getPlugin("document-manager") as {
     provides?: () => {
       getDocument(id: string): PdfDocumentObject | null;
@@ -484,6 +725,34 @@ async function wireEngine(
   const selScope = selection.forDocument(DOC_ID);
   const scrollScope = scroll.forDocument(DOC_ID);
   const zoomScope = zoom.forDocument(DOC_ID);
+
+  // Wire the paged-mode touch host to the live capabilities. `paged` was seeded
+  // at mount from the restored layout; the plugin defaults already match it.
+  pagedRef.current.scroll = scrollScope;
+  pagedRef.current.interaction = interaction;
+  // The numeric scale of the fit-page baseline, tracked so a pinch past it flips
+  // the machine into pan mode and a pinch back down re-locks fit-page. Updated
+  // whenever the zoom level is observed at fit-page.
+  let fitPageScale = 0;
+  const refreshZoomedIn = () => {
+    const zs = zoomScope.getState();
+    if (zs.zoomLevel === ZoomMode.FitPage) fitPageScale = zs.currentZoomLevel;
+    if (!pagedRef.current.paged) {
+      pagedRef.current.zoomedIn = false;
+      return;
+    }
+    if (fitPageScale > 0 && zs.currentZoomLevel > fitPageScale * 1.02) {
+      pagedRef.current.zoomedIn = true;
+    } else {
+      pagedRef.current.zoomedIn = false;
+      // Pinched back to (or below) fit-page: re-lock the exact fit so swipe
+      // turning resumes on a clean page-sized screen.
+      if (typeof zs.zoomLevel === "number" && fitPageScale > 0 && zs.currentZoomLevel <= fitPageScale * 1.01) {
+        zoomScope.requestZoom(ZoomMode.FitPage);
+      }
+    }
+  };
+  let layout: EmbedLayout = pagedRef.current.paged ? "paged" : "vertical";
 
   // Map annotation id -> pageIndex, so host-side ops can address the right page.
   const pageOf = new Map<string, number>();
@@ -567,6 +836,7 @@ async function wireEngine(
     const st: EmbedViewState = {
       pageIndex: scrollScope.getCurrentPage() - 1,
       zoom: zoomScope.getState().currentZoomLevel,
+      layout,
     };
     try {
       // Anchor on the topmost visible page, not the "current" (most visible)
@@ -598,6 +868,7 @@ async function wireEngine(
       canZoomIn: z < 6,
       canZoomOut: z > 0.15,
       spreadMode: ENUM_TO_SPREAD[spread.getSpreadMode()] ?? "none",
+      layout,
     };
     propsRef.current.onViewStats?.(stats);
   };
@@ -609,6 +880,7 @@ async function wireEngine(
     emitStats();
   });
   zoom.onZoomChange(() => {
+    refreshZoomedIn();
     emitState();
     emitStats();
   });
@@ -620,7 +892,12 @@ async function wireEngine(
     perfMark("layoutReady");
     importAll(propsRef.current.annotations ?? []);
     const iv = propsRef.current.initialViewState;
-    if (iv) {
+    if (iv && layout === "paged") {
+      // Paged mode is always fit-page; restore only the page, centred. The saved
+      // zoom / in-page offset belong to vertical mode and are ignored here.
+      zoomScope.requestZoom(ZoomMode.FitPage);
+      scrollScope.scrollToPage({ pageNumber: iv.pageIndex + 1, behavior: "instant" });
+    } else if (iv) {
       zoomScope.requestZoom(iv.zoom);
       // Restore the exact in-page position when the saved state carries one
       // (unscaled page coordinates; the plugin scales them at scroll time).
@@ -641,6 +918,7 @@ async function wireEngine(
         behavior: "instant",
       });
     }
+    refreshZoomedIn();
     emitStats();
     emitState();
   });
@@ -650,6 +928,23 @@ async function wireEngine(
   const handle: EmbedPdfHandle = {
     setTool(tool) {
       annScope.setActiveTool(tool === "pointer" ? null : tool);
+      pagedRef.current.tool = tool;
+    },
+    setLayout(mode) {
+      if (mode === layout) return;
+      layout = mode;
+      pagedRef.current.paged = mode === "paged";
+      pagedRef.current.setTouchLock?.(mode === "paged");
+      if (mode === "paged") {
+        scrollScope.setScrollStrategy(ScrollStrategy.Horizontal);
+        zoomScope.requestZoom(ZoomMode.FitPage);
+      } else {
+        scrollScope.setScrollStrategy(ScrollStrategy.Vertical);
+        zoomScope.requestZoom(ZoomMode.FitWidth);
+      }
+      refreshZoomedIn();
+      emitStats();
+      emitState();
     },
     setColor(color) {
       const id = activeToolId();
