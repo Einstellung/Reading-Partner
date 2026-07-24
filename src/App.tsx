@@ -2342,11 +2342,9 @@ export default function App() {
                 <span aria-hidden className="sm:hidden">‹</span>
                 <span className="hidden sm:inline">‹ Library</span>
               </button>
-              {/* The breadcrumb costs width the center tool group needs on a
-                  phone; hidden below sm, shown from iPad up. */}
-              <span className="hidden min-w-0 max-w-[28vw] overflow-hidden text-ellipsis whitespace-nowrap text-[13px] text-[#1b1b1b] sm:inline">
-                {activeTopic?.name} <span className="text-[#777] mx-0.5">›</span> {title}
-              </span>
+              {/* No title breadcrumb: the book is open in front of the reader, so
+                  its name carries no information and the width is better spent on
+                  the tool group (tight on a phone). */}
               {status && <span className="ml-1 flex-none text-xs text-[#b45309] sm:ml-3">{status}</span>}
             </div>
 
