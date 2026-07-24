@@ -1,0 +1,165 @@
+# Build a signed arm64 Android APK on an Ubuntu runner and verify the signature,
+# with no local Android environment. The artifact installs directly on a physical
+# phone (Settings > allow install from unknown sources). This is the real product
+# line, not the smoke build: VITE_SMOKE is unset, so main.tsx runs the app and the
+# Google client ids are injected so Drive login is wired in (except the Android
+# Google client, which needs the signing key's SHA-1 and is provisioned later —
+# until then Android shows "Google client not configured", it does not crash).
+#
+# Signing: the release APK is built UNSIGNED, then signed out-of-band with
+# apksigner using a keystore restored from repo secrets (base64). This keeps the
+# generated gen/android (gitignored, re-initialized each run) untouched — no
+# build.gradle.kts patching — and makes the signing step explicit and verifiable.
+# The keystore is the app's UPGRADE IDENTITY: replacing it makes a phone refuse to
+# install the update over an existing install. Back it up (docs/20-安卓安装.md).
+#
+# Independent of android-engine-smoke.yml (the emulator engine gate).
+
+name: Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [android-spike]
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: true
+
+env:
+  # NDK r26d — a stable long-term NDK supported by Tauri's cargo-mobile2. Pinned
+  # so an image default bump cannot change the toolchain under us.
+  NDK_VERSION: "26.3.11579264"
+  BUILD_TOOLS_VERSION: "34.0.0"
+  BUNDLE_ID: com.xinyuan.readingpartner
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      # Baked into the Vite build (tauri's beforeBuildCommand runs bun run build,
+      # which inherits job env). Same names as release.yml; the desktop OAuth
+      # client secret is not confidential (PKCE is the protection) but still lives
+      # in repo secrets. The iOS client id is a public value, hardcoded like the
+      # iOS workflows. No VITE_GOOGLE_ANDROID_CLIENT_ID yet (client not created).
+      VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
+      VITE_GOOGLE_CLIENT_SECRET: ${{ secrets.VITE_GOOGLE_CLIENT_SECRET }}
+      VITE_GOOGLE_IOS_CLIENT_ID: 379091688229-esc23unqq02igufrjr9jjvtsug49j097.apps.googleusercontent.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: oven-sh/setup-bun@v2
+
+      # aarch64-linux-android is the Rust target for arm64 phones; the Gradle
+      # "Build Rust Code" task cross-compiles the cdylib for it.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # Put the SDK command-line tools (sdkmanager) on PATH.
+      - uses: android-actions/setup-android@v3
+
+      # Add the pinned NDK and build-tools (apksigner/zipalign live in build-tools).
+      - name: Install Android NDK and build-tools
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "ndk;${NDK_VERSION}" "build-tools;${BUILD_TOOLS_VERSION}" "platform-tools" "platforms;android-34"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/build-tools/${BUILD_TOOLS_VERSION}" >> "$GITHUB_PATH"
+
+      - run: bun install --frozen-lockfile
+
+      # Self-host pdfium.wasm from node_modules into public/ (vite copies it into
+      # dist). Without it the reader cannot start.
+      - name: Copy pdfium.wasm
+        run: bun run wasm
+
+      # src-tauri/gen/android is gitignored; generate the Gradle project fresh.
+      # --ci answers prompts with defaults. Uses NDK_HOME set above.
+      - name: Initialize the Android project
+        run: bun tauri android init --ci
+
+      # Build the release APK for arm64 only, unsigned. Runs beforeBuildCommand
+      # (bun run build) which inherits the VITE_* env above.
+      - name: Build the unsigned release APK
+        run: bun tauri android build --apk --target aarch64
+
+      # Restore the keystore and sign with apksigner (zipalign first, required for
+      # v2+ signatures). Passwords and keystore come from repo secrets.
+      - name: Sign the APK
+        run: |
+          set -euo pipefail
+          UNSIGNED=$(find src-tauri/gen/android -path '*release*' -name '*.apk' | grep -i unsigned | head -1 || true)
+          if [ -z "$UNSIGNED" ]; then
+            UNSIGNED=$(find src-tauri/gen/android -path '*release*' -name '*.apk' | head -1 || true)
+          fi
+          if [ -z "$UNSIGNED" ]; then
+            echo "::error::no release APK produced"; find src-tauri/gen/android -name '*.apk' || true; exit 1
+          fi
+          echo "unsigned apk: $UNSIGNED"
+
+          KS="$RUNNER_TEMP/release.jks"
+          base64 -d <<< "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" > "$KS"
+
+          ALIGNED="$RUNNER_TEMP/aligned.apk"
+          SIGNED="$RUNNER_TEMP/signed.apk"
+          zipalign -f -v 4 "$UNSIGNED" "$ALIGNED" >/dev/null
+          apksigner sign \
+            --ks "$KS" \
+            --ks-key-alias "${{ secrets.ANDROID_KEY_ALIAS }}" \
+            --ks-pass "pass:${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
+            --key-pass "pass:${{ secrets.ANDROID_KEY_PASSWORD }}" \
+            --out "$SIGNED" "$ALIGNED"
+          echo "SIGNED_APK=$SIGNED" >> "$GITHUB_ENV"
+
+      # Prove the artifact is a valid, verifiable signed APK before uploading.
+      - name: Verify the signature
+        run: |
+          set -euo pipefail
+          apksigner verify --verbose --print-certs "$SIGNED_APK"
+          echo "--- expected signer SHA-256 fingerprint ---"
+          keytool -printcert -jarfile "$SIGNED_APK" | grep -i 'SHA256:' || true
+          # Confirm package id and that it is a release (non-debuggable) build.
+          AAPT=$(ls "$ANDROID_HOME"/build-tools/${BUILD_TOOLS_VERSION}/aapt2)
+          BADGING=$("$AAPT" dump badging "$SIGNED_APK" 2>/dev/null || true)
+          echo "$BADGING" | grep -q "package: name='${BUNDLE_ID}'" || {
+            echo "::error::package id is not ${BUNDLE_ID}"; echo "$BADGING" | head -3; exit 1
+          }
+          echo "$BADGING" | grep -q "application-debuggable" && {
+            echo "::error::release APK is debuggable"; exit 1
+          } || true
+          echo "verify OK — signed release APK for ${BUNDLE_ID}"
+
+      # Stage the signed APK under a versioned name (marketing version from
+      # tauri.conf.json) so downloads self-describe.
+      - name: Stage the versioned APK
+        run: |
+          set -euo pipefail
+          VERSION=$(jq -r .version src-tauri/tauri.conf.json)
+          OUT="reading-partner-${VERSION}-android-arm64.apk"
+          cp "$SIGNED_APK" "$OUT"
+          echo "staged: $OUT ($(du -h "$OUT" | cut -f1))"
+          echo "APK_NAME=$OUT" >> "$GITHUB_ENV"
+
+      - name: Upload the signed APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: ${{ env.APK_NAME }}
+          if-no-files-found: error
+
+      - name: Dump build tree on failure
+        if: failure()
+        run: find src-tauri/gen/android -maxdepth 6 -name '*.apk' 2>/dev/null || true
