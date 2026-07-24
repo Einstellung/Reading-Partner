@@ -44,7 +44,7 @@
     "deep-link": {
       "mobile": [
         {
-          "scheme": ["com.googleusercontent.apps.REPLACE_WITH_YOUR_IOS_CLIENT_ID"],
+          "scheme": ["com.googleusercontent.apps.379091688229-esc23unqq02igufrjr9jjvtsug49j097"],
           "appLink": false
         }
       ]

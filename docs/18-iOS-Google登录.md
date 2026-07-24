@@ -26,7 +26,7 @@
 
 必须落地的配置（已在本分支完成，除占位符替换）：
 
-1. `tauri.conf.json` → `plugins.deep-link.mobile[0].scheme` = `["com.googleusercontent.apps.<你的反向 client id>"]`，`appLink: false`。当前是占位符 `com.googleusercontent.apps.REPLACE_WITH_YOUR_IOS_CLIENT_ID`，用户建 client 后替换。
+1. `tauri.conf.json` → `plugins.deep-link.mobile[0].scheme` = `["com.googleusercontent.apps.<你的反向 client id>"]`，`appLink: false`。已填入本仓库的 iOS client（379091688229-esc23unqq02igufrjr9jjvtsug49j097）。
 2. `.env` → `VITE_GOOGLE_IOS_CLIENT_ID` = 完整 iOS client id（`<id>.apps.googleusercontent.com`）。前端构建时读，必须和上面 scheme 指向同一个 client。
 
 gen/apple 落地后要核对（后续批次接上时验一遍）：
