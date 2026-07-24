@@ -34,3 +34,4 @@
 - [27-embedpdf-searchinpage-not-on-engine](./27-embedpdf-searchinpage-not-on-engine.md) — searchInPage 在 IPdfiumExecutor 不在 PdfEngine,定点搜索改用 searchAllPages 按页过滤
 - [29-voice-stt-fetch-and-ipc-bytes](./29-voice-stt-fetch-and-ipc-bytes.md) — 语音 STT 请求必须走 cleanTauriFetch(CSP+CORS 双杀直连);Rust 返回 Vec<u8> 是 JSON 数字数组
 - [30-webview-csp-coep-block-external-img](./30-webview-csp-coep-block-external-img.md) — webview 的 CSP+COEP 双杀外链图片,文章图片要走 http 路由取字节内联成 data: URL
+- [31-embedpdf-useviewportref-vs-element](./31-embedpdf-useviewportref-vs-element.md) — useViewportRef 每次新建 ref(挂自渲染元素用),读现有滚动容器要用 useViewportElement
