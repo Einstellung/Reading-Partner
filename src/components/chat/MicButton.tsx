@@ -190,7 +190,7 @@ export function MicButton({
 		}
 	};
 
-	const dim = size === 'lg' ? 'h-9 w-9' : 'h-7 w-7';
+	const dim = (size === 'lg' ? 'h-9 w-9' : 'h-7 w-7') + ' coarse:h-11 coarse:w-11';
 	const seconds = Math.floor(elapsed / 1000);
 
 	const btnClass =

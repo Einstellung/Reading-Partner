@@ -33,7 +33,7 @@ export default function ChatPipCard({ lastMessage, onClick, onHangUp }: ChatPipC
 					e.stopPropagation();
 					onHangUp();
 				}}
-				className="-mr-1 -mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-neutral-400 hover:bg-black/5 hover:text-neutral-600"
+				className="-mr-1 -mt-1 flex h-5 w-5 coarse:h-9 coarse:w-9 shrink-0 items-center justify-center rounded-full text-neutral-400 hover:bg-black/5 hover:text-neutral-600"
 			>
 				<IconClose size={11} />
 			</button>

@@ -43,7 +43,7 @@ const STATUS_STYLE: Record<ChapterStatus, string> = {
 };
 
 const SMALL_BTN =
-  "rounded border border-[#dcdcdc] bg-white px-1.5 py-0.5 text-[11px] leading-none text-neutral-500 cursor-pointer hover:bg-[#f0f0f0]";
+  "rounded border border-[#dcdcdc] bg-white px-1.5 py-0.5 text-[11px] leading-none text-neutral-500 cursor-pointer hover:bg-[#f0f0f0] coarse:px-2.5 coarse:py-2";
 
 interface NotesPanelProps {
   snapshot: NotesSnapshot | null;
@@ -217,7 +217,7 @@ export default function NotesPanel({
         </p>
         <button
           type="button"
-          className="rounded-md border border-[#c9c2e8] bg-[#efecfb] px-3 py-1.5 text-sm text-[#4a3a9e] cursor-pointer hover:bg-[#e7e3f7]"
+          className="rounded-md border border-[#c9c2e8] bg-[#efecfb] px-3 py-1.5 text-sm text-[#4a3a9e] cursor-pointer hover:bg-[#e7e3f7] coarse:py-2.5"
           onClick={onGenerate}
         >
           Generate notes
@@ -240,7 +240,7 @@ export default function NotesPanel({
             {doneCount > 0 && (
               <button
                 type="button"
-                className="rounded border border-[#c9c2e8] bg-[#efecfb] px-1.5 py-0.5 text-[11px] leading-none text-[#4a3a9e] cursor-pointer hover:bg-[#e7e3f7]"
+                className="rounded border border-[#c9c2e8] bg-[#efecfb] px-1.5 py-0.5 text-[11px] leading-none text-[#4a3a9e] cursor-pointer hover:bg-[#e7e3f7] coarse:px-2.5 coarse:py-2"
                 onClick={() => setShowSlides(true)}
               >
                 Slides
@@ -250,7 +250,7 @@ export default function NotesPanel({
           {running ? (
             <button
               type="button"
-              className="cursor-pointer border-0 bg-transparent p-0 text-[11px] text-neutral-400 hover:text-neutral-600"
+              className="cursor-pointer border-0 bg-transparent p-0 text-[11px] text-neutral-400 hover:text-neutral-600 coarse:px-2 coarse:py-1.5"
               onClick={onStop}
             >
               Stop
@@ -259,7 +259,7 @@ export default function NotesPanel({
             state.planStatus === "done" && (
               <button
                 type="button"
-                className="cursor-pointer border-0 bg-transparent p-0 text-[11px] text-neutral-400 hover:text-neutral-600"
+                className="cursor-pointer border-0 bg-transparent p-0 text-[11px] text-neutral-400 hover:text-neutral-600 coarse:px-2 coarse:py-1.5"
                 onClick={onGenerate}
               >
                 Resume
