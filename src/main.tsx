@@ -28,15 +28,22 @@ if (import.meta.env.DEV) {
   });
 }
 
-// The bridge must be in place before pi-ai (imported via App) initializes, in
-// case the underlying SDK captures a reference to the global fetch at module
-// load. Hence the dynamic import.
-installFetchBridge();
+// Smoke build (VITE_SMOKE=1, set only by the iOS simulator smoke workflow): run
+// the unattended engine check instead of mounting the app. Guarded by the env
+// flag so a normal build never loads the smoke chunk.
+if (import.meta.env.VITE_SMOKE === "1") {
+  void import("./smoke/smoke").then(({ runSmoke }) => runSmoke());
+} else {
+  // The bridge must be in place before pi-ai (imported via App) initializes, in
+  // case the underlying SDK captures a reference to the global fetch at module
+  // load. Hence the dynamic import.
+  installFetchBridge();
 
-void import("./App").then(({ default: App }) => {
-  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>,
-  );
-});
+  void import("./App").then(({ default: App }) => {
+    ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>,
+    );
+  });
+}
