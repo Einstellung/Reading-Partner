@@ -203,12 +203,12 @@ const BTN_SM_DANGER = `${BTN_BASE} text-xs px-2 py-1 border-[#f0c8c8] text-[#b91
 // because two background utilities in one class list resolve by stylesheet order.
 const BTN_SM_ON =
   "inline-flex items-center justify-center text-xs leading-none px-2 py-1 border rounded-md border-[#c9c2e8] bg-[#efecfb] text-[#4a3a9e] cursor-pointer enabled:hover:bg-[#e7e3f7] disabled:opacity-40 disabled:cursor-default coarse:min-h-[44px]";
-// Default reading layout for a book that has never set one: paged horizontal
-// flip on touch-first devices (iPad), vertical scroll everywhere else.
+// Default reading layout for a book that has never set one: vertical continuous
+// scroll on every surface (the correct PDF-reading default; a finger swipe
+// scrolls, like Notability / PDF Expert). Paged horizontal flip stays available
+// as an opt-in in the reader's More menu, off by default.
 function defaultLayout(): "vertical" | "paged" {
-  return typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches
-    ? "paged"
-    : "vertical";
+  return "vertical";
 }
 
 const INPUT = "flex-1 px-2.5 py-2 border border-[#dcdcdc] rounded-md [font:inherit]";
