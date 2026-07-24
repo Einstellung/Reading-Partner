@@ -53,6 +53,13 @@ export function pagedGestureTool(tool: ToolKind, penSeen: boolean): "pointer" | 
   return penSeen ? "pointer" : "pen";
 }
 
+// Once a finger is classified as scroll, a move past the slop in ANY direction
+// commits it to scrolling — a horizontal pan must never fall through to the
+// drawing layer. Direction only decides the axis afterwards, never draw-vs-scroll.
+export function shouldCommitScroll(dx: number, dy: number, slop: number): boolean {
+  return Math.abs(dx) >= slop || Math.abs(dy) >= slop;
+}
+
 // Normalize a PointerEvent.pointerType to a PointerKind. Unknown/empty types
 // (some engines report "") are treated as touch, the most conservative class.
 export function pointerKindOf(pointerType: string): PointerKind {

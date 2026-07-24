@@ -4,6 +4,7 @@ import {
   toolKindOf,
   pointerKindOf,
   pagedGestureTool,
+  shouldCommitScroll,
   type PointerKind,
   type ToolKind,
 } from "./touch-routing";
@@ -76,6 +77,27 @@ test("pagedGestureTool: hand always turns with a finger", () => {
 test("pagedGestureTool: annotate finger turns once a stylus is seen, else draws", () => {
   expect(pagedGestureTool("annotate", true)).toBe("pointer");
   expect(pagedGestureTool("annotate", false)).toBe("pen");
+});
+
+test("shouldCommitScroll: a horizontal-only move past the slop still commits to scroll (never draws)", () => {
+  expect(shouldCommitScroll(20, 0, 6)).toBe(true);
+});
+
+test("shouldCommitScroll: vertical and diagonal moves past the slop commit", () => {
+  expect(shouldCommitScroll(0, 20, 6)).toBe(true);
+  expect(shouldCommitScroll(15, 15, 6)).toBe(true);
+  expect(shouldCommitScroll(-9, 2, 6)).toBe(true); // horizontal dominant, opposite sign
+});
+
+test("shouldCommitScroll: sub-slop jitter in any direction does not commit (tap stays a tap)", () => {
+  expect(shouldCommitScroll(0, 0, 6)).toBe(false);
+  expect(shouldCommitScroll(5, 5, 6)).toBe(false);
+  expect(shouldCommitScroll(-5, 3, 6)).toBe(false);
+});
+
+test("shouldCommitScroll: commit fires exactly at the slop threshold", () => {
+  expect(shouldCommitScroll(6, 0, 6)).toBe(true);
+  expect(shouldCommitScroll(0, 6, 6)).toBe(true);
 });
 
 test("pointerKindOf normalizes pointerType, unknown falls back to touch", () => {

@@ -6,4 +6,6 @@
 
 解法：笔手路由必须在 JS 层、按 `pointerType` 逐事件做，拦在 viewport 滚动容器的 capture 阶段（早于页 div 的 bubble handler）。判定为"该滚动的 touch"时 `interaction.pause()` + `setPointerCapture` 到容器 + `preventDefault` + 自己驱动 `scrollTop`（原生滚动被 touch-action:none 挡死，必须自驱动，可选加惯性）；判定为"该画的 pointer"（pen/mouse，或无笔设备的 touch）直接放行到引擎。pen/mouse 一律不拦（桌面零回归）。会话级 `penSeen` 锁存（任一 pointerType==="pen" 事件置真）决定"有笔时手指只滚、无笔设备手指画"。判定表抽成纯函数单测（`src/reader-embedpdf/touch-routing.ts`），接线在 `EmbedPdfView.tsx` 的 `TouchInputRouter`。不要试图用 `wantsRawTouch:false` 覆盖 mode 把页 div 放回可滚：那样 touch-action 变 `""`（auto）会放开浏览器原生 pinch-zoom，在 iPad WKWebView 里和引擎缩放打架。
 
+两个 JS 路由必须做对、否则真机翻车（都是实测才发现）：一，判定为 scroll 的手指，**任何方向**超过 slop 都要 commit 成滚动、只用方向选轴（dy→scrollTop，dx→scrollLeft 且仅容器可横滚时），绝不能只按纵向位移 commit——否则横向平移永远不 commit、整段漏给标注层画线（纵拖对、横拖画）。二，标注工具下判定 scroll 的手指要在 **pointerdown 当下就 pause**，不能等移动超 slop 再 pause：引擎的画笔在 pointerdown 就起笔，commit 前那几像素的 lead-in 会漏出一小段瞬时笔迹（不提交、但 DOM 残留，真机每次横滑起手闪一道）。手掌工具则相反，要延迟到 commit 再 pause，好让静止 tap 仍能到引擎（消气泡/取消）。
+
 附带一个开发环境坑：`vite.config.ts` 的 `server.watch.ignored` 含 `**/.claude/**`（本意是别让 agent worktree 的文件变动打断用户主 checkout 的 dev）。在 `.claude/worktrees/` 里跑 `bun run dev` 时，vite 监听不到自己源码的改动，一直服务旧转换缓存——改完代码要重启 dev server 才生效。

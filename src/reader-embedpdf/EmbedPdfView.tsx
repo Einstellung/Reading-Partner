@@ -43,7 +43,7 @@ import {
   type GestureInput,
   type GestureState,
 } from "./paged-gesture";
-import { routePointer, toolKindOf, pagedGestureTool } from "./touch-routing";
+import { routePointer, toolKindOf, pagedGestureTool, shouldCommitScroll } from "./touch-routing";
 
 const DOC_ID = "main";
 
@@ -309,7 +309,7 @@ interface PagedGestureCtx {
   setTouchLock: ((locked: boolean) => void) | null;
 }
 
-// Movement (CSS px) before a vertical one-finger touch commits to a scroll.
+// Movement (CSS px) in any direction before a scroll-classified finger commits.
 const VERTICAL_SCROLL_SLOP = 6;
 // Inertia decay per 16ms frame for the vertical fling, and the scrollTop speed
 // (px/ms) below which the fling stops.
@@ -378,11 +378,16 @@ function TouchInputRouter({
       // --- vertical follow-finger scroll state ----------------------------
       let vPhase: "idle" | "pending" | "scroll" = "idle";
       let vId: number | null = null;
+      let vStartX = 0;
       let vStartY = 0;
+      let vStartScrollLeft = 0;
       let vStartScrollTop = 0;
+      let vLastX = 0;
       let vLastY = 0;
       let vLastT = 0;
-      let vVel = 0; // finger velocity in clientY px/ms (positive = moving down)
+      // Finger velocity px/ms per axis (positive = moving right / down).
+      let vVelX = 0;
+      let vVelY = 0;
       let vPaused = false;
       let vCapturedId: number | null = null;
       let flingRaf = 0;
@@ -466,6 +471,8 @@ function TouchInputRouter({
       // --- vertical scroll helpers ----------------------------------------
       const maxScrollTop = () => Math.max(0, el.scrollHeight - el.clientHeight);
       const clampTop = (v: number) => Math.min(Math.max(v, 0), maxScrollTop());
+      const maxScrollLeft = () => Math.max(0, el.scrollWidth - el.clientWidth);
+      const clampLeft = (v: number) => Math.min(Math.max(v, 0), maxScrollLeft());
       const cancelFling = () => {
         if (flingRaf) {
           cancelAnimationFrame(flingRaf);
@@ -489,18 +496,27 @@ function TouchInputRouter({
         vId = null;
       };
       const startFling = () => {
-        // Finger down moves content down, so scrollTop moves opposite the finger.
-        let v = -vVel; // scrollTop-space speed, px/ms
-        if (Math.abs(v) < VERTICAL_FLING_MIN_SPEED) return;
+        // Each scroll axis coasts opposite its finger axis. Drive both until both
+        // fall below the stop speed or hit their edge.
+        let vx = -vVelX;
+        let vy = -vVelY;
+        if (Math.abs(vx) < VERTICAL_FLING_MIN_SPEED && Math.abs(vy) < VERTICAL_FLING_MIN_SPEED) return;
         let last = performance.now();
         const step = (now: number) => {
           const dt = Math.max(now - last, 1);
           last = now;
-          const next = clampTop(el.scrollTop + v * dt);
-          const hitEdge = next === el.scrollTop && v !== 0;
-          el.scrollTop = next;
-          v *= Math.pow(VERTICAL_FLING_DECAY, dt / 16);
-          if (!hitEdge && Math.abs(v) > VERTICAL_FLING_MIN_SPEED) {
+          const nextTop = clampTop(el.scrollTop + vy * dt);
+          const nextLeft = clampLeft(el.scrollLeft + vx * dt);
+          const topStuck = nextTop === el.scrollTop;
+          const leftStuck = nextLeft === el.scrollLeft;
+          el.scrollTop = nextTop;
+          el.scrollLeft = nextLeft;
+          const decay = Math.pow(VERTICAL_FLING_DECAY, dt / 16);
+          vx *= decay;
+          vy *= decay;
+          const yLive = !topStuck && Math.abs(vy) > VERTICAL_FLING_MIN_SPEED;
+          const xLive = !leftStuck && Math.abs(vx) > VERTICAL_FLING_MIN_SPEED;
+          if (yLive || xLive) {
             flingRaf = requestAnimationFrame(step);
           } else {
             flingRaf = 0;
@@ -515,17 +531,30 @@ function TouchInputRouter({
           endVertical();
           return;
         }
-        if (routePointer(toolKindOf(ctx.current.tool), "touch", ctx.current.penSeen) !== "scroll") {
+        const kind = toolKindOf(ctx.current.tool);
+        if (routePointer(kind, "touch", ctx.current.penSeen) !== "scroll") {
           return; // this finger draws — leave it to the annotation layer
         }
         cancelFling();
         vPhase = "pending";
         vId = e.pointerId;
+        vStartX = e.clientX;
         vStartY = e.clientY;
+        vStartScrollLeft = el.scrollLeft;
         vStartScrollTop = el.scrollTop;
+        vLastX = e.clientX;
         vLastY = e.clientY;
         vLastT = e.timeStamp;
-        vVel = 0;
+        vVelX = 0;
+        vVelY = 0;
+        // Under an annotation tool this finger must never mark the page, not even
+        // the sub-slop lead-in before the scroll commits — pause the engine's
+        // pointer pipeline now so no stroke can start. (The hand tool defers its
+        // pause to the commit so a stationary tap still reaches the engine.)
+        if (kind === "annotate" && !vPaused) {
+          ctx.current.interaction?.pause();
+          vPaused = true;
+        }
       };
       const onVerticalMove = (e: PointerEvent) => {
         if (vId !== e.pointerId || vPhase === "idle") return;
@@ -534,11 +563,16 @@ function TouchInputRouter({
           return;
         }
         const dt = Math.max(e.timeStamp - vLastT, 1);
-        vVel = (e.clientY - vLastY) / dt;
+        vVelX = (e.clientX - vLastX) / dt;
+        vVelY = (e.clientY - vLastY) / dt;
+        vLastX = e.clientX;
         vLastY = e.clientY;
         vLastT = e.timeStamp;
         if (vPhase === "pending") {
-          if (Math.abs(e.clientY - vStartY) < VERTICAL_SCROLL_SLOP) return;
+          // This finger is already classified as scroll, so a move past the slop
+          // in ANY direction commits it — a horizontal pan must never reach the
+          // drawing layer. Direction only picks the axis below.
+          if (!shouldCommitScroll(e.clientX - vStartX, e.clientY - vStartY, VERTICAL_SCROLL_SLOP)) return;
           vPhase = "scroll";
           if (!vPaused) {
             ctx.current.interaction?.pause();
@@ -552,7 +586,11 @@ function TouchInputRouter({
           }
         }
         if (vPhase === "scroll") {
+          // Both axes follow the finger; scrollLeft only moves when the container
+          // is horizontally scrollable (zoomed in / page wider than viewport),
+          // otherwise clampLeft pins it and that axis holds still.
           el.scrollTop = clampTop(vStartScrollTop - (e.clientY - vStartY));
+          el.scrollLeft = clampLeft(vStartScrollLeft - (e.clientX - vStartX));
           if (e.cancelable) e.preventDefault();
         }
       };
