@@ -1,0 +1,149 @@
+# Build the app for the iOS Simulator with NO Apple developer account and NO
+# code signing, boot an iPad simulator, launch the smoke build, and read back
+# the verdict it writes. This is the cheapest possible gate for the one real
+# iOS unknown: can EmbedPDF's pthread PDFium WASM (SharedArrayBuffer +
+# cross-origin isolation, served over WKWebView's custom scheme) load and
+# rasterize a page on iOS? Simulator builds need no signing, so this runs on
+# every push to ios-spike without the TestFlight signing setup.
+#
+# The machine verdict is src/smoke's result.json (read via simctl
+# get_app_container); the step fails red unless it says ok:true. The screenshot
+# is a human witness only.
+#
+# Independent of ios-testflight.yml (the signed device/TestFlight route); this
+# never touches signing.
+
+name: iOS Simulator Smoke
+
+on:
+  push:
+    branches: [ios-spike]
+  workflow_dispatch:
+
+concurrency:
+  group: ios-sim-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      # Build the frontend in smoke mode: main.tsx runs src/smoke instead of the
+      # app. tauri's beforeBuildCommand (bun run build) inherits this env.
+      VITE_SMOKE: "1"
+      BUNDLE_ID: com.xinyuan.readingpartner
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pin Xcode so an image default bump can't change the toolchain under us.
+      - name: Pin Xcode
+        env:
+          XCODE_VERSION: "26.5"
+        run: |
+          sudo xcode-select --switch "/Applications/Xcode_${XCODE_VERSION}.app" || {
+            echo "Xcode ${XCODE_VERSION} is not on this runner image. Installed:"
+            ls /Applications | grep -i '^Xcode' || true
+            exit 1
+          }
+          xcodebuild -version
+
+      - uses: oven-sh/setup-bun@v2
+
+      # aarch64-apple-ios-sim is the Rust target for the Apple Silicon simulator;
+      # the Xcode project's Build Rust Code phase compiles the staticlib for it.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios-sim
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: bun install --frozen-lockfile
+
+      # Self-host pdfium.wasm from node_modules into public/ (vite copies it into
+      # dist). Without it the engine cannot start.
+      - name: Copy pdfium.wasm
+        run: bun run wasm
+
+      # src-tauri/gen/apple is gitignored; generate the Xcode project fresh.
+      # --ci answers prompts with defaults. First run installs xcodegen (and
+      # cocoapods if missing) via Homebrew.
+      - name: Generate the Xcode project
+        run: bun tauri ios init --ci
+
+      # Build for the iOS Simulator, unsigned. --target aarch64-sim (arch label
+      # arm64-sim, triple aarch64-apple-ios-sim) makes the CLI emit a .app, not
+      # an .ipa; --no-sign skips codesigning (2.9.0+). This runs beforeBuildCommand
+      # (bun run build, which inherits VITE_SMOKE=1) and embeds the resulting dist
+      # into the Rust staticlib, so the smoke frontend — including dist/pdfium —
+      # is served over the tauri:// custom scheme. Apple-Silicon runner required.
+      - name: Build for the iOS Simulator (unsigned)
+        run: bun tauri ios build --target aarch64-sim --no-sign
+
+      # Boot an iPad simulator that already exists on the runner, launch the app,
+      # and read back the machine verdict. The result file's location under the
+      # data container is not assumed (BaseDirectory.AppData maps somewhere under
+      # it on iOS) — it is found by name. Gate is red unless ok:true.
+      - name: Boot iPad, launch, read the smoke verdict
+        run: |
+          set -euo pipefail
+          APP=$(ls -d src-tauri/gen/apple/build/arm64-sim/*.app 2>/dev/null | head -1)
+          if [ -z "$APP" ]; then
+            echo "::error::no .app produced"; find src-tauri/gen/apple/build -maxdepth 3 -name '*.app' || true; exit 1
+          fi
+          echo "app: $APP"
+
+          UDID=$(xcrun simctl list devices available -j \
+            | jq -r '.devices | to_entries[] | .value[] | select(.name|test("iPad")) | .udid' | head -1)
+          if [ -z "$UDID" ]; then
+            echo "::error::no available iPad simulator"; xcrun simctl list devices; exit 1
+          fi
+          echo "iPad udid: $UDID"
+
+          # Boots if needed and blocks until fully booted (headless is fine).
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch "$UDID" "$BUNDLE_ID"
+
+          DATA=$(xcrun simctl get_app_container "$UDID" "$BUNDLE_ID" data)
+          echo "data container: $DATA"
+
+          # The container exists at install time, but result.json appears only
+          # after the app writes it — poll (engine wasm compile + open + render).
+          RESULT=""
+          for i in $(seq 1 90); do
+            RESULT=$(find "$DATA" -name smoke-result.json 2>/dev/null | head -1 || true)
+            [ -n "$RESULT" ] && break
+            sleep 2
+          done
+
+          # Human witness, taken regardless of outcome.
+          xcrun simctl io "$UDID" screenshot smoke-screenshot.png || true
+
+          if [ -z "$RESULT" ]; then
+            echo "::error::smoke-result.json never appeared within ~180s (app crashed or hung before writing a verdict)"
+            exit 1
+          fi
+          echo "=== smoke-result.json ==="
+          cat "$RESULT"
+          echo
+          cp "$RESULT" smoke-result.json
+
+          OK=$(jq -r '.ok' "$RESULT")
+          if [ "$OK" != "true" ]; then
+            echo "::error::iOS engine gate RED at layer: $(jq -r '.failLayer // .stage' "$RESULT")"
+            exit 1
+          fi
+          echo "iOS engine gate GREEN — PDFium rendered a page in WKWebView"
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-smoke
+          path: |
+            smoke-result.json
+            smoke-screenshot.png
+          if-no-files-found: warn
