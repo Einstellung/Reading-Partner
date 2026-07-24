@@ -3331,6 +3331,7 @@ dependencies = [
  "cpal",
  "hound",
  "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-clipboard-manager",
