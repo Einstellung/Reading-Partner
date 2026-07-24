@@ -15,12 +15,19 @@ const TOKEN_URL = "https://platform.claude.com/v1/oauth/token";
 const CALLBACK_PORT = 53692;
 const CALLBACK_PATH = "/callback";
 const REDIRECT_URI = `http://localhost:${CALLBACK_PORT}${CALLBACK_PATH}`;
+// The code-display variant: with this registered redirect, the authorize page
+// lands on a console.anthropic.com page that shows the code (code#state) for
+// copy-paste. The localhost redirect never displays a code — `code=true` alone
+// does not change that — so the manual flow must use this one (real-iPad
+// finding; Claude Code's own paste-code login uses the same).
+const MANUAL_REDIRECT_URI = "https://console.anthropic.com/oauth/code/callback";
 const SCOPES =
 	"org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload";
 
 // Retained across an attempt so the manual-paste fallback can reuse the verifier
-// that was baked into the already-opened authorize URL.
-let pending: { verifier: string; state: string } | null = null;
+// that was baked into the already-opened authorize URL. The token exchange must
+// repeat the redirect_uri the authorize URL carried, so it is recorded here.
+let pending: { verifier: string; state: string; redirectUri: string } | null = null;
 
 function base64Url(bytes: Uint8Array): string {
 	let s = "";
@@ -34,12 +41,12 @@ async function generatePKCE(): Promise<{ verifier: string; challenge: string }> 
 	return { verifier, challenge: base64Url(new Uint8Array(digest)) };
 }
 
-function buildAuthUrl(challenge: string, state: string): string {
+function buildAuthUrl(challenge: string, state: string, redirectUri: string = REDIRECT_URI): string {
 	const params = new URLSearchParams({
 		code: "true",
 		client_id: CLIENT_ID,
 		response_type: "code",
-		redirect_uri: REDIRECT_URI,
+		redirect_uri: redirectUri,
 		scope: SCOPES,
 		code_challenge: challenge,
 		code_challenge_method: "S256",
@@ -70,7 +77,12 @@ function parseManualInput(input: string): { code: string; state?: string } {
 	return { code: value };
 }
 
-async function exchangeCode(code: string, state: string, verifier: string): Promise<AnthropicCredential> {
+async function exchangeCode(
+	code: string,
+	state: string,
+	verifier: string,
+	redirectUri: string = REDIRECT_URI,
+): Promise<AnthropicCredential> {
 	const res = await fetch(TOKEN_URL, {
 		method: "POST",
 		headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -79,7 +91,7 @@ async function exchangeCode(code: string, state: string, verifier: string): Prom
 			client_id: CLIENT_ID,
 			code,
 			state,
-			redirect_uri: REDIRECT_URI,
+			redirect_uri: redirectUri,
 			code_verifier: verifier,
 		}),
 	});
@@ -112,7 +124,7 @@ async function store(cred: AnthropicCredential): Promise<void> {
 export async function anthropicLogin(): Promise<void> {
 	const { verifier, challenge } = await generatePKCE();
 	const state = verifier; // pi uses the PKCE verifier as the state value
-	pending = { verifier, state };
+	pending = { verifier, state, redirectUri: REDIRECT_URI };
 
 	// Start the listener first (it binds immediately), then open the browser.
 	const listener = invoke<{ code: string; state: string }>("start_oauth_callback_listener", {
@@ -133,22 +145,22 @@ export async function anthropicLogin(): Promise<void> {
 
 /**
  * Start a paste-based login without the loopback listener: generate PKCE, open
- * the authorize page (code=true so it prints the code), and arm
- * {@link anthropicLoginWithManualCode}. This is the iOS entry (no loopback);
- * the user copies the code the page shows and pastes it back.
+ * the authorize page with the code-display redirect (the page then shows the
+ * code as code#state), and arm {@link anthropicLoginWithManualCode}. This is
+ * the iOS entry (no loopback); the user copies the shown code and pastes it back.
  */
 export async function anthropicLoginManualStart(): Promise<void> {
 	const { verifier, challenge } = await generatePKCE();
 	const state = verifier; // pi uses the PKCE verifier as the state value
-	pending = { verifier, state };
-	await openUrl(buildAuthUrl(challenge, state));
+	pending = { verifier, state, redirectUri: MANUAL_REDIRECT_URI };
+	await openUrl(buildAuthUrl(challenge, state, MANUAL_REDIRECT_URI));
 }
 
 /** Fallback: exchange a code the user pasted from the authorize page. */
 export async function anthropicLoginWithManualCode(input: string): Promise<void> {
 	if (!pending) throw new Error("no pending Anthropic login; start login first");
 	const { code, state } = parseManualInput(input);
-	await store(await exchangeCode(code, state ?? pending.state, pending.verifier));
+	await store(await exchangeCode(code, state ?? pending.state, pending.verifier, pending.redirectUri));
 }
 
 export async function anthropicLogout(): Promise<void> {
