@@ -7,7 +7,6 @@
 import {
   BaseDirectory,
   exists,
-  mkdir,
   readTextFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
@@ -32,16 +31,6 @@ export function parseFiguresCache(raw: unknown, version: number = FIGURES_VERSIO
   if (idx.version !== version) return null;
   if (!Array.isArray(idx.figures)) return null;
   return idx as FiguresIndex;
-}
-
-async function ensureDir(): Promise<void> {
-  try {
-    if (!(await exists("", { baseDir: BaseDirectory.AppData }))) {
-      await mkdir("", { baseDir: BaseDirectory.AppData, recursive: true });
-    }
-  } catch {
-    // A real problem resurfaces on the write below.
-  }
 }
 
 // Load a document's cached figure index by path hash. Missing or stale-version
@@ -95,7 +84,6 @@ export async function ensureFigures(key: string, buffer: ArrayBuffer): Promise<F
       index = EMPTY;
     }
     try {
-      await ensureDir();
       await writeTextFile(fileFor(hash), JSON.stringify(index), { baseDir: BaseDirectory.AppData });
     } catch (e) {
       console.warn("failed to persist figures cache", e);

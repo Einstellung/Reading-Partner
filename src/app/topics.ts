@@ -5,7 +5,6 @@
 import {
   BaseDirectory,
   exists,
-  mkdir,
   readTextFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
@@ -35,16 +34,6 @@ interface Store {
   topics: Topic[];
 }
 
-async function ensureDir(): Promise<void> {
-  try {
-    if (!(await exists("", { baseDir: BaseDirectory.AppData }))) {
-      await mkdir("", { baseDir: BaseDirectory.AppData, recursive: true });
-    }
-  } catch {
-    // A real problem resurfaces on the write below.
-  }
-}
-
 // Missing/corrupt file reads as an empty library; genuine write failures
 // propagate so the caller can warn (never silently lose a topic).
 async function load(): Promise<Store> {
@@ -62,7 +51,6 @@ async function load(): Promise<Store> {
 }
 
 async function save(store: Store): Promise<void> {
-  await ensureDir();
   await writeTextFile(TOPICS_FILE, JSON.stringify(store, null, 2), {
     baseDir: BaseDirectory.AppData,
   });

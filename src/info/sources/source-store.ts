@@ -9,7 +9,6 @@
 import {
   BaseDirectory,
   exists,
-  mkdir,
   readDir,
   readTextFile,
   writeTextFile,
@@ -59,16 +58,6 @@ export function migratedSources(hasPriorInfoData: boolean): SourceDescriptor[] {
 
 // --- filesystem ------------------------------------------------------------
 
-async function ensureDir(): Promise<void> {
-  try {
-    if (!(await exists("", { baseDir: BaseDirectory.AppData }))) {
-      await mkdir("", { baseDir: BaseDirectory.AppData, recursive: true });
-    }
-  } catch {
-    // A real problem resurfaces on the write below.
-  }
-}
-
 // True when this device shows signs of prior info use (a seeded profile or any
 // past briefing), so the source list should be migrated rather than left empty.
 async function hasPriorInfoData(): Promise<boolean> {
@@ -86,7 +75,6 @@ async function hasPriorInfoData(): Promise<boolean> {
 }
 
 export async function saveSources(sources: SourceDescriptor[]): Promise<void> {
-  await ensureDir();
   await writeTextFile(SOURCES_FILE, JSON.stringify(sources, null, 2), {
     baseDir: BaseDirectory.AppData,
   });
@@ -154,6 +142,5 @@ export async function loadSourceHealth(): Promise<Record<string, SourceHealth>> 
 }
 
 export async function saveSourceHealth(health: Record<string, SourceHealth>): Promise<void> {
-  await ensureDir();
   await writeTextFile(HEALTH_FILE, JSON.stringify(health), { baseDir: BaseDirectory.AppData });
 }

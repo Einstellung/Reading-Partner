@@ -6,23 +6,12 @@
 import {
   BaseDirectory,
   exists,
-  mkdir,
   readTextFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
 import type { FeedbackAction, FeedbackEvent } from "../info/briefing/types";
 
 export const FEEDBACK_FILE = "info-feedback.jsonl";
-
-async function ensureDir(): Promise<void> {
-  try {
-    if (!(await exists("", { baseDir: BaseDirectory.AppData }))) {
-      await mkdir("", { baseDir: BaseDirectory.AppData, recursive: true });
-    }
-  } catch {
-    // A real problem resurfaces on the write below.
-  }
-}
 
 // Parse a JSONL blob into events, skipping malformed lines (a half-written line
 // must not sink the whole log). Exported for tests.
@@ -58,7 +47,6 @@ export async function appendFeedback(event: {
   action: FeedbackAction;
   category?: string;
 }): Promise<void> {
-  await ensureDir();
   const full: FeedbackEvent = { ts: Date.now(), ...event };
   let prior = "";
   try {

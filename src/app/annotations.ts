@@ -8,7 +8,6 @@
 import {
   BaseDirectory,
   exists,
-  mkdir,
   readTextFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
@@ -44,20 +43,9 @@ export function onSaveError(handler: (e: unknown) => void): void {
   onError = handler;
 }
 
-async function ensureDir(): Promise<void> {
-  try {
-    if (!(await exists("", { baseDir: BaseDirectory.AppData }))) {
-      await mkdir("", { baseDir: BaseDirectory.AppData, recursive: true });
-    }
-  } catch {
-    // A real problem resurfaces on the write below.
-  }
-}
-
 async function writeNow(key: string): Promise<void> {
   dirty.delete(key);
   const anns = cache.get(key) ?? [];
-  await ensureDir();
   await writeTextFile(`annotations-${key}.json`, JSON.stringify(anns, null, 2), {
     baseDir: BaseDirectory.AppData,
   });

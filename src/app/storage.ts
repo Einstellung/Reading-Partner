@@ -6,12 +6,9 @@
 import {
   BaseDirectory,
   exists,
-  mkdir,
   readTextFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
-// Capability globs like $APPDATA/** do not match $APPDATA itself, so
-// capabilities/default.json must also allow the bare $APPDATA path (pitfall 09).
 import type { ViewState } from "./reader-contract";
 
 const STATE_FILE = "reading-state.json";
@@ -53,16 +50,6 @@ export function withClassroom(state: ViewState | null, on: boolean): ViewState {
   return { ...(state ?? DEFAULT_VIEW_STATE), classroom: on };
 }
 
-async function ensureDir(): Promise<void> {
-  try {
-    if (!(await exists("", { baseDir: BaseDirectory.AppData }))) {
-      await mkdir("", { baseDir: BaseDirectory.AppData, recursive: true });
-    }
-  } catch {
-    // A real problem resurfaces on the write below.
-  }
-}
-
 async function load(): Promise<Store> {
   try {
     if (!(await exists(STATE_FILE, { baseDir: BaseDirectory.AppData }))) {
@@ -78,7 +65,6 @@ async function load(): Promise<Store> {
 }
 
 async function save(store: Store): Promise<void> {
-  await ensureDir();
   await writeTextFile(STATE_FILE, JSON.stringify(store, null, 2), {
     baseDir: BaseDirectory.AppData,
   });

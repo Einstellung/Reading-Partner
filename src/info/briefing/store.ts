@@ -6,7 +6,6 @@
 import {
   BaseDirectory,
   exists,
-  mkdir,
   readTextFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
@@ -45,18 +44,7 @@ function itemsFile(date: string): string {
   return `info-items-${date}.json`;
 }
 
-async function ensureDir(): Promise<void> {
-  try {
-    if (!(await exists("", { baseDir: BaseDirectory.AppData }))) {
-      await mkdir("", { baseDir: BaseDirectory.AppData, recursive: true });
-    }
-  } catch {
-    // A real problem resurfaces on the write below.
-  }
-}
-
 export async function saveBriefing(briefing: Briefing): Promise<void> {
-  await ensureDir();
   await writeTextFile(briefingFile(briefing.date), JSON.stringify(briefing, null, 2), {
     baseDir: BaseDirectory.AppData,
   });
@@ -80,7 +68,6 @@ export async function saveArticles(
   date: string,
   articles: Record<string, CachedArticle>,
 ): Promise<void> {
-  await ensureDir();
   await writeTextFile(articlesFile(date), JSON.stringify(articles), {
     baseDir: BaseDirectory.AppData,
   });
@@ -115,7 +102,6 @@ export function leanItems(items: InfoItem[]): InfoItem[] {
 }
 
 export async function saveItems(date: string, items: InfoItem[]): Promise<void> {
-  await ensureDir();
   await writeTextFile(itemsFile(date), JSON.stringify(leanItems(items)), {
     baseDir: BaseDirectory.AppData,
   });
