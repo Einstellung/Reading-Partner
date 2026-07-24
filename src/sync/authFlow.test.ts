@@ -6,7 +6,7 @@ import { expect, test } from "bun:test";
 import {
   authCodeBody,
   buildAuthUrl,
-  iosRedirectUri,
+  schemeRedirectUri,
   matchesRedirect,
   parseCallbackParams,
   refreshBody,
@@ -18,13 +18,18 @@ import {
 const IOS_ID = "1234567890-abcdef.apps.googleusercontent.com";
 const REVERSED = "com.googleusercontent.apps.1234567890-abcdef";
 const REDIRECT = `${REVERSED}:/oauth2redirect`;
+const ANDROID_ID = "9876543210-ghijkl.apps.googleusercontent.com";
+const ANDROID_REVERSED = "com.googleusercontent.apps.9876543210-ghijkl";
+const ANDROID_REDIRECT = `${ANDROID_REVERSED}:/oauth2redirect`;
 
 const env: AuthEnv = {
   desktopClientId: "desk-id",
   desktopClientSecret: "desk-secret",
   desktopRedirectUri: "http://127.0.0.1:53692/callback",
   iosClientId: IOS_ID,
-  iosRedirectUri: iosRedirectUri(IOS_ID),
+  iosRedirectUri: schemeRedirectUri(IOS_ID),
+  androidClientId: ANDROID_ID,
+  androidRedirectUri: schemeRedirectUri(ANDROID_ID),
 };
 
 // --- reverse client id -----------------------------------------------------
@@ -33,12 +38,12 @@ test("reversedClientId strips the googleusercontent suffix and prepends the reve
   expect(reversedClientId(IOS_ID)).toBe(REVERSED);
 });
 
-test("iosRedirectUri appends the oauth2redirect path with a single slash", () => {
-  expect(iosRedirectUri(IOS_ID)).toBe(REDIRECT);
+test("schemeRedirectUri appends the oauth2redirect path with a single slash", () => {
+  expect(schemeRedirectUri(IOS_ID)).toBe(REDIRECT);
 });
 
-test("iosRedirectUri is empty when no iOS client is configured", () => {
-  expect(iosRedirectUri("")).toBe("");
+test("schemeRedirectUri is empty when no client is configured", () => {
+  expect(schemeRedirectUri("")).toBe("");
 });
 
 // --- platform fork ---------------------------------------------------------
@@ -49,6 +54,18 @@ test("iOS platform selects the scheme flow with no client secret", () => {
   expect(flow?.clientId).toBe(IOS_ID);
   expect(flow?.clientSecret).toBeUndefined();
   expect(flow?.redirectUri).toBe(REDIRECT);
+});
+
+test("Android platform selects the scheme flow with its own client and no secret", () => {
+  const flow = selectAuthFlow("android", env);
+  expect(flow?.kind).toBe("android-scheme");
+  expect(flow?.clientId).toBe(ANDROID_ID);
+  expect(flow?.clientSecret).toBeUndefined();
+  expect(flow?.redirectUri).toBe(ANDROID_REDIRECT);
+});
+
+test("Android flow is null when the Android client id is unset (shows not configured)", () => {
+  expect(selectAuthFlow("android", { ...env, androidClientId: "", androidRedirectUri: "" })).toBeNull();
 });
 
 test("macOS/windows/linux and unknown platforms all select the desktop loopback flow", () => {

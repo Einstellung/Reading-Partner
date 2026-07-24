@@ -5,14 +5,15 @@
 // redirect captured by the Rust listener (oauth_callback.rs) and a client_secret
 // alongside PKCE (the secret is not confidential for an installed-app client).
 //
-// iOS uses a Google "iOS" OAuth client: no client_secret (public client, PKCE is
-// the whole protection), and the redirect is the client's reverse-DNS custom
-// scheme captured by tauri-plugin-deep-link. Google is deprecating the loopback
-// redirect for native iOS/Android clients, and it forbids loading the consent
-// screen in an embedded webview, so the scheme + system-browser route is the only
-// compliant path on iOS.
+// iOS and Android use a Google "iOS"/"Android" OAuth client: no client_secret
+// (public client, PKCE is the whole protection), and the redirect is the client's
+// reverse-DNS custom scheme captured by tauri-plugin-deep-link. Google is
+// deprecating the loopback redirect for native iOS/Android clients, and it forbids
+// loading the consent screen in an embedded webview, so the scheme + system-browser
+// route is the only compliant path on both mobile platforms. The two differ only
+// in which client id (and thus which reversed scheme) is used.
 
-export type AuthFlowKind = "desktop-loopback" | "ios-scheme";
+export type AuthFlowKind = "desktop-loopback" | "ios-scheme" | "android-scheme";
 
 export interface AuthFlow {
   kind: AuthFlowKind;
@@ -28,6 +29,8 @@ export interface AuthEnv {
   desktopRedirectUri: string;
   iosClientId: string;
   iosRedirectUri: string;
+  androidClientId: string;
+  androidRedirectUri: string;
 }
 
 // Turn a Google iOS client id into its reverse-DNS URL scheme:
@@ -39,19 +42,25 @@ export function reversedClientId(iosClientId: string): string {
   return `com.googleusercontent.apps.${suffix}`;
 }
 
-// Full redirect URI for the iOS client: "<reversed-client-id>:/oauth2redirect".
-// Empty string when no iOS client is configured (so isGoogleConfigured stays false).
-export function iosRedirectUri(iosClientId: string): string {
-  return iosClientId ? `${reversedClientId(iosClientId)}:/oauth2redirect` : "";
+// Full redirect URI for a mobile client (iOS or Android): the reversed client id
+// as a custom scheme, "<reversed-client-id>:/oauth2redirect". Empty string when no
+// client is configured (so isGoogleConfigured stays false and sign-in is disabled
+// rather than crashing).
+export function schemeRedirectUri(clientId: string): string {
+  return clientId ? `${reversedClientId(clientId)}:/oauth2redirect` : "";
 }
 
 // Pick the flow for the running platform, or null when that platform's client is
-// not configured. "ios" is the only scheme-redirect platform we target; every
+// not configured. "ios" and "android" are the scheme-redirect platforms; every
 // other platform (macos/windows/linux, and unknowns) takes the desktop loopback.
 export function selectAuthFlow(platform: string, env: AuthEnv): AuthFlow | null {
   if (platform === "ios") {
     if (!env.iosClientId) return null;
     return { kind: "ios-scheme", clientId: env.iosClientId, redirectUri: env.iosRedirectUri };
+  }
+  if (platform === "android") {
+    if (!env.androidClientId) return null;
+    return { kind: "android-scheme", clientId: env.androidClientId, redirectUri: env.androidRedirectUri };
   }
   if (!env.desktopClientId || !env.desktopClientSecret) return null;
   return {

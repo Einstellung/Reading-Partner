@@ -9,18 +9,22 @@
 // value is not confidential (it ships in every binary), PKCE is the real
 // protection.
 //
-// iOS: an "iOS" OAuth client. VITE_GOOGLE_IOS_CLIENT_ID only — no secret (public
-// client, PKCE-only). The redirect is the client's reverse-DNS custom scheme,
-// which must ALSO be registered statically in tauri.conf.json > plugins >
-// deep-link > mobile (the Info.plist CFBundleURLTypes are generated from there at
-// iOS build time; it cannot be injected from this env var). Keep the two in sync.
+// iOS/Android: an "iOS"/"Android" OAuth client. VITE_GOOGLE_IOS_CLIENT_ID /
+// VITE_GOOGLE_ANDROID_CLIENT_ID only — no secret (public client, PKCE-only). The
+// redirect is the client's reverse-DNS custom scheme, which must ALSO be registered
+// statically in tauri.conf.json > plugins > deep-link > mobile (the intent-filter /
+// Info.plist CFBundleURLTypes are generated from there at build time; it cannot be
+// injected from this env var). Keep the two in sync. The Android client is created
+// separately (it needs the signing keystore's SHA-1); until VITE_GOOGLE_ANDROID_
+// CLIENT_ID is set, Android shows "Google client not configured" instead of failing.
 
 import { platform } from "@tauri-apps/plugin-os";
-import { iosRedirectUri, selectAuthFlow, type AuthEnv, type AuthFlow } from "./authFlow";
+import { schemeRedirectUri, selectAuthFlow, type AuthEnv, type AuthFlow } from "./authFlow";
 
 export const GOOGLE_CLIENT_ID: string = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "";
 export const GOOGLE_CLIENT_SECRET: string = import.meta.env.VITE_GOOGLE_CLIENT_SECRET ?? "";
 export const GOOGLE_IOS_CLIENT_ID: string = import.meta.env.VITE_GOOGLE_IOS_CLIENT_ID ?? "";
+export const GOOGLE_ANDROID_CLIENT_ID: string = import.meta.env.VITE_GOOGLE_ANDROID_CLIENT_ID ?? "";
 
 // Loopback redirect captured by the Rust listener (oauth_callback.rs), shared
 // with the Anthropic login. Google Desktop clients accept a loopback redirect on
@@ -41,7 +45,9 @@ function authEnv(): AuthEnv {
     desktopClientSecret: GOOGLE_CLIENT_SECRET,
     desktopRedirectUri: GOOGLE_REDIRECT_URI,
     iosClientId: GOOGLE_IOS_CLIENT_ID,
-    iosRedirectUri: iosRedirectUri(GOOGLE_IOS_CLIENT_ID),
+    iosRedirectUri: schemeRedirectUri(GOOGLE_IOS_CLIENT_ID),
+    androidClientId: GOOGLE_ANDROID_CLIENT_ID,
+    androidRedirectUri: schemeRedirectUri(GOOGLE_ANDROID_CLIENT_ID),
   };
 }
 

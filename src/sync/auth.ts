@@ -227,10 +227,12 @@ export async function signIn(): Promise<void> {
   const { verifier, challenge } = await generatePKCE();
   const state = base64Url(crypto.getRandomValues(new Uint8Array(16)));
 
+  // Both mobile flows (ios-scheme, android-scheme) capture the code via the
+  // custom-scheme deep link; only desktop uses the loopback listener.
   const code =
-    flow.kind === "ios-scheme"
-      ? await captureSchemeCode(flow, challenge, state)
-      : await captureLoopbackCode(flow, challenge, state);
+    flow.kind === "desktop-loopback"
+      ? await captureLoopbackCode(flow, challenge, state)
+      : await captureSchemeCode(flow, challenge, state);
 
   const token = await tokenRequest(authCodeBody(flow, code, verifier));
   if (!token.refresh_token) {
