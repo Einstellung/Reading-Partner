@@ -76,6 +76,8 @@
       "identifier": "opener:allow-open-path",
       "allow": [{ "path": "$APPDATA/slides/*" }]
     },
-    "clipboard-manager:allow-read-image"
+    "clipboard-manager:allow-read-image",
+    "deep-link:default",
+    "os:allow-platform"
   ]
 }

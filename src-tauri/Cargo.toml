@@ -21,6 +21,14 @@ tauri-plugin-fs = "2"
 # request that looks like CORS (docs/pitfall/15).
 tauri-plugin-http = { version = "2", features = ["unsafe-headers"] }
 tauri-plugin-opener = "2"
+# Receive the Google iOS OAuth redirect: the reverse-client-id custom scheme is
+# registered in tauri.conf.json (deep-link generates the Info.plist
+# CFBundleURLTypes at iOS build time), and the frontend reads the redirect via
+# onOpenUrl/getCurrent. Desktop keeps the loopback listener (oauth_callback.rs).
+tauri-plugin-deep-link = "2"
+# Platform detection to fork the OAuth flow (loopback on desktop, custom scheme
+# on iOS); platform() is read synchronously in src/sync/googleConfig.ts.
+tauri-plugin-os = "2"
 # Read images from the system clipboard: WebKitGTK's DOM paste event often
 # omits image data, so the shell reads the clipboard through Rust as a fallback.
 tauri-plugin-clipboard-manager = "2"

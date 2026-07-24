@@ -40,5 +40,14 @@
       "icons/icon.ico"
     ]
   },
-  "plugins": {}
+  "plugins": {
+    "deep-link": {
+      "mobile": [
+        {
+          "scheme": ["com.googleusercontent.apps.REPLACE_WITH_YOUR_IOS_CLIENT_ID"],
+          "appLink": false
+        }
+      ]
+    }
+  }
 }
