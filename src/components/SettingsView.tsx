@@ -21,7 +21,7 @@ import {
   type ProviderId,
   type ProviderInfo,
 } from "../ai/aiClient";
-import { isIOS } from "../app/platform";
+import { isMobileOS } from "../app/platform";
 import { hasImageGenKey, setImageGenKey } from "../ai/credentials";
 import { DEFAULT_STT_BASE, DEFAULT_STT_MODEL, hasSttKey, setSttKey } from "../voice";
 import { DEFAULT_IMAGE_API_BASE, DEFAULT_IMAGE_MODEL } from "../slides";
@@ -586,7 +586,7 @@ function OAuthCard({
   onChanged: () => void;
   onActivated: () => void;
 }) {
-  const ios = isIOS();
+  const mobile = isMobileOS();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // idle: entry buttons; paste: show the code input; device: OpenAI device flow.
@@ -691,8 +691,8 @@ function OAuthCard({
         </button>
       ) : (
         <>
-          {ios ? (
-            // No loopback on iOS: the code flow is the primary action.
+          {mobile ? (
+            // No loopback on mobile (iOS/Android): the code flow is primary.
             mode === "idle" && (
               <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={startCodeFlow}>
                 {busy ? "Opening the sign-in page…" : signInLabel}
