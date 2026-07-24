@@ -159,7 +159,17 @@ import PrepPanel from "./components/reader/PrepPanel";
 import NotesPanel from "./components/reader/NotesPanel";
 import MemoryPanel from "./components/reader/MemoryPanel";
 import PenToolbar from "./components/reader/PenToolbar";
-import { IconSidebar, IconSparkle, IconPagedLayout, IconVerticalLayout } from "./components/common/icons";
+import MoreMenu, { type MoreItem } from "./components/reader/MoreMenu";
+import {
+  IconSidebar,
+  IconSparkle,
+  IconPagedLayout,
+  IconGear,
+  IconFitWidth,
+  IconZoomIn,
+  IconZoomOut,
+  IconTwoPage,
+} from "./components/common/icons";
 import AnnotationPopup from "./components/reader/AnnotationPopup";
 import CallBubble from "./components/chat/CallBubble";
 import CallView from "./components/chat/CallView";
@@ -199,10 +209,6 @@ const BTN = `${BTN_BASE} text-sm px-3 py-1.5 border-[#dcdcdc]`;
 const BTN_PRIMARY = "inline-flex items-center justify-center text-sm leading-none px-3 py-1.5 rounded-md bg-[#6c4fd0] text-white cursor-pointer enabled:hover:bg-[#5a3fbf] disabled:opacity-40 coarse:min-h-[44px]";
 const BTN_SM = `${BTN_BASE} text-xs px-2 py-1 border-[#dcdcdc]`;
 const BTN_SM_DANGER = `${BTN_BASE} text-xs px-2 py-1 border-[#f0c8c8] text-[#b91c1c]`;
-// Pressed state for a toggle button; spelled out rather than appended to BTN_SM
-// because two background utilities in one class list resolve by stylesheet order.
-const BTN_SM_ON =
-  "inline-flex items-center justify-center text-xs leading-none px-2 py-1 border rounded-md border-[#c9c2e8] bg-[#efecfb] text-[#4a3a9e] cursor-pointer enabled:hover:bg-[#e7e3f7] disabled:opacity-40 disabled:cursor-default coarse:min-h-[44px]";
 // Default reading layout for a book that has never set one: vertical continuous
 // scroll on every surface (the correct PDF-reading default; a finger swipe
 // scrolls, like Notability / PDF Expert). Paged horizontal flip stays available
@@ -2198,6 +2204,56 @@ export default function App() {
   const twoPage = !!stats && stats.spreadMode !== SpreadMode.None;
   const paged = stats?.layout === "paged";
   const inReader = !!title;
+
+  // The reader top bar's "More" overflow: low-frequency view controls collapsed
+  // out of the main bar (zoom, fit, spread, the paged-flip opt-in, settings).
+  const moreItems: MoreItem[] = [
+    {
+      kind: "action",
+      label: "Fit page width",
+      icon: IconFitWidth,
+      disabled: !stats?.canZoomReset,
+      onClick: () => viewRef.current?.zoomReset(),
+    },
+    {
+      kind: "action",
+      label: "Zoom in",
+      icon: IconZoomIn,
+      disabled: !stats?.canZoomIn,
+      onClick: () => viewRef.current?.zoomIn(),
+    },
+    {
+      kind: "action",
+      label: "Zoom out",
+      icon: IconZoomOut,
+      disabled: !stats?.canZoomOut,
+      onClick: () => viewRef.current?.zoomOut(),
+    },
+    { kind: "divider" },
+    {
+      kind: "toggle",
+      label: "Two-page spread",
+      icon: IconTwoPage,
+      on: twoPage,
+      disabled: !viewReady,
+      onClick: () => viewRef.current?.setSpreadMode(twoPage ? SpreadMode.None : SpreadMode.Odd),
+    },
+    {
+      kind: "toggle",
+      label: "Paged flip",
+      icon: IconPagedLayout,
+      on: paged,
+      disabled: !viewReady,
+      onClick: () => viewRef.current?.setLayout(paged ? "vertical" : "paged"),
+    },
+    { kind: "divider" },
+    {
+      kind: "action",
+      label: "Settings",
+      icon: IconGear,
+      onClick: () => setShowSettings(true),
+    },
+  ];
   const configured = !!(
     settings.defaultProviderId &&
     settings.defaultModelId &&
@@ -2250,99 +2306,81 @@ export default function App() {
       }}
     >
       {/* z-10: the color palette drops out of the header into the reader area,
-          and <main> is positioned too — without this it would paint over it. */}
-      <header className="relative z-10 flex h-11 flex-none items-center gap-3 border-b border-[#dcdcdc] bg-[#fafafa] px-3">
-        {/* The pen rack is centered on the window, independent of how long the
-            file path or the zoom controls are. */}
-        {inReader && (
-          <div className="absolute left-1/2 top-0 z-[1] flex h-11 -translate-x-1/2 items-center">
-            <PenToolbar
-              orientation="horizontal"
-              tool={{ type: toolType, color: penColor }}
-              colors={ANNOTATION_COLORS}
-              onToolChange={(t) => {
-                setToolType(t.type);
-                setPenColor(t.color);
-              }}
-            />
-          </div>
-        )}
+          and <main> is positioned too — without this it would paint over it.
+          Three sections: left = navigation, center = tool group, right = AI +
+          overflow. The side sections are shrink-0 so they always hold their
+          content; the center is the flex-1 that grows to center its tools and,
+          when the phone is too narrow for the full rack, scrolls within its own
+          band (overflow-x-auto) so the page itself never scrolls. */}
+      <header className="relative z-10 flex h-11 flex-none items-center gap-1.5 border-b border-[#dcdcdc] bg-[#fafafa] px-2 sm:gap-2 sm:px-3">
         {inReader ? (
           <>
-            <button
-              className="relative flex h-8 w-8 items-center justify-center rounded-md border-0 bg-transparent text-[#555] cursor-pointer can-hover:hover:bg-black/5 coarse:h-11 coarse:w-11"
-              title={sidebarOpen ? "Close panel" : "Open panel"}
-              aria-label={sidebarOpen ? "Close panel" : "Open panel"}
-              aria-pressed={sidebarOpen}
-              onClick={() => setSidebarOpen((v) => !v)}
-            >
-              <IconSidebar size={18} />
-              {/* Background-work dot: prep/notes generating while the drawer is
-                  shut (docs: iPad adaptation). */}
-              {sidebarBusy && (
-                <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[#6c4fd0] ring-2 ring-[#fafafa]" />
-              )}
-            </button>
-            <button className={BTN} onClick={closeReader}>
-              ‹ Library
-            </button>
-            {/* The breadcrumb costs width the dense reader controls need on a
-                phone; hidden below sm, shown from iPad up. */}
-            <span className="hidden text-[13px] text-[#1b1b1b] overflow-hidden text-ellipsis whitespace-nowrap max-w-[max(160px,calc(50vw-330px))] sm:inline">
-              {activeTopic?.name} <span className="text-[#777] mx-0.5">›</span> {title}
-            </span>
-            {status && <span className="ml-3 text-xs text-[#b45309]">{status}</span>}
-            <span className="flex-1" />
-            {/* min-w-0 + overflow-x-auto: the control cluster can never push the
-                page wider than the viewport on a phone; it scrolls within itself
-                instead. Inert on desktop/iPad, where it fits. */}
-            <div className="flex min-w-0 items-center gap-2 overflow-x-auto">
+            {/* LEFT: navigation */}
+            <div className="flex shrink-0 items-center gap-1">
               <button
-                className="inline-flex items-center justify-center rounded-md border border-[#c9c2e8] bg-[#efecfb] px-2.5 py-1.5 text-[#4a3a9e] cursor-pointer hover:bg-[#e7e3f7] coarse:h-11 coarse:min-w-[44px]"
+                className="relative flex h-8 w-8 flex-none items-center justify-center rounded-md border-0 bg-transparent text-[#555] cursor-pointer can-hover:hover:bg-black/5 coarse:h-11 coarse:w-11"
+                title={sidebarOpen ? "Close panel" : "Open panel"}
+                aria-label={sidebarOpen ? "Close panel" : "Open panel"}
+                aria-pressed={sidebarOpen}
+                onClick={() => setSidebarOpen((v) => !v)}
+              >
+                <IconSidebar size={18} />
+                {/* Background-work dot: prep/notes generating while the drawer is
+                    shut (docs: iPad adaptation). */}
+                {sidebarBusy && (
+                  <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[#6c4fd0] ring-2 ring-[#fafafa]" />
+                )}
+              </button>
+              {/* Library: full label from sm up, back-chevron only on a phone,
+                  where every pixel of center width counts. */}
+              <button
+                className="flex h-8 flex-none items-center justify-center rounded-md border-0 bg-transparent px-1 text-[13px] text-[#555] cursor-pointer can-hover:hover:bg-black/5 coarse:h-11 coarse:min-w-[44px] sm:px-2"
+                title="Back to library"
+                aria-label="Back to library"
+                onClick={closeReader}
+              >
+                <span aria-hidden className="sm:hidden">‹</span>
+                <span className="hidden sm:inline">‹ Library</span>
+              </button>
+              {/* The breadcrumb costs width the center tool group needs on a
+                  phone; hidden below sm, shown from iPad up. */}
+              <span className="hidden min-w-0 max-w-[28vw] overflow-hidden text-ellipsis whitespace-nowrap text-[13px] text-[#1b1b1b] sm:inline">
+                {activeTopic?.name} <span className="text-[#777] mx-0.5">›</span> {title}
+              </span>
+              {status && <span className="ml-1 flex-none text-xs text-[#b45309] sm:ml-3">{status}</span>}
+            </div>
+
+            {/* CENTER: tool group — annotation rack + page indicator. flex-1 grows
+                to center the tools (justify-center) from iPad up; on a phone it
+                left-aligns and the min-w-0 + overflow-x-auto band scrolls the
+                tools rather than pushing the page wider. */}
+            <div className="flex min-w-0 flex-1 items-center justify-start gap-1.5 overflow-x-auto sm:justify-center sm:gap-2">
+              <PenToolbar
+                orientation="horizontal"
+                tool={{ type: toolType, color: penColor }}
+                colors={ANNOTATION_COLORS}
+                onToolChange={(t) => {
+                  setToolType(t.type);
+                  setPenColor(t.color);
+                }}
+              />
+              <span className="h-5 w-px flex-none bg-[#dcdcdc]" />
+              <span className="flex-none [font-variant-numeric:tabular-nums] text-[13px] text-[#555] whitespace-nowrap px-0.5">
+                {pageText}
+              </span>
+            </div>
+
+            {/* RIGHT: AI entry + overflow */}
+            <div className="flex shrink-0 items-center justify-end gap-0.5 sm:gap-1">
+              <button
+                className="flex h-8 w-8 flex-none items-center justify-center rounded-md border-0 bg-transparent text-[#555] cursor-pointer can-hover:hover:bg-black/5 coarse:h-11 coarse:w-11"
                 title="Talk about this book"
                 aria-label="Talk about this book"
                 onClick={openBookThread}
               >
-                <IconSparkle size={16} />
+                <IconSparkle size={18} />
               </button>
-              <span className="h-5 w-px bg-[#dcdcdc]" />
-              <button className={`${BTN} coarse:min-w-[44px]`} disabled={!stats?.canZoomOut} onClick={() => viewRef.current?.zoomOut()}>
-                −
-              </button>
-              <span className="[font-variant-numeric:tabular-nums] text-[13px] min-w-[64px] text-center">{pageText}</span>
-              <button className={`${BTN} coarse:min-w-[44px]`} disabled={!stats?.canZoomIn} onClick={() => viewRef.current?.zoomIn()}>
-                +
-              </button>
-              <span className="h-5 w-px bg-[#dcdcdc]" />
-              <button
-                className={BTN_SM}
-                title="Fit page width"
-                disabled={!stats?.canZoomReset}
-                onClick={() => viewRef.current?.zoomReset()}
-              >
-                Fit width
-              </button>
-              <button
-                className={twoPage ? BTN_SM_ON : BTN_SM}
-                title="Two-page spread"
-                aria-pressed={twoPage}
-                disabled={!viewReady}
-                onClick={() =>
-                  viewRef.current?.setSpreadMode(twoPage ? SpreadMode.None : SpreadMode.Odd)
-                }
-              >
-                Two pages
-              </button>
-              <button
-                className={`flex items-center justify-center px-2 py-1 ${paged ? BTN_SM_ON : BTN_SM}`}
-                title={paged ? "Paged flip (tap for vertical scroll)" : "Vertical scroll (tap for paged flip)"}
-                aria-label="Reading layout"
-                aria-pressed={paged}
-                disabled={!viewReady}
-                onClick={() => viewRef.current?.setLayout(paged ? "vertical" : "paged")}
-              >
-                {paged ? <IconPagedLayout size={16} /> : <IconVerticalLayout size={16} />}
-              </button>
+              <MoreMenu items={moreItems} />
             </div>
           </>
         ) : homeScreen === "library" ? (
@@ -2358,13 +2396,18 @@ export default function App() {
             )}
             {activeTopic && <span className="text-[13px] text-[#1b1b1b] overflow-hidden text-ellipsis whitespace-nowrap max-w-[40vw]">{activeTopic.name}</span>}
             <span className="flex-1" />
+            <button className={`${BTN} coarse:min-w-[44px]`} title="Settings" aria-label="Settings" onClick={() => setShowSettings(true)}>
+              ⚙
+            </button>
           </>
         ) : (
-          <span className="flex-1" />
+          <>
+            <span className="flex-1" />
+            <button className={`${BTN} coarse:min-w-[44px]`} title="Settings" aria-label="Settings" onClick={() => setShowSettings(true)}>
+              ⚙
+            </button>
+          </>
         )}
-        <button className={`${BTN} coarse:min-w-[44px]`} title="Settings" aria-label="Settings" onClick={() => setShowSettings(true)}>
-          ⚙
-        </button>
       </header>
 
       <main className="relative flex-1 min-h-0 flex">
