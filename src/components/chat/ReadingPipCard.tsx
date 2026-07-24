@@ -31,7 +31,7 @@ export default function ReadingPipCard({ title, badge, body, hoverLabel = 'Back 
 				{badge}
 			</div>
 			{body}
-			<span className="mt-auto text-[11px] text-neutral-400 opacity-0 transition-opacity group-hover:opacity-100">
+			<span className="mt-auto text-[11px] text-neutral-400 can-hover:opacity-0 transition-opacity group-hover:opacity-100">
 				{hoverLabel}
 			</span>
 		</button>

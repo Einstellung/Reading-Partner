@@ -197,7 +197,7 @@ export function SourcesPage(props: SourcesPageProps) {
                 aria-label="Remove source"
                 title="Remove"
                 onClick={() => props.onRemove(s.id)}
-                className="flex h-7 w-7 flex-none items-center justify-center rounded-full text-[#bbb] opacity-0 transition-opacity hover:bg-[#f0f0f0] hover:text-[#c0392b] group-hover:opacity-100"
+                className="flex h-7 w-7 flex-none items-center justify-center rounded-full text-[#bbb] can-hover:opacity-0 transition-opacity hover:bg-[#f0f0f0] hover:text-[#c0392b] group-hover:opacity-100 coarse:h-11 coarse:w-11"
               >
                 ✕
               </button>

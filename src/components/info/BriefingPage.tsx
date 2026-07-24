@@ -27,7 +27,7 @@ function DismissButton({ onDismiss }: { onDismiss: () => void }) {
         e.stopPropagation();
         onDismiss();
       }}
-      className="flex h-6 w-6 flex-none items-center justify-center rounded-full text-[#bbb] opacity-0 transition-opacity hover:bg-[#f0f0f0] hover:text-[#666] group-hover:opacity-100"
+      className="flex h-6 w-6 flex-none items-center justify-center rounded-full text-[#bbb] can-hover:opacity-0 transition-opacity hover:bg-[#f0f0f0] hover:text-[#666] group-hover:opacity-100 coarse:h-11 coarse:w-11"
     >
       ✕
     </button>
@@ -113,7 +113,7 @@ export function BriefingPage(props: BriefingPageProps) {
                         aria-label="Ask about this"
                         title="Ask about this"
                         onClick={() => props.onAskArticle(r.itemId)}
-                        className="flex h-6 w-6 items-center justify-center rounded-full text-[#c3bce6] opacity-0 transition-opacity hover:bg-[#f0eefb] hover:text-[#6d5ae0] group-hover:opacity-100"
+                        className="flex h-6 w-6 items-center justify-center rounded-full text-[#c3bce6] can-hover:opacity-0 transition-opacity hover:bg-[#f0eefb] hover:text-[#6d5ae0] group-hover:opacity-100 coarse:h-11 coarse:w-11"
                       >
                         <IconSparkle size={14} />
                       </button>
@@ -242,7 +242,7 @@ function FilteredSection({
                 <span className="min-w-0 flex-1 truncate text-[13px] text-[#777]">{m.title}</span>
                 {openedIds.has(f.itemId) && <span className="text-[11px] text-[#bbb]">Read</span>}
                 <button
-                  className="flex-none text-[12px] text-[#8a7fd0] opacity-0 transition-opacity hover:underline group-hover:opacity-100"
+                  className="flex-none text-[12px] text-[#8a7fd0] can-hover:opacity-0 transition-opacity hover:underline group-hover:opacity-100"
                   onClick={() => onAppeal(f.itemId, m, f.category)}
                 >
                   Show anyway

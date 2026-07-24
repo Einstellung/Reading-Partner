@@ -18,7 +18,7 @@ const ITEM =
 const ITEM_SELECTED =
 	"bg-sky-50 before:content-[''] before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-sky-600";
 const ICON_BTN =
-	'flex cursor-pointer items-center justify-center border-0 bg-transparent p-0.5 rounded';
+	'flex cursor-pointer items-center justify-center border-0 bg-transparent p-0.5 rounded coarse:h-11 coarse:w-11';
 
 function TypeMark({ annotation }: { annotation: Annotation }) {
 	// Region-select is retired; legacy image annotations still render on the page
@@ -88,10 +88,10 @@ export default function TraceList({ annotations, selectedId, onSelect, onToggleS
 						<button
 							type="button"
 							className={
-								'flex h-6 w-6 flex-none cursor-pointer items-center justify-center rounded border-0 bg-transparent p-0 transition-opacity hover:bg-black/5 focus-visible:opacity-100' +
+								'flex h-6 w-6 coarse:h-11 coarse:w-11 flex-none cursor-pointer items-center justify-center rounded border-0 bg-transparent p-0 transition-opacity hover:bg-black/5 focus-visible:opacity-100' +
 								(starred
 									? ' text-amber-500 opacity-100'
-									: ' text-neutral-400 opacity-0 group-hover:opacity-100 hover:text-amber-500')
+									: ' text-neutral-400 can-hover:opacity-0 group-hover:opacity-100 hover:text-amber-500')
 							}
 							title={starred ? 'Unstar' : 'Star'}
 							aria-label={starred ? 'Unstar' : 'Star'}
