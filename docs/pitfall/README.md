@@ -35,3 +35,4 @@
 - [29-voice-stt-fetch-and-ipc-bytes](./29-voice-stt-fetch-and-ipc-bytes.md) — 语音 STT 请求必须走 cleanTauriFetch(CSP+CORS 双杀直连);Rust 返回 Vec<u8> 是 JSON 数字数组
 - [30-webview-csp-coep-block-external-img](./30-webview-csp-coep-block-external-img.md) — webview 的 CSP+COEP 双杀外链图片,文章图片要走 http 路由取字节内联成 data: URL
 - [31-ios-deep-link-scheme-build-time](./31-ios-deep-link-scheme-build-time.md) — iOS 自定义 scheme 只能构建期静态注册进 tauri.conf,不能靠 env,且要和 env client id 手工对齐
+- [32-embedpdf-useviewportref-vs-element](./32-embedpdf-useviewportref-vs-element.md) — useViewportRef 每次新建 ref(挂自渲染元素用),读现有滚动容器要用 useViewportElement

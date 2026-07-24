@@ -73,6 +73,7 @@ function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
         ...(typeof props.viewState.pageY === "number"
           ? { pageX: props.viewState.pageX, pageY: props.viewState.pageY }
           : {}),
+        ...(props.viewState.layout ? { layout: props.viewState.layout } : {}),
       }
     : null;
 
@@ -135,6 +136,7 @@ function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
       zoomOut: () => h.zoomOut(),
       zoomReset: () => h.fitWidth(),
       setSpreadMode: (mode) => h.setSpread(SPREAD_NUM_TO_EMBED[mode] ?? "none"),
+      setLayout: (mode) => h.setLayout(mode),
       navigate: (target) => {
         if (target.annotationID) h.navigateToAnnotation(target.annotationID);
         else if (typeof target.pageIndex === "number") h.navigateToPage(target.pageIndex);
@@ -201,6 +203,7 @@ function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
             scrollMode: 0,
             spreadMode: 0,
             ...(typeof s.pageY === "number" ? { pageX: s.pageX, pageY: s.pageY } : {}),
+            ...(s.layout ? { layout: s.layout } : {}),
           })
         }
         onViewStats={(s: EmbedViewStats) =>
@@ -212,6 +215,7 @@ function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
             canZoomOut: s.canZoomOut,
             canZoomReset: true,
             spreadMode: EMBED_TO_SPREAD_NUM[s.spreadMode] ?? SpreadMode.None,
+            layout: s.layout,
           })
         }
       />

@@ -315,6 +315,40 @@ export function IconNotes({ size = 20 }: IconProps) {
 	);
 }
 
+// Paged reading layout: a page framed by left/right flip chevrons.
+export function IconPagedLayout({ size = 20 }: IconProps) {
+	return (
+		<svg
+			{...svgProps(size)}
+			stroke="currentColor"
+			strokeWidth="1.5"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<rect x="7" y="4" width="6" height="12" rx="1" />
+			<path d="M4 7L2.5 10L4 13" />
+			<path d="M16 7L17.5 10L16 13" />
+		</svg>
+	);
+}
+
+// Vertical continuous scroll layout: a page with a downward flow arrow.
+export function IconVerticalLayout({ size = 20 }: IconProps) {
+	return (
+		<svg
+			{...svgProps(size)}
+			stroke="currentColor"
+			strokeWidth="1.5"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<rect x="4" y="3" width="12" height="14" rx="1" />
+			<path d="M10 6.5V13.5" />
+			<path d="M7.5 11L10 13.5L12.5 11" />
+		</svg>
+	);
+}
+
 // Trash can for the delete action.
 export function IconTrash({ size = 16 }: IconProps) {
 	return (
