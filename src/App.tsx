@@ -159,7 +159,7 @@ import PrepPanel from "./components/reader/PrepPanel";
 import NotesPanel from "./components/reader/NotesPanel";
 import MemoryPanel from "./components/reader/MemoryPanel";
 import PenToolbar from "./components/reader/PenToolbar";
-import { IconSparkle } from "./components/common/icons";
+import { IconSparkle, IconPagedLayout, IconVerticalLayout } from "./components/common/icons";
 import AnnotationPopup from "./components/reader/AnnotationPopup";
 import CallBubble from "./components/chat/CallBubble";
 import CallView from "./components/chat/CallView";
@@ -200,6 +200,14 @@ const BTN_SM_DANGER = `${BTN_BASE} text-xs px-2 py-1 border-[#f0c8c8] text-[#b91
 // because two background utilities in one class list resolve by stylesheet order.
 const BTN_SM_ON =
   "text-xs leading-none px-2 py-1 border rounded-md border-[#c9c2e8] bg-[#efecfb] text-[#4a3a9e] cursor-pointer enabled:hover:bg-[#e7e3f7] disabled:opacity-40 disabled:cursor-default";
+// Default reading layout for a book that has never set one: paged horizontal
+// flip on touch-first devices (iPad), vertical scroll everywhere else.
+function defaultLayout(): "vertical" | "paged" {
+  return typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches
+    ? "paged"
+    : "vertical";
+}
+
 const INPUT = "flex-1 px-2.5 py-2 border border-[#dcdcdc] rounded-md [font:inherit]";
 const LIBRARY = "w-[min(680px,100%)] mx-auto px-6 py-10";
 const TOPIC_LIST = "list-none m-0 p-0 flex flex-col gap-1.5";
@@ -1526,7 +1534,12 @@ export default function App() {
         name,
         buffer: bytes.slice().buffer as ArrayBuffer,
         annotations: saved,
-        viewState: state,
+        // Seed the layout for a book that has never chosen one from the platform
+        // default (paged on touch, vertical on desktop), so the reader opens in
+        // the right mode on the first paint.
+        viewState: state
+          ? { ...state, layout: state.layout ?? defaultLayout() }
+          : ({ pageIndex: 0, scale: "auto", scrollMode: 0, spreadMode: 0, layout: defaultLayout() } as ViewState),
       });
       setTitle(name);
     },
@@ -2172,6 +2185,7 @@ export default function App() {
 
   const pageText = stats ? `${stats.pageIndex + 1} / ${stats.pagesCount}` : "— / —";
   const twoPage = !!stats && stats.spreadMode !== SpreadMode.None;
+  const paged = stats?.layout === "paged";
   const inReader = !!title;
   const configured = !!(
     settings.defaultProviderId &&
@@ -2277,6 +2291,16 @@ export default function App() {
                 }
               >
                 Two pages
+              </button>
+              <button
+                className={`flex items-center justify-center px-2 py-1 ${paged ? BTN_SM_ON : BTN_SM}`}
+                title={paged ? "Paged flip (tap for vertical scroll)" : "Vertical scroll (tap for paged flip)"}
+                aria-label="Reading layout"
+                aria-pressed={paged}
+                disabled={!viewReady}
+                onClick={() => viewRef.current?.setLayout(paged ? "vertical" : "paged")}
+              >
+                {paged ? <IconPagedLayout size={16} /> : <IconVerticalLayout size={16} />}
               </button>
             </div>
           </>
