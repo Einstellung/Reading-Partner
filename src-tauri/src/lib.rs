@@ -44,8 +44,25 @@ pub fn run() {
     ]);
 
     builder
-        // Pick up data written under the pre-0.3 bundle identifier.
         .setup(|app| {
+            // App-wide root directory guarantee. Tauri derives the per-app data
+            // dir from the bundle identifier but never creates it, and
+            // writeTextFile does not create parent directories. On a fresh iOS
+            // install the dir does not exist on first run, so the first writer
+            // (Google sign-in) hit "os error 2" (see docs/pitfall). Create it
+            // once at startup so every later write finds the root in place.
+            // Idempotent, runs every launch; a failure is logged, not fatal —
+            // a real problem surfaces at the actual write.
+            use tauri::Manager;
+            match app.path().app_data_dir() {
+                Ok(dir) => {
+                    if let Err(err) = std::fs::create_dir_all(&dir) {
+                        eprintln!("failed to create app data dir {}: {}", dir.display(), err);
+                    }
+                }
+                Err(err) => eprintln!("failed to resolve app data dir: {}", err),
+            }
+            // Pick up data written under the pre-0.3 bundle identifier.
             migrate::migrate_legacy_dirs(app.handle());
             Ok(())
         })
