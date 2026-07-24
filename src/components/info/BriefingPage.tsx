@@ -99,7 +99,9 @@ export function BriefingPage(props: BriefingPageProps) {
                     (dismissed ? "opacity-45" : "")
                   }
                 >
-                  <div className="flex items-start gap-3">
+                  {/* Narrow: actions drop below the text so the reason gets full
+                      width; sm+ keeps them in the right rail. */}
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
                     <button className="min-w-0 flex-1 text-left" onClick={() => props.onOpenArticle(r.itemId)}>
                       <div className="flex items-center gap-2">
                         <SourceTag name={m.sourceName} />
@@ -108,7 +110,7 @@ export function BriefingPage(props: BriefingPageProps) {
                       <div className="mt-1.5 text-[16px] font-medium leading-snug text-[#1b1b1b]">{m.title}</div>
                       <div className="mt-1.5 text-[14px] leading-relaxed text-[#555]">{r.reason}</div>
                     </button>
-                    <div className="flex flex-none items-center gap-1">
+                    <div className="flex flex-none items-center gap-1 self-end sm:self-auto">
                       <button
                         aria-label="Ask about this"
                         title="Ask about this"

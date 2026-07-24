@@ -28,7 +28,7 @@ function useElapsed(running: boolean): number {
 
 function Card({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-[220px] flex-1 flex-col rounded-2xl border border-[#e6e6e6] bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+    <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-[#e6e6e6] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] sm:min-h-[220px] sm:p-6">
       {children}
     </div>
   );
@@ -194,9 +194,9 @@ export function Vestibule({
   onStartSubscribing: () => void;
 }) {
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col px-6 py-12">
+    <div className="mx-auto flex w-full max-w-4xl flex-col px-5 py-8 sm:px-6 sm:py-12">
       <h1 className="m-0 text-[26px] font-semibold text-[#1b1b1b]">Reading Partner</h1>
-      <p className="mb-9 mt-1 text-[14px] text-[#999]">Today</p>
+      <p className="mb-6 mt-1 text-[14px] text-[#999] sm:mb-9">Today</p>
 
       <div className="flex flex-col gap-5 sm:flex-row">
         <Card>
