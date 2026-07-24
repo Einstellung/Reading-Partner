@@ -6,5 +6,12 @@
        Store Connect skips the encryption questionnaire on every upload. -->
   <key>ITSAppUsesNonExemptEncryption</key>
   <false/>
+  <!-- Point SpringBoard at the AppIcon set compiled into Assets.car. actool
+       normally injects this when it designates the appiconset as the target's
+       app icon, but we set it explicitly so a sideloaded build always has a
+       resolvable home-screen icon even if that wiring is absent. The name must
+       match the appiconset (AppIcon). See docs/pitfall/34. -->
+  <key>CFBundleIconName</key>
+  <string>AppIcon</string>
 </dict>
 </plist>
