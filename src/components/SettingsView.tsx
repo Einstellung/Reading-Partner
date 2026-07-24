@@ -286,7 +286,9 @@ function SyncCard() {
     try {
       await fn();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Sync action failed");
+      // Tauri plugin invokes reject with plain strings; show them verbatim so
+      // platform-level failures (network, scope, fs) are diagnosable in the UI.
+      setError(e instanceof Error ? e.message : String(e) || "Sync action failed");
     } finally {
       setBusy(false);
     }
