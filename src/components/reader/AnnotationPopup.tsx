@@ -19,8 +19,11 @@ const GAP = 10;
 const MARGIN = 8;
 const COMMENT_DEBOUNCE = 400;
 
+// The 9-colour palette is too dense for a full 44px per swatch; a 36px coarse
+// target is the practical compromise (the popup widens and the row wraps to
+// keep the swatches reachable on touch).
 const ICON_BTN =
-	'flex h-6 w-6 cursor-pointer items-center justify-center rounded border-0 bg-transparent p-0 hover:bg-black/5';
+	'flex h-6 w-6 coarse:h-9 coarse:w-9 cursor-pointer items-center justify-center rounded border-0 bg-transparent p-0 hover:bg-black/5';
 
 export default function AnnotationPopup({ annotation, anchor, colors, onChange, onDelete, onClose }: AnnotationPopupProps) {
 	const ref = useRef<HTMLDivElement>(null);
@@ -80,12 +83,12 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 	return (
 		<div
 			ref={ref}
-			className="fixed z-[1000] flex w-60 flex-col gap-2 rounded-lg border border-black/10 bg-white p-2.5 text-neutral-800 shadow-xl select-none"
+			className="fixed z-[1000] flex w-60 coarse:w-72 flex-col gap-2 rounded-lg border border-black/10 bg-white p-2.5 text-neutral-800 shadow-xl select-none"
 			style={pos ? { left: pos.left, top: pos.top, visibility: 'visible' } : { visibility: 'hidden' }}
 			role="dialog"
 			aria-label="Annotation"
 		>
-			<div className="flex items-center gap-0.5">
+			<div className="flex flex-wrap items-center gap-0.5">
 				{colors.map((c) => (
 					<button
 						key={c.color}
@@ -124,7 +127,7 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 			<div className="flex items-center justify-end">
 				<button
 					type="button"
-					className="inline-flex cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-2 py-1 text-xs text-red-700 [font:inherit] hover:bg-red-700/10"
+					className="inline-flex cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-2 py-1 text-xs text-red-700 [font:inherit] hover:bg-red-700/10 coarse:px-3 coarse:py-2.5"
 					title="Delete"
 					onClick={() => onDelete(annotation.id)}
 				>
