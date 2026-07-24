@@ -47,11 +47,19 @@ export default function CallBubble({
 	const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
 	// Re-clamp above the soft keyboard when it opens/closes (iPad).
 	const keyboardInset = useKeyboardInset();
+	// The bubble's fixed width, shrunk on a phone narrower than WIDTH+margins so it
+	// never spills past the viewport edge. Inert on desktop/iPad (WIDTH fits).
+	const [width, setWidth] = useState(WIDTH);
+
+	useLayoutEffect(() => {
+		const vw = window.innerWidth;
+		setWidth(Math.min(WIDTH, vw - 2 * MARGIN));
+	}, []);
 
 	useLayoutEffect(() => {
 		const el = ref.current;
 		if (!el) return;
-		const { width, height } = el.getBoundingClientRect();
+		const { height } = el.getBoundingClientRect();
 		const vw = window.innerWidth;
 		// The visual viewport height already excludes the keyboard; fall back to the
 		// layout height where the API is unavailable (desktop).
@@ -66,7 +74,7 @@ export default function CallBubble({
 			top = above >= MARGIN ? above : Math.max(MARGIN, vh - height - MARGIN);
 		}
 		setPos({ left, top });
-	}, [anchor.x, anchor.y, messages.length, keyboardInset]);
+	}, [anchor.x, anchor.y, messages.length, keyboardInset, width]);
 
 	useEffect(() => {
 		function onDown(e: MouseEvent) {
@@ -81,7 +89,7 @@ export default function CallBubble({
 			ref={ref}
 			role="dialog"
 			aria-label="AI conversation"
-			style={{ width: WIDTH, left: pos?.left, top: pos?.top, visibility: pos ? 'visible' : 'hidden' }}
+			style={{ width, left: pos?.left, top: pos?.top, visibility: pos ? 'visible' : 'hidden' }}
 			className="fixed z-[1000] box-border flex flex-col gap-2 rounded-xl border border-black/10 bg-white p-3 shadow-[0_8px_40px_rgba(0,0,0,0.18)]"
 		>
 			<div className="flex items-center justify-between">
