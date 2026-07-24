@@ -3,7 +3,7 @@
 // device. Payloads are ids and numbers, never message or passage text.
 // The append is injected so the format and logger run headless in tests.
 
-import { BaseDirectory, exists, mkdir, writeTextFile } from "@tauri-apps/plugin-fs";
+import { BaseDirectory, writeTextFile } from "@tauri-apps/plugin-fs";
 
 export type EventType =
   | "classroom-toggle" // { on: boolean }
@@ -38,18 +38,7 @@ export function createEventLogger(append: AppendFn, now: () => number = Date.now
   };
 }
 
-async function ensureDir(): Promise<void> {
-  try {
-    if (!(await exists("", { baseDir: BaseDirectory.AppData }))) {
-      await mkdir("", { baseDir: BaseDirectory.AppData, recursive: true });
-    }
-  } catch {
-    // A real problem resurfaces on the write below.
-  }
-}
-
 async function tauriAppend(topicId: string, line: string): Promise<void> {
-  await ensureDir();
   await writeTextFile(`events-${topicId}.jsonl`, line, {
     baseDir: BaseDirectory.AppData,
     append: true,

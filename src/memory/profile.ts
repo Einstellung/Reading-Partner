@@ -10,7 +10,6 @@
 import {
   BaseDirectory,
   exists,
-  mkdir,
   readTextFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
@@ -42,16 +41,6 @@ export const PROFILE_SKELETON_GUIDANCE = [
   "what the user has actually said — no invented taste, unspoken sections left out.",
 ].join("\n");
 
-async function ensureDir(): Promise<void> {
-  try {
-    if (!(await exists("", { baseDir: BaseDirectory.AppData }))) {
-      await mkdir("", { baseDir: BaseDirectory.AppData, recursive: true });
-    }
-  } catch {
-    // A real problem resurfaces on the write below.
-  }
-}
-
 // Load the profile. No file means no profile yet — return empty (nothing is
 // seeded or written); every reader handles an empty profile. A read failure
 // returns empty too, never blocking a briefing.
@@ -68,7 +57,6 @@ export async function loadProfile(): Promise<string> {
     if (await exists(LEGACY_PROFILE_FILE, { baseDir: BaseDirectory.AppData })) {
       const legacy = await readTextFile(LEGACY_PROFILE_FILE, { baseDir: BaseDirectory.AppData });
       try {
-        await ensureDir();
         await writeTextFile(PROFILE_FILE, legacy, { baseDir: BaseDirectory.AppData });
       } catch {
         // If the promote-write fails, the legacy content is still returned; the
@@ -83,6 +71,5 @@ export async function loadProfile(): Promise<string> {
 }
 
 export async function saveProfile(text: string): Promise<void> {
-  await ensureDir();
   await writeTextFile(PROFILE_FILE, text, { baseDir: BaseDirectory.AppData });
 }

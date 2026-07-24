@@ -69,16 +69,6 @@ export function onThreadSaveError(handler: (e: unknown) => void): void {
   onError = handler;
 }
 
-async function ensureDir(): Promise<void> {
-  try {
-    if (!(await exists("", { baseDir: BaseDirectory.AppData }))) {
-      await mkdir("", { baseDir: BaseDirectory.AppData, recursive: true });
-    }
-  } catch {
-    // A real problem resurfaces on the write below.
-  }
-}
-
 // Thread images live one directory per thread. Mirrors annotations.ts's base64
 // <-> bytes helpers; here `data` is bare base64 (no data: prefix), matching the
 // ChatMessage.images contract.
@@ -147,7 +137,6 @@ export async function readThreadImages(
 async function writeNow(key: string): Promise<void> {
   dirty.delete(key);
   const threads = cache.get(key) ?? {};
-  await ensureDir();
   await writeTextFile(`threads-${key}.json`, JSON.stringify({ threads }, null, 2), {
     baseDir: BaseDirectory.AppData,
   });

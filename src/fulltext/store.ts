@@ -7,7 +7,6 @@
 import {
   BaseDirectory,
   exists,
-  mkdir,
   readTextFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
@@ -21,16 +20,6 @@ function fileFor(hash: string): string {
 let onError: (e: unknown) => void = () => {};
 export function onFulltextError(handler: (e: unknown) => void): void {
   onError = handler;
-}
-
-async function ensureDir(): Promise<void> {
-  try {
-    if (!(await exists("", { baseDir: BaseDirectory.AppData }))) {
-      await mkdir("", { baseDir: BaseDirectory.AppData, recursive: true });
-    }
-  } catch {
-    // A real problem resurfaces on the write below.
-  }
 }
 
 // Load a document's cached full text by path hash. Missing or stale-version
@@ -56,7 +45,6 @@ export async function getFulltext(hash: string): Promise<Fulltext | null> {
 // uses, so the reading tools can serve it immediately. Overwrites any prior
 // entry for the key.
 export async function saveFulltext(key: string, ft: Fulltext): Promise<void> {
-  await ensureDir();
   await writeTextFile(fileFor(key), JSON.stringify(ft), { baseDir: BaseDirectory.AppData });
 }
 
@@ -78,7 +66,6 @@ export async function ensureFulltext(key: string, buffer: ArrayBuffer): Promise<
     const result = await extractFulltext(buffer);
     const ft: Fulltext = { version: FULLTEXT_VERSION, ...result };
     try {
-      await ensureDir();
       await writeTextFile(fileFor(hash), JSON.stringify(ft), {
         baseDir: BaseDirectory.AppData,
       });

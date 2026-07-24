@@ -6,7 +6,6 @@ import type { ThinkingLevel } from "@earendil-works/pi-ai";
 import {
   BaseDirectory,
   exists,
-  mkdir,
   readTextFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
@@ -131,16 +130,6 @@ export function onSettingsSaveError(handler: (e: unknown) => void): void {
   onError = handler;
 }
 
-async function ensureDir(): Promise<void> {
-  try {
-    if (!(await exists("", { baseDir: BaseDirectory.AppData }))) {
-      await mkdir("", { baseDir: BaseDirectory.AppData, recursive: true });
-    }
-  } catch {
-    // A real problem resurfaces on the write below.
-  }
-}
-
 export async function loadSettings(): Promise<Settings> {
   try {
     if (!(await exists(SETTINGS_FILE, { baseDir: BaseDirectory.AppData }))) return { ...DEFAULTS };
@@ -158,7 +147,6 @@ export function saveSettings(settings: Settings): void {
   if (timer) window.clearTimeout(timer);
   timer = window.setTimeout(() => {
     (async () => {
-      await ensureDir();
       await writeTextFile(SETTINGS_FILE, JSON.stringify(settings, null, 2), {
         baseDir: BaseDirectory.AppData,
       });
