@@ -40,3 +40,4 @@
 - [34-ios-init-default-icon-alpha](./34-ios-init-default-icon-alpha.md) — tauri ios init 用内置默认图标模板不读我们的图标,CI init 后要覆盖 appiconset;iOS 图标 strip alpha,CFBundleIconName 兜底
 - [35-ios-unsigned-linkedit-vmsize](./35-ios-unsigned-linkedit-vmsize.md) — 完全无签名 Mach-O 过第三方重签名器时 __LINKEDIT vmsize 不更新真机秒崩,产线预 ad-hoc 签名规避
 - [36-appdata-root-not-created-first-write](./36-appdata-root-not-created-first-write.md) — iOS 首装首跑第一个写入者报 os error 2,数据根目录改由 Rust setup create_dir_all 元能力保障,前端不再各自兜底
+- [37-embedpdf-page-touch-action-none-all-modes](./37-embedpdf-page-touch-action-none-all-modes.md) — EmbedPDF 每页 div 所有模式都 touch-action:none,页面上原生触摸滚动不可能;笔手路由必须在 viewport 容器 capture 阶段按 pointerType 逐事件做

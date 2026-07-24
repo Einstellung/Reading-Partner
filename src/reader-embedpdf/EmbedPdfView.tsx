@@ -43,6 +43,7 @@ import {
   type GestureInput,
   type GestureState,
 } from "./paged-gesture";
+import { routePointer, toolKindOf, pagedGestureTool } from "./touch-routing";
 
 const DOC_ID = "main";
 
@@ -296,24 +297,51 @@ interface PagedGestureCtx {
   paged: boolean;
   tool: EmbedTool;
   zoomedIn: boolean;
+  // Session-level latch: true once any pointer event reported pointerType "pen"
+  // (Apple Pencil in WKWebView). Never persisted. Once a stylus is in play the
+  // finger only ever scrolls; before it, a stylus-less device draws with the
+  // finger. Read live by the touch router each event.
+  penSeen: boolean;
   scroll: ScrollScope | null;
   interaction: InteractionManagerCapability | null;
-  // Set by PagedGestures so setLayout can toggle the viewport's touch-action
+  // Set by the touch router so setLayout can toggle the viewport's touch-action
   // (paged locks native pan/zoom; vertical restores it).
   setTouchLock: ((locked: boolean) => void) | null;
 }
 
-// Touch host for paged mode: a zero-size child inside the Viewport that grabs
-// the scroll container element (via the viewport-element context) and runs the
-// pure gesture machine on its pointer events. Follow-finger drags set scrollLeft
-// directly; a committed turn snaps with scrollToPage; a zoomed-in one-finger
-// drag pans. Only finger pointers (pointerType "touch") are handled — mouse and
-// stylus fall through to the desktop / drawing paths. On a committed gesture the
-// pointer is captured to the container and the engine's pointer pipeline paused,
-// so a swipe never turns into a text selection. Two-finger pinch is left to the
-// engine's own ZoomGestureWrapper (raw-touch channel); this machine yields the
-// moment a second finger lands.
-function PagedGestures({
+// Movement (CSS px) before a vertical one-finger touch commits to a scroll.
+const VERTICAL_SCROLL_SLOP = 6;
+// Inertia decay per 16ms frame for the vertical fling, and the scrollTop speed
+// (px/ms) below which the fling stops.
+const VERTICAL_FLING_DECAY = 0.95;
+const VERTICAL_FLING_MIN_SPEED = 0.02;
+
+// Touch input router: a zero-size child inside the Viewport that grabs the
+// scroll container (via the viewport-element context) and routes single-finger
+// pointer events between drawing and scrolling per pointerType — a decision CSS
+// touch-action cannot make (it cannot tell pen from finger).
+//
+// Every pointer of type "pen" latches ctx.penSeen for the session. Only finger
+// pointers ("touch") are ever intercepted; mouse and stylus fall straight
+// through to the engine's desktop / drawing paths (desktop is untouched).
+//
+// Vertical (continuous) mode — the main path: a finger that routePointer says
+// should scroll is driven here (pause the engine's pointer pipeline, capture the
+// pointer, follow the finger by setting scrollTop, then a light inertia fling on
+// release). Because the page divs carry touch-action:none in every mode, native
+// scroll is impossible over a page, so the scroll is driven in JS. A finger that
+// should draw (annotation tool, no stylus seen) is left alone and reaches the
+// annotation layer. A stationary finger is never paused, so a tap still reaches
+// the engine (dismiss / select) and native long-press behaviour is preserved.
+//
+// Paged (horizontal flip) mode: runs the pure gesture machine (paged-gesture.ts)
+// on finger pointers — follow-finger drags set scrollLeft, a committed turn snaps
+// with scrollToPage, a zoomed-in drag pans. The finger's draw-vs-turn rule
+// follows the same penSeen policy (pagedGestureTool).
+//
+// Two-finger pinch is left to the engine's own ZoomGestureWrapper in both modes;
+// this router yields the moment a second finger lands.
+function TouchInputRouter({
   documentId,
   ctx,
 }: {
@@ -336,6 +364,9 @@ function PagedGestures({
     };
 
     const attach = (el: HTMLDivElement): (() => void) => {
+      let activeTouches = 0;
+
+      // --- paged (horizontal flip) gesture machine state ------------------
       let state: GestureState = initGestureState();
       let captured = false;
       let capturedId: number | null = null;
@@ -343,7 +374,18 @@ function PagedGestures({
       let dragStartScrollLeft = 0;
       let dragStartPage = 1;
       let lpTimer = 0;
-      let activeTouches = 0;
+
+      // --- vertical follow-finger scroll state ----------------------------
+      let vPhase: "idle" | "pending" | "scroll" = "idle";
+      let vId: number | null = null;
+      let vStartY = 0;
+      let vStartScrollTop = 0;
+      let vLastY = 0;
+      let vLastT = 0;
+      let vVel = 0; // finger velocity in clientY px/ms (positive = moving down)
+      let vPaused = false;
+      let vCapturedId: number | null = null;
+      let flingRaf = 0;
 
       const clearLp = () => {
         if (lpTimer) {
@@ -373,6 +415,7 @@ function PagedGestures({
       ctx.current.setTouchLock = setTouchLock;
       setTouchLock(ctx.current.paged);
 
+      // --- paged apply / feed (unchanged behaviour) -----------------------
       const apply = (cmds: GestureCommand[]) => {
         const scroll = ctx.current.scroll;
         for (const c of cmds) {
@@ -406,7 +449,7 @@ function PagedGestures({
 
       const feed = (input: GestureInput, e?: Event) => {
         const r = stepGesture(state, input, {
-          tool: ctx.current.tool === "pointer" ? "pointer" : "pen",
+          tool: pagedGestureTool(toolKindOf(ctx.current.tool), ctx.current.penSeen),
           zoomedIn: ctx.current.zoomedIn,
           width: el.clientWidth || window.innerWidth,
         });
@@ -420,31 +463,150 @@ function PagedGestures({
         }
       };
 
+      // --- vertical scroll helpers ----------------------------------------
+      const maxScrollTop = () => Math.max(0, el.scrollHeight - el.clientHeight);
+      const clampTop = (v: number) => Math.min(Math.max(v, 0), maxScrollTop());
+      const cancelFling = () => {
+        if (flingRaf) {
+          cancelAnimationFrame(flingRaf);
+          flingRaf = 0;
+        }
+      };
+      const endVertical = () => {
+        if (vPaused) {
+          ctx.current.interaction?.resume();
+          vPaused = false;
+        }
+        if (vCapturedId !== null) {
+          try {
+            el.releasePointerCapture(vCapturedId);
+          } catch {
+            // ignore
+          }
+          vCapturedId = null;
+        }
+        vPhase = "idle";
+        vId = null;
+      };
+      const startFling = () => {
+        // Finger down moves content down, so scrollTop moves opposite the finger.
+        let v = -vVel; // scrollTop-space speed, px/ms
+        if (Math.abs(v) < VERTICAL_FLING_MIN_SPEED) return;
+        let last = performance.now();
+        const step = (now: number) => {
+          const dt = Math.max(now - last, 1);
+          last = now;
+          const next = clampTop(el.scrollTop + v * dt);
+          const hitEdge = next === el.scrollTop && v !== 0;
+          el.scrollTop = next;
+          v *= Math.pow(VERTICAL_FLING_DECAY, dt / 16);
+          if (!hitEdge && Math.abs(v) > VERTICAL_FLING_MIN_SPEED) {
+            flingRaf = requestAnimationFrame(step);
+          } else {
+            flingRaf = 0;
+          }
+        };
+        flingRaf = requestAnimationFrame(step);
+      };
+
+      const onVerticalDown = (e: PointerEvent) => {
+        // A second finger means pinch — yield to the zoom wrapper.
+        if (activeTouches >= 2) {
+          endVertical();
+          return;
+        }
+        if (routePointer(toolKindOf(ctx.current.tool), "touch", ctx.current.penSeen) !== "scroll") {
+          return; // this finger draws — leave it to the annotation layer
+        }
+        cancelFling();
+        vPhase = "pending";
+        vId = e.pointerId;
+        vStartY = e.clientY;
+        vStartScrollTop = el.scrollTop;
+        vLastY = e.clientY;
+        vLastT = e.timeStamp;
+        vVel = 0;
+      };
+      const onVerticalMove = (e: PointerEvent) => {
+        if (vId !== e.pointerId || vPhase === "idle") return;
+        if (activeTouches >= 2) {
+          endVertical();
+          return;
+        }
+        const dt = Math.max(e.timeStamp - vLastT, 1);
+        vVel = (e.clientY - vLastY) / dt;
+        vLastY = e.clientY;
+        vLastT = e.timeStamp;
+        if (vPhase === "pending") {
+          if (Math.abs(e.clientY - vStartY) < VERTICAL_SCROLL_SLOP) return;
+          vPhase = "scroll";
+          if (!vPaused) {
+            ctx.current.interaction?.pause();
+            vPaused = true;
+          }
+          try {
+            el.setPointerCapture(e.pointerId);
+            vCapturedId = e.pointerId;
+          } catch {
+            // Best effort — pause is the real draw guard.
+          }
+        }
+        if (vPhase === "scroll") {
+          el.scrollTop = clampTop(vStartScrollTop - (e.clientY - vStartY));
+          if (e.cancelable) e.preventDefault();
+        }
+      };
+      const onVerticalUp = (e: PointerEvent, cancelled: boolean) => {
+        if (vId !== e.pointerId) return;
+        const wasScroll = vPhase === "scroll";
+        endVertical();
+        if (wasScroll && !cancelled) startFling();
+      };
+
+      // --- shared dispatch ------------------------------------------------
       const onDown = (e: PointerEvent) => {
-        if (!ctx.current.paged || e.pointerType !== "touch") return;
+        if (e.pointerType === "pen") ctx.current.penSeen = true;
+        if (e.pointerType !== "touch") return;
         activeTouches += 1;
-        feed({ type: "pointerdown", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp });
-        clearLp();
-        if (activeTouches === 1 && ctx.current.tool === "pointer" && !ctx.current.zoomedIn) {
-          const id = e.pointerId;
-          lpTimer = window.setTimeout(() => feed({ type: "longpress", id }), PAGED_LONG_PRESS_MS);
+        if (ctx.current.paged) {
+          feed({ type: "pointerdown", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp });
+          clearLp();
+          if (activeTouches === 1 && ctx.current.tool === "pointer" && !ctx.current.zoomedIn) {
+            const id = e.pointerId;
+            lpTimer = window.setTimeout(() => feed({ type: "longpress", id }), PAGED_LONG_PRESS_MS);
+          }
+        } else {
+          onVerticalDown(e);
         }
       };
       const onMove = (e: PointerEvent) => {
-        if (!ctx.current.paged || e.pointerType !== "touch") return;
-        feed({ type: "pointermove", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp }, e);
+        if (e.pointerType === "pen") ctx.current.penSeen = true;
+        if (e.pointerType !== "touch") return;
+        if (ctx.current.paged) {
+          feed({ type: "pointermove", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp }, e);
+        } else {
+          onVerticalMove(e);
+        }
       };
       const onUp = (e: PointerEvent) => {
         if (e.pointerType !== "touch") return;
         activeTouches = Math.max(0, activeTouches - 1);
-        clearLp();
-        feed({ type: "pointerup", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp }, e);
+        if (ctx.current.paged) {
+          clearLp();
+          feed({ type: "pointerup", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp }, e);
+        } else {
+          onVerticalUp(e, false);
+        }
       };
       const onCancel = (e: PointerEvent) => {
         if (e.pointerType !== "touch") return;
         activeTouches = Math.max(0, activeTouches - 1);
-        clearLp();
-        feed({ type: "pointercancel", id: e.pointerId }, e);
+        if (ctx.current.paged) {
+          clearLp();
+          feed({ type: "pointercancel", id: e.pointerId }, e);
+        } else {
+          onVerticalUp(e, true);
+        }
       };
 
       // Capture phase: see the pointer before the page's PagePointerProvider, and
@@ -456,8 +618,10 @@ function PagedGestures({
       el.addEventListener("pointercancel", onCancel, { capture: true });
       return () => {
         clearLp();
+        cancelFling();
         resume();
         releaseCapture();
+        endVertical();
         ctx.current.setTouchLock = null;
         el.style.touchAction = "";
         el.removeEventListener("pointerdown", onDown, { capture: true });
@@ -507,6 +671,7 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
     paged: initialLayoutRef.current === "paged",
     tool: "pointer",
     zoomedIn: false,
+    penSeen: false,
     scroll: null,
     interaction: null,
     setTouchLock: null,
@@ -634,7 +799,7 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
                 )}
               />
               </ZoomGestureWrapper>
-              <PagedGestures documentId={activeDocumentId} ctx={pagedRef} />
+              <TouchInputRouter documentId={activeDocumentId} ctx={pagedRef} />
             </Viewport>
           )
         }
@@ -1070,6 +1235,13 @@ async function wireEngine(
       pageHeight,
       doc,
       registry,
+      // Touch-routing introspection for the harness/Playwright: the live penSeen
+      // latch, the tool, and whether the engine's pointer pipeline is paused.
+      routing: () => ({
+        penSeen: pagedRef.current.penSeen,
+        tool: pagedRef.current.tool,
+        paused: interaction.isPaused(),
+      }),
     } as EmbedPdfHandle["_debug"] & { registry: PluginRegistry },
   };
 
