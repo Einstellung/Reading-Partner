@@ -1,0 +1,195 @@
+# Build an UNSIGNED arm64 iOS device .ipa on a macOS runner, with no Apple
+# developer account and no signing material in the repo. The artifact is a
+# standard Payload/<App>.app ipa that a free-signing sideload tool (Sideloadly,
+# AltStore) re-signs on the user's own machine with a free Apple ID and installs
+# on their iPad. See docs/19-iOS侧载安装.md for the user-side flow.
+#
+# How the ipa is produced: `tauri ios build --target aarch64 --no-sign` archives
+# the device build with codesigning disabled (cargo-mobile2 passes
+# CODE_SIGNING_ALLOWED=NO / CODE_SIGNING_REQUIRED=NO / CODE_SIGN_IDENTITY="" /
+# CODE_SIGN_ENTITLEMENTS="" to xcodebuild archive, so no team or provisioning
+# profile is needed), then zips the unsigned .app into Payload/ and writes a
+# standard .ipa under src-tauri/gen/apple/build/arm64/. No manual repackaging
+# and no xcodebuild fallback is needed — tauri emits the standard ipa directly.
+#
+# This is a real product line, not the smoke build: VITE_SMOKE is NOT set, so
+# main.tsx runs the app, and the Google client ids are injected so Drive login
+# works in the sideloaded build. Independent of ios-simulator-smoke.yml (the
+# unsigned simulator engine gate) and ios-testflight.yml (the signed store line).
+
+name: iOS Sideload IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios-spike]
+
+concurrency:
+  group: ios-sideload-ipa
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      # Baked into the Vite build. Same secret names as release.yml; the desktop
+      # OAuth client secret is not confidential (PKCE is the protection) but
+      # still lives in repo secrets. Present at job scope so tauri's
+      # beforeBuildCommand (bun run build) inherits them.
+      VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
+      VITE_GOOGLE_CLIENT_SECRET: ${{ secrets.VITE_GOOGLE_CLIENT_SECRET }}
+      # iOS OAuth client id is a public value (no secret; PKCE-protected) and is
+      # the same client whose reversed form is the deep-link scheme in
+      # tauri.conf.json. Hardcoded here so the sideloaded build can sign in.
+      VITE_GOOGLE_IOS_CLIENT_ID: 379091688229-esc23unqq02igufrjr9jjvtsug49j097.apps.googleusercontent.com
+      BUNDLE_ID: com.xinyuan.readingpartner
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pin Xcode so an image default bump can't change the toolchain under us.
+      - name: Pin Xcode
+        env:
+          XCODE_VERSION: "26.5"
+        run: |
+          sudo xcode-select --switch "/Applications/Xcode_${XCODE_VERSION}.app" || {
+            echo "Xcode ${XCODE_VERSION} is not on this runner image. Installed:"
+            ls /Applications | grep -i '^Xcode' || true
+            exit 1
+          }
+          xcodebuild -version
+
+      - uses: oven-sh/setup-bun@v2
+
+      # aarch64-apple-ios is the Rust target for the physical device; the Xcode
+      # project's Build Rust Code phase compiles the staticlib for it.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: bun install --frozen-lockfile
+
+      # Self-host pdfium.wasm from node_modules into public/ (vite copies it into
+      # dist). Without it the reader cannot start.
+      - name: Copy pdfium.wasm
+        run: bun run wasm
+
+      # src-tauri/gen/apple is gitignored; generate the Xcode project fresh.
+      # --ci answers prompts with defaults. First run installs xcodegen (and
+      # cocoapods if missing) via Homebrew.
+      - name: Generate the Xcode project
+        run: bun tauri ios init --ci
+
+      # XcodeGen's iOS defaults set TARGETED_DEVICE_FAMILY "1,2" (iPhone + iPad).
+      # Fail fast if a toolchain update ever drops iPad from the product.
+      - name: Assert iPad support
+        run: |
+          grep -rq 'TARGETED_DEVICE_FAMILY = "1,2"' src-tauri/gen/apple/*.xcodeproj/project.pbxproj || {
+            echo 'TARGETED_DEVICE_FAMILY "1,2" missing from the generated project:'
+            grep -r 'TARGETED_DEVICE_FAMILY' src-tauri/gen/apple/*.xcodeproj/project.pbxproj || true
+            exit 1
+          }
+
+      # Archive the arm64 device build unsigned and zip it into a standard ipa.
+      # --target aarch64 selects the physical-device slice (arch label arm64);
+      # --no-sign disables codesigning during archive and makes tauri build the
+      # Payload/ ipa itself. Runs beforeBuildCommand (bun run build) which
+      # inherits the VITE_* env above, so Drive login is wired into the bundle.
+      - name: Build the unsigned device ipa
+        run: bun tauri ios build --target aarch64 --no-sign
+
+      # Prove the artifact is a sideloadable arm64 iOS ipa before uploading:
+      # standard Payload/ layout, an arm64 *device* Mach-O (not simulator), the
+      # right bundle id / version, and the Google deep-link scheme baked into
+      # Info.plist (free signing needs no entitlement for a CFBundleURLTypes
+      # custom scheme, so login survives re-signing).
+      - name: Verify the ipa
+        run: |
+          set -euo pipefail
+
+          IPA=$(find src-tauri/gen/apple/build -name '*.ipa' -print -quit)
+          if [ -z "$IPA" ]; then
+            echo "::error::no ipa produced"; find src-tauri/gen/apple/build -maxdepth 4 -type f || true; exit 1
+          fi
+          echo "ipa: $IPA"
+
+          WORK="$RUNNER_TEMP/ipa-verify"
+          rm -rf "$WORK"; mkdir -p "$WORK"
+          unzip -q "$IPA" -d "$WORK"
+
+          APP=$(ls -d "$WORK"/Payload/*.app 2>/dev/null | head -1)
+          if [ -z "$APP" ]; then
+            echo "::error::ipa has no Payload/*.app"; unzip -l "$IPA"; exit 1
+          fi
+          echo "app bundle: $(basename "$APP")"
+
+          PLIST="$APP/Info.plist"
+          [ -f "$PLIST" ] || { echo "::error::Info.plist missing"; exit 1; }
+          pb() { /usr/libexec/PlistBuddy -c "Print :$1" "$PLIST" 2>/dev/null || true; }
+
+          EXE=$(pb CFBundleExecutable)
+          BID=$(pb CFBundleIdentifier)
+          SHORTVER=$(pb CFBundleShortVersionString)
+          MINOS=$(pb MinimumOSVersion)
+          echo "CFBundleExecutable=$EXE  CFBundleIdentifier=$BID"
+          echo "CFBundleShortVersionString=$SHORTVER  MinimumOSVersion=$MINOS"
+
+          [ -n "$EXE" ] || { echo "::error::CFBundleExecutable empty"; exit 1; }
+          [ "$BID" = "$BUNDLE_ID" ] || { echo "::error::bundle id is '$BID', expected $BUNDLE_ID"; exit 1; }
+          [ -n "$SHORTVER" ] || { echo "::error::CFBundleShortVersionString empty"; exit 1; }
+
+          # The deep-link scheme (reversed iOS client id) must be present or
+          # Google OAuth's callback is lost on device. Its presence also shows
+          # tauri-plugin-deep-link's build.rs injected CFBundleURLTypes.
+          SCHEMES=$(/usr/libexec/PlistBuddy -c "Print :CFBundleURLTypes" "$PLIST" 2>/dev/null || true)
+          echo "$SCHEMES" | grep -q 'com.googleusercontent.apps.379091688229-esc23unqq02igufrjr9jjvtsug49j097' || {
+            echo "::error::Google deep-link scheme missing from CFBundleURLTypes"; echo "$SCHEMES"; exit 1
+          }
+          echo "deep-link scheme present in CFBundleURLTypes"
+
+          BIN="$APP/$EXE"
+          [ -f "$BIN" ] || { echo "::error::executable $EXE not found in app bundle"; ls -la "$APP"; exit 1; }
+          echo "=== file ==="; file "$BIN"
+          echo "=== lipo -archs ==="; lipo -archs "$BIN"
+          lipo -archs "$BIN" | grep -qw arm64 || { echo "::error::binary is not arm64"; exit 1; }
+
+          # arm64 alone doesn't distinguish device from simulator; the Mach-O
+          # LC_BUILD_VERSION platform does. Device iOS must be platform IOS, not
+          # IOSSIMULATOR.
+          echo "=== vtool build ==="
+          BUILD=$(vtool -arch arm64 -show-build "$BIN" 2>/dev/null || true)
+          echo "$BUILD"
+          echo "$BUILD" | grep -q 'platform IOS' || {
+            echo "::error::Mach-O platform is not iOS device (a simulator slice re-signs but won't install)"; exit 1
+          }
+          echo "$BUILD" | grep -qi 'SIMULATOR' && { echo "::error::binary is an iOS Simulator slice"; exit 1; } || true
+
+          echo "verify OK — unsigned arm64 iOS device ipa"
+
+      # Stage the ipa under a versioned name (marketing version from
+      # tauri.conf.json) so downloads self-describe.
+      - name: Stage the versioned ipa
+        run: |
+          set -euo pipefail
+          IPA=$(find src-tauri/gen/apple/build -name '*.ipa' -print -quit)
+          VERSION=$(jq -r .version src-tauri/tauri.conf.json)
+          OUT="reading-partner-${VERSION}-ios-arm64-unsigned.ipa"
+          cp "$IPA" "$OUT"
+          echo "staged: $OUT ($(du -h "$OUT" | cut -f1))"
+          echo "IPA_NAME=$OUT" >> "$GITHUB_ENV"
+
+      - name: Upload the unsigned ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-sideload-ipa
+          path: ${{ env.IPA_NAME }}
+          if-no-files-found: error
+
+      # Keep the build tree on failure for post-mortems.
+      - name: Dump build tree on failure
+        if: failure()
+        run: find src-tauri/gen/apple/build -maxdepth 4 -type f 2>/dev/null || true
