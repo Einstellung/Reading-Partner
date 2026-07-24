@@ -3,16 +3,20 @@
 export { installFetchBridge } from "./fetch-bridge";
 export {
 	anthropicLogin,
+	anthropicLoginManualStart,
 	anthropicLoginWithManualCode,
 	anthropicLogout,
 	getValidAnthropicAuth,
 } from "./anthropic-oauth";
 export {
 	openaiLogin,
+	openaiLoginManualStart,
 	openaiLoginWithManualCode,
+	openaiLoginDeviceCode,
 	openaiLogout,
 	getValidOpenAIAuth,
 } from "./openai-oauth";
+export type { DeviceCodeState } from "./device-code";
 export {
 	listProviders,
 	setApiKey,

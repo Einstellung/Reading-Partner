@@ -12,8 +12,14 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { refreshOpenAICodexToken } from "@earendil-works/pi-ai/oauth";
+import {
+	loginOpenAICodexDeviceCode,
+	refreshOpenAICodexToken,
+	type OAuthCredentials,
+	type OAuthDeviceCodeInfo,
+} from "@earendil-works/pi-ai/oauth";
 import { isOAuthCredential, loadCredentials, saveCredentials, setActiveCredential, type OpenAICredential } from "./credentials";
+import { awaitingState, classifyDeviceCodeError, type DeviceCodeState } from "./device-code";
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 const AUTHORIZE_URL = "https://auth.openai.com/oauth/authorize";
@@ -156,6 +162,63 @@ export async function openaiLoginWithManualCode(input: string): Promise<void> {
 	const { code, state } = parseManualInput(input);
 	if (state && state !== pending.state) throw new Error("OAuth state mismatch");
 	await store(await exchangeCode(code, pending.verifier));
+}
+
+/**
+ * Start a paste-based login without the loopback listener: generate PKCE, open
+ * the authorize page in the browser, and arm {@link openaiLoginWithManualCode}.
+ * The redirect after login lands on http://localhost:1455/auth/callback?code=…
+ * which fails to load, but the address bar is copyable — paste that URL back.
+ * This is the iOS entry (no loopback) and the desktop fallback when device-code
+ * login is not enabled for the account.
+ */
+export async function openaiLoginManualStart(): Promise<void> {
+	const { verifier, challenge } = await generatePKCE();
+	const state = generateState();
+	pending = { verifier, state };
+	await openUrl(buildAuthUrl(challenge, state));
+}
+
+// Injectable seam for tests: the real login is pi-ai's device-code flow.
+export type DeviceCodeLogin = (options: {
+	onDeviceCode: (info: OAuthDeviceCodeInfo) => void;
+	signal?: AbortSignal;
+}) => Promise<OAuthCredentials>;
+
+/**
+ * Device-code login (the iOS-friendly OpenAI path, also usable on desktop as a
+ * loopback-free test route). Reports progress through `onState`; never throws —
+ * failures and cancellation are delivered as terminal states so a single handler
+ * can drive the UI. On success the credentials are stored (single-active) and
+ * the state machine ends in `success`.
+ *
+ * pi-ai owns the RFC 8628 poll loop; auth.openai.com is on the fetch-bridge
+ * allowlist so its requests route through the Tauri http plugin like the rest.
+ */
+export async function openaiLoginDeviceCode(opts: {
+	onState: (state: DeviceCodeState) => void;
+	signal?: AbortSignal;
+	login?: DeviceCodeLogin;
+}): Promise<void> {
+	const login = opts.login ?? loginOpenAICodexDeviceCode;
+	opts.onState({ status: "starting" });
+	try {
+		const cred = await login({
+			signal: opts.signal,
+			onDeviceCode: (info) => opts.onState(awaitingState(info)),
+		});
+		// pi-ai returns expires as an absolute ms timestamp with no skew; bake in
+		// the same refresh skew the loopback path uses.
+		await store({
+			type: "oauth",
+			access: cred.access,
+			refresh: cred.refresh,
+			expires: cred.expires - EXPIRY_SKEW_MS,
+		});
+		opts.onState({ status: "success" });
+	} catch (e) {
+		opts.onState(classifyDeviceCodeError(e, opts.signal?.aborted ?? false));
+	}
 }
 
 export async function openaiLogout(): Promise<void> {

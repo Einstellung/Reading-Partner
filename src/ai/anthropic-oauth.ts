@@ -131,6 +131,19 @@ export async function anthropicLogin(): Promise<void> {
 	await store(await exchangeCode(code, state, verifier));
 }
 
+/**
+ * Start a paste-based login without the loopback listener: generate PKCE, open
+ * the authorize page (code=true so it prints the code), and arm
+ * {@link anthropicLoginWithManualCode}. This is the iOS entry (no loopback);
+ * the user copies the code the page shows and pastes it back.
+ */
+export async function anthropicLoginManualStart(): Promise<void> {
+	const { verifier, challenge } = await generatePKCE();
+	const state = verifier; // pi uses the PKCE verifier as the state value
+	pending = { verifier, state };
+	await openUrl(buildAuthUrl(challenge, state));
+}
+
 /** Fallback: exchange a code the user pasted from the authorize page. */
 export async function anthropicLoginWithManualCode(input: string): Promise<void> {
 	if (!pending) throw new Error("no pending Anthropic login; start login first");
