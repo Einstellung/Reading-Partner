@@ -24,6 +24,7 @@ import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import {
   BaseDirectory,
   exists,
+  mkdir,
   readTextFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
@@ -66,6 +67,15 @@ export async function loadAuth(): Promise<GoogleAuth | null> {
 }
 
 async function saveAuth(auth: GoogleAuth): Promise<void> {
+  // The app-data dir may not exist yet on a fresh install (iOS first run hits
+  // this when sign-in is the first write); writeTextFile does not create it.
+  try {
+    if (!(await exists("", { baseDir: BaseDirectory.AppData }))) {
+      await mkdir("", { baseDir: BaseDirectory.AppData, recursive: true });
+    }
+  } catch {
+    // A real problem resurfaces on the write below.
+  }
   await writeTextFile(AUTH_FILE, JSON.stringify(auth, null, 2), { baseDir: BaseDirectory.AppData });
 }
 
