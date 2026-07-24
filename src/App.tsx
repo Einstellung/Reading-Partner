@@ -1434,6 +1434,10 @@ export default function App() {
       setPopup(null);
       setCall(null);
       setSelectedAnnId(null);
+      // Every book opens on the hand tool (pan/scroll). The tool state lives on
+      // App and would otherwise carry the previous book's annotation tool into
+      // the next open — a finger then marks the page the moment it lands.
+      setToolType("pointer");
       const state = await getViewState(bookId);
       let saved: Annotation[] = [];
       try {
