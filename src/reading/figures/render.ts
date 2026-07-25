@@ -6,7 +6,7 @@
 // page (scanned pages / failed pairing). Results are memo-cached per book so a
 // figure card and the view_figure tool never re-raster the same crop.
 
-import { loadPdfjs } from "../fulltext/extract";
+import { loadPdfjs } from "../../fulltext/extract";
 import type { Figure } from "./types";
 
 export interface RenderedFigure {

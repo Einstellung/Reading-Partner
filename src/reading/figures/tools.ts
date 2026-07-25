@@ -1,12 +1,12 @@
 // The view_figure tool (M9): the model asks for a figure by id and gets the
 // cropped image back so it can actually answer "what does the arrow point to".
-// Rendering is injected (browser-only, src/figures/render), so the tool builder
+// Rendering is injected (browser-only, src/reading/figures/render), so the tool builder
 // stays headless and unit-testable. Gated on vision support: for a text-only
 // model the tool still exists but returns the caption and a note that it can't
 // see the picture, so the model doesn't promise the user something it can't do.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool, ToolResult } from "../ai/agent";
+import type { AgentTool, ToolResult } from "../../ai/agent";
 import { findFigureById } from "./lookup";
 import type { Figure } from "./types";
 

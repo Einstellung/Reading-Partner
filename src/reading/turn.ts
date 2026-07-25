@@ -22,10 +22,10 @@ import { getThread, readThreadImages } from "../platform/app/threads";
 import { chapterAt } from "../fulltext/query";
 import { getFulltext } from "../fulltext/store";
 import type { Fulltext } from "../fulltext/types";
-import { buildFigureCatalog } from "../figures/catalog";
-import { buildFigureTools } from "../figures/tools";
-import { renderFigure } from "../figures/render";
-import type { Figure } from "../figures/types";
+import { buildFigureCatalog } from "./figures/catalog";
+import { buildFigureTools } from "./figures/tools";
+import { renderFigure } from "./figures/render";
+import type { Figure } from "./figures/types";
 import {
   assembleIdentity,
   buildMemorySnapshot,

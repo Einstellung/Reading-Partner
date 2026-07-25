@@ -1,9 +1,9 @@
-// Figure-index cache versioning (src/figures/store.parseFiguresCache). Pure — the
+// Figure-index cache versioning (src/reading/figures/store.parseFiguresCache). Pure — the
 // Tauri fs wrapper (ensureFigures/getFigures) is exercised by the app. Run: bun test.
 
 import { test, expect } from "bun:test";
-import { parseFiguresCache } from "../../src/figures/store";
-import { FIGURES_VERSION } from "../../src/figures/types";
+import { parseFiguresCache } from "../../../src/reading/figures/store";
+import { FIGURES_VERSION } from "../../../src/reading/figures/types";
 
 test("accepts a same-version index", () => {
   const idx = { version: FIGURES_VERSION, figures: [{ id: "1", page: 2, caption: "c", bbox: null }] };

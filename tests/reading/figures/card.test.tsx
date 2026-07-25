@@ -3,9 +3,9 @@
 // Run: bun test.
 
 import { test, expect } from "bun:test";
-import { figureChipLabel } from "../../src/components/reader/FigureCard";
-import { cardDisplayWidth } from "../../src/figures/render";
-import type { Figure } from "../../src/figures/types";
+import { figureChipLabel } from "../../../src/components/reader/FigureCard";
+import { cardDisplayWidth } from "../../../src/reading/figures/render";
+import type { Figure } from "../../../src/reading/figures/types";
 
 test("chip label reads Fig. <id> · p.<page>", () => {
   const fig: Figure = { id: "3a", page: 12, caption: "x", bbox: null };

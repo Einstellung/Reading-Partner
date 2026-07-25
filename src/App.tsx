@@ -101,7 +101,7 @@ import {
   renderFigure,
   type Figure,
   type FiguresIndex,
-} from "./figures";
+} from "./reading/figures";
 import PrepPanel from "./components/reader/PrepPanel";
 import NotesPanel from "./components/reader/NotesPanel";
 import MemoryPanel from "./components/reader/MemoryPanel";

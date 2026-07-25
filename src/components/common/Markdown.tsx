@@ -15,7 +15,7 @@
 
 import { createContext, lazy, memo, Suspense } from 'react';
 import type { Citation } from '../../reading/prep/anchors';
-import type { Figure } from '../../figures/types';
+import type { Figure } from '../../reading/figures/types';
 
 export type CitationHandler = (citation: Citation) => void;
 

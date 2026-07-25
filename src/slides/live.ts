@@ -8,8 +8,8 @@
 import { BaseDirectory, readDir } from "@tauri-apps/plugin-fs";
 import { getImageGenKey } from "../ai/credentials";
 import { callModel, resolveModel } from "../ai/model-call";
-import { getFigures } from "../figures/store";
-import { renderFigure } from "../figures/render";
+import { getFigures } from "../reading/figures/store";
+import { renderFigure } from "../reading/figures/render";
 import { getLibraryEntry, readLibraryBook } from "../platform/app/library";
 import { loadNotesState, readChapterNote, readOverviewNote } from "../reading/notes/store";
 import { loadSettings } from "../platform/app/settings";

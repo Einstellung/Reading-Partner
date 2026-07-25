@@ -7,7 +7,7 @@
 import { callModel, resolveModel } from "../../ai/model-call";
 import { ensureFulltext, saveFulltext } from "../../fulltext/store";
 import { FULLTEXT_VERSION, type Fulltext } from "../../fulltext/types";
-import { buildFigureCatalog, ensureFigures } from "../../figures";
+import { buildFigureCatalog, ensureFigures } from "../figures";
 import { loadSettings } from "../../platform/app/settings";
 import { extractArticle } from "./article";
 import { fetchFromArxiv, normalizeArxivId } from "./arxiv";

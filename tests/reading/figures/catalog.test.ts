@@ -1,8 +1,8 @@
-// Figure catalog formatting + capping (src/figures/catalog). Pure. Run: bun test.
+// Figure catalog formatting + capping (src/reading/figures/catalog). Pure. Run: bun test.
 
 import { test, expect } from "bun:test";
-import { buildFigureCatalog, selectCatalogFigures } from "../../src/figures/catalog";
-import type { Figure } from "../../src/figures/types";
+import { buildFigureCatalog, selectCatalogFigures } from "../../../src/reading/figures/catalog";
+import type { Figure } from "../../../src/reading/figures/types";
 
 function fig(id: string, page: number, caption = `Caption for ${id}`): Figure {
   return { id, page, caption, bbox: null };

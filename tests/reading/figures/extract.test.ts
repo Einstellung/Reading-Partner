@@ -1,4 +1,4 @@
-// Pure coverage of figure extraction (src/figures/extract): CTM-tracked image
+// Pure coverage of figure extraction (src/reading/figures/extract): CTM-tracked image
 // boxes, caption detection, caption/image pairing (single, multi-panel, unpaired
 // -> null), and index assembly. No pdfjs/DOM — operator and text data are
 // synthetic, with the OP codes injected. Run with `bun test`.
@@ -17,7 +17,7 @@ import {
   type OpCodes,
   type OpList,
   type TextItem,
-} from "../../src/figures/extract";
+} from "../../../src/reading/figures/extract";
 
 // Synthetic op numbering (the real pdfjs codes differ; injected either way).
 const CODES: OpCodes = { save: 1, restore: 2, transform: 3, image: new Set([10]) };

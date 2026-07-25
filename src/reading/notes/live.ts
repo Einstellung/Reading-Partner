@@ -7,9 +7,9 @@
 
 import { modelSupportsImages } from "../../ai/providers";
 import { callModel, resolveModel } from "../../ai/model-call";
-import { buildFigureCatalog } from "../../figures/catalog";
-import { renderFigure } from "../../figures/render";
-import type { Figure } from "../../figures/types";
+import { buildFigureCatalog } from "../figures/catalog";
+import { renderFigure } from "../figures/render";
+import type { Figure } from "../figures/types";
 import type { Fulltext } from "../../fulltext/types";
 import {
   buildChapterTools,

@@ -9,9 +9,9 @@ import {
   exists,
   readTextFile,
 } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../platform/app/atomic-fs";
+import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { extractFiguresFromDocument, FIGURES_VERSION } from "./extract";
-import { loadPdfjs } from "../fulltext/extract";
+import { loadPdfjs } from "../../fulltext/extract";
 import type { FiguresIndex } from "./types";
 
 function fileFor(hash: string): string {

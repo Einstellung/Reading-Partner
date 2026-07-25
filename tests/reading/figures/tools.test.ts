@@ -3,8 +3,8 @@
 // Run: bun test.
 
 import { test, expect } from "bun:test";
-import { buildFigureTools, figureToolResult } from "../../src/figures/tools";
-import type { Figure } from "../../src/figures/types";
+import { buildFigureTools, figureToolResult } from "../../../src/reading/figures/tools";
+import type { Figure } from "../../../src/reading/figures/types";
 
 const FIG: Figure = { id: "3", page: 5, caption: "A schematic of the model", bbox: { x: 1, y: 2, width: 3, height: 4 } };
 const IMG = { base64: "AAAA", mimeType: "image/jpeg" };

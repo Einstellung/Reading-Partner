@@ -47,11 +47,11 @@ const LAYER: Record<string, Layer> = {
   "ai/voice": "capability",
   fulltext: "capability",
 
-  figures: "domain",
   info: "domain",
   memory: "domain",
   reading: "domain",
   "reading/engine": "domain",
+  "reading/figures": "domain",
   "reading/notes": "domain",
   "reading/prep": "domain",
   slides: "domain",

@@ -7,7 +7,7 @@ import { beforeEach, expect, mock, test } from "bun:test";
 import type { Annotation } from "../../src/platform/app/reader-contract";
 import { DEFAULT_SETTINGS, type Settings } from "../../src/platform/app/settings";
 import type { Fulltext } from "../../src/fulltext/types";
-import type { Figure } from "../../src/figures/types";
+import type { Figure } from "../../src/reading/figures/types";
 import type { PrepPaper, PrepState } from "../../src/reading/prep/types";
 
 // Headless: no AppData, so every optional read misses (the overview note, the
