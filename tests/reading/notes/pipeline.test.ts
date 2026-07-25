@@ -1,4 +1,4 @@
-// Unit tests for the notes pipeline state machine (src/notes/pipeline.ts),
+// Unit tests for the notes pipeline state machine (src/reading/notes/pipeline.ts),
 // driven entirely by fake deps — no Tauri, no network, no AI spend. Run: bun test.
 
 import { expect, test } from "bun:test";
@@ -8,8 +8,8 @@ import {
   type ChapterGenInput,
   type NotesDeps,
   type PlanOutcome,
-} from "../../src/notes/pipeline";
-import type { NoteChapter, NotesState } from "../../src/notes/types";
+} from "../../../src/reading/notes/pipeline";
+import type { NoteChapter, NotesState } from "../../../src/reading/notes/types";
 
 // A short retry delay so error-path tests (which retry the stall watchdog's
 // maxAttempts) don't wait out the real 2s default between attempts.

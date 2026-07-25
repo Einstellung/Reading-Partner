@@ -1,4 +1,4 @@
-// Unit tests for the chapter prompt builders (src/notes/chapter.ts): the chat
+// Unit tests for the chapter prompt builders (src/reading/notes/chapter.ts): the chat
 // thread block (in-range filtering, roles, clipping, caps, empty case) and the
 // system prompt embedding it with its instruction. Run: bun test.
 
@@ -7,8 +7,8 @@ import {
   chapterSystemPrompt,
   formatChatThreads,
   type ChatThread,
-} from "../../src/notes/chapter";
-import type { NoteChapter } from "../../src/notes/types";
+} from "../../../src/reading/notes/chapter";
+import type { NoteChapter } from "../../../src/reading/notes/types";
 
 function thread(page: number, createdAt: number, msgs: [ChatThread["messages"][number]["role"], string][]): ChatThread {
   return { page, createdAt, messages: msgs.map(([role, text]) => ({ role, text })) };

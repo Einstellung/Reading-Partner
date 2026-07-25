@@ -5,12 +5,12 @@
 // switches. The book's full text, figures, buffer and reader emphasis signals
 // are supplied by the host (App) so this module stays decoupled from the reader.
 
-import { modelSupportsImages } from "../ai/providers";
-import { callModel, resolveModel } from "../ai/model-call";
-import { buildFigureCatalog } from "../figures/catalog";
-import { renderFigure } from "../figures/render";
-import type { Figure } from "../figures/types";
-import type { Fulltext } from "../fulltext/types";
+import { modelSupportsImages } from "../../ai/providers";
+import { callModel, resolveModel } from "../../ai/model-call";
+import { buildFigureCatalog } from "../../figures/catalog";
+import { renderFigure } from "../../figures/render";
+import type { Figure } from "../../figures/types";
+import type { Fulltext } from "../../fulltext/types";
 import {
   buildChapterTools,
   formatChatThreads,

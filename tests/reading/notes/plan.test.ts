@@ -1,4 +1,4 @@
-// Unit tests for the notes plan (src/notes/plan.ts): outline -> chapters, range
+// Unit tests for the notes plan (src/reading/notes/plan.ts): outline -> chapters, range
 // assignment, and the AI table-of-contents fallback parse. Run: bun test.
 
 import { expect, test } from "bun:test";
@@ -6,8 +6,8 @@ import {
   chaptersFromOutline,
   parseNotesPlan,
   toChapters,
-} from "../../src/notes/plan";
-import type { OutlineItem } from "../../src/fulltext/types";
+} from "../../../src/reading/notes/plan";
+import type { OutlineItem } from "../../../src/fulltext/types";
 
 test("toChapters makes contiguous, whole-book-covering ranges", () => {
   const chapters = toChapters(

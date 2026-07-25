@@ -1,8 +1,8 @@
-// Unit tests for the overview system prompt builder (src/notes/overview.ts):
+// Unit tests for the overview system prompt builder (src/reading/notes/overview.ts):
 // the output-language wiring. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { overviewSystemPrompt } from "../../src/notes/overview";
+import { overviewSystemPrompt } from "../../../src/reading/notes/overview";
 
 test("overviewSystemPrompt keeps the English default on auto and replaces it on a set language", () => {
   const auto = overviewSystemPrompt("auto");

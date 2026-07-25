@@ -1,8 +1,8 @@
-// Unit tests for the highlight-frontier logic (src/notes/auto.ts), pure — no
+// Unit tests for the highlight-frontier logic (src/reading/notes/auto.ts), pure — no
 // pipeline, no IO. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { highlightFrontier, planAutoNotes, type AutoChapter } from "../../src/notes/auto";
+import { highlightFrontier, planAutoNotes, type AutoChapter } from "../../../src/reading/notes/auto";
 
 // Four contiguous chapters, all pending unless overridden.
 function chapters(overrides: Partial<Record<number, AutoChapter["status"]>> = {}): AutoChapter[] {

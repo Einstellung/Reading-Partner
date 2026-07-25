@@ -6,8 +6,8 @@
 // Plain and functional by design. Tailwind-only.
 
 import { useEffect, useMemo, useState } from "react";
-import type { NotesActivity, NotesSnapshot } from "../../notes";
-import type { ChapterStatus, NoteChapter } from "../../notes";
+import type { NotesActivity, NotesSnapshot } from "../../reading/notes";
+import type { ChapterStatus, NoteChapter } from "../../reading/notes";
 import { Markdown } from "../common/Markdown";
 import SlidesDialog from "./SlidesDialog";
 

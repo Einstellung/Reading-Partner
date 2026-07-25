@@ -5,7 +5,7 @@
 // the AI call is wired in live.ts.
 
 import { type ThinkingLevel } from "@earendil-works/pi-ai";
-import { aiLanguageName, type AiLanguage } from "../platform/app/settings";
+import { aiLanguageName, type AiLanguage } from "../../platform/app/settings";
 
 // The overview system prompt for a given output language. The output language is
 // templated into the "Write in ___" line rather than pinned by an appended

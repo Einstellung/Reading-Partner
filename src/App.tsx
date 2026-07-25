@@ -79,8 +79,8 @@ import {
   readOverviewNote,
   type NotesInputs,
   type NotesSnapshot,
-} from "./notes";
-import type { NotesPipeline } from "./notes/pipeline";
+} from "./reading/notes";
+import type { NotesPipeline } from "./reading/notes/pipeline";
 import InfoHome, { type HomeScreen } from "./components/info/InfoHome";
 import {
   distillThread,

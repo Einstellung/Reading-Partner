@@ -11,7 +11,7 @@ import { callModel, resolveModel } from "../ai/model-call";
 import { getFigures } from "../figures/store";
 import { renderFigure } from "../figures/render";
 import { getLibraryEntry, readLibraryBook } from "../platform/app/library";
-import { loadNotesState, readChapterNote, readOverviewNote } from "../notes/store";
+import { loadNotesState, readChapterNote, readOverviewNote } from "../reading/notes/store";
 import { loadSettings } from "../platform/app/settings";
 import { contentSystemPrompt, contentUserMessage, sanitizeFragment } from "./content";
 import { generateImage, resolveImageGenConfig, type ImageGenDeps } from "./imageGen";

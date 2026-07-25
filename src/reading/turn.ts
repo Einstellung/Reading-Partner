@@ -37,7 +37,7 @@ import {
   type DistillAnnotation,
   type MemoryEntry,
 } from "../memory";
-import { readOverviewNote } from "../notes/store";
+import { readOverviewNote } from "./notes/store";
 import { chapterIndexForPage, papersForChapter } from "./prep/scheduler";
 import { paperFulltextHash, readPrepNote } from "./prep/store";
 import { parseNote } from "./prep/notes";

@@ -5,8 +5,8 @@
 // (Tauri fs, pi-ai). Structurally the unattended sibling of the prep pipeline;
 // the stall watchdog is the shared src/ai/watchdog.
 
-import { StoppedError, type AiCallOptions, type WatchdogConfig } from "../ai/watchdog";
-import { ObservableRun, type RunSnapshot } from "../ai/observable-run";
+import { StoppedError, type AiCallOptions, type WatchdogConfig } from "../../ai/watchdog";
+import { ObservableRun, type RunSnapshot } from "../../ai/observable-run";
 import { planAutoNotes, type AutoAnnotation, type FinalPass } from "./auto";
 import { createNotesState, normalizeNotesOnLoad, type NoteChapter, type NotesState } from "./types";
 

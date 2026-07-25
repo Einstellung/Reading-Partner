@@ -5,7 +5,7 @@
 // makes the ranges contiguous and covering the whole book. The AI call itself
 // lives in live.ts.
 
-import type { Fulltext, OutlineItem } from "../fulltext/types";
+import type { Fulltext, OutlineItem } from "../../fulltext/types";
 import type { NoteChapter } from "./types";
 
 // How many leading pages of the book to hand the model when it has to read the
