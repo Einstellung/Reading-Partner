@@ -67,5 +67,5 @@ Actions → iOS TestFlight → Run workflow(main 分支)。20-40 分钟。
 ## 已知限制
 
 - 没有 Mac:不能 `tauri ios dev` 真机调试,不能用 Safari 远程 inspector,一切问题只能靠 CI 日志和(模拟器/TestFlight)包内表现定位。
-- iOS 引擎闸门(EmbedPDF 的 PDFium WASM 在 WKWebView 里能不能渲染)已在模拟器上无签名验证通过:`.github/workflows/ios-simulator-smoke.yml`(推 ios-spike 触发)。实测结论:iOS 自定义协议下 `crossOriginIsolated` 为假、`SharedArrayBuffer` 不存在,但直连引擎单线程照样渲染出页面(见 docs/pitfall/31)。不需要第一个 TestFlight 包来验证闸门。
+- iOS 引擎闸门(EmbedPDF 的 PDFium WASM 在 WKWebView 里能不能渲染)已在模拟器上无签名验证通过:`.github/workflows/ios-simulator-smoke.yml`(推 ios-spike 触发)。实测结论:iOS 自定义协议下 `crossOriginIsolated` 为假、`SharedArrayBuffer` 不存在,但直连引擎单线程照样渲染出页面(见 docs/pitfall/33)。不需要第一个 TestFlight 包来验证闸门。
 - Claude 订阅 OAuth 的 loopback 回调在 iOS 不可用,走手动粘贴 code;BYOK 不受影响(见 docs/06)。

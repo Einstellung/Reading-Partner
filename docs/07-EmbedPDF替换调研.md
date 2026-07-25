@@ -1,5 +1,7 @@
 # EmbedPDF 替换调研
 
+> historical：调研结论已执行，引擎就是 EmbedPDF。实测见 [08](./08-EmbedPDF-spike结果.md)，落地代码在 `src/reading/engine/`。文中的契约映射表和风险清单读作"当初为什么这么选"，不是现状说明。
+
 2026-07-16 调研定稿。背景:zotero/reader 的 AGPL 与 App Store 冲突(见 `06-iOS发布路线.md`),issue zotero/reader#231 已发出但成败未知;EmbedPDF 是 MIT,还顺带解除对 CDS 授权的长期依赖、不挡商业化。决定不等 CDS 回复,直接探索替换。只考虑 PDF,不管 EPUB/snapshot。
 
 ## 结论

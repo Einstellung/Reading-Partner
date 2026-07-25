@@ -1,5 +1,7 @@
 # EmbedPDF 替换 spike 实测结果
 
+> historical：spike 已执行并落地，EmbedPDF 是唯一引擎。文中路径已搬家：`src/reader-embedpdf/` → `src/reading/engine/`，`tests/reader-embedpdf-convert.test.ts` → `tests/reading/engine/convert.test.ts`；`VITE_ENGINE` 开关和 zotero 那条路径都已删除。
+
 2026-07-16。分支 `spike/embedpdf`。只做 PDF。桌面 + headless Chromium 实测，未测 iOS/WKWebView、未测 WebKitGTK 拖选延迟。
 
 对应 `docs/07-EmbedPDF替换调研.md` 的存疑项 3-8，逐条给实测结论。验证靠 `embedpdf-spike.html` + `src/reader-embedpdf/spike-harness.tsx`（Vite dev 起，Playwright 驱动），批注转换器另有纯函数单测 `tests/reader-embedpdf-convert.test.ts`（`bun test`，9 pass）。

@@ -52,7 +52,7 @@ PPT 用于线下分享，形态是 HTML slides，从笔记派生而非直接从�
 
 ## 落地：M-note-1
 
-- 存储 `notes-<bookId>/`：`state.json`（plan、每章状态、页码范围、overview 状态）、`overview.md`、`chapter-NN.md`。bookId 即内容 hash（[library.ts](../src/library.ts)）。派生视图、可重建，与备课同一姿态。
+- 存储 `notes-<bookId>/`：`state.json`（plan、每章状态、页码范围、overview 状态）、`overview.md`、`chapter-NN.md`。bookId 即内容 hash（[library.ts](../src/platform/app/library.ts)）。派生视图、可重建，与备课同一姿态。
 - 管线 `src/reading/notes/`：plan／逐章／overview 三段，纯逻辑（章节划分、状态机、范围计算）注入式可测，AI 调用在 `live.ts`。
 - 同步：`state.json` 与 `*.md` 进同步范围（[13](./13-账户同步.md)），下载缓存不进。
 - 已知限制：笔记管线的输入（buffer、图索引、批注）在首次挂载时捕获并冻结，与备课一样；后台跑期间换书不影响，但同一本书重开后台已在跑的那次读到的批注可能略旧。

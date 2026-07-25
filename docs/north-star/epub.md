@@ -10,6 +10,8 @@
 
 ## 将来做时已知的事实
 
+> 下面几条记于 zotero/reader 时代，引擎已换成 EmbedPDF，只做 PDF——"引擎原生支持 epub"这个前提没了，vendor/reader 和 docs/04 的接法也都不适用。EPUB 要另找渲染方案，这几条只当历史读。
+
 - 引擎原生支持 `type: 'epub'`(docs/04 对接备忘)。
 - 跨 realm ArrayBuffer 有已知修法:`vendor/reader/src/index.web.js` 里 `window.ArrayBuffer = window.top.ArrayBuffer` 那段,以及 pitfall 10。
 - annotations 的 EPUB 更新分支未实测(docs/04 有注,合并逻辑是顶层 spread,同源但没跑过)。

@@ -12,6 +12,8 @@
 
 ## 将来做时已知的事实
 
+> 下面这节记于 zotero/reader 时代，引擎已换成 EmbedPDF：`pdf-view.js`、`patches/`、`installPenUpAnchor` 都不存在了。现状是 `ink`/`eraser` 已在 `reader-contract.ts` 和适配层通到引擎，缺的是笔架 UI 和笔宽；防误触已经做完并有实测结论（pitfall 37/38/39/44/46——iPad 上笔手互斥由系统强制，web 层不做掌抑制）；压感仍未解决。
+
 引擎已实现（`vendor/reader/src/pdf/pdf-view.js`，裸 `createView` 模式下可用，不依赖 Zotero 自己的界面）：
 
 - `ink` 工具：pointerdown 起一条 `ink` 标注，路径点累加进 `position.paths`，抬笔存盘（pdf-view.js:2453、2751）。
