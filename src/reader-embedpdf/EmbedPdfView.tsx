@@ -44,6 +44,7 @@ import {
 } from "./paged-gesture";
 import { LAYOUT_SETTINGS } from "./layout-modes";
 import {
+  planFinger,
   planPointer,
   pointerKindOf,
   routesAsContact,
@@ -161,6 +162,9 @@ export interface EmbedViewStats {
 
 export interface EmbedPdfHandle {
   setTool(tool: EmbedTool): void;
+  // The "draw with your finger" setting. Off (the default) means a finger only
+  // ever moves the page and the stylus does the marking.
+  setFingerDraw(on: boolean): void;
   setColor(color: string): void;
   zoomIn(): void;
   zoomOut(): void;
@@ -318,11 +322,10 @@ interface PagedGestureCtx {
   paged: boolean;
   tool: EmbedTool;
   zoomedIn: boolean;
-  // Session-level latch: true once any pointer event reported pointerType "pen"
-  // (Apple Pencil in WKWebView). Never persisted. Once a stylus is in play the
-  // finger only ever scrolls; before it, a stylus-less device draws with the
-  // finger. Read live by the touch router each event.
-  penSeen: boolean;
+  // The "draw with your finger" setting, mirrored here so the touch router can
+  // read it synchronously on every event. Off by default: the finger only moves
+  // the page and the stylus marks it.
+  fingerDraw: boolean;
   scroll: ScrollScope | null;
   interaction: InteractionManagerCapability | null;
   // Used by the touch router to drop a text selection its own gesture caused.
@@ -345,8 +348,7 @@ interface PagedGestureCtx {
 // by device type and finger count — decisions CSS touch-action cannot make (it
 // cannot tell pen from finger, or one finger from two).
 //
-// Every pointer of type "pen" latches ctx.penSeen for the session. Which
-// pointers this router drives as its own contacts is routesAsContact's call:
+// Which pointers this router drives as its own contacts is routesAsContact's call:
 // fingers always, the stylus only while the navigation lock is on (there it is
 // a finger in every respect), the mouse never — so the desktop is untouched.
 // Everything else falls straight through to the engine's drawing / selection
@@ -595,7 +597,7 @@ function TouchInputRouter({
         const page = scroll?.getCurrentPage() ?? 1;
         const total = scroll?.getTotalPages() ?? 1;
         const r = stepGesture(state, input, {
-          tool: pagedGestureTool(toolKindOf(ctx.current.tool), ctx.current.penSeen),
+          tool: pagedGestureTool(toolKindOf(ctx.current.tool), ctx.current.fingerDraw),
           zoomedIn: ctx.current.zoomedIn,
           width: el.clientWidth || window.innerWidth,
           canTurnPrev: page > 1,
@@ -745,7 +747,11 @@ function TouchInputRouter({
           mode: touchGestureMode(fingers.size),
           multi: multiTouch,
           penLock,
-          penSeen: ctx.current.penSeen,
+          fingerDraw: ctx.current.fingerDraw,
+          // What the next finger to land will do, from the same routing table
+          // the router itself uses — the one number that says whether a dead
+          // swipe is a routing verdict or something further down.
+          fingerPlan: planFinger(toolKindOf(ctx.current.tool), ctx.current.fingerDraw).action,
           navLock: toolKindOf(ctx.current.tool) === "navlock",
         });
       };
@@ -782,7 +788,6 @@ function TouchInputRouter({
 
       const onDown = (e: PointerEvent) => {
         const kind = pointerKindOf(e.pointerType);
-        if (kind === "pen") ctx.current.penSeen = true;
         const tool = toolKindOf(ctx.current.tool);
         // Whether this pointer becomes one of our contacts is latched here, by
         // the `fingers` map: toggling the navigation lock mid-gesture can never
@@ -811,7 +816,7 @@ function TouchInputRouter({
         hadSelectionAtStart = hasSelection();
         // One plan for both layouts and both devices: what this pointer is for,
         // and whether the engine has to be shut off before it can mark the page.
-        const plan = planPointer(tool, kind, ctx.current.penSeen);
+        const plan = planPointer(tool, kind, ctx.current.fingerDraw);
         if (ctx.current.paged) {
           if (plan.pauseAtDown) pauseEngine();
           feed({ type: "pointerdown", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp });
@@ -841,7 +846,6 @@ function TouchInputRouter({
       };
 
       const onMove = (e: PointerEvent) => {
-        if (e.pointerType === "pen") ctx.current.penSeen = true;
         const f = fingers.get(e.pointerId);
         // Not a contact this router drives: a mouse, a stylus outside the
         // navigation lock, or a finger that landed before this listener existed.
@@ -973,7 +977,9 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
     paged: initialLayoutRef.current === "paged",
     tool: "pointer",
     zoomedIn: false,
-    penSeen: false,
+    // Off until the shell applies the setting, which it does in the same effect
+    // that applies the tool.
+    fingerDraw: false,
     scroll: null,
     interaction: null,
     selection: null,
@@ -1452,6 +1458,9 @@ async function wireEngine(
       annScope.setActiveTool(drawing ? tool : null);
       pagedRef.current.tool = tool;
     },
+    setFingerDraw(on) {
+      pagedRef.current.fingerDraw = on;
+    },
     setLayout(mode) {
       // Every field of LAYOUT_SETTINGS is applied, in both directions and on
       // every call — no early return when the mode looks unchanged. Entering and
@@ -1616,11 +1625,13 @@ async function wireEngine(
       pageHeight,
       doc,
       registry,
-      // Touch-routing introspection for the harness/Playwright: the live penSeen
-      // latch, the tool, and whether the engine's pointer pipeline is paused.
+      // Touch-routing introspection for the harness/Playwright: the setting, the
+      // tool, what a finger would do, and whether the engine's pointer pipeline
+      // is paused.
       routing: () => ({
-        penSeen: pagedRef.current.penSeen,
+        fingerDraw: pagedRef.current.fingerDraw,
         tool: pagedRef.current.tool,
+        fingerPlan: planFinger(toolKindOf(pagedRef.current.tool), pagedRef.current.fingerDraw).action,
         paused: interaction.isPaused(),
       }),
     } as EmbedPdfHandle["_debug"] & { registry: PluginRegistry },

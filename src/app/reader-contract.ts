@@ -92,6 +92,10 @@ export interface ViewInstance {
   clearQuoteHighlight: () => void;
   // undefined deactivates the active tool (reverts to pointer).
   setTool: (tool?: Tool) => void;
+  // Whether a finger may mark the page (the "draw with your finger" setting).
+  // Off — the default — means the finger only ever moves the page, whatever
+  // tool is selected, and the stylus does the marking.
+  setFingerDraw: (on: boolean) => void;
   // Upsert by id and re-render; does not fire onSaveAnnotations (host is source
   // of truth), so use it to reflect host-side color/comment edits.
   setAnnotations: (annotations: Annotation[]) => void;

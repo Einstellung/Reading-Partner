@@ -101,6 +101,11 @@ export interface Settings {
   // Language the AI writes its user-facing output in. "auto" mirrors the user's
   // own language; every other value pins output to that language.
   aiLanguage: AiLanguage;
+  // Whether a finger may mark the page in the reader. Off means the stylus
+  // writes and the finger only ever moves the page, which is what a device with
+  // a stylus wants; a device without one turns this on to reach annotation at
+  // all. The navigation lock still outranks it: while that is on, nothing draws.
+  fingerDraw: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -115,6 +120,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sttModel: null,
   autoNotes: true,
   aiLanguage: "auto",
+  fingerDraw: false,
 };
 
 const DEFAULTS = DEFAULT_SETTINGS;
