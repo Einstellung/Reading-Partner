@@ -13,13 +13,9 @@ const SURROUND_RADIUS = 200;
 const SURROUND_MAX = 700;
 
 // Engine annotation page (0-based position.pageIndex) -> 1-based page for the
-// full-text helpers. Null when the annotation has no page.
-export function annotationPage(
-  ann: { position?: { pageIndex?: number } } | null | undefined,
-): number | null {
-  const idx = ann?.position?.pageIndex;
-  return typeof idx === "number" ? idx + 1 : null;
-}
+// full-text helpers. Defined with the annotation shape it reads so the units
+// under reading/ can use it without importing this group root.
+export { annotationPage } from "../platform/app/reader-contract";
 
 // Trim to `max` characters on a word boundary, adding an ellipsis when cut.
 export function clip(text: string, max: number): string {

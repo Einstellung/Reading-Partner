@@ -9,7 +9,7 @@ import {
   type ViewStats,
 } from "./platform/app/reader-contract";
 import { onCorruptFile } from "./platform/app/atomic-fs";
-import { getViewState, hashPath, saveViewState, withClassroom } from "./platform/app/storage";
+import { getViewState, hashPath, saveViewState } from "./platform/app/storage";
 import { importBook, libraryHas, readLibraryBook } from "./platform/app/library";
 import { migrateBookLive } from "./platform/app/migrate";
 import { ensureFulltext, onFulltextError, type Fulltext } from "./fulltext";
@@ -59,28 +59,9 @@ import {
   type ProviderId,
   type ProviderInfo,
 } from "./ai/aiClient";
-import {
-  chapterIndexForPage,
-  getPrepPipeline,
-  hasPrepState,
-  locateQuote,
-  parseNote,
-  peekPrepPipeline,
-  readPrepNote,
-  type Citation,
-  type PrepSnapshot,
-} from "./reading/prep";
-import type { PrepPipeline } from "./reading/prep/pipeline";
-import {
-  getNotesPipeline,
-  hasNotesState,
-  peekNotesPipeline,
-  readChapterNote as readNotesChapter,
-  readOverviewNote,
-  type NotesInputs,
-  type NotesSnapshot,
-} from "./reading/notes";
-import type { NotesPipeline } from "./reading/notes/pipeline";
+import { locateQuote, type Citation } from "./reading/prep";
+import { usePrep } from "./reading/prep/use-prep";
+import { useNotes } from "./reading/notes/use-notes";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import {
   distillThread,
@@ -126,9 +107,6 @@ import type { Annotation as PopupAnnotation, PendingImage, ToolStatus, ToolType 
 const AI_PEN_COLOR = "#a28ae5";
 // Cap on images attached to one chat turn (docs/03: paste screenshots to ask).
 const MAX_PENDING_IMAGES = 3;
-// Coalesce bursts of annotation-created events before re-evaluating the notes
-// highlight frontier (docs/14).
-const AUTO_NOTES_DEBOUNCE = 4000;
 
 // Reading layout for a book that has never chosen one: vertical continuous
 // scroll on every surface (the correct PDF-reading default; a finger swipe
@@ -238,24 +216,10 @@ export default function App() {
     pageIndex: null,
     files: [],
   });
-  // Classroom mode (docs/09), mirrored for the stable runTurn callback.
-  const classroomRef = useRef(false);
-  // The lesson-prep pipeline attached to the open book (module singleton; this
-  // ref only tracks which one the UI is looking at) and its unsubscribe.
-  const pipelineRef = useRef<PrepPipeline | null>(null);
-  const prepUnsubRef = useRef<(() => void) | null>(null);
-  // The book-notes pipeline attached to the open book (docs/14), its unsubscribe,
-  // and the last-seen plan/overview phases so run start/done/failed log as
-  // transitions.
-  const notesRef = useRef<NotesPipeline | null>(null);
-  const notesUnsubRef = useRef<(() => void) | null>(null);
-  const notesPhaseRef = useRef<{ plan: string; overview: string }>({ plan: "pending", overview: "pending" });
   // Event-log instrumentation (M8). Dwell: the page being read and when it was
   // entered. lastCallThread: the thread a call-start was last logged for.
-  // prepStatuses: paper statuses already seen, so only transitions are logged.
   const pageDwellRef = useRef<{ page: number; since: number } | null>(null);
   const lastCallThreadRef = useRef<string | null>(null);
-  const prepStatusesRef = useRef<Map<string, string>>(new Map());
   // Guards the one-time content-hash backfill so StrictMode's double effect run
   // doesn't start it twice.
   const migrationRan = useRef(false);
@@ -298,12 +262,6 @@ export default function App() {
   // card host and empty until extraction finishes.
   const [figures, setFigures] = useState<Figure[]>([]);
   const [call, setCall] = useState<CallState | null>(null);
-  // Classroom mode + lesson prep (docs/09). classroomOn is per open book and
-  // resets on open/close; prepSnap mirrors the pipeline for the panel.
-  const [classroomOn, setClassroomOn] = useState(false);
-  const [prepSnap, setPrepSnap] = useState<PrepSnapshot | null>(null);
-  const [selectedPrepSlug, setSelectedPrepSlug] = useState<string | null>(null);
-  const [notesSnap, setNotesSnap] = useState<NotesSnapshot | null>(null);
   const [settings, setSettings] = useState<Settings>({ ...DEFAULT_SETTINGS });
   const [showSettings, setShowSettings] = useState(false);
   const [providersInfo, setProvidersInfo] = useState<ProviderInfo[]>([]);
@@ -382,9 +340,28 @@ export default function App() {
     };
   });
 
-  useEffect(() => {
-    classroomRef.current = classroomOn;
-  }, [classroomOn]);
+  // Classroom mode and lesson prep (docs/09): the panel's state and every
+  // callback that serves it. Called here so its two effects — the classroom
+  // mirror and the scheduler following the reader — keep firing among the
+  // shell's own, and it reads the open book through the shell's refs.
+  const {
+    snapshot: prepSnap,
+    panel: prepPanelProps,
+    classroomOn,
+    classroomRef,
+    pipelineRef,
+    setSelectedSlug: setSelectedPrepSlug,
+    toggleClassroom,
+    reset: resetPrep,
+    resume: resumePrep,
+  } = usePrep({
+    stats,
+    bookIdRef,
+    ctxRef,
+    currentFulltextRef,
+    lastStateRef: lastState,
+    pushToast,
+  });
 
   // Page-navigation events, with the dwell time on the page being left. The
   // ref makes this idempotent under StrictMode's double effect runs.
@@ -411,14 +388,6 @@ export default function App() {
     }
     lastCallThreadRef.current = id;
   }, [call?.threadId, call?.isBook]);
-
-  // Lazy prep follows the reader: on every page change, tell the scheduler
-  // which chapter the user is in so its papers prep first.
-  useEffect(() => {
-    const chapters = prepSnap?.state?.chapters;
-    if (!chapters || !stats) return;
-    pipelineRef.current?.setCurrentChapter(chapterIndexForPage(chapters, stats.pageIndex + 1));
-  }, [stats, prepSnap]);
 
   const applySettings = useCallback((next: Settings) => {
     setSettings(next);
@@ -549,18 +518,6 @@ export default function App() {
     }, 500);
   }, [pushToast]);
 
-  // Persist the sticky classroom flag immediately on toggle, so it survives even
-  // if the reader emits no further position change before the app closes.
-  const persistClassroom = useCallback((on: boolean) => {
-    const bookId = bookIdRef.current;
-    if (!bookId) return;
-    const merged = withClassroom(lastState.current, on);
-    lastState.current = merged;
-    saveViewState(bookId, merged).catch((e) => {
-      console.error("failed to persist classroom mode", e);
-    });
-  }, []);
-
   useEffect(() => {
     const flush = () => {
       const bookId = bookIdRef.current;
@@ -601,58 +558,6 @@ export default function App() {
       );
     })();
   }, []);
-
-  // Attach the open book's prep pipeline to the UI: subscribe the panel and
-  // (re)start the background run. Idempotent — the pipeline is a module
-  // singleton per survey, so re-attaching never restarts finished work.
-  const attachPipeline = useCallback((bookId: string, name: string, ft: Fulltext) => {
-    const pipeline = getPrepPipeline(bookId, name, ft);
-    pipelineRef.current = pipeline;
-    prepUnsubRef.current?.();
-    prepStatusesRef.current = new Map();
-    const sync = () => {
-      const snap = pipeline.snapshot();
-      // Log paper status transitions (not the initial statuses on attach).
-      const topicId = ctxRef.current.topicId;
-      for (const p of snap.state?.papers ?? []) {
-        const prev = prepStatusesRef.current.get(p.slug);
-        if (prev === p.status) continue;
-        prepStatusesRef.current.set(p.slug, p.status);
-        if (prev !== undefined && topicId) {
-          logEvent(topicId, "prep-status", { slug: p.slug, status: p.status });
-        }
-      }
-      setPrepSnap(snap);
-    };
-    prepUnsubRef.current = pipeline.subscribe(sync);
-    sync();
-    void pipeline.ensureStarted();
-  }, []);
-
-  // First classroom press (or the panel's Start button) kicks off lesson prep.
-  const startPrep = useCallback(async () => {
-    const bookId = bookIdRef.current;
-    const name = ctxRef.current.fileName;
-    if (!bookId) return;
-    const ft = await currentFulltextRef.current;
-    if (bookIdRef.current !== bookId) return; // switched books while extracting
-    if (!ft || ft.status !== "ok") {
-      pushToast("warn", "This book has no readable text layer, so prep can't run.");
-      return;
-    }
-    attachPipeline(bookId, name, ft);
-  }, [attachPipeline, pushToast]);
-
-  const toggleClassroom = useCallback(() => {
-    // Outside the state updater: StrictMode double-invokes updaters, which
-    // would double-log the event.
-    const next = !classroomRef.current;
-    const topicId = ctxRef.current.topicId;
-    if (topicId) logEvent(topicId, "classroom-toggle", { on: next });
-    if (next) void startPrep();
-    setClassroomOn(next);
-    persistClassroom(next);
-  }, [startPrep, persistClassroom]);
 
   // A page citation carrying a source quote: confirm the quote against the
   // page's extracted text (fulltext cache), then hand the reader the exact
@@ -700,14 +605,6 @@ export default function App() {
     setCall((cur) => (cur && cur.view === "chat-main" ? { ...cur, view: "chat-pip" } : cur));
   }, [jumpToQuote]);
 
-  // The prep panel reads a note's body on expand (frontmatter stripped).
-  const loadPrepNoteBody = useCallback(async (slug: string) => {
-    const bookId = bookIdRef.current;
-    if (!bookId) return null;
-    const raw = await readPrepNote(bookId, slug);
-    return raw ? parseNote(raw).body : null;
-  }, []);
-
   // Memory panel data (M8): loaded when the tab shows, refreshed when a
   // background write (distillation or an in-chat memory_update) lands.
   const [memEntries, setMemEntries] = useState<MemoryEntry[] | null>(null);
@@ -745,86 +642,26 @@ export default function App() {
     [activeTopicId, refreshMemory],
   );
 
-  const prepSkip = useCallback((slug: string) => pipelineRef.current?.skip(slug), []);
-  const prepRequeue = useCallback((slug: string) => pipelineRef.current?.requeue(slug), []);
-  const prepAdd = useCallback((query: string) => pipelineRef.current?.addPaper(query), []);
-  const prepStart = useCallback(() => void startPrep(), [startPrep]);
-  const prepRetryPlan = useCallback(() => pipelineRef.current?.retryPlan(), []);
-  const prepReplan = useCallback(() => pipelineRef.current?.replan(), []);
-
-  // Attach the open book's notes pipeline to the UI (docs/14): subscribe the
-  // panel to the book's pipeline. Book-specific inputs (buffer, figure index,
-  // annotations) are captured now so a background run reads this book's data, not
-  // whatever book is open later. Idempotent — the pipeline is a module singleton
-  // per book. It does not kick generation; callers choose manual (ensureStarted)
-  // or highlight-driven (autoAdvance) and returns the pipeline for that.
-  const attachNotes = useCallback((bookId: string, name: string, ft: Fulltext): NotesPipeline => {
-    const buffer = bufferRef.current;
-    const figuresPromise = currentFiguresRef.current;
-    const annMap = annsRef.current;
-    const inputs: NotesInputs = {
-      fulltext: ft,
-      getBuffer: () => buffer,
-      getFigures: async () => (await figuresPromise)?.figures ?? [],
-      getEmphasisSignals: () =>
-        [...annMap.values()]
-          .map((a) => ({
-            page: annotationPage(a as { position?: { pageIndex?: number } }) ?? 0,
-            text: typeof a.text === "string" ? a.text : "",
-            comment: typeof a.comment === "string" ? a.comment : undefined,
-            discussed: !!a.aiThreadId,
-          }))
-          .filter((s) => s.page > 0 && s.text.trim() !== ""),
-      // Chat threads carried into chapter generation: anchor each mark-anchored
-      // thread to its annotation's page; book-level threads have no anchor and
-      // are dropped (docs/14).
-      getChatThreads: async () => {
-        const threadMap = await loadThreads(bookId);
-        return Object.values(threadMap)
-          .map((t) => {
-            const ann = t.annotationId ? annMap.get(t.annotationId) : undefined;
-            const page = annotationPage(ann as { position?: { pageIndex?: number } } | undefined);
-            if (!page) return null;
-            return {
-              page,
-              createdAt: t.createdAt,
-              messages: t.messages.map((m) => ({ role: m.role, text: m.text })),
-            };
-          })
-          .filter((t): t is NonNullable<typeof t> => t !== null);
-      },
-    };
-    const pipeline = getNotesPipeline(bookId, name, inputs);
-    notesRef.current = pipeline;
-    notesUnsubRef.current?.();
-    notesPhaseRef.current = { plan: "pending", overview: "pending" };
-    const sync = () => {
-      const snap = pipeline.snapshot();
-      const topicId = ctxRef.current.topicId;
-      const st = snap.state;
-      if (st && topicId) {
-        const prev = notesPhaseRef.current;
-        if (st.overviewStatus === "done" && prev.overview !== "done") {
-          logEvent(topicId, "notes-run", { phase: "done" });
-        }
-        if (st.planStatus === "failed" && prev.plan !== "failed") {
-          logEvent(topicId, "notes-run", { phase: "failed" });
-        }
-        notesPhaseRef.current = { plan: st.planStatus, overview: st.overviewStatus };
-      }
-      setNotesSnap(snap);
-    };
-    notesUnsubRef.current = pipeline.subscribe(sync);
-    sync();
-    return pipeline;
-  }, []);
-
-  // The reader's marks reduced to pages, for the highlight frontier (docs/14).
-  const notesAnnotationPages = useCallback((): { page: number }[] => {
-    return [...annsRef.current.values()]
-      .map((a) => ({ page: annotationPage(a as { position?: { pageIndex?: number } }) ?? 0 }))
-      .filter((a) => a.page > 0);
-  }, []);
+  // The book-notes feature (docs/14): the panel's state and every callback that
+  // serves it. It reads the open book through the shell's refs, so what it
+  // returns is stable the way it was when this code sat here.
+  const {
+    snapshot: notesSnap,
+    panel: notesPanelProps,
+    scheduleAuto: scheduleAutoNotes,
+    reset: resetNotes,
+    resume: resumeNotes,
+    finalPass: finalPassNotes,
+  } = useNotes({
+    bookIdRef,
+    ctxRef,
+    settingsRef,
+    currentFulltextRef,
+    currentFiguresRef,
+    bufferRef,
+    annsRef,
+    pushToast,
+  });
 
   // The open book's marks for distillation's silent-marks input (docs/02 part 2):
   // id, page, selected text, note, and creation time (from the engine's ISO
@@ -840,78 +677,6 @@ export default function App() {
         createdAt: Number.isFinite(created) ? created : Date.now(),
       };
     });
-  }, []);
-
-  // Highlight-driven auto generation (docs/14): (re)evaluate the frontier for the
-  // open book and let the pipeline plan/skip/generate. Gated on the autoNotes
-  // setting. `finalPass` (book close / re-attach) lets the last chapter settle by
-  // the inclusive rule. Fire-and-forget; the pipeline serializes its own runs.
-  const autoAdvanceNotes = useCallback(
-    async (finalPass?: { readingPage: number }) => {
-      if (!settingsRef.current.autoNotes) return;
-      const bookId = bookIdRef.current;
-      const name = ctxRef.current.fileName;
-      if (!bookId) return;
-      const ft = await currentFulltextRef.current;
-      if (bookIdRef.current !== bookId) return; // switched books while extracting
-      if (!ft || ft.status !== "ok") return;
-      const anns = notesAnnotationPages();
-      if (anns.length === 0 && !finalPass) return;
-      const pipeline = attachNotes(bookId, name, ft);
-      await pipeline.autoAdvance(anns, finalPass);
-    },
-    [attachNotes, notesAnnotationPages],
-  );
-
-  // Debounced frontier evaluation: annotation-created events fire in bursts, so
-  // coalesce them and evaluate at most once every few seconds (docs/14).
-  const autoNotesTimer = useRef<number | null>(null);
-  const scheduleAutoNotes = useCallback(() => {
-    if (!settingsRef.current.autoNotes) return;
-    if (autoNotesTimer.current) window.clearTimeout(autoNotesTimer.current);
-    autoNotesTimer.current = window.setTimeout(() => {
-      autoNotesTimer.current = null;
-      void autoAdvanceNotes();
-    }, AUTO_NOTES_DEBOUNCE);
-  }, [autoAdvanceNotes]);
-
-  // The Notes tab's Generate / Resume button: the manual whole-book run, always
-  // available regardless of the autoNotes setting.
-  const generateNotes = useCallback(async () => {
-    const bookId = bookIdRef.current;
-    const name = ctxRef.current.fileName;
-    if (!bookId) return;
-    const ft = await currentFulltextRef.current;
-    if (bookIdRef.current !== bookId) return; // switched books while extracting
-    if (!ft || ft.status !== "ok") {
-      pushToast("warn", "This book has no readable text layer, so notes can't be generated.");
-      return;
-    }
-    const topicId = ctxRef.current.topicId;
-    if (topicId) logEvent(topicId, "notes-run", { phase: "start" });
-    const pipeline = attachNotes(bookId, name, ft);
-    void pipeline.ensureStarted();
-  }, [attachNotes, pushToast]);
-
-  const notesGenerate = useCallback(() => void generateNotes(), [generateNotes]);
-  const notesStop = useCallback(() => notesRef.current?.stop(), []);
-  const notesRetryPlan = useCallback(() => notesRef.current?.retryPlan(), []);
-  const notesRetryChapter = useCallback((index: number) => notesRef.current?.retryChapter(index), []);
-  const notesRegenerateChapter = useCallback((index: number, instruction?: string) => {
-    const topicId = ctxRef.current.topicId;
-    if (topicId) logEvent(topicId, "notes-chapter-regenerate", { index });
-    notesRef.current?.regenerateChapter(index, instruction);
-  }, []);
-  // Override a skipped (zero-mark) chapter (docs/14): generate just that chapter.
-  const notesGenerateChapter = useCallback((index: number) => notesRef.current?.generateChapter(index), []);
-  const notesRegenerateOverview = useCallback(() => notesRef.current?.regenerateOverview(), []);
-  const loadNotesOverview = useCallback(() => {
-    const bookId = bookIdRef.current;
-    return bookId ? readOverviewNote(bookId) : Promise.resolve(null);
-  }, []);
-  const loadNotesChapter = useCallback((index: number) => {
-    const bookId = bookIdRef.current;
-    return bookId ? readNotesChapter(bookId, index) : Promise.resolve(null);
   }, []);
 
   // Run one assistant turn for a thread: assemble the reading context, stream the
@@ -1174,19 +939,9 @@ export default function App() {
       // the pipeline below once the fulltext is ready, degrading exactly like a
       // manual toggle-on when the book has no readable text.
       const restoreClassroom = !!state?.classroom;
-      setClassroomOn(restoreClassroom);
-      setSelectedPrepSlug(null);
-      prepUnsubRef.current?.();
-      prepUnsubRef.current = null;
-      pipelineRef.current = null;
-      setPrepSnap(null);
-      // Notes are per book too; detach the previous book's panel (the pipeline
-      // keeps running in the background as a module singleton).
-      notesUnsubRef.current?.();
-      notesUnsubRef.current = null;
-      notesRef.current = null;
-      notesPhaseRef.current = { plan: "pending", overview: "pending" };
-      setNotesSnap(null);
+      resetPrep(restoreClassroom);
+      // Notes are per book too; detach the previous book's panel.
+      resetNotes();
       // Extract the full text in the background so the AI can see the book
       // (M6). Fire-and-forget: never blocks rendering. Extraction's pdf.js
       // transfers its buffer to a worker (detaching it), so extraction gets its
@@ -1218,33 +973,11 @@ export default function App() {
         if (bookIdRef.current !== bookId) return; // stale: the user switched books
         setFulltext(ft);
         setFulltextPending(false);
-        // Resume lesson prep from its persisted state (docs/09: restartable
-        // from the breakpoint) or re-attach a pipeline already running. A
-        // restored classroom flag also kicks a fresh pipeline when none exists
-        // yet (e.g. the book moved devices) — the same path a manual toggle-on
-        // takes via startPrep.
         if (ft && ft.status === "ok") {
-          try {
-            if (restoreClassroom || peekPrepPipeline(bookId) || (await hasPrepState(bookId))) {
-              if (bookIdRef.current === bookId) attachPipeline(bookId, name, ft);
-            }
-          } catch (e) {
-            console.warn("failed to resume lesson prep", e);
-          }
-          // Resume book notes from persisted state (docs/14): subscribe the panel,
-          // then re-evaluate the highlight frontier (autoNotes) or resume the
-          // interrupted manual run.
-          try {
-            if (peekNotesPipeline(bookId) || (await hasNotesState(bookId))) {
-              if (bookIdRef.current === bookId) {
-                const pipeline = attachNotes(bookId, name, ft);
-                if (settingsRef.current.autoNotes) void autoAdvanceNotes();
-                else void pipeline.ensureStarted();
-              }
-            }
-          } catch (e) {
-            console.warn("failed to resume book notes", e);
-          }
+          // Resume lesson prep from its persisted state (docs/09).
+          await resumePrep(bookId, name, ft, restoreClassroom);
+          // Resume book notes from persisted state (docs/14).
+          await resumeNotes(bookId, name, ft);
         }
       });
 
@@ -1264,7 +997,7 @@ export default function App() {
       });
       setTitle(name);
     },
-    [pushToast, attachPipeline, attachNotes, autoAdvanceNotes],
+    [pushToast, resetPrep, resumePrep, resetNotes, resumeNotes],
   );
 
   // Open a topic file. If its book id is known and the library holds the
@@ -1661,19 +1394,9 @@ export default function App() {
     // Closing the book with a call open ends that conversation too.
     captureHangup();
     // The last chapter can't be reached by a "next chapter" highlight, so on
-    // close evaluate the frontier once with the inclusive rule (docs/14). Only
-    // when a notes pipeline already exists; otherwise the manual button is the
-    // fallback. Fire before the refs are torn down below.
-    if (settingsRef.current.autoNotes) {
-      const bookId = bookIdRef.current;
-      const pipeline = bookId ? peekNotesPipeline(bookId) : null;
-      if (pipeline) {
-        const pageIndex = ctxRef.current.pageIndex;
-        pipeline.autoAdvance(notesAnnotationPages(), {
-          readingPage: pageIndex !== null ? pageIndex + 1 : 1,
-        }).catch(() => {});
-      }
-    }
+    // close evaluate the notes frontier once with the inclusive rule (docs/14).
+    // Fire before the refs are torn down below.
+    finalPassNotes();
     abortRef.current?.abort();
     abortRef.current = null;
     setCall(null);
@@ -1684,16 +1407,11 @@ export default function App() {
     setFulltextPending(false);
     setEmbedDoc(null);
     // Detach the prep UI; the pipeline keeps prepping in the background.
-    setClassroomOn(false);
-    setSelectedPrepSlug(null);
-    prepUnsubRef.current?.();
-    prepUnsubRef.current = null;
-    pipelineRef.current = null;
-    setPrepSnap(null);
+    resetPrep(false);
     bookIdRef.current = null;
     viewRef.current = null;
     pageDwellRef.current = null;
-  }, [clearPendingImages, captureHangup, notesAnnotationPages]);
+  }, [clearPendingImages, captureHangup, finalPassNotes, resetPrep]);
 
   // Stable handlers for the EmbedPDF pane so its React.memo actually holds: any
   // new prop identity here would re-render the whole engine subtree on every
@@ -1866,33 +1584,8 @@ export default function App() {
             onSelectAnnotation={onTraceSelect}
             onToggleStar={(id, starred) => patchAnnotation(id, { starred })}
             onOpenThread={openThreadForAnnotation}
-            prepPanel={
-              <PrepPanel
-                snapshot={prepSnap}
-                loadNote={loadPrepNoteBody}
-                onSkip={prepSkip}
-                onRequeue={prepRequeue}
-                onAdd={prepAdd}
-                onStartPrep={prepStart}
-                onRetryPlan={prepRetryPlan}
-                onReplan={prepReplan}
-                selectedSlug={selectedPrepSlug}
-              />
-            }
-            notesPanel={
-              <NotesPanel
-                snapshot={notesSnap}
-                loadOverview={loadNotesOverview}
-                loadChapter={loadNotesChapter}
-                onGenerate={notesGenerate}
-                onStop={notesStop}
-                onRetryPlan={notesRetryPlan}
-                onRetryChapter={notesRetryChapter}
-                onRegenerateChapter={notesRegenerateChapter}
-                onGenerateChapter={notesGenerateChapter}
-                onRegenerateOverview={notesRegenerateOverview}
-              />
-            }
+            prepPanel={<PrepPanel {...prepPanelProps} />}
+            notesPanel={<NotesPanel {...notesPanelProps} />}
             memoryPanel={<MemoryPanel entries={memEntries} lastDistilledAt={memLastDistill} />}
           />
         )}

@@ -49,6 +49,17 @@ export interface Annotation {
   [key: string]: unknown;
 }
 
+// Engine annotation page (0-based position.pageIndex) -> 1-based page for the
+// full-text helpers. Null when the annotation has no page. It sits with the
+// shape it reads so any layer may use it; reading/context re-exports it, which
+// is where its callers have always imported it from.
+export function annotationPage(
+  ann: { position?: { pageIndex?: number } } | null | undefined,
+): number | null {
+  const idx = ann?.position?.pageIndex;
+  return typeof idx === "number" ? idx + 1 : null;
+}
+
 export type ToolType =
   | "pointer"
   // The navigation lock (palm toggle): no annotation tool, and every pointer —
