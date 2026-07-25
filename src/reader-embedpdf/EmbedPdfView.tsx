@@ -74,6 +74,7 @@ import {
   stepBandSpring,
   type BandOffset,
 } from "./rubber-band";
+import { INDICATOR_FADE_AFTER_MS, thumbMetrics } from "./scroll-indicator";
 import {
   TouchDebugOverlay,
   isTouchDebugEnabled,
@@ -336,6 +337,10 @@ interface PagedGestureCtx {
   // Set by the touch router so setLayout can toggle the viewport's touch-action
   // (paged locks native pan/zoom; vertical restores it).
   setTouchLock: ((locked: boolean) => void) | null;
+  // The scroll indicator's thumb, which lives outside the scroll container so
+  // the rubber band does not carry it off the edge. Painted by the router on
+  // every scroll — including the engine's own programmatic ones.
+  indicator: HTMLElement | null;
   // Set by the touch router so setLayout can drop everything the old layout had
   // in flight (drag, rubber band, inertia, captured pointer, paused engine)
   // before the new layout's geometry lands.
@@ -559,6 +564,31 @@ function TouchInputRouter({
         el.style.transform = bandTransform({ x, y });
       };
       const clearViewportBand = () => setViewportBand(0, 0);
+
+      // --- scroll indicator -------------------------------------------------
+      // Fades in on movement and out again when it stops. Driven off the
+      // container's own scroll event, so it follows a page jump and the
+      // engine's smooth scrolls as well as a finger.
+      let indicatorTimer = 0;
+      const hideIndicator = () => {
+        indicatorTimer = 0;
+        const bar = ctx.current.indicator;
+        if (bar) bar.style.opacity = "0";
+      };
+      const paintIndicator = () => {
+        const bar = ctx.current.indicator;
+        if (!bar) return;
+        const m = thumbMetrics(el.scrollTop, el.clientHeight, el.scrollHeight);
+        if (!m) {
+          bar.style.opacity = "0";
+          return;
+        }
+        bar.style.height = `${m.size}px`;
+        bar.style.transform = `translateY(${m.offset}px)`;
+        bar.style.opacity = "1";
+        if (indicatorTimer) window.clearTimeout(indicatorTimer);
+        indicatorTimer = window.setTimeout(hideIndicator, INDICATOR_FADE_AFTER_MS);
+      };
 
       const setTouchLock = (locked: boolean) => {
         el.style.touchAction = locked ? "none" : "";
@@ -1017,8 +1047,12 @@ function TouchInputRouter({
       el.addEventListener("pointermove", onMove, { capture: true, passive: false });
       el.addEventListener("pointerup", onUp, { capture: true });
       el.addEventListener("pointercancel", onCancel, { capture: true });
+      el.addEventListener("scroll", paintIndicator, { passive: true });
       return () => {
         clearLp();
+        if (indicatorTimer) window.clearTimeout(indicatorTimer);
+        hideIndicator();
+        el.removeEventListener("scroll", paintIndicator);
         clearBand();
         releaseCapture();
         feedVertical({ type: "reset" });
@@ -1081,6 +1115,7 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
     interaction: null,
     selection: null,
     setTouchLock: null,
+    indicator: null,
     resetGestures: null,
     turnToPage: null,
   });
@@ -1144,6 +1179,12 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
     propsRef.current.onAnnotationAnchor?.(id, rect);
   }, []);
 
+  // Handed to the touch router through the ref so painting it never re-renders
+  // the memoized engine subtree.
+  const indicatorRef = useCallback((el: HTMLDivElement | null) => {
+    pagedRef.current.indicator = el;
+  }, []);
+
   // Selection menu slot on the native AnnotationLayer: instead of a menu, it
   // hosts the probe that measures the selected annotation's viewport rect (the
   // wrapper div is absolutely positioned over the annotation by the layer).
@@ -1181,6 +1222,7 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
       style={{
         height: "100%",
         width: "100%",
+        position: "relative",
         overflow: "hidden",
         backgroundColor: "#f1f3f5",
         ...props.style,
@@ -1228,6 +1270,25 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
           )
         }
       </EmbedPDF>
+      {/* The scroll indicator. Outside the scroll container on purpose: it
+          belongs to the frame, so the rubber band does not carry it off the
+          screen. Non-interactive and invisible until something scrolls. */}
+      <div
+        ref={indicatorRef}
+        aria-hidden
+        style={{
+          position: "absolute",
+          top: 0,
+          right: "2px",
+          width: "3px",
+          height: 0,
+          borderRadius: "2px",
+          backgroundColor: "rgba(0, 0, 0, 0.28)",
+          opacity: 0,
+          transition: "opacity 200ms ease",
+          pointerEvents: "none",
+        }}
+      />
     </div>
   );
 }
