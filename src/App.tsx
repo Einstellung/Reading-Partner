@@ -650,6 +650,14 @@ export default function App() {
     viewRef.current?.setTool(tool);
   }, [toolType, penColor, viewReady]);
 
+  // Whether a finger may mark the page. Applied alongside the tool, and again
+  // whenever the setting changes, so the reader never routes a finger by a stale
+  // copy of it.
+  useEffect(() => {
+    if (!viewReady) return;
+    viewRef.current?.setFingerDraw(settings.fingerDraw);
+  }, [settings.fingerDraw, viewReady]);
+
   // Debounced persist of the reading position. A save failure must be visible;
   // silently losing positions looks fine until the app is reopened (pitfall 09).
   const persist = useCallback((state: ViewState) => {

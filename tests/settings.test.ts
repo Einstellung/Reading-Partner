@@ -28,6 +28,12 @@ test("thinking defaults are low (chat) and medium (prep)", () => {
   expect(DEFAULT_SETTINGS.prepThinking).toBe("medium");
 });
 
+// The reader routes a finger by this one boolean. It has to default to off, or
+// a drawing tool takes the finger away from moving the page.
+test("the finger only ever moves the page until the setting says otherwise", () => {
+  expect(DEFAULT_SETTINGS.fingerDraw).toBe(false);
+});
+
 test("toReasoning maps off -> undefined and passes the levels through", () => {
   expect(toReasoning("off")).toBeUndefined();
   expect(toReasoning("low")).toBe("low");
@@ -54,6 +60,7 @@ test("loadSettings round-trips a fully persisted object", async () => {
     sttModel: "sense",
     autoNotes: false,
     aiLanguage: "zh-CN",
+    fingerDraw: true,
   };
   fileContent = JSON.stringify(saved);
   const s = await loadSettings();

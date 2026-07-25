@@ -1,16 +1,21 @@
-// Adaptive pen/finger input routing for the reader. Given the active tool, the
-// pointer's device type, and whether a stylus has ever been seen this session,
-// decides whether a single-pointer gesture should DRAW (annotate) or SCROLL
-// (pan / turn pages). Pure and DOM-free so the whole routing table is unit
-// testable; the host translates the verdict into engine calls.
+// Pen/finger input routing for the reader. Given the active tool, the pointer's
+// device type and one setting, decides whether a single-pointer gesture should
+// DRAW (annotate) or SCROLL (pan / turn pages). Pure and DOM-free so the whole
+// routing table is unit testable; the host translates the verdict into engine
+// calls.
 //
-// The design ("pen writes, finger scrolls" once a stylus is in play) mirrors
-// paper: with an Apple Pencil present the finger is only ever for moving the
-// page, the pen for marking it. On a stylus-less device (iPhone) the finger has
-// to draw or annotation would be unreachable.
+// The design mirrors paper: the stylus marks the page, the finger moves it. That
+// holds on every platform and at every moment — the finger never draws unless
+// the reader has been told to let it, by the "draw with your finger" setting,
+// which a device with no stylus turns on.
 //
-// The navigation lock (the palm toggle in the tool group) suspends that split:
-// while it is on, every device only moves the page.
+// The rule used to be inferred instead of set: the finger drew until a stylus
+// had been seen this session. It made the first swipe of every session mark the
+// page (the Pencil had not touched the glass yet), and which of the two a finger
+// would do could not be read off the screen. One explicit input replaces it.
+//
+// The navigation lock (the palm toggle in the tool group) suspends the split
+// entirely: while it is on, every device only moves the page.
 
 // What the tool group is set to.
 //   "none"    — nothing selected. The traditional mode: a stylus marks and
@@ -27,8 +32,8 @@ export type PointerKind = "mouse" | "pen" | "touch";
 
 export type RouteAction = "draw" | "scroll";
 
-// The routing table. `penSeen` is the session-level latch: true once any pointer
-// event this session reported pointerType "pen".
+// The routing table. `fingerDraw` is the setting: off (the default) means the
+// finger only ever moves the page, on any platform.
 //
 // - navlock: always scroll (mouse/pen/touch alike) — the whole point of it.
 // - none:
@@ -37,12 +42,11 @@ export type RouteAction = "draw" | "scroll";
 // - annotate:
 //   - mouse: draw (desktop, unchanged).
 //   - pen:   draw.
-//   - touch: scroll when a stylus has been seen (finger only moves the page),
-//            draw otherwise (stylus-less device still needs to annotate).
-export function routePointer(tool: ToolKind, pointer: PointerKind, penSeen: boolean): RouteAction {
+//   - touch: draw only when the setting says so; scroll otherwise.
+export function routePointer(tool: ToolKind, pointer: PointerKind, fingerDraw: boolean): RouteAction {
   if (tool === "navlock") return "scroll";
   if (pointer !== "touch") return "draw"; // mouse and pen go to the engine
-  if (tool === "annotate") return penSeen ? "scroll" : "draw";
+  if (tool === "annotate") return fingerDraw ? "draw" : "scroll";
   return "scroll";
 }
 
@@ -86,8 +90,8 @@ export interface PointerPlan {
   longPressSelect: boolean;
 }
 
-export function planPointer(tool: ToolKind, pointer: PointerKind, penSeen: boolean): PointerPlan {
-  const action = routePointer(tool, pointer, penSeen);
+export function planPointer(tool: ToolKind, pointer: PointerKind, fingerDraw: boolean): PointerPlan {
+  const action = routePointer(tool, pointer, fingerDraw);
   return {
     action,
     pauseAtDown: tool === "annotate" && action === "scroll",
@@ -96,8 +100,8 @@ export function planPointer(tool: ToolKind, pointer: PointerKind, penSeen: boole
 }
 
 // The finger case, the one both layouts always have.
-export function planFinger(tool: ToolKind, penSeen: boolean): PointerPlan {
-  return planPointer(tool, "touch", penSeen);
+export function planFinger(tool: ToolKind, fingerDraw: boolean): PointerPlan {
+  return planPointer(tool, "touch", fingerDraw);
 }
 
 // Paged (horizontal flip) mode maps the same verdict onto the paged gesture
@@ -106,8 +110,8 @@ export function planFinger(tool: ToolKind, penSeen: boolean): PointerPlan {
 // pointer that reaches paged is either a finger or a stylus under the navigation
 // lock, and the lock answers "pointer" for every device, so the finger plan
 // decides for both.
-export function pagedGestureTool(tool: ToolKind, penSeen: boolean): "pointer" | "pen" {
-  return planFinger(tool, penSeen).action === "scroll" ? "pointer" : "pen";
+export function pagedGestureTool(tool: ToolKind, fingerDraw: boolean): "pointer" | "pen" {
+  return planFinger(tool, fingerDraw).action === "scroll" ? "pointer" : "pen";
 }
 
 // Once a finger is classified as scroll, a move past the slop in ANY direction

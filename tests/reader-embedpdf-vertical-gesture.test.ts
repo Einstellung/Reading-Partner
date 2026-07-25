@@ -24,10 +24,10 @@ import {
 import { planPointer } from "../src/reader-embedpdf/touch-routing";
 
 // The four plans that can reach (or be refused by) the machine.
-const FINGER = planPointer("none", "touch", true); // no tool: finger scrolls
-const ANNOTATE = planPointer("annotate", "touch", true); // tool + stylus seen: scrolls, pauses at down
-const DRAW = planPointer("annotate", "touch", false); // stylus-less device: finger draws
-const NAVLOCK_PEN = planPointer("navlock", "pen", true); // palm toggle: the stylus is a finger
+const FINGER = planPointer("none", "touch", false); // no tool: finger scrolls
+const ANNOTATE = planPointer("annotate", "touch", false); // tool, finger still scrolls, pauses at down
+const DRAW = planPointer("annotate", "touch", true); // "draw with your finger" on: finger draws
+const NAVLOCK_PEN = planPointer("navlock", "pen", false); // palm toggle: the stylus is a finger
 
 // A stand-in scroll container: the machine reads its geometry, the harness
 // writes back every scrollTo, exactly as the host does on the real element.

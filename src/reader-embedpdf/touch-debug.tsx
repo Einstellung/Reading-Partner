@@ -28,7 +28,8 @@ export interface TouchDebugSnapshot {
   mode: string; // single / pinch / reserved
   multi: boolean; // multi-touch latch held
   penLock: boolean; // fingers dead until they all lift (pen won)
-  penSeen: boolean;
+  fingerDraw: boolean; // the "draw with your finger" setting
+  fingerPlan: "draw" | "scroll"; // what the next finger to land will do
   navLock: boolean; // the palm toggle: every pointer only navigates
   // The last non-empty contact set, kept after every finger lifts so the
   // measurement can be read (and photographed) with the hand off the glass.
@@ -46,7 +47,8 @@ const EMPTY: TouchDebugSnapshot = {
   mode: "single",
   multi: false,
   penLock: false,
-  penSeen: false,
+  fingerDraw: false,
+  fingerPlan: "scroll",
   navLock: false,
   lastContacts: [],
   peakWidth: 0,
@@ -129,10 +131,10 @@ export function TouchDebugOverlay(): ReactNode {
   return (
     <div className="pointer-events-none fixed bottom-2 left-2 z-50 max-w-[85vw] rounded-lg bg-black/80 px-3 py-2 font-mono text-white">
       <div className="text-[14px] leading-[20px]">
-        fingers {s.fingers} · {s.mode}
+        fingers {s.fingers} · {s.mode} · finger:{s.fingerPlan}
         {s.multi ? " · multi" : ""}
         {s.penLock ? " · penLock" : ""}
-        {s.penSeen ? " · penSeen" : ""}
+        {s.fingerDraw ? " · fingerDraw" : ""}
         {s.navLock ? " · navLock" : ""}
       </div>
       {rows.length === 0 ? (

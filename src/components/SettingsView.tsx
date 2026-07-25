@@ -250,6 +250,23 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
           </p>
         </div>
 
+        <h2 className="mb-2 mt-8 text-sm font-semibold text-[#777]">Reader input</h2>
+        <div className={CARD}>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={settings.fingerDraw}
+              onChange={(e) => onSettingsChange({ ...settings, fingerDraw: e.target.checked })}
+            />
+            Draw with your finger
+          </label>
+          <p className="m-0 text-xs text-[#777]">
+            Off, a finger only moves the page and a stylus does the marking, whatever tool is
+            selected. Turn it on for a device with no stylus, where the finger has to be able to
+            highlight and draw. The navigation lock in the reader still overrides both.
+          </p>
+        </div>
+
         <h2 className="mb-2 mt-8 text-sm font-semibold text-[#777]">Voice input</h2>
         <VoiceInputCard settings={settings} onSettingsChange={onSettingsChange} />
 

@@ -133,6 +133,7 @@ function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
       },
       highlightQuote: (pageIndex, req) => h.highlightQuote(pageIndex, req),
       clearQuoteHighlight: () => h.clearQuoteHighlight(),
+      setFingerDraw: (on: boolean) => h.setFingerDraw(on),
       setTool: (tool?: Tool) => {
         if (!tool || tool.type === "pointer" || tool.type === "navlock") {
           h.setTool(tool?.type === "navlock" ? "navlock" : "pointer");
