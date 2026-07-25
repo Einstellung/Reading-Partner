@@ -7,13 +7,8 @@
 // it carries its own timeout, not the watchdog) and the figure crop path. A run
 // is one-shot — no resume across restart in v1; a Stop aborts it.
 
-import {
-  resolveWatchdogConfig,
-  runWithWatchdog,
-  StoppedError,
-  type AiCallOptions,
-  type WatchdogConfig,
-} from "../ai/watchdog";
+import { StoppedError, type AiCallOptions, type WatchdogConfig } from "../ai/watchdog";
+import { ObservableRun, type RunSnapshot } from "../ai/observable-run";
 import type { DeckPlan } from "./plan";
 import { slugify } from "./template";
 import {
@@ -24,8 +19,6 @@ import {
 } from "./types";
 
 export type { AiCallOptions };
-
-const ACTIVITY_NOTIFY_MS = 250;
 
 export type PipelineConfig = WatchdogConfig;
 
@@ -78,11 +71,7 @@ export interface SlidesActivity {
   attempts: number;
 }
 
-export interface SlidesSnapshot {
-  state: SlidesState | null;
-  running: boolean;
-  activity: SlidesActivity | null;
-}
+export type SlidesSnapshot = RunSnapshot<SlidesState, SlidesActivity>;
 
 export interface SlidesInit {
   createdAt: number;
@@ -90,15 +79,7 @@ export interface SlidesInit {
   bookIds: string[];
 }
 
-export class SlidesPipeline {
-  private state: SlidesState;
-  private running = false;
-  private listeners = new Set<() => void>();
-  private snap: SlidesSnapshot;
-  private activity: SlidesActivity | null = null;
-  private lastActivityNotify = 0;
-  private readonly config: PipelineConfig;
-  private stopController: AbortController | null = null;
+export class SlidesPipeline extends ObservableRun<SlidesState, SlidesActivity> {
   private stopFlag = false;
   // The generated fragments and resolved assets, kept off the snapshot so a
   // notify never ships base64 through React (notes keeps chapter bodies on disk
@@ -113,75 +94,26 @@ export class SlidesPipeline {
     init: SlidesInit,
     config: Partial<PipelineConfig> = {},
   ) {
-    this.config = resolveWatchdogConfig(config);
-    this.state = {
-      version: SLIDES_VERSION,
-      id: `${init.createdAt}`,
-      title: "Generating…",
-      createdAt: init.createdAt,
-      instruction: init.instruction,
-      bookIds: init.bookIds,
-      runStatus: "idle",
-      planStatus: "pending",
-      slides: [],
-      assembleStatus: "pending",
-    };
-    this.snap = { state: this.state, running: false, activity: null };
+    super(
+      {
+        version: SLIDES_VERSION,
+        id: `${init.createdAt}`,
+        title: "Generating…",
+        createdAt: init.createdAt,
+        instruction: init.instruction,
+        bookIds: init.bookIds,
+        runStatus: "idle",
+        planStatus: "pending",
+        slides: [],
+        assembleStatus: "pending",
+      },
+      deps,
+      config,
+    );
   }
 
-  subscribe(fn: () => void): () => void {
-    this.listeners.add(fn);
-    return () => this.listeners.delete(fn);
-  }
-
-  snapshot(): SlidesSnapshot {
-    return this.snap;
-  }
-
-  private notify(): void {
-    this.snap = {
-      state: { ...this.state, slides: this.state.slides.map((s) => ({ ...s })) },
-      running: this.running,
-      activity: this.activity,
-    };
-    for (const fn of this.listeners) fn();
-  }
-
-  private setActivity(activity: SlidesActivity | null): void {
-    this.activity = activity;
-    this.lastActivityNotify = activity ? this.deps.now() : 0;
-    this.notify();
-  }
-
-  private bumpActivity(chars: number): void {
-    if (!this.activity) return;
-    this.activity = { ...this.activity, chars };
-    const now = this.deps.now();
-    if (now - this.lastActivityNotify >= ACTIVITY_NOTIFY_MS) {
-      this.lastActivityNotify = now;
-      this.notify();
-    }
-  }
-
-  private async callWithWatchdog<T>(
-    info: { kind: SlidesActivity["kind"]; slide?: number },
-    invoke: (opts: AiCallOptions) => Promise<T>,
-  ): Promise<T> {
-    try {
-      return await runWithWatchdog(
-        invoke,
-        this.config,
-        { now: this.deps.now, sleep: this.deps.sleep, setTimer: this.deps.setTimer },
-        {
-          onAttempt: ({ attempt, attempts, startedAt }) =>
-            this.setActivity({ ...info, startedAt, chars: 0, attempt, attempts }),
-          onProgress: (chars) => this.bumpActivity(chars),
-        },
-        this.stopController?.signal,
-      );
-    } finally {
-      this.setActivity(null);
-    }
+  protected copyState(state: SlidesState): SlidesState {
+    return { ...state, slides: state.slides.map((s) => ({ ...s })) };
   }
 
   // Start (or, if called again, no-op while running) the one-shot run.
