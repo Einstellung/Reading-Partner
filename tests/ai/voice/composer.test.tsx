@@ -1,4 +1,4 @@
-// The composer's voice-input default (src/ui/components/chat.tsx). Voice is a base
+// The composer's voice-input default (src/ui/components/chat/chat.tsx). Voice is a base
 // capability: the mic renders unless a caller explicitly opts out. Covered two
 // ways — the pure prop resolver, and a static render that proves the mic button
 // is actually in (or out of) the DOM. Run: bun test.

@@ -1,4 +1,4 @@
-// AI source probing (src/info/probe.ts): candidate path generation, response
+// AI source probing (src/info/sources/probe.ts): candidate path generation, response
 // sniffing, feed full-text assessment, homepage link inference, descriptor
 // assembly, and the probeSource orchestrator with an injected fetch. Pure logic
 // only — no real network. Run: bun test.

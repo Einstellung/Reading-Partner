@@ -1,4 +1,4 @@
-// Feedback log parsing (src/info/feedback.ts). The append/load fs paths need the
+// Feedback log parsing (src/memory/feedback.ts). The append/load fs paths need the
 // Tauri plugin; the pure JSONL parse is tested here. Run: bun test.
 
 import { expect, test } from "bun:test";

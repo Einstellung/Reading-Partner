@@ -1,4 +1,4 @@
-// The chat message-parts protocol (src/ui/components/chatParts.ts): the legacy-field
+// The chat message-parts protocol (src/ui/components/chat/chatParts.ts): the legacy-field
 // adapter, the by-id card-part update channel (the patchPart primitives), and the
 // persistence policy + round-trip. Pure — no React, no filesystem. Run: bun test.
 

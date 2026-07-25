@@ -1,4 +1,4 @@
-// The info-briefing orchestrator (src/info/pipeline.ts) as a state machine: the
+// The info-briefing orchestrator (src/info/briefing/pipeline.ts) as a state machine: the
 // snapshot it exposes must carry live progress so the chat/vestibule UI can show
 // a run is alive — per-source collection counts during fetching, then triage
 // streaming liveness. Deps are injected, so this runs headless. Run: bun test.

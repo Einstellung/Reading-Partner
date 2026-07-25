@@ -1,4 +1,4 @@
-// Unit tests for the floating info-chat system prompts (src/info/chat.ts): the
+// Unit tests for the floating info-chat system prompts (src/info/companion/chat.ts): the
 // output-language wiring on both threads, and the shared companion context —
 // profile, source roster, per-item source, the full filtered clip list, and the
 // update_profile anti-over-trigger rule. Run: bun test.
@@ -21,7 +21,7 @@ const SOURCES: SourceDescriptor[] = [
   },
   {
     id: "hn", name: "Hacker News", line: "tech front page", enabled: false,
-    discovery: { kind: "feed", url: "https://hn/feed" }, fulltext: { mode: "feed" },
+    discovery: { kind: "feed", url: "https://hn/feed" }, fulltext: { mode: "feed-field" },
   },
 ];
 

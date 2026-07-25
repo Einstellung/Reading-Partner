@@ -1,4 +1,4 @@
-// Source list parse + migration policy (src/info/source-store.ts, pure parts).
+// Source list parse + migration policy (src/info/sources/source-store.ts, pure parts).
 // The fs read/write paths need the Tauri plugin; only the pure helpers run here.
 // Run: bun test.
 

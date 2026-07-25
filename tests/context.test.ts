@@ -1,4 +1,4 @@
-// Unit tests for system-prompt assembly (src/context.ts). Pure string building.
+// Unit tests for system-prompt assembly (src/platform/app/context.ts). Pure string building.
 // Run: bun test.
 
 import { expect, test } from "bun:test";

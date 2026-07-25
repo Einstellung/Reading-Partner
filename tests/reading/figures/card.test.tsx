@@ -1,4 +1,4 @@
-// The figure card's text label (src/ui/components/FigureCard.figureChipLabel).
+// The figure card's text label (src/ui/components/reader/FigureCard.figureChipLabel).
 // Pure; the card's DOM behavior (lazy raster, click-to-jump) is device-verified.
 // Run: bun test.
 

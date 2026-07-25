@@ -1,4 +1,4 @@
-// The shared companion tools (src/info/companion-tools.ts): the update_profile
+// The shared companion tools (src/info/companion/companion-tools.ts): the update_profile
 // tool drafts a confirm card and writes nothing; the tool set includes the three
 // source tools; the status label extends the source labels. Card sink injected;
 // no save, no fetch. Run: bun test.

@@ -1,4 +1,4 @@
-// The AI add-source tools (src/info/source-tools.ts): trialSource over the
+// The AI add-source tools (src/info/sources/source-tools.ts): trialSource over the
 // generic engine, the confirm-card payload, descriptor resolution, and the
 // consent/validation guards. Network + extract injected; no DOM, no real fetch.
 // Run: bun test.

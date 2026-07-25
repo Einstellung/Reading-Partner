@@ -1,4 +1,4 @@
-// Path-hash -> book-id migration (src/migrate.ts) over a fake fs. Covers the
+// Path-hash -> book-id migration (src/platform/app/migrate.ts) over a fake fs. Covers the
 // move-if-absent guard (idempotency), the shared reading-state map edit, per-book
 // file renames, and the prep directory move + surveyHash rewrite. Run: bun test.
 

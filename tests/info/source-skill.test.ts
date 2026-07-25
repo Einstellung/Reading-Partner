@@ -1,4 +1,4 @@
-// The onboarding skill prompt (src/info/source-skill.ts): the consent rule, the
+// The onboarding skill prompt (src/info/sources/source-skill.ts): the consent rule, the
 // no-menu candidate discipline, and the onboarding-only opening paragraph. There
 // is no built-in source list to inject. Run: bun test.
 

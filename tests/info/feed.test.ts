@@ -1,4 +1,4 @@
-// Feed parser (src/info/feed.ts): RSS 2.0, Atom, RDF, CDATA, and field
+// Feed parser (src/info/sources/feed.ts): RSS 2.0, Atom, RDF, CDATA, and field
 // selection. Run: bun test.
 
 import { expect, test } from "bun:test";

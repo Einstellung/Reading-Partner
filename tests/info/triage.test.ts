@@ -1,4 +1,4 @@
-// Triage prompt assembly + strict-JSON validation (src/info/triage.ts).
+// Triage prompt assembly + strict-JSON validation (src/info/briefing/triage.ts).
 // Run: bun test.
 
 import { expect, test } from "bun:test";

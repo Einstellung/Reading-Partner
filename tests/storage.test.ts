@@ -1,4 +1,4 @@
-// Unit tests for the pure classroom-flag merge (src/storage.ts withClassroom):
+// Unit tests for the pure classroom-flag merge (src/platform/app/storage.ts withClassroom):
 // the per-book sticky Classroom mode (docs/09). Run: bun test.
 
 import { expect, test } from "bun:test";
