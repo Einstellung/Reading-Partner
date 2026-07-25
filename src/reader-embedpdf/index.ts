@@ -3,7 +3,6 @@ export type {
   EmbedPdfHandle,
   EmbedPdfViewProps,
   EmbedTool,
-  EmbedSpread,
   EmbedViewState,
   EmbedViewStats,
 } from "./EmbedPdfView";

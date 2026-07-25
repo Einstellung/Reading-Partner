@@ -9,6 +9,7 @@ const base: ViewState = {
   pageIndex: 7,
   scale: 1.25,
   scrollMode: 0,
+  // Legacy field from the removed two-page spread: old files still carry it.
   spreadMode: 0,
   pageX: 10,
   pageY: 20,
@@ -34,7 +35,12 @@ test("falls back to a default base when the book has no saved state", () => {
   expect(on.classroom).toBe(true);
   expect(on.pageIndex).toBe(0);
   expect(on.scrollMode).toBe(0);
-  expect(on.spreadMode).toBe(0);
+  // The removed spread is not written into new state.
+  expect(on.spreadMode).toBeUndefined();
+});
+
+test("keeps a legacy spreadMode from an old file untouched", () => {
+  expect(withClassroom(base, true).spreadMode).toBe(0);
 });
 
 test("does not mutate the input state", () => {

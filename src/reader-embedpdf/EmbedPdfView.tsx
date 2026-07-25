@@ -24,8 +24,6 @@ import { RenderPluginPackage, RenderLayer } from "@embedpdf/plugin-render/react"
 import { TilingPluginPackage, TilingLayer } from "@embedpdf/plugin-tiling/react";
 import { ZoomPluginPackage, ZoomMode, ZoomGestureWrapper } from "@embedpdf/plugin-zoom/react";
 import type { ZoomCapability } from "@embedpdf/plugin-zoom";
-import { SpreadPluginPackage, SpreadMode } from "@embedpdf/plugin-spread/react";
-import type { SpreadCapability } from "@embedpdf/plugin-spread";
 import type { ViewportCapability } from "@embedpdf/plugin-viewport";
 import { InteractionManagerPluginPackage, PagePointerProvider } from "@embedpdf/plugin-interaction-manager/react";
 import type { InteractionManagerCapability } from "@embedpdf/plugin-interaction-manager";
@@ -38,21 +36,22 @@ import type { AnnotationCapability } from "@embedpdf/plugin-annotation";
 import { embedToZotero, zoteroToEmbed, type ZoteroAnnotation } from "./convert";
 import {
   initGestureState,
+  pageCenterAlign,
   stepGesture,
   type GestureCommand,
   type GestureInput,
   type GestureState,
 } from "./paged-gesture";
 import {
-  routePointer,
+  planFinger,
   toolKindOf,
   pagedGestureTool,
+  type FingerPlan,
   shouldCommitScroll,
   touchGestureMode,
   multiTouchLatch,
   fingerLockAfterPen,
   fingerVerdict,
-  rejectsAsPalm,
   centroidOf,
   shouldClearGestureSelection,
 } from "./touch-routing";
@@ -93,7 +92,6 @@ function useSharedEngine(): { engine: PdfEngine | null; isLoading: boolean; erro
 }
 
 export type EmbedTool = "pointer" | "highlight" | "underline" | "ink";
-export type EmbedSpread = "none" | "odd" | "even";
 // Reading layout: "vertical" = the classic continuous vertical scroll; "paged" =
 // one fit-page screen at a time, flipped horizontally by touch swipe (iPad).
 export type EmbedLayout = "vertical" | "paged";
@@ -140,7 +138,6 @@ export interface EmbedViewStats {
   zoom: number;
   canZoomIn: boolean;
   canZoomOut: boolean;
-  spreadMode: EmbedSpread;
   layout: EmbedLayout;
 }
 
@@ -151,7 +148,6 @@ export interface EmbedPdfHandle {
   zoomOut(): void;
   fitWidth(): void;
   fitPage(): void;
-  setSpread(mode: EmbedSpread): void;
   // Switch between vertical continuous scroll and paged horizontal flip.
   setLayout(mode: EmbedLayout): void;
   navigateToPage(pageIndex: number): void;
@@ -292,17 +288,6 @@ function AnchorProbe(props: { id: string; onAnchor: (id: string, rect: Annotatio
   return <div ref={ref} style={{ display: "none" }} />;
 }
 
-const SPREAD_TO_ENUM: Record<EmbedSpread, SpreadMode> = {
-  none: SpreadMode.None,
-  odd: SpreadMode.Odd,
-  even: SpreadMode.Even,
-};
-const ENUM_TO_SPREAD: Record<string, EmbedSpread> = {
-  [SpreadMode.None]: "none",
-  [SpreadMode.Odd]: "odd",
-  [SpreadMode.Even]: "even",
-};
-
 // Long press (ms) before a stationary finger in paged mode is handed to native
 // text selection instead of being watched for a page swipe.
 const PAGED_LONG_PRESS_MS = 450;
@@ -327,10 +312,18 @@ interface PagedGestureCtx {
   // Set by the touch router so setLayout can toggle the viewport's touch-action
   // (paged locks native pan/zoom; vertical restores it).
   setTouchLock: ((locked: boolean) => void) | null;
+  // Paged mode's only way to change page: centres the target page and re-locks
+  // fit-page, so a turn always lands on one whole page (the geometry needs the
+  // zoom scope, which lives in the imperative wiring).
+  turnToPage: ((pageNumber: number) => void) | null;
 }
 
 // Movement (CSS px) in any direction before a scroll-classified finger commits.
 const VERTICAL_SCROLL_SLOP = 6;
+// Spring-back of the paged rubber band: fraction of the remaining offset shed
+// per 16ms frame, and the px below which it snaps to rest.
+const BAND_SPRING_DECAY = 0.68;
+const BAND_SPRING_MIN_PX = 0.5;
 // Inertia decay per 16ms frame for the vertical fling, and the scrollTop speed
 // (px/ms) below which the fling stops.
 const VERTICAL_FLING_DECAY = 0.95;
@@ -362,24 +355,27 @@ const VERTICAL_FLING_MIN_SPEED = 0.02;
 // always gets its pointerup too, or the engine's per-page selection handler
 // keeps a stale text anchor.
 //
-// Contact-size palm rejection is currently switched off (see
-// PALM_REJECTION_ENABLED): iOS reported an ordinary fingertip as a palm, which
-// also broke the pinch rules. The palm path below stays wired for when measured
-// thresholds land, but rejectsAsPalm never fires today.
+// There is no palm rejection: iPadOS withholds touch from the page while the
+// Pencil is down and reports no usable contact geometry, so palm suppression is
+// neither possible nor needed here (docs/pitfall/39).
 //
-// Vertical (continuous) mode — the main path: a finger that routePointer says
-// should scroll is driven here (pause the engine's pointer pipeline, capture the
-// pointer, follow the finger by setting scrollTop, then a light inertia fling on
-// release). Because the page divs carry touch-action:none in every mode, native
-// scroll is impossible over a page, so the scroll is driven in JS. A finger that
-// should draw (annotation tool, no stylus seen) is left alone and reaches the
-// annotation layer. A stationary finger is never paused, so a tap still reaches
-// the engine (dismiss / select) and native long-press behaviour is preserved.
+// Both layouts get the single finger's job from the same planFinger call, so
+// the two branches cannot drift apart on the pen/finger policy or on when the
+// engine is shut off (an annotation tool pauses it at pointerdown, before the
+// stroke's lead-in can leave ink; the hand tool waits for the commit so a
+// stationary tap still reaches the engine).
+//
+// Vertical (continuous) mode — the main path: a finger planned as "scroll" is
+// driven here (capture the pointer, follow the finger by setting scrollTop, then
+// a light inertia fling on release). Because the page divs carry
+// touch-action:none in every mode, native scroll is impossible over a page, so
+// the scroll is driven in JS. A finger planned as "draw" (annotation tool, no
+// stylus seen) is left alone and reaches the annotation layer.
 //
 // Paged (horizontal flip) mode: runs the pure gesture machine (paged-gesture.ts)
-// on finger pointers — follow-finger drags set scrollLeft, a committed turn snaps
-// with scrollToPage, a zoomed-in drag pans. The finger's draw-vs-turn rule
-// follows the same penSeen policy (pagedGestureTool).
+// on finger pointers — follow-finger drags set scrollLeft, a committed turn goes
+// through turnToPage (centre the page, re-lock fit-page), a magnified page pans,
+// and a swipe with nowhere to go rubber-bands instead of freezing.
 function TouchInputRouter({
   documentId,
   ctx,
@@ -404,12 +400,9 @@ function TouchInputRouter({
 
     const attach = (el: HTMLDivElement): (() => void) => {
       // --- contact bookkeeping (shared by both layout machines) -----------
-      // Live finger contacts, palms excluded, in arrival order. Its size is the
-      // finger count the gesture rules run on.
+      // Live finger contacts in arrival order. Its size is the finger count the
+      // gesture rules run on.
       const fingers = new Map<number, { x: number; y: number }>();
-      // Contacts classified as palm/elbow at pointerdown: swallowed whole and
-      // never counted as fingers. Empty while palm rejection is off.
-      const palms = new Set<number>();
       // Fingers whose pointerdown the engine saw, so their pointerup is let
       // through even if the gesture has since been taken over.
       const engineSaw = new Set<number>();
@@ -434,6 +427,10 @@ function TouchInputRouter({
       let dragStartScrollLeft = 0;
       let dragStartPage = 1;
       let lpTimer = 0;
+      // Rubber band: a CSS translate on the scroll content, sprung back by rAF.
+      let bandX = 0;
+      let bandY = 0;
+      let bandRaf = 0;
 
       // --- vertical follow-finger scroll state ----------------------------
       let vPhase: "idle" | "pending" | "scroll" = "idle";
@@ -473,6 +470,7 @@ function TouchInputRouter({
         }
       };
       const releaseCapture = () => {
+        captured = false;
         if (capturedId !== null) {
           try {
             el.releasePointerCapture(capturedId);
@@ -482,8 +480,63 @@ function TouchInputRouter({
           capturedId = null;
         }
       };
+      // --- paged rubber band ------------------------------------------------
+      // The band offsets the scroll content, not the scroll position: at
+      // fit-page there is nothing left to scroll, which is the whole point.
+      // It writes the same element the engine's pinch preview transforms, so it
+      // must never leave a CSS transition behind (that would lag a pinch) —
+      // the spring-back runs on rAF and clears the property when it lands.
+      const bandTarget = (): HTMLElement | null => el.firstElementChild as HTMLElement | null;
+      const paintBand = () => {
+        const t = bandTarget();
+        if (!t) return;
+        t.style.transform = bandX === 0 && bandY === 0 ? "" : `translate3d(${bandX}px, ${bandY}px, 0)`;
+      };
+      const cancelBandSpring = () => {
+        if (bandRaf) {
+          cancelAnimationFrame(bandRaf);
+          bandRaf = 0;
+        }
+      };
+      const setBand = (x: number, y: number) => {
+        cancelBandSpring();
+        bandX = x;
+        bandY = y;
+        paintBand();
+      };
+      const clearBand = () => {
+        cancelBandSpring();
+        if (bandX === 0 && bandY === 0) return;
+        bandX = 0;
+        bandY = 0;
+        paintBand();
+      };
+      const springBand = () => {
+        cancelBandSpring();
+        let last = performance.now();
+        const step = (now: number) => {
+          const dt = Math.max(now - last, 1);
+          last = now;
+          const keep = Math.pow(BAND_SPRING_DECAY, dt / 16);
+          bandX *= keep;
+          bandY *= keep;
+          if (Math.abs(bandX) < BAND_SPRING_MIN_PX && Math.abs(bandY) < BAND_SPRING_MIN_PX) {
+            bandX = 0;
+            bandY = 0;
+            bandRaf = 0;
+            paintBand();
+            return;
+          }
+          paintBand();
+          bandRaf = requestAnimationFrame(step);
+        };
+        bandRaf = requestAnimationFrame(step);
+      };
+
       const setTouchLock = (locked: boolean) => {
         el.style.touchAction = locked ? "none" : "";
+        // Switching layout mid-gesture must not leave a band offset behind.
+        clearBand();
       };
       ctx.current.setTouchLock = setTouchLock;
       setTouchLock(ctx.current.paged);
@@ -526,20 +579,34 @@ function TouchInputRouter({
           } else if (c.type === "panMove") {
             el.scrollLeft -= c.dx;
             el.scrollTop -= c.dy;
+          } else if (c.type === "bandMove") {
+            setBand(c.dx, c.dy);
+          } else if (c.type === "bandEnd") {
+            springBand();
           } else if (c.type === "dragEnd") {
             const total = scroll?.getTotalPages() ?? 1;
             const target = Math.min(Math.max(dragStartPage + c.turn, 1), total);
-            scroll?.scrollToPage({ pageNumber: target, behavior: "smooth" });
+            // Always through turnToPage: it centres the page and re-locks
+            // fit-page, so a turn out of a temporary magnification lands on one
+            // whole page again.
+            ctx.current.turnToPage?.(target);
             captured = false;
           }
         }
       };
 
       const feed = (input: GestureInput, e?: Event) => {
+        const scroll = ctx.current.scroll;
+        const page = scroll?.getCurrentPage() ?? 1;
+        const total = scroll?.getTotalPages() ?? 1;
         const r = stepGesture(state, input, {
           tool: pagedGestureTool(toolKindOf(ctx.current.tool), ctx.current.penSeen),
           zoomedIn: ctx.current.zoomedIn,
           width: el.clientWidth || window.innerWidth,
+          canTurnPrev: page > 1,
+          canTurnNext: page < total,
+          canPanLeft: el.scrollLeft > 1,
+          canPanRight: el.scrollLeft < maxScrollLeft() - 1,
         });
         state = r.state;
         if (r.commands.some((c) => c.type === "capture")) clearLp();
@@ -578,19 +645,25 @@ function TouchInputRouter({
         vPhase = "idle";
         vId = null;
       };
-      // The one-finger gesture loses the glass (a second finger, a pen, a palm
-      // promotion). Both machines go idle and the engine gets its pipeline back
+      // The one-finger gesture loses the glass (a second finger, a pen). Both
+      // machines go idle and the engine gets its pipeline back
       // — from here on the fingers are blocked one pointer at a time, which
       // leaves a pen free to keep drawing.
       const suspendFingerGesture = () => {
         cancelFling();
         clearLp();
         if (ctx.current.paged) {
-          if (state.primary !== null && (state.phase === "drag" || state.phase === "pan")) {
+          if (
+            state.primary !== null &&
+            (state.phase === "drag" || state.phase === "pan" || state.phase === "band")
+          ) {
             feed({ type: "pointercancel", id: state.primary });
           }
           state = initGestureState();
           captured = false;
+          // A band in flight is dropped outright: leaving a transform on the
+          // element the pinch preview also writes would offset the zoom anchor.
+          clearBand();
         }
         releaseCapture();
         endVertical();
@@ -641,9 +714,8 @@ function TouchInputRouter({
         flingRaf = requestAnimationFrame(step);
       };
 
-      const onVerticalDown = (e: PointerEvent) => {
-        const kind = toolKindOf(ctx.current.tool);
-        if (routePointer(kind, "touch", ctx.current.penSeen) !== "scroll") {
+      const onVerticalDown = (e: PointerEvent, plan: FingerPlan) => {
+        if (plan.action !== "scroll") {
           return; // this finger draws — leave it to the annotation layer
         }
         cancelFling();
@@ -658,11 +730,6 @@ function TouchInputRouter({
         vLastT = e.timeStamp;
         vVelX = 0;
         vVelY = 0;
-        // Under an annotation tool this finger must never mark the page, not even
-        // the sub-slop lead-in before the scroll commits — pause the engine's
-        // pointer pipeline now so no stroke can start. (The hand tool defers its
-        // pause to the commit so a stationary tap still reaches the engine.)
-        if (kind === "annotate") pauseEngine();
       };
       const onVerticalMove = (e: PointerEvent) => {
         if (vId !== e.pointerId || vPhase === "idle") return;
@@ -709,20 +776,18 @@ function TouchInputRouter({
         publishTouchDebug({
           contacts: [...contacts.values()],
           fingers: fingers.size,
-          palms: palms.size,
           mode: touchGestureMode(fingers.size),
           multi: multiTouch,
           penLock,
           penSeen: ctx.current.penSeen,
         });
       };
-      const trackContact = (e: PointerEvent, palm: boolean) => {
+      const trackContact = (e: PointerEvent) => {
         contacts.set(e.pointerId, {
           id: e.pointerId,
           type: e.pointerType,
           width: e.width,
           height: e.height,
-          palm,
         });
       };
 
@@ -739,7 +804,7 @@ function TouchInputRouter({
       // so the hand a user writes with cannot interrupt the stroke.
       const onPenDown = (e: PointerEvent) => {
         ctx.current.penSeen = true;
-        trackContact(e, false);
+        trackContact(e);
         cancelFling();
         if (fingers.size > 0) suspendFingerGesture();
         penLock = fingerLockAfterPen(penLock, true, fingers.size);
@@ -753,15 +818,8 @@ function TouchInputRouter({
           return;
         }
         if (e.pointerType !== "touch") return;
-        if (rejectsAsPalm({ width: e.width, height: e.height }, ctx.current.penSeen)) {
-          palms.add(e.pointerId);
-          trackContact(e, true);
-          swallow(e);
-          publishDebug();
-          return;
-        }
         fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-        trackContact(e, false);
+        trackContact(e);
         const wasMulti = multiTouch;
         multiTouch = multiTouchLatch(multiTouch, fingers.size);
         publishDebug();
@@ -778,15 +836,22 @@ function TouchInputRouter({
           return;
         }
         hadSelectionAtStart = hasSelection();
+        // One plan for both layouts: what this finger is for, and whether the
+        // engine has to be shut off before it can mark the page.
+        const plan = planFinger(toolKindOf(ctx.current.tool), ctx.current.penSeen);
+        if (plan.pauseAtDown) pauseEngine();
         if (ctx.current.paged) {
           feed({ type: "pointerdown", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp });
           clearLp();
-          if (ctx.current.tool === "pointer" && !ctx.current.zoomedIn) {
+          // The long press hands off to native text selection: only for a hand
+          // tool finger at fit-page (an annotation tool's engine pipeline is
+          // already shut off, a zoomed page is panning).
+          if (!plan.pauseAtDown && plan.action === "scroll" && !ctx.current.zoomedIn) {
             const id = e.pointerId;
             lpTimer = window.setTimeout(() => feed({ type: "longpress", id }), PAGED_LONG_PRESS_MS);
           }
         } else {
-          onVerticalDown(e);
+          onVerticalDown(e, plan);
         }
         // Only a down the engine actually received owes it an up.
         if (!enginePaused) engineSaw.add(e.pointerId);
@@ -798,17 +863,11 @@ function TouchInputRouter({
           return;
         }
         if (e.pointerType !== "touch") return;
-        if (palms.has(e.pointerId)) {
-          trackContact(e, true);
-          swallow(e);
-          publishDebug();
-          return;
-        }
         const f = fingers.get(e.pointerId);
         if (!f) return; // a contact that landed before this listener existed
         f.x = e.clientX;
         f.y = e.clientY;
-        trackContact(e, false);
+        trackContact(e);
         publishDebug();
         const mode = touchGestureMode(fingers.size);
         if (fingerVerdict(mode, multiTouch, penLock) === "swallow") {
@@ -827,11 +886,6 @@ function TouchInputRouter({
         const wasContact = contacts.delete(e.pointerId);
         if (e.pointerType !== "touch") {
           if (wasContact) publishDebug();
-          return;
-        }
-        if (palms.delete(e.pointerId)) {
-          swallow(e);
-          publishDebug();
           return;
         }
         const known = fingers.delete(e.pointerId);
@@ -877,6 +931,7 @@ function TouchInputRouter({
       return () => {
         clearLp();
         cancelFling();
+        clearBand();
         releaseCapture();
         endVertical();
         ctx.current.setTouchLock = null;
@@ -933,6 +988,7 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
     interaction: null,
     selection: null,
     setTouchLock: null,
+    turnToPage: null,
   });
 
   useEffect(() => {
@@ -949,6 +1005,9 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
       // hang at progress 0 when the load races the engine coming up).
       createPluginRegistration(DocumentManagerPluginPackage, {}),
       createPluginRegistration(ViewportPluginPackage),
+      // No spread plugin: the reader is one page per row, always. Scroll and
+      // zoom both take it as optional and fall back to a page per row, which is
+      // exactly the layout paged mode is locked to.
       createPluginRegistration(ScrollPluginPackage, {
         defaultBufferSize: 1,
         // Paged mode lays pages out in a horizontal strip so the neighbour page
@@ -964,7 +1023,6 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
       createPluginRegistration(ZoomPluginPackage, {
         defaultZoomLevel: initialLayoutRef.current === "paged" ? ZoomMode.FitPage : ZoomMode.FitWidth,
       }),
-      createPluginRegistration(SpreadPluginPackage),
       createPluginRegistration(InteractionManagerPluginPackage),
       createPluginRegistration(SelectionPluginPackage),
       createPluginRegistration(HistoryPluginPackage),
@@ -1116,7 +1174,6 @@ async function wireEngine(
   const selection = cap<SelectionCapability>(registry, "selection");
   const scroll = cap<ScrollCapability>(registry, "scroll");
   const zoom = cap<ZoomCapability>(registry, "zoom");
-  const spread = cap<SpreadCapability>(registry, "spread");
   const interaction = cap<InteractionManagerCapability>(registry, "interaction-manager");
   const docManager = registry.getPlugin("document-manager") as {
     provides?: () => {
@@ -1178,6 +1235,53 @@ async function wireEngine(
     }
   };
   let layout: EmbedLayout = pagedRef.current.paged ? "paged" : "vertical";
+
+  // --- paged mode: one whole page per screen --------------------------------
+  // The horizontal strip packs pages side by side and scrollToPage puts the
+  // page's left edge at the viewport's left edge, so a page narrower than the
+  // viewport (fit-page in landscape) would sit off to one side with its
+  // neighbour crowding in. Centre it explicitly instead.
+  const viewportScope = cap<ViewportCapability>(registry, "viewport").forDocument(DOC_ID);
+  const pageWidthPx = (pageNumber: number): number => {
+    try {
+      const item = scrollScope.getLayout().virtualItems.find((i) => i.pageNumbers.includes(pageNumber));
+      return item ? item.width * zoomScope.getState().currentZoomLevel : 0;
+    } catch {
+      return 0;
+    }
+  };
+  const centerAlignFor = (pageNumber: number): number =>
+    pageCenterAlign(pageWidthPx(pageNumber), viewportScope.getMetrics().clientWidth);
+
+  // Paged mode's only page change: centre the target page, and come back to
+  // fit-page if a temporary magnification was in play. Turning a page always
+  // lands on one whole page.
+  const turnToPage = (pageNumber: number, behavior: "smooth" | "instant" = "smooth") => {
+    const target = Math.min(Math.max(pageNumber, 1), scrollScope.getTotalPages() || 1);
+    const zs = zoomScope.getState();
+    const refit = zs.zoomLevel !== ZoomMode.FitPage;
+    const go = () =>
+      scrollScope.scrollToPage({ pageNumber: target, behavior, alignX: centerAlignFor(target) });
+    if (refit) {
+      // The zoom change re-lays the strip out; centre against the new geometry.
+      zoomScope.requestZoom(ZoomMode.FitPage);
+      requestAnimationFrame(go);
+    } else {
+      go();
+    }
+  };
+  pagedRef.current.turnToPage = (pageNumber) => turnToPage(pageNumber);
+
+  // Rotating the iPad (or any viewport resize) must not leave paged mode
+  // magnified or off-centre: the zoom plugin only recomputes a fit when the
+  // level still IS a fit mode, and a pinch replaces it with a number.
+  cap<ViewportCapability>(registry, "viewport").onViewportResize((ev) => {
+    if (!pagedRef.current.paged || ev.documentId !== DOC_ID) return;
+    zoomScope.requestZoom(ZoomMode.FitPage);
+    requestAnimationFrame(() => {
+      if (pagedRef.current.paged) turnToPage(scrollScope.getCurrentPage(), "instant");
+    });
+  });
 
   // Map annotation id -> pageIndex, so host-side ops can address the right page.
   const pageOf = new Map<string, number>();
@@ -1292,7 +1396,6 @@ async function wireEngine(
       zoom: z,
       canZoomIn: z < 6,
       canZoomOut: z > 0.15,
-      spreadMode: ENUM_TO_SPREAD[spread.getSpreadMode()] ?? "none",
       layout,
     };
     propsRef.current.onViewStats?.(stats);
@@ -1320,8 +1423,7 @@ async function wireEngine(
     if (iv && layout === "paged") {
       // Paged mode is always fit-page; restore only the page, centred. The saved
       // zoom / in-page offset belong to vertical mode and are ignored here.
-      zoomScope.requestZoom(ZoomMode.FitPage);
-      scrollScope.scrollToPage({ pageNumber: iv.pageIndex + 1, behavior: "instant" });
+      turnToPage(iv.pageIndex + 1, "instant");
     } else if (iv) {
       zoomScope.requestZoom(iv.zoom);
       // Restore the exact in-page position when the saved state carries one
@@ -1361,8 +1463,14 @@ async function wireEngine(
       pagedRef.current.paged = mode === "paged";
       pagedRef.current.setTouchLock?.(mode === "paged");
       if (mode === "paged") {
+        // Paged is locked to one whole page per screen: fit-page, centred, and
+        // no leftover magnification from the vertical reading position.
+        const page = scrollScope.getCurrentPage();
         scrollScope.setScrollStrategy(ScrollStrategy.Horizontal);
         zoomScope.requestZoom(ZoomMode.FitPage);
+        requestAnimationFrame(() => {
+          if (pagedRef.current.paged) turnToPage(page, "instant");
+        });
       } else {
         scrollScope.setScrollStrategy(ScrollStrategy.Vertical);
         zoomScope.requestZoom(ZoomMode.FitWidth);
@@ -1380,13 +1488,13 @@ async function wireEngine(
     zoomOut: () => zoomScope.zoomOut(),
     fitWidth: () => zoomScope.requestZoom(ZoomMode.FitWidth),
     fitPage: () => zoomScope.requestZoom(ZoomMode.FitPage),
-    setSpread(mode) {
-      spread.setSpreadMode(SPREAD_TO_ENUM[mode]);
-      emitStats();
-    },
     navigateToPage(pageIndex) {
       // An explicit page jump is navigating away — drop any quote overlay.
       setQuoteHlRef.current(null);
+      if (layout === "paged") {
+        turnToPage(pageIndex + 1);
+        return;
+      }
       scrollScope.scrollToPage({ pageNumber: pageIndex + 1, behavior: "smooth" });
     },
     async highlightQuote(pageIndex, req) {

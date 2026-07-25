@@ -13,7 +13,9 @@ export interface ViewState {
   top?: number;
   left?: number;
   scrollMode: number;
-  spreadMode: number;
+  // Legacy: the two-page spread this reader no longer has. Old files carry it,
+  // nothing writes it, nothing reads it.
+  spreadMode?: number;
   // In-page reading position in unscaled page coordinates, top-left origin
   // (EmbedPDF page space). Distinct from the legacy `top`/`left` (which used the
   // old engine's coordinate convention), so an old file restores to the page top
@@ -37,16 +39,8 @@ export interface ViewStats {
   canZoomOut: boolean;
   // False once the scale is already page-width (zoomReset is fit-width).
   canZoomReset: boolean;
-  spreadMode: SpreadMode;
   layout: "vertical" | "paged";
 }
-
-export const SpreadMode = {
-  None: 0,
-  Odd: 1,
-  Even: 2,
-} as const;
-export type SpreadMode = (typeof SpreadMode)[keyof typeof SpreadMode];
 
 // Minimal annotation shape; unknown fields round-trip untouched.
 export interface Annotation {
@@ -83,7 +77,6 @@ export interface ViewInstance {
   zoomOut: () => void;
   // Fit-width, not 100%.
   zoomReset: () => void;
-  setSpreadMode: (mode: SpreadMode) => void;
   // Switch reading layout (vertical continuous vs paged horizontal flip).
   setLayout: (mode: "vertical" | "paged") => void;
   navigate: (target: { pageIndex?: number; annotationID?: string }) => void;

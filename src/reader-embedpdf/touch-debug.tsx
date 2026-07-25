@@ -1,9 +1,10 @@
 // On-device touch probe. iPad/WKWebView is the only place the reader's touch
-// rules can actually be verified, and PointerEvent width/height (the palm
-// rejection input) turned out to be nothing like the desktop guess there. This
-// is a tiny store the touch router feeds, plus a corner overlay that shows the
-// live contacts and the session peaks, so a fingertip, a palm or an elbow
-// pressed against the glass can be read off the screen (or photographed).
+// rules can actually be verified. This is a tiny store the touch router feeds,
+// plus a corner overlay showing the live contacts and the session peaks, so
+// what the glass actually reports can be read off the screen (or photographed).
+//
+// The per-contact width x height is raw diagnostics only. It cannot classify a
+// palm — iOS does not report a real contact patch (docs/pitfall/39).
 //
 // The numbers have to survive lifting the hand: you cannot read a value off the
 // glass while your hand is on it. Every contact's last sample is kept, and so
@@ -19,13 +20,11 @@ export interface TouchDebugContact {
   type: string; // pointerType as reported
   width: number;
   height: number;
-  palm: boolean;
 }
 
 export interface TouchDebugSnapshot {
   contacts: TouchDebugContact[];
-  fingers: number; // contacts counted as fingers (palms excluded)
-  palms: number;
+  fingers: number;
   mode: string; // single / pinch / reserved
   multi: boolean; // multi-touch latch held
   penLock: boolean; // fingers dead until they all lift (pen won)
@@ -43,7 +42,6 @@ export interface TouchDebugSnapshot {
 const EMPTY: TouchDebugSnapshot = {
   contacts: [],
   fingers: 0,
-  palms: 0,
   mode: "single",
   multi: false,
   penLock: false,
@@ -129,7 +127,7 @@ export function TouchDebugOverlay(): ReactNode {
   return (
     <div className="pointer-events-none fixed bottom-2 left-2 z-50 max-w-[85vw] rounded-lg bg-black/80 px-3 py-2 font-mono text-white">
       <div className="text-[14px] leading-[20px]">
-        fingers {s.fingers} · palms {s.palms} · {s.mode}
+        fingers {s.fingers} · {s.mode}
         {s.multi ? " · multi" : ""}
         {s.penLock ? " · penLock" : ""}
         {s.penSeen ? " · penSeen" : ""}
@@ -140,7 +138,6 @@ export function TouchDebugOverlay(): ReactNode {
         rows.map((c) => (
           <div key={c.id} className={"text-[17px] leading-[25px] " + (live ? "" : "opacity-70")}>
             #{c.id} {c.type} {num(c.width)} × {num(c.height)}
-            {c.palm ? " PALM" : ""}
             {live ? "" : " (lifted)"}
           </div>
         ))
