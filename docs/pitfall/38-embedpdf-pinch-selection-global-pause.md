@@ -14,4 +14,16 @@
 
 两个必须守的不变量：引擎见过 pointerdown 的那根手指必须收到 pointerup，否则选择 handler 留悬空 anchor；唯一例外是笔正在写字时，宁可留悬空 anchor 也不能把手掌的 pointerup 漏给引擎断掉笔画。
 
+## 补：`setPointerCapture` 也会漏掉 pointerup，每一次滚动都漏
+
+现象：iPad 上滑动翻页，偶尔整页变蓝像被全选，末尾还有一道像光标的细条。
+
+原因：上面那条不变量只写了"别吞 pointerup"，漏了另一条同样切断投递的路。滚动 commit 时路由器对 viewport 调 `setPointerCapture`，此后这根指针的所有事件都被重定向到 viewport，页 div 再也收不到——引擎的 pointerup 不是被吞掉，是压根没派发过去。于是每一次滑动结束，那一页的选择 handler 都留着 `anchorGlyph`/`anchorPos`（`hasTextAnchor` 一直是 true），有时还留下 plugin 级的 `selecting = true`。
+
+留着的 anchor 是活的：handler 的 `onPointerMove` 只要看到 `anchorGlyph` 且 `dragStarted` 为假，就拿当前点和**上一次滑动**的 anchorPos 比距离，超过 `minDragDistance`（默认 3 页面单位，约 4 css px）直接 `onBegin(旧 anchor)` + `onUpdate(当前字)`——不需要任何 pointerdown。中间隔了几屏滚动，选区就从上次起手的那个词一直拉到指针所在处，整页甚至跨页全蓝；`rectsWithinSlice` 在断行处切出的窄条看着就是个文字光标。Chromium 实测：三次普通手指滑动之后，一个不按键的两像素 mousemove 就凭空选出 639 个字符、44779 px² 的蓝。iPad 上同样的裸 move 来自悬停的 Pencil，或任何走到引擎的指针移动。
+
+`selection.clear()` 修不了：它只清 plugin 的 `selecting`/`anchor`/rects，清不掉每页 handler 闭包里的那份 anchor。`shouldClearGestureSelection` 也够不着——它看的是 `getBoundingRects().length`，而"只有 anchor、还没画出 rects"的状态是隐形的。
+
+解法：路由器接管手势的那一刻，给引擎补发一个合成 `pointerup`（`dispatchEvent` 到 pointerdown 当时的 target），让它自己走 `onPointerUp` → `onEnd` + `reset`。三个必须对的细节：一，必须在 `pause()` **之前**发，暂停中的引擎会原样丢掉；二，只给引擎真听见过 down 的指针发（annotate 工具 pauseAtDown、落在惯性上的 takeover，引擎都没听见 down，不欠），规则在 `vertical-gesture.ts` 的 `engineHeardDown` 和 `touch-routing.ts` 的 `shouldHandEngineTheUp`；三，合成事件会穿回路由器自己的监听器，要用一个 `synthesizing` 标志挡住，并在 viewport 上冒泡阶段截停，别让外面当成真的抬手。
+
 附：手掌抑制按 `PointerEvent.width/height` 判定，但 iOS WKWebView 是否真的给出接触面积没有实测过（很可能是常值）。阈值是常量（`PALM_CONTACT_PX` / `PALM_CONTACT_PX_WITH_PEN`），几何为 0 或 1×1 时一律不判掌。真机数据用阅读器 More 菜单里的 Touch debug 开关采：视口左下角实时显示触点数、每个触点的 pointerType 和 width×height、以及本次会话的峰值。
