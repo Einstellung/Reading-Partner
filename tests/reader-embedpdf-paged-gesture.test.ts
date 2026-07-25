@@ -1,5 +1,6 @@
 // Headless coverage of the paged-mode touch gesture state machine
-// (src/reader-embedpdf/paged-gesture.ts). Pure functions, no DOM, no engine —
+// (src/reader-embedpdf/paged-gesture.ts) and the rubber band it hands the host
+// (src/reader-embedpdf/rubber-band.ts). Pure functions, no DOM, no engine —
 // run with `bun test`. Mirrors the style of tests/reader-embedpdf-convert.test.ts.
 
 import { test, expect } from "bun:test";
@@ -19,6 +20,13 @@ import {
   type GestureState,
   type PagedGestureConfig,
 } from "../src/reader-embedpdf/paged-gesture";
+import {
+  BAND_SPRING_DECAY,
+  BAND_SPRING_MIN_PX,
+  bandAtRest,
+  bandTransform,
+  stepBandSpring,
+} from "../src/reader-embedpdf/rubber-band";
 
 const WIDTH = 800;
 const base = (over: Partial<PagedGestureConfig> = {}): PagedGestureConfig => ({
@@ -390,6 +398,39 @@ test("pageCenterAlign: centres a page narrower than the viewport, 0 once it fill
   expect(pageCenterAlign(1600, 1000)).toBe(0);
   expect(pageCenterAlign(0, 1000)).toBe(0);
   expect(pageCenterAlign(500, 0)).toBe(0);
+});
+
+// --- rubber band spring (rubber-band.ts) ----------------------------------
+
+test("bandTransform: rest clears the property instead of writing an identity", () => {
+  expect(bandTransform({ x: 0, y: 0 })).toBe("");
+  expect(bandTransform({ x: -12, y: 0 })).toBe("translate3d(-12px, 0px, 0)");
+});
+
+test("stepBandSpring: sheds the quoted fraction per 16ms frame", () => {
+  expect(stepBandSpring({ x: 100, y: 0 }, 16).x).toBeCloseTo(100 * BAND_SPRING_DECAY, 6);
+  // Two 8ms frames shed as much as one 16ms frame.
+  const half = stepBandSpring(stepBandSpring({ x: 100, y: 0 }, 8), 8);
+  expect(half.x).toBeCloseTo(stepBandSpring({ x: 100, y: 0 }, 16).x, 6);
+});
+
+test("stepBandSpring: snaps to exact rest under the threshold, on both axes at once", () => {
+  const nearly = { x: BAND_SPRING_MIN_PX * 0.9, y: BAND_SPRING_MIN_PX * 0.9 };
+  expect(stepBandSpring(nearly, 16)).toEqual({ x: 0, y: 0 });
+  // One axis still moving keeps the other alive.
+  const mixed = stepBandSpring({ x: 40, y: BAND_SPRING_MIN_PX * 0.9 }, 16);
+  expect(bandAtRest(mixed)).toBe(false);
+});
+
+test("stepBandSpring: always lands, from any offset", () => {
+  let o = { x: -220, y: 180 };
+  let frames = 0;
+  while (!bandAtRest(o) && frames < 200) {
+    o = stepBandSpring(o, 16);
+    frames += 1;
+  }
+  expect(bandAtRest(o)).toBe(true);
+  expect(frames).toBeLessThan(40);
 });
 
 test("after a two-finger gesture, lifting both fingers resets to idle", () => {
