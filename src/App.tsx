@@ -81,33 +81,7 @@ import {
   type NotesSnapshot,
 } from "./notes";
 import type { NotesPipeline } from "./notes/pipeline";
-import { getInfoPipeline } from "./info/briefing/live";
-import type { InfoPipeline, InfoSnapshot } from "./info/briefing/pipeline";
-import { loadArticle, saveInlinedArticleHtml, todayLocal } from "./info/briefing/store";
-import { appendFeedback } from "./memory/feedback";
-import { sanitizeArticleHtml } from "./info/extract/sanitize";
-import { extractImageSrcs, inlineArticleImages } from "./info/extract/inline-images";
-import { fetchImageBytes } from "./info/extract/http";
-import { articleChatSystemPrompt, briefingChatSystemPrompt } from "./info/companion/chat";
-import { loadProfile } from "./memory/profile";
-import { addSourceSystemPrompt } from "./info/sources/source-skill";
-import {
-  addSource as addSourceStore,
-  hasSources,
-  loadSources,
-  loadSourceHealth,
-  removeSource,
-  setSourceEnabled,
-} from "./info/sources/source-store";
-import { liveProbeAndTrial } from "./info/sources/source-live";
-import type { SourceDescriptor } from "./info/sources/descriptor";
-import type { SourceHealth } from "./info/sources/engine";
-import type { BriefingItemMeta } from "./info/briefing/types";
-import { Vestibule } from "./components/info/Vestibule";
-import { BriefingPage } from "./components/info/BriefingPage";
-import { SourcesPage } from "./components/info/SourcesPage";
-import { ArticleView } from "./components/info/ArticleView";
-import { InfoCall, type InfoCallAnchor } from "./components/info/InfoCall";
+import InfoHome, { type HomeScreen } from "./components/info/InfoHome";
 import {
   distillThread,
   getLastDistillation,
@@ -300,24 +274,9 @@ export default function App() {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
 
-  // Info triage (docs/16). homeScreen is the launch layer in front of the
-  // library, only meaningful when not in the reader. The info pipeline is a
-  // module singleton; this ref just tracks it for the UI.
-  const [homeScreen, setHomeScreen] = useState<"vestibule" | "library" | "briefing" | "article" | "sources">("vestibule");
-  const [infoSnap, setInfoSnap] = useState<InfoSnapshot | null>(null);
-  // Whether the user has any source configured (drives onboarding), plus the
-  // source list + health for the source-list page (docs/17).
-  const [hasSourcesState, setHasSourcesState] = useState<boolean | null>(null);
-  const [sourcesList, setSourcesList] = useState<SourceDescriptor[]>([]);
-  const [sourceHealth, setSourceHealth] = useState<Record<string, SourceHealth>>({});
-  const infoRef = useRef<InfoPipeline | null>(null);
-  const [openArticleId, setOpenArticleId] = useState<string | null>(null);
-  const [articleHtml, setArticleHtml] = useState<string | null>(null);
-  // Aborts the previous article's background image-inlining when another opens.
-  const articleInlineAbort = useRef<AbortController | null>(null);
-  const [openedItemIds, setOpenedItemIds] = useState<Set<string>>(new Set());
-  const [dismissedItemIds, setDismissedItemIds] = useState<Set<string>>(new Set());
-  const [infoCall, setInfoCall] = useState<InfoCallAnchor | null>(null);
+  // The launch layer in front of the library, only meaningful when not in the
+  // reader. InfoHome renders every screen but the library.
+  const [homeScreen, setHomeScreen] = useState<HomeScreen>("vestibule");
 
   // The open book: bytes + saved state for EmbedReaderPane; null in the library.
   const [embedDoc, setEmbedDoc] = useState<{
@@ -393,18 +352,6 @@ export default function App() {
   // open, not on its critical path.
   useEffect(() => {
     prewarmPdfiumEngine();
-  }, []);
-
-  // Attach the info-briefing pipeline (docs/16): mirror its snapshot for the
-  // vestibule and load today's briefing if one exists.
-  useEffect(() => {
-    const p = getInfoPipeline();
-    infoRef.current = p;
-    setInfoSnap(p.snapshot());
-    const unsub = p.subscribe(() => setInfoSnap(p.snapshot()));
-    p.init().catch(() => {});
-    hasSources().then(setHasSourcesState).catch(() => {});
-    return unsub;
   }, []);
 
   // Install the Tauri fetch bridge + load settings once. A data file that can't
@@ -502,13 +449,6 @@ export default function App() {
   const callVoice = useMemo(
     () => ({ glossary: buildGlossary({ title, outline: fulltext?.outline }) }),
     [title, fulltext],
-  );
-
-  // Same enrichment for the info call composer: the glossary anchors on the
-  // article/briefing title (there is no book outline here).
-  const infoVoice = useMemo(
-    () => ({ glossary: buildGlossary({ title: infoCall?.position.title }) }),
-    [infoCall],
   );
 
   const refreshTopics = useCallback(async () => {
@@ -1387,69 +1327,6 @@ export default function App() {
     await refreshTopics();
   }, [activeTopicId, refreshTopics]);
 
-  // --- Info briefing (docs/16) -------------------------------------------
-
-  const generateBriefing = useCallback(() => {
-    void infoRef.current?.generate();
-  }, []);
-  const stopBriefing = useCallback(() => {
-    infoRef.current?.stop();
-  }, []);
-
-  // Reload the source list + health (source-list page) and the hasSources flag.
-  const refreshSources = useCallback(async () => {
-    const [list, health] = await Promise.all([loadSources(), loadSourceHealth()]);
-    setSourcesList(list);
-    setSourceHealth(health);
-    setHasSourcesState(list.length > 0);
-  }, []);
-
-  // Open the first-run / add-source chat: the info call in add-source mode.
-  const openOnboarding = useCallback(() => {
-    setInfoCall({
-      threadId: "onboarding",
-      mode: "add-source",
-      onboarding: true,
-      emptyTitle: "Let's set up your sources",
-      placeholder: "Tell me what you follow, or paste a link…",
-      systemPrompt: addSourceSystemPrompt({ aiLanguage: settingsRef.current.aiLanguage, onboarding: true }),
-      position: { title: "Subscriptions", line: "Set up your information sources" },
-    });
-  }, []);
-
-  const openSourcesPage = useCallback(() => {
-    void refreshSources();
-    setHomeScreen("sources");
-  }, [refreshSources]);
-
-  const toggleSource = useCallback(
-    (id: string, enabled: boolean) => {
-      void (async () => {
-        await setSourceEnabled(id, enabled);
-        await refreshSources();
-      })();
-    },
-    [refreshSources],
-  );
-
-  const removeSourceById = useCallback(
-    (id: string) => {
-      void (async () => {
-        await removeSource(id);
-        await refreshSources();
-      })();
-    },
-    [refreshSources],
-  );
-
-  const confirmAddSource = useCallback(
-    async (descriptor: SourceDescriptor) => {
-      await addSourceStore(descriptor);
-      await refreshSources();
-    },
-    [refreshSources],
-  );
-
   const continueReading = useCallback(() => {
     const recent = mostRecentlyOpened(topics);
     if (!recent) {
@@ -1458,112 +1335,6 @@ export default function App() {
     }
     void openFile(recent.file, recent.topic.id);
   }, [topics, openFile]);
-
-  const openArticle = useCallback(
-    async (itemId: string) => {
-      const briefing = infoRef.current?.snapshot().briefing ?? null;
-      const date = briefing?.date ?? todayLocal();
-      // Stop the previously opened article's image-inlining before starting this one.
-      articleInlineAbort.current?.abort();
-      const ac = new AbortController();
-      articleInlineAbort.current = ac;
-      setOpenArticleId(itemId);
-      setArticleHtml(null);
-      setHomeScreen("article");
-      const meta = briefing?.items[itemId];
-      // Opening an article logs "opened" once per session; it also drives the
-      // read-state marker on the briefing.
-      if (meta && !openedItemIds.has(itemId)) {
-        setOpenedItemIds((s) => new Set(s).add(itemId));
-        appendFeedback({ itemId, title: meta.title, action: "opened" }).catch(() => {});
-      }
-      let sanitized: string | null = null;
-      try {
-        const cached = await loadArticle(date, itemId);
-        sanitized = cached?.contentHtml ? sanitizeArticleHtml(cached.contentHtml) : null;
-        setArticleHtml(sanitized);
-      } catch {
-        setArticleHtml(null);
-      }
-      // External <img> loads are blocked by the webview's CSP/COEP (docs/pitfall/30):
-      // fetch each through the Tauri http route, swap in data: URLs as they arrive,
-      // then persist the rewritten HTML so later opens are instant and offline.
-      if (ac.signal.aborted || !sanitized || extractImageSrcs(sanitized).length === 0) return;
-      try {
-        const inlined = await inlineArticleImages(sanitized, fetchImageBytes, {
-          signal: ac.signal,
-          onProgress: (html) => {
-            if (!ac.signal.aborted) setArticleHtml(html);
-          },
-        });
-        if (ac.signal.aborted) return;
-        setArticleHtml(inlined);
-        await saveInlinedArticleHtml(date, itemId, inlined);
-      } catch {
-        // Leave the text-only render in place; a later open retries the images.
-      }
-    },
-    [openedItemIds],
-  );
-
-  const dismissItem = useCallback((itemId: string, meta: BriefingItemMeta, category?: string) => {
-    setDismissedItemIds((s) => new Set(s).add(itemId));
-    appendFeedback({ itemId, title: meta.title, action: "dismissed", category }).catch(() => {});
-  }, []);
-
-  const appealItem = useCallback(
-    (itemId: string, meta: BriefingItemMeta, category: string) => {
-      appendFeedback({ itemId, title: meta.title, action: "appealed", category }).catch(() => {});
-      void openArticle(itemId);
-    },
-    [openArticle],
-  );
-
-  const askBriefing = useCallback(async () => {
-    const b = infoRef.current?.snapshot().briefing;
-    if (!b) return;
-    const [profile, sources] = await Promise.all([loadProfile(), loadSources()]);
-    setInfoCall({
-      threadId: "briefing",
-      emptyTitle: "Today's briefing",
-      placeholder: "Ask about today's briefing…",
-      systemPrompt: briefingChatSystemPrompt(b, {
-        profile,
-        sources,
-        aiLanguage: settingsRef.current.aiLanguage,
-      }),
-      position: { title: "Today's briefing", line: b.overview },
-    });
-  }, []);
-
-  const askArticle = useCallback(async (itemId: string) => {
-    const b = infoRef.current?.snapshot().briefing;
-    if (!b) return;
-    const meta = b.items[itemId];
-    const [cached, profile, sources] = await Promise.all([
-      loadArticle(b.date, itemId),
-      loadProfile(),
-      loadSources(),
-    ]);
-    // The item's one-line reason/overview from the briefing tiers, shown on the
-    // position card so the chat window can recall what the article was about.
-    const line =
-      b.mustRead.find((r) => r.itemId === itemId)?.reason ??
-      b.oneLiners.find((r) => r.itemId === itemId)?.line ??
-      b.outOfLane.find((r) => r.itemId === itemId)?.reason ??
-      null;
-    setInfoCall({
-      threadId: itemId,
-      emptyTitle: meta?.title ?? "Article",
-      placeholder: "Ask about this article…",
-      systemPrompt: articleChatSystemPrompt(b.overview, meta?.title ?? "", cached?.textContent ?? "", {
-        profile,
-        sources,
-        aiLanguage: settingsRef.current.aiLanguage,
-      }),
-      position: { title: meta?.title ?? "Article", sourceName: meta?.sourceName, line },
-    });
-  }, []);
 
   // Host-side edit of an existing annotation: patch, re-render, persist.
   const patchAnnotation = useCallback(
@@ -2278,87 +2049,17 @@ export default function App() {
           )}
         </div>
 
-        {!inReader && homeScreen === "vestibule" && (
-          <div className="absolute inset-0 overflow-y-auto bg-white">
-            <Vestibule
-              continueBook={(() => {
-                const recent = mostRecentlyOpened(topics);
-                return recent ? { title: recent.file.name, topicName: recent.topic.name } : null;
-              })()}
-              snap={infoSnap}
-              configured={configured}
-              hasSources={hasSourcesState}
-              onContinue={continueReading}
-              onOpenLibrary={() => setHomeScreen("library")}
-              onGenerate={generateBriefing}
-              onStop={stopBriefing}
-              onOpenBriefing={() => setHomeScreen("briefing")}
-              onOpenSettings={() => setShowSettings(true)}
-              onStartSubscribing={openOnboarding}
-            />
-          </div>
-        )}
-
-        {!inReader && homeScreen === "briefing" && infoSnap?.briefing && (
-          <div className="absolute inset-0 overflow-y-auto bg-white">
-            <BriefingPage
-              briefing={infoSnap.briefing}
-              openedIds={openedItemIds}
-              dismissedIds={dismissedItemIds}
-              onOpenArticle={openArticle}
-              onDismiss={dismissItem}
-              onAppeal={appealItem}
-              onAskBriefing={askBriefing}
-              onAskArticle={askArticle}
-              onOpenSources={openSourcesPage}
-              onBack={() => setHomeScreen("vestibule")}
-            />
-          </div>
-        )}
-
-        {!inReader && homeScreen === "sources" && (
-          <div className="absolute inset-0 overflow-y-auto bg-white">
-            <SourcesPage
-              sources={sourcesList}
-              health={sourceHealth}
-              onToggle={toggleSource}
-              onRemove={removeSourceById}
-              onProbeAdd={liveProbeAndTrial}
-              onConfirmAdd={confirmAddSource}
-              onBack={() => setHomeScreen("briefing")}
-            />
-          </div>
-        )}
-
-        {!inReader && homeScreen === "article" && openArticleId && infoSnap?.briefing && (
-          <div className="absolute inset-0">
-            <ArticleView
-              meta={
-                infoSnap.briefing.items[openArticleId] ?? {
-                  title: "Article",
-                  url: "",
-                  source: "",
-                  sourceName: "",
-                  publishedAt: "",
-                }
-              }
-              contentHtml={articleHtml}
-              onBack={() => setHomeScreen("briefing")}
-              onAsk={() => askArticle(openArticleId)}
-            />
-          </div>
-        )}
-
-        {!inReader && infoCall && (
-          <InfoCall
-            anchor={infoCall}
-            dateKey={infoSnap?.briefing?.date ?? todayLocal()}
-            onHangUp={() => setInfoCall(null)}
-            voice={infoVoice}
-            onSourcesChanged={refreshSources}
-            onOpenBriefing={() => setHomeScreen("briefing")}
-          />
-        )}
+        <InfoHome
+          screen={inReader ? null : homeScreen}
+          onNavigate={setHomeScreen}
+          continueBook={(() => {
+            const recent = mostRecentlyOpened(topics);
+            return recent ? { title: recent.file.name, topicName: recent.topic.name } : null;
+          })()}
+          onContinue={continueReading}
+          configured={configured}
+          onOpenSettings={() => setShowSettings(true)}
+        />
 
         {!inReader && homeScreen === "library" && (
           <LibraryScreen
