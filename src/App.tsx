@@ -71,16 +71,7 @@ import {
   type PrepSnapshot,
 } from "./reading/prep";
 import type { PrepPipeline } from "./reading/prep/pipeline";
-import {
-  getNotesPipeline,
-  hasNotesState,
-  peekNotesPipeline,
-  readChapterNote as readNotesChapter,
-  readOverviewNote,
-  type NotesInputs,
-  type NotesSnapshot,
-} from "./reading/notes";
-import type { NotesPipeline } from "./reading/notes/pipeline";
+import { useNotes } from "./reading/notes/use-notes";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import {
   distillThread,
@@ -126,9 +117,6 @@ import type { Annotation as PopupAnnotation, PendingImage, ToolStatus, ToolType 
 const AI_PEN_COLOR = "#a28ae5";
 // Cap on images attached to one chat turn (docs/03: paste screenshots to ask).
 const MAX_PENDING_IMAGES = 3;
-// Coalesce bursts of annotation-created events before re-evaluating the notes
-// highlight frontier (docs/14).
-const AUTO_NOTES_DEBOUNCE = 4000;
 
 // Reading layout for a book that has never chosen one: vertical continuous
 // scroll on every surface (the correct PDF-reading default; a finger swipe
@@ -244,12 +232,6 @@ export default function App() {
   // ref only tracks which one the UI is looking at) and its unsubscribe.
   const pipelineRef = useRef<PrepPipeline | null>(null);
   const prepUnsubRef = useRef<(() => void) | null>(null);
-  // The book-notes pipeline attached to the open book (docs/14), its unsubscribe,
-  // and the last-seen plan/overview phases so run start/done/failed log as
-  // transitions.
-  const notesRef = useRef<NotesPipeline | null>(null);
-  const notesUnsubRef = useRef<(() => void) | null>(null);
-  const notesPhaseRef = useRef<{ plan: string; overview: string }>({ plan: "pending", overview: "pending" });
   // Event-log instrumentation (M8). Dwell: the page being read and when it was
   // entered. lastCallThread: the thread a call-start was last logged for.
   // prepStatuses: paper statuses already seen, so only transitions are logged.
@@ -303,7 +285,6 @@ export default function App() {
   const [classroomOn, setClassroomOn] = useState(false);
   const [prepSnap, setPrepSnap] = useState<PrepSnapshot | null>(null);
   const [selectedPrepSlug, setSelectedPrepSlug] = useState<string | null>(null);
-  const [notesSnap, setNotesSnap] = useState<NotesSnapshot | null>(null);
   const [settings, setSettings] = useState<Settings>({ ...DEFAULT_SETTINGS });
   const [showSettings, setShowSettings] = useState(false);
   const [providersInfo, setProvidersInfo] = useState<ProviderInfo[]>([]);
@@ -752,79 +733,26 @@ export default function App() {
   const prepRetryPlan = useCallback(() => pipelineRef.current?.retryPlan(), []);
   const prepReplan = useCallback(() => pipelineRef.current?.replan(), []);
 
-  // Attach the open book's notes pipeline to the UI (docs/14): subscribe the
-  // panel to the book's pipeline. Book-specific inputs (buffer, figure index,
-  // annotations) are captured now so a background run reads this book's data, not
-  // whatever book is open later. Idempotent — the pipeline is a module singleton
-  // per book. It does not kick generation; callers choose manual (ensureStarted)
-  // or highlight-driven (autoAdvance) and returns the pipeline for that.
-  const attachNotes = useCallback((bookId: string, name: string, ft: Fulltext): NotesPipeline => {
-    const buffer = bufferRef.current;
-    const figuresPromise = currentFiguresRef.current;
-    const annMap = annsRef.current;
-    const inputs: NotesInputs = {
-      fulltext: ft,
-      getBuffer: () => buffer,
-      getFigures: async () => (await figuresPromise)?.figures ?? [],
-      getEmphasisSignals: () =>
-        [...annMap.values()]
-          .map((a) => ({
-            page: annotationPage(a as { position?: { pageIndex?: number } }) ?? 0,
-            text: typeof a.text === "string" ? a.text : "",
-            comment: typeof a.comment === "string" ? a.comment : undefined,
-            discussed: !!a.aiThreadId,
-          }))
-          .filter((s) => s.page > 0 && s.text.trim() !== ""),
-      // Chat threads carried into chapter generation: anchor each mark-anchored
-      // thread to its annotation's page; book-level threads have no anchor and
-      // are dropped (docs/14).
-      getChatThreads: async () => {
-        const threadMap = await loadThreads(bookId);
-        return Object.values(threadMap)
-          .map((t) => {
-            const ann = t.annotationId ? annMap.get(t.annotationId) : undefined;
-            const page = annotationPage(ann as { position?: { pageIndex?: number } } | undefined);
-            if (!page) return null;
-            return {
-              page,
-              createdAt: t.createdAt,
-              messages: t.messages.map((m) => ({ role: m.role, text: m.text })),
-            };
-          })
-          .filter((t): t is NonNullable<typeof t> => t !== null);
-      },
-    };
-    const pipeline = getNotesPipeline(bookId, name, inputs);
-    notesRef.current = pipeline;
-    notesUnsubRef.current?.();
-    notesPhaseRef.current = { plan: "pending", overview: "pending" };
-    const sync = () => {
-      const snap = pipeline.snapshot();
-      const topicId = ctxRef.current.topicId;
-      const st = snap.state;
-      if (st && topicId) {
-        const prev = notesPhaseRef.current;
-        if (st.overviewStatus === "done" && prev.overview !== "done") {
-          logEvent(topicId, "notes-run", { phase: "done" });
-        }
-        if (st.planStatus === "failed" && prev.plan !== "failed") {
-          logEvent(topicId, "notes-run", { phase: "failed" });
-        }
-        notesPhaseRef.current = { plan: st.planStatus, overview: st.overviewStatus };
-      }
-      setNotesSnap(snap);
-    };
-    notesUnsubRef.current = pipeline.subscribe(sync);
-    sync();
-    return pipeline;
-  }, []);
-
-  // The reader's marks reduced to pages, for the highlight frontier (docs/14).
-  const notesAnnotationPages = useCallback((): { page: number }[] => {
-    return [...annsRef.current.values()]
-      .map((a) => ({ page: annotationPage(a as { position?: { pageIndex?: number } }) ?? 0 }))
-      .filter((a) => a.page > 0);
-  }, []);
+  // The book-notes feature (docs/14): the panel's state and every callback that
+  // serves it. It reads the open book through the shell's refs, so what it
+  // returns is stable the way it was when this code sat here.
+  const {
+    snapshot: notesSnap,
+    panel: notesPanelProps,
+    scheduleAuto: scheduleAutoNotes,
+    reset: resetNotes,
+    resume: resumeNotes,
+    finalPass: finalPassNotes,
+  } = useNotes({
+    bookIdRef,
+    ctxRef,
+    settingsRef,
+    currentFulltextRef,
+    currentFiguresRef,
+    bufferRef,
+    annsRef,
+    pushToast,
+  });
 
   // The open book's marks for distillation's silent-marks input (docs/02 part 2):
   // id, page, selected text, note, and creation time (from the engine's ISO
@@ -840,78 +768,6 @@ export default function App() {
         createdAt: Number.isFinite(created) ? created : Date.now(),
       };
     });
-  }, []);
-
-  // Highlight-driven auto generation (docs/14): (re)evaluate the frontier for the
-  // open book and let the pipeline plan/skip/generate. Gated on the autoNotes
-  // setting. `finalPass` (book close / re-attach) lets the last chapter settle by
-  // the inclusive rule. Fire-and-forget; the pipeline serializes its own runs.
-  const autoAdvanceNotes = useCallback(
-    async (finalPass?: { readingPage: number }) => {
-      if (!settingsRef.current.autoNotes) return;
-      const bookId = bookIdRef.current;
-      const name = ctxRef.current.fileName;
-      if (!bookId) return;
-      const ft = await currentFulltextRef.current;
-      if (bookIdRef.current !== bookId) return; // switched books while extracting
-      if (!ft || ft.status !== "ok") return;
-      const anns = notesAnnotationPages();
-      if (anns.length === 0 && !finalPass) return;
-      const pipeline = attachNotes(bookId, name, ft);
-      await pipeline.autoAdvance(anns, finalPass);
-    },
-    [attachNotes, notesAnnotationPages],
-  );
-
-  // Debounced frontier evaluation: annotation-created events fire in bursts, so
-  // coalesce them and evaluate at most once every few seconds (docs/14).
-  const autoNotesTimer = useRef<number | null>(null);
-  const scheduleAutoNotes = useCallback(() => {
-    if (!settingsRef.current.autoNotes) return;
-    if (autoNotesTimer.current) window.clearTimeout(autoNotesTimer.current);
-    autoNotesTimer.current = window.setTimeout(() => {
-      autoNotesTimer.current = null;
-      void autoAdvanceNotes();
-    }, AUTO_NOTES_DEBOUNCE);
-  }, [autoAdvanceNotes]);
-
-  // The Notes tab's Generate / Resume button: the manual whole-book run, always
-  // available regardless of the autoNotes setting.
-  const generateNotes = useCallback(async () => {
-    const bookId = bookIdRef.current;
-    const name = ctxRef.current.fileName;
-    if (!bookId) return;
-    const ft = await currentFulltextRef.current;
-    if (bookIdRef.current !== bookId) return; // switched books while extracting
-    if (!ft || ft.status !== "ok") {
-      pushToast("warn", "This book has no readable text layer, so notes can't be generated.");
-      return;
-    }
-    const topicId = ctxRef.current.topicId;
-    if (topicId) logEvent(topicId, "notes-run", { phase: "start" });
-    const pipeline = attachNotes(bookId, name, ft);
-    void pipeline.ensureStarted();
-  }, [attachNotes, pushToast]);
-
-  const notesGenerate = useCallback(() => void generateNotes(), [generateNotes]);
-  const notesStop = useCallback(() => notesRef.current?.stop(), []);
-  const notesRetryPlan = useCallback(() => notesRef.current?.retryPlan(), []);
-  const notesRetryChapter = useCallback((index: number) => notesRef.current?.retryChapter(index), []);
-  const notesRegenerateChapter = useCallback((index: number, instruction?: string) => {
-    const topicId = ctxRef.current.topicId;
-    if (topicId) logEvent(topicId, "notes-chapter-regenerate", { index });
-    notesRef.current?.regenerateChapter(index, instruction);
-  }, []);
-  // Override a skipped (zero-mark) chapter (docs/14): generate just that chapter.
-  const notesGenerateChapter = useCallback((index: number) => notesRef.current?.generateChapter(index), []);
-  const notesRegenerateOverview = useCallback(() => notesRef.current?.regenerateOverview(), []);
-  const loadNotesOverview = useCallback(() => {
-    const bookId = bookIdRef.current;
-    return bookId ? readOverviewNote(bookId) : Promise.resolve(null);
-  }, []);
-  const loadNotesChapter = useCallback((index: number) => {
-    const bookId = bookIdRef.current;
-    return bookId ? readNotesChapter(bookId, index) : Promise.resolve(null);
   }, []);
 
   // Run one assistant turn for a thread: assemble the reading context, stream the
@@ -1180,13 +1036,8 @@ export default function App() {
       prepUnsubRef.current = null;
       pipelineRef.current = null;
       setPrepSnap(null);
-      // Notes are per book too; detach the previous book's panel (the pipeline
-      // keeps running in the background as a module singleton).
-      notesUnsubRef.current?.();
-      notesUnsubRef.current = null;
-      notesRef.current = null;
-      notesPhaseRef.current = { plan: "pending", overview: "pending" };
-      setNotesSnap(null);
+      // Notes are per book too; detach the previous book's panel.
+      resetNotes();
       // Extract the full text in the background so the AI can see the book
       // (M6). Fire-and-forget: never blocks rendering. Extraction's pdf.js
       // transfers its buffer to a worker (detaching it), so extraction gets its
@@ -1231,20 +1082,8 @@ export default function App() {
           } catch (e) {
             console.warn("failed to resume lesson prep", e);
           }
-          // Resume book notes from persisted state (docs/14): subscribe the panel,
-          // then re-evaluate the highlight frontier (autoNotes) or resume the
-          // interrupted manual run.
-          try {
-            if (peekNotesPipeline(bookId) || (await hasNotesState(bookId))) {
-              if (bookIdRef.current === bookId) {
-                const pipeline = attachNotes(bookId, name, ft);
-                if (settingsRef.current.autoNotes) void autoAdvanceNotes();
-                else void pipeline.ensureStarted();
-              }
-            }
-          } catch (e) {
-            console.warn("failed to resume book notes", e);
-          }
+          // Resume book notes from persisted state (docs/14).
+          await resumeNotes(bookId, name, ft);
         }
       });
 
@@ -1264,7 +1103,7 @@ export default function App() {
       });
       setTitle(name);
     },
-    [pushToast, attachPipeline, attachNotes, autoAdvanceNotes],
+    [pushToast, attachPipeline, resetNotes, resumeNotes],
   );
 
   // Open a topic file. If its book id is known and the library holds the
@@ -1661,19 +1500,9 @@ export default function App() {
     // Closing the book with a call open ends that conversation too.
     captureHangup();
     // The last chapter can't be reached by a "next chapter" highlight, so on
-    // close evaluate the frontier once with the inclusive rule (docs/14). Only
-    // when a notes pipeline already exists; otherwise the manual button is the
-    // fallback. Fire before the refs are torn down below.
-    if (settingsRef.current.autoNotes) {
-      const bookId = bookIdRef.current;
-      const pipeline = bookId ? peekNotesPipeline(bookId) : null;
-      if (pipeline) {
-        const pageIndex = ctxRef.current.pageIndex;
-        pipeline.autoAdvance(notesAnnotationPages(), {
-          readingPage: pageIndex !== null ? pageIndex + 1 : 1,
-        }).catch(() => {});
-      }
-    }
+    // close evaluate the notes frontier once with the inclusive rule (docs/14).
+    // Fire before the refs are torn down below.
+    finalPassNotes();
     abortRef.current?.abort();
     abortRef.current = null;
     setCall(null);
@@ -1693,7 +1522,7 @@ export default function App() {
     bookIdRef.current = null;
     viewRef.current = null;
     pageDwellRef.current = null;
-  }, [clearPendingImages, captureHangup, notesAnnotationPages]);
+  }, [clearPendingImages, captureHangup, finalPassNotes]);
 
   // Stable handlers for the EmbedPDF pane so its React.memo actually holds: any
   // new prop identity here would re-render the whole engine subtree on every
@@ -1879,20 +1708,7 @@ export default function App() {
                 selectedSlug={selectedPrepSlug}
               />
             }
-            notesPanel={
-              <NotesPanel
-                snapshot={notesSnap}
-                loadOverview={loadNotesOverview}
-                loadChapter={loadNotesChapter}
-                onGenerate={notesGenerate}
-                onStop={notesStop}
-                onRetryPlan={notesRetryPlan}
-                onRetryChapter={notesRetryChapter}
-                onRegenerateChapter={notesRegenerateChapter}
-                onGenerateChapter={notesGenerateChapter}
-                onRegenerateOverview={notesRegenerateOverview}
-              />
-            }
+            notesPanel={<NotesPanel {...notesPanelProps} />}
             memoryPanel={<MemoryPanel entries={memEntries} lastDistilledAt={memLastDistill} />}
           />
         )}
