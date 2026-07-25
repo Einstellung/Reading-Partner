@@ -10,6 +10,11 @@ Two-factor codes cannot be automated (Apple pushes a one-time code to your other
 devices); the script hands the terminal back to you only when Apple asks for one,
 which is occasional because the machine identity is cached under ~/.config/Sideloader.
 
+When it fetches from CI it first waits out any queued/running build, then prints
+the run, commit and commit title it is about to install, and warns when that
+commit is not the tip of the default branch. Otherwise running the script right
+after a push silently installs the previous build.
+
 .env keys (see .env.example):
   SIDELOAD_APPLE_ID          Apple ID email used for signing
   SIDELOAD_APPLE_PASSWORD    its password (app-specific password if 2FA is on)
@@ -22,10 +27,12 @@ Usage:
   python3 scripts/sideload-ios.py path.ipa   # install a specific local ipa
 """
 
+import json
 import os
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 try:
@@ -36,6 +43,12 @@ except ImportError:
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW = "ios-sideload-ipa.yml"
 ARTIFACT = "ios-sideload-ipa"
+
+# Statuses gh reports for a run that has not finished yet. queued/in_progress
+# are the common two; the rest are the approval/scheduling states.
+ACTIVE_STATUSES = {"queued", "in_progress", "requested", "waiting", "pending"}
+POLL_SECONDS = 15
+WAIT_TIMEOUT_SECONDS = 15 * 60
 
 
 def load_env() -> dict:
@@ -51,23 +64,139 @@ def load_env() -> dict:
     return env
 
 
+def short_sha(sha) -> str:
+    return sha[:7] if sha else "unknown"
+
+
+def gh_output(args: list) -> str:
+    try:
+        return subprocess.check_output(["gh"] + args, text=True).strip()
+    except FileNotFoundError:
+        sys.exit("gh (GitHub CLI) is required to fetch the ipa from CI.")
+    except subprocess.CalledProcessError as exc:
+        sys.exit(f"gh {' '.join(args)} failed with code {exc.returncode}.")
+
+
+def list_runs(repo: str, limit: int = 20) -> list:
+    """Recent ios-sideload-ipa runs, newest first."""
+    raw = gh_output(
+        ["run", "list", "--workflow", WORKFLOW, "-R", repo, "--limit", str(limit),
+         "--json", "databaseId,status,conclusion,headSha,headBranch,createdAt,url"]
+    )
+    runs = json.loads(raw or "[]")
+    runs.sort(key=lambda r: r.get("createdAt", ""), reverse=True)
+    return runs
+
+
+def commit_subject(repo: str, sha: str) -> str:
+    """First line of a commit message, best effort (empty when GitHub is unreachable)."""
+    try:
+        message = subprocess.check_output(
+            ["gh", "api", f"repos/{repo}/commits/{sha}", "--jq", ".commit.message"],
+            text=True, stderr=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return ""
+    return message.strip().splitlines()[0] if message.strip() else ""
+
+
+def default_branch_tip(repo: str) -> tuple:
+    """(sha, subject) of the tip of the repo's default branch, or (None, "")."""
+    try:
+        raw = subprocess.check_output(
+            ["gh", "api", f"repos/{repo}/commits?per_page=1"],
+            text=True, stderr=subprocess.DEVNULL,
+        )
+        head = json.loads(raw)[0]
+    except (OSError, subprocess.CalledProcessError, ValueError, IndexError, KeyError):
+        return None, ""
+    subject = (head.get("commit", {}).get("message") or "").strip().splitlines()
+    return head.get("sha"), subject[0] if subject else ""
+
+
+def wait_for_running_builds(repo: str) -> None:
+    """Block until no ios-sideload-ipa run is queued or running.
+
+    Without this, fetching right after a push grabs the previous build's
+    artifact. Exits non-zero if the build we waited for did not succeed.
+    """
+    started = time.monotonic()
+    announced = set()
+    waited = False
+    while True:
+        runs = list_runs(repo)
+        active = [r for r in runs if r.get("status") in ACTIVE_STATUSES]
+        if not active:
+            break
+        waited = True
+        for run in active:
+            if run["databaseId"] not in announced:
+                announced.add(run["databaseId"])
+                print(f"Build in flight: run {run['databaseId']} ({run['status']}) "
+                      f"on {short_sha(run.get('headSha'))} — {run.get('url', '')}")
+        elapsed = int(time.monotonic() - started)
+        if elapsed >= WAIT_TIMEOUT_SECONDS:
+            sys.exit(f"Still {active[0]['status']} after {elapsed // 60} minutes. "
+                     f"Check CI yourself: {active[0].get('url', '')}")
+        print(f"  {active[0]['status']} for {elapsed}s, waiting {POLL_SECONDS}s "
+              f"(gives up after {WAIT_TIMEOUT_SECONDS // 60} min)...", flush=True)
+        time.sleep(POLL_SECONDS)
+
+    if not waited:
+        return
+    newest = runs[0] if runs else None
+    if newest and newest["databaseId"] in announced and newest.get("conclusion") != "success":
+        sys.exit(f"Run {newest['databaseId']} finished as {newest.get('conclusion')}, "
+                 f"so there is no new ipa: {newest.get('url', '')}")
+    print("Build finished.")
+
+
+def pick_run(repo: str) -> dict:
+    wait_for_running_builds(repo)
+    runs = list_runs(repo)
+    if not runs:
+        sys.exit(f"No {WORKFLOW} runs found in {repo}.")
+    successes = [r for r in runs if r.get("conclusion") == "success"]
+    if not successes:
+        sys.exit(f"No successful {WORKFLOW} run found in {repo}.")
+    chosen = successes[0]
+    if chosen["databaseId"] != runs[0]["databaseId"]:
+        newer = [r for r in runs if r.get("createdAt", "") > chosen.get("createdAt", "")]
+        print(f"\n!! {len(newer)} newer run(s) did not succeed "
+              f"({', '.join(str(r.get('conclusion')) for r in newer)}); "
+              f"falling back to the last successful build.")
+    return chosen
+
+
+def describe_run(repo: str, run: dict) -> None:
+    sha = run.get("headSha")
+    subject = commit_subject(repo, sha)
+    print("\nInstalling the ipa from:")
+    print(f"  run     {run['databaseId']}  ({run.get('createdAt', '')})  {run.get('url', '')}")
+    print(f"  commit  {short_sha(sha)} on {run.get('headBranch', '?')}"
+          + (f"  {subject}" if subject else ""))
+
+    tip_sha, tip_subject = default_branch_tip(repo)
+    if tip_sha and sha and tip_sha != sha:
+        print("\n!! This build is NOT the tip of the default branch.")
+        print(f"!!   built:  {short_sha(sha)} {subject}")
+        print(f"!!   tip:    {short_sha(tip_sha)} {tip_subject}")
+        print("!! Installing it anyway.")
+    print()
+
+
 def fetch_latest_ipa(repo: str, dest: Path) -> Path:
-    print(f"Fetching latest ipa from {repo} ({WORKFLOW})...")
-    run_id = subprocess.check_output(
-        ["gh", "run", "list", "--workflow", WORKFLOW, "-R", repo,
-         "--status", "success", "--limit", "1", "--json", "databaseId",
-         "--jq", ".[0].databaseId"],
-        text=True,
-    ).strip()
-    if not run_id:
-        sys.exit("No successful ios-sideload-ipa run found on GitHub.")
+    print(f"Fetching the ipa from {repo} ({WORKFLOW})...")
+    run = pick_run(repo)
+    describe_run(repo, run)
     subprocess.check_call(
-        ["gh", "run", "download", run_id, "-n", ARTIFACT, "-R", repo, "--dir", str(dest)]
+        ["gh", "run", "download", str(run["databaseId"]), "-n", ARTIFACT,
+         "-R", repo, "--dir", str(dest)]
     )
     ipas = list(dest.glob("*.ipa"))
     if not ipas:
         sys.exit("Downloaded artifact contained no ipa.")
-    print(f"Downloaded {ipas[0].name} (run {run_id}).")
+    print(f"Downloaded {ipas[0].name} (run {run['databaseId']}).")
     return ipas[0]
 
 
