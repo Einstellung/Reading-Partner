@@ -59,9 +59,31 @@ POLL_SECONDS = 15
 WAIT_TIMEOUT_SECONDS = 15 * 60
 
 
+# .env is gitignored, so it exists only in the main checkout — a git worktree
+# never gets a copy. Running this script from a worktree would otherwise report
+# missing credentials that are in fact sitting one directory tree away. The
+# common git dir points at the main checkout's .git from anywhere.
+def env_file() -> Path:
+    local = REPO_ROOT / ".env"
+    if local.exists():
+        return local
+    try:
+        common = Path(
+            subprocess.check_output(
+                ["git", "-C", str(REPO_ROOT), "rev-parse", "--git-common-dir"],
+                text=True, stderr=subprocess.DEVNULL,
+            ).strip()
+        )
+        if not common.is_absolute():
+            common = REPO_ROOT / common
+        return common.resolve().parent / ".env"
+    except Exception:
+        return local
+
+
 def load_env() -> dict:
     env = dict(os.environ)
-    envfile = REPO_ROOT / ".env"
+    envfile = env_file()
     if envfile.exists():
         for line in envfile.read_text().splitlines():
             line = line.strip()
