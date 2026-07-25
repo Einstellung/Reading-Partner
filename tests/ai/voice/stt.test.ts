@@ -42,7 +42,9 @@ test("parseTranscriptionResponse accepts { text }, a bare string, and nested sha
 });
 
 test("transcribe posts multipart and returns the parsed transcript", async () => {
-  let seen: { url: string; method: string; auth?: string; hasFile: boolean } | null = null;
+  // Definite-assignment: the fetch below must run, so an unset `seen` should
+  // blow up the assertion rather than be narrowed away as never-assigned.
+  let seen!: { url: string; method: string; auth?: string; hasFile: boolean };
   const fetchImpl: SttFetch = async (url, init) => {
     seen = {
       url,

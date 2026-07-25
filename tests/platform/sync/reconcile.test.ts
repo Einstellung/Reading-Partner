@@ -62,6 +62,16 @@ test("conflict: remote mtime newer wins (download)", () => {
   expect(plan.uploads).toEqual([]);
 });
 
+// The state file is rebuildable precisely because of this: losing it (loadState
+// falls back to an empty state on any read failure) degrades to comparing
+// mtimes, not to re-pushing every local file over the remote.
+test("no snapshot at all falls back to last-writer-wins, not a blanket re-push", () => {
+  const remote: Manifest = { old: { rev: 5, mtime: 100, size: 10 }, fresh: { rev: 5, mtime: 900, size: 10 } };
+  const plan = reconcile([L("old", 400), L("fresh", 400)], remote, {});
+  expect(plan.uploads).toEqual([{ path: "old", rev: 6, mtime: 400, size: 10 }]);
+  expect(plan.downloads).toEqual([{ path: "fresh", rev: 5, size: 10 }]);
+});
+
 test("a locally-deleted file (present in snapshot/remote, unchanged remote) is left alone", () => {
   const snap: Snapshot = { a: { rev: 2, mtime: 100, size: 10 } };
   const remote: Manifest = { a: { rev: 2, mtime: 100, size: 10 } };

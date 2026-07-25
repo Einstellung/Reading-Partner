@@ -161,7 +161,7 @@ test("stop aborts an in-flight content call and marks the run stopped", async ()
     content: (i) =>
       i === 1
         ? Promise.resolve("<h2>title</h2>")
-        : new Promise<string>((_, reject) => {
+        : new Promise<string>(() => {
             // the pipeline's stop signal reaches generateContent via opts.signal,
             // but the fake ignores it; simulate a hang that never resolves.
           }),

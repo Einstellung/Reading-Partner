@@ -4,6 +4,8 @@
 // The Tauri fs plugin is mocked with an in-memory file. Run: bun test.
 
 import { expect, mock, test } from "bun:test";
+// Type-only, so it is erased and never loads the module before mock.module runs.
+import type { Settings } from "../src/platform/app/settings";
 
 // In-memory backing for the mocked @tauri-apps/plugin-fs used by loadSettings.
 let fileContent: string | null = null;
@@ -48,7 +50,7 @@ test("loadSettings returns the defaults when nothing is persisted", async () => 
 });
 
 test("loadSettings round-trips a fully persisted object", async () => {
-  const saved = {
+  const saved: Settings = {
     defaultProviderId: "anthropic",
     defaultModelId: "claude",
     semanticScholarApiKey: "k",

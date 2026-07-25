@@ -11,7 +11,7 @@
 // is opaque to Drive (slashes are not path separators there). books/<hash>.pdf
 // are immutable content-addressed blobs, uploaded once and never overwritten.
 
-import { cleanTauriFetch } from "../app/tauri-fetch";
+import { cleanTauriFetch, type TauriFetch } from "../app/tauri-fetch";
 import type { Manifest, SyncBackend } from "./backend";
 import type { DriveIds } from "./state";
 
@@ -29,6 +29,8 @@ export interface DriveBackendDeps {
   getToken: () => Promise<string>;
   ids: DriveIds; // mutated in place as folders/files are discovered or created
   persistIds: () => Promise<void>;
+  // Injectable for tests; production always uses the Tauri http plugin wrapper.
+  fetchImpl?: TauriFetch;
 }
 
 // Escape a value for a Drive `q` search string (single-quoted).
@@ -63,7 +65,7 @@ export class DriveBackend implements SyncBackend {
     const headers = new Headers(init?.headers);
     headers.set("Authorization", `Bearer ${token}`);
     headers.set("Origin", "");
-    return cleanTauriFetch(url, { ...init, headers });
+    return (this.d.fetchImpl ?? cleanTauriFetch)(url, { ...init, headers });
   }
 
   private async ok(res: Response, what: string): Promise<Response> {
@@ -146,10 +148,18 @@ export class DriveBackend implements SyncBackend {
       this.ids.manifestFileId = id;
       await this.d.persistIds();
     }
+    // A failed download must propagate. "Empty" here is indistinguishable from
+    // "the remote holds nothing", and the engine writes reconcile's nextManifest
+    // (a copy of what it read) after the next upload — so one transient failure
+    // would rewrite manifest.json with only this device's changed files, and
+    // every entry it does not have locally silently drops out of the backup.
+    // Unparseable content still degrades to empty: that file cannot be repaired
+    // by retrying, and the next upload rebuilds it.
+    const bytes = await this.getMedia(id);
+    const text = new TextDecoder().decode(bytes).trim();
+    if (!text) return {};
     try {
-      const bytes = await this.getMedia(id);
-      const text = new TextDecoder().decode(bytes).trim();
-      return text ? (JSON.parse(text) as Manifest) : {};
+      return JSON.parse(text) as Manifest;
     } catch {
       return {};
     }

@@ -110,11 +110,11 @@ function makeBooks(localHashes: Record<string, string> = {}, listed?: string[]) 
 
 function makeEngine(over: Partial<EngineDeps> & { snapshot: Snapshot }) {
   const pulled: string[][] = [];
+  // Defaults first so `over` can override any of them, onPulled included.
   const deps: EngineDeps = {
-    backend: over.backend ?? makeBackend().backend,
-    fs: over.fs ?? makeFs().fs,
-    books: over.books ?? makeBooks().books,
-    snapshot: over.snapshot,
+    backend: makeBackend().backend,
+    fs: makeFs().fs,
+    books: makeBooks().books,
     onPulled: (p) => pulled.push(p),
     ...over,
   };
