@@ -56,6 +56,12 @@ export const VERTICAL_VELOCITY_SMOOTHING = 0.7;
 // looser end-of-document; smaller = closer to a hard stop.
 export const VERTICAL_BAND_LIMIT = 120;
 
+// The raw overshoot is what the spring works on, and it is not what is drawn —
+// the curve above has all but saturated well before this. Capping it keeps the
+// spring-back short and keeps a very deep pull from leaving a stretch of
+// dragging back that moves nothing. Higher = a longer, looser return.
+export const VERTICAL_BAND_OVERSHOOT_CAP = 360;
+
 // Spring-back after the finger lifts (or after the inertia is spent), quoted as
 // the fraction of the remaining overshoot kept per 16ms frame, plus the px it
 // snaps to rest under. Lower decay = a snappier return.
@@ -90,6 +96,7 @@ export interface VerticalGestureConfig {
   flingMinSpeed?: number; // px/ms below which an axis stops coasting
   velocitySmoothing?: number; // weight of the newest velocity sample
   bandLimit?: number; // px the band asymptotically approaches
+  bandOvershootCap?: number; // px of raw overshoot the spring may have to undo
   bandDecay?: number; // fraction of the overshoot kept per 16ms frame
   bandMinPx?: number; // overshoot px below which the band snaps to rest
   bandAbsorb?: number; // fraction of speed kept per frame while banded
@@ -105,6 +112,7 @@ function resolve(config: VerticalGestureConfig): Cfg {
     flingMinSpeed: VERTICAL_FLING_MIN_SPEED,
     velocitySmoothing: VERTICAL_VELOCITY_SMOOTHING,
     bandLimit: VERTICAL_BAND_LIMIT,
+    bandOvershootCap: VERTICAL_BAND_OVERSHOOT_CAP,
     bandDecay: VERTICAL_BAND_DECAY,
     bandMinPx: VERTICAL_BAND_MIN_PX,
     bandAbsorb: VERTICAL_BAND_ABSORB,
@@ -255,10 +263,11 @@ export function smoothVelocity(
 export function splitOvershoot(
   virtual: number,
   max: number,
+  cap: number = VERTICAL_BAND_OVERSHOOT_CAP,
 ): { scroll: number; over: number } {
   const scroll = clampScroll(virtual, max);
   if (max <= 0) return { scroll, over: 0 };
-  return { scroll, over: virtual - scroll };
+  return { scroll, over: Math.min(Math.max(virtual - scroll, -cap), cap) };
 }
 
 // The content offset an overshoot is worth: damped, so the end of the document
@@ -299,9 +308,10 @@ export function stepFlingAxis(
     bandDecay: number;
     bandMinPx: number;
     bandAbsorb: number;
+    bandOvershootCap: number;
   },
 ): { scroll: number; over: number; v: number; live: boolean } {
-  const split = splitOvershoot(scroll + over + v * dt, max);
+  const split = splitOvershoot(scroll + over + v * dt, max, cfg.bandOvershootCap);
   let nextOver = split.over;
   let nextV = v * flingDecayFactor(nextOver !== 0 ? cfg.bandAbsorb : cfg.flingDecay, dt);
   if (Math.abs(nextV) < cfg.flingMinSpeed) nextV = 0;
@@ -413,8 +423,16 @@ export function stepVertical(
         // container is scrollable that way (zoomed in / page wider than the
         // viewport), otherwise there is no range and the axis holds still.
         const before = s.over;
-        const y = splitOvershoot(s.startScrollTop - (input.y - s.startY), cfg.maxScrollTop);
-        const x = splitOvershoot(s.startScrollLeft - (input.x - s.startX), cfg.maxScrollLeft);
+        const y = splitOvershoot(
+          s.startScrollTop - (input.y - s.startY),
+          cfg.maxScrollTop,
+          cfg.bandOvershootCap,
+        );
+        const x = splitOvershoot(
+          s.startScrollLeft - (input.x - s.startX),
+          cfg.maxScrollLeft,
+          cfg.bandOvershootCap,
+        );
         s.over = { x: x.over, y: y.over };
         cmds.push({ type: "scrollTo", top: y.scroll, left: x.scroll });
         emitBandIfChanged(before);

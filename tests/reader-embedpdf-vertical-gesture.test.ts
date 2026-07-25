@@ -19,6 +19,7 @@ import {
   stepVertical,
   verticalNeedsFrames,
   VERTICAL_BAND_LIMIT,
+  VERTICAL_BAND_OVERSHOOT_CAP,
   VERTICAL_FLING_DECAY,
   VERTICAL_FLING_MIN_SPEED,
   VERTICAL_SCROLL_SLOP,
@@ -493,6 +494,13 @@ test("splitOvershoot: an axis with no range at all never bands", () => {
   // A document that fits the screen should sit still, not wobble.
   expect(splitOvershoot(-40, 0)).toEqual({ scroll: 0, over: 0 });
   expect(splitOvershoot(80, 0)).toEqual({ scroll: 0, over: 0 });
+});
+
+test("splitOvershoot: the raw overshoot is capped, so the spring is never long", () => {
+  // The drawn offset saturates well before the cap; what the cap bounds is how
+  // much the spring (and the drag back in) has to undo.
+  expect(splitOvershoot(-4000, 500).over).toBe(-VERTICAL_BAND_OVERSHOOT_CAP);
+  expect(splitOvershoot(9000, 500).over).toBe(VERTICAL_BAND_OVERSHOOT_CAP);
 });
 
 test("bandOffsetFor: opposite the overshoot, damped, and bounded by the limit", () => {
