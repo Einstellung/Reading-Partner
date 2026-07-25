@@ -30,7 +30,7 @@ import type {
 	TSchema,
 } from "@earendil-works/pi-ai";
 import { validateToolCall } from "@earendil-works/pi-ai";
-import { providers, resolveApiKey, toPiMessages, transportFor, type ChatMessage, type ProviderId } from "./providers";
+import { resolveCall, toPiMessages, type ChatMessage, type ProviderId } from "./providers";
 
 // An image block a tool can return alongside its text (e.g. view_figure hands
 // the model a cropped figure). `data` is bare base64, `mimeType` the MIME type;
@@ -269,30 +269,18 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
 	} = options;
 
 	try {
-		const provider = providers[providerId];
-		const model = provider.getModels().find((m) => m.id === modelId);
-		if (!model) throw new Error(`unknown model '${modelId}' for ${provider.name}`);
-
-		if (messages.some((m) => m.images?.length) && !model.input.includes("image")) {
-			onError(
-				`${model.name || modelId} can't read images. Switch to a vision-capable model to send pictures.`,
-			);
-			return;
-		}
-
-		const apiKey = await resolveApiKey(providerId);
+		const call = await resolveCall(providerId, modelId, messages, reasoning);
 
 		await runAgentLoop({
-			stream: (m, ctx, opts) => provider.streamSimple(m, ctx, opts),
-			model: model as Model<Api>,
-			apiKey,
+			stream: (m, ctx, opts) => call.provider.streamSimple(m, ctx, opts),
+			model: call.model,
+			apiKey: call.apiKey,
 			systemPrompt,
 			messages: toPiMessages(messages),
 			tools,
 			signal,
-			// Silently omit reasoning on models that don't support it.
-			reasoning: reasoning && model.reasoning ? reasoning : undefined,
-			transport: transportFor(providerId),
+			reasoning: call.reasoning,
+			transport: call.transport,
 			maxRounds,
 			onDelta,
 			onThinking,
