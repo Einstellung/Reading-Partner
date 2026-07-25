@@ -88,6 +88,19 @@ export interface PointerPlan {
   // a later drag of a selection handle is not stolen as a page turn. The
   // navigation lock is the one mode that does not: under it nothing selects text.
   longPressSelect: boolean;
+  // Whether the engine's pointer pipeline may watch this pointer MOVE. Under the
+  // navigation lock it may not. The engine does not read pointerType and its
+  // selection handler needs nothing but a move, so a stylus sliding down a page
+  // drags a text selection out under the scroll — the lock scrolls correctly and
+  // leaves a blue word behind it anyway. The down and the up still reach the
+  // engine, so a stationary tap under the lock keeps doing what it always did
+  // (dismiss an overlay, select an annotation); only the drag is taken away,
+  // which is exactly what the lock means.
+  //
+  // Blocked per pointer with stopPropagation, not with the interaction manager's
+  // global pause (docs/pitfall/38): pause is all-or-nothing and would also have
+  // to be undone before the tap could go through.
+  engineMayDrag: boolean;
 }
 
 export function planPointer(tool: ToolKind, pointer: PointerKind, fingerDraw: boolean): PointerPlan {
@@ -96,6 +109,7 @@ export function planPointer(tool: ToolKind, pointer: PointerKind, fingerDraw: bo
     action,
     pauseAtDown: tool === "annotate" && action === "scroll",
     longPressSelect: tool === "none" && action === "scroll",
+    engineMayDrag: tool !== "navlock",
   };
 }
 
@@ -154,6 +168,18 @@ export function multiTouchLatch(prev: boolean, fingers: number): boolean {
   if (fingers >= 2) return true;
   if (fingers === 0) return false;
   return prev;
+}
+
+// A pinch that has come down to its last finger. That finger takes the gesture
+// over as a one-finger pan — it is already on the glass and the content is
+// already following it, so waiting for the glass to empty would strand the
+// reader mid-zoom. 2 -> 3 -> 2 is not a handoff (still a multi-finger gesture),
+// and a pen holding the fingers dead is not one either: those fingers are inert
+// until they lift. The caller clears the multi-touch latch itself when this is
+// true; the latch alone cannot tell "one finger left" from "one finger left and
+// the host has picked it up".
+export function pinchHandsOff(prevMulti: boolean, fingers: number, penLock: boolean): boolean {
+  return prevMulti && !penLock && fingers === 1;
 }
 
 // The pen-priority latch. A stylus outranks every finger: the moment it lands,
