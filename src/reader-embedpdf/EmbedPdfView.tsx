@@ -49,8 +49,6 @@ import {
   routesAsContact,
   toolKindOf,
   pagedGestureTool,
-  type PointerPlan,
-  shouldCommitScroll,
   touchGestureMode,
   multiTouchLatch,
   fingerLockAfterPen,
@@ -58,6 +56,20 @@ import {
   centroidOf,
   shouldClearGestureSelection,
 } from "./touch-routing";
+import {
+  initVerticalState,
+  stepVertical,
+  type VerticalCommand,
+  type VerticalInput,
+  type VerticalState,
+} from "./vertical-gesture";
+import {
+  BAND_REST,
+  bandAtRest,
+  bandTransform,
+  stepBandSpring,
+  type BandOffset,
+} from "./rubber-band";
 import {
   TouchDebugOverlay,
   isTouchDebugEnabled,
@@ -328,17 +340,6 @@ interface PagedGestureCtx {
   turnToPage: ((pageNumber: number) => void) | null;
 }
 
-// Movement (CSS px) in any direction before a scroll-classified finger commits.
-const VERTICAL_SCROLL_SLOP = 6;
-// Spring-back of the paged rubber band: fraction of the remaining offset shed
-// per 16ms frame, and the px below which it snaps to rest.
-const BAND_SPRING_DECAY = 0.68;
-const BAND_SPRING_MIN_PX = 0.5;
-// Inertia decay per 16ms frame for the vertical fling, and the scrollTop speed
-// (px/ms) below which the fling stops.
-const VERTICAL_FLING_DECAY = 0.95;
-const VERTICAL_FLING_MIN_SPEED = 0.02;
-
 // Touch input router: a zero-size child inside the Viewport that grabs the
 // scroll container (via the viewport-element context) and routes pointer events
 // by device type and finger count — decisions CSS touch-action cannot make (it
@@ -378,12 +379,13 @@ const VERTICAL_FLING_MIN_SPEED = 0.02;
 // stroke's lead-in can leave ink; with no drawing tool active the pause waits
 // for the commit so a stationary tap still reaches the engine).
 //
-// Vertical (continuous) mode — the main path: a finger planned as "scroll" is
-// driven here (capture the pointer, follow the finger by setting scrollTop, then
-// a light inertia fling on release). Because the page divs carry
-// touch-action:none in every mode, native scroll is impossible over a page, so
-// the scroll is driven in JS. A finger planned as "draw" (annotation tool, no
-// stylus seen) is left alone and reaches the annotation layer.
+// Vertical (continuous) mode — the main path: a finger planned as "scroll" runs
+// the pure vertical machine (vertical-gesture.ts), which captures the pointer,
+// follows the finger by setting scrollTop/scrollLeft and coasts on release.
+// Because the page divs carry touch-action:none in every mode, native scroll is
+// impossible over a page, so the scroll is driven in JS. A finger planned as
+// "draw" (annotation tool, no stylus seen) is left alone and reaches the
+// annotation layer.
 //
 // Paged (horizontal flip) mode: runs the pure gesture machine (paged-gesture.ts)
 // on finger pointers — follow-finger drags set scrollLeft, a committed turn goes
@@ -441,25 +443,15 @@ function TouchInputRouter({
       let dragStartPage = 1;
       let lpTimer = 0;
       // Rubber band: a CSS translate on the scroll content, sprung back by rAF.
-      let bandX = 0;
-      let bandY = 0;
+      let band: BandOffset = BAND_REST;
       let bandRaf = 0;
 
       // --- vertical follow-finger scroll state ----------------------------
-      let vPhase: "idle" | "pending" | "scroll" = "idle";
-      let vId: number | null = null;
-      let vStartX = 0;
-      let vStartY = 0;
-      let vStartScrollLeft = 0;
-      let vStartScrollTop = 0;
-      let vLastX = 0;
-      let vLastY = 0;
-      let vLastT = 0;
-      // Finger velocity px/ms per axis (positive = moving right / down).
-      let vVelX = 0;
-      let vVelY = 0;
-      let vCapturedId: number | null = null;
+      // The machine holds the phase, the follow origin, the velocity and the
+      // inertia; this side owns only the rAF that drives the fling forward.
+      let vState: VerticalState = initVerticalState();
       let flingRaf = 0;
+      let flingLast = 0;
 
       const clearLp = () => {
         if (lpTimer) {
@@ -494,16 +486,13 @@ function TouchInputRouter({
         }
       };
       // --- paged rubber band ------------------------------------------------
-      // The band offsets the scroll content, not the scroll position: at
-      // fit-page there is nothing left to scroll, which is the whole point.
-      // It writes the same element the engine's pinch preview transforms, so it
-      // must never leave a CSS transition behind (that would lag a pinch) —
-      // the spring-back runs on rAF and clears the property when it lands.
+      // Offset and spring physics live in rubber-band.ts; this side owns the
+      // element and the rAF.
       const bandTarget = (): HTMLElement | null => el.firstElementChild as HTMLElement | null;
       const paintBand = () => {
         const t = bandTarget();
         if (!t) return;
-        t.style.transform = bandX === 0 && bandY === 0 ? "" : `translate3d(${bandX}px, ${bandY}px, 0)`;
+        t.style.transform = bandTransform(band);
       };
       const cancelBandSpring = () => {
         if (bandRaf) {
@@ -513,34 +502,27 @@ function TouchInputRouter({
       };
       const setBand = (x: number, y: number) => {
         cancelBandSpring();
-        bandX = x;
-        bandY = y;
+        band = { x, y };
         paintBand();
       };
       const clearBand = () => {
         cancelBandSpring();
-        if (bandX === 0 && bandY === 0) return;
-        bandX = 0;
-        bandY = 0;
+        if (bandAtRest(band)) return;
+        band = BAND_REST;
         paintBand();
       };
       const springBand = () => {
         cancelBandSpring();
         let last = performance.now();
         const step = (now: number) => {
-          const dt = Math.max(now - last, 1);
+          const dt = now - last;
           last = now;
-          const keep = Math.pow(BAND_SPRING_DECAY, dt / 16);
-          bandX *= keep;
-          bandY *= keep;
-          if (Math.abs(bandX) < BAND_SPRING_MIN_PX && Math.abs(bandY) < BAND_SPRING_MIN_PX) {
-            bandX = 0;
-            bandY = 0;
+          band = stepBandSpring(band, dt);
+          paintBand();
+          if (bandAtRest(band)) {
             bandRaf = 0;
-            paintBand();
             return;
           }
-          paintBand();
           bandRaf = requestAnimationFrame(step);
         };
         bandRaf = requestAnimationFrame(step);
@@ -636,28 +618,73 @@ function TouchInputRouter({
       const clampTop = (v: number) => Math.min(Math.max(v, 0), maxScrollTop());
       const maxScrollLeft = () => Math.max(0, el.scrollWidth - el.clientWidth);
       const clampLeft = (v: number) => Math.min(Math.max(v, 0), maxScrollLeft());
-      const cancelFling = () => {
+      const cancelFlingRaf = () => {
         if (flingRaf) {
           cancelAnimationFrame(flingRaf);
           flingRaf = 0;
         }
       };
-      const releaseVCapture = () => {
-        if (vCapturedId !== null) {
-          try {
-            el.releasePointerCapture(vCapturedId);
-          } catch {
-            // ignore
+
+      // --- vertical apply / feed -------------------------------------------
+      // The live scroll geometry the machine measures the follow against and
+      // clamps both the follow and the coast to.
+      const verticalGeometry = () => ({
+        scrollTop: el.scrollTop,
+        scrollLeft: el.scrollLeft,
+        maxScrollTop: maxScrollTop(),
+        maxScrollLeft: maxScrollLeft(),
+      });
+      const applyVertical = (cmds: VerticalCommand[], e?: PointerEvent) => {
+        for (const c of cmds) {
+          if (c.type === "pause") {
+            pauseEngine();
+          } else if (c.type === "resume") {
+            resumeEngine();
+          } else if (c.type === "dropSelection") {
+            dropGestureSelection();
+          } else if (c.type === "capture") {
+            try {
+              el.setPointerCapture(c.id);
+            } catch {
+              // Best effort — the pause is the real draw guard.
+            }
+          } else if (c.type === "releaseCapture") {
+            if (c.id !== null) {
+              try {
+                el.releasePointerCapture(c.id);
+              } catch {
+                // The pointer may already be gone; ignore.
+              }
+            }
+          } else if (c.type === "scrollTo") {
+            el.scrollTop = c.top;
+            el.scrollLeft = c.left;
+          } else if (c.type === "preventDefault") {
+            if (e?.cancelable) e.preventDefault();
+          } else if (c.type === "startFling") {
+            cancelFlingRaf();
+            flingLast = performance.now();
+            flingRaf = requestAnimationFrame(flingFrame);
+          } else if (c.type === "stopFling") {
+            cancelFlingRaf();
           }
-          vCapturedId = null;
         }
       };
-      const endVertical = () => {
-        resumeEngine();
-        releaseVCapture();
-        vPhase = "idle";
-        vId = null;
+      const feedVertical = (input: VerticalInput, e?: PointerEvent) => {
+        const r = stepVertical(vState, input, verticalGeometry());
+        vState = r.state;
+        applyVertical(r.commands, e);
       };
+      // One inertia frame. The machine decides when the coast is over; this side
+      // only keeps asking for frames while it is not (hoisted so applyVertical
+      // above can schedule it).
+      function flingFrame(now: number): void {
+        flingRaf = 0;
+        const dt = now - flingLast;
+        flingLast = now;
+        feedVertical({ type: "flingFrame", dt });
+        if (vState.fling) flingRaf = requestAnimationFrame(flingFrame);
+      }
       // Everything the two one-finger machines hold: inertia, the long-press
       // timer, the paged machine's phase, the rubber band, the pointer capture
       // and the engine pause. Dropped as one unit, unconditionally — a caller
@@ -665,7 +692,6 @@ function TouchInputRouter({
       // still the live layout) would leave a phase behind that the next gesture
       // inherits.
       const resetGestures = () => {
-        cancelFling();
         clearLp();
         state = initGestureState();
         captured = false;
@@ -673,7 +699,7 @@ function TouchInputRouter({
         // element the pinch preview also writes would offset the zoom anchor.
         clearBand();
         releaseCapture();
-        endVertical();
+        feedVertical({ type: "reset" });
       };
       ctx.current.resetGestures = resetGestures;
 
@@ -682,7 +708,6 @@ function TouchInputRouter({
       // — from here on the fingers are blocked one pointer at a time, which
       // leaves a pen free to keep drawing.
       const suspendFingerGesture = () => {
-        cancelFling();
         clearLp();
         if (
           ctx.current.paged &&
@@ -711,92 +736,6 @@ function TouchInputRouter({
         }
         panBase = c;
       };
-      const startFling = () => {
-        // Each scroll axis coasts opposite its finger axis. Drive both until both
-        // fall below the stop speed or hit their edge.
-        let vx = -vVelX;
-        let vy = -vVelY;
-        if (Math.abs(vx) < VERTICAL_FLING_MIN_SPEED && Math.abs(vy) < VERTICAL_FLING_MIN_SPEED) return;
-        let last = performance.now();
-        const step = (now: number) => {
-          const dt = Math.max(now - last, 1);
-          last = now;
-          const nextTop = clampTop(el.scrollTop + vy * dt);
-          const nextLeft = clampLeft(el.scrollLeft + vx * dt);
-          const topStuck = nextTop === el.scrollTop;
-          const leftStuck = nextLeft === el.scrollLeft;
-          el.scrollTop = nextTop;
-          el.scrollLeft = nextLeft;
-          const decay = Math.pow(VERTICAL_FLING_DECAY, dt / 16);
-          vx *= decay;
-          vy *= decay;
-          const yLive = !topStuck && Math.abs(vy) > VERTICAL_FLING_MIN_SPEED;
-          const xLive = !leftStuck && Math.abs(vx) > VERTICAL_FLING_MIN_SPEED;
-          if (yLive || xLive) {
-            flingRaf = requestAnimationFrame(step);
-          } else {
-            flingRaf = 0;
-          }
-        };
-        flingRaf = requestAnimationFrame(step);
-      };
-
-      const onVerticalDown = (e: PointerEvent, plan: PointerPlan) => {
-        if (plan.action !== "scroll") {
-          return; // this finger draws — leave it to the annotation layer
-        }
-        cancelFling();
-        vPhase = "pending";
-        vId = e.pointerId;
-        vStartX = e.clientX;
-        vStartY = e.clientY;
-        vStartScrollLeft = el.scrollLeft;
-        vStartScrollTop = el.scrollTop;
-        vLastX = e.clientX;
-        vLastY = e.clientY;
-        vLastT = e.timeStamp;
-        vVelX = 0;
-        vVelY = 0;
-      };
-      const onVerticalMove = (e: PointerEvent) => {
-        if (vId !== e.pointerId || vPhase === "idle") return;
-        const dt = Math.max(e.timeStamp - vLastT, 1);
-        vVelX = (e.clientX - vLastX) / dt;
-        vVelY = (e.clientY - vLastY) / dt;
-        vLastX = e.clientX;
-        vLastY = e.clientY;
-        vLastT = e.timeStamp;
-        if (vPhase === "pending") {
-          // This finger is already classified as scroll, so a move past the slop
-          // in ANY direction commits it — a horizontal pan must never reach the
-          // drawing layer. Direction only picks the axis below.
-          if (!shouldCommitScroll(e.clientX - vStartX, e.clientY - vStartY, VERTICAL_SCROLL_SLOP)) return;
-          vPhase = "scroll";
-          pauseEngine();
-          dropGestureSelection();
-          try {
-            el.setPointerCapture(e.pointerId);
-            vCapturedId = e.pointerId;
-          } catch {
-            // Best effort — pause is the real draw guard.
-          }
-        }
-        if (vPhase === "scroll") {
-          // Both axes follow the finger; scrollLeft only moves when the container
-          // is horizontally scrollable (zoomed in / page wider than viewport),
-          // otherwise clampLeft pins it and that axis holds still.
-          el.scrollTop = clampTop(vStartScrollTop - (e.clientY - vStartY));
-          el.scrollLeft = clampLeft(vStartScrollLeft - (e.clientX - vStartX));
-          if (e.cancelable) e.preventDefault();
-        }
-      };
-      const onVerticalUp = (e: PointerEvent, cancelled: boolean) => {
-        if (vId !== e.pointerId) return;
-        const wasScroll = vPhase === "scroll";
-        endVertical();
-        if (wasScroll && !cancelled) startFling();
-      };
-
       // --- probe -----------------------------------------------------------
       const publishDebug = () => {
         if (!isTouchDebugEnabled()) return;
@@ -834,7 +773,7 @@ function TouchInputRouter({
       // like any other and never gets here.
       const onPenDown = (e: PointerEvent) => {
         trackContact(e);
-        cancelFling();
+        feedVertical({ type: "cancelFling" });
         if (fingers.size > 0) suspendFingerGesture();
         penLock = fingerLockAfterPen(penLock, true, fingers.size);
         resetPanBase();
@@ -873,8 +812,8 @@ function TouchInputRouter({
         // One plan for both layouts and both devices: what this pointer is for,
         // and whether the engine has to be shut off before it can mark the page.
         const plan = planPointer(tool, kind, ctx.current.penSeen);
-        if (plan.pauseAtDown) pauseEngine();
         if (ctx.current.paged) {
+          if (plan.pauseAtDown) pauseEngine();
           feed({ type: "pointerdown", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp });
           clearLp();
           // The long press hands off to native text selection: only with no tool
@@ -886,7 +825,16 @@ function TouchInputRouter({
             lpTimer = window.setTimeout(() => feed({ type: "longpress", id }), PAGED_LONG_PRESS_MS);
           }
         } else {
-          onVerticalDown(e, plan);
+          // The vertical machine takes the plan with the pointer: a "draw" plan
+          // never enters it, an annotation tool's plan pauses the engine there.
+          feedVertical({
+            type: "pointerdown",
+            id: e.pointerId,
+            x: e.clientX,
+            y: e.clientY,
+            t: e.timeStamp,
+            plan,
+          });
         }
         // Only a down the engine actually received owes it an up.
         if (!enginePaused) engineSaw.add(e.pointerId);
@@ -911,7 +859,10 @@ function TouchInputRouter({
         if (ctx.current.paged) {
           feed({ type: "pointermove", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp }, e);
         } else {
-          onVerticalMove(e);
+          feedVertical(
+            { type: "pointermove", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp },
+            e,
+          );
         }
       };
 
@@ -946,7 +897,11 @@ function TouchInputRouter({
             e,
           );
         } else {
-          onVerticalUp(e, cancelled);
+          feedVertical(
+            cancelled
+              ? { type: "pointercancel", id: e.pointerId }
+              : { type: "pointerup", id: e.pointerId },
+          );
         }
         multiTouch = multiTouchLatch(multiTouch, fingers.size);
         penLock = fingerLockAfterPen(penLock, false, fingers.size);
@@ -965,10 +920,9 @@ function TouchInputRouter({
       el.addEventListener("pointercancel", onCancel, { capture: true });
       return () => {
         clearLp();
-        cancelFling();
         clearBand();
         releaseCapture();
-        endVertical();
+        feedVertical({ type: "reset" });
         ctx.current.setTouchLock = null;
         ctx.current.resetGestures = null;
         el.style.touchAction = "";
