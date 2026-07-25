@@ -26,7 +26,9 @@ export interface TopicMaterial {
 }
 
 // Max pages one read_pages call may pull, so the model can't dump a whole book.
-const MAX_PAGES = 10;
+// Exported because a tool description has to state the same number formatPages
+// enforces.
+export const MAX_PAGES = 10;
 const SEARCH_LIMIT = 8;
 
 // A 1-based, inclusive page range from one book, capped at MAX_PAGES and clamped

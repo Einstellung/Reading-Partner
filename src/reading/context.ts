@@ -6,11 +6,9 @@
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../ai/agent";
 import { chapterAt, textAround } from "../fulltext/query";
-import { formatPages, formatSearch, type TopicMaterial } from "../fulltext/format";
+import { formatPages, formatSearch, MAX_PAGES, type TopicMaterial } from "../fulltext/format";
 import type { Fulltext } from "../fulltext/types";
 
-// Max pages one read_pages call may pull, so the model can't dump a whole book.
-const MAX_PAGES = 10;
 const SURROUND_RADIUS = 200;
 const SURROUND_MAX = 700;
 
