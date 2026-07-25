@@ -22,6 +22,12 @@
 // few px under the finger and returns, so "nothing to scroll here" is felt
 // instead of the screen appearing frozen.
 
+// The damped follow lives with the rest of the band physics (vertical mode uses
+// the same curve). Re-exported here because it is part of this machine's
+// vocabulary and its callers/tests have always read it from here.
+import { rubberBand } from "./rubber-band";
+export { rubberBand };
+
 export type GestureTool = "pointer" | "pen";
 
 export interface PagedGestureConfig {
@@ -70,7 +76,10 @@ function resolve(config: PagedGestureConfig): Cfg {
 }
 
 export type GestureInput =
-  | { type: "pointerdown"; id: number; x: number; y: number; t: number }
+  // `takeover` marks the finger a two-finger pinch left behind: it is already on
+  // the glass and already moving the page, so on a magnified page it becomes a
+  // pan at once instead of asking for another slop's worth of movement.
+  | { type: "pointerdown"; id: number; x: number; y: number; t: number; takeover?: boolean }
   | { type: "pointermove"; id: number; x: number; y: number; t: number }
   | { type: "pointerup"; id: number; x: number; y: number; t: number }
   | { type: "pointercancel"; id: number }
@@ -173,16 +182,6 @@ export function edgeOf(x: number, width: number, edgeZone: number): "left" | "ri
   return null;
 }
 
-// Damped follow for a drag with nowhere to go: grows with the finger but never
-// past `limit`, so the page visibly gives a little and springs back. Sign is the
-// finger's; magnitude is limit/2 at a drag of one limit, and asymptotic after.
-export function rubberBand(delta: number, limit: number): number {
-  if (limit <= 0) return 0;
-  const d = Math.abs(delta);
-  const damped = limit * (1 - 1 / (d / limit + 1));
-  return delta < 0 ? -damped : damped;
-}
-
 // Which page a horizontal drag is reaching for, and whether it exists: -1 the
 // previous page (finger moving right), +1 the next (finger moving left).
 export function turnDirection(dx: number): -1 | 1 {
@@ -258,6 +257,13 @@ export function stepGesture(
         s.vx = 0;
         s.vLastX = input.x;
         s.vLastT = input.t;
+        // The survivor of a pinch on a magnified page keeps panning without a
+        // pause. At fit-page there is nothing to pan, so it waits for the slop
+        // like any other finger and can still turn the page.
+        if (input.takeover && cfg.zoomedIn) {
+          s.phase = "pan";
+          cmds.push({ type: "capture", id: input.id });
+        }
       } else {
         // A second finger means pinch-zoom (engine wrapper's job) or multi-touch
         // we don't drive — yield. Anything mid-flight springs back.
