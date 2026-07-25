@@ -13,7 +13,7 @@ import { getViewState, hashPath, saveViewState, withClassroom } from "./platform
 import { importBook, libraryHas, readLibraryBook } from "./platform/app/library";
 import { migrateBookLive } from "./platform/app/migrate";
 import { ensureFulltext, onFulltextError, type Fulltext } from "./fulltext";
-import Sidebar, { type SidebarTab } from "./components/reader/Sidebar";
+import Sidebar, { type SidebarTab } from "./ui/components/reader/Sidebar";
 import { annotationPage, toolStatusLabel } from "./reading/context";
 import {
   ANNOTATION_COLORS,
@@ -81,7 +81,7 @@ import {
   type NotesSnapshot,
 } from "./reading/notes";
 import type { NotesPipeline } from "./reading/notes/pipeline";
-import InfoHome, { type HomeScreen } from "./components/info/InfoHome";
+import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import {
   distillThread,
   getLastDistillation,
@@ -93,7 +93,7 @@ import {
 import { logEvent } from "./platform/app/events";
 import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
 import EmbedReaderPane from "./reading/engine/EmbedReaderPane";
-import { CitationContext, FigureContext, type FigureHost } from "./components/common/Markdown";
+import { CitationContext, FigureContext, type FigureHost } from "./ui/components/common/Markdown";
 import {
   clearFigureCache,
   ensureFigures,
@@ -102,22 +102,22 @@ import {
   type Figure,
   type FiguresIndex,
 } from "./reading/figures";
-import PrepPanel from "./components/reader/PrepPanel";
-import NotesPanel from "./components/reader/NotesPanel";
-import MemoryPanel from "./components/reader/MemoryPanel";
-import ReaderTopBar from "./components/reader/ReaderTopBar";
-import AnnotationPopup from "./components/reader/AnnotationPopup";
-import CallBubble from "./components/chat/CallBubble";
-import CallView from "./components/chat/CallView";
-import ReadingPipCard from "./components/chat/ReadingPipCard";
-import ChatPipCard from "./components/chat/ChatPipCard";
-import SettingsView from "./components/SettingsView";
+import PrepPanel from "./ui/components/reader/PrepPanel";
+import NotesPanel from "./ui/components/reader/NotesPanel";
+import MemoryPanel from "./ui/components/reader/MemoryPanel";
+import ReaderTopBar from "./ui/components/reader/ReaderTopBar";
+import AnnotationPopup from "./ui/components/reader/AnnotationPopup";
+import CallBubble from "./ui/components/chat/CallBubble";
+import CallView from "./ui/components/chat/CallView";
+import ReadingPipCard from "./ui/components/chat/ReadingPipCard";
+import ChatPipCard from "./ui/components/chat/ChatPipCard";
+import SettingsView from "./ui/components/SettingsView";
 import { buildReadingTurn } from "./reading/turn";
-import { BTN, BTN_PRIMARY } from "./components/common/buttons";
-import { appendRunningTool, resolveToolStatus } from "./components/common/toolTrace";
-import LibraryScreen from "./components/library/LibraryScreen";
-import Toast, { useToasts } from "./components/common/Toast";
-import type { Annotation as PopupAnnotation, PendingImage, ToolStatus, ToolType } from "./components/common/types";
+import { BTN, BTN_PRIMARY } from "./ui/components/common/buttons";
+import { appendRunningTool, resolveToolStatus } from "./ui/components/common/toolTrace";
+import LibraryScreen from "./ui/components/library/LibraryScreen";
+import Toast, { useToasts } from "./ui/components/common/Toast";
+import type { Annotation as PopupAnnotation, PendingImage, ToolStatus, ToolType } from "./ui/components/common/types";
 
 // The AI pen maps to the engine's underline tool in a fixed purple (the palette's
 // Purple). Owning this one color for the AI pen is a v1 implementation

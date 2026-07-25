@@ -15,7 +15,7 @@ import {
 import { writeTextAtomic } from "./atomic-fs";
 
 // A durable message part (the persisted projection of the UI's ChatPart, in
-// src/components/chatParts.ts). Only durable parts reach disk: text, and a card
+// src/ui/components/chatParts.ts). Only durable parts reach disk: text, and a card
 // whose kind is worth keeping (the confirm card, the briefing-ready card). The
 // tool trace and the transient briefing progress/failure cards are never stored.
 // The card payload is kept opaque here so persistence does not depend on the info

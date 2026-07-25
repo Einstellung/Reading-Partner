@@ -11,19 +11,17 @@
 //              never reach up into a domain, because that is how ai/ ended up
 //              in a cycle with four of them (reading-turn assembly used to live
 //              there).
-//   domain     one product area each, free to use platform, capability and each
-//              other, as long as the graph stays acyclic.
-//   ui         React components (components/).
+//   domain     one product area each (info/, memory/, reading/ and the units
+//              inside it), free to use platform, capability and each other, as
+//              long as the graph stays acyclic.
+//   ui         React components (ui/components).
 //   shell      App.tsx, the one place that wires ui to domains.
 //   entry      main.tsx and smoke/, which pick what to boot; they may import
 //              anything.
 //
-// A planned regrouping folds these directories into platform/ (done), ai/
-// (done), memory/, fulltext/, reading/ (absorbing prep, notes, figures, slides,
-// reader-embedpdf), info/ and ui/ (components). Grouping must not cost the
-// graph its resolution, so a LAYER key may name a unit inside a grouping
-// directory ("platform/app") and the graph keeps a node per unit. When the
-// regrouping lands, this test needs edits to LAYER only.
+// Grouping must not cost the graph its resolution: a LAYER key may name a unit
+// inside a grouping directory ("reading/prep"), and every such unit stays a node
+// of its own, so the edges between reading's parts are still checked.
 
 import { expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -56,7 +54,8 @@ const LAYER: Record<string, Layer> = {
   "reading/prep": "domain",
   "reading/slides": "domain",
 
-  components: "ui",
+  ui: "ui",
+  "ui/components": "ui",
   "App.tsx": "shell",
 
   "main.tsx": "entry",
@@ -322,7 +321,7 @@ test("capability layers import no domain, ui or shell code", () => {
   expect(bad).toEqual([]);
 });
 
-test("components/ and App.tsx are imported only by the shell and the entry point", () => {
+test("ui/components and App.tsx are imported only by the shell and the entry point", () => {
   const bad = DECLARED.filter(
     (e) => UI_ONLY.includes(e.to) && !["ui", "shell", "entry"].includes(LAYER[e.from]),
   );

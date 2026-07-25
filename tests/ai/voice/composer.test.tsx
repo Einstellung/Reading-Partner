@@ -1,11 +1,11 @@
-// The composer's voice-input default (src/components/chat.tsx). Voice is a base
+// The composer's voice-input default (src/ui/components/chat.tsx). Voice is a base
 // capability: the mic renders unless a caller explicitly opts out. Covered two
 // ways — the pure prop resolver, and a static render that proves the mic button
 // is actually in (or out of) the DOM. Run: bun test.
 
 import { test, expect } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Composer, resolveComposerVoice } from "../../../src/components/chat/chat";
+import { Composer, resolveComposerVoice } from "../../../src/ui/components/chat/chat";
 
 // The mic button's title/aria-label; its presence in the markup means the mic
 // rendered.
