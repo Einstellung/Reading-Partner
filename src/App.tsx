@@ -12,17 +12,9 @@ import { onCorruptFile } from "./app/atomic-fs";
 import { getViewState, hashPath, saveViewState, withClassroom } from "./app/storage";
 import { importBook, libraryHas, readLibraryBook } from "./app/library";
 import { migrateBookLive } from "./app/migrate";
-import { chapterAt, ensureFulltext, getFulltext, onFulltextError, type Fulltext } from "./fulltext";
+import { ensureFulltext, getFulltext, onFulltextError, type Fulltext } from "./fulltext";
 import Sidebar, { type SidebarTab } from "./components/reader/Sidebar";
-import {
-  annotationPage,
-  buildReadingTools,
-  notesOverviewSection,
-  surroundingText,
-  toolStatusLabel,
-  type AnnotationLite,
-  type TopicMaterial,
-} from "./ai/reading-context";
+import { annotationPage, toolStatusLabel } from "./ai/reading-context";
 import {
   ANNOTATION_COLORS,
   deleteAnnotations,
@@ -62,8 +54,7 @@ import {
 import { initSync, onSyncPulled } from "./sync";
 import { compressImage, compressImageData, type CompressedImage } from "./ai/image-utils";
 import { isTauri, readClipboardImage } from "./app/clipboard";
-import { DEFAULT_SETTINGS, languageInstruction, loadSettings, onSettingsSaveError, saveSettings, toReasoning, type Settings } from "./app/settings";
-import { buildSystemPrompt, readerProfileSection, type BooklistItem } from "./app/context";
+import { DEFAULT_SETTINGS, loadSettings, onSettingsSaveError, saveSettings, toReasoning, type Settings } from "./app/settings";
 import { buildGlossary } from "./voice";
 import {
   installFetchBridge,
@@ -74,15 +65,9 @@ import {
   type ProviderInfo,
 } from "./ai/aiClient";
 import {
-  ADD_SOURCE_PROMPT,
-  buildClassroomSystemPrompt,
-  buildClassroomTools,
-  buildSourceTools,
   chapterIndexForPage,
   getPrepPipeline,
   hasPrepState,
-  paperFulltextHash,
-  papersForChapter,
   locateQuote,
   parseNote,
   peekPrepPipeline,
@@ -91,7 +76,6 @@ import {
   type PrepSnapshot,
 } from "./prep";
 import type { PrepPipeline } from "./prep/pipeline";
-import type { ClassroomNote } from "./prep/classroom";
 import {
   getNotesPipeline,
   hasNotesState,
@@ -130,14 +114,9 @@ import { SourcesPage } from "./components/info/SourcesPage";
 import { ArticleView } from "./components/info/ArticleView";
 import { InfoCall, type InfoCallAnchor } from "./components/info/InfoCall";
 import {
-  assembleIdentity,
-  buildMemorySnapshot,
-  buildMemoryTools,
   distillThread,
   getLastDistillation,
   getMemoryAdapter,
-  memoryPromptSection,
-  notifyMemoryChange,
   onMemoryChange,
   type DistillAnnotation,
   type MemoryEntry,
@@ -148,8 +127,6 @@ import EmbedReaderPane from "./reader-embedpdf/EmbedReaderPane";
 import { setTouchDebugEnabled } from "./reader-embedpdf/touch-debug";
 import { CitationContext, FigureContext, type FigureHost } from "./components/common/Markdown";
 import {
-  buildFigureCatalog,
-  buildFigureTools,
   clearFigureCache,
   ensureFigures,
   findFigureById,
@@ -178,12 +155,11 @@ import CallView from "./components/chat/CallView";
 import ReadingPipCard from "./components/chat/ReadingPipCard";
 import ChatPipCard from "./components/chat/ChatPipCard";
 import SettingsView from "./components/SettingsView";
+import { buildReadingTurn } from "./ai/reading-turn";
 import { BTN, BTN_PRIMARY, BTN_SM, BTN_SM_DANGER } from "./components/common/buttons";
 import Toast, { useToasts } from "./components/common/Toast";
 import type { Annotation as PopupAnnotation, PendingImage, ToolStatus, ToolType } from "./components/common/types";
 
-// Auto-explanation kickoff (docs/03: the bubble starts explaining, unprompted).
-const EXPLAIN_KICKOFF = "Please explain the passage I just marked, using the reading context above.";
 // The AI pen maps to the engine's underline tool in a fixed purple (the palette's
 // Purple). Owning this one color for the AI pen is a v1 implementation
 // convenience, not a semantic in the color palette; the host identifies AI-pen
@@ -191,12 +167,6 @@ const EXPLAIN_KICKOFF = "Please explain the passage I just marked, using the rea
 const AI_PEN_COLOR = "#a28ae5";
 // Cap on images attached to one chat turn (docs/03: paste screenshots to ask).
 const MAX_PENDING_IMAGES = 3;
-// Replayed thread history is trimmed to this many messages per turn; crossing
-// the cap fires the fallback memory distillation before older turns fall out
-// of context (docs/02: hangup is the main trigger, trimming the backstop).
-const HISTORY_KEEP = 40;
-// The trim-triggered distillation re-fires only after this many new messages.
-const TRIM_DISTILL_MIN_NEW = 20;
 // Coalesce bursts of annotation-created events before re-evaluating the notes
 // highlight frontier (docs/14).
 const AUTO_NOTES_DEBOUNCE = 4000;
@@ -1094,215 +1064,31 @@ export default function App() {
       // current book's extraction may still be running; await it so the AI can
       // see the page. Thread images (stored as filenames) are read back too.
       const currentFulltext = (await currentFulltextRef.current) ?? null;
-      const { topicId, topicName, fileName, pageLabel, pageIndex, files } = ctxRef.current;
-      const materials = await gatherTopicMaterials(
-        files,
+      const figures = (await currentFiguresRef.current)?.figures ?? [];
+      const turn = await buildReadingTurn({
         bookId,
-        currentFulltext,
-        [...annsRef.current.values()],
-      );
-      // The book-level thread (top-bar AI button) has no mark: its position is
-      // wherever the reader currently is, and it carries no selection-derived
-      // context (marked passage / surrounding text).
-      const isBook = annotationId === "";
-      const currentPage = pageIndex !== null ? pageIndex + 1 : null;
-      const page = isBook
-        ? currentPage
-        : annotationPage(ann as { position?: { pageIndex?: number } } | undefined);
-      const chapterTitle =
-        currentFulltext && page ? chapterAt(currentFulltext, page)?.title ?? null : null;
-      const surrounding =
-        !isBook && currentFulltext && page ? surroundingText(currentFulltext, page) : "";
-      const booklist: BooklistItem[] = materials
-        .filter((m) => m.path !== bookId)
-        .map((m) => ({
-          label: m.label,
-          pageCount: m.fulltext?.pages.length ?? 0,
-          annotationCount: m.annotations.length,
-          fulltextAvailable: m.fulltext?.status === "ok",
-          isCurrent: false,
-        }));
-      const selectionText = typeof ann?.text === "string" ? ann.text : "";
-      const selectionComment = typeof ann?.comment === "string" ? ann.comment : undefined;
-
-      // Classroom mode swaps the context assembly (docs/09): the whole survey
-      // rides in a stable prompt prefix, this chapter's prep notes follow, and
-      // paper tools join the M6 reading tools. Companion mode is untouched.
-      let systemPrompt: string;
-      let tools = buildReadingTools({ currentFulltext, materials });
-      // Per-topic memory (M8): the memory tools join the same loop as the
-      // reading tools; the opening snapshot rides the system prompt below.
-      let memorySection = "";
-      if (topicId) {
-        const memory = getMemoryAdapter(topicId);
-        const observations = await memory.listObservations().catch((): MemoryEntry[] => []);
-        tools = [...tools, ...buildMemoryTools(memory, { onWrite: () => notifyMemoryChange(topicId) })];
-        memorySection = memoryPromptSection(buildMemorySnapshot(observations), true);
-      }
-      // Figure catalog + view_figure tool (M9): the model can cite figures as
-      // [fig:N] (rendered inline in chat) and open one to actually see it.
-      const figuresIndex = (await currentFiguresRef.current)?.figures ?? [];
-      const figureCatalog = figuresIndex.length
-        ? buildFigureCatalog(figuresIndex, { currentPage: page ?? currentPage ?? null })
-        : "";
-      if (figuresIndex.length) {
-        const supportsImages = modelSupportsImages(
-          s.defaultProviderId as ProviderId,
-          s.defaultModelId as string,
-        );
-        const buf = bufferRef.current;
-        const figHash = bookId;
-        tools = [
-          ...tools,
-          ...buildFigureTools({
-            figures: figuresIndex,
-            modelSupportsImages: supportsImages,
-            renderImage: async (fig) => {
-              if (!buf) return null;
-              const r = await renderFigure(figHash, buf, fig, "view");
-              return r ? { base64: r.base64, mimeType: r.mimeType } : null;
-            },
-          }),
-        ];
-      }
-      const prepState = pipelineRef.current?.snapshot().state ?? null;
-
-      // Link ingestion (docs/09): when a prep pipeline exists for this book, the
-      // model can ingest a user-pasted URL with add_source and read it with the
-      // paper tools — in companion mode too, so "compare this link with ch.3"
-      // works outside the classroom. Classroom mode wires the paper tools below
-      // with its own prompt; here we add them for companion mode.
-      const livePipeline = pipelineRef.current;
-      let canIngestUrl = false;
-      if (livePipeline && currentFulltext?.status === "ok") {
-        const surveyHash = bookId;
-        tools = [
-          ...tools,
-          ...buildSourceTools({
-            ingest: async (url) => {
-              const paper = await livePipeline.ingestSource(url);
-              const ft = await getFulltext(paperFulltextHash(surveyHash, paper.slug));
-              const chars = ft ? ft.pages.reduce((n, pg) => n + pg.length, 0) : 0;
-              return {
-                slug: paper.slug,
-                title: paper.title,
-                kind: paper.kind ?? "pdf",
-                pages: ft?.pages.length ?? paper.pages ?? 0,
-                chars,
-                status: paper.status,
-                error: paper.error,
-              };
-            },
-          }),
-        ];
-        canIngestUrl = true;
-        if (!classroomRef.current) {
-          tools = [
-            ...tools,
-            ...buildClassroomTools(() => livePipeline.snapshot().state ?? prepState!),
-          ];
-        }
-      }
-
-      if (classroomRef.current && currentFulltext?.status === "ok") {
-        const here = page ?? (pageIndex !== null ? pageIndex + 1 : 1);
-        const chapterIdx = prepState ? chapterIndexForPage(prepState.chapters, here) : 1;
-        const notePapers = prepState ? papersForChapter(prepState.papers, chapterIdx) : [];
-        const notes = (
-          await Promise.all(
-            notePapers.map(async (p): Promise<ClassroomNote | null> => {
-              const raw = await readPrepNote(bookId, p.slug);
-              return raw ? { slug: p.slug, title: p.title, body: parseNote(raw).body } : null;
-            }),
-          )
-        ).filter((n): n is ClassroomNote => n !== null);
-        if (prepState) {
-          tools = [...tools, ...buildClassroomTools(() => pipelineRef.current?.snapshot().state ?? prepState)];
-        }
-        systemPrompt = buildClassroomSystemPrompt({
-          topicName,
-          surveyName: fileName,
-          fulltext: currentFulltext,
-          pageLabel,
-          chapterTitle,
-          selectionText,
-          selectionComment,
-          notes,
-          prep: prepState,
-          hasTools: tools.length > 0,
-          figureCatalog,
-        });
-        // Classroom mode shares the AI output-language setting; the companion
-        // prompt gets it inside buildSystemPrompt.
-        const lang = languageInstruction(s.aiLanguage);
-        if (lang) systemPrompt += "\n\n" + lang;
-      } else {
-        systemPrompt = buildSystemPrompt({
-          topicName,
-          fileName,
-          pageLabel,
-          selectionText,
-          selectionComment,
-          chapterTitle,
-          surroundingText: surrounding,
-          fulltextAvailable: currentFulltext?.status === "ok",
-          materials: booklist,
-          figureCatalog,
-          hasTools: tools.length > 0,
-          bookLevel: isBook,
-          aiLanguage: s.aiLanguage,
-        });
-      }
-      if (memorySection) systemPrompt += "\n\n" + memorySection;
-      // The cross-scenario user profile: who the companion is reading with, so it
-      // pitches explanation depth to their background. Empty profile → no section.
-      const profileSection = readerProfileSection(await assembleIdentity().catch(() => ""));
-      if (profileSection) systemPrompt += "\n\n" + profileSection;
-      // The whole-book outline from the reader's notes (docs/14), when they exist.
-      const notesOverview = notesOverviewSection(await readOverviewNote(bookId));
-      if (notesOverview) systemPrompt += "\n\n" + notesOverview;
-      if (canIngestUrl) systemPrompt += "\n\n" + ADD_SOURCE_PROMPT;
-
-      const threadMsgs = getThread(bookId, threadId)?.messages ?? [];
-      const prior = await Promise.all(
-        threadMsgs.map(async (m) => ({
-          role: m.role,
-          text: m.text,
-          images: m.images?.length ? await readThreadImages(threadId, m.images) : undefined,
-        })),
-      );
-      if (controller.signal.aborted) return;
-      // Replay only the tail of a long thread, and before the older turns fall
-      // out of context, run the fallback distillation (docs/02: hangup is the
-      // main trigger, the trim is the backstop).
-      let history = prior;
-      if (prior.length > HISTORY_KEEP) {
-        history = prior.slice(prior.length - HISTORY_KEEP);
-        if (topicId) {
-          void distillThread(
-            {
-              topicId,
-              topicName,
-              bookName: fileName,
-              threadId,
-              annotationId,
-              page,
-              markedText: selectionText,
-              messages: threadMsgs.map(({ role, text, ts }) => ({ role, text, ts })),
-              annotations: distillAnnotations(),
-            },
-            TRIM_DISTILL_MIN_NEW,
-          );
-        }
-      }
-      const apiMessages = [{ role: "user" as const, text: EXPLAIN_KICKOFF }, ...history];
+        threadId,
+        annotationId,
+        annotation: ann,
+        annotations: [...annsRef.current.values()],
+        fulltext: currentFulltext,
+        figures,
+        buffer: bufferRef.current,
+        context: ctxRef.current,
+        classroom: classroomRef.current,
+        settings: s,
+        getPipeline: () => pipelineRef.current,
+        distillAnnotations,
+        signal: controller.signal,
+      });
+      if (!turn) return;
 
       void runAgentTurn({
         providerId: s.defaultProviderId as ProviderId,
         modelId: s.defaultModelId as string,
-        systemPrompt,
-        messages: apiMessages,
-        tools,
+        systemPrompt: turn.systemPrompt,
+        messages: turn.messages,
+        tools: turn.tools,
         signal: controller.signal,
         reasoning: toReasoning(s.chatThinking),
         onDelta: (chunk) => {
@@ -2778,60 +2564,6 @@ function callExcerpt(ann: Annotation | undefined): string {
   if (typeof ann.text === "string" && ann.text) return ann.text;
   if (typeof ann.comment === "string" && ann.comment) return ann.comment;
   return "";
-}
-
-// An annotation flattened for the read_annotations tool: 1-based page + selected
-// text + comment. Skips annotations with neither text nor comment (e.g. legacy
-// image regions).
-function toAnnotationLite(ann: Annotation): AnnotationLite | null {
-  const text = typeof ann.text === "string" ? ann.text.trim() : "";
-  const comment = typeof ann.comment === "string" ? ann.comment.trim() : "";
-  if (!text && !comment) return null;
-  return { page: annotationPage(ann as { position?: { pageIndex?: number } }), text, comment };
-}
-
-// Assemble the topic's materials for a call (M6): each file's cached full text
-// and its annotations, scoped to the active topic. The current book uses the
-// in-memory annotations and the just-extracted full text; other books read from
-// the cache/disk (never re-extracted here, so they show only if opened before).
-async function gatherTopicMaterials(
-  files: { path: string; name: string; hash?: string }[],
-  currentBookId: string,
-  currentFulltext: Fulltext | null,
-  currentAnns: Annotation[],
-): Promise<(TopicMaterial & { path: string })[]> {
-  const out: (TopicMaterial & { path: string })[] = [];
-  for (const f of files) {
-    const isCurrent = f.hash === currentBookId;
-    // Other books are read from their content-hash-keyed data; a file that has
-    // never been opened since the upgrade has no book id yet, so it contributes
-    // no cached full text / annotations (it will once opened).
-    let fulltext: Fulltext | null;
-    if (isCurrent) fulltext = currentFulltext;
-    else if (!f.hash) fulltext = null;
-    else {
-      try {
-        fulltext = await getFulltext(f.hash);
-      } catch {
-        fulltext = null;
-      }
-    }
-    let anns: Annotation[];
-    if (isCurrent) anns = currentAnns;
-    else if (!f.hash) anns = [];
-    else {
-      try {
-        anns = await loadAnnotations(f.hash);
-      } catch {
-        anns = [];
-      }
-    }
-    const annotations = anns
-      .map(toAnnotationLite)
-      .filter((a): a is AnnotationLite => a !== null);
-    out.push({ path: f.hash ?? f.path, label: f.name, fulltext, annotations });
-  }
-  return out;
 }
 
 function TopicLibrary(props: {
