@@ -161,6 +161,15 @@ test("a settled run with no briefing becomes the failed card, quoting the error"
   );
 });
 
+test("a failed run does not report the briefing it failed to replace", () => {
+  // The pipeline keeps the previous briefing on failure, so a re-triage that
+  // died must still settle as failed rather than announcing "Briefing updated"
+  // over the old one's counts.
+  const update = briefingJobUpdate("retriage", snapshot({ briefing: briefing(), error: "no provider" }));
+  expect(update.status).toBe("failed");
+  expect(update.card).toEqual({ kind: "briefing-failed", message: "no provider" });
+});
+
 test("the failure note names the job, and both card and note survive a null error", () => {
   const retriage = briefingJobUpdate("retriage", snapshot({ error: "boom" }));
   expect(retriage.status === "failed" && retriage.note).toBe("The briefing re-triage failed: boom.");

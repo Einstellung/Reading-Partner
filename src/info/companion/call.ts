@@ -101,7 +101,10 @@ export type BriefingJobUpdate =
 
 export function briefingJobUpdate(job: BriefingJob, s: InfoSnapshot): BriefingJobUpdate {
   if (s.running) return { status: "running", card: briefingProgressCard(job, s) };
-  const b = s.briefing;
+  // The error decides the outcome, not the presence of a briefing: a failed run
+  // leaves the pipeline holding the PREVIOUS briefing, so a failed re-triage
+  // would otherwise announce "Briefing updated" over the old one's counts.
+  const b = s.error ? null : s.briefing;
   if (b) {
     return {
       status: "ready",
