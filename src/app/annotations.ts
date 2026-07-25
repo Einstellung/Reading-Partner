@@ -9,8 +9,8 @@ import {
   BaseDirectory,
   exists,
   readTextFile,
-  writeTextFile,
 } from "@tauri-apps/plugin-fs";
+import { writeTextAtomic } from "./atomic-fs";
 import type { Annotation } from "./reader-contract";
 
 // The annotation color palette. The UI components use the same list; this
@@ -46,9 +46,7 @@ export function onSaveError(handler: (e: unknown) => void): void {
 async function writeNow(key: string): Promise<void> {
   dirty.delete(key);
   const anns = cache.get(key) ?? [];
-  await writeTextFile(`annotations-${key}.json`, JSON.stringify(anns, null, 2), {
-    baseDir: BaseDirectory.AppData,
-  });
+  await writeTextAtomic(fileFor(key), JSON.stringify(anns, null, 2));
 }
 
 let pagehideBound = false;
@@ -96,6 +94,21 @@ export async function loadAnnotations(bookId: string): Promise<Annotation[]> {
   const list = Array.isArray(parsed) ? parsed : [];
   cache.set(key, list.map((a) => ({ ...a })));
   return list;
+}
+
+// Drop a book's cached annotations so the next loadAnnotations re-reads from
+// disk. Used after sync pulls a newer annotations-<bookId>.json (src/sync): the
+// cache is written back in full on the next mark, so a stale one would erase
+// whatever the other device added.
+//
+// A book with edits still waiting on the debounce is left alone — dropping it
+// would throw away the mark the user just made, and the pull is picked up on
+// reopen instead. Same rule as dropThreadCache. Note this only settles the
+// on-disk copy: a book that is open keeps the reader's own annotation set, which
+// still overwrites the pull on the next save, so pulled marks appear on reopen.
+export function dropAnnotationCache(bookId: string): void {
+  if (dirty.has(bookId)) return;
+  cache.delete(bookId);
 }
 
 // Replace the full set for a document and schedule a debounced write.

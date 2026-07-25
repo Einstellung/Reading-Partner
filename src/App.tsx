@@ -26,6 +26,7 @@ import {
 import {
   ANNOTATION_COLORS,
   deleteAnnotations,
+  dropAnnotationCache,
   loadAnnotations,
   onSaveError,
   saveAnnotations,
@@ -614,16 +615,19 @@ export default function App() {
 
   // Account sync (docs/13): start the engine if the user is signed in with
   // auto-sync on, and react to files a pull writes. A pulled library.json or
-  // topics.json refreshes the shelf; pulled threads-<id>.json files have their
-  // in-memory cache dropped so a reopen reads the newer data.
+  // topics.json refreshes the shelf; pulled threads-<id>.json and
+  // annotations-<id>.json files have their in-memory cache dropped so a reopen
+  // reads the newer data instead of the stale cache overwriting it.
   useEffect(() => {
     void initSync().catch((e) => console.warn("sync init failed", e));
     return onSyncPulled((paths) => {
       let refreshShelf = false;
       for (const p of paths) {
         if (p === "library.json" || p === "topics.json") refreshShelf = true;
-        const m = /^threads-(.+)\.json$/.exec(p);
-        if (m) dropThreadCache(m[1]);
+        const threads = /^threads-(.+)\.json$/.exec(p);
+        if (threads) dropThreadCache(threads[1]);
+        const anns = /^annotations-(.+)\.json$/.exec(p);
+        if (anns) dropAnnotationCache(anns[1]);
       }
       if (refreshShelf) refreshTopics().catch(() => {});
     });
