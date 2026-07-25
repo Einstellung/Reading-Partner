@@ -129,13 +129,11 @@ const MAX_PENDING_IMAGES = 3;
 // highlight frontier (docs/14).
 const AUTO_NOTES_DEBOUNCE = 4000;
 
-// Default reading layout for a book that has never set one: vertical continuous
+// Reading layout for a book that has never chosen one: vertical continuous
 // scroll on every surface (the correct PDF-reading default; a finger swipe
 // scrolls, like Notability / PDF Expert). Paged horizontal flip stays available
 // as an opt-in in the reader's More menu, off by default.
-function defaultLayout(): "vertical" | "paged" {
-  return "vertical";
-}
+const DEFAULT_LAYOUT = "vertical" as const;
 
 interface PopupState {
   annotation: Annotation;
@@ -1261,12 +1259,11 @@ export default function App() {
         name,
         buffer: bytes.slice().buffer as ArrayBuffer,
         annotations: saved,
-        // Seed the layout for a book that has never chosen one from the platform
-        // default (paged on touch, vertical on desktop), so the reader opens in
-        // the right mode on the first paint.
+        // Seed the layout for a book that has never chosen one, so the reader
+        // opens in the right mode on the first paint.
         viewState: state
-          ? { ...state, layout: state.layout ?? defaultLayout() }
-          : ({ pageIndex: 0, scale: "auto", scrollMode: 0, layout: defaultLayout() } as ViewState),
+          ? { ...state, layout: state.layout ?? DEFAULT_LAYOUT }
+          : ({ pageIndex: 0, scale: "auto", scrollMode: 0, layout: DEFAULT_LAYOUT } as ViewState),
       });
       setTitle(name);
     },
@@ -1542,11 +1539,11 @@ export default function App() {
     if (partial) appendMessage(bookId, c.threadId, { role: "ai", text: partial, ts });
   }, []);
 
-  // Bubble → full-window chat (reading shrinks to the corner card).
-  const expandCall = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-main" } : c)), []);
-  // The two picture-in-picture swaps.
+  // Chat takes the whole window: from the bubble (reading shrinks to the corner
+  // card) and back from the chat corner card.
+  const showChatMain = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-main" } : c)), []);
+  // The other picture-in-picture swap: reading is back, chat shrinks.
   const swapToReading = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-pip" } : c)), []);
-  const swapToChat = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-main" } : c)), []);
   // Hangup bookkeeping (docs/02, docs/03): log the end of the conversation and
   // kick the silent memory distillation over its persisted transcript. Reads
   // refs so it is stable; no-ops when nothing is open. Distillation runs in the
@@ -1971,7 +1968,7 @@ export default function App() {
             anchor={call.anchor}
             messages={call.messages}
             onSend={sendCallMessage}
-            onExpand={expandCall}
+            onExpand={showChatMain}
             onClose={endCall}
             onDelete={deleteCallThread}
             pendingImages={pendingImages}
@@ -2071,7 +2068,7 @@ export default function App() {
           <div className="absolute right-3 top-3 z-50">
             <ChatPipCard
               lastMessage={call.messages.length ? call.messages[call.messages.length - 1].text : null}
-              onClick={swapToChat}
+              onClick={showChatMain}
               onHangUp={endCall}
             />
           </div>
