@@ -13,7 +13,7 @@
 import type { ReactNode } from "react";
 import { IconHighlight, IconMemory, IconNotes, IconOutline, IconSparkle } from "../common/icons";
 import OutlineView from "./OutlineView";
-import TraceList from "../chat/TraceList";
+import TraceList from "./TraceList";
 import type { Annotation } from "../common/types";
 import type { Fulltext } from "../../fulltext/types";
 
