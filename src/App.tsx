@@ -9,7 +9,7 @@ import {
   type ViewStats,
 } from "./platform/app/reader-contract";
 import { onCorruptFile } from "./platform/app/atomic-fs";
-import { getViewState, hashPath, saveViewState, withClassroom } from "./platform/app/storage";
+import { getViewState, hashPath, saveViewState } from "./platform/app/storage";
 import { importBook, libraryHas, readLibraryBook } from "./platform/app/library";
 import { migrateBookLive } from "./platform/app/migrate";
 import { ensureFulltext, onFulltextError, type Fulltext } from "./fulltext";
@@ -59,18 +59,8 @@ import {
   type ProviderId,
   type ProviderInfo,
 } from "./ai/aiClient";
-import {
-  chapterIndexForPage,
-  getPrepPipeline,
-  hasPrepState,
-  locateQuote,
-  parseNote,
-  peekPrepPipeline,
-  readPrepNote,
-  type Citation,
-  type PrepSnapshot,
-} from "./reading/prep";
-import type { PrepPipeline } from "./reading/prep/pipeline";
+import { locateQuote, type Citation } from "./reading/prep";
+import { usePrep } from "./reading/prep/use-prep";
 import { useNotes } from "./reading/notes/use-notes";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import {
@@ -226,18 +216,10 @@ export default function App() {
     pageIndex: null,
     files: [],
   });
-  // Classroom mode (docs/09), mirrored for the stable runTurn callback.
-  const classroomRef = useRef(false);
-  // The lesson-prep pipeline attached to the open book (module singleton; this
-  // ref only tracks which one the UI is looking at) and its unsubscribe.
-  const pipelineRef = useRef<PrepPipeline | null>(null);
-  const prepUnsubRef = useRef<(() => void) | null>(null);
   // Event-log instrumentation (M8). Dwell: the page being read and when it was
   // entered. lastCallThread: the thread a call-start was last logged for.
-  // prepStatuses: paper statuses already seen, so only transitions are logged.
   const pageDwellRef = useRef<{ page: number; since: number } | null>(null);
   const lastCallThreadRef = useRef<string | null>(null);
-  const prepStatusesRef = useRef<Map<string, string>>(new Map());
   // Guards the one-time content-hash backfill so StrictMode's double effect run
   // doesn't start it twice.
   const migrationRan = useRef(false);
@@ -280,11 +262,6 @@ export default function App() {
   // card host and empty until extraction finishes.
   const [figures, setFigures] = useState<Figure[]>([]);
   const [call, setCall] = useState<CallState | null>(null);
-  // Classroom mode + lesson prep (docs/09). classroomOn is per open book and
-  // resets on open/close; prepSnap mirrors the pipeline for the panel.
-  const [classroomOn, setClassroomOn] = useState(false);
-  const [prepSnap, setPrepSnap] = useState<PrepSnapshot | null>(null);
-  const [selectedPrepSlug, setSelectedPrepSlug] = useState<string | null>(null);
   const [settings, setSettings] = useState<Settings>({ ...DEFAULT_SETTINGS });
   const [showSettings, setShowSettings] = useState(false);
   const [providersInfo, setProvidersInfo] = useState<ProviderInfo[]>([]);
@@ -363,9 +340,28 @@ export default function App() {
     };
   });
 
-  useEffect(() => {
-    classroomRef.current = classroomOn;
-  }, [classroomOn]);
+  // Classroom mode and lesson prep (docs/09): the panel's state and every
+  // callback that serves it. Called here so its two effects — the classroom
+  // mirror and the scheduler following the reader — keep firing among the
+  // shell's own, and it reads the open book through the shell's refs.
+  const {
+    snapshot: prepSnap,
+    panel: prepPanelProps,
+    classroomOn,
+    classroomRef,
+    pipelineRef,
+    setSelectedSlug: setSelectedPrepSlug,
+    toggleClassroom,
+    reset: resetPrep,
+    resume: resumePrep,
+  } = usePrep({
+    stats,
+    bookIdRef,
+    ctxRef,
+    currentFulltextRef,
+    lastStateRef: lastState,
+    pushToast,
+  });
 
   // Page-navigation events, with the dwell time on the page being left. The
   // ref makes this idempotent under StrictMode's double effect runs.
@@ -392,14 +388,6 @@ export default function App() {
     }
     lastCallThreadRef.current = id;
   }, [call?.threadId, call?.isBook]);
-
-  // Lazy prep follows the reader: on every page change, tell the scheduler
-  // which chapter the user is in so its papers prep first.
-  useEffect(() => {
-    const chapters = prepSnap?.state?.chapters;
-    if (!chapters || !stats) return;
-    pipelineRef.current?.setCurrentChapter(chapterIndexForPage(chapters, stats.pageIndex + 1));
-  }, [stats, prepSnap]);
 
   const applySettings = useCallback((next: Settings) => {
     setSettings(next);
@@ -530,18 +518,6 @@ export default function App() {
     }, 500);
   }, [pushToast]);
 
-  // Persist the sticky classroom flag immediately on toggle, so it survives even
-  // if the reader emits no further position change before the app closes.
-  const persistClassroom = useCallback((on: boolean) => {
-    const bookId = bookIdRef.current;
-    if (!bookId) return;
-    const merged = withClassroom(lastState.current, on);
-    lastState.current = merged;
-    saveViewState(bookId, merged).catch((e) => {
-      console.error("failed to persist classroom mode", e);
-    });
-  }, []);
-
   useEffect(() => {
     const flush = () => {
       const bookId = bookIdRef.current;
@@ -582,58 +558,6 @@ export default function App() {
       );
     })();
   }, []);
-
-  // Attach the open book's prep pipeline to the UI: subscribe the panel and
-  // (re)start the background run. Idempotent — the pipeline is a module
-  // singleton per survey, so re-attaching never restarts finished work.
-  const attachPipeline = useCallback((bookId: string, name: string, ft: Fulltext) => {
-    const pipeline = getPrepPipeline(bookId, name, ft);
-    pipelineRef.current = pipeline;
-    prepUnsubRef.current?.();
-    prepStatusesRef.current = new Map();
-    const sync = () => {
-      const snap = pipeline.snapshot();
-      // Log paper status transitions (not the initial statuses on attach).
-      const topicId = ctxRef.current.topicId;
-      for (const p of snap.state?.papers ?? []) {
-        const prev = prepStatusesRef.current.get(p.slug);
-        if (prev === p.status) continue;
-        prepStatusesRef.current.set(p.slug, p.status);
-        if (prev !== undefined && topicId) {
-          logEvent(topicId, "prep-status", { slug: p.slug, status: p.status });
-        }
-      }
-      setPrepSnap(snap);
-    };
-    prepUnsubRef.current = pipeline.subscribe(sync);
-    sync();
-    void pipeline.ensureStarted();
-  }, []);
-
-  // First classroom press (or the panel's Start button) kicks off lesson prep.
-  const startPrep = useCallback(async () => {
-    const bookId = bookIdRef.current;
-    const name = ctxRef.current.fileName;
-    if (!bookId) return;
-    const ft = await currentFulltextRef.current;
-    if (bookIdRef.current !== bookId) return; // switched books while extracting
-    if (!ft || ft.status !== "ok") {
-      pushToast("warn", "This book has no readable text layer, so prep can't run.");
-      return;
-    }
-    attachPipeline(bookId, name, ft);
-  }, [attachPipeline, pushToast]);
-
-  const toggleClassroom = useCallback(() => {
-    // Outside the state updater: StrictMode double-invokes updaters, which
-    // would double-log the event.
-    const next = !classroomRef.current;
-    const topicId = ctxRef.current.topicId;
-    if (topicId) logEvent(topicId, "classroom-toggle", { on: next });
-    if (next) void startPrep();
-    setClassroomOn(next);
-    persistClassroom(next);
-  }, [startPrep, persistClassroom]);
 
   // A page citation carrying a source quote: confirm the quote against the
   // page's extracted text (fulltext cache), then hand the reader the exact
@@ -681,14 +605,6 @@ export default function App() {
     setCall((cur) => (cur && cur.view === "chat-main" ? { ...cur, view: "chat-pip" } : cur));
   }, [jumpToQuote]);
 
-  // The prep panel reads a note's body on expand (frontmatter stripped).
-  const loadPrepNoteBody = useCallback(async (slug: string) => {
-    const bookId = bookIdRef.current;
-    if (!bookId) return null;
-    const raw = await readPrepNote(bookId, slug);
-    return raw ? parseNote(raw).body : null;
-  }, []);
-
   // Memory panel data (M8): loaded when the tab shows, refreshed when a
   // background write (distillation or an in-chat memory_update) lands.
   const [memEntries, setMemEntries] = useState<MemoryEntry[] | null>(null);
@@ -725,13 +641,6 @@ export default function App() {
       }),
     [activeTopicId, refreshMemory],
   );
-
-  const prepSkip = useCallback((slug: string) => pipelineRef.current?.skip(slug), []);
-  const prepRequeue = useCallback((slug: string) => pipelineRef.current?.requeue(slug), []);
-  const prepAdd = useCallback((query: string) => pipelineRef.current?.addPaper(query), []);
-  const prepStart = useCallback(() => void startPrep(), [startPrep]);
-  const prepRetryPlan = useCallback(() => pipelineRef.current?.retryPlan(), []);
-  const prepReplan = useCallback(() => pipelineRef.current?.replan(), []);
 
   // The book-notes feature (docs/14): the panel's state and every callback that
   // serves it. It reads the open book through the shell's refs, so what it
@@ -1030,12 +939,7 @@ export default function App() {
       // the pipeline below once the fulltext is ready, degrading exactly like a
       // manual toggle-on when the book has no readable text.
       const restoreClassroom = !!state?.classroom;
-      setClassroomOn(restoreClassroom);
-      setSelectedPrepSlug(null);
-      prepUnsubRef.current?.();
-      prepUnsubRef.current = null;
-      pipelineRef.current = null;
-      setPrepSnap(null);
+      resetPrep(restoreClassroom);
       // Notes are per book too; detach the previous book's panel.
       resetNotes();
       // Extract the full text in the background so the AI can see the book
@@ -1069,19 +973,9 @@ export default function App() {
         if (bookIdRef.current !== bookId) return; // stale: the user switched books
         setFulltext(ft);
         setFulltextPending(false);
-        // Resume lesson prep from its persisted state (docs/09: restartable
-        // from the breakpoint) or re-attach a pipeline already running. A
-        // restored classroom flag also kicks a fresh pipeline when none exists
-        // yet (e.g. the book moved devices) — the same path a manual toggle-on
-        // takes via startPrep.
         if (ft && ft.status === "ok") {
-          try {
-            if (restoreClassroom || peekPrepPipeline(bookId) || (await hasPrepState(bookId))) {
-              if (bookIdRef.current === bookId) attachPipeline(bookId, name, ft);
-            }
-          } catch (e) {
-            console.warn("failed to resume lesson prep", e);
-          }
+          // Resume lesson prep from its persisted state (docs/09).
+          await resumePrep(bookId, name, ft, restoreClassroom);
           // Resume book notes from persisted state (docs/14).
           await resumeNotes(bookId, name, ft);
         }
@@ -1103,7 +997,7 @@ export default function App() {
       });
       setTitle(name);
     },
-    [pushToast, attachPipeline, resetNotes, resumeNotes],
+    [pushToast, resetPrep, resumePrep, resetNotes, resumeNotes],
   );
 
   // Open a topic file. If its book id is known and the library holds the
@@ -1513,16 +1407,11 @@ export default function App() {
     setFulltextPending(false);
     setEmbedDoc(null);
     // Detach the prep UI; the pipeline keeps prepping in the background.
-    setClassroomOn(false);
-    setSelectedPrepSlug(null);
-    prepUnsubRef.current?.();
-    prepUnsubRef.current = null;
-    pipelineRef.current = null;
-    setPrepSnap(null);
+    resetPrep(false);
     bookIdRef.current = null;
     viewRef.current = null;
     pageDwellRef.current = null;
-  }, [clearPendingImages, captureHangup, finalPassNotes]);
+  }, [clearPendingImages, captureHangup, finalPassNotes, resetPrep]);
 
   // Stable handlers for the EmbedPDF pane so its React.memo actually holds: any
   // new prop identity here would re-render the whole engine subtree on every
@@ -1695,19 +1584,7 @@ export default function App() {
             onSelectAnnotation={onTraceSelect}
             onToggleStar={(id, starred) => patchAnnotation(id, { starred })}
             onOpenThread={openThreadForAnnotation}
-            prepPanel={
-              <PrepPanel
-                snapshot={prepSnap}
-                loadNote={loadPrepNoteBody}
-                onSkip={prepSkip}
-                onRequeue={prepRequeue}
-                onAdd={prepAdd}
-                onStartPrep={prepStart}
-                onRetryPlan={prepRetryPlan}
-                onReplan={prepReplan}
-                selectedSlug={selectedPrepSlug}
-              />
-            }
+            prepPanel={<PrepPanel {...prepPanelProps} />}
             notesPanel={<NotesPanel {...notesPanelProps} />}
             memoryPanel={<MemoryPanel entries={memEntries} lastDistilledAt={memLastDistill} />}
           />
