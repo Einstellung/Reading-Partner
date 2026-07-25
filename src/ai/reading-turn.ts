@@ -175,7 +175,6 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
       s.defaultProviderId as ProviderId,
       s.defaultModelId as string,
     );
-    const figHash = bookId;
     tools = [
       ...tools,
       ...buildFigureTools({
@@ -183,7 +182,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
         modelSupportsImages: supportsImages,
         renderImage: async (fig) => {
           if (!buffer) return null;
-          const r = await renderFigure(figHash, buffer, fig, "view");
+          const r = await renderFigure(bookId, buffer, fig, "view");
           return r ? { base64: r.base64, mimeType: r.mimeType } : null;
         },
       }),
@@ -199,13 +198,12 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   const livePipeline = getPipeline();
   let canIngestUrl = false;
   if (livePipeline && currentFulltext?.status === "ok") {
-    const surveyHash = bookId;
     tools = [
       ...tools,
       ...buildSourceTools({
         ingest: async (url) => {
           const paper = await livePipeline.ingestSource(url);
-          const ft = await getFulltext(paperFulltextHash(surveyHash, paper.slug));
+          const ft = await getFulltext(paperFulltextHash(bookId, paper.slug));
           const chars = ft ? ft.pages.reduce((n, pg) => n + pg.length, 0) : 0;
           return {
             slug: paper.slug,

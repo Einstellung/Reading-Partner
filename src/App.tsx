@@ -187,7 +187,9 @@ export default function App() {
   // Whether a transient AI-cited-quote overlay is showing, so Escape can dismiss
   // it before it falls through to closing the call.
   const [quoteHlActive, setQuoteHlActive] = useState(false);
-  const pathRef = useRef<string | null>(null);
+  // The open book's id: the content hash its annotations, threads, reading
+  // position, prep notes and figure crops are all keyed by. Null in the library.
+  const bookIdRef = useRef<string | null>(null);
   const saveTimer = useRef<number | null>(null);
   const lastState = useRef<ViewState | null>(null);
 
@@ -268,7 +270,7 @@ export default function App() {
 
   // The open book: bytes + saved state for EmbedReaderPane; null in the library.
   const [embedDoc, setEmbedDoc] = useState<{
-    path: string;
+    bookId: string;
     name: string;
     buffer: ArrayBuffer;
     annotations: Annotation[];
@@ -525,15 +527,15 @@ export default function App() {
   // Debounced persist of the reading position. A save failure must be visible;
   // silently losing positions looks fine until the app is reopened (pitfall 09).
   const persist = useCallback((state: ViewState) => {
-    const path = pathRef.current;
-    if (!path) return;
+    const bookId = bookIdRef.current;
+    if (!bookId) return;
     // Carry the sticky classroom flag (docs/09) alongside the reader-owned
     // position fields, which never carry it.
     const merged = { ...state, classroom: classroomRef.current };
     lastState.current = merged;
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
-      saveViewState(path, merged).catch((e) => {
+      saveViewState(bookId, merged).catch((e) => {
         console.error("failed to persist reading position", e);
         pushToast("warn", "Reading position could not be saved");
       });
@@ -543,21 +545,21 @@ export default function App() {
   // Persist the sticky classroom flag immediately on toggle, so it survives even
   // if the reader emits no further position change before the app closes.
   const persistClassroom = useCallback((on: boolean) => {
-    const path = pathRef.current;
-    if (!path) return;
+    const bookId = bookIdRef.current;
+    if (!bookId) return;
     const merged = withClassroom(lastState.current, on);
     lastState.current = merged;
-    saveViewState(path, merged).catch((e) => {
+    saveViewState(bookId, merged).catch((e) => {
       console.error("failed to persist classroom mode", e);
     });
   }, []);
 
   useEffect(() => {
     const flush = () => {
-      const path = pathRef.current;
-      if (!path || !lastState.current) return;
+      const bookId = bookIdRef.current;
+      if (!bookId || !lastState.current) return;
       if (saveTimer.current) window.clearTimeout(saveTimer.current);
-      void saveViewState(path, lastState.current).catch(() => {});
+      void saveViewState(bookId, lastState.current).catch(() => {});
     };
     window.addEventListener("pagehide", flush);
     return () => window.removeEventListener("pagehide", flush);
@@ -568,8 +570,8 @@ export default function App() {
   }, []);
 
   const persistAnnotations = useCallback(() => {
-    const path = pathRef.current;
-    if (path) saveAnnotations(path, [...annsRef.current.values()]);
+    const bookId = bookIdRef.current;
+    if (bookId) saveAnnotations(bookId, [...annsRef.current.values()]);
   }, []);
 
   // Load a thread's stored images (filenames -> base64) and patch them into the
@@ -596,8 +598,8 @@ export default function App() {
   // Attach the open book's prep pipeline to the UI: subscribe the panel and
   // (re)start the background run. Idempotent — the pipeline is a module
   // singleton per survey, so re-attaching never restarts finished work.
-  const attachPipeline = useCallback((surveyHash: string, name: string, ft: Fulltext) => {
-    const pipeline = getPrepPipeline(surveyHash, name, ft);
+  const attachPipeline = useCallback((bookId: string, name: string, ft: Fulltext) => {
+    const pipeline = getPrepPipeline(bookId, name, ft);
     pipelineRef.current = pipeline;
     prepUnsubRef.current?.();
     prepStatusesRef.current = new Map();
@@ -622,11 +624,11 @@ export default function App() {
 
   // First classroom press (or the panel's Start button) kicks off lesson prep.
   const startPrep = useCallback(async () => {
-    const bookId = pathRef.current;
+    const bookId = bookIdRef.current;
     const name = ctxRef.current.fileName;
     if (!bookId) return;
     const ft = await currentFulltextRef.current;
-    if (pathRef.current !== bookId) return; // switched books while extracting
+    if (bookIdRef.current !== bookId) return; // switched books while extracting
     if (!ft || ft.status !== "ok") {
       pushToast("warn", "This book has no readable text layer, so prep can't run.");
       return;
@@ -693,7 +695,7 @@ export default function App() {
 
   // The prep panel reads a note's body on expand (frontmatter stripped).
   const loadPrepNoteBody = useCallback(async (slug: string) => {
-    const bookId = pathRef.current;
+    const bookId = bookIdRef.current;
     if (!bookId) return null;
     const raw = await readPrepNote(bookId, slug);
     return raw ? parseNote(raw).body : null;
@@ -840,11 +842,11 @@ export default function App() {
   const autoAdvanceNotes = useCallback(
     async (finalPass?: { readingPage: number }) => {
       if (!settingsRef.current.autoNotes) return;
-      const bookId = pathRef.current;
+      const bookId = bookIdRef.current;
       const name = ctxRef.current.fileName;
       if (!bookId) return;
       const ft = await currentFulltextRef.current;
-      if (pathRef.current !== bookId) return; // switched books while extracting
+      if (bookIdRef.current !== bookId) return; // switched books while extracting
       if (!ft || ft.status !== "ok") return;
       const anns = notesAnnotationPages();
       if (anns.length === 0 && !finalPass) return;
@@ -869,11 +871,11 @@ export default function App() {
   // The Notes tab's Generate / Resume button: the manual whole-book run, always
   // available regardless of the autoNotes setting.
   const generateNotes = useCallback(async () => {
-    const bookId = pathRef.current;
+    const bookId = bookIdRef.current;
     const name = ctxRef.current.fileName;
     if (!bookId) return;
     const ft = await currentFulltextRef.current;
-    if (pathRef.current !== bookId) return; // switched books while extracting
+    if (bookIdRef.current !== bookId) return; // switched books while extracting
     if (!ft || ft.status !== "ok") {
       pushToast("warn", "This book has no readable text layer, so notes can't be generated.");
       return;
@@ -897,11 +899,11 @@ export default function App() {
   const notesGenerateChapter = useCallback((index: number) => notesRef.current?.generateChapter(index), []);
   const notesRegenerateOverview = useCallback(() => notesRef.current?.regenerateOverview(), []);
   const loadNotesOverview = useCallback(() => {
-    const bookId = pathRef.current;
+    const bookId = bookIdRef.current;
     return bookId ? readOverviewNote(bookId) : Promise.resolve(null);
   }, []);
   const loadNotesChapter = useCallback((index: number) => {
-    const bookId = pathRef.current;
+    const bookId = bookIdRef.current;
     return bookId ? readNotesChapter(bookId, index) : Promise.resolve(null);
   }, []);
 
@@ -909,7 +911,7 @@ export default function App() {
   // reply into the bubble, persist on done. Stable (reads refs). No-ops (leaving
   // the bubble empty for the guidance) when no provider is configured.
   const runTurn = useCallback((threadId: string, annotationId: string) => {
-    const bookId = pathRef.current;
+    const bookId = bookIdRef.current;
     const s = settingsRef.current;
     if (!bookId || !s.defaultProviderId || !s.defaultModelId) return;
     abortRef.current?.abort();
@@ -1056,8 +1058,8 @@ export default function App() {
       if (aiCreated) {
         // Persist the aiThreadId into the engine model, open the thread + bubble.
         viewRef.current?.setAnnotations([aiCreated.annotation]);
-        const path = pathRef.current;
-        if (path) createThread(path, aiCreated.annotation.id, aiCreated.threadId);
+        const bookId = bookIdRef.current;
+        if (bookId) createThread(bookId, aiCreated.annotation.id, aiCreated.threadId);
         const up = penUpRef.current;
         const rect = readerPaneRef.current?.getBoundingClientRect();
         const anchor = up
@@ -1082,8 +1084,8 @@ export default function App() {
   const onDeleteAnnotations = useCallback(
     (ids: string[]) => {
       for (const id of ids) annsRef.current.delete(id);
-      const path = pathRef.current;
-      if (path) deleteAnnotations(path, ids);
+      const bookId = bookIdRef.current;
+      if (bookId) deleteAnnotations(bookId, ids);
       syncTraceList();
     },
     [syncTraceList],
@@ -1102,8 +1104,8 @@ export default function App() {
     const ann = params.annotation;
     const threadId = ann.aiThreadId as string | undefined;
     if (threadId) {
-      const path = pathRef.current;
-      const thread = path ? getThread(path, threadId) : undefined;
+      const bookId = bookIdRef.current;
+      const thread = bookId ? getThread(bookId, threadId) : undefined;
       abortRef.current?.abort(); // stop any stream from a previously open thread
       setPopup(null);
       const msgs = thread?.messages ?? [];
@@ -1165,7 +1167,7 @@ export default function App() {
       setTraceAnns(saved);
 
       setViewReady(false);
-      pathRef.current = bookId;
+      bookIdRef.current = bookId;
       // Seed the persist base with the loaded state so an early classroom toggle
       // (before the reader emits a position) merges onto the right book.
       lastState.current = state;
@@ -1206,7 +1208,7 @@ export default function App() {
         return null;
       });
       currentFiguresRef.current.then((idx) => {
-        if (pathRef.current !== bookId) return; // stale: the user switched books
+        if (bookIdRef.current !== bookId) return; // stale: the user switched books
         const list = idx?.figures ?? [];
         figuresRef.current = list;
         setFigures(list);
@@ -1218,7 +1220,7 @@ export default function App() {
         },
       );
       currentFulltextRef.current.then(async (ft) => {
-        if (pathRef.current !== bookId) return; // stale: the user switched books
+        if (bookIdRef.current !== bookId) return; // stale: the user switched books
         setFulltext(ft);
         setFulltextPending(false);
         // Resume lesson prep from its persisted state (docs/09: restartable
@@ -1229,7 +1231,7 @@ export default function App() {
         if (ft && ft.status === "ok") {
           try {
             if (restoreClassroom || peekPrepPipeline(bookId) || (await hasPrepState(bookId))) {
-              if (pathRef.current === bookId) attachPipeline(bookId, name, ft);
+              if (bookIdRef.current === bookId) attachPipeline(bookId, name, ft);
             }
           } catch (e) {
             console.warn("failed to resume lesson prep", e);
@@ -1239,7 +1241,7 @@ export default function App() {
           // interrupted manual run.
           try {
             if (peekNotesPipeline(bookId) || (await hasNotesState(bookId))) {
-              if (pathRef.current === bookId) {
+              if (bookIdRef.current === bookId) {
                 const pipeline = attachNotes(bookId, name, ft);
                 if (settingsRef.current.autoNotes) void autoAdvanceNotes();
                 else void pipeline.ensureStarted();
@@ -1255,7 +1257,7 @@ export default function App() {
       // viewRef) and onInitialized once ready. A fresh copy of the bytes is
       // handed over so nothing detaches the shell's original.
       setEmbedDoc({
-        path: bookId,
+        bookId,
         name,
         buffer: bytes.slice().buffer as ArrayBuffer,
         annotations: saved,
@@ -1341,8 +1343,8 @@ export default function App() {
     (id: string) => {
       viewRef.current?.unsetAnnotations([id]);
       annsRef.current.delete(id);
-      const path = pathRef.current;
-      if (path) deleteAnnotations(path, [id]);
+      const bookId = bookIdRef.current;
+      if (bookId) deleteAnnotations(bookId, [id]);
       syncTraceList();
       setPopup(null);
     },
@@ -1461,14 +1463,14 @@ export default function App() {
   const sendCallMessage = useCallback(
     (text: string) => {
       const c = callRef.current;
-      const path = pathRef.current;
+      const bookId = bookIdRef.current;
       const staged = pendingImagesRef.current;
       const trimmed = text.trim();
       if (staged.some((p) => p.status === "loading")) return; // wait for compression
       const images = staged.flatMap((p) =>
         p.status === "ready" ? [{ data: p.data, mediaType: p.mediaType }] : [],
       );
-      if (!c || !path || (!trimmed && images.length === 0)) return;
+      if (!c || !bookId || (!trimmed && images.length === 0)) return;
       const ts = Date.now();
       mutatePending(() => []);
       setImageHint("");
@@ -1491,7 +1493,7 @@ export default function App() {
           ts,
           ...(imageNames.length ? { images: imageNames } : {}),
         };
-        appendMessage(path, c.threadId, persistMsg);
+        appendMessage(bookId, c.threadId, persistMsg);
         const displayMsg: CallMessage = {
           role: "user",
           text: trimmed,
@@ -1518,10 +1520,10 @@ export default function App() {
   // it survives a reopen. Nothing generated yet → drop the empty reply.
   const stopTurn = useCallback(() => {
     const c = callRef.current;
-    const path = pathRef.current;
+    const bookId = bookIdRef.current;
     abortRef.current?.abort();
     abortRef.current = null;
-    if (!c || !path) return;
+    if (!c || !bookId) return;
     const streamingMsg = [...c.messages].reverse().find((m) => m.role === "ai" && m.streaming);
     if (!streamingMsg) return;
     const { ts } = streamingMsg;
@@ -1537,7 +1539,7 @@ export default function App() {
               : cur.messages.filter((m) => !(m.ts === ts && m.role === "ai")),
           },
     );
-    if (partial) appendMessage(path, c.threadId, { role: "ai", text: partial, ts });
+    if (partial) appendMessage(bookId, c.threadId, { role: "ai", text: partial, ts });
   }, []);
 
   // Bubble → full-window chat (reading shrinks to the corner card).
@@ -1551,11 +1553,11 @@ export default function App() {
   // background with no UI — the memory panel shows when it last ran.
   const captureHangup = useCallback(() => {
     const c = callRef.current;
-    const path = pathRef.current;
+    const bookId = bookIdRef.current;
     const { topicId, topicName, fileName, pageIndex } = ctxRef.current;
-    if (!c || !path || !topicId) return;
+    if (!c || !bookId || !topicId) return;
     logEvent(topicId, "call-end", { threadId: c.threadId, book: c.isBook ?? false });
-    const msgs = getThread(path, c.threadId)?.messages ?? [];
+    const msgs = getThread(bookId, c.threadId)?.messages ?? [];
     const ann = annsRef.current.get(c.annotationId);
     void distillThread({
       topicId,
@@ -1594,11 +1596,11 @@ export default function App() {
   // talk is being thrown away — and any memory already distilled from it stays.
   const deleteCallThread = useCallback(() => {
     const c = callRef.current;
-    const path = pathRef.current;
-    if (!c || !path) return;
+    const bookId = bookIdRef.current;
+    if (!c || !bookId) return;
     abortRef.current?.abort();
     abortRef.current = null;
-    deleteThread(path, c.threadId);
+    deleteThread(bookId, c.threadId);
     if (!c.isBook && c.annotationId) removeAnnotation(c.annotationId);
     const topicId = ctxRef.current.topicId;
     if (topicId) logEvent(topicId, "thread-delete", { threadId: c.threadId, book: c.isBook ?? false });
@@ -1610,9 +1612,9 @@ export default function App() {
     (annotationId: string) => {
       const ann = annsRef.current.get(annotationId);
       const threadId = ann?.aiThreadId as string | undefined;
-      const path = pathRef.current;
-      if (!threadId || !path) return;
-      const thread = getThread(path, threadId);
+      const bookId = bookIdRef.current;
+      if (!threadId || !bookId) return;
+      const thread = getThread(bookId, threadId);
       abortRef.current?.abort();
       viewRef.current?.selectAnnotations([annotationId]);
       viewRef.current?.navigate({ annotationID: annotationId });
@@ -1631,9 +1633,9 @@ export default function App() {
   // thread. It has no anchor, so it never joins the trace list; this button is
   // its only way back. Opens straight to the main call view, skipping the bubble.
   const openBookThread = useCallback(() => {
-    const path = pathRef.current;
-    if (!path) return;
-    const thread = getBookThread(path) ?? createBookThread(path, crypto.randomUUID());
+    const bookId = bookIdRef.current;
+    if (!bookId) return;
+    const thread = getBookThread(bookId) ?? createBookThread(bookId, crypto.randomUUID());
     abortRef.current?.abort();
     setPopup(null);
     const msgs = thread.messages;
@@ -1669,7 +1671,7 @@ export default function App() {
     // when a notes pipeline already exists; otherwise the manual button is the
     // fallback. Fire before the refs are torn down below.
     if (settingsRef.current.autoNotes) {
-      const bookId = pathRef.current;
+      const bookId = bookIdRef.current;
       const pipeline = bookId ? peekNotesPipeline(bookId) : null;
       if (pipeline) {
         const pageIndex = ctxRef.current.pageIndex;
@@ -1694,7 +1696,7 @@ export default function App() {
     prepUnsubRef.current = null;
     pipelineRef.current = null;
     setPrepSnap(null);
-    pathRef.current = null;
+    bookIdRef.current = null;
     viewRef.current = null;
     pageDwellRef.current = null;
   }, [clearPendingImages, captureHangup, notesAnnotationPages]);
@@ -1772,7 +1774,7 @@ export default function App() {
       getFigure: (id) => findFigureById(figures, id),
       renderCard: async (figure) => {
         const buf = bufferRef.current;
-        const bookId = pathRef.current;
+        const bookId = bookIdRef.current;
         if (!buf || !bookId) return null;
         const r = await renderFigure(bookId, buf, figure, "card");
         return r ? { src: r.dataUrl, width: r.width, height: r.height } : null;
@@ -1909,7 +1911,7 @@ export default function App() {
         >
           {embedDoc && (
             <EmbedReaderPane
-              key={embedDoc.path}
+              key={embedDoc.bookId}
               buffer={embedDoc.buffer}
               annotations={embedDoc.annotations}
               authorName="Reading-Partner"
