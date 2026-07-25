@@ -40,6 +40,14 @@ jobs:
       # Overrides bundle > iOS > developmentTeam, which is unset in
       # tauri.conf.json so the team id never lives in the repository.
       APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_TEAM_ID }}
+      # Baked into the Vite build by tauri's beforeBuildCommand (bun run build),
+      # which inherits job-scope env. Without them Settings > Sync reports
+      # "Google client not configured" and a tester cannot sign in at all.
+      # Same values as ios-sideload-ipa.yml; the iOS client id is public (PKCE
+      # protects it) and its reversed form is the deep-link scheme.
+      VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
+      VITE_GOOGLE_CLIENT_SECRET: ${{ secrets.VITE_GOOGLE_CLIENT_SECRET }}
+      VITE_GOOGLE_IOS_CLIENT_ID: 379091688229-esc23unqq02igufrjr9jjvtsug49j097.apps.googleusercontent.com
     steps:
       - uses: actions/checkout@v4
 
@@ -87,6 +95,21 @@ jobs:
       # xcodegen (and cocoapods if missing) via Homebrew.
       - name: Generate the Xcode project
         run: bun tauri ios init --ci
+
+      # `tauri ios init` fills AppIcon.appiconset from a bundled DEFAULT (Tauri
+      # logo) template and ignores src-tauri/icons/ios/, so a bare build ships
+      # the placeholder icon. On this line that is not just cosmetic: the
+      # template's 1024 marketing icon carries an alpha channel, which App Store
+      # ingestion rejects outright. Our committed set is RGB with no alpha and
+      # the filenames match the template's Contents.json, so it still resolves.
+      # See docs/pitfall/34-ios-init-default-icon-alpha.md.
+      - name: Apply our app icon to the iOS project
+        run: |
+          set -euo pipefail
+          DEST=$(find src-tauri/gen/apple -type d -name AppIcon.appiconset -print -quit)
+          [ -n "$DEST" ] || { echo "::error::AppIcon.appiconset not found in generated project"; exit 1; }
+          cp src-tauri/icons/ios/*.png "$DEST"/
+          echo "applied $(ls src-tauri/icons/ios/*.png | wc -l | tr -d ' ') icons to $DEST"
 
       # XcodeGen's iOS defaults set TARGETED_DEVICE_FAMILY "1,2" (iPhone +
       # iPad) and the Tauri template allows all iPad orientations. Fail fast
