@@ -9,11 +9,10 @@ import {
   DEFAULT_MAX_ATTEMPTS,
   DEFAULT_RETRY_DELAY_MS,
   DEFAULT_WATCHDOG_MS,
-  resolveWatchdogConfig,
-  runWithWatchdog,
   type AiCallOptions,
   type WatchdogConfig,
 } from "../ai/watchdog";
+import { ObservableRun, type RunSnapshot } from "../ai/observable-run";
 import { isRateLimitError } from "./http";
 import { abstractNoteBody } from "./notes";
 import { earliestCooldown, nextQueued, normalizeOnLoad } from "./scheduler";
@@ -26,9 +25,6 @@ const COOLDOWN_MS = [60_000, 300_000, 900_000];
 // The stall-watchdog defaults, re-exported for callers that tuned them before.
 export { DEFAULT_WATCHDOG_MS, DEFAULT_MAX_ATTEMPTS, DEFAULT_RETRY_DELAY_MS };
 export type { AiCallOptions };
-
-// Cap on how often streaming progress re-renders React (~4/s).
-const ACTIVITY_NOTIFY_MS = 250;
 
 export type PipelineConfig = WatchdogConfig;
 
@@ -94,21 +90,10 @@ export interface PrepActivity {
   attempts: number;
 }
 
-export interface PrepSnapshot {
-  state: PrepState | null;
-  running: boolean;
-  activity: PrepActivity | null;
-}
+export type PrepSnapshot = RunSnapshot<PrepState | null, PrepActivity>;
 
-export class PrepPipeline {
-  private state: PrepState | null = null;
-  private running = false;
+export class PrepPipeline extends ObservableRun<PrepState | null, PrepActivity> {
   private currentChapter = 1;
-  private listeners = new Set<() => void>();
-  private snap: PrepSnapshot = { state: null, running: false, activity: null };
-  private activity: PrepActivity | null = null;
-  private lastActivityNotify = 0;
-  private readonly config: PipelineConfig;
 
   constructor(
     private readonly surveyHash: string,
@@ -116,71 +101,11 @@ export class PrepPipeline {
     private readonly deps: PipelineDeps,
     config: Partial<PipelineConfig> = {},
   ) {
-    this.config = resolveWatchdogConfig(config);
+    super(null, deps, config);
   }
 
-  subscribe(fn: () => void): () => void {
-    this.listeners.add(fn);
-    return () => this.listeners.delete(fn);
-  }
-
-  // Stable between notifications so useSyncExternalStore doesn't loop.
-  snapshot(): PrepSnapshot {
-    return this.snap;
-  }
-
-  private notify(): void {
-    // Deep-ish copy so React sees fresh identities without the pipeline's
-    // in-place mutations leaking into rendered state.
-    this.snap = {
-      state: this.state
-        ? { ...this.state, papers: this.state.papers.map((p) => ({ ...p })) }
-        : null,
-      running: this.running,
-      activity: this.activity,
-    };
-    for (const fn of this.listeners) fn();
-  }
-
-  // Start (or clear) the live counter for a long AI call. Always notifies.
-  private setActivity(activity: PrepActivity | null): void {
-    this.activity = activity;
-    this.lastActivityNotify = activity ? this.deps.now() : 0;
-    this.notify();
-  }
-
-  // A streamed delta arrived: update the char count and notify, throttled so a
-  // token stream doesn't re-render React on every chunk.
-  private bumpActivity(chars: number): void {
-    if (!this.activity) return;
-    this.activity = { ...this.activity, chars };
-    const now = this.deps.now();
-    if (now - this.lastActivityNotify >= ACTIVITY_NOTIFY_MS) {
-      this.lastActivityNotify = now;
-      this.notify();
-    }
-  }
-
-  // Run one long AI call under the shared stall watchdog (src/ai/watchdog),
-  // publishing its liveness as prep activity and clearing it on the way out.
-  private async callWithWatchdog<T>(
-    info: { kind: PrepActivity["kind"]; slug?: string },
-    invoke: (opts: AiCallOptions) => Promise<T>,
-  ): Promise<T> {
-    try {
-      return await runWithWatchdog(
-        invoke,
-        this.config,
-        { now: this.deps.now, sleep: this.deps.sleep, setTimer: this.deps.setTimer },
-        {
-          onAttempt: ({ attempt, attempts, startedAt }) =>
-            this.setActivity({ ...info, startedAt, chars: 0, attempt, attempts }),
-          onProgress: (chars) => this.bumpActivity(chars),
-        },
-      );
-    } finally {
-      this.setActivity(null);
-    }
+  protected copyState(state: PrepState | null): PrepState | null {
+    return state ? { ...state, papers: state.papers.map((p) => ({ ...p })) } : null;
   }
 
   private async persist(): Promise<void> {

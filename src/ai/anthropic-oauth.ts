@@ -7,6 +7,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { refreshAnthropicToken } from "@earendil-works/pi-ai/oauth";
+import { generatePKCE, parseManualInput } from "../app/oauth";
 import { loadCredentials, setActiveCredential, updateCredentials, type AnthropicCredential } from "./credentials";
 import { coalesceRefresh } from "./token-refresh";
 
@@ -30,18 +31,6 @@ const SCOPES =
 // repeat the redirect_uri the authorize URL carried, so it is recorded here.
 let pending: { verifier: string; state: string; redirectUri: string } | null = null;
 
-function base64Url(bytes: Uint8Array): string {
-	let s = "";
-	for (const b of bytes) s += String.fromCharCode(b);
-	return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-async function generatePKCE(): Promise<{ verifier: string; challenge: string }> {
-	const verifier = base64Url(crypto.getRandomValues(new Uint8Array(32)));
-	const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
-	return { verifier, challenge: base64Url(new Uint8Array(digest)) };
-}
-
 function buildAuthUrl(challenge: string, state: string, redirectUri: string = REDIRECT_URI): string {
 	const params = new URLSearchParams({
 		code: "true",
@@ -54,28 +43,6 @@ function buildAuthUrl(challenge: string, state: string, redirectUri: string = RE
 		state,
 	});
 	return `${AUTHORIZE_URL}?${params.toString()}`;
-}
-
-// Accepts a bare code, `code#state`, `code=…&state=…`, or the full redirect URL.
-function parseManualInput(input: string): { code: string; state?: string } {
-	const value = input.trim();
-	try {
-		const url = new URL(value);
-		const code = url.searchParams.get("code");
-		if (code) return { code, state: url.searchParams.get("state") ?? undefined };
-	} catch {
-		// not a URL
-	}
-	if (value.includes("#")) {
-		const [code, state] = value.split("#", 2);
-		return { code, state };
-	}
-	if (value.includes("code=")) {
-		const params = new URLSearchParams(value);
-		const code = params.get("code");
-		if (code) return { code, state: params.get("state") ?? undefined };
-	}
-	return { code: value };
 }
 
 async function exchangeCode(

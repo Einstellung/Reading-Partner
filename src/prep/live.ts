@@ -4,12 +4,11 @@
 // the app's lifetime, so prep keeps running in the background across
 // classroom toggles.
 
-import type { ThinkingLevel } from "@earendil-works/pi-ai";
-import { streamChat, type ProviderId } from "../ai/providers";
+import { callModel, resolveModel } from "../ai/model-call";
 import { ensureFulltext, saveFulltext } from "../fulltext/store";
 import { FULLTEXT_VERSION, type Fulltext } from "../fulltext/types";
 import { buildFigureCatalog, ensureFigures } from "../figures";
-import { loadSettings, toReasoning, type AiLanguage } from "../app/settings";
+import { loadSettings } from "../app/settings";
 import { extractArticle } from "./article";
 import { fetchFromArxiv, normalizeArxivId } from "./arxiv";
 import { fetchFromOpenAlex } from "./openalex";
@@ -30,58 +29,6 @@ import { fetchFromS2 } from "./s2";
 import type { DigestOutcome, FetchOutcome, PipelineDeps } from "./pipeline";
 import { PrepPipeline } from "./pipeline";
 import type { PrepPaper } from "./types";
-
-async function resolveModel(): Promise<{
-  providerId: ProviderId;
-  modelId: string;
-  reasoning: ThinkingLevel | undefined;
-  aiLanguage: AiLanguage;
-}> {
-  const s = await loadSettings();
-  if (!s.defaultProviderId || !s.defaultModelId) {
-    throw new Error("no default AI provider configured (Settings)");
-  }
-  return {
-    providerId: s.defaultProviderId as ProviderId,
-    modelId: s.defaultModelId,
-    reasoning: toReasoning(s.prepThinking),
-    aiLanguage: s.aiLanguage,
-  };
-}
-
-// One plain (tool-less) model call, promisified. onProgress reports the
-// cumulative received character count so the pipeline's watchdog and liveness
-// counter can track a long stream; signal aborts it.
-function callModel(
-  systemPrompt: string,
-  userText: string,
-  opts: { signal: AbortSignal; onProgress: (chars: number) => void },
-): Promise<string> {
-  return resolveModel().then(
-    (model) =>
-      new Promise<string>((resolve, reject) => {
-        let chars = 0;
-        // Both visible text and thinking count as liveness, so a model that
-        // thinks for a long stretch before answering isn't aborted as stalled.
-        const bump = (t: string) => {
-          chars += t.length;
-          opts.onProgress(chars);
-        };
-        void streamChat({
-          providerId: model.providerId,
-          modelId: model.modelId,
-          systemPrompt,
-          messages: [{ role: "user", text: userText }],
-          signal: opts.signal,
-          reasoning: model.reasoning,
-          onDelta: bump,
-          onThinking: bump,
-          onDone: resolve,
-          onError: (m) => reject(new Error(m)),
-        });
-      }),
-  );
-}
 
 // Largest source a pasted link may pull; a bigger response is aborted.
 const MAX_SOURCE_BYTES = 30 * 1024 * 1024;
@@ -153,7 +100,7 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
     saveState: savePrepState,
 
     async buildPlan(opts) {
-      const text = await callModel(PLAN_SYSTEM_PROMPT, planUserMessage(surveyFulltext), opts);
+      const text = await callModel("prep", PLAN_SYSTEM_PROMPT, planUserMessage(surveyFulltext), opts);
       return parsePlan(text);
     },
 
@@ -231,7 +178,7 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
         }
       }
       if (ft.status !== "ok") return { body: "", pages: ft.pages.length, thin: true };
-      const model = await resolveModel();
+      const model = await resolveModel("prep");
       // The paper's figure catalog (M9), so the note can cite key figures as
       // [fig:N]. PDF-only (a fetched article has no figures); extraction-only (no
       // vision); a failure just omits the catalog.

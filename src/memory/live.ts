@@ -12,10 +12,8 @@ import {
   remove,
 } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../app/atomic-fs";
-import type { ThinkingLevel } from "@earendil-works/pi-ai";
 import { runAgentTurn } from "../ai/agent";
-import type { ProviderId } from "../ai/providers";
-import { loadSettings, toReasoning } from "../app/settings";
+import { resolveModel } from "../ai/model-call";
 import { logEvent } from "../app/events";
 import { FileMemoryAdapter, type MemoryAdapter } from "./adapter";
 import { isoDate } from "./files";
@@ -116,22 +114,6 @@ export interface DistillThreadOptions {
 const distilledCounts = new Map<string, number>();
 const inFlight = new Set<string>();
 
-async function resolveModel(): Promise<{
-  providerId: ProviderId;
-  modelId: string;
-  reasoning: ThinkingLevel | undefined;
-}> {
-  const s = await loadSettings();
-  if (!s.defaultProviderId || !s.defaultModelId) {
-    throw new Error("no default AI provider configured (Settings)");
-  }
-  return {
-    providerId: s.defaultProviderId as ProviderId,
-    modelId: s.defaultModelId,
-    reasoning: toReasoning(s.chatThinking),
-  };
-}
-
 // One silent distillation turn for a finished (or long-running) thread.
 // Never throws and never surfaces UI: memory is derived, a failed pass just
 // means the next trigger tries again. `minNewMessages` gates the trim fallback
@@ -150,7 +132,9 @@ export async function distillThread(
 
   inFlight.add(threadId);
   try {
-    const model = await resolveModel();
+    // Distillation runs on the chat model config, not the pipelines' — it is a
+    // silent turn of the same conversation.
+    const model = await resolveModel("chat");
     const store = getStore(opts.topicId);
     const adapter = getMemoryAdapter(opts.topicId);
     const meta = await store.getMeta();

@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { openaiLoginDeviceCode, parseManualInput } from "./openai-oauth";
+import { openaiLoginDeviceCode } from "./openai-oauth";
+import { parseManualInput } from "../app/oauth";
 import type { DeviceCodeState } from "./device-code";
 
 test("parseManualInput: full redirect URL yields code and state", () => {

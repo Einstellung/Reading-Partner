@@ -5,15 +5,14 @@
 // material (overviews, chapter notes, figures) is read straight from disk by
 // book id, so a talk can span books that aren't the one currently open.
 
-import type { ThinkingLevel } from "@earendil-works/pi-ai";
 import { BaseDirectory, readDir } from "@tauri-apps/plugin-fs";
 import { getImageGenKey } from "../ai/credentials";
-import { streamChat, type ProviderId } from "../ai/providers";
+import { callModel, resolveModel } from "../ai/model-call";
 import { getFigures } from "../figures/store";
 import { renderFigure } from "../figures/render";
 import { getLibraryEntry, readLibraryBook } from "../app/library";
 import { loadNotesState, readChapterNote, readOverviewNote } from "../notes/store";
-import { loadSettings, toReasoning, type AiLanguage } from "../app/settings";
+import { loadSettings } from "../app/settings";
 import { contentSystemPrompt, contentUserMessage, sanitizeFragment } from "./content";
 import { generateImage, resolveImageGenConfig, type ImageGenDeps } from "./imageGen";
 import { cleanTauriFetch } from "../app/tauri-fetch";
@@ -38,56 +37,6 @@ const DECK_ILLUSTRATION_STYLE =
 // Cap on how much note text feeds a single slide, so a rich chapter can't blow
 // up the content prompt.
 const SLIDE_NOTES_MAX_CHARS = 8_000;
-
-async function resolveModel(): Promise<{
-  providerId: ProviderId;
-  modelId: string;
-  reasoning: ThinkingLevel | undefined;
-  aiLanguage: AiLanguage;
-}> {
-  const s = await loadSettings();
-  if (!s.defaultProviderId || !s.defaultModelId) {
-    throw new Error("no default AI provider configured (Settings)");
-  }
-  return {
-    providerId: s.defaultProviderId as ProviderId,
-    modelId: s.defaultModelId,
-    reasoning: toReasoning(s.prepThinking),
-    aiLanguage: s.aiLanguage,
-  };
-}
-
-// One plain (tool-less) model call, promisified — for the plan and content
-// stages. onProgress reports cumulative characters so the watchdog/liveness
-// counter track a long stream; signal aborts it.
-function callModel(
-  systemPrompt: string,
-  userText: string,
-  opts: { signal: AbortSignal; onProgress: (chars: number) => void },
-): Promise<string> {
-  return resolveModel().then(
-    (model) =>
-      new Promise<string>((resolve, reject) => {
-        let chars = 0;
-        const bump = (t: string) => {
-          chars += t.length;
-          opts.onProgress(chars);
-        };
-        void streamChat({
-          providerId: model.providerId,
-          modelId: model.modelId,
-          systemPrompt,
-          messages: [{ role: "user", text: userText }],
-          signal: opts.signal,
-          reasoning: model.reasoning,
-          onDelta: bump,
-          onThinking: bump,
-          onDone: resolve,
-          onError: (m) => reject(new Error(m)),
-        });
-      }),
-  );
-}
 
 const first40Words = (text: string): string =>
   text.trim().split(/\s+/).slice(0, 40).join(" ");
@@ -205,9 +154,10 @@ function imageDeps(signal: AbortSignal): ImageGenDeps {
 function makeDeps(bookIds: string[], instruction: string): SlidesDeps {
   return {
     async buildPlan(opts) {
-      const { aiLanguage } = await resolveModel();
+      const { aiLanguage } = await resolveModel("prep");
       const books = await Promise.all(bookIds.map(planMaterial));
       const text = await callModel(
+        "prep",
         slidesPlanSystemPrompt(aiLanguage),
         planUserMessage(books, instruction),
         opts,
@@ -216,9 +166,10 @@ function makeDeps(bookIds: string[], instruction: string): SlidesDeps {
     },
 
     async generateContent(slide, opts) {
-      const { aiLanguage } = await resolveModel();
+      const { aiLanguage } = await resolveModel("prep");
       const notes = await gatherSlideNotes(slide, bookIds);
       const text = await callModel(
+        "prep",
         contentSystemPrompt(aiLanguage),
         contentUserMessage(slide, notes),
         opts,
