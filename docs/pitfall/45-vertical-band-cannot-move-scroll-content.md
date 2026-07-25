@@ -8,6 +8,6 @@
 
 副作用：pinch 的 `initializeGestureState` 读 `container.getBoundingClientRect()`，橡皮筋期间这个 rect 带着偏移，缩放锚点会偏。和坑 41 同一个缓解手段——第二根手指落下时 `suspendFingerGesture` 先把橡皮筋清零，所以 pinch 开始时偏移量已经是 0。
 
-物理量（阻尼、最大拉出距离、回弹刚度、惯性撞边界的吸收率）都是 `src/reader-embedpdf/vertical-gesture.ts` 顶部的具名常量，元素和 rAF 在 `TouchInputRouter`。
+物理量（阻尼、最大拉出距离、回弹刚度、惯性撞边界的吸收率）都是 `src/reading/engine/vertical-gesture.ts` 顶部的具名常量，元素和 rAF 在 `TouchInputRouter`。
 
 注：这条是从规范和坑 41 观察到的「橡皮筋期间 scrollWidth/scrollHeight 会变」推出来的，真机上先按到底那一侧验证——如果到底能弹、到顶也能弹，就是对的。

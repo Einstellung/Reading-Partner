@@ -13,7 +13,7 @@ const FILE = "credentials.json";
 // is nothing to run headless).
 const files = new Map<string, string>();
 
-mock.module("../../src/app/atomic-fs", () => ({
+mock.module("../../src/platform/app/atomic-fs", () => ({
   writeTextAtomic: async (path: string, contents: string) => {
     await null;
     files.set(path, contents);
@@ -56,7 +56,7 @@ mock.module("@earendil-works/pi-ai/oauth", () => ({
 }));
 
 const { setImageGenKey } = await import("../../src/ai/credentials");
-const { setSttKey } = await import("../../src/voice/config");
+const { setSttKey } = await import("../../src/ai/voice/config");
 const { anthropicLogout, getValidAnthropicAuth } = await import("../../src/ai/anthropic-oauth");
 const { getValidOpenAIAuth } = await import("../../src/ai/openai-oauth");
 

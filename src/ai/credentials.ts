@@ -9,7 +9,7 @@
 // through updateCredentials, which serializes and re-reads, so no writer
 // resurrects the state it read before another one committed.
 
-import { readGuardedJson, writeTextAtomic } from "../app/atomic-fs";
+import { readGuardedJson, writeTextAtomic } from "../platform/app/atomic-fs";
 
 const FILE = "credentials.json";
 

@@ -4,11 +4,11 @@
 // trim. Run: bun test.
 
 import { beforeEach, expect, mock, test } from "bun:test";
-import type { Annotation } from "../../src/app/reader-contract";
-import { DEFAULT_SETTINGS, type Settings } from "../../src/app/settings";
+import type { Annotation } from "../../src/platform/app/reader-contract";
+import { DEFAULT_SETTINGS, type Settings } from "../../src/platform/app/settings";
 import type { Fulltext } from "../../src/fulltext/types";
-import type { Figure } from "../../src/figures/types";
-import type { PrepPaper, PrepState } from "../../src/prep/types";
+import type { Figure } from "../../src/reading/figures/types";
+import type { PrepPaper, PrepState } from "../../src/reading/prep/types";
 
 // Headless: no AppData, so every optional read misses (the overview note, the
 // memory index). The turn treats all of them as "not there yet".
@@ -24,7 +24,7 @@ mock.module("@tauri-apps/plugin-fs", () => ({
 }));
 
 const { buildReadingTurn, EXPLAIN_KICKOFF, HISTORY_KEEP } = await import("../../src/reading/turn");
-const { appendMessage, createThread, dropThreadCache } = await import("../../src/app/threads");
+const { appendMessage, createThread, dropThreadCache } = await import("../../src/platform/app/threads");
 
 const BOOK = "book-hash";
 

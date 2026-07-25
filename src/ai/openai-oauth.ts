@@ -18,7 +18,7 @@ import {
 	type OAuthCredentials,
 	type OAuthDeviceCodeInfo,
 } from "@earendil-works/pi-ai/oauth";
-import { base64Url, generatePKCE, parseManualInput } from "../app/oauth";
+import { base64Url, generatePKCE, parseManualInput } from "../platform/app/oauth";
 import { isOAuthCredential, loadCredentials, setActiveCredential, updateCredentials, type OpenAICredential } from "./credentials";
 import { coalesceRefresh } from "./token-refresh";
 import { awaitingState, classifyDeviceCodeError, type DeviceCodeState } from "./device-code";

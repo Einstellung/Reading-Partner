@@ -4,7 +4,7 @@
 
 ## 分叉设计
 
-分叉点收敛在 `src/sync` 内部，调用方（index.ts、SettingsView）无感。
+分叉点收敛在 `src/platform/sync` 内部，调用方（index.ts、SettingsView）无感。
 
 - `authFlow.ts`：纯函数。`selectAuthFlow(platform, env)` 按平台返回 `AuthFlow`（`desktop-loopback` 或 `ios-scheme`），未配置返回 null。`buildAuthUrl`、`authCodeBody`、`refreshBody`、`matchesRedirect`、`parseCallbackParams`、`reversedClientId`、`iosRedirectUri` 都在这里，全部单测覆盖（`authFlow.test.ts`）。
 - `googleConfig.ts`：读 env（`VITE_GOOGLE_CLIENT_ID`/`VITE_GOOGLE_CLIENT_SECRET` 桌面，`VITE_GOOGLE_IOS_CLIENT_ID` iOS），用 `@tauri-apps/plugin-os` 的 `platform()`（同步）判平台，`isGoogleConfigured()` 和 `activeAuthFlow()` 都平台感知。

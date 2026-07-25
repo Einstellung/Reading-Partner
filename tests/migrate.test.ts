@@ -9,7 +9,7 @@ import {
   migratePrepDir,
   migrateViewState,
   type MigrateFs,
-} from "../src/app/migrate";
+} from "../src/platform/app/migrate";
 
 function makeFakeFs(initial: Record<string, string> = {}) {
   const files = new Map<string, string>(Object.entries(initial));

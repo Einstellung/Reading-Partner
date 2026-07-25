@@ -14,18 +14,18 @@ import {
 } from "./context";
 import type { AnnotationLite, TopicMaterial } from "../fulltext/format";
 import { modelSupportsImages, type ProviderId } from "../ai/aiClient";
-import type { Annotation } from "../app/reader-contract";
-import { buildSystemPrompt, readerProfileSection, type BooklistItem } from "../app/context";
-import { languageInstruction, type Settings } from "../app/settings";
-import { loadAnnotations } from "../app/annotations";
-import { getThread, readThreadImages } from "../app/threads";
+import type { Annotation } from "../platform/app/reader-contract";
+import { buildSystemPrompt, readerProfileSection, type BooklistItem } from "../platform/app/context";
+import { languageInstruction, type Settings } from "../platform/app/settings";
+import { loadAnnotations } from "../platform/app/annotations";
+import { getThread, readThreadImages } from "../platform/app/threads";
 import { chapterAt } from "../fulltext/query";
 import { getFulltext } from "../fulltext/store";
 import type { Fulltext } from "../fulltext/types";
-import { buildFigureCatalog } from "../figures/catalog";
-import { buildFigureTools } from "../figures/tools";
-import { renderFigure } from "../figures/render";
-import type { Figure } from "../figures/types";
+import { buildFigureCatalog } from "./figures/catalog";
+import { buildFigureTools } from "./figures/tools";
+import { renderFigure } from "./figures/render";
+import type { Figure } from "./figures/types";
 import {
   assembleIdentity,
   buildMemorySnapshot,
@@ -37,14 +37,14 @@ import {
   type DistillAnnotation,
   type MemoryEntry,
 } from "../memory";
-import { readOverviewNote } from "../notes/store";
-import { chapterIndexForPage, papersForChapter } from "../prep/scheduler";
-import { paperFulltextHash, readPrepNote } from "../prep/store";
-import { parseNote } from "../prep/notes";
-import { buildClassroomSystemPrompt, type ClassroomNote } from "../prep/classroom";
-import { buildClassroomTools } from "../prep/tools";
-import { ADD_SOURCE_PROMPT, buildSourceTools } from "../prep/source-tool";
-import type { PrepPipeline } from "../prep/pipeline";
+import { readOverviewNote } from "./notes/store";
+import { chapterIndexForPage, papersForChapter } from "./prep/scheduler";
+import { paperFulltextHash, readPrepNote } from "./prep/store";
+import { parseNote } from "./prep/notes";
+import { buildClassroomSystemPrompt, type ClassroomNote } from "./prep/classroom";
+import { buildClassroomTools } from "./prep/tools";
+import { ADD_SOURCE_PROMPT, buildSourceTools } from "./prep/source-tool";
+import type { PrepPipeline } from "./prep/pipeline";
 
 // Auto-explanation kickoff (docs/03: the bubble starts explaining, unprompted).
 export const EXPLAIN_KICKOFF =

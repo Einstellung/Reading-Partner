@@ -33,7 +33,7 @@ export interface VoiceCapabilities {
   // read is not proof that synthesis has no voices.
   speechVoices: number | null;
   hasMediaSession: boolean;
-  // If false, contentHash() in src/app/library.ts cannot work on this platform.
+  // If false, contentHash() in src/platform/app/library.ts cannot work here.
   hasSubtleCrypto: boolean;
 }
 

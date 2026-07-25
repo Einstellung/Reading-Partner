@@ -7,7 +7,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { refreshAnthropicToken } from "@earendil-works/pi-ai/oauth";
-import { generatePKCE, parseManualInput } from "../app/oauth";
+import { generatePKCE, parseManualInput } from "../platform/app/oauth";
 import { loadCredentials, setActiveCredential, updateCredentials, type AnthropicCredential } from "./credentials";
 import { coalesceRefresh } from "./token-refresh";
 

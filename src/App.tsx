@@ -7,13 +7,13 @@ import {
   type ViewInstance,
   type ViewState,
   type ViewStats,
-} from "./app/reader-contract";
-import { onCorruptFile } from "./app/atomic-fs";
-import { getViewState, hashPath, saveViewState, withClassroom } from "./app/storage";
-import { importBook, libraryHas, readLibraryBook } from "./app/library";
-import { migrateBookLive } from "./app/migrate";
+} from "./platform/app/reader-contract";
+import { onCorruptFile } from "./platform/app/atomic-fs";
+import { getViewState, hashPath, saveViewState, withClassroom } from "./platform/app/storage";
+import { importBook, libraryHas, readLibraryBook } from "./platform/app/library";
+import { migrateBookLive } from "./platform/app/migrate";
 import { ensureFulltext, onFulltextError, type Fulltext } from "./fulltext";
-import Sidebar, { type SidebarTab } from "./components/reader/Sidebar";
+import Sidebar, { type SidebarTab } from "./ui/components/reader/Sidebar";
 import { annotationPage, toolStatusLabel } from "./reading/context";
 import {
   ANNOTATION_COLORS,
@@ -22,7 +22,7 @@ import {
   loadAnnotations,
   onSaveError,
   saveAnnotations,
-} from "./app/annotations";
+} from "./platform/app/annotations";
 import {
   addFileToTopic,
   listTopics,
@@ -31,7 +31,7 @@ import {
   setFileHash,
   type FileRef,
   type Topic,
-} from "./app/topics";
+} from "./platform/app/topics";
 import {
   appendMessage,
   createBookThread,
@@ -45,12 +45,12 @@ import {
   readThreadImages,
   saveThreadImages,
   type ThreadMessage,
-} from "./app/threads";
-import { initSync, onSyncPulled } from "./sync";
+} from "./platform/app/threads";
+import { initSync, onSyncPulled } from "./platform/sync";
 import { compressImage, compressImageData, type CompressedImage } from "./ai/image-utils";
-import { isTauri, readClipboardImage } from "./app/clipboard";
-import { DEFAULT_SETTINGS, loadSettings, onSettingsSaveError, saveSettings, toReasoning, type Settings } from "./app/settings";
-import { buildGlossary } from "./voice";
+import { isTauri, readClipboardImage } from "./platform/app/clipboard";
+import { DEFAULT_SETTINGS, loadSettings, onSettingsSaveError, saveSettings, toReasoning, type Settings } from "./platform/app/settings";
+import { buildGlossary } from "./ai/voice";
 import {
   installFetchBridge,
   listProviders,
@@ -69,8 +69,8 @@ import {
   readPrepNote,
   type Citation,
   type PrepSnapshot,
-} from "./prep";
-import type { PrepPipeline } from "./prep/pipeline";
+} from "./reading/prep";
+import type { PrepPipeline } from "./reading/prep/pipeline";
 import {
   getNotesPipeline,
   hasNotesState,
@@ -79,9 +79,9 @@ import {
   readOverviewNote,
   type NotesInputs,
   type NotesSnapshot,
-} from "./notes";
-import type { NotesPipeline } from "./notes/pipeline";
-import InfoHome, { type HomeScreen } from "./components/info/InfoHome";
+} from "./reading/notes";
+import type { NotesPipeline } from "./reading/notes/pipeline";
+import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import {
   distillThread,
   getLastDistillation,
@@ -90,10 +90,10 @@ import {
   type DistillAnnotation,
   type MemoryEntry,
 } from "./memory";
-import { logEvent } from "./app/events";
-import { prewarmPdfiumEngine } from "./reader-embedpdf/engine-singleton";
-import EmbedReaderPane from "./reader-embedpdf/EmbedReaderPane";
-import { CitationContext, FigureContext, type FigureHost } from "./components/common/Markdown";
+import { logEvent } from "./platform/app/events";
+import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
+import EmbedReaderPane from "./reading/engine/EmbedReaderPane";
+import { CitationContext, FigureContext, type FigureHost } from "./ui/components/common/Markdown";
 import {
   clearFigureCache,
   ensureFigures,
@@ -101,23 +101,23 @@ import {
   renderFigure,
   type Figure,
   type FiguresIndex,
-} from "./figures";
-import PrepPanel from "./components/reader/PrepPanel";
-import NotesPanel from "./components/reader/NotesPanel";
-import MemoryPanel from "./components/reader/MemoryPanel";
-import ReaderTopBar from "./components/reader/ReaderTopBar";
-import AnnotationPopup from "./components/reader/AnnotationPopup";
-import CallBubble from "./components/chat/CallBubble";
-import CallView from "./components/chat/CallView";
-import ReadingPipCard from "./components/chat/ReadingPipCard";
-import ChatPipCard from "./components/chat/ChatPipCard";
-import SettingsView from "./components/SettingsView";
+} from "./reading/figures";
+import PrepPanel from "./ui/components/reader/PrepPanel";
+import NotesPanel from "./ui/components/reader/NotesPanel";
+import MemoryPanel from "./ui/components/reader/MemoryPanel";
+import ReaderTopBar from "./ui/components/reader/ReaderTopBar";
+import AnnotationPopup from "./ui/components/reader/AnnotationPopup";
+import CallBubble from "./ui/components/chat/CallBubble";
+import CallView from "./ui/components/chat/CallView";
+import ReadingPipCard from "./ui/components/chat/ReadingPipCard";
+import ChatPipCard from "./ui/components/chat/ChatPipCard";
+import SettingsView from "./ui/components/SettingsView";
 import { buildReadingTurn } from "./reading/turn";
-import { BTN, BTN_PRIMARY } from "./components/common/buttons";
-import { appendRunningTool, resolveToolStatus } from "./components/common/toolTrace";
-import LibraryScreen from "./components/library/LibraryScreen";
-import Toast, { useToasts } from "./components/common/Toast";
-import type { Annotation as PopupAnnotation, PendingImage, ToolStatus, ToolType } from "./components/common/types";
+import { BTN, BTN_PRIMARY } from "./ui/components/common/buttons";
+import { appendRunningTool, resolveToolStatus } from "./ui/components/common/toolTrace";
+import LibraryScreen from "./ui/components/library/LibraryScreen";
+import Toast, { useToasts } from "./ui/components/common/Toast";
+import type { Annotation as PopupAnnotation, PendingImage, ToolStatus, ToolType } from "./ui/components/common/types";
 
 // The AI pen maps to the engine's underline tool in a fixed purple (the palette's
 // Purple). Owning this one color for the AI pen is a v1 implementation

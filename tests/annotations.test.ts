@@ -1,10 +1,10 @@
-// The annotation store's in-memory cache and its invalidation (src/app/
-// annotations.ts). The cache is written back in full on every mark, so after
-// sync pulls another device's annotations-<bookId>.json it has to be dropped or
-// the next mark erases what was pulled. Run: bun test.
+// The annotation store's in-memory cache and its invalidation
+// (src/platform/app/annotations.ts). The cache is written back in full on every
+// mark, so after sync pulls another device's annotations-<bookId>.json it has to
+// be dropped or the next mark erases what was pulled. Run: bun test.
 
 import { beforeEach, expect, mock, test } from "bun:test";
-import type { Annotation } from "../src/app/reader-contract";
+import type { Annotation } from "../src/platform/app/reader-contract";
 
 const files = new Map<string, string>();
 
@@ -20,7 +20,7 @@ mock.module("@tauri-apps/plugin-fs", () => ({
 }));
 
 const writes: string[] = [];
-mock.module("../src/app/atomic-fs", () => ({
+mock.module("../src/platform/app/atomic-fs", () => ({
   writeTextAtomic: async (path: string, contents: string) => {
     writes.push(path);
     files.set(path, contents);
@@ -32,7 +32,7 @@ mock.module("../src/app/atomic-fs", () => ({
 (globalThis as { window?: unknown }).window = globalThis;
 
 const { deleteAnnotations, dropAnnotationCache, loadAnnotations, saveAnnotations } = await import(
-  "../src/app/annotations"
+  "../src/platform/app/annotations"
 );
 
 const mark = (id: string): Annotation =>
