@@ -11,9 +11,8 @@ import {
   buildReadingTools,
   notesOverviewSection,
   surroundingText,
-  type AnnotationLite,
-  type TopicMaterial,
 } from "./context";
+import type { AnnotationLite, TopicMaterial } from "../fulltext/format";
 import { modelSupportsImages, type ProviderId } from "../ai/aiClient";
 import type { Annotation } from "../app/reader-contract";
 import { buildSystemPrompt, readerProfileSection, type BooklistItem } from "../app/context";

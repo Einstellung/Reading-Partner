@@ -8,7 +8,7 @@
 import { Type, type ThinkingLevel } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../ai/agent";
 import { runAgentTurn } from "../ai/agent";
-import { formatPages, formatSearch } from "../reading/context";
+import { formatPages, formatSearch } from "../fulltext/format";
 import { buildFigureTools, type FigureImage } from "../figures/tools";
 import type { Figure } from "../figures/types";
 import type { Fulltext } from "../fulltext/types";

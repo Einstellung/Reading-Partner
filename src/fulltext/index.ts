@@ -10,4 +10,10 @@ export type {
 export { FULLTEXT_VERSION } from "./types";
 export { ensureFulltext, getFulltext, onFulltextError } from "./store";
 export { textAround, chapterAt, readPages, searchTopic } from "./query";
+export {
+  formatPages,
+  formatSearch,
+  type AnnotationLite,
+  type TopicMaterial,
+} from "./format";
 export { extractFulltext } from "./extract";
