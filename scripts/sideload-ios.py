@@ -15,9 +15,16 @@ the run, commit and commit title it is about to install, and warns when that
 commit is not the tip of the default branch. Otherwise running the script right
 after a push silently installs the previous build.
 
+Two signing accounts can coexist. The default is the free Apple ID (7-day
+profile); --dev picks the paid Developer Program one (1-year profile). They are
+different team IDs, so iOS will not upgrade one over the other in place — the
+device copy has to be deleted before switching, which wipes on-device data.
+
 .env keys (see .env.example):
   SIDELOAD_APPLE_ID          Apple ID email used for signing
   SIDELOAD_APPLE_PASSWORD    its password (app-specific password if 2FA is on)
+  SIDELOAD_DEV_APPLE_ID      Developer Program Apple ID, used by --dev
+  SIDELOAD_DEV_APPLE_PASSWORD  its app-specific password
   SIDELOAD_SIDELOADER_BIN    path to the sideloader-cli binary
   SIDELOAD_IPA               optional: local ipa path; omit to fetch latest from CI
   SIDELOAD_REPO              GitHub repo for the fetch (default Einstellung/Reading-Partner)
@@ -25,6 +32,7 @@ after a push silently installs the previous build.
 Usage:
   python3 scripts/sideload-ios.py            # fetch latest ipa from CI and install
   python3 scripts/sideload-ios.py path.ipa   # install a specific local ipa
+  python3 scripts/sideload-ios.py --dev      # sign with the Developer Program account
 """
 
 import json
@@ -224,17 +232,31 @@ def install(sideloader: str, ipa: Path, apple_id: str, password: str) -> int:
 
 
 def main() -> None:
+    args = sys.argv[1:]
+    dev = "--dev" in args
+    args = [a for a in args if a != "--dev"]
+
     env = load_env()
-    apple_id = env.get("SIDELOAD_APPLE_ID")
-    password = env.get("SIDELOAD_APPLE_PASSWORD")
+    prefix = "SIDELOAD_DEV_" if dev else "SIDELOAD_"
+    apple_id = env.get(prefix + "APPLE_ID")
+    password = env.get(prefix + "APPLE_PASSWORD")
     sideloader = env.get("SIDELOAD_SIDELOADER_BIN")
-    if not (apple_id and password and sideloader):
-        sys.exit("Set SIDELOAD_APPLE_ID, SIDELOAD_APPLE_PASSWORD, SIDELOAD_SIDELOADER_BIN in .env")
+    if not (apple_id and password):
+        sys.exit(f"Set {prefix}APPLE_ID and {prefix}APPLE_PASSWORD in .env")
+    if not sideloader:
+        sys.exit("Set SIDELOAD_SIDELOADER_BIN in .env")
     if not Path(sideloader).exists():
         sys.exit(f"Sideloader binary not found: {sideloader}")
+    if dev:
+        print(
+            "Signing with the Developer Program account. Its team ID differs from the\n"
+            "free one, so iOS refuses to install over an app signed by the other\n"
+            "account: delete Reading Partner on the device first (on-device data goes\n"
+            "with it; Drive sync restores what is in sync range)."
+        )
 
-    if len(sys.argv) > 1:
-        ipa = Path(sys.argv[1])
+    if args:
+        ipa = Path(args[0])
     elif env.get("SIDELOAD_IPA"):
         ipa = Path(env["SIDELOAD_IPA"])
     else:
