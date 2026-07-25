@@ -1,5 +1,5 @@
 // Headless coverage of the zotero <-> EmbedPDF annotation converters
-// (src/reader-embedpdf/convert.ts). Pure functions, no engine — run with
+// (src/reading/engine/convert.ts). Pure functions, no engine — run with
 // `bun test`. Mirrors the test style of tests/fulltext.test.ts.
 
 import { test, expect } from "bun:test";
@@ -13,7 +13,7 @@ import {
   zoteroRectToEmbed,
   zoteroToEmbed,
   type ZoteroAnnotation,
-} from "../src/reader-embedpdf/convert";
+} from "../../../src/reading/engine/convert";
 
 const PAGE_H = 792; // US Letter height in PDF points.
 

@@ -1,7 +1,7 @@
 // Headless coverage of the paged-mode touch gesture state machine
-// (src/reader-embedpdf/paged-gesture.ts) and the rubber band it hands the host
-// (src/reader-embedpdf/rubber-band.ts). Pure functions, no DOM, no engine —
-// run with `bun test`. Mirrors the style of tests/reader-embedpdf-convert.test.ts.
+// (src/reading/engine/paged-gesture.ts) and the rubber band it hands the host
+// (src/reading/engine/rubber-band.ts). Pure functions, no DOM, no engine —
+// run with `bun test`. Mirrors the style of the convert test next to it.
 
 import { test, expect } from "bun:test";
 import {
@@ -19,14 +19,14 @@ import {
   type GestureInput,
   type GestureState,
   type PagedGestureConfig,
-} from "../src/reader-embedpdf/paged-gesture";
+} from "../../../src/reading/engine/paged-gesture";
 import {
   BAND_SPRING_DECAY,
   BAND_SPRING_MIN_PX,
   bandAtRest,
   bandTransform,
   stepBandSpring,
-} from "../src/reader-embedpdf/rubber-band";
+} from "../../../src/reading/engine/rubber-band";
 
 const WIDTH = 800;
 const base = (over: Partial<PagedGestureConfig> = {}): PagedGestureConfig => ({

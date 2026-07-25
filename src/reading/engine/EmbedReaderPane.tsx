@@ -17,7 +17,7 @@ import {
   type ViewInstance,
   type ViewState,
   type ViewStats,
-} from "../platform/app/reader-contract";
+} from "../../platform/app/reader-contract";
 
 export interface EmbedReaderPaneProps {
   buffer: ArrayBuffer;

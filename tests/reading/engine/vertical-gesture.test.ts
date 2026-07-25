@@ -1,5 +1,5 @@
 // Headless coverage of the vertical-mode touch gesture state machine
-// (src/reader-embedpdf/vertical-gesture.ts): follow-finger scrolling and the
+// (src/reading/engine/vertical-gesture.ts): follow-finger scrolling and the
 // inertia fling. Pure functions, no DOM, no engine — run with `bun test`.
 //
 // The cases here are the ones real devices have broken before: a horizontal pan
@@ -27,8 +27,8 @@ import {
   type VerticalCommand,
   type VerticalInput,
   type VerticalState,
-} from "../src/reader-embedpdf/vertical-gesture";
-import { pinchHandsOff, planPointer } from "../src/reader-embedpdf/touch-routing";
+} from "../../../src/reading/engine/vertical-gesture";
+import { pinchHandsOff, planPointer } from "../../../src/reading/engine/touch-routing";
 
 // The four plans that can reach (or be refused by) the machine.
 const FINGER = planPointer("none", "touch", false); // no tool: finger scrolls

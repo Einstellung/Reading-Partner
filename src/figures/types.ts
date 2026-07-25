@@ -3,7 +3,7 @@
 // version field: a bump invalidates figure caches without touching fulltext.
 // Bboxes are in EmbedPDF/top-left page space (origin at the page's top-left, y
 // grows downward, PDF points) so they feed renderPageRect / a pdf.js crop
-// directly — the same convention as src/reader-embedpdf/convert.ts.
+// directly — the same convention as src/reading/engine/convert.ts.
 
 export const FIGURES_VERSION = 2 as const;
 

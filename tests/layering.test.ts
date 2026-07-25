@@ -52,8 +52,8 @@ const LAYER: Record<string, Layer> = {
   memory: "domain",
   notes: "domain",
   prep: "domain",
-  "reader-embedpdf": "domain",
   reading: "domain",
+  "reading/engine": "domain",
   slides: "domain",
 
   components: "ui",

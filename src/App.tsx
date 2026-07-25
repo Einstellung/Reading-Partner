@@ -91,8 +91,8 @@ import {
   type MemoryEntry,
 } from "./memory";
 import { logEvent } from "./platform/app/events";
-import { prewarmPdfiumEngine } from "./reader-embedpdf/engine-singleton";
-import EmbedReaderPane from "./reader-embedpdf/EmbedReaderPane";
+import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
+import EmbedReaderPane from "./reading/engine/EmbedReaderPane";
 import { CitationContext, FigureContext, type FigureHost } from "./components/common/Markdown";
 import {
   clearFigureCache,

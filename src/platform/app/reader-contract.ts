@@ -1,6 +1,6 @@
 // Engine-neutral contract between the shell and the reading engine: the view
 // handle the shell drives, the callbacks it receives, and the persisted shapes
-// (ViewState, Annotation). The EmbedPDF adapter in src/reader-embedpdf/
+// (ViewState, Annotation). The EmbedPDF adapter in src/reading/engine/
 // implements this contract; annotations keep their original on-disk JSON schema
 // (position.rects in PDF points, bottom-left origin) so existing files stay
 // readable without migration.
