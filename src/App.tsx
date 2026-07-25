@@ -8,6 +8,7 @@ import {
   type ViewState,
   type ViewStats,
 } from "./app/reader-contract";
+import { onCorruptFile } from "./app/atomic-fs";
 import { getViewState, hashPath, saveViewState, withClassroom } from "./app/storage";
 import { importBook, libraryHas, readLibraryBook } from "./app/library";
 import { migrateBookLive } from "./app/migrate";
@@ -459,9 +460,20 @@ export default function App() {
     return unsub;
   }, []);
 
-  // Install the Tauri fetch bridge + load settings once.
+  // Install the Tauri fetch bridge + load settings once. A data file that can't
+  // be read is set aside rather than silently replaced by defaults, and the user
+  // is told — otherwise a reset shelf or a lost provider config looks like the
+  // app forgot on its own.
   useEffect(() => {
     installFetchBridge();
+    onCorruptFile(({ file, savedAs }) => {
+      pushToast(
+        "warn",
+        savedAs
+          ? `${file} was unreadable and has been set aside as ${savedAs}`
+          : `${file} could not be read; it is left untouched and won't be overwritten`,
+      );
+    });
     loadSettings().then(setSettings).catch(() => {});
     onSettingsSaveError((e) => {
       console.error("failed to persist settings", e);

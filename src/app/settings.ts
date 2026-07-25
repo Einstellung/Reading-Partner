@@ -3,12 +3,7 @@
 // Persisted to AppData/settings.json, debounced, with failures surfaced.
 
 import type { ThinkingLevel } from "@earendil-works/pi-ai";
-import {
-  BaseDirectory,
-  exists,
-  readTextFile,
-  writeTextFile,
-} from "@tauri-apps/plugin-fs";
+import { readGuardedJson, writeTextAtomic } from "./atomic-fs";
 
 const SETTINGS_FILE = "settings.json";
 const SAVE_DEBOUNCE = 500;
@@ -130,16 +125,22 @@ export function onSettingsSaveError(handler: (e: unknown) => void): void {
   onError = handler;
 }
 
+// Set when the file exists but could not be read, so the app is running on
+// defaults that would erase real configuration (provider, keys) if written back.
+// Reset on a successful load, which is the only thing that can happen first.
+let blockWrites = false;
+
+// Falling back to the defaults is fine for a missing file and unavoidable for an
+// unreadable one, but it must not become the new truth: unparseable content is
+// quarantined first, and an unreadable file blocks saving until a later load
+// succeeds.
 export async function loadSettings(): Promise<Settings> {
-  try {
-    if (!(await exists(SETTINGS_FILE, { baseDir: BaseDirectory.AppData }))) return { ...DEFAULTS };
-    const parsed = JSON.parse(
-      await readTextFile(SETTINGS_FILE, { baseDir: BaseDirectory.AppData }),
-    ) as Partial<Settings>;
-    return { ...DEFAULTS, ...parsed };
-  } catch {
-    return { ...DEFAULTS };
-  }
+  const read = await readGuardedJson<Partial<Settings>>(SETTINGS_FILE, (raw) =>
+    raw && typeof raw === "object" ? (raw as Partial<Settings>) : null,
+  );
+  blockWrites = read.status === "corrupt" && read.savedAs === null;
+  if (read.status === "ok") return { ...DEFAULTS, ...read.value };
+  return { ...DEFAULTS };
 }
 
 // Debounced write; a failure is reported (never silently lost, pitfall 09).
@@ -147,9 +148,10 @@ export function saveSettings(settings: Settings): void {
   if (timer) window.clearTimeout(timer);
   timer = window.setTimeout(() => {
     (async () => {
-      await writeTextFile(SETTINGS_FILE, JSON.stringify(settings, null, 2), {
-        baseDir: BaseDirectory.AppData,
-      });
+      if (blockWrites) {
+        throw new Error(`${SETTINGS_FILE} could not be read; refusing to overwrite it`);
+      }
+      await writeTextAtomic(SETTINGS_FILE, JSON.stringify(settings, null, 2));
     })().catch((e) => onError(e));
   }, SAVE_DEBOUNCE);
 }
