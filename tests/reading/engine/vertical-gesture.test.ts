@@ -644,7 +644,7 @@ test("cancelFling drops the inertia but still brings the band home", () => {
   const flung = run([down(100, 300), move(100, 260, 16), upAt(100, 220, 32)], vp);
   const banded = step(flung.state, { type: "flingFrame", dt: 16 }, vp).state;
   expect(banded.over.y).not.toBe(0);
-  const r = run([{ type: "cancelFling" }], vp, banded.state);
+  const r = run([{ type: "cancelFling" }], vp, banded);
   expect(r.state.fling).toBeNull();
   expect(types(r.commands)).not.toContain("stopFling"); // frames are still owed
   expect(coast(r.state, vp).state.over).toEqual({ x: 0, y: 0 });

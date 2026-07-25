@@ -1,3 +1,6 @@
+// App code only. Test files (here and under tests/) are checked by
+// tsconfig.test.json, which adds the bun runtime types; `types: []` keeps those
+// globals out of here so a `Bun.` call can never compile into webview code.
 {
   "compilerOptions": {
     "target": "ES2020",
@@ -14,8 +17,10 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "types": []
   },
   "include": ["src"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

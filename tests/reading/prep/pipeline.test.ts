@@ -533,7 +533,9 @@ test("a URL source with a pre-extracted full text digests without a PDF, refinin
 });
 
 test("ingestSource resolves once fetched — before the digest finishes — and reads the source back", async () => {
-  let releaseDigest: ((d: DigestOutcome) => void) | null = null;
+  // Definite-assignment: the digest below is reached before the assertions, so
+  // a still-unset releaseDigest should throw rather than silently no-op.
+  let releaseDigest!: (d: DigestOutcome) => void;
   const { deps } = makeFakes({
     initial: emptyPlannedState(),
     fetch: async () => ({
@@ -555,7 +557,7 @@ test("ingestSource resolves once fetched — before the digest finishes — and 
   expect(paper.pages).toBe(1);
   expect(paper.title).toBe("Ingested Title");
   // Let the still-pending digest settle so the run loop can finish cleanly.
-  releaseDigest?.({ body: "n", pages: 1, thin: false });
+  releaseDigest({ body: "n", pages: 1, thin: false });
 });
 
 test("ingestSource ingests a user source even before the survey plan is done", async () => {
