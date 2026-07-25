@@ -7,7 +7,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { refreshAnthropicToken } from "@earendil-works/pi-ai/oauth";
-import { loadCredentials, saveCredentials, setActiveCredential, type AnthropicCredential } from "./credentials";
+import { loadCredentials, setActiveCredential, updateCredentials, type AnthropicCredential } from "./credentials";
+import { coalesceRefresh } from "./token-refresh";
 
 const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 const AUTHORIZE_URL = "https://claude.ai/oauth/authorize";
@@ -164,29 +165,44 @@ export async function anthropicLoginWithManualCode(input: string): Promise<void>
 }
 
 export async function anthropicLogout(): Promise<void> {
-	const s = await loadCredentials();
-	delete s.anthropic;
-	await saveCredentials(s);
+	await updateCredentials((s) => {
+		delete s.anthropic;
+	});
 }
 
 /**
  * Returns a usable access token, refreshing (and persisting the new token) when
  * the stored one is within the 5-minute expiry skew. Null when not logged in.
+ *
+ * Concurrent callers share one refresh: the refresh token rotates on use, so a
+ * second exchange with the same token fails and logs the user out (see
+ * token-refresh.ts).
  */
 export async function getValidAnthropicAuth(): Promise<string | null> {
-	const s = await loadCredentials();
-	const cred = s.anthropic;
+	const cred = (await loadCredentials()).anthropic;
 	if (!cred) return null;
 	if (Date.now() < cred.expires) return cred.access;
 
-	const refreshed = await refreshAnthropicToken(cred.refresh);
-	const next: AnthropicCredential = {
-		type: "oauth",
-		access: refreshed.access,
-		refresh: refreshed.refresh,
-		expires: refreshed.expires,
-	};
-	s.anthropic = next;
-	await saveCredentials(s);
-	return next.access;
+	return coalesceRefresh("anthropic", async () => {
+		// Re-read inside the coalescer: a refresh that finished between our read
+		// and our turn already spent this refresh token, and left the only valid
+		// successor on disk.
+		const current = (await loadCredentials()).anthropic;
+		if (!current) return null;
+		if (Date.now() < current.expires) return current.access;
+
+		const refreshed = await refreshAnthropicToken(current.refresh);
+		const next: AnthropicCredential = {
+			type: "oauth",
+			access: refreshed.access,
+			refresh: refreshed.refresh,
+			expires: refreshed.expires,
+		};
+		await updateCredentials((s) => {
+			// A sign-in or sign-out that landed while the exchange was in flight
+			// owns the file now; putting our token back would undo it.
+			if (s.anthropic?.refresh === current.refresh) s.anthropic = next;
+		});
+		return next.access;
+	});
 }

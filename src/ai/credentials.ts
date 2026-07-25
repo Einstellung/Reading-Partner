@@ -2,11 +2,16 @@
 // the OAuth triple (access/refresh/expires); DeepSeek holds an API key. Write
 // failures are surfaced, never swallowed — a silently dropped credential looks
 // like the login worked until the next request fails.
+//
+// One file, several independent writers: any of the five AI singletons (prep,
+// notes, slides, briefing, chat) can persist a refreshed token at any moment,
+// while Settings can be saving an image or STT key. Every write therefore goes
+// through updateCredentials, which serializes and re-reads, so no writer
+// resurrects the state it read before another one committed.
 
-import { BaseDirectory, exists, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readGuardedJson, writeTextAtomic } from "../app/atomic-fs";
 
 const FILE = "credentials.json";
-const opts = { baseDir: BaseDirectory.AppData } as const;
 
 export interface OAuthCredential {
 	type: "oauth";
@@ -94,19 +99,52 @@ export function withActiveCredential(
 	return next;
 }
 
+// Reads the store. Unparseable content is moved aside (the tokens in it are
+// unusable anyway) and reads as an empty store — the user signs in again. A file
+// that exists but cannot be read throws instead: the credentials are still in
+// there, and every writer loads before it writes, so throwing is what stops a
+// good file from being replaced by an empty one.
 export async function loadCredentials(): Promise<CredentialStore> {
-	if (!(await exists(FILE, opts))) return {};
-	const text = await readTextFile(FILE, opts);
-	try {
-		return JSON.parse(text) as CredentialStore;
-	} catch (e) {
-		throw new Error(`credentials.json is corrupt: ${e instanceof Error ? e.message : String(e)}`);
-	}
+	const read = await readGuardedJson<CredentialStore>(FILE, (raw) =>
+		raw && typeof raw === "object" ? (raw as CredentialStore) : null,
+	);
+	if (read.status === "ok") return read.value;
+	if (read.status === "missing") return {};
+	if (read.savedAs === null) throw new Error(`${FILE} could not be read`);
+	return {};
 }
 
 export async function saveCredentials(store: CredentialStore): Promise<void> {
-	// writeTextFile throws on failure; let it propagate to the caller/UI.
-	await writeTextFile(FILE, JSON.stringify(store, null, 2), opts);
+	// The write throws on failure; let it propagate to the caller/UI.
+	await writeTextAtomic(FILE, JSON.stringify(store, null, 2));
+}
+
+// Serializes every read-modify-write of the file. Chained rather than locked:
+// each mutation waits for the previous one to have landed, then reads the file
+// itself, so `mutate` always sees what is actually on disk.
+let queue: Promise<unknown> = Promise.resolve();
+
+/**
+ * Apply one mutation to credentials.json, serialized against every other
+ * mutation. `mutate` runs on a store freshly read inside the queue and either
+ * edits it in place or returns a replacement; it must touch only its own
+ * fields, since it is merging into whatever the other writers left behind.
+ */
+export function updateCredentials(
+	mutate: (store: CredentialStore) => CredentialStore | void,
+): Promise<CredentialStore> {
+	const run = queue.then(async () => {
+		const store = await loadCredentials();
+		const next = mutate(store) ?? store;
+		await saveCredentials(next);
+		return next;
+	});
+	// Keep the chain alive after a failure; the failure itself is the caller's.
+	queue = run.then(
+		() => undefined,
+		() => undefined,
+	);
+	return run;
 }
 
 // Single-active write: store one provider's credential and drop the other two,
@@ -117,8 +155,7 @@ export async function setActiveCredential(
 	id: ProviderCredentialId,
 	cred: OAuthCredential | ApiKeyCredential,
 ): Promise<void> {
-	const s = await loadCredentials();
-	await saveCredentials(withActiveCredential(s, id, cred));
+	await updateCredentials((s) => withActiveCredential(s, id, cred));
 }
 
 // The image-relay key, or null when unset (decks then generate without AI
@@ -130,11 +167,11 @@ export async function getImageGenKey(): Promise<string | null> {
 
 // Set or clear the image-relay key (empty string clears it).
 export async function setImageGenKey(key: string): Promise<void> {
-	const creds = await loadCredentials();
 	const trimmed = key.trim();
-	if (trimmed) creds.imageGen = { type: "apiKey", key: trimmed };
-	else delete creds.imageGen;
-	await saveCredentials(creds);
+	await updateCredentials((creds) => {
+		if (trimmed) creds.imageGen = { type: "apiKey", key: trimmed };
+		else delete creds.imageGen;
+	});
 }
 
 // Whether an image-relay key is configured (drives the Settings UI state).
