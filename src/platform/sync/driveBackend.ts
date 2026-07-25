@@ -11,7 +11,7 @@
 // is opaque to Drive (slashes are not path separators there). books/<hash>.pdf
 // are immutable content-addressed blobs, uploaded once and never overwritten.
 
-import { cleanTauriFetch } from "../app/tauri-fetch";
+import { cleanTauriFetch, type TauriFetch } from "../app/tauri-fetch";
 import type { Manifest, SyncBackend } from "./backend";
 import type { DriveIds } from "./state";
 
@@ -29,6 +29,8 @@ export interface DriveBackendDeps {
   getToken: () => Promise<string>;
   ids: DriveIds; // mutated in place as folders/files are discovered or created
   persistIds: () => Promise<void>;
+  // Injectable for tests; production always uses the Tauri http plugin wrapper.
+  fetchImpl?: TauriFetch;
 }
 
 // Escape a value for a Drive `q` search string (single-quoted).
@@ -63,7 +65,7 @@ export class DriveBackend implements SyncBackend {
     const headers = new Headers(init?.headers);
     headers.set("Authorization", `Bearer ${token}`);
     headers.set("Origin", "");
-    return cleanTauriFetch(url, { ...init, headers });
+    return (this.d.fetchImpl ?? cleanTauriFetch)(url, { ...init, headers });
   }
 
   private async ok(res: Response, what: string): Promise<Response> {
