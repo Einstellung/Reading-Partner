@@ -1,14 +1,14 @@
-// Unit tests for the slides pipeline state machine (src/slides/pipeline.ts),
+// Unit tests for the slides pipeline state machine (src/reading/slides/pipeline.ts),
 // driven by fake deps — no Tauri, no network, no AI spend. Run: bun test.
 
 import { expect, test } from "bun:test";
-import type { DeckPlan } from "../../src/slides/plan";
+import type { DeckPlan } from "../../../src/reading/slides/plan";
 import {
   SlidesPipeline,
   type AssembleInput,
   type SlidesDeps,
-} from "../../src/slides/pipeline";
-import type { SlideOutline } from "../../src/slides/types";
+} from "../../../src/reading/slides/pipeline";
+import type { SlideOutline } from "../../../src/reading/slides/types";
 
 const TEST_CONFIG = { retryDelayMs: 5 };
 

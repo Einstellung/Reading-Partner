@@ -1,9 +1,9 @@
-// Unit tests for the talk registry append logic (src/slides/types.ts addTalk).
+// Unit tests for the talk registry append logic (src/reading/slides/types.ts addTalk).
 // The fs wrapper (store.ts) is exercised in the app; the pure append is here.
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { addTalk, type TalkEntry } from "../../src/slides/types";
+import { addTalk, type TalkEntry } from "../../../src/reading/slides/types";
 
 const entry = (title: string, createdAt: number): TalkEntry => ({
   title,

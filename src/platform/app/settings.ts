@@ -87,7 +87,7 @@ export interface Settings {
   prepThinking: ThinkingSetting;
   // Deck-illustration image relay (docs/14). Base URL and model are harmless
   // config and sync freely; the paid key lives in credentials.json (not synced).
-  // null falls back to the built-in defaults (see src/slides/imageGen.ts).
+  // null falls back to the built-in defaults (see src/reading/slides/imageGen.ts).
   illustrationApiBase: string | null;
   illustrationModel: string | null;
   // Voice-input STT endpoint (docs/15). base/model sync freely; the key lives in

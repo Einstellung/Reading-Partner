@@ -25,7 +25,7 @@ import { isIOS } from "../platform/app/platform";
 import { BTN, BTN_PRIMARY } from "./common/buttons";
 import { hasImageGenKey, setImageGenKey } from "../ai/credentials";
 import { DEFAULT_STT_BASE, DEFAULT_STT_MODEL, hasSttKey, setSttKey } from "../ai/voice";
-import { DEFAULT_IMAGE_API_BASE, DEFAULT_IMAGE_MODEL } from "../slides";
+import { DEFAULT_IMAGE_API_BASE, DEFAULT_IMAGE_MODEL } from "../reading/slides";
 import { AI_LANGUAGE_OPTIONS, type AiLanguage, type Settings, type ThinkingSetting } from "../platform/app/settings";
 import {
   setAutoSyncEnabled,

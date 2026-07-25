@@ -1,4 +1,4 @@
-// Unit tests for the image-relay client (src/slides/imageGen.ts): request
+// Unit tests for the image-relay client (src/reading/slides/imageGen.ts): request
 // building, the poll state parser, and the submit→poll→result flow driven by an
 // injected fetch — no network, no spend. Run: bun test.
 
@@ -13,7 +13,7 @@ import {
   resolveImageGenConfig,
   type HttpRequest,
   type ImageGenDeps,
-} from "../../src/slides/imageGen";
+} from "../../../src/reading/slides/imageGen";
 
 const config = resolveImageGenConfig({ apiBase: null, model: null, apiKey: "secret" });
 

@@ -18,7 +18,7 @@ import {
   type SlidesPipeline,
   type SlidesSnapshot,
   type TalkEntry,
-} from "../../slides";
+} from "../../reading/slides";
 import { BTN, BTN_PRIMARY } from "../common/buttons";
 
 function LivenessHint({ activity }: { activity: SlidesActivity }) {

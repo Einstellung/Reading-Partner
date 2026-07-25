@@ -10,7 +10,7 @@ import {
   mkdir,
   readTextFile,
 } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../platform/app/atomic-fs";
+import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { addTalk, type TalkEntry } from "./types";
 
 export const SLIDES_DIR = "slides";

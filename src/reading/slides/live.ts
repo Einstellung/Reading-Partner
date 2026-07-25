@@ -6,16 +6,16 @@
 // book id, so a talk can span books that aren't the one currently open.
 
 import { BaseDirectory, readDir } from "@tauri-apps/plugin-fs";
-import { getImageGenKey } from "../ai/credentials";
-import { callModel, resolveModel } from "../ai/model-call";
-import { getFigures } from "../reading/figures/store";
-import { renderFigure } from "../reading/figures/render";
-import { getLibraryEntry, readLibraryBook } from "../platform/app/library";
-import { loadNotesState, readChapterNote, readOverviewNote } from "../reading/notes/store";
-import { loadSettings } from "../platform/app/settings";
+import { getImageGenKey } from "../../ai/credentials";
+import { callModel, resolveModel } from "../../ai/model-call";
+import { getFigures } from "../figures/store";
+import { renderFigure } from "../figures/render";
+import { getLibraryEntry, readLibraryBook } from "../../platform/app/library";
+import { loadNotesState, readChapterNote, readOverviewNote } from "../notes/store";
+import { loadSettings } from "../../platform/app/settings";
 import { contentSystemPrompt, contentUserMessage, sanitizeFragment } from "./content";
 import { generateImage, resolveImageGenConfig, type ImageGenDeps } from "./imageGen";
-import { cleanTauriFetch } from "../platform/app/tauri-fetch";
+import { cleanTauriFetch } from "../../platform/app/tauri-fetch";
 import {
   parseSlidePlan,
   planUserMessage,

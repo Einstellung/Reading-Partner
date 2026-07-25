@@ -1,8 +1,8 @@
-// Unit tests for deck assembly (src/slides/template.ts): placeholders replaced,
+// Unit tests for deck assembly (src/reading/slides/template.ts): placeholders replaced,
 // slides wrapped, output self-contained. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { assembleDeck, slugify } from "../../src/slides/template";
+import { assembleDeck, slugify } from "../../../src/reading/slides/template";
 
 test("slugify makes a filename-safe stem", () => {
   expect(slugify("My Great Talk!")).toBe("my-great-talk");

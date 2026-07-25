@@ -54,7 +54,7 @@ const LAYER: Record<string, Layer> = {
   "reading/figures": "domain",
   "reading/notes": "domain",
   "reading/prep": "domain",
-  slides: "domain",
+  "reading/slides": "domain",
 
   components: "ui",
   "App.tsx": "shell",

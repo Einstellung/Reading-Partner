@@ -1,7 +1,7 @@
-// Unit tests for the slides plan parser (src/slides/plan.ts). Run: bun test.
+// Unit tests for the slides plan parser (src/reading/slides/plan.ts). Run: bun test.
 
 import { expect, test } from "bun:test";
-import { parseSlidePlan, planUserMessage, slidesPlanSystemPrompt } from "../../src/slides/plan";
+import { parseSlidePlan, planUserMessage, slidesPlanSystemPrompt } from "../../../src/reading/slides/plan";
 
 test("slidesPlanSystemPrompt appends the output-language instruction only when set", () => {
   expect(slidesPlanSystemPrompt("ru")).toContain("All user-facing output must be written in Русский.");

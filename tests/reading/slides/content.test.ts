@@ -1,8 +1,8 @@
-// Unit tests for slide-fragment sanitization (src/slides/content.ts). Run: bun test.
+// Unit tests for slide-fragment sanitization (src/reading/slides/content.ts). Run: bun test.
 
 import { expect, test } from "bun:test";
-import { contentSystemPrompt, contentUserMessage, sanitizeFragment } from "../../src/slides/content";
-import type { SlideRun } from "../../src/slides/types";
+import { contentSystemPrompt, contentUserMessage, sanitizeFragment } from "../../../src/reading/slides/content";
+import type { SlideRun } from "../../../src/reading/slides/types";
 
 test("sanitizeFragment strips scripts, styles, and event handlers", () => {
   const out = sanitizeFragment(

@@ -7,8 +7,8 @@
 // it carries its own timeout, not the watchdog) and the figure crop path. A run
 // is one-shot — no resume across restart in v1; a Stop aborts it.
 
-import { StoppedError, type AiCallOptions, type WatchdogConfig } from "../ai/watchdog";
-import { ObservableRun, type RunSnapshot } from "../ai/observable-run";
+import { StoppedError, type AiCallOptions, type WatchdogConfig } from "../../ai/watchdog";
+import { ObservableRun, type RunSnapshot } from "../../ai/observable-run";
 import type { DeckPlan } from "./plan";
 import { slugify } from "./template";
 import {
