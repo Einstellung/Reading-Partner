@@ -3,6 +3,7 @@
 import { expect, test } from "bun:test";
 import { contentSystemPrompt, contentUserMessage, sanitizeFragment } from "../../../src/reading/slides/content";
 import type { SlideRun } from "../../../src/reading/slides/types";
+import { languageInstruction } from "../../../src/platform/app/settings";
 
 test("sanitizeFragment strips scripts, styles, and event handlers", () => {
   const out = sanitizeFragment(
@@ -62,8 +63,10 @@ test("contentUserMessage handles a slide with no notes", () => {
   expect(contentUserMessage(slide, "")).toContain("No source notes");
 });
 
+// Against languageInstruction rather than a retyped copy of its wording — see
+// the note in slides/plan.test.ts.
 test("contentSystemPrompt appends the output-language instruction only when set", () => {
-  expect(contentSystemPrompt("es")).toContain("All user-facing output must be written in Español.");
-  expect(contentSystemPrompt()).not.toContain("must be written in");
-  expect(contentSystemPrompt("auto")).not.toContain("must be written in");
+  const base = contentSystemPrompt("auto");
+  expect(contentSystemPrompt("es")).toBe(`${base}\n\n${languageInstruction("es")}`);
+  expect(contentSystemPrompt()).toBe(base);
 });
