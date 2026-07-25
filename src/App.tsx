@@ -1081,6 +1081,9 @@ export default function App() {
   // Trace-list click: jump to the mark. Programmatic select does not open the
   // popup (pitfall 04), which is what we want for a list jump.
   const onTraceSelect = useCallback((id: string) => {
+    // Same as the outline jump: leaving the drawer open parks its backdrop over
+    // the page we just navigated to, and the backdrop only answers a tap.
+    setSidebarOpen(false);
     viewRef.current?.selectAnnotations([id]);
     viewRef.current?.navigate({ annotationID: id });
     setSelectedAnnId(id);
@@ -1578,7 +1581,13 @@ export default function App() {
             }}
             fulltext={fulltext}
             fulltextPending={fulltextPending}
-            onNavigatePage={(page) => viewRef.current?.navigate({ pageIndex: page - 1 })}
+            onNavigatePage={(page) => {
+              // Close the drawer on the way: its backdrop covers the reader and
+              // only answers a tap, so a jump that leaves it open lands on a page
+              // the finger cannot scroll.
+              setSidebarOpen(false);
+              viewRef.current?.navigate({ pageIndex: page - 1 });
+            }}
             annotations={traceAnns as unknown as PopupAnnotation[]}
             selectedId={selectedAnnId}
             onSelectAnnotation={onTraceSelect}
