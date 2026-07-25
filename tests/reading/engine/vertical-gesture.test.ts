@@ -129,11 +129,19 @@ function coast(state: VerticalState, vp: Viewport, frames = 600): { state: Verti
   return { state: s, n };
 }
 
+// -0 and 0 are the same offset. Which one the machine yields depends only on
+// where its unary minus sits (-rubberBand(x) rather than rubberBand(-x)), and
+// nothing downstream can tell them apart: translate3d(-0px, …) and
+// translate3d(0px, …) paint identically, and the rest check takes an absolute
+// value. Collapsing the sign keeps a sign-neutral rewrite of the machine from
+// turning the rest assertions red for no reason. toEqual does distinguish them.
+const unsigned = (n: number): number => n + 0;
+
 // The last band offset a run asked the host to paint.
 function lastBand(cmds: VerticalCommand[]): { x: number; y: number } | null {
   for (let i = cmds.length - 1; i >= 0; i -= 1) {
     const c = cmds[i];
-    if (c.type === "band") return { x: c.x, y: c.y };
+    if (c.type === "band") return { x: unsigned(c.x), y: unsigned(c.y) };
   }
   return null;
 }
@@ -149,7 +157,8 @@ test("clampScroll: pins to the range, and to 0 when there is no room", () => {
 });
 
 test("flingFrom: the scroll coasts opposite the finger", () => {
-  expect(flingFrom(0, -1.2, VERTICAL_FLING_MIN_SPEED)).toEqual({ vx: -0, vy: 1.2 });
+  const f = flingFrom(0, -1.2, VERTICAL_FLING_MIN_SPEED)!;
+  expect({ vx: unsigned(f.vx), vy: f.vy }).toEqual({ vx: 0, vy: 1.2 });
 });
 
 test("flingFrom: a slow release does not coast at all", () => {
@@ -504,7 +513,8 @@ test("splitOvershoot: the raw overshoot is capped, so the spring is never long",
 });
 
 test("bandOffsetFor: opposite the overshoot, damped, and bounded by the limit", () => {
-  expect(bandOffsetFor({ x: 0, y: 0 }, VERTICAL_BAND_LIMIT)).toEqual({ x: -0, y: -0 });
+  const rest = bandOffsetFor({ x: 0, y: 0 }, VERTICAL_BAND_LIMIT);
+  expect({ x: unsigned(rest.x), y: unsigned(rest.y) }).toEqual({ x: 0, y: 0 });
   // Pushing the scroll past the bottom moves the content up.
   expect(bandOffsetFor({ x: 0, y: 60 }, VERTICAL_BAND_LIMIT).y).toBeLessThan(0);
   expect(bandOffsetFor({ x: 0, y: -60 }, VERTICAL_BAND_LIMIT).y).toBeGreaterThan(0);
@@ -549,7 +559,7 @@ test("dragging back into the document zeroes the band and scrolls again, with no
   const past = run([move(100, 40, 48)], vp, back.state);
   expect(past.state.over).toEqual({ x: 0, y: 0 });
   expect(vp.top).toBe(60); // 100 - 40, measured from the same origin throughout
-  expect(lastBand(past.commands)).toEqual({ x: -0, y: -0 });
+  expect(lastBand(past.commands)).toEqual({ x: 0, y: 0 });
 });
 
 test("a release from inside the band springs home instead of flinging", () => {
@@ -574,7 +584,7 @@ test("the last band frame paints exactly rest, so the transform is cleared", () 
     s = f.state;
     cmds.push(...f.commands);
   }
-  expect(lastBand(cmds)).toEqual({ x: -0, y: -0 });
+  expect(lastBand(cmds)).toEqual({ x: 0, y: 0 });
   expect(types(cmds)).toContain("stopFling");
 });
 
