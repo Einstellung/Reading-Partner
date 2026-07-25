@@ -18,6 +18,7 @@ import { writeTextAtomic } from "../app/atomic-fs";
 import type { PdfEngine } from "@embedpdf/models";
 import { getPdfiumEngine } from "../reader-embedpdf/engine-singleton";
 import { SMOKE_PDF_BASE64, decodeBase64 } from "./smoke-pdf";
+import { probeVoiceCapabilities, type VoiceCapabilities } from "./voice-probe";
 
 // Where the verdict is written, relative to the app data dir. The CI does not
 // assume where BaseDirectory.AppData maps on iOS — it locates the file by its
@@ -53,6 +54,10 @@ export interface SmokeResult {
   renderHeight: number | null;
   nonWhitePixels: number | null;
   error: string | null;
+  // Passenger: the layer-0 voice capability probe (docs/20). Never affects `ok`
+  // — it is read out of the artifact by hand, not asserted on.
+  voice: VoiceCapabilities | null;
+  voiceError: string | null;
   timestamp: string;
 }
 
@@ -141,6 +146,8 @@ export async function runSmoke(): Promise<void> {
     renderHeight: null,
     nonWhitePixels: null,
     error: null,
+    voice: null,
+    voiceError: null,
     timestamp: new Date().toISOString(),
   };
 
@@ -219,6 +226,14 @@ export async function runSmoke(): Promise<void> {
     result.ok = false;
     result.error =
       e instanceof Error ? `${e.message}\n${e.stack ?? ""}`.trim() : String(e);
+  }
+
+  // After the engine verdict is settled, so the probe cannot perturb the timings
+  // it shares a file with, and runs whether the engine passed or threw.
+  try {
+    result.voice = probeVoiceCapabilities();
+  } catch (e) {
+    result.voiceError = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
   }
 
   await writeResult(result);
