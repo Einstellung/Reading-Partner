@@ -1,4 +1,4 @@
-// Article image inliner (src/info/inline-images.ts). Run: bun test.
+// Article image inliner (src/info/extract/inline-images.ts). Run: bun test.
 
 import { expect, test } from "bun:test";
 import {

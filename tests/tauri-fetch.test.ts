@@ -1,4 +1,4 @@
-// Unit tests for cleanTauriFetch (src/tauri-fetch.ts): the Tauri http plugin's
+// Unit tests for cleanTauriFetch (src/platform/app/tauri-fetch.ts): the Tauri http plugin's
 // abort/dropped-resource errors must reach callers as a standard AbortError,
 // while ordinary errors pass through untouched. No plugin, no network — the
 // underlying fetch is a fake. Run: bun test.

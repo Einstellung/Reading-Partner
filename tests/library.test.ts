@@ -1,4 +1,4 @@
-// Content hash + library registry (src/library.ts). The hash and the pure
+// Content hash + library registry (src/platform/app/library.ts). The hash and the pure
 // registry transform run headless; the Tauri fs copy path is exercised by the
 // app. Run: bun test.
 

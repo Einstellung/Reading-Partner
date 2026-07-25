@@ -1,4 +1,4 @@
-// Unit tests for the floating info-chat system prompts (src/info/chat.ts): the
+// Unit tests for the floating info-chat system prompts (src/info/companion/chat.ts): the
 // output-language wiring on both threads, and the shared companion context —
 // profile, source roster, per-item source, the full filtered clip list, and the
 // update_profile anti-over-trigger rule. Run: bun test.
@@ -13,6 +13,7 @@ import {
 } from "../../src/info/companion/chat";
 import type { SourceDescriptor } from "../../src/info/sources/descriptor";
 import type { Briefing } from "../../src/info/briefing/types";
+import { languageInstruction } from "../../src/platform/app/settings";
 
 const SOURCES: SourceDescriptor[] = [
   {
@@ -21,7 +22,7 @@ const SOURCES: SourceDescriptor[] = [
   },
   {
     id: "hn", name: "Hacker News", line: "tech front page", enabled: false,
-    discovery: { kind: "feed", url: "https://hn/feed" }, fulltext: { mode: "feed" },
+    discovery: { kind: "feed", url: "https://hn/feed" }, fulltext: { mode: "feed-field" },
   },
 ];
 
@@ -41,17 +42,26 @@ const BRIEFING: Briefing = {
   filtered: [{ itemId: "f1", category: "vendor PR" }],
 };
 
+// Against languageInstruction rather than a retyped copy of its wording: a
+// reworded directive should not be a test edit, and `not.toContain` on a
+// hand-copied fragment goes quietly vacuous the moment the wording moves. These
+// prompts splice the directive in mid-prompt rather than appending it, so this
+// asserts presence and absence rather than whole-string equality.
 test("briefingChatSystemPrompt pins output only when a language is set", () => {
-  const pinned = briefingChatSystemPrompt(BRIEFING, { ...CTX, aiLanguage: "zh-CN" });
-  expect(pinned).toContain("All user-facing output must be written in 简体中文.");
-  expect(briefingChatSystemPrompt(BRIEFING, CTX)).not.toContain("must be written in");
-  expect(briefingChatSystemPrompt(BRIEFING, { ...CTX, aiLanguage: "auto" })).not.toContain("must be written in");
+  const unset = briefingChatSystemPrompt(BRIEFING, CTX);
+  expect(briefingChatSystemPrompt(BRIEFING, { ...CTX, aiLanguage: "zh-CN" })).toContain(
+    languageInstruction("zh-CN"),
+  );
+  expect(unset).not.toContain(languageInstruction("zh-CN"));
+  expect(briefingChatSystemPrompt(BRIEFING, { ...CTX, aiLanguage: "auto" })).toBe(unset);
 });
 
 test("articleChatSystemPrompt pins output only when a language is set", () => {
-  const pinned = articleChatSystemPrompt("overview", "Title", "body", { ...CTX, aiLanguage: "pt" });
-  expect(pinned).toContain("All user-facing output must be written in Português.");
-  expect(articleChatSystemPrompt("overview", "Title", "body", CTX)).not.toContain("must be written in");
+  const unset = articleChatSystemPrompt("overview", "Title", "body", CTX);
+  expect(articleChatSystemPrompt("overview", "Title", "body", { ...CTX, aiLanguage: "pt" })).toContain(
+    languageInstruction("pt"),
+  );
+  expect(unset).not.toContain(languageInstruction("pt"));
 });
 
 test("both threads carry the profile, source roster, and the full tool set", () => {

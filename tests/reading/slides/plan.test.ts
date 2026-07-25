@@ -2,11 +2,15 @@
 
 import { expect, test } from "bun:test";
 import { parseSlidePlan, planUserMessage, slidesPlanSystemPrompt } from "../../../src/reading/slides/plan";
+import { languageInstruction } from "../../../src/platform/app/settings";
 
+// Against languageInstruction rather than a retyped copy of its wording: a
+// reworded directive should not be a test edit, and `not.toContain` on a
+// hand-copied fragment goes quietly vacuous the moment the wording moves.
 test("slidesPlanSystemPrompt appends the output-language instruction only when set", () => {
-  expect(slidesPlanSystemPrompt("ru")).toContain("All user-facing output must be written in Русский.");
-  expect(slidesPlanSystemPrompt()).not.toContain("must be written in");
-  expect(slidesPlanSystemPrompt("auto")).not.toContain("must be written in");
+  const base = slidesPlanSystemPrompt("auto");
+  expect(slidesPlanSystemPrompt("ru")).toBe(`${base}\n\n${languageInstruction("ru")}`);
+  expect(slidesPlanSystemPrompt()).toBe(base);
 });
 
 test("parseSlidePlan reads title, kinds, provenance, and asset slots", () => {

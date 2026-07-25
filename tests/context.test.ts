@@ -1,8 +1,9 @@
-// Unit tests for system-prompt assembly (src/context.ts). Pure string building.
+// Unit tests for system-prompt assembly (src/platform/app/context.ts). Pure string building.
 // Run: bun test.
 
 import { expect, test } from "bun:test";
 import { buildSystemPrompt, readerProfileSection, type BooklistItem } from "../src/platform/app/context";
+import { languageInstruction } from "../src/platform/app/settings";
 
 const base = {
   topicName: "what makes JITs fast",
@@ -94,13 +95,16 @@ test("the memory snapshot appends the same way for a book-level prompt", () => {
   expect(out).toContain("reading-position: on chapter 5");
 });
 
+// Against languageInstruction rather than a retyped copy of its wording: a
+// reworded directive should not be a test edit, and `not.toContain` on a
+// hand-copied fragment goes quietly vacuous the moment the wording moves.
 test("aiLanguage appends the output-language instruction, auto adds nothing", () => {
-  const pinned = buildSystemPrompt({ ...base, aiLanguage: "ja" });
-  expect(pinned).toContain("Respond in 日本語.");
-  expect(pinned).toContain("All user-facing output must be written in 日本語.");
+  const plain = buildSystemPrompt(base);
+  expect(buildSystemPrompt({ ...base, aiLanguage: "ja" })).toBe(
+    `${plain}\n\n${languageInstruction("ja")}`,
+  );
   // Auto (and unset) leave the prompt without a pinning instruction.
-  expect(buildSystemPrompt({ ...base, aiLanguage: "auto" })).not.toContain("must be written in");
-  expect(buildSystemPrompt(base)).not.toContain("must be written in");
+  expect(buildSystemPrompt({ ...base, aiLanguage: "auto" })).toBe(plain);
 });
 
 test("readerProfileSection injects the profile and depth guidance, empty when unset", () => {

@@ -1,4 +1,4 @@
-// The Readability-vs-defuddle selection logic (src/info/readable-select.ts).
+// The Readability-vs-defuddle selection logic (src/info/extract/readable-select.ts).
 // The DOM extraction itself runs only in the webview; this is the pure decision
 // of which result to keep, which is where the fallback policy lives. Run: bun test.
 

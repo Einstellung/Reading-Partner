@@ -1,4 +1,4 @@
-// Unit tests for settings (src/settings.ts): the thinking defaults, the
+// Unit tests for settings (src/platform/app/settings.ts): the thinking defaults, the
 // setting -> pi-ai reasoning-level mapping, and that loadSettings fills defaults
 // over a persisted file (so an old file without the thinking keys still loads).
 // The Tauri fs plugin is mocked with an in-memory file. Run: bun test.

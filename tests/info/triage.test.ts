@@ -1,4 +1,4 @@
-// Triage prompt assembly + strict-JSON validation (src/info/triage.ts).
+// Triage prompt assembly + strict-JSON validation (src/info/briefing/triage.ts).
 // Run: bun test.
 
 import { expect, test } from "bun:test";
@@ -10,6 +10,7 @@ import {
 } from "../../src/info/briefing/triage";
 import type { FeedbackEvent } from "../../src/memory/feedback";
 import type { InfoItem } from "../../src/info/briefing/types";
+import { languageInstruction } from "../../src/platform/app/settings";
 
 const ITEMS: InfoItem[] = [
   {
@@ -145,13 +146,14 @@ test("parseTriageResult fails on no JSON or missing overview", () => {
 test("triageSystemPrompt keeps the English default on auto, replaces it on a set language", () => {
   const auto = triageSystemPrompt("auto");
   expect(auto).toContain("Write the overview, reasons, and one-liners in English");
-  // No appended second directive to contradict the templated one.
-  expect(auto).not.toContain("All user-facing output must be written in");
+  // No appended second directive to contradict the templated one. Compared
+  // against languageInstruction itself, so a reword cannot make this vacuous.
+  expect(auto).not.toContain(languageInstruction("zh-CN"));
 
   const pinned = triageSystemPrompt("zh-CN");
   // The hardcoded English line is gone; the single directive names the language.
   expect(pinned).not.toContain("in English");
   expect(pinned).toContain("Write the overview, reasons, and one-liners in 简体中文");
-  // Exactly one language directive — no appended pin.
-  expect(pinned).not.toContain("All user-facing output must be written in");
+  // Exactly one language directive — the shared appended pin is not used here.
+  expect(pinned).not.toContain(languageInstruction("zh-CN"));
 });

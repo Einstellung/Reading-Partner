@@ -1,4 +1,4 @@
-// Briefing store date logic (src/info/store.ts) plus the item-snapshot leaning.
+// Briefing store date logic (src/info/briefing/store.ts) plus the item-snapshot leaning.
 // Only the pure helpers are exercised here; the fs read/write paths need the
 // Tauri plugin. Run: bun test.
 

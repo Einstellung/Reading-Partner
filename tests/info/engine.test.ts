@@ -1,4 +1,4 @@
-// The generic collection engine (src/info/engine.ts): the three discovery pipes
+// The generic collection engine (src/info/sources/engine.ts): the three discovery pipes
 // (json-api with a detail endpoint, json-api with inline bodies, feed + fetched
 // page, feed-field, listpage), per-item failure degradation, and per-source
 // isolation + health in collectAll. Injected fetch + extract keep it DOM-free.

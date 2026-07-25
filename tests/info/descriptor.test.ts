@@ -1,4 +1,4 @@
-// Source descriptor validation + path helpers (src/info/descriptor.ts).
+// Source descriptor validation + path helpers (src/info/sources/descriptor.ts).
 // Run: bun test.
 
 import { expect, test } from "bun:test";

@@ -1,4 +1,4 @@
-// Unit tests for the local event log (src/events.ts): line format and the
+// Unit tests for the local event log (src/platform/app/events.ts): line format and the
 // injected-append logger. Run: bun test.
 
 import { expect, test } from "bun:test";

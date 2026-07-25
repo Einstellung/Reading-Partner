@@ -1,4 +1,4 @@
-// Article-HTML sanitizer (src/info/sanitize.ts). Run: bun test.
+// Article-HTML sanitizer (src/info/extract/sanitize.ts). Run: bun test.
 
 import { expect, test } from "bun:test";
 import { htmlToText, sanitizeArticleHtml } from "../../src/info/extract/sanitize";
