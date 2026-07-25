@@ -46,3 +46,4 @@
 - [40-embedpdf-horizontal-strip-no-page-snap](./40-embedpdf-horizontal-strip-no-page-snap.md) — 横向布局是紧挨排布的页带、scrollToPage 左对齐、pageGap 运行期改不了;"一屏一页"要宿主自己算 alignX 居中
 - [41-zoom-wrapper-owns-content-transform](./41-zoom-wrapper-owns-content-transform.md) — 内容元素的 transform 归缩放预览所有,橡皮筋只能用 rAF 回弹、不能留 CSS transition
 - [42-scroll-strategy-relayout-not-guaranteed](./42-scroll-strategy-relayout-not-guaranteed.md) — 换 scroll strategy 的重排在文档非 loaded 时静默跳过,竖屏下 fit-page 和 fit-width 数值相同也不触发重排;切布局要全量应用+下一帧再断言
+- [43-webkit-tap-highlight-orphan-shadow](./43-webkit-tap-highlight-orphan-shadow.md) — 不引 preflight 也就没关掉 WKWebView 的原生点击高亮;点完即卸载的按钮会留下一块孤儿阴影,按下反馈改用 active:

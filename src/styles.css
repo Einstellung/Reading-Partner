@@ -25,6 +25,15 @@ body,
   height: 100%;
 }
 
+/* preflight also carries this one. Without it WKWebView paints its native tap
+   highlight over the pressed element, and a control that unmounts on tap (the
+   annotation popup's Delete, a More-menu item) leaves the highlight behind as an
+   orphan shadow for a few frames. Controls that want press feedback declare an
+   `active:` style instead, which unmounts with them. */
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   color: #1b1b1b;
