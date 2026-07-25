@@ -12,17 +12,9 @@ import { onCorruptFile } from "./app/atomic-fs";
 import { getViewState, hashPath, saveViewState, withClassroom } from "./app/storage";
 import { importBook, libraryHas, readLibraryBook } from "./app/library";
 import { migrateBookLive } from "./app/migrate";
-import { chapterAt, ensureFulltext, getFulltext, onFulltextError, type Fulltext } from "./fulltext";
+import { ensureFulltext, onFulltextError, type Fulltext } from "./fulltext";
 import Sidebar, { type SidebarTab } from "./components/reader/Sidebar";
-import {
-  annotationPage,
-  buildReadingTools,
-  notesOverviewSection,
-  surroundingText,
-  toolStatusLabel,
-  type AnnotationLite,
-  type TopicMaterial,
-} from "./ai/reading-context";
+import { annotationPage, toolStatusLabel } from "./ai/reading-context";
 import {
   ANNOTATION_COLORS,
   deleteAnnotations,
@@ -33,15 +25,10 @@ import {
 } from "./app/annotations";
 import {
   addFileToTopic,
-  createTopic,
-  deleteTopic,
   listTopics,
   markOpened,
   mostRecentlyOpened,
-  removeFileFromTopic,
-  renameTopic,
   setFileHash,
-  sortedFiles,
   type FileRef,
   type Topic,
 } from "./app/topics";
@@ -62,8 +49,7 @@ import {
 import { initSync, onSyncPulled } from "./sync";
 import { compressImage, compressImageData, type CompressedImage } from "./ai/image-utils";
 import { isTauri, readClipboardImage } from "./app/clipboard";
-import { DEFAULT_SETTINGS, languageInstruction, loadSettings, onSettingsSaveError, saveSettings, toReasoning, type Settings } from "./app/settings";
-import { buildSystemPrompt, readerProfileSection, type BooklistItem } from "./app/context";
+import { DEFAULT_SETTINGS, loadSettings, onSettingsSaveError, saveSettings, toReasoning, type Settings } from "./app/settings";
 import { buildGlossary } from "./voice";
 import {
   installFetchBridge,
@@ -74,15 +60,9 @@ import {
   type ProviderInfo,
 } from "./ai/aiClient";
 import {
-  ADD_SOURCE_PROMPT,
-  buildClassroomSystemPrompt,
-  buildClassroomTools,
-  buildSourceTools,
   chapterIndexForPage,
   getPrepPipeline,
   hasPrepState,
-  paperFulltextHash,
-  papersForChapter,
   locateQuote,
   parseNote,
   peekPrepPipeline,
@@ -91,7 +71,6 @@ import {
   type PrepSnapshot,
 } from "./prep";
 import type { PrepPipeline } from "./prep/pipeline";
-import type { ClassroomNote } from "./prep/classroom";
 import {
   getNotesPipeline,
   hasNotesState,
@@ -102,42 +81,11 @@ import {
   type NotesSnapshot,
 } from "./notes";
 import type { NotesPipeline } from "./notes/pipeline";
-import { getInfoPipeline } from "./info/briefing/live";
-import type { InfoPipeline, InfoSnapshot } from "./info/briefing/pipeline";
-import { loadArticle, saveInlinedArticleHtml, todayLocal } from "./info/briefing/store";
-import { appendFeedback } from "./memory/feedback";
-import { sanitizeArticleHtml } from "./info/extract/sanitize";
-import { extractImageSrcs, inlineArticleImages } from "./info/extract/inline-images";
-import { fetchImageBytes } from "./info/extract/http";
-import { articleChatSystemPrompt, briefingChatSystemPrompt } from "./info/companion/chat";
-import { loadProfile } from "./memory/profile";
-import { addSourceSystemPrompt } from "./info/sources/source-skill";
+import InfoHome, { type HomeScreen } from "./components/info/InfoHome";
 import {
-  addSource as addSourceStore,
-  hasSources,
-  loadSources,
-  loadSourceHealth,
-  removeSource,
-  setSourceEnabled,
-} from "./info/sources/source-store";
-import { liveProbeAndTrial } from "./info/sources/source-live";
-import type { SourceDescriptor } from "./info/sources/descriptor";
-import type { SourceHealth } from "./info/sources/engine";
-import type { BriefingItemMeta } from "./info/briefing/types";
-import { Vestibule } from "./components/info/Vestibule";
-import { BriefingPage } from "./components/info/BriefingPage";
-import { SourcesPage } from "./components/info/SourcesPage";
-import { ArticleView } from "./components/info/ArticleView";
-import { InfoCall, type InfoCallAnchor } from "./components/info/InfoCall";
-import {
-  assembleIdentity,
-  buildMemorySnapshot,
-  buildMemoryTools,
   distillThread,
   getLastDistillation,
   getMemoryAdapter,
-  memoryPromptSection,
-  notifyMemoryChange,
   onMemoryChange,
   type DistillAnnotation,
   type MemoryEntry,
@@ -145,11 +93,8 @@ import {
 import { logEvent } from "./app/events";
 import { prewarmPdfiumEngine } from "./reader-embedpdf/engine-singleton";
 import EmbedReaderPane from "./reader-embedpdf/EmbedReaderPane";
-import { setTouchDebugEnabled } from "./reader-embedpdf/touch-debug";
 import { CitationContext, FigureContext, type FigureHost } from "./components/common/Markdown";
 import {
-  buildFigureCatalog,
-  buildFigureTools,
   clearFigureCache,
   ensureFigures,
   findFigureById,
@@ -160,29 +105,20 @@ import {
 import PrepPanel from "./components/reader/PrepPanel";
 import NotesPanel from "./components/reader/NotesPanel";
 import MemoryPanel from "./components/reader/MemoryPanel";
-import PenToolbar from "./components/reader/PenToolbar";
-import MoreMenu, { type MoreItem } from "./components/reader/MoreMenu";
-import {
-  IconSidebar,
-  IconSparkle,
-  IconPagedLayout,
-  IconGear,
-  IconFitWidth,
-  IconZoomIn,
-  IconZoomOut,
-  IconTouchProbe,
-} from "./components/common/icons";
+import ReaderTopBar from "./components/reader/ReaderTopBar";
 import AnnotationPopup from "./components/reader/AnnotationPopup";
 import CallBubble from "./components/chat/CallBubble";
 import CallView from "./components/chat/CallView";
 import ReadingPipCard from "./components/chat/ReadingPipCard";
 import ChatPipCard from "./components/chat/ChatPipCard";
 import SettingsView from "./components/SettingsView";
+import { buildReadingTurn } from "./ai/reading-turn";
+import { BTN, BTN_PRIMARY } from "./components/common/buttons";
+import { appendRunningTool, resolveToolStatus } from "./components/common/toolTrace";
+import LibraryScreen from "./components/library/LibraryScreen";
 import Toast, { useToasts } from "./components/common/Toast";
 import type { Annotation as PopupAnnotation, PendingImage, ToolStatus, ToolType } from "./components/common/types";
 
-// Auto-explanation kickoff (docs/03: the bubble starts explaining, unprompted).
-const EXPLAIN_KICKOFF = "Please explain the passage I just marked, using the reading context above.";
 // The AI pen maps to the engine's underline tool in a fixed purple (the palette's
 // Purple). Owning this one color for the AI pen is a v1 implementation
 // convenience, not a semantic in the color palette; the host identifies AI-pen
@@ -190,41 +126,15 @@ const EXPLAIN_KICKOFF = "Please explain the passage I just marked, using the rea
 const AI_PEN_COLOR = "#a28ae5";
 // Cap on images attached to one chat turn (docs/03: paste screenshots to ask).
 const MAX_PENDING_IMAGES = 3;
-// Replayed thread history is trimmed to this many messages per turn; crossing
-// the cap fires the fallback memory distillation before older turns fall out
-// of context (docs/02: hangup is the main trigger, trimming the backstop).
-const HISTORY_KEEP = 40;
-// The trim-triggered distillation re-fires only after this many new messages.
-const TRIM_DISTILL_MIN_NEW = 20;
 // Coalesce bursts of annotation-created events before re-evaluating the notes
 // highlight frontier (docs/14).
 const AUTO_NOTES_DEBOUNCE = 4000;
 
-// Shared utility-class strings for the shell chrome (migrated from styles.css).
-// Split so variant overrides never collide with base padding/border utilities.
-// inline-flex + centering lets `coarse:min-h-[44px]` grow these to the 44px touch
-// target with the label centered; on a fine pointer min-h is inert, so desktop
-// density is unchanged.
-const BTN_BASE =
-  "inline-flex items-center justify-center leading-none border rounded-md bg-white cursor-pointer enabled:hover:bg-[#f0f0f0] disabled:opacity-40 disabled:cursor-default coarse:min-h-[44px]";
-const BTN = `${BTN_BASE} text-sm px-3 py-1.5 border-[#dcdcdc]`;
-const BTN_PRIMARY = "inline-flex items-center justify-center text-sm leading-none px-3 py-1.5 rounded-md bg-[#6c4fd0] text-white cursor-pointer enabled:hover:bg-[#5a3fbf] disabled:opacity-40 coarse:min-h-[44px]";
-const BTN_SM = `${BTN_BASE} text-xs px-2 py-1 border-[#dcdcdc]`;
-const BTN_SM_DANGER = `${BTN_BASE} text-xs px-2 py-1 border-[#f0c8c8] text-[#b91c1c]`;
-// Default reading layout for a book that has never set one: vertical continuous
+// Reading layout for a book that has never chosen one: vertical continuous
 // scroll on every surface (the correct PDF-reading default; a finger swipe
 // scrolls, like Notability / PDF Expert). Paged horizontal flip stays available
 // as an opt-in in the reader's More menu, off by default.
-function defaultLayout(): "vertical" | "paged" {
-  return "vertical";
-}
-
-const INPUT = "flex-1 px-2.5 py-2 border border-[#dcdcdc] rounded-md [font:inherit]";
-const LIBRARY = "w-[min(680px,100%)] mx-auto px-6 py-10";
-const TOPIC_LIST = "list-none m-0 p-0 flex flex-col gap-1.5";
-const TOPIC_ROW = "flex items-center gap-2 border border-[#dcdcdc] rounded-lg py-1 pl-1 pr-1.5";
-const TOPIC_NAME =
-  "flex-1 flex items-baseline gap-2.5 text-left px-2.5 py-2 border-0 bg-transparent cursor-pointer text-[15px] rounded-md hover:bg-[#f0f0f0]";
+const DEFAULT_LAYOUT = "vertical" as const;
 
 interface PopupState {
   annotation: Annotation;
@@ -276,7 +186,9 @@ export default function App() {
   // Whether a transient AI-cited-quote overlay is showing, so Escape can dismiss
   // it before it falls through to closing the call.
   const [quoteHlActive, setQuoteHlActive] = useState(false);
-  const pathRef = useRef<string | null>(null);
+  // The open book's id: the content hash its annotations, threads, reading
+  // position, prep notes and figure crops are all keyed by. Null in the library.
+  const bookIdRef = useRef<string | null>(null);
   const saveTimer = useRef<number | null>(null);
   const lastState = useRef<ViewState | null>(null);
 
@@ -350,32 +262,14 @@ export default function App() {
 
   const [topics, setTopics] = useState<Topic[]>([]);
   const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
-  const [newTopicName, setNewTopicName] = useState("");
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [renameText, setRenameText] = useState("");
 
-  // Info triage (docs/16). homeScreen is the launch layer in front of the
-  // library, only meaningful when not in the reader. The info pipeline is a
-  // module singleton; this ref just tracks it for the UI.
-  const [homeScreen, setHomeScreen] = useState<"vestibule" | "library" | "briefing" | "article" | "sources">("vestibule");
-  const [infoSnap, setInfoSnap] = useState<InfoSnapshot | null>(null);
-  // Whether the user has any source configured (drives onboarding), plus the
-  // source list + health for the source-list page (docs/17).
-  const [hasSourcesState, setHasSourcesState] = useState<boolean | null>(null);
-  const [sourcesList, setSourcesList] = useState<SourceDescriptor[]>([]);
-  const [sourceHealth, setSourceHealth] = useState<Record<string, SourceHealth>>({});
-  const infoRef = useRef<InfoPipeline | null>(null);
-  const [openArticleId, setOpenArticleId] = useState<string | null>(null);
-  const [articleHtml, setArticleHtml] = useState<string | null>(null);
-  // Aborts the previous article's background image-inlining when another opens.
-  const articleInlineAbort = useRef<AbortController | null>(null);
-  const [openedItemIds, setOpenedItemIds] = useState<Set<string>>(new Set());
-  const [dismissedItemIds, setDismissedItemIds] = useState<Set<string>>(new Set());
-  const [infoCall, setInfoCall] = useState<InfoCallAnchor | null>(null);
+  // The launch layer in front of the library, only meaningful when not in the
+  // reader. InfoHome renders every screen but the library.
+  const [homeScreen, setHomeScreen] = useState<HomeScreen>("vestibule");
 
   // The open book: bytes + saved state for EmbedReaderPane; null in the library.
   const [embedDoc, setEmbedDoc] = useState<{
-    path: string;
+    bookId: string;
     name: string;
     buffer: ArrayBuffer;
     annotations: Annotation[];
@@ -412,8 +306,6 @@ export default function App() {
   const [notesSnap, setNotesSnap] = useState<NotesSnapshot | null>(null);
   const [settings, setSettings] = useState<Settings>({ ...DEFAULT_SETTINGS });
   const [showSettings, setShowSettings] = useState(false);
-  // On-device touch probe (reader More menu). Off by default, never persisted.
-  const [touchDebug, setTouchDebug] = useState(false);
   const [providersInfo, setProvidersInfo] = useState<ProviderInfo[]>([]);
   // Failure messages (save/load/network errors) live here, not in `status` —
   // `status` is reserved for transient reader progress ("Rendering…").
@@ -447,18 +339,6 @@ export default function App() {
   // open, not on its critical path.
   useEffect(() => {
     prewarmPdfiumEngine();
-  }, []);
-
-  // Attach the info-briefing pipeline (docs/16): mirror its snapshot for the
-  // vestibule and load today's briefing if one exists.
-  useEffect(() => {
-    const p = getInfoPipeline();
-    infoRef.current = p;
-    setInfoSnap(p.snapshot());
-    const unsub = p.subscribe(() => setInfoSnap(p.snapshot()));
-    p.init().catch(() => {});
-    hasSources().then(setHasSourcesState).catch(() => {});
-    return unsub;
   }, []);
 
   // Install the Tauri fetch bridge + load settings once. A data file that can't
@@ -558,13 +438,6 @@ export default function App() {
     [title, fulltext],
   );
 
-  // Same enrichment for the info call composer: the glossary anchors on the
-  // article/briefing title (there is no book outline here).
-  const infoVoice = useMemo(
-    () => ({ glossary: buildGlossary({ title: infoCall?.position.title }) }),
-    [infoCall],
-  );
-
   const refreshTopics = useCallback(async () => {
     setTopics(await listTopics());
   }, []);
@@ -653,15 +526,15 @@ export default function App() {
   // Debounced persist of the reading position. A save failure must be visible;
   // silently losing positions looks fine until the app is reopened (pitfall 09).
   const persist = useCallback((state: ViewState) => {
-    const path = pathRef.current;
-    if (!path) return;
+    const bookId = bookIdRef.current;
+    if (!bookId) return;
     // Carry the sticky classroom flag (docs/09) alongside the reader-owned
     // position fields, which never carry it.
     const merged = { ...state, classroom: classroomRef.current };
     lastState.current = merged;
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
-      saveViewState(path, merged).catch((e) => {
+      saveViewState(bookId, merged).catch((e) => {
         console.error("failed to persist reading position", e);
         pushToast("warn", "Reading position could not be saved");
       });
@@ -671,21 +544,21 @@ export default function App() {
   // Persist the sticky classroom flag immediately on toggle, so it survives even
   // if the reader emits no further position change before the app closes.
   const persistClassroom = useCallback((on: boolean) => {
-    const path = pathRef.current;
-    if (!path) return;
+    const bookId = bookIdRef.current;
+    if (!bookId) return;
     const merged = withClassroom(lastState.current, on);
     lastState.current = merged;
-    saveViewState(path, merged).catch((e) => {
+    saveViewState(bookId, merged).catch((e) => {
       console.error("failed to persist classroom mode", e);
     });
   }, []);
 
   useEffect(() => {
     const flush = () => {
-      const path = pathRef.current;
-      if (!path || !lastState.current) return;
+      const bookId = bookIdRef.current;
+      if (!bookId || !lastState.current) return;
       if (saveTimer.current) window.clearTimeout(saveTimer.current);
-      void saveViewState(path, lastState.current).catch(() => {});
+      void saveViewState(bookId, lastState.current).catch(() => {});
     };
     window.addEventListener("pagehide", flush);
     return () => window.removeEventListener("pagehide", flush);
@@ -696,8 +569,8 @@ export default function App() {
   }, []);
 
   const persistAnnotations = useCallback(() => {
-    const path = pathRef.current;
-    if (path) saveAnnotations(path, [...annsRef.current.values()]);
+    const bookId = bookIdRef.current;
+    if (bookId) saveAnnotations(bookId, [...annsRef.current.values()]);
   }, []);
 
   // Load a thread's stored images (filenames -> base64) and patch them into the
@@ -724,8 +597,8 @@ export default function App() {
   // Attach the open book's prep pipeline to the UI: subscribe the panel and
   // (re)start the background run. Idempotent — the pipeline is a module
   // singleton per survey, so re-attaching never restarts finished work.
-  const attachPipeline = useCallback((surveyHash: string, name: string, ft: Fulltext) => {
-    const pipeline = getPrepPipeline(surveyHash, name, ft);
+  const attachPipeline = useCallback((bookId: string, name: string, ft: Fulltext) => {
+    const pipeline = getPrepPipeline(bookId, name, ft);
     pipelineRef.current = pipeline;
     prepUnsubRef.current?.();
     prepStatusesRef.current = new Map();
@@ -750,11 +623,11 @@ export default function App() {
 
   // First classroom press (or the panel's Start button) kicks off lesson prep.
   const startPrep = useCallback(async () => {
-    const bookId = pathRef.current;
+    const bookId = bookIdRef.current;
     const name = ctxRef.current.fileName;
     if (!bookId) return;
     const ft = await currentFulltextRef.current;
-    if (pathRef.current !== bookId) return; // switched books while extracting
+    if (bookIdRef.current !== bookId) return; // switched books while extracting
     if (!ft || ft.status !== "ok") {
       pushToast("warn", "This book has no readable text layer, so prep can't run.");
       return;
@@ -821,7 +694,7 @@ export default function App() {
 
   // The prep panel reads a note's body on expand (frontmatter stripped).
   const loadPrepNoteBody = useCallback(async (slug: string) => {
-    const bookId = pathRef.current;
+    const bookId = bookIdRef.current;
     if (!bookId) return null;
     const raw = await readPrepNote(bookId, slug);
     return raw ? parseNote(raw).body : null;
@@ -968,11 +841,11 @@ export default function App() {
   const autoAdvanceNotes = useCallback(
     async (finalPass?: { readingPage: number }) => {
       if (!settingsRef.current.autoNotes) return;
-      const bookId = pathRef.current;
+      const bookId = bookIdRef.current;
       const name = ctxRef.current.fileName;
       if (!bookId) return;
       const ft = await currentFulltextRef.current;
-      if (pathRef.current !== bookId) return; // switched books while extracting
+      if (bookIdRef.current !== bookId) return; // switched books while extracting
       if (!ft || ft.status !== "ok") return;
       const anns = notesAnnotationPages();
       if (anns.length === 0 && !finalPass) return;
@@ -997,11 +870,11 @@ export default function App() {
   // The Notes tab's Generate / Resume button: the manual whole-book run, always
   // available regardless of the autoNotes setting.
   const generateNotes = useCallback(async () => {
-    const bookId = pathRef.current;
+    const bookId = bookIdRef.current;
     const name = ctxRef.current.fileName;
     if (!bookId) return;
     const ft = await currentFulltextRef.current;
-    if (pathRef.current !== bookId) return; // switched books while extracting
+    if (bookIdRef.current !== bookId) return; // switched books while extracting
     if (!ft || ft.status !== "ok") {
       pushToast("warn", "This book has no readable text layer, so notes can't be generated.");
       return;
@@ -1025,11 +898,11 @@ export default function App() {
   const notesGenerateChapter = useCallback((index: number) => notesRef.current?.generateChapter(index), []);
   const notesRegenerateOverview = useCallback(() => notesRef.current?.regenerateOverview(), []);
   const loadNotesOverview = useCallback(() => {
-    const bookId = pathRef.current;
+    const bookId = bookIdRef.current;
     return bookId ? readOverviewNote(bookId) : Promise.resolve(null);
   }, []);
   const loadNotesChapter = useCallback((index: number) => {
-    const bookId = pathRef.current;
+    const bookId = bookIdRef.current;
     return bookId ? readNotesChapter(bookId, index) : Promise.resolve(null);
   }, []);
 
@@ -1037,7 +910,7 @@ export default function App() {
   // reply into the bubble, persist on done. Stable (reads refs). No-ops (leaving
   // the bubble empty for the guidance) when no provider is configured.
   const runTurn = useCallback((threadId: string, annotationId: string) => {
-    const bookId = pathRef.current;
+    const bookId = bookIdRef.current;
     const s = settingsRef.current;
     if (!bookId || !s.defaultProviderId || !s.defaultModelId) return;
     abortRef.current?.abort();
@@ -1068,27 +941,15 @@ export default function App() {
         (m) => ({
           ...m,
           text: "",
-          tools: [
-            ...(m.tools ?? []),
-            { name: info.name, label: toolStatusLabel(info.name, info.args), state: "running" as const },
-          ],
+          tools: appendRunningTool(m.tools, info.name, toolStatusLabel(info.name, info.args)),
         }),
         ts,
       );
     };
-    // Resolve the matching running status: drop it on success, mark it failed on
-    // error (soft-error style, left visible).
     const onToolEnd = (info: { name: string; isError: boolean }, ts: number) =>
       patch((m) => {
-        const tools = [...(m.tools ?? [])];
-        let idx = -1;
-        for (let i = 0; i < tools.length; i++) {
-          if (tools[i].state === "running" && tools[i].name === info.name) idx = i;
-        }
-        if (idx < 0) return m;
-        if (info.isError) tools[idx] = { ...tools[idx], state: "error" };
-        else tools.splice(idx, 1);
-        return { ...m, tools };
+        const tools = resolveToolStatus(m.tools, info.name, info.isError);
+        return tools ? { ...m, tools } : m;
       }, ts);
 
     const ann = annsRef.current.get(annotationId);
@@ -1104,215 +965,31 @@ export default function App() {
       // current book's extraction may still be running; await it so the AI can
       // see the page. Thread images (stored as filenames) are read back too.
       const currentFulltext = (await currentFulltextRef.current) ?? null;
-      const { topicId, topicName, fileName, pageLabel, pageIndex, files } = ctxRef.current;
-      const materials = await gatherTopicMaterials(
-        files,
+      const figures = (await currentFiguresRef.current)?.figures ?? [];
+      const turn = await buildReadingTurn({
         bookId,
-        currentFulltext,
-        [...annsRef.current.values()],
-      );
-      // The book-level thread (top-bar AI button) has no mark: its position is
-      // wherever the reader currently is, and it carries no selection-derived
-      // context (marked passage / surrounding text).
-      const isBook = annotationId === "";
-      const currentPage = pageIndex !== null ? pageIndex + 1 : null;
-      const page = isBook
-        ? currentPage
-        : annotationPage(ann as { position?: { pageIndex?: number } } | undefined);
-      const chapterTitle =
-        currentFulltext && page ? chapterAt(currentFulltext, page)?.title ?? null : null;
-      const surrounding =
-        !isBook && currentFulltext && page ? surroundingText(currentFulltext, page) : "";
-      const booklist: BooklistItem[] = materials
-        .filter((m) => m.path !== bookId)
-        .map((m) => ({
-          label: m.label,
-          pageCount: m.fulltext?.pages.length ?? 0,
-          annotationCount: m.annotations.length,
-          fulltextAvailable: m.fulltext?.status === "ok",
-          isCurrent: false,
-        }));
-      const selectionText = typeof ann?.text === "string" ? ann.text : "";
-      const selectionComment = typeof ann?.comment === "string" ? ann.comment : undefined;
-
-      // Classroom mode swaps the context assembly (docs/09): the whole survey
-      // rides in a stable prompt prefix, this chapter's prep notes follow, and
-      // paper tools join the M6 reading tools. Companion mode is untouched.
-      let systemPrompt: string;
-      let tools = buildReadingTools({ currentFulltext, materials });
-      // Per-topic memory (M8): the memory tools join the same loop as the
-      // reading tools; the opening snapshot rides the system prompt below.
-      let memorySection = "";
-      if (topicId) {
-        const memory = getMemoryAdapter(topicId);
-        const observations = await memory.listObservations().catch((): MemoryEntry[] => []);
-        tools = [...tools, ...buildMemoryTools(memory, { onWrite: () => notifyMemoryChange(topicId) })];
-        memorySection = memoryPromptSection(buildMemorySnapshot(observations), true);
-      }
-      // Figure catalog + view_figure tool (M9): the model can cite figures as
-      // [fig:N] (rendered inline in chat) and open one to actually see it.
-      const figuresIndex = (await currentFiguresRef.current)?.figures ?? [];
-      const figureCatalog = figuresIndex.length
-        ? buildFigureCatalog(figuresIndex, { currentPage: page ?? currentPage ?? null })
-        : "";
-      if (figuresIndex.length) {
-        const supportsImages = modelSupportsImages(
-          s.defaultProviderId as ProviderId,
-          s.defaultModelId as string,
-        );
-        const buf = bufferRef.current;
-        const figHash = bookId;
-        tools = [
-          ...tools,
-          ...buildFigureTools({
-            figures: figuresIndex,
-            modelSupportsImages: supportsImages,
-            renderImage: async (fig) => {
-              if (!buf) return null;
-              const r = await renderFigure(figHash, buf, fig, "view");
-              return r ? { base64: r.base64, mimeType: r.mimeType } : null;
-            },
-          }),
-        ];
-      }
-      const prepState = pipelineRef.current?.snapshot().state ?? null;
-
-      // Link ingestion (docs/09): when a prep pipeline exists for this book, the
-      // model can ingest a user-pasted URL with add_source and read it with the
-      // paper tools — in companion mode too, so "compare this link with ch.3"
-      // works outside the classroom. Classroom mode wires the paper tools below
-      // with its own prompt; here we add them for companion mode.
-      const livePipeline = pipelineRef.current;
-      let canIngestUrl = false;
-      if (livePipeline && currentFulltext?.status === "ok") {
-        const surveyHash = bookId;
-        tools = [
-          ...tools,
-          ...buildSourceTools({
-            ingest: async (url) => {
-              const paper = await livePipeline.ingestSource(url);
-              const ft = await getFulltext(paperFulltextHash(surveyHash, paper.slug));
-              const chars = ft ? ft.pages.reduce((n, pg) => n + pg.length, 0) : 0;
-              return {
-                slug: paper.slug,
-                title: paper.title,
-                kind: paper.kind ?? "pdf",
-                pages: ft?.pages.length ?? paper.pages ?? 0,
-                chars,
-                status: paper.status,
-                error: paper.error,
-              };
-            },
-          }),
-        ];
-        canIngestUrl = true;
-        if (!classroomRef.current) {
-          tools = [
-            ...tools,
-            ...buildClassroomTools(() => livePipeline.snapshot().state ?? prepState!),
-          ];
-        }
-      }
-
-      if (classroomRef.current && currentFulltext?.status === "ok") {
-        const here = page ?? (pageIndex !== null ? pageIndex + 1 : 1);
-        const chapterIdx = prepState ? chapterIndexForPage(prepState.chapters, here) : 1;
-        const notePapers = prepState ? papersForChapter(prepState.papers, chapterIdx) : [];
-        const notes = (
-          await Promise.all(
-            notePapers.map(async (p): Promise<ClassroomNote | null> => {
-              const raw = await readPrepNote(bookId, p.slug);
-              return raw ? { slug: p.slug, title: p.title, body: parseNote(raw).body } : null;
-            }),
-          )
-        ).filter((n): n is ClassroomNote => n !== null);
-        if (prepState) {
-          tools = [...tools, ...buildClassroomTools(() => pipelineRef.current?.snapshot().state ?? prepState)];
-        }
-        systemPrompt = buildClassroomSystemPrompt({
-          topicName,
-          surveyName: fileName,
-          fulltext: currentFulltext,
-          pageLabel,
-          chapterTitle,
-          selectionText,
-          selectionComment,
-          notes,
-          prep: prepState,
-          hasTools: tools.length > 0,
-          figureCatalog,
-        });
-        // Classroom mode shares the AI output-language setting; the companion
-        // prompt gets it inside buildSystemPrompt.
-        const lang = languageInstruction(s.aiLanguage);
-        if (lang) systemPrompt += "\n\n" + lang;
-      } else {
-        systemPrompt = buildSystemPrompt({
-          topicName,
-          fileName,
-          pageLabel,
-          selectionText,
-          selectionComment,
-          chapterTitle,
-          surroundingText: surrounding,
-          fulltextAvailable: currentFulltext?.status === "ok",
-          materials: booklist,
-          figureCatalog,
-          hasTools: tools.length > 0,
-          bookLevel: isBook,
-          aiLanguage: s.aiLanguage,
-        });
-      }
-      if (memorySection) systemPrompt += "\n\n" + memorySection;
-      // The cross-scenario user profile: who the companion is reading with, so it
-      // pitches explanation depth to their background. Empty profile → no section.
-      const profileSection = readerProfileSection(await assembleIdentity().catch(() => ""));
-      if (profileSection) systemPrompt += "\n\n" + profileSection;
-      // The whole-book outline from the reader's notes (docs/14), when they exist.
-      const notesOverview = notesOverviewSection(await readOverviewNote(bookId));
-      if (notesOverview) systemPrompt += "\n\n" + notesOverview;
-      if (canIngestUrl) systemPrompt += "\n\n" + ADD_SOURCE_PROMPT;
-
-      const threadMsgs = getThread(bookId, threadId)?.messages ?? [];
-      const prior = await Promise.all(
-        threadMsgs.map(async (m) => ({
-          role: m.role,
-          text: m.text,
-          images: m.images?.length ? await readThreadImages(threadId, m.images) : undefined,
-        })),
-      );
-      if (controller.signal.aborted) return;
-      // Replay only the tail of a long thread, and before the older turns fall
-      // out of context, run the fallback distillation (docs/02: hangup is the
-      // main trigger, the trim is the backstop).
-      let history = prior;
-      if (prior.length > HISTORY_KEEP) {
-        history = prior.slice(prior.length - HISTORY_KEEP);
-        if (topicId) {
-          void distillThread(
-            {
-              topicId,
-              topicName,
-              bookName: fileName,
-              threadId,
-              annotationId,
-              page,
-              markedText: selectionText,
-              messages: threadMsgs.map(({ role, text, ts }) => ({ role, text, ts })),
-              annotations: distillAnnotations(),
-            },
-            TRIM_DISTILL_MIN_NEW,
-          );
-        }
-      }
-      const apiMessages = [{ role: "user" as const, text: EXPLAIN_KICKOFF }, ...history];
+        threadId,
+        annotationId,
+        annotation: ann,
+        annotations: [...annsRef.current.values()],
+        fulltext: currentFulltext,
+        figures,
+        buffer: bufferRef.current,
+        context: ctxRef.current,
+        classroom: classroomRef.current,
+        settings: s,
+        getPipeline: () => pipelineRef.current,
+        distillAnnotations,
+        signal: controller.signal,
+      });
+      if (!turn) return;
 
       void runAgentTurn({
         providerId: s.defaultProviderId as ProviderId,
         modelId: s.defaultModelId as string,
-        systemPrompt,
-        messages: apiMessages,
-        tools,
+        systemPrompt: turn.systemPrompt,
+        messages: turn.messages,
+        tools: turn.tools,
         signal: controller.signal,
         reasoning: toReasoning(s.chatThinking),
         onDelta: (chunk) => {
@@ -1368,8 +1045,8 @@ export default function App() {
       if (aiCreated) {
         // Persist the aiThreadId into the engine model, open the thread + bubble.
         viewRef.current?.setAnnotations([aiCreated.annotation]);
-        const path = pathRef.current;
-        if (path) createThread(path, aiCreated.annotation.id, aiCreated.threadId);
+        const bookId = bookIdRef.current;
+        if (bookId) createThread(bookId, aiCreated.annotation.id, aiCreated.threadId);
         const up = penUpRef.current;
         const rect = readerPaneRef.current?.getBoundingClientRect();
         const anchor = up
@@ -1394,8 +1071,8 @@ export default function App() {
   const onDeleteAnnotations = useCallback(
     (ids: string[]) => {
       for (const id of ids) annsRef.current.delete(id);
-      const path = pathRef.current;
-      if (path) deleteAnnotations(path, ids);
+      const bookId = bookIdRef.current;
+      if (bookId) deleteAnnotations(bookId, ids);
       syncTraceList();
     },
     [syncTraceList],
@@ -1414,8 +1091,8 @@ export default function App() {
     const ann = params.annotation;
     const threadId = ann.aiThreadId as string | undefined;
     if (threadId) {
-      const path = pathRef.current;
-      const thread = path ? getThread(path, threadId) : undefined;
+      const bookId = bookIdRef.current;
+      const thread = bookId ? getThread(bookId, threadId) : undefined;
       abortRef.current?.abort(); // stop any stream from a previously open thread
       setPopup(null);
       const msgs = thread?.messages ?? [];
@@ -1477,7 +1154,7 @@ export default function App() {
       setTraceAnns(saved);
 
       setViewReady(false);
-      pathRef.current = bookId;
+      bookIdRef.current = bookId;
       // Seed the persist base with the loaded state so an early classroom toggle
       // (before the reader emits a position) merges onto the right book.
       lastState.current = state;
@@ -1518,7 +1195,7 @@ export default function App() {
         return null;
       });
       currentFiguresRef.current.then((idx) => {
-        if (pathRef.current !== bookId) return; // stale: the user switched books
+        if (bookIdRef.current !== bookId) return; // stale: the user switched books
         const list = idx?.figures ?? [];
         figuresRef.current = list;
         setFigures(list);
@@ -1530,7 +1207,7 @@ export default function App() {
         },
       );
       currentFulltextRef.current.then(async (ft) => {
-        if (pathRef.current !== bookId) return; // stale: the user switched books
+        if (bookIdRef.current !== bookId) return; // stale: the user switched books
         setFulltext(ft);
         setFulltextPending(false);
         // Resume lesson prep from its persisted state (docs/09: restartable
@@ -1541,7 +1218,7 @@ export default function App() {
         if (ft && ft.status === "ok") {
           try {
             if (restoreClassroom || peekPrepPipeline(bookId) || (await hasPrepState(bookId))) {
-              if (pathRef.current === bookId) attachPipeline(bookId, name, ft);
+              if (bookIdRef.current === bookId) attachPipeline(bookId, name, ft);
             }
           } catch (e) {
             console.warn("failed to resume lesson prep", e);
@@ -1551,7 +1228,7 @@ export default function App() {
           // interrupted manual run.
           try {
             if (peekNotesPipeline(bookId) || (await hasNotesState(bookId))) {
-              if (pathRef.current === bookId) {
+              if (bookIdRef.current === bookId) {
                 const pipeline = attachNotes(bookId, name, ft);
                 if (settingsRef.current.autoNotes) void autoAdvanceNotes();
                 else void pipeline.ensureStarted();
@@ -1567,16 +1244,15 @@ export default function App() {
       // viewRef) and onInitialized once ready. A fresh copy of the bytes is
       // handed over so nothing detaches the shell's original.
       setEmbedDoc({
-        path: bookId,
+        bookId,
         name,
         buffer: bytes.slice().buffer as ArrayBuffer,
         annotations: saved,
-        // Seed the layout for a book that has never chosen one from the platform
-        // default (paged on touch, vertical on desktop), so the reader opens in
-        // the right mode on the first paint.
+        // Seed the layout for a book that has never chosen one, so the reader
+        // opens in the right mode on the first paint.
         viewState: state
-          ? { ...state, layout: state.layout ?? defaultLayout() }
-          : ({ pageIndex: 0, scale: "auto", scrollMode: 0, layout: defaultLayout() } as ViewState),
+          ? { ...state, layout: state.layout ?? DEFAULT_LAYOUT }
+          : ({ pageIndex: 0, scale: "auto", scrollMode: 0, layout: DEFAULT_LAYOUT } as ViewState),
       });
       setTitle(name);
     },
@@ -1625,69 +1301,6 @@ export default function App() {
     await refreshTopics();
   }, [activeTopicId, refreshTopics]);
 
-  // --- Info briefing (docs/16) -------------------------------------------
-
-  const generateBriefing = useCallback(() => {
-    void infoRef.current?.generate();
-  }, []);
-  const stopBriefing = useCallback(() => {
-    infoRef.current?.stop();
-  }, []);
-
-  // Reload the source list + health (source-list page) and the hasSources flag.
-  const refreshSources = useCallback(async () => {
-    const [list, health] = await Promise.all([loadSources(), loadSourceHealth()]);
-    setSourcesList(list);
-    setSourceHealth(health);
-    setHasSourcesState(list.length > 0);
-  }, []);
-
-  // Open the first-run / add-source chat: the info call in add-source mode.
-  const openOnboarding = useCallback(() => {
-    setInfoCall({
-      threadId: "onboarding",
-      mode: "add-source",
-      onboarding: true,
-      emptyTitle: "Let's set up your sources",
-      placeholder: "Tell me what you follow, or paste a link…",
-      systemPrompt: addSourceSystemPrompt({ aiLanguage: settingsRef.current.aiLanguage, onboarding: true }),
-      position: { title: "Subscriptions", line: "Set up your information sources" },
-    });
-  }, []);
-
-  const openSourcesPage = useCallback(() => {
-    void refreshSources();
-    setHomeScreen("sources");
-  }, [refreshSources]);
-
-  const toggleSource = useCallback(
-    (id: string, enabled: boolean) => {
-      void (async () => {
-        await setSourceEnabled(id, enabled);
-        await refreshSources();
-      })();
-    },
-    [refreshSources],
-  );
-
-  const removeSourceById = useCallback(
-    (id: string) => {
-      void (async () => {
-        await removeSource(id);
-        await refreshSources();
-      })();
-    },
-    [refreshSources],
-  );
-
-  const confirmAddSource = useCallback(
-    async (descriptor: SourceDescriptor) => {
-      await addSourceStore(descriptor);
-      await refreshSources();
-    },
-    [refreshSources],
-  );
-
   const continueReading = useCallback(() => {
     const recent = mostRecentlyOpened(topics);
     if (!recent) {
@@ -1696,112 +1309,6 @@ export default function App() {
     }
     void openFile(recent.file, recent.topic.id);
   }, [topics, openFile]);
-
-  const openArticle = useCallback(
-    async (itemId: string) => {
-      const briefing = infoRef.current?.snapshot().briefing ?? null;
-      const date = briefing?.date ?? todayLocal();
-      // Stop the previously opened article's image-inlining before starting this one.
-      articleInlineAbort.current?.abort();
-      const ac = new AbortController();
-      articleInlineAbort.current = ac;
-      setOpenArticleId(itemId);
-      setArticleHtml(null);
-      setHomeScreen("article");
-      const meta = briefing?.items[itemId];
-      // Opening an article logs "opened" once per session; it also drives the
-      // read-state marker on the briefing.
-      if (meta && !openedItemIds.has(itemId)) {
-        setOpenedItemIds((s) => new Set(s).add(itemId));
-        appendFeedback({ itemId, title: meta.title, action: "opened" }).catch(() => {});
-      }
-      let sanitized: string | null = null;
-      try {
-        const cached = await loadArticle(date, itemId);
-        sanitized = cached?.contentHtml ? sanitizeArticleHtml(cached.contentHtml) : null;
-        setArticleHtml(sanitized);
-      } catch {
-        setArticleHtml(null);
-      }
-      // External <img> loads are blocked by the webview's CSP/COEP (docs/pitfall/30):
-      // fetch each through the Tauri http route, swap in data: URLs as they arrive,
-      // then persist the rewritten HTML so later opens are instant and offline.
-      if (ac.signal.aborted || !sanitized || extractImageSrcs(sanitized).length === 0) return;
-      try {
-        const inlined = await inlineArticleImages(sanitized, fetchImageBytes, {
-          signal: ac.signal,
-          onProgress: (html) => {
-            if (!ac.signal.aborted) setArticleHtml(html);
-          },
-        });
-        if (ac.signal.aborted) return;
-        setArticleHtml(inlined);
-        await saveInlinedArticleHtml(date, itemId, inlined);
-      } catch {
-        // Leave the text-only render in place; a later open retries the images.
-      }
-    },
-    [openedItemIds],
-  );
-
-  const dismissItem = useCallback((itemId: string, meta: BriefingItemMeta, category?: string) => {
-    setDismissedItemIds((s) => new Set(s).add(itemId));
-    appendFeedback({ itemId, title: meta.title, action: "dismissed", category }).catch(() => {});
-  }, []);
-
-  const appealItem = useCallback(
-    (itemId: string, meta: BriefingItemMeta, category: string) => {
-      appendFeedback({ itemId, title: meta.title, action: "appealed", category }).catch(() => {});
-      void openArticle(itemId);
-    },
-    [openArticle],
-  );
-
-  const askBriefing = useCallback(async () => {
-    const b = infoRef.current?.snapshot().briefing;
-    if (!b) return;
-    const [profile, sources] = await Promise.all([loadProfile(), loadSources()]);
-    setInfoCall({
-      threadId: "briefing",
-      emptyTitle: "Today's briefing",
-      placeholder: "Ask about today's briefing…",
-      systemPrompt: briefingChatSystemPrompt(b, {
-        profile,
-        sources,
-        aiLanguage: settingsRef.current.aiLanguage,
-      }),
-      position: { title: "Today's briefing", line: b.overview },
-    });
-  }, []);
-
-  const askArticle = useCallback(async (itemId: string) => {
-    const b = infoRef.current?.snapshot().briefing;
-    if (!b) return;
-    const meta = b.items[itemId];
-    const [cached, profile, sources] = await Promise.all([
-      loadArticle(b.date, itemId),
-      loadProfile(),
-      loadSources(),
-    ]);
-    // The item's one-line reason/overview from the briefing tiers, shown on the
-    // position card so the chat window can recall what the article was about.
-    const line =
-      b.mustRead.find((r) => r.itemId === itemId)?.reason ??
-      b.oneLiners.find((r) => r.itemId === itemId)?.line ??
-      b.outOfLane.find((r) => r.itemId === itemId)?.reason ??
-      null;
-    setInfoCall({
-      threadId: itemId,
-      emptyTitle: meta?.title ?? "Article",
-      placeholder: "Ask about this article…",
-      systemPrompt: articleChatSystemPrompt(b.overview, meta?.title ?? "", cached?.textContent ?? "", {
-        profile,
-        sources,
-        aiLanguage: settingsRef.current.aiLanguage,
-      }),
-      position: { title: meta?.title ?? "Article", sourceName: meta?.sourceName, line },
-    });
-  }, []);
 
   // Host-side edit of an existing annotation: patch, re-render, persist.
   const patchAnnotation = useCallback(
@@ -1822,8 +1329,8 @@ export default function App() {
     (id: string) => {
       viewRef.current?.unsetAnnotations([id]);
       annsRef.current.delete(id);
-      const path = pathRef.current;
-      if (path) deleteAnnotations(path, [id]);
+      const bookId = bookIdRef.current;
+      if (bookId) deleteAnnotations(bookId, [id]);
       syncTraceList();
       setPopup(null);
     },
@@ -1942,14 +1449,14 @@ export default function App() {
   const sendCallMessage = useCallback(
     (text: string) => {
       const c = callRef.current;
-      const path = pathRef.current;
+      const bookId = bookIdRef.current;
       const staged = pendingImagesRef.current;
       const trimmed = text.trim();
       if (staged.some((p) => p.status === "loading")) return; // wait for compression
       const images = staged.flatMap((p) =>
         p.status === "ready" ? [{ data: p.data, mediaType: p.mediaType }] : [],
       );
-      if (!c || !path || (!trimmed && images.length === 0)) return;
+      if (!c || !bookId || (!trimmed && images.length === 0)) return;
       const ts = Date.now();
       mutatePending(() => []);
       setImageHint("");
@@ -1972,7 +1479,7 @@ export default function App() {
           ts,
           ...(imageNames.length ? { images: imageNames } : {}),
         };
-        appendMessage(path, c.threadId, persistMsg);
+        appendMessage(bookId, c.threadId, persistMsg);
         const displayMsg: CallMessage = {
           role: "user",
           text: trimmed,
@@ -1999,10 +1506,10 @@ export default function App() {
   // it survives a reopen. Nothing generated yet → drop the empty reply.
   const stopTurn = useCallback(() => {
     const c = callRef.current;
-    const path = pathRef.current;
+    const bookId = bookIdRef.current;
     abortRef.current?.abort();
     abortRef.current = null;
-    if (!c || !path) return;
+    if (!c || !bookId) return;
     const streamingMsg = [...c.messages].reverse().find((m) => m.role === "ai" && m.streaming);
     if (!streamingMsg) return;
     const { ts } = streamingMsg;
@@ -2018,25 +1525,25 @@ export default function App() {
               : cur.messages.filter((m) => !(m.ts === ts && m.role === "ai")),
           },
     );
-    if (partial) appendMessage(path, c.threadId, { role: "ai", text: partial, ts });
+    if (partial) appendMessage(bookId, c.threadId, { role: "ai", text: partial, ts });
   }, []);
 
-  // Bubble → full-window chat (reading shrinks to the corner card).
-  const expandCall = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-main" } : c)), []);
-  // The two picture-in-picture swaps.
+  // Chat takes the whole window: from the bubble (reading shrinks to the corner
+  // card) and back from the chat corner card.
+  const showChatMain = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-main" } : c)), []);
+  // The other picture-in-picture swap: reading is back, chat shrinks.
   const swapToReading = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-pip" } : c)), []);
-  const swapToChat = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-main" } : c)), []);
   // Hangup bookkeeping (docs/02, docs/03): log the end of the conversation and
   // kick the silent memory distillation over its persisted transcript. Reads
   // refs so it is stable; no-ops when nothing is open. Distillation runs in the
   // background with no UI — the memory panel shows when it last ran.
   const captureHangup = useCallback(() => {
     const c = callRef.current;
-    const path = pathRef.current;
+    const bookId = bookIdRef.current;
     const { topicId, topicName, fileName, pageIndex } = ctxRef.current;
-    if (!c || !path || !topicId) return;
+    if (!c || !bookId || !topicId) return;
     logEvent(topicId, "call-end", { threadId: c.threadId, book: c.isBook ?? false });
-    const msgs = getThread(path, c.threadId)?.messages ?? [];
+    const msgs = getThread(bookId, c.threadId)?.messages ?? [];
     const ann = annsRef.current.get(c.annotationId);
     void distillThread({
       topicId,
@@ -2075,11 +1582,11 @@ export default function App() {
   // talk is being thrown away — and any memory already distilled from it stays.
   const deleteCallThread = useCallback(() => {
     const c = callRef.current;
-    const path = pathRef.current;
-    if (!c || !path) return;
+    const bookId = bookIdRef.current;
+    if (!c || !bookId) return;
     abortRef.current?.abort();
     abortRef.current = null;
-    deleteThread(path, c.threadId);
+    deleteThread(bookId, c.threadId);
     if (!c.isBook && c.annotationId) removeAnnotation(c.annotationId);
     const topicId = ctxRef.current.topicId;
     if (topicId) logEvent(topicId, "thread-delete", { threadId: c.threadId, book: c.isBook ?? false });
@@ -2091,9 +1598,9 @@ export default function App() {
     (annotationId: string) => {
       const ann = annsRef.current.get(annotationId);
       const threadId = ann?.aiThreadId as string | undefined;
-      const path = pathRef.current;
-      if (!threadId || !path) return;
-      const thread = getThread(path, threadId);
+      const bookId = bookIdRef.current;
+      if (!threadId || !bookId) return;
+      const thread = getThread(bookId, threadId);
       abortRef.current?.abort();
       viewRef.current?.selectAnnotations([annotationId]);
       viewRef.current?.navigate({ annotationID: annotationId });
@@ -2112,9 +1619,9 @@ export default function App() {
   // thread. It has no anchor, so it never joins the trace list; this button is
   // its only way back. Opens straight to the main call view, skipping the bubble.
   const openBookThread = useCallback(() => {
-    const path = pathRef.current;
-    if (!path) return;
-    const thread = getBookThread(path) ?? createBookThread(path, crypto.randomUUID());
+    const bookId = bookIdRef.current;
+    if (!bookId) return;
+    const thread = getBookThread(bookId) ?? createBookThread(bookId, crypto.randomUUID());
     abortRef.current?.abort();
     setPopup(null);
     const msgs = thread.messages;
@@ -2150,7 +1657,7 @@ export default function App() {
     // when a notes pipeline already exists; otherwise the manual button is the
     // fallback. Fire before the refs are torn down below.
     if (settingsRef.current.autoNotes) {
-      const bookId = pathRef.current;
+      const bookId = bookIdRef.current;
       const pipeline = bookId ? peekNotesPipeline(bookId) : null;
       if (pipeline) {
         const pageIndex = ctxRef.current.pageIndex;
@@ -2175,7 +1682,7 @@ export default function App() {
     prepUnsubRef.current = null;
     pipelineRef.current = null;
     setPrepSnap(null);
-    pathRef.current = null;
+    bookIdRef.current = null;
     viewRef.current = null;
     pageDwellRef.current = null;
   }, [clearPendingImages, captureHangup, notesAnnotationPages]);
@@ -2225,62 +1732,7 @@ export default function App() {
   // toggle carries a status dot so progress is visible while the drawer is shut.
   const sidebarBusy = !!(prepSnap?.running || notesSnap?.running);
 
-  const pageText = stats ? `${stats.pageIndex + 1} / ${stats.pagesCount}` : "— / —";
-  const paged = stats?.layout === "paged";
   const inReader = !!title;
-
-  // The reader top bar's "More" overflow: low-frequency view controls collapsed
-  // out of the main bar (zoom, fit, the paged-flip opt-in, the touch probe).
-  const moreItems: MoreItem[] = [
-    {
-      kind: "action",
-      label: "Fit page width",
-      icon: IconFitWidth,
-      disabled: !stats?.canZoomReset,
-      onClick: () => viewRef.current?.zoomReset(),
-    },
-    {
-      kind: "action",
-      label: "Zoom in",
-      icon: IconZoomIn,
-      disabled: !stats?.canZoomIn,
-      onClick: () => viewRef.current?.zoomIn(),
-    },
-    {
-      kind: "action",
-      label: "Zoom out",
-      icon: IconZoomOut,
-      disabled: !stats?.canZoomOut,
-      onClick: () => viewRef.current?.zoomOut(),
-    },
-    { kind: "divider" },
-    {
-      kind: "toggle",
-      label: "Paged flip",
-      icon: IconPagedLayout,
-      on: paged,
-      disabled: !viewReady,
-      onClick: () => viewRef.current?.setLayout(paged ? "vertical" : "paged"),
-    },
-    {
-      kind: "toggle",
-      label: "Touch debug",
-      icon: IconTouchProbe,
-      on: touchDebug,
-      onClick: () => {
-        const next = !touchDebug;
-        setTouchDebug(next);
-        setTouchDebugEnabled(next);
-      },
-    },
-    { kind: "divider" },
-    {
-      kind: "action",
-      label: "Settings",
-      icon: IconGear,
-      onClick: () => setShowSettings(true),
-    },
-  ];
   const configured = !!(
     settings.defaultProviderId &&
     settings.defaultModelId &&
@@ -2308,7 +1760,7 @@ export default function App() {
       getFigure: (id) => findFigureById(figures, id),
       renderCard: async (figure) => {
         const buf = bufferRef.current;
-        const bookId = pathRef.current;
+        const bookId = bookIdRef.current;
         if (!buf || !bookId) return null;
         const r = await renderFigure(bookId, buf, figure, "card");
         return r ? { src: r.dataUrl, width: r.width, height: r.height } : null;
@@ -2341,73 +1793,23 @@ export default function App() {
           band (overflow-x-auto) so the page itself never scrolls. */}
       <header className="relative z-10 flex h-11 flex-none items-center gap-1.5 border-b border-[#dcdcdc] bg-[#fafafa] px-2 sm:gap-2 sm:px-3">
         {inReader ? (
-          <>
-            {/* LEFT: navigation */}
-            <div className="flex shrink-0 items-center gap-1">
-              <button
-                className="relative flex h-8 w-8 flex-none items-center justify-center rounded-md border-0 bg-transparent text-[#555] cursor-pointer can-hover:hover:bg-black/5 coarse:h-11 coarse:w-11"
-                title={sidebarOpen ? "Close panel" : "Open panel"}
-                aria-label={sidebarOpen ? "Close panel" : "Open panel"}
-                aria-pressed={sidebarOpen}
-                onClick={() => setSidebarOpen((v) => !v)}
-              >
-                <IconSidebar size={18} />
-                {/* Background-work dot: prep/notes generating while the drawer is
-                    shut (docs: iPad adaptation). */}
-                {sidebarBusy && (
-                  <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[#6c4fd0] ring-2 ring-[#fafafa]" />
-                )}
-              </button>
-              {/* Library: full label from sm up, back-chevron only on a phone,
-                  where every pixel of center width counts. */}
-              <button
-                className="flex h-8 flex-none items-center justify-center rounded-md border-0 bg-transparent px-1 text-[13px] text-[#555] cursor-pointer can-hover:hover:bg-black/5 coarse:h-11 coarse:min-w-[44px] sm:px-2"
-                title="Back to library"
-                aria-label="Back to library"
-                onClick={closeReader}
-              >
-                <span aria-hidden className="sm:hidden">‹</span>
-                <span className="hidden sm:inline">‹ Library</span>
-              </button>
-              {/* No title breadcrumb: the book is open in front of the reader, so
-                  its name carries no information and the width is better spent on
-                  the tool group (tight on a phone). */}
-              {status && <span className="ml-1 flex-none text-xs text-[#b45309] sm:ml-3">{status}</span>}
-            </div>
-
-            {/* CENTER: tool group — annotation rack + page indicator. flex-1 grows
-                to center the tools (justify-center) from iPad up; on a phone it
-                left-aligns and the min-w-0 + overflow-x-auto band scrolls the
-                tools rather than pushing the page wider. */}
-            <div className="flex min-w-0 flex-1 items-center justify-start gap-1.5 overflow-x-auto sm:justify-center sm:gap-2">
-              <PenToolbar
-                orientation="horizontal"
-                tool={{ type: toolType, color: penColor }}
-                colors={ANNOTATION_COLORS}
-                onToolChange={(t) => {
-                  setToolType(t.type);
-                  setPenColor(t.color);
-                }}
-              />
-              <span className="h-5 w-px flex-none bg-[#dcdcdc]" />
-              <span className="flex-none [font-variant-numeric:tabular-nums] text-[13px] text-[#555] whitespace-nowrap px-0.5">
-                {pageText}
-              </span>
-            </div>
-
-            {/* RIGHT: AI entry + overflow */}
-            <div className="flex shrink-0 items-center justify-end gap-0.5 sm:gap-1">
-              <button
-                className="flex h-8 w-8 flex-none items-center justify-center rounded-md border-0 bg-transparent text-[#555] cursor-pointer can-hover:hover:bg-black/5 coarse:h-11 coarse:w-11"
-                title="Talk about this book"
-                aria-label="Talk about this book"
-                onClick={openBookThread}
-              >
-                <IconSparkle size={18} />
-              </button>
-              <MoreMenu items={moreItems} />
-            </div>
-          </>
+          <ReaderTopBar
+            view={viewRef}
+            stats={stats}
+            viewReady={viewReady}
+            sidebarOpen={sidebarOpen}
+            sidebarBusy={sidebarBusy}
+            onToggleSidebar={() => setSidebarOpen((v) => !v)}
+            onCloseReader={closeReader}
+            status={status}
+            tool={{ type: toolType, color: penColor }}
+            onToolChange={(t) => {
+              setToolType(t.type);
+              setPenColor(t.color);
+            }}
+            onOpenBookThread={openBookThread}
+            onOpenSettings={() => setShowSettings(true)}
+          />
         ) : homeScreen === "library" ? (
           <>
             {activeTopic ? (
@@ -2495,7 +1897,7 @@ export default function App() {
         >
           {embedDoc && (
             <EmbedReaderPane
-              key={embedDoc.path}
+              key={embedDoc.bookId}
               buffer={embedDoc.buffer}
               annotations={embedDoc.annotations}
               authorName="Reading-Partner"
@@ -2516,132 +1918,27 @@ export default function App() {
           )}
         </div>
 
-        {!inReader && homeScreen === "vestibule" && (
-          <div className="absolute inset-0 overflow-y-auto bg-white">
-            <Vestibule
-              continueBook={(() => {
-                const recent = mostRecentlyOpened(topics);
-                return recent ? { title: recent.file.name, topicName: recent.topic.name } : null;
-              })()}
-              snap={infoSnap}
-              configured={configured}
-              hasSources={hasSourcesState}
-              onContinue={continueReading}
-              onOpenLibrary={() => setHomeScreen("library")}
-              onGenerate={generateBriefing}
-              onStop={stopBriefing}
-              onOpenBriefing={() => setHomeScreen("briefing")}
-              onOpenSettings={() => setShowSettings(true)}
-              onStartSubscribing={openOnboarding}
-            />
-          </div>
-        )}
-
-        {!inReader && homeScreen === "briefing" && infoSnap?.briefing && (
-          <div className="absolute inset-0 overflow-y-auto bg-white">
-            <BriefingPage
-              briefing={infoSnap.briefing}
-              openedIds={openedItemIds}
-              dismissedIds={dismissedItemIds}
-              onOpenArticle={openArticle}
-              onDismiss={dismissItem}
-              onAppeal={appealItem}
-              onAskBriefing={askBriefing}
-              onAskArticle={askArticle}
-              onOpenSources={openSourcesPage}
-              onBack={() => setHomeScreen("vestibule")}
-            />
-          </div>
-        )}
-
-        {!inReader && homeScreen === "sources" && (
-          <div className="absolute inset-0 overflow-y-auto bg-white">
-            <SourcesPage
-              sources={sourcesList}
-              health={sourceHealth}
-              onToggle={toggleSource}
-              onRemove={removeSourceById}
-              onProbeAdd={liveProbeAndTrial}
-              onConfirmAdd={confirmAddSource}
-              onBack={() => setHomeScreen("briefing")}
-            />
-          </div>
-        )}
-
-        {!inReader && homeScreen === "article" && openArticleId && infoSnap?.briefing && (
-          <div className="absolute inset-0">
-            <ArticleView
-              meta={
-                infoSnap.briefing.items[openArticleId] ?? {
-                  title: "Article",
-                  url: "",
-                  source: "",
-                  sourceName: "",
-                  publishedAt: "",
-                }
-              }
-              contentHtml={articleHtml}
-              onBack={() => setHomeScreen("briefing")}
-              onAsk={() => askArticle(openArticleId)}
-            />
-          </div>
-        )}
-
-        {!inReader && infoCall && (
-          <InfoCall
-            anchor={infoCall}
-            dateKey={infoSnap?.briefing?.date ?? todayLocal()}
-            onHangUp={() => setInfoCall(null)}
-            voice={infoVoice}
-            onSourcesChanged={refreshSources}
-            onOpenBriefing={() => setHomeScreen("briefing")}
-          />
-        )}
+        <InfoHome
+          screen={inReader ? null : homeScreen}
+          onNavigate={setHomeScreen}
+          continueBook={(() => {
+            const recent = mostRecentlyOpened(topics);
+            return recent ? { title: recent.file.name, topicName: recent.topic.name } : null;
+          })()}
+          onContinue={continueReading}
+          configured={configured}
+          onOpenSettings={() => setShowSettings(true)}
+        />
 
         {!inReader && homeScreen === "library" && (
-          <div className="absolute inset-0 flex flex-col items-stretch justify-start gap-6 bg-white overflow-y-auto">
-            {activeTopic ? (
-              <TopicDetail
-                topic={activeTopic}
-                onAddFile={addFile}
-                onOpenFile={openFile}
-                onRemoveFile={async (p) => {
-                  await removeFileFromTopic(activeTopic.id, p);
-                  await refreshTopics();
-                }}
-              />
-            ) : (
-              <TopicLibrary
-                topics={topics}
-                newTopicName={newTopicName}
-                setNewTopicName={setNewTopicName}
-                renamingId={renamingId}
-                renameText={renameText}
-                setRenameText={setRenameText}
-                onCreate={async () => {
-                  if (!newTopicName.trim()) return;
-                  await createTopic(newTopicName);
-                  setNewTopicName("");
-                  await refreshTopics();
-                }}
-                onStartRename={(t) => {
-                  setRenamingId(t.id);
-                  setRenameText(t.name);
-                }}
-                onCommitRename={async () => {
-                  if (renamingId) await renameTopic(renamingId, renameText);
-                  setRenamingId(null);
-                  await refreshTopics();
-                }}
-                onDelete={async (t) => {
-                  if (!window.confirm(`Delete topic "${t.name}"? Files stay on disk.`)) return;
-                  await deleteTopic(t.id);
-                  await refreshTopics();
-                }}
-                onOpen={(t) => setActiveTopicId(t.id)}
-              />
-            )}
-          </div>
+          <LibraryScreen
+            topics={topics}
+            activeTopic={activeTopic}
+            onOpenTopic={(t) => setActiveTopicId(t.id)}
+            onAddFile={addFile}
+            onOpenFile={openFile}
+            onTopicsChanged={refreshTopics}
+          />
         )}
 
         {popup && (
@@ -2660,7 +1957,7 @@ export default function App() {
             anchor={call.anchor}
             messages={call.messages}
             onSend={sendCallMessage}
-            onExpand={expandCall}
+            onExpand={showChatMain}
             onClose={endCall}
             onDelete={deleteCallThread}
             pendingImages={pendingImages}
@@ -2760,7 +2057,7 @@ export default function App() {
           <div className="absolute right-3 top-3 z-50">
             <ChatPipCard
               lastMessage={call.messages.length ? call.messages[call.messages.length - 1].text : null}
-              onClick={swapToChat}
+              onClick={showChatMain}
               onHangUp={endCall}
             />
           </div>
@@ -2788,227 +2085,4 @@ function callExcerpt(ann: Annotation | undefined): string {
   if (typeof ann.text === "string" && ann.text) return ann.text;
   if (typeof ann.comment === "string" && ann.comment) return ann.comment;
   return "";
-}
-
-// An annotation flattened for the read_annotations tool: 1-based page + selected
-// text + comment. Skips annotations with neither text nor comment (e.g. legacy
-// image regions).
-function toAnnotationLite(ann: Annotation): AnnotationLite | null {
-  const text = typeof ann.text === "string" ? ann.text.trim() : "";
-  const comment = typeof ann.comment === "string" ? ann.comment.trim() : "";
-  if (!text && !comment) return null;
-  return { page: annotationPage(ann as { position?: { pageIndex?: number } }), text, comment };
-}
-
-// Assemble the topic's materials for a call (M6): each file's cached full text
-// and its annotations, scoped to the active topic. The current book uses the
-// in-memory annotations and the just-extracted full text; other books read from
-// the cache/disk (never re-extracted here, so they show only if opened before).
-async function gatherTopicMaterials(
-  files: { path: string; name: string; hash?: string }[],
-  currentBookId: string,
-  currentFulltext: Fulltext | null,
-  currentAnns: Annotation[],
-): Promise<(TopicMaterial & { path: string })[]> {
-  const out: (TopicMaterial & { path: string })[] = [];
-  for (const f of files) {
-    const isCurrent = f.hash === currentBookId;
-    // Other books are read from their content-hash-keyed data; a file that has
-    // never been opened since the upgrade has no book id yet, so it contributes
-    // no cached full text / annotations (it will once opened).
-    let fulltext: Fulltext | null;
-    if (isCurrent) fulltext = currentFulltext;
-    else if (!f.hash) fulltext = null;
-    else {
-      try {
-        fulltext = await getFulltext(f.hash);
-      } catch {
-        fulltext = null;
-      }
-    }
-    let anns: Annotation[];
-    if (isCurrent) anns = currentAnns;
-    else if (!f.hash) anns = [];
-    else {
-      try {
-        anns = await loadAnnotations(f.hash);
-      } catch {
-        anns = [];
-      }
-    }
-    const annotations = anns
-      .map(toAnnotationLite)
-      .filter((a): a is AnnotationLite => a !== null);
-    out.push({ path: f.hash ?? f.path, label: f.name, fulltext, annotations });
-  }
-  return out;
-}
-
-function TopicLibrary(props: {
-  topics: Topic[];
-  newTopicName: string;
-  setNewTopicName: (v: string) => void;
-  renamingId: string | null;
-  renameText: string;
-  setRenameText: (v: string) => void;
-  onCreate: () => void;
-  onStartRename: (t: Topic) => void;
-  onCommitRename: () => void;
-  onDelete: (t: Topic) => void;
-  onOpen: (t: Topic) => void;
-}) {
-  return (
-    <div className={LIBRARY}>
-      <h1 className="mt-0 mb-5 mx-0 text-[22px]">Topics</h1>
-      <div className="flex gap-2 mb-5">
-        <input
-          className={INPUT}
-          placeholder="New topic (e.g. what makes JITs fast)"
-          value={props.newTopicName}
-          onChange={(e) => props.setNewTopicName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && props.onCreate()}
-        />
-        <button className={BTN} onClick={props.onCreate}>
-          Add
-        </button>
-      </div>
-      {props.topics.length === 0 && <p className="text-[#777] text-sm">No topics yet. Create one to start reading.</p>}
-      <ul className={TOPIC_LIST}>
-        {props.topics.map((t) => (
-          <li key={t.id} className={TOPIC_ROW}>
-            {props.renamingId === t.id ? (
-              <input
-                className={INPUT}
-                autoFocus
-                value={props.renameText}
-                onChange={(e) => props.setRenameText(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && props.onCommitRename()}
-                onBlur={props.onCommitRename}
-              />
-            ) : (
-              <button className={TOPIC_NAME} onClick={() => props.onOpen(t)}>
-                {t.name}
-                <span className="text-xs text-[#777]">{t.files.length} file{t.files.length === 1 ? "" : "s"}</span>
-              </button>
-            )}
-            <div className="flex gap-1">
-              <button className={BTN_SM} onClick={() => props.onStartRename(t)}>
-                Rename
-              </button>
-              <button className={BTN_SM_DANGER} onClick={() => props.onDelete(t)}>
-                Delete
-              </button>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-// Per-book reading metadata. `page`/`pages` are absent until the book has been
-// opened at least once (no reading position, no full-text cache).
-interface BookMeta {
-  page?: number; // 1-based
-  pages?: number;
-  marks: number;
-}
-
-function plural(n: number, unit: string): string {
-  return `${n} ${unit}${n === 1 ? "" : "s"}`;
-}
-
-function relativeTime(ts: number): string {
-  const minutes = Math.floor((Date.now() - ts) / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${plural(minutes, "minute")} ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${plural(hours, "hour")} ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${plural(days, "day")} ago`;
-  return new Date(ts).toLocaleDateString();
-}
-
-// Empty for a book that was never opened, which renders as no second line.
-function metaLine(meta: BookMeta | undefined, lastOpenedAt?: number): string {
-  const parts: string[] = [];
-  if (meta?.page) {
-    parts.push(meta.pages ? `Page ${meta.page} of ${meta.pages}` : `Page ${meta.page}`);
-  }
-  if (meta?.marks) parts.push(plural(meta.marks, "mark"));
-  if (lastOpenedAt) parts.push(relativeTime(lastOpenedAt));
-  return parts.join(" · ");
-}
-
-function TopicDetail(props: {
-  topic: Topic;
-  onAddFile: () => void;
-  onOpenFile: (file: FileRef) => void;
-  onRemoveFile: (path: string) => void;
-}) {
-  const files = sortedFiles(props.topic);
-  const [meta, setMeta] = useState<Record<string, BookMeta>>({});
-
-  // Loaded off the render path, per file, keyed by book id (content hash). Every
-  // read is optional: a book that was never opened has no state, no full-text
-  // cache and no annotation file — the normal case, not an error. A file without
-  // a book id yet (added but never opened since the upgrade) shows no meta line.
-  useEffect(() => {
-    let cancelled = false;
-    void Promise.all(
-      props.topic.files.map(async (f): Promise<[string, BookMeta]> => {
-        if (!f.hash) return [f.path, { marks: 0 }];
-        const [state, fulltext, annotations] = await Promise.all([
-          getViewState(f.hash).catch(() => null),
-          getFulltext(f.hash).catch(() => null),
-          loadAnnotations(f.hash).catch(() => []),
-        ]);
-        return [
-          f.path,
-          {
-            page: state ? state.pageIndex + 1 : undefined,
-            pages: fulltext?.pages.length || undefined,
-            marks: annotations.length,
-          },
-        ];
-      }),
-    ).then((entries) => {
-      if (!cancelled) setMeta(Object.fromEntries(entries));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [props.topic]);
-
-  return (
-    <div className={LIBRARY}>
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="m-0 text-[22px]">{props.topic.name}</h1>
-        <button className={BTN} onClick={props.onAddFile}>
-          Add PDF
-        </button>
-      </div>
-      {files.length === 0 && <p className="text-[#777] text-sm">No files yet. Add a PDF to this topic.</p>}
-      <ul className={TOPIC_LIST}>
-        {files.map((f) => {
-          const line = metaLine(meta[f.path], f.lastOpenedAt);
-          return (
-            <li key={f.path} className={TOPIC_ROW}>
-              <button className={TOPIC_NAME} onClick={() => props.onOpenFile(f)}>
-                <span className="flex min-w-0 flex-col gap-0.5">
-                  <span className="truncate">{f.name}</span>
-                  {line && <span className="text-xs text-[#777]">{line}</span>}
-                </span>
-              </button>
-              <div className="flex gap-1">
-                <button className={BTN_SM_DANGER} onClick={() => props.onRemoveFile(f.path)}>
-                  Remove
-                </button>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
 }

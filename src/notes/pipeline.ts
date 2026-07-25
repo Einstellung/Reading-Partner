@@ -5,20 +5,12 @@
 // (Tauri fs, pi-ai). Structurally the unattended sibling of the prep pipeline;
 // the stall watchdog is the shared src/ai/watchdog.
 
-import {
-  resolveWatchdogConfig,
-  runWithWatchdog,
-  StoppedError,
-  type AiCallOptions,
-  type WatchdogConfig,
-} from "../ai/watchdog";
+import { StoppedError, type AiCallOptions, type WatchdogConfig } from "../ai/watchdog";
+import { ObservableRun, type RunSnapshot } from "../ai/observable-run";
 import { planAutoNotes, type AutoAnnotation, type FinalPass } from "./auto";
 import { createNotesState, normalizeNotesOnLoad, type NoteChapter, type NotesState } from "./types";
 
 export type { AiCallOptions };
-
-// Cap on how often streaming progress re-renders React (~4/s).
-const ACTIVITY_NOTIFY_MS = 250;
 
 export type PipelineConfig = WatchdogConfig;
 
@@ -63,22 +55,9 @@ export interface NotesActivity {
   attempts: number;
 }
 
-export interface NotesSnapshot {
-  state: NotesState | null;
-  running: boolean;
-  activity: NotesActivity | null;
-}
+export type NotesSnapshot = RunSnapshot<NotesState | null, NotesActivity>;
 
-export class NotesPipeline {
-  private state: NotesState | null = null;
-  private running = false;
-  private listeners = new Set<() => void>();
-  private snap: NotesSnapshot = { state: null, running: false, activity: null };
-  private activity: NotesActivity | null = null;
-  private lastActivityNotify = 0;
-  private readonly config: PipelineConfig;
-  // Aborts the in-flight AI call when the user presses Stop; recreated per run.
-  private stopController: AbortController | null = null;
+export class NotesPipeline extends ObservableRun<NotesState | null, NotesActivity> {
   private stopFlag = false;
   // One-line steers for a pending regenerate, keyed by chapter index (not
   // persisted — a steer only applies to the run it was requested for).
@@ -95,65 +74,11 @@ export class NotesPipeline {
     private readonly deps: NotesDeps,
     config: Partial<PipelineConfig> = {},
   ) {
-    this.config = resolveWatchdogConfig(config);
+    super(null, deps, config);
   }
 
-  subscribe(fn: () => void): () => void {
-    this.listeners.add(fn);
-    return () => this.listeners.delete(fn);
-  }
-
-  // Stable between notifications so useSyncExternalStore doesn't loop.
-  snapshot(): NotesSnapshot {
-    return this.snap;
-  }
-
-  private notify(): void {
-    this.snap = {
-      state: this.state
-        ? { ...this.state, chapters: this.state.chapters.map((c) => ({ ...c })) }
-        : null,
-      running: this.running,
-      activity: this.activity,
-    };
-    for (const fn of this.listeners) fn();
-  }
-
-  private setActivity(activity: NotesActivity | null): void {
-    this.activity = activity;
-    this.lastActivityNotify = activity ? this.deps.now() : 0;
-    this.notify();
-  }
-
-  private bumpActivity(chars: number): void {
-    if (!this.activity) return;
-    this.activity = { ...this.activity, chars };
-    const now = this.deps.now();
-    if (now - this.lastActivityNotify >= ACTIVITY_NOTIFY_MS) {
-      this.lastActivityNotify = now;
-      this.notify();
-    }
-  }
-
-  private async callWithWatchdog<T>(
-    info: { kind: NotesActivity["kind"]; chapter?: number },
-    invoke: (opts: AiCallOptions) => Promise<T>,
-  ): Promise<T> {
-    try {
-      return await runWithWatchdog(
-        invoke,
-        this.config,
-        { now: this.deps.now, sleep: this.deps.sleep, setTimer: this.deps.setTimer },
-        {
-          onAttempt: ({ attempt, attempts, startedAt }) =>
-            this.setActivity({ ...info, startedAt, chars: 0, attempt, attempts }),
-          onProgress: (chars) => this.bumpActivity(chars),
-        },
-        this.stopController?.signal,
-      );
-    } finally {
-      this.setActivity(null);
-    }
+  protected copyState(state: NotesState | null): NotesState | null {
+    return state ? { ...state, chapters: state.chapters.map((c) => ({ ...c })) } : null;
   }
 
   private async persist(): Promise<void> {

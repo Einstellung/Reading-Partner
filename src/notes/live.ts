@@ -5,13 +5,12 @@
 // switches. The book's full text, figures, buffer and reader emphasis signals
 // are supplied by the host (App) so this module stays decoupled from the reader.
 
-import type { ThinkingLevel } from "@earendil-works/pi-ai";
-import { modelSupportsImages, streamChat, type ProviderId } from "../ai/providers";
+import { modelSupportsImages } from "../ai/providers";
+import { callModel, resolveModel } from "../ai/model-call";
 import { buildFigureCatalog } from "../figures/catalog";
 import { renderFigure } from "../figures/render";
 import type { Figure } from "../figures/types";
 import type { Fulltext } from "../fulltext/types";
-import { loadSettings, toReasoning, type AiLanguage } from "../app/settings";
 import {
   buildChapterTools,
   formatChatThreads,
@@ -49,56 +48,6 @@ export interface NotesInputs {
   getChatThreads(): Promise<ChatThread[]>;
 }
 
-async function resolveModel(): Promise<{
-  providerId: ProviderId;
-  modelId: string;
-  reasoning: ThinkingLevel | undefined;
-  aiLanguage: AiLanguage;
-}> {
-  const s = await loadSettings();
-  if (!s.defaultProviderId || !s.defaultModelId) {
-    throw new Error("no default AI provider configured (Settings)");
-  }
-  return {
-    providerId: s.defaultProviderId as ProviderId,
-    modelId: s.defaultModelId,
-    reasoning: toReasoning(s.prepThinking),
-    aiLanguage: s.aiLanguage,
-  };
-}
-
-// One plain (tool-less) model call, promisified — for the plan and overview
-// stages. onProgress reports the cumulative received character count so the
-// watchdog and liveness counter can track a long stream; signal aborts it.
-function callModel(
-  systemPrompt: string,
-  userText: string,
-  opts: { signal: AbortSignal; onProgress: (chars: number) => void },
-): Promise<string> {
-  return resolveModel().then(
-    (model) =>
-      new Promise<string>((resolve, reject) => {
-        let chars = 0;
-        const bump = (t: string) => {
-          chars += t.length;
-          opts.onProgress(chars);
-        };
-        void streamChat({
-          providerId: model.providerId,
-          modelId: model.modelId,
-          systemPrompt,
-          messages: [{ role: "user", text: userText }],
-          signal: opts.signal,
-          reasoning: model.reasoning,
-          onDelta: bump,
-          onThinking: bump,
-          onDone: resolve,
-          onError: (m) => reject(new Error(m)),
-        });
-      }),
-  );
-}
-
 function makeDeps(bookId: string, bookName: string, inputs: NotesInputs): NotesDeps {
   const { fulltext } = inputs;
   return {
@@ -110,12 +59,12 @@ function makeDeps(bookId: string, bookName: string, inputs: NotesInputs): NotesD
       // model reads the front matter's table of contents.
       const fromOutline = chaptersFromOutline(fulltext.outline, fulltext.pages.length);
       if (fromOutline) return { chapters: fromOutline, source: "outline" };
-      const text = await callModel(NOTES_PLAN_SYSTEM_PROMPT, planUserMessage(fulltext), opts);
+      const text = await callModel("prep", NOTES_PLAN_SYSTEM_PROMPT, planUserMessage(fulltext), opts);
       return { chapters: parseNotesPlan(text, fulltext.pages.length), source: "ai" };
     },
 
     async generateChapter({ chapter, instruction }, opts) {
-      const model = await resolveModel();
+      const model = await resolveModel("prep");
       const figures = await inputs.getFigures().catch(() => []);
       const inRange = figures.filter((f) => f.page >= chapter.startPage && f.page <= chapter.endPage);
       const supportsImages = modelSupportsImages(model.providerId, model.modelId);
@@ -162,8 +111,12 @@ function makeDeps(bookId: string, bookName: string, inputs: NotesInputs): NotesD
     readChapterNote: (index) => readChapterNote(bookId, index),
 
     async buildOverview(chapters, opts) {
-      const { aiLanguage } = await resolveModel();
-      return callModel(overviewSystemPrompt(aiLanguage), overviewUserMessage(chapters), opts);
+      return callModel(
+        "prep",
+        (m) => overviewSystemPrompt(m.aiLanguage),
+        overviewUserMessage(chapters),
+        opts,
+      );
     },
 
     writeOverview: (body) => writeOverviewNote(bookId, body),

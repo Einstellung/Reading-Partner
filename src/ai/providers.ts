@@ -152,6 +152,45 @@ export function modelSupportsImages(providerId: ProviderId, modelId: string): bo
 	return !!model?.input.includes("image");
 }
 
+// Everything a call needs before it can stream: the provider, the looked-up
+// model, credentials, transport, and the reasoning level gated against the
+// model's support. Shared by streamChat and the agent loop so the model lookup
+// and the image gate have one wording. Throws on an unknown model, on images
+// sent to a text-only model (pi would silently drop them to a placeholder, so
+// the user's picture would vanish without a word), and on missing credentials —
+// both callers funnel a throw into onError.
+export async function resolveCall(
+	providerId: ProviderId,
+	modelId: string,
+	messages: ChatMessage[],
+	reasoning?: ThinkingLevel,
+): Promise<{
+	provider: Provider;
+	model: Model<Api>;
+	apiKey: string;
+	transport: Transport | undefined;
+	reasoning: ThinkingLevel | undefined;
+}> {
+	const provider = providers[providerId];
+	const model = provider.getModels().find((m) => m.id === modelId);
+	if (!model) throw new Error(`unknown model '${modelId}' for ${provider.name}`);
+
+	if (messages.some((m) => m.images?.length) && !model.input.includes("image")) {
+		throw new Error(
+			`${model.name || modelId} can't read images. Switch to a vision-capable model to send pictures.`,
+		);
+	}
+
+	return {
+		provider,
+		model: model as Model<Api>,
+		apiKey: await resolveApiKey(providerId),
+		transport: transportFor(providerId),
+		// Silently omit reasoning on models that don't support it.
+		reasoning: reasoning && model.reasoning ? reasoning : undefined,
+	};
+}
+
 export function toPiMessages(messages: ChatMessage[]): Message[] {
 	return messages.map((m): Message => {
 		if (m.role === "user") {
@@ -228,29 +267,16 @@ export async function streamChat(options: StreamChatOptions): Promise<void> {
 	const { providerId, modelId, systemPrompt, messages, signal, reasoning } = options;
 	const { onDelta, onThinking, onDone, onError } = options;
 	try {
-		const provider = providers[providerId];
-		const model = provider.getModels().find((m) => m.id === modelId);
-		if (!model) throw new Error(`unknown model '${modelId}' for ${provider.name}`);
-
-		// Gate images up front: pi would silently downgrade them to a text
-		// placeholder for a non-vision model, so the user's picture would vanish
-		// without a word. Fail loudly instead.
-		if (messages.some((m) => m.images?.length) && !model.input.includes("image")) {
-			onError(`${model.name || modelId} can't read images. Switch to a vision-capable model to send pictures.`);
-			return;
-		}
-
-		const apiKey = await resolveApiKey(providerId);
+		const call = await resolveCall(providerId, modelId, messages, reasoning);
 		await streamChatCore({
-			stream: (m, ctx, opts) => provider.streamSimple(m, ctx, opts),
-			model: model as Model<Api>,
-			apiKey,
+			stream: (m, ctx, opts) => call.provider.streamSimple(m, ctx, opts),
+			model: call.model,
+			apiKey: call.apiKey,
 			systemPrompt,
 			messages: toPiMessages(messages),
 			signal,
-			// Silently omit reasoning on models that don't support it.
-			reasoning: reasoning && model.reasoning ? reasoning : undefined,
-			transport: transportFor(providerId),
+			reasoning: call.reasoning,
+			transport: call.transport,
 			onDelta,
 			onThinking,
 			onDone,

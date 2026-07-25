@@ -4,7 +4,8 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { buildAuthUrl, generatePKCE, parseManualInput } from "../../src/ai/openai-oauth";
+import { buildAuthUrl } from "../../src/ai/openai-oauth";
+import { generatePKCE, parseManualInput } from "../../src/app/oauth";
 import { isOAuthCredential } from "../../src/ai/credentials";
 
 test("buildAuthUrl carries the Codex OAuth client, redirect, scope, and flow flags", () => {

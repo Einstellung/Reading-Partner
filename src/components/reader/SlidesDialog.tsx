@@ -19,6 +19,7 @@ import {
   type SlidesSnapshot,
   type TalkEntry,
 } from "../../slides";
+import { BTN, BTN_PRIMARY } from "../common/buttons";
 
 function LivenessHint({ activity }: { activity: SlidesActivity }) {
   const [now, setNow] = useState(() => Date.now());
@@ -42,11 +43,6 @@ const STATUS_STYLE: Record<string, string> = {
   done: "bg-green-100 text-green-700",
   failed: "bg-red-100 text-red-700",
 };
-
-const BTN =
-  "rounded-md border border-[#dcdcdc] bg-white px-3 py-1.5 text-sm cursor-pointer enabled:hover:bg-[#f0f0f0] disabled:opacity-40 disabled:cursor-default";
-const BTN_PRIMARY =
-  "rounded-md bg-[#6c4fd0] px-3 py-1.5 text-sm text-white cursor-pointer enabled:hover:bg-[#5a3fbf] disabled:opacity-40 disabled:cursor-default";
 
 function SlideRow({ slide, activity }: { slide: SlideRun; activity: SlidesActivity | null }) {
   const mine = activity && (activity.kind === "content" || activity.kind === "assets") && activity.slide === slide.index;
