@@ -188,7 +188,14 @@ test("no capture, no pause, no scroll before the slop is passed", () => {
 test("a purely horizontal move past the slop commits the scroll (never falls through to drawing)", () => {
   const vp = viewport({ maxLeft: 400 });
   const r = run([down(100, 100), move(100 - VERTICAL_SCROLL_SLOP, 100, 16)], vp);
-  expect(types(r.commands)).toEqual(["pause", "dropSelection", "capture", "scrollTo", "preventDefault"]);
+  expect(types(r.commands)).toEqual([
+    "releaseEnginePointer",
+    "pause",
+    "dropSelection",
+    "capture",
+    "scrollTo",
+    "preventDefault",
+  ]);
   expect(r.state.phase).toBe("scroll");
 });
 
@@ -209,8 +216,34 @@ test("a diagonal move under the slop on both axes stays pending", () => {
 test("the pause comes before the selection drop and the capture", () => {
   const vp = viewport();
   const r = run([down(100, 100), move(100, 80, 16)], vp);
-  expect(types(r.commands).slice(0, 3)).toEqual(["pause", "dropSelection", "capture"]);
+  expect(types(r.commands).slice(0, 4)).toEqual([
+    "releaseEnginePointer",
+    "pause",
+    "dropSelection",
+    "capture",
+  ]);
   expect(r.commands.find((c) => c.type === "capture")).toEqual({ type: "capture", id: 1 });
+});
+
+// The engine arms a text anchor on the pointerdown it saw and disarms it only on
+// the matching pointerup — which never comes, because from the capture on every
+// event for that pointer is retargeted to the viewport. An armed anchor turns
+// the next move the engine does see into a selection running from the word the
+// swipe started on to wherever the pointer now is (docs/pitfall/38). The engine
+// is therefore handed that up here, and it has to go out before the pause: a
+// paused engine drops the event and the anchor survives.
+test("the engine is handed the pointer's up at the takeover, before the pause", () => {
+  const vp = viewport();
+  const r = run([down(100, 100), move(100, 80, 16)], vp);
+  expect(r.commands[0]).toEqual({ type: "releaseEnginePointer", id: 1 });
+  const order = types(r.commands);
+  expect(order.indexOf("releaseEnginePointer")).toBeLessThan(order.indexOf("pause"));
+});
+
+test("nothing is handed back when the engine never had the down (annotation tool)", () => {
+  const vp = viewport();
+  const r = run([down(100, 100, 0, ANNOTATE), move(100, 80, 16)], vp);
+  expect(types(r.commands)).not.toContain("releaseEnginePointer");
 });
 
 // --- follow-finger scrolling ------------------------------------------------
@@ -780,6 +813,7 @@ test("an explicit takeover follows from the finger's current position, no slop",
     vp,
   );
   expect(r.state.phase).toBe("scroll");
+  // Taken over on the down itself, so the engine never heard it: nothing owed.
   expect(types(r.commands)).toEqual(["pause", "dropSelection", "capture"]);
   run([move(100, 297, 16)], vp, r.state);
   expect(vp.top).toBe(903); // 3px of movement, 3px of scroll

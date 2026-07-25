@@ -242,3 +242,26 @@ export function shouldClearGestureSelection(
 ): boolean {
   return hasSelectionNow && !hadSelectionAtStart;
 }
+
+// The engine's text-selection handler arms an anchor on the pointerdown it sees
+// and disarms it only on the matching pointerup. The moment this router takes a
+// gesture over it captures the pointer on the viewport, and from there on every
+// event for that pointer is retargeted to the viewport — the page below never
+// gets another one, so that pointerup never arrives and the anchor stays armed
+// for as long as the page is mounted. The next move the engine does see, with no
+// pointerdown in front of it, is measured against that stale anchor and drags a
+// selection out of nothing: from the word the last swipe started on to wherever
+// the pointer is now, which after a few screens of scrolling is the whole
+// visible page (docs/pitfall/38 — the same dangling anchor as before, reached by
+// capturing the pointer instead of by swallowing its up).
+//
+// Dropping the selection is not a substitute: that resets the plugin's state,
+// not the per-page handler that holds the anchor, and an anchor with no rects
+// yet is invisible to any "is something selected" check.
+//
+// So a pointer whose pointerdown the engine saw is handed a synthetic pointerup
+// at the takeover — while the engine is still listening, because a paused one
+// drops the event and the anchor survives anyway.
+export function shouldHandEngineTheUp(engineSawDown: boolean, enginePaused: boolean): boolean {
+  return engineSawDown && !enginePaused;
+}

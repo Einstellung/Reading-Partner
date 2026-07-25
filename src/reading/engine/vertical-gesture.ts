@@ -154,6 +154,12 @@ export type VerticalCommand =
   // The engine's pointer pipeline must not see this gesture.
   | { type: "pause" }
   | { type: "resume" }
+  // Hand the engine the pointerup it is owed for this pointer. From the capture
+  // below onwards every event for it is retargeted to the viewport, so the
+  // engine's own up never arrives and its text anchor stays armed
+  // (docs/pitfall/38). Always emitted before `pause`: a paused engine drops the
+  // event and the anchor survives.
+  | { type: "releaseEnginePointer"; id: number }
   | { type: "capture"; id: number }
   // id is null when nothing was captured — the host no-ops.
   | { type: "releaseCapture"; id: number | null }
@@ -194,6 +200,12 @@ export interface VerticalState {
   velX: number; // smoothed finger velocity px/ms (positive = right / down)
   velY: number;
   capturedId: number | null;
+  // Whether the engine's pointer pipeline was live when this pointer landed, so
+  // it heard the pointerdown and is owed the matching up once the router takes
+  // the gesture over (docs/pitfall/38). False when the engine was already paused
+  // at the down (an annotation tool) or when the gesture was taken over on the
+  // down itself (landing on a coast, inheriting a pinch): it never heard it.
+  engineHeardDown: boolean;
   fling: FlingMotion | null;
   // How far past the scrollable range the gesture currently is, in scroll-space
   // px (positive = past the bottom / right edge). The band the host paints is
@@ -215,6 +227,7 @@ export function initVerticalState(): VerticalState {
     velX: 0,
     velY: 0,
     capturedId: null,
+    engineHeardDown: false,
     fling: null,
     over: { x: 0, y: 0 },
   };
@@ -385,6 +398,8 @@ export function stepVertical(
       s.lastT = input.t;
       s.velX = 0;
       s.velY = 0;
+      // A grab pauses on the down itself, so the engine never hears it either.
+      s.engineHeardDown = !input.plan.pauseAtDown && !grab;
       if (grab) {
         s.phase = "scroll";
         s.capturedId = input.id;
@@ -415,6 +430,13 @@ export function stepVertical(
         if (!shouldCommitScroll(input.x - s.startX, input.y - s.startY, cfg.slop)) break;
         s.phase = "scroll";
         s.capturedId = input.id;
+        // The engine has had this pointer's down and the few px of moves before
+        // the slop, and is about to stop hearing from it: close it out before
+        // the pause, or the anchor it armed stays armed.
+        if (s.engineHeardDown) {
+          cmds.push({ type: "releaseEnginePointer", id: input.id });
+          s.engineHeardDown = false;
+        }
         cmds.push({ type: "pause" }, { type: "dropSelection" }, { type: "capture", id: input.id });
       }
 

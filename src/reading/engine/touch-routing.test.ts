@@ -14,6 +14,7 @@ import {
   fingerVerdict,
   centroidOf,
   shouldClearGestureSelection,
+  shouldHandEngineTheUp,
   type PointerKind,
   type ToolKind,
 } from "./touch-routing";
@@ -336,4 +337,13 @@ test("shouldClearGestureSelection: drop what this gesture caused, keep what was 
   expect(shouldClearGestureSelection(false, true)).toBe(true);
   expect(shouldClearGestureSelection(true, true)).toBe(false);
   expect(shouldClearGestureSelection(false, false)).toBe(false);
+});
+
+test("shouldHandEngineTheUp: only a down the engine heard, and only while it can still hear", () => {
+  expect(shouldHandEngineTheUp(true, false)).toBe(true);
+  // Paused at down (an annotation tool): the engine never saw it, owes nothing.
+  expect(shouldHandEngineTheUp(false, false)).toBe(false);
+  // Already paused: the event would be dropped and the anchor would survive it.
+  expect(shouldHandEngineTheUp(true, true)).toBe(false);
+  expect(shouldHandEngineTheUp(false, true)).toBe(false);
 });

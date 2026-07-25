@@ -57,6 +57,7 @@ import {
   fingerVerdict,
   centroidOf,
   shouldClearGestureSelection,
+  shouldHandEngineTheUp,
   type PointerPlan,
 } from "./touch-routing";
 import {
@@ -432,8 +433,17 @@ function TouchInputRouter({
       // policies.
       const fingers = new Map<number, { x: number; y: number; plan: PointerPlan }>();
       // Fingers whose pointerdown the engine saw, so their pointerup is let
-      // through even if the gesture has since been taken over.
-      const engineSaw = new Set<number>();
+      // through even if the gesture has since been taken over — and, when the
+      // router takes the gesture over instead, so the engine can be handed that
+      // up itself. The element is the one the down was dispatched on, which is
+      // where the synthetic up has to go.
+      const engineSaw = new Map<
+        number,
+        { target: EventTarget; type: string; x: number; y: number }
+      >();
+      // True only while the synthetic pointerup below is being dispatched: it
+      // travels through this router's own listeners on the way to the page.
+      let synthesizing = false;
       // Every live contact (pen included), for the on-device probe only.
       const contacts = new Map<number, TouchDebugContact>();
       // Latched once a second finger lands, cleared when the glass is empty.
@@ -615,6 +625,33 @@ function TouchInputRouter({
           ctx.current.selection?.clear(documentId);
         }
       };
+      // Hand the engine the pointerup it is owed for a pointer this router is
+      // taking over. Without it the engine's per-page text handler keeps the
+      // anchor it armed at pointerdown — the capture retargets every later event
+      // to the viewport, so its own up never comes — and the next move it does
+      // see selects everything between that stale anchor and the pointer
+      // (docs/pitfall/38). Dropping the selection does not do this: that clears
+      // the plugin, not the handler holding the anchor.
+      const handEngineTheUp = (id: number) => {
+        const seen = engineSaw.get(id);
+        if (!seen || !shouldHandEngineTheUp(seen !== undefined, enginePaused)) return;
+        engineSaw.delete(id);
+        synthesizing = true;
+        try {
+          seen.target.dispatchEvent(
+            new PointerEvent("pointerup", {
+              pointerId: id,
+              pointerType: seen.type,
+              bubbles: true,
+              cancelable: true,
+              clientX: seen.x,
+              clientY: seen.y,
+            }),
+          );
+        } finally {
+          synthesizing = false;
+        }
+      };
 
       // --- paged apply / feed ---------------------------------------------
       const apply = (cmds: GestureCommand[]) => {
@@ -623,6 +660,9 @@ function TouchInputRouter({
           if (c.type === "capture") {
             captured = true;
             capturedId = c.id;
+            // Before the pause and the capture, both of which cut the engine off
+            // from this pointer for good.
+            handEngineTheUp(c.id);
             try {
               el.setPointerCapture(c.id);
             } catch {
@@ -703,6 +743,8 @@ function TouchInputRouter({
             pauseEngine();
           } else if (c.type === "resume") {
             resumeEngine();
+          } else if (c.type === "releaseEnginePointer") {
+            handEngineTheUp(c.id);
           } else if (c.type === "dropSelection") {
             dropGestureSelection();
           } else if (c.type === "capture") {
@@ -888,6 +930,7 @@ function TouchInputRouter({
       };
 
       const onDown = (e: PointerEvent) => {
+        if (synthesizing) return;
         const kind = pointerKindOf(e.pointerType);
         const tool = toolKindOf(ctx.current.tool);
         // Whether this pointer becomes one of our contacts is latched here, by
@@ -944,10 +987,18 @@ function TouchInputRouter({
           });
         }
         // Only a down the engine actually received owes it an up.
-        if (!enginePaused) engineSaw.add(e.pointerId);
+        if (!enginePaused && e.target) {
+          engineSaw.set(e.pointerId, {
+            target: e.target,
+            type: e.pointerType,
+            x: e.clientX,
+            y: e.clientY,
+          });
+        }
       };
 
       const onMove = (e: PointerEvent) => {
+        if (synthesizing) return;
         const f = fingers.get(e.pointerId);
         // Not a contact this router drives: a mouse, a stylus outside the
         // navigation lock, or a finger that landed before this listener existed.
@@ -977,6 +1028,7 @@ function TouchInputRouter({
       };
 
       const onEnd = (e: PointerEvent, cancelled: boolean) => {
+        if (synthesizing) return;
         const wasContact = contacts.delete(e.pointerId);
         const leaving = fingers.get(e.pointerId);
         const known = fingers.delete(e.pointerId);
@@ -1039,6 +1091,12 @@ function TouchInputRouter({
       };
       const onUp = (e: PointerEvent) => onEnd(e, false);
       const onCancel = (e: PointerEvent) => onEnd(e, true);
+      // The synthetic up is meant for the page below and is stopped here on its
+      // way back out, so nothing outside the viewport takes it for a real lift
+      // while the finger is still down.
+      const containSynthetic = (e: PointerEvent) => {
+        if (synthesizing) e.stopPropagation();
+      };
 
       // Capture phase: see the pointer before the page's PagePointerProvider, and
       // keep receiving moves after it (the container is an ancestor of the page,
@@ -1047,6 +1105,7 @@ function TouchInputRouter({
       el.addEventListener("pointermove", onMove, { capture: true, passive: false });
       el.addEventListener("pointerup", onUp, { capture: true });
       el.addEventListener("pointercancel", onCancel, { capture: true });
+      el.addEventListener("pointerup", containSynthetic);
       el.addEventListener("scroll", paintIndicator, { passive: true });
       return () => {
         clearLp();
@@ -1065,6 +1124,7 @@ function TouchInputRouter({
         el.removeEventListener("pointermove", onMove, { capture: true });
         el.removeEventListener("pointerup", onUp, { capture: true });
         el.removeEventListener("pointercancel", onCancel, { capture: true });
+        el.removeEventListener("pointerup", containSynthetic);
       };
     };
 
