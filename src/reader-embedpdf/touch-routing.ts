@@ -67,3 +67,108 @@ export function pointerKindOf(pointerType: string): PointerKind {
   if (pointerType === "pen") return "pen";
   return "touch";
 }
+
+// --- finger-count semantics -------------------------------------------------
+
+// What a gesture means by the number of fingers on the glass:
+//   single   — one finger: routePointer above decides draw vs scroll.
+//   pinch    — two fingers: zoom (engine's own touch-driven wrapper) plus pan;
+//              nothing may be selected or drawn while it lasts.
+//   reserved — three or more: swallowed whole. No action is wired to it yet;
+//              this is the slot a future 3-finger gesture (undo, page sweep)
+//              would take.
+export type TouchGestureMode = "single" | "pinch" | "reserved";
+
+export function touchGestureMode(fingers: number): TouchGestureMode {
+  if (fingers >= 3) return "reserved";
+  if (fingers === 2) return "pinch";
+  return "single";
+}
+
+// The multi-touch latch. Once a second finger lands, the gesture belongs to the
+// pinch until every finger is off the glass — going 2 -> 3 -> 2 stays the same
+// gesture and must not restart it, and the finger that outlives the pinch must
+// not turn into a fresh scroll.
+export function multiTouchLatch(prev: boolean, fingers: number): boolean {
+  if (fingers >= 2) return true;
+  if (fingers === 0) return false;
+  return prev;
+}
+
+// The pen-priority latch. A stylus outranks every finger: the moment it lands,
+// the fingers already resting on the glass (the writing hand) are dead — no
+// scroll, no fling, no engine events — until every one of them lifts. Without
+// this the hand a user writes with keeps interrupting the stroke.
+export function fingerLockAfterPen(prev: boolean, penDown: boolean, fingers: number): boolean {
+  if (penDown) return fingers > 0;
+  if (fingers === 0) return false;
+  return prev;
+}
+
+// What the router does with a finger event: hand it to the one-finger machine,
+// or eat it here so the engine never sees it.
+export type FingerVerdict = "route" | "swallow";
+
+export function fingerVerdict(
+  mode: TouchGestureMode,
+  multiTouch: boolean,
+  penLock: boolean,
+): FingerVerdict {
+  if (penLock) return "swallow";
+  if (multiTouch || mode !== "single") return "swallow";
+  return "route";
+}
+
+// Mid-point of the live contacts, the point a two-finger pan follows. Returns
+// null for an empty set so the caller keeps its previous baseline.
+export function centroidOf(points: readonly { x: number; y: number }[]): { x: number; y: number } | null {
+  if (points.length === 0) return null;
+  let x = 0;
+  let y = 0;
+  for (const p of points) {
+    x += p.x;
+    y += p.y;
+  }
+  return { x: x / points.length, y: y / points.length };
+}
+
+// --- palm / elbow rejection -------------------------------------------------
+
+// A pointerdown's contact patch, in CSS px (PointerEvent width/height).
+export interface ContactSize {
+  width: number;
+  height: number;
+}
+
+// Contact patch (CSS px) at or above which a touch is a palm, not a finger.
+// A fingertip on an iPad reports roughly 20-30px; a palm or forearm is much
+// wider. Tune against the on-device Touch debug overlay.
+export const PALM_CONTACT_PX = 45;
+// Stricter once a stylus is in play: with a pen on the glass a large contact is
+// the writing hand, never a deliberate finger gesture.
+export const PALM_CONTACT_PX_WITH_PEN = 32;
+
+// Contacts reporting no geometry at all (0, or the 1x1 some engines hardcode)
+// carry no information — never call those a palm.
+function hasGeometry(size: ContactSize): boolean {
+  return size.width > 1 && size.height > 1;
+}
+
+export function isPalmContact(size: ContactSize, penSeen: boolean): boolean {
+  if (!hasGeometry(size)) return false;
+  const limit = penSeen ? PALM_CONTACT_PX_WITH_PEN : PALM_CONTACT_PX;
+  return size.width >= limit || size.height >= limit;
+}
+
+// --- stray selection cleanup ------------------------------------------------
+
+// A finger gesture that takes over (scroll commit, pinch start) drops the
+// selection it caused on the way in — the engine can begin a text drag inside
+// the few px before the takeover. A selection that was already on screen when
+// the finger landed (a pen selection with its AI menu open) is left alone.
+export function shouldClearGestureSelection(
+  hadSelectionAtStart: boolean,
+  hasSelectionNow: boolean,
+): boolean {
+  return hasSelectionNow && !hadSelectionAtStart;
+}

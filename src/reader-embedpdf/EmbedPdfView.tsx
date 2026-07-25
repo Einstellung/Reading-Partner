@@ -43,7 +43,25 @@ import {
   type GestureInput,
   type GestureState,
 } from "./paged-gesture";
-import { routePointer, toolKindOf, pagedGestureTool, shouldCommitScroll } from "./touch-routing";
+import {
+  routePointer,
+  toolKindOf,
+  pagedGestureTool,
+  shouldCommitScroll,
+  touchGestureMode,
+  multiTouchLatch,
+  fingerLockAfterPen,
+  fingerVerdict,
+  isPalmContact,
+  centroidOf,
+  shouldClearGestureSelection,
+} from "./touch-routing";
+import {
+  TouchDebugOverlay,
+  isTouchDebugEnabled,
+  publishTouchDebug,
+  type TouchDebugContact,
+} from "./touch-debug";
 
 const DOC_ID = "main";
 
@@ -304,6 +322,8 @@ interface PagedGestureCtx {
   penSeen: boolean;
   scroll: ScrollScope | null;
   interaction: InteractionManagerCapability | null;
+  // Used by the touch router to drop a text selection its own gesture caused.
+  selection: SelectionCapability | null;
   // Set by the touch router so setLayout can toggle the viewport's touch-action
   // (paged locks native pan/zoom; vertical restores it).
   setTouchLock: ((locked: boolean) => void) | null;
@@ -317,13 +337,30 @@ const VERTICAL_FLING_DECAY = 0.95;
 const VERTICAL_FLING_MIN_SPEED = 0.02;
 
 // Touch input router: a zero-size child inside the Viewport that grabs the
-// scroll container (via the viewport-element context) and routes single-finger
-// pointer events between drawing and scrolling per pointerType — a decision CSS
-// touch-action cannot make (it cannot tell pen from finger).
+// scroll container (via the viewport-element context) and routes pointer events
+// by device type and finger count — decisions CSS touch-action cannot make (it
+// cannot tell pen from finger, or one finger from two).
 //
 // Every pointer of type "pen" latches ctx.penSeen for the session. Only finger
 // pointers ("touch") are ever intercepted; mouse and stylus fall straight
 // through to the engine's desktop / drawing paths (desktop is untouched).
+//
+// Finger count decides the gesture (touch-routing.ts holds the table):
+//   1  the single-finger machines below (scroll / draw / page flip);
+//   2  pinch — zoom is the engine's own ZoomGestureWrapper, which drives itself
+//      off raw touch events and never consults the interaction manager, so it
+//      keeps working while every finger pointer event is eaten here; the pan
+//      that goes with it follows the two-finger centroid;
+//   3+ swallowed whole, reserved for a future gesture.
+// A gesture that ever had two fingers stays locked until the last finger lifts,
+// so 2 -> 3 -> 2 is one gesture and the leftover finger never becomes a scroll.
+//
+// Blocking is per pointer (stopPropagation in the capture phase), not the
+// interaction manager's global pause: pause would also stop a pen mid-stroke,
+// and the point of palm rejection is that the resting hand goes dead while the
+// pen keeps drawing. Invariant: a finger whose pointerdown reached the engine
+// always gets its pointerup too, or the engine's per-page selection handler
+// keeps a stale text anchor.
 //
 // Vertical (continuous) mode — the main path: a finger that routePointer says
 // should scroll is driven here (pause the engine's pointer pipeline, capture the
@@ -338,9 +375,6 @@ const VERTICAL_FLING_MIN_SPEED = 0.02;
 // on finger pointers — follow-finger drags set scrollLeft, a committed turn snaps
 // with scrollToPage, a zoomed-in drag pans. The finger's draw-vs-turn rule
 // follows the same penSeen policy (pagedGestureTool).
-//
-// Two-finger pinch is left to the engine's own ZoomGestureWrapper in both modes;
-// this router yields the moment a second finger lands.
 function TouchInputRouter({
   documentId,
   ctx,
@@ -364,13 +398,34 @@ function TouchInputRouter({
     };
 
     const attach = (el: HTMLDivElement): (() => void) => {
-      let activeTouches = 0;
+      // --- contact bookkeeping (shared by both layout machines) -----------
+      // Live finger contacts, palms excluded, in arrival order. Its size is the
+      // finger count the gesture rules run on.
+      const fingers = new Map<number, { x: number; y: number }>();
+      // Contacts classified as palm/elbow at pointerdown: swallowed whole and
+      // never counted as fingers.
+      const palms = new Set<number>();
+      // Fingers whose pointerdown the engine saw, so their pointerup is let
+      // through even if the gesture has since been taken over.
+      const engineSaw = new Set<number>();
+      // Every live contact (pen included), for the on-device probe only.
+      const contacts = new Map<number, TouchDebugContact>();
+      // Latched once a second finger lands, cleared when the glass is empty.
+      let multiTouch = false;
+      // Latched when a pen lands on top of resting fingers: they are dead until
+      // they all lift.
+      let penLock = false;
+      // Whether a text selection was already on screen when this gesture began
+      // (a pen selection with its AI menu open must survive a finger scroll).
+      let hadSelectionAtStart = false;
+      // Centroid the two-finger pan measures from.
+      let panBase: { x: number; y: number } | null = null;
 
       // --- paged (horizontal flip) gesture machine state ------------------
       let state: GestureState = initGestureState();
       let captured = false;
       let capturedId: number | null = null;
-      let paused = false;
+      let enginePaused = false;
       let dragStartScrollLeft = 0;
       let dragStartPage = 1;
       let lpTimer = 0;
@@ -388,7 +443,6 @@ function TouchInputRouter({
       // Finger velocity px/ms per axis (positive = moving right / down).
       let vVelX = 0;
       let vVelY = 0;
-      let vPaused = false;
       let vCapturedId: number | null = null;
       let flingRaf = 0;
 
@@ -398,10 +452,19 @@ function TouchInputRouter({
           lpTimer = 0;
         }
       };
-      const resume = () => {
-        if (paused) {
+      // The engine's pointer pipeline is paused only for the single-finger
+      // paths that need it (an annotation tool must not start a stroke under a
+      // scrolling finger). Everything multi-touch blocks per pointer instead.
+      const pauseEngine = () => {
+        if (!enginePaused) {
+          ctx.current.interaction?.pause();
+          enginePaused = true;
+        }
+      };
+      const resumeEngine = () => {
+        if (enginePaused) {
           ctx.current.interaction?.resume();
-          paused = false;
+          enginePaused = false;
         }
       };
       const releaseCapture = () => {
@@ -420,7 +483,24 @@ function TouchInputRouter({
       ctx.current.setTouchLock = setTouchLock;
       setTouchLock(ctx.current.paged);
 
-      // --- paged apply / feed (unchanged behaviour) -----------------------
+      // --- selection hygiene ----------------------------------------------
+      const hasSelection = (): boolean => {
+        try {
+          return (ctx.current.selection?.getBoundingRects(documentId).length ?? 0) > 0;
+        } catch {
+          return false;
+        }
+      };
+      // Drop a selection this finger gesture caused on its way in: the engine
+      // can start a text drag inside the few px before the gesture is taken
+      // over. A selection that was already there is left alone.
+      const dropGestureSelection = () => {
+        if (shouldClearGestureSelection(hadSelectionAtStart, hasSelection())) {
+          ctx.current.selection?.clear(documentId);
+        }
+      };
+
+      // --- paged apply / feed ---------------------------------------------
       const apply = (cmds: GestureCommand[]) => {
         const scroll = ctx.current.scroll;
         for (const c of cmds) {
@@ -430,12 +510,10 @@ function TouchInputRouter({
             try {
               el.setPointerCapture(c.id);
             } catch {
-              // Best effort — the pause() below is the real selection guard.
+              // Best effort — the pause below is the real selection guard.
             }
-            if (!paused) {
-              ctx.current.interaction?.pause();
-              paused = true;
-            }
+            pauseEngine();
+            dropGestureSelection();
             dragStartScrollLeft = el.scrollLeft;
             dragStartPage = scroll?.getCurrentPage() ?? 1;
           } else if (c.type === "dragMove") {
@@ -463,7 +541,7 @@ function TouchInputRouter({
         apply(r.commands);
         if (captured && e && e.cancelable) e.preventDefault();
         if (state.phase === "idle" || state.phase === "off") {
-          resume();
+          resumeEngine();
           releaseCapture();
         }
       };
@@ -479,11 +557,7 @@ function TouchInputRouter({
           flingRaf = 0;
         }
       };
-      const endVertical = () => {
-        if (vPaused) {
-          ctx.current.interaction?.resume();
-          vPaused = false;
-        }
+      const releaseVCapture = () => {
         if (vCapturedId !== null) {
           try {
             el.releasePointerCapture(vCapturedId);
@@ -492,8 +566,45 @@ function TouchInputRouter({
           }
           vCapturedId = null;
         }
+      };
+      const endVertical = () => {
+        resumeEngine();
+        releaseVCapture();
         vPhase = "idle";
         vId = null;
+      };
+      // The one-finger gesture loses the glass (a second finger, a pen, a palm
+      // promotion). Both machines go idle and the engine gets its pipeline back
+      // — from here on the fingers are blocked one pointer at a time, which
+      // leaves a pen free to keep drawing.
+      const suspendFingerGesture = () => {
+        cancelFling();
+        clearLp();
+        if (ctx.current.paged) {
+          if (state.primary !== null && (state.phase === "drag" || state.phase === "pan")) {
+            feed({ type: "pointercancel", id: state.primary });
+          }
+          state = initGestureState();
+          captured = false;
+        }
+        releaseCapture();
+        endVertical();
+      };
+      // Two-finger pan: the content follows the centroid of the two fingers.
+      // Zoom is the engine's wrapper; this only moves the scroll container, and
+      // the wrapper resolves its zoom anchor against the live scroll position
+      // when the pinch commits, so the two compose.
+      const resetPanBase = () => {
+        panBase = null;
+      };
+      const panStep = () => {
+        const c = centroidOf([...fingers.values()]);
+        if (!c) return;
+        if (panBase) {
+          el.scrollTop = clampTop(el.scrollTop - (c.y - panBase.y));
+          el.scrollLeft = clampLeft(el.scrollLeft - (c.x - panBase.x));
+        }
+        panBase = c;
       };
       const startFling = () => {
         // Each scroll axis coasts opposite its finger axis. Drive both until both
@@ -526,11 +637,6 @@ function TouchInputRouter({
       };
 
       const onVerticalDown = (e: PointerEvent) => {
-        // A second finger means pinch — yield to the zoom wrapper.
-        if (activeTouches >= 2) {
-          endVertical();
-          return;
-        }
         const kind = toolKindOf(ctx.current.tool);
         if (routePointer(kind, "touch", ctx.current.penSeen) !== "scroll") {
           return; // this finger draws — leave it to the annotation layer
@@ -551,17 +657,10 @@ function TouchInputRouter({
         // the sub-slop lead-in before the scroll commits — pause the engine's
         // pointer pipeline now so no stroke can start. (The hand tool defers its
         // pause to the commit so a stationary tap still reaches the engine.)
-        if (kind === "annotate" && !vPaused) {
-          ctx.current.interaction?.pause();
-          vPaused = true;
-        }
+        if (kind === "annotate") pauseEngine();
       };
       const onVerticalMove = (e: PointerEvent) => {
         if (vId !== e.pointerId || vPhase === "idle") return;
-        if (activeTouches >= 2) {
-          endVertical();
-          return;
-        }
         const dt = Math.max(e.timeStamp - vLastT, 1);
         vVelX = (e.clientX - vLastX) / dt;
         vVelY = (e.clientY - vLastY) / dt;
@@ -574,10 +673,8 @@ function TouchInputRouter({
           // drawing layer. Direction only picks the axis below.
           if (!shouldCommitScroll(e.clientX - vStartX, e.clientY - vStartY, VERTICAL_SCROLL_SLOP)) return;
           vPhase = "scroll";
-          if (!vPaused) {
-            ctx.current.interaction?.pause();
-            vPaused = true;
-          }
+          pauseEngine();
+          dropGestureSelection();
           try {
             el.setPointerCapture(e.pointerId);
             vCapturedId = e.pointerId;
@@ -601,51 +698,169 @@ function TouchInputRouter({
         if (wasScroll && !cancelled) startFling();
       };
 
+      // --- probe -----------------------------------------------------------
+      const publishDebug = () => {
+        if (!isTouchDebugEnabled()) return;
+        publishTouchDebug({
+          contacts: [...contacts.values()],
+          fingers: fingers.size,
+          palms: palms.size,
+          mode: touchGestureMode(fingers.size),
+          multi: multiTouch,
+          penLock,
+          penSeen: ctx.current.penSeen,
+        });
+      };
+      const trackContact = (e: PointerEvent, palm: boolean) => {
+        contacts.set(e.pointerId, {
+          id: e.pointerId,
+          type: e.pointerType,
+          width: e.width,
+          height: e.height,
+          palm,
+        });
+      };
+
       // --- shared dispatch ------------------------------------------------
+      // Eat the event here: the engine's page providers sit below this capture
+      // listener, so stopping propagation is a per-contact block (unlike the
+      // interaction manager's pause, which is global and would freeze the pen).
+      const swallow = (e: PointerEvent) => {
+        e.stopPropagation();
+      };
+
+      // A stylus outranks every finger on the glass: the finger scroll and its
+      // fling stop dead, and the fingers already down go inert until they lift,
+      // so the hand a user writes with cannot interrupt the stroke.
+      const onPenDown = (e: PointerEvent) => {
+        ctx.current.penSeen = true;
+        trackContact(e, false);
+        cancelFling();
+        if (fingers.size > 0) suspendFingerGesture();
+        penLock = fingerLockAfterPen(penLock, true, fingers.size);
+        resetPanBase();
+        publishDebug();
+      };
+
       const onDown = (e: PointerEvent) => {
-        if (e.pointerType === "pen") ctx.current.penSeen = true;
+        if (e.pointerType === "pen") {
+          onPenDown(e);
+          return;
+        }
         if (e.pointerType !== "touch") return;
-        activeTouches += 1;
+        if (isPalmContact({ width: e.width, height: e.height }, ctx.current.penSeen)) {
+          palms.add(e.pointerId);
+          trackContact(e, true);
+          swallow(e);
+          publishDebug();
+          return;
+        }
+        fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        trackContact(e, false);
+        const wasMulti = multiTouch;
+        multiTouch = multiTouchLatch(multiTouch, fingers.size);
+        publishDebug();
+        if (fingerVerdict(touchGestureMode(fingers.size), multiTouch, penLock) === "swallow") {
+          swallow(e);
+          if (!wasMulti) {
+            // The one-finger machine hands the gesture over. Entering a pinch
+            // also drops whatever that finger selected on the way in; a finger
+            // landing under a working pen must not touch the selection.
+            suspendFingerGesture();
+            if (multiTouch) dropGestureSelection();
+          }
+          resetPanBase();
+          return;
+        }
+        hadSelectionAtStart = hasSelection();
         if (ctx.current.paged) {
           feed({ type: "pointerdown", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp });
           clearLp();
-          if (activeTouches === 1 && ctx.current.tool === "pointer" && !ctx.current.zoomedIn) {
+          if (ctx.current.tool === "pointer" && !ctx.current.zoomedIn) {
             const id = e.pointerId;
             lpTimer = window.setTimeout(() => feed({ type: "longpress", id }), PAGED_LONG_PRESS_MS);
           }
         } else {
           onVerticalDown(e);
         }
+        // Only a down the engine actually received owes it an up.
+        if (!enginePaused) engineSaw.add(e.pointerId);
       };
+
       const onMove = (e: PointerEvent) => {
-        if (e.pointerType === "pen") ctx.current.penSeen = true;
+        if (e.pointerType === "pen") {
+          ctx.current.penSeen = true;
+          return;
+        }
         if (e.pointerType !== "touch") return;
+        if (palms.has(e.pointerId)) {
+          trackContact(e, true);
+          swallow(e);
+          publishDebug();
+          return;
+        }
+        const f = fingers.get(e.pointerId);
+        if (!f) return; // a contact that landed before this listener existed
+        f.x = e.clientX;
+        f.y = e.clientY;
+        trackContact(e, false);
+        publishDebug();
+        const mode = touchGestureMode(fingers.size);
+        if (fingerVerdict(mode, multiTouch, penLock) === "swallow") {
+          swallow(e);
+          if (mode === "pinch" && !penLock) panStep();
+          return;
+        }
         if (ctx.current.paged) {
           feed({ type: "pointermove", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp }, e);
         } else {
           onVerticalMove(e);
         }
       };
-      const onUp = (e: PointerEvent) => {
-        if (e.pointerType !== "touch") return;
-        activeTouches = Math.max(0, activeTouches - 1);
-        if (ctx.current.paged) {
-          clearLp();
-          feed({ type: "pointerup", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp }, e);
-        } else {
-          onVerticalUp(e, false);
+
+      const onEnd = (e: PointerEvent, cancelled: boolean) => {
+        const wasContact = contacts.delete(e.pointerId);
+        if (e.pointerType !== "touch") {
+          if (wasContact) publishDebug();
+          return;
         }
-      };
-      const onCancel = (e: PointerEvent) => {
-        if (e.pointerType !== "touch") return;
-        activeTouches = Math.max(0, activeTouches - 1);
-        if (ctx.current.paged) {
-          clearLp();
-          feed({ type: "pointercancel", id: e.pointerId }, e);
-        } else {
-          onVerticalUp(e, true);
+        if (palms.delete(e.pointerId)) {
+          swallow(e);
+          publishDebug();
+          return;
         }
+        const known = fingers.delete(e.pointerId);
+        resetPanBase();
+        const owedToEngine = engineSaw.delete(e.pointerId);
+        if (!known) {
+          swallow(e);
+        } else if (penLock) {
+          // A pen is working: nothing from the resting hand reaches the engine.
+          // Its handlers track no pointerId, so even a bare pointerup would end
+          // the stroke the pen is in the middle of.
+          swallow(e);
+        } else if (multiTouch) {
+          // Taken over mid-gesture: the engine only gets this up if it saw the
+          // matching down, so its selection handler cannot keep a stale anchor.
+          if (!owedToEngine) swallow(e);
+        } else if (ctx.current.paged) {
+          clearLp();
+          feed(
+            cancelled
+              ? { type: "pointercancel", id: e.pointerId }
+              : { type: "pointerup", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp },
+            e,
+          );
+        } else {
+          onVerticalUp(e, cancelled);
+        }
+        multiTouch = multiTouchLatch(multiTouch, fingers.size);
+        penLock = fingerLockAfterPen(penLock, false, fingers.size);
+        if (fingers.size === 0) engineSaw.clear();
+        publishDebug();
       };
+      const onUp = (e: PointerEvent) => onEnd(e, false);
+      const onCancel = (e: PointerEvent) => onEnd(e, true);
 
       // Capture phase: see the pointer before the page's PagePointerProvider, and
       // keep receiving moves after it (the container is an ancestor of the page,
@@ -657,7 +872,6 @@ function TouchInputRouter({
       return () => {
         clearLp();
         cancelFling();
-        resume();
         releaseCapture();
         endVertical();
         ctx.current.setTouchLock = null;
@@ -712,6 +926,7 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
     penSeen: false,
     scroll: null,
     interaction: null,
+    selection: null,
     setTouchLock: null,
   });
 
@@ -838,6 +1053,7 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
               />
               </ZoomGestureWrapper>
               <TouchInputRouter documentId={activeDocumentId} ctx={pagedRef} />
+              <TouchDebugOverlay />
             </Viewport>
           )
         }
@@ -933,6 +1149,7 @@ async function wireEngine(
   // at mount from the restored layout; the plugin defaults already match it.
   pagedRef.current.scroll = scrollScope;
   pagedRef.current.interaction = interaction;
+  pagedRef.current.selection = selection;
   // The numeric scale of the fit-page baseline, tracked so a pinch past it flips
   // the machine into pan mode and a pinch back down re-locks fit-page. Updated
   // whenever the zoom level is observed at fit-page.

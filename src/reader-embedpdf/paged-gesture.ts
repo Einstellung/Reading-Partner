@@ -8,8 +8,10 @@
 // testable in isolation.
 //
 // Two-finger pinch-zoom is NOT handled here: the engine's own ZoomGestureWrapper
-// owns it on the raw-touch channel. This machine yields (goes idle) the moment a
-// second finger lands, so the two never fight over the same gesture.
+// owns it on the raw-touch channel. The host stops feeding this machine the
+// moment a second finger lands (and springs back a drag in flight), so the two
+// never fight over the same gesture; a second pointerdown that does reach it
+// still yields, as a safety net.
 //
 // Coordinate convention: dragging the finger LEFT (dx < 0) pulls the NEXT page
 // in (turn = +1); dragging RIGHT (dx > 0) brings the PREVIOUS page (turn = -1).
