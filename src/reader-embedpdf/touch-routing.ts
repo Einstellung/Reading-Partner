@@ -8,11 +8,19 @@
 // paper: with an Apple Pencil present the finger is only ever for moving the
 // page, the pen for marking it. On a stylus-less device (iPhone) the finger has
 // to draw or annotation would be unreachable.
+//
+// The navigation lock (the palm toggle in the tool group) suspends that split:
+// while it is on, every device only moves the page.
 
-// Whether the active tool marks the page. "hand" = the pointer/pan tool (no
-// annotation tool active): everything scrolls. "annotate" = any drawing tool
-// (highlight / underline / ink / AI pen).
-export type ToolKind = "hand" | "annotate";
+// What the tool group is set to.
+//   "none"    — nothing selected. The traditional mode: a stylus marks and
+//               selects through the engine, the finger moves the page.
+//   "navlock" — the palm toggle, a navigation lock. Every pointer only moves
+//               the page: no ink, no text selection, stylus and finger alike.
+//   "annotate"— a drawing tool (highlight / underline / ink / AI pen).
+// "navlock" and "annotate" are mutually exclusive by construction: the tool
+// group holds one value.
+export type ToolKind = "none" | "navlock" | "annotate";
 
 // The pointer's device. Apple Pencil reports "pen" in WKWebView.
 export type PointerKind = "mouse" | "pen" | "touch";
@@ -22,47 +30,82 @@ export type RouteAction = "draw" | "scroll";
 // The routing table. `penSeen` is the session-level latch: true once any pointer
 // event this session reported pointerType "pen".
 //
-// - hand tool: always scroll (mouse/pen/touch alike).
-// - annotate tool:
+// - navlock: always scroll (mouse/pen/touch alike) — the whole point of it.
+// - none:
+//   - mouse/pen: draw, i.e. the engine's own pointer pipeline (text selection).
+//   - touch:     scroll.
+// - annotate:
 //   - mouse: draw (desktop, unchanged).
 //   - pen:   draw.
 //   - touch: scroll when a stylus has been seen (finger only moves the page),
 //            draw otherwise (stylus-less device still needs to annotate).
 export function routePointer(tool: ToolKind, pointer: PointerKind, penSeen: boolean): RouteAction {
-  if (tool === "hand") return "scroll";
-  if (pointer === "touch") return penSeen ? "scroll" : "draw";
-  return "draw"; // mouse and pen always draw under an annotation tool
+  if (tool === "navlock") return "scroll";
+  if (pointer !== "touch") return "draw"; // mouse and pen go to the engine
+  if (tool === "annotate") return penSeen ? "scroll" : "draw";
+  return "scroll";
 }
 
-// Normalize an EmbedPDF tool id to the two routing classes. Anything that is not
-// a drawing tool (null / "pointer") is the hand.
+// Normalize a tool id to the three routing classes. Anything that is not the
+// navigation lock and not a drawing tool (null / "pointer" / "none") is "none".
 export function toolKindOf(toolId: string | null | undefined): ToolKind {
-  if (!toolId || toolId === "pointer") return "hand";
+  if (toolId === "navlock") return "navlock";
+  if (!toolId || toolId === "pointer" || toolId === "none") return "none";
   return "annotate";
 }
 
-// What a finger does in either layout, plus when the engine's pointer pipeline
-// has to be shut off. Both layout branches go through this, so paged and
-// vertical can never drift apart on the pen/finger policy.
-export interface FingerPlan {
+// Which pointers the host router drives itself, as contacts of its own gesture
+// machines, instead of letting them through to the engine.
+//
+// Fingers always — the page divs are touch-action:none in every mode, so a
+// finger gesture only exists if the router makes it (pitfall 37). The stylus
+// only under the navigation lock, where it is treated exactly like a finger:
+// same scroll, same page flip, same rubber band, same fling. The mouse never,
+// so the desktop paths stay untouched.
+export function routesAsContact(tool: ToolKind, pointer: PointerKind): boolean {
+  if (pointer === "mouse") return false;
+  if (pointer === "pen") return tool === "navlock";
+  return true;
+}
+
+// What one routed pointer does in either layout, plus when the engine's pointer
+// pipeline has to be shut off. Both layout branches go through this, so paged
+// and vertical can never drift apart on the routing policy.
+export interface PointerPlan {
   action: RouteAction;
   // Pause the engine at pointerdown, not at the gesture commit: an annotation
   // tool starts its stroke on pointerdown, so the few px of lead-in before the
-  // gesture commits would leave a flash of ink on the page (pitfall 37). The
-  // hand tool defers its pause to the commit instead, so a stationary tap still
-  // reaches the engine (dismiss / select).
+  // gesture commits would leave a flash of ink on the page (pitfall 37). With no
+  // drawing tool active there is no stroke to leak, so the pause waits for the
+  // commit and a stationary tap still reaches the engine (dismiss / select an
+  // annotation).
   pauseAtDown: boolean;
+  // Paged mode hands a pointer that dwells in place to native text selection, so
+  // a later drag of a selection handle is not stolen as a page turn. The
+  // navigation lock is the one mode that does not: under it nothing selects text.
+  longPressSelect: boolean;
 }
 
-export function planFinger(tool: ToolKind, penSeen: boolean): FingerPlan {
-  const action = routePointer(tool, "touch", penSeen);
-  return { action, pauseAtDown: tool === "annotate" && action === "scroll" };
+export function planPointer(tool: ToolKind, pointer: PointerKind, penSeen: boolean): PointerPlan {
+  const action = routePointer(tool, pointer, penSeen);
+  return {
+    action,
+    pauseAtDown: tool === "annotate" && action === "scroll",
+    longPressSelect: tool === "none" && action === "scroll",
+  };
+}
+
+// The finger case, the one both layouts always have.
+export function planFinger(tool: ToolKind, penSeen: boolean): PointerPlan {
+  return planPointer(tool, "touch", penSeen);
 }
 
 // Paged (horizontal flip) mode maps the same verdict onto the paged gesture
-// machine's two tool modes ("pointer" = one finger turns the page anywhere;
-// "pen" = one finger draws, a turn must start from a screen edge). Paged only
-// ever handles finger pointers, so pen/mouse never reach here.
+// machine's two tool modes ("pointer" = one pointer turns the page anywhere;
+// "pen" = one pointer draws, a turn must start from a screen edge). Every
+// pointer that reaches paged is either a finger or a stylus under the navigation
+// lock, and the lock answers "pointer" for every device, so the finger plan
+// decides for both.
 export function pagedGestureTool(tool: ToolKind, penSeen: boolean): "pointer" | "pen" {
   return planFinger(tool, penSeen).action === "scroll" ? "pointer" : "pen";
 }

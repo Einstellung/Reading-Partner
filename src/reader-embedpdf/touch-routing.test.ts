@@ -3,8 +3,10 @@ import {
   routePointer,
   toolKindOf,
   pointerKindOf,
+  routesAsContact,
   pagedGestureTool,
   planFinger,
+  planPointer,
   shouldCommitScroll,
   touchGestureMode,
   multiTouchLatch,
@@ -16,14 +18,22 @@ import {
   type ToolKind,
 } from "./touch-routing";
 
-// Full routing table, both penSeen values, all pointer kinds, both tools.
-const tools: ToolKind[] = ["hand", "annotate"];
+// Full routing table, both penSeen values, all pointer kinds, all tool kinds.
+const tools: ToolKind[] = ["none", "navlock", "annotate"];
 const pointers: PointerKind[] = ["mouse", "pen", "touch"];
 
-test("hand tool always scrolls, regardless of pointer or penSeen", () => {
+test("the navigation lock scrolls every device, regardless of penSeen", () => {
   for (const p of pointers) {
-    expect(routePointer("hand", p, false)).toBe("scroll");
-    expect(routePointer("hand", p, true)).toBe("scroll");
+    expect(routePointer("navlock", p, false)).toBe("scroll");
+    expect(routePointer("navlock", p, true)).toBe("scroll");
+  }
+});
+
+test("no tool selected: the finger scrolls, the stylus and mouse go to the engine", () => {
+  for (const penSeen of [false, true]) {
+    expect(routePointer("none", "touch", penSeen)).toBe("scroll");
+    expect(routePointer("none", "pen", penSeen)).toBe("draw");
+    expect(routePointer("none", "mouse", penSeen)).toBe("draw");
   }
 });
 
@@ -52,12 +62,18 @@ test("exhaustive table snapshot", () => {
     }
   }
   expect(table).toEqual({
-    "hand/mouse/noPen": "scroll",
-    "hand/mouse/penSeen": "scroll",
-    "hand/pen/noPen": "scroll",
-    "hand/pen/penSeen": "scroll",
-    "hand/touch/noPen": "scroll",
-    "hand/touch/penSeen": "scroll",
+    "none/mouse/noPen": "draw",
+    "none/mouse/penSeen": "draw",
+    "none/pen/noPen": "draw",
+    "none/pen/penSeen": "draw",
+    "none/touch/noPen": "scroll",
+    "none/touch/penSeen": "scroll",
+    "navlock/mouse/noPen": "scroll",
+    "navlock/mouse/penSeen": "scroll",
+    "navlock/pen/noPen": "scroll",
+    "navlock/pen/penSeen": "scroll",
+    "navlock/touch/noPen": "scroll",
+    "navlock/touch/penSeen": "scroll",
     "annotate/mouse/noPen": "draw",
     "annotate/mouse/penSeen": "draw",
     "annotate/pen/noPen": "draw",
@@ -67,23 +83,71 @@ test("exhaustive table snapshot", () => {
   });
 });
 
-test("toolKindOf maps null/pointer to hand, drawing tools to annotate", () => {
-  expect(toolKindOf(null)).toBe("hand");
-  expect(toolKindOf(undefined)).toBe("hand");
-  expect(toolKindOf("pointer")).toBe("hand");
+test("toolKindOf: navlock is its own kind, null/pointer is none, drawing tools annotate", () => {
+  expect(toolKindOf(null)).toBe("none");
+  expect(toolKindOf(undefined)).toBe("none");
+  expect(toolKindOf("pointer")).toBe("none");
+  expect(toolKindOf("none")).toBe("none");
+  expect(toolKindOf("navlock")).toBe("navlock");
   expect(toolKindOf("highlight")).toBe("annotate");
   expect(toolKindOf("underline")).toBe("annotate");
   expect(toolKindOf("ink")).toBe("annotate");
 });
 
-test("planFinger: an annotation tool shuts the engine off at pointerdown, the hand does not", () => {
+// --- which pointers the router drives itself --------------------------------
+
+test("routesAsContact: the stylus joins the router only under the navigation lock", () => {
+  for (const t of tools) {
+    expect(routesAsContact(t, "touch")).toBe(true);
+    expect(routesAsContact(t, "mouse")).toBe(false);
+    expect(routesAsContact(t, "pen")).toBe(t === "navlock");
+  }
+});
+
+test("routesAsContact: the desktop mouse is never intercepted, lock or not", () => {
+  expect(routesAsContact("navlock", "mouse")).toBe(false);
+});
+
+test("planFinger: an annotation tool shuts the engine off at pointerdown, the others do not", () => {
   // A drawing tool starts its stroke on pointerdown, so a finger that is going
-  // to scroll has to pause the engine before the lead-in leaves ink. The hand
-  // tool waits for the commit so a stationary tap still reaches the engine.
-  expect(planFinger("annotate", true)).toEqual({ action: "scroll", pauseAtDown: true });
-  expect(planFinger("annotate", false)).toEqual({ action: "draw", pauseAtDown: false });
-  expect(planFinger("hand", true)).toEqual({ action: "scroll", pauseAtDown: false });
-  expect(planFinger("hand", false)).toEqual({ action: "scroll", pauseAtDown: false });
+  // to scroll has to pause the engine before the lead-in leaves ink. With no
+  // drawing tool the pause waits for the commit, so a stationary tap still
+  // reaches the engine.
+  expect(planFinger("annotate", true)).toEqual({
+    action: "scroll",
+    pauseAtDown: true,
+    longPressSelect: false,
+  });
+  expect(planFinger("annotate", false)).toEqual({
+    action: "draw",
+    pauseAtDown: false,
+    longPressSelect: false,
+  });
+  for (const penSeen of [false, true]) {
+    expect(planFinger("none", penSeen)).toEqual({
+      action: "scroll",
+      pauseAtDown: false,
+      longPressSelect: true,
+    });
+    expect(planFinger("navlock", penSeen)).toEqual({
+      action: "scroll",
+      pauseAtDown: false,
+      longPressSelect: false,
+    });
+  }
+});
+
+test("planPointer: under the lock the stylus gets the finger's plan, byte for byte", () => {
+  for (const penSeen of [false, true]) {
+    expect(planPointer("navlock", "pen", penSeen)).toEqual(planPointer("navlock", "touch", penSeen));
+  }
+});
+
+test("planPointer: the navigation lock never hands a pointer to text selection", () => {
+  for (const p of pointers) {
+    expect(planPointer("navlock", p, true).longPressSelect).toBe(false);
+    expect(planPointer("navlock", p, true).action).toBe("scroll");
+  }
 });
 
 test("planFinger drives both layouts: the paged tool is the same verdict", () => {
@@ -95,9 +159,11 @@ test("planFinger drives both layouts: the paged tool is the same verdict", () =>
   }
 });
 
-test("pagedGestureTool: hand always turns with a finger", () => {
-  expect(pagedGestureTool("hand", false)).toBe("pointer");
-  expect(pagedGestureTool("hand", true)).toBe("pointer");
+test("pagedGestureTool: with no tool, and under the lock, a swipe always turns", () => {
+  for (const penSeen of [false, true]) {
+    expect(pagedGestureTool("none", penSeen)).toBe("pointer");
+    expect(pagedGestureTool("navlock", penSeen)).toBe("pointer");
+  }
 });
 
 test("pagedGestureTool: annotate finger turns once a stylus is seen, else draws", () => {

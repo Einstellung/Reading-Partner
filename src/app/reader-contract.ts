@@ -51,6 +51,9 @@ export interface Annotation {
 
 export type ToolType =
   | "pointer"
+  // The navigation lock (palm toggle): no annotation tool, and every pointer —
+  // stylus included — only moves the page.
+  | "navlock"
   | "highlight"
   | "underline"
   | "image"

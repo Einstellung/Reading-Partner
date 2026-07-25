@@ -383,7 +383,7 @@ export default function App() {
   const [stats, setStats] = useState<ViewStats | null>(null);
   const [title, setTitle] = useState<string | null>(null);
   const [status, setStatus] = useState("");
-  const [toolType, setToolType] = useState<ToolType>("pointer");
+  const [toolType, setToolType] = useState<ToolType>("none");
   const [penColor, setPenColor] = useState(ANNOTATION_COLORS[0].color);
   const [popup, setPopup] = useState<PopupState | null>(null);
   const [viewReady, setViewReady] = useState(false);
@@ -624,11 +624,13 @@ export default function App() {
     aiPenRef.current = toolType === "ai";
     if (!viewReady) return;
     const tool =
-      toolType === "pointer"
+      toolType === "none"
         ? { type: "pointer" as const }
-        : toolType === "ai"
-          ? { type: "underline" as const, color: AI_PEN_COLOR }
-          : { type: toolType, color: penColor };
+        : toolType === "navlock"
+          ? { type: "navlock" as const }
+          : toolType === "ai"
+            ? { type: "underline" as const, color: AI_PEN_COLOR }
+            : { type: toolType, color: penColor };
     viewRef.current?.setTool(tool);
   }, [toolType, penColor, viewReady]);
 
@@ -1436,10 +1438,11 @@ export default function App() {
       setPopup(null);
       setCall(null);
       setSelectedAnnId(null);
-      // Every book opens on the hand tool (pan/scroll). The tool state lives on
-      // App and would otherwise carry the previous book's annotation tool into
-      // the next open — a finger then marks the page the moment it lands.
-      setToolType("pointer");
+      // Every book opens with nothing selected. The tool state lives on App and
+      // would otherwise carry the previous book's annotation tool into the next
+      // open — a finger then marks the page the moment it lands. The navigation
+      // lock is not carried over either; it is a per-session reading posture.
+      setToolType("none");
       const state = await getViewState(bookId);
       let saved: Annotation[] = [];
       try {

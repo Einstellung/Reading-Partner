@@ -42,11 +42,14 @@ import {
   type GestureInput,
   type GestureState,
 } from "./paged-gesture";
+import { LAYOUT_SETTINGS } from "./layout-modes";
 import {
-  planFinger,
+  planPointer,
+  pointerKindOf,
+  routesAsContact,
   toolKindOf,
   pagedGestureTool,
-  type FingerPlan,
+  type PointerPlan,
   shouldCommitScroll,
   touchGestureMode,
   multiTouchLatch,
@@ -91,7 +94,10 @@ function useSharedEngine(): { engine: PdfEngine | null; isLoading: boolean; erro
   return { engine, isLoading: !engine && !error, error };
 }
 
-export type EmbedTool = "pointer" | "highlight" | "underline" | "ink";
+// "pointer" is the tool group's all-unselected state (no annotation tool);
+// "navlock" is the palm toggle, which activates no annotation tool either but
+// puts the touch router in charge of every pointer.
+export type EmbedTool = "pointer" | "navlock" | "highlight" | "underline" | "ink";
 // Reading layout: "vertical" = the classic continuous vertical scroll; "paged" =
 // one fit-page screen at a time, flipped horizontally by touch swipe (iPad).
 export type EmbedLayout = "vertical" | "paged";
@@ -312,6 +318,10 @@ interface PagedGestureCtx {
   // Set by the touch router so setLayout can toggle the viewport's touch-action
   // (paged locks native pan/zoom; vertical restores it).
   setTouchLock: ((locked: boolean) => void) | null;
+  // Set by the touch router so setLayout can drop everything the old layout had
+  // in flight (drag, rubber band, inertia, captured pointer, paused engine)
+  // before the new layout's geometry lands.
+  resetGestures: (() => void) | null;
   // Paged mode's only way to change page: centres the target page and re-locks
   // fit-page, so a turn always lands on one whole page (the geometry needs the
   // zoom scope, which lives in the imperative wiring).
@@ -334,12 +344,15 @@ const VERTICAL_FLING_MIN_SPEED = 0.02;
 // by device type and finger count — decisions CSS touch-action cannot make (it
 // cannot tell pen from finger, or one finger from two).
 //
-// Every pointer of type "pen" latches ctx.penSeen for the session. Only finger
-// pointers ("touch") are ever intercepted; mouse and stylus fall straight
-// through to the engine's desktop / drawing paths (desktop is untouched).
+// Every pointer of type "pen" latches ctx.penSeen for the session. Which
+// pointers this router drives as its own contacts is routesAsContact's call:
+// fingers always, the stylus only while the navigation lock is on (there it is
+// a finger in every respect), the mouse never — so the desktop is untouched.
+// Everything else falls straight through to the engine's drawing / selection
+// paths.
 //
-// Finger count decides the gesture (touch-routing.ts holds the table):
-//   1  the single-finger machines below (scroll / draw / page flip);
+// Contact count decides the gesture (touch-routing.ts holds the table):
+//   1  the single-pointer machines below (scroll / draw / page flip);
 //   2  pinch — zoom is the engine's own ZoomGestureWrapper, which drives itself
 //      off raw touch events and never consults the interaction manager, so it
 //      keeps working while every finger pointer event is eaten here; the pan
@@ -359,11 +372,11 @@ const VERTICAL_FLING_MIN_SPEED = 0.02;
 // Pencil is down and reports no usable contact geometry, so palm suppression is
 // neither possible nor needed here (docs/pitfall/39).
 //
-// Both layouts get the single finger's job from the same planFinger call, so
-// the two branches cannot drift apart on the pen/finger policy or on when the
+// Both layouts get the single pointer's job from the same planPointer call, so
+// the two branches cannot drift apart on the routing policy or on when the
 // engine is shut off (an annotation tool pauses it at pointerdown, before the
-// stroke's lead-in can leave ink; the hand tool waits for the commit so a
-// stationary tap still reaches the engine).
+// stroke's lead-in can leave ink; with no drawing tool active the pause waits
+// for the commit so a stationary tap still reaches the engine).
 //
 // Vertical (continuous) mode — the main path: a finger planned as "scroll" is
 // driven here (capture the pointer, follow the finger by setting scrollTop, then
@@ -645,6 +658,25 @@ function TouchInputRouter({
         vPhase = "idle";
         vId = null;
       };
+      // Everything the two one-finger machines hold: inertia, the long-press
+      // timer, the paged machine's phase, the rubber band, the pointer capture
+      // and the engine pause. Dropped as one unit, unconditionally — a caller
+      // that reset half of it (or reset the paged machine only while paged was
+      // still the live layout) would leave a phase behind that the next gesture
+      // inherits.
+      const resetGestures = () => {
+        cancelFling();
+        clearLp();
+        state = initGestureState();
+        captured = false;
+        // A band in flight is dropped outright: leaving a transform on the
+        // element the pinch preview also writes would offset the zoom anchor.
+        clearBand();
+        releaseCapture();
+        endVertical();
+      };
+      ctx.current.resetGestures = resetGestures;
+
       // The one-finger gesture loses the glass (a second finger, a pen). Both
       // machines go idle and the engine gets its pipeline back
       // — from here on the fingers are blocked one pointer at a time, which
@@ -652,21 +684,16 @@ function TouchInputRouter({
       const suspendFingerGesture = () => {
         cancelFling();
         clearLp();
-        if (ctx.current.paged) {
-          if (
-            state.primary !== null &&
-            (state.phase === "drag" || state.phase === "pan" || state.phase === "band")
-          ) {
-            feed({ type: "pointercancel", id: state.primary });
-          }
-          state = initGestureState();
-          captured = false;
-          // A band in flight is dropped outright: leaving a transform on the
-          // element the pinch preview also writes would offset the zoom anchor.
-          clearBand();
+        if (
+          ctx.current.paged &&
+          state.primary !== null &&
+          (state.phase === "drag" || state.phase === "pan" || state.phase === "band")
+        ) {
+          // Spring the drag back before dropping it, so the page does not stay
+          // parked half-turned.
+          feed({ type: "pointercancel", id: state.primary });
         }
-        releaseCapture();
-        endVertical();
+        resetGestures();
       };
       // Two-finger pan: the content follows the centroid of the two fingers.
       // Zoom is the engine's wrapper; this only moves the scroll container, and
@@ -714,7 +741,7 @@ function TouchInputRouter({
         flingRaf = requestAnimationFrame(step);
       };
 
-      const onVerticalDown = (e: PointerEvent, plan: FingerPlan) => {
+      const onVerticalDown = (e: PointerEvent, plan: PointerPlan) => {
         if (plan.action !== "scroll") {
           return; // this finger draws — leave it to the annotation layer
         }
@@ -780,6 +807,7 @@ function TouchInputRouter({
           multi: multiTouch,
           penLock,
           penSeen: ctx.current.penSeen,
+          navLock: toolKindOf(ctx.current.tool) === "navlock",
         });
       };
       const trackContact = (e: PointerEvent) => {
@@ -799,11 +827,12 @@ function TouchInputRouter({
         e.stopPropagation();
       };
 
-      // A stylus outranks every finger on the glass: the finger scroll and its
-      // fling stop dead, and the fingers already down go inert until they lift,
-      // so the hand a user writes with cannot interrupt the stroke.
+      // A stylus the router does not drive outranks every finger on the glass:
+      // the finger scroll and its fling stop dead, and the fingers already down
+      // go inert until they lift, so the hand a user writes with cannot
+      // interrupt the stroke. Under the navigation lock the stylus is a contact
+      // like any other and never gets here.
       const onPenDown = (e: PointerEvent) => {
-        ctx.current.penSeen = true;
         trackContact(e);
         cancelFling();
         if (fingers.size > 0) suspendFingerGesture();
@@ -813,11 +842,16 @@ function TouchInputRouter({
       };
 
       const onDown = (e: PointerEvent) => {
-        if (e.pointerType === "pen") {
-          onPenDown(e);
+        const kind = pointerKindOf(e.pointerType);
+        if (kind === "pen") ctx.current.penSeen = true;
+        const tool = toolKindOf(ctx.current.tool);
+        // Whether this pointer becomes one of our contacts is latched here, by
+        // the `fingers` map: toggling the navigation lock mid-gesture can never
+        // split one pointer's lifetime across the two code paths.
+        if (!routesAsContact(tool, kind)) {
+          if (kind === "pen") onPenDown(e);
           return;
         }
-        if (e.pointerType !== "touch") return;
         fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
         trackContact(e);
         const wasMulti = multiTouch;
@@ -836,17 +870,18 @@ function TouchInputRouter({
           return;
         }
         hadSelectionAtStart = hasSelection();
-        // One plan for both layouts: what this finger is for, and whether the
-        // engine has to be shut off before it can mark the page.
-        const plan = planFinger(toolKindOf(ctx.current.tool), ctx.current.penSeen);
+        // One plan for both layouts and both devices: what this pointer is for,
+        // and whether the engine has to be shut off before it can mark the page.
+        const plan = planPointer(tool, kind, ctx.current.penSeen);
         if (plan.pauseAtDown) pauseEngine();
         if (ctx.current.paged) {
           feed({ type: "pointerdown", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp });
           clearLp();
-          // The long press hands off to native text selection: only for a hand
-          // tool finger at fit-page (an annotation tool's engine pipeline is
-          // already shut off, a zoomed page is panning).
-          if (!plan.pauseAtDown && plan.action === "scroll" && !ctx.current.zoomedIn) {
+          // The long press hands off to native text selection: only with no tool
+          // selected, at fit-page (an annotation tool's engine pipeline is
+          // already shut off, the navigation lock selects nothing, a zoomed page
+          // is panning).
+          if (plan.longPressSelect && !ctx.current.zoomedIn) {
             const id = e.pointerId;
             lpTimer = window.setTimeout(() => feed({ type: "longpress", id }), PAGED_LONG_PRESS_MS);
           }
@@ -858,13 +893,11 @@ function TouchInputRouter({
       };
 
       const onMove = (e: PointerEvent) => {
-        if (e.pointerType === "pen") {
-          ctx.current.penSeen = true;
-          return;
-        }
-        if (e.pointerType !== "touch") return;
+        if (e.pointerType === "pen") ctx.current.penSeen = true;
         const f = fingers.get(e.pointerId);
-        if (!f) return; // a contact that landed before this listener existed
+        // Not a contact this router drives: a mouse, a stylus outside the
+        // navigation lock, or a finger that landed before this listener existed.
+        if (!f) return;
         f.x = e.clientX;
         f.y = e.clientY;
         trackContact(e);
@@ -884,11 +917,13 @@ function TouchInputRouter({
 
       const onEnd = (e: PointerEvent, cancelled: boolean) => {
         const wasContact = contacts.delete(e.pointerId);
-        if (e.pointerType !== "touch") {
+        const known = fingers.delete(e.pointerId);
+        if (!known && pointerKindOf(e.pointerType) !== "touch") {
+          // A pointer this router never drove (a mouse, or a stylus outside the
+          // navigation lock): the engine owns its whole lifetime.
           if (wasContact) publishDebug();
           return;
         }
-        const known = fingers.delete(e.pointerId);
         resetPanBase();
         const owedToEngine = engineSaw.delete(e.pointerId);
         if (!known) {
@@ -935,6 +970,7 @@ function TouchInputRouter({
         releaseCapture();
         endVertical();
         ctx.current.setTouchLock = null;
+        ctx.current.resetGestures = null;
         el.style.touchAction = "";
         el.removeEventListener("pointerdown", onDown, { capture: true });
         el.removeEventListener("pointermove", onMove, { capture: true });
@@ -988,6 +1024,7 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
     interaction: null,
     selection: null,
     setTouchLock: null,
+    resetGestures: null,
     turnToPage: null,
   });
 
@@ -1454,27 +1491,49 @@ async function wireEngine(
 
   const handle: EmbedPdfHandle = {
     setTool(tool) {
-      annScope.setActiveTool(tool === "pointer" ? null : tool);
+      // Neither "pointer" (nothing selected) nor "navlock" (the navigation lock)
+      // is an engine tool; both clear the active one. They differ only in what
+      // the touch router does, which reads pagedRef.current.tool live.
+      const drawing = tool !== "pointer" && tool !== "navlock";
+      annScope.setActiveTool(drawing ? tool : null);
       pagedRef.current.tool = tool;
     },
     setLayout(mode) {
-      if (mode === layout) return;
+      // Every field of LAYOUT_SETTINGS is applied, in both directions and on
+      // every call — no early return when the mode looks unchanged. Entering and
+      // leaving are the same operation with a different target, so nothing can
+      // be set on the way in and left behind on the way out (layout-modes.ts
+      // holds the settings and the round-trip proof), and a repeat call
+      // re-asserts the layout instead of trusting a flag.
+      const s = LAYOUT_SETTINGS[mode];
+      const strategy = s.axis === "horizontal" ? ScrollStrategy.Horizontal : ScrollStrategy.Vertical;
+      const zoomMode = s.zoom === "fit-page" ? ZoomMode.FitPage : ZoomMode.FitWidth;
+      // Read before the strategy and zoom re-lay the document out.
+      const page = scrollScope.getCurrentPage();
       layout = mode;
       pagedRef.current.paged = mode === "paged";
-      pagedRef.current.setTouchLock?.(mode === "paged");
-      if (mode === "paged") {
-        // Paged is locked to one whole page per screen: fit-page, centred, and
-        // no leftover magnification from the vertical reading position.
-        const page = scrollScope.getCurrentPage();
-        scrollScope.setScrollStrategy(ScrollStrategy.Horizontal);
-        zoomScope.requestZoom(ZoomMode.FitPage);
-        requestAnimationFrame(() => {
-          if (pagedRef.current.paged) turnToPage(page, "instant");
-        });
-      } else {
-        scrollScope.setScrollStrategy(ScrollStrategy.Vertical);
-        zoomScope.requestZoom(ZoomMode.FitWidth);
-      }
+      // Nothing the old layout had in flight survives the switch.
+      pagedRef.current.resetGestures?.();
+      pagedRef.current.setTouchLock?.(s.touchLock);
+      scrollScope.setScrollStrategy(strategy);
+      zoomScope.requestZoom(zoomMode);
+      // The fit-page baseline belongs to paged mode; a stale one would misjudge
+      // "zoomed in" if the viewport changed size while reading vertically.
+      if (!s.tracksFitPage) fitPageScale = 0;
+      requestAnimationFrame(() => {
+        if (layout !== mode) return; // a newer switch already won
+        // Re-assert both on the next frame, in both directions. The scroll
+        // plugin drops its layout refresh without a word when the document is
+        // not "loaded" at the instant of the call, and a zoom request that
+        // lands on the same scale (fit-page and fit-width coincide on a
+        // portrait screen) fires no change to recompute it either — leaving the
+        // settings saying one layout while the pages stay laid out in the other.
+        scrollScope.setScrollStrategy(strategy);
+        zoomScope.requestZoom(zoomMode);
+        // Paged is one whole page per screen: centre it against the geometry
+        // that now exists, dropping any magnification carried in.
+        if (s.centerPage) turnToPage(page, "instant");
+      });
       refreshZoomedIn();
       emitStats();
       emitState();

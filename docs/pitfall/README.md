@@ -45,3 +45,4 @@
 - [39-ios-no-web-palm-rejection](./39-ios-no-web-palm-rejection.md) — iPad 上笔手互斥由系统强制且关不掉,接触面积也拿不到;web 层的掌抑制做不了也不用做,按面积判掌反而会掐死 pinch
 - [40-embedpdf-horizontal-strip-no-page-snap](./40-embedpdf-horizontal-strip-no-page-snap.md) — 横向布局是紧挨排布的页带、scrollToPage 左对齐、pageGap 运行期改不了;"一屏一页"要宿主自己算 alignX 居中
 - [41-zoom-wrapper-owns-content-transform](./41-zoom-wrapper-owns-content-transform.md) — 内容元素的 transform 归缩放预览所有,橡皮筋只能用 rAF 回弹、不能留 CSS transition
+- [42-scroll-strategy-relayout-not-guaranteed](./42-scroll-strategy-relayout-not-guaranteed.md) — 换 scroll strategy 的重排在文档非 loaded 时静默跳过,竖屏下 fit-page 和 fit-width 数值相同也不触发重排;切布局要全量应用+下一帧再断言

@@ -1,0 +1,106 @@
+// The two reading layouts as data, plus the reducer that switches between them.
+// Pure and engine-free so the one property that matters can be unit tested:
+// entering a layout and leaving it again restores every setting the entry
+// touched, and doing it repeatedly changes nothing further.
+//
+// The host (EmbedPdfView.setLayout) applies exactly these fields, in this
+// order. Anything a layout owns belongs in LayoutSettings — a setting applied
+// on the way in but not listed here is a setting nothing will restore on the
+// way out, which is how a reader gets stuck in a strip of pages it can no
+// longer scroll.
+
+export type ReadingLayout = "vertical" | "paged";
+
+// How the pages are laid out: a vertical column, or the horizontal strip paged
+// mode flips through.
+export type ScrollAxis = "vertical" | "horizontal";
+
+// The zoom each layout locks to. Paged is one whole page per screen; vertical
+// reads at page width.
+export type ZoomLock = "fit-width" | "fit-page";
+
+export interface LayoutSettings {
+  axis: ScrollAxis;
+  zoom: ZoomLock;
+  // Whether the viewport container swallows native pan/zoom (touch-action:none).
+  touchLock: boolean;
+  // Whether a page change has to be re-centred on one whole page (the horizontal
+  // strip left-aligns, so a page narrower than the viewport needs an explicit
+  // alignX — pitfall 40).
+  centerPage: boolean;
+  // Whether the layout keeps a fit-page baseline scale, the reference its pinch
+  // rules compare against. Only paged has one; carrying a stale baseline into a
+  // later paged session would misjudge "zoomed in" after a viewport resize.
+  tracksFitPage: boolean;
+}
+
+export const LAYOUT_SETTINGS: Record<ReadingLayout, LayoutSettings> = {
+  vertical: {
+    axis: "vertical",
+    zoom: "fit-width",
+    touchLock: false,
+    centerPage: false,
+    tracksFitPage: false,
+  },
+  paged: {
+    axis: "horizontal",
+    zoom: "fit-page",
+    touchLock: true,
+    centerPage: true,
+    tracksFitPage: true,
+  },
+};
+
+// Everything a layout switch owns, in the abstract: the engine settings above
+// plus the touch router's live state. The router state is in here because a
+// switch must never inherit a gesture from the layout it just left — a drag, a
+// rubber band, an inertia fling, a captured pointer and a paused engine all
+// belong to the layout that started them.
+export interface LayoutEngineState {
+  axis: ScrollAxis;
+  zoom: ZoomLock;
+  touchLock: boolean;
+  // Numeric fit-page scale, or 0 when none is held.
+  fitPageBaseline: number;
+  gesturesIdle: boolean;
+  enginePaused: boolean;
+  pointerCaptured: boolean;
+  inertia: boolean;
+}
+
+// The state a freshly switched layout is in. Total, not a patch: every field is
+// written from the target layout or reset, so the result never depends on how
+// dirty the previous one was.
+export function applyLayout(prev: LayoutEngineState, layout: ReadingLayout): LayoutEngineState {
+  const s = LAYOUT_SETTINGS[layout];
+  return {
+    axis: s.axis,
+    zoom: s.zoom,
+    touchLock: s.touchLock,
+    fitPageBaseline: s.tracksFitPage ? prev.fitPageBaseline : 0,
+    gesturesIdle: true,
+    enginePaused: false,
+    pointerCaptured: false,
+    inertia: false,
+  };
+}
+
+// The state a reader sits in while resting in a layout, i.e. what a round trip
+// has to come back to.
+export function restingState(layout: ReadingLayout, fitPageBaseline = 0): LayoutEngineState {
+  const s = LAYOUT_SETTINGS[layout];
+  return {
+    axis: s.axis,
+    zoom: s.zoom,
+    touchLock: s.touchLock,
+    fitPageBaseline: s.tracksFitPage ? fitPageBaseline : 0,
+    gesturesIdle: true,
+    enginePaused: false,
+    pointerCaptured: false,
+    inertia: false,
+  };
+}
+
+export function otherLayout(layout: ReadingLayout): ReadingLayout {
+  return layout === "paged" ? "vertical" : "paged";
+}
