@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import {
-  SpreadMode,
   type Annotation,
   type AnnotationPopupParams,
   type ViewInstance,
@@ -169,7 +168,6 @@ import {
   IconFitWidth,
   IconZoomIn,
   IconZoomOut,
-  IconTwoPage,
   IconTouchProbe,
 } from "./components/common/icons";
 import AnnotationPopup from "./components/reader/AnnotationPopup";
@@ -1559,7 +1557,7 @@ export default function App() {
         // the right mode on the first paint.
         viewState: state
           ? { ...state, layout: state.layout ?? defaultLayout() }
-          : ({ pageIndex: 0, scale: "auto", scrollMode: 0, spreadMode: 0, layout: defaultLayout() } as ViewState),
+          : ({ pageIndex: 0, scale: "auto", scrollMode: 0, layout: defaultLayout() } as ViewState),
       });
       setTitle(name);
     },
@@ -2209,12 +2207,11 @@ export default function App() {
   const sidebarBusy = !!(prepSnap?.running || notesSnap?.running);
 
   const pageText = stats ? `${stats.pageIndex + 1} / ${stats.pagesCount}` : "— / —";
-  const twoPage = !!stats && stats.spreadMode !== SpreadMode.None;
   const paged = stats?.layout === "paged";
   const inReader = !!title;
 
   // The reader top bar's "More" overflow: low-frequency view controls collapsed
-  // out of the main bar (zoom, fit, spread, the paged-flip opt-in, settings).
+  // out of the main bar (zoom, fit, the paged-flip opt-in, the touch probe).
   const moreItems: MoreItem[] = [
     {
       kind: "action",
@@ -2238,14 +2235,6 @@ export default function App() {
       onClick: () => viewRef.current?.zoomOut(),
     },
     { kind: "divider" },
-    {
-      kind: "toggle",
-      label: "Two-page spread",
-      icon: IconTwoPage,
-      on: twoPage,
-      disabled: !viewReady,
-      onClick: () => viewRef.current?.setSpreadMode(twoPage ? SpreadMode.None : SpreadMode.Odd),
-    },
     {
       kind: "toggle",
       label: "Paged flip",

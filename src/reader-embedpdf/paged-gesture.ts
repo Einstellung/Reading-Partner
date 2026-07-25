@@ -15,6 +15,12 @@
 //
 // Coordinate convention: dragging the finger LEFT (dx < 0) pulls the NEXT page
 // in (turn = +1); dragging RIGHT (dx > 0) brings the PREVIOUS page (turn = -1).
+//
+// Paged mode is locked to one whole page per screen (fit-page), so only a
+// horizontal swipe means anything. A vertical swipe, and a horizontal swipe with
+// no page on that side, get a damped follow that springs back — the page moves a
+// few px under the finger and returns, so "nothing to scroll here" is felt
+// instead of the screen appearing frozen.
 
 export type GestureTool = "pointer" | "pen";
 
@@ -22,27 +28,43 @@ export interface PagedGestureConfig {
   // "pen" = a drawing tool is active (highlight / underline / ink / AI pen):
   // one finger draws, so a page turn must start from a screen edge band.
   tool: GestureTool;
-  // The page is larger than the viewport (zoomed past fit-page): one finger pans
-  // instead of turning, and turning is locked until back at fit-page.
+  // Zoomed past fit-page (temporary magnification): one finger pans the page
+  // instead of turning it, until the pan runs into the horizontal edge.
   zoomedIn: boolean;
   // Viewport width in CSS px — sets the turn-commit distance and edge bands.
   width: number;
+  // Whether a page exists on that side. Without one the swipe rubber-bands
+  // instead of turning, so the first/last page never feels like a hard wall.
+  canTurnPrev?: boolean;
+  canTurnNext?: boolean;
+  // Whether the zoomed page still has room to pan that way (host reads the live
+  // scroll position). Pushing past the edge is what turns a page while zoomed.
+  canPanLeft?: boolean;
+  canPanRight?: boolean;
   slop?: number; // movement before a one-finger gesture commits (default 10)
   axisRatio?: number; // dominant axis must beat the other by this (default 1.2)
   edgeZone?: number; // edge band width for pen-mode edge swipe (default 32)
   commitFraction?: number; // fraction of width to commit a turn (default 0.22)
   commitVelocity?: number; // fling speed px/ms that commits a turn (default 0.45)
+  bandLimit?: number; // px the rubber band asymptotically approaches (default 48)
+  edgeTurnPull?: number; // px of pull past a zoomed edge that turns (default 60)
 }
 
 type Cfg = Required<PagedGestureConfig>;
 
 function resolve(config: PagedGestureConfig): Cfg {
   return {
+    canTurnPrev: true,
+    canTurnNext: true,
+    canPanLeft: true,
+    canPanRight: true,
     slop: 10,
     axisRatio: 1.2,
     edgeZone: 32,
     commitFraction: 0.22,
     commitVelocity: 0.45,
+    bandLimit: 48,
+    edgeTurnPull: 60,
     ...config,
   };
 }
@@ -63,7 +85,11 @@ export type GestureCommand =
   // Release: -1 previous page, +1 next page, 0 spring back to rest.
   | { type: "dragEnd"; turn: -1 | 0 | 1 }
   // Zoomed-in pan: shift the viewport by (dx, dy) since the last sample.
-  | { type: "panMove"; dx: number; dy: number };
+  | { type: "panMove"; dx: number; dy: number }
+  // Nothing to scroll this way: offset the page by an already-damped (dx, dy)
+  // so the gesture is felt, then spring it back on bandEnd.
+  | { type: "bandMove"; dx: number; dy: number }
+  | { type: "bandEnd" };
 
 interface Pt {
   x: number;
@@ -71,7 +97,7 @@ interface Pt {
   t: number;
 }
 
-export type GesturePhase = "idle" | "pending" | "drag" | "pan" | "off";
+export type GesturePhase = "idle" | "pending" | "drag" | "pan" | "band" | "off";
 
 export interface GestureState {
   phase: GesturePhase;
@@ -81,6 +107,8 @@ export interface GestureState {
   primary: number | null; // the finger driving a one-finger drag/pan
   dragBaseX: number; // x that drag dx is measured from
   lastDx: number; // last emitted drag dx (for release resolution)
+  bandAxis: "x" | "y" | null; // axis the rubber band follows
+  edgePull: number; // px pulled past a zoomed pan edge, one direction only
   vx: number; // smoothed horizontal velocity, px/ms
   vLastX: number;
   vLastT: number;
@@ -95,6 +123,8 @@ export function initGestureState(): GestureState {
     primary: null,
     dragBaseX: 0,
     lastDx: 0,
+    bandAxis: null,
+    edgePull: 0,
     vx: 0,
     vLastX: 0,
     vLastT: 0,
@@ -143,7 +173,53 @@ export function edgeOf(x: number, width: number, edgeZone: number): "left" | "ri
   return null;
 }
 
+// Damped follow for a drag with nowhere to go: grows with the finger but never
+// past `limit`, so the page visibly gives a little and springs back. Sign is the
+// finger's; magnitude is limit/2 at a drag of one limit, and asymptotic after.
+export function rubberBand(delta: number, limit: number): number {
+  if (limit <= 0) return 0;
+  const d = Math.abs(delta);
+  const damped = limit * (1 - 1 / (d / limit + 1));
+  return delta < 0 ? -damped : damped;
+}
+
+// Which page a horizontal drag is reaching for, and whether it exists: -1 the
+// previous page (finger moving right), +1 the next (finger moving left).
+export function turnDirection(dx: number): -1 | 1 {
+  return dx < 0 ? 1 : -1;
+}
+
+export function canTurn(dir: -1 | 1, cfg: { canTurnPrev: boolean; canTurnNext: boolean }): boolean {
+  return dir === 1 ? cfg.canTurnNext : cfg.canTurnPrev;
+}
+
+// Accumulated pull against a zoomed pan edge. Only counts while the pan is
+// blocked on that side and the finger keeps going the same way; any step with
+// room left, or a reversal, restarts it.
+export function accumulateEdgePull(prev: number, step: number, blocked: boolean): number {
+  if (!blocked) return 0;
+  if (prev === 0 || Math.sign(prev) === Math.sign(step)) return prev + step;
+  return step;
+}
+
+// Centring a page in the viewport: the alignX percentage scrollToPage takes
+// (it subtracts clientWidth * alignX/100 from the page's left edge). 0 once the
+// page is at least as wide as the viewport.
+export function pageCenterAlign(pageWidthPx: number, viewportWidthPx: number): number {
+  if (viewportWidthPx <= 0 || pageWidthPx <= 0) return 0;
+  return Math.max(0, Math.min(50, 50 * (1 - pageWidthPx / viewportWidthPx)));
+}
+
 // --- reducer ---------------------------------------------------------------
+
+// A band only ever moves along its locked axis, damped.
+function bandCommand(dx: number, dy: number, axis: "x" | "y", limit: number): GestureCommand {
+  return {
+    type: "bandMove",
+    dx: axis === "x" ? rubberBand(dx, limit) : 0,
+    dy: axis === "y" ? rubberBand(dy, limit) : 0,
+  };
+}
 
 function updateVelocity(s: GestureState, x: number, t: number): void {
   const dt = Math.max(t - s.vLastT, 1);
@@ -184,8 +260,9 @@ export function stepGesture(
         s.vLastT = input.t;
       } else {
         // A second finger means pinch-zoom (engine wrapper's job) or multi-touch
-        // we don't drive — yield. If a page drag was mid-flight, spring it back.
+        // we don't drive — yield. Anything mid-flight springs back.
         if (s.phase === "drag") cmds.push({ type: "dragEnd", turn: 0 });
+        if (s.phase === "band") cmds.push({ type: "bandEnd" });
         s.phase = "off";
         s.primary = null;
       }
@@ -214,14 +291,28 @@ export function stepGesture(
           break;
         }
 
-        if (cfg.tool === "pen") {
-          // One finger with a pen draws; a turn must start inside an edge band.
-          if (edgeOf(d.x, cfg.width, cfg.edgeZone) && lockAxis(dx, dy, cfg.slop, cfg.axisRatio) === "x") {
+        // At fit-page the whole page is on screen, so only the horizontal axis
+        // can go anywhere: it turns the page when there is one on that side,
+        // and rubber-bands when there is not. The vertical axis always bands.
+        const axis = lockAxis(dx, dy, cfg.slop, cfg.axisRatio);
+        const startTurnOrBand = (a: "x" | "y") => {
+          cmds.push({ type: "capture", id: input.id });
+          if (a === "x" && canTurn(turnDirection(dx), cfg)) {
             s.phase = "drag";
             s.dragBaseX = d.x;
             s.lastDx = dx;
-            cmds.push({ type: "capture", id: input.id });
             cmds.push({ type: "dragMove", dx });
+            return;
+          }
+          s.phase = "band";
+          s.bandAxis = a;
+          cmds.push(bandCommand(dx, dy, a, cfg.bandLimit));
+        };
+
+        if (cfg.tool === "pen") {
+          // One finger with a pen draws; a turn must start inside an edge band.
+          if (edgeOf(d.x, cfg.width, cfg.edgeZone) && axis === "x") {
+            startTurnOrBand("x");
           } else if (Math.abs(dx) >= cfg.slop || Math.abs(dy) >= cfg.slop) {
             s.phase = "off"; // hand the stroke to the annotation layer
           }
@@ -229,16 +320,7 @@ export function stepGesture(
         }
 
         // pointer tool at fit-page.
-        const axis = lockAxis(dx, dy, cfg.slop, cfg.axisRatio);
-        if (axis === "x") {
-          s.phase = "drag";
-          s.dragBaseX = d.x;
-          s.lastDx = dx;
-          cmds.push({ type: "capture", id: input.id });
-          cmds.push({ type: "dragMove", dx });
-        } else if (axis === "y") {
-          s.phase = "off"; // vertical drag has nothing to move at fit-page
-        }
+        if (axis !== "none") startTurnOrBand(axis);
         break;
       }
 
@@ -252,7 +334,27 @@ export function stepGesture(
 
       if (s.phase === "pan") {
         if (input.id !== s.primary) break;
-        cmds.push({ type: "panMove", dx: cur.x - prevPos.x, dy: cur.y - prevPos.y });
+        const stepX = cur.x - prevPos.x;
+        const blocked = stepX < 0 ? !cfg.canPanRight : stepX > 0 ? !cfg.canPanLeft : false;
+        s.edgePull = accumulateEdgePull(s.edgePull, stepX, blocked);
+        // Pushing past the edge of a magnified page is how it turns: the host
+        // snaps to the neighbour page and drops back to fit-page.
+        if (Math.abs(s.edgePull) >= cfg.edgeTurnPull) {
+          const dir = turnDirection(s.edgePull);
+          if (canTurn(dir, cfg)) {
+            cmds.push({ type: "dragEnd", turn: dir });
+            s.phase = "off";
+            break;
+          }
+        }
+        cmds.push({ type: "panMove", dx: stepX, dy: cur.y - prevPos.y });
+        break;
+      }
+
+      if (s.phase === "band") {
+        if (input.id !== s.primary) break;
+        const d = s.down[input.id];
+        cmds.push(bandCommand(cur.x - d.x, cur.y - d.y, s.bandAxis ?? "y", cfg.bandLimit));
         break;
       }
       break; // "off" / "idle": ignore
@@ -277,11 +379,18 @@ export function stepGesture(
       s.order = s.order.filter((id) => id !== input.id);
 
       if (wasPhase === "drag" && wasPrimary) {
-        const turn =
+        const rawTurn =
           input.type === "pointercancel"
             ? 0
             : resolveSwipe(s.lastDx, s.vx, cfg.width, cfg.commitFraction, cfg.commitVelocity);
+        // A flick back at the end can resolve to the side with no page left;
+        // that springs back instead of asking for a page that isn't there.
+        const turn = rawTurn !== 0 && !canTurn(rawTurn, cfg) ? 0 : rawTurn;
         cmds.push({ type: "dragEnd", turn });
+        s.phase = s.order.length > 0 ? "off" : "idle";
+      } else if (wasPhase === "band" && wasPrimary) {
+        cmds.push({ type: "bandEnd" });
+        s.bandAxis = null;
         s.phase = s.order.length > 0 ? "off" : "idle";
       } else if (wasPhase === "pan" && wasPrimary) {
         s.phase = s.order.length > 0 ? "off" : "idle";

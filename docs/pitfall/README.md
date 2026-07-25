@@ -43,3 +43,5 @@
 - [37-embedpdf-page-touch-action-none-all-modes](./37-embedpdf-page-touch-action-none-all-modes.md) — EmbedPDF 每页 div 所有模式都 touch-action:none,页面上原生触摸滚动不可能;笔手路由必须在 viewport 容器 capture 阶段按 pointerType 逐事件做
 - [38-embedpdf-pinch-selection-global-pause](./38-embedpdf-pinch-selection-global-pause.md) — 缩放走原生 touch 通道、选区 handler 不分 pointerId、pause 是全局的;多指/手掌/笔占用期间要逐指针 stopPropagation 而不是 pause
 - [39-ios-no-web-palm-rejection](./39-ios-no-web-palm-rejection.md) — iPad 上笔手互斥由系统强制且关不掉,接触面积也拿不到;web 层的掌抑制做不了也不用做,按面积判掌反而会掐死 pinch
+- [40-embedpdf-horizontal-strip-no-page-snap](./40-embedpdf-horizontal-strip-no-page-snap.md) — 横向布局是紧挨排布的页带、scrollToPage 左对齐、pageGap 运行期改不了;"一屏一页"要宿主自己算 alignX 居中
+- [41-zoom-wrapper-owns-content-transform](./41-zoom-wrapper-owns-content-transform.md) — 内容元素的 transform 归缩放预览所有,橡皮筋只能用 rAF 回弹、不能留 CSS transition

@@ -431,22 +431,6 @@ export function IconFitWidth({ size = 20 }: IconProps) {
 	);
 }
 
-// Two side-by-side pages: the two-page spread toggle.
-export function IconTwoPage({ size = 20 }: IconProps) {
-	return (
-		<svg
-			{...svgProps(size)}
-			stroke="currentColor"
-			strokeWidth="1.4"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-		>
-			<rect x="2.75" y="4" width="6.5" height="12" rx="1" />
-			<rect x="10.75" y="4" width="6.5" height="12" rx="1" />
-		</svg>
-	);
-}
-
 // Contact patch with its ripples: the on-device touch probe.
 export function IconTouchProbe({ size = 20 }: IconProps) {
 	return (

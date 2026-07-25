@@ -1,6 +1,6 @@
 // MoreMenu: the reader top bar's overflow ("More") control. A neutral chevron
 // button that opens a small dropdown holding low-frequency controls (fit width,
-// zoom, spread, paged flip, settings). Owns only the popover mechanics —
+// zoom, paged flip, settings). Owns only the popover mechanics —
 // open/close, outside-tap, Escape; the caller supplies the rows. Touch-friendly:
 // 44px targets, tap-to-open, tap-outside / re-tap to close.
 

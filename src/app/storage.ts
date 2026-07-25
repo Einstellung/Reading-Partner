@@ -41,7 +41,6 @@ const DEFAULT_VIEW_STATE: ViewState = {
   pageIndex: 0,
   scale: "auto",
   scrollMode: 0,
-  spreadMode: 0,
 };
 
 // Pure: merge the sticky classroom flag into a view state (or a default base

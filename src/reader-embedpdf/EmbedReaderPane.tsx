@@ -6,13 +6,11 @@ import { memo, useCallback, useEffect, useRef } from "react";
 import EmbedPdfView, {
   type AnnotationAnchor,
   type EmbedPdfHandle,
-  type EmbedSpread,
   type EmbedViewState,
   type EmbedViewStats,
 } from "./EmbedPdfView";
 import type { ZoteroAnnotation } from "./convert";
 import {
-  SpreadMode,
   type Annotation,
   type AnnotationPopupParams,
   type Tool,
@@ -20,13 +18,6 @@ import {
   type ViewState,
   type ViewStats,
 } from "../app/reader-contract";
-
-const SPREAD_NUM_TO_EMBED: Record<number, EmbedSpread> = { 0: "none", 1: "odd", 2: "even" };
-const EMBED_TO_SPREAD_NUM: Record<EmbedSpread, SpreadMode> = {
-  none: SpreadMode.None,
-  odd: SpreadMode.Odd,
-  even: SpreadMode.Even,
-};
 
 export interface EmbedReaderPaneProps {
   buffer: ArrayBuffer;
@@ -135,7 +126,6 @@ function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
       zoomIn: () => h.zoomIn(),
       zoomOut: () => h.zoomOut(),
       zoomReset: () => h.fitWidth(),
-      setSpreadMode: (mode) => h.setSpread(SPREAD_NUM_TO_EMBED[mode] ?? "none"),
       setLayout: (mode) => h.setLayout(mode),
       navigate: (target) => {
         if (target.annotationID) h.navigateToAnnotation(target.annotationID);
@@ -201,7 +191,6 @@ function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
             pageIndex: s.pageIndex,
             scale: s.zoom,
             scrollMode: 0,
-            spreadMode: 0,
             ...(typeof s.pageY === "number" ? { pageX: s.pageX, pageY: s.pageY } : {}),
             ...(s.layout ? { layout: s.layout } : {}),
           })
@@ -214,7 +203,6 @@ function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
             canZoomIn: s.canZoomIn,
             canZoomOut: s.canZoomOut,
             canZoomReset: true,
-            spreadMode: EMBED_TO_SPREAD_NUM[s.spreadMode] ?? SpreadMode.None,
             layout: s.layout,
           })
         }

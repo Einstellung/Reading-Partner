@@ -41,16 +41,30 @@ export function toolKindOf(toolId: string | null | undefined): ToolKind {
   return "annotate";
 }
 
-// Paged (horizontal flip) mode maps the same penSeen policy onto the paged
-// gesture machine's two tool modes ("pointer" = one finger turns the page
-// anywhere; "pen" = one finger draws, a turn must start from a screen edge).
-// Paged only ever handles finger pointers, so pen/mouse never reach here.
-//   - hand tool: finger turns (pointer).
-//   - annotate tool: a stylus was seen → finger turns (pointer, the pen draws);
-//     no stylus → finger draws (pen).
+// What a finger does in either layout, plus when the engine's pointer pipeline
+// has to be shut off. Both layout branches go through this, so paged and
+// vertical can never drift apart on the pen/finger policy.
+export interface FingerPlan {
+  action: RouteAction;
+  // Pause the engine at pointerdown, not at the gesture commit: an annotation
+  // tool starts its stroke on pointerdown, so the few px of lead-in before the
+  // gesture commits would leave a flash of ink on the page (pitfall 37). The
+  // hand tool defers its pause to the commit instead, so a stationary tap still
+  // reaches the engine (dismiss / select).
+  pauseAtDown: boolean;
+}
+
+export function planFinger(tool: ToolKind, penSeen: boolean): FingerPlan {
+  const action = routePointer(tool, "touch", penSeen);
+  return { action, pauseAtDown: tool === "annotate" && action === "scroll" };
+}
+
+// Paged (horizontal flip) mode maps the same verdict onto the paged gesture
+// machine's two tool modes ("pointer" = one finger turns the page anywhere;
+// "pen" = one finger draws, a turn must start from a screen edge). Paged only
+// ever handles finger pointers, so pen/mouse never reach here.
 export function pagedGestureTool(tool: ToolKind, penSeen: boolean): "pointer" | "pen" {
-  if (tool === "hand") return "pointer";
-  return penSeen ? "pointer" : "pen";
+  return planFinger(tool, penSeen).action === "scroll" ? "pointer" : "pen";
 }
 
 // Once a finger is classified as scroll, a move past the slop in ANY direction

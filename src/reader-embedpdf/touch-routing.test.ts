@@ -4,6 +4,7 @@ import {
   toolKindOf,
   pointerKindOf,
   pagedGestureTool,
+  planFinger,
   shouldCommitScroll,
   touchGestureMode,
   multiTouchLatch,
@@ -73,6 +74,25 @@ test("toolKindOf maps null/pointer to hand, drawing tools to annotate", () => {
   expect(toolKindOf("highlight")).toBe("annotate");
   expect(toolKindOf("underline")).toBe("annotate");
   expect(toolKindOf("ink")).toBe("annotate");
+});
+
+test("planFinger: an annotation tool shuts the engine off at pointerdown, the hand does not", () => {
+  // A drawing tool starts its stroke on pointerdown, so a finger that is going
+  // to scroll has to pause the engine before the lead-in leaves ink. The hand
+  // tool waits for the commit so a stationary tap still reaches the engine.
+  expect(planFinger("annotate", true)).toEqual({ action: "scroll", pauseAtDown: true });
+  expect(planFinger("annotate", false)).toEqual({ action: "draw", pauseAtDown: false });
+  expect(planFinger("hand", true)).toEqual({ action: "scroll", pauseAtDown: false });
+  expect(planFinger("hand", false)).toEqual({ action: "scroll", pauseAtDown: false });
+});
+
+test("planFinger drives both layouts: the paged tool is the same verdict", () => {
+  for (const t of tools) {
+    for (const penSeen of [false, true]) {
+      const expected = planFinger(t, penSeen).action === "scroll" ? "pointer" : "pen";
+      expect(pagedGestureTool(t, penSeen)).toBe(expected);
+    }
+  }
 });
 
 test("pagedGestureTool: hand always turns with a finger", () => {
