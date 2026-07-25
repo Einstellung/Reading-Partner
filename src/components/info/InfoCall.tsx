@@ -24,6 +24,7 @@ import { saveProfile } from "../../memory/profile";
 import { getInfoPipeline } from "../../info/briefing/live";
 import CallView from "../chat/CallView";
 import ChatPipCard from "../chat/ChatPipCard";
+import { appendRunningTool, resolveToolStatus } from "../common/toolTrace";
 import ReadingPipCard from "../chat/ReadingPipCard";
 import {
   cardRow,
@@ -471,24 +472,13 @@ export function InfoCall({
         full = "";
         patchLast((m) => ({
           text: "",
-          tools: [
-            ...(m.tools ?? []),
-            { name: info.name, label: companionToolStatusLabel(info.name, info.args), state: "running" as const },
-          ],
+          tools: appendRunningTool(m.tools, info.name, companionToolStatusLabel(info.name, info.args)),
         }));
       },
       onToolEnd: (info) =>
-        patchLast((m) => {
-          const tl = [...(m.tools ?? [])];
-          let idx = -1;
-          for (let i = 0; i < tl.length; i++) {
-            if (tl[i].state === "running" && tl[i].name === info.name) idx = i;
-          }
-          if (idx < 0) return { tools: tl };
-          if (info.isError) tl[idx] = { ...tl[idx], state: "error" };
-          else tl.splice(idx, 1);
-          return { tools: tl };
-        }),
+        patchLast((m) => ({
+          tools: resolveToolStatus(m.tools, info.name, info.isError) ?? [...(m.tools ?? [])],
+        })),
       onDone: (text) => {
         const finalText = text || full;
         patchLast((m) => ({ text: finalText, streaming: false, tools: (m.tools ?? []).filter((t) => t.state === "error") }));

@@ -114,6 +114,7 @@ import ChatPipCard from "./components/chat/ChatPipCard";
 import SettingsView from "./components/SettingsView";
 import { buildReadingTurn } from "./ai/reading-turn";
 import { BTN, BTN_PRIMARY } from "./components/common/buttons";
+import { appendRunningTool, resolveToolStatus } from "./components/common/toolTrace";
 import LibraryScreen from "./components/library/LibraryScreen";
 import Toast, { useToasts } from "./components/common/Toast";
 import type { Annotation as PopupAnnotation, PendingImage, ToolStatus, ToolType } from "./components/common/types";
@@ -940,27 +941,15 @@ export default function App() {
         (m) => ({
           ...m,
           text: "",
-          tools: [
-            ...(m.tools ?? []),
-            { name: info.name, label: toolStatusLabel(info.name, info.args), state: "running" as const },
-          ],
+          tools: appendRunningTool(m.tools, info.name, toolStatusLabel(info.name, info.args)),
         }),
         ts,
       );
     };
-    // Resolve the matching running status: drop it on success, mark it failed on
-    // error (soft-error style, left visible).
     const onToolEnd = (info: { name: string; isError: boolean }, ts: number) =>
       patch((m) => {
-        const tools = [...(m.tools ?? [])];
-        let idx = -1;
-        for (let i = 0; i < tools.length; i++) {
-          if (tools[i].state === "running" && tools[i].name === info.name) idx = i;
-        }
-        if (idx < 0) return m;
-        if (info.isError) tools[idx] = { ...tools[idx], state: "error" };
-        else tools.splice(idx, 1);
-        return { ...m, tools };
+        const tools = resolveToolStatus(m.tools, info.name, info.isError);
+        return tools ? { ...m, tools } : m;
       }, ts);
 
     const ann = annsRef.current.get(annotationId);
