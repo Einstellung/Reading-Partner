@@ -3,8 +3,8 @@
 // STT, streamChat for cleanup); the pure pieces stay in their own modules for
 // unit testing.
 
-import { streamChat } from "../ai/providers";
-import { cleanTauriFetch } from "../platform/app/tauri-fetch";
+import { streamChat } from "../providers";
+import { cleanTauriFetch } from "../../platform/app/tauri-fetch";
 import type { CleanupRunner } from "./cleanup";
 import type { SttFetch } from "./stt";
 

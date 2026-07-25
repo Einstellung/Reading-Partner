@@ -9,7 +9,7 @@ import { useFlickerProbe } from '../common/useFlickerProbe';
 import type { ChatImage, PendingImage, ThreadMessage, ToolStatus } from '../common/types';
 import { messageToParts, type CardActionHandler, type CardSurface } from './chatParts';
 import { CARD_REGISTRY } from '../info/InfoCards';
-import type { CleanupModel } from '../../voice';
+import type { CleanupModel } from '../../ai/voice';
 import type { ProviderId } from '../../ai/providers';
 import { loadSettings, toReasoning } from '../../platform/app/settings';
 

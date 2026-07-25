@@ -4,8 +4,8 @@
 // free SenseVoice tier — strongest on Chinese, OpenAI-compatible — but any
 // OpenAI-compatible transcription endpoint works via Settings.
 
-import { loadCredentials, updateCredentials, type ApiKeyCredential } from "../ai/credentials";
-import { loadSettings } from "../platform/app/settings";
+import { loadCredentials, updateCredentials, type ApiKeyCredential } from "../credentials";
+import { loadSettings } from "../../platform/app/settings";
 
 export const DEFAULT_STT_BASE = "https://api.siliconflow.cn";
 export const DEFAULT_STT_MODEL = "FunAudioLLM/SenseVoiceSmall";

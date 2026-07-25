@@ -92,7 +92,7 @@ export interface Settings {
   illustrationModel: string | null;
   // Voice-input STT endpoint (docs/15). base/model sync freely; the key lives in
   // credentials.json (not synced). null falls back to the built-in SiliconFlow
-  // SenseVoice defaults (see src/voice/config.ts).
+  // SenseVoice defaults (see src/ai/voice/config.ts).
   sttApiBase: string | null;
   sttModel: string | null;
   // Generate chapter notes automatically from the reader's highlights (docs/14).

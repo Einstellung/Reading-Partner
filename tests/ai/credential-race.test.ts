@@ -56,7 +56,7 @@ mock.module("@earendil-works/pi-ai/oauth", () => ({
 }));
 
 const { setImageGenKey } = await import("../../src/ai/credentials");
-const { setSttKey } = await import("../../src/voice/config");
+const { setSttKey } = await import("../../src/ai/voice/config");
 const { anthropicLogout, getValidAnthropicAuth } = await import("../../src/ai/anthropic-oauth");
 const { getValidOpenAIAuth } = await import("../../src/ai/openai-oauth");
 

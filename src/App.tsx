@@ -50,7 +50,7 @@ import { initSync, onSyncPulled } from "./platform/sync";
 import { compressImage, compressImageData, type CompressedImage } from "./ai/image-utils";
 import { isTauri, readClipboardImage } from "./platform/app/clipboard";
 import { DEFAULT_SETTINGS, loadSettings, onSettingsSaveError, saveSettings, toReasoning, type Settings } from "./platform/app/settings";
-import { buildGlossary } from "./voice";
+import { buildGlossary } from "./ai/voice";
 import {
   installFetchBridge,
   listProviders,

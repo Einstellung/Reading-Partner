@@ -6,7 +6,7 @@
 // answers the question. Prompt building is pure and unit-tested; the model call
 // is injected. On any failure the caller keeps the raw transcript.
 
-import type { ProviderId } from "../ai/providers";
+import type { ProviderId } from "../providers";
 import type { ThinkingLevel } from "@earendil-works/pi-ai";
 
 const GLOSSARY_MAX_CHARS = 300;

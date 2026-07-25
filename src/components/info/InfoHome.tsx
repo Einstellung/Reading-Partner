@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { loadSettings } from "../../platform/app/settings";
-import { buildGlossary } from "../../voice";
+import { buildGlossary } from "../../ai/voice";
 import { getInfoPipeline } from "../../info/briefing/live";
 import type { InfoPipeline, InfoSnapshot } from "../../info/briefing/pipeline";
 import { loadArticle, saveInlinedArticleHtml, todayLocal } from "../../info/briefing/store";

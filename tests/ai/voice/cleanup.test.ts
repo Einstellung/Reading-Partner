@@ -1,4 +1,4 @@
-// Unit tests for the cleanup pass (src/voice/cleanup.ts): glossary building,
+// Unit tests for the cleanup pass (src/ai/voice/cleanup.ts): glossary building,
 // the system prompt, and the degrade-to-raw fallback behavior. The model runner
 // is injected. Run: bun test.
 
@@ -9,7 +9,7 @@ import {
   cleanupTranscript,
   type CleanupModel,
   type CleanupRunner,
-} from "../../src/voice/cleanup";
+} from "../../../src/ai/voice/cleanup";
 
 const model: CleanupModel = { providerId: "anthropic", modelId: "claude", reasoning: "low" };
 

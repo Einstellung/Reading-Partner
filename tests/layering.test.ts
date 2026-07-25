@@ -6,10 +6,11 @@
 // The layers, innermost first:
 //   platform   host and storage primitives (platform/app, platform/sync).
 //              platform/app is the floor and imports nothing.
-//   capability headless services a domain calls into (ai/, fulltext/). They may
-//              use platform and each other; they must never reach up into a
-//              domain, because that is how ai/ ended up in a cycle with four of
-//              them (reading-turn assembly used to live there).
+//   capability headless services a domain calls into (ai/, ai/voice,
+//              fulltext/). They may use platform and each other; they must
+//              never reach up into a domain, because that is how ai/ ended up
+//              in a cycle with four of them (reading-turn assembly used to live
+//              there).
 //   domain     one product area each, free to use platform, capability and each
 //              other, as long as the graph stays acyclic.
 //   ui         React components (components/).
@@ -17,10 +18,10 @@
 //   entry      main.tsx and smoke/, which pick what to boot; they may import
 //              anything.
 //
-// A planned regrouping folds these directories into platform/ (done), ai/ (plus
-// voice), memory/, fulltext/, reading/ (absorbing prep, notes, figures, slides,
-// reader-embedpdf), info/ and ui/ (components). Grouping must not cost
-// the graph its resolution, so a LAYER key may name a unit inside a grouping
+// A planned regrouping folds these directories into platform/ (done), ai/
+// (done), memory/, fulltext/, reading/ (absorbing prep, notes, figures, slides,
+// reader-embedpdf), info/ and ui/ (components). Grouping must not cost the
+// graph its resolution, so a LAYER key may name a unit inside a grouping
 // directory ("platform/app") and the graph keeps a node per unit. When the
 // regrouping lands, this test needs edits to LAYER only.
 
@@ -43,6 +44,7 @@ const LAYER: Record<string, Layer> = {
   "platform/sync": "platform",
 
   ai: "capability",
+  "ai/voice": "capability",
   fulltext: "capability",
 
   figures: "domain",
@@ -53,7 +55,6 @@ const LAYER: Record<string, Layer> = {
   "reader-embedpdf": "domain",
   reading: "domain",
   slides: "domain",
-  voice: "domain",
 
   components: "ui",
   "App.tsx": "shell",
@@ -134,11 +135,12 @@ function entryOf(rel: string): string {
 // A specifier resolved to the entry under src/ it lands in, or null when it
 // leaves src/ or points at a non-source asset.
 //
-// The trap: a barrel import like "../voice" resolves to the directory src/voice,
-// not to a root-level file. Both look like a single path segment, so the
-// directory check has to be a real stat, not a count of slashes. Two segments
-// inside a grouping directory are ambiguous the same way — "reading/prep" is a
-// unit, "reading/turn" is a file of the group itself — and need the same stat.
+// The trap: a barrel import like "../memory" resolves to the directory
+// src/memory, not to a root-level file. Both look like a single path segment,
+// so the directory check has to be a real stat, not a count of slashes. Two
+// segments inside a grouping directory are ambiguous the same way —
+// "reading/prep" is a unit, "reading/turn" is a file of the group itself — and
+// need the same stat.
 function resolveEntry(fromFile: string, spec: string): string | null {
   const abs = resolve(dirname(fromFile), spec);
   const rel = relative(SRC, abs);

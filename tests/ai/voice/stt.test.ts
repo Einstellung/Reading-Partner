@@ -1,4 +1,4 @@
-// Unit tests for the STT client (src/voice/stt.ts): request URL/headers, the
+// Unit tests for the STT client (src/ai/voice/stt.ts): request URL/headers, the
 // multipart body, response parsing across the shapes providers use, and the
 // transcribe flow over an injected fetch. No network. Run: bun test.
 
@@ -9,8 +9,8 @@ import {
   parseTranscriptionResponse,
   transcribe,
   type SttFetch,
-} from "../../src/voice/stt";
-import type { SttConfig } from "../../src/voice/config";
+} from "../../../src/ai/voice/stt";
+import type { SttConfig } from "../../../src/ai/voice/config";
 
 const config: SttConfig = {
   base: "https://api.siliconflow.cn",

@@ -21,7 +21,7 @@ import {
 	transcribe,
 	type CleanupModel,
 	type SttConfig,
-} from '../../voice';
+} from '../../ai/voice';
 
 type Status = 'idle' | 'recording' | 'transcribing';
 
