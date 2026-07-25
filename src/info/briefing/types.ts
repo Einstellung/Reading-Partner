@@ -91,17 +91,3 @@ export interface TriageResult {
   outOfLane: OutOfLane[];
   filtered: Filtered[];
 }
-
-// Feedback events (append-only info-feedback.jsonl). "opened" fires from the
-// article view, "dismissed" from a card's ×, "appealed" from Filtered's
-// "Show anyway".
-export type FeedbackAction = "opened" | "dismissed" | "appealed";
-
-export interface FeedbackEvent {
-  ts: number;
-  itemId: string;
-  title: string;
-  action: FeedbackAction;
-  // The item's filtered/dismissal category when the event carries one.
-  category?: string;
-}
