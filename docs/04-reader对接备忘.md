@@ -1,5 +1,7 @@
 # reader 对接备忘
 
+> historical：本文写的是已被替换掉的 zotero/reader 引擎（现用 EmbedPDF，见 [07](./07-EmbedPDF替换调研.md)、[08](./08-EmbedPDF-spike结果.md)），接法整体不适用。仍然管用的两处：回调契约里那份标注 JSON 就是现在落盘的 schema（`src/reading/engine/convert.ts` 的 `ZoteroAnnotation`），以及"自定义字段"一节说的 `aiThreadId` 透传。
+
 壳走 `createView`（引擎只做渲染加批注的画布，工具栏侧栏全自建），不走 `createReader`。本文是实测出来的对接手册：怎么构建出能嵌的产物、怎么起、回调收到什么、有哪些坑。基于 reader commit `8cb2963`，只测了 PDF。
 
 ## view-web 构建变体
@@ -118,7 +120,7 @@ AI 星标、线程 ID 这类元数据可以直接挂在标注对象上，不需�
 
 ## 坑
 
-全部移至 [pitfall/](./pitfall/)（一坑一文件，含现象/原因/解法）。与本文相关的：01 pdf 相对路径、02 sumPrecise polyfill、03 initializedPromise、04 程序化选中不弹窗、05 onSelectAnnotations 回喂、06 宿主改删标注 API、07 image 标注膨胀、08 构建期网络依赖、10 跨 realm Uint8Array。
+全部移至 [pitfall/](./pitfall/)（一坑一文件，含现象/原因/解法）。本文相关的那批只留下还有残余价值的：02 sumPrecise polyfill、04 程序化选中不弹窗、07 image 标注膨胀、10 跨 realm Uint8Array、11 引擎就绪才能调；其余（01 相对路径、03 initializedPromise、05 onSelectAnnotations 回喂、06 宿主改删标注 API、08 构建期网络依赖、13 笔划完无浮窗坐标、17 view 包装层）随引擎一起删了。
 
 ---
 

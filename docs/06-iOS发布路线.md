@@ -1,5 +1,7 @@
 # iOS 发布路线
 
+> historical：本文的头号阻塞（zotero/reader 的 AGPL 挡 App Store、要等 CDS 授权）随引擎换成 EmbedPDF 一起消失，许可证也已改为 PolyForm-NC，末尾那封请求信不必发。实际发布流程见 [11](./11-iOS-TestFlight发布.md)、[19](./19-iOS侧载安装.md)、[18](./18-iOS-Google登录.md)。中国区、审核条款、账号那几节仍然有效。
+
 2026-07-14 调研定稿。目标:Apple 个人开发者账号,TestFlight 先行,美区公开上架,中国区暂缓。开发者无 Mac,构建全程走 GitHub Actions 的 macOS runner(公开仓库免费)。
 
 ## 最大阻塞:zotero/reader 的 AGPL 与 App Store
