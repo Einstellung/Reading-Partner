@@ -1,4 +1,4 @@
-// The sync-range predicate (src/sync/syncFs.ts): which AppData files are synced.
+// The sync-range predicate (src/platform/sync/syncFs.ts): which AppData files are synced.
 // Run: bun test.
 
 import { expect, test } from "bun:test";

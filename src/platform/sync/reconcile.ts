@@ -1,6 +1,6 @@
 // The pure heart of the sync engine: given the local files, the remote
 // manifest, and the snapshot of the last sync, decide what to upload and what to
-// download. No IO — unit-tested directly (tests/sync/reconcile.test.ts).
+// download. No IO — unit-tested directly (tests/platform/sync/reconcile.test.ts).
 //
 // A file is "locally changed" if its mtime or size differs from the snapshot
 // (or it is new). It is "remotely changed" if the manifest rev is ahead of the

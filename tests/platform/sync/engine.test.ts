@@ -1,4 +1,4 @@
-// The sync engine's pass (src/sync/engine.ts) over a fake backend + fake fs +
+// The sync engine's pass (src/platform/sync/engine.ts) over a fake backend + fake fs +
 // fake book store: push, pull, last-writer-wins, the books channel, the pulled
 // callback, and single-flight. No timers (syncNow drives a pass directly), no
 // network. Run: bun test.

@@ -20,4 +20,4 @@ useEffect(() => {
 }, [vpRef]);
 ```
 
-分页横翻模式（`src/reader-embedpdf/EmbedPdfView.tsx` 的 `PagedGestures`）靠这个拿到滚动容器跟手改 scrollLeft、锁 touch-action。
+分页横翻模式（`src/reading/engine/EmbedPdfView.tsx` 的 `PagedGestures`）靠这个拿到滚动容器跟手改 scrollLeft、锁 touch-action。

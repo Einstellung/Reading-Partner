@@ -1,4 +1,4 @@
-// Pure reconcile decisions (src/sync/reconcile.ts): which files upload vs
+// Pure reconcile decisions (src/platform/sync/reconcile.ts): which files upload vs
 // download, the rev they get, and last-writer-wins on a conflict. No IO.
 // Run: bun test.
 

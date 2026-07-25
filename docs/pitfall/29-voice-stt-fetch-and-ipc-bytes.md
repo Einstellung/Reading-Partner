@@ -10,7 +10,7 @@
 
 解法：
 
-1. STT 请求用 `cleanTauriFetch`（Tauri http 插件，走 IPC，绕开 CSP/CORS），不要用 window.fetch。任意 https 主机由 `capabilities/default.json` 的 `https://*` scope 放行。见 `src/voice/index.ts` 的 `sttFetch`。
-2. JS 侧 `new Uint8Array(await invoke<number[]>("stop_voice_recording"))` 还原字节。见 `src/voice/recorder.ts`。长录音这条数字数组偏重，90s 上限兜底。
+1. STT 请求用 `cleanTauriFetch`（Tauri http 插件，走 IPC，绕开 CSP/CORS），不要用 window.fetch。任意 https 主机由 `capabilities/default.json` 的 `https://*` scope 放行。见 `src/ai/voice/index.ts` 的 `sttFetch`。
+2. JS 侧 `new Uint8Array(await invoke<number[]>("stop_voice_recording"))` 还原字节。见 `src/ai/voice/recorder.ts`。长录音这条数字数组偏重，90s 上限兜底。
 
 相关：cpal 的 `Stream` 不是 `Send`，不能塞进共享 state 从别的命令线程碰。用独立线程持有 stream、AtomicBool 通知停止、回调把采样推进 `Arc<Mutex<Vec<f32>>>`。见 `src-tauri/src/voice.rs`。

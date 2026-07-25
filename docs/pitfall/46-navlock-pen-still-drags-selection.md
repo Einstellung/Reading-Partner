@@ -8,4 +8,4 @@
 
 解法：给 `PointerPlan` 加 `engineMayDrag`，navlock 下为 false。路由器逐指针 `stopPropagation` 掉这类指针的 **pointermove**，down 和 up 照旧放行。引擎拿到一个原地按下又抬起的指针，产生不了选区，tap 的语义原样保留。手势结束时再按 `shouldClearGestureSelection` 扫一次兜底（手势开始前就有的选区不动）。
 
-规则本身在 `src/reader-embedpdf/touch-routing.ts` 的 `planPointer`，逐指针拦截在 `TouchInputRouter` 的 `onMove`。
+规则本身在 `src/reading/engine/touch-routing.ts` 的 `planPointer`，逐指针拦截在 `TouchInputRouter` 的 `onMove`。

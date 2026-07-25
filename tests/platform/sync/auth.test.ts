@@ -1,4 +1,4 @@
-// parseIdTokenEmail (src/sync/auth.ts): pull the email claim out of an OIDC
+// parseIdTokenEmail (src/platform/sync/auth.ts): pull the email claim out of an OIDC
 // id_token without verifying it. Run: bun test.
 
 import { expect, test } from "bun:test";
