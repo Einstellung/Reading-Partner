@@ -52,7 +52,6 @@ import {
   multiTouchLatch,
   fingerLockAfterPen,
   fingerVerdict,
-  rejectsAsPalm,
   centroidOf,
   shouldClearGestureSelection,
 } from "./touch-routing";
@@ -362,10 +361,9 @@ const VERTICAL_FLING_MIN_SPEED = 0.02;
 // always gets its pointerup too, or the engine's per-page selection handler
 // keeps a stale text anchor.
 //
-// Contact-size palm rejection is currently switched off (see
-// PALM_REJECTION_ENABLED): iOS reported an ordinary fingertip as a palm, which
-// also broke the pinch rules. The palm path below stays wired for when measured
-// thresholds land, but rejectsAsPalm never fires today.
+// There is no palm rejection: iPadOS withholds touch from the page while the
+// Pencil is down and reports no usable contact geometry, so palm suppression is
+// neither possible nor needed here (docs/pitfall/39).
 //
 // Vertical (continuous) mode — the main path: a finger that routePointer says
 // should scroll is driven here (pause the engine's pointer pipeline, capture the
@@ -404,12 +402,9 @@ function TouchInputRouter({
 
     const attach = (el: HTMLDivElement): (() => void) => {
       // --- contact bookkeeping (shared by both layout machines) -----------
-      // Live finger contacts, palms excluded, in arrival order. Its size is the
-      // finger count the gesture rules run on.
+      // Live finger contacts in arrival order. Its size is the finger count the
+      // gesture rules run on.
       const fingers = new Map<number, { x: number; y: number }>();
-      // Contacts classified as palm/elbow at pointerdown: swallowed whole and
-      // never counted as fingers. Empty while palm rejection is off.
-      const palms = new Set<number>();
       // Fingers whose pointerdown the engine saw, so their pointerup is let
       // through even if the gesture has since been taken over.
       const engineSaw = new Set<number>();
@@ -578,8 +573,8 @@ function TouchInputRouter({
         vPhase = "idle";
         vId = null;
       };
-      // The one-finger gesture loses the glass (a second finger, a pen, a palm
-      // promotion). Both machines go idle and the engine gets its pipeline back
+      // The one-finger gesture loses the glass (a second finger, a pen). Both
+      // machines go idle and the engine gets its pipeline back
       // — from here on the fingers are blocked one pointer at a time, which
       // leaves a pen free to keep drawing.
       const suspendFingerGesture = () => {
@@ -709,20 +704,18 @@ function TouchInputRouter({
         publishTouchDebug({
           contacts: [...contacts.values()],
           fingers: fingers.size,
-          palms: palms.size,
           mode: touchGestureMode(fingers.size),
           multi: multiTouch,
           penLock,
           penSeen: ctx.current.penSeen,
         });
       };
-      const trackContact = (e: PointerEvent, palm: boolean) => {
+      const trackContact = (e: PointerEvent) => {
         contacts.set(e.pointerId, {
           id: e.pointerId,
           type: e.pointerType,
           width: e.width,
           height: e.height,
-          palm,
         });
       };
 
@@ -739,7 +732,7 @@ function TouchInputRouter({
       // so the hand a user writes with cannot interrupt the stroke.
       const onPenDown = (e: PointerEvent) => {
         ctx.current.penSeen = true;
-        trackContact(e, false);
+        trackContact(e);
         cancelFling();
         if (fingers.size > 0) suspendFingerGesture();
         penLock = fingerLockAfterPen(penLock, true, fingers.size);
@@ -753,15 +746,8 @@ function TouchInputRouter({
           return;
         }
         if (e.pointerType !== "touch") return;
-        if (rejectsAsPalm({ width: e.width, height: e.height }, ctx.current.penSeen)) {
-          palms.add(e.pointerId);
-          trackContact(e, true);
-          swallow(e);
-          publishDebug();
-          return;
-        }
         fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-        trackContact(e, false);
+        trackContact(e);
         const wasMulti = multiTouch;
         multiTouch = multiTouchLatch(multiTouch, fingers.size);
         publishDebug();
@@ -798,17 +784,11 @@ function TouchInputRouter({
           return;
         }
         if (e.pointerType !== "touch") return;
-        if (palms.has(e.pointerId)) {
-          trackContact(e, true);
-          swallow(e);
-          publishDebug();
-          return;
-        }
         const f = fingers.get(e.pointerId);
         if (!f) return; // a contact that landed before this listener existed
         f.x = e.clientX;
         f.y = e.clientY;
-        trackContact(e, false);
+        trackContact(e);
         publishDebug();
         const mode = touchGestureMode(fingers.size);
         if (fingerVerdict(mode, multiTouch, penLock) === "swallow") {
@@ -827,11 +807,6 @@ function TouchInputRouter({
         const wasContact = contacts.delete(e.pointerId);
         if (e.pointerType !== "touch") {
           if (wasContact) publishDebug();
-          return;
-        }
-        if (palms.delete(e.pointerId)) {
-          swallow(e);
-          publishDebug();
           return;
         }
         const known = fingers.delete(e.pointerId);

@@ -42,3 +42,4 @@
 - [36-appdata-root-not-created-first-write](./36-appdata-root-not-created-first-write.md) — iOS 首装首跑第一个写入者报 os error 2,数据根目录改由 Rust setup create_dir_all 元能力保障,前端不再各自兜底
 - [37-embedpdf-page-touch-action-none-all-modes](./37-embedpdf-page-touch-action-none-all-modes.md) — EmbedPDF 每页 div 所有模式都 touch-action:none,页面上原生触摸滚动不可能;笔手路由必须在 viewport 容器 capture 阶段按 pointerType 逐事件做
 - [38-embedpdf-pinch-selection-global-pause](./38-embedpdf-pinch-selection-global-pause.md) — 缩放走原生 touch 通道、选区 handler 不分 pointerId、pause 是全局的;多指/手掌/笔占用期间要逐指针 stopPropagation 而不是 pause
+- [39-ios-no-web-palm-rejection](./39-ios-no-web-palm-rejection.md) — iPad 上笔手互斥由系统强制且关不掉,接触面积也拿不到;web 层的掌抑制做不了也不用做,按面积判掌反而会掐死 pinch

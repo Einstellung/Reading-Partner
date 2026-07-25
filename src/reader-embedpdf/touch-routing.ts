@@ -97,8 +97,13 @@ export function multiTouchLatch(prev: boolean, fingers: number): boolean {
 
 // The pen-priority latch. A stylus outranks every finger: the moment it lands,
 // the fingers already resting on the glass (the writing hand) are dead — no
-// scroll, no fling, no engine events — until every one of them lifts. Without
-// this the hand a user writes with keeps interrupting the stroke.
+// scroll, no fling, no engine events — until every one of them lifts.
+//
+// On iPadOS this rarely fires: the system holds back touch events while a
+// Pencil is down (docs/pitfall/39), so the resting hand mostly never reaches
+// the page. It stays for the boundary the system does deliver — a pen landing
+// during a finger scroll already in flight — and for stylus platforms that have
+// no such rule.
 export function fingerLockAfterPen(prev: boolean, penDown: boolean, fingers: number): boolean {
   if (penDown) return fingers > 0;
   if (fingers === 0) return false;
@@ -132,58 +137,11 @@ export function centroidOf(points: readonly { x: number; y: number }[]): { x: nu
   return { x: x / points.length, y: y / points.length };
 }
 
-// --- palm / elbow rejection -------------------------------------------------
-
-// A pointerdown's contact patch, in CSS px (PointerEvent width/height).
-export interface ContactSize {
-  width: number;
-  height: number;
-}
-
-// Palm rejection is OFF. On-device measurement killed the thresholds below:
-// iOS WKWebView reports a contact patch far larger than the 45px guess, so a
-// single ordinary fingertip came back as a palm (probe: palm 1 / finger 0).
-// That did more than swallow fingers — with both pinch fingers classified as
-// palms the finger count never reached two, so the pinch rules never armed and
-// the "no selection while zooming" guard did nothing: zooming on the iPad still
-// dragged out a blue text selection.
-//
-// The classifier, its thresholds and its tests stay put; only the router's use
-// of them is gated here. Flip this back on once PALM_CONTACT_PX is set from
-// measured numbers (read them off the Touch debug overlay's per-contact
-// width x height, which survives lifting the finger).
-//
-// Not covered by this at all: five fingers at once and an elbow on the glass.
-// Neither reaches us — iOS eats them as a system gesture / accidental-contact
-// filter (probe shows finger 0 / palm 0). Nothing to handle on our side.
-export const PALM_REJECTION_ENABLED: boolean = false;
-
-// Contact patch (CSS px) at or above which a touch is a palm, not a finger.
-// A fingertip on an iPad reports roughly 20-30px; a palm or forearm is much
-// wider. Tune against the on-device Touch debug overlay.
-export const PALM_CONTACT_PX = 45;
-// Stricter once a stylus is in play: with a pen on the glass a large contact is
-// the writing hand, never a deliberate finger gesture.
-export const PALM_CONTACT_PX_WITH_PEN = 32;
-
-// Contacts reporting no geometry at all (0, or the 1x1 some engines hardcode)
-// carry no information — never call those a palm.
-function hasGeometry(size: ContactSize): boolean {
-  return size.width > 1 && size.height > 1;
-}
-
-export function isPalmContact(size: ContactSize, penSeen: boolean): boolean {
-  if (!hasGeometry(size)) return false;
-  const limit = penSeen ? PALM_CONTACT_PX_WITH_PEN : PALM_CONTACT_PX;
-  return size.width >= limit || size.height >= limit;
-}
-
-// What the router asks: is this contact to be thrown away as a palm? The
-// classifier's verdict, but only while palm rejection is switched on — which it
-// is not (see PALM_REJECTION_ENABLED). Every contact reaches the finger rules.
-export function rejectsAsPalm(size: ContactSize, penSeen: boolean): boolean {
-  return PALM_REJECTION_ENABLED && isPalmContact(size, penSeen);
-}
+// There is no palm rejection here, and there will not be: see
+// docs/pitfall/39. iPadOS makes pen and touch mutually exclusive at the system
+// level (the web page is not sent the finger contacts while the Pencil is
+// down), and iOS Safari does not report a contact patch a page could measure
+// anyway. Every contact that reaches this module is a real one.
 
 // --- stray selection cleanup ------------------------------------------------
 

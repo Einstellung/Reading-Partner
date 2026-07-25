@@ -9,13 +9,8 @@ import {
   multiTouchLatch,
   fingerLockAfterPen,
   fingerVerdict,
-  isPalmContact,
-  rejectsAsPalm,
   centroidOf,
   shouldClearGestureSelection,
-  PALM_CONTACT_PX,
-  PALM_CONTACT_PX_WITH_PEN,
-  PALM_REJECTION_ENABLED,
   type PointerKind,
   type ToolKind,
 } from "./touch-routing";
@@ -176,53 +171,15 @@ test("fingerVerdict: only a plain one-finger gesture reaches the engine", () => 
   expect(fingerVerdict("single", false, true)).toBe("swallow");
 });
 
-// --- palm rejection ---------------------------------------------------------
+// --- two-finger gesture arming ----------------------------------------------
 
-test("isPalmContact: a fingertip-sized patch is never a palm", () => {
-  expect(isPalmContact({ width: 24, height: 26 }, false)).toBe(false);
-  expect(isPalmContact({ width: 24, height: 26 }, true)).toBe(false);
-});
-
-test("isPalmContact: a wide patch is a palm, and the pen makes the bar lower", () => {
-  expect(isPalmContact({ width: PALM_CONTACT_PX, height: 20 }, false)).toBe(true);
-  expect(isPalmContact({ width: PALM_CONTACT_PX_WITH_PEN, height: 20 }, false)).toBe(false);
-  expect(isPalmContact({ width: PALM_CONTACT_PX_WITH_PEN, height: 20 }, true)).toBe(true);
-  expect(isPalmContact({ width: 20, height: PALM_CONTACT_PX }, false)).toBe(true);
-});
-
-test("isPalmContact: engines that report no contact geometry never yield a palm", () => {
-  expect(isPalmContact({ width: 0, height: 0 }, true)).toBe(false);
-  expect(isPalmContact({ width: 1, height: 1 }, true)).toBe(false);
-});
-
-test("palm rejection is off: the thresholds are unverified on device", () => {
-  expect(PALM_REJECTION_ENABLED).toBe(false);
-});
-
-test("rejectsAsPalm: nothing is thrown away while rejection is off", () => {
-  // The exact contact iOS reports for one ordinary fingertip: over the guessed
-  // threshold, so the classifier calls it a palm — and the router must not.
-  const wide = { width: 60, height: 60 };
-  expect(isPalmContact(wide, false)).toBe(true);
-  expect(rejectsAsPalm(wide, false)).toBe(false);
-  expect(rejectsAsPalm(wide, true)).toBe(false);
-  expect(rejectsAsPalm({ width: 24, height: 26 }, false)).toBe(false);
-});
-
-test("rejectsAsPalm off keeps two contacts counting as two fingers (pinch arms)", () => {
-  // The regression this fixes: both pinch fingers were classified as palms, the
-  // finger count never reached 2, so the pinch rules — and with them the
-  // no-selection-while-zooming guard — never ran.
-  const contacts = [
-    { width: 58, height: 58 },
-    { width: 62, height: 55 },
-  ];
-  const fingers = contacts.filter((c) => !rejectsAsPalm(c, false)).length;
-  expect(fingers).toBe(2);
-  expect(touchGestureMode(fingers)).toBe("pinch");
-  expect(fingerVerdict(touchGestureMode(fingers), multiTouchLatch(false, fingers), false)).toBe(
-    "swallow",
-  );
+test("two contacts are two fingers: the pinch arms and swallows the pointers", () => {
+  // Every touch that reaches the router counts. Nothing is filtered by contact
+  // size — see docs/pitfall/39 — so a pinch always reaches the pinch rules,
+  // which is what keeps a zoom from dragging out a text selection.
+  const mode = touchGestureMode(2);
+  expect(mode).toBe("pinch");
+  expect(fingerVerdict(mode, multiTouchLatch(false, 2), false)).toBe("swallow");
 });
 
 // --- pan / selection helpers ------------------------------------------------
