@@ -19,6 +19,16 @@ import { loadSettings, toReasoning } from "../../../platform/app/settings";
 import { appendMessage, createThread, getThread, loadThreads, patchThreadMessage } from "../../../platform/app/threads";
 import { buildLiveCompanionTools } from "../../../info/sources/source-live";
 import { companionToolStatusLabel } from "../../../info/companion/companion-tools";
+import {
+  BRIEFING_CARD_ID,
+  OPENING_KICKOFF,
+  briefingJobUpdate,
+  briefingProgressCard,
+  infoBookId,
+  profileAppliedNote,
+  sourceAddedNote,
+  type BriefingJob,
+} from "../../../info/companion/call";
 import { addSource, hasSources } from "../../../info/sources/source-store";
 import { saveProfile } from "../../../memory/profile";
 import { getInfoPipeline } from "../../../info/briefing/live";
@@ -32,7 +42,7 @@ import {
   insertBeforeLast,
   nextCardId,
   patchCardPayload,
-  rehydrateParts,
+  rehydrateMessage,
   toPersistedCardPart,
   upsertCardRow,
   type CardAction,
@@ -40,10 +50,8 @@ import {
 import type { ComposerVoice } from "../chat/chat";
 import type { ChatMessage } from "../../../ai/providers";
 import type { InfoPipeline } from "../../../info/briefing/pipeline";
-import type { Briefing } from "../../../info/briefing/types";
 import type { ProbeConfirmCardData, ProfileUpdateCardData } from "../../../info/briefing/cards";
 import type { ThreadMessage as UiMessage } from "../common/types";
-import type { ThreadMessage as StoredMessage } from "../../../platform/app/threads";
 
 export interface InfoCallAnchor {
   // "briefing" for the briefing-level thread, or the item id for an article, or
@@ -61,62 +69,6 @@ export interface InfoCallAnchor {
   mode?: "chat" | "add-source";
   // First-run onboarding: the AI opens the conversation itself.
   onboarding?: boolean;
-}
-
-function bookIdFor(dateKey: string): string {
-  return `info-${dateKey}`;
-}
-
-const OPENING_KICKOFF = "(The user just opened onboarding — greet them and begin.)";
-
-// The one first-briefing card's stable id: the progress card, then in place the
-// ready or failed card, all address this id through upsertCardRow.
-const BRIEFING_CARD_ID = "briefing";
-
-// The three briefing jobs the one card tracks: "first" is the onboarding first
-// briefing, "full" a user-requested full regeneration (both re-collect + triage),
-// "retriage" a re-sort of today's cached items with the current profile.
-type BriefingJob = "first" | "retriage" | "full";
-
-// Progress-card heading per job; "first" keeps the onboarding default copy.
-function progressTitle(job: BriefingJob): string | undefined {
-  if (job === "retriage") return "Re-running today's triage";
-  if (job === "full") return "Regenerating today's briefing";
-  return undefined;
-}
-
-// Ready-card heading and note per job; "first" keeps the onboarding default copy.
-function readyCopy(job: BriefingJob): { title?: string; note?: string } {
-  if (job === "retriage") return { title: "Briefing updated", note: "Re-triaged today's items with your updated profile." };
-  if (job === "full") return { title: "Briefing regenerated", note: "Re-collected every source and re-triaged." };
-  return {};
-}
-
-// The note injected into the thread when a job settles, so the AI's next turn
-// answers from the new briefing rather than the one it still has in context.
-function completionNote(job: BriefingJob, b: Briefing): string {
-  const worth = b.mustRead.length + b.outOfLane.length;
-  const verb = job === "retriage" ? "re-sorted" : job === "full" ? "regenerated" : "generated";
-  return (
-    `Today's briefing has been ${verb}. Overview: ${b.overview} — worth your time: ${worth}, ` +
-    `one-liners: ${b.oneLiners.length}, filtered: ${b.filtered.length}. Answer from this updated ` +
-    `briefing now, not the earlier one.`
-  );
-}
-
-function failureNote(job: BriefingJob, error: string | null): string {
-  const verb = job === "retriage" ? "re-triage" : "regeneration";
-  return `The briefing ${verb} failed: ${error || "unknown error"}.`;
-}
-
-// Persisted thread message -> live UI message on reopen. A stored card message
-// rehydrates its parts (re-rendered through the registry by kind); an old plain
-// message (no parts) stays text-only.
-function rehydrateUiMessage(m: StoredMessage): UiMessage {
-  if (m.parts && m.parts.length) {
-    return { role: m.role, text: m.text, ts: m.ts, parts: rehydrateParts(m.parts) };
-  }
-  return { role: m.role, text: m.text, ts: m.ts };
 }
 
 export function InfoCall({
@@ -140,7 +92,7 @@ export function InfoCall({
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
-  const bookId = bookIdFor(dateKey);
+  const bookId = infoBookId(dateKey);
 
   // Latest messages, mirrored to a ref so the (id-keyed) card dispatcher can look
   // up a card's payload without being torn down and rebuilt on every delta.
@@ -167,6 +119,19 @@ export function InfoCall({
     });
   }, []);
 
+  // A synthetic turn injected into the thread outside an AI reply: a card gesture
+  // reporting itself, or a settled briefing job re-anchoring the AI. Shown at
+  // once, and written to disk unless the outcome is in-session only.
+  const noteTurn = useCallback(
+    (text: string, opts?: { role?: "user" | "ai"; persist?: boolean }) => {
+      const role = opts?.role ?? "user";
+      const ts = Date.now();
+      setMessages((prev) => [...prev, { role, text, ts }]);
+      if (opts?.persist !== false) appendMessage(bookId, anchor.threadId, { role, text, ts });
+    },
+    [bookId, anchor.threadId],
+  );
+
   // Load (or start) the anchor's thread whenever it changes; open the chat
   // window. In onboarding, kick the AI's opening turn once the empty thread loads.
   useEffect(() => {
@@ -181,7 +146,7 @@ export function InfoCall({
       if (!live) return;
       let thread = getThread(bookId, anchor.threadId);
       if (!thread) thread = createThread(bookId, "info", anchor.threadId);
-      setMessages(thread.messages.map(rehydrateUiMessage));
+      setMessages(thread.messages.map(rehydrateMessage));
       // Onboarding: the AI opens the conversation itself when the thread is empty.
       // Gated on the on-disk thread being empty, so a reopened conversation never
       // re-greets.
@@ -198,78 +163,39 @@ export function InfoCall({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookId, anchor.threadId]);
 
-  // First-briefing generation status (add-source mode): reflect the singleton
-  // pipeline's progress and drop in the ready/failed card when it finishes. The
-  // one briefing card is addressed by BRIEFING_CARD_ID through the patchPart
-  // channel (upsertCardRow) across its whole progress -> ready/failed lifecycle.
+  // Briefing generation status: reflect the singleton pipeline's progress and
+  // drop in the ready/failed card when it finishes. The one briefing card is
+  // addressed by BRIEFING_CARD_ID through the patchPart channel (upsertCardRow)
+  // across its whole progress -> ready/failed lifecycle; what that card shows,
+  // and the note the outcome injects, is decided in info/companion/call.
   useEffect(() => {
     const p = getInfoPipeline();
     pipelineRef.current = p;
     const unsub = p.subscribe(() => {
       if (!awaitingBriefing.current) return;
-      const s = p.snapshot();
-      const job = lastJobRef.current;
-      if (s.running) {
-        setMessages((prev) =>
-          upsertCardRow(prev, BRIEFING_CARD_ID, {
-            kind: "briefing-progress",
-            phase: s.phase === "fetching" ? "fetching" : "triaging",
-            collect: s.collect,
-            triage: s.activity
-              ? {
-                  startedAt: s.activity.startedAt,
-                  chars: s.activity.chars,
-                  attempt: s.activity.attempt,
-                  attempts: s.activity.attempts,
-                }
-              : null,
-            title: progressTitle(job),
-          }),
-        );
-      } else {
-        awaitingBriefing.current = false;
-        if (s.briefing) {
-          const b = s.briefing;
-          const ready = {
-            kind: "briefing-ready" as const,
-            date: b.date,
-            worth: b.mustRead.length + b.outOfLane.length,
-            oneLiners: b.oneLiners.length,
-            filtered: b.filtered.length,
-            ...readyCopy(job),
-          };
-          setMessages((prev) => upsertCardRow(prev, BRIEFING_CARD_ID, ready));
-          // Ready is a durable outcome: persist it so a reopen shows the briefing
-          // exists (the progress card it replaced was never persisted).
-          appendMessage(bookId, anchor.threadId, {
-            role: "ai",
-            text: "",
-            ts: Date.now(),
-            parts: [toPersistedCardPart(BRIEFING_CARD_ID, ready)],
-          });
-          // Re-anchor the AI: inject the new overview + tier counts as a thread
-          // note (persisted like the ready card) so the next turn answers from the
-          // fresh briefing, not the one still in its context.
-          const note = completionNote(job, b);
-          const ts = Date.now();
-          setMessages((prev) => [...prev, { role: "user", text: note, ts }]);
-          appendMessage(bookId, anchor.threadId, { role: "user", text: note, ts });
-        } else {
-          // Failure is in-session only (retry needs the live pipeline); not persisted.
-          setMessages((prev) =>
-            upsertCardRow(prev, BRIEFING_CARD_ID, {
-              kind: "briefing-failed",
-              message: s.error || "The briefing could not be generated.",
-            }),
-          );
-          // Tell the AI the run failed so it doesn't claim success next turn.
-          // In-session only, matching the failed card (a reopen shouldn't replay it).
-          setMessages((prev) => [...prev, { role: "user", text: failureNote(job, s.error), ts: Date.now() }]);
-        }
+      const update = briefingJobUpdate(lastJobRef.current, p.snapshot());
+      setMessages((prev) => upsertCardRow(prev, BRIEFING_CARD_ID, update.card));
+      if (update.status === "running") return;
+      awaitingBriefing.current = false;
+      // Ready is a durable outcome: persist the card so a reopen shows the
+      // briefing exists (the progress card it replaced was never persisted). A
+      // failure stays in-session — retry needs the live pipeline — and so does
+      // its note, so a reopen doesn't replay it.
+      const durable = update.status === "ready";
+      if (durable) {
+        appendMessage(bookId, anchor.threadId, {
+          role: "ai",
+          text: "",
+          ts: Date.now(),
+          parts: [toPersistedCardPart(BRIEFING_CARD_ID, update.card)],
+        });
       }
+      // Re-anchor the AI on the outcome, so its next turn answers from the fresh
+      // briefing rather than the one still in its context (or knows the run died).
+      noteTurn(update.note, { persist: durable });
     });
     return unsub;
-  }, [bookId, anchor.threadId]);
+  }, [bookId, anchor.threadId, noteTurn]);
 
   // Start (or retry) a briefing job through the one BRIEFING_CARD_ID card: "first"
   // collects + triages (onboarding); "full" does the same on the user's explicit
@@ -281,15 +207,7 @@ export function InfoCall({
     pipelineRef.current = p;
     lastJobRef.current = job;
     awaitingBriefing.current = true;
-    setMessages((prev) =>
-      upsertCardRow(prev, BRIEFING_CARD_ID, {
-        kind: "briefing-progress",
-        phase: job === "retriage" ? "triaging" : "fetching",
-        collect: null,
-        triage: null,
-        title: progressTitle(job),
-      }),
-    );
+    setMessages((prev) => upsertCardRow(prev, BRIEFING_CARD_ID, briefingProgressCard(job, null)));
     if (job === "retriage") void p.retriage();
     else void p.generate();
   }
@@ -339,15 +257,12 @@ export function InfoCall({
       });
       onSourcesChanged?.();
       // reply
-      const note = `Added "${card.descriptor.name}" to my sources.`;
-      const ts = Date.now();
-      setMessages((prev) => [...prev, { role: "user", text: note, ts }]);
-      appendMessage(bookId, anchor.threadId, { role: "user", text: note, ts });
+      noteTurn(sourceAddedNote(card));
       if (!had) runBriefingJob("first");
     },
     // runBriefingJob reads only refs, so its per-render identity is harmless.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [bookId, anchor.threadId, onSourcesChanged],
+    [bookId, anchor.threadId, onSourcesChanged, noteTurn],
   );
 
   // Insert an update_profile draft card and persist it (profile-update is durable
@@ -386,12 +301,9 @@ export function InfoCall({
       patchThreadMessage(bookId, anchor.threadId, found.ts, {
         parts: [toPersistedCardPart(cardId, applied)],
       });
-      const note = `Applied the profile update: ${card.summary}.`;
-      const ts = Date.now();
-      setMessages((prev) => [...prev, { role: "user", text: note, ts }]);
-      appendMessage(bookId, anchor.threadId, { role: "user", text: note, ts });
+      noteTurn(profileAppliedNote(card));
     },
-    [bookId, anchor.threadId],
+    [bookId, anchor.threadId, noteTurn],
   );
 
   // The card action dispatcher wired into the message list. Stable across
@@ -416,13 +328,9 @@ export function InfoCall({
         case "local":
           setMessages((prev) => patchCardPayload(prev, cardId, action.patch));
           break;
-        case "reply": {
-          const role = action.role ?? "user";
-          const ts = Date.now();
-          setMessages((prev) => [...prev, { role, text: action.text, ts }]);
-          appendMessage(bookId, anchor.threadId, { role, text: action.text, ts });
+        case "reply":
+          noteTurn(action.text, { role: action.role });
           break;
-        }
         case "resolve":
           // Reserved for future human-in-the-loop cards; no card dispatches it yet.
           break;
@@ -430,7 +338,7 @@ export function InfoCall({
     },
     // handleAddFromCard/handleApplyProfile are stable; runBriefingJob reads refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [handleAddFromCard, handleApplyProfile, onOpenBriefing, bookId, anchor.threadId],
+    [handleAddFromCard, handleApplyProfile, onOpenBriefing, noteTurn],
   );
 
   // The add-source agent turn: probe/trial/add tools, tool trace, confirm cards.

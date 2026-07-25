@@ -12,7 +12,11 @@
 // not fold a card into text.
 
 import type { InfoCard } from "../../../info/briefing/cards";
-import type { PersistedCardPayload, PersistedPart } from "../../../platform/app/threads";
+import type {
+  PersistedCardPayload,
+  PersistedPart,
+  ThreadMessage as StoredMessage,
+} from "../../../platform/app/threads";
 import type { ThreadMessage, ToolStatus } from "../common/types";
 
 // The domain payload a card renders. Payload types stay in the domain layer
@@ -203,4 +207,14 @@ export function rehydrateParts(parts: PersistedPart[]): ChatPart[] {
       ? { type: "card", id: p.id, card: p.card as unknown as CardPayload }
       : { type: "text", text: p.text },
   );
+}
+
+// Persisted thread message -> live UI message on reopen. A stored card message
+// rehydrates its parts; a message written before parts existed (or one carrying
+// an empty array) stays text-only, so the row falls back to `text` alone.
+export function rehydrateMessage(m: StoredMessage): ThreadMessage {
+  if (m.parts && m.parts.length) {
+    return { role: m.role, text: m.text, ts: m.ts, parts: rehydrateParts(m.parts) };
+  }
+  return { role: m.role, text: m.text, ts: m.ts };
 }

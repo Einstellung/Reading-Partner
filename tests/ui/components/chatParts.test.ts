@@ -12,6 +12,7 @@ import {
   messageToParts,
   nextCardId,
   patchCardPayload,
+  rehydrateMessage,
   rehydrateParts,
   toPersistedCardPart,
   upsertCardRow,
@@ -19,6 +20,7 @@ import {
   type ChatPart,
 } from "../../../src/ui/components/chat/chatParts";
 import type { ThreadMessage } from "../../../src/ui/components/common/types";
+import type { ThreadMessage as StoredMessage } from "../../../src/platform/app/threads";
 import type { ProbeConfirmCardData } from "../../../src/info/briefing/cards";
 
 const probe = (added?: boolean): ProbeConfirmCardData => ({
@@ -130,4 +132,31 @@ test("toPersistedCardPart -> JSON -> rehydrateParts round-trips a card", () => {
     kind: "probe-confirm",
     added: true,
   });
+});
+
+test("rehydrateMessage restores a stored card row on thread reopen", () => {
+  const stored: StoredMessage = {
+    role: "ai",
+    text: "",
+    ts: 5,
+    parts: JSON.parse(JSON.stringify([toPersistedCardPart("c1", probe(true))])),
+  };
+  const live = rehydrateMessage(stored);
+  expect(live).toMatchObject({ role: "ai", text: "", ts: 5 });
+  expect(live.parts?.[0]).toMatchObject({ type: "card", id: "c1" });
+  expect((live.parts?.[0] as Extract<ChatPart, { type: "card" }>).card.kind).toBe("probe-confirm");
+});
+
+test("rehydrateMessage leaves a plain (pre-parts) message text-only", () => {
+  // Written before parts existed: no parts key at all.
+  expect(rehydrateMessage({ role: "user", text: "hello", ts: 3 })).toEqual({
+    role: "user",
+    text: "hello",
+    ts: 3,
+  });
+  // An empty array is the same thing — the row must not claim to have parts, or
+  // messageToParts would treat it as authoritative and render nothing.
+  const empty = rehydrateMessage({ role: "ai", text: "hi", ts: 4, parts: [] });
+  expect(empty.parts).toBeUndefined();
+  expect(messageToParts(empty)).toEqual([{ type: "text", text: "hi" }]);
 });
