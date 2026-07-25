@@ -50,3 +50,5 @@
 - [44-finger-draw-heuristic-kills-scrolling](./44-finger-draw-heuristic-kills-scrolling.md) — "没见过笔就让手指画"让选了标注工具的手指在 vertical 下彻底滑不动(paged 靠边缘滑还能翻页,像只坏了一半);删掉启发式,改成默认关闭的 fingerDraw 设置项
 - [45-vertical-band-cannot-move-scroll-content](./45-vertical-band-cannot-move-scroll-content.md) — 平移滚动内容会改可滚溢出区,浏览器夹紧 scrollTop 正好抵消掉偏移;纵向橡皮筋要平移滚动容器自己,外层包裹 div 负责裁切和补色
 - [46-navlock-pen-still-drags-selection](./46-navlock-pen-still-drags-selection.md) — navlock 下笔的 move 仍放行给引擎,滚动正常但照样拖出选区;逐指针拦 move、放行 down/up,保住 tap
+- [47-asc-key-role-cloud-signing](./47-asc-key-role-cloud-signing.md) — CI 云签名要 Admin 权限的 App Store Connect API key,App Manager 在 export 阶段被拒;试探权限不能用坏 payload(校验在鉴权前,一律 409)
+- [48-tauri-ios-signing-log-noise](./48-tauri-ios-signing-log-noise.md) — tauri ios build 的"找不到证书"警告和 `Apple Distribution: Tauri (unset)` 证书都是 Tauri 自己的噪音,签名成没成看 export 阶段

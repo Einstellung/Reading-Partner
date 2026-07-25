@@ -17,6 +17,12 @@
 # key authenticates the TestFlight upload. No certificates or profiles are
 # stored in the repository. See docs/11-iOS-TestFlight发布.md for the
 # one-time Apple-side setup.
+#
+# The key must have been generated with Admin access. Apple refuses
+# cloud-managed distribution certificates to App Manager and Developer keys,
+# and the export step then dies with "Cloud signing permission error" after a
+# successful archive. A key's access level cannot be edited after generation.
+# See docs/pitfall/47-asc-key-role-cloud-signing.md.
 
 name: iOS TestFlight
 

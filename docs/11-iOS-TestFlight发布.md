@@ -25,7 +25,7 @@ appstoreconnect.apple.com → My Apps → 加号 → New App。
 
 appstoreconnect.apple.com → Users and Access → Integrations → App Store Connect API → Team Keys → Generate API Key。
 
-- Name 随意,Access 选 **App Manager**(CI 云签名要自动建分发证书,Developer 权限可能不够)。
+- Name 随意,Access 必须选 **Admin**。云签名要现建 cloud-managed 分发证书,Apple 只放行 Admin 的 key,App Manager 和 Developer 会在 export 阶段报 `Cloud signing permission error`(见 docs/pitfall/47)。key 生成后 access 改不了,选错只能撤销重建。
 - 记下页面顶部的 **Issuer ID** 和这把 key 的 **Key ID**。
 - 下载 `AuthKey_<Key ID>.p8`,只有一次下载机会,存好。
 
@@ -49,6 +49,7 @@ Actions → iOS TestFlight → Run workflow(main 分支)。20-40 分钟。
 - 版本号读 `src-tauri/tauri.conf.json` 的 `version`,build number 是 run number,每跑一次自动 +1。
 - 首跑时云签名会自动创建 Apple Distribution 证书和 provisioning profile,不用手动建。
 - 失败看对应 step 日志;只要 ipa 已产出,即使上传失败也会留成 artifact。
+- 日志里的 `No code signing certificates found` 警告和 `Apple Distribution: Tauri (unset)` 证书都是 Tauri 自己的噪音,不是配置错(见 docs/pitfall/48)。签名成没成看 export 阶段。
 
 ## 6. TestFlight 配置(一次性)
 
