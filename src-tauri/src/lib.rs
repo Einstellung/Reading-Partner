@@ -1,3 +1,4 @@
+mod atomic_fs;
 mod migrate;
 mod oauth_callback;
 // Voice capture records the mic in Rust via cpal (WebKitGTK's getUserMedia is
@@ -11,8 +12,10 @@ mod voice;
 // routed through Rust to bypass CORS), opener (open the system browser for OAuth),
 // clipboard-manager (read pasted images on WebKitGTK, whose DOM paste event drops
 // image data), deep-link (receive the Google iOS OAuth custom-scheme redirect),
-// os (platform detection to fork the OAuth flow). Custom command: the one-shot
-// OAuth loopback listener (desktop-only in practice; registered everywhere).
+// os (platform detection to fork the OAuth flow). Custom commands: the one-shot
+// OAuth loopback listener (desktop-only in practice; registered everywhere) and
+// the atomic data-file writer (atomic_fs), which the fs plugin has no equivalent
+// for.
 //
 // mobile_entry_point generates the entry the iOS/Android wrapper calls; it is
 // inert on desktop, where main.rs calls run() directly.
@@ -33,6 +36,8 @@ pub fn run() {
     let builder = builder
         .manage(voice::VoiceState::default())
         .invoke_handler(tauri::generate_handler![
+            atomic_fs::write_text_file_atomic,
+            atomic_fs::quarantine_file,
             oauth_callback::start_oauth_callback_listener,
             voice::start_voice_recording,
             voice::stop_voice_recording,
@@ -40,6 +45,8 @@ pub fn run() {
         ]);
     #[cfg(mobile)]
     let builder = builder.invoke_handler(tauri::generate_handler![
+        atomic_fs::write_text_file_atomic,
+        atomic_fs::quarantine_file,
         oauth_callback::start_oauth_callback_listener
     ]);
 

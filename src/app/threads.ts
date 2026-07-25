@@ -11,8 +11,8 @@ import {
   readFile,
   readTextFile,
   writeFile,
-  writeTextFile,
 } from "@tauri-apps/plugin-fs";
+import { writeTextAtomic } from "./atomic-fs";
 
 // A durable message part (the persisted projection of the UI's ChatPart, in
 // src/components/chatParts.ts). Only durable parts reach disk: text, and a card
@@ -137,9 +137,7 @@ export async function readThreadImages(
 async function writeNow(key: string): Promise<void> {
   dirty.delete(key);
   const threads = cache.get(key) ?? {};
-  await writeTextFile(`threads-${key}.json`, JSON.stringify({ threads }, null, 2), {
-    baseDir: BaseDirectory.AppData,
-  });
+  await writeTextAtomic(`threads-${key}.json`, JSON.stringify({ threads }, null, 2));
 }
 
 let pagehideBound = false;

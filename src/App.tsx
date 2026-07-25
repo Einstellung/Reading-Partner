@@ -8,6 +8,7 @@ import {
   type ViewState,
   type ViewStats,
 } from "./app/reader-contract";
+import { onCorruptFile } from "./app/atomic-fs";
 import { getViewState, hashPath, saveViewState, withClassroom } from "./app/storage";
 import { importBook, libraryHas, readLibraryBook } from "./app/library";
 import { migrateBookLive } from "./app/migrate";
@@ -25,6 +26,7 @@ import {
 import {
   ANNOTATION_COLORS,
   deleteAnnotations,
+  dropAnnotationCache,
   loadAnnotations,
   onSaveError,
   saveAnnotations,
@@ -459,9 +461,20 @@ export default function App() {
     return unsub;
   }, []);
 
-  // Install the Tauri fetch bridge + load settings once.
+  // Install the Tauri fetch bridge + load settings once. A data file that can't
+  // be read is set aside rather than silently replaced by defaults, and the user
+  // is told — otherwise a reset shelf or a lost provider config looks like the
+  // app forgot on its own.
   useEffect(() => {
     installFetchBridge();
+    onCorruptFile(({ file, savedAs }) => {
+      pushToast(
+        "warn",
+        savedAs
+          ? `${file} was unreadable and has been set aside as ${savedAs}`
+          : `${file} could not be read; it is left untouched and won't be overwritten`,
+      );
+    });
     loadSettings().then(setSettings).catch(() => {});
     onSettingsSaveError((e) => {
       console.error("failed to persist settings", e);
@@ -602,16 +615,19 @@ export default function App() {
 
   // Account sync (docs/13): start the engine if the user is signed in with
   // auto-sync on, and react to files a pull writes. A pulled library.json or
-  // topics.json refreshes the shelf; pulled threads-<id>.json files have their
-  // in-memory cache dropped so a reopen reads the newer data.
+  // topics.json refreshes the shelf; pulled threads-<id>.json and
+  // annotations-<id>.json files have their in-memory cache dropped so a reopen
+  // reads the newer data instead of the stale cache overwriting it.
   useEffect(() => {
     void initSync().catch((e) => console.warn("sync init failed", e));
     return onSyncPulled((paths) => {
       let refreshShelf = false;
       for (const p of paths) {
         if (p === "library.json" || p === "topics.json") refreshShelf = true;
-        const m = /^threads-(.+)\.json$/.exec(p);
-        if (m) dropThreadCache(m[1]);
+        const threads = /^threads-(.+)\.json$/.exec(p);
+        if (threads) dropThreadCache(threads[1]);
+        const anns = /^annotations-(.+)\.json$/.exec(p);
+        if (anns) dropAnnotationCache(anns[1]);
       }
       if (refreshShelf) refreshTopics().catch(() => {});
     });

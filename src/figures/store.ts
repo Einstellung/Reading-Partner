@@ -8,8 +8,8 @@ import {
   BaseDirectory,
   exists,
   readTextFile,
-  writeTextFile,
 } from "@tauri-apps/plugin-fs";
+import { writeTextAtomic } from "../app/atomic-fs";
 import { extractFiguresFromDocument, FIGURES_VERSION } from "./extract";
 import { loadPdfjs } from "../fulltext/extract";
 import type { FiguresIndex } from "./types";
@@ -84,7 +84,7 @@ export async function ensureFigures(key: string, buffer: ArrayBuffer): Promise<F
       index = EMPTY;
     }
     try {
-      await writeTextFile(fileFor(hash), JSON.stringify(index), { baseDir: BaseDirectory.AppData });
+      await writeTextAtomic(fileFor(hash), JSON.stringify(index));
     } catch (e) {
       console.warn("failed to persist figures cache", e);
       onError(e);

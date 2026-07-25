@@ -22,7 +22,12 @@ mock.module("@tauri-apps/plugin-fs", () => ({
     if (v === undefined) throw new Error(`no file: ${path}`);
     return v;
   },
-  writeTextFile: async (path: string, content: string) => {
+}));
+
+// Stores write through the atomic writer (a Rust command), which has no
+// standalone JS implementation to fall back on in a headless test.
+mock.module("../../src/app/atomic-fs", () => ({
+  writeTextAtomic: async (path: string, content: string) => {
     writes += 1;
     files.set(path, content);
   },

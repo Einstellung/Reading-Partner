@@ -13,8 +13,8 @@ import {
   exists as fsExists,
   readTextFile,
   rename,
-  writeTextFile,
 } from "@tauri-apps/plugin-fs";
+import { writeTextAtomic } from "./atomic-fs";
 
 // Mirrors storage.ts's STATE_FILE (the shared reading-position map).
 const STATE_FILE = "reading-state.json";
@@ -107,7 +107,7 @@ export async function migrateBook(
 const tauriMigrateFs: MigrateFs = {
   exists: (name) => fsExists(name, { baseDir: BaseDirectory.AppData }),
   readText: (name) => readTextFile(name, { baseDir: BaseDirectory.AppData }),
-  writeText: (name, content) => writeTextFile(name, content, { baseDir: BaseDirectory.AppData }),
+  writeText: (name, content) => writeTextAtomic(name, content),
   rename: (from, to) =>
     rename(from, to, {
       oldPathBaseDir: BaseDirectory.AppData,

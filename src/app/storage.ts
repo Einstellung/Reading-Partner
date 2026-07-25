@@ -7,8 +7,8 @@ import {
   BaseDirectory,
   exists,
   readTextFile,
-  writeTextFile,
 } from "@tauri-apps/plugin-fs";
+import { writeTextAtomic } from "./atomic-fs";
 import type { ViewState } from "./reader-contract";
 
 const STATE_FILE = "reading-state.json";
@@ -64,9 +64,7 @@ async function load(): Promise<Store> {
 }
 
 async function save(store: Store): Promise<void> {
-  await writeTextFile(STATE_FILE, JSON.stringify(store, null, 2), {
-    baseDir: BaseDirectory.AppData,
-  });
+  await writeTextAtomic(STATE_FILE, JSON.stringify(store, null, 2));
 }
 
 export async function getViewState(bookId: string): Promise<ViewState | null> {

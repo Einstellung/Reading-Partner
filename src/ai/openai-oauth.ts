@@ -18,7 +18,8 @@ import {
 	type OAuthCredentials,
 	type OAuthDeviceCodeInfo,
 } from "@earendil-works/pi-ai/oauth";
-import { isOAuthCredential, loadCredentials, saveCredentials, setActiveCredential, type OpenAICredential } from "./credentials";
+import { isOAuthCredential, loadCredentials, setActiveCredential, updateCredentials, type OpenAICredential } from "./credentials";
+import { coalesceRefresh } from "./token-refresh";
 import { awaitingState, classifyDeviceCodeError, type DeviceCodeState } from "./device-code";
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
@@ -222,9 +223,9 @@ export async function openaiLoginDeviceCode(opts: {
 }
 
 export async function openaiLogout(): Promise<void> {
-	const s = await loadCredentials();
-	delete s.openai;
-	await saveCredentials(s);
+	await updateCredentials((s) => {
+		delete s.openai;
+	});
 }
 
 /**
@@ -232,21 +233,36 @@ export async function openaiLogout(): Promise<void> {
  * the stored one is within the expiry skew. Null when not logged in — including
  * when a legacy API-key credential is found, which is ignored (subscription
  * login is now the only supported OpenAI auth).
+ *
+ * Concurrent callers share one refresh: the refresh token rotates on use, so a
+ * second exchange with the same token fails and logs the user out (see
+ * token-refresh.ts).
  */
 export async function getValidOpenAIAuth(): Promise<string | null> {
-	const s = await loadCredentials();
-	const cred = s.openai;
+	const cred = (await loadCredentials()).openai;
 	if (!isOAuthCredential(cred)) return null;
 	if (Date.now() < cred.expires) return cred.access;
 
-	const refreshed = await refreshOpenAICodexToken(cred.refresh);
-	const next: OpenAICredential = {
-		type: "oauth",
-		access: refreshed.access,
-		refresh: refreshed.refresh,
-		expires: refreshed.expires - EXPIRY_SKEW_MS,
-	};
-	s.openai = next;
-	await saveCredentials(s);
-	return next.access;
+	return coalesceRefresh("openai", async () => {
+		// Re-read inside the coalescer: a refresh that finished between our read
+		// and our turn already spent this refresh token, and left the only valid
+		// successor on disk.
+		const current = (await loadCredentials()).openai;
+		if (!isOAuthCredential(current)) return null;
+		if (Date.now() < current.expires) return current.access;
+
+		const refreshed = await refreshOpenAICodexToken(current.refresh);
+		const next: OpenAICredential = {
+			type: "oauth",
+			access: refreshed.access,
+			refresh: refreshed.refresh,
+			expires: refreshed.expires - EXPIRY_SKEW_MS,
+		};
+		await updateCredentials((s) => {
+			// A sign-in or sign-out that landed while the exchange was in flight
+			// owns the file now; putting our token back would undo it.
+			if (isOAuthCredential(s.openai) && s.openai.refresh === current.refresh) s.openai = next;
+		});
+		return next.access;
+	});
 }

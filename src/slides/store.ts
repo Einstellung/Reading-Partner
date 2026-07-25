@@ -9,8 +9,8 @@ import {
   exists,
   mkdir,
   readTextFile,
-  writeTextFile,
 } from "@tauri-apps/plugin-fs";
+import { writeTextAtomic } from "../app/atomic-fs";
 import { addTalk, type TalkEntry } from "./types";
 
 export const SLIDES_DIR = "slides";
@@ -29,7 +29,7 @@ async function ensureDir(): Promise<void> {
 export async function writeDeck(id: string, html: string): Promise<string> {
   await ensureDir();
   const path = deckFile(id);
-  await writeTextFile(path, html, opts);
+  await writeTextAtomic(path, html);
   return path;
 }
 
@@ -50,5 +50,5 @@ export async function loadTalks(): Promise<TalkEntry[]> {
 export async function appendTalk(entry: TalkEntry): Promise<void> {
   await ensureDir();
   const talks = addTalk(await loadTalks(), entry);
-  await writeTextFile(TALKS_FILE, JSON.stringify(talks, null, 2), opts);
+  await writeTextAtomic(TALKS_FILE, JSON.stringify(talks, null, 2));
 }

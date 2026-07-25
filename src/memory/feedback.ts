@@ -7,8 +7,8 @@ import {
   BaseDirectory,
   exists,
   readTextFile,
-  writeTextFile,
 } from "@tauri-apps/plugin-fs";
+import { writeTextAtomic } from "../app/atomic-fs";
 import type { FeedbackAction, FeedbackEvent } from "../info/briefing/types";
 
 export const FEEDBACK_FILE = "info-feedback.jsonl";
@@ -57,5 +57,5 @@ export async function appendFeedback(event: {
     prior = "";
   }
   const body = (prior && !prior.endsWith("\n") ? prior + "\n" : prior) + JSON.stringify(full) + "\n";
-  await writeTextFile(FEEDBACK_FILE, body, { baseDir: BaseDirectory.AppData });
+  await writeTextAtomic(FEEDBACK_FILE, body);
 }

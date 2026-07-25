@@ -12,8 +12,8 @@ import {
   readFile,
   readTextFile,
   writeFile,
-  writeTextFile,
 } from "@tauri-apps/plugin-fs";
+import { writeTextAtomic } from "../app/atomic-fs";
 import { hashPath } from "../app/storage";
 import { PREP_VERSION, type PrepState } from "./types";
 
@@ -65,14 +65,12 @@ export async function loadPrepState(hash: string): Promise<PrepState | null> {
 
 export async function savePrepState(state: PrepState): Promise<void> {
   await ensurePrepDir(state.surveyHash);
-  await writeTextFile(stateFile(state.surveyHash), JSON.stringify(state, null, 2), {
-    baseDir: BaseDirectory.AppData,
-  });
+  await writeTextAtomic(stateFile(state.surveyHash), JSON.stringify(state, null, 2));
 }
 
 export async function writePrepNote(hash: string, slug: string, content: string): Promise<void> {
   await ensurePrepDir(hash);
-  await writeTextFile(noteFile(hash, slug), content, { baseDir: BaseDirectory.AppData });
+  await writeTextAtomic(noteFile(hash, slug), content);
 }
 
 export async function readPrepNote(hash: string, slug: string): Promise<string | null> {

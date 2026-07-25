@@ -4,7 +4,7 @@
 // free SenseVoice tier — strongest on Chinese, OpenAI-compatible — but any
 // OpenAI-compatible transcription endpoint works via Settings.
 
-import { loadCredentials, saveCredentials, type ApiKeyCredential } from "../ai/credentials";
+import { loadCredentials, updateCredentials, type ApiKeyCredential } from "../ai/credentials";
 import { loadSettings } from "../app/settings";
 
 export const DEFAULT_STT_BASE = "https://api.siliconflow.cn";
@@ -38,11 +38,11 @@ export async function getSttKey(): Promise<string | null> {
 
 // Set or clear the STT key (empty string clears it).
 export async function setSttKey(key: string): Promise<void> {
-  const creds = await loadCredentials();
   const trimmed = key.trim();
-  if (trimmed) creds.voiceStt = { type: "apiKey", key: trimmed } satisfies ApiKeyCredential;
-  else delete creds.voiceStt;
-  await saveCredentials(creds);
+  await updateCredentials((creds) => {
+    if (trimmed) creds.voiceStt = { type: "apiKey", key: trimmed } satisfies ApiKeyCredential;
+    else delete creds.voiceStt;
+  });
 }
 
 export async function hasSttKey(): Promise<boolean> {

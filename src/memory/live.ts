@@ -10,8 +10,8 @@ import {
   readDir,
   readTextFile,
   remove,
-  writeTextFile,
 } from "@tauri-apps/plugin-fs";
+import { writeTextAtomic } from "../app/atomic-fs";
 import type { ThinkingLevel } from "@earendil-works/pi-ai";
 import { runAgentTurn } from "../ai/agent";
 import type { ProviderId } from "../ai/providers";
@@ -36,7 +36,7 @@ const tauriFs: MemoryFs = {
   async write(path, content) {
     const dir = path.slice(0, path.lastIndexOf("/"));
     if (dir) await mkdir(dir, { baseDir: BaseDirectory.AppData, recursive: true });
-    await writeTextFile(path, content, { baseDir: BaseDirectory.AppData });
+    await writeTextAtomic(path, content);
   },
   async remove(path) {
     await remove(path, { baseDir: BaseDirectory.AppData });

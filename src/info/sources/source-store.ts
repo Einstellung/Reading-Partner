@@ -11,8 +11,8 @@ import {
   exists,
   readDir,
   readTextFile,
-  writeTextFile,
 } from "@tauri-apps/plugin-fs";
+import { writeTextAtomic } from "../../app/atomic-fs";
 import { validateDescriptor, type SourceDescriptor } from "./descriptor";
 import { builtinById } from "./builtins";
 import type { SourceHealth } from "./engine";
@@ -75,9 +75,7 @@ async function hasPriorInfoData(): Promise<boolean> {
 }
 
 export async function saveSources(sources: SourceDescriptor[]): Promise<void> {
-  await writeTextFile(SOURCES_FILE, JSON.stringify(sources, null, 2), {
-    baseDir: BaseDirectory.AppData,
-  });
+  await writeTextAtomic(SOURCES_FILE, JSON.stringify(sources, null, 2));
 }
 
 // Load the source list. On first run (no file), migrate: an existing user gets
@@ -142,5 +140,5 @@ export async function loadSourceHealth(): Promise<Record<string, SourceHealth>> 
 }
 
 export async function saveSourceHealth(health: Record<string, SourceHealth>): Promise<void> {
-  await writeTextFile(HEALTH_FILE, JSON.stringify(health), { baseDir: BaseDirectory.AppData });
+  await writeTextAtomic(HEALTH_FILE, JSON.stringify(health));
 }

@@ -7,8 +7,8 @@ import {
   BaseDirectory,
   exists,
   readTextFile,
-  writeTextFile,
 } from "@tauri-apps/plugin-fs";
+import { writeTextAtomic } from "../../app/atomic-fs";
 import { mergeInlinedHtml } from "../extract/inline-images";
 import type { Briefing, InfoItem } from "./types";
 
@@ -45,9 +45,7 @@ function itemsFile(date: string): string {
 }
 
 export async function saveBriefing(briefing: Briefing): Promise<void> {
-  await writeTextFile(briefingFile(briefing.date), JSON.stringify(briefing, null, 2), {
-    baseDir: BaseDirectory.AppData,
-  });
+  await writeTextAtomic(briefingFile(briefing.date), JSON.stringify(briefing, null, 2));
 }
 
 // Load a day's briefing (default: today). Missing/corrupt reads as null so the
@@ -68,9 +66,7 @@ export async function saveArticles(
   date: string,
   articles: Record<string, CachedArticle>,
 ): Promise<void> {
-  await writeTextFile(articlesFile(date), JSON.stringify(articles), {
-    baseDir: BaseDirectory.AppData,
-  });
+  await writeTextAtomic(articlesFile(date), JSON.stringify(articles));
 }
 
 export async function loadArticles(date: string): Promise<Record<string, CachedArticle>> {
@@ -102,9 +98,7 @@ export function leanItems(items: InfoItem[]): InfoItem[] {
 }
 
 export async function saveItems(date: string, items: InfoItem[]): Promise<void> {
-  await writeTextFile(itemsFile(date), JSON.stringify(leanItems(items)), {
-    baseDir: BaseDirectory.AppData,
-  });
+  await writeTextAtomic(itemsFile(date), JSON.stringify(leanItems(items)));
 }
 
 export async function loadItems(date: string): Promise<InfoItem[]> {

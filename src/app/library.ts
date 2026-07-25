@@ -10,10 +10,9 @@ import {
   exists,
   mkdir,
   readFile,
-  readTextFile,
   writeFile,
-  writeTextFile,
 } from "@tauri-apps/plugin-fs";
+import { readGuardedJson, writeTextAtomic } from "./atomic-fs";
 import { basename } from "./storage";
 
 // sha256 of the full file bytes, hex, truncated to the first 16 bytes (32 hex
@@ -64,23 +63,25 @@ async function ensureDir(): Promise<void> {
   }
 }
 
-async function loadStore(): Promise<LibraryStore> {
-  try {
-    if (!(await exists(LIBRARY_FILE, { baseDir: BaseDirectory.AppData }))) return { books: {} };
-    const parsed = JSON.parse(
-      await readTextFile(LIBRARY_FILE, { baseDir: BaseDirectory.AppData }),
-    ) as LibraryStore;
-    return parsed && parsed.books ? parsed : { books: {} };
-  } catch {
-    return { books: {} };
-  }
+// The registry read, plus whether it is safe to write the result back. The shelf
+// cannot be rebuilt from anywhere (the PDFs survive in library/, their titles do
+// not), so an unreadable file must never be silently replaced by "one book, the
+// one being imported". Content that doesn't parse is quarantined and a fresh
+// registry takes over; a file that could not be read at all is left alone and
+// writing is refused until the next launch reads it successfully.
+async function loadStore(): Promise<{ store: LibraryStore; writable: boolean }> {
+  const read = await readGuardedJson<LibraryStore>(LIBRARY_FILE, (raw) => {
+    const parsed = raw as LibraryStore | null;
+    return parsed && typeof parsed === "object" && parsed.books ? parsed : null;
+  });
+  if (read.status === "ok") return { store: read.value, writable: true };
+  if (read.status === "missing") return { store: { books: {} }, writable: true };
+  return { store: { books: {} }, writable: read.savedAs !== null };
 }
 
 async function saveStore(store: LibraryStore): Promise<void> {
   await ensureDir();
-  await writeTextFile(LIBRARY_FILE, JSON.stringify(store, null, 2), {
-    baseDir: BaseDirectory.AppData,
-  });
+  await writeTextAtomic(LIBRARY_FILE, JSON.stringify(store, null, 2));
 }
 
 // Whether the library holds the authoritative copy of a book.
@@ -94,7 +95,7 @@ export function readLibraryBook(bookId: string): Promise<Uint8Array> {
 }
 
 export async function getLibraryEntry(bookId: string): Promise<LibraryEntry | null> {
-  const store = await loadStore();
+  const { store } = await loadStore();
   return store.books[bookId] ?? null;
 }
 
@@ -107,9 +108,10 @@ export async function importBook(bytes: Uint8Array, originalPath: string): Promi
   if (!(await libraryHas(hash))) {
     await writeFile(libraryPdfPath(hash), bytes, { baseDir: BaseDirectory.AppData });
   }
-  const store = await loadStore();
+  const { store, writable } = await loadStore();
   const existing = store.books[hash];
   if (existing) return existing;
+  if (!writable) throw new Error(`${LIBRARY_FILE} could not be read; refusing to overwrite it`);
   const entry: LibraryEntry = {
     hash,
     title: basename(originalPath),
