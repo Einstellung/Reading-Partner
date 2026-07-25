@@ -46,6 +46,21 @@ Sideloadly 靠 Apple 的 USB 驱动和账户服务跟 iPad 通信，这些驱动
 - **最多 3 个**：一个免费 Apple ID 在一台设备上同时最多 3 个侧载 app。超了先删旧的。
 - **需要电脑**：每次重签都要电脑跑 Sideloadly，纯 iPad 上无法自我续签。
 
+## 5.5 有付费开发者账号之后
+
+侧载流程不变，只把 Apple ID 换成开发者账号那个。收益是证书从 7 天变 1 年，同时装的 app 数不再限 3 个。仓库里改的是 gitignored 的 `.env`：
+
+```
+SIDELOAD_APPLE_ID=<开发者账号邮箱>
+SIDELOAD_APPLE_PASSWORD=<该账号的应用专用密码>
+```
+
+`scripts/sideload-ios.py` 不用动。
+
+换账号有一个必须先知道的后果：签名身份（team ID）变了，iOS 不允许用另一个身份覆盖安装同一个 bundle id，装之前得先在 iPad 上把旧的 Reading Partner 删掉，本地数据一起没。开了 Google Drive 同步的话，重装后登录一次就能拉回书目、阅读进度、设置、主题、标注、聊天线程、记忆、笔记和备课的正文、画像和反馈日志。拉不回来的是 PDF 文件本身（要重新导入）、AI 供应商的登录凭据（要重新登录）、以及当天的简报和正文缓存（重新生成即可）。
+
+真正想摆脱插线和删重装，路线是 CI 里做真签名 + OTA 分发（GitHub Releases 托管 manifest，iPad 点链接直接装）。那条线走通之前，本节这套是过渡。
+
 ## 6. 我们这个 app 在免费签名下的行为
 
 免费签名只会剥掉需要「授权能力（entitlement）」的功能。我们逐项对过，结论是登录和阅读都不受影响：
