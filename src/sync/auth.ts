@@ -27,6 +27,7 @@ import {
   readTextFile,
 } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../app/atomic-fs";
+import { base64Url, generatePKCE } from "../app/oauth";
 import { cleanTauriFetch } from "../app/tauri-fetch";
 import { activeAuthFlow, AUTHORIZE_URL, GOOGLE_SCOPES, TOKEN_URL } from "./googleConfig";
 import {
@@ -80,20 +81,6 @@ export async function isSignedIn(): Promise<boolean> {
 
 export async function currentEmail(): Promise<string | null> {
   return (await loadAuth())?.email ?? null;
-}
-
-// --- PKCE ------------------------------------------------------------------
-
-function base64Url(bytes: Uint8Array): string {
-  let s = "";
-  for (const b of bytes) s += String.fromCharCode(b);
-  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-async function generatePKCE(): Promise<{ verifier: string; challenge: string }> {
-  const verifier = base64Url(crypto.getRandomValues(new Uint8Array(32)));
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
-  return { verifier, challenge: base64Url(new Uint8Array(digest)) };
 }
 
 // Pull the email claim out of an OIDC id_token without verifying the signature —
