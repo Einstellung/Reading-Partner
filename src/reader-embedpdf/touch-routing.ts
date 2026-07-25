@@ -140,6 +140,24 @@ export interface ContactSize {
   height: number;
 }
 
+// Palm rejection is OFF. On-device measurement killed the thresholds below:
+// iOS WKWebView reports a contact patch far larger than the 45px guess, so a
+// single ordinary fingertip came back as a palm (probe: palm 1 / finger 0).
+// That did more than swallow fingers — with both pinch fingers classified as
+// palms the finger count never reached two, so the pinch rules never armed and
+// the "no selection while zooming" guard did nothing: zooming on the iPad still
+// dragged out a blue text selection.
+//
+// The classifier, its thresholds and its tests stay put; only the router's use
+// of them is gated here. Flip this back on once PALM_CONTACT_PX is set from
+// measured numbers (read them off the Touch debug overlay's per-contact
+// width x height, which survives lifting the finger).
+//
+// Not covered by this at all: five fingers at once and an elbow on the glass.
+// Neither reaches us — iOS eats them as a system gesture / accidental-contact
+// filter (probe shows finger 0 / palm 0). Nothing to handle on our side.
+export const PALM_REJECTION_ENABLED: boolean = false;
+
 // Contact patch (CSS px) at or above which a touch is a palm, not a finger.
 // A fingertip on an iPad reports roughly 20-30px; a palm or forearm is much
 // wider. Tune against the on-device Touch debug overlay.
@@ -158,6 +176,13 @@ export function isPalmContact(size: ContactSize, penSeen: boolean): boolean {
   if (!hasGeometry(size)) return false;
   const limit = penSeen ? PALM_CONTACT_PX_WITH_PEN : PALM_CONTACT_PX;
   return size.width >= limit || size.height >= limit;
+}
+
+// What the router asks: is this contact to be thrown away as a palm? The
+// classifier's verdict, but only while palm rejection is switched on — which it
+// is not (see PALM_REJECTION_ENABLED). Every contact reaches the finger rules.
+export function rejectsAsPalm(size: ContactSize, penSeen: boolean): boolean {
+  return PALM_REJECTION_ENABLED && isPalmContact(size, penSeen);
 }
 
 // --- stray selection cleanup ------------------------------------------------
