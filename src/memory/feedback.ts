@@ -9,9 +9,22 @@ import {
   readTextFile,
 } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../app/atomic-fs";
-import type { FeedbackAction, FeedbackEvent } from "../info/briefing/types";
 
 export const FEEDBACK_FILE = "info-feedback.jsonl";
+
+// Feedback events (append-only info-feedback.jsonl). "opened" fires from the
+// article view, "dismissed" from a card's ×, "appealed" from Filtered's
+// "Show anyway".
+export type FeedbackAction = "opened" | "dismissed" | "appealed";
+
+export interface FeedbackEvent {
+  ts: number;
+  itemId: string;
+  title: string;
+  action: FeedbackAction;
+  // The item's filtered/dismissal category when the event carries one.
+  category?: string;
+}
 
 // Parse a JSONL blob into events, skipping malformed lines (a half-written line
 // must not sink the whole log). Exported for tests.

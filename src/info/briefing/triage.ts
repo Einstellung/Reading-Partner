@@ -5,7 +5,8 @@
 // overview/reasons/lines to the user.
 
 import { aiLanguageName, type AiLanguage } from "../../app/settings";
-import type { FeedbackEvent, InfoItem, TriageResult } from "./types";
+import type { FeedbackEvent } from "../../memory/feedback";
+import type { InfoItem, TriageResult } from "./types";
 
 // How much of each article's text the model sees. Enough to judge substance
 // without blowing up the prompt across ~30 items.

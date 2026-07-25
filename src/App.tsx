@@ -14,7 +14,7 @@ import { importBook, libraryHas, readLibraryBook } from "./app/library";
 import { migrateBookLive } from "./app/migrate";
 import { ensureFulltext, onFulltextError, type Fulltext } from "./fulltext";
 import Sidebar, { type SidebarTab } from "./components/reader/Sidebar";
-import { annotationPage, toolStatusLabel } from "./ai/reading-context";
+import { annotationPage, toolStatusLabel } from "./reading/context";
 import {
   ANNOTATION_COLORS,
   deleteAnnotations,
@@ -112,7 +112,7 @@ import CallView from "./components/chat/CallView";
 import ReadingPipCard from "./components/chat/ReadingPipCard";
 import ChatPipCard from "./components/chat/ChatPipCard";
 import SettingsView from "./components/SettingsView";
-import { buildReadingTurn } from "./ai/reading-turn";
+import { buildReadingTurn } from "./reading/turn";
 import { BTN, BTN_PRIMARY } from "./components/common/buttons";
 import { appendRunningTool, resolveToolStatus } from "./components/common/toolTrace";
 import LibraryScreen from "./components/library/LibraryScreen";

@@ -1,22 +1,20 @@
-// Unit tests for the pure M6 context/tool helpers (src/ai/reading-context.ts).
+// Unit tests for the pure M6 context/tool helpers (src/reading/context.ts).
 // No Tauri, no cache, no network — the callers gather data and hand it in. Run:
 // bun test.
 
 import { expect, test } from "bun:test";
 import { FULLTEXT_VERSION, type Fulltext } from "../../src/fulltext/types";
+import type { TopicMaterial } from "../../src/fulltext/format";
 import {
   annotationPage,
   buildReadingTools,
   clip,
   findMaterial,
   formatAnnotations,
-  formatPages,
-  formatSearch,
   notesOverviewSection,
   surroundingText,
   toolStatusLabel,
-  type TopicMaterial,
-} from "../../src/ai/reading-context";
+} from "../../src/reading/context";
 
 function ft(pages: string[], status: Fulltext["status"] = "ok", outline: Fulltext["outline"] = []): Fulltext {
   return { version: FULLTEXT_VERSION, status, pages, outline };
@@ -55,41 +53,6 @@ test("toolStatusLabel phrases each tool, single vs range pages", () => {
     "Reading your notes on Fooled by Randomness",
   );
   expect(toolStatusLabel("mystery", {})).toBe("Running mystery");
-});
-
-test("formatPages caps the range, clamps to the book, and labels each page", () => {
-  const book = ft(Array.from({ length: 20 }, (_, i) => `body of page ${i + 1}`));
-  // A 20-page ask is capped to 10 pages from the start of the range.
-  const capped = formatPages(book, 3, 20);
-  expect(capped).toContain("=== Page 3 ===");
-  expect(capped).toContain("=== Page 12 ===");
-  expect(capped).not.toContain("=== Page 13 ===");
-  // Reversed args normalize; upper bound clamps to the book.
-  expect(formatPages(book, 2, 1)).toBe("=== Page 1 ===\nbody of page 1\n\n=== Page 2 ===\nbody of page 2");
-  // Wholly out of range and no-text-layer both explain rather than throw.
-  expect(formatPages(book, 99, 99)).toContain("out of range");
-  expect(formatPages(ft([""], "no-text-layer"), 1, 1)).toContain("machine-readable");
-  expect(formatPages(null, 1, 1)).toContain("machine-readable");
-});
-
-test("formatSearch ranks across materials with a text layer, cites book + page", () => {
-  const materials: TopicMaterial[] = [
-    { label: "Book A", fulltext: ft(["nothing on topic", "garbage collector pauses here"]), annotations: [] },
-    { label: "Book B", fulltext: ft(["a generational garbage collector cuts collector pause times"]), annotations: [] },
-    { label: "Scan C", fulltext: ft([""], "no-text-layer"), annotations: [] },
-  ];
-  const out = formatSearch("garbage collector", materials);
-  // Both text-layer books are searched and cited by book + page.
-  expect(out).toContain("[Book B, p1]");
-  expect(out).toContain("[Book A, p2]");
-  // The scan with no text layer is never a hit.
-  expect(out).not.toContain("Scan C");
-  // No searchable material at all -> a clear notice, not a crash.
-  expect(formatSearch("x", [{ label: "Scan C", fulltext: ft([""], "no-text-layer"), annotations: [] }])).toContain(
-    "searchable text layer",
-  );
-  // No match -> named notice.
-  expect(formatSearch("zzzznomatch", materials)).toContain("No matches");
 });
 
 test("findMaterial matches exact case-insensitively, then substring", () => {

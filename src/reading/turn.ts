@@ -5,16 +5,15 @@
 // testable on its own. Pure assembly plus reads — it never touches React state
 // and never starts the stream; the caller owns runAgentTurn.
 
-import type { AgentTool } from "./agent";
+import type { AgentTool } from "../ai/agent";
 import {
   annotationPage,
   buildReadingTools,
   notesOverviewSection,
   surroundingText,
-  type AnnotationLite,
-  type TopicMaterial,
-} from "./reading-context";
-import { modelSupportsImages, type ProviderId } from "./aiClient";
+} from "./context";
+import type { AnnotationLite, TopicMaterial } from "../fulltext/format";
+import { modelSupportsImages, type ProviderId } from "../ai/aiClient";
 import type { Annotation } from "../app/reader-contract";
 import { buildSystemPrompt, readerProfileSection, type BooklistItem } from "../app/context";
 import { languageInstruction, type Settings } from "../app/settings";

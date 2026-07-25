@@ -1,4 +1,4 @@
-// Turn assembly for the reading companion (src/ai/reading-turn). The branching
+// Turn assembly for the reading companion (src/reading/turn). The branching
 // that used to live inside App's runTurn closure: which tools get mounted in
 // companion vs classroom mode, the figure/link-ingestion gates, and the history
 // trim. Run: bun test.
@@ -23,7 +23,7 @@ mock.module("@tauri-apps/plugin-fs", () => ({
   remove: async () => {},
 }));
 
-const { buildReadingTurn, EXPLAIN_KICKOFF, HISTORY_KEEP } = await import("../../src/ai/reading-turn");
+const { buildReadingTurn, EXPLAIN_KICKOFF, HISTORY_KEEP } = await import("../../src/reading/turn");
 const { appendMessage, createThread, dropThreadCache } = await import("../../src/app/threads");
 
 const BOOK = "book-hash";

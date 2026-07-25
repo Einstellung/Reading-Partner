@@ -8,7 +8,8 @@ import {
   triageSystemPrompt,
   triageUserMessage,
 } from "../../src/info/briefing/triage";
-import type { FeedbackEvent, InfoItem } from "../../src/info/briefing/types";
+import type { FeedbackEvent } from "../../src/memory/feedback";
+import type { InfoItem } from "../../src/info/briefing/types";
 
 const ITEMS: InfoItem[] = [
   {

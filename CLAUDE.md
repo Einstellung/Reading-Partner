@@ -22,6 +22,7 @@ AI 陪读软件。设计共识在 `docs/`。阅读引擎用 EmbedPDF（PDFium WA
 ## 代码组织
 
 - src 下任何文件夹超过约 15 个文件就该切子域。搬家 commit 纯移动（`git mv` 保历史）加改 import，零逻辑改动。
+- 分层：platform（`app`/`sync`，`app` 不 import 任何别的目录）→ capability（`ai`/`fulltext`，headless，只被领域调用，绝不反向 import 领域）→ 领域（各产品域，互相可用但目录级依赖图必须无环）→ `components` → `App.tsx` → 入口（`main.tsx`/`smoke`）。领域的编排代码放自己的领域目录，不要塞进 capability。规则由 `tests/layering.test.ts` 强制，新增顶层目录必须在那里的 LAYER 表里登记。
 - `.tsx` 只放渲染和事件绑定。不依赖 React 的逻辑放 `.ts` 并配单测。手机形态将来换掉的是 `.tsx` 那一层，`.ts` 不动。
 - 适配触摸和小屏用 utility 变体（`coarse:` / `can-hover:` / 断点），不按操作系统分叉组件。需要分形态时分的是外壳（phone / tablet+desktop），判据是宽度和指针类型，叶子组件共用一套。
 
