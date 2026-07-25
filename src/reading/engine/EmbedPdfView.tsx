@@ -1277,8 +1277,15 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
   // the vertical rubber band possible: the band translates the scroll container
   // itself (docs/pitfall/45), so the wrapper both clips the edge that leaves the
   // frame and fills the gap that opens on the other side.
+  // data-reader-surface turns off WebKit's own text selection and touch callout
+  // for everything below (styles.css). The engine's selection does not use them:
+  // it hit-tests PDFium glyph geometry and paints its own divs, so tap-drag
+  // highlighting, double-tap word select and copy are untouched, while a finger
+  // the touch router is driving can no longer start a native selection over the
+  // page (docs/pitfall/49).
   return (
     <div
+      data-reader-surface=""
       style={{
         height: "100%",
         width: "100%",

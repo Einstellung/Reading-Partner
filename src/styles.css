@@ -38,3 +38,22 @@ body {
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   color: #1b1b1b;
 }
+
+/* Same family as the tap highlight above: a WebKit default that preflight would
+   have neutralised, left live because preflight is off (docs/pitfall/43, 49).
+   The reader surface must never be natively selectable. WebKit asks the hit
+   element for `user-select` before it lets its own selection gesture start
+   (PositionInformationForWebPage.mm sets Selectability::UnselectableDueTo-
+   UserSelectNoneOrQuirk, and WKContentViewInteraction refuses the loupe on it);
+   with the default `auto` a finger that rests ~100ms before it moves starts an
+   iOS selection over the page, and the page divs are touch-action:none so no
+   scroll view ever pans to cancel it. Nothing here is DOM text — the pages are
+   <img> rasters and the engine draws its selection as absolutely positioned
+   divs off PDFium glyph geometry — so turning native selection off costs the
+   reader nothing. Text that must stay selectable (chat, notes, the article
+   reader) is outside this subtree. */
+[data-reader-surface] {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}

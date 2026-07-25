@@ -38,6 +38,7 @@
 - [44-finger-draw-heuristic-kills-scrolling](./44-finger-draw-heuristic-kills-scrolling.md) — "没见过笔就让手指画"让选了标注工具的手指在 vertical 下彻底滑不动；删掉启发式，改成默认关闭的 fingerDraw 设置项
 - [45-vertical-band-cannot-move-scroll-content](./45-vertical-band-cannot-move-scroll-content.md) — 平移滚动内容会改可滚溢出区，浏览器夹紧 scrollTop 正好抵消掉偏移；纵向橡皮筋要平移滚动容器自己
 - [46-navlock-pen-still-drags-selection](./46-navlock-pen-still-drags-selection.md) — navlock 下笔的 move 仍放行给引擎，滚动正常但照样拖出选区；逐指针拦 move、放行 down/up，保住 tap
+- [49-webkit-native-selection-over-page](./49-webkit-native-selection-over-page.md) — 阅读区没 DOM 文本也照样能起原生选区（WebKit 只看 `user-select` 用值），整页变蓝加系统 callout；阅读区根节点关掉 user-select 和 touch-callout，引擎选区不受影响。与坑 43 同族
 
 ## 网络与 CSP
 
@@ -70,7 +71,7 @@
 
 - [12-webkitgtk-drag-latency](./12-webkitgtk-drag-latency.md) — WebKitGTK 拖选高亮时选区滞后于鼠标（根因未定，换引擎后没复测）
 - [16-webkitgtk-clipboard-image](./16-webkitgtk-clipboard-image.md) — DOM paste 事件不带图片，贴图要从 Rust 读剪贴板
-- [43-webkit-tap-highlight-orphan-shadow](./43-webkit-tap-highlight-orphan-shadow.md) — 不引 preflight 也就没关掉 WKWebView 的原生点击高亮；点完即卸载的按钮会留下孤儿阴影，按下反馈改用 active:
+- [43-webkit-tap-highlight-orphan-shadow](./43-webkit-tap-highlight-orphan-shadow.md) — 不引 preflight 也就没关掉 WKWebView 的原生点击高亮；点完即卸载的按钮会留下孤儿阴影，按下反馈改用 active:（同族还有坑 49 的原生选区，收在「触摸与手势」）
 
 ## 开发环境
 
