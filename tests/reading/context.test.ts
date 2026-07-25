@@ -1,4 +1,4 @@
-// Unit tests for the pure M6 context/tool helpers (src/ai/reading-context.ts).
+// Unit tests for the pure M6 context/tool helpers (src/reading/context.ts).
 // No Tauri, no cache, no network — the callers gather data and hand it in. Run:
 // bun test.
 
@@ -16,7 +16,7 @@ import {
   surroundingText,
   toolStatusLabel,
   type TopicMaterial,
-} from "../../src/ai/reading-context";
+} from "../../src/reading/context";
 
 function ft(pages: string[], status: Fulltext["status"] = "ok", outline: Fulltext["outline"] = []): Fulltext {
   return { version: FULLTEXT_VERSION, status, pages, outline };
