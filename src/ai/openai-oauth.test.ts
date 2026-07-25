@@ -1,26 +1,10 @@
+// The device-code login orchestration: which states it emits, in which order.
+// parseManualInput lives in platform/app/oauth and is covered in
+// tests/ai/openai-oauth.test.ts. Run: bun test.
+
 import { expect, test } from "bun:test";
 import { openaiLoginDeviceCode } from "./openai-oauth";
-import { parseManualInput } from "../platform/app/oauth";
 import type { DeviceCodeState } from "./device-code";
-
-test("parseManualInput: full redirect URL yields code and state", () => {
-	expect(parseManualInput("http://localhost:1455/auth/callback?code=abc123&state=xyz")).toEqual({
-		code: "abc123",
-		state: "xyz",
-	});
-});
-
-test("parseManualInput: bare code", () => {
-	expect(parseManualInput("  abc123  ")).toEqual({ code: "abc123" });
-});
-
-test("parseManualInput: code#state shorthand", () => {
-	expect(parseManualInput("abc123#xyz")).toEqual({ code: "abc123", state: "xyz" });
-});
-
-test("parseManualInput: query-fragment form code=...&state=...", () => {
-	expect(parseManualInput("code=abc123&state=xyz")).toEqual({ code: "abc123", state: "xyz" });
-});
 
 test("openaiLoginDeviceCode: starting -> awaiting -> error when login rejects", async () => {
 	const states: DeviceCodeState[] = [];

@@ -37,8 +37,9 @@ test("generatePKCE derives the challenge as base64url(SHA-256(verifier))", async
 	expect(challenge).toBe(expected);
 });
 
-test("parseManualInput accepts a bare code", () => {
+test("parseManualInput accepts a bare code, trimming what the user pasted", () => {
 	expect(parseManualInput("abc123")).toEqual({ code: "abc123" });
+	expect(parseManualInput("  abc123  ")).toEqual({ code: "abc123" });
 });
 
 test("parseManualInput splits code#state", () => {
