@@ -1,7 +1,7 @@
-// Unit tests for quote locating (src/prep/quote-locate.ts). Run: bun test.
+// Unit tests for quote locating (src/reading/prep/quote-locate.ts). Run: bun test.
 
 import { expect, test } from "bun:test";
-import { locateQuote, normalizeForMatch } from "../../src/prep/quote-locate";
+import { locateQuote, normalizeForMatch } from "../../../src/reading/prep/quote-locate";
 
 test("normalizeForMatch folds case, whitespace, ligatures and diacritics", () => {
   expect(normalizeForMatch("  The\tQuick\nBrown  ")).toBe("the quick brown");

@@ -9,8 +9,8 @@ import {
   normalizeArxivId,
   parseArxivAtom,
   pickArxivMatch,
-} from "../../src/prep/arxiv";
-import { backoffMs, fetchWithRetry } from "../../src/prep/http";
+} from "../../../src/reading/prep/arxiv";
+import { backoffMs, fetchWithRetry } from "../../../src/reading/prep/http";
 
 test("normalizeArxivId accepts the shapes references use", () => {
   expect(normalizeArxivId("2212.06817")).toBe("2212.06817");

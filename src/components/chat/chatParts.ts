@@ -6,7 +6,7 @@
 // working unchanged.
 //
 // Boundary rule: inline references — the [fig:N] / [p.N] DSL parsed in
-// src/prep/anchors.ts and rendered inside Markdown — live INSIDE a text part's
+// src/reading/prep/anchors.ts and rendered inside Markdown — live INSIDE a text part's
 // Markdown, not as parts. Block-level cards (probe-confirm, briefing-*) are their
 // own `card` part. Keep it that way: do not lift inline refs into parts, and do
 // not fold a card into text.

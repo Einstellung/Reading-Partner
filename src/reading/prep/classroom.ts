@@ -4,7 +4,7 @@
 // variable tail (current position, this chapter's prep notes, prep status,
 // citation/tool instructions) appended after it.
 
-import type { Fulltext } from "../fulltext/types";
+import type { Fulltext } from "../../fulltext/types";
 import type { PrepPaper, PrepState } from "./types";
 
 export interface ClassroomNote {

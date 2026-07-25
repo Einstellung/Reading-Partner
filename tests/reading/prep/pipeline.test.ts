@@ -1,4 +1,4 @@
-// Unit tests for the prep pipeline state machine (src/prep/pipeline.ts), driven
+// Unit tests for the prep pipeline state machine (src/reading/prep/pipeline.ts), driven
 // entirely by fake deps — no Tauri, no network, no AI spend. Run: bun test.
 
 import { expect, test } from "bun:test";
@@ -16,10 +16,10 @@ import {
   type PipelineDeps,
   type PlanOutcome,
   type PrepActivity,
-} from "../../src/prep/pipeline";
-import { streamChatCore, type SimpleStreamFn } from "../../src/ai/providers";
-import { RateLimitError } from "../../src/prep/http";
-import type { PrepPaper, PrepState } from "../../src/prep/types";
+} from "../../../src/reading/prep/pipeline";
+import { streamChatCore, type SimpleStreamFn } from "../../../src/ai/providers";
+import { RateLimitError } from "../../../src/reading/prep/http";
+import type { PrepPaper, PrepState } from "../../../src/reading/prep/types";
 
 function paper(slug: string, chapters: number[]): PrepPaper {
   return {

@@ -1,10 +1,10 @@
-// The digest system prompt's output-language wiring (src/prep/digest.ts):
+// The digest system prompt's output-language wiring (src/reading/prep/digest.ts):
 // the language is templated into the "Write the note in ___" line, so the
 // prompt holds a single language directive. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { digestSystemPrompt } from "../../src/prep/digest";
-import type { PrepPaper } from "../../src/prep/types";
+import { digestSystemPrompt } from "../../../src/reading/prep/digest";
+import type { PrepPaper } from "../../../src/reading/prep/types";
 
 const PAPER: PrepPaper = {
   slug: "world-models",

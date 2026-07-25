@@ -4,9 +4,9 @@
 // survey/topic side.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../ai/agent";
-import { formatPages } from "../fulltext/format";
-import { getFulltext } from "../fulltext/store";
+import type { AgentTool } from "../../ai/agent";
+import { formatPages } from "../../fulltext/format";
+import { getFulltext } from "../../fulltext/store";
 import { parseNote } from "./notes";
 import { paperFulltextHash, readPrepNote } from "./store";
 import type { PrepState } from "./types";

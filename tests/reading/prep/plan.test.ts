@@ -1,9 +1,9 @@
-// Unit tests for plan parsing (src/prep/plan.ts). Pure JSON wrangling; the AI
+// Unit tests for plan parsing (src/reading/prep/plan.ts). Pure JSON wrangling; the AI
 // call that produces the text is mocked by literal strings. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { extractJson, parsePlan, planUserMessage, slugify, uniqueSlug } from "../../src/prep/plan";
-import type { Fulltext } from "../../src/fulltext/types";
+import { extractJson, parsePlan, planUserMessage, slugify, uniqueSlug } from "../../../src/reading/prep/plan";
+import type { Fulltext } from "../../../src/fulltext/types";
 
 const PLAN = {
   chapters: [

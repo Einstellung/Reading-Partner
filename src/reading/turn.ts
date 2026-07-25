@@ -38,13 +38,13 @@ import {
   type MemoryEntry,
 } from "../memory";
 import { readOverviewNote } from "../notes/store";
-import { chapterIndexForPage, papersForChapter } from "../prep/scheduler";
-import { paperFulltextHash, readPrepNote } from "../prep/store";
-import { parseNote } from "../prep/notes";
-import { buildClassroomSystemPrompt, type ClassroomNote } from "../prep/classroom";
-import { buildClassroomTools } from "../prep/tools";
-import { ADD_SOURCE_PROMPT, buildSourceTools } from "../prep/source-tool";
-import type { PrepPipeline } from "../prep/pipeline";
+import { chapterIndexForPage, papersForChapter } from "./prep/scheduler";
+import { paperFulltextHash, readPrepNote } from "./prep/store";
+import { parseNote } from "./prep/notes";
+import { buildClassroomSystemPrompt, type ClassroomNote } from "./prep/classroom";
+import { buildClassroomTools } from "./prep/tools";
+import { ADD_SOURCE_PROMPT, buildSourceTools } from "./prep/source-tool";
+import type { PrepPipeline } from "./prep/pipeline";
 
 // Auto-explanation kickoff (docs/03: the bubble starts explaining, unprompted).
 export const EXPLAIN_KICKOFF =

@@ -1,7 +1,7 @@
-// Unit tests for note frontmatter round-tripping (src/prep/notes.ts). Run: bun test.
+// Unit tests for note frontmatter round-tripping (src/reading/prep/notes.ts). Run: bun test.
 
 import { expect, test } from "bun:test";
-import { abstractNoteBody, parseNote, serializeNote, type NoteMeta } from "../../src/prep/notes";
+import { abstractNoteBody, parseNote, serializeNote, type NoteMeta } from "../../../src/reading/prep/notes";
 
 const META: NoteMeta = {
   title: "RT-1: Robotics Transformer",

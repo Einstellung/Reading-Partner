@@ -4,7 +4,7 @@
 // prep data model. The AI call itself lives in live.ts.
 
 import type { PrepChapter, PrepPaper, PrepReference } from "./types";
-import type { Fulltext } from "../fulltext/types";
+import type { Fulltext } from "../../fulltext/types";
 
 export interface PlanResult {
   chapters: PrepChapter[];

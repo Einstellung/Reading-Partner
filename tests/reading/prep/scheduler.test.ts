@@ -1,4 +1,4 @@
-// Unit tests for the lazy-prep scheduler (src/prep/scheduler.ts). Run: bun test.
+// Unit tests for the lazy-prep scheduler (src/reading/prep/scheduler.ts). Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
@@ -7,8 +7,8 @@ import {
   normalizeOnLoad,
   paperPriority,
   papersForChapter,
-} from "../../src/prep/scheduler";
-import { createPrepState, type PrepChapter, type PrepPaper } from "../../src/prep/types";
+} from "../../../src/reading/prep/scheduler";
+import { createPrepState, type PrepChapter, type PrepPaper } from "../../../src/reading/prep/types";
 
 const CHAPTERS: PrepChapter[] = [
   { index: 1, title: "Introduction", startPage: 1 },

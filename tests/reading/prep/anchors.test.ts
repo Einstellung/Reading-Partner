@@ -1,4 +1,4 @@
-// Unit tests for citation anchors (src/prep/anchors.ts). Run: bun test.
+// Unit tests for citation anchors (src/reading/prep/anchors.ts). Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
@@ -7,7 +7,7 @@ import {
   pageCitationHref,
   paperCitationHref,
   parseCitationHref,
-} from "../../src/prep/anchors";
+} from "../../../src/reading/prep/anchors";
 
 test("survey page citations become fragment links", () => {
   expect(linkifyCitations("See [p.12] for details.")).toBe(

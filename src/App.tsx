@@ -69,8 +69,8 @@ import {
   readPrepNote,
   type Citation,
   type PrepSnapshot,
-} from "./prep";
-import type { PrepPipeline } from "./prep/pipeline";
+} from "./reading/prep";
+import type { PrepPipeline } from "./reading/prep/pipeline";
 import {
   getNotesPipeline,
   hasNotesState,

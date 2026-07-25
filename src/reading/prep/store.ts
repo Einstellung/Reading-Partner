@@ -13,8 +13,8 @@ import {
   readTextFile,
   writeFile,
 } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../platform/app/atomic-fs";
-import { hashPath } from "../platform/app/storage";
+import { writeTextAtomic } from "../../platform/app/atomic-fs";
+import { hashPath } from "../../platform/app/storage";
 import { PREP_VERSION, type PrepState } from "./types";
 
 function dirFor(hash: string): string {

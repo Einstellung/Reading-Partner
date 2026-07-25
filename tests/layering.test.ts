@@ -51,9 +51,9 @@ const LAYER: Record<string, Layer> = {
   info: "domain",
   memory: "domain",
   notes: "domain",
-  prep: "domain",
   reading: "domain",
   "reading/engine": "domain",
+  "reading/prep": "domain",
   slides: "domain",
 
   components: "ui",

@@ -1,7 +1,7 @@
 // Semantic Scholar client tests. Fake fetch only. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { fetchFromS2 } from "../../src/prep/s2";
+import { fetchFromS2 } from "../../../src/reading/prep/s2";
 
 test("fetchFromS2 sends the api key as x-api-key and keeps it out of the url", async () => {
   const seen: { url: string; key: string | null }[] = [];

@@ -4,15 +4,15 @@
 // whole state machine runs in bun tests with fakes; live.ts provides the real
 // deps (Tauri fs, arXiv/S2, pi-ai).
 
-import type { Fulltext } from "../fulltext/types";
+import type { Fulltext } from "../../fulltext/types";
 import {
   DEFAULT_MAX_ATTEMPTS,
   DEFAULT_RETRY_DELAY_MS,
   DEFAULT_WATCHDOG_MS,
   type AiCallOptions,
   type WatchdogConfig,
-} from "../ai/watchdog";
-import { ObservableRun, type RunSnapshot } from "../ai/observable-run";
+} from "../../ai/watchdog";
+import { ObservableRun, type RunSnapshot } from "../../ai/observable-run";
 import { isRateLimitError } from "./http";
 import { abstractNoteBody } from "./notes";
 import { earliestCooldown, nextQueued, normalizeOnLoad } from "./scheduler";

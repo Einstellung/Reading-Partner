@@ -7,7 +7,7 @@ import {
   extractArxivId,
   extractPdfUrl,
   openAlexSearchUrl,
-} from "../../src/prep/openalex";
+} from "../../../src/reading/prep/openalex";
 
 test("reconstructAbstract rebuilds word order from the inverted index", () => {
   const index = { The: [0], quick: [1], brown: [2], fox: [3] };

@@ -8,7 +8,7 @@ import {
   fetchWithRetry,
   isRateLimitError,
   RateLimitError,
-} from "../../src/prep/http";
+} from "../../../src/reading/prep/http";
 
 test("createThrottle spaces same-host requests and passes untracked hosts through", async () => {
   let t = 0;
