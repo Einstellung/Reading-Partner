@@ -52,7 +52,7 @@ import {
   multiTouchLatch,
   fingerLockAfterPen,
   fingerVerdict,
-  isPalmContact,
+  rejectsAsPalm,
   centroidOf,
   shouldClearGestureSelection,
 } from "./touch-routing";
@@ -357,10 +357,15 @@ const VERTICAL_FLING_MIN_SPEED = 0.02;
 //
 // Blocking is per pointer (stopPropagation in the capture phase), not the
 // interaction manager's global pause: pause would also stop a pen mid-stroke,
-// and the point of palm rejection is that the resting hand goes dead while the
-// pen keeps drawing. Invariant: a finger whose pointerdown reached the engine
+// and the resting hand has to go dead while the pen keeps drawing (the pen lock
+// above does that). Invariant: a finger whose pointerdown reached the engine
 // always gets its pointerup too, or the engine's per-page selection handler
 // keeps a stale text anchor.
+//
+// Contact-size palm rejection is currently switched off (see
+// PALM_REJECTION_ENABLED): iOS reported an ordinary fingertip as a palm, which
+// also broke the pinch rules. The palm path below stays wired for when measured
+// thresholds land, but rejectsAsPalm never fires today.
 //
 // Vertical (continuous) mode — the main path: a finger that routePointer says
 // should scroll is driven here (pause the engine's pointer pipeline, capture the
@@ -403,7 +408,7 @@ function TouchInputRouter({
       // finger count the gesture rules run on.
       const fingers = new Map<number, { x: number; y: number }>();
       // Contacts classified as palm/elbow at pointerdown: swallowed whole and
-      // never counted as fingers.
+      // never counted as fingers. Empty while palm rejection is off.
       const palms = new Set<number>();
       // Fingers whose pointerdown the engine saw, so their pointerup is let
       // through even if the gesture has since been taken over.
@@ -748,7 +753,7 @@ function TouchInputRouter({
           return;
         }
         if (e.pointerType !== "touch") return;
-        if (isPalmContact({ width: e.width, height: e.height }, ctx.current.penSeen)) {
+        if (rejectsAsPalm({ width: e.width, height: e.height }, ctx.current.penSeen)) {
           palms.add(e.pointerId);
           trackContact(e, true);
           swallow(e);
