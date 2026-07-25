@@ -134,8 +134,8 @@ function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
       highlightQuote: (pageIndex, req) => h.highlightQuote(pageIndex, req),
       clearQuoteHighlight: () => h.clearQuoteHighlight(),
       setTool: (tool?: Tool) => {
-        if (!tool || tool.type === "pointer") {
-          h.setTool("pointer");
+        if (!tool || tool.type === "pointer" || tool.type === "navlock") {
+          h.setTool(tool?.type === "navlock" ? "navlock" : "pointer");
           return;
         }
         if (tool.type === "highlight" || tool.type === "underline" || tool.type === "ink") {

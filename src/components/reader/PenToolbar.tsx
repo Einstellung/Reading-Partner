@@ -15,8 +15,10 @@ interface PenToolbarProps {
 	orientation?: 'vertical' | 'horizontal';
 }
 
+// 'none' is not a button: it is the state the rack is in when no button is
+// pressed. Every button toggles, so tapping the active one returns to 'none'.
 const TOOLS: { type: ToolType; label: string; Icon: (p: { size?: number }) => JSX.Element }[] = [
-	{ type: 'pointer', label: 'Select', Icon: IconPointer },
+	{ type: 'navlock', label: 'Navigate only', Icon: IconPointer },
 	{ type: 'highlight', label: 'Highlight', Icon: IconHighlight },
 	{ type: 'underline', label: 'Underline', Icon: IconUnderline },
 	{ type: 'ai', label: 'AI pen', Icon: IconSparkle },
@@ -30,8 +32,9 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 	const [paletteOpen, setPaletteOpen] = useState(false);
 	const paletteRef = useRef<HTMLDivElement>(null);
 	const horizontal = orientation === 'horizontal';
-	// Only the painting tools carry a color; the pointer and AI pen do not, so the
-	// swatch shows as a disabled placeholder to keep the rack width stable.
+	// Only the painting tools carry a color; the navigation lock, the AI pen and
+	// the all-unselected state do not, so the swatch shows as a disabled
+	// placeholder to keep the rack width stable.
 	const hasColor = tool.type === 'highlight' || tool.type === 'underline';
 
 	useEffect(() => {
@@ -49,8 +52,10 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 		if (!hasColor) setPaletteOpen(false);
 	}, [hasColor]);
 
+	// Pressing the active button releases it: the rack drops to 'none', which is
+	// the traditional mode, not another tool.
 	function pickTool(type: ToolType) {
-		if (type !== tool.type) onToolChange({ type, color: tool.color });
+		onToolChange({ type: type === tool.type ? 'none' : type, color: tool.color });
 	}
 
 	function pickColor(color: string) {
@@ -67,14 +72,17 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 	// The AI pen keeps violet as its theme accent, but shares the tool rack's one
 	// visual language: same size, same light-tinted-fill selected state as the
 	// blue tools — no gradient block, no size change.
-	const toolBtn = (active: boolean, ai: boolean) =>
+	// The navigation lock is a latch, not a tool, so its pressed state carries an
+	// extra inset ring — it has to read as held down across a whole reading
+	// session, not just as "most recently tapped".
+	const toolBtn = (active: boolean, type: ToolType) =>
 		`${TOOL_BTN} ${toolSize} cursor-pointer ` +
-		(ai
+		(type === 'ai'
 			? active
 				? 'bg-violet-100 text-violet-700'
 				: 'text-violet-500 hover:bg-black/5'
 			: active
-				? 'bg-sky-100 text-sky-700'
+				? 'bg-sky-100 text-sky-700' + (type === 'navlock' ? ' ring-2 ring-inset ring-sky-600' : '')
 				: 'hover:bg-black/5');
 
 	return (
@@ -82,13 +90,13 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 			className={rack}
 			role="toolbar"
 			aria-orientation={orientation}
-			aria-label="Annotation tools"
+			aria-label="Reading tools"
 		>
 			{TOOLS.map(({ type, label, Icon }) => (
 				<button
 					key={type}
 					type="button"
-					className={toolBtn(tool.type === type, type === 'ai')}
+					className={toolBtn(tool.type === type, type)}
 					title={label}
 					aria-label={label}
 					aria-pressed={tool.type === type}
@@ -99,8 +107,8 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 			))}
 
 			{/* The divider and swatch always hold their place so the rack width never
-			    jumps between tools; colorless tools (pointer, AI pen) show the swatch
-			    as a disabled placeholder rather than removing it. */}
+			    jumps between tools; colorless states show the swatch as a disabled
+			    placeholder rather than removing it. */}
 			<div className={horizontal ? 'mx-1 h-5 w-px bg-black/10' : 'my-0.5 h-px w-6 bg-black/10'} />
 
 			<div className="relative flex" ref={paletteRef}>

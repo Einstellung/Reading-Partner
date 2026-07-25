@@ -29,6 +29,7 @@ export interface TouchDebugSnapshot {
   multi: boolean; // multi-touch latch held
   penLock: boolean; // fingers dead until they all lift (pen won)
   penSeen: boolean;
+  navLock: boolean; // the palm toggle: every pointer only navigates
   // The last non-empty contact set, kept after every finger lifts so the
   // measurement can be read (and photographed) with the hand off the glass.
   lastContacts: TouchDebugContact[];
@@ -46,6 +47,7 @@ const EMPTY: TouchDebugSnapshot = {
   multi: false,
   penLock: false,
   penSeen: false,
+  navLock: false,
   lastContacts: [],
   peakWidth: 0,
   peakHeight: 0,
@@ -131,6 +133,7 @@ export function TouchDebugOverlay(): ReactNode {
         {s.multi ? " · multi" : ""}
         {s.penLock ? " · penLock" : ""}
         {s.penSeen ? " · penSeen" : ""}
+        {s.navLock ? " · navLock" : ""}
       </div>
       {rows.length === 0 ? (
         <div className="text-[16px] leading-[24px] opacity-60">no contact yet</div>
