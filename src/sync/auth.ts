@@ -25,8 +25,8 @@ import {
   BaseDirectory,
   exists,
   readTextFile,
-  writeTextFile,
 } from "@tauri-apps/plugin-fs";
+import { writeTextAtomic } from "../app/atomic-fs";
 import { cleanTauriFetch } from "../app/tauri-fetch";
 import { activeAuthFlow, AUTHORIZE_URL, GOOGLE_SCOPES, TOKEN_URL } from "./googleConfig";
 import {
@@ -66,7 +66,7 @@ export async function loadAuth(): Promise<GoogleAuth | null> {
 }
 
 async function saveAuth(auth: GoogleAuth): Promise<void> {
-  await writeTextFile(AUTH_FILE, JSON.stringify(auth, null, 2), { baseDir: BaseDirectory.AppData });
+  await writeTextAtomic(AUTH_FILE, JSON.stringify(auth, null, 2));
 }
 
 async function clearAuth(): Promise<void> {

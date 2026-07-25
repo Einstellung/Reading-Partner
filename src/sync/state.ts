@@ -12,8 +12,8 @@ import {
   BaseDirectory,
   exists,
   readTextFile,
-  writeTextFile,
 } from "@tauri-apps/plugin-fs";
+import { writeTextAtomic } from "../app/atomic-fs";
 import type { Snapshot } from "./reconcile";
 
 const STATE_FILE = "sync-state.json";
@@ -71,5 +71,5 @@ export async function loadState(): Promise<SyncState> {
 }
 
 export async function saveState(state: SyncState): Promise<void> {
-  await writeTextFile(STATE_FILE, JSON.stringify(state, null, 2), { baseDir: BaseDirectory.AppData });
+  await writeTextAtomic(STATE_FILE, JSON.stringify(state, null, 2));
 }

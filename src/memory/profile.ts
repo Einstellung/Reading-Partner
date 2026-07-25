@@ -11,8 +11,8 @@ import {
   BaseDirectory,
   exists,
   readTextFile,
-  writeTextFile,
 } from "@tauri-apps/plugin-fs";
+import { writeTextAtomic } from "../app/atomic-fs";
 
 export const PROFILE_FILE = "user-profile.md";
 // The name an older build wrote (an info-only profile, before it was promoted to
@@ -57,7 +57,7 @@ export async function loadProfile(): Promise<string> {
     if (await exists(LEGACY_PROFILE_FILE, { baseDir: BaseDirectory.AppData })) {
       const legacy = await readTextFile(LEGACY_PROFILE_FILE, { baseDir: BaseDirectory.AppData });
       try {
-        await writeTextFile(PROFILE_FILE, legacy, { baseDir: BaseDirectory.AppData });
+        await writeTextAtomic(PROFILE_FILE, legacy);
       } catch {
         // If the promote-write fails, the legacy content is still returned; the
         // next read tries the migration again.
@@ -71,5 +71,5 @@ export async function loadProfile(): Promise<string> {
 }
 
 export async function saveProfile(text: string): Promise<void> {
-  await writeTextFile(PROFILE_FILE, text, { baseDir: BaseDirectory.AppData });
+  await writeTextAtomic(PROFILE_FILE, text);
 }

@@ -24,6 +24,7 @@ import {
   stat,
   writeFile,
 } from "@tauri-apps/plugin-fs";
+import { writeTextAtomic } from "../app/atomic-fs";
 
 export interface LocalFile {
   path: string;
@@ -121,6 +122,22 @@ export const tauriSyncFs: SyncFs = {
     return readFile(path, opts);
   },
   async write(path, bytes) {
+    // Every in-range file is UTF-8 text this app wrote, so a pull lands through
+    // the atomic writer (which also creates the parent directory): a pull is
+    // exactly when a torn write would be worst — half of the other device's
+    // library.json, then a local import overwriting the rest. Bytes that are
+    // not valid UTF-8 can't be ours; keep them verbatim rather than mangling
+    // them, and let the loader quarantine the file.
+    let text: string | null = null;
+    try {
+      text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch {
+      text = null;
+    }
+    if (text !== null) {
+      await writeTextAtomic(path, text);
+      return;
+    }
     const slash = path.lastIndexOf("/");
     if (slash > 0) await mkdir(path.slice(0, slash), { ...opts, recursive: true });
     await writeFile(path, bytes, opts);

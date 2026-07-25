@@ -2,6 +2,9 @@
 // (events-<topicId>.jsonl), append-only, local only — it never leaves the
 // device. Payloads are ids and numbers, never message or passage text.
 // The append is injected so the format and logger run headless in tests.
+// This is the one writer that stays on the fs plugin: an O_APPEND of one short
+// line is already all-or-nothing, and the atomic writer would have to rewrite
+// the whole log to add a line.
 
 import { BaseDirectory, writeTextFile } from "@tauri-apps/plugin-fs";
 

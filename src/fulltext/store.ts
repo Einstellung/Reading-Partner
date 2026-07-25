@@ -8,8 +8,8 @@ import {
   BaseDirectory,
   exists,
   readTextFile,
-  writeTextFile,
 } from "@tauri-apps/plugin-fs";
+import { writeTextAtomic } from "../app/atomic-fs";
 import { extractFulltext } from "./extract";
 import { FULLTEXT_VERSION, type Fulltext } from "./types";
 
@@ -45,7 +45,7 @@ export async function getFulltext(hash: string): Promise<Fulltext | null> {
 // uses, so the reading tools can serve it immediately. Overwrites any prior
 // entry for the key.
 export async function saveFulltext(key: string, ft: Fulltext): Promise<void> {
-  await writeTextFile(fileFor(key), JSON.stringify(ft), { baseDir: BaseDirectory.AppData });
+  await writeTextAtomic(fileFor(key), JSON.stringify(ft));
 }
 
 // Coalesce concurrent extraction requests for the same document so a double
@@ -66,9 +66,7 @@ export async function ensureFulltext(key: string, buffer: ArrayBuffer): Promise<
     const result = await extractFulltext(buffer);
     const ft: Fulltext = { version: FULLTEXT_VERSION, ...result };
     try {
-      await writeTextFile(fileFor(hash), JSON.stringify(ft), {
-        baseDir: BaseDirectory.AppData,
-      });
+      await writeTextAtomic(fileFor(hash), JSON.stringify(ft));
     } catch (e) {
       console.warn("failed to persist fulltext cache", e);
       onError(e);

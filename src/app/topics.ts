@@ -6,8 +6,8 @@ import {
   BaseDirectory,
   exists,
   readTextFile,
-  writeTextFile,
 } from "@tauri-apps/plugin-fs";
+import { writeTextAtomic } from "./atomic-fs";
 import { basename } from "./storage";
 
 const TOPICS_FILE = "topics.json";
@@ -51,9 +51,7 @@ async function load(): Promise<Store> {
 }
 
 async function save(store: Store): Promise<void> {
-  await writeTextFile(TOPICS_FILE, JSON.stringify(store, null, 2), {
-    baseDir: BaseDirectory.AppData,
-  });
+  await writeTextAtomic(TOPICS_FILE, JSON.stringify(store, null, 2));
 }
 
 export async function listTopics(): Promise<Topic[]> {

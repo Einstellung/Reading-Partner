@@ -10,8 +10,8 @@ import {
   exists,
   mkdir,
   readTextFile,
-  writeTextFile,
 } from "@tauri-apps/plugin-fs";
+import { writeTextAtomic } from "../app/atomic-fs";
 import { NOTES_VERSION, type NotesState } from "./types";
 
 function dirFor(bookId: string): string {
@@ -56,16 +56,12 @@ export async function loadNotesState(bookId: string): Promise<NotesState | null>
 
 export async function saveNotesState(state: NotesState): Promise<void> {
   await ensureNotesDir(state.bookId);
-  await writeTextFile(stateFile(state.bookId), JSON.stringify(state, null, 2), {
-    baseDir: BaseDirectory.AppData,
-  });
+  await writeTextAtomic(stateFile(state.bookId), JSON.stringify(state, null, 2));
 }
 
 export async function writeChapterNote(bookId: string, index: number, body: string): Promise<void> {
   await ensureNotesDir(bookId);
-  await writeTextFile(chapterFile(bookId, index), `${body.trim()}\n`, {
-    baseDir: BaseDirectory.AppData,
-  });
+  await writeTextAtomic(chapterFile(bookId, index), `${body.trim()}\n`);
 }
 
 export async function readChapterNote(bookId: string, index: number): Promise<string | null> {
@@ -80,7 +76,7 @@ export async function readChapterNote(bookId: string, index: number): Promise<st
 
 export async function writeOverviewNote(bookId: string, body: string): Promise<void> {
   await ensureNotesDir(bookId);
-  await writeTextFile(overviewFile(bookId), `${body.trim()}\n`, { baseDir: BaseDirectory.AppData });
+  await writeTextAtomic(overviewFile(bookId), `${body.trim()}\n`);
 }
 
 export async function readOverviewNote(bookId: string): Promise<string | null> {
