@@ -52,14 +52,17 @@ import {
   pagedGestureTool,
   touchGestureMode,
   multiTouchLatch,
+  pinchHandsOff,
   fingerLockAfterPen,
   fingerVerdict,
   centroidOf,
   shouldClearGestureSelection,
+  type PointerPlan,
 } from "./touch-routing";
 import {
   initVerticalState,
   stepVertical,
+  verticalNeedsFrames,
   type VerticalCommand,
   type VerticalInput,
   type VerticalState,
@@ -71,6 +74,7 @@ import {
   stepBandSpring,
   type BandOffset,
 } from "./rubber-band";
+import { INDICATOR_FADE_AFTER_MS, thumbMetrics } from "./scroll-indicator";
 import {
   TouchDebugOverlay,
   isTouchDebugEnabled,
@@ -333,6 +337,10 @@ interface PagedGestureCtx {
   // Set by the touch router so setLayout can toggle the viewport's touch-action
   // (paged locks native pan/zoom; vertical restores it).
   setTouchLock: ((locked: boolean) => void) | null;
+  // The scroll indicator's thumb, which lives outside the scroll container so
+  // the rubber band does not carry it off the edge. Painted by the router on
+  // every scroll — including the engine's own programmatic ones.
+  indicator: HTMLElement | null;
   // Set by the touch router so setLayout can drop everything the old layout had
   // in flight (drag, rubber band, inertia, captured pointer, paused engine)
   // before the new layout's geometry lands.
@@ -417,9 +425,12 @@ function TouchInputRouter({
 
     const attach = (el: HTMLDivElement): (() => void) => {
       // --- contact bookkeeping (shared by both layout machines) -----------
-      // Live finger contacts in arrival order. Its size is the finger count the
-      // gesture rules run on.
-      const fingers = new Map<number, { x: number; y: number }>();
+      // Live contacts this router drives, in arrival order (fingers always, and
+      // the stylus under the navigation lock). Its size is the finger count the
+      // gesture rules run on. Each carries the plan it landed with, so a tool
+      // change mid-gesture can never split one pointer's lifetime across two
+      // policies.
+      const fingers = new Map<number, { x: number; y: number; plan: PointerPlan }>();
       // Fingers whose pointerdown the engine saw, so their pointerup is let
       // through even if the gesture has since been taken over.
       const engineSaw = new Set<number>();
@@ -449,11 +460,16 @@ function TouchInputRouter({
       let bandRaf = 0;
 
       // --- vertical follow-finger scroll state ----------------------------
-      // The machine holds the phase, the follow origin, the velocity and the
-      // inertia; this side owns only the rAF that drives the fling forward.
+      // The machine holds the phase, the follow origin, the velocity, the
+      // inertia and the overscroll; this side owns only the rAF that drives
+      // them forward and the two elements they are painted on.
       let vState: VerticalState = initVerticalState();
       let flingRaf = 0;
       let flingLast = 0;
+      // Fingers whose gesture this router took over mid-flight (the survivor of
+      // a pinch): the engine never saw their pointerdown, so it must not see
+      // their pointerup either.
+      const orphaned = new Set<number>();
 
       const clearLp = () => {
         if (lpTimer) {
@@ -530,10 +546,55 @@ function TouchInputRouter({
         bandRaf = requestAnimationFrame(step);
       };
 
+      // --- vertical rubber band --------------------------------------------
+      // Paged bands the scroll CONTENT; vertical cannot (docs/pitfall/45): a
+      // translate on the content changes the container's scrollable overflow,
+      // and at the end of a scrollable document the browser's own re-clamp of
+      // scrollTop cancels the offset exactly. The scroll container itself is
+      // moved instead — its geometry is unaffected by its own transform — and
+      // the wrapper around it clips the gap that opens up.
+      let vBandY = 0;
+      let vBandX = 0;
+      const setViewportBand = (x: number, y: number) => {
+        if (x === vBandX && y === vBandY) return;
+        vBandX = x;
+        vBandY = y;
+        // Same rule as the paged band: a plain style write, never a CSS
+        // transition (docs/pitfall/41), and cleared to "" at rest.
+        el.style.transform = bandTransform({ x, y });
+      };
+      const clearViewportBand = () => setViewportBand(0, 0);
+
+      // --- scroll indicator -------------------------------------------------
+      // Fades in on movement and out again when it stops. Driven off the
+      // container's own scroll event, so it follows a page jump and the
+      // engine's smooth scrolls as well as a finger.
+      let indicatorTimer = 0;
+      const hideIndicator = () => {
+        indicatorTimer = 0;
+        const bar = ctx.current.indicator;
+        if (bar) bar.style.opacity = "0";
+      };
+      const paintIndicator = () => {
+        const bar = ctx.current.indicator;
+        if (!bar) return;
+        const m = thumbMetrics(el.scrollTop, el.clientHeight, el.scrollHeight);
+        if (!m) {
+          bar.style.opacity = "0";
+          return;
+        }
+        bar.style.height = `${m.size}px`;
+        bar.style.transform = `translateY(${m.offset}px)`;
+        bar.style.opacity = "1";
+        if (indicatorTimer) window.clearTimeout(indicatorTimer);
+        indicatorTimer = window.setTimeout(hideIndicator, INDICATOR_FADE_AFTER_MS);
+      };
+
       const setTouchLock = (locked: boolean) => {
         el.style.touchAction = locked ? "none" : "";
         // Switching layout mid-gesture must not leave a band offset behind.
         clearBand();
+        clearViewportBand();
       };
       ctx.current.setTouchLock = setTouchLock;
       setTouchLock(ctx.current.paged);
@@ -661,6 +722,8 @@ function TouchInputRouter({
           } else if (c.type === "scrollTo") {
             el.scrollTop = c.top;
             el.scrollLeft = c.left;
+          } else if (c.type === "band") {
+            setViewportBand(c.x, c.y);
           } else if (c.type === "preventDefault") {
             if (e?.cancelable) e.preventDefault();
           } else if (c.type === "startFling") {
@@ -677,15 +740,16 @@ function TouchInputRouter({
         vState = r.state;
         applyVertical(r.commands, e);
       };
-      // One inertia frame. The machine decides when the coast is over; this side
-      // only keeps asking for frames while it is not (hoisted so applyVertical
-      // above can schedule it).
+      // One frame of whatever outlives the finger — the inertia, the rubber
+      // band springing home, or the inertia being absorbed by it. The machine
+      // decides when there is nothing left to do; this side only keeps asking
+      // for frames while there is (hoisted so applyVertical can schedule it).
       function flingFrame(now: number): void {
         flingRaf = 0;
         const dt = now - flingLast;
         flingLast = now;
         feedVertical({ type: "flingFrame", dt });
-        if (vState.fling) flingRaf = requestAnimationFrame(flingFrame);
+        if (verticalNeedsFrames(vState)) flingRaf = requestAnimationFrame(flingFrame);
       }
       // Everything the two one-finger machines hold: inertia, the long-press
       // timer, the paged machine's phase, the rubber band, the pointer capture
@@ -701,7 +765,9 @@ function TouchInputRouter({
         // element the pinch preview also writes would offset the zoom anchor.
         clearBand();
         releaseCapture();
+        orphaned.clear();
         feedVertical({ type: "reset" });
+        clearViewportBand();
       };
       ctx.current.resetGestures = resetGestures;
 
@@ -721,6 +787,41 @@ function TouchInputRouter({
           feed({ type: "pointercancel", id: state.primary });
         }
         resetGestures();
+      };
+      // The pinch is down to its last finger. That finger keeps moving the page
+      // as a one-finger pan, from where it is — no jump, and no waiting for the
+      // glass to empty. The gesture is synthesized, not replayed: the machine
+      // gets a pointerdown at the finger's live position with `takeover`, which
+      // skips the slop and starts following on the next move.
+      const handOffToOneFinger = () => {
+        const id = [...fingers.keys()][0];
+        const f = fingers.get(id);
+        if (f === undefined) return;
+        const plan = f.plan;
+        // With "draw with your finger" on, a lone finger marks the page; it has
+        // no page-moving gesture to inherit, and the engine never saw its down,
+        // so it stays out of the way until it lifts.
+        if (plan.action !== "scroll") return;
+        // The pinch already dropped whatever the fingers selected on the way in;
+        // whatever is on screen now predates this gesture and must survive it.
+        hadSelectionAtStart = hasSelection();
+        // The engine never saw this pointer's down (the pinch swallowed it), so
+        // it must not see its up either.
+        orphaned.add(id);
+        const t = performance.now();
+        if (ctx.current.paged) {
+          feed({ type: "pointerdown", id, x: f.x, y: f.y, t, takeover: true });
+        } else {
+          feedVertical({
+            type: "pointerdown",
+            id,
+            x: f.x,
+            y: f.y,
+            t,
+            plan,
+            takeover: true,
+          });
+        }
       };
       // Two-finger pan: the content follows the centroid of the two fingers.
       // Zoom is the engine's wrapper; this only moves the scroll container, and
@@ -792,11 +893,15 @@ function TouchInputRouter({
         // Whether this pointer becomes one of our contacts is latched here, by
         // the `fingers` map: toggling the navigation lock mid-gesture can never
         // split one pointer's lifetime across the two code paths.
+        // One plan for both layouts and both devices: what this pointer is for,
+        // whether the engine has to be shut off before it can mark the page, and
+        // whether the engine may watch it move at all.
+        const plan = planPointer(tool, kind, ctx.current.fingerDraw);
         if (!routesAsContact(tool, kind)) {
           if (kind === "pen") onPenDown(e);
           return;
         }
-        fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        fingers.set(e.pointerId, { x: e.clientX, y: e.clientY, plan });
         trackContact(e);
         const wasMulti = multiTouch;
         multiTouch = multiTouchLatch(multiTouch, fingers.size);
@@ -814,9 +919,6 @@ function TouchInputRouter({
           return;
         }
         hadSelectionAtStart = hasSelection();
-        // One plan for both layouts and both devices: what this pointer is for,
-        // and whether the engine has to be shut off before it can mark the page.
-        const plan = planPointer(tool, kind, ctx.current.fingerDraw);
         if (ctx.current.paged) {
           if (plan.pauseAtDown) pauseEngine();
           feed({ type: "pointerdown", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp });
@@ -860,6 +962,10 @@ function TouchInputRouter({
           if (mode === "pinch" && !penLock) panStep();
           return;
         }
+        // Under the navigation lock the engine never sees the drag, so it cannot
+        // pull a text selection along behind the scroll. Its pointerdown and
+        // pointerup still go through, so a tap under the lock still works.
+        if (!f.plan.engineMayDrag) swallow(e);
         if (ctx.current.paged) {
           feed({ type: "pointermove", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp }, e);
         } else {
@@ -872,6 +978,7 @@ function TouchInputRouter({
 
       const onEnd = (e: PointerEvent, cancelled: boolean) => {
         const wasContact = contacts.delete(e.pointerId);
+        const leaving = fingers.get(e.pointerId);
         const known = fingers.delete(e.pointerId);
         if (!known && pointerKindOf(e.pointerType) !== "touch") {
           // A pointer this router never drove (a mouse, or a stylus outside the
@@ -881,6 +988,18 @@ function TouchInputRouter({
         }
         resetPanBase();
         const owedToEngine = engineSaw.delete(e.pointerId);
+        // A pinch coming down to one finger hands that finger the gesture right
+        // here: from the next event on it is an ordinary one-finger contact.
+        // The finger that just lifted is still judged as part of the pinch
+        // (wasMulti), so the engine does not get its bare pointerup.
+        const wasMulti = multiTouch;
+        if (pinchHandsOff(multiTouch, fingers.size, penLock)) {
+          multiTouch = false;
+          handOffToOneFinger();
+        }
+        // A pointer this router took over mid-gesture: the engine has no
+        // matching down for it, so it must not see the up either.
+        if (orphaned.delete(e.pointerId)) swallow(e);
         if (!known) {
           swallow(e);
         } else if (penLock) {
@@ -888,7 +1007,7 @@ function TouchInputRouter({
           // Its handlers track no pointerId, so even a bare pointerup would end
           // the stroke the pen is in the middle of.
           swallow(e);
-        } else if (multiTouch) {
+        } else if (wasMulti) {
           // Taken over mid-gesture: the engine only gets this up if it saw the
           // matching down, so its selection handler cannot keep a stale anchor.
           if (!owedToEngine) swallow(e);
@@ -904,9 +1023,15 @@ function TouchInputRouter({
           feedVertical(
             cancelled
               ? { type: "pointercancel", id: e.pointerId }
-              : { type: "pointerup", id: e.pointerId },
+              : // The release position matters: the last few px between the
+                // final pointermove and the lift are part of the throw.
+                { type: "pointerup", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp },
           );
         }
+        // Belt to the navigation lock's braces: the engine saw this pointer's
+        // down even though it never saw it move, and a bare down can still leave
+        // a caret behind. A selection that predates the gesture is kept.
+        if (leaving && !leaving.plan.engineMayDrag) dropGestureSelection();
         multiTouch = multiTouchLatch(multiTouch, fingers.size);
         penLock = fingerLockAfterPen(penLock, false, fingers.size);
         if (fingers.size === 0) engineSaw.clear();
@@ -922,14 +1047,20 @@ function TouchInputRouter({
       el.addEventListener("pointermove", onMove, { capture: true, passive: false });
       el.addEventListener("pointerup", onUp, { capture: true });
       el.addEventListener("pointercancel", onCancel, { capture: true });
+      el.addEventListener("scroll", paintIndicator, { passive: true });
       return () => {
         clearLp();
+        if (indicatorTimer) window.clearTimeout(indicatorTimer);
+        hideIndicator();
+        el.removeEventListener("scroll", paintIndicator);
         clearBand();
         releaseCapture();
         feedVertical({ type: "reset" });
+        clearViewportBand();
         ctx.current.setTouchLock = null;
         ctx.current.resetGestures = null;
         el.style.touchAction = "";
+        el.style.transform = "";
         el.removeEventListener("pointerdown", onDown, { capture: true });
         el.removeEventListener("pointermove", onMove, { capture: true });
         el.removeEventListener("pointerup", onUp, { capture: true });
@@ -984,6 +1115,7 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
     interaction: null,
     selection: null,
     setTouchLock: null,
+    indicator: null,
     resetGestures: null,
     turnToPage: null,
   });
@@ -1047,6 +1179,12 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
     propsRef.current.onAnnotationAnchor?.(id, rect);
   }, []);
 
+  // Handed to the touch router through the ref so painting it never re-renders
+  // the memoized engine subtree.
+  const indicatorRef = useCallback((el: HTMLDivElement | null) => {
+    pagedRef.current.indicator = el;
+  }, []);
+
   // Selection menu slot on the native AnnotationLayer: instead of a menu, it
   // hosts the probe that measures the selected annotation's viewport rect (the
   // wrapper div is absolutely positioned over the annotation by the layer).
@@ -1075,8 +1213,22 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
     return <div style={props.style} className={props.className} />;
   }
 
+  // overflow:hidden and the matching background on the wrapper are what make
+  // the vertical rubber band possible: the band translates the scroll container
+  // itself (docs/pitfall/45), so the wrapper both clips the edge that leaves the
+  // frame and fills the gap that opens on the other side.
   return (
-    <div style={{ height: "100%", width: "100%", ...props.style }} className={props.className}>
+    <div
+      style={{
+        height: "100%",
+        width: "100%",
+        position: "relative",
+        overflow: "hidden",
+        backgroundColor: "#f1f3f5",
+        ...props.style,
+      }}
+      className={props.className}
+    >
       <EmbedPDF engine={engine} plugins={plugins} onInitialized={onInitialized}>
         {({ activeDocumentId }) =>
           activeDocumentId && (
@@ -1118,6 +1270,25 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
           )
         }
       </EmbedPDF>
+      {/* The scroll indicator. Outside the scroll container on purpose: it
+          belongs to the frame, so the rubber band does not carry it off the
+          screen. Non-interactive and invisible until something scrolls. */}
+      <div
+        ref={indicatorRef}
+        aria-hidden
+        style={{
+          position: "absolute",
+          top: 0,
+          right: "2px",
+          width: "3px",
+          height: 0,
+          borderRadius: "2px",
+          backgroundColor: "rgba(0, 0, 0, 0.28)",
+          opacity: 0,
+          transition: "opacity 200ms ease",
+          pointerEvents: "none",
+        }}
+      />
     </div>
   );
 }

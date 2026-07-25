@@ -126,23 +126,61 @@ test("planFinger: an annotation tool shuts the engine off at pointerdown, the ot
     action: "scroll",
     pauseAtDown: true,
     longPressSelect: false,
+    engineMayDrag: true,
   });
   expect(planFinger("annotate", true)).toEqual({
     action: "draw",
     pauseAtDown: false,
     longPressSelect: false,
+    engineMayDrag: true,
   });
   for (const fingerDraw of [false, true]) {
     expect(planFinger("none", fingerDraw)).toEqual({
       action: "scroll",
       pauseAtDown: false,
       longPressSelect: true,
+      engineMayDrag: true,
     });
     expect(planFinger("navlock", fingerDraw)).toEqual({
       action: "scroll",
       pauseAtDown: false,
       longPressSelect: false,
+      engineMayDrag: false,
     });
+  }
+});
+
+// --- the navigation lock never lets the engine watch a drag -----------------
+
+test("planPointer: under the lock no device lets the engine follow the drag", () => {
+  // The lock scrolls correctly on its own; what leaked was the engine watching
+  // the same stylus slide and dragging a text selection out under it. The
+  // engine does not read pointerType, so this holds for every device.
+  for (const p of pointers) {
+    for (const fingerDraw of [false, true]) {
+      expect(planPointer("navlock", p, fingerDraw).engineMayDrag).toBe(false);
+    }
+  }
+});
+
+test("planPointer: outside the lock the stylus keeps its full reach", () => {
+  // Selecting text and drawing with the Pencil is the whole desktop/no-tool
+  // path; the fix must not touch it.
+  for (const t of ["none", "annotate"] as const) {
+    for (const fingerDraw of [false, true]) {
+      expect(planPointer(t, "pen", fingerDraw).engineMayDrag).toBe(true);
+      expect(planPointer(t, "pen", fingerDraw).action).toBe("draw");
+      expect(planPointer(t, "mouse", fingerDraw).engineMayDrag).toBe(true);
+    }
+  }
+});
+
+test("planPointer: under the lock a pointer still reaches the engine at down and up", () => {
+  // Only the drag is taken away. The pause is what would take the tap with it,
+  // and the lock does not ask for it: a tap under the lock still dismisses an
+  // overlay and still selects an annotation.
+  for (const p of pointers) {
+    expect(planPointer("navlock", p, false).pauseAtDown).toBe(false);
   }
 });
 

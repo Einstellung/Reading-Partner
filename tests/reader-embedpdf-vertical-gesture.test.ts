@@ -9,19 +9,26 @@
 
 import { test, expect } from "bun:test";
 import {
+  bandOffsetFor,
   clampScroll,
   flingDecayFactor,
   flingFrom,
   initVerticalState,
+  smoothVelocity,
+  splitOvershoot,
   stepVertical,
+  verticalNeedsFrames,
+  VERTICAL_BAND_LIMIT,
+  VERTICAL_BAND_OVERSHOOT_CAP,
   VERTICAL_FLING_DECAY,
   VERTICAL_FLING_MIN_SPEED,
   VERTICAL_SCROLL_SLOP,
+  VERTICAL_VELOCITY_SMOOTHING,
   type VerticalCommand,
   type VerticalInput,
   type VerticalState,
 } from "../src/reader-embedpdf/vertical-gesture";
-import { planPointer } from "../src/reader-embedpdf/touch-routing";
+import { pinchHandsOff, planPointer } from "../src/reader-embedpdf/touch-routing";
 
 // The four plans that can reach (or be refused by) the machine.
 const FINGER = planPointer("none", "touch", false); // no tool: finger scrolls
@@ -97,17 +104,38 @@ const move = (x: number, y: number, t: number): VerticalInput => ({
   y,
   t,
 });
+// A lift the host could not position (pointercancel's sibling in the old
+// shape). The throw then rests on the moves alone.
 const up = (): VerticalInput => ({ type: "pointerup", id: 1 });
+// The lift as the host really sends it: the last few px before the finger left
+// the glass are part of the throw.
+const upAt = (x: number, y: number, t: number): VerticalInput => ({
+  type: "pointerup",
+  id: 1,
+  x,
+  y,
+  t,
+});
 
-// Coast to a standstill (or give up), returning the frame count.
+// Run every frame the machine still wants — inertia, band spring, or both —
+// to a standstill (or give up), returning the frame count.
 function coast(state: VerticalState, vp: Viewport, frames = 600): { state: VerticalState; n: number } {
   let n = 0;
   let s = state;
-  while (s.fling && n < frames) {
+  while (verticalNeedsFrames(s) && n < frames) {
     s = step(s, { type: "flingFrame", dt: 16 }, vp).state;
     n += 1;
   }
   return { state: s, n };
+}
+
+// The last band offset a run asked the host to paint.
+function lastBand(cmds: VerticalCommand[]): { x: number; y: number } | null {
+  for (let i = cmds.length - 1; i >= 0; i -= 1) {
+    const c = cmds[i];
+    if (c.type === "band") return { x: c.x, y: c.y };
+  }
+  return null;
 }
 
 // --- helpers ---------------------------------------------------------------
@@ -302,13 +330,18 @@ test("a diagonal fling coasts on both axes", () => {
   expect(vp.left).toBeGreaterThan(before.left);
 });
 
-test("a fling stops at the bottom edge instead of grinding there", () => {
-  const vp = viewport({ top: 190, maxTop: 200 });
-  const r = run([down(100, 300), move(100, 280, 16), move(100, 100, 32), up()], vp);
+test("a fling into the bottom edge pins the scroll, bounces, and settles", () => {
+  // The throw is released well before the edge so the coast, not the finger,
+  // is what arrives there.
+  const vp = viewport({ top: 0, maxTop: 60 });
+  const r = run([down(100, 300), move(100, 280, 16), move(100, 240, 32), upAt(100, 200, 48)], vp);
+  expect(r.state.fling).not.toBeNull();
   const done = coast(r.state, vp);
-  expect(vp.top).toBe(200);
+  expect(vp.top).toBe(60); // the scroll position never leaves the range
   expect(done.state.fling).toBeNull();
-  expect(done.n).toBeLessThan(5); // it hits the edge almost immediately
+  expect(done.state.over).toEqual({ x: 0, y: 0 }); // and the band came home
+  expect(done.n).toBeGreaterThan(2); // it bounced rather than stopping dead
+  expect(done.n).toBeLessThan(120);
 });
 
 test("an axis stuck at its edge does not stop the axis that still has room", () => {
@@ -346,7 +379,6 @@ test("a new scroll pointer landing stops the coast", () => {
   const next = run([down(100, 400, 100)], vp, flung.state);
   expect(types(next.commands)).toContain("stopFling");
   expect(next.state.fling).toBeNull();
-  expect(next.state.phase).toBe("pending");
 });
 
 test("cancelFling drops the coast and touches nothing else", () => {
@@ -448,4 +480,307 @@ test("reset on an idle machine is harmless and idempotent", () => {
   expect(a.state).toEqual(initVerticalState());
   expect(b.state).toEqual(initVerticalState());
   expect(types(b.commands)).toEqual(["stopFling", "resume", "releaseCapture"]);
+});
+
+// --- rubber band: the ends of the document ----------------------------------
+
+test("splitOvershoot: the scroll position keeps what it can hold, the rest is overshoot", () => {
+  expect(splitOvershoot(120, 500)).toEqual({ scroll: 120, over: 0 });
+  expect(splitOvershoot(-40, 500)).toEqual({ scroll: 0, over: -40 });
+  expect(splitOvershoot(560, 500)).toEqual({ scroll: 500, over: 60 });
+});
+
+test("splitOvershoot: an axis with no range at all never bands", () => {
+  // A document that fits the screen should sit still, not wobble.
+  expect(splitOvershoot(-40, 0)).toEqual({ scroll: 0, over: 0 });
+  expect(splitOvershoot(80, 0)).toEqual({ scroll: 0, over: 0 });
+});
+
+test("splitOvershoot: the raw overshoot is capped, so the spring is never long", () => {
+  // The drawn offset saturates well before the cap; what the cap bounds is how
+  // much the spring (and the drag back in) has to undo.
+  expect(splitOvershoot(-4000, 500).over).toBe(-VERTICAL_BAND_OVERSHOOT_CAP);
+  expect(splitOvershoot(9000, 500).over).toBe(VERTICAL_BAND_OVERSHOOT_CAP);
+});
+
+test("bandOffsetFor: opposite the overshoot, damped, and bounded by the limit", () => {
+  expect(bandOffsetFor({ x: 0, y: 0 }, VERTICAL_BAND_LIMIT)).toEqual({ x: -0, y: -0 });
+  // Pushing the scroll past the bottom moves the content up.
+  expect(bandOffsetFor({ x: 0, y: 60 }, VERTICAL_BAND_LIMIT).y).toBeLessThan(0);
+  expect(bandOffsetFor({ x: 0, y: -60 }, VERTICAL_BAND_LIMIT).y).toBeGreaterThan(0);
+  // Damped: 60px of pull is worth less than 60px of movement.
+  expect(Math.abs(bandOffsetFor({ x: 0, y: 60 }, VERTICAL_BAND_LIMIT).y)).toBeLessThan(60);
+  // And no pull at all reaches past the limit.
+  expect(Math.abs(bandOffsetFor({ x: 0, y: 1e6 }, VERTICAL_BAND_LIMIT).y)).toBeLessThan(
+    VERTICAL_BAND_LIMIT,
+  );
+});
+
+test("pulling past the top pins the scroll at 0 and bands the content instead", () => {
+  const vp = viewport({ top: 0 });
+  const r = run([down(100, 100), move(100, 200, 16), move(100, 300, 32)], vp);
+  expect(vp.top).toBe(0);
+  const b = lastBand(r.commands);
+  expect(b).not.toBeNull();
+  expect(b!.y).toBeGreaterThan(0); // content follows the finger down
+  expect(b!.y).toBeLessThan(VERTICAL_BAND_LIMIT);
+  expect(r.state.over.y).toBe(-200);
+});
+
+test("the band grows with the pull but gives less and less", () => {
+  const vp = viewport({ top: 0 });
+  const a = run([down(100, 100), move(100, 160, 16)], vp);
+  const b = run([move(100, 220, 32)], vp, a.state);
+  const first = lastBand(a.commands)!.y;
+  const second = lastBand(b.commands)!.y;
+  expect(second).toBeGreaterThan(first);
+  expect(second - first).toBeLessThan(first); // the second 60px buys less than the first
+});
+
+test("dragging back into the document zeroes the band and scrolls again, with no jump", () => {
+  const vp = viewport({ top: 0 });
+  const pulled = run([down(100, 100), move(100, 260, 16)], vp);
+  expect(pulled.state.over.y).toBe(-160);
+  // The follow measures a virtual position, so the 160px of pull has to be
+  // paid back before the document moves at all.
+  const back = run([move(100, 180, 32)], vp, pulled.state);
+  expect(vp.top).toBe(0);
+  expect(back.state.over.y).toBe(-80);
+  const past = run([move(100, 40, 48)], vp, back.state);
+  expect(past.state.over).toEqual({ x: 0, y: 0 });
+  expect(vp.top).toBe(60); // 100 - 40, measured from the same origin throughout
+  expect(lastBand(past.commands)).toEqual({ x: -0, y: -0 });
+});
+
+test("a release from inside the band springs home instead of flinging", () => {
+  const vp = viewport({ top: 0 });
+  const r = run([down(100, 100), move(100, 200, 16), move(100, 300, 32), upAt(100, 400, 48)], vp);
+  expect(r.state.fling).toBeNull(); // the band is already holding the motion
+  expect(types(r.commands)).toContain("startFling"); // but frames are still owed
+  const done = coast(r.state, vp);
+  expect(done.state.over).toEqual({ x: 0, y: 0 });
+  expect(done.n).toBeGreaterThan(1);
+  expect(done.n).toBeLessThan(60);
+  expect(vp.top).toBe(0);
+});
+
+test("the last band frame paints exactly rest, so the transform is cleared", () => {
+  const vp = viewport({ top: 0 });
+  const r = run([down(100, 100), move(100, 260, 16), upAt(100, 260, 32)], vp);
+  let s = r.state;
+  const cmds: VerticalCommand[] = [];
+  for (let i = 0; i < 200 && verticalNeedsFrames(s); i += 1) {
+    const f = step(s, { type: "flingFrame", dt: 16 }, vp);
+    s = f.state;
+    cmds.push(...f.commands);
+  }
+  expect(lastBand(cmds)).toEqual({ x: -0, y: -0 });
+  expect(types(cmds)).toContain("stopFling");
+});
+
+test("a document with no scroll range never bands, however hard it is pulled", () => {
+  const vp = viewport({ top: 0, maxTop: 0, maxLeft: 0 });
+  const r = run([down(100, 100), move(100, 400, 16), move(100, 20, 32), upAt(100, 20, 48)], vp);
+  expect(types(r.commands)).not.toContain("band");
+  expect(r.state.over).toEqual({ x: 0, y: 0 });
+});
+
+test("the horizontal axis bands only when it has somewhere to scroll", () => {
+  const pinned = viewport({ maxLeft: 0 });
+  const scrollable = viewport({ maxLeft: 400 });
+  expect(types(run([down(200, 100), move(400, 100, 16)], pinned).commands)).not.toContain("band");
+  const r = run([down(200, 100), move(400, 100, 16)], scrollable);
+  expect(lastBand(r.commands)!.x).toBeGreaterThan(0);
+});
+
+test("a fling into the top edge bounces back to exactly rest", () => {
+  // Released while there is still room, so it is the coast that reaches the
+  // top, not the finger.
+  const vp = viewport({ top: 400, maxTop: 5000 });
+  const r = run([down(100, 100), move(100, 150, 16), move(100, 250, 32), upAt(100, 350, 48)], vp);
+  expect(r.state.fling).not.toBeNull();
+  const done = coast(r.state, vp);
+  expect(vp.top).toBe(0);
+  expect(done.state.over).toEqual({ x: 0, y: 0 });
+});
+
+test("a faster fling into the edge pulls the band out further", () => {
+  const slow = viewport({ top: 0, maxTop: 40 });
+  const fast = viewport({ top: 0, maxTop: 40 });
+  const slowRun = run([down(100, 300), move(100, 292, 16), upAt(100, 284, 32)], slow);
+  const fastRun = run([down(100, 300), move(100, 260, 16), upAt(100, 220, 32)], fast);
+  const peak = (from: VerticalState, vp: Viewport) => {
+    let s = from;
+    let max = 0;
+    for (let i = 0; i < 200 && verticalNeedsFrames(s); i += 1) {
+      s = step(s, { type: "flingFrame", dt: 16 }, vp).state;
+      max = Math.max(max, Math.abs(s.over.y));
+    }
+    return max;
+  };
+  expect(peak(fastRun.state, fast)).toBeGreaterThan(peak(slowRun.state, slow));
+});
+
+test("reset while banded tells the host to drop the offset", () => {
+  const vp = viewport({ top: 0 });
+  const pulled = run([down(100, 100), move(100, 260, 16)], vp);
+  const r = run([{ type: "reset" }], vp, pulled.state);
+  expect(r.commands).toContainEqual({ type: "band", x: 0, y: 0 });
+  expect(r.state.over).toEqual({ x: 0, y: 0 });
+});
+
+test("cancelFling drops the inertia but still brings the band home", () => {
+  const vp = viewport({ top: 0, maxTop: 40 });
+  const flung = run([down(100, 300), move(100, 260, 16), upAt(100, 220, 32)], vp);
+  const banded = step(flung.state, { type: "flingFrame", dt: 16 }, vp).state;
+  expect(banded.over.y).not.toBe(0);
+  const r = run([{ type: "cancelFling" }], vp, banded.state);
+  expect(r.state.fling).toBeNull();
+  expect(types(r.commands)).not.toContain("stopFling"); // frames are still owed
+  expect(coast(r.state, vp).state.over).toEqual({ x: 0, y: 0 });
+});
+
+// --- release velocity -------------------------------------------------------
+
+test("smoothVelocity: the quoted weight is the weight at one 16ms frame", () => {
+  expect(smoothVelocity(1, 0, VERTICAL_VELOCITY_SMOOTHING, 16)).toBeCloseTo(0.3, 10);
+  expect(smoothVelocity(0, 1, VERTICAL_VELOCITY_SMOOTHING, 16)).toBeCloseTo(0.7, 10);
+});
+
+test("smoothVelocity: independent of the sample rate", () => {
+  const once = smoothVelocity(1, 0, VERTICAL_VELOCITY_SMOOTHING, 16);
+  const twice = smoothVelocity(smoothVelocity(1, 0, VERTICAL_VELOCITY_SMOOTHING, 8), 0, VERTICAL_VELOCITY_SMOOTHING, 8);
+  expect(twice).toBeCloseTo(once, 10);
+});
+
+test("smoothVelocity: a long gap all but replaces the history", () => {
+  expect(smoothVelocity(5, 0, VERTICAL_VELOCITY_SMOOTHING, 1000)).toBeCloseTo(0, 6);
+});
+
+test("one jittery sample does not decide how far the throw goes", () => {
+  // The same steady drag, one sample of which stalls and the next of which
+  // catches up. Total displacement is identical; the release velocity has to be
+  // too. Taking the last sample raw would have made the throw twice as long.
+  const steady = viewport({ top: 2000 });
+  const jittery = viewport({ top: 2000 });
+  const a = run(
+    [
+      down(100, 500),
+      move(100, 480, 16),
+      move(100, 460, 32),
+      move(100, 440, 48),
+      move(100, 420, 64),
+      move(100, 400, 80),
+      upAt(100, 380, 96),
+    ],
+    steady,
+  );
+  const b = run(
+    [
+      down(100, 500),
+      move(100, 480, 16),
+      move(100, 460, 32),
+      move(100, 460, 48), // the sample that stalled
+      move(100, 420, 64), // and the one that caught up
+      move(100, 400, 80),
+      upAt(100, 380, 96),
+    ],
+    jittery,
+  );
+  const ay = a.state.fling!.vy;
+  const by = b.state.fling!.vy;
+  expect(Math.abs(by - ay) / ay).toBeLessThan(0.1);
+});
+
+test("the movement between the last sample and the lift counts towards the throw", () => {
+  const withLift = viewport({ top: 2000 });
+  const without = viewport({ top: 2000 });
+  const a = run([down(100, 400), move(100, 380, 16), upAt(100, 300, 32)], withLift);
+  const b = run([down(100, 400), move(100, 380, 16), upAt(100, 380, 32)], without);
+  expect(a.state.fling!.vy).toBeGreaterThan(b.state.fling!.vy * 2);
+});
+
+test("a finger that stops before lifting does not fling", () => {
+  const vp = viewport({ top: 2000 });
+  const r = run([down(100, 400), move(100, 300, 16), move(100, 299, 400), upAt(100, 299, 500)], vp);
+  expect(r.state.fling).toBeNull();
+  expect(types(r.commands)).not.toContain("startFling");
+});
+
+// --- taking over content that is still moving --------------------------------
+
+test("a finger landing on a live coast follows it at once, with no slop", () => {
+  const vp = viewport({ top: 2000 });
+  const flung = run([down(100, 300), move(100, 280, 16), move(100, 200, 32), upAt(100, 120, 48)], vp);
+  const grab = run([down(100, 400, 100)], vp, flung.state);
+  expect(grab.state.phase).toBe("scroll");
+  expect(types(grab.commands)).toEqual(["stopFling", "pause", "dropSelection", "capture"]);
+  // A move smaller than the slop already scrolls.
+  const top = vp.top;
+  run([move(100, 398, 116)], vp, grab.state);
+  expect(vp.top).toBe(top + 2);
+});
+
+test("a finger landing on a coast that is all but over is still an ordinary tap", () => {
+  const vp = viewport({ top: 2000 });
+  // Released just above the coast threshold, then left to decay to a crawl.
+  const flung = run([down(100, 300), move(100, 299, 16), upAt(100, 298, 32)], vp);
+  const slowed = coast(flung.state, vp);
+  const tap = run([down(100, 400, 900)], vp, slowed.state);
+  expect(tap.state.phase).toBe("pending");
+  expect(tap.commands).toEqual([]);
+});
+
+test("a finger landing on a bouncing document picks the band up where it was", () => {
+  const vp = viewport({ top: 0 });
+  const pulled = run([down(100, 100), move(100, 260, 16), upAt(100, 260, 32)], vp);
+  const springing = step(pulled.state, { type: "flingFrame", dt: 16 }, vp).state;
+  expect(springing.over.y).toBeLessThan(0);
+  const grab = run([down(100, 500, 100)], vp, springing);
+  expect(grab.state.phase).toBe("scroll");
+  // Holding still leaves the band exactly where the spring had got to: the
+  // content does not snap out from under the finger.
+  const held = run([move(100, 500, 116)], vp, grab.state);
+  expect(held.state.over.y).toBe(springing.over.y);
+  expect(types(held.commands)).not.toContain("band");
+});
+
+test("a pointer planned as draw never takes a coast over", () => {
+  const vp = viewport({ top: 2000 });
+  const flung = run([down(100, 300), move(100, 280, 16), move(100, 200, 32), upAt(100, 120, 48)], vp);
+  const r = run([down(100, 400, 100, DRAW)], vp, flung.state);
+  expect(r.commands).toEqual([]);
+  expect(r.state.fling).not.toBeNull();
+});
+
+// --- the finger a pinch leaves behind ----------------------------------------
+
+test("pinchHandsOff: only when a multi-finger gesture comes down to one live finger", () => {
+  expect(pinchHandsOff(true, 1, false)).toBe(true);
+  expect(pinchHandsOff(true, 2, false)).toBe(false); // 3 -> 2 is still a pinch
+  expect(pinchHandsOff(true, 0, false)).toBe(false); // the glass emptied
+  expect(pinchHandsOff(false, 1, false)).toBe(false); // never was a pinch
+  expect(pinchHandsOff(true, 1, true)).toBe(false); // a pen holds it dead
+});
+
+test("an explicit takeover follows from the finger's current position, no slop", () => {
+  const vp = viewport({ top: 900 });
+  const r = run(
+    [{ type: "pointerdown", id: 1, x: 100, y: 300, t: 0, plan: FINGER, takeover: true }],
+    vp,
+  );
+  expect(r.state.phase).toBe("scroll");
+  expect(types(r.commands)).toEqual(["pause", "dropSelection", "capture"]);
+  run([move(100, 297, 16)], vp, r.state);
+  expect(vp.top).toBe(903); // 3px of movement, 3px of scroll
+});
+
+test("a takeover under an annotation tool pauses the engine once, at down", () => {
+  const vp = viewport({ top: 900 });
+  const r = run(
+    [{ type: "pointerdown", id: 1, x: 100, y: 300, t: 0, plan: ANNOTATE, takeover: true }],
+    vp,
+  );
+  expect(types(r.commands)).toEqual(["pause", "dropSelection", "capture"]);
+  expect(r.state.phase).toBe("scroll");
 });
