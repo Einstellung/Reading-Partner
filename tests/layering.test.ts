@@ -1,7 +1,7 @@
 // The layering of src/ enforced instead of remembered. Every .ts/.tsx file under
-// src/ is scanned for relative imports, each one resolved to the top-level entry
-// it lands in, and the resulting directory graph is checked against the table
-// below. Run: bun test.
+// src/ is scanned for relative imports, each one resolved to the entry it lands
+// in, and the resulting directory graph is checked against the table below.
+// Run: bun test.
 //
 // The layers, innermost first:
 //   platform   host and storage primitives (app/, sync/). app/ is the floor and
@@ -19,9 +19,10 @@
 //
 // A planned regrouping folds these directories into platform/ (app, sync), ai/
 // (plus voice), memory/, fulltext/, reading/ (absorbing prep, notes, figures,
-// slides, reader-embedpdf), info/ and ui/ (components). When that lands, this
-// test should need edits to LAYER only — the rules below are written against
-// layers, not directory names.
+// slides, reader-embedpdf), info/ and ui/ (components). Grouping must not cost
+// the graph its resolution, so a LAYER key may name a unit inside a grouping
+// directory ("platform/app") and the graph keeps a node per unit. When the
+// regrouping lands, this test needs edits to LAYER only.
 
 import { expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -30,7 +31,10 @@ import { fileURLToPath } from "node:url";
 
 type Layer = "platform" | "capability" | "domain" | "ui" | "shell" | "entry";
 
-// Every top-level entry under src/ and the layer it belongs to. A new directory
+// Every entry under src/ and the layer it belongs to. A key is either a
+// top-level entry ("memory", "App.tsx") or, when a top-level directory groups
+// several units, one of those units ("platform/app"); a grouping directory
+// keeps a key of its own for the files sitting directly in it. A new directory
 // or root file must be added here or the first test fails: deciding where it
 // sits is the point.
 const LAYER: Record<string, Layer> = {
@@ -68,10 +72,20 @@ const MAY_IMPORT: Record<Layer, Layer[]> = {
   entry: ["platform", "capability", "domain", "ui", "shell", "entry"],
 };
 
-// app/ is the floor: it imports no other top-level entry at all.
+// A top-level directory whose subdirectories are units in their own right, so
+// an import into one of them is an edge to that unit rather than to the group.
+// Derived from the two-segment keys above, so registering a unit is enough.
+const GROUPS = new Set(
+  Object.keys(LAYER)
+    .filter((k) => k.includes("/"))
+    .map((k) => k.split("/")[0]),
+);
+
+// app/ is the floor: it imports no other entry at all.
 const LEAF = "app";
-// components/ and App.tsx are reachable only from the shell and the entry point.
-const UI_ONLY = ["components", "App.tsx"];
+// The ui layer and the shell are reachable only from the shell and the entry
+// point.
+const UI_ONLY = Object.keys(LAYER).filter((d) => LAYER[d] === "ui" || LAYER[d] === "shell");
 
 const SRC = fileURLToPath(new URL("../src", import.meta.url));
 
@@ -108,18 +122,38 @@ function sourceFiles(dir: string): string[] {
 // message names the file and the specifier, so that reads as what it is.
 const IMPORT_RE = /(?:\bfrom|\bimport)\s*\(?\s*["']([^"']+)["']/g;
 
-// A specifier resolved to the top-level entry under src/ it lands in, or null
-// when it leaves src/ or points at a non-source asset.
+// The entry a source file belongs to: its top-level entry, or the unit that
+// holds it when it sits inside a grouping directory.
+function entryOf(rel: string): string {
+  const parts = rel.split("/");
+  if (parts.length > 2 && GROUPS.has(parts[0])) return `${parts[0]}/${parts[1]}`;
+  return parts[0];
+}
+
+// A specifier resolved to the entry under src/ it lands in, or null when it
+// leaves src/ or points at a non-source asset.
 //
 // The trap: a barrel import like "../voice" resolves to the directory src/voice,
 // not to a root-level file. Both look like a single path segment, so the
-// directory check has to be a real stat, not a count of slashes.
+// directory check has to be a real stat, not a count of slashes. Two segments
+// inside a grouping directory are ambiguous the same way — "reading/prep" is a
+// unit, "reading/turn" is a file of the group itself — and need the same stat.
 function resolveEntry(fromFile: string, spec: string): string | null {
   const abs = resolve(dirname(fromFile), spec);
   const rel = relative(SRC, abs);
   if (rel === "" || rel.startsWith("..")) return null;
-  const head = rel.split("/")[0];
-  if (rel.includes("/")) return head;
+  const parts = rel.split("/");
+  const head = parts[0];
+  if (parts.length > 1) {
+    if (!GROUPS.has(head)) return head;
+    if (parts.length > 2) return `${head}/${parts[1]}`;
+    try {
+      if (statSync(abs).isDirectory()) return `${head}/${parts[1]}`;
+    } catch {
+      // Not a directory: a file of the grouping directory itself.
+    }
+    return head;
+  }
   try {
     if (statSync(abs).isDirectory()) return head;
   } catch {
@@ -140,7 +174,7 @@ function collectEdges(): Edge[] {
   const edges: Edge[] = [];
   for (const file of sourceFiles(SRC)) {
     const rel = relative(SRC, file);
-    const from = rel.includes("/") ? rel.split("/")[0] : rel;
+    const from = entryOf(rel);
     const text = readFileSync(file, "utf8");
     for (const m of text.matchAll(IMPORT_RE)) {
       const spec = m[1];
@@ -158,11 +192,24 @@ const EDGES = collectEdges();
 // undeclared entry is reported by its own test instead of crashing the others.
 const DECLARED = EDGES.filter((e) => e.from in LAYER && e.to in LAYER);
 
-function topLevelEntries(): string[] {
-  return readdirSync(SRC).filter((entry) => {
-    if (statSync(join(SRC, entry)).isDirectory()) return true;
-    return /\.tsx?$/.test(entry) && !/\.test\.tsx?$/.test(entry) && !/\.d\.ts$/.test(entry);
-  });
+// Every entry that needs a key in LAYER: the top-level ones, plus the
+// subdirectories of a grouping directory.
+function declaredEntries(): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(SRC)) {
+    if (!statSync(join(SRC, entry)).isDirectory()) {
+      if (/\.tsx?$/.test(entry) && !/\.test\.tsx?$/.test(entry) && !/\.d\.ts$/.test(entry)) {
+        out.push(entry);
+      }
+      continue;
+    }
+    out.push(entry);
+    if (!GROUPS.has(entry)) continue;
+    for (const sub of readdirSync(join(SRC, entry))) {
+      if (statSync(join(SRC, entry, sub)).isDirectory()) out.push(`${entry}/${sub}`);
+    }
+  }
+  return out;
 }
 
 function describe(edges: Edge[]): string {
@@ -180,8 +227,8 @@ function reject(message: string): never {
   throw new Error(`\n${message}\n`);
 }
 
-test("every top-level entry under src/ has a declared layer", () => {
-  const undeclared = topLevelEntries().filter((entry) => !(entry in LAYER));
+test("every entry under src/ has a declared layer", () => {
+  const undeclared = declaredEntries().filter((entry) => !(entry in LAYER));
   if (undeclared.length > 0) {
     reject(
       `Not in the LAYER table in tests/layering.test.ts:\n` +
@@ -245,7 +292,7 @@ test("the directory dependency graph is acyclic", () => {
   expect([...reports.keys()]).toEqual([]);
 });
 
-test("app/ is a leaf and imports no other src/ directory", () => {
+test("app/ is a leaf and imports no other src/ entry", () => {
   const escaping = EDGES.filter((e) => e.from === LEAF);
   if (escaping.length > 0) {
     reject(
@@ -278,7 +325,7 @@ test("components/ and App.tsx are imported only by the shell and the entry point
   );
   if (bad.length > 0) {
     reject(
-      "Only App.tsx and the entry point may reach into src/components or src/App.tsx:\n" +
+      `Only App.tsx and the entry point may reach into ${UI_ONLY.map((u) => `src/${u}`).join(" or ")}:\n` +
         describe(bad) +
         "\nLogic a component needs belongs in a .ts module the component imports, not the" +
         " other way round.",
