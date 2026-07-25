@@ -14,7 +14,7 @@
 // screenshot artifact.
 
 import { mkdir, BaseDirectory } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../app/atomic-fs";
+import { writeTextAtomic } from "../platform/app/atomic-fs";
 import type { PdfEngine } from "@embedpdf/models";
 import { getPdfiumEngine } from "../reader-embedpdf/engine-singleton";
 import { SMOKE_PDF_BASE64, decodeBase64 } from "./smoke-pdf";

@@ -4,8 +4,8 @@
 // other control reports up to App.
 
 import { useState, type RefObject } from "react";
-import type { ViewInstance, ViewStats } from "../../app/reader-contract";
-import { ANNOTATION_COLORS } from "../../app/annotations";
+import type { ViewInstance, ViewStats } from "../../platform/app/reader-contract";
+import { ANNOTATION_COLORS } from "../../platform/app/annotations";
 import { setTouchDebugEnabled } from "../../reader-embedpdf/touch-debug";
 import type { ToolType } from "../common/types";
 import {

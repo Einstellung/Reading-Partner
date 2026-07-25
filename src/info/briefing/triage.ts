@@ -4,7 +4,7 @@
 // watchdog. The model sorts every item into exactly one tier and writes the
 // overview/reasons/lines to the user.
 
-import { aiLanguageName, type AiLanguage } from "../../app/settings";
+import { aiLanguageName, type AiLanguage } from "../../platform/app/settings";
 import type { FeedbackEvent } from "../../memory/feedback";
 import type { InfoItem, TriageResult } from "./types";
 

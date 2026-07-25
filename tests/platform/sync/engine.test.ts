@@ -4,11 +4,11 @@
 // network. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { SyncEngine, type EngineDeps } from "../../src/sync/engine";
-import type { Manifest, SyncBackend } from "../../src/sync/backend";
-import type { BookFs } from "../../src/sync/books";
-import type { LocalFile, SyncFs } from "../../src/sync/syncFs";
-import type { Snapshot } from "../../src/sync/reconcile";
+import { SyncEngine, type EngineDeps } from "../../../src/platform/sync/engine";
+import type { Manifest, SyncBackend } from "../../../src/platform/sync/backend";
+import type { BookFs } from "../../../src/platform/sync/books";
+import type { LocalFile, SyncFs } from "../../../src/platform/sync/syncFs";
+import type { Snapshot } from "../../../src/platform/sync/reconcile";
 
 const enc = (s: string) => new TextEncoder().encode(s);
 const dec = (b: Uint8Array) => new TextDecoder().decode(b);

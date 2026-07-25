@@ -11,7 +11,7 @@ import {
   mkdir,
   readTextFile,
 } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../app/atomic-fs";
+import { writeTextAtomic } from "../platform/app/atomic-fs";
 import { NOTES_VERSION, type NotesState } from "./types";
 
 function dirFor(bookId: string): string {

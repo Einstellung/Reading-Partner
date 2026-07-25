@@ -1,8 +1,9 @@
-// The load-side half of durable storage (src/app/atomic-fs.ts): a data file the
-// app cannot rebuild is never silently replaced by defaults. Unparseable content
-// is quarantined first; a file that could not be read at all is left in place
-// and reported so callers can refuse to overwrite it. The atomic write itself is
-// a Rust command, covered by the tests in src-tauri/src/atomic_fs.rs.
+// The load-side half of durable storage (src/platform/app/atomic-fs.ts): a data
+// file the app cannot rebuild is never silently replaced by defaults.
+// Unparseable content is quarantined first; a file that could not be read at all
+// is left in place and reported so callers can refuse to overwrite it. The
+// atomic write itself is a Rust command, covered by the tests in
+// src-tauri/src/atomic_fs.rs.
 // Run: bun test.
 
 import { beforeEach, expect, mock, test } from "bun:test";
@@ -44,7 +45,7 @@ mock.module("@tauri-apps/api/core", () => ({
   },
 }));
 
-const { onCorruptFile, readGuardedJson } = await import("../src/app/atomic-fs");
+const { onCorruptFile, readGuardedJson } = await import("../src/platform/app/atomic-fs");
 
 interface Store {
   books: Record<string, string>;

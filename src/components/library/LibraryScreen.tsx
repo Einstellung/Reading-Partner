@@ -11,10 +11,10 @@ import {
   sortedFiles,
   type FileRef,
   type Topic,
-} from "../../app/topics";
-import { getViewState } from "../../app/storage";
+} from "../../platform/app/topics";
+import { getViewState } from "../../platform/app/storage";
 import { getFulltext } from "../../fulltext";
-import { loadAnnotations } from "../../app/annotations";
+import { loadAnnotations } from "../../platform/app/annotations";
 import { BTN, BTN_SM, BTN_SM_DANGER } from "../common/buttons";
 
 const INPUT = "flex-1 px-2.5 py-2 border border-[#dcdcdc] rounded-md [font:inherit]";

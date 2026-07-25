@@ -11,7 +11,7 @@
 // entries) so it unit-tests without a filesystem; the async wrapper wires it to
 // the live store and topic list. Nothing here changes the memory storage format.
 
-import { listTopics } from "../app/topics";
+import { listTopics } from "../platform/app/topics";
 import { readMemoryIndex } from "./live";
 import { loadProfile } from "./profile";
 import type { MemoryIndexEntry, MemoryType } from "./types";

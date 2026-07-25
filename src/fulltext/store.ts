@@ -9,7 +9,7 @@ import {
   exists,
   readTextFile,
 } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../app/atomic-fs";
+import { writeTextAtomic } from "../platform/app/atomic-fs";
 import { extractFulltext } from "./extract";
 import { FULLTEXT_VERSION, type Fulltext } from "./types";
 

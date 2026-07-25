@@ -14,11 +14,11 @@ import {
 } from "./context";
 import type { AnnotationLite, TopicMaterial } from "../fulltext/format";
 import { modelSupportsImages, type ProviderId } from "../ai/aiClient";
-import type { Annotation } from "../app/reader-contract";
-import { buildSystemPrompt, readerProfileSection, type BooklistItem } from "../app/context";
-import { languageInstruction, type Settings } from "../app/settings";
-import { loadAnnotations } from "../app/annotations";
-import { getThread, readThreadImages } from "../app/threads";
+import type { Annotation } from "../platform/app/reader-contract";
+import { buildSystemPrompt, readerProfileSection, type BooklistItem } from "../platform/app/context";
+import { languageInstruction, type Settings } from "../platform/app/settings";
+import { loadAnnotations } from "../platform/app/annotations";
+import { getThread, readThreadImages } from "../platform/app/threads";
 import { chapterAt } from "../fulltext/query";
 import { getFulltext } from "../fulltext/store";
 import type { Fulltext } from "../fulltext/types";

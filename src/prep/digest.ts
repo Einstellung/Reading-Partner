@@ -8,7 +8,7 @@ import { Type, type ThinkingLevel } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../ai/agent";
 import { runAgentTurn } from "../ai/agent";
 import { streamChat, type ProviderId } from "../ai/providers";
-import { aiLanguageName, type AiLanguage } from "../app/settings";
+import { aiLanguageName, type AiLanguage } from "../platform/app/settings";
 import { formatPages, formatSearch } from "../fulltext/format";
 import type { Fulltext } from "../fulltext/types";
 import type { PrepPaper } from "./types";

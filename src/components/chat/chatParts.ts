@@ -12,7 +12,7 @@
 // not fold a card into text.
 
 import type { InfoCard } from "../../info/briefing/cards";
-import type { PersistedCardPayload, PersistedPart } from "../../app/threads";
+import type { PersistedCardPayload, PersistedPart } from "../../platform/app/threads";
 import type { ThreadMessage, ToolStatus } from "../common/types";
 
 // The domain payload a card renders. Payload types stay in the domain layer

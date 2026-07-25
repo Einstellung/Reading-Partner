@@ -3,9 +3,9 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { reconcile, type Snapshot } from "../../src/sync/reconcile";
-import type { Manifest } from "../../src/sync/backend";
-import type { LocalFile } from "../../src/sync/syncFs";
+import { reconcile, type Snapshot } from "../../../src/platform/sync/reconcile";
+import type { Manifest } from "../../../src/platform/sync/backend";
+import type { LocalFile } from "../../../src/platform/sync/syncFs";
 
 const L = (path: string, mtime: number, size = 10): LocalFile => ({ path, mtime, size });
 

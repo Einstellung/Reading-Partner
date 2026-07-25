@@ -12,7 +12,7 @@ import {
   exists,
   readTextFile,
 } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../app/atomic-fs";
+import { writeTextAtomic } from "../platform/app/atomic-fs";
 
 export const PROFILE_FILE = "user-profile.md";
 // The name an older build wrote (an info-only profile, before it was promoted to

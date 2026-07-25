@@ -13,7 +13,7 @@ const FILE = "credentials.json";
 // is nothing to run headless).
 const files = new Map<string, string>();
 
-mock.module("../../src/app/atomic-fs", () => ({
+mock.module("../../src/platform/app/atomic-fs", () => ({
   writeTextAtomic: async (path: string, contents: string) => {
     await null;
     files.set(path, contents);

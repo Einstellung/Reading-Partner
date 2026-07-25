@@ -7,11 +7,11 @@ import {
   type ViewInstance,
   type ViewState,
   type ViewStats,
-} from "./app/reader-contract";
-import { onCorruptFile } from "./app/atomic-fs";
-import { getViewState, hashPath, saveViewState, withClassroom } from "./app/storage";
-import { importBook, libraryHas, readLibraryBook } from "./app/library";
-import { migrateBookLive } from "./app/migrate";
+} from "./platform/app/reader-contract";
+import { onCorruptFile } from "./platform/app/atomic-fs";
+import { getViewState, hashPath, saveViewState, withClassroom } from "./platform/app/storage";
+import { importBook, libraryHas, readLibraryBook } from "./platform/app/library";
+import { migrateBookLive } from "./platform/app/migrate";
 import { ensureFulltext, onFulltextError, type Fulltext } from "./fulltext";
 import Sidebar, { type SidebarTab } from "./components/reader/Sidebar";
 import { annotationPage, toolStatusLabel } from "./reading/context";
@@ -22,7 +22,7 @@ import {
   loadAnnotations,
   onSaveError,
   saveAnnotations,
-} from "./app/annotations";
+} from "./platform/app/annotations";
 import {
   addFileToTopic,
   listTopics,
@@ -31,7 +31,7 @@ import {
   setFileHash,
   type FileRef,
   type Topic,
-} from "./app/topics";
+} from "./platform/app/topics";
 import {
   appendMessage,
   createBookThread,
@@ -45,11 +45,11 @@ import {
   readThreadImages,
   saveThreadImages,
   type ThreadMessage,
-} from "./app/threads";
-import { initSync, onSyncPulled } from "./sync";
+} from "./platform/app/threads";
+import { initSync, onSyncPulled } from "./platform/sync";
 import { compressImage, compressImageData, type CompressedImage } from "./ai/image-utils";
-import { isTauri, readClipboardImage } from "./app/clipboard";
-import { DEFAULT_SETTINGS, loadSettings, onSettingsSaveError, saveSettings, toReasoning, type Settings } from "./app/settings";
+import { isTauri, readClipboardImage } from "./platform/app/clipboard";
+import { DEFAULT_SETTINGS, loadSettings, onSettingsSaveError, saveSettings, toReasoning, type Settings } from "./platform/app/settings";
 import { buildGlossary } from "./voice";
 import {
   installFetchBridge,
@@ -90,7 +90,7 @@ import {
   type DistillAnnotation,
   type MemoryEntry,
 } from "./memory";
-import { logEvent } from "./app/events";
+import { logEvent } from "./platform/app/events";
 import { prewarmPdfiumEngine } from "./reader-embedpdf/engine-singleton";
 import EmbedReaderPane from "./reader-embedpdf/EmbedReaderPane";
 import { CitationContext, FigureContext, type FigureHost } from "./components/common/Markdown";

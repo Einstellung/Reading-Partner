@@ -4,7 +4,7 @@
 // conversational path, "prep" for the background pipelines.
 
 import type { ThinkingLevel } from "@earendil-works/pi-ai";
-import { loadSettings, toReasoning, type AiLanguage } from "../app/settings";
+import { loadSettings, toReasoning, type AiLanguage } from "../platform/app/settings";
 import { streamChat, type ProviderId } from "./providers";
 import type { AiCallOptions } from "./watchdog";
 

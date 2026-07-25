@@ -2,7 +2,7 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { inSyncRange } from "../../src/sync/syncFs";
+import { inSyncRange } from "../../../src/platform/sync/syncFs";
 
 test("core user-data files are in range", () => {
   for (const p of [

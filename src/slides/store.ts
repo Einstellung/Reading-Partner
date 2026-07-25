@@ -1,8 +1,8 @@
 // Slides persistence under AppData/slides/ (docs/14). A generated deck is a
 // self-contained HTML file; slides/talks.json indexes the decks. This directory
-// is a build output, NOT synced (verified in tests/sync/range.test.ts — the
-// sync range excludes slides/). Derived and rebuildable, same posture as the
-// notes and prep stores.
+// is a build output, NOT synced (verified in tests/platform/sync/range.test.ts —
+// the sync range excludes slides/). Derived and rebuildable, same posture as
+// the notes and prep stores.
 
 import {
   BaseDirectory,
@@ -10,7 +10,7 @@ import {
   mkdir,
   readTextFile,
 } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../app/atomic-fs";
+import { writeTextAtomic } from "../platform/app/atomic-fs";
 import { addTalk, type TalkEntry } from "./types";
 
 export const SLIDES_DIR = "slides";

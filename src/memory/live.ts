@@ -11,10 +11,10 @@ import {
   readTextFile,
   remove,
 } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../app/atomic-fs";
+import { writeTextAtomic } from "../platform/app/atomic-fs";
 import { runAgentTurn } from "../ai/agent";
 import { resolveModel } from "../ai/model-call";
-import { logEvent } from "../app/events";
+import { logEvent } from "../platform/app/events";
 import { FileMemoryAdapter, type MemoryAdapter } from "./adapter";
 import { isoDate } from "./files";
 import { MemoryFileStore, type MemoryFs } from "./store";

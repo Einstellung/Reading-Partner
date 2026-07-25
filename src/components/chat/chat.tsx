@@ -11,7 +11,7 @@ import { messageToParts, type CardActionHandler, type CardSurface } from './chat
 import { CARD_REGISTRY } from '../info/InfoCards';
 import type { CleanupModel } from '../../voice';
 import type { ProviderId } from '../../ai/providers';
-import { loadSettings, toReasoning } from '../../app/settings';
+import { loadSettings, toReasoning } from '../../platform/app/settings';
 
 // Optional enrichment for the composer's built-in voice input. The mic is on by
 // default; this only adds context. `glossary` seeds the STT cleanup pass with

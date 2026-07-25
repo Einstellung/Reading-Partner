@@ -5,7 +5,7 @@
 // user names and — once an interest is concrete — from the model's own knowledge.
 // Pure string assembly, like chat.ts / triage.ts.
 
-import { languageInstruction, type AiLanguage } from "../../app/settings";
+import { languageInstruction, type AiLanguage } from "../../platform/app/settings";
 import { PROFILE_SKELETON_GUIDANCE } from "../../memory/profile";
 import { DESCRIPTOR_GUIDE } from "./descriptor";
 

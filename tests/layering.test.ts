@@ -4,8 +4,8 @@
 // Run: bun test.
 //
 // The layers, innermost first:
-//   platform   host and storage primitives (app/, sync/). app/ is the floor and
-//              imports nothing.
+//   platform   host and storage primitives (platform/app, platform/sync).
+//              platform/app is the floor and imports nothing.
 //   capability headless services a domain calls into (ai/, fulltext/). They may
 //              use platform and each other; they must never reach up into a
 //              domain, because that is how ai/ ended up in a cycle with four of
@@ -17,9 +17,9 @@
 //   entry      main.tsx and smoke/, which pick what to boot; they may import
 //              anything.
 //
-// A planned regrouping folds these directories into platform/ (app, sync), ai/
-// (plus voice), memory/, fulltext/, reading/ (absorbing prep, notes, figures,
-// slides, reader-embedpdf), info/ and ui/ (components). Grouping must not cost
+// A planned regrouping folds these directories into platform/ (done), ai/ (plus
+// voice), memory/, fulltext/, reading/ (absorbing prep, notes, figures, slides,
+// reader-embedpdf), info/ and ui/ (components). Grouping must not cost
 // the graph its resolution, so a LAYER key may name a unit inside a grouping
 // directory ("platform/app") and the graph keeps a node per unit. When the
 // regrouping lands, this test needs edits to LAYER only.
@@ -38,8 +38,9 @@ type Layer = "platform" | "capability" | "domain" | "ui" | "shell" | "entry";
 // or root file must be added here or the first test fails: deciding where it
 // sits is the point.
 const LAYER: Record<string, Layer> = {
-  app: "platform",
-  sync: "platform",
+  platform: "platform",
+  "platform/app": "platform",
+  "platform/sync": "platform",
 
   ai: "capability",
   fulltext: "capability",
@@ -81,8 +82,8 @@ const GROUPS = new Set(
     .map((k) => k.split("/")[0]),
 );
 
-// app/ is the floor: it imports no other entry at all.
-const LEAF = "app";
+// platform/app is the floor: it imports no other entry at all.
+const LEAF = "platform/app";
 // The ui layer and the shell are reachable only from the shell and the entry
 // point.
 const UI_ONLY = Object.keys(LAYER).filter((d) => LAYER[d] === "ui" || LAYER[d] === "shell");
@@ -292,7 +293,7 @@ test("the directory dependency graph is acyclic", () => {
   expect([...reports.keys()]).toEqual([]);
 });
 
-test("app/ is a leaf and imports no other src/ entry", () => {
+test("platform/app is a leaf and imports no other src/ entry", () => {
   const escaping = EDGES.filter((e) => e.from === LEAF);
   if (escaping.length > 0) {
     reject(

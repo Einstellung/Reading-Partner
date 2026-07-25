@@ -4,7 +4,7 @@
 // the native fetch is used so bun/dev at least runs. Both feeds gate on a
 // browser User-Agent (see sources.ts), so it is forced on the plugin path.
 
-import { cleanTauriFetch } from "../../app/tauri-fetch";
+import { cleanTauriFetch } from "../../platform/app/tauri-fetch";
 import type { ImageBytes } from "./inline-images";
 import { INFO_USER_AGENT } from "../sources/sources";
 

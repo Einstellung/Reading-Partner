@@ -2,7 +2,7 @@
 // id_token without verifying it. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { parseIdTokenEmail } from "../../src/sync/auth";
+import { parseIdTokenEmail } from "../../../src/platform/sync/auth";
 
 function b64url(obj: unknown): string {
   return Buffer.from(JSON.stringify(obj)).toString("base64url");

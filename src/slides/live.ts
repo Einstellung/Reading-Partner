@@ -10,12 +10,12 @@ import { getImageGenKey } from "../ai/credentials";
 import { callModel, resolveModel } from "../ai/model-call";
 import { getFigures } from "../figures/store";
 import { renderFigure } from "../figures/render";
-import { getLibraryEntry, readLibraryBook } from "../app/library";
+import { getLibraryEntry, readLibraryBook } from "../platform/app/library";
 import { loadNotesState, readChapterNote, readOverviewNote } from "../notes/store";
-import { loadSettings } from "../app/settings";
+import { loadSettings } from "../platform/app/settings";
 import { contentSystemPrompt, contentUserMessage, sanitizeFragment } from "./content";
 import { generateImage, resolveImageGenConfig, type ImageGenDeps } from "./imageGen";
-import { cleanTauriFetch } from "../app/tauri-fetch";
+import { cleanTauriFetch } from "../platform/app/tauri-fetch";
 import {
   parseSlidePlan,
   planUserMessage,

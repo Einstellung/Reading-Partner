@@ -12,7 +12,7 @@ import {
   readDir,
   readTextFile,
 } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../../app/atomic-fs";
+import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { validateDescriptor, type SourceDescriptor } from "./descriptor";
 import { builtinById } from "./builtins";
 import type { SourceHealth } from "./engine";

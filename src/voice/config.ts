@@ -5,7 +5,7 @@
 // OpenAI-compatible transcription endpoint works via Settings.
 
 import { loadCredentials, updateCredentials, type ApiKeyCredential } from "../ai/credentials";
-import { loadSettings } from "../app/settings";
+import { loadSettings } from "../platform/app/settings";
 
 export const DEFAULT_STT_BASE = "https://api.siliconflow.cn";
 export const DEFAULT_STT_MODEL = "FunAudioLLM/SenseVoiceSmall";

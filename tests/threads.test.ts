@@ -14,7 +14,7 @@ import {
   type PersistedPart,
   type Thread,
   type ThreadMessage,
-} from "../src/app/threads";
+} from "../src/platform/app/threads";
 
 test("createBookThread marks the thread and leaves it unanchored", () => {
   const path = "/books/book-thread-a.pdf";

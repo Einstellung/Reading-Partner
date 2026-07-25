@@ -15,8 +15,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { runAgentTurn } from "../../ai/agent";
-import { loadSettings, toReasoning } from "../../app/settings";
-import { appendMessage, createThread, getThread, loadThreads, patchThreadMessage } from "../../app/threads";
+import { loadSettings, toReasoning } from "../../platform/app/settings";
+import { appendMessage, createThread, getThread, loadThreads, patchThreadMessage } from "../../platform/app/threads";
 import { buildLiveCompanionTools } from "../../info/sources/source-live";
 import { companionToolStatusLabel } from "../../info/companion/companion-tools";
 import { addSource, hasSources } from "../../info/sources/source-store";
@@ -43,7 +43,7 @@ import type { InfoPipeline } from "../../info/briefing/pipeline";
 import type { Briefing } from "../../info/briefing/types";
 import type { ProbeConfirmCardData, ProfileUpdateCardData } from "../../info/briefing/cards";
 import type { ThreadMessage as UiMessage } from "../common/types";
-import type { ThreadMessage as StoredMessage } from "../../app/threads";
+import type { ThreadMessage as StoredMessage } from "../../platform/app/threads";
 
 export interface InfoCallAnchor {
   // "briefing" for the briefing-level thread, or the item id for an article, or
