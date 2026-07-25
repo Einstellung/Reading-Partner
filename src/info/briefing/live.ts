@@ -4,9 +4,7 @@
 // keeps running across view switches. AI calls happen here (streamChat under the
 // watchdog); the pure logic (adapters, triage prompt/validation) stays testable.
 
-import type { ThinkingLevel } from "@earendil-works/pi-ai";
-import { streamChat, type ProviderId } from "../../ai/providers";
-import { loadSettings, toReasoning } from "../../app/settings";
+import { callModel } from "../../ai/model-call";
 import type { AiCallOptions } from "../../ai/watchdog";
 import { collectAll, type CollectEvent } from "../sources/engine";
 import { extractReadable } from "../extract/readable";
@@ -27,52 +25,17 @@ import {
   triageSystemPrompt,
   triageUserMessage,
 } from "./triage";
-import type { AiLanguage } from "../../app/settings";
 import type { FeedbackEvent, InfoItem, TriageResult } from "./types";
 
-async function resolveModel(): Promise<{
-  providerId: ProviderId;
-  modelId: string;
-  reasoning: ThinkingLevel | undefined;
-  aiLanguage: AiLanguage;
-}> {
-  const s = await loadSettings();
-  if (!s.defaultProviderId || !s.defaultModelId) {
-    throw new Error("No default AI provider configured (Settings).");
-  }
-  return {
-    providerId: s.defaultProviderId as ProviderId,
-    modelId: s.defaultModelId,
-    // Triage wants some deliberation but not a marathon; reuse the prep effort.
-    reasoning: toReasoning(s.prepThinking),
-    aiLanguage: s.aiLanguage,
-  };
-}
-
-// One tool-less streaming call, promisified, reporting cumulative chars for the
-// watchdog. `extra` lets the parse-retry append a corrective nudge.
-function callModel(userText: string, opts: AiCallOptions, extra?: string): Promise<string> {
-  return resolveModel().then(
-    (model) =>
-      new Promise<string>((resolve, reject) => {
-        let chars = 0;
-        const bump = (t: string) => {
-          chars += t.length;
-          opts.onProgress(chars);
-        };
-        void streamChat({
-          providerId: model.providerId,
-          modelId: model.modelId,
-          systemPrompt: triageSystemPrompt(model.aiLanguage) + (extra ?? ""),
-          messages: [{ role: "user", text: userText }],
-          signal: opts.signal,
-          reasoning: model.reasoning,
-          onDelta: bump,
-          onThinking: bump,
-          onDone: resolve,
-          onError: (m) => reject(new Error(m)),
-        });
-      }),
+// One tool-less streaming call. `extra` lets the parse-retry append a corrective
+// nudge. Triage wants some deliberation but not a marathon, so it reuses the
+// prep effort setting.
+function runTriageCall(userText: string, opts: AiCallOptions, extra?: string): Promise<string> {
+  return callModel(
+    "prep",
+    (model) => triageSystemPrompt(model.aiLanguage) + (extra ?? ""),
+    userText,
+    opts,
   );
 }
 
@@ -87,10 +50,10 @@ async function triage(
     readerContext: input.readerContext,
   });
   const validIds = new Set(input.items.map((it) => it.id));
-  const first = await callModel(userText, opts);
+  const first = await runTriageCall(userText, opts);
   const parsed = parseTriageResult(first, validIds);
   if (parsed.ok) return parsed.result;
-  const retry = await callModel(
+  const retry = await runTriageCall(
     userText,
     opts,
     "\n\nYour previous reply was not valid JSON in the required shape. Reply with ONLY the JSON object, no prose, no markdown fence.",
