@@ -5,6 +5,15 @@ import {
   pointerKindOf,
   pagedGestureTool,
   shouldCommitScroll,
+  touchGestureMode,
+  multiTouchLatch,
+  fingerLockAfterPen,
+  fingerVerdict,
+  isPalmContact,
+  centroidOf,
+  shouldClearGestureSelection,
+  PALM_CONTACT_PX,
+  PALM_CONTACT_PX_WITH_PEN,
   type PointerKind,
   type ToolKind,
 } from "./touch-routing";
@@ -106,4 +115,99 @@ test("pointerKindOf normalizes pointerType, unknown falls back to touch", () => 
   expect(pointerKindOf("touch")).toBe("touch");
   expect(pointerKindOf("")).toBe("touch");
   expect(pointerKindOf("kinect")).toBe("touch");
+});
+
+// --- finger-count semantics -------------------------------------------------
+
+test("touchGestureMode: 1 finger routes, 2 pinch, 3+ reserved", () => {
+  expect(touchGestureMode(0)).toBe("single");
+  expect(touchGestureMode(1)).toBe("single");
+  expect(touchGestureMode(2)).toBe("pinch");
+  expect(touchGestureMode(3)).toBe("reserved");
+  expect(touchGestureMode(5)).toBe("reserved");
+});
+
+test("multiTouchLatch: latches on the second finger, clears only when all lift", () => {
+  let l = false;
+  l = multiTouchLatch(l, 1);
+  expect(l).toBe(false);
+  l = multiTouchLatch(l, 2);
+  expect(l).toBe(true);
+  l = multiTouchLatch(l, 1); // one finger lifted mid-pinch: still locked
+  expect(l).toBe(true);
+  l = multiTouchLatch(l, 0);
+  expect(l).toBe(false);
+});
+
+test("multiTouchLatch: 2 -> 3 -> 2 stays one gesture", () => {
+  let l = multiTouchLatch(false, 2);
+  l = multiTouchLatch(l, 3);
+  expect(l).toBe(true);
+  l = multiTouchLatch(l, 2);
+  expect(l).toBe(true);
+  expect(multiTouchLatch(l, 0)).toBe(false);
+});
+
+test("fingerLockAfterPen: the pen kills the fingers already down until all lift", () => {
+  let lock = false;
+  lock = fingerLockAfterPen(lock, false, 1); // a finger is scrolling
+  expect(lock).toBe(false);
+  lock = fingerLockAfterPen(lock, true, 1); // pen lands on top of it
+  expect(lock).toBe(true);
+  lock = fingerLockAfterPen(lock, false, 2); // more of the hand settles: still dead
+  expect(lock).toBe(true);
+  lock = fingerLockAfterPen(lock, false, 0); // hand off the glass
+  expect(lock).toBe(false);
+});
+
+test("fingerLockAfterPen: a pen landing on an empty screen locks nothing", () => {
+  expect(fingerLockAfterPen(false, true, 0)).toBe(false);
+});
+
+test("fingerVerdict: only a plain one-finger gesture reaches the engine", () => {
+  expect(fingerVerdict("single", false, false)).toBe("route");
+  expect(fingerVerdict("pinch", true, false)).toBe("swallow");
+  expect(fingerVerdict("reserved", true, false)).toBe("swallow");
+  // Latched pinch that dropped back to one finger.
+  expect(fingerVerdict("single", true, false)).toBe("swallow");
+  // Pen priority beats everything.
+  expect(fingerVerdict("single", false, true)).toBe("swallow");
+});
+
+// --- palm rejection ---------------------------------------------------------
+
+test("isPalmContact: a fingertip-sized patch is never a palm", () => {
+  expect(isPalmContact({ width: 24, height: 26 }, false)).toBe(false);
+  expect(isPalmContact({ width: 24, height: 26 }, true)).toBe(false);
+});
+
+test("isPalmContact: a wide patch is a palm, and the pen makes the bar lower", () => {
+  expect(isPalmContact({ width: PALM_CONTACT_PX, height: 20 }, false)).toBe(true);
+  expect(isPalmContact({ width: PALM_CONTACT_PX_WITH_PEN, height: 20 }, false)).toBe(false);
+  expect(isPalmContact({ width: PALM_CONTACT_PX_WITH_PEN, height: 20 }, true)).toBe(true);
+  expect(isPalmContact({ width: 20, height: PALM_CONTACT_PX }, false)).toBe(true);
+});
+
+test("isPalmContact: engines that report no contact geometry never yield a palm", () => {
+  expect(isPalmContact({ width: 0, height: 0 }, true)).toBe(false);
+  expect(isPalmContact({ width: 1, height: 1 }, true)).toBe(false);
+});
+
+// --- pan / selection helpers ------------------------------------------------
+
+test("centroidOf: midpoint of the live contacts, null when there are none", () => {
+  expect(centroidOf([])).toBe(null);
+  expect(centroidOf([{ x: 10, y: 20 }])).toEqual({ x: 10, y: 20 });
+  expect(
+    centroidOf([
+      { x: 0, y: 0 },
+      { x: 10, y: 40 },
+    ]),
+  ).toEqual({ x: 5, y: 20 });
+});
+
+test("shouldClearGestureSelection: drop what this gesture caused, keep what was already there", () => {
+  expect(shouldClearGestureSelection(false, true)).toBe(true);
+  expect(shouldClearGestureSelection(true, true)).toBe(false);
+  expect(shouldClearGestureSelection(false, false)).toBe(false);
 });

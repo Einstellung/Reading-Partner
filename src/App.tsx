@@ -144,6 +144,7 @@ import {
 import { logEvent } from "./app/events";
 import { prewarmPdfiumEngine } from "./reader-embedpdf/engine-singleton";
 import EmbedReaderPane from "./reader-embedpdf/EmbedReaderPane";
+import { setTouchDebugEnabled } from "./reader-embedpdf/touch-debug";
 import { CitationContext, FigureContext, type FigureHost } from "./components/common/Markdown";
 import {
   buildFigureCatalog,
@@ -169,6 +170,7 @@ import {
   IconZoomIn,
   IconZoomOut,
   IconTwoPage,
+  IconTouchProbe,
 } from "./components/common/icons";
 import AnnotationPopup from "./components/reader/AnnotationPopup";
 import CallBubble from "./components/chat/CallBubble";
@@ -410,6 +412,8 @@ export default function App() {
   const [notesSnap, setNotesSnap] = useState<NotesSnapshot | null>(null);
   const [settings, setSettings] = useState<Settings>({ ...DEFAULT_SETTINGS });
   const [showSettings, setShowSettings] = useState(false);
+  // On-device touch probe (reader More menu). Off by default, never persisted.
+  const [touchDebug, setTouchDebug] = useState(false);
   const [providersInfo, setProvidersInfo] = useState<ProviderInfo[]>([]);
   // Failure messages (save/load/network errors) live here, not in `status` —
   // `status` is reserved for transient reader progress ("Rendering…").
@@ -2249,6 +2253,17 @@ export default function App() {
       on: paged,
       disabled: !viewReady,
       onClick: () => viewRef.current?.setLayout(paged ? "vertical" : "paged"),
+    },
+    {
+      kind: "toggle",
+      label: "Touch debug",
+      icon: IconTouchProbe,
+      on: touchDebug,
+      onClick: () => {
+        const next = !touchDebug;
+        setTouchDebug(next);
+        setTouchDebugEnabled(next);
+      },
     },
     { kind: "divider" },
     {

@@ -447,6 +447,23 @@ export function IconTwoPage({ size = 20 }: IconProps) {
 	);
 }
 
+// Contact patch with its ripples: the on-device touch probe.
+export function IconTouchProbe({ size = 20 }: IconProps) {
+	return (
+		<svg
+			{...svgProps(size)}
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<circle cx="10" cy="10" r="2.25" fill="currentColor" stroke="none" />
+			<path d="M13.4 6.6a4.8 4.8 0 0 1 0 6.8M6.6 13.4a4.8 4.8 0 0 1 0-6.8" />
+			<path d="M15.8 4.2a8.2 8.2 0 0 1 0 11.6M4.2 15.8a8.2 8.2 0 0 1 0-11.6" opacity="0.5" />
+		</svg>
+	);
+}
+
 // Trash can for the delete action.
 export function IconTrash({ size = 16 }: IconProps) {
 	return (
