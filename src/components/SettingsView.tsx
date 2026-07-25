@@ -22,6 +22,7 @@ import {
   type ProviderInfo,
 } from "../ai/aiClient";
 import { isIOS } from "../app/platform";
+import { BTN, BTN_PRIMARY } from "./common/buttons";
 import { hasImageGenKey, setImageGenKey } from "../ai/credentials";
 import { DEFAULT_STT_BASE, DEFAULT_STT_MODEL, hasSttKey, setSttKey } from "../voice";
 import { DEFAULT_IMAGE_API_BASE, DEFAULT_IMAGE_MODEL } from "../slides";
@@ -54,8 +55,6 @@ interface SettingsViewProps {
 }
 
 const CARD = "rounded-xl border border-[#dcdcdc] p-4 flex flex-col gap-3";
-const BTN = "text-sm leading-none px-3 py-1.5 border border-[#dcdcdc] rounded-md bg-white cursor-pointer enabled:hover:bg-[#f0f0f0] disabled:opacity-40 disabled:cursor-default";
-const BTN_PRIMARY = "text-sm leading-none px-3 py-1.5 rounded-md bg-[#6c4fd0] text-white cursor-pointer enabled:hover:bg-[#5a3fbf] disabled:opacity-40 disabled:cursor-default";
 const FIELD = "flex-1 min-w-0 px-2.5 py-2 border border-[#dcdcdc] rounded-md [font:inherit] text-sm";
 
 export default function SettingsView({ settings, onSettingsChange, onClose }: SettingsViewProps) {

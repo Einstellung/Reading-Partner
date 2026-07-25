@@ -178,6 +178,7 @@ import CallView from "./components/chat/CallView";
 import ReadingPipCard from "./components/chat/ReadingPipCard";
 import ChatPipCard from "./components/chat/ChatPipCard";
 import SettingsView from "./components/SettingsView";
+import { BTN, BTN_PRIMARY, BTN_SM, BTN_SM_DANGER } from "./components/common/buttons";
 import Toast, { useToasts } from "./components/common/Toast";
 import type { Annotation as PopupAnnotation, PendingImage, ToolStatus, ToolType } from "./components/common/types";
 
@@ -200,17 +201,6 @@ const TRIM_DISTILL_MIN_NEW = 20;
 // highlight frontier (docs/14).
 const AUTO_NOTES_DEBOUNCE = 4000;
 
-// Shared utility-class strings for the shell chrome (migrated from styles.css).
-// Split so variant overrides never collide with base padding/border utilities.
-// inline-flex + centering lets `coarse:min-h-[44px]` grow these to the 44px touch
-// target with the label centered; on a fine pointer min-h is inert, so desktop
-// density is unchanged.
-const BTN_BASE =
-  "inline-flex items-center justify-center leading-none border rounded-md bg-white cursor-pointer enabled:hover:bg-[#f0f0f0] disabled:opacity-40 disabled:cursor-default coarse:min-h-[44px]";
-const BTN = `${BTN_BASE} text-sm px-3 py-1.5 border-[#dcdcdc]`;
-const BTN_PRIMARY = "inline-flex items-center justify-center text-sm leading-none px-3 py-1.5 rounded-md bg-[#6c4fd0] text-white cursor-pointer enabled:hover:bg-[#5a3fbf] disabled:opacity-40 coarse:min-h-[44px]";
-const BTN_SM = `${BTN_BASE} text-xs px-2 py-1 border-[#dcdcdc]`;
-const BTN_SM_DANGER = `${BTN_BASE} text-xs px-2 py-1 border-[#f0c8c8] text-[#b91c1c]`;
 // Default reading layout for a book that has never set one: vertical continuous
 // scroll on every surface (the correct PDF-reading default; a finger swipe
 // scrolls, like Notability / PDF Expert). Paged horizontal flip stays available
