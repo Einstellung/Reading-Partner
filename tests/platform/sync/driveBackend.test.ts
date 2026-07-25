@@ -274,6 +274,31 @@ test("listManifest adopts the existing manifest and reuses its id afterwards", a
   expect(drive.requests.some((r) => r.url.includes("files?q="))).toBe(false);
 });
 
+test("a manifest that fails to download stops the pass instead of reporting an empty remote", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  const manifestId = drive.add({
+    name: "manifest.json",
+    parents: [seeded.folderId],
+    body: JSON.stringify({ "settings.json": { rev: 4, mtime: 9, size: 2 } }),
+  });
+  const { backend } = makeBackend(drive, { folderId: seeded.folderId, manifestFileId: manifestId });
+  drive.failOn((_m, url) => url.includes("alt=media"));
+
+  // Reporting {} would have the next upload rewrite manifest.json without the
+  // entries this device has no local copy of.
+  await expect(backend.listManifest()).rejects.toThrow(/Drive download failed/);
+});
+
+test("an unparseable manifest reports empty, since a retry cannot repair it", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  const manifestId = drive.add({ name: "manifest.json", parents: [seeded.folderId], body: "{oops" });
+  const { backend } = makeBackend(drive, { folderId: seeded.folderId, manifestFileId: manifestId });
+
+  expect(await backend.listManifest()).toEqual({});
+});
+
 test("writeManifest creates manifest.json once and patches it from then on", async () => {
   const drive = makeDrive();
   const seeded = seedTree(drive);

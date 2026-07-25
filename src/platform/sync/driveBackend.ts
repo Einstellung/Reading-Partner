@@ -148,10 +148,18 @@ export class DriveBackend implements SyncBackend {
       this.ids.manifestFileId = id;
       await this.d.persistIds();
     }
+    // A failed download must propagate. "Empty" here is indistinguishable from
+    // "the remote holds nothing", and the engine writes reconcile's nextManifest
+    // (a copy of what it read) after the next upload — so one transient failure
+    // would rewrite manifest.json with only this device's changed files, and
+    // every entry it does not have locally silently drops out of the backup.
+    // Unparseable content still degrades to empty: that file cannot be repaired
+    // by retrying, and the next upload rebuilds it.
+    const bytes = await this.getMedia(id);
+    const text = new TextDecoder().decode(bytes).trim();
+    if (!text) return {};
     try {
-      const bytes = await this.getMedia(id);
-      const text = new TextDecoder().decode(bytes).trim();
-      return text ? (JSON.parse(text) as Manifest) : {};
+      return JSON.parse(text) as Manifest;
     } catch {
       return {};
     }
