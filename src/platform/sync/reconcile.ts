@@ -8,9 +8,14 @@
 // won a whole-file conflict, wiping the other device's annotations. It is
 // "remotely changed" when the remote rev is ahead of the snapshot.
 //
-// When both changed, last-writer-wins by mtime (docs/13): the newer mtime keeps
-// its side. Deletions are not propagated in v1 — a file missing locally but
+// When both changed since the base, neither side wins: the file goes into
+// `merges` and the engine merges the three contents the way git does. A whole
+// file is the wrong unit to pick a winner at when the file is a collection of
+// records — one device's annotations are not an alternative to the other's.
+//
+// File-level deletions are still not propagated — a file missing locally but
 // present remotely is left alone, so nothing is ever destroyed by a sync.
+// Record-level deletion inside a file is the merge module's decision.
 
 import type { Manifest, ManifestEntry } from "./backend";
 import type { LocalFile } from "./syncFs";
@@ -32,6 +37,15 @@ export interface Download {
   size: number;
 }
 
+// Both sides changed this file since the base. The engine fetches the remote
+// content, merges it with the local one over the base, and publishes the result
+// at `rev` — above what the remote holds, so the merge is what every device
+// converges on rather than one more side of the argument.
+export interface Merge {
+  path: string;
+  rev: number;
+}
+
 // Nothing needs to move for this file, and the snapshot does not say so yet:
 // both sides already hold the same bytes, or the file was rewritten with the
 // content already in it and only its mtime moved. Recording it is what stops
@@ -50,6 +64,7 @@ export interface Converged {
 export interface Plan {
   uploads: Upload[];
   downloads: Download[];
+  merges: Merge[];
   converged: Converged[];
   // Paths gone from both sides. Their merge base is what is left of a file
   // nothing holds any more, so it is dropped (localStore.ts).
@@ -86,6 +101,7 @@ export function reconcile(local: LocalFile[], remote: Manifest, snap: Snapshot):
 
   const uploads: Upload[] = [];
   const downloads: Download[] = [];
+  const merges: Merge[] = [];
   const converged: Converged[] = [];
   const dropBases: string[] = [];
 
@@ -134,10 +150,8 @@ export function reconcile(local: LocalFile[], remote: Manifest, snap: Snapshot):
     };
 
     if (localChanged && remoteChanged) {
-      // Conflict: the newer writer wins. Ties go to the local copy (it is
-      // already on disk, so keeping it avoids a needless download).
-      if (loc.mtime >= rem!.mtime) upload();
-      else downloads.push({ path, rev: rem!.rev, size: rem!.size });
+      // Both sides moved. Merge them; do not pick one.
+      merges.push({ path, rev: rem!.rev + 1 });
     } else if (localChanged) {
       upload();
     } else if (remoteChanged) {
@@ -150,5 +164,5 @@ export function reconcile(local: LocalFile[], remote: Manifest, snap: Snapshot):
     }
   }
 
-  return { uploads, downloads, converged, dropBases };
+  return { uploads, downloads, merges, converged, dropBases };
 }

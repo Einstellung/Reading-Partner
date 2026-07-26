@@ -1,5 +1,5 @@
-// Pure reconcile decisions (src/platform/sync/reconcile.ts): which files upload vs
-// download, the rev they get, and last-writer-wins on a conflict. No IO.
+// Pure reconcile decisions (src/platform/sync/reconcile.ts): which files upload
+// vs download vs merge, the rev they get, and what counts as changed. No IO.
 // Run: bun test.
 
 import { expect, test } from "bun:test";
@@ -62,20 +62,18 @@ test("a remote-newer file (no local change) downloads", () => {
   expect(plan.uploads).toEqual([]);
 });
 
-test("conflict: local mtime newer wins (upload)", () => {
+// Neither side wins a file both of them changed: one device's annotations are
+// not an alternative to the other's. Which clock is ahead does not enter into
+// it, so the two directions are the same decision.
+test("both sides changed: merge, published above the remote's rev", () => {
   const snap: Snapshot = { a: { rev: 2, mtime: 100, size: 10, hash: "h1" } };
-  const remote: Manifest = { a: { rev: 5, mtime: 300, size: 10, hash: "h9" } };
-  const plan = reconcile([L("a", 400, "h2")], remote, snap); // both changed, local newer
-  expect(plan.uploads).toEqual([{ path: "a", rev: 6, mtime: 400, size: 10, hash: "h2" }]);
-  expect(plan.downloads).toEqual([]);
-});
-
-test("conflict: remote mtime newer wins (download)", () => {
-  const snap: Snapshot = { a: { rev: 2, mtime: 100, size: 10, hash: "h1" } };
-  const remote: Manifest = { a: { rev: 5, mtime: 500, size: 10, hash: "h9" } };
-  const plan = reconcile([L("a", 400, "h2")], remote, snap); // both changed, remote newer
-  expect(plan.downloads).toEqual([{ path: "a", rev: 5, size: 10 }]);
-  expect(plan.uploads).toEqual([]);
+  for (const remoteMtime of [300, 500]) {
+    const remote: Manifest = { a: { rev: 5, mtime: remoteMtime, size: 10, hash: "h9" } };
+    const plan = reconcile([L("a", 400, "h2")], remote, snap);
+    expect(plan.merges).toEqual([{ path: "a", rev: 6 }]);
+    expect(plan.uploads).toEqual([]);
+    expect(plan.downloads).toEqual([]);
+  }
 });
 
 // Two devices that made the same edit, or one that re-saved byte for byte.
@@ -97,16 +95,18 @@ test("agreement the snapshot already records is not re-reported", () => {
 });
 
 // The state file is rebuildable precisely because of this: losing it (loadState
-// falls back to an empty state on any read failure) degrades to comparing
-// mtimes, not to re-pushing every local file over the remote.
-test("no snapshot at all falls back to last-writer-wins, not a blanket re-push", () => {
+// falls back to an empty state on any read failure) costs the knowledge of what
+// was last agreed, not the data. Everything held on both sides merges, which
+// with no base is exactly what the merge contract is told to expect.
+test("no snapshot at all merges rather than picking a side", () => {
   const remote: Manifest = {
-    old: { rev: 5, mtime: 100, size: 10, hash: "hx" },
-    fresh: { rev: 5, mtime: 900, size: 10, hash: "hy" },
+    both: { rev: 5, mtime: 100, size: 10, hash: "hx" },
+    remoteOnly: { rev: 5, mtime: 900, size: 10, hash: "hy" },
   };
-  const plan = reconcile([L("old", 400, "h1"), L("fresh", 400, "h2")], remote, {});
-  expect(plan.uploads).toEqual([{ path: "old", rev: 6, mtime: 400, size: 10, hash: "h1" }]);
-  expect(plan.downloads).toEqual([{ path: "fresh", rev: 5, size: 10 }]);
+  const plan = reconcile([L("both", 400, "h1"), L("localOnly", 400, "h3")], remote, {});
+  expect(plan.merges).toEqual([{ path: "both", rev: 6 }]);
+  expect(plan.uploads).toEqual([{ path: "localOnly", rev: 1, mtime: 400, size: 10, hash: "h3" }]);
+  expect(plan.downloads).toEqual([{ path: "remoteOnly", rev: 5, size: 10 }]);
 });
 
 // The first pass after the upgrade reads a snapshot with no hashes in it.

@@ -15,7 +15,17 @@ import {
   type SyncBackend,
 } from "../../../src/platform/sync/backend";
 import type { BookFs } from "../../../src/platform/sync/books";
-import type { BaseStore } from "../../../src/platform/sync/localStore";
+import {
+  TRASH_TTL_MS,
+  type BaseStore,
+  type TrashEntry,
+  type TrashJournal,
+} from "../../../src/platform/sync/localStore";
+import type {
+  MergeFile,
+  MergeInput,
+  MergeOutput,
+} from "../../../src/platform/sync/merge/contract";
 import type { ScannedFile, SyncFs } from "../../../src/platform/sync/syncFs";
 import type { Snapshot } from "../../../src/platform/sync/reconcile";
 
@@ -144,6 +154,22 @@ function makeBase(seed: Record<string, string> = {}) {
   return { base, store, text: (p: string) => (store.has(p) ? dec(store.get(p)!) : null) };
 }
 
+// The delete journal: what a merge removed because the other side had.
+function makeTrash() {
+  let entries: TrashEntry[] = [];
+  let prunedAt: number | null = null;
+  const trash: TrashJournal = {
+    async append(added) {
+      entries = [...entries, ...added];
+    },
+    async prune(now) {
+      prunedAt = now;
+      entries = entries.filter((e) => now - e.at < TRASH_TTL_MS);
+    },
+  };
+  return { trash, entries: () => entries, prunedAt: () => prunedAt };
+}
+
 function makeEngine(over: Partial<EngineDeps> & { snapshot: Snapshot }) {
   const pulled: string[][] = [];
   // Defaults first so `over` can override any of them, onPulled included.
@@ -152,6 +178,7 @@ function makeEngine(over: Partial<EngineDeps> & { snapshot: Snapshot }) {
     fs: makeFs().fs,
     books: makeBooks().books,
     base: makeBase().base,
+    trash: makeTrash().trash,
     onPulled: (p) => pulled.push(p),
     ...over,
   };
@@ -191,34 +218,229 @@ test("pull: a remote-only file is written locally and reported to onPulled", asy
   expect(pulled).toEqual([["topics.json"]]);
 });
 
-test("conflict: the newer mtime wins (local edit beats older remote)", async () => {
+// --- both sides changed: merge, do not pick -----------------------------------
+//
+// A whole file is the wrong unit to declare a winner at when the file is a
+// collection of records. The merge module decides what the merged content is;
+// what is pinned here is what the engine does with its three outputs.
+
+// A stand-in for ../merge. What it returns is deliberately not what any real
+// strategy would return — the point is that the engine honours the contract's
+// three outputs whatever produces them.
+function fakeMerge(out: {
+  merged: string;
+  copies?: MergeOutput["copies"];
+  dropped?: MergeOutput["dropped"];
+}): MergeFile {
+  return () => ({
+    merged: enc(out.merged),
+    copies: out.copies ?? [],
+    dropped: out.dropped ?? [],
+    contested: false,
+  });
+}
+
+function bothChanged(localText: string, remoteText: string) {
   const be = makeBackend(
-    { "reading-state.json": { rev: 2, mtime: 100, size: 3 } },
-    { "reading-state.json": "OLD" },
+    { "reading-state.json": { rev: 4, mtime: 900, size: remoteText.length, hash: "remote" } },
+    { "reading-state.json": remoteText },
   );
-  const { fs } = makeFs({ "reading-state.json": { text: "NEWLOCAL", mtime: 900 } });
-  const snapshot: Snapshot = { "reading-state.json": { rev: 1, mtime: 50, size: 3 } };
-  const { engine } = makeEngine({ backend: be.backend, fs, snapshot });
+  const { fs, files } = makeFs({ "reading-state.json": { text: localText, mtime: 800 } });
+  const snapshot: Snapshot = {
+    "reading-state.json": { rev: 2, mtime: 50, size: 3, hash: "base" },
+  };
+  return { be, fs, files, snapshot };
+}
+
+test("a file both sides changed is merged and the merge is published above the remote", async () => {
+  const { be, fs, files, snapshot } = bothChanged("LOCAL", "REMOTE");
+  const bs = makeBase({ "reading-state.json": "BASE" });
+  const { engine, pulled } = makeEngine({
+    backend: be.backend,
+    fs,
+    base: bs.base,
+    snapshot,
+    merge: fakeMerge({ merged: "MERGED" }),
+  });
 
   await engine.syncNow();
 
-  expect(dec(be.data.get("reading-state.json")!)).toBe("NEWLOCAL");
-  expect(be.manifest()["reading-state.json"].rev).toBe(3);
+  expect(dec(files.get("reading-state.json")!.bytes)).toBe("MERGED");
+  expect(dec(be.data.get("reading-state.json")!)).toBe("MERGED");
+  // Above the remote's rev, so the other device pulls the merge rather than
+  // treating its own copy as still current.
+  expect(be.manifest()["reading-state.json"].rev).toBe(5);
+  expect(snapshot["reading-state.json"].hash).toBe(await h("MERGED"));
+  expect(bs.text("reading-state.json")).toBe("MERGED");
+  // The shell has to reload a file the pass rewrote under it.
+  expect(pulled).toEqual([["reading-state.json"]]);
 });
 
-test("conflict: the newer mtime wins (remote beats older local edit)", async () => {
-  const be = makeBackend(
-    { "reading-state.json": { rev: 9, mtime: 9000, size: 6 } },
-    { "reading-state.json": "REMOTE" },
-  );
-  const { fs, files } = makeFs({ "reading-state.json": { text: "loc", mtime: 800 } });
-  const snapshot: Snapshot = { "reading-state.json": { rev: 1, mtime: 50, size: 3 } };
-  const { engine } = makeEngine({ backend: be.backend, fs, snapshot });
+test("the merge sees the base, this side and the other side", async () => {
+  const { be, fs, snapshot } = bothChanged("LOCAL", "REMOTE");
+  const bs = makeBase({ "reading-state.json": "BASE" });
+  let seen: MergeInput | null = null;
+  const { engine } = makeEngine({
+    backend: be.backend,
+    fs,
+    base: bs.base,
+    snapshot,
+    merge: (input) => {
+      seen = input;
+      return { merged: input.local, copies: [], dropped: [], contested: false };
+    },
+  });
 
   await engine.syncNow();
 
-  expect(dec(files.get("reading-state.json")!.bytes)).toBe("REMOTE");
-  expect(snapshot["reading-state.json"].rev).toBe(9);
+  const input = seen as unknown as MergeInput;
+  expect(input.path).toBe("reading-state.json");
+  expect(dec(input.base!)).toBe("BASE");
+  expect(dec(input.local)).toBe("LOCAL");
+  expect(dec(input.remote)).toBe("REMOTE");
+});
+
+test("a merge with no base is handed null, not skipped", async () => {
+  const { be, fs, files, snapshot } = bothChanged("LOCAL", "REMOTE");
+  let base: Uint8Array | null | undefined;
+  const { engine } = makeEngine({
+    backend: be.backend,
+    fs,
+    snapshot,
+    merge: (input) => {
+      base = input.base;
+      return { merged: enc("KEPT-BOTH"), copies: [], dropped: [], contested: true };
+    },
+  });
+
+  await engine.syncNow();
+
+  // The first pass after this landed has no base, and neither does a file this
+  // device never pulled. The merge is still run; the contract covers the case.
+  expect(base).toBeNull();
+  expect(dec(files.get("reading-state.json")!.bytes)).toBe("KEPT-BOTH");
+});
+
+test("every conflict copy is written, and an existing path is never overwritten", async () => {
+  const { be, fs, files, snapshot } = bothChanged("LOCAL", "REMOTE");
+  files.set("reading-state.conflict-taken.json", { bytes: enc("ALREADY-THERE"), mtime: 1 });
+  const { engine } = makeEngine({
+    backend: be.backend,
+    fs,
+    snapshot,
+    merge: fakeMerge({
+      merged: "MERGED",
+      copies: [
+        { path: "reading-state.conflict-new.json", bytes: enc("THEIRS") },
+        { path: "reading-state.conflict-taken.json", bytes: enc("WOULD-CLOBBER") },
+      ],
+    }),
+  });
+
+  await engine.syncNow();
+
+  expect(dec(files.get("reading-state.conflict-new.json")!.bytes)).toBe("THEIRS");
+  expect(dec(files.get("reading-state.conflict-taken.json")!.bytes)).toBe("ALREADY-THERE");
+});
+
+test("every dropped record is journalled so a propagated delete stays recoverable", async () => {
+  const { be, fs, snapshot } = bothChanged("LOCAL", "REMOTE");
+  const tr = makeTrash();
+  const { engine } = makeEngine({
+    backend: be.backend,
+    fs,
+    trash: tr.trash,
+    snapshot,
+    now: () => 7000,
+    merge: fakeMerge({
+      merged: "MERGED",
+      dropped: [
+        { id: "a1", record: { text: "a highlight the other device deleted" } },
+        { id: "a2", record: { text: "and another" } },
+      ],
+    }),
+  });
+
+  await engine.syncNow();
+
+  expect(tr.entries()).toEqual([
+    {
+      at: 7000,
+      path: "reading-state.json",
+      id: "a1",
+      record: { text: "a highlight the other device deleted" },
+    },
+    { at: 7000, path: "reading-state.json", id: "a2", record: { text: "and another" } },
+  ]);
+});
+
+test("the journal is pruned once per pass", async () => {
+  const tr = makeTrash();
+  await tr.trash.append([
+    { at: 1000, path: "a.json", id: "old", record: 1 },
+    { at: 1000 + TRASH_TTL_MS, path: "a.json", id: "fresh", record: 2 },
+  ]);
+  const { engine } = makeEngine({ trash: tr.trash, snapshot: {}, now: () => 1000 + TRASH_TTL_MS });
+
+  await engine.syncNow();
+
+  expect(tr.prunedAt()).toBe(1000 + TRASH_TTL_MS);
+  expect(tr.entries().map((e) => e.id)).toEqual(["fresh"]);
+});
+
+test("a merge that throws costs only its own file", async () => {
+  const { be, fs, files, snapshot } = bothChanged("LOCAL", "REMOTE");
+  files.set("settings.json", { bytes: enc("S"), mtime: 500 });
+  const { engine } = makeEngine({
+    backend: be.backend,
+    fs,
+    snapshot,
+    merge: () => {
+      throw new Error("unmergeable");
+    },
+  });
+
+  await engine.syncNow();
+
+  // Untouched: neither side's content was thrown away.
+  expect(dec(files.get("reading-state.json")!.bytes)).toBe("LOCAL");
+  expect(dec(be.data.get("reading-state.json")!)).toBe("REMOTE");
+  // And the rest of the pass still ran.
+  expect(dec(be.data.get("settings.json")!)).toBe("S");
+  expect(engine.status().lastError).toStartWith("merge reading-state.json failed: unmergeable");
+});
+
+test("a merge whose upload fails keeps the merged bytes on disk and retries next pass", async () => {
+  const { be, fs, files, snapshot } = bothChanged("LOCAL", "REMOTE");
+  let refuse = true;
+  const upload = be.backend.upload;
+  be.backend.upload = async (name, bytes, mtime) => {
+    if (refuse) throw new Error("error sending request");
+    return upload(name, bytes, mtime);
+  };
+  const bs = makeBase({ "reading-state.json": "BASE" });
+  const { engine } = makeEngine({
+    backend: be.backend,
+    fs,
+    base: bs.base,
+    snapshot,
+    merge: fakeMerge({ merged: "MERGED" }),
+  });
+
+  await engine.syncNow();
+
+  // The merged bytes are the only copy holding both sides' work; losing them to
+  // a failed upload would be the one unrecoverable outcome.
+  expect(dec(files.get("reading-state.json")!.bytes)).toBe("MERGED");
+  expect(be.manifest()["reading-state.json"].rev).toBe(4);
+  expect(bs.text("reading-state.json")).toBe("BASE");
+  expect(engine.status().lastError).toStartWith("merge reading-state.json failed:");
+
+  refuse = false;
+  await engine.syncNow();
+
+  expect(dec(be.data.get("reading-state.json")!)).toBe("MERGED");
+  expect(be.manifest()["reading-state.json"].rev).toBe(5);
 });
 
 // --- change detection is by content, not by clock ---------------------------

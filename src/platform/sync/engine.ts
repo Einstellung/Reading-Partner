@@ -1,5 +1,5 @@
 // The sync engine: one pass reconciles the data channel (pull remote-newer
-// files, push local changes, last-writer-wins on conflict) then the books
+// files, push local changes, merge what both sides changed) then the books
 // channel (upload local-only book blobs, download remote-only ones). A single
 // pass runs at a time; overlapping triggers are dropped, and a failure (offline)
 // is kept as lastError for the UI and retried on the next tick.
@@ -8,6 +8,12 @@
 // (content.ts). mtime and size stay in the snapshot as the pre-filter that
 // keeps the 15s tick from reading every file: they can rule a file out, and
 // only what they flag is hashed.
+//
+// A file both sides changed is merged, not won: the three inputs are the base
+// (localStore.ts), this device's content and the other's, and the merged result
+// is published above the remote's rev so both devices converge on it. Records
+// the merge dropped are journalled locally (sync-trash.jsonl) so a propagated
+// delete stays recoverable.
 //
 // A pass is per-item, not all-or-nothing (docs/pitfall/52). One file that will
 // not transfer must not cost the other fifty, the manifest write or the books
@@ -29,8 +35,10 @@
 import { isRemoteGone, type Manifest, type SyncBackend } from "./backend";
 import type { BookFs } from "./books";
 import { hashBytes } from "./content";
-import type { BaseStore } from "./localStore";
-import { cachedHash, reconcile, type Snapshot, type Upload } from "./reconcile";
+import type { BaseStore, TrashJournal } from "./localStore";
+import type { MergeFile } from "./merge/contract";
+import { mergeFile } from "./merge";
+import { cachedHash, reconcile, type Merge, type Snapshot, type Upload } from "./reconcile";
 import type { LocalFile, ScannedFile, SyncFs } from "./syncFs";
 
 export const TICK_MS = 15_000;
@@ -51,7 +59,15 @@ export interface EngineDeps {
   books: BookFs;
   // The last agreed content of every synced file, for three-way merges.
   base: BaseStore;
+  // Where records a merge dropped are kept so a propagated delete stays
+  // recoverable. Local only; never synced.
+  trash: TrashJournal;
   snapshot: Snapshot;
+  // How two changed copies of a file become one (../merge). Injected like
+  // everything else the pass touches, so what the engine does with a merge's
+  // copies and dropped records can be pinned without depending on which
+  // strategy the merge module happens to apply today.
+  merge?: MergeFile;
   now?: () => number;
   // Called after a pass writes files pulled from remote, with their paths, so
   // the shell can refresh the shelf / drop stale caches.
@@ -232,7 +248,48 @@ export class SyncEngine {
     }
   }
 
-  // Files that were already in sync when this landed have no base, and neither
+  // One three-way merge, start to finish: fetch the other side, merge it with
+  // this one over the base, and get the result onto disk and into Drive.
+  //
+  // The local write comes before the upload on purpose. The merged bytes are
+  // the only copy that holds both sides' work, and a merge whose upload dies is
+  // repeated next pass; a merge whose local write never happened has thrown
+  // that work away.
+  private async mergeOne(mg: Merge): Promise<{ up: Upload; bytes: Uint8Array }> {
+    const remote = await this.d.backend.download(mg.path);
+    const local = await this.d.fs.read(mg.path);
+    const base = await this.d.base.read(mg.path);
+    const out = (this.d.merge ?? mergeFile)({ path: mg.path, base, local, remote });
+
+    await this.d.fs.write(mg.path, out.merged);
+    for (const copy of out.copies) {
+      // Never overwrite: a copy is named from its own content, so a path that
+      // already exists holds those exact bytes — and if it somehow does not, it
+      // is someone's file and this is not the code that gets to replace it.
+      if ((await this.d.fs.stat(copy.path)) !== null) continue;
+      await this.d.fs.write(copy.path, copy.bytes);
+    }
+    if (out.dropped.length > 0) {
+      // Record-level deletes do propagate, so the only thing standing between
+      // the user and a silently vanished record is this journal.
+      await this.d.trash.append(
+        out.dropped.map((d) => ({ at: this.now(), path: mg.path, id: d.id, record: d.record })),
+      );
+    }
+
+    const st = await this.d.fs.stat(mg.path);
+    const up: Upload = {
+      path: mg.path,
+      rev: mg.rev,
+      mtime: st?.mtime ?? 0,
+      size: out.merged.length,
+      hash: await hashBytes(out.merged),
+    };
+    await this.d.backend.upload(up.path, out.merged, up.mtime);
+    return { up, bytes: out.merged };
+  }
+
+  // Files that were already in sync when the base landed have none, and neither
   // does one whose base the user deleted. Nothing moves them, so nothing else
   // would ever write it: seed it from disk, which is what both sides agree on
   // whenever the local hash still matches the snapshot's.
@@ -262,6 +319,7 @@ export class SyncEngine {
       const remote = await this.d.backend.listManifest();
       const local = await this.hashLocal(await this.d.fs.list());
       const plan = reconcile(local, remote, this.snapshot);
+      await this.d.trash.prune(this.now()).catch(() => {});
 
       // No bytes move for these: the snapshot is only catching up on what it
       // needs to skip the file cheaply next pass. The base does move — the
@@ -309,6 +367,27 @@ export class SyncEngine {
       }
 
       const landed: { up: Upload; bytes: Uint8Array }[] = [];
+
+      // Both sides changed since the base. The merge is what gets published, at
+      // a rev above the remote's, so both devices converge on it instead of one
+      // of them winning the whole file. A merge that fails is one bad file like
+      // any other, never the end of the pass.
+      for (const mg of plan.merges) {
+        if (failures.halted()) break;
+        try {
+          const up = await this.mergeOne(mg);
+          landed.push(up);
+          // The local file changed, so the shell has to reload it whether or
+          // not the upload that follows gets published.
+          changed.push(mg.path);
+          failures.succeeded();
+        } catch (e) {
+          if (isAuthError(e)) throw e;
+          if (isRemoteGone(e)) continue;
+          failures.record(`merge ${mg.path}`, e);
+        }
+      }
+
       for (const up of plan.uploads) {
         if (failures.halted()) break;
         try {

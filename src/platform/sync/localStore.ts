@@ -9,6 +9,12 @@
 //               only guess. It sits outside the sync range (syncFs.ts), so it
 //               never syncs itself and never shows up in a plan.
 //
+// sync-trash.jsonl — every record a merge removed because the other side had
+//               deleted it. Record-level deletions do propagate (whole files
+//               never do), so this is what keeps one recoverable: the merge
+//               reports what it dropped and this journals it, on this device
+//               only, for thirty days.
+//
 // A base is written whenever a file is successfully uploaded or downloaded —
 // exactly the moments both sides are known to agree on its content — and
 // dropped when the file is gone from both sides. A missing base is legal: the
@@ -20,11 +26,19 @@ import {
   exists,
   mkdir,
   readFile,
+  readTextFile,
   remove,
   writeFile,
 } from "@tauri-apps/plugin-fs";
+import { writeTextAtomic } from "../app/atomic-fs";
 
 export const BASE_DIR = "sync-base";
+export const TRASH_FILE = "sync-trash.jsonl";
+
+// Long enough that a delete propagated while a device was offline is still
+// recoverable when it comes back, short enough that the journal cannot grow
+// without bound.
+export const TRASH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface BaseStore {
   // The last agreed content, or null when this device has none for the path.
@@ -67,5 +81,62 @@ export const tauriBaseStore: BaseStore = {
     } catch {
       // Already gone, which is the state this asks for.
     }
+  },
+};
+
+// --- the delete journal -----------------------------------------------------
+
+export interface TrashEntry {
+  // When this device journalled it, not when the deleting device acted: the
+  // pass has no honest reading of the other device's clock.
+  at: number;
+  // The file the record was merged out of.
+  path: string;
+  id: string;
+  record: unknown;
+}
+
+export interface TrashJournal {
+  append(entries: TrashEntry[]): Promise<void>;
+  // Drops entries older than TRASH_TTL_MS. Called once per pass.
+  prune(now: number): Promise<void>;
+}
+
+// The kept lines, or null when nothing would change — so a pass over a journal
+// that is already current writes nothing. A line that will not parse is kept:
+// it is a record the user might still want, and this is the only copy.
+export function pruneTrashText(text: string, now: number): string | null {
+  const lines = text.split("\n").filter((l) => l.trim() !== "");
+  const kept = lines.filter((line) => {
+    try {
+      const at = (JSON.parse(line) as Partial<TrashEntry>).at;
+      return typeof at !== "number" || now - at < TRASH_TTL_MS;
+    } catch {
+      return true;
+    }
+  });
+  if (kept.length === lines.length) return null;
+  return kept.length === 0 ? "" : `${kept.join("\n")}\n`;
+}
+
+async function readTrash(): Promise<string> {
+  try {
+    if (!(await exists(TRASH_FILE, opts))) return "";
+    return await readTextFile(TRASH_FILE, opts);
+  } catch {
+    return "";
+  }
+}
+
+export const tauriTrashJournal: TrashJournal = {
+  async append(entries) {
+    if (entries.length === 0) return;
+    const added = entries.map((e) => JSON.stringify(e)).join("\n");
+    await writeTextAtomic(TRASH_FILE, `${await readTrash()}${added}\n`);
+  },
+  async prune(now) {
+    const pruned = pruneTrashText(await readTrash(), now);
+    if (pruned === null) return;
+    await writeTextAtomic(TRASH_FILE, pruned);
   },
 };
