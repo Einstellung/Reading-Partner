@@ -10,9 +10,22 @@
 // data/ files carry their AppData-relative path as the Drive file name; the name
 // is opaque to Drive (slashes are not path separators there). books/<hash>.pdf
 // are immutable content-addressed blobs, uploaded once and never overwritten.
+//
+// A cached id is a guess, not a fact: the file behind it can have been deleted
+// or recreated by another device or by the user. Every request made with one
+// treats a 404 as "this id is stale" — forget it, find the name again, retry
+// once — because otherwise one dead id fails that file on every pass forever
+// (docs/pitfall/52).
 
 import { cleanTauriFetch, type TauriFetch } from "../app/tauri-fetch";
-import type { Manifest, SyncBackend } from "./backend";
+import {
+  isRetryableFailure,
+  RemoteGoneError,
+  SyncHttpError,
+  SyncTransportError,
+  type Manifest,
+  type SyncBackend,
+} from "./backend";
 import type { DriveIds } from "./state";
 
 const DRIVE = "https://www.googleapis.com/drive/v3";
@@ -25,12 +38,39 @@ const FOLDER_MIME = "application/vnd.google-apps.folder";
 // upload endpoint's size limits.
 const RESUMABLE_THRESHOLD = 5 * 1024 * 1024;
 
+// How long to wait for the connection itself. The http plugin passes this to
+// reqwest's connect_timeout, which covers only reaching the host — enough to
+// stop a blackholed route from hanging a pass, and safe to apply to a 26 MB
+// blob whose transfer may legitimately take minutes.
+const CONNECT_TIMEOUT_MS = 10_000;
+
+interface Policy {
+  attempts: number;
+  // Deadline for the whole request including reading the body, enforced with an
+  // AbortSignal (the http plugin honours one). null = no deadline.
+  timeoutMs: number | null;
+}
+
+// Manifest, searches, metadata and data files: all small (the largest data file
+// is ~100 KB), so a request still running after this is not going to finish.
+const SMALL: Policy = { attempts: 3, timeoutMs: 20_000 };
+// Book blobs: no deadline, since a slow link can take minutes to move 26 MB
+// legitimately, and one retry only — a repeat costs the whole blob again, and
+// the next pass retries anyway.
+const BULK: Policy = { attempts: 2, timeoutMs: null };
+
+// Backoff before attempt 2 and attempt 3. Short on purpose: this is a background
+// pass on a flaky link, not a queue drain, and the pass itself repeats.
+const BACKOFF_MS = [500, 1500];
+
 export interface DriveBackendDeps {
   getToken: () => Promise<string>;
   ids: DriveIds; // mutated in place as folders/files are discovered or created
   persistIds: () => Promise<void>;
   // Injectable for tests; production always uses the Tauri http plugin wrapper.
   fetchImpl?: TauriFetch;
+  // Injectable for tests, so retry cases do not cost real seconds.
+  sleep?: (ms: number) => Promise<void>;
 }
 
 // Escape a value for a Drive `q` search string (single-quoted).
@@ -48,6 +88,35 @@ function asBody(bytes: Uint8Array): ArrayBuffer {
   return bytes.slice().buffer as ArrayBuffer;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((done) => setTimeout(done, ms));
+}
+
+// Anything that is not a status: DNS, TLS, a reset connection, a body that
+// stopped mid-stream, our own deadline. reqwest's own text ("error sending
+// request for url (…)") is kept verbatim — it is the only clue about which
+// stage died, and the caller prefixes the file it was working on.
+function transportError(
+  what: string,
+  e: unknown,
+  timedOutAfter: number | null,
+): SyncTransportError {
+  if (timedOutAfter !== null) {
+    return new SyncTransportError(`Drive ${what} timed out after ${timedOutAfter}ms`);
+  }
+  return new SyncTransportError(e instanceof Error ? e.message : String(e));
+}
+
+function parseManifest(bytes: Uint8Array): Manifest {
+  const text = new TextDecoder().decode(bytes).trim();
+  if (!text) return {};
+  try {
+    return JSON.parse(text) as Manifest;
+  } catch {
+    return {};
+  }
+}
+
 interface DriveFile {
   id: string;
   name?: string;
@@ -60,57 +129,149 @@ export class DriveBackend implements SyncBackend {
     return this.d.ids;
   }
 
-  private async authed(url: string, init?: RequestInit): Promise<Response> {
+  // One request, retried while the failure is the kind a retry can fix. Every
+  // attempt gets a fresh token and a fresh deadline; the body is read inside the
+  // attempt, so a stream that dies halfway is retried like any other transport
+  // failure instead of surfacing as truncated bytes.
+  private async send<T>(
+    url: string,
+    init: RequestInit | undefined,
+    what: string,
+    policy: Policy,
+    read: (res: Response) => Promise<T>,
+  ): Promise<T> {
+    let last: unknown;
+    for (let attempt = 0; attempt < policy.attempts; attempt++) {
+      if (attempt > 0) {
+        await (this.d.sleep ?? sleep)(BACKOFF_MS[attempt - 1] ?? BACKOFF_MS[BACKOFF_MS.length - 1]);
+      }
+      try {
+        return await this.once(url, init, what, policy, read);
+      } catch (e) {
+        // A dead refresh token, a 404, a 403 quota denial: asking again changes
+        // nothing, and the caller has to see it as it is.
+        if (!isRetryableFailure(e) || attempt === policy.attempts - 1) throw e;
+        last = e;
+      }
+    }
+    throw last;
+  }
+
+  private async once<T>(
+    url: string,
+    init: RequestInit | undefined,
+    what: string,
+    policy: Policy,
+    read: (res: Response) => Promise<T>,
+  ): Promise<T> {
+    // Outside the try: a GoogleAuthError is not a transport failure and must
+    // reach the engine untouched, which uses it to drop to signed-out.
     const token = await this.d.getToken();
     const headers = new Headers(init?.headers);
     headers.set("Authorization", `Bearer ${token}`);
     headers.set("Origin", "");
-    return (this.d.fetchImpl ?? cleanTauriFetch)(url, { ...init, headers });
-  }
-
-  private async ok(res: Response, what: string): Promise<Response> {
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      throw new Error(`Drive ${what} failed (HTTP ${res.status}): ${body.slice(0, 300)}`);
+    const controller = policy.timeoutMs === null ? null : new AbortController();
+    const timer =
+      controller === null ? null : setTimeout(() => controller.abort(), policy.timeoutMs!);
+    const timedOut = (): boolean => controller?.signal.aborted === true;
+    try {
+      let res: Response;
+      try {
+        res = await (this.d.fetchImpl ?? cleanTauriFetch)(url, {
+          ...init,
+          headers,
+          signal: controller?.signal,
+          connectTimeout: CONNECT_TIMEOUT_MS,
+        });
+      } catch (e) {
+        throw transportError(what, e, timedOut() ? policy.timeoutMs : null);
+      }
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        throw new SyncHttpError(
+          res.status,
+          `Drive ${what} failed (HTTP ${res.status}): ${body.slice(0, 300)}`,
+        );
+      }
+      try {
+        return await read(res);
+      } catch (e) {
+        throw transportError(what, e, timedOut() ? policy.timeoutMs : null);
+      }
+    } finally {
+      if (timer !== null) clearTimeout(timer);
     }
-    return res;
   }
 
   private async findOne(q: string): Promise<DriveFile | null> {
     const url = `${DRIVE}/files?q=${encodeURIComponent(q)}&fields=files(id,name)&spaces=drive&pageSize=1`;
-    const res = await this.ok(await this.authed(url), "search");
-    const data = (await res.json()) as { files?: DriveFile[] };
-    return data.files && data.files.length > 0 ? data.files[0] : null;
+    const data = await this.send(url, undefined, "search", SMALL, (res) => res.json());
+    const files = (data as { files?: DriveFile[] }).files;
+    return files && files.length > 0 ? files[0] : null;
   }
 
   private async createMeta(name: string, parentId: string, mimeType?: string): Promise<string> {
     const body: Record<string, unknown> = { name, parents: [parentId] };
     if (mimeType) body.mimeType = mimeType;
-    const res = await this.ok(
-      await this.authed(`${DRIVE}/files?fields=id`, {
+    const data = await this.send(
+      `${DRIVE}/files?fields=id`,
+      {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
-      }),
+      },
       "create",
+      SMALL,
+      (res) => res.json(),
     );
-    return ((await res.json()) as DriveFile).id;
+    return (data as DriveFile).id;
   }
 
-  private async patchMedia(id: string, bytes: Uint8Array): Promise<void> {
-    await this.ok(
-      await this.authed(`${UPLOAD}/files/${id}?uploadType=media`, {
+  private async patchMedia(
+    id: string,
+    bytes: Uint8Array,
+    what: string,
+    policy: Policy = SMALL,
+  ): Promise<void> {
+    await this.send(
+      `${UPLOAD}/files/${id}?uploadType=media`,
+      {
         method: "PATCH",
         headers: { "Content-Type": "application/octet-stream" },
         body: asBody(bytes),
-      }),
-      "upload media",
+      },
+      what,
+      policy,
+      async () => undefined,
     );
   }
 
-  private async getMedia(id: string): Promise<Uint8Array> {
-    const res = await this.ok(await this.authed(`${DRIVE}/files/${id}?alt=media`), "download");
-    return new Uint8Array(await res.arrayBuffer());
+  private async getMedia(id: string, what: string, policy: Policy = SMALL): Promise<Uint8Array> {
+    return this.send(
+      `${DRIVE}/files/${id}?alt=media`,
+      undefined,
+      what,
+      policy,
+      async (res) => new Uint8Array(await res.arrayBuffer()),
+    );
+  }
+
+  // Run `attempt` with a cached id; on a 404 the id is stale, so forget it and
+  // hand back null for the caller to resolve the name afresh.
+  private async withCachedId<T>(
+    cached: string | undefined,
+    forget: () => void,
+    attempt: (id: string) => Promise<T>,
+  ): Promise<{ done: true; value: T } | { done: false }> {
+    if (!cached) return { done: false };
+    try {
+      return { done: true, value: await attempt(cached) };
+    } catch (e) {
+      if (!(e instanceof SyncHttpError) || e.status !== 404) throw e;
+      forget();
+      await this.d.persistIds();
+      return { done: false };
+    }
   }
 
   private async findOrCreateFolder(name: string, parentId: string): Promise<string> {
@@ -137,41 +298,55 @@ export class DriveBackend implements SyncBackend {
     if (changed) await this.d.persistIds();
   }
 
+  private async findManifest(): Promise<DriveFile | null> {
+    return this.findOne(
+      `name='manifest.json' and '${this.ids.folderId}' in parents and trashed=false`,
+    );
+  }
+
+  // A failed download must propagate. "Empty" here is indistinguishable from
+  // "the remote holds nothing", and the engine republishes what it read after
+  // the next upload — so one transient failure would rewrite manifest.json with
+  // only this device's changed files, and every entry it does not have locally
+  // silently drops out of the backup. Unparseable content still degrades to
+  // empty: that file cannot be repaired by retrying, and the next upload
+  // rebuilds it.
   async listManifest(): Promise<Manifest> {
-    let id = this.ids.manifestFileId;
-    if (!id) {
-      const found = await this.findOne(
-        `name='manifest.json' and '${this.ids.folderId}' in parents and trashed=false`,
-      );
-      if (!found) return {};
-      id = found.id;
-      this.ids.manifestFileId = id;
-      await this.d.persistIds();
-    }
-    // A failed download must propagate. "Empty" here is indistinguishable from
-    // "the remote holds nothing", and the engine writes reconcile's nextManifest
-    // (a copy of what it read) after the next upload — so one transient failure
-    // would rewrite manifest.json with only this device's changed files, and
-    // every entry it does not have locally silently drops out of the backup.
-    // Unparseable content still degrades to empty: that file cannot be repaired
-    // by retrying, and the next upload rebuilds it.
-    const bytes = await this.getMedia(id);
-    const text = new TextDecoder().decode(bytes).trim();
-    if (!text) return {};
-    try {
-      return JSON.parse(text) as Manifest;
-    } catch {
-      return {};
-    }
+    const cached = await this.withCachedId(
+      this.ids.manifestFileId,
+      () => {
+        this.ids.manifestFileId = undefined;
+      },
+      (id) => this.getMedia(id, "manifest download"),
+    );
+    if (cached.done) return parseManifest(cached.value);
+
+    const found = await this.findManifest();
+    if (!found) return {};
+    this.ids.manifestFileId = found.id;
+    await this.d.persistIds();
+    return parseManifest(await this.getMedia(found.id, "manifest download"));
   }
 
   async writeManifest(manifest: Manifest): Promise<void> {
     const bytes = new TextEncoder().encode(JSON.stringify(manifest, null, 2));
-    if (!this.ids.manifestFileId) {
-      this.ids.manifestFileId = await this.createMeta("manifest.json", this.ids.folderId!);
-      await this.d.persistIds();
-    }
-    await this.patchMedia(this.ids.manifestFileId, bytes);
+    const cached = await this.withCachedId(
+      this.ids.manifestFileId,
+      () => {
+        this.ids.manifestFileId = undefined;
+      },
+      (id) => this.patchMedia(id, bytes, "manifest write"),
+    );
+    if (cached.done) return;
+
+    // Search before creating: the id can be stale while the file is fine (the
+    // user emptied their trash on a copy, another device recreated it), and a
+    // blind create leaves two manifests and two divergent views of the backup.
+    const found = await this.findManifest();
+    const id = found ? found.id : await this.createMeta("manifest.json", this.ids.folderId!);
+    this.ids.manifestFileId = id;
+    await this.d.persistIds();
+    await this.patchMedia(id, bytes, "manifest write");
   }
 
   private async dataFileId(name: string, create: boolean): Promise<string | null> {
@@ -188,22 +363,44 @@ export class DriveBackend implements SyncBackend {
     return id;
   }
 
+  private forgetFile(name: string): void {
+    delete this.ids.fileIds[name];
+  }
+
   async download(name: string): Promise<Uint8Array> {
+    const cached = await this.withCachedId(
+      this.ids.fileIds[name],
+      () => this.forgetFile(name),
+      (id) => this.getMedia(id, "download"),
+    );
+    if (cached.done) return cached.value;
+
     const id = await this.dataFileId(name, false);
-    if (!id) throw new Error(`Drive file not found: ${name}`);
-    return this.getMedia(id);
+    if (!id) throw new RemoteGoneError(`Drive file not found: ${name}`);
+    return this.getMedia(id, "download");
   }
 
   async upload(name: string, bytes: Uint8Array): Promise<void> {
+    const cached = await this.withCachedId(
+      this.ids.fileIds[name],
+      () => this.forgetFile(name),
+      (id) => this.patchMedia(id, bytes, "upload"),
+    );
+    if (cached.done) return;
+
     const id = await this.dataFileId(name, true);
-    await this.patchMedia(id!, bytes);
+    await this.patchMedia(id!, bytes, "upload");
+  }
+
+  private async findBook(hash: string): Promise<DriveFile | null> {
+    return this.findOne(
+      `name='${escapeQ(hash)}.pdf' and '${this.ids.booksFolderId}' in parents and trashed=false`,
+    );
   }
 
   async hasBook(hash: string): Promise<boolean> {
     if (this.ids.bookIds[hash]) return true;
-    const found = await this.findOne(
-      `name='${escapeQ(hash)}.pdf' and '${this.ids.booksFolderId}' in parents and trashed=false`,
-    );
+    const found = await this.findBook(hash);
     if (!found) return false;
     this.ids.bookIds[hash] = found.id;
     await this.d.persistIds();
@@ -222,17 +419,20 @@ export class DriveBackend implements SyncBackend {
   }
 
   async downloadBook(hash: string): Promise<Uint8Array> {
-    let id = this.ids.bookIds[hash];
-    if (!id) {
-      const found = await this.findOne(
-        `name='${escapeQ(hash)}.pdf' and '${this.ids.booksFolderId}' in parents and trashed=false`,
-      );
-      if (!found) throw new Error(`Drive book not found: ${hash}`);
-      id = found.id;
-      this.ids.bookIds[hash] = id;
-      await this.d.persistIds();
-    }
-    return this.getMedia(id);
+    const cached = await this.withCachedId(
+      this.ids.bookIds[hash],
+      () => {
+        delete this.ids.bookIds[hash];
+      },
+      (id) => this.getMedia(id, "book download", BULK),
+    );
+    if (cached.done) return cached.value;
+
+    const found = await this.findBook(hash);
+    if (!found) throw new RemoteGoneError(`Drive book not found: ${hash}`);
+    this.ids.bookIds[hash] = found.id;
+    await this.d.persistIds();
+    return this.getMedia(found.id, "book download", BULK);
   }
 
   // Small book: one multipart/related request carrying metadata + media.
@@ -248,21 +448,25 @@ export class DriveBackend implements SyncBackend {
     body.set(head, 0);
     body.set(bytes, head.length);
     body.set(tail, head.length + bytes.length);
-    const res = await this.ok(
-      await this.authed(`${UPLOAD}/files?uploadType=multipart&fields=id`, {
+    const data = await this.send(
+      `${UPLOAD}/files?uploadType=multipart&fields=id`,
+      {
         method: "POST",
         headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
         body,
-      }),
+      },
       "book upload",
+      BULK,
+      (res) => res.json(),
     );
-    return ((await res.json()) as DriveFile).id;
+    return (data as DriveFile).id;
   }
 
   // Large book: open a resumable session, then PUT the whole blob to it.
   private async resumableUpload(name: string, bytes: Uint8Array): Promise<string> {
-    const init = await this.ok(
-      await this.authed(`${UPLOAD}/files?uploadType=resumable&fields=id`, {
+    const location = await this.send(
+      `${UPLOAD}/files?uploadType=resumable&fields=id`,
+      {
         method: "POST",
         headers: {
           "Content-Type": "application/json; charset=UTF-8",
@@ -270,19 +474,23 @@ export class DriveBackend implements SyncBackend {
           "X-Upload-Content-Length": String(bytes.length),
         },
         body: JSON.stringify({ name, parents: [this.ids.booksFolderId] }),
-      }),
+      },
       "book session",
+      SMALL,
+      async (res) => res.headers.get("Location") ?? res.headers.get("location"),
     );
-    const location = init.headers.get("Location") ?? init.headers.get("location");
     if (!location) throw new Error("Drive resumable session returned no Location");
-    const res = await this.ok(
-      await this.authed(location, {
+    const data = await this.send(
+      location,
+      {
         method: "PUT",
         headers: { "Content-Type": "application/pdf" },
         body: asBody(bytes),
-      }),
+      },
       "book put",
+      BULK,
+      (res) => res.json(),
     );
-    return ((await res.json()) as DriveFile).id;
+    return (data as DriveFile).id;
   }
 }

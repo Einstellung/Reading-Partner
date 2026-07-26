@@ -23,6 +23,57 @@ export interface ManifestEntry {
 // "memory-<topicId>/m-ab12cd34.md").
 export type Manifest = Record<string, ManifestEntry>;
 
+// --- how a failure is classified ------------------------------------------
+//
+// Three kinds of failure have to be told apart in code, never by matching
+// message text: a request that never completed (retry it), a status the server
+// chose (retry only 429/5xx), and a file that is simply not in the remote any
+// more (no retry will produce it — skip the item).
+
+// The request never reached a response: DNS, TLS, a reset connection, our own
+// timeout. reqwest reports these through the http plugin as "error sending
+// request for url (…)", which carries no status at all.
+export class SyncTransportError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SyncTransportError";
+  }
+}
+
+// The server answered with a status the request cannot be considered done at.
+export class SyncHttpError extends Error {
+  readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "SyncHttpError";
+    this.status = status;
+  }
+}
+
+// The named file is gone from the remote (or was never there). A pass skips the
+// item rather than counting it as a fault: retrying cannot bring it back, and
+// treating it as a fault would keep lastSyncAt pinned forever over a condition
+// nothing can fix.
+export class RemoteGoneError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RemoteGoneError";
+  }
+}
+
+// 408/429 and the 5xx family are the server asking to be asked again; every
+// other status is an answer, and repeating the request just repeats it.
+const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
+
+export function isRetryableFailure(e: unknown): boolean {
+  if (e instanceof SyncTransportError) return true;
+  return e instanceof SyncHttpError && RETRYABLE_STATUS.has(e.status);
+}
+
+export function isRemoteGone(e: unknown): boolean {
+  return e instanceof RemoteGoneError;
+}
+
 export interface SyncBackend {
   // Create the "Reading Partner" folder and its books/ and data/ subfolders if
   // absent, remembering their ids. Idempotent.
@@ -31,10 +82,12 @@ export interface SyncBackend {
   listManifest(): Promise<Manifest>;
   writeManifest(manifest: Manifest): Promise<void>;
 
+  // Throws RemoteGoneError when the name is not in the remote any more.
   download(name: string): Promise<Uint8Array>;
   upload(name: string, bytes: Uint8Array, mtime: number): Promise<void>;
 
   hasBook(hash: string): Promise<boolean>;
   uploadBook(hash: string, bytes: Uint8Array): Promise<void>;
+  // Throws RemoteGoneError when the blob is not in the remote any more.
   downloadBook(hash: string): Promise<Uint8Array>;
 }

@@ -9,6 +9,7 @@
 
 import { expect, test } from "bun:test";
 import { DriveBackend } from "../../../src/platform/sync/driveBackend";
+import { RemoteGoneError, SyncTransportError } from "../../../src/platform/sync/backend";
 import type { DriveIds } from "../../../src/platform/sync/state";
 import type { TauriFetch } from "../../../src/platform/app/tauri-fetch";
 
@@ -50,6 +51,9 @@ function makeDrive() {
   let pendingSession: { name: string; parents: string[] } | null = null;
   // Set to make one request fail, for the partial-failure cases.
   let failWhen: ((method: string, url: string, body: string) => boolean) | null = null;
+  // Same, but the request never completes: what a reset connection or a dead
+  // route looks like, as opposed to a status the server chose.
+  let throwWhen: ((method: string, url: string, body: string) => boolean) | null = null;
 
   const add = (seed: Seed): string => {
     const id = `id-${++nextId}`;
@@ -86,6 +90,9 @@ function makeDrive() {
     const method = init?.method ?? "GET";
     const body = bodyText(init?.body);
     requests.push({ method, url });
+    if (throwWhen?.(method, url, body)) {
+      throw new Error(`error sending request for url (${url})`);
+    }
     if (failWhen?.(method, url, body)) return new Response("boom", { status: 500 });
 
     if (method === "GET" && url.startsWith(`${DRIVE}/files?q=`)) {
@@ -141,6 +148,10 @@ function makeDrive() {
     failOn: (fn: typeof failWhen) => {
       failWhen = fn;
     },
+    throwOn: (fn: typeof throwWhen) => {
+      throwWhen = fn;
+    },
+    count: (match: (url: string) => boolean) => requests.filter((r) => match(r.url)).length,
   };
 }
 
@@ -156,6 +167,8 @@ function makeBackend(drive: Drive, ids: Partial<DriveIds> = {}) {
       persisted += 1;
     },
     fetchImpl: drive.fetchImpl,
+    // Retry backoff, skipped: these tests are about which requests are made.
+    sleep: async () => {},
   });
   return { backend, ids: full, persistCount: () => persisted };
 }
@@ -287,7 +300,7 @@ test("a manifest that fails to download stops the pass instead of reporting an e
 
   // Reporting {} would have the next upload rewrite manifest.json without the
   // entries this device has no local copy of.
-  await expect(backend.listManifest()).rejects.toThrow(/Drive download failed/);
+  await expect(backend.listManifest()).rejects.toThrow(/Drive manifest download failed/);
 });
 
 test("an unparseable manifest reports empty, since a retry cannot repair it", async () => {
@@ -430,4 +443,181 @@ test("downloadBook finds a blob this device has never seen, and fails loudly whe
   expect(dec(await backend.downloadBook("seen"))).toBe("BOOK");
   expect(ids.bookIds["seen"]).toBe(id);
   await expect(backend.downloadBook("gone")).rejects.toThrow("Drive book not found: gone");
+});
+
+// --- stale ids -----------------------------------------------------------
+//
+// The reported failure: an id cached from an earlier epoch, pointing at nothing.
+// Every pass asked for it, got a 404, and treated the whole pass as failed —
+// forever, since nothing ever forgot the id.
+
+test("a data file id that 404s is forgotten, re-found by name, and the download succeeds", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  const real = drive.add({
+    name: "annotations-a1.json",
+    parents: [seeded.dataFolderId],
+    body: "MARKS",
+  });
+  const { backend, ids } = makeBackend(drive, {
+    dataFolderId: seeded.dataFolderId,
+    fileIds: { "annotations-a1.json": "id-ghost" },
+  });
+
+  expect(dec(await backend.download("annotations-a1.json"))).toBe("MARKS");
+  expect(ids.fileIds["annotations-a1.json"]).toBe(real);
+  // One try with the stale id, one search, one download with the fresh one.
+  expect(drive.count((u) => u.includes("alt=media"))).toBe(2);
+  expect(drive.count((u) => u.includes("files?q="))).toBe(1);
+});
+
+test("a stale id whose name is gone from Drive raises the gone error, not a network fault", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  const { backend, ids } = makeBackend(drive, {
+    dataFolderId: seeded.dataFolderId,
+    fileIds: { "topics.json": "id-ghost" },
+  });
+
+  await expect(backend.download("topics.json")).rejects.toThrow(RemoteGoneError);
+  expect(ids.fileIds["topics.json"]).toBeUndefined();
+});
+
+test("an upload against a stale id re-finds the file instead of losing the write", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  const real = drive.add({ name: "settings.json", parents: [seeded.dataFolderId], body: "old" });
+  const { backend, ids } = makeBackend(drive, {
+    dataFolderId: seeded.dataFolderId,
+    fileIds: { "settings.json": "id-ghost" },
+  });
+
+  await backend.upload("settings.json", enc("new"));
+
+  expect(drive.one("settings.json").body).toBe("new");
+  expect(ids.fileIds["settings.json"]).toBe(real);
+});
+
+test("an upload against a stale id creates the file when the name is gone too", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  const { backend, ids } = makeBackend(drive, {
+    dataFolderId: seeded.dataFolderId,
+    fileIds: { "topics.json": "id-ghost" },
+  });
+
+  await backend.upload("topics.json", enc("fresh"));
+
+  expect(drive.one("topics.json").body).toBe("fresh");
+  expect(ids.fileIds["topics.json"]).not.toBe("id-ghost");
+});
+
+test("a stale manifest id is re-resolved rather than reporting an empty remote", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  const real = drive.add({
+    name: "manifest.json",
+    parents: [seeded.folderId],
+    body: JSON.stringify({ "a.json": { rev: 2, mtime: 1, size: 1 } }),
+  });
+  const { backend, ids } = makeBackend(drive, {
+    folderId: seeded.folderId,
+    manifestFileId: "id-ghost",
+  });
+
+  // Degrading to {} here would rewrite the manifest with this device's files
+  // only on the next upload.
+  expect(await backend.listManifest()).toEqual({ "a.json": { rev: 2, mtime: 1, size: 1 } });
+  expect(ids.manifestFileId).toBe(real);
+});
+
+test("writeManifest with a stale id adopts the real manifest instead of creating a second", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  const real = drive.add({ name: "manifest.json", parents: [seeded.folderId], body: "{}" });
+  const { backend, ids } = makeBackend(drive, {
+    folderId: seeded.folderId,
+    manifestFileId: "id-ghost",
+  });
+
+  await backend.writeManifest({ a: { rev: 1, mtime: 1, size: 1 } });
+
+  expect(drive.byName("manifest.json").length).toBe(1);
+  expect(ids.manifestFileId).toBe(real);
+  expect(JSON.parse(drive.one("manifest.json").body)).toEqual({ a: { rev: 1, mtime: 1, size: 1 } });
+});
+
+test("a stale book id is forgotten and the blob found by name", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  const real = drive.add({ name: "h1.pdf", parents: [seeded.booksFolderId], body: "BOOK" });
+  const { backend, ids } = makeBackend(drive, {
+    booksFolderId: seeded.booksFolderId,
+    bookIds: { h1: "id-ghost" },
+  });
+
+  expect(dec(await backend.downloadBook("h1"))).toBe("BOOK");
+  expect(ids.bookIds["h1"]).toBe(real);
+});
+
+// --- retry ---------------------------------------------------------------
+
+test("a request that never completes is retried, and the second attempt lands", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  drive.add({ name: "settings.json", parents: [seeded.dataFolderId], body: "DATA" });
+  const { backend } = makeBackend(drive, { dataFolderId: seeded.dataFolderId });
+  let first = true;
+  drive.throwOn((_m, url) => {
+    if (!url.includes("alt=media") || !first) return false;
+    first = false;
+    return true;
+  });
+
+  expect(dec(await backend.download("settings.json"))).toBe("DATA");
+  expect(drive.count((u) => u.includes("alt=media"))).toBe(2);
+});
+
+test("a 5xx is retried and a transport failure that never clears gives up bounded", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  drive.add({ name: "settings.json", parents: [seeded.dataFolderId], body: "DATA" });
+  const { backend } = makeBackend(drive, { dataFolderId: seeded.dataFolderId });
+
+  let fails = 1;
+  drive.failOn((_m, url) => url.includes("alt=media") && fails-- > 0);
+  expect(dec(await backend.download("settings.json"))).toBe("DATA");
+  expect(drive.count((u) => u.includes("alt=media"))).toBe(2);
+
+  drive.failOn(null);
+  drive.reset();
+  drive.throwOn((_m, url) => url.includes("alt=media"));
+  await expect(backend.download("settings.json")).rejects.toThrow(SyncTransportError);
+  // Bounded: a dead link must not turn one file into an unbounded retry loop.
+  expect(drive.count((u) => u.includes("alt=media"))).toBe(3);
+});
+
+test("a 404 is answered, not retried: it is what triggers the id self-heal", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  drive.add({ name: "settings.json", parents: [seeded.dataFolderId], body: "DATA" });
+  const { backend } = makeBackend(drive, {
+    dataFolderId: seeded.dataFolderId,
+    fileIds: { "settings.json": "id-ghost" },
+  });
+
+  expect(dec(await backend.download("settings.json"))).toBe("DATA");
+  // One 404 with the stale id, one download with the fresh one. Three would mean
+  // the retry budget is being spent on a status no retry can change.
+  expect(drive.count((u) => u.includes("alt=media"))).toBe(2);
+});
+
+test("a book upload is retried at most once: a repeat costs the whole blob again", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  const { backend } = makeBackend(drive, { booksFolderId: seeded.booksFolderId });
+  drive.throwOn((_m, url) => url.includes("uploadType=multipart"));
+
+  await expect(backend.uploadBook("h", enc("PDF"))).rejects.toThrow(SyncTransportError);
+  expect(drive.count((u) => u.includes("uploadType=multipart"))).toBe(2);
 });
