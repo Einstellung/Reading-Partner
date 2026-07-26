@@ -33,6 +33,7 @@
 - [56-layout-switch-centres-before-geometry](./56-layout-switch-centres-before-geometry.md) — 切布局后居中跑在 DOM 重排前面，落点被浏览器夹掉且无人察觉；重复 setScrollStrategy 是空操作、同尺度 requestZoom 不重排，要按几何判据等 + 复核落点
 - [57-zoom-plugin-rewrites-scroll-150ms-after-resize](./57-zoom-plugin-rewrites-scroll-150ms-after-resize.md) — 缩放插件用 150ms debounce 回应视口变化，到期时按缓存里的旧滚动位置再写一次，把旋转后刚居中的页面拉回去；落点确认要盯满整个帧预算
 - [58-broken-pdf-open-resolves-instead-of-rejecting](./58-broken-pdf-open-resolves-instead-of-rejecting.md) — 解析失败的文档 openDocumentBuffer 照常 resolve，只有 onDocumentError 和 core 里的 status:"error" 说话；不订阅就是永远的灰屏加 “Rendering…”
+- [59-tool-switch-republishes-selection](./59-tool-switch-republishes-selection.md) — onStateChange 是整份状态的流，切工具把还留着的选中同步再播一遍，宿主当成新选中武装 150ms 兜底定时器，标注编辑器在页面中间凭空弹出；按 selectedUids 数组身份判选中是否真的动了
 
 ## 触摸与手势
 

@@ -10,6 +10,7 @@ import EmbedPdfView, {
   type EmbedViewStats,
 } from "./EmbedPdfView";
 import type { ZoteroAnnotation } from "./convert";
+import { popupEffect } from "./annotation-selection";
 import {
   type Annotation,
   type AnnotationPopupParams,
@@ -51,6 +52,10 @@ function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
   // Selection whose precise anchor (AnchorProbe) hasn't arrived yet; the timer
   // opens the popup at a viewport-center fallback if it never does.
   const pendingAnchor = useRef<{ id: string; timer: number } | null>(null);
+  // Set while setTool runs. The engine republishes its annotation state inside
+  // that call — synchronously, with the selection it already held — and the
+  // popup rule reads this to tell that apart from a selection the reader made.
+  const toolChanging = useRef(false);
   const propsRef = useRef(props);
   propsRef.current = props;
   useEffect(
@@ -90,11 +95,16 @@ function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
   const onSelectAnnotation = useCallback(
     (id: string | null) => {
       propsRef.current.onSelectAnnotations(id ? [id] : []);
+      const effect = popupEffect(id, toolChanging.current);
+      // A tool change speaks for itself, not for the selection: leave the editor
+      // and any pending fallback untouched (annotation-selection.ts).
+      if (effect === "ignore") return;
       if (pendingAnchor.current) {
         window.clearTimeout(pendingAnchor.current.timer);
         pendingAnchor.current = null;
       }
       if (!id) {
+        // effect === "close"
         propsRef.current.onSetAnnotationPopup(undefined);
         return;
       }
@@ -139,16 +149,21 @@ function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
       clearQuoteHighlight: () => h.clearQuoteHighlight(),
       setFingerDraw: (on: boolean) => h.setFingerDraw(on),
       setTool: (tool?: Tool) => {
-        if (!tool || tool.type === "pointer" || tool.type === "navlock") {
-          h.setTool(tool?.type === "navlock" ? "navlock" : "pointer");
-          return;
-        }
-        if (tool.type === "highlight" || tool.type === "underline" || tool.type === "ink") {
-          h.setTool(tool.type);
-          if (tool.color) h.setColor(tool.color);
-        } else {
-          // note/text/image/eraser have no EmbedPDF spike equivalent → pointer.
-          h.setTool("pointer");
+        toolChanging.current = true;
+        try {
+          if (!tool || tool.type === "pointer" || tool.type === "navlock") {
+            h.setTool(tool?.type === "navlock" ? "navlock" : "pointer");
+            return;
+          }
+          if (tool.type === "highlight" || tool.type === "underline" || tool.type === "ink") {
+            h.setTool(tool.type);
+            if (tool.color) h.setColor(tool.color);
+          } else {
+            // note/text/image/eraser have no EmbedPDF spike equivalent → pointer.
+            h.setTool("pointer");
+          }
+        } finally {
+          toolChanging.current = false;
         }
       },
       setAnnotations: (anns: Annotation[]) => {
