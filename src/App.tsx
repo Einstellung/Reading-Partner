@@ -98,6 +98,8 @@ import { BTN, BTN_PRIMARY } from "./ui/components/common/buttons";
 import { appendRunningTool, resolveToolStatus } from "./ui/components/common/toolTrace";
 import LibraryScreen from "./ui/components/library/LibraryScreen";
 import Toast, { useToasts } from "./ui/components/common/Toast";
+import SettingsButton from "./ui/components/common/SettingsButton";
+import { useSyncHealth } from "./ui/components/common/useSyncHealth";
 import type { Annotation as PopupAnnotation, PendingImage, ToolStatus, ToolType } from "./ui/components/common/types";
 
 // The AI pen maps to the engine's underline tool in a fixed purple (the palette's
@@ -474,6 +476,17 @@ export default function App() {
       if (refreshShelf) refreshTopics().catch(() => {});
     });
   }, [refreshTopics]);
+
+  // A sync that is not running says so once per app start and then keeps a dot
+  // on the Settings affordance. One toast, never repeated: the whole point is a
+  // user who believes sync is on finding out, not being nagged about it.
+  const syncReport = useSyncHealth();
+  const syncToastedRef = useRef(false);
+  useEffect(() => {
+    if (syncReport.alert !== "alert" || !syncReport.message || syncToastedRef.current) return;
+    syncToastedRef.current = true;
+    pushToast("warn", syncReport.message);
+  }, [syncReport, pushToast]);
 
   // Apply the tool once the view is initialized (setTool before the pdf viewer
   // is ready throws — PDFViewerApplication null, pitfall 11). The AI pen is the
@@ -1538,6 +1551,7 @@ export default function App() {
             }}
             onOpenBookThread={openBookThread}
             onOpenSettings={() => setShowSettings(true)}
+            settingsAlert={syncReport.alert !== "none"}
           />
         ) : homeScreen === "library" ? (
           <>
@@ -1552,16 +1566,18 @@ export default function App() {
             )}
             {activeTopic && <span className="text-[13px] text-[#1b1b1b] overflow-hidden text-ellipsis whitespace-nowrap max-w-[40vw]">{activeTopic.name}</span>}
             <span className="flex-1" />
-            <button className={`${BTN} coarse:min-w-[44px]`} title="Settings" aria-label="Settings" onClick={() => setShowSettings(true)}>
-              ⚙
-            </button>
+            <SettingsButton
+              alert={syncReport.alert !== "none"}
+              onClick={() => setShowSettings(true)}
+            />
           </>
         ) : (
           <>
             <span className="flex-1" />
-            <button className={`${BTN} coarse:min-w-[44px]`} title="Settings" aria-label="Settings" onClick={() => setShowSettings(true)}>
-              ⚙
-            </button>
+            <SettingsButton
+              alert={syncReport.alert !== "none"}
+              onClick={() => setShowSettings(true)}
+            />
           </>
         )}
       </header>

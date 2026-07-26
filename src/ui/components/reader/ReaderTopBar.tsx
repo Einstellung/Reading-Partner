@@ -35,6 +35,8 @@ export default function ReaderTopBar(props: {
   onToolChange: (tool: { type: ToolType; color: string }) => void;
   onOpenBookThread: () => void;
   onOpenSettings: () => void;
+  // Something in Settings needs attention (today: sync is not running).
+  settingsAlert: boolean;
 }) {
   const { view, stats, sidebarOpen } = props;
   // On-device touch probe. Off by default, never persisted.
@@ -160,7 +162,7 @@ export default function ReaderTopBar(props: {
         >
           <IconSparkle size={18} />
         </button>
-        <MoreMenu items={moreItems} />
+        <MoreMenu items={moreItems} alert={props.settingsAlert} />
       </div>
     </>
   );

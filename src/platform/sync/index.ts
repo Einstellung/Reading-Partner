@@ -2,6 +2,10 @@
 // in-memory status the Settings page and shelf subscribe to. Nothing here runs
 // unless Google is configured and the user is signed in with auto-sync (or they
 // press Sync now).
+//
+// "Not running" is a state of its own, not the absence of one: whether the
+// engine started and why it did not are both part of the status, and health.ts
+// turns them into what the user is told.
 
 import { DriveBackend } from "./driveBackend";
 import { SyncEngine } from "./engine";
@@ -15,18 +19,38 @@ import {
   signIn,
   signOut,
 } from "./auth";
+import { syncStartAction } from "./health";
 import { emptyState, loadState, saveState, type SyncState } from "./state";
 
 export { isGoogleConfigured } from "./googleConfig";
+export {
+  syncHealth,
+  SYNC_GRACE_MS,
+  SYNC_STALE_MS,
+  type SyncAlert,
+  type SyncHealth,
+  type SyncHealthReport,
+} from "./health";
+
+// Written into sync-state.json when auto-sync is on and the engine cannot run.
+// A null lastError next to autoSync:true reads as healthy, which is what let a
+// stopped sync go unnoticed for four days (docs/pitfall/51).
+export const SIGNED_OUT_STOP_REASON =
+  "Auto-sync is on but this device is signed out of Google";
 
 export interface SyncStatus {
   configured: boolean;
   signedIn: boolean;
   email: string | null;
   autoSync: boolean;
+  // The ticking engine is started. Distinguishes "syncing" from "auto-sync is
+  // on and nothing is running".
+  engineStarted: boolean;
   running: boolean;
   lastSyncAt: number | null;
   lastError: string | null;
+  // When initSync ran, or null before it did.
+  startedAt: number | null;
 }
 
 let state: SyncState = emptyState();
@@ -34,6 +58,8 @@ let engine: SyncEngine | null = null;
 let initialized = false;
 let signedIn = false;
 let email: string | null = null;
+let engineStarted = false;
+let startedAt: number | null = null;
 
 const statusListeners = new Set<(s: SyncStatus) => void>();
 const pulledListeners = new Set<(paths: string[]) => void>();
@@ -45,9 +71,11 @@ function buildStatus(): SyncStatus {
     signedIn,
     email,
     autoSync: state.autoSync,
+    engineStarted,
     running: s?.running ?? false,
     lastSyncAt: s?.lastSyncAt ?? state.lastSyncAt,
     lastError: s?.lastError ?? state.lastError,
+    startedAt,
   };
 }
 
@@ -90,6 +118,7 @@ function ensureEngine(): SyncEngine {
 async function handleSignedOut(): Promise<void> {
   engine?.stop();
   engine = null;
+  engineStarted = false;
   signedIn = false;
   email = null;
   await signOut().catch(() => {});
@@ -102,7 +131,21 @@ export async function initSync(): Promise<void> {
   state = await loadState();
   signedIn = await isSignedIn();
   email = await currentEmail();
-  if (isGoogleConfigured() && signedIn && state.autoSync) ensureEngine().start();
+  startedAt = Date.now();
+  const action = syncStartAction({
+    configured: isGoogleConfigured(),
+    signedIn,
+    autoSync: state.autoSync,
+    lastSyncAt: state.lastSyncAt,
+  });
+  if (action === "start") {
+    ensureEngine().start();
+    engineStarted = true;
+  } else if (action === "record-stopped") {
+    // Say it on disk rather than leaving a state that reads as healthy.
+    state.lastError = SIGNED_OUT_STOP_REASON;
+    await saveState(state);
+  }
   notify();
 }
 
@@ -125,14 +168,18 @@ export async function signInToGoogle(): Promise<void> {
   email = await currentEmail();
   // Auto-sync defaults on after the first sign-in (docs/13).
   state.autoSync = true;
+  // Drop any recorded reason the engine was not running; it is running now.
+  state.lastError = null;
   await saveState(state);
   ensureEngine().start();
+  engineStarted = true;
   notify();
 }
 
 export async function signOutOfGoogle(): Promise<void> {
   engine?.stop();
   engine = null;
+  engineStarted = false;
   await signOut();
   signedIn = false;
   email = null;
@@ -148,9 +195,17 @@ export async function signOutOfGoogle(): Promise<void> {
 
 export async function setAutoSyncEnabled(on: boolean): Promise<void> {
   state.autoSync = on;
+  // Turning it off leaves nothing to report; turning it on with the engine
+  // running lets the first pass set the truth.
+  if (!on) state.lastError = null;
   await saveState(state);
-  if (on && signedIn && isGoogleConfigured()) ensureEngine().start();
-  else engine?.stop();
+  if (on && signedIn && isGoogleConfigured()) {
+    ensureEngine().start();
+    engineStarted = true;
+  } else {
+    engine?.stop();
+    engineStarted = false;
+  }
   notify();
 }
 
@@ -158,5 +213,8 @@ export async function syncNow(): Promise<void> {
   if (!signedIn || !isGoogleConfigured()) throw new Error("Sign in to Google to sync");
   const e = ensureEngine();
   await e.syncNow();
-  if (state.autoSync) e.start();
+  if (state.autoSync) {
+    e.start();
+    engineStarted = true;
+  }
 }
