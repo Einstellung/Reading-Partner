@@ -10,6 +10,7 @@
 | iPad 触摸、笔、缩放、翻页 | 触摸与手势 + EmbedPDF 引擎 |
 | 发请求、外链资源、CSP | 网络与 CSP |
 | 读写 AppData | 存储与数据目录 |
+| 同步引擎、Drive 后端 | 存储与数据目录 + 网络与 CSP |
 | 全文/图片提取、裁图 | 提取（壳侧 pdf.js） |
 | 出 iOS 包、签名、图标、深链接 | iOS 构建与签名 |
 | 桌面 webview 行为异常 | WebKit / webview |
@@ -54,6 +55,7 @@
 - [09-appdata-glob-capability](./09-appdata-glob-capability.md) — Tauri 权限 glob 不匹配目录本身；且持久化失败绝不静默吞
 - [36-appdata-root-not-created-first-write](./36-appdata-root-not-created-first-write.md) — iOS 首装首跑第一个写入者报 os error 2，数据根目录由 Rust setup 的 create_dir_all 保障，前端不再各自兜底
 - [51-sync-stopped-looks-healthy](./51-sync-stopped-looks-healthy.md) — 凭据文件不在，引擎从不启动，`autoSync:true` + `lastError:null` 读起来完全健康，四天没人发现；启动的三选一和「该说什么」都收进 `platform/sync/health.ts`
+- [52-all-or-nothing-pass-never-completes](./52-all-or-nothing-pass-never-completes.md) — 一趟同步一个文件失败就整趟中止，丢包链路上 51 个请求的一趟几乎不可能跑完，`Last sync: Never`；改逐项 + 缓存 id 遇 404 自愈 + 重试超时
 
 ## 提取（壳侧 pdf.js）
 
