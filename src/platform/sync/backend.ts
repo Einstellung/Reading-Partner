@@ -13,10 +13,14 @@ export interface ManifestEntry {
   // Monotonic per-file counter, bumped on every upload; the pull side compares
   // it against the last-synced snapshot to spot remote changes.
   rev: number;
-  // Local modification time (epoch ms) of the writer at upload; the tiebreak for
-  // last-writer-wins conflicts.
+  // Local modification time (epoch ms) of the writer at upload. Informational
+  // since conflicts stopped being decided by a clock.
   mtime: number;
   size: number;
+  // Content hash of the bytes (content.ts). Optional because entries written
+  // before hashing have none: an absent hash costs the "both sides already hold
+  // the same bytes" shortcut, nothing else.
+  hash?: string;
 }
 
 // Keyed by the AppData-relative path (e.g. "annotations-<id>.json",

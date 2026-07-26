@@ -4,6 +4,11 @@
 // pass runs at a time; overlapping triggers are dropped, and a failure (offline)
 // is kept as lastError for the UI and retried on the next tick.
 //
+// What counts as changed is the file's content hash, never its mtime
+// (content.ts). mtime and size stay in the snapshot as the pre-filter that
+// keeps the 15s tick from reading every file: they can rule a file out, and
+// only what they flag is hashed.
+//
 // A pass is per-item, not all-or-nothing (docs/pitfall/52). One file that will
 // not transfer must not cost the other fifty, the manifest write or the books
 // channel: on a link where every request has a real chance of failing, a pass
@@ -23,8 +28,9 @@
 
 import { isRemoteGone, type Manifest, type SyncBackend } from "./backend";
 import type { BookFs } from "./books";
-import { reconcile, type Snapshot, type Upload } from "./reconcile";
-import type { LocalFile, SyncFs } from "./syncFs";
+import { hashBytes } from "./content";
+import { cachedHash, reconcile, type Snapshot, type Upload } from "./reconcile";
+import type { LocalFile, ScannedFile, SyncFs } from "./syncFs";
 
 export const TICK_MS = 15_000;
 export const PULL_INTERVAL_MS = 5 * 60_000;
@@ -155,20 +161,52 @@ export class SyncEngine {
     await this.runPass();
   }
 
+  // Cheap on purpose: this runs every TICK_MS. mtime/size rule a file out
+  // without reading it, and only what they flag is hashed — which is what keeps
+  // a rewrite that changed nothing from waking a pass every 15 seconds.
   private async hasLocalChange(): Promise<boolean> {
-    let local: LocalFile[];
+    let scanned: ScannedFile[];
     try {
-      local = await this.d.fs.list();
+      scanned = await this.d.fs.list();
     } catch {
       return false;
     }
-    const seen = new Set<string>();
-    for (const f of local) {
-      seen.add(f.path);
-      const base = this.snapshot[f.path];
-      if (!base || f.mtime !== base.mtime || f.size !== base.size) return true;
+    for (const f of scanned) {
+      const snap = this.snapshot[f.path];
+      if (!snap) return true;
+      if (snap.mtime === f.mtime && snap.size === f.size) continue;
+      // Moved, and no hash to compare it against (a snapshot from before
+      // hashing): let a pass look properly.
+      if (snap.hash === undefined) return true;
+      try {
+        if ((await hashBytes(await this.d.fs.read(f.path))) !== snap.hash) return true;
+      } catch {
+        // Unreadable right now; a pass could not move it either.
+      }
     }
     return false;
+  }
+
+  // Fill in the content hash of every scanned file. The snapshot supplies it
+  // for free when mtime and size still match, so a steady pass reads only the
+  // files that actually moved. A file that will not read is dropped from the
+  // pass entirely: it cannot be uploaded, and list() already tolerates one
+  // vanishing mid-scan.
+  private async hashLocal(scanned: ScannedFile[]): Promise<LocalFile[]> {
+    const out: LocalFile[] = [];
+    for (const f of scanned) {
+      const known = cachedHash(this.snapshot[f.path], f);
+      if (known !== null) {
+        out.push({ ...f, hash: known });
+        continue;
+      }
+      try {
+        out.push({ ...f, hash: await hashBytes(await this.d.fs.read(f.path)) });
+      } catch {
+        // skipped
+      }
+    }
+    return out;
   }
 
   private emitStatus(): void {
@@ -185,8 +223,19 @@ export class SyncEngine {
       // without them there is nothing to reconcile, so these two still stop it.
       await this.d.backend.ensureLayout();
       const remote = await this.d.backend.listManifest();
-      const local = await this.d.fs.list();
+      const local = await this.hashLocal(await this.d.fs.list());
       const plan = reconcile(local, remote, this.snapshot);
+
+      // No bytes move for these: the snapshot is only catching up on what it
+      // needs to skip the file cheaply next pass.
+      for (const cv of plan.converged) {
+        this.snapshot[cv.path] = {
+          rev: cv.rev,
+          mtime: cv.mtime,
+          size: cv.size,
+          hash: cv.hash,
+        };
+      }
 
       const changed: string[] = [];
       // Pull first so library.json is current before the books channel reads it.
@@ -196,7 +245,12 @@ export class SyncEngine {
           const bytes = await this.d.backend.download(dl.path);
           await this.d.fs.write(dl.path, bytes);
           const st = await this.d.fs.stat(dl.path);
-          this.snapshot[dl.path] = { rev: dl.rev, mtime: st?.mtime ?? 0, size: bytes.length };
+          this.snapshot[dl.path] = {
+            rev: dl.rev,
+            mtime: st?.mtime ?? 0,
+            size: bytes.length,
+            hash: await hashBytes(bytes),
+          };
           changed.push(dl.path);
           failures.succeeded();
         } catch (e) {
@@ -228,14 +282,21 @@ export class SyncEngine {
         // never arrived tells every other device it is up to date with content
         // that does not exist, and the writer's own copy stops being offered.
         const next: Manifest = { ...remote };
-        for (const up of landed) next[up.path] = { rev: up.rev, mtime: up.mtime, size: up.size };
+        for (const up of landed) {
+          next[up.path] = { rev: up.rev, mtime: up.mtime, size: up.size, hash: up.hash };
+        }
         try {
           await this.d.backend.writeManifest(next);
           // Snapshotted only now: bytes in Drive that the manifest does not name
           // are invisible to every other device, so an unpublished upload has to
           // look unsent and be repeated next pass.
           for (const up of landed) {
-            this.snapshot[up.path] = { rev: up.rev, mtime: up.mtime, size: up.size };
+            this.snapshot[up.path] = {
+              rev: up.rev,
+              mtime: up.mtime,
+              size: up.size,
+              hash: up.hash,
+            };
           }
           failures.succeeded();
         } catch (e) {

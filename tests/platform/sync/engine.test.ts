@@ -15,11 +15,14 @@ import {
   type SyncBackend,
 } from "../../../src/platform/sync/backend";
 import type { BookFs } from "../../../src/platform/sync/books";
-import type { LocalFile, SyncFs } from "../../../src/platform/sync/syncFs";
+import type { ScannedFile, SyncFs } from "../../../src/platform/sync/syncFs";
 import type { Snapshot } from "../../../src/platform/sync/reconcile";
+
+import { hashBytes } from "../../../src/platform/sync/content";
 
 const enc = (s: string) => new TextEncoder().encode(s);
 const dec = (b: Uint8Array) => new TextDecoder().decode(b);
+const h = (s: string) => hashBytes(enc(s));
 
 function makeBackend(seedManifest: Manifest = {}, seedData: Record<string, string> = {}) {
   let manifest: Manifest = structuredClone(seedManifest);
@@ -71,8 +74,9 @@ function makeFs(seed: Record<string, { text: string; mtime: number }> = {}) {
   const files = new Map<string, { bytes: Uint8Array; mtime: number }>();
   for (const [k, v] of Object.entries(seed)) files.set(k, { bytes: enc(v.text), mtime: v.mtime });
   let writeClock = 1000;
+  let reads = 0;
   const fs: SyncFs = {
-    async list(): Promise<LocalFile[]> {
+    async list(): Promise<ScannedFile[]> {
       return [...files.entries()].map(([path, f]) => ({
         path,
         mtime: f.mtime,
@@ -80,6 +84,7 @@ function makeFs(seed: Record<string, { text: string; mtime: number }> = {}) {
       }));
     },
     async read(path) {
+      reads += 1;
       const f = files.get(path);
       if (!f) throw new Error(`enoent ${path}`);
       return f.bytes;
@@ -92,7 +97,7 @@ function makeFs(seed: Record<string, { text: string; mtime: number }> = {}) {
       return f ? { mtime: f.mtime, size: f.bytes.length } : null;
     },
   };
-  return { fs, files };
+  return { fs, files, reads: () => reads };
 }
 
 function makeBooks(localHashes: Record<string, string> = {}, listed?: string[]) {
@@ -138,8 +143,9 @@ test("push: a new local file is uploaded, manifested, and snapshotted", async ()
   await engine.syncNow();
 
   expect(dec(be.data.get("settings.json")!)).toBe("{}");
-  expect(be.manifest()["settings.json"]).toEqual({ rev: 1, mtime: 500, size: 2 });
-  expect(snapshot["settings.json"]).toEqual({ rev: 1, mtime: 500, size: 2 });
+  const hash = await h("{}");
+  expect(be.manifest()["settings.json"]).toEqual({ rev: 1, mtime: 500, size: 2, hash });
+  expect(snapshot["settings.json"]).toEqual({ rev: 1, mtime: 500, size: 2, hash });
   // Nothing failed, so this device is mirrored — the one thing health reads
   // lastSyncAt for.
   expect(engine.status().lastSyncAt).not.toBeNull();
@@ -189,6 +195,112 @@ test("conflict: the newer mtime wins (remote beats older local edit)", async () 
 
   expect(dec(files.get("reading-state.json")!.bytes)).toBe("REMOTE");
   expect(snapshot["reading-state.json"].rev).toBe(9);
+});
+
+// --- change detection is by content, not by clock ---------------------------
+//
+// The app rewrites files with the content already in them. Under mtime that was
+// a local edit, and whichever device re-saved last won the whole file — so a
+// device that only re-saved could wipe the other's annotations.
+
+test("a rewrite with identical content produces no upload, no download, no conflict", async () => {
+  const hash = await h("SAME");
+  const be = makeBackend(
+    { "topics.json": { rev: 4, mtime: 100, size: 4, hash } },
+    { "topics.json": "SAME" },
+  );
+  const { fs, files } = makeFs({ "topics.json": { text: "SAME", mtime: 100 } });
+  const snapshot: Snapshot = { "topics.json": { rev: 4, mtime: 100, size: 4, hash } };
+  const { engine, pulled } = makeEngine({ backend: be.backend, fs, snapshot });
+
+  // Re-saved byte for byte: only the clock moved.
+  files.set("topics.json", { bytes: enc("SAME"), mtime: 999_999 });
+  await engine.syncNow();
+
+  expect(be.manifest()["topics.json"].rev).toBe(4); // no upload
+  expect(pulled).toEqual([]); // no download
+  // And the snapshot took the new mtime, so the cheap pre-filter stops flagging
+  // the file on every 15s tick from here on.
+  expect(snapshot["topics.json"]).toEqual({ rev: 4, mtime: 999_999, size: 4, hash });
+});
+
+test("a real local edit still uploads", async () => {
+  const be = makeBackend(
+    { "topics.json": { rev: 4, mtime: 100, size: 4, hash: await h("SAME") } },
+    { "topics.json": "SAME" },
+  );
+  const { fs, files } = makeFs({ "topics.json": { text: "SAME", mtime: 100 } });
+  const snapshot: Snapshot = {
+    "topics.json": { rev: 4, mtime: 100, size: 4, hash: await h("SAME") },
+  };
+  const { engine } = makeEngine({ backend: be.backend, fs, snapshot });
+
+  files.set("topics.json", { bytes: enc("EDITED"), mtime: 200 });
+  await engine.syncNow();
+
+  expect(dec(be.data.get("topics.json")!)).toBe("EDITED");
+  expect(be.manifest()["topics.json"]).toEqual({
+    rev: 5,
+    mtime: 200,
+    size: 6,
+    hash: await h("EDITED"),
+  });
+});
+
+test("both devices holding the same bytes at different revs exchange nothing", async () => {
+  const hash = await h("SAME");
+  const be = makeBackend(
+    { "topics.json": { rev: 9, mtime: 900, size: 4, hash } },
+    { "topics.json": "SAME" },
+  );
+  const { fs } = makeFs({ "topics.json": { text: "SAME", mtime: 100 } });
+  // Both sides edited to the same content since the last sync.
+  const snapshot: Snapshot = { "topics.json": { rev: 4, mtime: 50, size: 3, hash: "old" } };
+  const { engine, pulled } = makeEngine({ backend: be.backend, fs, snapshot });
+
+  await engine.syncNow();
+
+  expect(be.manifest()["topics.json"].rev).toBe(9);
+  expect(pulled).toEqual([]);
+  expect(snapshot["topics.json"]).toEqual({ rev: 9, mtime: 100, size: 4, hash });
+});
+
+// The first pass after this upgrade reads a sync-state.json with no hashes in
+// it. Treating a missing hash as "changed" would push the whole data set over
+// the remote; the entries keep the old mtime/size rule for exactly one pass.
+test("a snapshot from before hashing is filled in, not re-pushed", async () => {
+  const be = makeBackend(
+    { "topics.json": { rev: 4, mtime: 100, size: 4 } },
+    { "topics.json": "SAME" },
+  );
+  const { fs } = makeFs({ "topics.json": { text: "SAME", mtime: 100 } });
+  const snapshot: Snapshot = { "topics.json": { rev: 4, mtime: 100, size: 4 } };
+  const { engine, pulled } = makeEngine({ backend: be.backend, fs, snapshot });
+
+  await engine.syncNow();
+
+  expect(be.manifest()["topics.json"].rev).toBe(4);
+  expect(pulled).toEqual([]);
+  expect(snapshot["topics.json"]).toEqual({ rev: 4, mtime: 100, size: 4, hash: await h("SAME") });
+});
+
+test("a steady pass reads only the files whose mtime or size moved", async () => {
+  const be = makeBackend();
+  const { fs, files, reads } = makeFs({
+    "topics.json": { text: "T", mtime: 100 },
+    "settings.json": { text: "S", mtime: 100 },
+  });
+  const snapshot: Snapshot = {};
+  const { engine } = makeEngine({ backend: be.backend, fs, snapshot });
+
+  await engine.syncNow();
+  const afterFirst = reads();
+  files.set("topics.json", { bytes: enc("T2"), mtime: 300 });
+  await engine.syncNow();
+
+  // One hash read plus one upload read for the changed file; the untouched one
+  // is answered from the snapshot.
+  expect(reads() - afterFirst).toBe(2);
 });
 
 test("books channel: local-only book uploads, remote-only book downloads", async () => {
@@ -292,12 +404,13 @@ test("an upload that failed is never claimed in the manifest", async () => {
 
   await engine.syncNow();
 
-  expect(be.manifest()["settings.json"]).toEqual({ rev: 1, mtime: 500, size: 1 });
+  const entry = { rev: 1, mtime: 500, size: 1, hash: await h("S") };
+  expect(be.manifest()["settings.json"]).toEqual(entry);
   // A rev here would tell every other device that topics.json is current with
   // bytes that were never sent, and stop this device from offering its own copy.
   expect(be.manifest()["topics.json"]).toBeUndefined();
   expect(snapshot["topics.json"]).toBeUndefined();
-  expect(snapshot["settings.json"]).toEqual({ rev: 1, mtime: 500, size: 1 });
+  expect(snapshot["settings.json"]).toEqual(entry);
 });
 
 test("publishing one upload leaves every other manifest entry alone", async () => {
@@ -338,8 +451,9 @@ test("bytes in the remote that the manifest write did not publish are sent again
   refuse = false;
   await engine.syncNow();
 
-  expect(be.manifest()["settings.json"]).toEqual({ rev: 1, mtime: 500, size: 2 });
-  expect(snapshot["settings.json"]).toEqual({ rev: 1, mtime: 500, size: 2 });
+  const entry = { rev: 1, mtime: 500, size: 2, hash: await h("{}") };
+  expect(be.manifest()["settings.json"]).toEqual(entry);
+  expect(snapshot["settings.json"]).toEqual(entry);
   expect(engine.status().lastSyncAt).not.toBeNull();
   expect(engine.status().lastError).toBeNull();
 });
