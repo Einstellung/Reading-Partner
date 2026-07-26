@@ -56,6 +56,9 @@ async function postToken(
 		method: "POST",
 		headers: { "Content-Type": "application/json", Accept: "application/json" },
 		body: JSON.stringify(body),
+		// A refresh with no deadline hangs the AI call that triggered it, with no
+		// way for the user to tell it apart from a slow model. pi used the same 30s.
+		signal: AbortSignal.timeout(30_000),
 	});
 	if (!res.ok) {
 		throw new Error(`${what} failed (HTTP ${res.status}): ${await res.text()}`);
