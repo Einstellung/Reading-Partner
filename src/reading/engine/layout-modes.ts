@@ -101,6 +101,28 @@ export function restingState(layout: ReadingLayout, fitPageBaseline = 0): Layout
   };
 }
 
+// A host-driven jump — the outline, the trace list, an AI citation — is the
+// other event a gesture must not survive. The touch router owns the scroll
+// position (the page divs are touch-action:none, so nothing scrolls unless the
+// router writes it — pitfall 37), and anything it still has in flight keeps
+// writing after the jump: an inertia fling coasts for up to a second and drags
+// the reader straight back off the page it was sent to. So a jump drops the
+// router's state exactly as a layout switch does.
+//
+// What it must NOT touch is the layout itself. A jump is not a switch: the
+// axis, the zoom lock and the fit-page baseline are whatever the current layout
+// says they are, and re-deriving them here would silently re-assert a layout
+// the reader may have changed.
+export function applyJump(prev: LayoutEngineState): LayoutEngineState {
+  return {
+    ...prev,
+    gesturesIdle: true,
+    enginePaused: false,
+    pointerCaptured: false,
+    inertia: false,
+  };
+}
+
 export function otherLayout(layout: ReadingLayout): ReadingLayout {
   return layout === "paged" ? "vertical" : "paged";
 }

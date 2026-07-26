@@ -1277,8 +1277,15 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
   // the vertical rubber band possible: the band translates the scroll container
   // itself (docs/pitfall/45), so the wrapper both clips the edge that leaves the
   // frame and fills the gap that opens on the other side.
+  // data-reader-surface turns off WebKit's own text selection and touch callout
+  // for everything below (styles.css). The engine's selection does not use them:
+  // it hit-tests PDFium glyph geometry and paints its own divs, so tap-drag
+  // highlighting, double-tap word select and copy are untouched, while a finger
+  // the touch router is driving can no longer start a native selection over the
+  // page (docs/pitfall/49).
   return (
     <div
+      data-reader-surface=""
       style={{
         height: "100%",
         width: "100%",
@@ -1497,6 +1504,27 @@ async function wireEngine(
     } else {
       go();
     }
+  };
+
+  // Every host-driven jump — the outline, the trace list, an AI citation —
+  // goes through here. Two rules, both about who owns the scroll position.
+  //
+  // One: the touch router owns it. The page divs are touch-action:none in every
+  // mode, so nothing scrolls unless the router writes it (pitfall 37), and
+  // whatever it has in flight keeps writing after the jump. An inertia fling
+  // coasts for up to a second; a jump issued mid-coast is overwritten frame by
+  // frame and lands nowhere near the page it asked for (measured in Chromium:
+  // 613px instead of 2604px). So the jump silences the router first, the same
+  // reset a layout switch does (layout-modes.applyJump).
+  //
+  // Two: the jump must not hand the scroll position to a second animator
+  // either. `behavior: "smooth"` runs the browser's own scroll animation, which
+  // the reader can neither see nor stop — on iOS it is dispatched to the
+  // scrolling thread, off the main thread entirely — and it writes the same
+  // property the router writes every frame (pitfall 50).
+  const jumpToPage = (opts: Parameters<typeof scrollScope.scrollToPage>[0]) => {
+    pagedRef.current.resetGestures?.();
+    scrollScope.scrollToPage({ ...opts, behavior: "instant" });
   };
   pagedRef.current.turnToPage = (pageNumber) => turnToPage(pageNumber);
 
@@ -1745,10 +1773,13 @@ async function wireEngine(
       // An explicit page jump is navigating away — drop any quote overlay.
       setQuoteHlRef.current(null);
       if (layout === "paged") {
-        turnToPage(pageIndex + 1);
+        // A host jump is not a finger flip: it lands on the page outright, and
+        // it silences the router for the same reason jumpToPage does.
+        pagedRef.current.resetGestures?.();
+        turnToPage(pageIndex + 1, "instant");
         return;
       }
-      scrollScope.scrollToPage({ pageNumber: pageIndex + 1, behavior: "smooth" });
+      jumpToPage({ pageNumber: pageIndex + 1 });
     },
     async highlightQuote(pageIndex, req) {
       const d = doc();
@@ -1760,17 +1791,16 @@ async function wireEngine(
       const rects = await findQuoteRects(engine, d, pageIndex, req.searchText);
       if (rects && rects.length > 0) {
         setQuoteHlRef.current({ pageIndex, kind: "rects", rects });
-        scrollScope.scrollToPage({
+        jumpToPage({
           pageNumber: pageIndex + 1,
           pageCoordinates: { x: rects[0].origin.x, y: rects[0].origin.y },
           alignY: 60,
-          behavior: "smooth",
         });
         return true;
       }
       // Tier B: could not locate the quote geometrically — show it as a banner.
       setQuoteHlRef.current({ pageIndex, kind: "banner", quote: req.displayText });
-      scrollScope.scrollToPage({ pageNumber: pageIndex + 1, behavior: "smooth" });
+      jumpToPage({ pageNumber: pageIndex + 1 });
       return false;
     },
     clearQuoteHighlight() {
@@ -1783,11 +1813,10 @@ async function wireEngine(
       const pageIndex = obj.pageIndex;
       annScope.selectAnnotation(pageIndex, id);
       // rect.origin is top-left page coordinates: scroll the mark near the top.
-      scrollScope.scrollToPage({
+      jumpToPage({
         pageNumber: pageIndex + 1,
         pageCoordinates: { x: obj.rect.origin.x, y: obj.rect.origin.y },
         alignY: 20,
-        behavior: "smooth",
       });
     },
     updateAnnotation(id, patch) {
