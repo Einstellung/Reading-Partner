@@ -74,6 +74,7 @@ import {
 import { logEvent } from "./platform/app/events";
 import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
 import EmbedReaderPane from "./reading/engine/EmbedReaderPane";
+import { openFailureText } from "./reading/engine/open-failure";
 import { CitationContext, FigureContext, type FigureHost } from "./ui/components/common/Markdown";
 import {
   clearFigureCache,
@@ -169,6 +170,9 @@ export default function App() {
   // The open book's id: the content hash its annotations, threads, reading
   // position, prep notes and figure crops are all keyed by. Null in the library.
   const bookIdRef = useRef<string | null>(null);
+  // Its file name, for the handlers that have to name it in a sentence and must
+  // stay stable across renders (the reader pane is memoized on prop identity).
+  const bookNameRef = useRef("");
   const saveTimer = useRef<number | null>(null);
   const lastState = useRef<ViewState | null>(null);
 
@@ -941,6 +945,7 @@ export default function App() {
 
       setViewReady(false);
       bookIdRef.current = bookId;
+      bookNameRef.current = name;
       // Seed the persist base with the loaded state so an early classroom toggle
       // (before the reader emits a position) merges onto the right book.
       lastState.current = state;
@@ -1441,6 +1446,20 @@ export default function App() {
     setStatus("");
     setViewReady(true);
   }, []);
+  // The book did not open. Nothing further is coming: the reading area stays
+  // empty and onEmbedInitialized never fires, so the status line would go on
+  // saying "Rendering…" forever and look exactly like a slow load. Say it
+  // instead — the toast names the book while it lasts, the status line keeps
+  // saying so beside the title, and the engine's own text goes to the console.
+  const onEmbedError = useCallback(
+    (e: Error) => {
+      const text = openFailureText(bookNameRef.current, e);
+      console.error(text.detail, e);
+      setStatus(text.status);
+      pushToast("error", text.toast);
+    },
+    [pushToast],
+  );
   const onEmbedSelect = useCallback((ids: string[]) => setSelectedAnnId(ids[0] ?? null), []);
 
   // Escape closes whatever is topmost (Settings, else the open call — same path
@@ -1633,6 +1652,7 @@ export default function App() {
               className="h-full w-full block"
               onView={onEmbedView}
               onInitialized={onEmbedInitialized}
+              onError={onEmbedError}
               onChangeViewState={persist}
               onChangeViewStats={setStats}
               onSaveAnnotations={onSaveAnnotations}

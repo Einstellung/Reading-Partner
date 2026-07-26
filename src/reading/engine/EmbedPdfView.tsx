@@ -1436,9 +1436,20 @@ async function wireEngine(
         name: string;
         autoActivate?: boolean;
       }): { toPromise(): Promise<unknown> };
+      onDocumentError(handler: (ev: { documentId: string; message: string }) => void): () => void;
     };
   } | null;
   const dm = docManager?.provides?.();
+
+  // A file PDFium cannot parse does not throw. The open task below resolves
+  // like any other, getDocument then answers null, and every plugin under it
+  // simply has nothing to do — which on screen is an empty grey rectangle,
+  // indistinguishable from a slow load. This event is the only report, so it is
+  // subscribed before the open is issued.
+  let openFailure: string | null = null;
+  dm?.onDocumentError((ev) => {
+    if (ev.documentId === DOC_ID) openFailure = ev.message;
+  });
 
   // Open the document explicitly from the in-memory buffer (spike item 8:
   // openDocumentBuffer consumes the bytes directly, no temp file). A fresh copy
@@ -1450,6 +1461,14 @@ async function wireEngine(
   perfMark("docOpenEnd");
 
   const doc = () => dm?.getDocument(DOC_ID) ?? null;
+  // Nothing was opened: hand the failure to the host and stop. The rest of this
+  // function wires a document that does not exist, and onReady at the end of it
+  // would tell the shell the reader is up — clearing the very status line that
+  // has to keep saying it is not.
+  if (!doc()) {
+    propsRef.current.onError?.(new Error(openFailure ?? "the document did not open"));
+    return;
+  }
   const pageHeight = (pageIndex: number) => doc()?.pages[pageIndex]?.size.height ?? 0;
   // Cache page sizes for the quote-highlight overlay's rect scaling.
   pageSizesRef.current = doc()?.pages.map((p) => ({ width: p.size.width, height: p.size.height })) ?? [];

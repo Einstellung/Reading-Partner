@@ -26,6 +26,10 @@ export interface EmbedReaderPaneProps {
   viewState: ViewState | null;
   onView: (view: ViewInstance) => void;
   onInitialized: () => void;
+  // The book did not open: the engine failed to come up, or failed to parse the
+  // file. Nothing follows it — onInitialized never fires and the reading area
+  // stays empty — so the host has to say so (open-failure.ts).
+  onError: (e: Error) => void;
   onChangeViewState: (s: ViewState) => void;
   onChangeViewStats: (s: ViewStats) => void;
   onSaveAnnotations: (anns: Annotation[]) => void;
@@ -176,6 +180,7 @@ function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
           props.onView(buildViewInstance(h));
           props.onInitialized();
         }}
+        onError={(e) => propsRef.current.onError(e)}
         onSaveAnnotations={(anns) => {
           for (const a of anns) annById.current.set(a.id, a as unknown as Annotation);
           props.onSaveAnnotations(anns as unknown as Annotation[]);
