@@ -34,6 +34,7 @@ import { AnnotationPluginPackage, AnnotationLayer } from "@embedpdf/plugin-annot
 import type { AnnotationCapability } from "@embedpdf/plugin-annotation";
 
 import { embedToZotero, zoteroToEmbed, type ZoteroAnnotation } from "./convert";
+import { selectionChanged } from "./annotation-selection";
 import {
   initGestureState,
   pageCenterAlign,
@@ -1816,9 +1817,17 @@ async function wireEngine(
     }
   });
 
-  // Selection state -> host (trace-list highlight sync).
+  // Selection state -> host (trace-list highlight sync + the annotation editor).
+  // onStateChange is the plugin's whole-document state stream, not a selection
+  // event: a tool switch or an annotation write republishes the selection that
+  // was already there, and the host used to read every one of those as a fresh
+  // selection (annotation-selection.ts). Only a selection that moved is passed
+  // on.
+  let lastSelected: readonly string[] | null = null;
   annotation.onStateChange(() => {
     const ids = annScope.getSelectedAnnotationIds();
+    if (!selectionChanged(lastSelected, ids)) return;
+    lastSelected = ids;
     propsRef.current.onSelectAnnotation?.(ids[0] ?? null);
   });
 
