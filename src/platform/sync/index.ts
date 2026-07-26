@@ -11,6 +11,7 @@ import { DriveBackend } from "./driveBackend";
 import { SyncEngine } from "./engine";
 import { tauriSyncFs } from "./syncFs";
 import { tauriBookFs } from "./books";
+import { tauriBaseStore, tauriTrashJournal } from "./localStore";
 import { isGoogleConfigured } from "./googleConfig";
 import {
   currentEmail,
@@ -94,6 +95,8 @@ function makeEngine(): SyncEngine {
     backend,
     fs: tauriSyncFs,
     books: tauriBookFs,
+    base: tauriBaseStore,
+    trash: tauriTrashJournal,
     snapshot: state.snapshot,
     onPulled: (paths) => {
       for (const l of pulledListeners) l(paths);

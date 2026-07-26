@@ -38,6 +38,12 @@ test("caches, logs, sync internals, and book blobs are out of range", () => {
     "events-topic1.jsonl",
     "sync-auth.json",
     "sync-state.json",
+    // The merge base mirrors the whole sync range under sync-base/. Syncing
+    // the record of what was last agreed would be circular, and every path
+    // under it would come back as a second copy of the file it mirrors.
+    "sync-base/library.json",
+    "sync-base/memory-topic1/m-ab12cd34.md",
+    "sync-base/notes-deadbeef/state.json",
     "credentials.json",
     "prep-deadbeef/pdf/some-paper.pdf",
     "notes-deadbeef/cache/raster.png",

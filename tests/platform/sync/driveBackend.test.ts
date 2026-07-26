@@ -27,6 +27,8 @@ interface FakeFile {
   mimeType: string;
   trashed: boolean;
   body: string;
+  modifiedTime: string;
+  appProperties?: Record<string, string>;
 }
 
 interface Seed {
@@ -35,6 +37,8 @@ interface Seed {
   mimeType?: string;
   trashed?: boolean;
   body?: string;
+  modifiedTime?: string;
+  appProperties?: Record<string, string>;
 }
 
 function bodyText(body: BodyInit | null | undefined): string {
@@ -42,6 +46,17 @@ function bodyText(body: BodyInit | null | undefined): string {
   if (body instanceof ArrayBuffer) return dec(new Uint8Array(body));
   if (ArrayBuffer.isView(body)) return dec(new Uint8Array(body.buffer, body.byteOffset, body.byteLength));
   return "";
+}
+
+// multipart/related as Drive parses it: the first part is the metadata JSON,
+// the second is the media. Split on the boundary rather than hunting for braces
+// — appProperties nests, and a brace scan silently truncates it.
+function parseMultipart(body: string, contentType: string): { meta: Seed; media: string } | null {
+  const found = /boundary=(.+)$/.exec(contentType);
+  if (!found) return null;
+  const parts = body.split(`--${found[1]}`).slice(1, -1);
+  const section = (p: string): string => p.slice(p.indexOf("\r\n\r\n") + 4).replace(/\r\n$/, "");
+  return { meta: JSON.parse(section(parts[0]!)) as Seed, media: section(parts[1]!) };
 }
 
 function makeDrive() {
@@ -62,6 +77,7 @@ function makeDrive() {
       mimeType: "application/octet-stream",
       trashed: false,
       body: "",
+      modifiedTime: "2026-01-01T00:00:00.000Z",
       ...seed,
     });
     return id;
@@ -89,6 +105,7 @@ function makeDrive() {
     const url = String(input);
     const method = init?.method ?? "GET";
     const body = bodyText(init?.body);
+    const contentType = new Headers(init?.headers).get("content-type") ?? "";
     requests.push({ method, url });
     if (throwWhen?.(method, url, body)) {
       throw new Error(`error sending request for url (${url})`);
@@ -99,7 +116,15 @@ function makeDrive() {
       const params = new URL(url).searchParams;
       const size = Number(params.get("pageSize") ?? "100");
       const hits = search(params.get("q") ?? "").slice(0, size);
-      return json({ files: hits.map((f) => ({ id: f.id, name: f.name })) });
+      return json({
+        files: hits.map((f) => ({
+          id: f.id,
+          name: f.name,
+          size: String(f.body.length),
+          modifiedTime: f.modifiedTime,
+          ...(f.appProperties ? { appProperties: f.appProperties } : {}),
+        })),
+      });
     }
     if (method === "GET" && url.includes("alt=media")) {
       const id = url.slice(`${DRIVE}/files/`.length).split("?")[0];
@@ -111,17 +136,26 @@ function makeDrive() {
       const meta = JSON.parse(body) as Seed;
       return json({ id: add(meta) });
     }
+    // Metadata only: the seeding path.
+    if (method === "PATCH" && url.startsWith(`${DRIVE}/files/`)) {
+      const id = url.slice(`${DRIVE}/files/`.length).split("?")[0];
+      const f = files.get(id);
+      if (!f) return new Response("not found", { status: 404 });
+      Object.assign(f, JSON.parse(body) as Partial<FakeFile>);
+      return json({ id });
+    }
     if (method === "PATCH" && url.startsWith(`${UPLOAD}/files/`)) {
       const id = url.slice(`${UPLOAD}/files/`.length).split("?")[0];
       const f = files.get(id);
       if (!f) return new Response("not found", { status: 404 });
-      f.body = body;
+      const part = parseMultipart(body, contentType);
+      f.body = part ? part.media : body;
+      if (part?.meta.appProperties) f.appProperties = part.meta.appProperties;
       return json({ id });
     }
     if (method === "POST" && url.includes("uploadType=multipart")) {
-      const meta = JSON.parse(body.slice(body.indexOf("{"), body.indexOf("}") + 1)) as Seed;
-      const mediaStart = body.indexOf("\r\n\r\n", body.indexOf("\r\n\r\n") + 4) + 4;
-      return json({ id: add({ ...meta, body: body.slice(mediaStart, body.lastIndexOf("\r\n--")) }) });
+      const part = parseMultipart(body, contentType)!;
+      return json({ id: add({ ...part.meta, body: part.media }) });
     }
     if (method === "POST" && url.includes("uploadType=resumable")) {
       pendingSession = JSON.parse(body) as { name: string; parents: string[] };
@@ -256,73 +290,173 @@ test("an ensureLayout that dies partway leaves no duplicate folder for the next 
   expect(drive.byName("books").length).toBe(1);
 });
 
-test("listManifest reports an empty remote without creating a manifest", async () => {
+// --- the remote state -------------------------------------------------------
+//
+// One listing of data/, read from each file's own appProperties. There used to
+// be a manifest.json over the top: two devices publishing in the same window
+// lost one of the two writes, and the one request that failed took the whole
+// pass with it.
+
+test("listRemote reports an empty remote from one listing", async () => {
   const drive = makeDrive();
   const seeded = seedTree(drive);
-  const { backend, ids, persistCount } = makeBackend(drive, { folderId: seeded.folderId });
+  const { backend, persistCount } = makeBackend(drive, seeded);
 
-  expect(await backend.listManifest()).toEqual({});
+  expect(await backend.listRemote()).toEqual({});
 
-  // Creating manifest.json on the read path would race writeManifest into two.
   expect(posts(drive)).toEqual([]);
-  expect(ids.manifestFileId).toBeUndefined();
   expect(persistCount()).toBe(0);
 });
 
-test("listManifest adopts the existing manifest and reuses its id afterwards", async () => {
+test("listRemote builds every entry from the file's own metadata", async () => {
   const drive = makeDrive();
   const seeded = seedTree(drive);
-  const manifestId = drive.add({
-    name: "manifest.json",
-    parents: [seeded.folderId],
-    body: JSON.stringify({ "settings.json": { rev: 4, mtime: 9, size: 2 } }),
+  drive.add({
+    name: "settings.json",
+    parents: [seeded.dataFolderId],
+    body: "ab",
+    appProperties: { rev: "4", mtime: "9", hash: "h1" },
   });
-  const { backend, ids } = makeBackend(drive, { folderId: seeded.folderId });
+  const { backend, ids } = makeBackend(drive, seeded);
 
-  expect(await backend.listManifest()).toEqual({ "settings.json": { rev: 4, mtime: 9, size: 2 } });
-  expect(ids.manifestFileId).toBe(manifestId);
-
+  expect(await backend.listRemote()).toEqual({
+    "settings.json": { rev: 4, mtime: 9, size: 2, hash: "h1" },
+  });
+  // The listing also answers "which Drive file is this", so nothing has to be
+  // searched for by name afterwards.
+  expect(ids.fileIds["settings.json"]).toBe(drive.one("settings.json").id);
   drive.reset();
-  await backend.listManifest();
+  await backend.download("settings.json");
   expect(drive.requests.some((r) => r.url.includes("files?q="))).toBe(false);
 });
 
-test("a manifest that fails to download stops the pass instead of reporting an empty remote", async () => {
+test("a file the user dropped into the data folder is not pulled into their AppData", async () => {
   const drive = makeDrive();
   const seeded = seedTree(drive);
+  drive.add({
+    name: "holiday-photos.zip",
+    parents: [seeded.dataFolderId],
+    body: "not ours",
+    appProperties: { rev: "1", mtime: "1" },
+  });
+  const { backend } = makeBackend(drive, seeded);
+
+  expect(await backend.listRemote()).toEqual({});
+});
+
+// --- migrating off manifest.json --------------------------------------------
+
+test("files with no appProperties are seeded from manifest.json, once", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  drive.add({ name: "settings.json", parents: [seeded.dataFolderId], body: "ab" });
+  drive.add({
+    name: "manifest.json",
+    parents: [seeded.folderId],
+    body: JSON.stringify({ "settings.json": { rev: 4, mtime: 9, size: 2 } }),
+  });
+  const { backend } = makeBackend(drive, seeded);
+
+  expect(await backend.listRemote()).toEqual({
+    "settings.json": { rev: 4, mtime: 9, size: 2, hash: undefined },
+  });
+  // Read from the file itself from now on. Re-downloading all fifty to learn
+  // their hashes is exactly what a migration must not cost, so there is none.
+  expect(drive.one("settings.json").appProperties).toEqual({ rev: "4", mtime: "9" });
+
+  drive.reset();
+  expect(await backend.listRemote()).toEqual({
+    "settings.json": { rev: 4, mtime: 9, size: 2, hash: undefined },
+  });
+  expect(drive.requests.some((r) => r.url.includes("alt=media"))).toBe(false);
+  expect(drive.requests.length).toBe(1);
+});
+
+test("manifest.json is left in the user's Drive, just not maintained", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  drive.add({ name: "topics.json", parents: [seeded.dataFolderId], body: "x" });
+  drive.add({
+    name: "manifest.json",
+    parents: [seeded.folderId],
+    body: JSON.stringify({ "topics.json": { rev: 2, mtime: 1, size: 1 } }),
+  });
+  const { backend } = makeBackend(drive, seeded);
+
+  await backend.listRemote();
+  await backend.upload("topics.json", enc("y"), { rev: 3, mtime: 5, hash: "h2" });
+
+  // A device still on the old build reads it; deleting it would strand them.
+  expect(JSON.parse(drive.one("manifest.json").body)).toEqual({
+    "topics.json": { rev: 2, mtime: 1, size: 1 },
+  });
+});
+
+test("a file the old manifest never named is offered at rev 0, not skipped", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  drive.add({
+    name: "topics.json",
+    parents: [seeded.dataFolderId],
+    body: "abc",
+    modifiedTime: "2026-02-03T00:00:00.000Z",
+  });
+  drive.add({ name: "manifest.json", parents: [seeded.folderId], body: "{}" });
+  const { backend } = makeBackend(drive, seeded);
+
+  // A device that has never seen it still pulls it; one that has will not
+  // mistake rev 0 for a change.
+  expect(await backend.listRemote()).toEqual({
+    "topics.json": { rev: 0, mtime: Date.parse("2026-02-03T00:00:00.000Z"), size: 3 },
+  });
+});
+
+test("a manifest that fails to download stops the pass instead of reporting no revs", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  drive.add({ name: "settings.json", parents: [seeded.dataFolderId], body: "ab" });
   const manifestId = drive.add({
     name: "manifest.json",
     parents: [seeded.folderId],
     body: JSON.stringify({ "settings.json": { rev: 4, mtime: 9, size: 2 } }),
   });
-  const { backend } = makeBackend(drive, { folderId: seeded.folderId, manifestFileId: manifestId });
+  const { backend } = makeBackend(drive, { ...seeded, manifestFileId: manifestId });
   drive.failOn((_m, url) => url.includes("alt=media"));
 
-  // Reporting {} would have the next upload rewrite manifest.json without the
-  // entries this device has no local copy of.
-  await expect(backend.listManifest()).rejects.toThrow(/Drive manifest download failed/);
+  // Reporting rev 0 for everything would tell this device that no other device
+  // has changed anything, and it would quietly stop pulling their work.
+  await expect(backend.listRemote()).rejects.toThrow(/Drive manifest download failed/);
 });
 
-test("an unparseable manifest reports empty, since a retry cannot repair it", async () => {
+test("an unparseable manifest does not stop the pass, since a retry cannot repair it", async () => {
   const drive = makeDrive();
   const seeded = seedTree(drive);
-  const manifestId = drive.add({ name: "manifest.json", parents: [seeded.folderId], body: "{oops" });
-  const { backend } = makeBackend(drive, { folderId: seeded.folderId, manifestFileId: manifestId });
+  drive.add({ name: "settings.json", parents: [seeded.dataFolderId], body: "ab" });
+  drive.add({ name: "manifest.json", parents: [seeded.folderId], body: "{oops" });
+  const { backend } = makeBackend(drive, seeded);
 
-  expect(await backend.listManifest()).toEqual({});
+  expect(Object.keys(await backend.listRemote())).toEqual(["settings.json"]);
 });
 
-test("writeManifest creates manifest.json once and patches it from then on", async () => {
+test("a seeding write that fails leaves the state correct and retries next pass", async () => {
   const drive = makeDrive();
   const seeded = seedTree(drive);
-  const { backend } = makeBackend(drive, { folderId: seeded.folderId });
+  drive.add({ name: "settings.json", parents: [seeded.dataFolderId], body: "ab" });
+  drive.add({
+    name: "manifest.json",
+    parents: [seeded.folderId],
+    body: JSON.stringify({ "settings.json": { rev: 4, mtime: 9, size: 2 } }),
+  });
+  const { backend } = makeBackend(drive, seeded);
+  drive.failOn((method, url) => method === "PATCH" && url.startsWith(`${DRIVE}/files/`));
 
-  await backend.writeManifest({ a: { rev: 1, mtime: 1, size: 1 } });
-  await backend.writeManifest({ a: { rev: 2, mtime: 2, size: 2 } });
+  // Best effort: the answer this pass needs was already in hand.
+  expect((await backend.listRemote())["settings.json"]!.rev).toBe(4);
+  expect(drive.one("settings.json").appProperties).toBeUndefined();
 
-  // Two manifests means two divergent views of the backup.
-  expect(posts(drive).length).toBe(1);
-  expect(JSON.parse(drive.one("manifest.json").body)).toEqual({ a: { rev: 2, mtime: 2, size: 2 } });
+  drive.failOn(null);
+  await backend.listRemote();
+  expect(drive.one("settings.json").appProperties).toEqual({ rev: "4", mtime: "9" });
 });
 
 test("upload adopts the data file another device already created", async () => {
@@ -335,7 +469,7 @@ test("upload adopts the data file another device already created", async () => {
   });
   const { backend, ids } = makeBackend(drive, { dataFolderId: seeded.dataFolderId });
 
-  await backend.upload("settings.json", enc("mine"));
+  await backend.upload("settings.json", enc("mine"), { rev: 1, mtime: 5, hash: "h" });
 
   // Creating a second settings.json splits the file: each device keeps writing
   // its own copy and neither ever sees the other's edits.
@@ -349,13 +483,36 @@ test("upload creates a data file once and reuses the id on the next pass", async
   const seeded = seedTree(drive);
   const { backend } = makeBackend(drive, { dataFolderId: seeded.dataFolderId });
 
-  await backend.upload("topics.json", enc("one"));
+  await backend.upload("topics.json", enc("one"), { rev: 1, mtime: 5, hash: "h1" });
   drive.reset();
-  await backend.upload("topics.json", enc("two"));
+  await backend.upload("topics.json", enc("two"), { rev: 2, mtime: 6, hash: "h2" });
 
   expect(posts(drive)).toEqual([]);
   expect(drive.requests.some((r) => r.url.includes("files?q="))).toBe(false);
   expect(drive.one("topics.json").body).toBe("two");
+});
+
+// Two requests — bytes, then the rev that describes them — can leave a file
+// whose content and whose description disagree. uploadType=media cannot carry
+// metadata at all, so the write is one multipart request.
+test("an upload publishes its rev and hash with the bytes, in one request", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  const { backend } = makeBackend(drive, { dataFolderId: seeded.dataFolderId });
+
+  drive.reset();
+  await backend.upload("topics.json", enc("one"), { rev: 7, mtime: 5, hash: "h1" });
+
+  expect(drive.requests.filter((r) => r.method !== "GET").length).toBe(1);
+  expect(drive.one("topics.json").body).toBe("one");
+  expect(drive.one("topics.json").appProperties).toEqual({
+    rev: "7",
+    mtime: "5",
+    hash: "h1",
+  });
+
+  await backend.upload("topics.json", enc("two"), { rev: 8, mtime: 6, hash: "h2" });
+  expect(drive.one("topics.json").appProperties).toEqual({ rev: "8", mtime: "6", hash: "h2" });
 });
 
 test("a data file duplicated in Drive is adopted, not multiplied", async () => {
@@ -365,7 +522,7 @@ test("a data file duplicated in Drive is adopted, not multiplied", async () => {
   drive.add({ name: "library.json", parents: [seeded.dataFolderId], body: "b" });
   const { backend, ids } = makeBackend(drive, { dataFolderId: seeded.dataFolderId });
 
-  await backend.upload("library.json", enc("c"));
+  await backend.upload("library.json", enc("c"), { rev: 1, mtime: 5, hash: "h" });
 
   expect(drive.byName("library.json").length).toBe(2);
   expect(ids.fileIds["library.json"]).toBe(first);
@@ -492,7 +649,7 @@ test("an upload against a stale id re-finds the file instead of losing the write
     fileIds: { "settings.json": "id-ghost" },
   });
 
-  await backend.upload("settings.json", enc("new"));
+  await backend.upload("settings.json", enc("new"), { rev: 1, mtime: 5, hash: "h" });
 
   expect(drive.one("settings.json").body).toBe("new");
   expect(ids.fileIds["settings.json"]).toBe(real);
@@ -506,45 +663,27 @@ test("an upload against a stale id creates the file when the name is gone too", 
     fileIds: { "topics.json": "id-ghost" },
   });
 
-  await backend.upload("topics.json", enc("fresh"));
+  await backend.upload("topics.json", enc("fresh"), { rev: 1, mtime: 5, hash: "h" });
 
   expect(drive.one("topics.json").body).toBe("fresh");
   expect(ids.fileIds["topics.json"]).not.toBe("id-ghost");
 });
 
-test("a stale manifest id is re-resolved rather than reporting an empty remote", async () => {
+test("a stale manifest id is re-resolved rather than losing the revs it holds", async () => {
   const drive = makeDrive();
   const seeded = seedTree(drive);
+  drive.add({ name: "library.json", parents: [seeded.dataFolderId], body: "x" });
   const real = drive.add({
     name: "manifest.json",
     parents: [seeded.folderId],
-    body: JSON.stringify({ "a.json": { rev: 2, mtime: 1, size: 1 } }),
+    body: JSON.stringify({ "library.json": { rev: 2, mtime: 1, size: 1 } }),
   });
-  const { backend, ids } = makeBackend(drive, {
-    folderId: seeded.folderId,
-    manifestFileId: "id-ghost",
-  });
+  const { backend, ids } = makeBackend(drive, { ...seeded, manifestFileId: "id-ghost" });
 
-  // Degrading to {} here would rewrite the manifest with this device's files
-  // only on the next upload.
-  expect(await backend.listManifest()).toEqual({ "a.json": { rev: 2, mtime: 1, size: 1 } });
+  expect(await backend.listRemote()).toEqual({
+    "library.json": { rev: 2, mtime: 1, size: 1, hash: undefined },
+  });
   expect(ids.manifestFileId).toBe(real);
-});
-
-test("writeManifest with a stale id adopts the real manifest instead of creating a second", async () => {
-  const drive = makeDrive();
-  const seeded = seedTree(drive);
-  const real = drive.add({ name: "manifest.json", parents: [seeded.folderId], body: "{}" });
-  const { backend, ids } = makeBackend(drive, {
-    folderId: seeded.folderId,
-    manifestFileId: "id-ghost",
-  });
-
-  await backend.writeManifest({ a: { rev: 1, mtime: 1, size: 1 } });
-
-  expect(drive.byName("manifest.json").length).toBe(1);
-  expect(ids.manifestFileId).toBe(real);
-  expect(JSON.parse(drive.one("manifest.json").body)).toEqual({ a: { rev: 1, mtime: 1, size: 1 } });
 });
 
 test("a stale book id is forgotten and the blob found by name", async () => {

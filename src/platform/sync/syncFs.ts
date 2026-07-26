@@ -9,7 +9,9 @@
 // (fulltext-*, figures-*, prep-*/pdf and its caches), generated slide decks
 // (slides/**, docs/14 — a build output, rebuildable from notes), the local
 // event log, sync's own local
-// files (sync-auth.json, sync-state.json), and credentials.json — plaintext AI
+// files (sync-auth.json, sync-state.json, and the sync-base/ merge-base mirror
+// — syncing the record of what was last agreed would be circular), and
+// credentials.json — plaintext AI
 // provider tokens stay on the device rather than widening their exposure to the
 // user's Drive, and per-device tokens avoid refresh-rotation kicking the other
 // device out. Thread images (images/**) are not synced in v1 — a screenshot
@@ -26,15 +28,24 @@ import {
 } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../app/atomic-fs";
 
-export interface LocalFile {
+// What a scan of the sync range sees: one stat per file, nothing read.
+export interface ScannedFile {
   path: string;
   mtime: number;
   size: number;
 }
 
+// A scanned file with the hash of its bytes. This, not ScannedFile, is what the
+// pass decides on — see content.ts for why mtime cannot be trusted.
+export interface LocalFile extends ScannedFile {
+  hash: string;
+}
+
 export interface SyncFs {
-  // Every in-range file with its mtime/size.
-  list(): Promise<LocalFile[]>;
+  // Every in-range file with its mtime/size. Deliberately does not hash: the
+  // 15s tick calls this, and reading every file each tick to learn nothing is
+  // not a pre-filter. The pass hashes what the pre-filter flags.
+  list(): Promise<ScannedFile[]>;
   read(path: string): Promise<Uint8Array>;
   // Writes bytes, creating any parent directory first.
   write(path: string, bytes: Uint8Array): Promise<void>;
@@ -86,7 +97,7 @@ export function inSyncRange(path: string): boolean {
 
 const opts = { baseDir: BaseDirectory.AppData } as const;
 
-async function walk(dir: string, out: LocalFile[]): Promise<void> {
+async function walk(dir: string, out: ScannedFile[]): Promise<void> {
   let entries;
   try {
     entries = await readDir(dir || ".", opts);
@@ -114,7 +125,7 @@ async function walk(dir: string, out: LocalFile[]): Promise<void> {
 
 export const tauriSyncFs: SyncFs = {
   async list() {
-    const out: LocalFile[] = [];
+    const out: ScannedFile[] = [];
     await walk("", out);
     return out;
   },
