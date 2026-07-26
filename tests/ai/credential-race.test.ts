@@ -5,7 +5,7 @@
 // refresh landing later merges into the file instead of restoring the snapshot
 // it read at the start. Run: bun test.
 
-import { beforeEach, expect, mock, test } from "bun:test";
+import { afterAll, beforeEach, expect, mock, test } from "bun:test";
 
 const FILE = "credentials.json";
 
@@ -29,8 +29,9 @@ mock.module("../../src/platform/app/atomic-fs", () => ({
   },
 }));
 
-// pi-ai owns the actual token exchange; here it only records the refresh token
-// it was handed and waits for the test to let it finish.
+// Both providers refresh with a POST to their own token endpoint (Anthropic
+// sends JSON, Codex sends a form). The stub records the refresh token it was
+// handed and waits for the test to let it finish; nothing here reaches a network.
 const refreshCalls: string[] = [];
 let release: () => void = () => {};
 let gate = Promise.resolve();
@@ -41,19 +42,31 @@ function armGate(): void {
   });
 }
 
-async function fakeRefresh(token: string) {
-  refreshCalls.push(token);
-  await gate;
-  return { access: `access-after-${token}`, refresh: `next-of-${token}`, expires: Date.now() + 3_600_000 };
+function sentRefreshToken(body: string): string | null {
+  try {
+    return JSON.parse(body).refresh_token ?? null;
+  } catch {
+    return new URLSearchParams(body).get("refresh_token");
+  }
 }
 
-mock.module("@earendil-works/pi-ai/oauth", () => ({
-  refreshAnthropicToken: fakeRefresh,
-  refreshOpenAICodexToken: fakeRefresh,
-  loginOpenAICodexDeviceCode: async () => {
-    throw new Error("not used");
-  },
-}));
+const realFetch = globalThis.fetch;
+globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+  const token = sentRefreshToken(String(init?.body ?? ""));
+  if (!token) throw new Error(`unexpected request body: ${String(init?.body)}`);
+  refreshCalls.push(token);
+  await gate;
+  return Response.json({
+    access_token: `access-after-${token}`,
+    refresh_token: `next-of-${token}`,
+    // The app subtracts a 5-minute skew, so this must outlast it to read as fresh.
+    expires_in: 3600,
+  });
+}) as typeof globalThis.fetch;
+
+afterAll(() => {
+  globalThis.fetch = realFetch;
+});
 
 const { setImageGenKey } = await import("../../src/ai/credentials");
 const { setSttKey } = await import("../../src/ai/voice/config");

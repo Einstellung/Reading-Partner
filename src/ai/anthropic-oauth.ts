@@ -1,12 +1,11 @@
 // Anthropic subscription OAuth (Claude Pro/Max): authorization code + PKCE.
-// pi-ai's loginAnthropic is Node-only (it spawns an http callback server) and it
-// doesn't export the code-exchange primitive, so the front half is reimplemented
-// here per docs/05. Loopback auto-capture is the finalized path; manual paste is
-// the fallback when port 53692 is busy or the browser is on another machine.
+// pi-ai's login is Node-only (it spawns an http callback server) and since 0.82
+// it exports no OAuth primitives at all, so the whole flow lives here per
+// docs/05. Loopback auto-capture is the finalized path; manual paste is the
+// fallback when port 53692 is busy or the browser is on another machine.
 
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { refreshAnthropicToken } from "@earendil-works/pi-ai/oauth";
 import { generatePKCE, parseManualInput } from "../platform/app/oauth";
 import { loadCredentials, setActiveCredential, updateCredentials, type AnthropicCredential } from "./credentials";
 import { coalesceRefresh } from "./token-refresh";
@@ -25,6 +24,9 @@ const REDIRECT_URI = `http://localhost:${CALLBACK_PORT}${CALLBACK_PATH}`;
 const MANUAL_REDIRECT_URI = "https://console.anthropic.com/oauth/code/callback";
 const SCOPES =
 	"org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload";
+// Treat the token as expired this long before the real boundary so an in-flight
+// request never races it.
+const EXPIRY_SKEW_MS = 5 * 60 * 1000;
 
 // Retained across an attempt so the manual-paste fallback can reuse the verifier
 // that was baked into the already-opened authorize URL. The token exchange must
@@ -45,34 +47,54 @@ function buildAuthUrl(challenge: string, state: string, redirectUri: string = RE
 	return `${AUTHORIZE_URL}?${params.toString()}`;
 }
 
-async function exchangeCode(
-	code: string,
-	state: string,
-	verifier: string,
-	redirectUri: string = REDIRECT_URI,
+// Both grants hit the same endpoint with the same JSON-in/JSON-out shape.
+async function postToken(
+	body: Record<string, string>,
+	what: string,
 ): Promise<AnthropicCredential> {
 	const res = await fetch(TOKEN_URL, {
 		method: "POST",
 		headers: { "Content-Type": "application/json", Accept: "application/json" },
-		body: JSON.stringify({
-			grant_type: "authorization_code",
-			client_id: CLIENT_ID,
-			code,
-			state,
-			redirect_uri: redirectUri,
-			code_verifier: verifier,
-		}),
+		body: JSON.stringify(body),
 	});
 	if (!res.ok) {
-		throw new Error(`token exchange failed (HTTP ${res.status}): ${await res.text()}`);
+		throw new Error(`${what} failed (HTTP ${res.status}): ${await res.text()}`);
 	}
 	const data = await res.json();
 	return {
 		type: "oauth",
 		access: data.access_token,
 		refresh: data.refresh_token,
-		expires: Date.now() + data.expires_in * 1000 - 5 * 60 * 1000,
+		expires: Date.now() + data.expires_in * 1000 - EXPIRY_SKEW_MS,
 	};
+}
+
+function exchangeCode(
+	code: string,
+	state: string,
+	verifier: string,
+	redirectUri: string = REDIRECT_URI,
+): Promise<AnthropicCredential> {
+	return postToken(
+		{
+			grant_type: "authorization_code",
+			client_id: CLIENT_ID,
+			code,
+			state,
+			redirect_uri: redirectUri,
+			code_verifier: verifier,
+		},
+		"token exchange",
+	);
+}
+
+// Spend the refresh token for a fresh pair. The refresh token rotates on use, so
+// only one caller may ever run this per stored credential (see token-refresh.ts).
+function refreshToken(refresh: string): Promise<AnthropicCredential> {
+	return postToken(
+		{ grant_type: "refresh_token", client_id: CLIENT_ID, refresh_token: refresh },
+		"token refresh",
+	);
 }
 
 async function store(cred: AnthropicCredential): Promise<void> {
@@ -158,13 +180,7 @@ export async function getValidAnthropicAuth(): Promise<string | null> {
 		if (!current) return null;
 		if (Date.now() < current.expires) return current.access;
 
-		const refreshed = await refreshAnthropicToken(current.refresh);
-		const next: AnthropicCredential = {
-			type: "oauth",
-			access: refreshed.access,
-			refresh: refreshed.refresh,
-			expires: refreshed.expires,
-		};
+		const next = await refreshToken(current.refresh);
 		await updateCredentials((s) => {
 			// A sign-in or sign-out that landed while the exchange was in flight
 			// owns the file now; putting our token back would undo it.
