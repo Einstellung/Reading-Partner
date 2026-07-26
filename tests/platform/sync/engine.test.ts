@@ -1,5 +1,5 @@
 // The sync engine's pass (src/platform/sync/engine.ts) over a fake backend + fake fs +
-// fake book store: push, pull, last-writer-wins, the books channel, the pulled
+// fake book store: push, pull, three-way merge, the books channel, the pulled
 // callback, single-flight, and what a pass does when part of it fails. No timers
 // (syncNow drives a pass directly), no network. Run: bun test.
 
@@ -11,7 +11,8 @@ import {
 } from "../../../src/platform/sync/engine";
 import {
   RemoteGoneError,
-  type Manifest,
+  type RemoteEntry,
+  type RemoteState,
   type SyncBackend,
 } from "../../../src/platform/sync/backend";
 import type { BookFs } from "../../../src/platform/sync/books";
@@ -35,8 +36,11 @@ const enc = (s: string) => new TextEncoder().encode(s);
 const dec = (b: Uint8Array) => new TextDecoder().decode(b);
 const h = (s: string) => hashBytes(enc(s));
 
-function makeBackend(seedManifest: Manifest = {}, seedData: Record<string, string> = {}) {
-  let manifest: Manifest = structuredClone(seedManifest);
+// An in-memory remote. Each file carries its own rev/mtime/hash, written with
+// its bytes in one call — there is no index over the top for a test to write
+// separately, because there is none in Drive either.
+function makeBackend(seedRemote: RemoteState = {}, seedData: Record<string, string> = {}) {
+  const meta = new Map<string, RemoteEntry>(Object.entries(structuredClone(seedRemote)));
   const data = new Map<string, Uint8Array>(
     Object.entries(seedData).map(([k, v]) => [k, enc(v)]),
   );
@@ -46,19 +50,17 @@ function makeBackend(seedManifest: Manifest = {}, seedData: Record<string, strin
     async ensureLayout() {
       ensureLayoutCalls++;
     },
-    async listManifest() {
-      return structuredClone(manifest);
-    },
-    async writeManifest(m) {
-      manifest = structuredClone(m);
+    async listRemote() {
+      return Object.fromEntries(meta);
     },
     async download(name) {
       const b = data.get(name);
       if (!b) throw new Error(`missing ${name}`);
       return b;
     },
-    async upload(name, bytes) {
+    async upload(name, bytes, m) {
       data.set(name, bytes);
+      meta.set(name, { rev: m.rev, mtime: m.mtime, size: bytes.length, hash: m.hash });
     },
     async hasBook(hash) {
       return books.has(hash);
@@ -76,7 +78,7 @@ function makeBackend(seedManifest: Manifest = {}, seedData: Record<string, strin
     backend,
     data,
     books,
-    manifest: () => manifest,
+    remote: () => Object.fromEntries(meta),
     ensureLayoutCalls: () => ensureLayoutCalls,
   };
 }
@@ -185,7 +187,7 @@ function makeEngine(over: Partial<EngineDeps> & { snapshot: Snapshot }) {
   return { engine: new SyncEngine(deps), pulled };
 }
 
-test("push: a new local file is uploaded, manifested, and snapshotted", async () => {
+test("push: a new local file is uploaded, published, and snapshotted", async () => {
   const be = makeBackend();
   const { fs } = makeFs({ "settings.json": { text: "{}", mtime: 500 } });
   const snapshot: Snapshot = {};
@@ -195,7 +197,7 @@ test("push: a new local file is uploaded, manifested, and snapshotted", async ()
 
   expect(dec(be.data.get("settings.json")!)).toBe("{}");
   const hash = await h("{}");
-  expect(be.manifest()["settings.json"]).toEqual({ rev: 1, mtime: 500, size: 2, hash });
+  expect(be.remote()["settings.json"]).toEqual({ rev: 1, mtime: 500, size: 2, hash });
   expect(snapshot["settings.json"]).toEqual({ rev: 1, mtime: 500, size: 2, hash });
   // Nothing failed, so this device is mirrored — the one thing health reads
   // lastSyncAt for.
@@ -269,7 +271,7 @@ test("a file both sides changed is merged and the merge is published above the r
   expect(dec(be.data.get("reading-state.json")!)).toBe("MERGED");
   // Above the remote's rev, so the other device pulls the merge rather than
   // treating its own copy as still current.
-  expect(be.manifest()["reading-state.json"].rev).toBe(5);
+  expect(be.remote()["reading-state.json"].rev).toBe(5);
   expect(snapshot["reading-state.json"].hash).toBe(await h("MERGED"));
   expect(bs.text("reading-state.json")).toBe("MERGED");
   // The shell has to reload a file the pass rewrote under it.
@@ -432,7 +434,7 @@ test("a merge whose upload fails keeps the merged bytes on disk and retries next
   // The merged bytes are the only copy holding both sides' work; losing them to
   // a failed upload would be the one unrecoverable outcome.
   expect(dec(files.get("reading-state.json")!.bytes)).toBe("MERGED");
-  expect(be.manifest()["reading-state.json"].rev).toBe(4);
+  expect(be.remote()["reading-state.json"].rev).toBe(4);
   expect(bs.text("reading-state.json")).toBe("BASE");
   expect(engine.status().lastError).toStartWith("merge reading-state.json failed:");
 
@@ -440,7 +442,7 @@ test("a merge whose upload fails keeps the merged bytes on disk and retries next
   await engine.syncNow();
 
   expect(dec(be.data.get("reading-state.json")!)).toBe("MERGED");
-  expect(be.manifest()["reading-state.json"].rev).toBe(5);
+  expect(be.remote()["reading-state.json"].rev).toBe(5);
 });
 
 // --- change detection is by content, not by clock ---------------------------
@@ -463,7 +465,7 @@ test("a rewrite with identical content produces no upload, no download, no confl
   files.set("topics.json", { bytes: enc("SAME"), mtime: 999_999 });
   await engine.syncNow();
 
-  expect(be.manifest()["topics.json"].rev).toBe(4); // no upload
+  expect(be.remote()["topics.json"].rev).toBe(4); // no upload
   expect(pulled).toEqual([]); // no download
   // And the snapshot took the new mtime, so the cheap pre-filter stops flagging
   // the file on every 15s tick from here on.
@@ -485,7 +487,7 @@ test("a real local edit still uploads", async () => {
   await engine.syncNow();
 
   expect(dec(be.data.get("topics.json")!)).toBe("EDITED");
-  expect(be.manifest()["topics.json"]).toEqual({
+  expect(be.remote()["topics.json"]).toEqual({
     rev: 5,
     mtime: 200,
     size: 6,
@@ -506,7 +508,7 @@ test("both devices holding the same bytes at different revs exchange nothing", a
 
   await engine.syncNow();
 
-  expect(be.manifest()["topics.json"].rev).toBe(9);
+  expect(be.remote()["topics.json"].rev).toBe(9);
   expect(pulled).toEqual([]);
   expect(snapshot["topics.json"]).toEqual({ rev: 9, mtime: 100, size: 4, hash });
 });
@@ -525,7 +527,7 @@ test("a snapshot from before hashing is filled in, not re-pushed", async () => {
 
   await engine.syncNow();
 
-  expect(be.manifest()["topics.json"].rev).toBe(4);
+  expect(be.remote()["topics.json"].rev).toBe(4);
   expect(pulled).toEqual([]);
   expect(snapshot["topics.json"]).toEqual({ rev: 4, mtime: 100, size: 4, hash: await h("SAME") });
 });
@@ -569,9 +571,9 @@ test("a successful upload and a successful download each become the base", async
   expect(bs.text("settings.json")).toBe("LOCAL");
 });
 
-test("bytes the manifest write never published are not recorded as agreed", async () => {
+test("bytes that never reached the remote are not recorded as agreed", async () => {
   const be = makeBackend();
-  be.backend.writeManifest = async () => {
+  be.backend.upload = async () => {
     throw new Error("error sending request");
   };
   const { fs } = makeFs({ "settings.json": { text: "LOCAL", mtime: 500 } });
@@ -580,7 +582,7 @@ test("bytes the manifest write never published are not recorded as agreed", asyn
 
   await engine.syncNow();
 
-  // No other device can see those bytes, so calling them the common ancestor
+  // No other device holds those bytes, so calling them the common ancestor
   // would let the next merge assume the other side had them.
   expect(bs.text("settings.json")).toBeNull();
 });
@@ -684,7 +686,7 @@ test("single-flight: overlapping passes run only once", async () => {
 
 test("an offline failure is captured as lastError, not thrown", async () => {
   const be = makeBackend();
-  be.backend.listManifest = async () => {
+  be.backend.listRemote = async () => {
     throw new Error("network down");
   };
   const { engine } = makeEngine({ backend: be.backend, snapshot: {} });
@@ -696,8 +698,8 @@ test("an offline failure is captured as lastError, not thrown", async () => {
 // --- a pass that partly fails ----------------------------------------------
 //
 // The reported failure: one file's download died on a lossy link, the pass
-// aborted there, and the remaining downloads, every upload, the manifest write
-// and the books channel never ran. On a link where each request has a real
+// aborted there, and the remaining downloads, every upload and the books
+// channel never ran. On a link where each request has a real
 // chance of failing, a pass needing fifty of them never completed once — the
 // device sat at "Last sync: Never" for weeks.
 
@@ -723,7 +725,7 @@ test("one file that will not download costs only itself", async () => {
 
   expect(dec(files.get("settings.json")!.bytes)).toBe("SET"); // the other pull landed
   expect(dec(be.data.get("library.json")!)).toBe("LIB"); // the push still ran
-  expect(be.manifest()["library.json"].rev).toBe(1); // the manifest was still written
+  expect(be.remote()["library.json"].rev).toBe(1); // and was published
   expect(dec(be.books.get("h")!)).toBe("PDF"); // the books channel still ran
   expect(store.size).toBe(1);
   expect(pulled).toEqual([["settings.json"]]); // only what landed
@@ -733,12 +735,12 @@ test("one file that will not download costs only itself", async () => {
   expect(engine.status().lastError).toStartWith("download topics.json failed: error sending");
 });
 
-test("an upload that failed is never claimed in the manifest", async () => {
+test("an upload that failed is never claimed", async () => {
   const be = makeBackend();
   const upload = be.backend.upload;
-  be.backend.upload = async (name, bytes, mtime) => {
+  be.backend.upload = async (name, bytes, meta) => {
     if (name === "topics.json") throw new Error("error sending request");
-    return upload(name, bytes, mtime);
+    return upload(name, bytes, meta);
   };
   const { fs } = makeFs({
     "topics.json": { text: "T", mtime: 500 },
@@ -750,15 +752,19 @@ test("an upload that failed is never claimed in the manifest", async () => {
   await engine.syncNow();
 
   const entry = { rev: 1, mtime: 500, size: 1, hash: await h("S") };
-  expect(be.manifest()["settings.json"]).toEqual(entry);
+  expect(be.remote()["settings.json"]).toEqual(entry);
   // A rev here would tell every other device that topics.json is current with
   // bytes that were never sent, and stop this device from offering its own copy.
-  expect(be.manifest()["topics.json"]).toBeUndefined();
+  expect(be.remote()["topics.json"]).toBeUndefined();
   expect(snapshot["topics.json"]).toBeUndefined();
   expect(snapshot["settings.json"]).toEqual(entry);
 });
 
-test("publishing one upload leaves every other manifest entry alone", async () => {
+// There used to be a manifest.json listing every file, rewritten whole on every
+// pass. Two devices publishing in the same window lost one of the two writes,
+// and a device that failed to read it had no remote state at all. Each file now
+// carries its own rev, so an upload cannot touch what it did not write.
+test("an upload cannot disturb another file's entry", async () => {
   const be = makeBackend({ "other.json": { rev: 7, mtime: 1, size: 2 } }, { "other.json": "xy" });
   const { fs } = makeFs({ "settings.json": { text: "{}", mtime: 500 } });
   const snapshot: Snapshot = { "other.json": { rev: 7, mtime: 1, size: 2 } };
@@ -766,41 +772,8 @@ test("publishing one upload leaves every other manifest entry alone", async () =
 
   await engine.syncNow();
 
-  // Dropping an entry this device has no local copy of takes the file out of
-  // the backup for every device.
-  expect(be.manifest()["other.json"]).toEqual({ rev: 7, mtime: 1, size: 2 });
-  expect(be.manifest()["settings.json"].rev).toBe(1);
-});
-
-test("bytes in the remote that the manifest write did not publish are sent again", async () => {
-  const be = makeBackend();
-  const writeManifest = be.backend.writeManifest;
-  let refuse = true;
-  be.backend.writeManifest = async (m) => {
-    if (refuse) throw new Error("error sending request");
-    return writeManifest(m);
-  };
-  const { fs } = makeFs({ "settings.json": { text: "{}", mtime: 500 } });
-  const snapshot: Snapshot = {};
-  const { engine } = makeEngine({ backend: be.backend, fs, snapshot });
-
-  await engine.syncNow();
-
-  // Uploaded, but no other device can see it: snapshotting it would leave the
-  // file looking synced and never publish it.
-  expect(be.data.has("settings.json")).toBe(true);
-  expect(snapshot["settings.json"]).toBeUndefined();
-  expect(engine.status().lastSyncAt).toBeNull();
-  expect(engine.status().lastError).toStartWith("write manifest failed:");
-
-  refuse = false;
-  await engine.syncNow();
-
-  const entry = { rev: 1, mtime: 500, size: 2, hash: await h("{}") };
-  expect(be.manifest()["settings.json"]).toEqual(entry);
-  expect(snapshot["settings.json"]).toEqual(entry);
-  expect(engine.status().lastSyncAt).not.toBeNull();
-  expect(engine.status().lastError).toBeNull();
+  expect(be.remote()["other.json"]).toEqual({ rev: 7, mtime: 1, size: 2 });
+  expect(be.remote()["settings.json"].rev).toBe(1);
 });
 
 test("a file gone from the remote is skipped, not counted as a fault", async () => {
@@ -819,7 +792,7 @@ test("a file gone from the remote is skipped, not counted as a fault", async () 
 });
 
 test("a run of failures ends the pass instead of grinding through the rest", async () => {
-  const remote: Manifest = {};
+  const remote: RemoteState = {};
   for (let i = 0; i < 6; i++) remote[`f${i}.json`] = { rev: 1, mtime: 1, size: 1 };
   const be = makeBackend(remote);
   let attempts = 0;

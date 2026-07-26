@@ -4,12 +4,23 @@
 //
 // Two channels:
 //   data   — the small JSON/markdown files in the sync range, tracked by their
-//            AppData-relative path as the file name, each carrying a manifest
-//            entry { rev, mtime, size }.
+//            AppData-relative path as the file name, each carrying its own
+//            { rev, mtime, size, hash }.
 //   books  — immutable content-addressed PDF blobs (books/<hash>.pdf), written
 //            once and never overwritten (uploadBook is a no-op if it exists).
+//
+// A file's own metadata is the record, with no index file over the top: an
+// index two devices both rewrite is a lost update waiting to happen, and one
+// that fails to load takes the whole pass with it.
 
-export interface ManifestEntry {
+// What the backend is told to record with an upload.
+export interface RemoteMeta {
+  rev: number;
+  mtime: number;
+  hash: string;
+}
+
+export interface RemoteEntry {
   // Monotonic per-file counter, bumped on every upload; the pull side compares
   // it against the last-synced snapshot to spot remote changes.
   rev: number;
@@ -17,15 +28,15 @@ export interface ManifestEntry {
   // since conflicts stopped being decided by a clock.
   mtime: number;
   size: number;
-  // Content hash of the bytes (content.ts). Optional because entries written
-  // before hashing have none: an absent hash costs the "both sides already hold
+  // Content hash of the bytes (content.ts). Optional because a file uploaded
+  // before hashing has none: an absent hash costs the "both sides already hold
   // the same bytes" shortcut, nothing else.
   hash?: string;
 }
 
 // Keyed by the AppData-relative path (e.g. "annotations-<id>.json",
 // "memory-<topicId>/m-ab12cd34.md").
-export type Manifest = Record<string, ManifestEntry>;
+export type RemoteState = Record<string, RemoteEntry>;
 
 // --- how a failure is classified ------------------------------------------
 //
@@ -78,17 +89,26 @@ export function isRemoteGone(e: unknown): boolean {
   return e instanceof RemoteGoneError;
 }
 
+// A dead refresh token, as opposed to an ordinary (offline) failure. The auth
+// module throws GoogleAuthError; nothing here takes a dependency on it, so it
+// is matched structurally by the thrown error's name.
+export function isAuthFailure(e: unknown): boolean {
+  return e instanceof Error && e.name === "GoogleAuthError";
+}
+
 export interface SyncBackend {
   // Create the "Reading Partner" folder and its books/ and data/ subfolders if
   // absent, remembering their ids. Idempotent.
   ensureLayout(): Promise<void>;
 
-  listManifest(): Promise<Manifest>;
-  writeManifest(manifest: Manifest): Promise<void>;
+  // Everything the data folder holds, from its own metadata.
+  listRemote(): Promise<RemoteState>;
 
   // Throws RemoteGoneError when the name is not in the remote any more.
   download(name: string): Promise<Uint8Array>;
-  upload(name: string, bytes: Uint8Array, mtime: number): Promise<void>;
+  // Writes the bytes and the metadata that describes them together, so a rev is
+  // never published for content that did not land.
+  upload(name: string, bytes: Uint8Array, meta: RemoteMeta): Promise<void>;
 
   hasBook(hash: string): Promise<boolean>;
   uploadBook(hash: string, bytes: Uint8Array): Promise<void>;

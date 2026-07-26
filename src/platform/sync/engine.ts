@@ -16,13 +16,12 @@
 // delete stays recoverable.
 //
 // A pass is per-item, not all-or-nothing (docs/pitfall/52). One file that will
-// not transfer must not cost the other fifty, the manifest write or the books
-// channel: on a link where every request has a real chance of failing, a pass
-// needing fifty of them in a row essentially never completes, and the device
-// sits at "Last sync: Never" while each individual request plainly works. What
-// a partial pass must never do is claim more than it did — lastSyncAt advances
-// only when nothing failed, and the manifest only ever names uploads that
-// actually landed.
+// not transfer must not cost the other fifty or the books channel: on a link
+// where every request has a real chance of failing, a pass needing fifty of
+// them in a row essentially never completes, and the device sits at "Last sync:
+// Never" while each individual request plainly works. What a partial pass must
+// never do is claim more than it did — lastSyncAt advances only when nothing
+// failed, and only a file that actually landed is snapshotted.
 //
 // Timers: an initial pass on start, a periodic tick every TICK_MS that runs a
 // pass when local files changed or PULL_INTERVAL_MS has elapsed since the last
@@ -32,7 +31,7 @@
 // Everything the pass touches (backend, fs, books) is injected; the Tauri wiring
 // lives in index.ts. reconcile() (reconcile.ts) is the pure decision core.
 
-import { isRemoteGone, type Manifest, type SyncBackend } from "./backend";
+import { isAuthFailure, isRemoteGone, type SyncBackend } from "./backend";
 import type { BookFs } from "./books";
 import { hashBytes } from "./content";
 import type { BaseStore, TrashJournal } from "./localStore";
@@ -83,13 +82,6 @@ export interface PassResult {
   lastSyncAt: number | null;
   lastError: string | null;
   snapshot: Snapshot;
-}
-
-// Distinguishes a dead-auth failure from an ordinary (offline) one. The auth
-// module throws GoogleAuthError; the engine takes no direct dependency on it, so
-// this is matched structurally by the thrown error's name.
-function isAuthError(e: unknown): boolean {
-  return e instanceof Error && e.name === "GoogleAuthError";
 }
 
 function messageOf(e: unknown): string {
@@ -240,6 +232,13 @@ export class SyncEngine {
     await this.d.base.write(path, bytes).catch(() => {});
   }
 
+  // What a landed upload leaves behind: the snapshot says what this device is
+  // in step with, the base says what both sides now agree the content is.
+  private async record(up: Upload, bytes: Uint8Array): Promise<void> {
+    this.snapshot[up.path] = { rev: up.rev, mtime: up.mtime, size: up.size, hash: up.hash };
+    await this.setBase(up.path, bytes);
+  }
+
   private async rebase(path: string): Promise<void> {
     try {
       await this.d.base.write(path, await this.d.fs.read(path));
@@ -285,7 +284,11 @@ export class SyncEngine {
       size: out.merged.length,
       hash: await hashBytes(out.merged),
     };
-    await this.d.backend.upload(up.path, out.merged, up.mtime);
+    await this.d.backend.upload(up.path, out.merged, {
+      rev: up.rev,
+      mtime: up.mtime,
+      hash: up.hash,
+    });
     return { up, bytes: out.merged };
   }
 
@@ -313,10 +316,11 @@ export class SyncEngine {
     this.emitStatus();
     const failures = new PassFailures();
     try {
-      // The layout and the manifest are what the rest of the pass stands on:
-      // without them there is nothing to reconcile, so these two still stop it.
+      // The layout and the remote listing are what the rest of the pass stands
+      // on: without them there is nothing to reconcile, so these two still stop
+      // it.
       await this.d.backend.ensureLayout();
-      const remote = await this.d.backend.listManifest();
+      const remote = await this.d.backend.listRemote();
       const local = await this.hashLocal(await this.d.fs.list());
       const plan = reconcile(local, remote, this.snapshot);
       await this.d.trash.prune(this.now()).catch(() => {});
@@ -357,16 +361,14 @@ export class SyncEngine {
           changed.push(dl.path);
           failures.succeeded();
         } catch (e) {
-          if (isAuthError(e)) throw e;
-          // Listed in the manifest, absent from the remote. Nothing to pull and
-          // nothing a retry can do; deletions are not propagated (docs/13), so
-          // the local copy stays as it is.
+          if (isAuthFailure(e)) throw e;
+          // Listed a moment ago, gone by the time it was asked for. Nothing to
+          // pull and nothing a retry can do; deletions are not propagated
+          // (docs/13), so the local copy stays as it is.
           if (isRemoteGone(e)) continue;
           failures.record(`download ${dl.path}`, e);
         }
       }
-
-      const landed: { up: Upload; bytes: Uint8Array }[] = [];
 
       // Both sides changed since the base. The merge is what gets published, at
       // a rev above the remote's, so both devices converge on it instead of one
@@ -375,14 +377,13 @@ export class SyncEngine {
       for (const mg of plan.merges) {
         if (failures.halted()) break;
         try {
-          const up = await this.mergeOne(mg);
-          landed.push(up);
-          // The local file changed, so the shell has to reload it whether or
-          // not the upload that follows gets published.
+          const { up, bytes } = await this.mergeOne(mg);
+          this.record(up, bytes);
+          // The local file changed, so the shell has to reload it.
           changed.push(mg.path);
           failures.succeeded();
         } catch (e) {
-          if (isAuthError(e)) throw e;
+          if (isAuthFailure(e)) throw e;
           if (isRemoteGone(e)) continue;
           failures.record(`merge ${mg.path}`, e);
         }
@@ -392,42 +393,19 @@ export class SyncEngine {
         if (failures.halted()) break;
         try {
           const bytes = await this.d.fs.read(up.path);
-          await this.d.backend.upload(up.path, bytes, up.mtime);
-          landed.push({ up, bytes });
+          await this.d.backend.upload(up.path, bytes, {
+            rev: up.rev,
+            mtime: up.mtime,
+            hash: up.hash,
+          });
+          // An upload carries its own rev, so what landed is published the
+          // moment it lands. There is no second request that could leave bytes
+          // in Drive no other device can see.
+          await this.record(up, bytes);
           failures.succeeded();
         } catch (e) {
-          if (isAuthError(e)) throw e;
+          if (isAuthFailure(e)) throw e;
           failures.record(`upload ${up.path}`, e);
-        }
-      }
-
-      if (landed.length > 0) {
-        // Only what actually landed. A rev published for a file whose bytes
-        // never arrived tells every other device it is up to date with content
-        // that does not exist, and the writer's own copy stops being offered.
-        const next: Manifest = { ...remote };
-        for (const { up } of landed) {
-          next[up.path] = { rev: up.rev, mtime: up.mtime, size: up.size, hash: up.hash };
-        }
-        try {
-          await this.d.backend.writeManifest(next);
-          // Snapshotted only now: bytes in Drive that the manifest does not name
-          // are invisible to every other device, so an unpublished upload has to
-          // look unsent and be repeated next pass. The base follows the same
-          // rule — it records agreement, and unpublished bytes are not agreed.
-          for (const { up, bytes } of landed) {
-            this.snapshot[up.path] = {
-              rev: up.rev,
-              mtime: up.mtime,
-              size: up.size,
-              hash: up.hash,
-            };
-            await this.setBase(up.path, bytes);
-          }
-          failures.succeeded();
-        } catch (e) {
-          if (isAuthError(e)) throw e;
-          failures.record("write manifest", e);
         }
       }
 
@@ -437,6 +415,7 @@ export class SyncEngine {
           ...plan.converged.map((c) => c.path),
           ...plan.downloads.map((d) => d.path),
           ...plan.uploads.map((u) => u.path),
+          ...plan.merges.map((m) => m.path),
         ]),
       );
 
@@ -452,7 +431,7 @@ export class SyncEngine {
       if (changed.length > 0) this.d.onPulled?.(changed);
     } catch (e) {
       this.lastError = messageOf(e);
-      if (isAuthError(e)) this.d.onSignedOut?.();
+      if (isAuthFailure(e)) this.d.onSignedOut?.();
     } finally {
       this.running = false;
       this.emitStatus();
@@ -475,7 +454,7 @@ export class SyncEngine {
         }
         failures.succeeded();
       } catch (e) {
-        if (isAuthError(e)) throw e;
+        if (isAuthFailure(e)) throw e;
         if (isRemoteGone(e)) continue;
         failures.record(`book ${hash}`, e);
       }

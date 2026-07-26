@@ -22,6 +22,8 @@ export interface DriveIds {
   folderId?: string;
   dataFolderId?: string;
   booksFolderId?: string;
+  // Only the migration reads manifest.json now, and only until every file in
+  // Drive carries its own metadata. Kept so that read costs one request.
   manifestFileId?: string;
   // AppData-relative path -> Drive file id, for the data channel.
   fileIds: Record<string, string>;

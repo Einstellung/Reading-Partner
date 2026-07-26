@@ -17,10 +17,10 @@
 // present remotely is left alone, so nothing is ever destroyed by a sync.
 // Record-level deletion inside a file is the merge module's decision.
 
-import type { Manifest, ManifestEntry } from "./backend";
+import type { RemoteEntry, RemoteState } from "./backend";
 import type { LocalFile } from "./syncFs";
 
-export type SnapshotEntry = ManifestEntry;
+export type SnapshotEntry = RemoteEntry;
 export type Snapshot = Record<string, SnapshotEntry>;
 
 export interface Upload {
@@ -58,9 +58,9 @@ export interface Converged {
   hash: string;
 }
 
-// What to move. Not what to publish: the manifest is composed by the engine
-// from the remote it read plus the uploads that actually landed, because only
-// the engine knows which of them did.
+// What to move. Every item carries the rev it should be published at; the
+// backend writes that alongside the bytes, so only what actually landed is ever
+// claimed.
 export interface Plan {
   uploads: Upload[];
   downloads: Download[];
@@ -91,7 +91,7 @@ function isLocallyChanged(loc: LocalFile, snap: SnapshotEntry | undefined): bool
   return loc.hash !== snap.hash;
 }
 
-export function reconcile(local: LocalFile[], remote: Manifest, snap: Snapshot): Plan {
+export function reconcile(local: LocalFile[], remote: RemoteState, snap: Snapshot): Plan {
   const localByPath = new Map(local.map((f) => [f.path, f]));
   const paths = new Set<string>([
     ...localByPath.keys(),
@@ -144,14 +144,19 @@ export function reconcile(local: LocalFile[], remote: Manifest, snap: Snapshot):
 
     const localChanged = isLocallyChanged(loc, base);
 
+    // Above both what the remote holds and what this device last published. A
+    // remote whose rev reads lower than the snapshot's — a file whose metadata
+    // predates rev tracking, a restored copy — must not be able to talk this
+    // device into republishing at a number other devices have already passed.
+    const nextRev = (): number => Math.max(rem?.rev ?? 0, base?.rev ?? 0) + 1;
+
     const upload = (): void => {
-      const rev = (rem?.rev ?? base?.rev ?? 0) + 1;
-      uploads.push({ path, rev, mtime: loc.mtime, size: loc.size, hash: loc.hash });
+      uploads.push({ path, rev: nextRev(), mtime: loc.mtime, size: loc.size, hash: loc.hash });
     };
 
     if (localChanged && remoteChanged) {
       // Both sides moved. Merge them; do not pick one.
-      merges.push({ path, rev: rem!.rev + 1 });
+      merges.push({ path, rev: nextRev() });
     } else if (localChanged) {
       upload();
     } else if (remoteChanged) {

@@ -5,11 +5,20 @@
 // allows any https host (docs/28), so googleapis.com needs no new entry.
 //
 // Layout (docs/13): a visible "Reading Partner" folder holding books/ and data/
-// subfolders and a manifest.json. Every tracked file is followed by Drive file
-// id (stored in sync-state.json), so a user rename in Drive never desyncs it.
-// data/ files carry their AppData-relative path as the Drive file name; the name
-// is opaque to Drive (slashes are not path separators there). books/<hash>.pdf
-// are immutable content-addressed blobs, uploaded once and never overwritten.
+// subfolders. Every tracked file is followed by Drive file id (stored in
+// sync-state.json), so a user rename in Drive never desyncs it. data/ files
+// carry their AppData-relative path as the Drive file name; the name is opaque
+// to Drive (slashes are not path separators there). books/<hash>.pdf are
+// immutable content-addressed blobs, uploaded once and never overwritten.
+//
+// The remote state is one listing of data/, read from each file's own
+// appProperties (rev, mtime, hash — private to this app, 124 bytes per
+// key+value, which a rev and a 32-char hash fit inside many times over). There
+// used to be a manifest.json over the top of it; it was a lost update every
+// time two devices published in the same window, and a single request whose
+// failure cost the entire pass. Files uploaded before appProperties are seeded
+// from that manifest.json once, on the first pass that sees them — it is left
+// in the user's Drive, just no longer maintained.
 //
 // A cached id is a guess, not a fact: the file behind it can have been deleted
 // or recreated by another device or by the user. Every request made with one
@@ -19,14 +28,18 @@
 
 import { cleanTauriFetch, type TauriFetch } from "../app/tauri-fetch";
 import {
+  isAuthFailure,
   isRetryableFailure,
   RemoteGoneError,
   SyncHttpError,
   SyncTransportError,
-  type Manifest,
+  type RemoteEntry,
+  type RemoteMeta,
+  type RemoteState,
   type SyncBackend,
 } from "./backend";
 import type { DriveIds } from "./state";
+import { inSyncRange } from "./syncFs";
 
 const DRIVE = "https://www.googleapis.com/drive/v3";
 const UPLOAD = "https://www.googleapis.com/upload/drive/v3";
@@ -107,11 +120,11 @@ function transportError(
   return new SyncTransportError(e instanceof Error ? e.message : String(e));
 }
 
-function parseManifest(bytes: Uint8Array): Manifest {
+function parseManifest(bytes: Uint8Array): RemoteState {
   const text = new TextDecoder().decode(bytes).trim();
   if (!text) return {};
   try {
-    return JSON.parse(text) as Manifest;
+    return JSON.parse(text) as RemoteState;
   } catch {
     return {};
   }
@@ -120,6 +133,47 @@ function parseManifest(bytes: Uint8Array): Manifest {
 interface DriveFile {
   id: string;
   name?: string;
+  size?: string;
+  modifiedTime?: string;
+  appProperties?: Record<string, string>;
+}
+
+// The listing fields the remote state is built from. `size` and `modifiedTime`
+// are Drive's own; rev/mtime/hash are ours.
+const LIST_FIELDS = "nextPageToken,files(id,name,size,modifiedTime,appProperties)";
+// Drive's maximum. One request covers a data folder many times the size of any
+// real one, so the page loop is a formality rather than a cost.
+const PAGE_SIZE = 1000;
+
+function numberProp(props: Record<string, string> | undefined, key: string): number | null {
+  const raw = props?.[key];
+  if (raw === undefined) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+// Drive's own write time, the fallback for a file that never recorded the
+// writer's local mtime.
+function driveMtime(f: DriveFile): number {
+  const t = Date.parse(f.modifiedTime ?? "");
+  return Number.isFinite(t) ? t : 0;
+}
+
+// What one listed file says about itself, or null when it predates
+// appProperties and has to be seeded from the old manifest.json.
+function entryOf(f: DriveFile): RemoteEntry | null {
+  const rev = numberProp(f.appProperties, "rev");
+  if (rev === null) return null;
+  return {
+    rev,
+    mtime: numberProp(f.appProperties, "mtime") ?? driveMtime(f),
+    size: Number(f.size ?? 0),
+    hash: f.appProperties?.hash,
+  };
+}
+
+function propsOf(meta: RemoteMeta): Record<string, string> {
+  return { rev: String(meta.rev), mtime: String(meta.mtime), hash: meta.hash };
 }
 
 export class DriveBackend implements SyncBackend {
@@ -227,23 +281,56 @@ export class DriveBackend implements SyncBackend {
     return (data as DriveFile).id;
   }
 
-  private async patchMedia(
-    id: string,
-    bytes: Uint8Array,
-    what: string,
-    policy: Policy = SMALL,
-  ): Promise<void> {
+  // Metadata only, no media: the endpoint that seeds appProperties onto a file
+  // whose bytes are already right.
+  private async patchMeta(id: string, body: Record<string, unknown>): Promise<void> {
     await this.send(
-      `${UPLOAD}/files/${id}?uploadType=media`,
+      `${DRIVE}/files/${id}`,
       {
         method: "PATCH",
-        headers: { "Content-Type": "application/octet-stream" },
-        body: asBody(bytes),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+      "properties",
+      SMALL,
+      async () => undefined,
+    );
+  }
+
+  // One multipart/related request carrying metadata and media together.
+  // uploadType=media cannot carry metadata at all, and two requests can leave a
+  // file whose bytes and whose description disagree.
+  private async multipartWrite(
+    url: string,
+    method: "POST" | "PATCH",
+    meta: Record<string, unknown>,
+    bytes: Uint8Array,
+    contentType: string,
+    what: string,
+    policy: Policy,
+  ): Promise<string> {
+    const boundary = `rp-${crypto.randomUUID()}`;
+    const head = new TextEncoder().encode(
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n` +
+        `--${boundary}\r\nContent-Type: ${contentType}\r\n\r\n`,
+    );
+    const tail = new TextEncoder().encode(`\r\n--${boundary}--`);
+    const body = new Uint8Array(head.length + bytes.length + tail.length);
+    body.set(head, 0);
+    body.set(bytes, head.length);
+    body.set(tail, head.length + bytes.length);
+    const data = await this.send(
+      url,
+      {
+        method,
+        headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
+        body,
       },
       what,
       policy,
-      async () => undefined,
+      (res) => res.json(),
     );
+    return (data as DriveFile).id;
   }
 
   private async getMedia(id: string, what: string, policy: Policy = SMALL): Promise<Uint8Array> {
@@ -298,20 +385,98 @@ export class DriveBackend implements SyncBackend {
     if (changed) await this.d.persistIds();
   }
 
-  private async findManifest(): Promise<DriveFile | null> {
-    return this.findOne(
-      `name='manifest.json' and '${this.ids.folderId}' in parents and trashed=false`,
-    );
+  // Every live file in data/, one page at a time.
+  private async listDataFiles(): Promise<DriveFile[]> {
+    const q = `'${this.ids.dataFolderId}' in parents and trashed=false`;
+    const out: DriveFile[] = [];
+    let pageToken: string | undefined;
+    do {
+      const url =
+        `${DRIVE}/files?q=${encodeURIComponent(q)}&fields=${encodeURIComponent(LIST_FIELDS)}` +
+        `&spaces=drive&pageSize=${PAGE_SIZE}` +
+        (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "");
+      const data = (await this.send(url, undefined, "list", SMALL, (res) => res.json())) as {
+        files?: DriveFile[];
+        nextPageToken?: string;
+      };
+      for (const f of data.files ?? []) if (f.name) out.push(f);
+      pageToken = data.nextPageToken;
+    } while (pageToken);
+    return out;
   }
 
-  // A failed download must propagate. "Empty" here is indistinguishable from
-  // "the remote holds nothing", and the engine republishes what it read after
-  // the next upload — so one transient failure would rewrite manifest.json with
-  // only this device's changed files, and every entry it does not have locally
-  // silently drops out of the backup. Unparseable content still degrades to
-  // empty: that file cannot be repaired by retrying, and the next upload
-  // rebuilds it.
-  async listManifest(): Promise<Manifest> {
+  // The whole remote state from one listing. Names outside the sync range are
+  // ignored: the folder is the user's, and something they dropped in it is not
+  // an instruction to write it into their AppData.
+  async listRemote(): Promise<RemoteState> {
+    const files = await this.listDataFiles();
+    const out: RemoteState = {};
+    const unseeded: DriveFile[] = [];
+    // Two files under one name is a Drive the app is not supposed to produce
+    // but can find; the first listed wins, so which one is chosen at least does
+    // not change from pass to pass.
+    const seen = new Set<string>();
+    let learnedIds = false;
+
+    for (const f of files) {
+      const name = f.name!;
+      if (!inSyncRange(name) || seen.has(name)) continue;
+      seen.add(name);
+      if (this.ids.fileIds[name] !== f.id) {
+        this.ids.fileIds[name] = f.id;
+        learnedIds = true;
+      }
+      const entry = entryOf(f);
+      if (entry) out[name] = entry;
+      else unseeded.push(f);
+    }
+    if (learnedIds) await this.d.persistIds();
+
+    if (unseeded.length > 0) await this.seedFromManifest(unseeded, out);
+    return out;
+  }
+
+  // Files uploaded before appProperties existed. Their rev lives in the old
+  // manifest.json, which is read once and copied onto them; from then on the
+  // listing answers for itself and this request never happens again. The
+  // manifest is not deleted — it is the user's file, and a device still on the
+  // old build reads it.
+  //
+  // A failed read propagates rather than degrading to "no revs": every other
+  // device's changes would look like nothing had happened, and this device
+  // would quietly stop pulling them.
+  private async seedFromManifest(unseeded: DriveFile[], out: RemoteState): Promise<void> {
+    const legacy = await this.readManifest();
+    for (const f of unseeded) {
+      const name = f.name!;
+      // rev 0 for a file the manifest never named: a device that has never seen
+      // it still pulls it, and reconcile publishes above its own snapshot, so
+      // an unknown rev cannot be mistaken for a fresh one.
+      out[name] = legacy[name] ?? { rev: 0, mtime: driveMtime(f), size: Number(f.size ?? 0) };
+    }
+
+    let streak = 0;
+    for (const f of unseeded) {
+      const e = out[f.name!]!;
+      try {
+        // No hash: the only way to learn one is to download the file, and
+        // fifty downloads is exactly what a migration must not cost. It gets
+        // one on its next upload.
+        await this.patchMeta(f.id, {
+          appProperties: { rev: String(e.rev), mtime: String(e.mtime) },
+        });
+        streak = 0;
+      } catch (err) {
+        if (isAuthFailure(err)) throw err;
+        // Best effort: the in-memory state above is already correct, and the
+        // next pass seeds whatever is left. A run of failures means the link is
+        // down, not that these files are special.
+        if ((streak += 1) >= 3) return;
+      }
+    }
+  }
+
+  private async readManifest(): Promise<RemoteState> {
     const cached = await this.withCachedId(
       this.ids.manifestFileId,
       () => {
@@ -321,46 +486,19 @@ export class DriveBackend implements SyncBackend {
     );
     if (cached.done) return parseManifest(cached.value);
 
-    const found = await this.findManifest();
+    const found = await this.findOne(
+      `name='manifest.json' and '${this.ids.folderId}' in parents and trashed=false`,
+    );
     if (!found) return {};
     this.ids.manifestFileId = found.id;
     await this.d.persistIds();
     return parseManifest(await this.getMedia(found.id, "manifest download"));
   }
 
-  async writeManifest(manifest: Manifest): Promise<void> {
-    const bytes = new TextEncoder().encode(JSON.stringify(manifest, null, 2));
-    const cached = await this.withCachedId(
-      this.ids.manifestFileId,
-      () => {
-        this.ids.manifestFileId = undefined;
-      },
-      (id) => this.patchMedia(id, bytes, "manifest write"),
-    );
-    if (cached.done) return;
-
-    // Search before creating: the id can be stale while the file is fine (the
-    // user emptied their trash on a copy, another device recreated it), and a
-    // blind create leaves two manifests and two divergent views of the backup.
-    const found = await this.findManifest();
-    const id = found ? found.id : await this.createMeta("manifest.json", this.ids.folderId!);
-    this.ids.manifestFileId = id;
-    await this.d.persistIds();
-    await this.patchMedia(id, bytes, "manifest write");
-  }
-
-  private async dataFileId(name: string, create: boolean): Promise<string | null> {
-    let id = this.ids.fileIds[name];
-    if (id) return id;
-    const found = await this.findOne(
+  private async findDataFile(name: string): Promise<DriveFile | null> {
+    return this.findOne(
       `name='${escapeQ(name)}' and '${this.ids.dataFolderId}' in parents and trashed=false`,
     );
-    if (found) id = found.id;
-    else if (create) id = await this.createMeta(name, this.ids.dataFolderId!);
-    else return null;
-    this.ids.fileIds[name] = id;
-    await this.d.persistIds();
-    return id;
   }
 
   private forgetFile(name: string): void {
@@ -375,21 +513,51 @@ export class DriveBackend implements SyncBackend {
     );
     if (cached.done) return cached.value;
 
-    const id = await this.dataFileId(name, false);
-    if (!id) throw new RemoteGoneError(`Drive file not found: ${name}`);
-    return this.getMedia(id, "download");
+    const found = await this.findDataFile(name);
+    if (!found) throw new RemoteGoneError(`Drive file not found: ${name}`);
+    this.ids.fileIds[name] = found.id;
+    await this.d.persistIds();
+    return this.getMedia(found.id, "download");
   }
 
-  async upload(name: string, bytes: Uint8Array): Promise<void> {
+  // Bytes and metadata in one request, so the rev that describes them can never
+  // be published for content that did not land.
+  async upload(name: string, bytes: Uint8Array, meta: RemoteMeta): Promise<void> {
+    const write = (id: string): Promise<string> =>
+      this.multipartWrite(
+        `${UPLOAD}/files/${id}?uploadType=multipart&fields=id`,
+        "PATCH",
+        { appProperties: propsOf(meta) },
+        bytes,
+        "application/octet-stream",
+        "upload",
+        SMALL,
+      );
+
     const cached = await this.withCachedId(
       this.ids.fileIds[name],
       () => this.forgetFile(name),
-      (id) => this.patchMedia(id, bytes, "upload"),
+      write,
     );
     if (cached.done) return;
 
-    const id = await this.dataFileId(name, true);
-    await this.patchMedia(id!, bytes, "upload");
+    // Search before creating: the id can be stale while the file is fine (the
+    // user emptied their trash on a copy, another device recreated it), and a
+    // blind create leaves two files under one name and two divergent histories.
+    const found = await this.findDataFile(name);
+    const id = found
+      ? await write(found.id)
+      : await this.multipartWrite(
+          `${UPLOAD}/files?uploadType=multipart&fields=id`,
+          "POST",
+          { name, parents: [this.ids.dataFolderId], appProperties: propsOf(meta) },
+          bytes,
+          "application/octet-stream",
+          "upload",
+          SMALL,
+        );
+    this.ids.fileIds[name] = id;
+    await this.d.persistIds();
   }
 
   private async findBook(hash: string): Promise<DriveFile | null> {
@@ -436,30 +604,16 @@ export class DriveBackend implements SyncBackend {
   }
 
   // Small book: one multipart/related request carrying metadata + media.
-  private async multipartUpload(name: string, bytes: Uint8Array): Promise<string> {
-    const boundary = `rp-${crypto.randomUUID()}`;
-    const meta = JSON.stringify({ name, parents: [this.ids.booksFolderId] });
-    const head = new TextEncoder().encode(
-      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n` +
-        `--${boundary}\r\nContent-Type: application/pdf\r\n\r\n`,
-    );
-    const tail = new TextEncoder().encode(`\r\n--${boundary}--`);
-    const body = new Uint8Array(head.length + bytes.length + tail.length);
-    body.set(head, 0);
-    body.set(bytes, head.length);
-    body.set(tail, head.length + bytes.length);
-    const data = await this.send(
+  private multipartUpload(name: string, bytes: Uint8Array): Promise<string> {
+    return this.multipartWrite(
       `${UPLOAD}/files?uploadType=multipart&fields=id`,
-      {
-        method: "POST",
-        headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
-        body,
-      },
+      "POST",
+      { name, parents: [this.ids.booksFolderId] },
+      bytes,
+      "application/pdf",
       "book upload",
       BULK,
-      (res) => res.json(),
     );
-    return (data as DriveFile).id;
   }
 
   // Large book: open a resumable session, then PUT the whole blob to it.

@@ -4,7 +4,7 @@
 
 import { expect, test } from "bun:test";
 import { cachedHash, reconcile, type Snapshot } from "../../../src/platform/sync/reconcile";
-import type { Manifest } from "../../../src/platform/sync/backend";
+import type { RemoteState } from "../../../src/platform/sync/backend";
 import type { LocalFile } from "../../../src/platform/sync/syncFs";
 
 const L = (path: string, mtime: number, hash: string, size = 10): LocalFile => ({
@@ -21,7 +21,7 @@ test("a brand-new local file uploads at rev 1", () => {
 });
 
 test("a remote-only file downloads", () => {
-  const remote: Manifest = { a: { rev: 3, mtime: 50, size: 20 } };
+  const remote: RemoteState = { a: { rev: 3, mtime: 50, size: 20 } };
   const plan = reconcile([], remote, {});
   expect(plan.downloads).toEqual([{ path: "a", rev: 3, size: 20 }]);
   expect(plan.uploads).toEqual([]);
@@ -29,7 +29,7 @@ test("a remote-only file downloads", () => {
 
 test("an unchanged file (local hash == snapshot, remote rev == snapshot) does nothing", () => {
   const snap: Snapshot = { a: { rev: 2, mtime: 100, size: 10, hash: "h1" } };
-  const remote: Manifest = { a: { rev: 2, mtime: 100, size: 10, hash: "h1" } };
+  const remote: RemoteState = { a: { rev: 2, mtime: 100, size: 10, hash: "h1" } };
   const plan = reconcile([L("a", 100, "h1")], remote, snap);
   expect(plan.uploads).toEqual([]);
   expect(plan.downloads).toEqual([]);
@@ -41,7 +41,7 @@ test("an unchanged file (local hash == snapshot, remote rev == snapshot) does no
 // the whole file against the other device's real change.
 test("a rewrite with identical content is not a change", () => {
   const snap: Snapshot = { a: { rev: 2, mtime: 100, size: 10, hash: "h1" } };
-  const remote: Manifest = { a: { rev: 2, mtime: 100, size: 10, hash: "h1" } };
+  const remote: RemoteState = { a: { rev: 2, mtime: 100, size: 10, hash: "h1" } };
   const plan = reconcile([L("a", 999_999, "h1")], remote, snap);
   expect(plan.uploads).toEqual([]);
   expect(plan.downloads).toEqual([]);
@@ -49,14 +49,14 @@ test("a rewrite with identical content is not a change", () => {
 
 test("a local edit uploads at snapshot rev + 1", () => {
   const snap: Snapshot = { a: { rev: 2, mtime: 100, size: 10, hash: "h1" } };
-  const remote: Manifest = { a: { rev: 2, mtime: 100, size: 10, hash: "h1" } };
+  const remote: RemoteState = { a: { rev: 2, mtime: 100, size: 10, hash: "h1" } };
   const plan = reconcile([L("a", 250, "h2", 12)], remote, snap);
   expect(plan.uploads).toEqual([{ path: "a", rev: 3, mtime: 250, size: 12, hash: "h2" }]);
 });
 
 test("a remote-newer file (no local change) downloads", () => {
   const snap: Snapshot = { a: { rev: 2, mtime: 100, size: 10, hash: "h1" } };
-  const remote: Manifest = { a: { rev: 5, mtime: 300, size: 14, hash: "h9" } };
+  const remote: RemoteState = { a: { rev: 5, mtime: 300, size: 14, hash: "h9" } };
   const plan = reconcile([L("a", 100, "h1")], remote, snap);
   expect(plan.downloads).toEqual([{ path: "a", rev: 5, size: 14 }]);
   expect(plan.uploads).toEqual([]);
@@ -68,7 +68,7 @@ test("a remote-newer file (no local change) downloads", () => {
 test("both sides changed: merge, published above the remote's rev", () => {
   const snap: Snapshot = { a: { rev: 2, mtime: 100, size: 10, hash: "h1" } };
   for (const remoteMtime of [300, 500]) {
-    const remote: Manifest = { a: { rev: 5, mtime: remoteMtime, size: 10, hash: "h9" } };
+    const remote: RemoteState = { a: { rev: 5, mtime: remoteMtime, size: 10, hash: "h9" } };
     const plan = reconcile([L("a", 400, "h2")], remote, snap);
     expect(plan.merges).toEqual([{ path: "a", rev: 6 }]);
     expect(plan.uploads).toEqual([]);
@@ -80,7 +80,7 @@ test("both sides changed: merge, published above the remote's rev", () => {
 // Nothing to exchange, and handing it to a conflict rule would invent one.
 test("both sides holding the same bytes moves nothing and converges the snapshot", () => {
   const snap: Snapshot = { a: { rev: 2, mtime: 100, size: 10, hash: "h1" } };
-  const remote: Manifest = { a: { rev: 7, mtime: 500, size: 10, hash: "h2" } };
+  const remote: RemoteState = { a: { rev: 7, mtime: 500, size: 10, hash: "h2" } };
   const plan = reconcile([L("a", 400, "h2")], remote, snap);
   expect(plan.uploads).toEqual([]);
   expect(plan.downloads).toEqual([]);
@@ -89,7 +89,7 @@ test("both sides holding the same bytes moves nothing and converges the snapshot
 
 test("agreement the snapshot already records is not re-reported", () => {
   const snap: Snapshot = { a: { rev: 7, mtime: 400, size: 10, hash: "h2" } };
-  const remote: Manifest = { a: { rev: 7, mtime: 500, size: 10, hash: "h2" } };
+  const remote: RemoteState = { a: { rev: 7, mtime: 500, size: 10, hash: "h2" } };
   const plan = reconcile([L("a", 400, "h2")], remote, snap);
   expect(plan.converged).toEqual([]);
 });
@@ -99,7 +99,7 @@ test("agreement the snapshot already records is not re-reported", () => {
 // was last agreed, not the data. Everything held on both sides merges, which
 // with no base is exactly what the merge contract is told to expect.
 test("no snapshot at all merges rather than picking a side", () => {
-  const remote: Manifest = {
+  const remote: RemoteState = {
     both: { rev: 5, mtime: 100, size: 10, hash: "hx" },
     remoteOnly: { rev: 5, mtime: 900, size: 10, hash: "hy" },
   };
@@ -115,7 +115,7 @@ test("no snapshot at all merges rather than picking a side", () => {
 // the hash in.
 test("a snapshot entry from before hashing falls back to mtime and size", () => {
   const snap: Snapshot = { a: { rev: 2, mtime: 100, size: 10 } };
-  const remote: Manifest = { a: { rev: 2, mtime: 100, size: 10 } };
+  const remote: RemoteState = { a: { rev: 2, mtime: 100, size: 10 } };
   expect(reconcile([L("a", 100, "h1")], remote, snap).uploads).toEqual([]);
   expect(reconcile([L("a", 700, "h2")], remote, snap).uploads).toEqual([
     { path: "a", rev: 3, mtime: 700, size: 10, hash: "h2" },
@@ -124,7 +124,7 @@ test("a snapshot entry from before hashing falls back to mtime and size", () => 
 
 test("a locally-deleted file (present in snapshot/remote, unchanged remote) is left alone", () => {
   const snap: Snapshot = { a: { rev: 2, mtime: 100, size: 10, hash: "h1" } };
-  const remote: Manifest = { a: { rev: 2, mtime: 100, size: 10, hash: "h1" } };
+  const remote: RemoteState = { a: { rev: 2, mtime: 100, size: 10, hash: "h1" } };
   const plan = reconcile([], remote, snap);
   expect(plan.uploads).toEqual([]);
   expect(plan.downloads).toEqual([]);
