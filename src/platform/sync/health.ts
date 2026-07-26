@@ -27,6 +27,11 @@ export type SyncHealth =
   | "ok"
   // A pass failed but a recent one succeeded. Usually offline.
   | "failing"
+  // Auto-sync on, engine running, and this device has never completed a pass.
+  // Told apart from "stalled" because there is no duration to report: a device
+  // signed in ten minutes ago has the same lastSyncAt as one that has been
+  // failing for a month, and claiming a day either way is a made-up fact.
+  | "never-synced"
   // Auto-sync on, engine running, no successful pass for a long time.
   | "stalled"
   // Auto-sync on, no credentials: nothing is syncing and nothing will.
@@ -104,9 +109,18 @@ export function syncHealth(input: SyncHealthInput): SyncHealthReport {
   }
 
   const settled = now - startedAt >= SYNC_GRACE_MS;
-  const stale = lastSyncAt === null || now - lastSyncAt >= SYNC_STALE_MS;
 
-  if (settled && stale) {
+  if (settled && lastSyncAt === null) {
+    return {
+      health: "never-synced",
+      alert: "alert",
+      message: lastError
+        ? `This device has never completed a sync. Last error: ${lastError}`
+        : "This device has never completed a sync.",
+    };
+  }
+
+  if (settled && lastSyncAt !== null && now - lastSyncAt >= SYNC_STALE_MS) {
     return {
       health: "stalled",
       alert: "alert",

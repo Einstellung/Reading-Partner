@@ -117,10 +117,33 @@ test("a first pass that has not finished yet is not a failure", () => {
   expect(r.alert).toBe("none");
 });
 
-test("a first pass that has not finished long after startup is stalled", () => {
+// The iPad case: signed in, auto-sync on, every pass dying on one file. Saying
+// "no sync has succeeded for over a day" here would be a fabricated duration —
+// the same state exists eleven minutes after signing in.
+test("a device that has never completed a pass says so, without inventing a duration", () => {
   const r = syncHealth(input({ lastSyncAt: null, startedAt: NOW - SYNC_GRACE_MS - MINUTE }));
-  expect(r.health).toBe("stalled");
+  expect(r.health).toBe("never-synced");
   expect(r.alert).toBe("alert");
+  expect(r.message).toBe("This device has never completed a sync.");
+});
+
+test("never-synced carries the last error when there is one", () => {
+  const r = syncHealth(
+    input({
+      lastSyncAt: null,
+      startedAt: NOW - SYNC_GRACE_MS - MINUTE,
+      lastError: "download annotations-a1.json failed: error sending request",
+    }),
+  );
+  expect(r.health).toBe("never-synced");
+  expect(r.message).toBe(
+    "This device has never completed a sync. Last error: download annotations-a1.json failed: error sending request",
+  );
+});
+
+test("the over-a-day wording is only used when there is a last sync to measure from", () => {
+  const never = syncHealth(input({ lastSyncAt: null, startedAt: NOW - SYNC_GRACE_MS - MINUTE }));
+  expect(never.message).not.toContain("over a day");
 });
 
 test("one failed pass with a recent success is a notice, not an alert", () => {
@@ -210,6 +233,7 @@ test("every quiet state carries no message and every loud one does", () => {
     input({ lastSyncAt: null, startedAt: NOW - MINUTE }),
     input(),
     input({ lastError: "fetch failed" }),
+    input({ lastSyncAt: null, startedAt: NOW - SYNC_GRACE_MS - MINUTE }),
     input({ lastSyncAt: NOW - SYNC_STALE_MS - 1 }),
     input({ signedIn: false, engineStarted: false }),
     input({ engineStarted: false }),
