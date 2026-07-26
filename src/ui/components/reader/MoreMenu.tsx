@@ -31,7 +31,7 @@ const ROW =
 	"min-h-[36px] coarse:min-h-[44px] cursor-pointer bg-transparent border-0 " +
 	"enabled:hover:bg-[#f0f0f0] disabled:opacity-40 disabled:cursor-default";
 
-export default function MoreMenu({ items }: { items: MoreItem[] }) {
+export default function MoreMenu({ items, alert }: { items: MoreItem[]; alert?: boolean }) {
 	const [open, setOpen] = useState(false);
 	const rootRef = useRef<HTMLDivElement>(null);
 
@@ -56,17 +56,22 @@ export default function MoreMenu({ items }: { items: MoreItem[] }) {
 			<button
 				type="button"
 				className={
-					"flex h-8 w-8 items-center justify-center rounded-md border-0 bg-transparent text-[#555] " +
+					"relative flex h-8 w-8 items-center justify-center rounded-md border-0 bg-transparent text-[#555] " +
 					"cursor-pointer can-hover:hover:bg-black/5 coarse:h-11 coarse:w-11 " +
 					(open ? "bg-black/5 text-[#1b1b1b]" : "")
 				}
-				title="More"
-				aria-label="More"
+				title={alert ? "More — sync needs attention" : "More"}
+				aria-label={alert ? "More — sync needs attention" : "More"}
 				aria-haspopup="menu"
 				aria-expanded={open}
 				onClick={() => setOpen((v) => !v)}
 			>
 				<IconChevronDown size={18} />
+				{/* Settings lives in here, so a Settings-level warning rides the
+				    trigger the same way it rides the gear on the home headers. */}
+				{alert && (
+					<span className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-[#b45309] ring-2 ring-[#fafafa]" />
+				)}
 			</button>
 
 			{open && (

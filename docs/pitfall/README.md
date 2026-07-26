@@ -53,6 +53,7 @@
 
 - [09-appdata-glob-capability](./09-appdata-glob-capability.md) — Tauri 权限 glob 不匹配目录本身；且持久化失败绝不静默吞
 - [36-appdata-root-not-created-first-write](./36-appdata-root-not-created-first-write.md) — iOS 首装首跑第一个写入者报 os error 2，数据根目录由 Rust setup 的 create_dir_all 保障，前端不再各自兜底
+- [51-sync-stopped-looks-healthy](./51-sync-stopped-looks-healthy.md) — 凭据文件不在，引擎从不启动，`autoSync:true` + `lastError:null` 读起来完全健康，四天没人发现；启动的三选一和「该说什么」都收进 `platform/sync/health.ts`
 
 ## 提取（壳侧 pdf.js）
 

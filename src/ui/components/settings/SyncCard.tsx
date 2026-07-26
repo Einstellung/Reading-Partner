@@ -5,6 +5,7 @@ import {
   signInToGoogle,
   signOutOfGoogle,
   subscribeSyncStatus,
+  syncHealth,
   syncNow,
   type SyncStatus,
 } from "../../../platform/sync";
@@ -43,6 +44,10 @@ export default function SyncCard() {
 
   if (!status) return <div className={CARD} />;
 
+  // The one place that explains a stopped sync in full. The header dot and the
+  // startup toast only point here.
+  const report = syncHealth({ ...status, now: Date.now() });
+
   if (!status.configured) {
     return (
       <div className={CARD}>
@@ -56,12 +61,20 @@ export default function SyncCard() {
   }
 
   if (!status.signedIn) {
+    const broken = report.health === "credentials-missing";
     return (
       <div className={CARD}>
         <span className="font-medium">Google Drive</span>
-        <p className="m-0 text-sm text-[#777]">
-          Sync reading progress, marks, and books to your own Google Drive.
-        </p>
+        {broken ? (
+          <p className="m-0 text-sm text-[#b45309]">
+            {report.message} Everything since the last sync is on this device only. Sign in again
+            to resume; nothing local is lost.
+          </p>
+        ) : (
+          <p className="m-0 text-sm text-[#777]">
+            Sync reading progress, marks, and books to your own Google Drive.
+          </p>
+        )}
         <button
           type="button"
           className={BTN_PRIMARY}
@@ -70,6 +83,9 @@ export default function SyncCard() {
         >
           {busy ? "Complete sign-in in your browser…" : "Sign in with Google"}
         </button>
+        {broken && (
+          <span className="text-xs text-[#777]">Last sync: {formatSyncTime(status.lastSyncAt)}</span>
+        )}
         {error && <p className="m-0 text-xs text-[#b91c1c]">{error}</p>}
       </div>
     );
@@ -104,8 +120,12 @@ export default function SyncCard() {
         </button>
         <span className="text-xs text-[#777]">Last sync: {formatSyncTime(status.lastSyncAt)}</span>
       </div>
-      {status.lastError && (
-        <p className="m-0 text-xs text-[#b91c1c]">Last sync failed: {status.lastError}</p>
+      {report.message && (
+        <p
+          className={`m-0 text-xs ${report.alert === "alert" ? "text-[#b45309]" : "text-[#b91c1c]"}`}
+        >
+          {report.message}
+        </p>
       )}
       {error && <p className="m-0 text-xs text-[#b91c1c]">{error}</p>}
     </div>
