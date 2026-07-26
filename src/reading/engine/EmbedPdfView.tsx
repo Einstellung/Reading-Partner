@@ -42,7 +42,14 @@ import {
   type GestureInput,
   type GestureState,
 } from "./paged-gesture";
-import { LAYOUT_SETTINGS } from "./layout-modes";
+import { LAYOUT_SETTINGS, type ZoomLock } from "./layout-modes";
+import {
+  centeredScrollX,
+  geometrySettled,
+  landedAt,
+  settleGap,
+  type LayoutGeometry,
+} from "./layout-settle";
 import {
   planFinger,
   planPointer,
@@ -338,6 +345,12 @@ interface PagedGestureCtx {
   // Set by the touch router so setLayout can toggle the viewport's touch-action
   // (paged locks native pan/zoom; vertical restores it).
   setTouchLock: ((locked: boolean) => void) | null;
+  // The scroll container itself, shared out by the touch router that grabbed
+  // it. A layout switch has to read the element's own scrollWidth/scrollHeight:
+  // the viewport plugin's cached metrics come from a ResizeObserver on the
+  // container, which never fires when only the content inside it changes size,
+  // so they say nothing about whether the re-layout has reached the DOM.
+  viewport: HTMLElement | null;
   // The scroll indicator's thumb, which lives outside the scroll container so
   // the rubber band does not carry it off the edge. Painted by the router on
   // every scroll — including the engine's own programmatic ones.
@@ -607,6 +620,7 @@ function TouchInputRouter({
         clearViewportBand();
       };
       ctx.current.setTouchLock = setTouchLock;
+      ctx.current.viewport = el;
       setTouchLock(ctx.current.paged);
 
       // --- selection hygiene ----------------------------------------------
@@ -1118,6 +1132,7 @@ function TouchInputRouter({
         clearViewportBand();
         ctx.current.setTouchLock = null;
         ctx.current.resetGestures = null;
+        ctx.current.viewport = null;
         el.style.touchAction = "";
         el.style.transform = "";
         el.removeEventListener("pointerdown", onDown, { capture: true });
@@ -1175,6 +1190,7 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
     interaction: null,
     selection: null,
     setTouchLock: null,
+    viewport: null,
     indicator: null,
     resetGestures: null,
     turnToPage: null,
@@ -1488,22 +1504,153 @@ async function wireEngine(
   const centerAlignFor = (pageNumber: number): number =>
     pageCenterAlign(pageWidthPx(pageNumber), viewportScope.getMetrics().clientWidth);
 
+  // --- settling a layout change ---------------------------------------------
+  // A layout change is a request, not a completed operation: the scroll model,
+  // the zoom and the DOM arrive on three different frames, and a centring
+  // issued before all three are in place is clamped to something else and never
+  // corrected (layout-settle.ts explains why nothing downstream notices). So
+  // the host waits for a geometry that answers to the layout, centres against
+  // it, and then confirms the page actually got there.
+  const zoomLockOf = (level: unknown): ZoomLock | null =>
+    level === ZoomMode.FitPage ? "fit-page" : level === ZoomMode.FitWidth ? "fit-width" : null;
+
+  const readGeometry = (): LayoutGeometry | null => {
+    const el = pagedRef.current.viewport;
+    if (!el) return null;
+    try {
+      const model = scrollScope.getLayout();
+      const zs = zoomScope.getState();
+      const items = model.virtualItems;
+      return {
+        firstItem: items[0] ? { x: items[0].x, y: items[0].y } : null,
+        secondItem: items[1] ? { x: items[1].x, y: items[1].y } : null,
+        contentWidth: model.totalContentSize.width,
+        contentHeight: model.totalContentSize.height,
+        scale: zs.currentZoomLevel,
+        zoomLock: zoomLockOf(zs.zoomLevel),
+        domScrollWidth: el.scrollWidth,
+        domScrollHeight: el.scrollHeight,
+      };
+    } catch {
+      // The scroll state is gone (document closing): nothing to settle.
+      return null;
+    }
+  };
+
+  // Where the centring wants the strip to sit for this page, clamped the way
+  // the browser clamps it, so "did it arrive" compares like with like.
+  const centerTargetX = (pageNumber: number): number | null => {
+    const el = pagedRef.current.viewport;
+    if (!el) return null;
+    try {
+      const item = scrollScope.getLayout().virtualItems.find((i) => i.pageNumbers.includes(pageNumber));
+      if (!item) return null;
+      return centeredScrollX({
+        pageX: item.x,
+        pageWidth: item.width,
+        scale: zoomScope.getState().currentZoomLevel,
+        viewportGap: cap<ViewportCapability>(registry, "viewport").getViewportGap(),
+        clientWidth: viewportScope.getMetrics().clientWidth,
+        maxScrollX: el.scrollWidth - el.clientWidth,
+      });
+    } catch {
+      return null;
+    }
+  };
+
+  // Re-applying a scroll strategy the plugin already holds is a no-op inside
+  // it — setScrollStrategyForDocument returns early on `strategy === newStrategy`
+  // — so the layout refresh it silently skipped (document not "loaded" at that
+  // instant, pitfall 42) can only be forced by going through the other strategy
+  // first. Both calls are synchronous, so the intermediate layout never reaches
+  // the screen. Used only as a repair, when the virtual items say the refresh
+  // did not happen.
+  const forceScrollStrategy = (strategy: ScrollStrategy) => {
+    scrollScope.setScrollStrategy(
+      strategy === ScrollStrategy.Horizontal ? ScrollStrategy.Vertical : ScrollStrategy.Horizontal,
+    );
+    scrollScope.setScrollStrategy(strategy);
+  };
+
+  // Frames a layout change may keep asking for. Bounded on purpose: a signal
+  // that never arrives must not leave the reader waiting, so at the deadline it
+  // centres against whatever geometry exists — exactly what the old
+  // single-frame version did unconditionally.
+  const SETTLE_FRAME_BUDGET = 24;
+  // How many times the centring may be re-issued once the geometry is ready.
+  // More than one because the viewport plugin defers the scroll it is given by
+  // a frame, and the browser clamps it to the extent that exists then.
+  const MAX_CENTER_ATTEMPTS = 3;
+  // Serial number of the live settle: a newer layout change or page turn owns
+  // the scroll position, and the older one stops touching it.
+  let settleSerial = 0;
+
+  const centerPage = (target: number, behavior: "smooth" | "instant") =>
+    scrollScope.scrollToPage({ pageNumber: target, behavior, alignX: centerAlignFor(target) });
+
+  // Wait for the geometry the layout asked for, then put `page` on screen and
+  // confirm it stayed there. Re-asserts only the half that is actually missing:
+  // the zoom lock if the request never took, the virtual items if the plugin
+  // dropped its refresh. The DOM catching up is nobody's to hurry — that one is
+  // only waited on.
+  const settleLayout = (mode: EmbedLayout, page: number, behavior: "smooth" | "instant") => {
+    const serial = ++settleSerial;
+    const settings = LAYOUT_SETTINGS[mode];
+    const strategy = settings.axis === "horizontal" ? ScrollStrategy.Horizontal : ScrollStrategy.Vertical;
+    const zoomMode = settings.zoom === "fit-page" ? ZoomMode.FitPage : ZoomMode.FitWidth;
+    let frames = 0;
+    let attempts = 0;
+    let ready = false;
+    const tick = () => {
+      // A newer switch or turn has taken over the scroll position.
+      if (serial !== settleSerial || layout !== mode) return;
+      frames += 1;
+      const expired = frames >= SETTLE_FRAME_BUDGET;
+      const geometry = readGeometry();
+      if (!ready) {
+        // A null geometry means there is no DOM to consult (the touch router
+        // has not grabbed the viewport yet): fall back to the old behaviour and
+        // centre on this frame.
+        if (geometry !== null && !expired && !geometrySettled(geometry, mode)) {
+          const gap = settleGap(geometry, mode);
+          if (gap === "zoom") zoomScope.requestZoom(zoomMode);
+          if (gap === "model") forceScrollStrategy(strategy);
+          requestAnimationFrame(tick);
+          return;
+        }
+        ready = true;
+        // Vertical has nothing to place: the column starts where it starts.
+        if (!settings.centerPage) return;
+      }
+      const el = pagedRef.current.viewport;
+      const want = centerTargetX(page);
+      if (el && want !== null && landedAt(el.scrollLeft, want)) return;
+      // A smooth turn is an animation in progress, not a landing to confirm:
+      // issue it once and leave it alone.
+      if (attempts >= (behavior === "smooth" ? 1 : MAX_CENTER_ATTEMPTS)) return;
+      attempts += 1;
+      centerPage(page, behavior);
+      if (!expired) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  };
+
   // Paged mode's only page change: centre the target page, and come back to
   // fit-page if a temporary magnification was in play. Turning a page always
   // lands on one whole page.
   const turnToPage = (pageNumber: number, behavior: "smooth" | "instant" = "smooth") => {
     const target = Math.min(Math.max(pageNumber, 1), scrollScope.getTotalPages() || 1);
-    const zs = zoomScope.getState();
-    const refit = zs.zoomLevel !== ZoomMode.FitPage;
-    const go = () =>
-      scrollScope.scrollToPage({ pageNumber: target, behavior, alignX: centerAlignFor(target) });
-    if (refit) {
-      // The zoom change re-lays the strip out; centre against the new geometry.
+    if (zoomScope.getState().zoomLevel !== ZoomMode.FitPage) {
+      // Dropping a temporary magnification re-scales the whole strip, so the
+      // page it lands on has moved: centre once the strip is the new size.
       zoomScope.requestZoom(ZoomMode.FitPage);
-      requestAnimationFrame(go);
-    } else {
-      go();
+      settleLayout("paged", target, behavior);
+      return;
     }
+    // A turn is the newest word on where the strip should sit: a settle still
+    // confirming an older target stands down rather than pulling it back.
+    settleSerial += 1;
+    centerPage(target, behavior);
   };
 
   // Every host-driven jump — the outline, the trace list, an AI citation —
@@ -1742,20 +1889,18 @@ async function wireEngine(
       // The fit-page baseline belongs to paged mode; a stale one would misjudge
       // "zoomed in" if the viewport changed size while reading vertically.
       if (!s.tracksFitPage) fitPageScale = 0;
-      requestAnimationFrame(() => {
-        if (layout !== mode) return; // a newer switch already won
-        // Re-assert both on the next frame, in both directions. The scroll
-        // plugin drops its layout refresh without a word when the document is
-        // not "loaded" at the instant of the call, and a zoom request that
-        // lands on the same scale (fit-page and fit-width coincide on a
-        // portrait screen) fires no change to recompute it either — leaving the
-        // settings saying one layout while the pages stay laid out in the other.
-        scrollScope.setScrollStrategy(strategy);
-        zoomScope.requestZoom(zoomMode);
-        // Paged is one whole page per screen: centre it against the geometry
-        // that now exists, dropping any magnification carried in.
-        if (s.centerPage) turnToPage(page, "instant");
-      });
+      // Neither call above is guaranteed to have done anything. The scroll
+      // plugin drops its layout refresh without a word when the document is not
+      // "loaded" at that instant, and re-issuing the same strategy is a no-op
+      // inside it, so a second identical call cannot repair that; the zoom
+      // request lands on the same scale whenever fit-page and fit-width
+      // coincide, which is every portrait screen holding a portrait page, so no
+      // scale change follows to recompute anything either. And when both do
+      // take, the DOM is still a frame behind them. The settle checks all three
+      // against the layout that was asked for, re-asserts whichever is missing,
+      // and only then centres — and confirms the page arrived, because a scroll
+      // the browser clamped is one nothing downstream will ever notice.
+      settleLayout(mode, page, "instant");
       refreshZoomedIn();
       emitStats();
       emitState();
