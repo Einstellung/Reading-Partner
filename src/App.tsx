@@ -956,17 +956,21 @@ export default function App() {
       // Notes are per book too; detach the previous book's panel.
       resetNotes();
       // Extract the full text in the background so the AI can see the book
-      // (M6). Fire-and-forget: never blocks rendering. Extraction's pdf.js
-      // transfers its buffer to a worker (detaching it), so extraction gets its
-      // own synchronous copy here and never races the engine for the bytes.
+      // (M6). Fire-and-forget: never blocks rendering.
       setFulltextPending(true);
       setFulltext(null);
       // Reset the figure index + cached crops for the new book (M9).
       setFigures([]);
       figuresRef.current = [];
       clearFigureCache();
-      bufferRef.current = bytes.slice().buffer as ArrayBuffer;
-      currentFiguresRef.current = ensureFigures(bookId, bytes.slice().buffer as ArrayBuffer).catch((e) => {
+      // One copy of the book, shared by everything that reads it. pdf.js does
+      // detach the buffer it is handed, but every consumer here already slices
+      // its own before handing it over (fulltext/extract.ts, figures/store.ts,
+      // figures/render.ts, EmbedPdfView's wireEngine), so a copy per consumer
+      // was five 26 MB allocations at book-open where one does.
+      const buffer = bytes.slice().buffer as ArrayBuffer;
+      bufferRef.current = buffer;
+      currentFiguresRef.current = ensureFigures(bookId, buffer).catch((e) => {
         console.warn("failed to extract figures", e);
         return null;
       });
@@ -976,12 +980,10 @@ export default function App() {
         figuresRef.current = list;
         setFigures(list);
       });
-      currentFulltextRef.current = ensureFulltext(bookId, bytes.slice().buffer as ArrayBuffer).catch(
-        (e) => {
-          console.warn("failed to extract fulltext", e);
-          return null;
-        },
-      );
+      currentFulltextRef.current = ensureFulltext(bookId, buffer).catch((e) => {
+        console.warn("failed to extract fulltext", e);
+        return null;
+      });
       currentFulltextRef.current.then(async (ft) => {
         if (bookIdRef.current !== bookId) return; // stale: the user switched books
         setFulltext(ft);
@@ -995,12 +997,12 @@ export default function App() {
       });
 
       // Mount EmbedReaderPane with the bytes. It calls back onView (sets
-      // viewRef) and onInitialized once ready. A fresh copy of the bytes is
-      // handed over so nothing detaches the shell's original.
+      // viewRef) and onInitialized once ready. It slices its own copy for
+      // PDFium and never detaches this one, so it reads the shared buffer.
       setEmbedDoc({
         bookId,
         name,
-        buffer: bytes.slice().buffer as ArrayBuffer,
+        buffer,
         annotations: saved,
         // Seed the layout for a book that has never chosen one, so the reader
         // opens in the right mode on the first paint.
