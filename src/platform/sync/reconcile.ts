@@ -28,12 +28,12 @@ export interface Download {
   size: number;
 }
 
+// What to move. Not what to publish: the manifest is composed by the engine
+// from the remote it read plus the uploads that actually landed, because only
+// the engine knows which of them did.
 export interface Plan {
   uploads: Upload[];
   downloads: Download[];
-  // The manifest to write after the uploads land (downloads leave their entries
-  // untouched). Equal to the remote manifest when there is nothing to upload.
-  nextManifest: Manifest;
 }
 
 export function reconcile(local: LocalFile[], remote: Manifest, snap: Snapshot): Plan {
@@ -46,7 +46,6 @@ export function reconcile(local: LocalFile[], remote: Manifest, snap: Snapshot):
 
   const uploads: Upload[] = [];
   const downloads: Download[] = [];
-  const nextManifest: Manifest = { ...remote };
 
   for (const path of paths) {
     const loc = localByPath.get(path);
@@ -60,7 +59,6 @@ export function reconcile(local: LocalFile[], remote: Manifest, snap: Snapshot):
       if (!loc) return;
       const rev = (rem?.rev ?? base?.rev ?? 0) + 1;
       uploads.push({ path, rev, mtime: loc.mtime, size: loc.size });
-      nextManifest[path] = { rev, mtime: loc.mtime, size: loc.size };
     };
     const download = (): void => {
       if (!rem) return;
@@ -81,5 +79,5 @@ export function reconcile(local: LocalFile[], remote: Manifest, snap: Snapshot):
     // entry with no local file (deletion — left as-is).
   }
 
-  return { uploads, downloads, nextManifest };
+  return { uploads, downloads };
 }

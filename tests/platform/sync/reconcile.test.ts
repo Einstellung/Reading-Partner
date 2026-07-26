@@ -13,7 +13,6 @@ test("a brand-new local file uploads at rev 1", () => {
   const plan = reconcile([L("a.json", 100)], {}, {});
   expect(plan.uploads).toEqual([{ path: "a.json", rev: 1, mtime: 100, size: 10 }]);
   expect(plan.downloads).toEqual([]);
-  expect(plan.nextManifest["a.json"]).toEqual({ rev: 1, mtime: 100, size: 10 });
 });
 
 test("a remote-only file downloads", () => {
@@ -78,5 +77,4 @@ test("a locally-deleted file (present in snapshot/remote, unchanged remote) is l
   const plan = reconcile([], remote, snap);
   expect(plan.uploads).toEqual([]);
   expect(plan.downloads).toEqual([]);
-  expect(plan.nextManifest.a).toEqual({ rev: 2, mtime: 100, size: 10 });
 });

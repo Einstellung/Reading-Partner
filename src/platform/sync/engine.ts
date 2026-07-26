@@ -4,6 +4,15 @@
 // pass runs at a time; overlapping triggers are dropped, and a failure (offline)
 // is kept as lastError for the UI and retried on the next tick.
 //
+// A pass is per-item, not all-or-nothing (docs/pitfall/52). One file that will
+// not transfer must not cost the other fifty, the manifest write or the books
+// channel: on a link where every request has a real chance of failing, a pass
+// needing fifty of them in a row essentially never completes, and the device
+// sits at "Last sync: Never" while each individual request plainly works. What
+// a partial pass must never do is claim more than it did — lastSyncAt advances
+// only when nothing failed, and the manifest only ever names uploads that
+// actually landed.
+//
 // Timers: an initial pass on start, a periodic tick every TICK_MS that runs a
 // pass when local files changed or PULL_INTERVAL_MS has elapsed since the last
 // pull, and an on-demand syncNow(). All three funnel through runPass(), so
@@ -12,13 +21,22 @@
 // Everything the pass touches (backend, fs, books) is injected; the Tauri wiring
 // lives in index.ts. reconcile() (reconcile.ts) is the pure decision core.
 
-import type { SyncBackend } from "./backend";
+import { isRemoteGone, type Manifest, type SyncBackend } from "./backend";
 import type { BookFs } from "./books";
-import { reconcile, type Snapshot } from "./reconcile";
+import { reconcile, type Snapshot, type Upload } from "./reconcile";
 import type { LocalFile, SyncFs } from "./syncFs";
 
 export const TICK_MS = 15_000;
 export const PULL_INTERVAL_MS = 5 * 60_000;
+
+// A run of failures this long means the link is down, not that one file is
+// awkward. The rest of the pass would only spend its retry budget failing the
+// same way, so it is left for the next pass.
+export const MAX_CONSECUTIVE_FAILURES = 3;
+
+// Cap on the failure text kept for the UI: it is shown on one line in Settings,
+// and Drive's error bodies run long.
+const MESSAGE_LIMIT = 160;
 
 export interface EngineDeps {
   backend: SyncBackend;
@@ -47,6 +65,44 @@ export interface PassResult {
 // this is matched structurally by the thrown error's name.
 function isAuthError(e: unknown): boolean {
   return e instanceof Error && e.name === "GoogleAuthError";
+}
+
+function messageOf(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
+// What failed in one pass, and whether to keep going. Every line the user reads
+// about a partial pass is composed here, so it names the file rather than the
+// URL: "download annotations-<hash>.json failed: …" is diagnosable, the Drive
+// media URL alone is not.
+class PassFailures {
+  count = 0;
+  private first: string | null = null;
+  private streak = 0;
+
+  record(what: string, e: unknown): void {
+    this.count += 1;
+    this.streak += 1;
+    if (this.first === null) {
+      const detail = messageOf(e);
+      const line = `${what} failed: ${detail}`;
+      this.first = line.length > MESSAGE_LIMIT ? `${line.slice(0, MESSAGE_LIMIT - 1)}…` : line;
+    }
+  }
+
+  succeeded(): void {
+    this.streak = 0;
+  }
+
+  halted(): boolean {
+    return this.streak >= MAX_CONSECUTIVE_FAILURES;
+  }
+
+  message(): string | null {
+    if (this.count === 0) return null;
+    if (this.count === 1) return this.first;
+    return `${this.count} items failed; first: ${this.first}`;
+  }
 }
 
 export class SyncEngine {
@@ -123,7 +179,10 @@ export class SyncEngine {
     if (this.running) return;
     this.running = true;
     this.emitStatus();
+    const failures = new PassFailures();
     try {
+      // The layout and the manifest are what the rest of the pass stands on:
+      // without them there is nothing to reconcile, so these two still stop it.
       await this.d.backend.ensureLayout();
       const remote = await this.d.backend.listManifest();
       const local = await this.d.fs.list();
@@ -132,27 +191,71 @@ export class SyncEngine {
       const changed: string[] = [];
       // Pull first so library.json is current before the books channel reads it.
       for (const dl of plan.downloads) {
-        const bytes = await this.d.backend.download(dl.path);
-        await this.d.fs.write(dl.path, bytes);
-        const st = await this.d.fs.stat(dl.path);
-        this.snapshot[dl.path] = { rev: dl.rev, mtime: st?.mtime ?? 0, size: bytes.length };
-        changed.push(dl.path);
+        if (failures.halted()) break;
+        try {
+          const bytes = await this.d.backend.download(dl.path);
+          await this.d.fs.write(dl.path, bytes);
+          const st = await this.d.fs.stat(dl.path);
+          this.snapshot[dl.path] = { rev: dl.rev, mtime: st?.mtime ?? 0, size: bytes.length };
+          changed.push(dl.path);
+          failures.succeeded();
+        } catch (e) {
+          if (isAuthError(e)) throw e;
+          // Listed in the manifest, absent from the remote. Nothing to pull and
+          // nothing a retry can do; deletions are not propagated (docs/13), so
+          // the local copy stays as it is.
+          if (isRemoteGone(e)) continue;
+          failures.record(`download ${dl.path}`, e);
+        }
       }
+
+      const landed: Upload[] = [];
       for (const up of plan.uploads) {
-        const bytes = await this.d.fs.read(up.path);
-        await this.d.backend.upload(up.path, bytes, up.mtime);
-        this.snapshot[up.path] = { rev: up.rev, mtime: up.mtime, size: up.size };
+        if (failures.halted()) break;
+        try {
+          const bytes = await this.d.fs.read(up.path);
+          await this.d.backend.upload(up.path, bytes, up.mtime);
+          landed.push(up);
+          failures.succeeded();
+        } catch (e) {
+          if (isAuthError(e)) throw e;
+          failures.record(`upload ${up.path}`, e);
+        }
       }
-      if (plan.uploads.length > 0) await this.d.backend.writeManifest(plan.nextManifest);
 
-      await this.syncBooks();
+      if (landed.length > 0) {
+        // Only what actually landed. A rev published for a file whose bytes
+        // never arrived tells every other device it is up to date with content
+        // that does not exist, and the writer's own copy stops being offered.
+        const next: Manifest = { ...remote };
+        for (const up of landed) next[up.path] = { rev: up.rev, mtime: up.mtime, size: up.size };
+        try {
+          await this.d.backend.writeManifest(next);
+          // Snapshotted only now: bytes in Drive that the manifest does not name
+          // are invisible to every other device, so an unpublished upload has to
+          // look unsent and be repeated next pass.
+          for (const up of landed) {
+            this.snapshot[up.path] = { rev: up.rev, mtime: up.mtime, size: up.size };
+          }
+          failures.succeeded();
+        } catch (e) {
+          if (isAuthError(e)) throw e;
+          failures.record("write manifest", e);
+        }
+      }
 
+      await this.syncBooks(failures);
+
+      // A pass that got this far pulled what it could, so the next one is due on
+      // the normal schedule rather than on the next 15s tick.
       this.lastPullAt = this.now();
-      this.lastSyncAt = this.now();
-      this.lastError = null;
+      // Only a clean pass counts as a sync: health's staleness check reads
+      // lastSyncAt as "everything this device holds is mirrored".
+      if (failures.count === 0) this.lastSyncAt = this.now();
+      this.lastError = failures.message();
       if (changed.length > 0) this.d.onPulled?.(changed);
     } catch (e) {
-      this.lastError = e instanceof Error ? e.message : String(e);
+      this.lastError = messageOf(e);
       if (isAuthError(e)) this.d.onSignedOut?.();
     } finally {
       this.running = false;
@@ -160,17 +263,25 @@ export class SyncEngine {
     }
   }
 
-  private async syncBooks(): Promise<void> {
+  private async syncBooks(failures: PassFailures): Promise<void> {
     const hashes = await this.d.books.listHashes();
     for (const hash of hashes) {
-      const [localHas, remoteHas] = await Promise.all([
-        this.d.books.has(hash),
-        this.d.backend.hasBook(hash),
-      ]);
-      if (localHas && !remoteHas) {
-        await this.d.backend.uploadBook(hash, await this.d.books.read(hash));
-      } else if (!localHas && remoteHas) {
-        await this.d.books.write(hash, await this.d.backend.downloadBook(hash));
+      if (failures.halted()) break;
+      try {
+        const [localHas, remoteHas] = await Promise.all([
+          this.d.books.has(hash),
+          this.d.backend.hasBook(hash),
+        ]);
+        if (localHas && !remoteHas) {
+          await this.d.backend.uploadBook(hash, await this.d.books.read(hash));
+        } else if (!localHas && remoteHas) {
+          await this.d.books.write(hash, await this.d.backend.downloadBook(hash));
+        }
+        failures.succeeded();
+      } catch (e) {
+        if (isAuthError(e)) throw e;
+        if (isRemoteGone(e)) continue;
+        failures.record(`book ${hash}`, e);
       }
     }
   }
