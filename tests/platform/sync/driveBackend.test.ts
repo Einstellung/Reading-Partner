@@ -8,7 +8,7 @@
 // so "which file did the backend pick" is observable. No network. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { DriveBackend } from "../../../src/platform/sync/driveBackend";
+import { DriveBackend, resumeOffset } from "../../../src/platform/sync/driveBackend";
 import { RemoteGoneError, SyncTransportError } from "../../../src/platform/sync/backend";
 import type { DriveIds } from "../../../src/platform/sync/state";
 import type { TauriFetch } from "../../../src/platform/app/tauri-fetch";
@@ -59,11 +59,22 @@ function parseMultipart(body: string, contentType: string): { meta: Seed; media:
   return { meta: JSON.parse(section(parts[0]!)) as Seed, media: section(parts[1]!) };
 }
 
+// An open resumable session: what it will become, and what it has stored so far.
+interface FakeSession {
+  name: string;
+  parents: string[];
+  stored: string;
+}
+
 function makeDrive() {
   const files = new Map<string, FakeFile>();
-  const requests: { method: string; url: string }[] = [];
+  const requests: { method: string; url: string; range: string | null }[] = [];
   let nextId = 0;
-  let pendingSession: { name: string; parents: string[] } | null = null;
+  const sessions = new Map<string, FakeSession>();
+  let nextSession = 0;
+  // How many of an offered chunk the server actually stores. Drive is allowed to
+  // take less than was sent, and the 308 says so; null means it takes all of it.
+  let acceptChunk: ((offset: number, offered: number) => number) | null = null;
   // Set to make one request fail, for the partial-failure cases.
   let failWhen: ((method: string, url: string, body: string) => boolean) | null = null;
   // Same, but the request never completes: what a reset connection or a dead
@@ -105,8 +116,9 @@ function makeDrive() {
     const url = String(input);
     const method = init?.method ?? "GET";
     const body = bodyText(init?.body);
-    const contentType = new Headers(init?.headers).get("content-type") ?? "";
-    requests.push({ method, url });
+    const headers = new Headers(init?.headers);
+    const contentType = headers.get("content-type") ?? "";
+    requests.push({ method, url, range: headers.get("content-range") });
     if (throwWhen?.(method, url, body)) {
       throw new Error(`error sending request for url (${url})`);
     }
@@ -158,12 +170,38 @@ function makeDrive() {
       return json({ id: add({ ...part.meta, body: part.media }) });
     }
     if (method === "POST" && url.includes("uploadType=resumable")) {
-      pendingSession = JSON.parse(body) as { name: string; parents: string[] };
-      return new Response(null, { status: 200, headers: { Location: `${UPLOAD}/session/1` } });
+      const meta = JSON.parse(body) as { name: string; parents: string[] };
+      const location = `${UPLOAD}/session/${++nextSession}`;
+      sessions.set(location, { ...meta, stored: "" });
+      return new Response(null, { status: 200, headers: { Location: location } });
     }
+    // A resumable session, filled a chunk at a time. Drive answers every chunk
+    // but the last with 308 and the range it holds, and the last one with the
+    // file it made.
     if (method === "PUT" && url.startsWith(`${UPLOAD}/session/`)) {
-      if (!pendingSession) return new Response("no session", { status: 400 });
-      return json({ id: add({ ...pendingSession, body }) });
+      const session = sessions.get(url);
+      if (!session) return new Response("no session", { status: 400 });
+      const parsed = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(headers.get("content-range") ?? "");
+      if (!parsed) return new Response("missing Content-Range", { status: 400 });
+      const [start, last, total] = parsed.slice(1).map(Number) as [number, number, number];
+      // A client that resumes from anywhere but where the server actually got to
+      // writes a file with a hole in it.
+      if (start !== session.stored.length) return new Response("wrong offset", { status: 400 });
+      const offered = last - start + 1;
+      session.stored += body.slice(0, acceptChunk ? acceptChunk(start, offered) : offered);
+      if (session.stored.length >= total) {
+        sessions.delete(url);
+        return json({
+          id: add({ name: session.name, parents: session.parents, body: session.stored }),
+        });
+      }
+      // Drive omits the header entirely while it holds nothing.
+      return new Response(null, {
+        status: 308,
+        ...(session.stored.length > 0
+          ? { headers: { Range: `bytes=0-${session.stored.length - 1}` } }
+          : {}),
+      });
     }
     throw new Error(`unexpected ${method} ${url}`);
   };
@@ -185,13 +223,18 @@ function makeDrive() {
     throwOn: (fn: typeof throwWhen) => {
       throwWhen = fn;
     },
+    acceptOn: (fn: typeof acceptChunk) => {
+      acceptChunk = fn;
+    },
+    // Every Content-Range a chunked upload sent, in order.
+    chunkRanges: () => requests.filter((r) => r.range !== null).map((r) => r.range!),
     count: (match: (url: string) => boolean) => requests.filter((r) => match(r.url)).length,
   };
 }
 
 type Drive = ReturnType<typeof makeDrive>;
 
-function makeBackend(drive: Drive, ids: Partial<DriveIds> = {}) {
+function makeBackend(drive: Drive, ids: Partial<DriveIds> = {}, chunkBytes?: number) {
   const full: DriveIds = { fileIds: {}, bookIds: {}, ...ids };
   let persisted = 0;
   const backend = new DriveBackend({
@@ -203,6 +246,7 @@ function makeBackend(drive: Drive, ids: Partial<DriveIds> = {}) {
     fetchImpl: drive.fetchImpl,
     // Retry backoff, skipped: these tests are about which requests are made.
     sleep: async () => {},
+    chunkBytes,
   });
   return { backend, ids: full, persistCount: () => persisted };
 }
@@ -573,6 +617,140 @@ test("a book over the threshold uploads through a resumable session, once", asyn
   drive.reset();
   await backend.uploadBook("big", big);
   expect(drive.requests).toEqual([]);
+});
+
+// --- chunked book upload --------------------------------------------------
+//
+// The reported failure: uploading a 26 MB book killed the iPad's webview
+// process. A body handed to the http plugin is JSON-serialised byte by byte
+// (docs/pitfall/54), so one PUT of the whole blob cost around 400 MB — a
+// jetsam, after which the user was back at the initial screen with the book
+// closed, and since the blob was still missing remotely every following pass
+// attempted the identical upload. Chunking bounds the cost at the chunk.
+
+// A pattern rather than a fill: a file assembled from the wrong offsets still
+// has the right length, and 0x41 everywhere would hide it.
+const pattern = (n: number): Uint8Array =>
+  Uint8Array.from({ length: n }, (_, i) => 65 + (i % 26));
+
+const OVER_THRESHOLD = 5 * 1024 * 1024 + 1;
+
+test("a large book is PUT in 1 MB chunks, each a multiple of 256 KB", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  const { backend } = makeBackend(drive, { booksFolderId: seeded.booksFolderId });
+  const size = 5 * 1024 * 1024 + 300 * 1024;
+  const big = pattern(size);
+
+  await backend.uploadBook("big", big);
+
+  const ranges = drive.chunkRanges();
+  expect(ranges).toEqual([
+    `bytes 0-1048575/${size}`,
+    `bytes 1048576-2097151/${size}`,
+    `bytes 2097152-3145727/${size}`,
+    `bytes 3145728-4194303/${size}`,
+    `bytes 4194304-5242879/${size}`,
+    `bytes 5242880-${size - 1}/${size}`,
+  ]);
+  // Drive rejects a non-final chunk that is not a multiple of 256 KB.
+  for (const r of ranges.slice(0, -1)) {
+    const [start, last] = /bytes (\d+)-(\d+)/.exec(r)!.slice(1).map(Number);
+    expect((last! - start! + 1) % (256 * 1024)).toBe(0);
+  }
+  expect(drive.one("big.pdf").body).toBe(dec(big));
+});
+
+test("a 308 that took less than was sent is continued from what it reports", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  const chunk = 2 * 1024 * 1024;
+  const { backend } = makeBackend(drive, { booksFolderId: seeded.booksFolderId }, chunk);
+  const big = pattern(OVER_THRESHOLD);
+  // The second chunk is half swallowed. Trusting the client's own offset here
+  // writes a file with a 1 MB hole in it, and nothing ever says so: the upload
+  // reports success and the book is corrupt on every other device.
+  drive.acceptOn((offset, offered) => (offset === chunk ? offered / 2 : offered));
+
+  await backend.uploadBook("big", big);
+
+  expect(drive.chunkRanges()).toEqual([
+    `bytes 0-2097151/${OVER_THRESHOLD}`,
+    `bytes 2097152-4194303/${OVER_THRESHOLD}`,
+    // Resumed from the 3 MB the server acknowledged, not the 4 MB that was sent.
+    `bytes 3145728-5242879/${OVER_THRESHOLD}`,
+    `bytes 5242880-5242880/${OVER_THRESHOLD}`,
+  ]);
+  expect(drive.one("big.pdf").body).toBe(dec(big));
+});
+
+test("a chunk that never completes is retried at the same offset, and the book lands", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  const chunk = 2 * 1024 * 1024;
+  const { backend } = makeBackend(drive, { booksFolderId: seeded.booksFolderId }, chunk);
+  const big = pattern(OVER_THRESHOLD);
+  let dropped = false;
+  drive.throwOn((method, url) => {
+    if (method !== "PUT" || dropped || !url.includes("/session/")) return false;
+    return (dropped = true);
+  });
+
+  await backend.uploadBook("big", big);
+
+  // The dropped attempt re-sends the range the server still says it is missing;
+  // it must not skip ahead as though the bytes had landed.
+  expect(drive.chunkRanges()).toEqual([
+    `bytes 0-2097151/${OVER_THRESHOLD}`,
+    `bytes 0-2097151/${OVER_THRESHOLD}`,
+    `bytes 2097152-4194303/${OVER_THRESHOLD}`,
+    `bytes 4194304-5242880/${OVER_THRESHOLD}`,
+  ]);
+  expect(drive.one("big.pdf").body).toBe(dec(big));
+});
+
+test("a book that fits in one chunk is one PUT, and its 200 carries the file id", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  const { backend, ids } = makeBackend(
+    drive,
+    { booksFolderId: seeded.booksFolderId },
+    8 * 1024 * 1024,
+  );
+  const big = pattern(OVER_THRESHOLD);
+
+  await backend.uploadBook("big", big);
+
+  // No 308 to lean on: the loop has to accept a file id from the very first
+  // chunk rather than waiting for a progress report that never comes.
+  expect(drive.chunkRanges()).toEqual([`bytes 0-5242880/${OVER_THRESHOLD}`]);
+  expect(drive.one("big.pdf").body).toBe(dec(big));
+  expect(ids.bookIds["big"]).toBe(drive.one("big.pdf").id);
+});
+
+test("a session that keeps acknowledging nothing fails instead of resending forever", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  const { backend, ids } = makeBackend(
+    drive,
+    { booksFolderId: seeded.booksFolderId },
+    2 * 1024 * 1024,
+  );
+  drive.acceptOn(() => 0);
+
+  await expect(backend.uploadBook("big", pattern(OVER_THRESHOLD))).rejects.toThrow(
+    SyncTransportError,
+  );
+  expect(drive.chunkRanges().length).toBe(1);
+  expect(ids.bookIds["big"]).toBeUndefined();
+});
+
+test("resumeOffset reads the next byte to send off a 308", () => {
+  expect(resumeOffset("bytes=0-262143")).toBe(262144);
+  expect(resumeOffset("bytes=0-0")).toBe(1);
+  // No header: the server holds nothing yet.
+  expect(resumeOffset(null)).toBe(0);
+  expect(resumeOffset("")).toBe(0);
 });
 
 test("a failed book upload records no id, so the next pass retries it", async () => {

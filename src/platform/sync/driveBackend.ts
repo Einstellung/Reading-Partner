@@ -46,10 +46,24 @@ const UPLOAD = "https://www.googleapis.com/upload/drive/v3";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 // Below this, a book is uploaded in a single multipart request; above it, a
 // resumable session is used (docs/13). Books are content-addressed and written
-// once, so a resumable session is not resumed across restarts here — it is one
-// PUT of the whole blob, which the >5MB path exists to keep off the simple
-// upload endpoint's size limits.
+// once, so a resumable session is not resumed across restarts here — it is
+// opened, filled a chunk at a time, and forgotten.
 const RESUMABLE_THRESHOLD = 5 * 1024 * 1024;
+
+// How much of the blob one PUT carries. Drive requires every non-final chunk to
+// be a multiple of 256 KB.
+//
+// The size is set by memory, not by throughput. A body handed to the http
+// plugin costs about twenty times its own length while the request is in flight
+// (docs/pitfall/54): the plugin turns it into a JS number array (measured 10.6
+// bytes per byte in JSC), which is then JSON-encoded (3.54) and UTF-8-encoded
+// (3.54) because the array is a field of a config object rather than the IPC
+// message itself. One PUT of a 26 MB book therefore peaked around 400 MB in the
+// webview's content process — a jetsam on an iPad, which kills the process,
+// reloads the webview, and drops the user back at the initial screen with the
+// open book lost. 1 MB holds that cost near 20 MB whatever the book weighs, at
+// the price of 26 round trips for a 26 MB book.
+const CHUNK_BYTES = 4 * 256 * 1024;
 
 // How long to wait for the connection itself. The http plugin passes this to
 // reqwest's connect_timeout, which covers only reaching the host — enough to
@@ -67,10 +81,19 @@ interface Policy {
 // Manifest, searches, metadata and data files: all small (the largest data file
 // is ~100 KB), so a request still running after this is not going to finish.
 const SMALL: Policy = { attempts: 3, timeoutMs: 20_000 };
-// Book blobs: no deadline, since a slow link can take minutes to move 26 MB
+// Whole book blobs in one request (a small book's multipart upload, any book's
+// download): no deadline, since a slow link can take minutes to move 26 MB
 // legitimately, and one retry only — a repeat costs the whole blob again, and
 // the next pass retries anyway.
 const BULK: Policy = { attempts: 2, timeoutMs: null };
+// One chunk of a large book's upload. A deadline is affordable here in a way it
+// was not for the whole blob, because the request carries a known CHUNK_BYTES
+// rather than however big the book is: 60s for 1 MB is a floor of 17 KB/s,
+// below which the book would not finish inside a pass anyway. Three attempts,
+// because a repeat now costs one chunk instead of the whole book — and a chunk
+// that gives up strands the other twenty-five, which have to be sent again from
+// scratch on the next pass.
+const CHUNK: Policy = { attempts: 3, timeoutMs: 60_000 };
 
 // Backoff before attempt 2 and attempt 3. Short on purpose: this is a background
 // pass on a flaky link, not a queue drain, and the pass itself repeats.
@@ -84,6 +107,9 @@ export interface DriveBackendDeps {
   fetchImpl?: TauriFetch;
   // Injectable for tests, so retry cases do not cost real seconds.
   sleep?: (ms: number) => Promise<void>;
+  // Injectable for tests, so a chunk boundary can be put where a small fake book
+  // will actually reach it. Production always uses CHUNK_BYTES.
+  chunkBytes?: number;
 }
 
 // Escape a value for a Drive `q` search string (single-quoted).
@@ -176,6 +202,22 @@ function propsOf(meta: RemoteMeta): Record<string, string> {
   return { rev: String(meta.rev), mtime: String(meta.mtime), hash: meta.hash };
 }
 
+// Where to continue a resumable upload from, read off the 308 that answers a
+// chunk: `Range: bytes=0-<last byte stored>`. The header is absent when the
+// server holds nothing yet, and Drive is free to store less than was sent, so
+// this is the only honest source for the next offset — assuming the server took
+// exactly what the client sent leaves a hole in the file that nothing notices
+// until the book is opened again on another device.
+export function resumeOffset(range: string | null): number {
+  const found = /bytes=(\d+)-(\d+)/.exec(range ?? "");
+  if (!found) return 0;
+  return Number(found[2]) + 1;
+}
+
+// A chunk PUT is answered either by the file (the last chunk) or by how far the
+// upload has got (every other chunk).
+type ChunkAck = { done: true; id: string } | { done: false; at: number };
+
 export class DriveBackend implements SyncBackend {
   constructor(private readonly d: DriveBackendDeps) {}
 
@@ -187,12 +229,17 @@ export class DriveBackend implements SyncBackend {
   // attempt gets a fresh token and a fresh deadline; the body is read inside the
   // attempt, so a stream that dies halfway is retried like any other transport
   // failure instead of surfacing as truncated bytes.
+  //
+  // `accept` widens what counts as an answer rather than a failure — a chunked
+  // upload's 308 is the server reporting progress, not an error, and it carries
+  // the offset the next chunk has to start from.
   private async send<T>(
     url: string,
     init: RequestInit | undefined,
     what: string,
     policy: Policy,
     read: (res: Response) => Promise<T>,
+    accept?: (status: number) => boolean,
   ): Promise<T> {
     let last: unknown;
     for (let attempt = 0; attempt < policy.attempts; attempt++) {
@@ -200,7 +247,7 @@ export class DriveBackend implements SyncBackend {
         await (this.d.sleep ?? sleep)(BACKOFF_MS[attempt - 1] ?? BACKOFF_MS[BACKOFF_MS.length - 1]);
       }
       try {
-        return await this.once(url, init, what, policy, read);
+        return await this.once(url, init, what, policy, read, accept);
       } catch (e) {
         // A dead refresh token, a 404, a 403 quota denial: asking again changes
         // nothing, and the caller has to see it as it is.
@@ -217,6 +264,7 @@ export class DriveBackend implements SyncBackend {
     what: string,
     policy: Policy,
     read: (res: Response) => Promise<T>,
+    accept?: (status: number) => boolean,
   ): Promise<T> {
     // Outside the try: a GoogleAuthError is not a transport failure and must
     // reach the engine untouched, which uses it to drop to signed-out.
@@ -240,7 +288,7 @@ export class DriveBackend implements SyncBackend {
       } catch (e) {
         throw transportError(what, e, timedOut() ? policy.timeoutMs : null);
       }
-      if (!res.ok) {
+      if (!res.ok && !(accept?.(res.status) ?? false)) {
         const body = await res.text().catch(() => "");
         throw new SyncHttpError(
           res.status,
@@ -603,7 +651,10 @@ export class DriveBackend implements SyncBackend {
     return this.getMedia(found.id, "book download", BULK);
   }
 
-  // Small book: one multipart/related request carrying metadata + media.
+  // Small book: one multipart/related request carrying metadata + media. It
+  // pays the same per-byte encoding cost as any other body (see CHUNK_BYTES),
+  // but RESUMABLE_THRESHOLD caps what reaches it, so the worst case is a 5 MB
+  // book rather than an unbounded one.
   private multipartUpload(name: string, bytes: Uint8Array): Promise<string> {
     return this.multipartWrite(
       `${UPLOAD}/files?uploadType=multipart&fields=id`,
@@ -616,8 +667,39 @@ export class DriveBackend implements SyncBackend {
     );
   }
 
-  // Large book: open a resumable session, then PUT the whole blob to it.
+  // Large book: open a resumable session, then fill it CHUNK_BYTES at a time.
+  //
+  // One PUT of the whole blob is what this used to be, and it is what killed the
+  // app: the plugin's body encoding costs about twenty times the body's length
+  // (see CHUNK_BYTES), so a 26 MB book peaked around 400 MB and the iPad's
+  // content process was jetsammed mid-upload. Nothing recovered from it either
+  // — the blob was still missing remotely, so hasBook stayed false and the next
+  // pass attempted the identical upload.
+  //
+  // Only the loop is bounded work; each chunk's body is released before the
+  // next is taken. The book itself stays resident throughout because the fs
+  // plugin hands back whole files, so no smaller read is available to us.
   private async resumableUpload(name: string, bytes: Uint8Array): Promise<string> {
+    const total = bytes.length;
+    const size = this.d.chunkBytes ?? CHUNK_BYTES;
+    const location = await this.openSession(name, total);
+    let at = 0;
+    while (at < total) {
+      const ack = await this.putChunk(location, bytes, at, Math.min(at + size, total), total);
+      if (ack.done) return ack.id;
+      // A server that keeps answering "I have the same bytes I had before" would
+      // otherwise be a loop that sends the book forever.
+      if (ack.at <= at) {
+        throw new SyncTransportError(`Drive book put stalled at byte ${at} of ${total}`);
+      }
+      at = ack.at;
+    }
+    // Drive answers the chunk that completes the file with the file itself, so
+    // getting here means it acknowledged every byte and never said what it made.
+    throw new SyncTransportError("Drive book put completed without a file id");
+  }
+
+  private async openSession(name: string, total: number): Promise<string> {
     const location = await this.send(
       `${UPLOAD}/files?uploadType=resumable&fields=id`,
       {
@@ -625,7 +707,7 @@ export class DriveBackend implements SyncBackend {
         headers: {
           "Content-Type": "application/json; charset=UTF-8",
           "X-Upload-Content-Type": "application/pdf",
-          "X-Upload-Content-Length": String(bytes.length),
+          "X-Upload-Content-Length": String(total),
         },
         body: JSON.stringify({ name, parents: [this.ids.booksFolderId] }),
       },
@@ -634,17 +716,38 @@ export class DriveBackend implements SyncBackend {
       async (res) => res.headers.get("Location") ?? res.headers.get("location"),
     );
     if (!location) throw new Error("Drive resumable session returned no Location");
-    const data = await this.send(
+    return location;
+  }
+
+  // One chunk, retried under the ordinary policy. The body is a copy of just
+  // this range: a subarray would drag its whole backing buffer through the
+  // plugin's encoder, which is the cost this exists to avoid.
+  private putChunk(
+    location: string,
+    bytes: Uint8Array,
+    start: number,
+    end: number,
+    total: number,
+  ): Promise<ChunkAck> {
+    return this.send(
       location,
       {
         method: "PUT",
-        headers: { "Content-Type": "application/pdf" },
-        body: asBody(bytes),
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Range": `bytes ${start}-${end - 1}/${total}`,
+        },
+        body: asBody(bytes.subarray(start, end)),
       },
-      "book put",
-      BULK,
-      (res) => res.json(),
+      // Named with the offset: "book put failed" alone does not say whether the
+      // upload died on its first chunk or its last.
+      `book put at ${start}`,
+      CHUNK,
+      async (res) => {
+        if (res.status !== 308) return { done: true, id: ((await res.json()) as DriveFile).id };
+        return { done: false, at: resumeOffset(res.headers.get("Range")) };
+      },
+      (status) => status === 308,
     );
-    return (data as DriveFile).id;
   }
 }
