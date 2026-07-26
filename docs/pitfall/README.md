@@ -31,6 +31,8 @@
 - [42-scroll-strategy-relayout-not-guaranteed](./42-scroll-strategy-relayout-not-guaranteed.md) — 换 scroll strategy 的重排在文档非 loaded 时静默跳过，竖屏下 fit-page 和 fit-width 数值相同也不触发重排；切布局要全量应用 + 下一帧再断言
 - [50-programmatic-jump-fights-gesture-scroll](./50-programmatic-jump-fights-gesture-scroll.md) — 宿主跳页不停掉惯性就被自己的 fling 覆盖（落点差两千像素），`behavior:"smooth"` 还把 scrollTop 交给浏览器动画；跳转要先 resetGestures 再 instant 落点
 - [56-layout-switch-centres-before-geometry](./56-layout-switch-centres-before-geometry.md) — 切布局后居中跑在 DOM 重排前面，落点被浏览器夹掉且无人察觉；重复 setScrollStrategy 是空操作、同尺度 requestZoom 不重排，要按几何判据等 + 复核落点
+- [57-zoom-plugin-rewrites-scroll-150ms-after-resize](./57-zoom-plugin-rewrites-scroll-150ms-after-resize.md) — 缩放插件用 150ms debounce 回应视口变化，到期时按缓存里的旧滚动位置再写一次，把旋转后刚居中的页面拉回去；落点确认要盯满整个帧预算
+- [58-broken-pdf-open-resolves-instead-of-rejecting](./58-broken-pdf-open-resolves-instead-of-rejecting.md) — 解析失败的文档 openDocumentBuffer 照常 resolve，只有 onDocumentError 和 core 里的 status:"error" 说话；不订阅就是永远的灰屏加 “Rendering…”
 
 ## 触摸与手势
 
