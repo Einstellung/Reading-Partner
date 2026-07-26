@@ -48,8 +48,10 @@ export interface MergeOutput {
   merged: Uint8Array;
   // Files to write beside it. An existing path is never overwritten.
   copies: ConflictCopy[];
-  // Records this merge removed because the other side deleted them. The engine
-  // journals them locally so a propagated delete stays recoverable.
+  // Versions of a record, or of a settings key, that this merge did not keep:
+  // the other side deleted it, or the other side's edit won the tie-break. The
+  // engine journals them locally so nothing a device wrote is only recoverable
+  // from the device that no longer has it.
   dropped: DroppedRecord[];
   // The merge had to choose between two edits of the same record, field, or
   // line. Reported for the UI; not an error.
