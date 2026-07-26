@@ -123,7 +123,26 @@ export function centeredScrollX(t: CenterTarget): number {
   return Math.min(Math.max(x, 0), Math.max(0, t.maxScrollX));
 }
 
-// The page is where the centring asked for it. Compared with slack, never for
+export interface TopTarget {
+  // The page's virtual item, unscaled.
+  pageY: number;
+  scale: number;
+  // The viewport plugin's own padding, which its scroll positions include.
+  viewportGap: number;
+  // scrollHeight - clientHeight: the browser clamps past this, so the last
+  // page's target has to be clamped the same way or it never counts as arrived.
+  maxScrollY: number;
+}
+
+// Where the scroll container's top edge has to sit for a page to start at the
+// top of the viewport. Vertical's placement, and deliberately not centring: the
+// column carries on below the page, and a reader arriving from paged mode wants
+// to read that page from its first line, not from its middle.
+export function pageTopScrollY(t: TopTarget): number {
+  return Math.min(Math.max(t.pageY * t.scale + t.viewportGap, 0), Math.max(0, t.maxScrollY));
+}
+
+// The page is where the placement asked for it. Compared with slack, never for
 // equality: the browser snaps scroll offsets to device pixels.
 export function landedAt(actual: number, want: number, tolerance = SETTLE_TOLERANCE_PX): boolean {
   return Math.abs(actual - want) <= tolerance;

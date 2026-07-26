@@ -6,6 +6,7 @@ import {
   geometrySettled,
   landedAt,
   modelAxis,
+  pageTopScrollY,
   settleGap,
   SETTLE_TOLERANCE_PX,
   type LayoutGeometry,
@@ -172,6 +173,28 @@ test("the target is clamped the way the browser clamps it", () => {
       maxScrollX,
     }),
   ).toBe(0);
+});
+
+test("vertical puts the page top at the top of the viewport, not in the middle", () => {
+  // Page 8 of the column, at the numbers the browser reported: the switch out of
+  // paged mode lands here and the reader reads on from the page's first line.
+  const pageY = 7 * (PAGE.height + 10);
+  expect(
+    pageTopScrollY({ pageY, scale: SCALE, viewportGap: GAP, maxScrollY: Number.POSITIVE_INFINITY }),
+  ).toBeCloseTo(pageY * SCALE + GAP, 6);
+  // The first page sits at the very top, and no page is ever placed above it.
+  expect(
+    pageTopScrollY({ pageY: 0, scale: SCALE, viewportGap: 0, maxScrollY: 10000 }),
+  ).toBe(0);
+});
+
+test("the last page's top is clamped the way the browser clamps it", () => {
+  // Past the end of the column the browser stops, so the target has to stop
+  // there too or the last page never counts as arrived.
+  const maxScrollY = 500;
+  expect(
+    pageTopScrollY({ pageY: 100000, scale: SCALE, viewportGap: GAP, maxScrollY }),
+  ).toBe(maxScrollY);
 });
 
 test("landing is measured with slack, never for equality", () => {

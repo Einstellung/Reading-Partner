@@ -79,6 +79,14 @@ test("paged is the horizontal fit-page strip, vertical the fit-width column", ()
   expect(LAYOUT_SETTINGS.vertical.zoom).toBe("fit-width");
 });
 
+test("paged centres the page it is given, vertical starts it at the top", () => {
+  // The switch carries the reading position across the axis flip, and each
+  // layout places it its own way: one whole page in the middle of the strip,
+  // or the page's first line at the top of the column.
+  expect(LAYOUT_SETTINGS.paged.placePage).toBe("center");
+  expect(LAYOUT_SETTINGS.vertical.placePage).toBe("top");
+});
+
 test("otherLayout is the toggle the reader's menu item performs", () => {
   expect(otherLayout("paged")).toBe("vertical");
   expect(otherLayout("vertical")).toBe("paged");

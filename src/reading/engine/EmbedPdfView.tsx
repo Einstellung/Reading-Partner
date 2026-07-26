@@ -47,6 +47,7 @@ import {
   centeredScrollX,
   geometrySettled,
   landedAt,
+  pageTopScrollY,
   settleGap,
   type LayoutGeometry,
 } from "./layout-settle";
@@ -1537,19 +1538,30 @@ async function wireEngine(
     }
   };
 
-  // Where the centring wants the strip to sit for this page, clamped the way
-  // the browser clamps it, so "did it arrive" compares like with like.
-  const centerTargetX = (pageNumber: number): number | null => {
+  // Where the placement wants the scroll container to sit for this page, along
+  // the layout's own axis and clamped the way the browser clamps it, so "did it
+  // arrive" compares like with like.
+  const placeTarget = (mode: EmbedLayout, pageNumber: number): number | null => {
     const el = pagedRef.current.viewport;
     if (!el) return null;
     try {
       const item = scrollScope.getLayout().virtualItems.find((i) => i.pageNumbers.includes(pageNumber));
       if (!item) return null;
+      const scale = zoomScope.getState().currentZoomLevel;
+      const viewportGap = cap<ViewportCapability>(registry, "viewport").getViewportGap();
+      if (LAYOUT_SETTINGS[mode].placePage === "top") {
+        return pageTopScrollY({
+          pageY: item.y,
+          scale,
+          viewportGap,
+          maxScrollY: el.scrollHeight - el.clientHeight,
+        });
+      }
       return centeredScrollX({
         pageX: item.x,
         pageWidth: item.width,
-        scale: zoomScope.getState().currentZoomLevel,
-        viewportGap: cap<ViewportCapability>(registry, "viewport").getViewportGap(),
+        scale,
+        viewportGap,
         clientWidth: viewportScope.getMetrics().clientWidth,
         maxScrollX: el.scrollWidth - el.clientWidth,
       });
@@ -1574,26 +1586,38 @@ async function wireEngine(
 
   // Frames a layout change may keep asking for. Bounded on purpose: a signal
   // that never arrives must not leave the reader waiting, so at the deadline it
-  // centres against whatever geometry exists — exactly what the old
+  // places the page against whatever geometry exists — exactly what the old
   // single-frame version did unconditionally.
   const SETTLE_FRAME_BUDGET = 24;
-  // How many times the centring may be re-issued once the geometry is ready.
+  // How many times the placement may be re-issued once the geometry is ready.
   // More than one because the viewport plugin defers the scroll it is given by
   // a frame, and the browser clamps it to the extent that exists then.
-  const MAX_CENTER_ATTEMPTS = 3;
-  // Serial number of the live settle: a newer layout change or page turn owns
-  // the scroll position, and the older one stops touching it.
+  const MAX_PLACE_ATTEMPTS = 3;
+  // Serial number of the live settle: a newer layout change, rotation or page
+  // turn owns the scroll position, and the older one stops touching it.
   let settleSerial = 0;
 
   const centerPage = (target: number, behavior: "smooth" | "instant") =>
     scrollScope.scrollToPage({ pageNumber: target, behavior, alignX: centerAlignFor(target) });
 
+  // Put the page where the layout puts it: centred on the strip, or with its top
+  // at the top of the column (no alignY — the plugin's default is the page top).
+  const placePage = (mode: EmbedLayout, target: number, behavior: "smooth" | "instant") => {
+    if (LAYOUT_SETTINGS[mode].placePage === "top") {
+      scrollScope.scrollToPage({ pageNumber: target, behavior });
+      return;
+    }
+    centerPage(target, behavior);
+  };
+
   // Wait for the geometry the layout asked for, then put `page` on screen and
   // confirm it stayed there. Re-asserts only the half that is actually missing:
   // the zoom lock if the request never took, the virtual items if the plugin
   // dropped its refresh. The DOM catching up is nobody's to hurry — that one is
-  // only waited on.
-  const settleLayout = (mode: EmbedLayout, page: number, behavior: "smooth" | "instant") => {
+  // only waited on. A null page settles the geometry and places nothing, which
+  // is what re-asserting vertical does: the reader is already inside the page
+  // and putting its top back at the top of the viewport would eat the offset.
+  const settleLayout = (mode: EmbedLayout, page: number | null, behavior: "smooth" | "instant") => {
     const serial = ++settleSerial;
     const settings = LAYOUT_SETTINGS[mode];
     const strategy = settings.axis === "horizontal" ? ScrollStrategy.Horizontal : ScrollStrategy.Vertical;
@@ -1619,26 +1643,27 @@ async function wireEngine(
           return;
         }
         ready = true;
-        // Vertical has nothing to place: the column starts where it starts.
-        if (!settings.centerPage) return;
       }
+      // Nothing to place: the settle was only asked to let the geometry land.
+      if (page === null) return;
       const el = pagedRef.current.viewport;
-      const want = centerTargetX(page);
-      if (el && want !== null && landedAt(el.scrollLeft, want)) {
+      const want = placeTarget(mode, page);
+      const at = settings.axis === "horizontal" ? el?.scrollLeft : el?.scrollTop;
+      if (el && want !== null && at !== undefined && landedAt(at, want)) {
         // Landed — but not necessarily last. The zoom plugin answers a viewport
         // resize on a 150ms debounce of its own and writes a focus-preserving
         // scroll offset when it does, which on a rotation arrives after the
-        // centring has already landed (measured: centred at 4310, pulled back to
-        // 4450 two frames later, and there it stayed). So the landing is watched
-        // for the rest of the budget instead of being trusted on sight.
+        // placement has already landed (measured: centred at 4310, pulled back
+        // to 4450 two frames later, and there it stayed). So the landing is
+        // watched for the rest of the budget instead of being trusted on sight.
         if (!expired && behavior === "instant") requestAnimationFrame(tick);
         return;
       }
       // A smooth turn is an animation in progress, not a landing to confirm:
       // issue it once and leave it alone.
-      if (attempts >= (behavior === "smooth" ? 1 : MAX_CENTER_ATTEMPTS)) return;
+      if (attempts >= (behavior === "smooth" ? 1 : MAX_PLACE_ATTEMPTS)) return;
       attempts += 1;
-      centerPage(page, behavior);
+      placePage(mode, page, behavior);
       if (!expired) requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
@@ -1897,6 +1922,11 @@ async function wireEngine(
       const zoomMode = s.zoom === "fit-page" ? ZoomMode.FitPage : ZoomMode.FitWidth;
       // Read before the strategy and zoom re-lay the document out.
       const page = scrollScope.getCurrentPage();
+      // Whether this call moves the reader between the layouts or re-asserts the
+      // one they are in. Only the axis flip has a position to carry across: a
+      // re-assert leaves the reader exactly where they are, which for vertical
+      // means not placing the page at all (LayoutSettings.placePage says why).
+      const switched = layout !== mode;
       layout = mode;
       pagedRef.current.paged = mode === "paged";
       // Nothing the old layout had in flight survives the switch.
@@ -1916,9 +1946,9 @@ async function wireEngine(
       // scale change follows to recompute anything either. And when both do
       // take, the DOM is still a frame behind them. The settle checks all three
       // against the layout that was asked for, re-asserts whichever is missing,
-      // and only then centres — and confirms the page arrived, because a scroll
-      // the browser clamped is one nothing downstream will ever notice.
-      settleLayout(mode, page, "instant");
+      // and only then places the page — and confirms it arrived, because a
+      // scroll the browser clamped is one nothing downstream will ever notice.
+      settleLayout(mode, switched || s.placePage === "center" ? page : null, "instant");
       refreshZoomedIn();
       emitStats();
       emitState();

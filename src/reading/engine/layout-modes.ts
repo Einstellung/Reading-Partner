@@ -24,10 +24,17 @@ export interface LayoutSettings {
   zoom: ZoomLock;
   // Whether the viewport container swallows native pan/zoom (touch-action:none).
   touchLock: boolean;
-  // Whether a page change has to be re-centred on one whole page (the horizontal
-  // strip left-aligns, so a page narrower than the viewport needs an explicit
-  // alignX — pitfall 40).
-  centerPage: boolean;
+  // Where a page the layout is asked to show has to end up. Paged centres one
+  // whole page (the horizontal strip left-aligns, so a page narrower than the
+  // viewport needs an explicit alignX — pitfall 40); vertical puts the page's
+  // top at the top of the viewport and lets the column continue below it.
+  //
+  // The two also differ in whether placing again is free. Centring is
+  // idempotent — paged is already resting on the page it centres — so a repeat
+  // setLayout re-asserts it. Putting a page top at the viewport top is not: it
+  // throws away where inside the page the reader was, so vertical only places a
+  // page when the switch actually changed the axis.
+  placePage: "center" | "top";
   // Whether the layout keeps a fit-page baseline scale, the reference its pinch
   // rules compare against. Only paged has one; carrying a stale baseline into a
   // later paged session would misjudge "zoomed in" after a viewport resize.
@@ -39,14 +46,14 @@ export const LAYOUT_SETTINGS: Record<ReadingLayout, LayoutSettings> = {
     axis: "vertical",
     zoom: "fit-width",
     touchLock: false,
-    centerPage: false,
+    placePage: "top",
     tracksFitPage: false,
   },
   paged: {
     axis: "horizontal",
     zoom: "fit-page",
     touchLock: true,
-    centerPage: true,
+    placePage: "center",
     tracksFitPage: true,
   },
 };
