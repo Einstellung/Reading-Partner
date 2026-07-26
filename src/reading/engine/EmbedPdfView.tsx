@@ -1624,7 +1624,16 @@ async function wireEngine(
       }
       const el = pagedRef.current.viewport;
       const want = centerTargetX(page);
-      if (el && want !== null && landedAt(el.scrollLeft, want)) return;
+      if (el && want !== null && landedAt(el.scrollLeft, want)) {
+        // Landed — but not necessarily last. The zoom plugin answers a viewport
+        // resize on a 150ms debounce of its own and writes a focus-preserving
+        // scroll offset when it does, which on a rotation arrives after the
+        // centring has already landed (measured: centred at 4310, pulled back to
+        // 4450 two frames later, and there it stayed). So the landing is watched
+        // for the rest of the budget instead of being trusted on sight.
+        if (!expired && behavior === "instant") requestAnimationFrame(tick);
+        return;
+      }
       // A smooth turn is an animation in progress, not a landing to confirm:
       // issue it once and leave it alone.
       if (attempts >= (behavior === "smooth" ? 1 : MAX_CENTER_ATTEMPTS)) return;
@@ -1678,12 +1687,21 @@ async function wireEngine(
   // Rotating the iPad (or any viewport resize) must not leave paged mode
   // magnified or off-centre: the zoom plugin only recomputes a fit when the
   // level still IS a fit mode, and a pinch replaces it with a number.
+  //
+  // A rotation changes both viewport dimensions, so it re-scales and re-lays
+  // out the strip exactly as a layout switch does — and re-centring one frame
+  // later hits the same trap (pitfall 56), plus one the switch does not have:
+  // the zoom plugin answers the resize on a 150ms debounce of its own and
+  // writes a focus-preserving scroll offset when it does, after the host's
+  // centring has already landed. So the re-centring goes through the settle,
+  // asked about the layout that is live rather than one being switched to, and
+  // the settle keeps confirming the landing for its whole budget. Its serial
+  // does the rest: a rotation arriving mid-settle takes the scroll position off
+  // the older one instead of fighting it for the frames they overlap.
   cap<ViewportCapability>(registry, "viewport").onViewportResize((ev) => {
     if (!pagedRef.current.paged || ev.documentId !== DOC_ID) return;
     zoomScope.requestZoom(ZoomMode.FitPage);
-    requestAnimationFrame(() => {
-      if (pagedRef.current.paged) turnToPage(scrollScope.getCurrentPage(), "instant");
-    });
+    settleLayout(layout, scrollScope.getCurrentPage(), "instant");
   });
 
   // Map annotation id -> pageIndex, so host-side ops can address the right page.
