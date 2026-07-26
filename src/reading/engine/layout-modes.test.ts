@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  applyJump,
   applyLayout,
   LAYOUT_SETTINGS,
   otherLayout,
@@ -81,4 +82,38 @@ test("paged is the horizontal fit-page strip, vertical the fit-width column", ()
 test("otherLayout is the toggle the reader's menu item performs", () => {
   expect(otherLayout("paged")).toBe("vertical");
   expect(otherLayout("vertical")).toBe("paged");
+});
+
+test("a jump drops every gesture the router had in flight", () => {
+  // The states a jump can arrive in: a finger following, the engine paused
+  // under it, the pointer captured on the viewport, inertia still coasting.
+  // Each of those keeps writing the scroll position, so each has to go —
+  // otherwise the fling overwrites the jump a frame later and the reader lands
+  // short of the page it was sent to.
+  const mid: LayoutEngineState = {
+    ...restingState("vertical"),
+    gesturesIdle: false,
+    enginePaused: true,
+    pointerCaptured: true,
+    inertia: true,
+  };
+  expect(applyJump(mid)).toEqual(restingState("vertical"));
+});
+
+test("a jump is not a layout switch: it leaves the layout exactly as it found it", () => {
+  for (const layout of layouts) {
+    const resting = restingState(layout, 1.4);
+    const jumped = applyJump(resting);
+    expect(jumped.axis).toBe(resting.axis);
+    expect(jumped.zoom).toBe(resting.zoom);
+    expect(jumped.touchLock).toBe(resting.touchLock);
+    // The fit-page baseline belongs to the layout, not to the gesture: a jump
+    // inside paged mode must not make the reader recompute "zoomed in".
+    expect(jumped.fitPageBaseline).toBe(resting.fitPageBaseline);
+  }
+});
+
+test("jumping twice changes nothing further", () => {
+  const once = applyJump({ ...restingState("paged", 1.1), inertia: true });
+  expect(applyJump(once)).toEqual(once);
 });
