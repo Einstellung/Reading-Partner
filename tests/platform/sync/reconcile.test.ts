@@ -128,6 +128,13 @@ test("a locally-deleted file (present in snapshot/remote, unchanged remote) is l
   const plan = reconcile([], remote, snap);
   expect(plan.uploads).toEqual([]);
   expect(plan.downloads).toEqual([]);
+  // Still on the remote, so its merge base is still worth something.
+  expect(plan.dropBases).toEqual([]);
+});
+
+test("a file gone from both sides has its merge base dropped", () => {
+  const snap: Snapshot = { a: { rev: 2, mtime: 100, size: 10, hash: "h1" } };
+  expect(reconcile([], {}, snap).dropBases).toEqual(["a"]);
 });
 
 test("the snapshot's hash is only reusable while mtime and size still match", () => {

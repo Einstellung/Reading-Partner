@@ -15,6 +15,7 @@ import {
   type SyncBackend,
 } from "../../../src/platform/sync/backend";
 import type { BookFs } from "../../../src/platform/sync/books";
+import type { BaseStore } from "../../../src/platform/sync/localStore";
 import type { ScannedFile, SyncFs } from "../../../src/platform/sync/syncFs";
 import type { Snapshot } from "../../../src/platform/sync/reconcile";
 
@@ -121,6 +122,28 @@ function makeBooks(localHashes: Record<string, string> = {}, listed?: string[]) 
   return { books, store };
 }
 
+// The merge base: the bytes both sides last agreed on, one entry per path.
+function makeBase(seed: Record<string, string> = {}) {
+  const store = new Map<string, Uint8Array>(
+    Object.entries(seed).map(([k, v]) => [k, enc(v)]),
+  );
+  const base: BaseStore = {
+    async read(path) {
+      return store.get(path) ?? null;
+    },
+    async has(path) {
+      return store.has(path);
+    },
+    async write(path, bytes) {
+      store.set(path, bytes);
+    },
+    async remove(path) {
+      store.delete(path);
+    },
+  };
+  return { base, store, text: (p: string) => (store.has(p) ? dec(store.get(p)!) : null) };
+}
+
 function makeEngine(over: Partial<EngineDeps> & { snapshot: Snapshot }) {
   const pulled: string[][] = [];
   // Defaults first so `over` can override any of them, onPulled included.
@@ -128,6 +151,7 @@ function makeEngine(over: Partial<EngineDeps> & { snapshot: Snapshot }) {
     backend: makeBackend().backend,
     fs: makeFs().fs,
     books: makeBooks().books,
+    base: makeBase().base,
     onPulled: (p) => pulled.push(p),
     ...over,
   };
@@ -301,6 +325,105 @@ test("a steady pass reads only the files whose mtime or size moved", async () =>
   // One hash read plus one upload read for the changed file; the untouched one
   // is answered from the snapshot.
   expect(reads() - afterFirst).toBe(2);
+});
+
+// --- the merge base ---------------------------------------------------------
+//
+// The bytes both sides last agreed on, kept locally so a later conflict has
+// three inputs instead of two.
+
+test("a successful upload and a successful download each become the base", async () => {
+  const be = makeBackend(
+    { "topics.json": { rev: 4, mtime: 200, size: 6 } },
+    { "topics.json": "REMOTE" },
+  );
+  const { fs } = makeFs({ "settings.json": { text: "LOCAL", mtime: 500 } });
+  const bs = makeBase();
+  const { engine } = makeEngine({ backend: be.backend, fs, base: bs.base, snapshot: {} });
+
+  await engine.syncNow();
+
+  expect(bs.text("topics.json")).toBe("REMOTE");
+  expect(bs.text("settings.json")).toBe("LOCAL");
+});
+
+test("bytes the manifest write never published are not recorded as agreed", async () => {
+  const be = makeBackend();
+  be.backend.writeManifest = async () => {
+    throw new Error("error sending request");
+  };
+  const { fs } = makeFs({ "settings.json": { text: "LOCAL", mtime: 500 } });
+  const bs = makeBase();
+  const { engine } = makeEngine({ backend: be.backend, fs, base: bs.base, snapshot: {} });
+
+  await engine.syncNow();
+
+  // No other device can see those bytes, so calling them the common ancestor
+  // would let the next merge assume the other side had them.
+  expect(bs.text("settings.json")).toBeNull();
+});
+
+test("a file already in sync when this landed gets its base seeded from disk", async () => {
+  const hash = await h("SAME");
+  const be = makeBackend(
+    { "topics.json": { rev: 4, mtime: 100, size: 4, hash } },
+    { "topics.json": "SAME" },
+  );
+  const { fs } = makeFs({ "topics.json": { text: "SAME", mtime: 100 } });
+  const snapshot: Snapshot = { "topics.json": { rev: 4, mtime: 100, size: 4, hash } };
+  const bs = makeBase();
+  const { engine } = makeEngine({ backend: be.backend, fs, base: bs.base, snapshot });
+
+  await engine.syncNow();
+
+  // Nothing moved it, so nothing else would ever write its base.
+  expect(bs.text("topics.json")).toBe("SAME");
+});
+
+test("a base is not seeded from a local file the snapshot does not vouch for", async () => {
+  const be = makeBackend();
+  const { fs } = makeFs({ "topics.json": { text: "LOCAL", mtime: 100 } });
+  be.backend.upload = async () => {
+    throw new Error("error sending request");
+  };
+  const bs = makeBase();
+  const { engine } = makeEngine({ backend: be.backend, fs, base: bs.base, snapshot: {} });
+
+  await engine.syncNow();
+
+  expect(bs.text("topics.json")).toBeNull();
+});
+
+test("a base is dropped when the file is gone from both sides", async () => {
+  const be = makeBackend();
+  const bs = makeBase({ "topics.json": "OLD", "settings.json": "KEPT" });
+  const { fs } = makeFs({ "settings.json": { text: "KEPT", mtime: 100 } });
+  const snapshot: Snapshot = {
+    "topics.json": { rev: 4, mtime: 100, size: 3, hash: "gone" },
+    "settings.json": { rev: 1, mtime: 100, size: 4, hash: await h("KEPT") },
+  };
+  const { engine } = makeEngine({ backend: be.backend, fs, base: bs.base, snapshot });
+
+  await engine.syncNow();
+
+  expect(bs.text("topics.json")).toBeNull();
+  expect(bs.text("settings.json")).toBe("KEPT");
+});
+
+test("a base store that will not write does not fail the file that moved", async () => {
+  const be = makeBackend();
+  const { fs } = makeFs({ "settings.json": { text: "LOCAL", mtime: 500 } });
+  const bs = makeBase();
+  bs.base.write = async () => {
+    throw new Error("disk full");
+  };
+  const { engine } = makeEngine({ backend: be.backend, fs, base: bs.base, snapshot: {} });
+
+  await engine.syncNow();
+
+  expect(dec(be.data.get("settings.json")!)).toBe("LOCAL");
+  expect(engine.status().lastError).toBeNull();
+  expect(engine.status().lastSyncAt).not.toBeNull();
 });
 
 test("books channel: local-only book uploads, remote-only book downloads", async () => {

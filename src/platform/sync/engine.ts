@@ -29,6 +29,7 @@
 import { isRemoteGone, type Manifest, type SyncBackend } from "./backend";
 import type { BookFs } from "./books";
 import { hashBytes } from "./content";
+import type { BaseStore } from "./localStore";
 import { cachedHash, reconcile, type Snapshot, type Upload } from "./reconcile";
 import type { LocalFile, ScannedFile, SyncFs } from "./syncFs";
 
@@ -48,6 +49,8 @@ export interface EngineDeps {
   backend: SyncBackend;
   fs: SyncFs;
   books: BookFs;
+  // The last agreed content of every synced file, for three-way merges.
+  base: BaseStore;
   snapshot: Snapshot;
   now?: () => number;
   // Called after a pass writes files pulled from remote, with their paths, so
@@ -213,6 +216,40 @@ export class SyncEngine {
     this.d.onStatus?.(this.status());
   }
 
+  // A base is an optimisation for the next conflict, never a reason to fail the
+  // file that produced it: a pass that moved the bytes correctly and could not
+  // write the base has still done its job, and the merge contract accepts a
+  // missing base.
+  private async setBase(path: string, bytes: Uint8Array): Promise<void> {
+    await this.d.base.write(path, bytes).catch(() => {});
+  }
+
+  private async rebase(path: string): Promise<void> {
+    try {
+      await this.d.base.write(path, await this.d.fs.read(path));
+    } catch {
+      // see setBase
+    }
+  }
+
+  // Files that were already in sync when this landed have no base, and neither
+  // does one whose base the user deleted. Nothing moves them, so nothing else
+  // would ever write it: seed it from disk, which is what both sides agree on
+  // whenever the local hash still matches the snapshot's.
+  private async seedBases(local: LocalFile[], moved: Set<string>): Promise<void> {
+    for (const f of local) {
+      if (moved.has(f.path)) continue;
+      const snap = this.snapshot[f.path];
+      if (!snap || snap.hash !== f.hash) continue;
+      try {
+        if (await this.d.base.has(f.path)) continue;
+      } catch {
+        continue;
+      }
+      await this.rebase(f.path);
+    }
+  }
+
   private async runPass(): Promise<void> {
     if (this.running) return;
     this.running = true;
@@ -227,7 +264,8 @@ export class SyncEngine {
       const plan = reconcile(local, remote, this.snapshot);
 
       // No bytes move for these: the snapshot is only catching up on what it
-      // needs to skip the file cheaply next pass.
+      // needs to skip the file cheaply next pass. The base does move — the
+      // agreed content is whatever is on disk right now.
       for (const cv of plan.converged) {
         this.snapshot[cv.path] = {
           rev: cv.rev,
@@ -235,6 +273,10 @@ export class SyncEngine {
           size: cv.size,
           hash: cv.hash,
         };
+        await this.rebase(cv.path);
+      }
+      for (const path of plan.dropBases) {
+        await this.d.base.remove(path).catch(() => {});
       }
 
       const changed: string[] = [];
@@ -251,6 +293,9 @@ export class SyncEngine {
             size: bytes.length,
             hash: await hashBytes(bytes),
           };
+          // Both sides are known to hold these bytes now: that is the base a
+          // later conflict gets to reason from.
+          await this.setBase(dl.path, bytes);
           changed.push(dl.path);
           failures.succeeded();
         } catch (e) {
@@ -263,13 +308,13 @@ export class SyncEngine {
         }
       }
 
-      const landed: Upload[] = [];
+      const landed: { up: Upload; bytes: Uint8Array }[] = [];
       for (const up of plan.uploads) {
         if (failures.halted()) break;
         try {
           const bytes = await this.d.fs.read(up.path);
           await this.d.backend.upload(up.path, bytes, up.mtime);
-          landed.push(up);
+          landed.push({ up, bytes });
           failures.succeeded();
         } catch (e) {
           if (isAuthError(e)) throw e;
@@ -282,21 +327,23 @@ export class SyncEngine {
         // never arrived tells every other device it is up to date with content
         // that does not exist, and the writer's own copy stops being offered.
         const next: Manifest = { ...remote };
-        for (const up of landed) {
+        for (const { up } of landed) {
           next[up.path] = { rev: up.rev, mtime: up.mtime, size: up.size, hash: up.hash };
         }
         try {
           await this.d.backend.writeManifest(next);
           // Snapshotted only now: bytes in Drive that the manifest does not name
           // are invisible to every other device, so an unpublished upload has to
-          // look unsent and be repeated next pass.
-          for (const up of landed) {
+          // look unsent and be repeated next pass. The base follows the same
+          // rule — it records agreement, and unpublished bytes are not agreed.
+          for (const { up, bytes } of landed) {
             this.snapshot[up.path] = {
               rev: up.rev,
               mtime: up.mtime,
               size: up.size,
               hash: up.hash,
             };
+            await this.setBase(up.path, bytes);
           }
           failures.succeeded();
         } catch (e) {
@@ -304,6 +351,15 @@ export class SyncEngine {
           failures.record("write manifest", e);
         }
       }
+
+      await this.seedBases(
+        local,
+        new Set([
+          ...plan.converged.map((c) => c.path),
+          ...plan.downloads.map((d) => d.path),
+          ...plan.uploads.map((u) => u.path),
+        ]),
+      );
 
       await this.syncBooks(failures);
 

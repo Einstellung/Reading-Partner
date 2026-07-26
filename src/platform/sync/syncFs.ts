@@ -9,7 +9,9 @@
 // (fulltext-*, figures-*, prep-*/pdf and its caches), generated slide decks
 // (slides/**, docs/14 — a build output, rebuildable from notes), the local
 // event log, sync's own local
-// files (sync-auth.json, sync-state.json), and credentials.json — plaintext AI
+// files (sync-auth.json, sync-state.json, and the sync-base/ merge-base mirror
+// — syncing the record of what was last agreed would be circular), and
+// credentials.json — plaintext AI
 // provider tokens stay on the device rather than widening their exposure to the
 // user's Drive, and per-device tokens avoid refresh-rotation kicking the other
 // device out. Thread images (images/**) are not synced in v1 — a screenshot

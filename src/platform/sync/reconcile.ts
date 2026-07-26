@@ -51,6 +51,9 @@ export interface Plan {
   uploads: Upload[];
   downloads: Download[];
   converged: Converged[];
+  // Paths gone from both sides. Their merge base is what is left of a file
+  // nothing holds any more, so it is dropped (localStore.ts).
+  dropBases: string[];
 }
 
 // The snapshot's hash for a scanned file, when it can be trusted without
@@ -84,6 +87,7 @@ export function reconcile(local: LocalFile[], remote: Manifest, snap: Snapshot):
   const uploads: Upload[] = [];
   const downloads: Download[] = [];
   const converged: Converged[] = [];
+  const dropBases: string[] = [];
 
   for (const path of paths) {
     const loc = localByPath.get(path);
@@ -96,6 +100,7 @@ export function reconcile(local: LocalFile[], remote: Manifest, snap: Snapshot):
     // delete anything (docs/13).
     if (!loc) {
       if (remoteChanged) downloads.push({ path, rev: rem!.rev, size: rem!.size });
+      else if (!rem) dropBases.push(path);
       continue;
     }
 
@@ -145,5 +150,5 @@ export function reconcile(local: LocalFile[], remote: Manifest, snap: Snapshot):
     }
   }
 
-  return { uploads, downloads, converged };
+  return { uploads, downloads, converged, dropBases };
 }
