@@ -36,6 +36,9 @@ test("caches, logs, sync internals, and book blobs are out of range", () => {
     "fulltext-abc123.json",
     "figures-abc123.json",
     "events-topic1.jsonl",
+    // The structured-output log rides the same naming under a reserved topic id
+    // (src/platform/app/structured-output.ts) and is just as local.
+    "events-ai.jsonl",
     "sync-auth.json",
     "sync-state.json",
     // The merge base mirrors the whole sync range under sync-base/. Syncing

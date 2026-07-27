@@ -5,6 +5,7 @@
 // book/chapter provenance and asset slots. The AI call itself lives in live.ts.
 
 import { languageInstruction, type AiLanguage } from "../../platform/app/settings";
+import type { ParseTally } from "../../platform/app/structured-output";
 import type { SlideKind, SlideOutline } from "./types";
 
 // The plan input for one book: its whole-book overview (or a fallback summary
@@ -100,8 +101,10 @@ export function extractJson(text: string): string {
   return text.slice(start, end + 1);
 }
 
-function asKind(v: unknown): SlideKind {
-  return KINDS.includes(v as SlideKind) ? (v as SlideKind) : "content";
+function asKind(v: unknown, tally?: ParseTally): SlideKind {
+  if (KINDS.includes(v as SlideKind)) return v as SlideKind;
+  if (tally) tally.repaired++;
+  return "content";
 }
 
 function asChapters(v: unknown): number[] | undefined {
@@ -112,25 +115,36 @@ function asChapters(v: unknown): number[] | undefined {
   return nums.length ? nums : undefined;
 }
 
-function cleanSlide(raw: any): SlideOutline | null {
+function cleanSlide(raw: any, tally?: ParseTally): SlideOutline | null {
+  const repair = () => {
+    if (tally) tally.repaired++;
+  };
   const title = typeof raw?.title === "string" ? raw.title.trim() : "";
-  const kind = asKind(raw?.kind);
+  const kind = asKind(raw?.kind, tally);
   // A slide with neither a title nor a kind cue is unusable; section/title/closing
   // can carry a short title, content needs one.
   if (!title && kind === "content") return null;
+  if (!title) repair();
   const slide: SlideOutline = { title: title || defaultTitle(kind), kind };
 
   if (typeof raw?.bookId === "string" && raw.bookId.trim()) slide.bookId = raw.bookId.trim();
+  if (raw?.sourceChapters !== undefined && !Array.isArray(raw.sourceChapters)) repair();
   const chapters = asChapters(raw?.sourceChapters);
   if (chapters) slide.sourceChapters = chapters;
 
   const ill = raw?.illustration;
   const figure = raw?.figure;
+  const wantsFigure = !!(figure && typeof figure.figId === "string" && figure.figId.trim());
+  const wantsIllustration = !!(ill && typeof ill.prompt === "string" && ill.prompt.trim());
+  // The prompt allows at most one asset slot; asking for both loses one.
+  if (wantsFigure && wantsIllustration) repair();
   // At most one asset slot; a figure with a real id wins over an illustration.
-  if (figure && typeof figure.figId === "string" && figure.figId.trim()) {
+  if (wantsFigure) {
     const bookId = typeof figure.bookId === "string" && figure.bookId.trim() ? figure.bookId.trim() : slide.bookId;
     if (bookId) slide.figure = { bookId, figId: String(figure.figId).trim().toLowerCase() };
-  } else if (ill && typeof ill.prompt === "string" && ill.prompt.trim()) {
+    // A figure citation with no book to resolve it against is dropped whole.
+    else repair();
+  } else if (wantsIllustration) {
     slide.illustration = { prompt: ill.prompt.trim() };
   }
   return slide;
@@ -142,12 +156,25 @@ function defaultTitle(kind: SlideKind): string {
 
 // Parse and validate the plan call's output into a deck plan. Invalid slides are
 // dropped; an empty deck throws so the pipeline can surface a plan failure.
-export function parseSlidePlan(text: string): DeckPlan {
+//
+// `tally` is an optional out-parameter for the structured-output measurement
+// (structured-output.ts).
+export function parseSlidePlan(text: string, tally?: ParseTally): DeckPlan {
   const raw = JSON.parse(extractJson(text)) as Record<string, unknown>;
-  const title = typeof raw.title === "string" && raw.title.trim() ? raw.title.trim() : "Untitled talk";
-  const slides = (Array.isArray(raw.slides) ? raw.slides : [])
-    .map(cleanSlide)
+  const hasTitle = typeof raw.title === "string" && !!raw.title.trim();
+  if (!hasTitle && tally) tally.repaired++;
+  const title = hasTitle ? (raw.title as string).trim() : "Untitled talk";
+  const rawSlides = Array.isArray(raw.slides) ? raw.slides : [];
+  const slides = rawSlides
+    .map((s) => cleanSlide(s, tally))
     .filter((s): s is SlideOutline => s !== null);
-  if (slides.length === 0) throw new Error("plan produced no slides");
+  if (tally) {
+    tally.seen += rawSlides.length;
+    tally.kept += slides.length;
+  }
+  if (slides.length === 0) {
+    if (tally) tally.fail = rawSlides.length ? "empty-result" : "missing-field";
+    throw new Error("plan produced no slides");
+  }
   return { title, slides };
 }

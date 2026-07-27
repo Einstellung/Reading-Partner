@@ -30,6 +30,7 @@ import type {
 	TSchema,
 } from "@earendil-works/pi-ai";
 import { validateToolCall } from "@earendil-works/pi-ai";
+import { recordToolArgs } from "../platform/app/structured-output";
 import { resolveCall, toPiMessages, type ChatMessage, type ProviderId } from "./providers";
 
 // An image block a tool can return alongside its text (e.g. view_figure hands
@@ -208,8 +209,15 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 					if (!tool) throw new Error(`unknown tool '${call.name}'`);
 					// Validate/coerce against the tool's schema before executing; a
 					// throw here (bad args or a throwing execute) becomes a tool-result
-					// error the model can react to, not a crashed turn.
-					const args = validateToolCall(piTools, call) as Record<string, any>;
+					// error the model can react to, not a crashed turn. Both outcomes
+					// are recorded (platform/app/structured-output.ts): this is the
+					// tool-argument half of how well models hit a schema, and a
+					// failure rate is meaningless without its denominator.
+					const args = recordToolArgs(
+						{ providerId: model.provider, modelId: model.id },
+						call.name,
+						() => validateToolCall(piTools, call) as Record<string, any>,
+					);
 					const raw = await tool.execute(args);
 					if (typeof raw === "string") {
 						resultText = raw;

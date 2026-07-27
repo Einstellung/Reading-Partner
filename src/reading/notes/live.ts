@@ -7,6 +7,7 @@
 
 import { modelSupportsImages } from "../../ai/providers";
 import { callModel, resolveModel } from "../../ai/model-call";
+import { recordParse } from "../../platform/app/structured-output";
 import { buildFigureCatalog } from "../figures/catalog";
 import { renderFigure } from "../figures/render";
 import type { Figure } from "../figures/types";
@@ -59,8 +60,14 @@ function makeDeps(bookId: string, bookName: string, inputs: NotesInputs): NotesD
       // model reads the front matter's table of contents.
       const fromOutline = chaptersFromOutline(fulltext.outline, fulltext.pages.length);
       if (fromOutline) return { chapters: fromOutline, source: "outline" };
+      // Resolved up front only so the parse can be attributed to the model that
+      // produced it; the call itself resolves the same settings again.
+      const model = await resolveModel("prep");
       const text = await callModel("prep", NOTES_PLAN_SYSTEM_PROMPT, planUserMessage(fulltext), opts);
-      return { chapters: parseNotesPlan(text, fulltext.pages.length), source: "ai" };
+      const chapters = recordParse("notes-plan", model, text, (tally) =>
+        parseNotesPlan(text, fulltext.pages.length, tally),
+      );
+      return { chapters, source: "ai" };
     },
 
     async generateChapter({ chapter, instruction }, opts) {

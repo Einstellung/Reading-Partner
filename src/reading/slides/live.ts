@@ -13,6 +13,7 @@ import { renderFigure } from "../figures/render";
 import { getLibraryEntry, readLibraryBook } from "../../platform/app/library";
 import { loadNotesState, readChapterNote, readOverviewNote } from "../notes/store";
 import { loadSettings } from "../../platform/app/settings";
+import { recordParse } from "../../platform/app/structured-output";
 import { contentSystemPrompt, contentUserMessage, sanitizeFragment } from "./content";
 import { generateImage, resolveImageGenConfig, type ImageGenDeps } from "./imageGen";
 import { cleanTauriFetch } from "../../platform/app/tauri-fetch";
@@ -154,15 +155,15 @@ function imageDeps(signal: AbortSignal): ImageGenDeps {
 function makeDeps(bookIds: string[], instruction: string): SlidesDeps {
   return {
     async buildPlan(opts) {
-      const { aiLanguage } = await resolveModel("prep");
+      const model = await resolveModel("prep");
       const books = await Promise.all(bookIds.map(planMaterial));
       const text = await callModel(
         "prep",
-        slidesPlanSystemPrompt(aiLanguage),
+        slidesPlanSystemPrompt(model.aiLanguage),
         planUserMessage(books, instruction),
         opts,
       );
-      return parseSlidePlan(text);
+      return recordParse("slides-plan", model, text, (tally) => parseSlidePlan(text, tally));
     },
 
     async generateContent(slide, opts) {

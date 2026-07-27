@@ -5,6 +5,7 @@
 // overview/reasons/lines to the user.
 
 import { aiLanguageName, type AiLanguage } from "../../platform/app/settings";
+import type { ParseTally } from "../../platform/app/structured-output";
 import type { FeedbackEvent } from "../../memory/feedback";
 import type { InfoItem, TriageResult } from "./types";
 
@@ -161,8 +162,10 @@ function asRefs<T extends { itemId: string }>(
   raw: unknown,
   validIds: Set<string>,
   build: (o: Record<string, unknown>, id: string) => T | null,
+  tally?: ParseTally,
 ): T[] {
   if (!Array.isArray(raw)) return [];
+  if (tally) tally.seen += raw.length;
   const out: T[] = [];
   const seen = new Set<string>();
   for (const el of raw) {
@@ -186,7 +189,17 @@ export type ParseOutcome =
 // Validate the model's JSON against the known item ids. Unknown-id or duplicate
 // references are dropped; a missing overview or an unparseable body fails so the
 // caller can retry once.
-export function parseTriageResult(text: string, validIds: Set<string>): ParseOutcome {
+//
+// `tally` is an optional out-parameter for the structured-output measurement
+// (structured-output.ts). It is what makes the quiet losses visible: a reference
+// to an id the model invented, a second outOfLane pick past the cap, a tier
+// entry with no text — all of those are dropped here and show up only as `kept`
+// falling short of `seen`.
+export function parseTriageResult(
+  text: string,
+  validIds: Set<string>,
+  tally?: ParseTally,
+): ParseOutcome {
   const json = extractJson(text);
   if (!json) return { ok: false, error: "no JSON object in reply" };
   let data: unknown;
@@ -198,27 +211,58 @@ export function parseTriageResult(text: string, validIds: Set<string>): ParseOut
   if (!data || typeof data !== "object") return { ok: false, error: "reply is not an object" };
   const o = data as Record<string, unknown>;
   const overview = typeof o.overview === "string" ? o.overview.trim() : "";
-  if (!overview) return { ok: false, error: "missing overview" };
+  if (!overview) {
+    if (tally) tally.fail = "missing-field";
+    return { ok: false, error: "missing overview" };
+  }
 
   const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
   const result: TriageResult = {
     overview,
-    mustRead: asRefs(o.mustRead, validIds, (r, itemId) => {
-      const reason = str(r.reason);
-      return reason ? { itemId, reason } : null;
-    }),
-    oneLiners: asRefs(o.oneLiners, validIds, (r, itemId) => {
-      const line = str(r.line);
-      return line ? { itemId, line } : null;
-    }),
-    outOfLane: asRefs(o.outOfLane, validIds, (r, itemId) => {
-      const reason = str(r.reason);
-      return reason ? { itemId, reason } : null;
-    }).slice(0, 1),
-    filtered: asRefs(o.filtered, validIds, (r, itemId) => ({
-      itemId,
-      category: str(r.category) || "other",
-    })),
+    mustRead: asRefs(
+      o.mustRead,
+      validIds,
+      (r, itemId) => {
+        const reason = str(r.reason);
+        return reason ? { itemId, reason } : null;
+      },
+      tally,
+    ),
+    oneLiners: asRefs(
+      o.oneLiners,
+      validIds,
+      (r, itemId) => {
+        const line = str(r.line);
+        return line ? { itemId, line } : null;
+      },
+      tally,
+    ),
+    outOfLane: asRefs(
+      o.outOfLane,
+      validIds,
+      (r, itemId) => {
+        const reason = str(r.reason);
+        return reason ? { itemId, reason } : null;
+      },
+      tally,
+    ).slice(0, 1),
+    filtered: asRefs(
+      o.filtered,
+      validIds,
+      (r, itemId) => {
+        const category = str(r.category);
+        if (!category && tally) tally.repaired++;
+        return { itemId, category: category || "other" };
+      },
+      tally,
+    ),
   };
+  if (tally) {
+    tally.kept +=
+      result.mustRead.length +
+      result.oneLiners.length +
+      result.outOfLane.length +
+      result.filtered.length;
+  }
   return { ok: true, result };
 }
