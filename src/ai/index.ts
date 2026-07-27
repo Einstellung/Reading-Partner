@@ -23,8 +23,10 @@ export {
 	getModels,
 	defaultModelFor,
 	nextDefaultsForActive,
+	isSelectableModel,
 	modelSupportsImages,
 	streamChat,
+	MIN_CONTEXT_WINDOW,
 	ModelCallError,
 	type ProviderId,
 	type ProviderInfo,
@@ -33,6 +35,7 @@ export {
 	type StreamChatOptions,
 	type StreamOutcome,
 } from "./providers";
+export { enforceModelFloor } from "./model-call";
 export {
 	runAgentTurn,
 	type AgentTool,

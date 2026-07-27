@@ -138,15 +138,39 @@ export async function setApiKey(id: "deepseek", key: string): Promise<void> {
 	await setActiveCredential(id, { type: "apiKey", key });
 }
 
-export function getModels(id: ProviderId): { id: string; label: string }[] {
-	return providers[id].getModels().map((m) => ({ id: m.id, label: m.name || m.id }));
+// The context window a model must have before this app will offer it. The
+// catalog comes in tiers — 128k, 200k, 272k, 1M — and the product runs on the
+// top one only; a book plus its notes plus a conversation does not fit in 200k,
+// and being one dropdown entry away from a 200k model is how you end up in one
+// without noticing. Everything below the floor is invisible: not listed, not
+// selectable, never the default. tests/ai/model-floor.test.ts checks the value
+// against the live catalog rather than restating it.
+export const MIN_CONTEXT_WINDOW = 1_000_000;
+
+// The models of `id` this app will offer, in catalog order. The raw list stays
+// reachable through providers[id].getModels() for lookups that must still
+// resolve a model the settings already point at (see resolveCall): the floor
+// governs what can be chosen, not what can be called, so a stale stored id
+// degrades into a notice instead of an app with no working AI.
+function selectableModels(id: ProviderId): Model<Api>[] {
+	return providers[id].getModels().filter((m) => m.contextWindow >= MIN_CONTEXT_WINDOW);
 }
 
-// The model a freshly-activated provider defaults to: the first in its model
-// list. pi exposes no "recommended" flag, so first-listed is the deterministic
-// pick; the user can change it in Settings. Null only if the list is empty.
+export function getModels(id: ProviderId): { id: string; label: string }[] {
+	return selectableModels(id).map((m) => ({ id: m.id, label: m.name || m.id }));
+}
+
+// Whether `modelId` may be chosen for `id` — in the catalog and over the floor.
+export function isSelectableModel(id: ProviderId, modelId: string | null): boolean {
+	return !!modelId && selectableModels(id).some((m) => m.id === modelId);
+}
+
+// The model a freshly-activated provider defaults to: the first offered one. pi
+// exposes no "recommended" flag, so first-listed is the deterministic pick; the
+// user can change it in Settings. Null when the provider offers nothing that
+// meets the floor, which callers must handle rather than assume away.
 export function defaultModelFor(id: ProviderId): string | null {
-	return providers[id].getModels()[0]?.id ?? null;
+	return selectableModels(id)[0]?.id ?? null;
 }
 
 // Default provider/model to write after `id` becomes the active provider. Keeps
@@ -158,7 +182,7 @@ export function nextDefaultsForActive(
 	defaultModelId: string | null,
 	id: ProviderId,
 ): { defaultProviderId: ProviderId; defaultModelId: string | null } {
-	const keep = defaultProviderId === id && getModels(id).some((m) => m.id === defaultModelId);
+	const keep = defaultProviderId === id && isSelectableModel(id, defaultModelId);
 	return { defaultProviderId: id, defaultModelId: keep ? defaultModelId : defaultModelFor(id) };
 }
 

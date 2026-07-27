@@ -4,9 +4,12 @@
 // conversational path, "prep" for the background pipelines.
 
 import type { ThinkingLevel } from "@earendil-works/pi-ai";
-import { loadSettings, toReasoning, type AiLanguage } from "../platform/app/settings";
+import { loadSettings, toReasoning, type AiLanguage, type Settings } from "../platform/app/settings";
 import {
+	defaultModelFor,
+	isSelectableModel,
 	ModelCallError,
+	providers,
 	streamChat,
 	type ProviderId,
 	type ResponseHead,
@@ -15,6 +18,36 @@ import {
 import type { AiCallOptions } from "./watchdog";
 
 export type ThinkingKind = "chat" | "prep";
+
+// Settings read off disk with a default model that no longer qualifies swapped
+// for one that does — the model floor applies to what was stored, not only to
+// what can be picked from now on. A settings file predates the floor, or arrives
+// from a device that was on an older build, or came in over sync; none of those
+// may leave the app pointing at a model it will not offer.
+//
+// `notice` is the sentence to show the user, and it is the point: swapping the
+// model under someone silently is worse than the stale value. null means nothing
+// changed. The model is only ever cleared when the provider has nothing over the
+// floor at all, and the app then behaves as it does before any provider is set
+// up, rather than failing at the first call.
+export function enforceModelFloor(settings: Settings): { settings: Settings; notice: string | null } {
+	const providerId = settings.defaultProviderId;
+	if (!providerId || !(providerId in providers) || !settings.defaultModelId) {
+		return { settings, notice: null };
+	}
+	const id = providerId as ProviderId;
+	if (isSelectableModel(id, settings.defaultModelId)) return { settings, notice: null };
+
+	const stale = settings.defaultModelId;
+	const replacement = defaultModelFor(id);
+	const name = providers[id].name;
+	return {
+		settings: { ...settings, defaultModelId: replacement },
+		notice: replacement
+			? `${stale} no longer meets this app's context-window minimum; switched to ${replacement}.`
+			: `${stale} no longer meets this app's context-window minimum, and ${name} has no model that does. Pick another provider in Settings.`,
+	};
+}
 
 export interface ResolvedModel {
 	providerId: ProviderId;

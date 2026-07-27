@@ -52,6 +52,7 @@ import { isTauri, readClipboardImage } from "./platform/app/clipboard";
 import { DEFAULT_SETTINGS, loadSettings, onSettingsSaveError, saveSettings, toReasoning, type Settings } from "./platform/app/settings";
 import { buildGlossary } from "./ai/voice";
 import {
+  enforceModelFloor,
   installFetchBridge,
   listProviders,
   modelSupportsImages,
@@ -319,7 +320,19 @@ export default function App() {
           : `${file} could not be read; it is left untouched and won't be overwritten`,
       );
     });
-    loadSettings().then(setSettings).catch(() => {});
+    loadSettings()
+      .then((loaded) => {
+        // A stored default model below the context floor is corrected here and
+        // written back, with a toast: the app keeps working on a model that
+        // qualifies, and the swap is never silent.
+        const { settings: next, notice } = enforceModelFloor(loaded);
+        setSettings(next);
+        if (notice) {
+          saveSettings(next);
+          pushToast("warn", notice);
+        }
+      })
+      .catch(() => {});
     onSettingsSaveError((e) => {
       console.error("failed to persist settings", e);
       pushToast("warn", "Settings could not be saved");
