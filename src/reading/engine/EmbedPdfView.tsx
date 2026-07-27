@@ -1137,6 +1137,9 @@ function TouchInputRouter({
         ctx.current.viewport = null;
         el.style.touchAction = "";
         el.style.transform = "";
+        // A settle may have been holding the page area back when the router let
+        // go of the element (docs/pitfall/63). Nothing else would clear it.
+        el.style.visibility = "";
         el.removeEventListener("pointerdown", onDown, { capture: true });
         el.removeEventListener("pointermove", onMove, { capture: true });
         el.removeEventListener("pointerup", onUp, { capture: true });
@@ -1688,6 +1691,45 @@ async function wireEngine(
     return scrollScope.getCurrentPage();
   };
 
+  // --- holding the page area back --------------------------------------------
+  // A placement cannot be issued before the geometry it measures exists, and
+  // that geometry arrives several frames after the document does. Every one of
+  // those frames paints, and it paints at the scroll container's origin — page
+  // 1 — because that is where a fresh scroll container sits and nothing has
+  // moved it yet. Shrinking the gap does not remove those frames; a scroll
+  // issued after a frame has painted cannot un-paint it. So the page area does
+  // not paint at all until the placement has been confirmed.
+  //
+  // The viewport plugin's own gate (`gate`/`releaseGate`) cannot do this: it
+  // unmounts the Scroller, and with no Scroller there is no layout-ready, no
+  // virtual items and no scrollWidth — the settle would be waiting for the
+  // geometry that only exists once the gate is released. What this needs is a
+  // page area that is laid out and not drawn, which is `visibility: hidden` on
+  // the scroll container. Its box, its extents and its scroll offset all stay
+  // live, the engine renders from the scroll model rather than from anything
+  // the compositor sees, and behind it is the same background the reader was
+  // already looking at while the document loaded.
+  //
+  // Whoever placed last owns it. A settle that holds the area back releases it
+  // on the frame it confirms the placement and on any frame it stops running —
+  // including the frame budget running out — and a newer placement takes
+  // ownership from an older one. There is no path that stops the settle without
+  // giving the reader the page area back.
+  let heldBy = 0;
+  const holdPageArea = (serial: number) => {
+    heldBy = serial;
+    const el = pagedRef.current.viewport;
+    // Re-asserted rather than set once: the scroll container is handed over a
+    // frame or two after the document opens, so the first ask can arrive before
+    // there is an element to hide.
+    if (el && el.style.visibility !== "hidden") el.style.visibility = "hidden";
+  };
+  const showPageArea = () => {
+    heldBy = 0;
+    const el = pagedRef.current.viewport;
+    if (el && el.style.visibility) el.style.visibility = "";
+  };
+
   const centerPage = (target: number, behavior: "smooth" | "instant") =>
     scrollScope.scrollToPage({ pageNumber: target, behavior, alignX: centerAlignFor(target) });
 
@@ -1708,18 +1750,34 @@ async function wireEngine(
   // only waited on. A null page settles the geometry and places nothing, which
   // is what re-asserting vertical does: the reader is already inside the page
   // and putting its top back at the top of the viewport would eat the offset.
-  const settleLayout = (mode: EmbedLayout, page: number | null, behavior: "smooth" | "instant") => {
+  const settleLayout = (
+    mode: EmbedLayout,
+    page: number | null,
+    behavior: "smooth" | "instant",
+    // Whether the page area stays dark until this placement is confirmed. For
+    // the paths that have no page on screen to protect, or whose wait would
+    // otherwise be painted at the wrong page.
+    hold = false,
+  ) => {
     const serial = ++settleSerial;
     if (page !== null) settleTarget = { serial, page };
+    // The newest placement owns the page area, so an older settle can neither
+    // keep it dark nor give it back. A placement that does not want it dark
+    // takes it back from one that did.
+    if (hold && page !== null) holdPageArea(serial);
+    else if (heldBy !== 0) showPageArea();
     const settings = LAYOUT_SETTINGS[mode];
     const strategy = settings.axis === "horizontal" ? ScrollStrategy.Horizontal : ScrollStrategy.Vertical;
     const zoomMode = settings.zoom === "fit-page" ? ZoomMode.FitPage : ZoomMode.FitWidth;
     let frames = 0;
     let attempts = 0;
     let ready = false;
-    const tick = () => {
-      // A newer switch or turn has taken over the scroll position.
-      if (serial !== settleSerial || layout !== mode) return;
+    let placed = false;
+    // One frame of the settle: repair what is missing, place when the geometry
+    // allows it, and say whether another frame is wanted. Every way this stops
+    // returns false, which is what makes the hold bounded — the caller below
+    // gives the page area back on the frame it stops, whatever stopped it.
+    const step = (): boolean => {
       frames += 1;
       const expired = frames >= SETTLE_FRAME_BUDGET;
       const geometry = readGeometry();
@@ -1728,19 +1786,21 @@ async function wireEngine(
         // router grabs the scroll container a frame or two after it mounts, and
         // opening a book can reach here first. Waiting is the whole point: a
         // placement measured against nothing is the failure this exists to
-        // prevent. The frame budget below bounds the wait.
+        // prevent. The frame budget bounds the wait.
         if (!expired && (geometry === null || !geometrySettled(geometry, mode))) {
           const gap = geometry === null ? null : settleGap(geometry, mode);
           if (gap === "metrics") refreshViewportMetrics();
           if (gap === "zoom") zoomScope.requestZoom(zoomMode);
           if (gap === "model") forceScrollStrategy(strategy);
-          requestAnimationFrame(tick);
-          return;
+          // The element may only just have arrived, after the hold was asked
+          // for and found nothing to hide.
+          if (heldBy === serial) holdPageArea(serial);
+          return true;
         }
         ready = true;
       }
       // Nothing to place: the settle was only asked to let the geometry land.
-      if (page === null) return;
+      if (page === null) return false;
       const el = pagedRef.current.viewport;
       const want = placeTarget(mode, page);
       const at = settings.axis === "horizontal" ? el?.scrollLeft : el?.scrollTop;
@@ -1754,15 +1814,36 @@ async function wireEngine(
         // rather than the one it last cached, and then watched for the rest of
         // the budget instead of being trusted on sight.
         syncScrollMetrics();
-        if (!expired && behavior === "instant") requestAnimationFrame(tick);
-        return;
+        placed = true;
+        return !expired && behavior === "instant";
       }
       // A smooth turn is an animation in progress, not a landing to confirm:
       // issue it once and leave it alone.
-      if (attempts >= (behavior === "smooth" ? 1 : MAX_PLACE_ATTEMPTS)) return;
+      if (attempts >= (behavior === "smooth" ? 1 : MAX_PLACE_ATTEMPTS)) return false;
       attempts += 1;
       placePage(mode, page, behavior);
-      if (!expired) requestAnimationFrame(tick);
+      return !expired;
+    };
+    const release = () => {
+      if (heldBy === serial) showPageArea();
+    };
+    const tick = () => {
+      // A newer switch or turn has taken over the scroll position, and the page
+      // area with it.
+      if (serial !== settleSerial || layout !== mode) return;
+      const again = step();
+      // The page area comes back the moment the placement is confirmed: the
+      // offset this frame is about to paint is the one that was asked for.
+      if (placed) release();
+      // And it comes back a frame after the settle stops for any other reason —
+      // a geometry that never settles, a placement that will not land, the
+      // frame budget. A frame later rather than on the spot because the scroll
+      // the last attempt asked for is deferred by one (the viewport plugin
+      // defers every scroll it is handed), so releasing here would show the one
+      // frame all of this exists to hide. Nothing waits on more than that: this
+      // is the settle's last frame either way.
+      if (again) requestAnimationFrame(tick);
+      else requestAnimationFrame(release);
     };
     requestAnimationFrame(tick);
   };
@@ -1780,9 +1861,12 @@ async function wireEngine(
       return;
     }
     // A turn is the newest word on where the strip should sit: a settle still
-    // confirming an older target stands down rather than pulling it back.
+    // confirming an older target stands down rather than pulling it back — and
+    // hands back the page area with it, since a turn is issued against a page
+    // the reader is already looking at.
     settleSerial += 1;
     settleTarget = { serial: settleSerial, page: target };
+    if (heldBy !== 0) showPageArea();
     centerPage(target, behavior);
   };
 
@@ -1996,8 +2080,14 @@ async function wireEngine(
       // else that no plugin will ever call wrong. Opening is the harder case —
       // the viewport is measuring itself for the first time, and nothing has
       // ever been placed to correct.
+      //
+      // And held back until it is placed. This is the one path with nothing on
+      // screen to lose: the reader is waiting for a book to open, the frames
+      // between the strip appearing and the placement landing are the strip's
+      // origin — page 1 — and the grey they are replaced with is the grey they
+      // have been looking at since they tapped the book.
       const target = Math.min(Math.max(iv.pageIndex + 1, 1), scrollScope.getTotalPages() || 1);
-      settleLayout("paged", target, "instant");
+      settleLayout("paged", target, "instant", true);
     } else if (iv) {
       zoomScope.requestZoom(iv.zoom);
       // Restore the exact in-page position when the saved state carries one
@@ -2076,7 +2166,19 @@ async function wireEngine(
       // against the layout that was asked for, re-asserts whichever is missing,
       // and only then places the page — and confirms it arrived, because a
       // scroll the browser clamped is one nothing downstream will ever notice.
-      settleLayout(mode, switched || s.placePage === "center" ? page : null, "instant");
+      //
+      // A switch holds the page area back too, for the same reason the open
+      // does: between the request and the geometry the scroll offset is 0 in a
+      // layout that has just been rebuilt around it, so what paints is the top
+      // of the new layout — page 1, on the way to the page the reader was on.
+      // Unlike the open there is something on screen to lose, so it was
+      // measured: one painted frame at page 1 (17ms) becomes two dark ones plus
+      // the frame that confirms the landing — 33ms at full speed, 100ms under a
+      // 6x CPU throttle. A slightly longer gap that stays on the background the
+      // page sits on, instead of a shorter one that says the reader lost their
+      // place. A re-assert of the layout already in effect moves nothing and so
+      // holds nothing.
+      settleLayout(mode, switched || s.placePage === "center" ? page : null, "instant", switched);
       refreshZoomedIn();
       emitStats();
       emitState();

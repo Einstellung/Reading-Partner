@@ -37,6 +37,7 @@
 - [60-annotation-plugin-selects-what-it-creates](./60-annotation-plugin-selects-what-it-creates.md) — `selectAfterCreate` 运行期默认为真（类型注释写反成 default false），每画完一笔新标注就是选中的，宿主据此把标注编辑器弹在页面上；注册插件时显式关掉，创建从此不动选中
 - [61-viewport-metrics-never-see-their-own-padding](./61-viewport-metrics-never-see-their-own-padding.md) — 视口插件的 ResizeObserver 看 content box，而它自己的 padding 只改 client box，度量停在 padding 之前就再也不更新；fit 永远小 2×gap，一整页填不满屏幕、邻页露一条，重发 requestZoom 修不了。几何判据加"插件度量等于元素度量"和"scale 等于该视口解出的 fit"，打开时的还原也走 settle
 - [62-paged-strip-topmost-visible-page-is-the-previous-one](./62-paged-strip-topmost-visible-page-is-the-previous-one.md) — 横排页带两侧邻页常露一条，坑 23 的"最顶上的可见页"在翻页模式下指的是上一页，存的位置每次退一页；锚点按布局分，翻页用插件的 `getCurrentPage()`（居中那页）且不存页内偏移
+- [63-first-painted-frame-is-always-page-one](./63-first-painted-frame-is-always-page-one.md) — 放置要等几何，等的那几帧照画，画的是滚动容器的原点即第 1 页，缩窗口去不掉；视口插件的 gate 会把 Scroller 卸掉（等于死锁），要的是滚动容器上的 `visibility:hidden`，落点确认或 settle 停下就放出来
 
 ## 触摸与手势
 
