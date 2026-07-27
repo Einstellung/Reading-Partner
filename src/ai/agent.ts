@@ -34,7 +34,6 @@ import {
 	contextBudget,
 	fitsBudget,
 	stubEarlyToolResults,
-	REFUSE_EXHAUSTED,
 	TOOL_RESULTS_KEPT,
 	type BudgetPurpose,
 } from "../budget";
@@ -102,6 +101,15 @@ export interface AgentCallbacks {
 	// usage, responseId, stopReason. A caller that only wants the text ignores it.
 	onDone(finalText: string, assistant?: StreamOutcome): void;
 	onError(message: string, assistant?: StreamOutcome): void;
+	// The loop gave up for a reason it can state, with nothing having failed: the
+	// call outgrew the model's window mid-turn, or the round cap ran out. Every
+	// request that went out was answered, so presenting this as a failed call
+	// tells the user to check a connection that is fine. Separate from onError
+	// because the two ask for different things — an error is worth another press,
+	// a refusal gives the same answer every time. Unset falls back to onError, for
+	// callers with no use for the distinction (the unattended pipelines turn
+	// either one into a rejected promise).
+	onRefusal?(message: string): void;
 }
 
 export interface RunAgentTurnOptions extends AgentCallbacks {
@@ -115,7 +123,7 @@ export interface RunAgentTurnOptions extends AgentCallbacks {
 	// metadata says reasoning:false.
 	reasoning?: ThinkingLevel;
 	// Max streamed model turns that request tools before the loop gives up.
-	// Default 8. Exceeding it surfaces a clear error through onError.
+	// Default 8. Exceeding it is a refusal, not an error.
 	maxRounds?: number;
 	// What the answer is for, which sets how much output room each round must
 	// leave (src/budget). "chat" when unset.
@@ -124,6 +132,24 @@ export interface RunAgentTurnOptions extends AgentCallbacks {
 
 const DEFAULT_MAX_ROUNDS = 8;
 const PREVIEW_LIMIT = 200;
+
+// The two things the loop says when it gives up. Both are refusals rather than
+// errors, and both are written for someone who does not know what a token is:
+// they say what happened to the reading, not what happened to the arithmetic.
+//
+// Kept here rather than beside the ladder's refusals (src/budget) because only
+// the loop can reach either state — the planner sizes a turn before it is sent
+// and never sees one in flight.
+
+// A turn that started with room and ran out of it partway through, after the one
+// reduction available mid-flight (stubbing the tool results it already
+// collected). Worded to hold whether or not anything was actually stubbed.
+export const REFUSE_MIDTURN =
+	"I've taken in more of this material than I can hold at once, and setting aside what I can spare still doesn't leave room to answer. Ask about a narrower part of it and I can.";
+
+// The model spent the whole round cap calling tools and never wrote an answer.
+export const REFUSE_ROUNDS =
+	"I kept looking things up without getting to an answer, so I've stopped rather than go around again. Ask something more specific and I can.";
 
 function preview(text: string): string {
 	return text.length <= PREVIEW_LIMIT ? text : `${text.slice(0, PREVIEW_LIMIT)}…`;
@@ -177,6 +203,7 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 	const { stream, model, apiKey, systemPrompt, tools, signal, reasoning, transport, maxRounds } = params;
 	const { onDelta, onThinking, onResponse, onToolStart, onToolEnd, onDone, onError } = params;
 	const maxRetries = params.maxRetries ?? DEFAULT_MAX_RETRIES;
+	const refuse = params.onRefusal ?? ((message: string) => onError(message));
 
 	const piTools: Tool[] = tools.map(({ name, description, parameters }) => ({
 		name,
@@ -221,7 +248,7 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 				// line, no edit to the history can help: pi clamps against that number
 				// regardless, so refusing is the outcome rather than a missed rescue.
 				if (!fitsBudget(contextBudget(model, context), purpose)) {
-					onError(REFUSE_EXHAUSTED);
+					refuse(REFUSE_MIDTURN);
 					return;
 				}
 			}
@@ -319,7 +346,11 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 		}
 
 		if (signal?.aborted) return;
-		onError(`agent stopped after ${maxRounds} tool rounds without a final answer`);
+		// Same exit as the budget refusal, for the same reason: every round of this
+		// turn reached the model and came back. What it did with them — fetching and
+		// fetching without concluding — is not a broken call, and a Retry button on
+		// it only offers to spend the cap again on the identical ask.
+		refuse(REFUSE_ROUNDS);
 	} catch (e) {
 		if (signal?.aborted) return;
 		onError(e instanceof Error ? e.message : String(e));
@@ -346,6 +377,7 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
 		onToolEnd,
 		onDone,
 		onError,
+		onRefusal,
 	} = options;
 
 	try {
@@ -370,6 +402,7 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
 			onToolEnd,
 			onDone,
 			onError,
+			onRefusal,
 		});
 	} catch (e) {
 		onError(e instanceof Error ? e.message : String(e));

@@ -95,7 +95,7 @@ import CallView from "./ui/components/chat/CallView";
 import ReadingPipCard from "./ui/components/chat/ReadingPipCard";
 import ChatPipCard from "./ui/components/chat/ChatPipCard";
 import SettingsView from "./ui/components/SettingsView";
-import { buildReadingTurn } from "./reading/turn";
+import { buildReadingTurn, turnFailureView, type TurnFailure } from "./reading/turn";
 import { BTN, BTN_PRIMARY } from "./ui/components/common/buttons";
 import { appendRunningTool, resolveToolStatus } from "./ui/components/common/toolTrace";
 import LibraryScreen from "./ui/components/library/LibraryScreen";
@@ -758,6 +758,18 @@ export default function App() {
         return tools ? { ...m, tools } : m;
       }, ts);
 
+    // A turn that ends without a reply. The row it leaves behind, whether a
+    // toast goes up and whether Retry is offered all follow from which kind it
+    // was (reading/turn.ts), so the refusal paths cannot pick up the error
+    // path's red banner or its "couldn't reach the model".
+    const showFailure = (kind: TurnFailure, message: string, ts: number) => {
+      if (abortRef.current === controller) abortRef.current = null;
+      if (controller.signal.aborted) return; // switch/hangup, not a failure
+      const view = turnFailureView(kind, message);
+      if (view.toast) pushToast("error", view.toast);
+      patch(() => ({ role: "ai", text: view.text, ts, failed: true }), ts, view.retry);
+    };
+
     const ann = annsRef.current.get(annotationId);
     const ts = Date.now();
     setCall((c) => {
@@ -795,9 +807,7 @@ export default function App() {
       // reads as a one-word reply. No Retry offered — the same inputs assemble
       // the same call, so there is nothing for a second press to change.
       if (turn.refusal) {
-        if (abortRef.current === controller) abortRef.current = null;
-        if (controller.signal.aborted) return;
-        patch(() => ({ role: "ai", text: turn.refusal, ts, failed: true }), ts);
+        showFailure("refusal", turn.refusal, ts);
         return;
       }
 
@@ -834,12 +844,13 @@ export default function App() {
           appendMessage(bookId, threadId, { role: "ai", text: full, ts });
         },
         onError: (message: string) => {
-          if (abortRef.current === controller) abortRef.current = null;
-          if (controller.signal.aborted) return; // switch/hangup, not a failure
-          console.error("agent turn failed", message);
-          pushToast("error", "AI reply failed");
-          patch(() => ({ role: "ai", text: `⚠️ Couldn't reach the model. ${message}`, ts, failed: true }), ts, true);
+          if (!controller.signal.aborted) console.error("agent turn failed", message);
+          showFailure("error", message, ts);
         },
+        // The loop gave up mid-turn: the call outgrew the window, or it spent the
+        // round cap fetching without answering. Shown like the refusal above,
+        // because that is what it is.
+        onRefusal: (message: string) => showFailure("refusal", message, ts),
       });
     })();
   }, [pushToast, distillAnnotations]);

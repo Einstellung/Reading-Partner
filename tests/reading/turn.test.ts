@@ -23,7 +23,10 @@ mock.module("@tauri-apps/plugin-fs", () => ({
   remove: async () => {},
 }));
 
-const { buildReadingTurn, EXPLAIN_KICKOFF, HISTORY_KEEP } = await import("../../src/reading/turn");
+const { buildReadingTurn, turnFailureView, EXPLAIN_KICKOFF, HISTORY_KEEP } = await import(
+  "../../src/reading/turn"
+);
+const { REFUSE_MIDTURN, REFUSE_ROUNDS } = await import("../../src/ai/agent");
 const { appendMessage, createThread, dropThreadCache } = await import("../../src/platform/app/threads");
 
 const BOOK = "book-hash";
@@ -290,4 +293,59 @@ test("a figure the conversation has already cited keeps its catalog", async () =
   );
   expect(turn!.systemPrompt).toContain("[fig:1]");
   expect(turn!.systemPrompt).not.toContain("=== Page 2 ===");
+});
+
+// --- how a turn with no reply is shown (turnFailureView) ---
+//
+// A refusal and a failed call look alike from inside the loop — no answer came
+// back — and used to be shown alike, which told a reader whose network is fine
+// to go and check their network. These pin the difference.
+
+test("a refusal stands as the reply: no toast, no Retry", () => {
+  const view = turnFailureView("refusal", REFUSE_MIDTURN);
+  expect(view.text).toBe(REFUSE_MIDTURN);
+  expect(view.toast).toBeNull();
+  expect(view.retry).toBe(false);
+});
+
+test("a refusal is never dressed as a failure to reach the model", () => {
+  for (const message of [REFUSE_MIDTURN, REFUSE_ROUNDS]) {
+    const view = turnFailureView("refusal", message);
+    expect(view.text).not.toContain("Couldn't reach");
+    expect(view.text).not.toContain("⚠️");
+    // Nothing a reader would have to look up before they could act on it.
+    expect(view.text).not.toContain("token");
+    expect(view.text).not.toContain("context window");
+    // And it ends by naming the ask that would work instead.
+    expect(view.text).toContain("Ask ");
+  }
+});
+
+test("an error keeps its toast, its Retry and its cause", () => {
+  const view = turnFailureView("error", "fetch failed");
+  expect(view.text).toContain("Couldn't reach the model");
+  expect(view.text).toContain("fetch failed");
+  expect(view.toast).toBe("AI reply failed");
+  expect(view.retry).toBe(true);
+});
+
+// The refusal assembled before the call and the one the loop reaches mid-turn
+// are two causes with one presentation; they share this mapping so they cannot
+// drift apart.
+test("a pre-send refusal and a mid-turn refusal are presented identically", async () => {
+  const turn = await buildReadingTurn(
+    input({
+      settings: small,
+      annotation: {
+        id: "ann-1",
+        text: "编译器内联缓存".repeat(40_000),
+        position: { pageIndex: 1 },
+      } as unknown as Annotation,
+    }),
+  );
+  const before = turnFailureView("refusal", turn!.refusal);
+  const during = turnFailureView("refusal", REFUSE_MIDTURN);
+  expect(before.text).toBe(turn!.refusal);
+  expect(before.toast).toBe(during.toast);
+  expect(before.retry).toBe(during.retry);
 });

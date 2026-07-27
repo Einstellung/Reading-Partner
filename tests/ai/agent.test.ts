@@ -19,14 +19,16 @@ import {
 	type Api,
 	type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
-import { runAgentLoop, type AgentCallbacks, type AgentTool, type StreamFn } from "../../src/ai/agent";
-import { DEFAULT_MAX_RETRIES } from "../../src/ai/providers";
 import {
-	contextBudget,
-	estimateContextTokens,
-	piBudget,
-	REFUSE_EXHAUSTED,
-} from "../../src/budget";
+	runAgentLoop,
+	REFUSE_MIDTURN,
+	REFUSE_ROUNDS,
+	type AgentCallbacks,
+	type AgentTool,
+	type StreamFn,
+} from "../../src/ai/agent";
+import { DEFAULT_MAX_RETRIES } from "../../src/ai/providers";
+import { contextBudget, estimateContextTokens, piBudget } from "../../src/budget";
 
 // A scripted model turn: either a `done` (optional text + optional tool calls)
 // or an `error` event. Text is emitted as a single text_delta before `done`.
@@ -96,6 +98,7 @@ function collectCallbacks() {
 	const toolEnds: { name: string; resultPreview: string; isError: boolean }[] = [];
 	let done: string | undefined;
 	let error: string | undefined;
+	let refusal: string | undefined;
 	let outcome: AssistantMessage | undefined;
 	const cb: AgentCallbacks = {
 		onDelta: (t) => deltas.push(t),
@@ -108,6 +111,9 @@ function collectCallbacks() {
 		onError: (m, a) => {
 			error = m;
 			outcome = a;
+		},
+		onRefusal: (m) => {
+			refusal = m;
 		},
 	};
 	return {
@@ -126,6 +132,9 @@ function collectCallbacks() {
 		},
 		get error() {
 			return error;
+		},
+		get refusal() {
+			return refusal;
 		},
 		// The AssistantMessage handed to whichever of onDone/onError fired.
 		get outcome() {
@@ -288,7 +297,10 @@ test("abort during a tool stops before the next round", async () => {
 	expect(script.calls()).toBe(1);
 });
 
-test("round cap surfaces a clear error", async () => {
+// The round cap is a refusal, not an error: every one of those rounds reached
+// the model and came back. Calling it an error tells the user to check a
+// connection that is fine, and offers a Retry that buys the same circle again.
+test("the round cap leaves through the refusal exit", async () => {
 	const script = scriptStream([
 		{ calls: [{ name: "echo", args: { value: "a" }, id: "t1" }] },
 		{ calls: [{ name: "echo", args: { value: "b" }, id: "t2" }] },
@@ -306,9 +318,34 @@ test("round cap surfaces a clear error", async () => {
 	});
 
 	expect(c.done).toBeUndefined();
-	expect(c.error).toContain("2 tool rounds");
+	expect(c.error).toBeUndefined();
+	expect(c.refusal).toBe(REFUSE_ROUNDS);
 	// Exactly maxRounds model turns were streamed.
 	expect(script.calls()).toBe(2);
+});
+
+test("a caller with no refusal exit still hears about it, through onError", async () => {
+	const script = scriptStream([
+		{ calls: [{ name: "echo", args: { value: "a" }, id: "t1" }] },
+		{ calls: [{ name: "echo", args: { value: "b" }, id: "t2" }] },
+	]);
+	let error: string | undefined;
+	const c = collectCallbacks();
+
+	await runAgentLoop({
+		stream: script.fn,
+		model: MODEL,
+		messages: [{ role: "user", content: "loop forever", timestamp: 0 }],
+		tools: [echoTool],
+		maxRounds: 1,
+		...c.cb,
+		onError: (m) => {
+			error = m;
+		},
+		onRefusal: undefined,
+	});
+
+	expect(error).toBe(REFUSE_ROUNDS);
 });
 
 test("a tool result with images is fed back as image content (M9)", async () => {
@@ -616,7 +653,10 @@ test("a round pi would clamp to one token is refused instead of sent", async () 
 	// normal `done`, no error (docs/pitfall/65). It is never sent.
 	expect(script.calls()).toBe(1);
 	expect(c.done).toBeUndefined();
-	expect(c.error).toBe(REFUSE_EXHAUSTED);
+	// Nothing failed — round one was answered — so this leaves through the
+	// refusal exit, not the one that means the model could not be reached.
+	expect(c.error).toBeUndefined();
+	expect(c.refusal).toBe(REFUSE_MIDTURN);
 });
 
 test("a round over the line on the script-aware count is rescued by stubbing old tool results", async () => {

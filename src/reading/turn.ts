@@ -127,6 +127,42 @@ export interface ReadingTurn {
   refusal: string;
 }
 
+// Why a turn produced no reply. The distinction the UI has to make is not what
+// went wrong but what a second press would change.
+//
+//   "refusal" — the turn was declined for a reason it can state: it did not fit
+//     the model's window (before sending, or after growing mid-flight), or the
+//     loop went round and round without answering. Every request that went out
+//     was answered; nothing was unreachable.
+//   "error" — the call itself did not complete: no network, a rejected key, a
+//     provider failure. The reason is outside the conversation, so it may well
+//     be gone by the next press.
+export type TurnFailure = "refusal" | "error";
+
+export interface TurnFailureView {
+  // What the failed reply row says, in full.
+  text: string;
+  // The toast to raise, or null for none. A refusal raises none: it is already
+  // sitting where the reply would be, and a red banner over it would say the
+  // opposite of what it says.
+  toast: string | null;
+  // Whether to offer Retry. False for a refusal — the same inputs are declined
+  // the same way, so the button would only promise a second identical stop.
+  retry: boolean;
+}
+
+// One place deciding how a turn that produced no reply is shown, so the two
+// refusal paths (declined before sending, declined mid-loop) cannot drift apart
+// or drift into the error path's wording.
+export function turnFailureView(kind: TurnFailure, message: string): TurnFailureView {
+  if (kind === "refusal") return { text: message, toast: null, retry: false };
+  return {
+    text: `⚠️ Couldn't reach the model. ${message}`,
+    toast: "AI reply failed",
+    retry: true,
+  };
+}
+
 // The configured model's metadata (its context window is all we want). A
 // synchronous catalog lookup — no credentials, no network. Null when settings
 // name a provider or model pi doesn't know, in which case the turn is assembled
