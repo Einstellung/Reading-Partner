@@ -31,6 +31,7 @@ import type {
 } from "@earendil-works/pi-ai";
 import { validateToolCall } from "@earendil-works/pi-ai";
 import {
+	DEFAULT_MAX_RETRIES,
 	resolveCall,
 	toPiMessages,
 	type ChatMessage,
@@ -149,6 +150,9 @@ export interface AgentLoopParams extends AgentCallbacks {
 	reasoning?: ThinkingLevel;
 	// Provider transport preference (SSE for OpenAI; see transportFor).
 	transport?: Transport;
+	// Client-side retries on the request that opens each round's stream;
+	// DEFAULT_MAX_RETRIES when unset. See providers.ts for why it must be passed.
+	maxRetries?: number;
 	maxRounds: number;
 }
 
@@ -158,6 +162,7 @@ export interface AgentLoopParams extends AgentCallbacks {
 export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 	const { stream, model, apiKey, systemPrompt, tools, signal, reasoning, transport, maxRounds } = params;
 	const { onDelta, onThinking, onResponse, onToolStart, onToolEnd, onDone, onError } = params;
+	const maxRetries = params.maxRetries ?? DEFAULT_MAX_RETRIES;
 
 	const piTools: Tool[] = tools.map(({ name, description, parameters }) => ({
 		name,
@@ -173,7 +178,14 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 			if (signal?.aborted) return;
 
 			const context: Context = { systemPrompt, messages, tools: piTools };
-			const s = stream(model, context, { apiKey, signal, reasoning, transport, onResponse });
+			const s = stream(model, context, {
+				apiKey,
+				signal,
+				reasoning,
+				transport,
+				maxRetries,
+				onResponse,
+			});
 
 			let final: AssistantMessage | undefined;
 			for await (const ev of s) {

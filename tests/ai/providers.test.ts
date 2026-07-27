@@ -19,7 +19,7 @@ import {
 	type SimpleStreamOptions,
 	type Usage,
 } from "@earendil-works/pi-ai";
-import { streamChatCore, type SimpleStreamFn } from "../../src/ai/providers";
+import { DEFAULT_MAX_RETRIES, streamChatCore, type SimpleStreamFn } from "../../src/ai/providers";
 
 const MODEL = {} as Model<Api>;
 
@@ -176,6 +176,39 @@ test("thinking without an onThinking handler is simply dropped, reply stays clea
 	});
 	expect(c.deltas).toEqual(["visible"]);
 	expect(c.done).toBe("visible");
+});
+
+test("the opening request carries a retry budget, since pi's own default is none", async () => {
+	const rec = recordingStream([textDelta("ok")]);
+	const c = collect();
+	await streamChatCore({
+		stream: rec.fn,
+		model: MODEL,
+		messages: [],
+		onDelta: c.onDelta,
+		onDone: c.onDone,
+		onError: c.onError,
+	});
+	expect(DEFAULT_MAX_RETRIES).toBeGreaterThan(0);
+	expect(rec.options()?.maxRetries).toBe(DEFAULT_MAX_RETRIES);
+	// Left at pi's default so a server asking for a very long wait still fails
+	// fast, into the watchdog's hands rather than into a silent hour-long sleep.
+	expect(rec.options()?.maxRetryDelayMs).toBeUndefined();
+});
+
+test("an explicit retry budget wins over the default, including zero", async () => {
+	const rec = recordingStream([textDelta("ok")]);
+	const c = collect();
+	await streamChatCore({
+		stream: rec.fn,
+		model: MODEL,
+		messages: [],
+		maxRetries: 0,
+		onDelta: c.onDelta,
+		onDone: c.onDone,
+		onError: c.onError,
+	});
+	expect(rec.options()?.maxRetries).toBe(0);
 });
 
 test("the done event's AssistantMessage reaches onDone with its usage and response id", async () => {

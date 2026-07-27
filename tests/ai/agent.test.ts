@@ -20,6 +20,7 @@ import {
 	type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
 import { runAgentLoop, type AgentCallbacks, type AgentTool, type StreamFn } from "../../src/ai/agent";
+import { DEFAULT_MAX_RETRIES } from "../../src/ai/providers";
 
 // A scripted model turn: either a `done` (optional text + optional tool calls)
 // or an `error` event. Text is emitted as a single text_delta before `done`.
@@ -494,4 +495,28 @@ test("the response head is forwarded to every round's stream options", async () 
 		await options?.onResponse?.({ status: 200, headers: {} }, MODEL);
 	}
 	expect(heads).toEqual([200, 200]);
+});
+
+test("every round opens its request with a retry budget", async () => {
+	const seen: (SimpleStreamOptions | undefined)[] = [];
+	const script = scriptStream([
+		{ text: "checking", calls: [{ name: "echo", args: { value: "x" }, id: "t1" }] },
+		{ text: "done" },
+	]);
+	const stream: StreamFn = (model, context, options) => {
+		seen.push(options);
+		return script.fn(model, context, options);
+	};
+	const c = collectCallbacks();
+
+	await runAgentLoop({
+		stream,
+		model: MODEL,
+		messages: [{ role: "user", content: "go", timestamp: 0 }],
+		tools: [echoTool],
+		maxRounds: 8,
+		...c.cb,
+	});
+
+	expect(seen.map((o) => o?.maxRetries)).toEqual([DEFAULT_MAX_RETRIES, DEFAULT_MAX_RETRIES]);
 });

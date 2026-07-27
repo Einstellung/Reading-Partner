@@ -257,6 +257,19 @@ export type SimpleStreamFn = (
 	options: SimpleStreamOptions,
 ) => AssistantMessageEventStream;
 
+// Client-side retries for the request that opens the stream. pi has the loop
+// inlined in all three of our APIs (retryProviderRequest) but defaults it to 0,
+// so until it is passed there are none: a 503 with `retry-after: 1` fails the
+// call a millisecond later and the server is asked once. Two retries turn the
+// same 503 into a reply about two seconds later.
+//
+// This only wraps establishing the request. A stream that opens and then goes
+// quiet is the stall watchdog's business (src/ai/watchdog.ts); the two do not
+// overlap. maxRetryDelayMs stays at pi's default, so a server asking for a wait
+// longer than a minute still fails fast and lands in the watchdog's hands with
+// the requested delay in the message.
+export const DEFAULT_MAX_RETRIES = 2;
+
 export interface StreamChatCoreParams {
 	stream: SimpleStreamFn;
 	model: Model<Api>;
@@ -269,6 +282,8 @@ export interface StreamChatCoreParams {
 	reasoning?: ThinkingLevel;
 	// Provider transport preference (SSE for OpenAI; see transportFor).
 	transport?: Transport;
+	// Client-side retries on the opening request; DEFAULT_MAX_RETRIES when unset.
+	maxRetries?: number;
 	onDelta(text: string): void;
 	onThinking?(delta: string): void;
 	onResponse?: ResponseHead;
@@ -285,11 +300,12 @@ export interface StreamChatCoreParams {
 export async function streamChatCore(params: StreamChatCoreParams): Promise<void> {
 	const { stream, model, apiKey, systemPrompt, messages, signal, reasoning, transport } = params;
 	const { onDelta, onThinking, onResponse, onDone, onError } = params;
+	const maxRetries = params.maxRetries ?? DEFAULT_MAX_RETRIES;
 	try {
 		const s = stream(
 			model,
 			{ systemPrompt, messages },
-			{ apiKey, signal, reasoning, transport, onResponse },
+			{ apiKey, signal, reasoning, transport, maxRetries, onResponse },
 		);
 		let full = "";
 		let final: StreamOutcome | undefined;
