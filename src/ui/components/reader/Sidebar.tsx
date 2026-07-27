@@ -50,7 +50,7 @@ interface SidebarProps {
 	annotations: Annotation[];
 	selectedId?: string | null;
 	onSelectAnnotation(id: string): void;
-	onToggleStar(id: string, starred: boolean): void;
+	onDeleteAnnotation(id: string): void;
 	onOpenThread(id: string): void;
 	// The prep tab's content, owned by App (state, callbacks, note loading).
 	prepPanel: ReactNode;
@@ -71,7 +71,7 @@ export default function Sidebar({
 	annotations,
 	selectedId,
 	onSelectAnnotation,
-	onToggleStar,
+	onDeleteAnnotation,
 	onOpenThread,
 	prepPanel,
 	notesPanel,
@@ -128,7 +128,7 @@ export default function Sidebar({
 							annotations={annotations}
 							selectedId={selectedId}
 							onSelect={onSelectAnnotation}
-							onToggleStar={onToggleStar}
+							onDelete={onDeleteAnnotation}
 							onOpenThread={onOpenThread}
 						/>
 					) : tab === "prep" ? (

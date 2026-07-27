@@ -1358,6 +1358,41 @@ export default function App() {
     clearPendingImages();
   }, [clearPendingImages, removeAnnotation]);
 
+  // Delete a mark from the trace list. This is the only way to get rid of an
+  // AI-pen mark: tapping one on the page opens its conversation, so the
+  // annotation editor's Delete never reaches it.
+  //
+  // The mark and its thread go together. The mark is the thread's only door —
+  // tapping it on the page, or its sparkle in the trace list — so a thread left
+  // behind is a conversation nothing can ever open again, syncing forever. That
+  // is the same pairing deleteCallThread already makes from the other end. The
+  // mark goes through removeAnnotation like every other deletion, so the
+  // annotations file, the in-memory map and sync stay in agreement; the thread
+  // goes through deleteThread, an in-file rewrite its own cache owns. Memory
+  // distilled from the talk stays, and the event log is appended to, not
+  // rewritten.
+  const deleteTraceAnnotation = useCallback(
+    (id: string) => {
+      const bookId = bookIdRef.current;
+      const threadId = annsRef.current.get(id)?.aiThreadId as string | undefined;
+      // A conversation open on this mark goes with it. Deleting the mark under a
+      // live bubble and leaving the bubble on screen reads as a bug even when it
+      // is not.
+      if (callRef.current?.annotationId === id) {
+        abortRef.current?.abort();
+        abortRef.current = null;
+        setCall(null);
+        clearPendingImages();
+      }
+      if (bookId && threadId && deleteThread(bookId, threadId)) {
+        const topicId = ctxRef.current.topicId;
+        if (topicId) logEvent(topicId, "thread-delete", { threadId, book: false });
+      }
+      removeAnnotation(id);
+    },
+    [removeAnnotation, clearPendingImages],
+  );
+
   const openThreadForAnnotation = useCallback(
     (annotationId: string) => {
       const ann = annsRef.current.get(annotationId);
@@ -1628,7 +1663,7 @@ export default function App() {
             annotations={traceAnns as unknown as PopupAnnotation[]}
             selectedId={selectedAnnId}
             onSelectAnnotation={onTraceSelect}
-            onToggleStar={(id, starred) => patchAnnotation(id, { starred })}
+            onDeleteAnnotation={deleteTraceAnnotation}
             onOpenThread={openThreadForAnnotation}
             prepPanel={<PrepPanel {...prepPanelProps} />}
             notesPanel={<NotesPanel {...notesPanelProps} />}
