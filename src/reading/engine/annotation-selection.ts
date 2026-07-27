@@ -10,6 +10,25 @@
 // unchanged. Passing those on made a tool switch open the editor over the middle
 // of the page for an annotation nobody had touched.
 
+// Drawing is not selecting. The plugin selects whatever it has just created
+// unless this says otherwise, and that default is behind two things the reader
+// never asked for: the editor opening over the page the moment a stroke ends,
+// and the fresh mark left selected — handles up, page claimed by the selection
+// activity — until something else is tapped. A mark is selected by being tapped.
+//
+// Passed explicitly because the default is true and reads as false: the plugin's
+// own type declares "When true (default false)", while the manifest and the tool
+// merge both fall back to true (docs/pitfall/60).
+//
+// Nothing downstream needs the new annotation selected: the host learns about it
+// from the create event (onSaveAnnotations), which is also where the AI pen picks
+// up the id for its thread. The one visible consequence is that a just-drawn mark
+// is no longer the highlighted row in the trace list.
+//
+// With it off, a create emits the plugin state with its selection array
+// untouched, which `selectionChanged` below already reads as nothing to say.
+export const SELECT_AFTER_CREATE = false;
+
 // Whether an emission carries a selection that actually moved.
 //
 // The identity of the plugin's own id array is what tells the two cases apart: a

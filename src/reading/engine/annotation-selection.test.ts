@@ -1,5 +1,22 @@
 import { expect, test } from "bun:test";
-import { popupEffect, selectionChanged } from "./annotation-selection";
+import { SELECT_AFTER_CREATE, popupEffect, selectionChanged } from "./annotation-selection";
+
+// Every finished stroke used to pop the annotation editor over the page: the
+// plugin selects what it creates by default, and the host opens the editor on a
+// selection. Drawing a line has to draw a line and stop there.
+test("a finished stroke leaves nothing selected", () => {
+  expect(SELECT_AFTER_CREATE).toBe(false);
+});
+
+test("a create says nothing, and tapping the mark it made opens the editor", () => {
+  // The create republishes the plugin state with the selection array it already
+  // held — the same array, so nothing reaches the editor.
+  const nothingSelected: string[] = [];
+  expect(selectionChanged(nothingSelected, nothingSelected)).toBe(false);
+  // The reader then taps the new mark: a select dispatch builds a new array.
+  expect(selectionChanged(nothingSelected, ["new"])).toBe(true);
+  expect(popupEffect("new", false)).toBe("open");
+});
 
 // The reported bug: switching from the pen to the palm popped the annotation
 // editor over the middle of the page. The tool change made the annotation plugin

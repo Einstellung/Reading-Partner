@@ -34,7 +34,7 @@ import { AnnotationPluginPackage, AnnotationLayer } from "@embedpdf/plugin-annot
 import type { AnnotationCapability } from "@embedpdf/plugin-annotation";
 
 import { embedToZotero, zoteroToEmbed, type ZoteroAnnotation } from "./convert";
-import { selectionChanged } from "./annotation-selection";
+import { SELECT_AFTER_CREATE, selectionChanged } from "./annotation-selection";
 import {
   initGestureState,
   pageCenterAlign,
@@ -1235,6 +1235,8 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
       createPluginRegistration(HistoryPluginPackage),
       createPluginRegistration(AnnotationPluginPackage, {
         annotationAuthor: props.authorName ?? "Reading-Partner",
+        // Finishing a stroke leaves nothing selected (annotation-selection.ts).
+        selectAfterCreate: SELECT_AFTER_CREATE,
       }),
     ],
     // The buffer identifies the document; other props are read live via propsRef.
