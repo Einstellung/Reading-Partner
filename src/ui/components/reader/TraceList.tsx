@@ -1,22 +1,44 @@
 // TraceList: the right-hand trace column — every mark the reader left on the
-// document, in document order. A read-only list with a star toggle and an AI
-// thread shortcut. Pure and controlled; styled with Tailwind utilities.
+// document, in document order. A read-only list with an AI thread shortcut and a
+// swipe-to-delete on each row. Controlled; styled with Tailwind utilities.
+//
+// Deleting from here is the only way to get rid of an AI-pen mark: tapping one
+// on the page opens its conversation, not the annotation editor, so the editor's
+// Delete never comes within reach of it.
+//
+// The gesture itself is decided in swipe-action.ts, unit tested and DOM-free;
+// this file binds pointer events, runs the commands that come back, and paints
+// the offset. Reaching the Delete costs two separate acts, and neither of them
+// is the swipe: uncover it, then press it.
 
-import { IconArea, IconHighlight, IconSparkle, IconStar, IconUnderline } from '../common/icons';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { IconArea, IconHighlight, IconSparkle, IconTrash, IconUnderline } from '../common/icons';
 import type { Annotation } from '../common/types';
+import {
+	SWIPE_ACTION_WIDTH,
+	actionVisible,
+	initSwipeState,
+	rowClickAction,
+	stepSwipe,
+	trackedOpen,
+	type SwipeInput,
+	type SwipeState,
+} from './swipe-action';
 
 interface TraceListProps {
 	annotations: Annotation[];
 	selectedId?: string | null;
 	onSelect(id: string): void;
-	onToggleStar(id: string, starred: boolean): void;
+	onDelete(id: string): void;
 	onOpenThread?(id: string): void;
 }
 
-const ITEM =
-	'group relative flex cursor-pointer items-start gap-2 border-b border-black/10 py-2 pl-3 pr-2 hover:bg-black/5';
+// The sliding content needs an opaque background of its own: the delete drawer
+// sits behind it, and a translucent hover tint would show it through.
+const ITEM = 'relative flex cursor-pointer items-start gap-2 py-2 pl-3 pr-2 touch-pan-y';
+const ITEM_REST = 'bg-white can-hover:hover:bg-neutral-100';
 const ITEM_SELECTED =
-	"bg-sky-50 before:content-[''] before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-sky-600";
+	"bg-sky-50 can-hover:hover:bg-sky-100 before:content-[''] before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-sky-600";
 const ICON_BTN =
 	'flex cursor-pointer items-center justify-center border-0 bg-transparent p-0.5 rounded coarse:h-11 coarse:w-11';
 
@@ -34,7 +56,185 @@ function TypeMark({ annotation }: { annotation: Annotation }) {
 	);
 }
 
-export default function TraceList({ annotations, selectedId, onSelect, onToggleStar, onOpenThread }: TraceListProps) {
+interface TraceRowProps {
+	annotation: Annotation;
+	selected: boolean;
+	// Whether this is the list's one open row. The list holds it, so opening a
+	// second row shuts the first.
+	open: boolean;
+	onOpenChange(id: string, open: boolean): void;
+	onSelect(id: string): void;
+	onDelete(id: string): void;
+	onOpenThread?(id: string): void;
+}
+
+function TraceRow({ annotation, selected, open, onOpenChange, onSelect, onDelete, onOpenThread }: TraceRowProps) {
+	const a = annotation;
+	const contentRef = useRef<HTMLDivElement>(null);
+	const swipeRef = useRef<SwipeState>(initSwipeState());
+	const [swipe, setSwipe] = useState<SwipeState>(swipeRef.current);
+	// A click is the tail of the drag that just ended, not a tap on the row.
+	const draggedRef = useRef(false);
+
+	const dispatch = useCallback(
+		(input: SwipeInput, e?: React.PointerEvent) => {
+			const out = stepSwipe(swipeRef.current, input);
+			swipeRef.current = out.state;
+			const el = contentRef.current;
+			for (const c of out.commands) {
+				switch (c.type) {
+					case 'capture':
+						el?.setPointerCapture(c.id);
+						break;
+					case 'releaseCapture':
+						if (el?.hasPointerCapture(c.id)) el.releasePointerCapture(c.id);
+						break;
+					case 'preventDefault':
+						e?.preventDefault();
+						break;
+					case 'suppressClick':
+						draggedRef.current = true;
+						break;
+					case 'openChanged':
+						onOpenChange(a.id, c.open);
+						break;
+				}
+			}
+			setSwipe(out.state);
+		},
+		[a.id, onOpenChange],
+	);
+
+	// The list shutting this row: another one opened, or a selection was made.
+	useEffect(() => {
+		if (!open && trackedOpen(swipeRef.current)) dispatch({ type: 'close' });
+	}, [open, dispatch]);
+
+	const text = typeof a.text === 'string' ? a.text : '';
+	const comment = typeof a.comment === 'string' ? a.comment : '';
+	const pageLabel = typeof a.pageLabel === 'string' ? a.pageLabel : '';
+	const hasThread = typeof a.aiThreadId === 'string' && a.aiThreadId !== '';
+	const dragging = swipe.phase === 'dragging';
+
+	return (
+		<div
+			role="option"
+			aria-selected={selected}
+			className="group relative overflow-hidden border-b border-black/10"
+		>
+			{/* The action the row slides off: only mounted once it is uncovered, so
+			    a shut row has nothing under it to press by accident. Its width is
+			    the row's travel, which swipe-action.ts owns. */}
+			{actionVisible(swipe) && (
+				<button
+					type="button"
+					className="absolute inset-y-0 right-0 flex cursor-pointer items-center justify-center border-0 bg-red-600 text-[13px] font-medium text-white can-hover:hover:bg-red-700 active:bg-red-700"
+					style={{ width: SWIPE_ACTION_WIDTH }}
+					title="Confirm delete"
+					onClick={(e) => {
+						e.stopPropagation();
+						onDelete(a.id);
+					}}
+				>
+					Delete
+				</button>
+			)}
+
+			<div
+				ref={contentRef}
+				className={
+					ITEM +
+					' ' +
+					(selected ? ITEM_SELECTED : ITEM_REST) +
+					(dragging ? ' transition-none' : ' transition-transform duration-200 ease-out')
+				}
+				style={{ transform: `translateX(${swipe.offset}px)` }}
+				onPointerDown={(e) => dispatch({ type: 'pointerdown', id: e.pointerId, x: e.clientX, y: e.clientY }, e)}
+				onPointerMove={(e) => dispatch({ type: 'pointermove', id: e.pointerId, x: e.clientX, y: e.clientY }, e)}
+				onPointerUp={(e) => dispatch({ type: 'pointerup', id: e.pointerId }, e)}
+				onPointerCancel={(e) => dispatch({ type: 'pointercancel', id: e.pointerId }, e)}
+				onClick={() => {
+					const action = rowClickAction(trackedOpen(swipeRef.current), draggedRef.current);
+					draggedRef.current = false;
+					if (action === 'close') dispatch({ type: 'close' });
+					else if (action === 'select') onSelect(a.id);
+				}}
+			>
+				<div className="flex w-5 flex-none items-center justify-center pt-0.5">
+					<TypeMark annotation={a} />
+				</div>
+
+				<div className="flex min-w-0 flex-1 flex-col gap-1">
+					{text && <div className="line-clamp-2 leading-snug">{text}</div>}
+					{comment && <div className="line-clamp-2 text-xs leading-snug text-neutral-500">{comment}</div>}
+					<div className="flex items-center gap-1.5">
+						{pageLabel && <span className="text-[11px] text-neutral-400">Page {pageLabel}</span>}
+						{hasThread && (
+							<button
+								type="button"
+								className={`${ICON_BTN} text-violet-500 hover:bg-violet-500/10`}
+								title="Open AI thread"
+								aria-label="Open AI thread"
+								onClick={(e) => {
+									e.stopPropagation();
+									onOpenThread?.(a.id);
+								}}
+							>
+								<IconSparkle size={14} />
+							</button>
+						)}
+					</div>
+				</div>
+
+				{/* The mouse's way in. Dragging a list row sideways is not something a
+				    desktop reader would think to try, so a hover-capable pointer gets
+				    the same reveal on a click here; it uncovers the Delete rather than
+				    deleting, so both devices pay the same two acts. */}
+				<button
+					type="button"
+					className="hidden h-6 w-6 flex-none cursor-pointer items-center justify-center rounded border-0 bg-transparent p-0 text-neutral-400 opacity-0 transition-opacity can-hover:flex group-hover:opacity-100 focus-visible:opacity-100 can-hover:hover:bg-red-700/10 can-hover:hover:text-red-700"
+					title="Delete mark"
+					aria-label="Delete mark"
+					aria-expanded={actionVisible(swipe)}
+					onClick={(e) => {
+						e.stopPropagation();
+						dispatch({ type: 'open' });
+					}}
+				>
+					<IconTrash size={14} />
+				</button>
+			</div>
+		</div>
+	);
+}
+
+export default function TraceList({ annotations, selectedId, onSelect, onDelete, onOpenThread }: TraceListProps) {
+	// The one row standing open. Opening another shuts it, so there is never more
+	// than one Delete on screen.
+	const [openId, setOpenId] = useState<string | null>(null);
+
+	// A row only ever reports its own state, so a row shutting itself because
+	// another one opened must not clear the new one.
+	const onOpenChange = useCallback((id: string, open: boolean) => {
+		setOpenId((cur) => (open ? id : cur === id ? null : cur));
+	}, []);
+
+	const handleSelect = useCallback(
+		(id: string) => {
+			setOpenId(null);
+			onSelect(id);
+		},
+		[onSelect],
+	);
+
+	const handleDelete = useCallback(
+		(id: string) => {
+			setOpenId(null);
+			onDelete(id);
+		},
+		[onDelete],
+	);
+
 	// sortIndex is the document-order key; lexicographic order is document order.
 	const items = [...annotations].sort((a, b) => {
 		const sa = a.sortIndex ?? '';
@@ -44,68 +244,18 @@ export default function TraceList({ annotations, selectedId, onSelect, onToggleS
 
 	return (
 		<div className="h-full overflow-y-auto bg-white text-[13px] text-neutral-800 select-none" role="listbox" aria-label="Traces">
-			{items.map((a) => {
-				const starred = a.starred === true;
-				const selected = a.id === selectedId;
-				const text = typeof a.text === 'string' ? a.text : '';
-				const comment = typeof a.comment === 'string' ? a.comment : '';
-				const pageLabel = typeof a.pageLabel === 'string' ? a.pageLabel : '';
-				const hasThread = typeof a.aiThreadId === 'string' && a.aiThreadId !== '';
-				return (
-					<div
-						key={a.id}
-						role="option"
-						aria-selected={selected}
-						className={ITEM + (selected ? ' ' + ITEM_SELECTED : '')}
-						onClick={() => onSelect(a.id)}
-					>
-						<div className="flex w-5 flex-none items-center justify-center pt-0.5">
-							<TypeMark annotation={a} />
-						</div>
-
-						<div className="flex min-w-0 flex-1 flex-col gap-1">
-							{text && <div className="line-clamp-2 leading-snug">{text}</div>}
-							{comment && <div className="line-clamp-2 text-xs leading-snug text-neutral-500">{comment}</div>}
-							<div className="flex items-center gap-1.5">
-								{pageLabel && <span className="text-[11px] text-neutral-400">Page {pageLabel}</span>}
-								{hasThread && (
-									<button
-										type="button"
-										className={`${ICON_BTN} text-violet-500 hover:bg-violet-500/10`}
-										title="Open AI thread"
-										aria-label="Open AI thread"
-										onClick={(e) => {
-											e.stopPropagation();
-											onOpenThread?.(a.id);
-										}}
-									>
-										<IconSparkle size={14} />
-									</button>
-								)}
-							</div>
-						</div>
-
-						<button
-							type="button"
-							className={
-								'flex h-6 w-6 coarse:h-11 coarse:w-11 flex-none cursor-pointer items-center justify-center rounded border-0 bg-transparent p-0 transition-opacity hover:bg-black/5 focus-visible:opacity-100' +
-								(starred
-									? ' text-amber-500 opacity-100'
-									: ' text-neutral-400 can-hover:opacity-0 group-hover:opacity-100 hover:text-amber-500')
-							}
-							title={starred ? 'Unstar' : 'Star'}
-							aria-label={starred ? 'Unstar' : 'Star'}
-							aria-pressed={starred}
-							onClick={(e) => {
-								e.stopPropagation();
-								onToggleStar(a.id, !starred);
-							}}
-						>
-							<IconStar filled={starred} size={16} />
-						</button>
-					</div>
-				);
-			})}
+			{items.map((a) => (
+				<TraceRow
+					key={a.id}
+					annotation={a}
+					selected={a.id === selectedId}
+					open={a.id === openId}
+					onOpenChange={onOpenChange}
+					onSelect={handleSelect}
+					onDelete={handleDelete}
+					onOpenThread={onOpenThread}
+				/>
+			))}
 		</div>
 	);
 }
