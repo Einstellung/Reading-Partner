@@ -126,8 +126,11 @@ export interface PiBudget {
 // capped by the requested maxTokens, so asking for MAX_SAFE_INTEGER leaves the
 // estimate as the only unknown. Models with no declared window (contextWindow
 // <= 0) are exempt from pi's clamp entirely, and reported as unbounded here.
+// So is a model whose metadata carries no number at all: the arithmetic would
+// otherwise be NaN, and NaN compares false against every floor, which would read
+// as "nothing fits" rather than as "there is nothing to measure against".
 export function piBudget(model: Model<Api>, ctx: Context): PiBudget {
-  if (model.contextWindow <= 0) {
+  if (!(model.contextWindow > 0)) {
     return { tokens: 0, allowedOutput: Number.MAX_SAFE_INTEGER, saturated: false };
   }
   const allowedOutput = clampMaxTokensToContext(model, ctx, Number.MAX_SAFE_INTEGER);
@@ -141,7 +144,7 @@ export function piBudget(model: Model<Api>, ctx: Context): PiBudget {
 // Output tokens left for a context of `used` tokens, after pi's safety margin.
 // Never negative; a model with no declared window is unbounded.
 export function outputAllowance(contextWindow: number, used: number): number {
-  if (contextWindow <= 0) return Number.MAX_SAFE_INTEGER;
+  if (!(contextWindow > 0)) return Number.MAX_SAFE_INTEGER;
   return Math.max(0, contextWindow - used - PI_CONTEXT_SAFETY_TOKENS);
 }
 

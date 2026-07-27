@@ -159,6 +159,7 @@ function makeDeps(bookIds: string[], instruction: string): SlidesDeps {
       const books = await Promise.all(bookIds.map(planMaterial));
       const text = await callModel(
         "prep",
+        "plan",
         slidesPlanSystemPrompt(model.aiLanguage),
         planUserMessage(books, instruction),
         opts,
@@ -169,8 +170,11 @@ function makeDeps(bookIds: string[], instruction: string): SlidesDeps {
     async generateContent(slide, opts) {
       const { aiLanguage } = await resolveModel("prep");
       const notes = await gatherSlideNotes(slide, bookIds);
+      // One slide's body from the gathered notes: a single unit of prose, so it
+      // is held to the same output floor as a chapter note.
       const text = await callModel(
         "prep",
+        "chapter-note",
         contentSystemPrompt(aiLanguage),
         contentUserMessage(slide, notes),
         opts,

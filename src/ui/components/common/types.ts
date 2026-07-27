@@ -64,6 +64,11 @@ export interface ThreadMessage {
 	failed?: boolean;
 	// Transient tool-call trace shown above the streaming reply (M6).
 	tools?: ToolStatus[];
+	// What this turn had to leave out of the model's view to fit the context
+	// window (src/budget). One quiet line after the answer. Never persisted and
+	// never part of `text`: it is the app talking about the turn, not the model's
+	// output, and replaying it next turn would put words in the model's mouth.
+	notice?: string;
 	// Transient inline card for the info add-source flow (docs/17): a probe-confirm
 	// card, or the first-briefing readiness/failure. Legacy field; new code uses a
 	// `card` part in `parts` instead. Absent in the reader chat.

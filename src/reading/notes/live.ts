@@ -63,7 +63,13 @@ function makeDeps(bookId: string, bookName: string, inputs: NotesInputs): NotesD
       // Resolved up front only so the parse can be attributed to the model that
       // produced it; the call itself resolves the same settings again.
       const model = await resolveModel("prep");
-      const text = await callModel("prep", NOTES_PLAN_SYSTEM_PROMPT, planUserMessage(fulltext), opts);
+      const text = await callModel(
+        "prep",
+        "plan",
+        NOTES_PLAN_SYSTEM_PROMPT,
+        planUserMessage(fulltext),
+        opts,
+      );
       const chapters = recordParse("notes-plan", model, text, (tally) =>
         parseNotesPlan(text, fulltext.pages.length, tally),
       );
@@ -120,6 +126,7 @@ function makeDeps(bookId: string, bookName: string, inputs: NotesInputs): NotesD
     async buildOverview(chapters, opts) {
       return callModel(
         "prep",
+        "overview",
         (m) => overviewSystemPrompt(m.aiLanguage),
         overviewUserMessage(chapters),
         opts,

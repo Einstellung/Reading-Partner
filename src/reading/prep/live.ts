@@ -104,7 +104,13 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
       // Resolved up front only so the parse can be attributed to the model that
       // produced it; the call itself resolves the same settings again.
       const model = await resolveModel("prep");
-      const text = await callModel("prep", PLAN_SYSTEM_PROMPT, planUserMessage(surveyFulltext), opts);
+      const text = await callModel(
+        "prep",
+        "plan",
+        PLAN_SYSTEM_PROMPT,
+        planUserMessage(surveyFulltext),
+        opts,
+      );
       return recordParse("prep-plan", model, text, (tally) => parsePlan(text, tally));
     },
 

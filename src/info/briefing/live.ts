@@ -32,10 +32,12 @@ import type { InfoItem, TriageResult } from "./types";
 
 // One tool-less streaming call. `extra` lets the parse-retry append a corrective
 // nudge. Triage wants some deliberation but not a marathon, so it reuses the
-// prep effort setting.
+// prep effort setting. Budgeted as a plan: the reply is a verdict on every item
+// collected, so it grows with the input and needs the wider output floor.
 function runTriageCall(userText: string, opts: AiCallOptions, extra?: string): Promise<string> {
   return callModel(
     "prep",
+    "plan",
     (model) => triageSystemPrompt(model.aiLanguage) + (extra ?? ""),
     userText,
     opts,

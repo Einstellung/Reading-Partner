@@ -164,6 +164,18 @@ function ToolTrace({ tools, size }: { tools: ToolStatus[]; size: 'sm' | 'lg' }) 
 	);
 }
 
+// The line under a reply that names what the turn left out to fit the context
+// window. Deliberately not a toast and not an error color: nothing failed, the
+// answer above is real, and this only says what it was formed from. One line,
+// low contrast, sitting where a footnote would.
+function BudgetNotice({ text, size }: { text: string; size: 'sm' | 'lg' }) {
+	return (
+		<div className={'text-neutral-400 ' + (size === 'lg' ? 'text-[13px] leading-6' : 'text-[11px] leading-relaxed')}>
+			{text}
+		</div>
+	);
+}
+
 // Render a single card part through the registry, dispatching its actions to the
 // host's onCardAction with the card's stable id. The registry lookup is by kind,
 // so the payload cast is safe (a card kind's component always accepts its own
@@ -211,7 +223,7 @@ const MessageBubble = memo(function MessageBubble({
 	surface: CardSurface;
 	onCardAction?: CardActionHandler;
 }) {
-	const { role, images, streaming, failed } = message;
+	const { role, images, streaming, failed, notice } = message;
 	const lg = size === 'lg';
 	// Dev-only diagnostic for the streaming gray-line glitch; no-op in prod and
 	// when this row isn't a streaming AI reply. Ref is attached to the prose row.
@@ -273,6 +285,9 @@ const MessageBubble = memo(function MessageBubble({
 			<div className={'text-neutral-800 ' + (lg ? 'text-base' : 'text-[13px]')}>
 				<Markdown text={textPart.text} />
 			</div>
+			{/* After the answer, before the copy affordance: the notice belongs to the
+			    reply, but Copy takes the model's words only. */}
+			{!streaming && notice && <BudgetNotice text={notice} size={size} />}
 			{!streaming && <CopyButton text={textPart.text} />}
 		</div>
 	);

@@ -21,12 +21,20 @@ import {
 } from "@earendil-works/pi-ai";
 import { runAgentLoop, type AgentCallbacks, type AgentTool, type StreamFn } from "../../src/ai/agent";
 import { DEFAULT_MAX_RETRIES } from "../../src/ai/providers";
+import {
+	contextBudget,
+	estimateContextTokens,
+	piBudget,
+	REFUSE_EXHAUSTED,
+} from "../../src/budget";
 
 // A scripted model turn: either a `done` (optional text + optional tool calls)
 // or an `error` event. Text is emitted as a single text_delta before `done`.
+// `usage` sets the finished message's reported total, which is what makes pi's
+// estimator switch to its usage shortcut on the next round.
 type ToolReq = { name: string; args: Record<string, any>; id?: string };
 type Turn =
-	| { text?: string; calls?: ToolReq[] }
+	| { text?: string; calls?: ToolReq[]; usage?: number }
 	| { error: string; reason?: "error" | "aborted"; text?: string };
 
 function turnEvents(turn: Turn): AssistantMessageEvent[] {
@@ -48,6 +56,7 @@ function turnEvents(turn: Turn): AssistantMessageEvent[] {
 	const message: AssistantMessage = fauxAssistantMessage(blocks.length ? blocks : "", {
 		stopReason: hasCalls ? "toolUse" : "stop",
 	});
+	if (turn.usage) message.usage = { ...message.usage, input: turn.usage, totalTokens: turn.usage };
 	events.push({ type: "done", reason: hasCalls ? "toolUse" : "stop", message });
 	return events;
 }
@@ -519,4 +528,143 @@ test("every round opens its request with a retry budget", async () => {
 	});
 
 	expect(seen.map((o) => o?.maxRetries)).toEqual([DEFAULT_MAX_RETRIES, DEFAULT_MAX_RETRIES]);
+});
+
+// --- fitting each round to the model's context window (src/budget) ---
+//
+// Every test above runs on a model with no declared window, so those rounds are
+// unmeasured by construction. These give the loop a real one.
+
+const WINDOW = 200_000;
+
+function sizedModel(contextWindow: number): Model<Api> {
+	return { id: "m", name: "m", contextWindow, maxTokens: 64_000 } as unknown as Model<Api>;
+}
+
+// A tool that hands back as much Chinese text as it is asked for: the shape that
+// makes the two estimates disagree, since pi charges every script chars/4.
+const pagesTool: AgentTool = {
+	name: "read_pages",
+	description: "Return pages of the book",
+	parameters: Type.Object({ chars: Type.Number() }),
+	execute: async (args) => "章".repeat(args.chars),
+};
+
+function isStub(text: string): boolean {
+	return text.startsWith("[read_pages:") && text.includes("dropped to fit");
+}
+
+// The trap this pins. `contextBudget` plans against max(pi, script-aware), and
+// the two are the same currency only while pi is counting characters. From the
+// second round the array carries a real AssistantMessage with usage, pi's
+// estimator switches to that number for the entire prefix — system prompt
+// included, which it then stops counting at all — and the two numbers stop being
+// comparable. A saving computed script-aware therefore cannot be subtracted from
+// `used`; the loop applies its reduction and measures again instead.
+test("from round two pi prices the prefix from usage, not from the characters", () => {
+	const m = sizedModel(WINDOW);
+	const book = "张".repeat(60_000);
+	const answered = fauxAssistantMessage([fauxToolCall("read_pages", { chars: 8 }, { id: "t1" })], {
+		stopReason: "toolUse",
+		timestamp: 2,
+	});
+	const messages: Message[] = [
+		{ role: "user", content: "explain this", timestamp: 1 },
+		{ ...answered, usage: { ...answered.usage, input: 190_000, totalTokens: 190_000 } },
+		{
+			role: "toolResult",
+			toolCallId: "t1",
+			toolName: "read_pages",
+			content: [{ type: "text", text: "章".repeat(8) }],
+			isError: false,
+			timestamp: 3,
+		},
+	];
+	const ctx: Context = { systemPrompt: book, messages };
+
+	// Script-aware: a 60k-token book and a round with plenty of room left.
+	expect(estimateContextTokens(ctx)).toBeLessThan(61_000);
+	// pi: the provider's own count stands in for everything up to that turn.
+	expect(piBudget(m, ctx).tokens).toBeGreaterThan(189_000);
+	expect(piBudget(m, ctx).saturated).toBe(false);
+	// So the number the call is planned against is pi's, while any saving the
+	// ladder could quote would still be in the other currency.
+	expect(contextBudget(m, ctx).used).toBe(piBudget(m, ctx).tokens);
+});
+
+test("a round pi would clamp to one token is refused instead of sent", async () => {
+	const script = scriptStream([
+		// Round one fits: pi reads the Chinese system prompt as 15k tokens, the
+		// script-aware estimate as 60k, and 200k less 60k leaves room to answer.
+		// The provider then reports what it really cost.
+		{ calls: [{ name: "read_pages", args: { chars: 8 }, id: "t1" }], usage: 197_000 },
+		{ text: "never asked" },
+	]);
+	const c = collectCallbacks();
+
+	await runAgentLoop({
+		stream: script.fn,
+		model: sizedModel(WINDOW),
+		systemPrompt: "张".repeat(60_000),
+		messages: [{ role: "user", content: "explain this", timestamp: 1 }],
+		tools: [pagesTool],
+		maxRounds: 8,
+		...c.cb,
+	});
+
+	// Round two would have gone out with an allowance of 1: one token back, a
+	// normal `done`, no error (docs/pitfall/65). It is never sent.
+	expect(script.calls()).toBe(1);
+	expect(c.done).toBeUndefined();
+	expect(c.error).toBe(REFUSE_EXHAUSTED);
+});
+
+test("a round over the line on the script-aware count is rescued by stubbing old tool results", async () => {
+	const big = (id: string) => ({ name: "read_pages", args: { chars: 33_000 }, id });
+	// Snapshotted as each round goes out: the loop keeps appending to the array it
+	// sent, so a recorded Context read afterwards shows the end state.
+	const sent: string[][] = [];
+	const script = scriptStream(
+		[
+			// Six chapters at once: 198k script-aware tokens of Chinese, which pi
+			// prices at 49.5k and would happily send.
+			{ calls: ["t1", "t2", "t3", "t4", "t5", "t6"].map(big) },
+			{ calls: [{ name: "read_pages", args: { chars: 200 }, id: "t7" }] },
+			{ text: "here is the answer" },
+		],
+		(_round, context) => sent.push(toolResultTexts(context.messages)),
+	);
+	const c = collectCallbacks();
+
+	await runAgentLoop({
+		stream: script.fn,
+		model: sizedModel(WINDOW),
+		messages: [{ role: "user", content: "explain this", timestamp: 1 }],
+		tools: [pagesTool],
+		maxRounds: 8,
+		...c.cb,
+	});
+
+	expect(c.done).toBe("here is the answer");
+	expect(script.calls()).toBe(3);
+
+	// Round one carried nothing to stub yet.
+	expect(sent[0].length).toBe(0);
+
+	// Round two: the two oldest results are stubs naming the call and its size,
+	// the four most recent are whole.
+	const second = sent[1];
+	expect(second.length).toBe(6);
+	expect(second.slice(0, 2).every(isStub)).toBe(true);
+	expect(second.slice(2).every((t) => t.length === 33_000)).toBe(true);
+	expect(second[0]).toContain("33,000 chars");
+
+	// Round three fits without any further reduction, and the two stubs are still
+	// stubs: the loop replaced its message array, so what was given up does not
+	// come back the moment there is room for it again.
+	const third = sent[2];
+	expect(third.length).toBe(7);
+	expect(third.slice(0, 2).every(isStub)).toBe(true);
+	expect(third.slice(2, 6).every((t) => t.length === 33_000)).toBe(true);
+	expect(third[6].length).toBe(200);
 });

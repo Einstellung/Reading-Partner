@@ -135,6 +135,9 @@ type CallMessage = {
   failed?: boolean;
   // Transient tool-call trace for a streaming AI turn (M6); never persisted.
   tools?: ToolStatus[];
+  // What the turn left out to fit the context window (src/budget). Display-only,
+  // like the trace: it is the app's remark about the turn, not model output.
+  notice?: string;
 };
 
 // Persisted thread messages -> display messages. Image bytes are loaded
@@ -786,6 +789,17 @@ export default function App() {
         signal: controller.signal,
       });
       if (!turn) return;
+      // The turn could not be assembled small enough to leave the model room to
+      // answer. Say so instead of sending it: an over-full request comes back one
+      // token long with a normal `done` and no error (docs/pitfall/65), which
+      // reads as a one-word reply. No Retry offered — the same inputs assemble
+      // the same call, so there is nothing for a second press to change.
+      if (turn.refusal) {
+        if (abortRef.current === controller) abortRef.current = null;
+        if (controller.signal.aborted) return;
+        patch(() => ({ role: "ai", text: turn.refusal, ts, failed: true }), ts);
+        return;
+      }
 
       void runAgentTurn({
         providerId: s.defaultProviderId as ProviderId,
@@ -804,7 +818,19 @@ export default function App() {
         onDone: (full) => {
           if (abortRef.current === controller) abortRef.current = null;
           if (controller.signal.aborted) return; // stopTurn already kept the partial
-          patch((m) => ({ role: "ai", text: full, ts, tools: (m.tools ?? []).filter((t) => t.state === "error") }), ts);
+          // The notice rides the displayed row only. Persisting it would replay it
+          // next turn as if the model had written it, and it would then describe a
+          // turn whose assembly no longer applies.
+          patch(
+            (m) => ({
+              role: "ai",
+              text: full,
+              ts,
+              tools: (m.tools ?? []).filter((t) => t.state === "error"),
+              ...(turn.notice ? { notice: turn.notice } : {}),
+            }),
+            ts,
+          );
           appendMessage(bookId, threadId, { role: "ai", text: full, ts });
         },
         onError: (message: string) => {

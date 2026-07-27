@@ -30,6 +30,14 @@ import type {
 	TSchema,
 } from "@earendil-works/pi-ai";
 import { validateToolCall } from "@earendil-works/pi-ai";
+import {
+	contextBudget,
+	fitsBudget,
+	stubEarlyToolResults,
+	REFUSE_EXHAUSTED,
+	TOOL_RESULTS_KEPT,
+	type BudgetPurpose,
+} from "../budget";
 import { recordToolArgs } from "../platform/app/structured-output";
 import {
 	DEFAULT_MAX_RETRIES,
@@ -109,6 +117,9 @@ export interface RunAgentTurnOptions extends AgentCallbacks {
 	// Max streamed model turns that request tools before the loop gives up.
 	// Default 8. Exceeding it surfaces a clear error through onError.
 	maxRounds?: number;
+	// What the answer is for, which sets how much output room each round must
+	// leave (src/budget). "chat" when unset.
+	purpose?: BudgetPurpose;
 }
 
 const DEFAULT_MAX_ROUNDS = 8;
@@ -155,6 +166,8 @@ export interface AgentLoopParams extends AgentCallbacks {
 	// DEFAULT_MAX_RETRIES when unset. See providers.ts for why it must be passed.
 	maxRetries?: number;
 	maxRounds: number;
+	// Output floor to hold each round to; "chat" when unset.
+	purpose?: BudgetPurpose;
 }
 
 // Core loop, provider-injected so tests can drive it with a fake stream. Aborts
@@ -172,13 +185,46 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 	}));
 	const byName = new Map(tools.map((t) => [t.name, t]));
 	// Copied so appended assistant/tool-result turns don't mutate the caller's array.
-	const messages: Message[] = [...params.messages];
+	// Reassigned, not mutated, when a round has to be shrunk to fit: the stubbed
+	// array replaces this one, so what was given up does not come back next round.
+	let messages: Message[] = [...params.messages];
+	const purpose = params.purpose ?? "chat";
 
 	try {
 		for (let round = 0; round < maxRounds; round++) {
 			if (signal?.aborted) return;
 
-			const context: Context = { systemPrompt, messages, tools: piTools };
+			let context: Context = { systemPrompt, messages, tools: piTools };
+			// Every round grows the history by an assistant turn and its tool
+			// results, so a loop that started comfortably can reach the window
+			// mid-way. Sending it anyway does not fail: pi clamps the allowed output
+			// to 1, the model emits one token, and the stream ends with a normal
+			// `done` (docs/pitfall/65). Fetching a chapter is exactly how a turn
+			// gets there, so the check belongs on every round, not just the first.
+			if (!fitsBudget(contextBudget(model, context), purpose)) {
+				// The one rung available mid-turn: everything but the last few tool
+				// results becomes a stub naming the call and its size, so the model
+				// can fetch it again if it turns out to matter.
+				messages = stubEarlyToolResults(messages, TOOL_RESULTS_KEPT).messages;
+				context = { systemPrompt, messages, tools: piTools };
+				// Measured again rather than subtracted from. From round two the array
+				// carries real AssistantMessages with usage, pi's estimator prices the
+				// whole prefix at the provider's own count, and a rung's saving can only
+				// ever be counted script-aware; subtracting one from the other is
+				// arithmetic across two currencies (docs/pitfall/66).
+				//
+				// What that costs: a usage figure describes the request that was already
+				// sent, so it does not fall when the history behind it is rewritten.
+				// Stubbing rescues a round whose script-aware number was the binding one
+				// — the CJK case this module exists for — plus this round's own results,
+				// which sit after the usage mark. When pi's number is what is over the
+				// line, no edit to the history can help: pi clamps against that number
+				// regardless, so refusing is the outcome rather than a missed rescue.
+				if (!fitsBudget(contextBudget(model, context), purpose)) {
+					onError(REFUSE_EXHAUSTED);
+					return;
+				}
+			}
 			const s = stream(model, context, {
 				apiKey,
 				signal,
@@ -292,6 +338,7 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
 		signal,
 		reasoning,
 		maxRounds = DEFAULT_MAX_ROUNDS,
+		purpose,
 		onDelta,
 		onThinking,
 		onResponse,
@@ -315,6 +362,7 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
 			reasoning: call.reasoning,
 			transport: call.transport,
 			maxRounds,
+			purpose,
 			onDelta,
 			onThinking,
 			onResponse,

@@ -240,6 +240,7 @@ export function runNoteChapter(params: {
       signal,
       reasoning: model.reasoning,
       maxRounds: CHAPTER_MAX_ROUNDS,
+      purpose: "chapter-note",
       onDelta: bump,
       onThinking: bump,
       onToolStart: () => {},

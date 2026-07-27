@@ -192,6 +192,7 @@ export function runDigest(params: {
         signal,
         reasoning: model.reasoning,
         maxRounds: DIGEST_MAX_ROUNDS,
+        purpose: "digest",
         onDelta,
         onThinking,
         onToolStart: () => {},
