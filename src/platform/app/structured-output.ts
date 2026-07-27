@@ -88,7 +88,11 @@ export interface ModelRef {
 // forgiving of the four extractors.
 function stripFence(text: string): string {
   const m = /```(?:json)?\s*([\s\S]*?)```/i.exec(text);
-  return m ? m[1] : text;
+  if (m) return m[1];
+  // A reply cut off before its closing fence still opened one, and the opening
+  // marker would otherwise be counted as prose.
+  const open = /^\s*```(?:json)?[ \t]*\n?/i.exec(text);
+  return open ? text.slice(open[0].length) : text;
 }
 
 // The candidate JSON object: first "{" to last "}", the rule all four sites
@@ -152,6 +156,13 @@ export function classifyJson(text: string): ParseFailure | null {
 // parse itself concluded about a structurally valid object.
 function classifyOutcome(text: string, tally?: ParseTally): ParseFailure {
   return classifyJson(text) ?? tally?.fail ?? "missing-field";
+}
+
+// Whether the reply failed before anything schema-shaped could be looked at.
+// The element counts and the trailing-prose measure mean nothing in that case
+// and are logged as null rather than as a zero somebody would read as a fact.
+function isJsonLayer(fail: ParseFailure): boolean {
+  return fail === "no-json" || fail === "truncated" || fail === "syntax" || fail === "not-object";
 }
 
 // What the reply looked like around its JSON. Lengths and flags only.
@@ -243,16 +254,20 @@ export function createParseReporter(log: LogFn): ParseReporter {
   const reportParse = (input: ReportInput): void => {
     const { site, model, text, tally, error } = input;
     const ok = error === undefined;
+    const fail = ok ? null : classifyOutcome(text, tally);
+    // Nothing was validated, and on a cut reply what follows the last "}" is the
+    // severed tail rather than trailing prose.
+    const blind = fail !== null && isJsonLayer(fail);
     const shape = replyShape(text);
     emit(site, ok, model, {
-      fail: ok ? null : classifyOutcome(text, tally),
+      fail,
       chars: shape.chars,
       fence: shape.fence,
       pre: shape.pre,
-      post: shape.post,
-      seen: tally?.seen ?? null,
-      kept: tally?.kept ?? null,
-      repaired: tally?.repaired ?? null,
+      post: fail === "truncated" ? null : shape.post,
+      seen: blind ? null : (tally?.seen ?? null),
+      kept: blind ? null : (tally?.kept ?? null),
+      repaired: blind ? null : (tally?.repaired ?? null),
     });
   };
 

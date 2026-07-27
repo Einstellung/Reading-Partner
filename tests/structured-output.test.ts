@@ -145,6 +145,20 @@ test("a throwing parse logs the classified failure and still throws", () => {
   expect(() => r.recordParse("prep-plan", MODEL, text, (t) => parsePlan(text, t))).toThrow();
   expect(lines[0].payload.ok).toBe(false);
   expect(lines[0].payload.fail).toBe("no-json");
+  // Nothing reached validation, so the counts are absent rather than zero.
+  expect(lines[0].payload.seen).toBe(null);
+  expect(lines[0].payload.kept).toBe(null);
+});
+
+test("a cut reply reports no trailing prose, because the tail is the cut", () => {
+  const { r, lines } = reporter();
+  const text = '```json\n{"chapters": [{"title": "Intro", "startPage": 1}], "references": [{"title": "A pa';
+  expect(() => r.recordParse("prep-plan", MODEL, text, (t) => parsePlan(text, t))).toThrow();
+  expect(lines[0].payload.fail).toBe("truncated");
+  expect(lines[0].payload.fence).toBe(true);
+  expect(lines[0].payload.post).toBe(null);
+  // The opening fence marker is not prose either, even with no closer to pair it.
+  expect(lines[0].payload.pre).toBe(0);
 });
 
 test("a field the model omitted reads as missing-field, one it filled with junk as empty-result", () => {
