@@ -2,12 +2,23 @@
 // virtual clock so no real time passes. Run: bun test.
 
 import { expect, test } from "bun:test";
+import { fauxAssistantMessage, isRetryableAssistantError } from "@earendil-works/pi-ai";
+import { ModelCallError } from "../../src/ai/providers";
 import {
+  isRetryableAiFailure,
   runWithWatchdog,
   StoppedError,
   resolveWatchdogConfig,
   type WatchdogHooks,
 } from "../../src/ai/watchdog";
+
+// A failure as it reaches the watchdog: pi's AssistantMessage for the failed
+// turn, wrapped the way callModel wraps it.
+function providerFailure(errorMessage: string): ModelCallError {
+  return new ModelCallError(errorMessage, {
+    assistant: fauxAssistantMessage("", { stopReason: "error", errorMessage }),
+  });
+}
 
 // The same virtual clock the prep pipeline tests use: events fire in due-time
 // order, one macrotask tick per step so imminent settles win over the watchdog.
@@ -148,4 +159,105 @@ test("an external stop aborts the attempt and throws StoppedError, no retry", as
   stop.abort();
   await expect(promise).rejects.toBeInstanceOf(StoppedError);
   expect(attempts).toBe(1); // no retry after a stop
+});
+
+test("a failure with no provider verdict stays retryable", () => {
+  // A stall, an unparseable reply, anything raised on our own side: nothing to
+  // classify, so the answer is the behaviour the pipelines already relied on.
+  expect(isRetryableAiFailure(new Error("stalled: no response for 60s"))).toBe(true);
+  expect(isRetryableAiFailure(new Error("plan JSON did not parse"))).toBe(true);
+  expect(isRetryableAiFailure(new ModelCallError("something local went wrong"))).toBe(true);
+});
+
+test("a failure marked terminal is never retried", () => {
+  const err = new ModelCallError("no default AI provider configured (Settings)", { terminal: true });
+  expect(isRetryableAiFailure(err)).toBe(false);
+});
+
+test("the provider's own verdict decides for provider failures", () => {
+  expect(isRetryableAiFailure(providerFailure("Overloaded"))).toBe(true);
+  expect(isRetryableAiFailure(providerFailure("503 Service Unavailable"))).toBe(true);
+  expect(isRetryableAiFailure(providerFailure("fetch failed"))).toBe(true);
+
+  expect(isRetryableAiFailure(providerFailure("invalid x-api-key"))).toBe(false);
+  expect(isRetryableAiFailure(providerFailure("insufficient_quota: check your billing"))).toBe(false);
+  expect(isRetryableAiFailure(providerFailure("Monthly usage limit reached"))).toBe(false);
+});
+
+test("a context overflow is taken out before pi's classifier can misread it", () => {
+  const overflow = "prompt is too long: 205000 tokens > 200000 maximum";
+  // Left to pi alone this reads as retryable, because its pattern table matches
+  // "500" as a substring of the token count. Hence the order in the classifier.
+  expect(isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage: overflow }))).toBe(
+    true,
+  );
+  expect(isRetryableAiFailure(providerFailure(overflow))).toBe(false);
+});
+
+test("a deterministic provider failure fails on the first attempt", async () => {
+  const clock = makeClock();
+  let attempts = 0;
+  await expect(
+    runWithWatchdog(
+      async () => {
+        attempts++;
+        throw providerFailure("invalid x-api-key");
+      },
+      resolveWatchdogConfig({ retryDelayMs: 100 }),
+      clock,
+      noopHooks(),
+    ),
+  ).rejects.toThrow(/invalid x-api-key/);
+  expect(attempts).toBe(1);
+});
+
+test("a transient provider failure still spends the whole retry budget", async () => {
+  const clock = makeClock();
+  let attempts = 0;
+  await expect(
+    runWithWatchdog(
+      async () => {
+        attempts++;
+        throw providerFailure("Overloaded");
+      },
+      resolveWatchdogConfig({ retryDelayMs: 100 }),
+      clock,
+      noopHooks(),
+    ),
+  ).rejects.toThrow(/Overloaded/);
+  expect(attempts).toBe(3);
+});
+
+test("a stalled stream is retried even though its wording classifies as non-retryable", async () => {
+  // The stall's own message would be refused by pi's classifier, so the abort
+  // check must come first. This is the same guarantee as the stall test above,
+  // pinned against the classifier rather than against the abort plumbing.
+  const stallWording = fauxAssistantMessage("", {
+    stopReason: "error",
+    errorMessage: "stalled: no response for 60s",
+  });
+  expect(isRetryableAssistantError(stallWording)).toBe(false);
+  // So is the wording a provider gives an aborted request, which is what the
+  // silent call below rejects with.
+  expect(isRetryableAiFailure(providerFailure("Request was aborted"))).toBe(false);
+
+  const clock = makeClock();
+  let attempts = 0;
+  await expect(
+    runWithWatchdog(
+      ({ signal }) =>
+        new Promise<string>((_, reject) => {
+          attempts++;
+          // A silent stream: the call only ever settles because we abort it, and
+          // it reports the abort as a provider error the classifier would refuse.
+          signal.addEventListener("abort", () => reject(providerFailure("Request was aborted")), {
+            once: true,
+          });
+        }),
+      resolveWatchdogConfig({ retryDelayMs: 100 }),
+      clock,
+      noopHooks(),
+    ),
+  ).rejects.toThrow(/stalled|aborted/);
+  expect(attempts).toBe(3);
 });

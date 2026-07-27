@@ -11,11 +11,13 @@ import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-code
 import { deepseekProvider } from "@earendil-works/pi-ai/providers/deepseek";
 import type {
 	Api,
+	AssistantMessage,
 	AssistantMessageEventStream,
 	Context,
 	Message,
 	Model,
 	Provider,
+	ProviderResponse,
 	SimpleStreamOptions,
 	ThinkingLevel,
 	Transport,
@@ -42,6 +44,39 @@ export interface ChatMessage {
 	images?: { data: string; mediaType: string }[];
 }
 
+// pi hands the whole AssistantMessage to both the `done` and the `error` event,
+// and it carries everything about the turn that the text does not: `usage`
+// (input / output / cacheRead / cacheWrite / totalTokens, plus the cost pi
+// computes from the model's price table), `responseId`, `stopReason` and, when
+// it failed, `errorMessage`. It reaches callers as the second argument of
+// onDone / onError, so a caller that only wants the text is unaffected.
+export type StreamOutcome = AssistantMessage;
+
+// The HTTP response head, delivered after the headers are in and before the
+// body is read. Its value is the provider's request id and its rate-limit
+// headers: the only handle that can be matched against the provider's own
+// records when a call goes wrong. All three providers call it.
+export type ResponseHead = (response: ProviderResponse, model: Model<Api>) => void;
+
+// A model call that failed, carrying pi's AssistantMessage when the failure came
+// back from a provider. Callers classify from that message rather than from the
+// message text. A failure raised before the request reached a provider (no
+// credentials, unknown model, a rejected image) has none.
+//
+// `terminal` marks the failures that involve no network whatsoever, so no amount
+// of repeating can change the answer. It is deliberately narrow: a credential
+// lookup can refresh an OAuth token over the network and so is not terminal.
+export class ModelCallError extends Error {
+	readonly assistant?: StreamOutcome;
+	readonly terminal: boolean;
+	constructor(message: string, options: { assistant?: StreamOutcome; terminal?: boolean } = {}) {
+		super(message);
+		this.name = "ModelCallError";
+		this.assistant = options.assistant;
+		this.terminal = options.terminal ?? false;
+	}
+}
+
 export interface StreamChatOptions {
 	providerId: ProviderId;
 	modelId: string;
@@ -57,8 +92,9 @@ export interface StreamChatOptions {
 	// onDelta so callers never render thinking into the visible reply; prep wires
 	// it as a watchdog liveness signal so a long think isn't seen as a stall.
 	onThinking?(delta: string): void;
-	onDone(fullText: string): void;
-	onError(message: string): void;
+	onResponse?: ResponseHead;
+	onDone(fullText: string, assistant?: StreamOutcome): void;
+	onError(message: string, assistant?: StreamOutcome): void;
 }
 
 const AUTH_KIND: Record<ProviderId, "oauth" | "apiKey"> = {
@@ -102,15 +138,39 @@ export async function setApiKey(id: "deepseek", key: string): Promise<void> {
 	await setActiveCredential(id, { type: "apiKey", key });
 }
 
-export function getModels(id: ProviderId): { id: string; label: string }[] {
-	return providers[id].getModels().map((m) => ({ id: m.id, label: m.name || m.id }));
+// The context window a model must have before this app will offer it. The
+// catalog comes in tiers — 128k, 200k, 272k, 1M — and the product runs on the
+// top one only; a book plus its notes plus a conversation does not fit in 200k,
+// and being one dropdown entry away from a 200k model is how you end up in one
+// without noticing. Everything below the floor is invisible: not listed, not
+// selectable, never the default. tests/ai/model-floor.test.ts checks the value
+// against the live catalog rather than restating it.
+export const MIN_CONTEXT_WINDOW = 1_000_000;
+
+// The models of `id` this app will offer, in catalog order. The raw list stays
+// reachable through providers[id].getModels() for lookups that must still
+// resolve a model the settings already point at (see resolveCall): the floor
+// governs what can be chosen, not what can be called, so a stale stored id
+// degrades into a notice instead of an app with no working AI.
+function selectableModels(id: ProviderId): Model<Api>[] {
+	return providers[id].getModels().filter((m) => m.contextWindow >= MIN_CONTEXT_WINDOW);
 }
 
-// The model a freshly-activated provider defaults to: the first in its model
-// list. pi exposes no "recommended" flag, so first-listed is the deterministic
-// pick; the user can change it in Settings. Null only if the list is empty.
+export function getModels(id: ProviderId): { id: string; label: string }[] {
+	return selectableModels(id).map((m) => ({ id: m.id, label: m.name || m.id }));
+}
+
+// Whether `modelId` may be chosen for `id` — in the catalog and over the floor.
+export function isSelectableModel(id: ProviderId, modelId: string | null): boolean {
+	return !!modelId && selectableModels(id).some((m) => m.id === modelId);
+}
+
+// The model a freshly-activated provider defaults to: the first offered one. pi
+// exposes no "recommended" flag, so first-listed is the deterministic pick; the
+// user can change it in Settings. Null when the provider offers nothing that
+// meets the floor, which callers must handle rather than assume away.
 export function defaultModelFor(id: ProviderId): string | null {
-	return providers[id].getModels()[0]?.id ?? null;
+	return selectableModels(id)[0]?.id ?? null;
 }
 
 // Default provider/model to write after `id` becomes the active provider. Keeps
@@ -122,7 +182,7 @@ export function nextDefaultsForActive(
 	defaultModelId: string | null,
 	id: ProviderId,
 ): { defaultProviderId: ProviderId; defaultModelId: string | null } {
-	const keep = defaultProviderId === id && getModels(id).some((m) => m.id === defaultModelId);
+	const keep = defaultProviderId === id && isSelectableModel(id, defaultModelId);
 	return { defaultProviderId: id, defaultModelId: keep ? defaultModelId : defaultModelFor(id) };
 }
 
@@ -207,6 +267,14 @@ export function toPiMessages(messages: ChatMessage[]): Message[] {
 		}
 		// Replaying history only needs role + content; the rest of AssistantMessage
 		// is response metadata pi fills on output, not required as input.
+		//
+		// Do not add `timestamp` here without adding `usage` in the same edit, and
+		// read docs/pitfall/64 before touching this line at all. pi's token
+		// estimator runs on every single call (clampMaxTokensToContext, via
+		// buildBaseOptions) and reaches for `usage` on any assistant turn whose
+		// timestamp is not older than the messages before it. No timestamp is what
+		// keeps that comparison false; a timestamp without a usage makes it throw,
+		// on every AI call in the app.
 		return { role: "assistant", content: [{ type: "text", text: m.text }] } as unknown as Message;
 	});
 }
@@ -218,6 +286,19 @@ export type SimpleStreamFn = (
 	context: Context,
 	options: SimpleStreamOptions,
 ) => AssistantMessageEventStream;
+
+// Client-side retries for the request that opens the stream. pi has the loop
+// inlined in all three of our APIs (retryProviderRequest) but defaults it to 0,
+// so until it is passed there are none: a 503 with `retry-after: 1` fails the
+// call a millisecond later and the server is asked once. Two retries turn the
+// same 503 into a reply about two seconds later.
+//
+// This only wraps establishing the request. A stream that opens and then goes
+// quiet is the stall watchdog's business (src/ai/watchdog.ts); the two do not
+// overlap. maxRetryDelayMs stays at pi's default, so a server asking for a wait
+// longer than a minute still fails fast and lands in the watchdog's hands with
+// the requested delay in the message.
+export const DEFAULT_MAX_RETRIES = 2;
 
 export interface StreamChatCoreParams {
 	stream: SimpleStreamFn;
@@ -231,33 +312,47 @@ export interface StreamChatCoreParams {
 	reasoning?: ThinkingLevel;
 	// Provider transport preference (SSE for OpenAI; see transportFor).
 	transport?: Transport;
+	// Client-side retries on the opening request; DEFAULT_MAX_RETRIES when unset.
+	maxRetries?: number;
 	onDelta(text: string): void;
 	onThinking?(delta: string): void;
-	onDone(fullText: string): void;
-	onError(message: string): void;
+	onResponse?: ResponseHead;
+	onDone(fullText: string, assistant?: StreamOutcome): void;
+	onError(message: string, assistant?: StreamOutcome): void;
 }
 
 // Provider-injected streaming core. text_delta builds the visible reply;
 // thinking_delta is routed only to onThinking so raw thinking never leaks into
 // `full`. reasoning rides the streamSimple options (undefined omits thinking).
+// The `done` event carries the assembled AssistantMessage; it is kept and handed
+// to onDone after the iterator drains, so the accounting for a turn (usage,
+// responseId) is available on this path too and not only in the agent loop.
 export async function streamChatCore(params: StreamChatCoreParams): Promise<void> {
 	const { stream, model, apiKey, systemPrompt, messages, signal, reasoning, transport } = params;
-	const { onDelta, onThinking, onDone, onError } = params;
+	const { onDelta, onThinking, onResponse, onDone, onError } = params;
+	const maxRetries = params.maxRetries ?? DEFAULT_MAX_RETRIES;
 	try {
-		const s = stream(model, { systemPrompt, messages }, { apiKey, signal, reasoning, transport });
+		const s = stream(
+			model,
+			{ systemPrompt, messages },
+			{ apiKey, signal, reasoning, transport, maxRetries, onResponse },
+		);
 		let full = "";
+		let final: StreamOutcome | undefined;
 		for await (const ev of s) {
 			if (ev.type === "text_delta") {
 				full += ev.delta;
 				onDelta(ev.delta);
 			} else if (ev.type === "thinking_delta") {
 				onThinking?.(ev.delta);
+			} else if (ev.type === "done") {
+				final = ev.message;
 			} else if (ev.type === "error") {
-				onError(ev.error.errorMessage || "stream error");
+				onError(ev.error.errorMessage || "stream error", ev.error);
 				return;
 			}
 		}
-		onDone(full);
+		onDone(full, final);
 	} catch (e) {
 		onError(e instanceof Error ? e.message : String(e));
 	}
@@ -265,7 +360,7 @@ export async function streamChatCore(params: StreamChatCoreParams): Promise<void
 
 export async function streamChat(options: StreamChatOptions): Promise<void> {
 	const { providerId, modelId, systemPrompt, messages, signal, reasoning } = options;
-	const { onDelta, onThinking, onDone, onError } = options;
+	const { onDelta, onThinking, onResponse, onDone, onError } = options;
 	try {
 		const call = await resolveCall(providerId, modelId, messages, reasoning);
 		await streamChatCore({
@@ -279,6 +374,7 @@ export async function streamChat(options: StreamChatOptions): Promise<void> {
 			transport: call.transport,
 			onDelta,
 			onThinking,
+			onResponse,
 			onDone,
 			onError,
 		});

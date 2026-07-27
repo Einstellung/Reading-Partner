@@ -31,7 +31,15 @@ import type {
 } from "@earendil-works/pi-ai";
 import { validateToolCall } from "@earendil-works/pi-ai";
 import { recordToolArgs } from "../platform/app/structured-output";
-import { resolveCall, toPiMessages, type ChatMessage, type ProviderId } from "./providers";
+import {
+	DEFAULT_MAX_RETRIES,
+	resolveCall,
+	toPiMessages,
+	type ChatMessage,
+	type ProviderId,
+	type ResponseHead,
+	type StreamOutcome,
+} from "./providers";
 
 // An image block a tool can return alongside its text (e.g. view_figure hands
 // the model a cropped figure). `data` is bare base64, `mimeType` the MIME type;
@@ -79,8 +87,13 @@ export interface AgentCallbacks {
 	onThinking?(delta: string): void;
 	onToolStart(info: AgentToolStart): void;
 	onToolEnd(info: AgentToolEnd): void;
-	onDone(finalText: string): void;
-	onError(message: string): void;
+	// The HTTP response head of each round, before its body is read: request id
+	// and rate-limit headers. Fires once per streamed model turn.
+	onResponse?: ResponseHead;
+	// The turn's text, plus pi's AssistantMessage for the round that produced it —
+	// usage, responseId, stopReason. A caller that only wants the text ignores it.
+	onDone(finalText: string, assistant?: StreamOutcome): void;
+	onError(message: string, assistant?: StreamOutcome): void;
 }
 
 export interface RunAgentTurnOptions extends AgentCallbacks {
@@ -138,6 +151,9 @@ export interface AgentLoopParams extends AgentCallbacks {
 	reasoning?: ThinkingLevel;
 	// Provider transport preference (SSE for OpenAI; see transportFor).
 	transport?: Transport;
+	// Client-side retries on the request that opens each round's stream;
+	// DEFAULT_MAX_RETRIES when unset. See providers.ts for why it must be passed.
+	maxRetries?: number;
 	maxRounds: number;
 }
 
@@ -146,7 +162,8 @@ export interface AgentLoopParams extends AgentCallbacks {
 // the signal, so it already knows; no onDone/onError fires.
 export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 	const { stream, model, apiKey, systemPrompt, tools, signal, reasoning, transport, maxRounds } = params;
-	const { onDelta, onThinking, onToolStart, onToolEnd, onDone, onError } = params;
+	const { onDelta, onThinking, onResponse, onToolStart, onToolEnd, onDone, onError } = params;
+	const maxRetries = params.maxRetries ?? DEFAULT_MAX_RETRIES;
 
 	const piTools: Tool[] = tools.map(({ name, description, parameters }) => ({
 		name,
@@ -162,7 +179,14 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 			if (signal?.aborted) return;
 
 			const context: Context = { systemPrompt, messages, tools: piTools };
-			const s = stream(model, context, { apiKey, signal, reasoning, transport });
+			const s = stream(model, context, {
+				apiKey,
+				signal,
+				reasoning,
+				transport,
+				maxRetries,
+				onResponse,
+			});
 
 			let final: AssistantMessage | undefined;
 			for await (const ev of s) {
@@ -176,7 +200,7 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 					// pi reports an aborted signal as an error event; treat it as a
 					// silent stop rather than a surfaced failure.
 					if (ev.reason === "aborted" || signal?.aborted) return;
-					onError(ev.error.errorMessage || "stream error");
+					onError(ev.error.errorMessage || "stream error", ev.error);
 					return;
 				}
 			}
@@ -189,7 +213,7 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 
 			const calls = toolCalls(final);
 			if (calls.length === 0) {
-				onDone(assistantText(final));
+				onDone(assistantText(final), final);
 				return;
 			}
 
@@ -270,6 +294,7 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
 		maxRounds = DEFAULT_MAX_ROUNDS,
 		onDelta,
 		onThinking,
+		onResponse,
 		onToolStart,
 		onToolEnd,
 		onDone,
@@ -292,6 +317,7 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
 			maxRounds,
 			onDelta,
 			onThinking,
+			onResponse,
 			onToolStart,
 			onToolEnd,
 			onDone,

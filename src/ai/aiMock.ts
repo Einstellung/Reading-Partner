@@ -2,6 +2,8 @@
 // shell can be exercised headlessly without real network/OAuth. Signatures match
 // the real module exactly, so aiClient.ts can point at either.
 
+import type { Api, AssistantMessage, Model, ProviderResponse } from "@earendil-works/pi-ai";
+
 export type ProviderId = "anthropic" | "openai" | "deepseek";
 
 export interface ProviderInfo {
@@ -26,9 +28,12 @@ export interface StreamChatOptions {
   // Accepted for parity with the real streamChat; the mock ignores them.
   reasoning?: string;
   onThinking?(delta: string): void;
+  onResponse?(response: ProviderResponse, model: Model<Api>): void;
   onDelta(text: string): void;
-  onDone(fullText: string): void;
-  onError(message: string): void;
+  // The mock never produces an AssistantMessage; the parameter exists so a
+  // caller written against the real streamChat still type-checks here.
+  onDone(fullText: string, assistant?: AssistantMessage): void;
+  onError(message: string, assistant?: AssistantMessage): void;
 }
 
 const configured: Record<ProviderId, boolean> = { anthropic: false, openai: false, deepseek: false };

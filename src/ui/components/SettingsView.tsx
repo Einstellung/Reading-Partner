@@ -9,6 +9,7 @@ import {
   anthropicLogout,
   getModels,
   listProviders,
+  MIN_CONTEXT_WINDOW,
   nextDefaultsForActive,
   openaiLogin,
   openaiLoginDeviceCode,
@@ -65,9 +66,11 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
   };
 
   // Models for the currently chosen default provider (getModels is synchronous).
+  // Already filtered by the context-window floor, so a provider can offer none.
   const models: ModelInfo[] = settings.defaultProviderId
     ? getModels(settings.defaultProviderId as ProviderId)
     : [];
+  const noQualifyingModel = !!settings.defaultProviderId && models.length === 0;
 
   const connectedProviders = providers.filter((p) => p.configured);
 
@@ -166,6 +169,13 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
                 value={settings.chatThinking}
                 onChange={(chatThinking) => onSettingsChange({ ...settings, chatThinking })}
               />
+              {noQualifyingModel && (
+                <p className="m-0 basis-full text-xs text-[#a33]">
+                  None of this provider's models has a context window of{" "}
+                  {MIN_CONTEXT_WINDOW / 1_000_000}M tokens, which is what this app reads books with.
+                  Choose another provider.
+                </p>
+              )}
             </div>
           )}
         </div>
