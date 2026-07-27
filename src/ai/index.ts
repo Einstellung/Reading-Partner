@@ -25,10 +25,13 @@ export {
 	nextDefaultsForActive,
 	modelSupportsImages,
 	streamChat,
+	ModelCallError,
 	type ProviderId,
 	type ProviderInfo,
 	type ChatMessage,
+	type ResponseHead,
 	type StreamChatOptions,
+	type StreamOutcome,
 } from "./providers";
 export {
 	runAgentTurn,

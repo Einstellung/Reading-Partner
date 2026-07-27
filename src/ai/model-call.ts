@@ -5,7 +5,13 @@
 
 import type { ThinkingLevel } from "@earendil-works/pi-ai";
 import { loadSettings, toReasoning, type AiLanguage } from "../platform/app/settings";
-import { streamChat, type ProviderId } from "./providers";
+import {
+	ModelCallError,
+	streamChat,
+	type ProviderId,
+	type ResponseHead,
+	type StreamOutcome,
+} from "./providers";
 import type { AiCallOptions } from "./watchdog";
 
 export type ThinkingKind = "chat" | "prep";
@@ -30,17 +36,32 @@ export async function resolveModel(thinking: ThinkingKind): Promise<ResolvedMode
 	};
 }
 
+// What an unattended call can be told about the turn beyond its text. Optional
+// and unused by the pipelines themselves: the call resolves to the reply string
+// as before, and everything else — the response head, the finished
+// AssistantMessage with its usage and responseId — arrives here instead of
+// widening the return type of every caller.
+export interface ModelCallObserver {
+	onResponse?: ResponseHead;
+	onFinal?(assistant: StreamOutcome): void;
+}
+
 // One plain (tool-less) model call, promisified. onProgress reports the
 // cumulative received character count so a caller's watchdog and liveness
 // counter can track a long stream; signal aborts it. Both visible text and
 // thinking count as liveness, so a model that thinks for a long stretch before
 // answering isn't aborted as stalled. systemPrompt may be a function when it
 // depends on the resolved model (e.g. its output language).
+//
+// A failure rejects with a ModelCallError carrying pi's AssistantMessage when
+// the provider produced one, so the watchdog can tell a transient failure from a
+// deterministic one instead of guessing from the message text.
 export function callModel(
 	thinking: ThinkingKind,
 	systemPrompt: string | ((model: ResolvedModel) => string),
 	userText: string,
 	opts: AiCallOptions,
+	observer?: ModelCallObserver,
 ): Promise<string> {
 	return resolveModel(thinking).then(
 		(model) =>
@@ -59,8 +80,15 @@ export function callModel(
 					reasoning: model.reasoning,
 					onDelta: bump,
 					onThinking: bump,
-					onDone: resolve,
-					onError: (m) => reject(new Error(m)),
+					onResponse: observer?.onResponse,
+					onDone: (text, assistant) => {
+						if (assistant) observer?.onFinal?.(assistant);
+						resolve(text);
+					},
+					onError: (m, assistant) => {
+						if (assistant) observer?.onFinal?.(assistant);
+						reject(new ModelCallError(m, assistant));
+					},
 				});
 			}),
 	);

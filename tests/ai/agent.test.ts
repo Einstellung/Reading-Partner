@@ -86,15 +86,18 @@ function collectCallbacks() {
 	const toolEnds: { name: string; resultPreview: string; isError: boolean }[] = [];
 	let done: string | undefined;
 	let error: string | undefined;
+	let outcome: AssistantMessage | undefined;
 	const cb: AgentCallbacks = {
 		onDelta: (t) => deltas.push(t),
 		onToolStart: (i) => toolStarts.push(i),
 		onToolEnd: (i) => toolEnds.push(i),
-		onDone: (t) => {
+		onDone: (t, a) => {
 			done = t;
+			outcome = a;
 		},
-		onError: (m) => {
+		onError: (m, a) => {
 			error = m;
+			outcome = a;
 		},
 	};
 	return {
@@ -113,6 +116,10 @@ function collectCallbacks() {
 		},
 		get error() {
 			return error;
+		},
+		// The AssistantMessage handed to whichever of onDone/onError fired.
+		get outcome() {
+			return outcome;
 		},
 	};
 }
@@ -409,4 +416,82 @@ test("plain answer with no tools calls onDone directly", async () => {
 	expect(c.done).toBe("hello world");
 	expect(c.toolStarts).toEqual([]);
 	expect(script.calls()).toBe(1);
+});
+
+test("the final round's AssistantMessage reaches onDone with its usage", async () => {
+	const message = fauxAssistantMessage("all done", { stopReason: "stop", responseId: "resp_9" });
+	message.usage = { ...message.usage, input: 800, output: 120, totalTokens: 920 };
+	const stream: StreamFn = () => {
+		const s = createAssistantMessageEventStream();
+		(async () => {
+			await Promise.resolve();
+			s.push({ type: "done", reason: "stop", message });
+			s.end();
+		})();
+		return s;
+	};
+	const c = collectCallbacks();
+
+	await runAgentLoop({
+		stream,
+		model: MODEL,
+		messages: [{ role: "user", content: "go", timestamp: 0 }],
+		tools: [echoTool],
+		maxRounds: 8,
+		...c.cb,
+	});
+
+	expect(c.done).toBe("all done");
+	expect(c.outcome).toBe(message);
+	expect(c.outcome?.usage.totalTokens).toBe(920);
+	expect(c.outcome?.responseId).toBe("resp_9");
+});
+
+test("a stream error hands its AssistantMessage to onError alongside the text", async () => {
+	const script = scriptStream([{ error: "overloaded_error: server is overloaded" }]);
+	const c = collectCallbacks();
+
+	await runAgentLoop({
+		stream: script.fn,
+		model: MODEL,
+		messages: [{ role: "user", content: "go", timestamp: 0 }],
+		tools: [echoTool],
+		maxRounds: 8,
+		...c.cb,
+	});
+
+	expect(c.error).toBe("overloaded_error: server is overloaded");
+	expect(c.outcome?.stopReason).toBe("error");
+	expect(c.outcome?.errorMessage).toBe("overloaded_error: server is overloaded");
+});
+
+test("the response head is forwarded to every round's stream options", async () => {
+	const seen: (SimpleStreamOptions | undefined)[] = [];
+	const script = scriptStream([
+		{ text: "checking", calls: [{ name: "echo", args: { value: "x" }, id: "t1" }] },
+		{ text: "done" },
+	]);
+	const stream: StreamFn = (model, context, options) => {
+		seen.push(options);
+		return script.fn(model, context, options);
+	};
+	const c = collectCallbacks();
+	const heads: number[] = [];
+
+	await runAgentLoop({
+		stream,
+		model: MODEL,
+		messages: [{ role: "user", content: "go", timestamp: 0 }],
+		tools: [echoTool],
+		maxRounds: 8,
+		...c.cb,
+		onResponse: (response) => heads.push(response.status),
+	});
+
+	expect(seen.length).toBe(2);
+	for (const options of seen) {
+		expect(options?.onResponse).toBeDefined();
+		await options?.onResponse?.({ status: 200, headers: {} }, MODEL);
+	}
+	expect(heads).toEqual([200, 200]);
 });
