@@ -97,7 +97,15 @@ export function findMaterial(materials: TopicMaterial[], label: string): TopicMa
   );
 }
 
-// The user's highlights/underlines + notes for one named material.
+// read_annotations has no natural bound: a heavily marked book carries hundreds
+// of highlights, and one of them can be a whole page of selected text. Cap the
+// list and each entry, and say so when either bites — an unannounced cut reads
+// to the model as "these are all the marks there are".
+const MAX_ANNOTATIONS = 60;
+const ANNOTATION_CHARS = 400;
+
+// The user's highlights/underlines + notes for one named material, in page
+// order, capped.
 export function formatAnnotations(materials: TopicMaterial[], label: string): string {
   const m = findMaterial(materials, label);
   if (!m) {
@@ -105,14 +113,18 @@ export function formatAnnotations(materials: TopicMaterial[], label: string): st
     return `No material named "${label}" in this topic. Available: ${names || "(none)"}.`;
   }
   if (m.annotations.length === 0) return `${m.label} has no annotations yet.`;
-  return m.annotations
-    .map((a) => {
-      const head = a.page !== null ? `p${a.page}` : "—";
-      const quote = a.text ? `"${a.text}"` : "(no selected text)";
-      const note = a.comment ? ` — note: ${a.comment}` : "";
-      return `${head}: ${quote}${note}`;
-    })
-    .join("\n");
+  const shown = m.annotations.slice(0, MAX_ANNOTATIONS);
+  const lines = shown.map((a) => {
+    const head = a.page !== null ? `p${a.page}` : "—";
+    const quote = a.text ? `"${clip(a.text, ANNOTATION_CHARS)}"` : "(no selected text)";
+    const note = a.comment ? ` — note: ${clip(a.comment, ANNOTATION_CHARS)}` : "";
+    return `${head}: ${quote}${note}`;
+  });
+  const hidden = m.annotations.length - shown.length;
+  if (hidden > 0) {
+    lines.push(`[${hidden} more annotation${hidden === 1 ? "" : "s"} on this material, not shown]`);
+  }
+  return lines.join("\n");
 }
 
 // Build the reading tools for the current call, scoped to one topic. Only tools

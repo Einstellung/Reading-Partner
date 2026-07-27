@@ -86,6 +86,38 @@ test("formatAnnotations lists page + quote + note, or guides when missing", () =
   expect(missing).toContain("Book B");
 });
 
+// A heavily marked book can carry hundreds of highlights, one of which may be a
+// whole page of selected text. Both bounds are announced: a silent cut reads to
+// the model as "that is all the marks there are".
+test("formatAnnotations caps the list and each entry, and says when it did", () => {
+  const many = Array.from({ length: 75 }, (_, i) => ({
+    page: i + 1,
+    text: "x".repeat(1200),
+    comment: "y".repeat(1200),
+  }));
+  const out = formatAnnotations([{ label: "Book A", fulltext: null, annotations: many }], "Book A");
+  const lines = out.split("\n");
+  expect(lines.length).toBe(61);
+  expect(lines[60]).toBe("[15 more annotations on this material, not shown]");
+  expect(lines[0].startsWith("p1: ")).toBe(true);
+  expect(lines[0].length).toBeLessThan(1000);
+  expect(lines[0]).toContain("…");
+
+  // One over the cap reads naturally.
+  const one = formatAnnotations(
+    [{ label: "B", fulltext: null, annotations: many.slice(0, 61) }],
+    "B",
+  );
+  expect(one).toContain("[1 more annotation on this material, not shown]");
+
+  // Under the cap, nothing is added.
+  const few = formatAnnotations(
+    [{ label: "C", fulltext: null, annotations: [{ page: 3, text: "short", comment: "" }] }],
+    "C",
+  );
+  expect(few).toBe('p3: "short"');
+});
+
 test("buildReadingTools includes only tools with usable data", async () => {
   const current = ft(Array.from({ length: 5 }, (_, i) => `page ${i + 1} text`));
   const materials: TopicMaterial[] = [

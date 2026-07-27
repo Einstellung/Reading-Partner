@@ -14,6 +14,7 @@
 | 全文/图片提取、裁图 | 提取（壳侧 pdf.js） |
 | 出 iOS 包、签名、图标、深链接 | iOS 构建与签名 |
 | 桌面 webview 行为异常 | WebKit / webview |
+| 组装提示词、加长上下文、改模型调用 | AI 与上下文窗口 |
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
@@ -85,6 +86,10 @@
 - [12-webkitgtk-drag-latency](./12-webkitgtk-drag-latency.md) — WebKitGTK 拖选高亮时选区滞后于鼠标（根因未定，换引擎后没复测）
 - [16-webkitgtk-clipboard-image](./16-webkitgtk-clipboard-image.md) — DOM paste 事件不带图片，贴图要从 Rust 读剪贴板
 - [43-webkit-tap-highlight-orphan-shadow](./43-webkit-tap-highlight-orphan-shadow.md) — 不引 preflight 也就没关掉 WKWebView 的原生点击高亮；点完即卸载的按钮会留下孤儿阴影，按下反馈改用 active:（同族还有坑 49 的原生选区，收在「触摸与手势」）
+
+## AI 与上下文窗口
+
+- [64-pi-clamps-max-tokens-to-one-and-calls-it-done](./64-pi-clamps-max-tokens-to-one-and-calls-it-done.md) — 上下文接近窗口时 pi 把允许输出夹到 1，模型吐一个 token 就停，`done` 正常发出、没有 error；聊天里是一个字的回复，解析 JSON 的地方变成"格式错误"。pi 的估算器还是 `chars/4`，中文低估 2.5–4 倍，最该收紧时放行。发请求前自己算，见 `src/budget/`
 
 ## 开发环境
 

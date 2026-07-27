@@ -29,6 +29,11 @@ export interface TopicMaterial {
 // Exported because a tool description has to state the same number formatPages
 // enforces.
 export const MAX_PAGES = 10;
+// Max characters of any one page. MAX_PAGES bounded the number of pages but
+// nothing bounded their size, so a dense page could return several thousand
+// tokens on its own. The cut is announced inside the page's own block: a model
+// that can't see the break will quote straight across it.
+export const MAX_PAGE_CHARS = 4000;
 const SEARCH_LIMIT = 8;
 
 // A 1-based, inclusive page range from one book, capped at MAX_PAGES and clamped
@@ -42,7 +47,14 @@ export function formatPages(ft: Fulltext | null, from: number, to: number): stri
   if (lo > total) return `This book has ${total} pages; page ${lo} is out of range.`;
   const hi = Math.min(total, Math.max(from, to), lo + MAX_PAGES - 1);
   const parts: string[] = [];
-  for (let p = lo; p <= hi; p++) parts.push(`=== Page ${p} ===\n${readPages(ft, p, p)}`);
+  for (let p = lo; p <= hi; p++) {
+    const body = readPages(ft, p, p);
+    const cut = body.length > MAX_PAGE_CHARS;
+    const text = cut
+      ? `${body.slice(0, MAX_PAGE_CHARS)}\n[page ${p} truncated at ${MAX_PAGE_CHARS} chars]`
+      : body;
+    parts.push(`=== Page ${p} ===\n${text}`);
+  }
   return parts.join("\n\n");
 }
 

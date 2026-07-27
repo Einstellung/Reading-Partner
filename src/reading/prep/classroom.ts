@@ -26,15 +26,32 @@ export interface ClassroomContext {
   hasTools: boolean;
   // Compact figure catalog for the survey (M9), or "" when none detected.
   figureCatalog?: string;
+  // False when the survey did not fit the model's context window and the caller
+  // dropped the inlined body (src/budget). The prefix then points at read_pages
+  // instead, and the tools paragraph stops claiming the survey is already there.
+  // Defaults to true.
+  inlineSurvey?: boolean;
+}
+
+// The page-by-page survey body, the part of the prefix that carries the whole
+// book. Exported so a caller can price dropping it before it builds the prompt.
+export function classroomSurveyBody(ft: Fulltext): string {
+  const lines: string[] = [];
+  for (let i = 0; i < ft.pages.length; i++) {
+    lines.push(`=== Page ${i + 1} ===`, ft.pages[i]);
+  }
+  return lines.join("\n");
 }
 
 // The stable prefix: everything before the per-turn context. Depends only on
 // the survey itself, so its string identity survives across turns.
-export function classroomPromptPrefix(surveyName: string, ft: Fulltext): string {
+export function classroomPromptPrefix(surveyName: string, ft: Fulltext, inlineSurvey = true): string {
   const lines = [
-    "You are a reading companion in classroom mode: you have digested this",
-    "entire survey and pre-read its load-bearing references, and you teach by",
-    "walking the user through the survey itself — a newcomer to the field who",
+    "You are a reading companion in classroom mode: you have pre-read this",
+    inlineSurvey
+      ? "survey's load-bearing references and digested the survey itself, and you"
+      : "survey's load-bearing references, and you",
+    "teach by walking the user through the survey — a newcomer to the field who",
     "picked this survey as their textbook.",
     "",
     "How to teach:",
@@ -49,10 +66,16 @@ export function classroomPromptPrefix(surveyName: string, ft: Fulltext): string 
     "- Follow the user's language: if they write in Chinese, answer in Chinese.",
     "- Your replies render as Markdown: math as $...$ / $$...$$, code fenced.",
     "",
-    `The full survey ("${surveyName}"), page by page:`,
   ];
-  for (let i = 0; i < ft.pages.length; i++) {
-    lines.push(`=== Page ${i + 1} ===`, ft.pages[i]);
+  if (inlineSurvey) {
+    lines.push(`The full survey ("${surveyName}"), page by page:`, classroomSurveyBody(ft));
+  } else {
+    lines.push(
+      `The survey ("${surveyName}") runs ${ft.pages.length} pages. It is too long to`,
+      "hold in your context, so it is NOT reproduced here: read what you need with",
+      "read_pages(from, to), starting around the reader's current position. Do not",
+      "describe a page you have not read.",
+    );
   }
   return lines.join("\n");
 }
@@ -63,7 +86,8 @@ function paperLine(p: PrepPaper): string {
 }
 
 export function buildClassroomSystemPrompt(ctx: ClassroomContext): string {
-  const lines: string[] = [classroomPromptPrefix(ctx.surveyName, ctx.fulltext)];
+  const inlineSurvey = ctx.inlineSurvey !== false;
+  const lines: string[] = [classroomPromptPrefix(ctx.surveyName, ctx.fulltext, inlineSurvey)];
 
   lines.push("", "Current position:", `- Topic: ${ctx.topicName}`);
   if (ctx.pageLabel) lines.push(`- Page: ${ctx.pageLabel}`);
@@ -100,7 +124,12 @@ export function buildClassroomSystemPrompt(ctx: ClassroomContext): string {
     lines.push(
       "",
       "Tools:",
-      "The survey is already fully in your context above. When a question goes",
+      // The claim has to track the prefix. Left standing after the body was
+      // dropped, it tells the model it can see a book it cannot, and it invents
+      // the pages.
+      inlineSurvey
+        ? "The survey is already fully in your context above. When a question goes"
+        : "The survey is not in your context: read it with read_pages. When a question goes",
       "deeper than the prep notes, call tools instead of guessing:",
       "read_paper(slug, from, to) reads pages of a pre-read paper's full text;",
       "read_note(slug) returns a paper's whole prep note; search_topic(query)",
