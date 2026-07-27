@@ -26,7 +26,10 @@ export interface ResolvedModel {
 export async function resolveModel(thinking: ThinkingKind): Promise<ResolvedModel> {
 	const s = await loadSettings();
 	if (!s.defaultProviderId || !s.defaultModelId) {
-		throw new Error("no default AI provider configured (Settings)");
+		// Terminal: this is a settings read, and repeating it cannot conjure a
+		// provider. Without the flag the watchdog spends its whole retry budget on
+		// an app that has nothing to call.
+		throw new ModelCallError("no default AI provider configured (Settings)", { terminal: true });
 	}
 	return {
 		providerId: s.defaultProviderId as ProviderId,
@@ -87,7 +90,7 @@ export function callModel(
 					},
 					onError: (m, assistant) => {
 						if (assistant) observer?.onFinal?.(assistant);
-						reject(new ModelCallError(m, assistant));
+						reject(new ModelCallError(m, { assistant }));
 					},
 				});
 			}),

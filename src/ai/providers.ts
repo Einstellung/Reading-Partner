@@ -62,12 +62,18 @@ export type ResponseHead = (response: ProviderResponse, model: Model<Api>) => vo
 // back from a provider. Callers classify from that message rather than from the
 // message text. A failure raised before the request reached a provider (no
 // credentials, unknown model, a rejected image) has none.
+//
+// `terminal` marks the failures that involve no network whatsoever, so no amount
+// of repeating can change the answer. It is deliberately narrow: a credential
+// lookup can refresh an OAuth token over the network and so is not terminal.
 export class ModelCallError extends Error {
 	readonly assistant?: StreamOutcome;
-	constructor(message: string, assistant?: StreamOutcome) {
+	readonly terminal: boolean;
+	constructor(message: string, options: { assistant?: StreamOutcome; terminal?: boolean } = {}) {
 		super(message);
 		this.name = "ModelCallError";
-		this.assistant = assistant;
+		this.assistant = options.assistant;
+		this.terminal = options.terminal ?? false;
 	}
 }
 
