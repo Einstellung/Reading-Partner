@@ -6,6 +6,7 @@
 // lives in live.ts.
 
 import type { Fulltext, OutlineItem } from "../../fulltext/types";
+import type { ParseTally } from "../../platform/app/structured-output";
 import type { NoteChapter } from "./types";
 
 // How many leading pages of the book to hand the model when it has to read the
@@ -109,16 +110,32 @@ export function extractJson(text: string): string {
 
 // Parse the plan call's output into chapters with whole-book page ranges. Throws
 // when no chapter is parseable so the pipeline can surface a plan failure.
-export function parseNotesPlan(text: string, totalPages: number): NoteChapter[] {
+//
+// `tally` is an optional out-parameter for the structured-output measurement
+// (structured-output.ts). `kept` is counted after toChapters, so chapters
+// dropped for sharing a start page count as lost too.
+export function parseNotesPlan(
+  text: string,
+  totalPages: number,
+  tally?: ParseTally,
+): NoteChapter[] {
   const raw = JSON.parse(extractJson(text)) as Record<string, unknown>;
-  const items = (Array.isArray(raw.chapters) ? raw.chapters : [])
+  const rawChapters = Array.isArray(raw.chapters) ? raw.chapters : [];
+  if (tally) tally.seen += rawChapters.length;
+  const items = rawChapters
     .map((c: any) => {
       const title = typeof c?.title === "string" ? c.title.trim() : "";
       const startPage = Number(c?.startPage);
       if (!Number.isFinite(startPage) || startPage < 1) return null;
+      if (!title && tally) tally.repaired++;
       return { title: title || "Untitled", startPage: Math.round(startPage) };
     })
     .filter((c): c is { title: string; startPage: number } => c !== null);
-  if (items.length === 0) throw new Error("plan has no parseable chapters");
-  return toChapters(items, totalPages);
+  if (items.length === 0) {
+    if (tally) tally.fail = rawChapters.length ? "empty-result" : "missing-field";
+    throw new Error("plan has no parseable chapters");
+  }
+  const chapters = toChapters(items, totalPages);
+  if (tally) tally.kept += chapters.length;
+  return chapters;
 }

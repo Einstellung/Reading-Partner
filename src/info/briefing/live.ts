@@ -4,8 +4,9 @@
 // keeps running across view switches. AI calls happen here (streamChat under the
 // watchdog); the pure logic (adapters, triage prompt/validation) stays testable.
 
-import { callModel } from "../../ai/model-call";
+import { callModel, resolveModel, type ResolvedModel } from "../../ai/model-call";
 import type { AiCallOptions } from "../../ai/watchdog";
+import { newTally, reportParse } from "../../platform/app/structured-output";
 import { collectAll, type CollectEvent } from "../sources/engine";
 import { extractReadable } from "../extract/readable";
 import { loadSources, loadSourceHealth, saveSourceHealth } from "../sources/source-store";
@@ -24,6 +25,7 @@ import {
   parseTriageResult,
   triageSystemPrompt,
   triageUserMessage,
+  type ParseOutcome,
 } from "./triage";
 import type { FeedbackEvent } from "../../memory/feedback";
 import type { InfoItem, TriageResult } from "./types";
@@ -40,6 +42,29 @@ function runTriageCall(userText: string, opts: AiCallOptions, extra?: string): P
   );
 }
 
+// One triage attempt: run the model, validate, and record how the parse went
+// (structured-output.ts) whichever way it lands. The in-band retry below is a
+// second attempt, so it logs a second line.
+async function attemptTriage(
+  model: ResolvedModel,
+  userText: string,
+  validIds: Set<string>,
+  opts: AiCallOptions,
+  extra?: string,
+): Promise<ParseOutcome> {
+  const text = await runTriageCall(userText, opts, extra);
+  const tally = newTally();
+  const parsed = parseTriageResult(text, validIds, tally);
+  reportParse({
+    site: "info-triage",
+    model,
+    text,
+    tally,
+    error: parsed.ok ? undefined : parsed.error,
+  });
+  return parsed;
+}
+
 // The triage dep: stream the model, validate the JSON, retry once on a parse
 // failure with a corrective instruction. A second failure throws so the watchdog
 // treats it as a transient error and retries the whole attempt.
@@ -51,15 +76,16 @@ async function triage(
     readerContext: input.readerContext,
   });
   const validIds = new Set(input.items.map((it) => it.id));
-  const first = await runTriageCall(userText, opts);
-  const parsed = parseTriageResult(first, validIds);
+  const model = await resolveModel("prep");
+  const parsed = await attemptTriage(model, userText, validIds, opts);
   if (parsed.ok) return parsed.result;
-  const retry = await runTriageCall(
+  const reparsed = await attemptTriage(
+    model,
     userText,
+    validIds,
     opts,
     "\n\nYour previous reply was not valid JSON in the required shape. Reply with ONLY the JSON object, no prose, no markdown fence.",
   );
-  const reparsed = parseTriageResult(retry, validIds);
   if (reparsed.ok) return reparsed.result;
   throw new Error(`triage produced invalid JSON: ${reparsed.error}`);
 }

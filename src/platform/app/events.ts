@@ -20,7 +20,11 @@ export type EventType =
   | "memory-tab-open" // {}
   | "notes-run" // { phase: "start" | "done" | "failed" }
   | "notes-chapter-regenerate" // { index }
-  | "notes-tab-open"; // {}
+  | "notes-tab-open" // {}
+  // One attempt at reading a model's machine-readable output, in
+  // events-ai.jsonl rather than a topic's log. See structured-output.ts for the
+  // fields and for why it has no topic.
+  | "structured-parse";
 
 export type EventPayload = Record<string, string | number | boolean | null>;
 
@@ -41,7 +45,11 @@ export function createEventLogger(append: AppendFn, now: () => number = Date.now
   };
 }
 
+// Outside Tauri (unit tests, the plain-browser dev server) there is no AppData
+// to append to. Dropping the line beats warning once per event, now that the
+// unattended pipelines log one on every structured parse.
 async function tauriAppend(topicId: string, line: string): Promise<void> {
+  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
   await writeTextFile(`events-${topicId}.jsonl`, line, {
     baseDir: BaseDirectory.AppData,
     append: true,

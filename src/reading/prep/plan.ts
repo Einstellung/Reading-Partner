@@ -4,6 +4,7 @@
 // prep data model. The AI call itself lives in live.ts.
 
 import type { PrepChapter, PrepPaper, PrepReference } from "./types";
+import type { ParseTally } from "../../platform/app/structured-output";
 import type { Fulltext } from "../../fulltext/types";
 
 export interface PlanResult {
@@ -121,21 +122,40 @@ export function uniqueSlug(taken: Set<string>, title: string): string {
 // Parse the plan call's output into chapters + references + nominated papers.
 // Tolerant of missing optional fields; throws on structural problems (no JSON,
 // no references, no nominations) so the pipeline can surface a plan failure.
-export function parsePlan(text: string): PlanResult {
+//
+// `tally` is an optional out-parameter the caller uses to measure how well the
+// model hit the schema (structured-output.ts): how many elements it emitted, how
+// many survived — a nomination naming a key the reference list never had is
+// dropped here without a word — and how many fields had to be defaulted.
+export function parsePlan(text: string, tally?: ParseTally): PlanResult {
   const raw = JSON.parse(extractJson(text)) as Record<string, unknown>;
+  const repair = () => {
+    if (tally) tally.repaired++;
+  };
 
-  const chapters: PrepChapter[] = (Array.isArray(raw.chapters) ? raw.chapters : [])
-    .map((c: any, i: number) => ({
-      index: Number.isFinite(Number(c?.index)) ? Math.round(Number(c.index)) : i + 1,
-      title: asString(c?.title, `Chapter ${i + 1}`),
-      startPage: Number.isFinite(Number(c?.startPage)) ? Math.max(1, Math.round(Number(c.startPage))) : 1,
-    }))
+  const rawChapters = Array.isArray(raw.chapters) ? raw.chapters : [];
+  const chapters: PrepChapter[] = rawChapters
+    .map((c: any, i: number) => {
+      const index = Number(c?.index);
+      const startPage = Number(c?.startPage);
+      if (typeof c?.title !== "string" || !Number.isFinite(index) || !Number.isFinite(startPage)) {
+        repair();
+      }
+      return {
+        index: Number.isFinite(index) ? Math.round(index) : i + 1,
+        title: asString(c?.title, `Chapter ${i + 1}`),
+        startPage: Number.isFinite(startPage) ? Math.max(1, Math.round(startPage)) : 1,
+      };
+    })
     .sort((a, b) => a.startPage - b.startPage);
 
-  const references: PrepReference[] = (Array.isArray(raw.references) ? raw.references : [])
+  const rawRefs = Array.isArray(raw.references) ? raw.references : [];
+  const references: PrepReference[] = rawRefs
     .map((r: any): PrepReference | null => {
       const title = asString(r?.title);
       if (!title) return null;
+      if (r?.year != null && asYear(r.year) === null) repair();
+      if (r?.citedInChapters !== undefined && !Array.isArray(r.citedInChapters)) repair();
       return {
         key: asKey(r?.key),
         title,
@@ -147,14 +167,24 @@ export function parsePlan(text: string): PlanResult {
       };
     })
     .filter((r): r is PrepReference => r !== null);
-  if (references.length === 0) throw new Error("plan has no parseable references");
+  if (tally) {
+    tally.seen += rawChapters.length + rawRefs.length;
+    tally.kept += chapters.length + references.length;
+  }
+  if (references.length === 0) {
+    if (tally) tally.fail = rawRefs.length ? "empty-result" : "missing-field";
+    throw new Error("plan has no parseable references");
+  }
 
   const byKey = new Map(references.map((r) => [r.key, r]));
   const taken = new Set<string>();
-  const papers: PrepPaper[] = (Array.isArray(raw.nominations) ? raw.nominations : [])
+  const rawNoms = Array.isArray(raw.nominations) ? raw.nominations : [];
+  const papers: PrepPaper[] = rawNoms
     .map((n: any): PrepPaper | null => {
       const ref = byKey.get(asKey(n?.key));
       if (!ref) return null;
+      const reason = asString(n?.reason);
+      if (!reason) repair();
       const slug = uniqueSlug(taken, ref.title);
       taken.add(slug);
       return {
@@ -164,12 +194,19 @@ export function parsePlan(text: string): PlanResult {
         year: ref.year,
         arxivId: ref.arxivId,
         citedInChapters: ref.citedInChapters,
-        reason: asString(n?.reason),
+        reason,
         status: "queued",
       };
     })
     .filter((p): p is PrepPaper => p !== null);
-  if (papers.length === 0) throw new Error("plan has no resolvable nominations");
+  if (tally) {
+    tally.seen += rawNoms.length;
+    tally.kept += papers.length;
+  }
+  if (papers.length === 0) {
+    if (tally) tally.fail = rawNoms.length ? "empty-result" : "missing-field";
+    throw new Error("plan has no resolvable nominations");
+  }
 
   return { chapters, references, papers };
 }

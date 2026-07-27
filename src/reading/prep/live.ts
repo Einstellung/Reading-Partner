@@ -9,6 +9,7 @@ import { ensureFulltext, saveFulltext } from "../../fulltext/store";
 import { FULLTEXT_VERSION, type Fulltext } from "../../fulltext/types";
 import { buildFigureCatalog, ensureFigures } from "../figures";
 import { loadSettings } from "../../platform/app/settings";
+import { recordParse } from "../../platform/app/structured-output";
 import { extractArticle } from "./article";
 import { fetchFromArxiv, normalizeArxivId } from "./arxiv";
 import { fetchFromOpenAlex } from "./openalex";
@@ -100,8 +101,11 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
     saveState: savePrepState,
 
     async buildPlan(opts) {
+      // Resolved up front only so the parse can be attributed to the model that
+      // produced it; the call itself resolves the same settings again.
+      const model = await resolveModel("prep");
       const text = await callModel("prep", PLAN_SYSTEM_PROMPT, planUserMessage(surveyFulltext), opts);
-      return parsePlan(text);
+      return recordParse("prep-plan", model, text, (tally) => parsePlan(text, tally));
     },
 
     async fetchPaper(paper): Promise<FetchOutcome | null> {
