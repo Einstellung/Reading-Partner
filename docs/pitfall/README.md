@@ -34,6 +34,7 @@
 - [57-zoom-plugin-rewrites-scroll-150ms-after-resize](./57-zoom-plugin-rewrites-scroll-150ms-after-resize.md) — 缩放插件用 150ms debounce 回应视口变化，到期时按缓存里的旧滚动位置再写一次，把旋转后刚居中的页面拉回去；落点确认要盯满整个帧预算
 - [58-broken-pdf-open-resolves-instead-of-rejecting](./58-broken-pdf-open-resolves-instead-of-rejecting.md) — 解析失败的文档 openDocumentBuffer 照常 resolve，只有 onDocumentError 和 core 里的 status:"error" 说话；不订阅就是永远的灰屏加 “Rendering…”
 - [59-tool-switch-republishes-selection](./59-tool-switch-republishes-selection.md) — onStateChange 是整份状态的流，切工具把还留着的选中同步再播一遍，宿主当成新选中武装 150ms 兜底定时器，标注编辑器在页面中间凭空弹出；按 selectedUids 数组身份判选中是否真的动了
+- [60-viewport-metrics-never-see-their-own-padding](./60-viewport-metrics-never-see-their-own-padding.md) — 视口插件的 ResizeObserver 看 content box，而它自己的 padding 只改 client box，度量停在 padding 之前就再也不更新；fit 永远小 2×gap，一整页填不满屏幕、邻页露一条，重发 requestZoom 修不了。几何判据加"插件度量等于元素度量"和"scale 等于该视口解出的 fit"，打开时的还原也走 settle
 
 ## 触摸与手势
 

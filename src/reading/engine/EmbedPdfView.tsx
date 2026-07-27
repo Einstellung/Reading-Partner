@@ -24,7 +24,7 @@ import { RenderPluginPackage, RenderLayer } from "@embedpdf/plugin-render/react"
 import { TilingPluginPackage, TilingLayer } from "@embedpdf/plugin-tiling/react";
 import { ZoomPluginPackage, ZoomMode, ZoomGestureWrapper } from "@embedpdf/plugin-zoom/react";
 import type { ZoomCapability } from "@embedpdf/plugin-zoom";
-import type { ViewportCapability } from "@embedpdf/plugin-viewport";
+import type { ViewportCapability, ViewportPlugin } from "@embedpdf/plugin-viewport";
 import { InteractionManagerPluginPackage, PagePointerProvider } from "@embedpdf/plugin-interaction-manager/react";
 import type { InteractionManagerCapability } from "@embedpdf/plugin-interaction-manager";
 import { SelectionPluginPackage, SelectionLayer } from "@embedpdf/plugin-selection/react";
@@ -1542,6 +1542,7 @@ async function wireEngine(
       const model = scrollScope.getLayout();
       const zs = zoomScope.getState();
       const items = model.virtualItems;
+      const pluginMetrics = viewportScope.getMetrics();
       return {
         firstItem: items[0] ? { x: items[0].x, y: items[0].y } : null,
         secondItem: items[1] ? { x: items[1].x, y: items[1].y } : null,
@@ -1551,11 +1552,69 @@ async function wireEngine(
         zoomLock: zoomLockOf(zs.zoomLevel),
         domScrollWidth: el.scrollWidth,
         domScrollHeight: el.scrollHeight,
+        largestItem: items.length
+          ? {
+              width: Math.max(...items.map((i) => i.width)),
+              height: Math.max(...items.map((i) => i.height)),
+            }
+          : null,
+        domClientWidth: el.clientWidth,
+        domClientHeight: el.clientHeight,
+        pluginClientWidth: pluginMetrics.clientWidth,
+        pluginClientHeight: pluginMetrics.clientHeight,
+        viewportGap: cap<ViewportCapability>(registry, "viewport").getViewportGap(),
       };
     } catch {
       // The scroll state is gone (document closing): nothing to settle.
       return null;
     }
+  };
+
+  // Hand the viewport plugin the box the element actually has. Its own
+  // measurements come from a ResizeObserver watching the container's content
+  // box, which the padding the viewport gives itself never changes, so a
+  // viewport that was measured before that padding landed stays wrong for the
+  // session: every fit comes out 2*gap too small and every alignX is resolved
+  // against a viewport narrower than the one on screen. This is the same call
+  // the plugin's own React adapter makes from that observer.
+  //
+  // Only when the numbers actually differ. Every call counts as a resize, and
+  // the zoom plugin answers a resize 150ms later by rewriting the scroll
+  // position from the one it has cached (pitfall 57) — which during an open is
+  // the position from before the page was placed. A refresh that changes
+  // nothing would buy that for nothing.
+  const viewportPlugin = registry.getPlugin("viewport") as unknown as ViewportPlugin | null;
+  const refreshViewportMetrics = () => {
+    const el = pagedRef.current.viewport;
+    if (!el || !viewportPlugin) return;
+    const known = viewportScope.getMetrics();
+    if (known.clientWidth === el.clientWidth && known.clientHeight === el.clientHeight) return;
+    viewportPlugin.setViewportResizeMetrics(DOC_ID, {
+      width: el.offsetWidth,
+      height: el.offsetHeight,
+      clientWidth: el.clientWidth,
+      clientHeight: el.clientHeight,
+      scrollTop: el.scrollTop,
+      scrollLeft: el.scrollLeft,
+      scrollWidth: el.scrollWidth,
+      scrollHeight: el.scrollHeight,
+      clientLeft: el.clientLeft,
+      clientTop: el.clientTop,
+    });
+  };
+
+  // Tell the viewport plugin where the scroll position actually is. It learns
+  // that from a scroll event, which the browser dispatches on its own schedule —
+  // and anything that recomputes a focus-preserving scroll in the meantime
+  // (the zoom plugin, 150ms after any resize) does it from the position the
+  // plugin last heard about. Measured on the open path: the page centred at
+  // 5930 and was pulled back to 0 three milliseconds later, because as far as
+  // the plugin knew the reader was still at 0. So a placement that has landed
+  // says so, rather than waiting to be discovered.
+  const syncScrollMetrics = () => {
+    const el = pagedRef.current.viewport;
+    if (!el || !viewportPlugin) return;
+    viewportPlugin.setViewportScrollMetrics(DOC_ID, { scrollLeft: el.scrollLeft, scrollTop: el.scrollTop });
   };
 
   // Where the placement wants the scroll container to sit for this page, along
@@ -1616,6 +1675,16 @@ async function wireEngine(
   // Serial number of the live settle: a newer layout change, rotation or page
   // turn owns the scroll position, and the older one stops touching it.
   let settleSerial = 0;
+  // The page the newest settle or turn is putting on screen. A viewport resize
+  // asks for it rather than for the page the scroll position happens to be over:
+  // during a restore or a turn the scroll position is mid-flight and means
+  // nothing, and a resize that re-targets from it drags the reader to whatever
+  // page the placement had reached.
+  let settleTarget: { serial: number; page: number } | null = null;
+  const targetedPage = (): number => {
+    if (settleTarget && settleTarget.serial === settleSerial) return settleTarget.page;
+    return scrollScope.getCurrentPage();
+  };
 
   const centerPage = (target: number, behavior: "smooth" | "instant") =>
     scrollScope.scrollToPage({ pageNumber: target, behavior, alignX: centerAlignFor(target) });
@@ -1639,6 +1708,7 @@ async function wireEngine(
   // and putting its top back at the top of the viewport would eat the offset.
   const settleLayout = (mode: EmbedLayout, page: number | null, behavior: "smooth" | "instant") => {
     const serial = ++settleSerial;
+    if (page !== null) settleTarget = { serial, page };
     const settings = LAYOUT_SETTINGS[mode];
     const strategy = settings.axis === "horizontal" ? ScrollStrategy.Horizontal : ScrollStrategy.Vertical;
     const zoomMode = settings.zoom === "fit-page" ? ZoomMode.FitPage : ZoomMode.FitWidth;
@@ -1652,11 +1722,14 @@ async function wireEngine(
       const expired = frames >= SETTLE_FRAME_BUDGET;
       const geometry = readGeometry();
       if (!ready) {
-        // A null geometry means there is no DOM to consult (the touch router
-        // has not grabbed the viewport yet): fall back to the old behaviour and
-        // centre on this frame.
-        if (geometry !== null && !expired && !geometrySettled(geometry, mode)) {
-          const gap = settleGap(geometry, mode);
+        // A null geometry means there is no element to consult yet — the touch
+        // router grabs the scroll container a frame or two after it mounts, and
+        // opening a book can reach here first. Waiting is the whole point: a
+        // placement measured against nothing is the failure this exists to
+        // prevent. The frame budget below bounds the wait.
+        if (!expired && (geometry === null || !geometrySettled(geometry, mode))) {
+          const gap = geometry === null ? null : settleGap(geometry, mode);
+          if (gap === "metrics") refreshViewportMetrics();
           if (gap === "zoom") zoomScope.requestZoom(zoomMode);
           if (gap === "model") forceScrollStrategy(strategy);
           requestAnimationFrame(tick);
@@ -1675,7 +1748,10 @@ async function wireEngine(
         // scroll offset when it does, which on a rotation arrives after the
         // placement has already landed (measured: centred at 4310, pulled back
         // to 4450 two frames later, and there it stayed). So the landing is
-        // watched for the rest of the budget instead of being trusted on sight.
+        // published to the plugin, so that a rewrite preserves this position
+        // rather than the one it last cached, and then watched for the rest of
+        // the budget instead of being trusted on sight.
+        syncScrollMetrics();
         if (!expired && behavior === "instant") requestAnimationFrame(tick);
         return;
       }
@@ -1704,6 +1780,7 @@ async function wireEngine(
     // A turn is the newest word on where the strip should sit: a settle still
     // confirming an older target stands down rather than pulling it back.
     settleSerial += 1;
+    settleTarget = { serial: settleSerial, page: target };
     centerPage(target, behavior);
   };
 
@@ -1746,7 +1823,7 @@ async function wireEngine(
   cap<ViewportCapability>(registry, "viewport").onViewportResize((ev) => {
     if (!pagedRef.current.paged || ev.documentId !== DOC_ID) return;
     zoomScope.requestZoom(ZoomMode.FitPage);
-    settleLayout(layout, scrollScope.getCurrentPage(), "instant");
+    settleLayout(layout, targetedPage(), "instant");
   });
 
   // Map annotation id -> pageIndex, so host-side ops can address the right page.
@@ -1892,12 +1969,30 @@ async function wireEngine(
   scroll.onLayoutReady((ev) => {
     if (!ev.isInitial) return;
     perfMark("layoutReady");
+    // The one measurement the viewport plugin takes of itself is the one it
+    // takes before it has applied its own padding, and nothing re-takes it
+    // (refreshViewportMetrics says why). By now the padding is long since on,
+    // so this is where the plugin gets told what it is working with — before
+    // any fit is resolved from it. Both layouts need it: paged reads it back
+    // through the settle, vertical has no settle to catch it later.
+    refreshViewportMetrics();
     importAll(propsRef.current.annotations ?? []);
     const iv = propsRef.current.initialViewState;
     if (iv && layout === "paged") {
-      // Paged mode is always fit-page; restore only the page, centred. The saved
-      // zoom / in-page offset belong to vertical mode and are ignored here.
-      turnToPage(iv.pageIndex + 1, "instant");
+      // Of a saved state, paged mode restores the page and nothing else. The
+      // scale and the in-page offset are one window's presentation of it — the
+      // desktop's, usually — and paged mode's contract is one whole page, which
+      // is the fit for the screen in front of the reader and not the one that
+      // last saved. Only the page index carries across.
+      //
+      // Placed through the settle for the same reason a switch is (pitfall 56):
+      // the scroll model, the zoom and the DOM land on three different frames,
+      // and a centring issued before all three agree is clamped to something
+      // else that no plugin will ever call wrong. Opening is the harder case —
+      // the viewport is measuring itself for the first time, and nothing has
+      // ever been placed to correct.
+      const target = Math.min(Math.max(iv.pageIndex + 1, 1), scrollScope.getTotalPages() || 1);
+      settleLayout("paged", target, "instant");
     } else if (iv) {
       zoomScope.requestZoom(iv.zoom);
       // Restore the exact in-page position when the saved state carries one
@@ -2115,6 +2210,14 @@ async function wireEngine(
         fingerPlan: planFinger(toolKindOf(pagedRef.current.tool), pagedRef.current.fingerDraw).action,
         paused: interaction.isPaused(),
       }),
+      // Everything the settle judges a layout on, and its verdict. The failure
+      // it guards against is invisible from outside — a clamped scroll and a
+      // stale fit both look like ordinary numbers — so the numbers themselves
+      // are what a Playwright check has to read.
+      geometry: () => {
+        const g = readGeometry();
+        return g && { ...g, layout, gap: settleGap(g, layout), settled: geometrySettled(g, layout) };
+      },
     } as EmbedPdfHandle["_debug"] & { registry: PluginRegistry },
   };
 

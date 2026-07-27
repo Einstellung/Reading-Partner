@@ -1,5 +1,7 @@
-// Whether the engine's geometry has caught up with a layout switch — as a pure
-// predicate over numbers, so the rule can be tested without a viewport.
+// Whether the engine's geometry has caught up with the layout it is supposed to
+// be in — as a pure predicate over numbers, so the rule can be tested without a
+// viewport. Two paths ask: a layout switch, and opening a book whose saved
+// layout is paged. Both hand the engine a request and get no completion back.
 //
 // A layout switch is not one operation the engine completes. The host sets the
 // scroll strategy, asks for the zoom and centres the page, and only the first
@@ -29,6 +31,12 @@ import { pageCenterAlign } from "./paged-gesture";
 // equality.
 export const SETTLE_TOLERANCE_PX = 2;
 
+// Slack on a zoom scale. The plugin floors what it computes to three decimals,
+// so two agreeing fits differ by at most one unit in the last place; the
+// mismatch this catches (a fit computed against a viewport two paddings too
+// narrow) is thirty times that.
+export const SETTLE_SCALE_TOLERANCE = 0.002;
+
 export interface LayoutGeometry {
   // The first two virtual items' offsets, unscaled. Which coordinate advances
   // between them is the axis the scroll model was actually laid out on — the
@@ -50,6 +58,21 @@ export interface LayoutGeometry {
   // element the scroll position is written on.
   domScrollWidth: number;
   domScrollHeight: number;
+  // The largest virtual item, unscaled — the box a fit resolves against, by the
+  // same rule the zoom plugin uses. Null when the model has no items yet.
+  largestItem: { width: number; height: number } | null;
+  // The scroll container's visible box, from the element itself.
+  domClientWidth: number;
+  domClientHeight: number;
+  // The same box as the viewport plugin believes it to be. It is the plugin
+  // that resolves a fit and an alignX, so its numbers decide where a page
+  // lands; the element's decide what the reader sees. While the two disagree,
+  // every placement is computed in one frame of reference and clamped in
+  // another.
+  pluginClientWidth: number;
+  pluginClientHeight: number;
+  // The viewport's own padding, which a fit subtracts from the visible box.
+  viewportGap: number;
 }
 
 // The axis the virtual items are laid out on, or null when the document is too
@@ -74,27 +97,72 @@ function domExtent(g: LayoutGeometry, axis: ScrollAxis): number {
   return axis === "horizontal" ? g.domScrollWidth : g.domScrollHeight;
 }
 
-// Every part of the switch has landed: the zoom lock is the layout's, the
-// virtual items were rebuilt on the layout's axis, and the DOM has grown to
-// hold them at the current scale. Anything short of all three means a scroll
-// issued now measures one layout and lands in another.
-export function geometrySettled(g: LayoutGeometry, layout: ReadingLayout): boolean {
-  const want = LAYOUT_SETTINGS[layout];
-  if (g.zoomLock !== want.zoom) return false;
-  const axis = modelAxis(g);
-  if (axis !== null && axis !== want.axis) return false;
-  return domExtent(g, want.axis) + SETTLE_TOLERANCE_PX >= modelExtent(g, want.axis);
+// Whether the viewport plugin's measurements are the element's own. They go out
+// of date without a word: the plugin's numbers come from a ResizeObserver on
+// the scroll container, which watches the content box, while the padding the
+// viewport gives itself (its gap, applied one commit after it mounts) only
+// changes the client box. The observer never fires for that, so a viewport that
+// mounted before its own padding stays two paddings too narrow for the rest of
+// the session — and every fit computed from it comes out too small, which on
+// screen is a page that does not fill the frame with its neighbour showing at
+// the edge.
+export function metricsFresh(g: LayoutGeometry): boolean {
+  return (
+    Math.abs(g.domClientWidth - g.pluginClientWidth) <= SETTLE_TOLERANCE_PX &&
+    Math.abs(g.domClientHeight - g.pluginClientHeight) <= SETTLE_TOLERANCE_PX
+  );
 }
 
-// Which half of the switch is still outstanding, for the host to re-assert
-// exactly that one. "model" means the scroll plugin dropped its layout refresh;
-// "zoom" means the zoom request never took; "dom" means both took and the
-// browser has not laid the result out yet, which no re-assert can hurry.
-export type SettleGap = "zoom" | "model" | "dom" | null;
+// The scale this layout's zoom lock resolves to on this viewport, as the zoom
+// plugin would compute it — the largest item box against the visible box minus
+// its padding, floored to three decimals the way the plugin floors it. Null
+// when there is nothing to measure against yet.
+export function lockedFitScale(g: LayoutGeometry, layout: ReadingLayout): number | null {
+  if (!g.largestItem) return null;
+  const raw = fitScale(
+    LAYOUT_SETTINGS[layout].zoom,
+    g.largestItem,
+    { clientWidth: g.domClientWidth, clientHeight: g.domClientHeight },
+    g.viewportGap,
+  );
+  if (raw <= 0) return null;
+  return Math.floor(raw * 1e3) / 1e3;
+}
+
+// The scale in effect is the fit, not merely a fit's name. The lock says which
+// fit the layout wants; this says the number under it was computed against the
+// viewport the reader is actually looking at. The plugin clamps a fit to its own
+// zoom limits, which this does not know about, so a document too large to fit
+// within them reads as never settled — bounded by the caller's frame budget, so
+// it costs a wait and not a hang.
+export function scaleIsFit(g: LayoutGeometry, layout: ReadingLayout): boolean {
+  const want = lockedFitScale(g, layout);
+  if (want === null) return true;
+  return Math.abs(g.scale - want) <= SETTLE_SCALE_TOLERANCE;
+}
+
+// Every part of the layout has landed: the plugin is measuring the viewport the
+// reader has, the zoom lock is the layout's and resolved against that viewport,
+// the virtual items were rebuilt on the layout's axis, and the DOM has grown to
+// hold them at the current scale. Anything short of all of it means a scroll
+// issued now measures one layout and lands in another.
+export function geometrySettled(g: LayoutGeometry, layout: ReadingLayout): boolean {
+  return settleGap(g, layout) === null;
+}
+
+// Which part is still outstanding, for the host to re-assert exactly that one.
+// "metrics" means the plugin is working from a viewport that is not the one on
+// screen; "zoom" means the zoom request never took, or took against those stale
+// metrics; "model" means the scroll plugin dropped its layout refresh; "dom"
+// means everything took and the browser has not laid the result out yet, which
+// no re-assert can hurry. In that order: a fit resolved from the wrong viewport
+// cannot be repaired by asking for it again.
+export type SettleGap = "metrics" | "zoom" | "model" | "dom" | null;
 
 export function settleGap(g: LayoutGeometry, layout: ReadingLayout): SettleGap {
   const want = LAYOUT_SETTINGS[layout];
-  if (g.zoomLock !== want.zoom) return "zoom";
+  if (!metricsFresh(g)) return "metrics";
+  if (g.zoomLock !== want.zoom || !scaleIsFit(g, layout)) return "zoom";
   const axis = modelAxis(g);
   if (axis !== null && axis !== want.axis) return "model";
   if (domExtent(g, want.axis) + SETTLE_TOLERANCE_PX < modelExtent(g, want.axis)) return "dom";

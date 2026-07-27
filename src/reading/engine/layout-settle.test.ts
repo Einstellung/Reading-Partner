@@ -5,9 +5,13 @@ import {
   fitsCoincide,
   geometrySettled,
   landedAt,
+  lockedFitScale,
+  metricsFresh,
   modelAxis,
   pageTopScrollY,
+  scaleIsFit,
   settleGap,
+  SETTLE_SCALE_TOLERANCE,
   SETTLE_TOLERANCE_PX,
   type LayoutGeometry,
 } from "./layout-settle";
@@ -23,6 +27,18 @@ const PAGES = 14;
 const columnHeight = PAGES * PAGE.height + (PAGES - 1) * 10;
 const stripWidth = PAGES * PAGE.width + (PAGES - 1) * 10;
 
+// The viewport as both the element and the plugin see it while nothing is
+// stale. Every page is the same size in this document, so the largest item is
+// the page.
+const measured = {
+  largestItem: PAGE,
+  domClientWidth: IPAD_PORTRAIT.clientWidth,
+  domClientHeight: IPAD_PORTRAIT.clientHeight,
+  pluginClientWidth: IPAD_PORTRAIT.clientWidth,
+  pluginClientHeight: IPAD_PORTRAIT.clientHeight,
+  viewportGap: GAP,
+};
+
 // What the host reads while resting in each layout.
 const verticalGeometry = (): LayoutGeometry => ({
   firstItem: { x: 0, y: 0 },
@@ -33,6 +49,7 @@ const verticalGeometry = (): LayoutGeometry => ({
   zoomLock: "fit-width",
   domScrollWidth: IPAD_PORTRAIT.clientWidth,
   domScrollHeight: columnHeight * SCALE + 2 * GAP,
+  ...measured,
 });
 
 const pagedGeometry = (): LayoutGeometry => ({
@@ -44,6 +61,7 @@ const pagedGeometry = (): LayoutGeometry => ({
   zoomLock: "fit-page",
   domScrollWidth: stripWidth * SCALE + 2 * GAP,
   domScrollHeight: IPAD_PORTRAIT.clientHeight,
+  ...measured,
 });
 
 test("a layout at rest is settled for itself and never for the other one", () => {
@@ -89,6 +107,95 @@ test("a settled geometry has no gap left", () => {
   expect(settleGap(verticalGeometry(), "vertical")).toBe(null);
 });
 
+test("a viewport the plugin has not measured since it padded itself is not settled", () => {
+  // Measured on the open path: the viewport applies its own gap as padding one
+  // commit after it mounts, which changes the client box and not the content
+  // box, so the ResizeObserver behind the plugin's metrics never fires. The
+  // plugin then holds a viewport 2*gap narrower than the one on screen for the
+  // rest of the session.
+  const stale: LayoutGeometry = {
+    ...pagedGeometry(),
+    pluginClientWidth: IPAD_PORTRAIT.clientWidth - 2 * GAP,
+    pluginClientHeight: IPAD_PORTRAIT.clientHeight - 2 * GAP,
+  };
+  expect(metricsFresh(stale)).toBe(false);
+  expect(geometrySettled(stale, "paged")).toBe(false);
+  // Repaired first, and on its own: a fit resolved against the wrong viewport
+  // comes back wrong however many times it is asked for.
+  expect(settleGap(stale, "paged")).toBe("metrics");
+});
+
+test("stale metrics are still stale when the zoom is wrong too", () => {
+  const stale: LayoutGeometry = {
+    ...pagedGeometry(),
+    scale: 1.3,
+    zoomLock: "fit-width",
+    pluginClientWidth: IPAD_PORTRAIT.clientWidth - 2 * GAP,
+    pluginClientHeight: IPAD_PORTRAIT.clientHeight,
+  };
+  expect(settleGap(stale, "paged")).toBe("metrics");
+});
+
+test("a fit that is the layout's in name but not in number is a zoom gap", () => {
+  // The failure the open path lands in: fit-page computed while the viewport was
+  // 2*gap narrower resolves to 1.3, the lock still says fit-page, and nothing
+  // downstream disagrees — on screen the page stops short of the frame and its
+  // neighbour shows at the edge.
+  const short: LayoutGeometry = { ...pagedGeometry(), scale: 1.3 };
+  expect(scaleIsFit(short, "paged")).toBe(false);
+  expect(settleGap(short, "paged")).toBe("zoom");
+  expect(geometrySettled(short, "paged")).toBe(false);
+});
+
+test("the expected fit is floored the way the zoom plugin floors it", () => {
+  // The plugin keeps three decimals (Math.floor(x * 1e3) / 1e3), so a host that
+  // compares against the exact quotient never agrees with it.
+  const wide = { ...pagedGeometry(), domClientWidth: 854, pluginClientWidth: 854 };
+  expect(fitScale("fit-width", PAGE, { clientWidth: 854, clientHeight: 1214 }, GAP)).toBeCloseTo(1.3627, 4);
+  expect(lockedFitScale({ ...wide, domClientHeight: 1214, pluginClientHeight: 1214 }, "paged")).toBe(1.362);
+  // And the slack covers that last place without covering a stale fit.
+  expect(scaleIsFit({ ...pagedGeometry(), scale: SCALE + SETTLE_SCALE_TOLERANCE / 2 }, "paged")).toBe(true);
+  expect(scaleIsFit({ ...pagedGeometry(), scale: SCALE + 0.01 }, "paged")).toBe(false);
+});
+
+test("a model with no items yet has no fit to check against", () => {
+  // Nothing to measure means nothing to disagree with: the other conditions
+  // carry the settle, rather than it waiting for a number that cannot exist.
+  const empty: LayoutGeometry = { ...pagedGeometry(), largestItem: null };
+  expect(lockedFitScale(empty, "paged")).toBe(null);
+  expect(scaleIsFit(empty, "paged")).toBe(true);
+  // Same for a viewport with no room in it yet.
+  const unsized: LayoutGeometry = { ...pagedGeometry(), domClientWidth: 0, pluginClientWidth: 0 };
+  expect(lockedFitScale(unsized, "paged")).toBe(null);
+  expect(scaleIsFit(unsized, "paged")).toBe(true);
+});
+
+test("each layout is checked against its own fit", () => {
+  // On a viewport where the two fits differ, vertical resting at fit-width is
+  // settled and the same numbers read as paged are not.
+  const wide = { clientWidth: 900, clientHeight: 1000 };
+  const onWide = {
+    largestItem: PAGE,
+    domClientWidth: wide.clientWidth,
+    domClientHeight: wide.clientHeight,
+    pluginClientWidth: wide.clientWidth,
+    pluginClientHeight: wide.clientHeight,
+    viewportGap: GAP,
+  };
+  const fitWidth = lockedFitScale({ ...verticalGeometry(), ...onWide }, "vertical")!;
+  const fitPage = lockedFitScale({ ...pagedGeometry(), ...onWide }, "paged")!;
+  expect(fitWidth).toBe(1.437);
+  expect(fitPage).toBe(1.237);
+  const vertical: LayoutGeometry = {
+    ...verticalGeometry(),
+    ...onWide,
+    scale: fitWidth,
+    domScrollHeight: columnHeight * fitWidth + 2 * GAP,
+  };
+  expect(settleGap(vertical, "vertical")).toBe(null);
+  expect(scaleIsFit(vertical, "paged")).toBe(false);
+});
+
 test("the axis comes from the items, and a one-page document has none", () => {
   expect(modelAxis(pagedGeometry())).toBe("horizontal");
   expect(modelAxis(verticalGeometry())).toBe("vertical");
@@ -108,6 +215,7 @@ test("a single-page document settles on the zoom and the DOM alone", () => {
     zoomLock: "fit-page",
     domScrollWidth: IPAD_PORTRAIT.clientWidth,
     domScrollHeight: IPAD_PORTRAIT.clientHeight,
+    ...measured,
   };
   expect(geometrySettled(one, "paged")).toBe(true);
   expect(geometrySettled({ ...one, zoomLock: "fit-width" }, "paged")).toBe(false);

@@ -88,11 +88,15 @@ function Harness() {
   const memoized = q.get("memo") !== "0"; // ?memo=0 to measure the un-isolated baseline
   // Props built once; identity stable across churn so the memo can bail.
   const props = useMemo<EmbedPdfViewProps>(() => {
+    const layout = q.get("layout");
     const initial: EmbedViewState | null = q.has("page")
       ? {
           pageIndex: Number(q.get("page")),
           zoom: Number(q.get("zoom") ?? "1"),
           ...(q.has("py") ? { pageX: Number(q.get("px") ?? "0"), pageY: Number(q.get("py")) } : {}),
+          // A restored paged layout is the open path the switch's settle does
+          // not cover: ?layout=paged reproduces it without the shell.
+          ...(layout === "paged" || layout === "vertical" ? { layout } : {}),
         }
       : ((window as any).__initialViewState as EmbedViewState | null);
     (window as any).__churn = (n: number) => {
