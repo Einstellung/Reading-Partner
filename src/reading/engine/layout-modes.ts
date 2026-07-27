@@ -1,13 +1,15 @@
-// The two reading layouts as data, plus the reducer that switches between them.
-// Pure and engine-free so the one property that matters can be unit tested:
-// entering a layout and leaving it again restores every setting the entry
-// touched, and doing it repeatedly changes nothing further.
+// The two reading layouts as data, plus the reducer that switches between them
+// and the rule for where each one thinks the reader is. Pure and engine-free so
+// the properties that matter can be unit tested: entering a layout and leaving
+// it again restores every setting the entry touched, doing it repeatedly changes
+// nothing further, and a position saved in either layout names the page the
+// reader is looking at.
 //
-// The host (EmbedPdfView.setLayout) applies exactly these fields, in this
-// order. Anything a layout owns belongs in LayoutSettings — a setting applied
-// on the way in but not listed here is a setting nothing will restore on the
-// way out, which is how a reader gets stuck in a strip of pages it can no
-// longer scroll.
+// EmbedPdfView.setLayout applies these fields on every switch, in this order,
+// and EmbedPdfView.currentState reads the anchor back. Anything a layout owns
+// belongs in LayoutSettings — a setting applied on the way in but not listed
+// here is a setting nothing will restore on the way out, which is how a reader
+// gets stuck in a strip of pages it can no longer scroll.
 
 export type ReadingLayout = "vertical" | "paged";
 
@@ -18,6 +20,21 @@ export type ScrollAxis = "vertical" | "horizontal";
 // The zoom each layout locks to. Paged is one whole page per screen; vertical
 // reads at page width.
 export type ZoomLock = "fit-width" | "fit-page";
+
+// Where a saved reading position points — not the same question in the two
+// layouts, which is why it is a per-layout setting and not one shared rule.
+//
+// "viewport-top": the reader is at the top edge of the viewport. It falls inside
+// the topmost visible page, and how far into that page is the other half of the
+// answer, so the position carries an in-page offset. This is the continuous
+// column: it stops anywhere, including between two pages.
+//
+// "centered-page": the reader is on the page in the middle of the screen, whole.
+// There is no in-page offset to carry, and naming the topmost visible page would
+// name the wrong one — the strip packs pages side by side with a gap, so at any
+// viewport where fit-page is smaller than fit-width both neighbours peek in at
+// the edges and the leftmost visible page is the one before.
+export type ReadingAnchor = "viewport-top" | "centered-page";
 
 export interface LayoutSettings {
   axis: ScrollAxis;
@@ -35,6 +52,11 @@ export interface LayoutSettings {
   // throws away where inside the page the reader was, so vertical only places a
   // page when the switch actually changed the axis.
   placePage: "center" | "top";
+  // Which page the layout reads back as the reading position, the inverse of
+  // placePage: a layout that centres a page anchors on the centred one, a layout
+  // that puts a page top at the viewport top anchors on whatever page the
+  // viewport top is in (ReadingAnchor says what each answer means).
+  anchor: ReadingAnchor;
   // Whether the layout keeps a fit-page baseline scale, the reference its pinch
   // rules compare against. Only paged has one; carrying a stale baseline into a
   // later paged session would misjudge "zoomed in" after a viewport resize.
@@ -47,6 +69,7 @@ export const LAYOUT_SETTINGS: Record<ReadingLayout, LayoutSettings> = {
     zoom: "fit-width",
     touchLock: false,
     placePage: "top",
+    anchor: "viewport-top",
     tracksFitPage: false,
   },
   paged: {
@@ -54,9 +77,50 @@ export const LAYOUT_SETTINGS: Record<ReadingLayout, LayoutSettings> = {
     zoom: "fit-page",
     touchLock: true,
     placePage: "center",
+    anchor: "centered-page",
     tracksFitPage: true,
   },
 };
+
+// One page's slice of the scroll plugin's visibility metrics: the page's number
+// and the viewport's top-left corner inside it, in unscaled page coordinates.
+export interface VisiblePage {
+  pageNumber: number;
+  pageX: number;
+  pageY: number;
+}
+
+// A reading position as it is persisted: zero-based page, plus the in-page
+// offset for the layouts whose anchor carries one.
+export interface ReadingPosition {
+  pageIndex: number;
+  pageX?: number;
+  pageY?: number;
+}
+
+// Where the reader is, in the terms the layout in front of them uses.
+//
+// `currentPage` is the scroll plugin's own answer — 1-based, the most visible
+// page, which under a fit-page lock is the centred one — and `visible` its
+// visibility metrics, both out of the one state the plugin publishes. Paged
+// takes the first, so the page it saves is the same `currentPage` the stats
+// readout shows and a layout switch carries across, rather than a centred page
+// the host works out for itself and can disagree about. Vertical takes the
+// second, which is the one place the two deliberately differ: the reader can be
+// at the bottom of a page the plugin has stopped calling current.
+//
+// With no metrics — the layout is not ready yet — the plugin's page is all
+// there is, and the position restores to that page's top.
+export function readingPosition(
+  layout: ReadingLayout,
+  currentPage: number,
+  visible: readonly VisiblePage[],
+): ReadingPosition {
+  const current = { pageIndex: Math.max(0, currentPage - 1) };
+  if (LAYOUT_SETTINGS[layout].anchor === "centered-page" || visible.length === 0) return current;
+  const top = visible.reduce((a, b) => (b.pageNumber < a.pageNumber ? b : a));
+  return { pageIndex: Math.max(0, top.pageNumber - 1), pageX: top.pageX, pageY: top.pageY };
+}
 
 // Everything a layout switch owns, in the abstract: the engine settings above
 // plus the touch router's live state. The router state is in here because a

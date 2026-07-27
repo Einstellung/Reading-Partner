@@ -12,3 +12,5 @@ const top = metrics.pageVisibilityMetrics.reduce((a, b) => (b.pageNumber < a.pag
 ```
 
 `getCurrentPage()` 继续用于页码显示；只是持久化锚点换页。配合 22 的 gap 补偿，三档 zoom 下 round-trip 漂移为 0。
+
+只对竖排连续列成立。横排页带上"最顶上的可见页"是上一页，见坑 62。

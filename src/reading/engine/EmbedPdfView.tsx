@@ -43,7 +43,7 @@ import {
   type GestureInput,
   type GestureState,
 } from "./paged-gesture";
-import { LAYOUT_SETTINGS, type ZoomLock } from "./layout-modes";
+import { LAYOUT_SETTINGS, readingPosition, type VisiblePage, type ZoomLock } from "./layout-modes";
 import {
   centeredScrollX,
   geometrySettled,
@@ -1910,33 +1910,34 @@ async function wireEngine(
     propsRef.current.onSelectAnnotation?.(ids[0] ?? null);
   });
 
-  // Reading position + nav/zoom stats -> host. The in-page offset comes from
-  // the scroll metrics: the visible region's top-left within the current page,
-  // in unscaled page coordinates — exactly what scrollToPage's pageCoordinates
-  // takes on restore.
+  // Reading position + nav/zoom stats -> host. Which page counts as the reading
+  // position, and whether an in-page offset is part of it, is the live layout's
+  // to say (layout-modes.readingPosition, pitfall 62). Both of the inputs come
+  // out of the one scroll state the plugin publishes, so the two answers cannot
+  // describe different moments.
+  //
+  // Vertical's offset is the topmost visible page's visible-region origin: the
+  // viewport top-left in that page's coordinates, in unscaled page units —
+  // exactly what scrollToPage's pageCoordinates takes on restore.
   const currentState = (): EmbedViewState => {
-    const st: EmbedViewState = {
-      pageIndex: scrollScope.getCurrentPage() - 1,
+    let currentPage = 1;
+    let visible: VisiblePage[] = [];
+    try {
+      currentPage = scrollScope.getCurrentPage();
+      visible = scrollScope.getMetrics().pageVisibilityMetrics.map((m) => ({
+        pageNumber: m.pageNumber,
+        pageX: m.original.pageX,
+        pageY: m.original.pageY,
+      }));
+    } catch {
+      // Scroll state unavailable (layout not ready): position falls back to the
+      // first page's top.
+    }
+    return {
+      ...readingPosition(layout, currentPage, visible),
       zoom: zoomScope.getState().currentZoomLevel,
       layout,
     };
-    try {
-      // Anchor on the topmost visible page, not the "current" (most visible)
-      // page: the topmost page's visible-region origin IS the viewport
-      // top-left in its page coordinates, so restoring it reproduces the exact
-      // scroll position. The current page can start mid-viewport, where its
-      // visible-region origin is 0/0 and the offset would be lost.
-      const vis = scrollScope.getMetrics().pageVisibilityMetrics;
-      if (vis.length > 0) {
-        const top = vis.reduce((a, b) => (b.pageNumber < a.pageNumber ? b : a));
-        st.pageIndex = top.pageNumber - 1;
-        st.pageX = top.original.pageX;
-        st.pageY = top.original.pageY;
-      }
-    } catch {
-      // Metrics unavailable (layout not ready): position falls back to page top.
-    }
-    return st;
   };
   const emitState = () => {
     propsRef.current.onViewState?.(currentState());
@@ -1985,7 +1986,9 @@ async function wireEngine(
       // scale and the in-page offset are one window's presentation of it — the
       // desktop's, usually — and paged mode's contract is one whole page, which
       // is the fit for the screen in front of the reader and not the one that
-      // last saved. Only the page index carries across.
+      // last saved. Only the page index carries across, which is also all paged
+      // mode writes (LayoutSettings.anchor); an offset in the state is either
+      // vertical's or one an older build left behind.
       //
       // Placed through the settle for the same reason a switch is (pitfall 56):
       // the scroll model, the zoom and the DOM land on three different frames,
