@@ -199,3 +199,95 @@ test("the book-level thread carries no marked passage", async () => {
   const turn = await buildReadingTurn(input({ annotationId: "", annotation: undefined }));
   expect(turn!.systemPrompt).not.toContain("inline caches");
 });
+
+// --- fitting the turn to the model's context window (src/budget) ---
+
+// A 200k window, against the 1M one the other tests use.
+const small: Settings = { ...settings, defaultModelId: "claude-opus-4-5" };
+
+// A Chinese survey, the shape that actually overflows: pi prices it at chars/4
+// and sees room to spare, the script-aware estimate prices it by the character
+// and does not.
+function cjkSurvey(pages: number, charsPerPage = 1000): Fulltext {
+  return {
+    version: 1,
+    status: "ok",
+    pages: Array.from({ length: pages }, () => "编译器内联缓存".repeat(charsPerPage / 7)),
+    outline: [],
+  };
+}
+
+test("a turn that fits keeps everything and says nothing", async () => {
+  const figures: Figure[] = [{ id: "1", page: 2, caption: "Inline cache layout", bbox: null }];
+  const turn = await buildReadingTurn(input({ figures, settings: small }));
+  expect(turn!.notice).toBe("");
+  expect(turn!.refusal).toBe("");
+  expect(turn!.systemPrompt).toContain("[fig:1]");
+});
+
+test("a survey too long for the window stops being inlined, and the user is told", async () => {
+  const fulltext = cjkSurvey(300);
+  const figures: Figure[] = [{ id: "1", page: 2, caption: "内联缓存布局", bbox: null }];
+  const turn = await buildReadingTurn(
+    input({ classroom: true, fulltext, figures, settings: small }),
+  );
+
+  expect(turn!.refusal).toBe("");
+  expect(turn!.notice).toBe(
+    "Note: the book didn't fit in context, so I read the pages I needed instead of having all of it in view.",
+  );
+  // The body is gone and every claim that it is there went with it.
+  expect(turn!.systemPrompt).not.toContain("=== Page 2 ===");
+  expect(turn!.systemPrompt).not.toContain("already fully in your context");
+  expect(turn!.systemPrompt).toContain("read it with read_pages");
+  // The cheaper rung above it was taken first, so the catalog went too.
+  expect(turn!.systemPrompt).not.toContain("[fig:1]");
+  // The tool that replaces the inline body is still mounted.
+  expect(names(turn!.tools)).toContain("read_pages");
+});
+
+test("the same survey inside a 1M window is left alone", async () => {
+  const turn = await buildReadingTurn(input({ classroom: true, fulltext: cjkSurvey(300) }));
+  expect(turn!.notice).toBe("");
+  expect(turn!.systemPrompt).toContain("=== Page 2 ===");
+  expect(turn!.systemPrompt).toContain("already fully in your context");
+});
+
+// Nothing on the ladder can help when the thing that overflows is the passage
+// the user pointed at. Refusing beats answering from a sample of it.
+test("a marked passage larger than the window is refused, not quietly shrunk", async () => {
+  const turn = await buildReadingTurn(
+    input({
+      settings: small,
+      annotation: {
+        id: "ann-1",
+        text: "编译器内联缓存".repeat(40_000),
+        position: { pageIndex: 1 },
+      } as unknown as Annotation,
+    }),
+  );
+  expect(turn!.refusal).toContain("too large");
+  expect(turn!.notice).toBe("");
+  // The passage is still whole: the caller shows the refusal instead of sending.
+  expect(turn!.systemPrompt.length).toBeGreaterThan(200_000);
+});
+
+test("a model the catalog doesn't know skips the budget rather than blocking the turn", async () => {
+  const turn = await buildReadingTurn(
+    input({ classroom: true, fulltext: cjkSurvey(300), settings: { ...settings, defaultModelId: "no-such-model" } }),
+  );
+  expect(turn!.notice).toBe("");
+  expect(turn!.refusal).toBe("");
+  expect(turn!.systemPrompt).toContain("=== Page 2 ===");
+});
+
+test("a figure the conversation has already cited keeps its catalog", async () => {
+  createThread(BOOK, "ann-1", "thread-1");
+  appendMessage(BOOK, "thread-1", { role: "ai", text: "see [fig:1] for the layout", ts: 1 });
+  const figures: Figure[] = [{ id: "1", page: 2, caption: "内联缓存布局", bbox: null }];
+  const turn = await buildReadingTurn(
+    input({ classroom: true, fulltext: cjkSurvey(300), figures, settings: small }),
+  );
+  expect(turn!.systemPrompt).toContain("[fig:1]");
+  expect(turn!.systemPrompt).not.toContain("=== Page 2 ===");
+});

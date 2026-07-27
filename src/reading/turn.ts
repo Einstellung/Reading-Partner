@@ -5,6 +5,7 @@
 // testable on its own. Pure assembly plus reads — it never touches React state
 // and never starts the stream; the caller owns runAgentTurn.
 
+import type { Api, Context as PiContext, Model } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../ai/agent";
 import {
   annotationPage,
@@ -14,6 +15,15 @@ import {
 } from "./context";
 import type { AnnotationLite, TopicMaterial } from "../fulltext/format";
 import { modelSupportsImages, type ProviderId } from "../ai/aiClient";
+import { providers, toPiMessages } from "../ai/providers";
+import {
+  contextBudget,
+  estimateContextTokens,
+  estimateTextTokens,
+  fitsBudget,
+  planReductions,
+  type ReductionId,
+} from "../budget";
 import type { Annotation } from "../platform/app/reader-contract";
 import { buildSystemPrompt, readerProfileSection, type BooklistItem } from "../platform/app/context";
 import { languageInstruction, type Settings } from "../platform/app/settings";
@@ -55,6 +65,12 @@ export const EXPLAIN_KICKOFF =
 export const HISTORY_KEEP = 40;
 // The trim-triggered distillation re-fires only after this many new messages.
 export const TRIM_DISTILL_MIN_NEW = 20;
+// How short the replayed history gets when the budget ladder reaches its last
+// rung. Three exchanges: above the two rounds that are never dropped, below
+// anything that would still be called a conversation.
+export const HISTORY_KEEP_TIGHT = 6;
+// Memory observations kept when the ladder trims the opening snapshot.
+const MEMORY_KEEP_TIGHT = 3;
 
 // The live reading position and topic scope for the turn (App's ctxRef).
 export interface ReadingTurnContext {
@@ -102,6 +118,35 @@ export interface ReadingTurn {
   systemPrompt: string;
   tools: AgentTool[];
   messages: ReadingTurnMessage[];
+  // A low-key line for the end of the reply, naming what this turn had to leave
+  // out, or "" when nothing was dropped that the user has a stake in.
+  notice: string;
+  // Set when the turn cannot be assembled small enough to leave the model room
+  // to answer. Show this instead of sending; retrying changes nothing, since the
+  // same inputs assemble the same call.
+  refusal: string;
+}
+
+// The configured model's metadata (its context window is all we want). A
+// synchronous catalog lookup — no credentials, no network. Null when settings
+// name a provider or model pi doesn't know, in which case the turn is assembled
+// without a budget rather than blocked on one.
+function configuredModel(s: Settings): Model<Api> | null {
+  const provider = providers[s.defaultProviderId as ProviderId];
+  if (!provider) return null;
+  return provider.getModels().find((m) => m.id === s.defaultModelId) ?? null;
+}
+
+function piContext(
+  systemPrompt: string,
+  messages: ReadingTurnMessage[],
+  tools: AgentTool[],
+): PiContext {
+  return {
+    systemPrompt,
+    messages: toPiMessages(messages),
+    tools: tools.map(({ name, description, parameters }) => ({ name, description, parameters })),
+  };
 }
 
 // Assemble the live reading context, tools and replayed history for one turn.
@@ -153,16 +198,20 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   // Classroom mode swaps the context assembly (docs/09): the whole survey
   // rides in a stable prompt prefix, this chapter's prep notes follow, and
   // paper tools join the M6 reading tools. Companion mode is untouched.
-  let systemPrompt: string;
   let tools = buildReadingTools({ currentFulltext, materials });
   // Per-topic memory (M8): the memory tools join the same loop as the
   // reading tools; the opening snapshot rides the system prompt below.
   let memorySection = "";
+  let memorySectionTight = "";
   if (topicId) {
     const memory = getMemoryAdapter(topicId);
     const observations = await memory.listObservations().catch((): MemoryEntry[] => []);
     tools = [...tools, ...buildMemoryTools(memory, { onWrite: () => notifyMemoryChange(topicId) })];
     memorySection = memoryPromptSection(buildMemorySnapshot(observations), true);
+    const recent = [...observations]
+      .sort((a, b) => b.updated.localeCompare(a.updated))
+      .slice(0, MEMORY_KEEP_TIGHT);
+    memorySectionTight = memoryPromptSection(buildMemorySnapshot(recent), true);
   }
   // Figure catalog + view_figure tool (M9): the model can cite figures as
   // [fig:N] (rendered inline in chat) and open one to actually see it.
@@ -222,11 +271,13 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     }
   }
 
-  if (classroom && currentFulltext?.status === "ok") {
+  const isClassroom = classroom && currentFulltext?.status === "ok";
+  let classroomNotes: ClassroomNote[] = [];
+  if (isClassroom) {
     const here = page ?? (pageIndex !== null ? pageIndex + 1 : 1);
     const chapterIdx = prepState ? chapterIndexForPage(prepState.chapters, here) : 1;
     const notePapers = prepState ? papersForChapter(prepState.papers, chapterIdx) : [];
-    const notes = (
+    classroomNotes = (
       await Promise.all(
         notePapers.map(async (p): Promise<ClassroomNote | null> => {
           const raw = await readPrepNote(bookId, p.slug);
@@ -237,49 +288,67 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     if (prepState) {
       tools = [...tools, ...buildClassroomTools(() => getPipeline()?.snapshot().state ?? prepState)];
     }
-    systemPrompt = buildClassroomSystemPrompt({
-      topicName,
-      surveyName: fileName,
-      fulltext: currentFulltext,
-      pageLabel,
-      chapterTitle,
-      selectionText,
-      selectionComment,
-      notes,
-      prep: prepState,
-      hasTools: tools.length > 0,
-      figureCatalog,
-    });
-    // Classroom mode shares the AI output-language setting; the companion
-    // prompt gets it inside buildSystemPrompt.
-    const lang = languageInstruction(s.aiLanguage);
-    if (lang) systemPrompt += "\n\n" + lang;
-  } else {
-    systemPrompt = buildSystemPrompt({
-      topicName,
-      fileName,
-      pageLabel,
-      selectionText,
-      selectionComment,
-      chapterTitle,
-      surroundingText: surrounding,
-      fulltextAvailable: currentFulltext?.status === "ok",
-      materials: booklist,
-      figureCatalog,
-      hasTools: tools.length > 0,
-      bookLevel: isBook,
-      aiLanguage: s.aiLanguage,
-    });
   }
-  if (memorySection) systemPrompt += "\n\n" + memorySection;
   // The cross-scenario user profile: who the companion is reading with, so it
   // pitches explanation depth to their background. Empty profile → no section.
   const profileSection = readerProfileSection(await assembleIdentity().catch(() => ""));
-  if (profileSection) systemPrompt += "\n\n" + profileSection;
   // The whole-book outline from the reader's notes (docs/14), when they exist.
   const notesOverview = notesOverviewSection(await readOverviewNote(bookId));
-  if (notesOverview) systemPrompt += "\n\n" + notesOverview;
-  if (canIngestUrl) systemPrompt += "\n\n" + ADD_SOURCE_PROMPT;
+  // A booklist entry with no text layer and no marks is a title the model can do
+  // nothing with; the first thing to go when the window is tight.
+  const booklistThin = booklist.filter((m) => m.fulltextAvailable || m.annotationCount > 0);
+
+  // The prompt as a function of what this turn had to give up (src/budget). The
+  // pieces named by a ReductionId are the optional ones; everything else — the
+  // role, the instructions, the marked passage and its note, the position, this
+  // chapter's prep notes — is assembled the same way no matter how tight the
+  // window is.
+  function composePrompt(dropped: ReadonlySet<ReductionId>): string {
+    const catalog = dropped.has("figure-catalog") ? "" : figureCatalog;
+    let prompt: string;
+    if (isClassroom) {
+      prompt = buildClassroomSystemPrompt({
+        topicName,
+        surveyName: fileName,
+        fulltext: currentFulltext as Fulltext,
+        pageLabel,
+        chapterTitle,
+        selectionText,
+        selectionComment,
+        notes: classroomNotes,
+        prep: prepState,
+        hasTools: tools.length > 0,
+        figureCatalog: catalog,
+        inlineSurvey: !dropped.has("classroom-inline"),
+      });
+      // Classroom mode shares the AI output-language setting; the companion
+      // prompt gets it inside buildSystemPrompt.
+      const lang = languageInstruction(s.aiLanguage);
+      if (lang) prompt += "\n\n" + lang;
+    } else {
+      prompt = buildSystemPrompt({
+        topicName,
+        fileName,
+        pageLabel,
+        selectionText,
+        selectionComment,
+        chapterTitle,
+        surroundingText: surrounding,
+        fulltextAvailable: currentFulltext?.status === "ok",
+        materials: dropped.has("booklist-thin") ? booklistThin : booklist,
+        figureCatalog: catalog,
+        hasTools: tools.length > 0,
+        bookLevel: isBook,
+        aiLanguage: s.aiLanguage,
+      });
+    }
+    const memory = dropped.has("memory-trim") ? memorySectionTight : memorySection;
+    if (memory) prompt += "\n\n" + memory;
+    if (profileSection && !dropped.has("reader-profile")) prompt += "\n\n" + profileSection;
+    if (notesOverview && !dropped.has("notes-overview")) prompt += "\n\n" + notesOverview;
+    if (canIngestUrl) prompt += "\n\n" + ADD_SOURCE_PROMPT;
+    return prompt;
+  }
 
   const threadMsgs = getThread(bookId, threadId)?.messages ?? [];
   const prior = await Promise.all(
@@ -293,31 +362,89 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   // Replay only the tail of a long thread, and before the older turns fall
   // out of context, run the fallback distillation (docs/02: hangup is the
   // main trigger, the trim is the backstop).
-  let history = prior;
-  if (prior.length > HISTORY_KEEP) {
-    history = prior.slice(prior.length - HISTORY_KEEP);
-    if (topicId) {
-      void distillThread(
-        {
-          topicId,
-          topicName,
-          bookName: fileName,
-          threadId,
-          annotationId,
-          page,
-          markedText: selectionText,
-          messages: threadMsgs.map(({ role, text, ts }) => ({ role, text, ts })),
-          annotations: distillAnnotations(),
-        },
-        TRIM_DISTILL_MIN_NEW,
-      );
+  if (prior.length > HISTORY_KEEP && topicId) {
+    void distillThread(
+      {
+        topicId,
+        topicName,
+        bookName: fileName,
+        threadId,
+        annotationId,
+        page,
+        markedText: selectionText,
+        messages: threadMsgs.map(({ role, text, ts }) => ({ role, text, ts })),
+        annotations: distillAnnotations(),
+      },
+      TRIM_DISTILL_MIN_NEW,
+    );
+  }
+
+  function composeMessages(dropped: ReadonlySet<ReductionId>): ReadingTurnMessage[] {
+    const keep = dropped.has("history-trim") ? HISTORY_KEEP_TIGHT : HISTORY_KEEP;
+    const tail = prior.length > keep ? prior.slice(prior.length - keep) : prior;
+    return [{ role: "user" as const, text: EXPLAIN_KICKOFF }, ...tail];
+  }
+
+  const none: ReadonlySet<ReductionId> = new Set();
+  let systemPrompt = composePrompt(none);
+  let messages = composeMessages(none);
+  let notice = "";
+  let refusal = "";
+
+  // Fit the call to the model's context window before it is sent. Left
+  // unchecked, an over-full request comes back one token long with a normal
+  // `done` and no error — a one-word reply, or a "malformed" answer wherever one
+  // gets parsed (src/budget/estimate.ts).
+  const model = configuredModel(s);
+  if (model) {
+    const budget = contextBudget(model, piContext(systemPrompt, messages, tools));
+    if (!fitsBudget(budget, "chat")) {
+      // Price each rung by composing without it. The classroom body dominates,
+      // so it is held out of the base and priced as the difference — the small
+      // rungs are then measured against a prompt that does not carry the book.
+      const withoutBook: ReadonlySet<ReductionId> = new Set<ReductionId>(["classroom-inline"]);
+      const baseTokens = estimateTextTokens(composePrompt(withoutBook));
+      const priceOf = (id: ReductionId): number =>
+        Math.max(0, baseTokens - estimateTextTokens(composePrompt(new Set([...withoutBook, id]))));
+      const tightMessages = composeMessages(new Set<ReductionId>(["history-trim"]));
+      // The catalog is only redundant while nothing is leaning on it: once the
+      // conversation has cited a [fig:N], dropping the list of figures makes the
+      // reference dangle.
+      const figuresInPlay = messages.some((m) => m.text.includes("[fig:"));
+      const savings: Partial<Record<ReductionId, number>> = {
+        "figure-catalog": figuresInPlay ? 0 : priceOf("figure-catalog"),
+        "reader-profile": priceOf("reader-profile"),
+        "notes-overview": priceOf("notes-overview"),
+        "booklist-thin": priceOf("booklist-thin"),
+        "memory-trim": priceOf("memory-trim"),
+        "classroom-inline": Math.max(0, estimateTextTokens(systemPrompt) - baseTokens),
+        "history-trim": Math.max(
+          0,
+          estimateContextTokens({ messages: toPiMessages(messages) }) -
+            estimateContextTokens({ messages: toPiMessages(tightMessages) }),
+        ),
+      };
+      // Tool results are stubbed inside the agent loop, not here; this assembly
+      // has no results yet, so that rung has nothing to offer.
+      const total = Object.values(savings).reduce((n, v) => n + (v ?? 0), 0);
+      const plan = planReductions({
+        contextWindow: budget.contextWindow,
+        purpose: "chat",
+        used: budget.used,
+        floorTokens: budget.used - total,
+        savings,
+      });
+      if (plan.apply.length > 0) {
+        const dropped = new Set(plan.apply);
+        systemPrompt = composePrompt(dropped);
+        messages = composeMessages(dropped);
+      }
+      notice = plan.notice;
+      refusal = plan.refusal;
     }
   }
-  return {
-    systemPrompt,
-    tools,
-    messages: [{ role: "user" as const, text: EXPLAIN_KICKOFF }, ...history],
-  };
+
+  return { systemPrompt, tools, messages, notice, refusal };
 }
 
 // An annotation flattened for the read_annotations tool: 1-based page + selected

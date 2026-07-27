@@ -43,6 +43,7 @@ const LAYER: Record<string, Layer> = {
 
   ai: "capability",
   "ai/voice": "capability",
+  budget: "capability",
   fulltext: "capability",
 
   info: "domain",

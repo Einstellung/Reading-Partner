@@ -17,7 +17,7 @@ import {
 } from "../src/fulltext/extract";
 import { FULLTEXT_VERSION, type Fulltext } from "../src/fulltext/types";
 import { chapterAt, readPages, searchTopic, textAround } from "../src/fulltext/query";
-import { formatPages, formatSearch, type TopicMaterial } from "../src/fulltext/format";
+import { formatPages, formatSearch, MAX_PAGE_CHARS, type TopicMaterial } from "../src/fulltext/format";
 import { tokenize } from "../src/fulltext/bm25";
 
 function fixture(rel: string): string {
@@ -194,6 +194,22 @@ test("formatPages caps the range, clamps to the book, and labels each page", () 
   expect(formatPages(book, 99, 99)).toContain("out of range");
   expect(formatPages(ft([""], "no-text-layer"), 1, 1)).toContain("machine-readable");
   expect(formatPages(null, 1, 1)).toContain("machine-readable");
+});
+
+// MAX_PAGES bounded how many pages a call returns, nothing bounded their size.
+// The cut has to be visible inside the page, or the model quotes across it as
+// if the text ran on.
+test("formatPages truncates a long page and says so in the page's own block", () => {
+  const long = "x".repeat(MAX_PAGE_CHARS + 500);
+  const book = ft(["short page", long, "another short one"]);
+  const out = formatPages(book, 1, 3);
+  expect(out).toContain(`[page 2 truncated at ${MAX_PAGE_CHARS} chars]`);
+  expect(out).not.toContain("[page 1 truncated");
+  expect(out).not.toContain("[page 3 truncated");
+  // Exactly MAX_PAGE_CHARS of body survive, and the neighbours are untouched.
+  const page2 = out.split("=== Page 2 ===\n")[1].split("\n[page 2")[0];
+  expect(page2.length).toBe(MAX_PAGE_CHARS);
+  expect(out).toContain("=== Page 3 ===\nanother short one");
 });
 
 test("formatSearch ranks across materials with a text layer, cites book + page", () => {
