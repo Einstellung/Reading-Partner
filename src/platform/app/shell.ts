@@ -17,6 +17,10 @@ export const PHONE_MAX_WIDTH = 640;
 export interface ShellEnv {
   // Viewport width in CSS pixels.
   width: number;
+  // Viewport height in CSS pixels. The measurement is the shorter side, not the
+  // width: a phone launched in landscape is 852 wide and would otherwise mount
+  // the reader, and the choice is never revisited afterwards.
+  height: number;
   // Whether the primary pointer is coarse (a finger). A narrow desktop window
   // still has a mouse, and the desktop shell is the right one for it.
   coarsePointer: boolean;
@@ -27,7 +31,8 @@ export interface ShellEnv {
 
 export function pickShell(env: ShellEnv): Shell {
   if (env.override === "phone" || env.override === "desktop") return env.override;
-  return env.width < PHONE_MAX_WIDTH && env.coarsePointer ? "phone" : "desktop";
+  const shortSide = Math.min(env.width, env.height);
+  return shortSide < PHONE_MAX_WIDTH && env.coarsePointer ? "phone" : "desktop";
 }
 
 // The environment as the running window reports it. matchMedia is absent in
@@ -42,6 +47,7 @@ export function readShellEnv(win: Window): ShellEnv {
   }
   return {
     width: win.innerWidth,
+    height: win.innerHeight,
     coarsePointer: win.matchMedia?.("(pointer: coarse)").matches ?? false,
     override,
   };
