@@ -24,6 +24,9 @@ const TOOLS: { type: ToolType; label: string; Icon: (p: { size?: number }) => JS
 	{ type: 'ai', label: 'AI pen', Icon: IconSparkle },
 ];
 
+// The two tools that paint in a color.
+type PenType = 'highlight' | 'underline';
+
 const TOOL_BTN =
 	'flex items-center justify-center rounded-lg border-0 bg-transparent p-0 text-neutral-700';
 const CARD = 'rounded-xl border border-black/10 bg-white shadow-lg';
@@ -41,8 +44,7 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 	const swatchRef = useRef<HTMLButtonElement>(null);
 	const horizontal = orientation === 'horizontal';
 	// Only the painting tools carry a color; the navigation lock, the AI pen and
-	// the all-unselected state do not, so the swatch shows as a disabled
-	// placeholder to keep the rack width stable.
+	// the all-unselected state do not.
 	const hasColor = tool.type === 'highlight' || tool.type === 'underline';
 
 	useLayoutEffect(() => {
@@ -84,10 +86,23 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 		if (!hasColor) setPaletteOpen(false);
 	}, [hasColor]);
 
+	// Which pen the color belongs to when none is out. Reaching for the color is
+	// reaching for the pen, so the swatch picks the last one used rather than
+	// sitting there dead.
+	const lastPen = useRef<PenType>('highlight');
+	useEffect(() => {
+		if (hasColor) lastPen.current = tool.type as PenType;
+	}, [hasColor, tool.type]);
+
 	// Pressing the active button releases it: the rack drops to 'none', which is
 	// the traditional mode, not another tool.
 	function pickTool(type: ToolType) {
 		onToolChange({ type: type === tool.type ? 'none' : type, color: tool.color });
+	}
+
+	function pickSwatch() {
+		if (!hasColor) onToolChange({ type: lastPen.current, color: tool.color });
+		setPaletteOpen((v) => !hasColor || !v);
 	}
 
 	function pickColor(color: string) {
@@ -139,8 +154,7 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 			))}
 
 			{/* The divider and swatch always hold their place so the rack width never
-			    jumps between tools; colorless states show the swatch as a disabled
-			    placeholder rather than removing it. */}
+			    jumps between tools. */}
 			<div className={horizontal ? 'mx-1 h-5 w-px bg-black/10' : 'my-0.5 h-px w-6 bg-black/10'} />
 
 			<div className="relative flex" ref={paletteRef}>
@@ -148,19 +162,14 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 					ref={swatchRef}
 					type="button"
 					className={
-						`${TOOL_BTN} ${toolSize} ` +
-						(!hasColor
-							? 'cursor-not-allowed opacity-40'
-							: paletteOpen
-								? 'cursor-pointer bg-sky-100 text-sky-700'
-								: 'cursor-pointer hover:bg-black/5')
+						`${TOOL_BTN} ${toolSize} cursor-pointer ` +
+						(paletteOpen ? 'bg-sky-100 text-sky-700' : 'hover:bg-black/5')
 					}
 					title="Color"
 					aria-label="Color"
 					aria-haspopup="true"
 					aria-expanded={paletteOpen}
-					disabled={!hasColor}
-					onClick={() => setPaletteOpen((v) => !v)}
+					onClick={pickSwatch}
 				>
 					<IconColorSwatch color={tool.color} size={20} />
 				</button>
