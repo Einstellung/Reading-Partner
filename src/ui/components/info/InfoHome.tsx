@@ -46,14 +46,32 @@ import { InfoCall, type InfoCallAnchor } from "./InfoCall";
 // renders the shelf; it is in the union so the two navigate through one setter.
 export type HomeScreen = "vestibule" | "library" | "briefing" | "article" | "sources";
 
+// Everything a launch screen needs from the briefing pipeline. The state lives
+// here, so a shell that draws its own launch screen (the phone's, docs/22) is
+// handed these rather than subscribing a second time.
+export interface LaunchProps {
+  snap: InfoSnapshot | null;
+  configured: boolean;
+  hasSources: boolean | null;
+  onGenerate: () => void;
+  onStop: () => void;
+  onOpenBriefing: () => void;
+  onOpenSettings: () => void;
+  onStartSubscribing: () => void;
+}
+
 export default function InfoHome(props: {
   // Which screen to show, or null while the reader is open (the pipeline
   // subscription lives on regardless, so a briefing keeps generating).
   screen: HomeScreen | null;
   onNavigate: (screen: HomeScreen) => void;
+  // The launch screen to draw in place of the vestibule. Omitted by the desktop
+  // shell, which wants the vestibule; the phone shell has no library and no
+  // book to continue, so it draws its own.
+  renderLaunch?: (launch: LaunchProps) => React.ReactNode;
   // The most recently opened book, for the vestibule's Continue reading.
-  continueBook: { title: string; topicName: string } | null;
-  onContinue: () => void;
+  continueBook?: { title: string; topicName: string } | null;
+  onContinue?: () => void;
   // Whether an AI provider is connected (the vestibule guides to Settings).
   configured: boolean;
   onOpenSettings: () => void;
@@ -317,19 +335,32 @@ export default function InfoHome(props: {
     <>
       {screen === "vestibule" && (
         <div className="absolute inset-0 overflow-y-auto bg-white">
-          <Vestibule
-            continueBook={props.continueBook}
-            snap={infoSnap}
-            configured={props.configured}
-            hasSources={hasSourcesState}
-            onContinue={props.onContinue}
-            onOpenLibrary={() => onNavigate("library")}
-            onGenerate={generateBriefing}
-            onStop={stopBriefing}
-            onOpenBriefing={() => onNavigate("briefing")}
-            onOpenSettings={props.onOpenSettings}
-            onStartSubscribing={openOnboarding}
-          />
+          {props.renderLaunch ? (
+            props.renderLaunch({
+              snap: infoSnap,
+              configured: props.configured,
+              hasSources: hasSourcesState,
+              onGenerate: generateBriefing,
+              onStop: stopBriefing,
+              onOpenBriefing: () => onNavigate("briefing"),
+              onOpenSettings: props.onOpenSettings,
+              onStartSubscribing: openOnboarding,
+            })
+          ) : (
+            <Vestibule
+              continueBook={props.continueBook ?? null}
+              snap={infoSnap}
+              configured={props.configured}
+              hasSources={hasSourcesState}
+              onContinue={props.onContinue ?? (() => {})}
+              onOpenLibrary={() => onNavigate("library")}
+              onGenerate={generateBriefing}
+              onStop={stopBriefing}
+              onOpenBriefing={() => onNavigate("briefing")}
+              onOpenSettings={props.onOpenSettings}
+              onStartSubscribing={openOnboarding}
+            />
+          )}
         </div>
       )}
 
