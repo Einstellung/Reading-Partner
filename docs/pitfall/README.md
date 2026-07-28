@@ -87,6 +87,7 @@
 - [12-webkitgtk-drag-latency](./12-webkitgtk-drag-latency.md) — WebKitGTK 拖选高亮时选区滞后于鼠标（根因未定，换引擎后没复测）
 - [16-webkitgtk-clipboard-image](./16-webkitgtk-clipboard-image.md) — DOM paste 事件不带图片，贴图要从 Rust 读剪贴板
 - [43-webkit-tap-highlight-orphan-shadow](./43-webkit-tap-highlight-orphan-shadow.md) — 不引 preflight 也就没关掉 WKWebView 的原生点击高亮；点完即卸载的按钮会留下孤儿阴影，按下反馈改用 active:（同族还有坑 49 的原生选区，收在「触摸与手势」）
+- [67-webkit-tap-does-not-focus-a-button](./67-webkit-tap-does-not-focus-a-button.md) — WebKit 点击不给按钮焦点，靠 `.focus()` + `onBlur` 收起的二次确认在 iPad 上按了等于没按（blur 抢在 click 前面解除武装，React 又复用同一个 button 节点，这一下变成解除再武装）；收起改用 document 上 capture 的 pointerdown
 
 ## AI 调用与上下文窗口
 
