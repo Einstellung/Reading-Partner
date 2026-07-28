@@ -5,7 +5,7 @@
 // place, without going through the chat. No drag/group/frequency — ranking is
 // triage's job. Presentational; the host owns the store writes and probing.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { SourceDescriptor } from "../../../info/sources/descriptor";
 import type { SourceHealth } from "../../../info/sources/engine";
 import type { ProbeConfirmCardData } from "../../../info/briefing/cards";
@@ -36,15 +36,28 @@ function healthState(h: SourceHealth | undefined): "ok" | "warn" | "unknown" {
 
 function HealthDot({ health }: { health: SourceHealth | undefined }) {
   const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
   const state = healthState(health);
   const color = state === "ok" ? "bg-[#3fb950]" : state === "warn" ? "bg-[#e3b341]" : "bg-[#d0d0d0]";
+
+  // A press outside shuts the panel. Not blur: WebKit does not focus a button
+  // when it is tapped, so on a touch device the dot never holds focus and a blur
+  // never comes — docs/pitfall/67-webkit-tap-does-not-focus-a-button.md.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    return () => document.removeEventListener("pointerdown", onDown, true);
+  }, [open]);
+
   return (
-    <div className="relative">
+    <div className="relative" ref={ref}>
       <button
         type="button"
         aria-label="Source health"
         onClick={() => setOpen((v) => !v)}
-        onBlur={() => setOpen(false)}
         className={`h-2.5 w-2.5 rounded-full ${color}`}
       />
       {open && health && (

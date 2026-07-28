@@ -2,7 +2,7 @@
 // the current Tool (including sticky behaviour); this renders it and reports
 // changes. Styled with Tailwind utilities.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconColorSwatch, IconHighlight, IconPointer, IconSparkle, IconUnderline } from '../common/icons';
 import type { ColorEntry, Tool, ToolType } from '../common/types';
 
@@ -24,38 +24,85 @@ const TOOLS: { type: ToolType; label: string; Icon: (p: { size?: number }) => JS
 	{ type: 'ai', label: 'AI pen', Icon: IconSparkle },
 ];
 
+// The two tools that paint in a color.
+type PenType = 'highlight' | 'underline';
+
 const TOOL_BTN =
 	'flex items-center justify-center rounded-lg border-0 bg-transparent p-0 text-neutral-700';
 const CARD = 'rounded-xl border border-black/10 bg-white shadow-lg';
+// Distance from the swatch to the palette that opens off it.
+const GAP = 8;
 
 export default function PenToolbar({ tool, colors, onToolChange, orientation = 'vertical' }: PenToolbarProps) {
 	const [paletteOpen, setPaletteOpen] = useState(false);
+	// Where the open palette sits, in viewport coordinates. It cannot be laid out
+	// against the swatch: the header's tool band scrolls horizontally, and a
+	// scroll container clips both axes, so an absolutely-positioned popover
+	// hanging below the bar never reaches the screen.
+	const [palettePos, setPalettePos] = useState<{ left: number; top: number } | null>(null);
 	const paletteRef = useRef<HTMLDivElement>(null);
+	const swatchRef = useRef<HTMLButtonElement>(null);
 	const horizontal = orientation === 'horizontal';
 	// Only the painting tools carry a color; the navigation lock, the AI pen and
-	// the all-unselected state do not, so the swatch shows as a disabled
-	// placeholder to keep the rack width stable.
+	// the all-unselected state do not.
 	const hasColor = tool.type === 'highlight' || tool.type === 'underline';
 
+	useLayoutEffect(() => {
+		if (!paletteOpen) {
+			setPalettePos(null);
+			return;
+		}
+		const swatch = swatchRef.current;
+		if (!swatch) return;
+		// Horizontal hangs below the swatch and is centred on it (the popover
+		// carries the -50% itself); vertical opens to its right, top-aligned.
+		const place = () => {
+			const r = swatch.getBoundingClientRect();
+			setPalettePos(
+				horizontal
+					? { left: r.left + r.width / 2, top: r.bottom + GAP }
+					: { left: r.right + GAP, top: r.top },
+			);
+		};
+		place();
+		window.addEventListener('resize', place);
+		return () => window.removeEventListener('resize', place);
+	}, [paletteOpen, horizontal]);
+
+	// A press outside shuts the palette. pointerdown, not mousedown, and capture:
+	// docs/pitfall/67-webkit-tap-does-not-focus-a-button.md.
 	useEffect(() => {
 		if (!paletteOpen) return;
-		function onDown(e: MouseEvent) {
+		function onDown(e: PointerEvent) {
 			if (paletteRef.current && !paletteRef.current.contains(e.target as Node)) {
 				setPaletteOpen(false);
 			}
 		}
-		document.addEventListener('mousedown', onDown);
-		return () => document.removeEventListener('mousedown', onDown);
+		document.addEventListener('pointerdown', onDown, true);
+		return () => document.removeEventListener('pointerdown', onDown, true);
 	}, [paletteOpen]);
 
 	useEffect(() => {
 		if (!hasColor) setPaletteOpen(false);
 	}, [hasColor]);
 
+	// Which pen the color belongs to when none is out. Reaching for the color is
+	// reaching for the pen, so the swatch picks the last one used rather than
+	// sitting there dead.
+	const lastPen = useRef<PenType>('highlight');
+	useEffect(() => {
+		if (hasColor) lastPen.current = tool.type as PenType;
+	}, [hasColor, tool.type]);
+
 	// Pressing the active button releases it: the rack drops to 'none', which is
 	// the traditional mode, not another tool.
 	function pickTool(type: ToolType) {
 		onToolChange({ type: type === tool.type ? 'none' : type, color: tool.color });
+	}
+
+	function pickSwatch() {
+		if (!hasColor) onToolChange({ type: lastPen.current, color: tool.color });
+		setPaletteOpen((v) => !hasColor || !v);
 	}
 
 	function pickColor(color: string) {
@@ -107,38 +154,35 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 			))}
 
 			{/* The divider and swatch always hold their place so the rack width never
-			    jumps between tools; colorless states show the swatch as a disabled
-			    placeholder rather than removing it. */}
+			    jumps between tools. */}
 			<div className={horizontal ? 'mx-1 h-5 w-px bg-black/10' : 'my-0.5 h-px w-6 bg-black/10'} />
 
 			<div className="relative flex" ref={paletteRef}>
 				<button
+					ref={swatchRef}
 					type="button"
 					className={
-						`${TOOL_BTN} ${toolSize} ` +
-						(!hasColor
-							? 'cursor-not-allowed opacity-40'
-							: paletteOpen
-								? 'cursor-pointer bg-sky-100 text-sky-700'
-								: 'cursor-pointer hover:bg-black/5')
+						`${TOOL_BTN} ${toolSize} cursor-pointer ` +
+						(paletteOpen ? 'bg-sky-100 text-sky-700' : 'hover:bg-black/5')
 					}
 					title="Color"
 					aria-label="Color"
 					aria-haspopup="true"
 					aria-expanded={paletteOpen}
-					disabled={!hasColor}
-					onClick={() => setPaletteOpen((v) => !v)}
+					onClick={pickSwatch}
 				>
 					<IconColorSwatch color={tool.color} size={20} />
 				</button>
 
-				{paletteOpen && (
+				{paletteOpen && palettePos && (
 					<div
+						style={{ left: palettePos.left, top: palettePos.top }}
 						className={
-							// Fixed column tracks: an absolutely-positioned popover shrinks to its
-							// 32px positioning wrapper, so 1fr tracks would collapse.
-							`absolute z-10 grid grid-cols-[repeat(4,1.75rem)] gap-0.5 p-1.5 shadow-xl ${CARD} ` +
-							(horizontal ? 'left-1/2 top-full mt-2 -translate-x-1/2' : 'left-full top-0 ml-2')
+							// Fixed column tracks: the popover shrinks to its content, so 1fr
+							// tracks would collapse. A track has to hold a whole swatch button,
+							// which is finger-sized on a touch device.
+							`fixed z-[1000] grid grid-cols-[repeat(4,1.75rem)] coarse:grid-cols-[repeat(4,2.75rem)] gap-0.5 p-1.5 shadow-xl ${CARD} ` +
+							(horizontal ? '-translate-x-1/2' : '')
 						}
 						role="listbox"
 						aria-label="Colors"
