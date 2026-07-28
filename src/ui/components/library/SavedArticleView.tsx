@@ -9,21 +9,25 @@ import { formatPublishedAt, type SavedArticle } from "../../../reading/saved-art
 export default function SavedArticleView({
   article,
   onBack,
+  backLabel = "Topic",
 }: {
   article: SavedArticle;
   onBack: () => void;
+  // What Back leads to. The library opens this from a topic; the phone opens it
+  // from the list of kept articles, and the button has to say so.
+  backLabel?: string;
 }) {
   const published = formatPublishedAt(article.publishedAt);
   return (
     <div className="absolute inset-0 overflow-y-auto bg-white">
       <style>{ARTICLE_PROSE_CSS}</style>
-      <div className="mx-auto flex w-full max-w-[46rem] flex-col px-6 py-8">
-        <div className="sticky top-0 z-10 -mx-6 mb-6 flex items-center gap-3 border-b border-[#ececec] bg-white/85 px-6 py-3 backdrop-blur">
+      <div className="mx-auto flex w-full max-w-[46rem] flex-col px-4 py-5 sm:px-6 sm:py-8">
+        <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-2 border-b border-[#ececec] bg-white/85 px-4 py-2 backdrop-blur sm:-mx-6 sm:mb-6 sm:gap-3 sm:px-6 sm:py-3">
           <button
-            className="rounded-lg border border-[#dcdcdc] px-2.5 py-1 text-[13px] text-[#555] hover:bg-[#f4f4f4]"
+            className="rounded-lg border border-[#dcdcdc] px-2.5 py-1 text-[13px] text-[#555] coarse:min-h-[44px] hover:bg-[#f4f4f4]"
             onClick={onBack}
           >
-            ‹ Topic
+            ‹ {backLabel}
           </button>
           {article.sourceName && (
             <span className="rounded-full bg-[#f0eefb] px-2 py-0.5 text-[11px] font-medium text-[#6d5ae0]">
@@ -33,7 +37,7 @@ export default function SavedArticleView({
           {published && <span className="text-[12px] text-[#888]">{published}</span>}
         </div>
 
-        <h1 className="m-0 mb-6 text-[26px] font-semibold leading-tight text-[#141414]">
+        <h1 className="m-0 mb-4 text-[22px] font-semibold leading-tight text-[#141414] sm:mb-6 sm:text-[26px]">
           {article.title}
         </h1>
 
@@ -53,7 +57,7 @@ export default function SavedArticleView({
           </p>
         )}
 
-        <div className="mt-10 border-t border-[#eee] pt-4 text-[12px] text-[#bbb]">{article.url}</div>
+        <div className="mt-8 border-t border-[#eee] pt-4 text-[12px] text-[#bbb] sm:mt-10">{article.url}</div>
       </div>
     </div>
   );

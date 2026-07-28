@@ -15,7 +15,8 @@
 //              inside it), free to use platform, capability and each other, as
 //              long as the graph stays acyclic.
 //   ui         React components (ui/components).
-//   shell      App.tsx, the one place that wires ui to domains.
+//   shell      App.tsx and PhoneApp.tsx, the two form factors, and the only
+//              places that wire ui to domains.
 //   entry      main.tsx and smoke/, which pick what to boot; they may import
 //              anything.
 //
@@ -58,6 +59,7 @@ const LAYER: Record<string, Layer> = {
   ui: "ui",
   "ui/components": "ui",
   "App.tsx": "shell",
+  "PhoneApp.tsx": "shell",
 
   "main.tsx": "entry",
   smoke: "entry",

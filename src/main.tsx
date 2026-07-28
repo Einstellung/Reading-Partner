@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { installFetchBridge } from "./ai/fetch-bridge";
+import { detectShell } from "./platform/app/shell";
 import "./styles.css";
 
 // Dev-only: silence the Tauri http plugin's fire-and-forget cleanup rejections.
@@ -39,10 +40,17 @@ if (import.meta.env.VITE_SMOKE === "1") {
   // load. Hence the dynamic import.
   installFetchBridge();
 
-  void import("./App").then(({ default: App }) => {
+  // Which shell (docs/22), decided once here: the phone one carries no reader,
+  // so the choice also decides whether PDFium is ever loaded. Both are dynamic
+  // imports, so the shell that lost is not in the mounted chunk either.
+  const shell = detectShell(window);
+  void (shell === "phone"
+    ? import("./PhoneApp").then((m) => m.default)
+    : import("./App").then((m) => m.default)
+  ).then((Shell) => {
     ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       <React.StrictMode>
-        <App />
+        <Shell />
       </React.StrictMode>,
     );
   });
