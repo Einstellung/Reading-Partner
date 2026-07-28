@@ -27,10 +27,10 @@ export function ArticleView({
   return (
     <div className="h-full overflow-y-auto bg-white">
       <style>{ARTICLE_PROSE_CSS}</style>
-      <div className="mx-auto flex w-full max-w-[46rem] flex-col px-6 py-8">
-        <div className="sticky top-0 z-10 -mx-6 mb-6 flex items-center gap-3 border-b border-[#ececec] bg-white/85 px-6 py-3 backdrop-blur">
+      <div className="mx-auto flex w-full max-w-[46rem] flex-col px-4 py-5 sm:px-6 sm:py-8">
+        <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-2 border-b border-[#ececec] bg-white/85 px-4 py-2 backdrop-blur sm:-mx-6 sm:mb-6 sm:gap-3 sm:px-6 sm:py-3">
           <button
-            className="rounded-lg border border-[#dcdcdc] px-2.5 py-1 text-[13px] text-[#555] hover:bg-[#f4f4f4]"
+            className="rounded-lg border border-[#dcdcdc] px-2.5 py-1 text-[13px] text-[#555] coarse:min-h-[44px] hover:bg-[#f4f4f4]"
             onClick={onBack}
           >
             ‹ Briefing
@@ -44,8 +44,8 @@ export function ArticleView({
           <button
             className={
               saved
-                ? "flex items-center gap-1.5 rounded-lg border border-[#cfe3d2] bg-[#eff6f0] px-2.5 py-1 text-[13px] text-[#3e6b48]"
-                : "flex items-center gap-1.5 rounded-lg border border-[#dcdcdc] px-2.5 py-1 text-[13px] text-[#555] hover:bg-[#f4f4f4]"
+                ? "flex items-center gap-1.5 rounded-lg border border-[#cfe3d2] bg-[#eff6f0] px-2.5 py-1 text-[13px] text-[#3e6b48] coarse:min-h-[44px]"
+                : "flex items-center gap-1.5 rounded-lg border border-[#dcdcdc] px-2.5 py-1 text-[13px] text-[#555] coarse:min-h-[44px] hover:bg-[#f4f4f4]"
             }
             onClick={onSave}
             disabled={saved}
@@ -55,7 +55,7 @@ export function ArticleView({
             {saved ? "Kept" : "Keep"}
           </button>
           <button
-            className="flex items-center gap-1.5 rounded-lg border border-[#c9c2e8] bg-[#efecfb] px-2.5 py-1 text-[13px] text-[#4a3a9e] hover:bg-[#e7e3f7]"
+            className="flex items-center gap-1.5 rounded-lg border border-[#c9c2e8] bg-[#efecfb] px-2.5 py-1 text-[13px] text-[#4a3a9e] coarse:min-h-[44px] hover:bg-[#e7e3f7]"
             onClick={onAsk}
             title="Ask about this article"
           >
@@ -63,7 +63,7 @@ export function ArticleView({
           </button>
         </div>
 
-        <h1 className="m-0 mb-6 text-[26px] font-semibold leading-tight text-[#141414]">{meta.title}</h1>
+        <h1 className="m-0 mb-4 text-[22px] font-semibold leading-tight text-[#141414] sm:mb-6 sm:text-[26px]">{meta.title}</h1>
 
         {contentHtml ? (
           <div className={ARTICLE_PROSE_CLASS} dangerouslySetInnerHTML={{ __html: contentHtml }} />
@@ -74,7 +74,7 @@ export function ArticleView({
           </p>
         )}
 
-        <div className="mt-10 border-t border-[#eee] pt-4 text-[12px] text-[#bbb]">{meta.url}</div>
+        <div className="mt-8 border-t border-[#eee] pt-4 text-[12px] text-[#bbb] sm:mt-10">{meta.url}</div>
       </div>
     </div>
   );

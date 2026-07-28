@@ -52,10 +52,10 @@ export function BriefingPage(props: BriefingPageProps) {
   const meta = (id: string): BriefingItemMeta | undefined => b.items[id];
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col px-6 py-8">
-      <div className="sticky top-0 z-10 -mx-6 mb-6 flex items-center gap-3 border-b border-[#ececec] bg-white/85 px-6 py-3 backdrop-blur">
+    <div className="mx-auto flex w-full max-w-3xl flex-col px-4 py-5 sm:px-6 sm:py-8">
+      <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-2 border-b border-[#ececec] bg-white/85 px-4 py-2 backdrop-blur sm:-mx-6 sm:mb-6 sm:gap-3 sm:px-6 sm:py-3">
         <button
-          className="rounded-lg border border-[#dcdcdc] px-2.5 py-1 text-[13px] text-[#555] hover:bg-[#f4f4f4]"
+          className="rounded-lg border border-[#dcdcdc] px-2.5 py-1 text-[13px] text-[#555] coarse:min-h-[44px] hover:bg-[#f4f4f4]"
           onClick={props.onBack}
         >
           ‹ Today
@@ -63,14 +63,14 @@ export function BriefingPage(props: BriefingPageProps) {
         <span className="text-[13px] text-[#999]">{b.date}</span>
         <span className="flex-1" />
         <button
-          className="rounded-lg border border-[#dcdcdc] px-2.5 py-1 text-[13px] text-[#555] hover:bg-[#f4f4f4]"
+          className="rounded-lg border border-[#dcdcdc] px-2.5 py-1 text-[13px] text-[#555] coarse:min-h-[44px] hover:bg-[#f4f4f4]"
           onClick={props.onOpenSources}
           title="Manage sources"
         >
           Sources
         </button>
         <button
-          className="flex items-center gap-1.5 rounded-lg border border-[#c9c2e8] bg-[#efecfb] px-2.5 py-1 text-[13px] text-[#4a3a9e] hover:bg-[#e7e3f7]"
+          className="flex items-center gap-1.5 rounded-lg border border-[#c9c2e8] bg-[#efecfb] px-2.5 py-1 text-[13px] text-[#4a3a9e] coarse:min-h-[44px] hover:bg-[#e7e3f7]"
           onClick={props.onAskBriefing}
           title="Ask about this briefing"
         >
@@ -79,11 +79,11 @@ export function BriefingPage(props: BriefingPageProps) {
       </div>
 
       {/* Overview: one honest line. */}
-      <p className="m-0 mb-9 text-[19px] font-medium leading-relaxed text-[#1b1b1b]">{b.overview}</p>
+      <p className="m-0 mb-6 text-[17px] font-medium leading-relaxed text-[#1b1b1b] sm:mb-9 sm:text-[19px]">{b.overview}</p>
 
       {/* Worth your time. */}
       {b.mustRead.length > 0 && (
-        <section className="mb-10">
+        <section className="mb-8 sm:mb-10">
           <h2 className="mb-3 text-[13px] font-semibold uppercase tracking-wider text-[#999]">Worth your time</h2>
           <div className="flex flex-col gap-3">
             {b.mustRead.map((r) => {
@@ -131,7 +131,7 @@ export function BriefingPage(props: BriefingPageProps) {
 
       {/* In one line. */}
       {b.oneLiners.length > 0 && (
-        <section className="mb-10">
+        <section className="mb-8 sm:mb-10">
           <h2 className="mb-3 text-[13px] font-semibold uppercase tracking-wider text-[#999]">In one line</h2>
           <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
             {b.oneLiners.map((r) => {
@@ -165,7 +165,7 @@ export function BriefingPage(props: BriefingPageProps) {
           const m = meta(r.itemId);
           if (!m) return null;
           return (
-            <section className="mb-10">
+            <section className="mb-8 sm:mb-10">
               <div className="group rounded-xl border border-dashed border-[#d8b26a] bg-[#fdf8ee] p-4">
                 <div className="flex items-start gap-3">
                   <button className="min-w-0 flex-1 text-left" onClick={() => props.onOpenArticle(r.itemId)}>

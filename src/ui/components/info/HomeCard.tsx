@@ -91,7 +91,7 @@ export function BriefingCardBody({
           </div>
         </div>
         <button
-          className="mt-4 w-fit rounded-lg border border-[#dcdcdc] px-3 py-1.5 text-[13px] text-[#555] hover:bg-[#f4f4f4]"
+          className="mt-4 w-fit rounded-lg border border-[#dcdcdc] px-3 py-1.5 text-[13px] text-[#555] coarse:min-h-[44px] hover:bg-[#f4f4f4]"
           onClick={onStop}
         >
           Stop
@@ -133,7 +133,7 @@ export function BriefingCardBody({
           triaged briefing each day.
         </p>
         <button
-          className="mt-4 w-fit rounded-lg bg-[#6d5ae0] px-4 py-2 text-[14px] font-medium text-white hover:bg-[#5d4bd0]"
+          className="mt-4 w-fit rounded-lg bg-[#6d5ae0] px-4 py-2 text-[14px] font-medium text-white coarse:min-h-[44px] hover:bg-[#5d4bd0]"
           onClick={onStartSubscribing}
         >
           Start subscribing
@@ -151,14 +151,14 @@ export function BriefingCardBody({
       {snap?.error && <p className="mt-2 text-[13px] text-[#c0392b]">{snap.error}</p>}
       {configured ? (
         <button
-          className="mt-4 w-fit rounded-lg bg-[#6d5ae0] px-4 py-2 text-[14px] font-medium text-white hover:bg-[#5d4bd0]"
+          className="mt-4 w-fit rounded-lg bg-[#6d5ae0] px-4 py-2 text-[14px] font-medium text-white coarse:min-h-[44px] hover:bg-[#5d4bd0]"
           onClick={onGenerate}
         >
           Generate briefing
         </button>
       ) : (
         <button
-          className="mt-4 w-fit rounded-lg border border-[#dcdcdc] px-4 py-2 text-[14px] text-[#555] hover:bg-[#f4f4f4]"
+          className="mt-4 w-fit rounded-lg border border-[#dcdcdc] px-4 py-2 text-[14px] text-[#555] coarse:min-h-[44px] hover:bg-[#f4f4f4]"
           onClick={onOpenSettings}
         >
           Configure a provider to begin
