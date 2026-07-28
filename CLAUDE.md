@@ -35,3 +35,7 @@ AI 陪读软件。设计共识在 `docs/`。阅读引擎用 EmbedPDF（PDFium WA
 - 包管理器用 bun。
 
 - 样式:Tailwind v4(只引 utilities,不引 preflight),UI 一律用 Tailwind utility class。
+
+## 发布
+
+说「构建」就是补丁号 +1 再发 TestFlight，不用问。版本号在 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock` 四处，一起改。主次版本号由项目发起人定。构建号是 workflow run number，不用管。
