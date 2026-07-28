@@ -9,8 +9,15 @@ import { loadSettings } from "../../../platform/app/settings";
 import { buildGlossary } from "../../../ai/voice";
 import { getInfoPipeline } from "../../../info/briefing/live";
 import type { InfoPipeline, InfoSnapshot } from "../../../info/briefing/pipeline";
-import { loadArticle, saveInlinedArticleHtml, todayLocal } from "../../../info/briefing/store";
+import { loadArticle, loadItems, saveInlinedArticleHtml, todayLocal } from "../../../info/briefing/store";
 import type { BriefingItemMeta } from "../../../info/briefing/types";
+import { ensureBriefTopic } from "../../../platform/app/topics";
+import {
+  loadSavedArticles,
+  saveArticle,
+  savedArticleId,
+} from "../../../reading/saved-articles";
+import { toSavedArticleInput } from "./saveArticle";
 import { appendFeedback } from "../../../memory/feedback";
 import { loadProfile } from "../../../memory/profile";
 import { sanitizeArticleHtml } from "../../../info/extract/sanitize";
@@ -50,6 +57,8 @@ export default function InfoHome(props: {
   // Whether an AI provider is connected (the vestibule guides to Settings).
   configured: boolean;
   onOpenSettings: () => void;
+  // Keeping an article can create the Brief topic, so the shelf needs a reload.
+  onTopicsChanged: () => Promise<void> | void;
 }) {
   const { screen, onNavigate } = props;
   const [infoSnap, setInfoSnap] = useState<InfoSnapshot | null>(null);
@@ -66,6 +75,10 @@ export default function InfoHome(props: {
   const [openedItemIds, setOpenedItemIds] = useState<Set<string>>(new Set());
   const [dismissedItemIds, setDismissedItemIds] = useState<Set<string>>(new Set());
   const [infoCall, setInfoCall] = useState<InfoCallAnchor | null>(null);
+  // Ids of articles already kept, so the article view can show its kept state.
+  // Keyed by saved-article id (the normalized URL), not by briefing item id,
+  // which is per-day.
+  const [keptIds, setKeptIds] = useState<Set<string>>(new Set());
 
   // Attach the info-briefing pipeline (docs/16): mirror its snapshot for the
   // vestibule and load today's briefing if one exists.
@@ -76,6 +89,9 @@ export default function InfoHome(props: {
     const unsub = p.subscribe(() => setInfoSnap(p.snapshot()));
     p.init().catch(() => {});
     hasSources().then(setHasSourcesState).catch(() => {});
+    loadSavedArticles()
+      .then((list) => setKeptIds(new Set(list.map((a) => a.id))))
+      .catch(() => {});
     return unsub;
   }, []);
 
@@ -197,6 +213,44 @@ export default function InfoHome(props: {
     [openedItemIds, onNavigate],
   );
 
+  // Keep the open article: file it under the Brief topic with its body snapshot
+  // (docs/21, store-and-display slice). The HTML kept is the one on screen —
+  // possibly with data: images already inlined, which the store strips — and the
+  // plain text comes from the day's cache, which the future AI path reads.
+  // The on-screen HTML has been through sanitizeArticleHtml; the day cache holds
+  // what the site served, so the fallback has to be sanitized here. A saved
+  // article is rendered with dangerouslySetInnerHTML, and it is rendered again
+  // on every later open — storing raw remote HTML would persist the hole.
+  const keepArticle = useCallback(
+    async (itemId: string) => {
+      const briefing = infoRef.current?.snapshot().briefing ?? null;
+      const meta = briefing?.items[itemId];
+      if (!meta) return;
+      const date = briefing?.date ?? todayLocal();
+      const [topic, cached, items] = await Promise.all([
+        ensureBriefTopic(),
+        loadArticle(date, itemId).catch(() => null),
+        loadItems(date).catch(() => []),
+      ]);
+      const saved = await saveArticle(
+        toSavedArticleInput({
+          topicId: topic.id,
+          meta,
+          itemId,
+          items,
+          html:
+            articleHtml ??
+            (cached?.contentHtml ? sanitizeArticleHtml(cached.contentHtml) : null),
+          text: cached?.textContent ?? null,
+        }),
+      );
+      if (!saved) return;
+      setKeptIds((s) => new Set(s).add(saved.id));
+      await props.onTopicsChanged();
+    },
+    [articleHtml, props.onTopicsChanged],
+  );
+
   const dismissItem = useCallback((itemId: string, meta: BriefingItemMeta, category?: string) => {
     setDismissedItemIds((s) => new Set(s).add(itemId));
     appendFeedback({ itemId, title: meta.title, action: "dismissed", category }).catch(() => {});
@@ -310,24 +364,28 @@ export default function InfoHome(props: {
         </div>
       )}
 
-      {screen === "article" && openArticleId && infoSnap?.briefing && (
-        <div className="absolute inset-0">
-          <ArticleView
-            meta={
-              infoSnap.briefing.items[openArticleId] ?? {
-                title: "Article",
-                url: "",
-                source: "",
-                sourceName: "",
-                publishedAt: "",
-              }
-            }
-            contentHtml={articleHtml}
-            onBack={() => onNavigate("briefing")}
-            onAsk={() => askArticle(openArticleId)}
-          />
-        </div>
-      )}
+      {screen === "article" && openArticleId && infoSnap?.briefing && (() => {
+        const meta =
+          infoSnap.briefing.items[openArticleId] ?? {
+            title: "Article",
+            url: "",
+            source: "",
+            sourceName: "",
+            publishedAt: "",
+          };
+        return (
+          <div className="absolute inset-0">
+            <ArticleView
+              meta={meta}
+              contentHtml={articleHtml}
+              saved={keptIds.has(savedArticleId(meta.url, meta.title))}
+              onBack={() => onNavigate("briefing")}
+              onAsk={() => askArticle(openArticleId)}
+              onSave={() => void keepArticle(openArticleId)}
+            />
+          </div>
+        );
+      })()}
 
       {infoCall && (
         <InfoCall

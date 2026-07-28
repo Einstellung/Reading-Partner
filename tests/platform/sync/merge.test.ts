@@ -47,6 +47,7 @@ test("the files the app writes are classified by what they hold", () => {
   expect(strategyFor("reading-state.json")).toBe("records");
   expect(strategyFor("info-sources.json")).toBe("records");
   expect(strategyFor("info-feedback.jsonl")).toBe("records");
+  expect(strategyFor("saved-articles.json")).toBe("records");
   expect(strategyFor("settings.json")).toBe("fields");
   expect(strategyFor("notes-abc/state.json")).toBe("fields");
   expect(strategyFor("prep-abc/state.json")).toBe("fields");
@@ -103,6 +104,21 @@ test("an edit outranks a delete", () => {
   expect(merged("annotations-x.json", base, remote, local)).toBe(
     JSON.stringify([ann("a", "one"), ann("b", "two, with more")], null, 2),
   );
+});
+
+// Why saved articles are their own records file instead of a field on Topic
+// (docs/21): a topic record merges whole, so two devices each keeping an article
+// the same day would have kept one. Per-record, both survive.
+test("two devices each keeping an article keep both", () => {
+  const kept = (id: string) => ({ id, topicId: "brief", title: id, savedAt: 1 });
+  const base = json([kept("https://a")]);
+  const local = json([kept("https://a"), kept("https://desk")]);
+  const remote = json([kept("https://a"), kept("https://ipad")]);
+  const out = merge("saved-articles.json", base, local, remote);
+  const ids = (JSON.parse(text(out.merged)) as { id: string }[]).map((r) => r.id);
+  expect(ids.sort()).toEqual(["https://a", "https://desk", "https://ipad"]);
+  expect(out.dropped).toEqual([]);
+  expect(out.copies).toEqual([]);
 });
 
 test("with no base nothing is deleted: the two sides are unioned", () => {

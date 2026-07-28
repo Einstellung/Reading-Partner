@@ -2,7 +2,7 @@
 // topic CRUD form state (new name, rename-in-place); the topic list itself and
 // which one is active stay on App, which needs them for the reading context.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   createTopic,
   deleteTopic,
@@ -15,7 +15,15 @@ import {
 import { getViewState } from "../../../platform/app/storage";
 import { getFulltext } from "../../../fulltext";
 import { loadAnnotations } from "../../../platform/app/annotations";
+import {
+  formatPublishedAt,
+  loadSavedArticles,
+  removeSavedArticle,
+  savedArticlesForTopic,
+  type SavedArticle,
+} from "../../../reading/saved-articles";
 import { BTN, BTN_SM, BTN_SM_DANGER } from "../common/buttons";
+import SavedArticleView from "./SavedArticleView";
 
 const INPUT = "flex-1 px-2.5 py-2 border border-[#dcdcdc] rounded-md [font:inherit]";
 const LIBRARY = "w-[min(680px,100%)] mx-auto px-6 py-10";
@@ -36,18 +44,46 @@ export default function LibraryScreen(props: {
   const [newTopicName, setNewTopicName] = useState("");
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameText, setRenameText] = useState("");
+  // Articles kept out of a briefing (docs/21), and which one is being read.
+  const [savedArticles, setSavedArticles] = useState<SavedArticle[]>([]);
+  const [openSavedArticle, setOpenSavedArticle] = useState<SavedArticle | null>(null);
   const { activeTopic } = props;
+
+  // Reloaded whenever the open topic changes: a keep that happened while the
+  // reader was over in the briefing has to show up here.
+  const refreshSavedArticles = useCallback(async () => {
+    if (!activeTopic) {
+      setSavedArticles([]);
+      return;
+    }
+    const all = await loadSavedArticles().catch((): SavedArticle[] => []);
+    setSavedArticles(savedArticlesForTopic(all, activeTopic.id));
+  }, [activeTopic]);
+
+  useEffect(() => {
+    void refreshSavedArticles();
+  }, [refreshSavedArticles]);
+
+  if (openSavedArticle) {
+    return <SavedArticleView article={openSavedArticle} onBack={() => setOpenSavedArticle(null)} />;
+  }
 
   return (
     <div className="absolute inset-0 flex flex-col items-stretch justify-start gap-6 bg-white overflow-y-auto">
       {activeTopic ? (
         <TopicDetail
           topic={activeTopic}
+          savedArticles={savedArticles}
           onAddFile={props.onAddFile}
           onOpenFile={props.onOpenFile}
           onRemoveFile={async (p) => {
             await removeFileFromTopic(activeTopic.id, p);
             await props.onTopicsChanged();
+          }}
+          onOpenSavedArticle={setOpenSavedArticle}
+          onRemoveSavedArticle={async (id) => {
+            await removeSavedArticle(id);
+            await refreshSavedArticles();
           }}
         />
       ) : (
@@ -183,9 +219,13 @@ function metaLine(meta: BookMeta | undefined, lastOpenedAt?: number): string {
 
 function TopicDetail(props: {
   topic: Topic;
+  // Already filtered to this topic and newest-first by the host.
+  savedArticles: SavedArticle[];
   onAddFile: () => void;
   onOpenFile: (file: FileRef) => void;
   onRemoveFile: (path: string) => void;
+  onOpenSavedArticle: (article: SavedArticle) => void;
+  onRemoveSavedArticle: (id: string) => void;
 }) {
   const files = sortedFiles(props.topic);
   const [meta, setMeta] = useState<Record<string, BookMeta>>({});
@@ -250,6 +290,34 @@ function TopicDetail(props: {
           );
         })}
       </ul>
+
+      {props.savedArticles.length > 0 && (
+        <>
+          <h2 className="mt-8 mb-3 text-[15px] font-semibold text-[#444]">Saved articles</h2>
+          <ul className={TOPIC_LIST}>
+            {props.savedArticles.map((a) => {
+              const line = [a.sourceName, formatPublishedAt(a.publishedAt)]
+                .filter(Boolean)
+                .join(" · ");
+              return (
+                <li key={a.id} className={TOPIC_ROW}>
+                  <button className={TOPIC_NAME} onClick={() => props.onOpenSavedArticle(a)}>
+                    <span className="flex min-w-0 flex-col gap-0.5">
+                      <span className="truncate">{a.title}</span>
+                      {line && <span className="text-xs text-[#777]">{line}</span>}
+                    </span>
+                  </button>
+                  <div className="flex gap-1">
+                    <button className={BTN_SM_DANGER} onClick={() => props.onRemoveSavedArticle(a.id)}>
+                      Remove
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
     </div>
   );
 }

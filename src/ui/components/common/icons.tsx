@@ -432,6 +432,28 @@ export function IconTouchProbe({ size = 20 }: IconProps) {
 	);
 }
 
+// A tray with an arrow going into it: file this into my reading context
+// (docs/21). Deliberately not a heart or a bookmark — this is not a favourites
+// list, and the glyph should not read like one.
+export function IconFileInto({ size = 16 }: IconProps) {
+	return (
+		<svg
+			width={size}
+			height={size}
+			viewBox="0 0 16 16"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.2"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			xmlns="http://www.w3.org/2000/svg"
+		>
+			<path d="M8 2V8.6M5.6 6.4L8 8.8L10.4 6.4" />
+			<path d="M2.5 10.4H5.6L6.4 11.9H9.6L10.4 10.4H13.5V12.4C13.5 13 13 13.5 12.4 13.5H3.6C3 13.5 2.5 13 2.5 12.4V10.4Z" />
+		</svg>
+	);
+}
+
 // Trash can for the delete action.
 export function IconTrash({ size = 16 }: IconProps) {
 	return (

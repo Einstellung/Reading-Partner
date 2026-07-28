@@ -1,0 +1,60 @@
+// Reading one saved article from a topic (docs/21, store-and-display slice).
+// Read-only: no ask, no highlights, no feedback logging — the briefing's
+// ArticleView owns all of that and takes info's own item shape, so this is a
+// separate screen rather than a reuse. The prose look is shared (proseCss).
+
+import { ARTICLE_PROSE_CLASS, ARTICLE_PROSE_CSS } from "../common/proseCss";
+import { formatPublishedAt, type SavedArticle } from "../../../reading/saved-articles";
+
+export default function SavedArticleView({
+  article,
+  onBack,
+}: {
+  article: SavedArticle;
+  onBack: () => void;
+}) {
+  const published = formatPublishedAt(article.publishedAt);
+  return (
+    <div className="absolute inset-0 overflow-y-auto bg-white">
+      <style>{ARTICLE_PROSE_CSS}</style>
+      <div className="mx-auto flex w-full max-w-[46rem] flex-col px-6 py-8">
+        <div className="sticky top-0 z-10 -mx-6 mb-6 flex items-center gap-3 border-b border-[#ececec] bg-white/85 px-6 py-3 backdrop-blur">
+          <button
+            className="rounded-lg border border-[#dcdcdc] px-2.5 py-1 text-[13px] text-[#555] hover:bg-[#f4f4f4]"
+            onClick={onBack}
+          >
+            ‹ Topic
+          </button>
+          {article.sourceName && (
+            <span className="rounded-full bg-[#f0eefb] px-2 py-0.5 text-[11px] font-medium text-[#6d5ae0]">
+              {article.sourceName}
+            </span>
+          )}
+          {published && <span className="text-[12px] text-[#888]">{published}</span>}
+        </div>
+
+        <h1 className="m-0 mb-6 text-[26px] font-semibold leading-tight text-[#141414]">
+          {article.title}
+        </h1>
+
+        {article.summaryOnly && (
+          <p className="mb-6 rounded-lg border border-[#efe2c4] bg-[#fdf8ec] px-3 py-2 text-[13px] leading-relaxed text-[#7a6432]">
+            The full text of this article was never retrieved. What follows is only a summary.
+          </p>
+        )}
+
+        {article.html ? (
+          <div className={ARTICLE_PROSE_CLASS} dangerouslySetInnerHTML={{ __html: article.html }} />
+        ) : article.text ? (
+          <div className={`${ARTICLE_PROSE_CLASS} whitespace-pre-wrap`}>{article.text}</div>
+        ) : (
+          <p className="text-[15px] leading-relaxed text-[#777]">
+            No body was saved with this article.
+          </p>
+        )}
+
+        <div className="mt-10 border-t border-[#eee] pt-4 text-[12px] text-[#bbb]">{article.url}</div>
+      </div>
+    </div>
+  );
+}

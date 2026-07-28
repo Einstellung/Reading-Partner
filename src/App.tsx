@@ -478,16 +478,19 @@ export default function App() {
   }, [refreshTopics]);
 
   // Account sync (docs/13): start the engine if the user is signed in with
-  // auto-sync on, and react to files a pull writes. A pulled library.json or
-  // topics.json refreshes the shelf; pulled threads-<id>.json and
-  // annotations-<id>.json files have their in-memory cache dropped so a reopen
-  // reads the newer data instead of the stale cache overwriting it.
+  // auto-sync on, and react to files a pull writes. A pulled library.json,
+  // topics.json or saved-articles.json refreshes the shelf; pulled
+  // threads-<id>.json and annotations-<id>.json files have their in-memory cache
+  // dropped so a reopen reads the newer data instead of the stale cache
+  // overwriting it.
   useEffect(() => {
     void initSync().catch((e) => console.warn("sync init failed", e));
     return onSyncPulled((paths) => {
       let refreshShelf = false;
       for (const p of paths) {
-        if (p === "library.json" || p === "topics.json") refreshShelf = true;
+        if (p === "library.json" || p === "topics.json" || p === "saved-articles.json") {
+          refreshShelf = true;
+        }
         const threads = /^threads-(.+)\.json$/.exec(p);
         if (threads) dropThreadCache(threads[1]);
         const anns = /^annotations-(.+)\.json$/.exec(p);
@@ -1761,6 +1764,7 @@ export default function App() {
           onContinue={continueReading}
           configured={configured}
           onOpenSettings={() => setShowSettings(true)}
+          onTopicsChanged={refreshTopics}
         />
 
         {!inReader && homeScreen === "library" && (

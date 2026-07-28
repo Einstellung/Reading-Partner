@@ -66,6 +66,7 @@ const RECORD_FILES = new Set([
   "reading-state.json",
   "info-sources.json",
   "info-feedback.jsonl",
+  "saved-articles.json",
 ]);
 
 export function strategyFor(path: string): MergeStrategy {

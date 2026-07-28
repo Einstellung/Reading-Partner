@@ -26,6 +26,9 @@ test("core user-data files are in range", () => {
     "user-profile.md",
     "info-profile.md",
     "info-feedback.jsonl",
+    // Articles kept out of a briefing (docs/21): the reader's own picks, so they
+    // travel — unlike the daily briefing/article caches they came from.
+    "saved-articles.json",
   ]) {
     expect(inSyncRange(p)).toBe(true);
   }

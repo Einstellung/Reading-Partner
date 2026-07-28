@@ -18,6 +18,7 @@ import {
 // the writers rather than guessed:
 //   annotations-<bookId>.json  array of Annotation, `id`      (platform/app/annotations.ts)
 //   info-sources.json          array of SourceDescriptor, `id` (info/sources/source-store.ts)
+//   saved-articles.json        array of SavedArticle, `id`     (reading/saved-articles.ts)
 //   topics.json                { topics: Topic[] }, `id`       (platform/app/topics.ts)
 //   threads-<key>.json         { threads: Record<id, Thread> } (platform/app/threads.ts)
 //   library.json               { books: Record<hash, Entry> }  (platform/app/library.ts)
@@ -38,6 +39,7 @@ export function recordShape(path: string): RecordShape | null {
   const name = path.slice(path.lastIndexOf("/") + 1);
   if (name === "info-feedback.jsonl") return { kind: "lines", container: null, idField: null };
   if (name === "info-sources.json") return { kind: "array", container: null, idField: "id" };
+  if (name === "saved-articles.json") return { kind: "array", container: null, idField: "id" };
   if (name === "topics.json") return { kind: "array", container: "topics", idField: "id" };
   if (name === "library.json") return { kind: "map", container: "books", idField: null };
   if (name === "reading-state.json") return { kind: "map", container: "states", idField: null };

@@ -67,6 +67,10 @@ const ROOT_FILES = new Set([
   "info-profile.md",
   "info-sources.json",
   "info-feedback.jsonl",
+  // Articles the reader kept out of a briefing (docs/21). Body snapshots ride
+  // along inside the records for now — stripped of inlined images, so a record
+  // is text, not re-encoded JPEGs.
+  "saved-articles.json",
 ]);
 
 // Whether an AppData-relative path (forward-slash separators) is synced.

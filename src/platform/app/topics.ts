@@ -72,6 +72,29 @@ export async function createTopic(name: string): Promise<Topic> {
   return topic;
 }
 
+// Where saved info articles land until anything smarter exists (docs/21). A
+// fixed id, not a name match: the user may rename it, and it still has to be
+// recognizable. Both devices derive the same id, so the two copies merge as one
+// topic record rather than becoming two topics named "Brief".
+export const BRIEF_TOPIC_ID = "brief";
+const BRIEF_TOPIC_NAME = "Brief";
+
+// The Brief topic, created on first use. Idempotent by id.
+export async function ensureBriefTopic(): Promise<Topic> {
+  const store = await load();
+  const found = store.topics.find((t) => t.id === BRIEF_TOPIC_ID);
+  if (found) return found;
+  const topic: Topic = {
+    id: BRIEF_TOPIC_ID,
+    name: BRIEF_TOPIC_NAME,
+    createdAt: Date.now(),
+    files: [],
+  };
+  store.topics.push(topic);
+  await save(store);
+  return topic;
+}
+
 export async function renameTopic(id: string, name: string): Promise<void> {
   const store = await load();
   const topic = store.topics.find((t) => t.id === id);
