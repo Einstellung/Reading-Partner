@@ -3,7 +3,12 @@
 // Tauri plugin. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { leanItems, localDateString, todayLocal } from "../../src/info/briefing/store";
+import {
+  leanItems,
+  localDateString,
+  staleDailyFiles,
+  todayLocal,
+} from "../../src/info/briefing/store";
 import type { InfoItem } from "../../src/info/briefing/types";
 
 test("localDateString is local YYYY-MM-DD, zero-padded", () => {
@@ -32,4 +37,55 @@ test("leanItems drops heavy contentHtml but keeps triage inputs", () => {
   expect(lean[0].summary).toBe("sum");
   expect(lean[0].summaryOnly).toBe(true);
   expect(lean[0].sourceName).toBe("S");
+});
+
+test("staleDailyFiles keeps all three of today's files", () => {
+  const names = [
+    "briefing-2026-07-25.json",
+    "info-articles-2026-07-25.json",
+    "info-items-2026-07-25.json",
+  ];
+  expect(staleDailyFiles(names, "2026-07-25")).toEqual([]);
+});
+
+test("staleDailyFiles returns all three of an older day", () => {
+  const names = [
+    "briefing-2026-07-22.json",
+    "info-articles-2026-07-22.json",
+    "info-items-2026-07-22.json",
+  ];
+  expect(staleDailyFiles(names, "2026-07-25")).toEqual(names);
+});
+
+test("staleDailyFiles never touches chat threads or the health sidecar", () => {
+  const names = [
+    "threads-info-2026-07-22.json",
+    "threads-abc123.json",
+    "info-source-health.json",
+    "info-feedback.jsonl",
+    "info-sources.json",
+    "user-profile.md",
+    "library.json",
+    "topics.json",
+    "annotations-abc123.json",
+    "reading-state-abc123.json",
+  ];
+  expect(staleDailyFiles(names, "2026-07-25")).toEqual([]);
+});
+
+test("staleDailyFiles ignores names whose date suffix is malformed", () => {
+  const names = [
+    "briefing-2026-7-22.json",
+    "briefing-2026-07-22.json.tmp",
+    "briefing-2026-07-22.txt",
+    "briefing-.json",
+    "briefing-2026-07-22-old.json",
+    "info-articles-yesterday.json",
+    "info-items-2026-07-222.json",
+  ];
+  expect(staleDailyFiles(names, "2026-07-25")).toEqual([]);
+});
+
+test("staleDailyFiles on an empty listing is empty", () => {
+  expect(staleDailyFiles([], "2026-07-25")).toEqual([]);
 });

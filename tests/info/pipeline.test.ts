@@ -162,6 +162,45 @@ test("retriage with no cached items errors instead of producing a briefing", asy
   expect(s.error).toBeTruthy();
 });
 
+test("generate prunes past days before collecting; retriage never prunes", async () => {
+  const order: string[] = [];
+  const pruned: string[] = [];
+  const deps = makeDeps({
+    pruneStaleDays: async (today) => {
+      order.push("prune");
+      pruned.push(today);
+    },
+    collect: async () => {
+      order.push("collect");
+      return [item("1")];
+    },
+    loadItems: async () => [item("1")],
+  });
+
+  await new InfoPipeline(deps).generate();
+  expect(order).toEqual(["prune", "collect"]);
+  expect(pruned).toEqual(["2026-07-22"]);
+
+  await new InfoPipeline(deps).retriage();
+  expect(pruned).toEqual(["2026-07-22"]);
+});
+
+test("a failing prune does not stop the briefing", async () => {
+  const p = new InfoPipeline(
+    makeDeps({
+      pruneStaleDays: async () => {
+        throw new Error("readDir denied");
+      },
+      collect: async () => [item("1")],
+      triage: async () => ({ ...EMPTY_TRIAGE, overview: "ok" }),
+    }),
+  );
+  await p.generate();
+  const s = p.snapshot();
+  expect(s.error).toBeNull();
+  expect(s.briefing?.overview).toBe("ok");
+});
+
 test("the reading-side context is loaded and passed into triage", async () => {
   let seen: string | undefined = "unset";
   const p = new InfoPipeline(
