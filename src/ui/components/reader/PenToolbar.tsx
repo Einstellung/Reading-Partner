@@ -2,7 +2,7 @@
 // the current Tool (including sticky behaviour); this renders it and reports
 // changes. Styled with Tailwind utilities.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconColorSwatch, IconHighlight, IconPointer, IconSparkle, IconUnderline } from '../common/icons';
 import type { ColorEntry, Tool, ToolType } from '../common/types';
 
@@ -27,25 +27,57 @@ const TOOLS: { type: ToolType; label: string; Icon: (p: { size?: number }) => JS
 const TOOL_BTN =
 	'flex items-center justify-center rounded-lg border-0 bg-transparent p-0 text-neutral-700';
 const CARD = 'rounded-xl border border-black/10 bg-white shadow-lg';
+// Distance from the swatch to the palette that opens off it.
+const GAP = 8;
 
 export default function PenToolbar({ tool, colors, onToolChange, orientation = 'vertical' }: PenToolbarProps) {
 	const [paletteOpen, setPaletteOpen] = useState(false);
+	// Where the open palette sits, in viewport coordinates. It cannot be laid out
+	// against the swatch: the header's tool band scrolls horizontally, and a
+	// scroll container clips both axes, so an absolutely-positioned popover
+	// hanging below the bar never reaches the screen.
+	const [palettePos, setPalettePos] = useState<{ left: number; top: number } | null>(null);
 	const paletteRef = useRef<HTMLDivElement>(null);
+	const swatchRef = useRef<HTMLButtonElement>(null);
 	const horizontal = orientation === 'horizontal';
 	// Only the painting tools carry a color; the navigation lock, the AI pen and
 	// the all-unselected state do not, so the swatch shows as a disabled
 	// placeholder to keep the rack width stable.
 	const hasColor = tool.type === 'highlight' || tool.type === 'underline';
 
+	useLayoutEffect(() => {
+		if (!paletteOpen) {
+			setPalettePos(null);
+			return;
+		}
+		const swatch = swatchRef.current;
+		if (!swatch) return;
+		// Horizontal hangs below the swatch and is centred on it (the popover
+		// carries the -50% itself); vertical opens to its right, top-aligned.
+		function place() {
+			const r = swatch.getBoundingClientRect();
+			setPalettePos(
+				horizontal
+					? { left: r.left + r.width / 2, top: r.bottom + GAP }
+					: { left: r.right + GAP, top: r.top },
+			);
+		}
+		place();
+		window.addEventListener('resize', place);
+		return () => window.removeEventListener('resize', place);
+	}, [paletteOpen, horizontal]);
+
+	// A press outside shuts the palette. pointerdown, not mousedown, and capture:
+	// docs/pitfall/67-webkit-tap-does-not-focus-a-button.md.
 	useEffect(() => {
 		if (!paletteOpen) return;
-		function onDown(e: MouseEvent) {
+		function onDown(e: PointerEvent) {
 			if (paletteRef.current && !paletteRef.current.contains(e.target as Node)) {
 				setPaletteOpen(false);
 			}
 		}
-		document.addEventListener('mousedown', onDown);
-		return () => document.removeEventListener('mousedown', onDown);
+		document.addEventListener('pointerdown', onDown, true);
+		return () => document.removeEventListener('pointerdown', onDown, true);
 	}, [paletteOpen]);
 
 	useEffect(() => {
@@ -113,6 +145,7 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 
 			<div className="relative flex" ref={paletteRef}>
 				<button
+					ref={swatchRef}
 					type="button"
 					className={
 						`${TOOL_BTN} ${toolSize} ` +
@@ -132,13 +165,15 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 					<IconColorSwatch color={tool.color} size={20} />
 				</button>
 
-				{paletteOpen && (
+				{paletteOpen && palettePos && (
 					<div
+						style={{ left: palettePos.left, top: palettePos.top }}
 						className={
-							// Fixed column tracks: an absolutely-positioned popover shrinks to its
-							// 32px positioning wrapper, so 1fr tracks would collapse.
-							`absolute z-10 grid grid-cols-[repeat(4,1.75rem)] gap-0.5 p-1.5 shadow-xl ${CARD} ` +
-							(horizontal ? 'left-1/2 top-full mt-2 -translate-x-1/2' : 'left-full top-0 ml-2')
+							// Fixed column tracks: the popover shrinks to its content, so 1fr
+							// tracks would collapse. A track has to hold a whole swatch button,
+							// which is finger-sized on a touch device.
+							`fixed z-[1000] grid grid-cols-[repeat(4,1.75rem)] coarse:grid-cols-[repeat(4,2.75rem)] gap-0.5 p-1.5 shadow-xl ${CARD} ` +
+							(horizontal ? '-translate-x-1/2' : '')
 						}
 						role="listbox"
 						aria-label="Colors"
