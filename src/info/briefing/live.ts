@@ -17,6 +17,7 @@ import { InfoPipeline } from "./pipeline";
 import {
   loadBriefing,
   loadItems,
+  pruneStaleDailyFiles,
   saveArticles,
   saveBriefing,
   saveItems,
@@ -121,6 +122,7 @@ export function getInfoPipeline(): InfoPipeline {
       saveArticles,
       saveItems,
       loadItems,
+      pruneStaleDays: pruneStaleDailyFiles,
       now: () => Date.now(),
       sleep: (ms) => new Promise<void>((r) => setTimeout(r, ms)),
       setTimer: (ms, cb) => {

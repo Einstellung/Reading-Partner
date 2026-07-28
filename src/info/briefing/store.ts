@@ -6,7 +6,9 @@
 import {
   BaseDirectory,
   exists,
+  readDir,
   readTextFile,
+  remove,
 } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { mergeInlinedHtml } from "../extract/inline-images";
@@ -110,6 +112,48 @@ export async function loadItems(date: string): Promise<InfoItem[]> {
     return Array.isArray(parsed) ? (parsed as InfoItem[]) : [];
   } catch {
     return [];
+  }
+}
+
+// --- pruning the past days -------------------------------------------------
+// These three per-day files are derived and only ever read for today, so older
+// days are dead weight (one article cache measured 4.3MB). Matching is by exact
+// prefix plus a strict date suffix and nothing else: a name we cannot parse is
+// left alone, because everything else under AppData is either the user's own
+// data or inside sync range, where a local delete would just be re-downloaded.
+const DAILY_PREFIXES = ["briefing-", "info-articles-", "info-items-"];
+const DATED_JSON = /^\d{4}-\d{2}-\d{2}\.json$/;
+
+// The names to delete, given a directory listing and today's local date. Pure,
+// unit-tested; the clock is the caller's business.
+export function staleDailyFiles(names: string[], today: string): string[] {
+  const out: string[] = [];
+  for (const name of names) {
+    const prefix = DAILY_PREFIXES.find((p) => name.startsWith(p));
+    if (!prefix) continue;
+    const tail = name.slice(prefix.length);
+    if (!DATED_JSON.test(tail)) continue;
+    if (tail.slice(0, -".json".length) !== today) out.push(name);
+  }
+  return out;
+}
+
+// Delete every past day's derived info file. Best effort: a listing failure or a
+// file that will not go away is swallowed, since a briefing must still generate.
+export async function pruneStaleDailyFiles(today: string): Promise<void> {
+  let names: string[];
+  try {
+    const entries = await readDir("", { baseDir: BaseDirectory.AppData });
+    names = entries.filter((e) => e.isFile).map((e) => e.name);
+  } catch {
+    return;
+  }
+  for (const name of staleDailyFiles(names, today)) {
+    try {
+      await remove(name, { baseDir: BaseDirectory.AppData });
+    } catch {
+      // Locked or already gone; keep going through the rest.
+    }
   }
 }
 

@@ -45,6 +45,9 @@ export interface InfoDeps {
   // cached items without re-collecting.
   saveItems(date: string, items: InfoItem[]): Promise<void>;
   loadItems(date: string): Promise<InfoItem[]>;
+  // Optional housekeeping: drop the derived per-day info files of every day but
+  // the given one. Absent, or throwing, leaves the old files on disk.
+  pruneStaleDays?(today: string): Promise<void>;
   now(): number;
   sleep(ms: number): Promise<void>;
   setTimer(ms: number, cb: () => void): () => void;
@@ -136,6 +139,18 @@ export class InfoPipeline {
     }
   }
 
+  // Housekeeping before a generation, guarded: it only ever removes days other
+  // than today, and a failure must not cost the reader a briefing. Not called
+  // from retriage, which reads today's item snapshot.
+  private async prune(): Promise<void> {
+    if (!this.deps.pruneStaleDays) return;
+    try {
+      await this.deps.pruneStaleDays(this.today());
+    } catch {
+      // Leave the old files; they cost disk, not correctness.
+    }
+  }
+
   subscribe(fn: () => void): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
@@ -192,6 +207,7 @@ export class InfoPipeline {
     this.stopController = new AbortController();
     this.notify();
     try {
+      await this.prune();
       const items = await this.deps.collect((e) => this.onCollectEvent(e));
       if (this.stopController.signal.aborted) throw new StoppedError();
       if (items.length === 0) throw new Error("No articles could be fetched from either source.");
