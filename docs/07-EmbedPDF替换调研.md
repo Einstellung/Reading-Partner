@@ -34,7 +34,7 @@
 | view.setSpreadMode | 单双页 | plugin-spread | 无 |
 | 自定义字段 aiThreadId round-trip | AI 陪读核心 | PdfAnnotationObjectBase.custom("any custom JSON-serializable data") | 无,一等公民 |
 | annotation.text 选中原文 | TraceList+AI context | highlight 是否存原文未确认(大概率不存);selection plugin getSelectedText() 可建注时抓 | 中:自抓塞 custom |
-| ink 压感 | 手写 north-star | PdfInkAnnoObject{inkList, strokeWidth 单值},无 pressure | 平手:zotero 也没有,north-star 已列自己做 |
+| ink 压感 | 无 | PdfInkAnnoObject{inkList, strokeWidth 单值},无 pressure | 不适用:手写已放弃(见 00 第二节第 4 条) |
 
 选择几何(onSetSelectionPopup,当前 noop,将来划词浮窗才用):selection plugin onEndSelection + getFormattedSelection() 给 boundingBox 和 per-line rects,比现在更直接。
 
