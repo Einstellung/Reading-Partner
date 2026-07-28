@@ -54,14 +54,14 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 		if (!swatch) return;
 		// Horizontal hangs below the swatch and is centred on it (the popover
 		// carries the -50% itself); vertical opens to its right, top-aligned.
-		function place() {
+		const place = () => {
 			const r = swatch.getBoundingClientRect();
 			setPalettePos(
 				horizontal
 					? { left: r.left + r.width / 2, top: r.bottom + GAP }
 					: { left: r.right + GAP, top: r.top },
 			);
-		}
+		};
 		place();
 		window.addEventListener('resize', place);
 		return () => window.removeEventListener('resize', place);
