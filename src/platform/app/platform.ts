@@ -13,9 +13,10 @@ import { platform } from "@tauri-apps/plugin-os";
 // Whether the host can capture the microphone. Voice input records through the
 // Rust side (src-tauri/src/voice.rs), which is compiled `#[cfg(desktop)]` — on a
 // phone the commands are not registered at all, so a mic button there can only
-// produce "command not found". This gates the button rather than the whole
-// feature: the rest of the chain (transcription, the cleanup pass) is host-
-// independent and works as soon as a mobile capture path exists (docs/20).
+// produce "command not found". Voice input is a desktop feature and stays one
+// (docs/22): a phone keyboard already dictates, and better. This gates the
+// button on the capability rather than on the form factor, so the rule holds
+// wherever the app runs.
 const NATIVE_RECORDER_PLATFORMS = new Set(["linux", "macos", "windows"]);
 
 export function hasNativeRecorder(): boolean {
