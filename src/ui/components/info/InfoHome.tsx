@@ -41,6 +41,9 @@ import { BriefingPage } from "./BriefingPage";
 import { SourcesPage } from "./SourcesPage";
 import { ArticleView } from "./ArticleView";
 import { InfoCall, type InfoCallAnchor } from "./InfoCall";
+// The phone shell's gesture, mounted from here because the call it opens is
+// owned here (see the pullToAsk prop).
+import { PullToAsk } from "../phone/PullToAsk";
 
 // The launch layer in front of the library. "library" belongs to App, which
 // renders the shelf; it is in the union so the two navigate through one setter.
@@ -84,6 +87,11 @@ export default function InfoHome(props: {
   // reader on a screen they never chose. Omitted by the desktop shell, where
   // back is the call's own Hang up.
   onOverlayChange?: (dismiss: (() => void) | null) => void;
+  // Phone shell only (docs/22): a pull from the top of the briefing or of an
+  // article opens the same chat their Ask buttons open. One more trigger for a
+  // call this component already owns, on the same footing as onOverlayChange —
+  // omitted by the desktop shell, which renders exactly what it did before.
+  pullToAsk?: boolean;
 }) {
   const { screen, onNavigate } = props;
   const [infoSnap, setInfoSnap] = useState<InfoSnapshot | null>(null);
@@ -380,22 +388,31 @@ export default function InfoHome(props: {
         </div>
       )}
 
-      {screen === "briefing" && infoSnap?.briefing && (
-        <div className="absolute inset-0 overflow-y-auto bg-white">
-          <BriefingPage
-            briefing={infoSnap.briefing}
-            openedIds={openedItemIds}
-            dismissedIds={dismissedItemIds}
-            onOpenArticle={openArticle}
-            onDismiss={dismissItem}
-            onAppeal={appealItem}
-            onAskBriefing={askBriefing}
-            onAskArticle={askArticle}
-            onOpenSources={openSourcesPage}
-            onBack={() => onNavigate("vestibule")}
-          />
-        </div>
-      )}
+      {screen === "briefing" && infoSnap?.briefing && (() => {
+        const page = (
+          <div className="absolute inset-0 overflow-y-auto bg-white">
+            <BriefingPage
+              briefing={infoSnap.briefing}
+              openedIds={openedItemIds}
+              dismissedIds={dismissedItemIds}
+              onOpenArticle={openArticle}
+              onDismiss={dismissItem}
+              onAppeal={appealItem}
+              onAskBriefing={askBriefing}
+              onAskArticle={askArticle}
+              onOpenSources={openSourcesPage}
+              onBack={() => onNavigate("vestibule")}
+            />
+          </div>
+        );
+        return props.pullToAsk ? (
+          <PullToAsk label="Ask about today's briefing" onAsk={() => void askBriefing()}>
+            {page}
+          </PullToAsk>
+        ) : (
+          page
+        );
+      })()}
 
       {screen === "sources" && (
         <div className="absolute inset-0 overflow-y-auto bg-white">
@@ -420,17 +437,25 @@ export default function InfoHome(props: {
             sourceName: "",
             publishedAt: "",
           };
-        return (
-          <div className="absolute inset-0">
-            <ArticleView
-              meta={meta}
-              contentHtml={articleHtml}
-              saved={keptIds.has(savedArticleId(meta.url, meta.title))}
-              onBack={() => onNavigate("briefing")}
-              onAsk={() => askArticle(openArticleId)}
-              onSave={() => void keepArticle(openArticleId)}
-            />
-          </div>
+        const view = (
+          <ArticleView
+            meta={meta}
+            contentHtml={articleHtml}
+            saved={keptIds.has(savedArticleId(meta.url, meta.title))}
+            onBack={() => onNavigate("briefing")}
+            onAsk={() => askArticle(openArticleId)}
+            onSave={() => void keepArticle(openArticleId)}
+          />
+        );
+        // The article view's own root is the scroll container, so it is the
+        // child the pull host wraps directly; the plain wrapper is what the
+        // desktop shell has always drawn around it.
+        return props.pullToAsk ? (
+          <PullToAsk label="Ask about this article" onAsk={() => void askArticle(openArticleId)}>
+            {view}
+          </PullToAsk>
+        ) : (
+          <div className="absolute inset-0">{view}</div>
         );
       })()}
 
