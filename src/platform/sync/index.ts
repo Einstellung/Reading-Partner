@@ -8,8 +8,10 @@
 // turns them into what the user is told.
 //
 // This is also where the engine meets the host: the shell it was mounted in
-// decides whether books travel at all, which the pass itself never asks about.
+// (which decides whether books travel at all) and the window's foreground and
+// background edges, both kept out of the pass itself.
 
+import { observeAppLifecycle } from "../app/lifecycle";
 import type { Shell } from "../app/shell";
 import { DriveBackend } from "./driveBackend";
 import { SyncEngine } from "./engine";
@@ -70,6 +72,8 @@ let startedAt: number | null = null;
 // asking the window a second time could answer differently. Desktop until told
 // otherwise — the shell that syncs everything.
 let shell: Shell = "desktop";
+// Undo for the foreground/background hooks, bound only while the engine ticks.
+let unobserveLifecycle: (() => void) | null = null;
 
 const statusListeners = new Set<(s: SyncStatus) => void>();
 const pulledListeners = new Set<(paths: string[]) => void>();
@@ -130,12 +134,31 @@ function ensureEngine(): SyncEngine {
   return engine;
 }
 
+// The ticking engine and the lifecycle hooks go up and down together: the hooks
+// run passes, so leaving them bound after the user turned auto-sync off would
+// keep syncing a device that asked not to be synced. They read `engine` at call
+// time — a signed-out engine is replaced, not reused.
+function startEngine(): void {
+  ensureEngine().start();
+  engineStarted = true;
+  unobserveLifecycle ??= observeAppLifecycle(window, {
+    onForeground: () => void engine?.onForeground(),
+    onBackground: () => void engine?.onBackground(),
+  });
+}
+
+function stopEngine(): void {
+  engine?.stop();
+  engineStarted = false;
+  unobserveLifecycle?.();
+  unobserveLifecycle = null;
+}
+
 // A dead refresh token surfaced mid-pass: drop to signed-out but keep all local
 // data and the toggle preference (docs/13). The UI prompts for re-login.
 async function handleSignedOut(): Promise<void> {
-  engine?.stop();
+  stopEngine();
   engine = null;
-  engineStarted = false;
   signedIn = false;
   email = null;
   await signOut().catch(() => {});
@@ -160,8 +183,7 @@ export async function initSync(mounted: Shell): Promise<void> {
     lastSyncAt: state.lastSyncAt,
   });
   if (action === "start") {
-    ensureEngine().start();
-    engineStarted = true;
+    startEngine();
   } else if (action === "record-stopped") {
     // Say it on disk rather than leaving a state that reads as healthy.
     state.lastError = SIGNED_OUT_STOP_REASON;
@@ -192,15 +214,13 @@ export async function signInToGoogle(): Promise<void> {
   // Drop any recorded reason the engine was not running; it is running now.
   state.lastError = null;
   await saveState(state);
-  ensureEngine().start();
-  engineStarted = true;
+  startEngine();
   notify();
 }
 
 export async function signOutOfGoogle(): Promise<void> {
-  engine?.stop();
+  stopEngine();
   engine = null;
-  engineStarted = false;
   await signOut();
   signedIn = false;
   email = null;
@@ -220,22 +240,13 @@ export async function setAutoSyncEnabled(on: boolean): Promise<void> {
   // running lets the first pass set the truth.
   if (!on) state.lastError = null;
   await saveState(state);
-  if (on && signedIn && isGoogleConfigured()) {
-    ensureEngine().start();
-    engineStarted = true;
-  } else {
-    engine?.stop();
-    engineStarted = false;
-  }
+  if (on && signedIn && isGoogleConfigured()) startEngine();
+  else stopEngine();
   notify();
 }
 
 export async function syncNow(): Promise<void> {
   if (!signedIn || !isGoogleConfigured()) throw new Error("Sign in to Google to sync");
-  const e = ensureEngine();
-  await e.syncNow();
-  if (state.autoSync) {
-    e.start();
-    engineStarted = true;
-  }
+  await ensureEngine().syncNow();
+  if (state.autoSync) startEngine();
 }

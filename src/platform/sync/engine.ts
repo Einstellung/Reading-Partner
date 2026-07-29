@@ -25,8 +25,11 @@
 //
 // Timers: an initial pass on start, a periodic tick every TICK_MS that runs a
 // pass when local files changed or PULL_INTERVAL_MS has elapsed since the last
-// pull, and an on-demand syncNow(). All three funnel through runPass(), so
-// single-flight is the only concurrency rule.
+// pull, and an on-demand syncNow(). The app coming back to the front and going
+// away drive two more (onForeground/onBackground) — a schedule built on timers
+// alone is wrong on a phone, where the timers stop the moment the app is
+// backgrounded. All of them funnel through runPass(), so single-flight is the
+// only concurrency rule.
 //
 // Everything the pass touches (backend, fs, books) is injected; the Tauri wiring
 // lives in index.ts. reconcile() (reconcile.ts) is the pure decision core.
@@ -42,6 +45,15 @@ import type { LocalFile, ScannedFile, SyncFs } from "./syncFs";
 
 export const TICK_MS = 15_000;
 export const PULL_INTERVAL_MS = 5 * 60_000;
+
+// The floor between two passes triggered by the app coming back to the front.
+// Returning is the strongest hint that another device moved something, so the
+// pull window is skipped — but switching away and back is not a rare gesture
+// (a phone flicked between two apps, a desktop window that loses focus to every
+// dialog), and one remote listing per flick is not a schedule. Two ticks: a
+// device that synced this recently cannot be meaningfully stale, and no amount
+// of flapping costs more than the steady 15s tick already does.
+export const RESUME_MIN_INTERVAL_MS = 30_000;
 
 // A run of failures this long means the link is down, not that one file is
 // awkward. The rest of the pass would only spend its retry budget failing the
@@ -144,6 +156,10 @@ export class SyncEngine {
   private lastSyncAt: number | null = null;
   private lastError: string | null = null;
   private lastPullAt = 0;
+  // When the last pass began, whatever triggered it and whether it succeeded.
+  // Only the resume floor reads it: what it has to know is when this device
+  // last asked the remote anything, not when it last got a clean answer.
+  private lastPassAt = 0;
   private tickTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(deps: EngineDeps) {
@@ -174,6 +190,38 @@ export class SyncEngine {
 
   // Manual "Sync now": always runs a full pass (unless one is already running).
   async syncNow(): Promise<void> {
+    await this.runPass();
+  }
+
+  // The app came back to the front. Which events those are is the wiring's
+  // business (platform/app/lifecycle.ts); what matters here is that the periodic
+  // schedule is the wrong one to come back to: a pull is due once every
+  // PULL_INTERVAL_MS, so a device that was away would sit on the other device's
+  // work for up to five minutes while its user looks straight at it. On a phone
+  // it is worse than late — the timers do not run at all while the app is
+  // backgrounded, so the five minutes only start when the user returns.
+  //
+  // Live only while the engine is ticking: the caller binds these hooks when it
+  // starts the engine and unbinds them when it stops, so auto-sync off means
+  // nothing runs here either.
+  async onForeground(): Promise<void> {
+    if (this.now() - this.lastPassAt < RESUME_MIN_INTERVAL_MS) return;
+    await this.runPass();
+  }
+
+  // The app is going away. Local writes have their own pagehide flush, so
+  // nothing is lost either way; what this saves is the change sitting on one
+  // device until it is next opened, which on a phone can be days.
+  //
+  // A whole pass rather than the uploads alone: publishing needs the rev the
+  // remote is at, and a file the other device also changed has to be merged
+  // rather than overwritten. Nothing changed locally means nothing to send, and
+  // finding that out costs no requests. A pass that the platform freezes
+  // half-way is the case the per-item design already covers — only what landed
+  // is claimed.
+  async onBackground(): Promise<void> {
+    if (this.running) return;
+    if (!(await this.hasLocalChange())) return;
     await this.runPass();
   }
 
@@ -327,6 +375,7 @@ export class SyncEngine {
   private async runPass(): Promise<void> {
     if (this.running) return;
     this.running = true;
+    this.lastPassAt = this.now();
     this.emitStatus();
     const failures = new PassFailures();
     try {
