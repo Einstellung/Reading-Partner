@@ -50,10 +50,29 @@ export function top(stack: NavStack): PhoneScreen {
   return stack[stack.length - 1] ?? HOME;
 }
 
-// Whether a back has anywhere to go. False on home, which is where the swipe
-// must not engage and where the Android button belongs to the system.
+// Whether a back has anywhere to go in the stack itself. False on home, the
+// floor. Not the whole answer for a shell — see resolveBack.
 export function canGoBack(stack: NavStack): boolean {
   return stack.length > 1;
+}
+
+// What a back does. An overlay drawn over the screens — the info call — is not
+// a stack entry, and back has to close it rather than navigate underneath it:
+// popping while it is up leaves the overlay on screen and drops the reader on a
+// screen they never chose, which is what they see the moment they hang up.
+//
+// "none" is what leaves the gesture inert and hands the Android button back to
+// the system, so it has to account for the overlay too: with one open on home
+// there is something to go back from, even though the stack is at its floor.
+export type BackAction = "dismissOverlay" | "pop" | "none";
+
+export function resolveBack(stack: NavStack, overlayOpen: boolean): BackAction {
+  if (overlayOpen) return "dismissOverlay";
+  return canGoBack(stack) ? "pop" : "none";
+}
+
+export function backIsAvailable(stack: NavStack, overlayOpen: boolean): boolean {
+  return resolveBack(stack, overlayOpen) !== "none";
 }
 
 // Back. Identity at the floor, so a caller never has to check first.

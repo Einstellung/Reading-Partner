@@ -11,7 +11,7 @@
 // Back has one definition, `goBack`, and three things reach it: the top bar
 // button on every screen, the left-edge swipe, and the Android system button.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { onCorruptFile } from "./platform/app/atomic-fs";
 import { bindSystemBack } from "./platform/app/back-button";
 import { BRIEF_TOPIC_ID } from "./platform/app/topics";
@@ -35,11 +35,12 @@ import PhoneHome from "./ui/components/phone/PhoneHome";
 import SavedList from "./ui/components/phone/SavedList";
 import {
   back,
+  backIsAvailable,
   baseScreen,
-  canGoBack,
   goTo,
   INITIAL_STACK,
   push,
+  resolveBack,
   screen,
   top,
   type NavStack,
@@ -78,9 +79,38 @@ export default function PhoneApp() {
   const [providersInfo, setProvidersInfo] = useState<ProviderInfo[]>([]);
   const { toasts, push: pushToast, dismiss: dismissToast } = useToasts();
 
+  // The info call InfoHome draws over its screens. It is not a stack entry, so
+  // back closes it instead of navigating underneath it; the ref keeps goBack
+  // stable, and the flag is what arms the gesture and the Android button when
+  // the stack itself is at its floor.
+  const dismissOverlayRef = useRef<(() => void) | null>(null);
+  const [overlayOpen, setOverlayOpen] = useState(false);
+  const onOverlayChange = useCallback((dismiss: (() => void) | null) => {
+    dismissOverlayRef.current = dismiss;
+    setOverlayOpen(!!dismiss);
+  }, []);
+
   const base = baseScreen(stack);
   const showSettings = top(stack).kind === "settings";
-  const goBack = useCallback(() => setStack((s) => back(s)), []);
+
+  // The one back. The three things that trigger it — a top bar button, the
+  // left-edge swipe, the Android button — all arrive here. Both inputs come
+  // from refs so the callback stays stable: it is handed to a gesture hook and
+  // to a plugin listener, neither of which should be rebound on a navigation.
+  const stackRef = useRef(stack);
+  stackRef.current = stack;
+  const goBack = useCallback(() => {
+    switch (resolveBack(stackRef.current, dismissOverlayRef.current !== null)) {
+      case "dismissOverlay":
+        dismissOverlayRef.current?.();
+        break;
+      case "pop":
+        setStack((s) => back(s));
+        break;
+      default:
+        break;
+    }
+  }, []);
 
   const refreshSavedArticles = useCallback(async () => {
     const all = await loadSavedArticles().catch((): SavedArticle[] => []);
@@ -142,9 +172,10 @@ export default function PhoneApp() {
     pushToast("warn", syncReport.message);
   }, [syncReport, syncToasted, pushToast]);
 
-  // The Android button, bound only above the floor: on home it belongs to the
-  // system, which leaves the app (see platform/app/back-button.ts).
-  const backable = canGoBack(stack);
+  // The Android button, bound only while back has somewhere to go: with nothing
+  // to close and nothing to pop it belongs to the system, which leaves the app
+  // (see platform/app/back-button.ts).
+  const backable = backIsAvailable(stack, overlayOpen);
   useEffect(() => {
     if (!backable) return;
     return bindSystemBack(goBack);
@@ -200,6 +231,7 @@ export default function PhoneApp() {
             configured={configured}
             onOpenSettings={openSettings}
             onTopicsChanged={refreshSavedArticles}
+            onOverlayChange={onOverlayChange}
             renderLaunch={(launch) => (
               <PhoneHome
                 launch={launch}

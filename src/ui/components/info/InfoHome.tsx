@@ -77,6 +77,13 @@ export default function InfoHome(props: {
   onOpenSettings: () => void;
   // Keeping an article can create the Brief topic, so the shelf needs a reload.
   onTopicsChanged: () => Promise<void> | void;
+  // Called with a way to close the info call whenever one opens, and with null
+  // when it closes. For a shell whose back is global (the phone's: a left-edge
+  // swipe and the Android button, neither of which can aim at a close button) —
+  // back has to close the call before it navigates, or hanging up leaves the
+  // reader on a screen they never chose. Omitted by the desktop shell, where
+  // back is the call's own Hang up.
+  onOverlayChange?: (dismiss: (() => void) | null) => void;
 }) {
   const { screen, onNavigate } = props;
   const [infoSnap, setInfoSnap] = useState<InfoSnapshot | null>(null);
@@ -112,6 +119,15 @@ export default function InfoHome(props: {
       .catch(() => {});
     return unsub;
   }, []);
+
+  // Report the open call upward, and take the report back on unmount. Nothing
+  // else changes with it: the call is still owned and closed here.
+  const { onOverlayChange } = props;
+  useEffect(() => {
+    if (!onOverlayChange) return;
+    onOverlayChange(infoCall ? () => setInfoCall(null) : null);
+    return () => onOverlayChange(null);
+  }, [infoCall, onOverlayChange]);
 
   // The glossary anchors the STT cleanup pass on the article/briefing title
   // (there is no book outline here).
