@@ -53,6 +53,7 @@
 - [46-navlock-pen-still-drags-selection](./46-navlock-pen-still-drags-selection.md) — navlock 下笔的 move 仍放行给引擎，滚动正常但照样拖出选区；逐指针拦 move、放行 down/up，保住 tap
 - [49-webkit-native-selection-over-page](./49-webkit-native-selection-over-page.md) — 阅读区没 DOM 文本也照样能起原生选区（WebKit 只看 `user-select` 用值），整页变蓝加系统 callout；阅读区根节点关掉 user-select 和 touch-callout，引擎选区不受影响。与坑 43 同族
 - [70-browser-claims-the-swipe-before-the-pointer-does](./70-browser-claims-the-swipe-before-the-pointer-does.md) — 只用 pointer 事件写的左缘右滑必被 `pointercancel` 掐死（浏览器判滚动不看方向可行性），`touch-action` 的交集只算到滚动容器为止、挂外层无效；要在非 passive 的 `touchmove` 上 3px 就抢并全程 prevent，另加 `overscroll-behavior-x: none` 挡掉浏览器自己的历史手势
+- [71-first-touchmove-is-already-past-the-slop](./71-first-touchmove-is-already-past-the-slop.md) — 抢触摸的阈值在 1–16px 之间毫无区别：浏览器越过自己的 slop 才派发第一个 `touchmove`，那一下的位移已经是 16（手指更快就更大）；这个数只需小到任何第一个 move 都能满足，不是调参
 
 ## 网络与 CSP
 

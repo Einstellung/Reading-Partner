@@ -232,6 +232,11 @@ export default function PhoneApp() {
             onOpenSettings={openSettings}
             onTopicsChanged={refreshSavedArticles}
             onOverlayChange={onOverlayChange}
+            // Pull down on the briefing or on an article to open the chat about
+            // it. Only those two: home and the kept list have nothing to talk
+            // about, and a kept article is still invisible to the AI (docs/21),
+            // so a chat over one would not know what it was reading.
+            pullToAsk
             renderLaunch={(launch) => (
               <PhoneHome
                 launch={launch}
