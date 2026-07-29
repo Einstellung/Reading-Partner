@@ -8,11 +8,12 @@
 // stack (nav-stack.ts) whose floor is home — plus the kept articles, settings
 // and sync.
 //
-// Back has one definition, `goBack`, and two things reach it: the top bar
-// button on every screen, and the left-edge swipe.
+// Back has one definition, `goBack`, and three things reach it: the top bar
+// button on every screen, the left-edge swipe, and the Android system button.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { onCorruptFile } from "./platform/app/atomic-fs";
+import { bindSystemBack } from "./platform/app/back-button";
 import { BRIEF_TOPIC_ID } from "./platform/app/topics";
 import { initSync, onSyncPulled } from "./platform/sync";
 import {
@@ -141,9 +142,16 @@ export default function PhoneApp() {
     pushToast("warn", syncReport.message);
   }, [syncReport, syncToasted, pushToast]);
 
-  // The left-edge swipe drives the same back, and slides this element while the
-  // finger is down. Inert at the floor: home has nothing behind it.
+  // The Android button, bound only above the floor: on home it belongs to the
+  // system, which leaves the app (see platform/app/back-button.ts).
   const backable = canGoBack(stack);
+  useEffect(() => {
+    if (!backable) return;
+    return bindSystemBack(goBack);
+  }, [backable, goBack]);
+
+  // The left-edge swipe drives the same back, and slides this element while the
+  // finger is down.
   const surfaceRef = useEdgeBack(
     useMemo(() => ({ enabled: backable, onBack: goBack }), [backable, goBack]),
   );
