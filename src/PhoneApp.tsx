@@ -237,6 +237,11 @@ export default function PhoneApp() {
             // about, and a kept article is still invisible to the AI (docs/21),
             // so a chat over one would not know what it was reading.
             pullToAsk
+            // No corner cards over the chat. The reader pulled it down or
+            // pressed Ask and pops it with a back, so the chat is a screen like
+            // any other; a card that shrank it away would be a second way out,
+            // parked in a corner of a screen 393pt wide.
+            pipCards={false}
             renderLaunch={(launch) => (
               <PhoneHome
                 launch={launch}
