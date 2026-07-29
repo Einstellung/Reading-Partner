@@ -52,10 +52,24 @@ export const MAX_CONSECUTIVE_FAILURES = 3;
 // and Drive's error bodies run long.
 const MESSAGE_LIMIT = 160;
 
+// Whether the books channel runs at all. "mirror" is every shell that can open
+// a book: local-only blobs go up, remote-only ones come down. "off" is the
+// phone (docs/22), which never opens a PDF and has no way to import one —
+// mirroring the library there spends a data plan and a phone's storage on files
+// nothing on the device can read. The channel is off in both directions, not
+// just the download half, so the policy has one meaning rather than two.
+//
+// library.json still travels the data channel, so the phone knows which books
+// exist; nothing there reads it (docs/22 — no shelf, no reader).
+export type BooksPolicy = "mirror" | "off";
+
 export interface EngineDeps {
   backend: SyncBackend;
   fs: SyncFs;
   books: BookFs;
+  // Defaults to "mirror": the shells that open books are the ones that existed
+  // first, and a caller that has not thought about it gets what it had.
+  booksPolicy?: BooksPolicy;
   // The last agreed content of every synced file, for three-way merges.
   base: BaseStore;
   // Where records a merge dropped are kept so a propagated delete stays
@@ -439,6 +453,9 @@ export class SyncEngine {
   }
 
   private async syncBooks(failures: PassFailures): Promise<void> {
+    // Before listHashes, not inside the loop: under "off" the channel does not
+    // exist, so it does not read library.json either.
+    if ((this.d.booksPolicy ?? "mirror") === "off") return;
     const hashes = await this.d.books.listHashes();
     for (const hash of hashes) {
       if (failures.halted()) break;

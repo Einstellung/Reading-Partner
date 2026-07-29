@@ -6,7 +6,11 @@
 // "Not running" is a state of its own, not the absence of one: whether the
 // engine started and why it did not are both part of the status, and health.ts
 // turns them into what the user is told.
+//
+// This is also where the engine meets the host: the shell it was mounted in
+// decides whether books travel at all, which the pass itself never asks about.
 
+import type { Shell } from "../app/shell";
 import { DriveBackend } from "./driveBackend";
 import { SyncEngine } from "./engine";
 import { tauriSyncFs } from "./syncFs";
@@ -61,6 +65,11 @@ let signedIn = false;
 let email: string | null = null;
 let engineStarted = false;
 let startedAt: number | null = null;
+// Which shell mounted us, as the shell itself reports it in initSync. Not
+// re-detected here: the form factor was decided once at mount (docs/22), and
+// asking the window a second time could answer differently. Desktop until told
+// otherwise — the shell that syncs everything.
+let shell: Shell = "desktop";
 
 const statusListeners = new Set<(s: SyncStatus) => void>();
 const pulledListeners = new Set<(paths: string[]) => void>();
@@ -95,6 +104,11 @@ function makeEngine(): SyncEngine {
     backend,
     fs: tauriSyncFs,
     books: tauriBookFs,
+    // The phone never opens a book, so it mirrors none (docs/22). Decided here
+    // rather than in the engine: the pass stays headless, and the one thing it
+    // would need — which shell is running — is something the caller already
+    // knows.
+    booksPolicy: shell === "phone" ? "off" : "mirror",
     base: tauriBaseStore,
     trash: tauriTrashJournal,
     snapshot: state.snapshot,
@@ -128,9 +142,13 @@ async function handleSignedOut(): Promise<void> {
   notify();
 }
 
-export async function initSync(): Promise<void> {
+// `shell` is the form factor the entry point mounted (docs/22). It decides
+// whether the books channel runs; everything else syncs the same on every
+// device.
+export async function initSync(mounted: Shell): Promise<void> {
   if (initialized) return;
   initialized = true;
+  shell = mounted;
   state = await loadState();
   signedIn = await isSignedIn();
   email = await currentEmail();

@@ -108,7 +108,9 @@ export default function PhoneApp() {
   // Account sync (docs/13). The kept articles are what this shell mostly shows
   // and they arrive over sync, so a pulled saved-articles.json reloads the list.
   useEffect(() => {
-    void initSync().catch((e) => console.warn("sync init failed", e));
+    // "phone": the books channel stays off here, since nothing on this shell
+    // can open a PDF (docs/22).
+    void initSync("phone").catch((e) => console.warn("sync init failed", e));
     return onSyncPulled((paths) => {
       if (paths.includes(SAVED_ARTICLES_FILE)) void refreshSavedArticles();
     });

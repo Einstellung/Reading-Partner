@@ -674,6 +674,56 @@ test("an immutable book blob is never re-uploaded", async () => {
   expect(dec(be.books.get("h")!)).toBe("ORIGINAL");
 });
 
+// --- the books channel is a policy, not a given -----------------------------
+//
+// The phone shell never opens a PDF (docs/22), and library.json is synced, so
+// without a policy a phone that signs in downloads the whole library in the
+// background — a data plan and a phone's storage spent on files nothing there
+// can read.
+
+test("under the phone policy the books channel does not run in either direction", async () => {
+  const be = makeBackend();
+  be.books.set("remotehash", enc("REMOTE-PDF"));
+  const { books, store } = makeBooks({ localhash: "LOCAL-PDF" }, ["localhash", "remotehash"]);
+  let listed = 0;
+  const counting: BookFs = {
+    ...books,
+    async listHashes() {
+      listed += 1;
+      return books.listHashes();
+    },
+  };
+  const { engine } = makeEngine({
+    backend: be.backend,
+    books: counting,
+    booksPolicy: "off",
+    snapshot: {},
+  });
+
+  await engine.syncNow();
+
+  // Nothing came down, nothing went up, and library.json was never even read
+  // to find out what could have.
+  expect(store.has("remotehash")).toBe(false);
+  expect(be.books.has("localhash")).toBe(false);
+  expect(listed).toBe(0);
+});
+
+test("the phone policy leaves the data channel alone", async () => {
+  const be = makeBackend(
+    { "library.json": { rev: 3, mtime: 200, size: 3 } },
+    { "library.json": "LIB" },
+  );
+  const { fs, files } = makeFs();
+  const { engine } = makeEngine({ backend: be.backend, fs, booksPolicy: "off", snapshot: {} });
+
+  await engine.syncNow();
+
+  // The phone knows what books exist; it just does not hold them.
+  expect(dec(files.get("library.json")!.bytes)).toBe("LIB");
+  expect(engine.status().lastError).toBeNull();
+});
+
 test("single-flight: overlapping passes run only once", async () => {
   const be = makeBackend();
   const { fs } = makeFs({ "settings.json": { text: "{}", mtime: 1 } });
