@@ -4,11 +4,16 @@
 // opens a book, so none of App's reading state exists here.
 //
 // The briefing pipeline, the article cache and the info call stay in InfoHome,
-// which both shells mount; this file owns which screen is showing, the kept
-// articles, settings and sync.
+// which both shells mount; this file owns where the reader is — a navigation
+// stack (nav-stack.ts) whose floor is home — plus the kept articles, settings
+// and sync.
+//
+// Back has one definition, `goBack`, and three things reach it: the top bar
+// button on every screen, the left-edge swipe, and the Android system button.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { onCorruptFile } from "./platform/app/atomic-fs";
+import { bindSystemBack } from "./platform/app/back-button";
 import { BRIEF_TOPIC_ID } from "./platform/app/topics";
 import { initSync, onSyncPulled } from "./platform/sync";
 import {
@@ -28,20 +33,29 @@ import {
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import PhoneHome from "./ui/components/phone/PhoneHome";
 import SavedList from "./ui/components/phone/SavedList";
+import {
+  back,
+  baseScreen,
+  canGoBack,
+  goTo,
+  INITIAL_STACK,
+  push,
+  screen,
+  top,
+  type NavStack,
+  type PhoneScreen,
+} from "./ui/components/phone/nav-stack";
+import { useEdgeBack } from "./ui/components/phone/useEdgeBack";
 import SavedArticleView from "./ui/components/library/SavedArticleView";
 import SettingsView from "./ui/components/SettingsView";
 import Toast, { useToasts } from "./ui/components/common/Toast";
 import { useSyncHealth } from "./ui/components/common/useSyncHealth";
 
-// The screens this shell navigates between. The first four are InfoHome's, under
-// their phone names; "saved" is this shell's own.
-type PhoneScreen = "home" | "briefing" | "article" | "sources" | "saved";
-
-// InfoHome's screen for a phone screen, or null on the ones it does not draw.
+// InfoHome's screen for a stack entry, or null on the ones it does not draw.
 // Null keeps it mounted with its pipeline and its opened article intact, the
 // same way App parks it while the reader is open.
-function infoScreenFor(screen: PhoneScreen): HomeScreen | null {
-  switch (screen) {
+function infoScreenFor(base: PhoneScreen): HomeScreen | null {
+  switch (base.kind) {
     case "home":
       return "vestibule";
     case "briefing":
@@ -56,15 +70,17 @@ function infoScreenFor(screen: PhoneScreen): HomeScreen | null {
 }
 
 export default function PhoneApp() {
-  const [screen, setScreen] = useState<PhoneScreen>("home");
-  // The kept articles (docs/21), and the one being read. Fixed to the Brief
-  // topic: the phone has no other place to file one from.
+  const [stack, setStack] = useState<NavStack>(INITIAL_STACK);
+  // The kept articles (docs/21). Fixed to the Brief topic: the phone has no
+  // other place to file one from. The one being read is a stack entry.
   const [savedArticles, setSavedArticles] = useState<SavedArticle[]>([]);
-  const [openSaved, setOpenSaved] = useState<SavedArticle | null>(null);
   const [settings, setSettings] = useState<Settings>({ ...DEFAULT_SETTINGS });
-  const [showSettings, setShowSettings] = useState(false);
   const [providersInfo, setProvidersInfo] = useState<ProviderInfo[]>([]);
   const { toasts, push: pushToast, dismiss: dismissToast } = useToasts();
+
+  const base = baseScreen(stack);
+  const showSettings = top(stack).kind === "settings";
+  const goBack = useCallback(() => setStack((s) => back(s)), []);
 
   const refreshSavedArticles = useCallback(async () => {
     const all = await loadSavedArticles().catch((): SavedArticle[] => []);
@@ -126,79 +142,100 @@ export default function PhoneApp() {
     pushToast("warn", syncReport.message);
   }, [syncReport, syncToasted, pushToast]);
 
+  // The Android button, bound only above the floor: on home it belongs to the
+  // system, which leaves the app (see platform/app/back-button.ts).
+  const backable = canGoBack(stack);
+  useEffect(() => {
+    if (!backable) return;
+    return bindSystemBack(goBack);
+  }, [backable, goBack]);
+
+  // The left-edge swipe drives the same back, and slides this element while the
+  // finger is down.
+  const surfaceRef = useEdgeBack(
+    useMemo(() => ({ enabled: backable, onBack: goBack }), [backable, goBack]),
+  );
+
   const configured = !!(
     settings.defaultProviderId &&
     settings.defaultModelId &&
     providersInfo.find((p) => p.id === settings.defaultProviderId)?.configured
   );
 
-  // InfoHome navigates in its own vocabulary; "library" cannot arrive, since the
-  // phone home screen has no way there.
+  // InfoHome navigates by naming a destination, and uses the same call for its
+  // own top bar backs ("briefing" from an article). goTo unwinds to a screen
+  // already on the stack, so those stay backs instead of stacking a second copy.
+  // "library" cannot arrive: the phone home screen has no way there.
   const onNavigate = useCallback((next: HomeScreen) => {
-    setScreen(next === "vestibule" || next === "library" ? "home" : next);
+    const kind = next === "vestibule" || next === "library" ? "home" : next;
+    setStack((s) => goTo(s, screen(kind)));
   }, []);
 
-  const openSettings = useCallback(() => setShowSettings(true), []);
+  const openSettings = useCallback(() => setStack((s) => push(s, screen("settings"))), []);
 
   return (
-    // Safe-area insets (viewport-fit=cover): the notch and the home indicator.
-    // All env() values are 0 in a browser window, so this is inert there.
-    <div
-      className="flex h-full flex-col"
-      style={{
-        paddingTop: "env(safe-area-inset-top)",
-        paddingLeft: "env(safe-area-inset-left)",
-        paddingRight: "env(safe-area-inset-right)",
-        paddingBottom: "env(safe-area-inset-bottom)",
-      }}
-    >
-      {/* No shell header: every screen carries its own top bar, and a second one
-          above them would cost a phone a line of reading height for nothing. */}
-      <main className="relative min-h-0 flex-1">
-        <InfoHome
-          screen={infoScreenFor(screen)}
-          onNavigate={onNavigate}
-          configured={configured}
-          onOpenSettings={openSettings}
-          onTopicsChanged={refreshSavedArticles}
-          renderLaunch={(launch) => (
-            <PhoneHome
-              launch={launch}
-              savedCount={savedArticles.length}
-              onOpenSaved={() => setScreen("saved")}
-              settingsAlert={syncReport.alert !== "none"}
-            />
-          )}
-        />
+    // The backdrop the swipe reveals, and the clip that hides whatever has left
+    // the screen. Only ever visible while a gesture or its animation is running.
+    <div className="relative h-full overflow-hidden bg-[#f1f3f5]">
+      <div
+        ref={surfaceRef}
+        className="flex h-full flex-col bg-white"
+        style={{
+          // Safe-area insets (viewport-fit=cover): the notch and the home
+          // indicator. All env() values are 0 in a browser window, so this is
+          // inert there.
+          paddingTop: "env(safe-area-inset-top)",
+          paddingLeft: "env(safe-area-inset-left)",
+          paddingRight: "env(safe-area-inset-right)",
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}
+      >
+        {/* No shell header: every screen carries its own top bar, and a second
+            one above them would cost a phone a line of reading height for
+            nothing. */}
+        <main className="relative min-h-0 flex-1">
+          <InfoHome
+            screen={infoScreenFor(base)}
+            onNavigate={onNavigate}
+            configured={configured}
+            onOpenSettings={openSettings}
+            onTopicsChanged={refreshSavedArticles}
+            renderLaunch={(launch) => (
+              <PhoneHome
+                launch={launch}
+                savedCount={savedArticles.length}
+                onOpenSaved={() => setStack((s) => push(s, screen("saved")))}
+                settingsAlert={syncReport.alert !== "none"}
+              />
+            )}
+          />
 
-        {screen === "saved" &&
-          (openSaved ? (
-            <SavedArticleView
-              article={openSaved}
-              backLabel="Saved"
-              onBack={() => setOpenSaved(null)}
-            />
-          ) : (
+          {base.kind === "saved" && (
             <SavedList
               articles={savedArticles}
-              onOpen={setOpenSaved}
-              onBack={() => setScreen("home")}
+              onOpen={(article) => setStack((s) => push(s, { kind: "savedArticle", article }))}
+              onBack={goBack}
             />
-          ))}
-      </main>
+          )}
 
-      <Toast toasts={toasts} onDismiss={dismissToast} />
+          {base.kind === "savedArticle" && (
+            <SavedArticleView article={base.article} backLabel="Saved" onBack={goBack} />
+          )}
+        </main>
 
-      {showSettings && (
-        <SettingsView
-          settings={settings}
-          onSettingsChange={(next) => {
-            setSettings(next);
-            saveSettings(next);
-          }}
-          onClose={() => setShowSettings(false)}
-        />
-      )}
+        <Toast toasts={toasts} onDismiss={dismissToast} />
+
+        {showSettings && (
+          <SettingsView
+            settings={settings}
+            onSettingsChange={(next) => {
+              setSettings(next);
+              saveSettings(next);
+            }}
+            onClose={goBack}
+          />
+        )}
+      </div>
     </div>
   );
 }

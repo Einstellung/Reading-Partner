@@ -32,6 +32,13 @@ body,
    `active:` style instead, which unmounts with them. */
 html {
   -webkit-tap-highlight-color: transparent;
+  /* The app has no browser history to walk, and something has to say so: a
+     horizontal overscroll that reaches the viewport is the browser's own
+     back/forward gesture, which cancels the pointer mid-swipe and then leaves
+     the page. That is what the phone shell's left-edge back swipe looks like to
+     a browser (docs/pitfall/70). Inert in the app's webviews, which ship those
+     gestures off; the value on the root element propagates to the viewport. */
+  overscroll-behavior-x: none;
 }
 
 body {
