@@ -8,9 +8,10 @@
 // stack (nav-stack.ts) whose floor is home — plus the kept articles, settings
 // and sync.
 //
-// Back has one definition, `goBack`, and every top bar button reaches it.
+// Back has one definition, `goBack`, and two things reach it: the top bar
+// button on every screen, and the left-edge swipe.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { onCorruptFile } from "./platform/app/atomic-fs";
 import { BRIEF_TOPIC_ID } from "./platform/app/topics";
 import { initSync, onSyncPulled } from "./platform/sync";
@@ -34,6 +35,7 @@ import SavedList from "./ui/components/phone/SavedList";
 import {
   back,
   baseScreen,
+  canGoBack,
   goTo,
   INITIAL_STACK,
   push,
@@ -42,6 +44,7 @@ import {
   type NavStack,
   type PhoneScreen,
 } from "./ui/components/phone/nav-stack";
+import { useEdgeBack } from "./ui/components/phone/useEdgeBack";
 import SavedArticleView from "./ui/components/library/SavedArticleView";
 import SettingsView from "./ui/components/SettingsView";
 import Toast, { useToasts } from "./ui/components/common/Toast";
@@ -138,6 +141,13 @@ export default function PhoneApp() {
     pushToast("warn", syncReport.message);
   }, [syncReport, syncToasted, pushToast]);
 
+  // The left-edge swipe drives the same back, and slides this element while the
+  // finger is down. Inert at the floor: home has nothing behind it.
+  const backable = canGoBack(stack);
+  const surfaceRef = useEdgeBack(
+    useMemo(() => ({ enabled: backable, onBack: goBack }), [backable, goBack]),
+  );
+
   const configured = !!(
     settings.defaultProviderId &&
     settings.defaultModelId &&
@@ -156,61 +166,68 @@ export default function PhoneApp() {
   const openSettings = useCallback(() => setStack((s) => push(s, screen("settings"))), []);
 
   return (
-    // Safe-area insets (viewport-fit=cover): the notch and the home indicator.
-    // All env() values are 0 in a browser window, so this is inert there.
-    <div
-      className="flex h-full flex-col"
-      style={{
-        paddingTop: "env(safe-area-inset-top)",
-        paddingLeft: "env(safe-area-inset-left)",
-        paddingRight: "env(safe-area-inset-right)",
-        paddingBottom: "env(safe-area-inset-bottom)",
-      }}
-    >
-      {/* No shell header: every screen carries its own top bar, and a second one
-          above them would cost a phone a line of reading height for nothing. */}
-      <main className="relative min-h-0 flex-1">
-        <InfoHome
-          screen={infoScreenFor(base)}
-          onNavigate={onNavigate}
-          configured={configured}
-          onOpenSettings={openSettings}
-          onTopicsChanged={refreshSavedArticles}
-          renderLaunch={(launch) => (
-            <PhoneHome
-              launch={launch}
-              savedCount={savedArticles.length}
-              onOpenSaved={() => setStack((s) => push(s, screen("saved")))}
-              settingsAlert={syncReport.alert !== "none"}
+    // The backdrop the swipe reveals, and the clip that hides whatever has left
+    // the screen. Only ever visible while a gesture or its animation is running.
+    <div className="relative h-full overflow-hidden bg-[#f1f3f5]">
+      <div
+        ref={surfaceRef}
+        className="flex h-full flex-col bg-white"
+        style={{
+          // Safe-area insets (viewport-fit=cover): the notch and the home
+          // indicator. All env() values are 0 in a browser window, so this is
+          // inert there.
+          paddingTop: "env(safe-area-inset-top)",
+          paddingLeft: "env(safe-area-inset-left)",
+          paddingRight: "env(safe-area-inset-right)",
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}
+      >
+        {/* No shell header: every screen carries its own top bar, and a second
+            one above them would cost a phone a line of reading height for
+            nothing. */}
+        <main className="relative min-h-0 flex-1">
+          <InfoHome
+            screen={infoScreenFor(base)}
+            onNavigate={onNavigate}
+            configured={configured}
+            onOpenSettings={openSettings}
+            onTopicsChanged={refreshSavedArticles}
+            renderLaunch={(launch) => (
+              <PhoneHome
+                launch={launch}
+                savedCount={savedArticles.length}
+                onOpenSaved={() => setStack((s) => push(s, screen("saved")))}
+                settingsAlert={syncReport.alert !== "none"}
+              />
+            )}
+          />
+
+          {base.kind === "saved" && (
+            <SavedList
+              articles={savedArticles}
+              onOpen={(article) => setStack((s) => push(s, { kind: "savedArticle", article }))}
+              onBack={goBack}
             />
           )}
-        />
 
-        {base.kind === "saved" && (
-          <SavedList
-            articles={savedArticles}
-            onOpen={(article) => setStack((s) => push(s, { kind: "savedArticle", article }))}
-            onBack={goBack}
+          {base.kind === "savedArticle" && (
+            <SavedArticleView article={base.article} backLabel="Saved" onBack={goBack} />
+          )}
+        </main>
+
+        <Toast toasts={toasts} onDismiss={dismissToast} />
+
+        {showSettings && (
+          <SettingsView
+            settings={settings}
+            onSettingsChange={(next) => {
+              setSettings(next);
+              saveSettings(next);
+            }}
+            onClose={goBack}
           />
         )}
-
-        {base.kind === "savedArticle" && (
-          <SavedArticleView article={base.article} backLabel="Saved" onBack={goBack} />
-        )}
-      </main>
-
-      <Toast toasts={toasts} onDismiss={dismissToast} />
-
-      {showSettings && (
-        <SettingsView
-          settings={settings}
-          onSettingsChange={(next) => {
-            setSettings(next);
-            saveSettings(next);
-          }}
-          onClose={goBack}
-        />
-      )}
+      </div>
     </div>
   );
 }
