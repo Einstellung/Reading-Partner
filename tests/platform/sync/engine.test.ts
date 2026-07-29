@@ -6,6 +6,7 @@
 import { expect, test } from "bun:test";
 import {
   MAX_CONSECUTIVE_FAILURES,
+  RESUME_MIN_INTERVAL_MS,
   SyncEngine,
   type EngineDeps,
 } from "../../../src/platform/sync/engine";
@@ -672,6 +673,129 @@ test("an immutable book blob is never re-uploaded", async () => {
   await engine.syncNow();
 
   expect(dec(be.books.get("h")!)).toBe("ORIGINAL");
+});
+
+// --- the books channel is a policy, not a given -----------------------------
+//
+// The phone shell never opens a PDF (docs/22), and library.json is synced, so
+// without a policy a phone that signs in downloads the whole library in the
+// background — a data plan and a phone's storage spent on files nothing there
+// can read.
+
+test("under the phone policy the books channel does not run in either direction", async () => {
+  const be = makeBackend();
+  be.books.set("remotehash", enc("REMOTE-PDF"));
+  const { books, store } = makeBooks({ localhash: "LOCAL-PDF" }, ["localhash", "remotehash"]);
+  let listed = 0;
+  const counting: BookFs = {
+    ...books,
+    async listHashes() {
+      listed += 1;
+      return books.listHashes();
+    },
+  };
+  const { engine } = makeEngine({
+    backend: be.backend,
+    books: counting,
+    booksPolicy: "off",
+    snapshot: {},
+  });
+
+  await engine.syncNow();
+
+  // Nothing came down, nothing went up, and library.json was never even read
+  // to find out what could have.
+  expect(store.has("remotehash")).toBe(false);
+  expect(be.books.has("localhash")).toBe(false);
+  expect(listed).toBe(0);
+});
+
+test("the phone policy leaves the data channel alone", async () => {
+  const be = makeBackend(
+    { "library.json": { rev: 3, mtime: 200, size: 3 } },
+    { "library.json": "LIB" },
+  );
+  const { fs, files } = makeFs();
+  const { engine } = makeEngine({ backend: be.backend, fs, booksPolicy: "off", snapshot: {} });
+
+  await engine.syncNow();
+
+  // The phone knows what books exist; it just does not hold them.
+  expect(dec(files.get("library.json")!.bytes)).toBe("LIB");
+  expect(engine.status().lastError).toBeNull();
+});
+
+// --- the app leaving and coming back ----------------------------------------
+//
+// The tick pulls once every PULL_INTERVAL_MS, and on a phone it does not run at
+// all while the app is backgrounded. Both edges of the app's own lifecycle are
+// worth a pass; neither may become a request per app switch.
+
+test("coming back to the front pulls without waiting for the pull window", async () => {
+  const be = makeBackend(
+    { "topics.json": { rev: 4, mtime: 200, size: 6 } },
+    { "topics.json": "REMOTE" },
+  );
+  const { fs, files } = makeFs();
+  let clock = 100;
+  const { engine } = makeEngine({ backend: be.backend, fs, snapshot: {}, now: () => clock });
+
+  await engine.syncNow();
+  // The other device publishes while this one is away.
+  await be.backend.upload("topics.json", enc("NEWER"), {
+    rev: 5,
+    mtime: 300,
+    hash: await h("NEWER"),
+  });
+  // Well inside the five-minute window the tick would have waited for.
+  clock += RESUME_MIN_INTERVAL_MS;
+  await engine.onForeground();
+
+  expect(dec(files.get("topics.json")!.bytes)).toBe("NEWER");
+});
+
+test("switching back and forth inside the floor costs one pass, not one each", async () => {
+  const be = makeBackend();
+  let clock = RESUME_MIN_INTERVAL_MS * 10;
+  const { engine } = makeEngine({ backend: be.backend, snapshot: {}, now: () => clock });
+
+  await engine.onForeground();
+  clock += RESUME_MIN_INTERVAL_MS - 1;
+  await engine.onForeground();
+
+  expect(be.ensureLayoutCalls()).toBe(1);
+
+  clock += 1;
+  await engine.onForeground();
+
+  expect(be.ensureLayoutCalls()).toBe(2);
+});
+
+test("going away pushes what has not been sent yet", async () => {
+  const be = makeBackend();
+  const { fs } = makeFs({ "settings.json": { text: "EDITED", mtime: 500 } });
+  const { engine } = makeEngine({ backend: be.backend, fs, snapshot: {} });
+
+  await engine.onBackground();
+
+  // Without this the edit waits for the next tick — which on a phone means the
+  // next time the app is opened.
+  expect(dec(be.data.get("settings.json")!)).toBe("EDITED");
+});
+
+test("going away with nothing to send makes no requests", async () => {
+  const be = makeBackend();
+  const { fs } = makeFs({ "settings.json": { text: "S", mtime: 500 } });
+  const snapshot: Snapshot = {
+    "settings.json": { rev: 1, mtime: 500, size: 1, hash: await h("S") },
+  };
+  const { engine } = makeEngine({ backend: be.backend, fs, snapshot });
+
+  await engine.onBackground();
+
+  // Leaving the app is frequent and mostly uneventful; the check that says so
+  // reads the disk, not the network.
+  expect(be.ensureLayoutCalls()).toBe(0);
 });
 
 test("single-flight: overlapping passes run only once", async () => {

@@ -484,7 +484,7 @@ export default function App() {
   // dropped so a reopen reads the newer data instead of the stale cache
   // overwriting it.
   useEffect(() => {
-    void initSync().catch((e) => console.warn("sync init failed", e));
+    void initSync("desktop").catch((e) => console.warn("sync init failed", e));
     return onSyncPulled((paths) => {
       let refreshShelf = false;
       for (const p of paths) {
