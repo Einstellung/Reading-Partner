@@ -62,6 +62,7 @@ interface Fixture {
   sources: InfoSourceRef[];
   fetched: string[];
   triaged: number;
+  awake: boolean[];
 }
 
 // A minimal set of injected deps over a fake disk; individual tests override
@@ -90,6 +91,7 @@ function makeDeps(fx: Fixture, over: Partial<InfoDeps> = {}): InfoDeps {
     loadRun: async (date) => fx.disk.runs.get(date) ?? null,
     saveRun: async (state) => fx.disk.saveRun(state),
     clearRun: async (date) => void fx.disk.runs.delete(date),
+    keepAwake: (on) => fx.awake.push(on),
     now: () => Date.now(),
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
     setTimer: (ms, cb) => {
@@ -102,7 +104,7 @@ function makeDeps(fx: Fixture, over: Partial<InfoDeps> = {}): InfoDeps {
 }
 
 function fixture(sources: InfoSourceRef[] = [source("a")], disk = new Disk()): Fixture {
-  return { disk, sources, fetched: [], triaged: 0 };
+  return { disk, sources, fetched: [], triaged: 0, awake: [] };
 }
 
 test("collection progress accumulates into the snapshot: total, done, failed, items, lastDone", async () => {
@@ -399,6 +401,23 @@ test("flush writes a checkpoint a failed write left behind", async () => {
   void p.generate();
   await fx.disk.until((s) => s.sources.some((x) => x.id === "a" && x.status === "done"));
   expect(fx.disk.runs.get(TODAY)!.items.map((i) => i.id)).toEqual(["a1"]);
+});
+
+test("the screen wake lock is held for the run and released however it ends", async () => {
+  const fx = fixture();
+  await new InfoPipeline(makeDeps(fx)).generate();
+  expect(fx.awake).toEqual([true, false]);
+
+  const failed = fixture();
+  await new InfoPipeline(
+    makeDeps(failed, {
+      triage: async () => {
+        throw new Error("boom");
+      },
+    }),
+    { retryDelayMs: 0 },
+  ).generate();
+  expect(failed.awake).toEqual([true, false]);
 });
 
 // --- re-triage and the rest -------------------------------------------------

@@ -8,6 +8,7 @@ import { callModel, resolveModel, type ResolvedModel } from "../../ai/model-call
 import type { AiCallOptions } from "../../ai/watchdog";
 import { newTally, reportParse } from "../../platform/app/structured-output";
 import { observeAppLifecycle } from "../../platform/app/lifecycle";
+import { browserWakeLockTarget, createScreenWakeLock } from "../../platform/app/wake-lock";
 import { collectAll } from "../sources/engine";
 import { extractReadable } from "../extract/readable";
 import { loadSources, loadSourceHealth, saveSourceHealth } from "../sources/source-store";
@@ -130,6 +131,9 @@ async function collect(
 
 let pipeline: InfoPipeline | null = null;
 
+// One screen wake lock for the app, held while a briefing generates (docs/22).
+const wakeLock = createScreenWakeLock(browserWakeLockTarget());
+
 export function getInfoPipeline(): InfoPipeline {
   if (!pipeline) {
     pipeline = new InfoPipeline({
@@ -150,6 +154,7 @@ export function getInfoPipeline(): InfoPipeline {
       saveRun,
       clearRun,
       pruneStaleDays: pruneStaleDailyFiles,
+      keepAwake: (on) => wakeLock.set(on),
       now: () => Date.now(),
       sleep: (ms) => new Promise<void>((r) => setTimeout(r, ms)),
       setTimer: (ms, cb) => {
@@ -161,7 +166,8 @@ export function getInfoPipeline(): InfoPipeline {
     // backgrounded webview within seconds. Flushing writes the checkpoint and
     // nothing else — no fetch, no AI call — so it fits in that window. Nothing
     // to do on the way back in: the run either survived and is still going, or
-    // it did not and the next start resumes it.
+    // it did not and the next start resumes it. The wake lock re-acquires
+    // itself (platform/app/wake-lock).
     const p = pipeline;
     observeAppLifecycle(window, {
       onForeground: () => {},

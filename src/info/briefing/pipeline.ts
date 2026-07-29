@@ -83,6 +83,10 @@ export interface InfoDeps {
   // Optional housekeeping: drop the derived per-day info files of every day but
   // the given one. Absent, or throwing, leaves the old files on disk.
   pruneStaleDays?(today: string): Promise<void>;
+  // Optional screen wake lock for the length of a run (platform/app/wake-lock).
+  // Best effort by construction: a screen that sleeps is a worse experience, not
+  // a broken run.
+  keepAwake?(on: boolean): void;
   now(): number;
   sleep(ms: number): Promise<void>;
   setTimer(ms: number, cb: () => void): () => void;
@@ -299,6 +303,7 @@ export class InfoPipeline {
     this.collect = null;
     this.activity = null;
     this.stopController = new AbortController();
+    this.deps.keepAwake?.(true);
     this.notify();
     const date = this.today();
     try {
@@ -327,7 +332,8 @@ export class InfoPipeline {
       this.activity = null;
       this.stopController = null;
       this.run = null;
-        this.notify();
+      this.deps.keepAwake?.(false);
+      this.notify();
     }
   }
 
@@ -421,6 +427,7 @@ export class InfoPipeline {
     this.activity = null;
     this.collect = null;
     this.stopController = new AbortController();
+    this.deps.keepAwake?.(true);
     this.notify();
     try {
       const date = this.today();
@@ -449,7 +456,8 @@ export class InfoPipeline {
       this.collect = null;
       this.activity = null;
       this.stopController = null;
-        this.notify();
+      this.deps.keepAwake?.(false);
+      this.notify();
     }
   }
 
