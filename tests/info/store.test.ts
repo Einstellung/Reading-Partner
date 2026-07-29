@@ -39,20 +39,24 @@ test("leanItems drops heavy contentHtml but keeps triage inputs", () => {
   expect(lean[0].sourceName).toBe("S");
 });
 
-test("staleDailyFiles keeps all three of today's files", () => {
+test("staleDailyFiles keeps every one of today's files, run checkpoint included", () => {
   const names = [
     "briefing-2026-07-25.json",
     "info-articles-2026-07-25.json",
     "info-items-2026-07-25.json",
+    "info-run-2026-07-25.json",
   ];
   expect(staleDailyFiles(names, "2026-07-25")).toEqual([]);
 });
 
-test("staleDailyFiles returns all three of an older day", () => {
+test("staleDailyFiles returns every file of an older day, run checkpoint included", () => {
   const names = [
     "briefing-2026-07-22.json",
     "info-articles-2026-07-22.json",
     "info-items-2026-07-22.json",
+    // A run abandoned overnight: never resumable again, and the heaviest of the
+    // four since it holds the article bodies.
+    "info-run-2026-07-22.json",
   ];
   expect(staleDailyFiles(names, "2026-07-25")).toEqual(names);
 });

@@ -29,19 +29,21 @@ export interface CollectDeps {
   // Item text cap fed to triage/chat. Default 20k.
   textMaxChars?: number;
   now?: () => number;
-  // Per-source progress, so a UI can show collection liveness (docs/16): a
-  // "start" as each enabled source begins, then "done" (with item count) or
-  // "error" as it settles. Pure data — no rendering here.
-  onProgress?(e: CollectEvent): void;
+  // Called as each source settles, with the items it produced (none when it
+  // failed). Awaited, so the caller can checkpoint a finished source before the
+  // slow ones come back — that is what makes a briefing run resumable per source
+  // (docs/16) — and it doubles as the collection-liveness signal a UI shows.
+  onSourceSettled?(result: SourceSettled): Promise<void> | void;
 }
 
-// A collection progress event for onProgress. index is 0-based within the
-// enabled set; total is the enabled count. Sources run concurrently, so all
-// "start" events precede the first "done"/"error".
-export type CollectEvent =
-  | { kind: "source-start"; source: string; sourceName: string; index: number; total: number }
-  | { kind: "source-done"; source: string; sourceName: string; index: number; total: number; items: number }
-  | { kind: "source-error"; source: string; sourceName: string; index: number; total: number; error: string };
+// One settled source. Sources run concurrently, so these arrive in completion
+// order, not list order.
+export interface SourceSettled {
+  source: string;
+  sourceName: string;
+  items: InfoItem[];
+  error?: string;
+}
 
 const DEFAULT_LIMIT = 20;
 const SUMMARY_CHARS = 400;
@@ -319,23 +321,21 @@ export async function collectAll(
   prior: Record<string, SourceHealth> = {},
 ): Promise<{ items: InfoItem[]; health: Record<string, SourceHealth> }> {
   const now = deps.now ?? (() => Date.now());
-  const emit = deps.onProgress;
+  const settled = deps.onSourceSettled;
   const health: Record<string, SourceHealth> = { ...prior };
   const enabled = descriptors.filter((d) => d.enabled);
-  const total = enabled.length;
   const results = await Promise.all(
-    enabled.map(async (desc, index) => {
-      emit?.({ kind: "source-start", source: desc.id, sourceName: desc.name, index, total });
+    enabled.map(async (desc) => {
       try {
         const items = await collectSource(desc, deps);
         health[desc.id] = { ...health[desc.id], lastSuccess: now(), lastError: undefined, lastErrorAt: undefined };
-        emit?.({ kind: "source-done", source: desc.id, sourceName: desc.name, index, total, items: items.length });
+        await settled?.({ source: desc.id, sourceName: desc.name, items });
         return items;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.warn(`info source ${desc.id} failed`, e);
         health[desc.id] = { ...health[desc.id], lastError: msg, lastErrorAt: now() };
-        emit?.({ kind: "source-error", source: desc.id, sourceName: desc.name, index, total, error: msg });
+        await settled?.({ source: desc.id, sourceName: desc.name, items: [], error: msg });
         return [] as InfoItem[];
       }
     }),

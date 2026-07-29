@@ -5,7 +5,7 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { collectSource, collectAll, type CollectEvent } from "../../src/info/sources/engine";
+import { collectSource, collectAll, type SourceSettled } from "../../src/info/sources/engine";
 import type { ExtractReadable, SourceDescriptor } from "../../src/info/sources/descriptor";
 
 const extract: ExtractReadable = (_html, url) => ({
@@ -251,7 +251,7 @@ test("collectAll isolates a failing source and records health", async () => {
   expect(health.off).toBeUndefined(); // disabled source not run
 });
 
-test("collectAll emits per-source progress: start for every source, done/error as they settle", async () => {
+test("collectAll hands each source over as it settles, items and all, once per enabled source", async () => {
   const good: SourceDescriptor = {
     id: "good",
     name: "Good",
@@ -275,25 +275,21 @@ test("collectAll emits per-source progress: start for every source, done/error a
     return res("down", 500); // bad feed fails after 5xx retries
   };
 
-  const events: CollectEvent[] = [];
-  await collectAll([good, bad, disabled], { fetchFn, now: () => 1000, onProgress: (e) => events.push(e) });
+  const settled: SourceSettled[] = [];
+  await collectAll([good, bad, disabled], {
+    fetchFn,
+    now: () => 1000,
+    onSourceSettled: (r) => void settled.push(r),
+  });
 
-  // Only enabled sources emit; the disabled one never starts.
-  const starts = events.filter((e) => e.kind === "source-start");
-  expect(starts.length).toBe(2);
-  expect(starts.every((e) => e.total === 2)).toBe(true);
-  expect(starts.map((e) => e.source).sort()).toEqual(["bad", "good"]);
-  expect(events.some((e) => e.source === "off")).toBe(false);
+  // Exactly one settle per enabled source; the disabled one never runs.
+  expect(settled.map((r) => r.source).sort()).toEqual(["bad", "good"]);
 
-  const goodDone = events.find((e) => e.kind === "source-done" && e.source === "good");
-  expect(goodDone).toBeDefined();
-  expect(goodDone!.kind === "source-done" && goodDone!.items).toBe(2);
+  const goodDone = settled.find((r) => r.source === "good")!;
+  expect(goodDone.items.map((i) => i.title)).toEqual(["Good one", "Another"]);
+  expect(goodDone.error).toBeUndefined();
 
-  const badErr = events.find((e) => e.kind === "source-error" && e.source === "bad");
-  expect(badErr).toBeDefined();
-  expect(badErr!.kind === "source-error" && badErr!.error).toBeTruthy();
-
-  // Exactly one settle (done|error) per enabled source.
-  const settles = events.filter((e) => e.kind !== "source-start");
-  expect(settles.length).toBe(2);
+  const badErr = settled.find((r) => r.source === "bad")!;
+  expect(badErr.items).toEqual([]);
+  expect(badErr.error).toBeTruthy();
 });

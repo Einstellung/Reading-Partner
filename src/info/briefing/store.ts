@@ -12,6 +12,7 @@ import {
 } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { mergeInlinedHtml } from "../extract/inline-images";
+import { INFO_RUN_VERSION, type InfoRunState } from "./run-state";
 import type { Briefing, InfoItem } from "./types";
 
 // The full article body kept per item, split out of the briefing so the briefing
@@ -44,6 +45,10 @@ function articlesFile(date: string): string {
 
 function itemsFile(date: string): string {
   return `info-items-${date}.json`;
+}
+
+function runFile(date: string): string {
+  return `info-run-${date}.json`;
 }
 
 export async function saveBriefing(briefing: Briefing): Promise<void> {
@@ -115,13 +120,59 @@ export async function loadItems(date: string): Promise<InfoItem[]> {
   }
 }
 
+// --- the run checkpoint ----------------------------------------------------
+// The resume point of an unfinished generation (run-state.ts), one file per day.
+// Written at every checkpoint and deleted the moment the briefing lands, so on a
+// healthy device it exists only while a run is in flight. A run abandoned for
+// good still dies with the daily prune below.
+
+// Rewritten whole at every checkpoint, article bodies and all: a source that
+// settles costs one write of everything collected so far. That is the price of
+// the checkpoint being a single self-contained file, and it is the right way
+// round — the writes are local and take milliseconds, the fetching they save is
+// minutes of a phone's radio.
+export async function saveRun(state: InfoRunState): Promise<void> {
+  await writeTextAtomic(runFile(state.date), JSON.stringify(state));
+}
+
+// A missing file is the normal case (no run in flight). A corrupt or
+// wrong-version one reads as null so the day starts over rather than crashing;
+// the cost of getting this wrong is a refetch, not a lost briefing.
+export async function loadRun(date: string): Promise<InfoRunState | null> {
+  try {
+    if (!(await exists(runFile(date), { baseDir: BaseDirectory.AppData }))) return null;
+    const parsed = JSON.parse(
+      await readTextFile(runFile(date), { baseDir: BaseDirectory.AppData }),
+    ) as InfoRunState;
+    if (!parsed || parsed.version !== INFO_RUN_VERSION || parsed.date !== date) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+// Best effort: a checkpoint that will not go away is stale, not fatal — the next
+// generation overwrites it, and isResumable rejects it once the day turns.
+export async function clearRun(date: string): Promise<void> {
+  try {
+    if (await exists(runFile(date), { baseDir: BaseDirectory.AppData })) {
+      await remove(runFile(date), { baseDir: BaseDirectory.AppData });
+    }
+  } catch {
+    // Leave it; it costs disk, not correctness.
+  }
+}
+
 // --- pruning the past days -------------------------------------------------
-// These three per-day files are derived and only ever read for today, so older
-// days are dead weight (one article cache measured 4.3MB). Matching is by exact
-// prefix plus a strict date suffix and nothing else: a name we cannot parse is
-// left alone, because everything else under AppData is either the user's own
-// data or inside sync range, where a local delete would just be re-downloaded.
-const DAILY_PREFIXES = ["briefing-", "info-articles-", "info-items-"];
+// These per-day files are derived and only ever read for today, so older days
+// are dead weight (one article cache measured 4.3MB). The run checkpoint is in
+// the set for the same reason and one more: it is the heaviest of them (it holds
+// the article bodies) and an abandoned run would otherwise keep a copy of a dead
+// day forever. Matching is by exact prefix plus a strict date suffix and nothing
+// else: a name we cannot parse is left alone, because everything else under
+// AppData is either the user's own data or inside sync range, where a local
+// delete would just be re-downloaded.
+const DAILY_PREFIXES = ["briefing-", "info-articles-", "info-items-", "info-run-"];
 const DATED_JSON = /^\d{4}-\d{2}-\d{2}\.json$/;
 
 // The names to delete, given a directory listing and today's local date. Pure,

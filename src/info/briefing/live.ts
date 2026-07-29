@@ -7,20 +7,24 @@
 import { callModel, resolveModel, type ResolvedModel } from "../../ai/model-call";
 import type { AiCallOptions } from "../../ai/watchdog";
 import { newTally, reportParse } from "../../platform/app/structured-output";
-import { collectAll, type CollectEvent } from "../sources/engine";
+import { observeAppLifecycle } from "../../platform/app/lifecycle";
+import { collectAll } from "../sources/engine";
 import { extractReadable } from "../extract/readable";
 import { loadSources, loadSourceHealth, saveSourceHealth } from "../sources/source-store";
 import { loadFeedback } from "../../memory/feedback";
 import { loadProfile } from "../../memory/profile";
 import { assembleReadingContext } from "../../memory/assemble";
-import { InfoPipeline } from "./pipeline";
+import { InfoPipeline, type InfoSourceRef, type SourceResult } from "./pipeline";
 import {
+  clearRun,
   loadBriefing,
   loadItems,
+  loadRun,
   pruneStaleDailyFiles,
   saveArticles,
   saveBriefing,
   saveItems,
+  saveRun,
 } from "./store";
 import {
   parseTriageResult,
@@ -93,16 +97,35 @@ async function triage(
   throw new Error(`triage produced invalid JSON: ${reparsed.error}`);
 }
 
-// Run every enabled source through the generic engine (docs/17). Per-source
+// The roster a run is checkpointed against: the enabled sources, in list order.
+async function listSources(): Promise<InfoSourceRef[]> {
+  const sources = await loadSources();
+  return sources.filter((d) => d.enabled).map((d) => ({ id: d.id, name: d.name }));
+}
+
+// Run the requested sources through the generic engine (docs/17) — a subset of
+// the roster when the pipeline is resuming, everything otherwise. Per-source
 // isolation lives in collectAll: one source failing degrades to no items rather
 // than failing the run (the pipeline fails only if the whole set comes back
-// empty). Each run records per-source health for a future source-list UI.
-async function collect(onProgress?: (e: CollectEvent) => void): Promise<InfoItem[]> {
-  const sources = await loadSources();
+// empty). Each source is handed to the pipeline as it settles so the run's
+// checkpoint advances one source at a time. Health is recorded for the
+// source-list UI.
+async function collect(
+  refs: InfoSourceRef[],
+  onSettled: (result: SourceResult) => Promise<void>,
+): Promise<void> {
+  const wanted = new Set(refs.map((r) => r.id));
+  const sources = (await loadSources()).filter((d) => wanted.has(d.id));
   const prior = await loadSourceHealth();
-  const { items, health } = await collectAll(sources, { extract: extractReadable, onProgress }, prior);
+  const { health } = await collectAll(
+    sources,
+    {
+      extract: extractReadable,
+      onSourceSettled: (r) => onSettled({ id: r.source, items: r.items, error: r.error }),
+    },
+    prior,
+  );
   saveSourceHealth(health).catch(() => {});
-  return items;
 }
 
 let pipeline: InfoPipeline | null = null;
@@ -116,12 +139,16 @@ export function getInfoPipeline(): InfoPipeline {
       // Reading-side signal for triage: assembled from per-topic memory, guarded
       // so a failure yields "" and the section is simply omitted.
       loadReaderContext: () => assembleReadingContext(),
+      listSources,
       collect,
       triage,
       saveBriefing,
       saveArticles,
       saveItems,
       loadItems,
+      loadRun,
+      saveRun,
+      clearRun,
       pruneStaleDays: pruneStaleDailyFiles,
       now: () => Date.now(),
       sleep: (ms) => new Promise<void>((r) => setTimeout(r, ms)),
@@ -129,6 +156,16 @@ export function getInfoPipeline(): InfoPipeline {
         const id = setTimeout(cb, ms);
         return () => clearTimeout(id);
       },
+    });
+    // Leaving the app is where a run dies (docs/22): iOS may suspend or kill a
+    // backgrounded webview within seconds. Flushing writes the checkpoint and
+    // nothing else — no fetch, no AI call — so it fits in that window. Nothing
+    // to do on the way back in: the run either survived and is still going, or
+    // it did not and the next start resumes it.
+    const p = pipeline;
+    observeAppLifecycle(window, {
+      onForeground: () => {},
+      onBackground: () => void p.flush(),
     });
   }
   return pipeline;
