@@ -5,6 +5,10 @@
 // (content main, chat becomes the corner pip); ✕ hangs up. No bubble, no
 // auto-started take — the composer is ready and the user types.
 //
+// A shell can turn the corner cards off (the phone's does, docs/22): then the
+// chat is the whole screen, there is no card to tap and no swapped layout to
+// tap it into. call-layout.ts holds that rule.
+//
 // Every info thread runs the same agent loop with the shared companion tool set
 // (docs/16/17): probe/trial/add_source plus update_profile, surfacing inline
 // confirm cards. The anchors differ only in context: the briefing/article
@@ -34,6 +38,7 @@ import { saveProfile } from "../../../memory/profile";
 import { getInfoPipeline } from "../../../info/briefing/live";
 import CallView from "../chat/CallView";
 import ChatPipCard from "../chat/ChatPipCard";
+import { callLayout, navigateAway } from "../chat/call-layout";
 import { appendRunningTool, resolveToolStatus } from "../common/toolTrace";
 import ReadingPipCard from "../chat/ReadingPipCard";
 import {
@@ -78,6 +83,7 @@ export function InfoCall({
   voice,
   onSourcesChanged,
   onOpenBriefing,
+  pipCards = true,
 }: {
   anchor: InfoCallAnchor;
   dateKey: string;
@@ -87,8 +93,15 @@ export function InfoCall({
   onSourcesChanged?: () => void;
   // Clicking the briefing-ready card: open the briefing as the main screen.
   onOpenBriefing?: (date: string) => void;
+  // Whether the call keeps its corner cards, and with them the swapped layout.
+  // The shell decides — no shape is detected here. False on the phone (docs/22),
+  // where the chat is a screen the reader pushed and pops with a back.
+  pipCards?: boolean;
 }) {
-  const [view, setView] = useState<"chat-main" | "chat-pip">("chat-main");
+  // Whether the reader has tapped the call out of the way. With no corner cards
+  // there is no way to set it and no layout to set it to (call-layout.ts).
+  const [swapped, setSwapped] = useState(false);
+  const view = callLayout(pipCards, swapped);
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -136,7 +149,7 @@ export function InfoCall({
   // window. In onboarding, kick the AI's opening turn once the empty thread loads.
   useEffect(() => {
     let live = true;
-    setView("chat-main");
+    setSwapped(false);
     (async () => {
       try {
         await loadThreads(bookId);
@@ -322,7 +335,10 @@ export function InfoCall({
           if (action.to === "briefing") {
             const date = action.arg ?? (findCardPart(messagesRef.current, cardId)?.payload as { date?: string })?.date;
             if (date) onOpenBriefing?.(date);
-            setView("chat-pip");
+            // Get out of the way of the screen just opened: shrink into the pip
+            // where there is one, hang up where the chat is the whole screen.
+            if (navigateAway(pipCards) === "swap") setSwapped(true);
+            else onHangUp();
           }
           break;
         case "local":
@@ -338,7 +354,7 @@ export function InfoCall({
     },
     // handleAddFromCard/handleApplyProfile are stable; runBriefingJob reads refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [handleAddFromCard, handleApplyProfile, onOpenBriefing, noteTurn],
+    [handleAddFromCard, handleApplyProfile, onOpenBriefing, onHangUp, pipCards, noteTurn],
   );
 
   // The add-source agent turn: probe/trial/add tools, tool trace, confirm cards.
@@ -429,7 +445,7 @@ export function InfoCall({
   if (view === "chat-pip") {
     return (
       <div className="absolute right-3 top-3 z-50">
-        <ChatPipCard lastMessage={lastMessage} onClick={() => setView("chat-main")} onHangUp={onHangUp} />
+        <ChatPipCard lastMessage={lastMessage} onClick={() => setSwapped(false)} onHangUp={onHangUp} />
       </div>
     );
   }
@@ -449,24 +465,26 @@ export function InfoCall({
           onCardAction={onCardAction}
         />
       </div>
-      <div className="absolute right-3 top-3 z-50">
-        <ReadingPipCard
-          title={position.title}
-          badge={
-            position.sourceName ? (
-              <span className="shrink-0 rounded-full bg-[#f0eefb] px-2 py-0.5 text-[11px] font-medium text-[#6d5ae0]">
-                {position.sourceName}
-              </span>
-            ) : undefined
-          }
-          body={
-            position.line ? (
-              <span className="line-clamp-3 text-[12px] leading-snug text-neutral-500">{position.line}</span>
-            ) : undefined
-          }
-          onClick={() => setView("chat-pip")}
-        />
-      </div>
+      {pipCards && (
+        <div className="absolute right-3 top-3 z-50">
+          <ReadingPipCard
+            title={position.title}
+            badge={
+              position.sourceName ? (
+                <span className="shrink-0 rounded-full bg-[#f0eefb] px-2 py-0.5 text-[11px] font-medium text-[#6d5ae0]">
+                  {position.sourceName}
+                </span>
+              ) : undefined
+            }
+            body={
+              position.line ? (
+                <span className="line-clamp-3 text-[12px] leading-snug text-neutral-500">{position.line}</span>
+              ) : undefined
+            }
+            onClick={() => setSwapped(true)}
+          />
+        </div>
+      )}
     </>
   );
 }

@@ -92,6 +92,12 @@ export default function InfoHome(props: {
   // call this component already owns, on the same footing as onOverlayChange —
   // omitted by the desktop shell, which renders exactly what it did before.
   pullToAsk?: boolean;
+  // Whether the call keeps its corner cards (docs/03). Default, and the desktop
+  // shell: it does. The phone shell turns them off — there the chat is a screen
+  // of the navigation stack with gestures in and out of it, and a card that
+  // swaps it away would be a second way to leave, eating a corner of a 393pt
+  // screen to offer it.
+  pipCards?: boolean;
 }) {
   const { screen, onNavigate } = props;
   const [infoSnap, setInfoSnap] = useState<InfoSnapshot | null>(null);
@@ -467,6 +473,7 @@ export default function InfoHome(props: {
           voice={infoVoice}
           onSourcesChanged={refreshSources}
           onOpenBriefing={() => onNavigate("briefing")}
+          pipCards={props.pipCards}
         />
       )}
     </>
