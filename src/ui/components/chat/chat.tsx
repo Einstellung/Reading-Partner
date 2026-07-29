@@ -12,6 +12,7 @@ import { CARD_REGISTRY } from '../info/InfoCards';
 import type { CleanupModel } from '../../../ai/voice';
 import type { ProviderId } from '../../../ai/providers';
 import { loadSettings, toReasoning } from '../../../platform/app/settings';
+import { hasNativeRecorder } from '../../../platform/app/platform';
 
 // Optional enrichment for the composer's built-in voice input. The mic is on by
 // default; this only adds context. `glossary` seeds the STT cleanup pass with
@@ -23,12 +24,14 @@ export interface ComposerVoice {
 }
 
 // Resolve the `voice` prop into what the mic needs. The mic is enabled unless a
-// caller explicitly opts out with `voice={false}`; anything else (omitted or an
-// enrichment object) enables it, with an empty glossary as the default.
+// caller explicitly opts out with `voice={false}`, or the host has no recorder —
+// on a phone the capture commands are not compiled in, so a mic there is a
+// button whose only outcome is an error (see hasNativeRecorder).
 export function resolveComposerVoice(
 	voice: ComposerVoice | false | undefined,
+	hasRecorder: boolean,
 ): { glossary: string } | null {
-	if (voice === false) return null;
+	if (voice === false || !hasRecorder) return null;
 	return { glossary: voice?.glossary ?? '' };
 }
 
@@ -386,7 +389,7 @@ export function Composer({
 	const [voiceHint, setVoiceHint] = useState<string | null>(null);
 	const taRef = useRef<HTMLTextAreaElement>(null);
 	const maxHeight = pill ? 160 : 100;
-	const resolvedVoice = resolveComposerVoice(voice);
+	const resolvedVoice = resolveComposerVoice(voice, hasNativeRecorder());
 	const cleanupModel = useDefaultCleanupModel();
 
 	// Drop a cleaned voice transcript into the composer for review (never
