@@ -5,12 +5,14 @@
 import { expect, test } from "bun:test";
 import {
   back,
+  backIsAvailable,
   baseScreen,
   canGoBack,
   goTo,
   HOME,
   INITIAL_STACK,
   push,
+  resolveBack,
   screen,
   top,
   type NavStack,
@@ -88,4 +90,22 @@ test("Settings is an entry, and the screen under it keeps drawing", () => {
 test("baseScreen falls back to home when nothing but Settings is open", () => {
   expect(baseScreen([HOME, screen("settings")]).kind).toBe("home");
   expect(baseScreen([screen("settings")]).kind).toBe("home");
+});
+
+test("back closes an open overlay before it touches the stack", () => {
+  const deep: NavStack = [HOME, screen("briefing"), screen("article")];
+  expect(resolveBack(deep, false)).toBe("pop");
+  // The info call is not an entry, and popping under it would leave it on
+  // screen over a screen the reader never chose.
+  expect(resolveBack(deep, true)).toBe("dismissOverlay");
+});
+
+test("an overlay on the floor is still something to go back from", () => {
+  // The onboarding call opens from the home screen, where the stack has
+  // nothing to pop: back has to close it rather than fall through to Android.
+  expect(resolveBack(INITIAL_STACK, false)).toBe("none");
+  expect(resolveBack(INITIAL_STACK, true)).toBe("dismissOverlay");
+  expect(backIsAvailable(INITIAL_STACK, false)).toBe(false);
+  expect(backIsAvailable(INITIAL_STACK, true)).toBe(true);
+  expect(backIsAvailable([HOME, screen("briefing")], false)).toBe(true);
 });
