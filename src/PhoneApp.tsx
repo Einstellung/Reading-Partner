@@ -4,8 +4,11 @@
 // opens a book, so none of App's reading state exists here.
 //
 // The briefing pipeline, the article cache and the info call stay in InfoHome,
-// which both shells mount; this file owns which screen is showing, the kept
-// articles, settings and sync.
+// which both shells mount; this file owns where the reader is — a navigation
+// stack (nav-stack.ts) whose floor is home — plus the kept articles, settings
+// and sync.
+//
+// Back has one definition, `goBack`, and every top bar button reaches it.
 
 import { useCallback, useEffect, useState } from "react";
 import { onCorruptFile } from "./platform/app/atomic-fs";
@@ -28,20 +31,27 @@ import {
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import PhoneHome from "./ui/components/phone/PhoneHome";
 import SavedList from "./ui/components/phone/SavedList";
+import {
+  back,
+  baseScreen,
+  goTo,
+  INITIAL_STACK,
+  push,
+  screen,
+  top,
+  type NavStack,
+  type PhoneScreen,
+} from "./ui/components/phone/nav-stack";
 import SavedArticleView from "./ui/components/library/SavedArticleView";
 import SettingsView from "./ui/components/SettingsView";
 import Toast, { useToasts } from "./ui/components/common/Toast";
 import { useSyncHealth } from "./ui/components/common/useSyncHealth";
 
-// The screens this shell navigates between. The first four are InfoHome's, under
-// their phone names; "saved" is this shell's own.
-type PhoneScreen = "home" | "briefing" | "article" | "sources" | "saved";
-
-// InfoHome's screen for a phone screen, or null on the ones it does not draw.
+// InfoHome's screen for a stack entry, or null on the ones it does not draw.
 // Null keeps it mounted with its pipeline and its opened article intact, the
 // same way App parks it while the reader is open.
-function infoScreenFor(screen: PhoneScreen): HomeScreen | null {
-  switch (screen) {
+function infoScreenFor(base: PhoneScreen): HomeScreen | null {
+  switch (base.kind) {
     case "home":
       return "vestibule";
     case "briefing":
@@ -56,15 +66,17 @@ function infoScreenFor(screen: PhoneScreen): HomeScreen | null {
 }
 
 export default function PhoneApp() {
-  const [screen, setScreen] = useState<PhoneScreen>("home");
-  // The kept articles (docs/21), and the one being read. Fixed to the Brief
-  // topic: the phone has no other place to file one from.
+  const [stack, setStack] = useState<NavStack>(INITIAL_STACK);
+  // The kept articles (docs/21). Fixed to the Brief topic: the phone has no
+  // other place to file one from. The one being read is a stack entry.
   const [savedArticles, setSavedArticles] = useState<SavedArticle[]>([]);
-  const [openSaved, setOpenSaved] = useState<SavedArticle | null>(null);
   const [settings, setSettings] = useState<Settings>({ ...DEFAULT_SETTINGS });
-  const [showSettings, setShowSettings] = useState(false);
   const [providersInfo, setProvidersInfo] = useState<ProviderInfo[]>([]);
   const { toasts, push: pushToast, dismiss: dismissToast } = useToasts();
+
+  const base = baseScreen(stack);
+  const showSettings = top(stack).kind === "settings";
+  const goBack = useCallback(() => setStack((s) => back(s)), []);
 
   const refreshSavedArticles = useCallback(async () => {
     const all = await loadSavedArticles().catch((): SavedArticle[] => []);
@@ -132,13 +144,16 @@ export default function PhoneApp() {
     providersInfo.find((p) => p.id === settings.defaultProviderId)?.configured
   );
 
-  // InfoHome navigates in its own vocabulary; "library" cannot arrive, since the
-  // phone home screen has no way there.
+  // InfoHome navigates by naming a destination, and uses the same call for its
+  // own top bar backs ("briefing" from an article). goTo unwinds to a screen
+  // already on the stack, so those stay backs instead of stacking a second copy.
+  // "library" cannot arrive: the phone home screen has no way there.
   const onNavigate = useCallback((next: HomeScreen) => {
-    setScreen(next === "vestibule" || next === "library" ? "home" : next);
+    const kind = next === "vestibule" || next === "library" ? "home" : next;
+    setStack((s) => goTo(s, screen(kind)));
   }, []);
 
-  const openSettings = useCallback(() => setShowSettings(true), []);
+  const openSettings = useCallback(() => setStack((s) => push(s, screen("settings"))), []);
 
   return (
     // Safe-area insets (viewport-fit=cover): the notch and the home indicator.
@@ -156,7 +171,7 @@ export default function PhoneApp() {
           above them would cost a phone a line of reading height for nothing. */}
       <main className="relative min-h-0 flex-1">
         <InfoHome
-          screen={infoScreenFor(screen)}
+          screen={infoScreenFor(base)}
           onNavigate={onNavigate}
           configured={configured}
           onOpenSettings={openSettings}
@@ -165,26 +180,23 @@ export default function PhoneApp() {
             <PhoneHome
               launch={launch}
               savedCount={savedArticles.length}
-              onOpenSaved={() => setScreen("saved")}
+              onOpenSaved={() => setStack((s) => push(s, screen("saved")))}
               settingsAlert={syncReport.alert !== "none"}
             />
           )}
         />
 
-        {screen === "saved" &&
-          (openSaved ? (
-            <SavedArticleView
-              article={openSaved}
-              backLabel="Saved"
-              onBack={() => setOpenSaved(null)}
-            />
-          ) : (
-            <SavedList
-              articles={savedArticles}
-              onOpen={setOpenSaved}
-              onBack={() => setScreen("home")}
-            />
-          ))}
+        {base.kind === "saved" && (
+          <SavedList
+            articles={savedArticles}
+            onOpen={(article) => setStack((s) => push(s, { kind: "savedArticle", article }))}
+            onBack={goBack}
+          />
+        )}
+
+        {base.kind === "savedArticle" && (
+          <SavedArticleView article={base.article} backLabel="Saved" onBack={goBack} />
+        )}
       </main>
 
       <Toast toasts={toasts} onDismiss={dismissToast} />
@@ -196,7 +208,7 @@ export default function PhoneApp() {
             setSettings(next);
             saveSettings(next);
           }}
-          onClose={() => setShowSettings(false)}
+          onClose={goBack}
         />
       )}
     </div>
