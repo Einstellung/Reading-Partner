@@ -21,7 +21,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { runAgentTurn } from "../../../ai/agent";
 import { loadSettings, toReasoning } from "../../../platform/app/settings";
 import { appendMessage, createThread, getThread, loadThreads, patchThreadMessage } from "../../../platform/app/threads";
-import { buildLiveCompanionTools } from "../../../info/sources/source-live";
+import { buildLiveCompanionTools } from "../../../info/companion/companion-live";
 import { companionToolStatusLabel } from "../../../info/companion/companion-tools";
 import {
   BRIEFING_CARD_ID,
