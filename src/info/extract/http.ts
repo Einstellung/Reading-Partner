@@ -2,11 +2,11 @@
 // go through the http plugin (the webview's CSP/CORS never sees them; the
 // https://* scope in capabilities/default.json allows the hosts), outside Tauri
 // the native fetch is used so bun/dev at least runs. Both feeds gate on a
-// browser User-Agent (see sources.ts), so it is forced on the plugin path.
+// browser User-Agent (see user-agent.ts), so it is forced on the plugin path.
 
 import { cleanTauriFetch } from "../../platform/app/tauri-fetch";
 import type { ImageBytes } from "./inline-images";
-import { INFO_USER_AGENT } from "../sources/sources";
+import { INFO_USER_AGENT } from "./user-agent";
 
 export type FetchFn = (url: string, init?: RequestInit) => Promise<Response>;
 
