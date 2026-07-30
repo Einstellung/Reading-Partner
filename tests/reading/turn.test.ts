@@ -114,14 +114,16 @@ beforeEach(() => {
 test("companion turn: reading tools only, kickoff as the first message", async () => {
   const turn = await buildReadingTurn(input());
   expect(turn).not.toBeNull();
-  expect(names(turn!.tools)).toEqual(["read_pages", "search_topic"]);
+  expect(names(turn!.tools)).toEqual(["read_pages", "search_papers", "search_topic"]);
   expect(turn!.messages).toEqual([{ role: "user", text: EXPLAIN_KICKOFF }]);
   expect(turn!.systemPrompt).toContain("inline caches");
 });
 
+// search_papers is the one tool that does not depend on the book: a book with no
+// text layer mounts nothing that can read it, and the literature is still open.
 test("a book with no text layer gets no read_pages tool", async () => {
   const turn = await buildReadingTurn(input({ fulltext: fulltext("no-text-layer") }));
-  expect(names(turn!.tools)).toEqual([]);
+  expect(names(turn!.tools)).toEqual(["search_papers"]);
 });
 
 test("a topic id mounts the memory tools", async () => {
@@ -133,6 +135,7 @@ test("a topic id mounts the memory tools", async () => {
     "memory_search",
     "memory_update",
     "read_pages",
+    "search_papers",
     "search_topic",
   ]);
 });
@@ -140,7 +143,7 @@ test("a topic id mounts the memory tools", async () => {
 test("a figure index mounts view_figure and the catalog", async () => {
   const figures: Figure[] = [{ id: "1", page: 2, caption: "Inline cache layout", bbox: null }];
   const turn = await buildReadingTurn(input({ figures }));
-  expect(names(turn!.tools)).toEqual(["read_pages", "search_topic", "view_figure"]);
+  expect(names(turn!.tools)).toEqual(["read_pages", "search_papers", "search_topic", "view_figure"]);
   expect(turn!.systemPrompt).toContain("[fig:1]");
 });
 
@@ -148,7 +151,14 @@ test("a figure index mounts view_figure and the catalog", async () => {
 // same flag, so the paper tools mount exactly once in either mode.
 test("companion mode with a live pipeline: source + paper tools, mounted once", async () => {
   const turn = await buildReadingTurn(input({ getPipeline: () => pipeline(prepState()) }));
-  expect(names(turn!.tools)).toEqual(["add_source", "read_note", "read_pages", "read_paper", "search_topic"]);
+  expect(names(turn!.tools)).toEqual([
+    "add_source",
+    "read_note",
+    "read_pages",
+    "read_paper",
+    "search_papers",
+    "search_topic",
+  ]);
   expect(turn!.systemPrompt).toContain("add_source");
 });
 
@@ -156,20 +166,45 @@ test("classroom mode with a live pipeline: source + paper tools, mounted once", 
   const turn = await buildReadingTurn(
     input({ classroom: true, getPipeline: () => pipeline(prepState()) }),
   );
-  expect(names(turn!.tools)).toEqual(["add_source", "read_note", "read_pages", "read_paper", "search_topic"]);
+  expect(names(turn!.tools)).toEqual([
+    "add_source",
+    "read_note",
+    "read_pages",
+    "read_paper",
+    "search_papers",
+    "search_topic",
+  ]);
 });
 
 test("classroom mode without a plan yet mounts no paper tools", async () => {
   const turn = await buildReadingTurn(
     input({ classroom: true, getPipeline: () => pipeline(null) }),
   );
-  expect(names(turn!.tools)).toEqual(["add_source", "read_pages", "search_topic"]);
+  expect(names(turn!.tools)).toEqual(["add_source", "read_pages", "search_papers", "search_topic"]);
 });
 
 test("no pipeline means no link ingestion", async () => {
   const turn = await buildReadingTurn(input({ classroom: true }));
-  expect(names(turn!.tools)).toEqual(["read_pages", "search_topic"]);
+  expect(names(turn!.tools)).toEqual(["read_pages", "search_papers", "search_topic"]);
   expect(turn!.systemPrompt).not.toContain("add_source");
+});
+
+// docs/24: the literature question can arrive on any page of any book, so
+// search_papers is not gated on classroom mode, on a prep pipeline, or on the book
+// having a text layer — unlike everything else here.
+test("search_papers is mounted on every reading turn, with its prompt line", async () => {
+  const cases = [
+    input(),
+    input({ classroom: true }),
+    input({ fulltext: fulltext("no-text-layer") }),
+    input({ getPipeline: () => pipeline(prepState()) }),
+    input({ annotationId: "" }),
+  ];
+  for (const c of cases) {
+    const turn = await buildReadingTurn(c);
+    expect(names(turn!.tools)).toContain("search_papers");
+    expect(turn!.systemPrompt).toContain("search_papers");
+  }
 });
 
 test("classroom mode swaps the system prompt", async () => {

@@ -43,3 +43,14 @@ export {
   type SourceIngestor,
   type IngestResult,
 } from "./source-tool";
+export {
+  searchPapers,
+  LIBRARIES,
+  LIBRARY_LABELS,
+  type PaperCandidate,
+  type PaperLibrary,
+  type PaperSearchFn,
+  type PaperSearchOptions,
+  type PaperSearchResult,
+} from "./paper-search";
+export { buildPaperSearchTools, SEARCH_PAPERS_PROMPT } from "./search-tool";

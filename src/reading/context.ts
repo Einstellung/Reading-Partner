@@ -74,6 +74,8 @@ export function toolStatusLabel(name: string, args: Record<string, any>): string
       return `Searching the topic for “${args.query}”`;
     case "read_annotations":
       return `Reading your notes on ${args.material}`;
+    case "search_papers":
+      return `Searching the literature for “${args.query}”`;
     case "memory_search":
       return `Searching memory for “${args.query}”`;
     case "memory_read":

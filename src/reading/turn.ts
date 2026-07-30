@@ -1,8 +1,8 @@
-// Assembly of one reading-companion turn (M6/M9, docs/03, docs/09, docs/14):
-// system prompt, tool set and replayed history for the AI-pen bubble and the
-// book-level thread. Extracted from App so the branching (classroom vs
-// companion, figure tools, link ingestion, memory, history trimming) is
-// testable on its own. Pure assembly plus reads — it never touches React state
+// Assembly of one reading-companion turn (M6/M9, docs/03, docs/09, docs/14,
+// docs/24): system prompt, tool set and replayed history for the AI-pen bubble and
+// the book-level thread. Extracted from App so the branching (classroom vs
+// companion, figure tools, link ingestion, literature search, memory, history
+// trimming) is testable on its own. Pure assembly plus reads — it never touches React state
 // and never starts the stream; the caller owns runAgentTurn.
 
 import type { Api, Context as PiContext, Model } from "@earendil-works/pi-ai";
@@ -54,6 +54,9 @@ import { parseNote } from "./prep/notes";
 import { buildClassroomSystemPrompt, type ClassroomNote } from "./prep/classroom";
 import { buildClassroomTools } from "./prep/tools";
 import { ADD_SOURCE_PROMPT, buildSourceTools } from "./prep/source-tool";
+import { prepFetch } from "./prep/http";
+import { searchPapers, type PaperSearchFn } from "./prep/paper-search";
+import { buildPaperSearchTools, SEARCH_PAPERS_PROMPT } from "./prep/search-tool";
 import type { PrepPipeline } from "./prep/pipeline";
 
 // Auto-explanation kickoff (docs/03: the bubble starts explaining, unprompted).
@@ -325,6 +328,27 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
       tools = [...tools, ...buildClassroomTools(() => getPipeline()?.snapshot().state ?? prepState)];
     }
   }
+
+  // Whether anything that reads *this book* was wired. Captured before the
+  // literature search joins the list, because the tools paragraph in the system
+  // prompt describes the reading tools by name: a book with no text layer mounts
+  // none of them, and search_papers must not make that paragraph appear.
+  const hasReadingTools = tools.length > 0;
+  // Academic literature search (docs/24), mounted on every reading turn. Not
+  // gated on the prep pipeline or on classroom mode: "what is the latest research
+  // on this" is a question the reader can have on any page of any book, and a tool
+  // that is only sometimes there is one the model cannot learn to reach for.
+  tools = [
+    ...tools,
+    ...buildPaperSearchTools({
+      search: ((query, opts) =>
+        searchPapers(query, opts, {
+          fetchFn: prepFetch,
+          s2ApiKey: s.semanticScholarApiKey ?? undefined,
+        })) satisfies PaperSearchFn,
+      canIngest: canIngestUrl,
+    }),
+  ];
   // The cross-scenario user profile: who the companion is reading with, so it
   // pitches explanation depth to their background. Empty profile → no section.
   const profileSection = readerProfileSection(await assembleIdentity().catch(() => ""));
@@ -353,7 +377,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
         selectionComment,
         notes: classroomNotes,
         prep: prepState,
-        hasTools: tools.length > 0,
+        hasTools: hasReadingTools,
         figureCatalog: catalog,
         inlineSurvey: !dropped.has("classroom-inline"),
       });
@@ -373,7 +397,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
         fulltextAvailable: currentFulltext?.status === "ok",
         materials: dropped.has("booklist-thin") ? booklistThin : booklist,
         figureCatalog: catalog,
-        hasTools: tools.length > 0,
+        hasTools: hasReadingTools,
         bookLevel: isBook,
         aiLanguage: s.aiLanguage,
       });
@@ -383,6 +407,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     if (profileSection && !dropped.has("reader-profile")) prompt += "\n\n" + profileSection;
     if (notesOverview && !dropped.has("notes-overview")) prompt += "\n\n" + notesOverview;
     if (canIngestUrl) prompt += "\n\n" + ADD_SOURCE_PROMPT;
+    prompt += "\n\n" + SEARCH_PAPERS_PROMPT;
     return prompt;
   }
 
