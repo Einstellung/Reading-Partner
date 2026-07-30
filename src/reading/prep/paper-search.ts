@@ -48,11 +48,18 @@ export interface PaperCandidate {
   doi: string | null;
   arxivId: string | null;
   pmid: string | null;
+  // The two library-native ids the citation graph walks on (citations.ts):
+  // OpenAlex's `cites:` filter takes the first, S2's path segments the second.
+  openAlexId: string | null;
+  s2PaperId: string | null;
   venue: string | null;
   // Where to go next: an open-access PDF when the library named one, else a
   // landing page. This is what add_source would ingest.
   url: string | null;
   abstract: string;
+  // How often the paper has been cited, when the library said. The ranking signal
+  // for a citation walk, and a rough weight in a candidate list.
+  citedByCount: number | null;
 }
 
 // A library that did not answer, and what to say about it. A failure is always
@@ -132,9 +139,13 @@ export function fromArxiv(e: ArxivEntry): PaperCandidate {
     doi: null,
     arxivId: e.id,
     pmid: null,
+    openAlexId: null,
+    s2PaperId: null,
     venue: "arXiv preprint",
     url: e.pdfUrl,
     abstract: e.summary,
+    // The Atom feed carries no citation count; arXiv does not track one.
+    citedByCount: null,
   };
 }
 
@@ -147,9 +158,12 @@ export function fromPubmed(a: PubmedArticle): PaperCandidate {
     doi: a.doi,
     arxivId: null,
     pmid: a.pmid,
+    openAlexId: null,
+    s2PaperId: null,
     venue: a.journal,
     url: pubmedUrl(a.pmid),
     abstract: a.abstract,
+    citedByCount: null,
   };
 }
 
@@ -162,9 +176,12 @@ export function fromOpenAlex(h: OpenAlexHit): PaperCandidate {
     doi: h.doi,
     arxivId: h.arxivId,
     pmid: null,
+    openAlexId: h.openAlexId,
+    s2PaperId: null,
     venue: h.venue,
     url: h.url,
     abstract: h.abstract,
+    citedByCount: h.citedByCount,
   };
 }
 
@@ -177,9 +194,12 @@ export function fromS2(h: S2Hit): PaperCandidate {
     doi: h.doi,
     arxivId: h.arxivId,
     pmid: h.pmid,
+    openAlexId: null,
+    s2PaperId: h.paperId,
     venue: h.venue,
     url: h.url,
     abstract: h.abstract,
+    citedByCount: h.citationCount,
   };
 }
 
@@ -197,6 +217,8 @@ export function candidateKeys(c: PaperCandidate): string[] {
   if (doi) keys.push(`doi:${doi}`);
   if (c.arxivId) keys.push(`arxiv:${c.arxivId.toLowerCase()}`);
   if (c.pmid) keys.push(`pmid:${c.pmid}`);
+  if (c.openAlexId) keys.push(`openalex:${c.openAlexId}`);
+  if (c.s2PaperId) keys.push(`s2:${c.s2PaperId}`);
   const title = normalizeTitle(c.title);
   if (title) keys.push(`title:${title}`);
   return keys;
@@ -212,9 +234,14 @@ function absorb(into: PaperCandidate, dup: PaperCandidate): void {
   into.doi ??= dup.doi;
   into.arxivId ??= dup.arxivId;
   into.pmid ??= dup.pmid;
+  into.openAlexId ??= dup.openAlexId;
+  into.s2PaperId ??= dup.s2PaperId;
   into.venue ??= dup.venue;
   into.url ??= dup.url;
   into.year ??= dup.year;
+  // OpenAlex and S2 count citations differently; whoever answered first is close
+  // enough for a signal shown as "cited N times".
+  into.citedByCount ??= dup.citedByCount;
   if (dup.abstract.length > into.abstract.length) into.abstract = dup.abstract;
   if (dup.authors.length > into.authors.length) into.authors = dup.authors;
 }
@@ -272,11 +299,23 @@ export function formatAuthors(authors: string[]): string {
   return authors.length > AUTHORS_SHOWN ? `${shown} et al.` : shown;
 }
 
-function candidateBlock(c: PaperCandidate, index: number): string {
+// One rendered candidate. Shared with the citation walk (citations.ts) so a paper
+// looks the same however it was found; `abstractChars` is the only thing the walk
+// varies, since it returns more rows per call. Zero drops the abstract line, for a
+// list that only has to identify papers rather than let the model choose between
+// them.
+export function candidateBlock(
+  c: PaperCandidate,
+  index: number,
+  abstractChars = ABSTRACT_CHARS,
+): string {
   const meta = [
     c.year !== null ? String(c.year) : "year unknown",
     formatAuthors(c.authors),
     c.venue ?? null,
+    // A number check, not a null check: a library that omits the field leaves it
+    // undefined, and "cited undefined×" is worse than saying nothing.
+    typeof c.citedByCount === "number" ? `cited ${c.citedByCount}×` : null,
     c.libraries.map((l) => LIBRARY_LABELS[l]).join(" + "),
   ].filter((p): p is string => p !== null);
   const ids = [
@@ -287,8 +326,10 @@ function candidateBlock(c: PaperCandidate, index: number): string {
   ].filter((p): p is string => p !== null);
   const lines = [`${index}. ${c.title}`, `   ${meta.join(" · ")}`];
   if (ids.length) lines.push(`   ${ids.join(" · ")}`);
-  const abstract = clipAbstract(c.abstract);
-  lines.push(`   ${abstract ? abstract : "(no abstract available)"}`);
+  if (abstractChars > 0) {
+    const abstract = clipAbstract(c.abstract, abstractChars);
+    lines.push(`   ${abstract ? abstract : "(no abstract available)"}`);
+  }
   return lines.join("\n");
 }
 

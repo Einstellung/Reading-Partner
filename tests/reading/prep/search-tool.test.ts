@@ -18,9 +18,12 @@ function hit(title: string): PaperCandidate {
     doi: "10.1/x",
     arxivId: null,
     pmid: "1",
+    openAlexId: null,
+    s2PaperId: null,
     venue: "PNAS",
     url: "https://pubmed.ncbi.nlm.nih.gov/1/",
     abstract: "An abstract.",
+    citedByCount: null,
   };
 }
 

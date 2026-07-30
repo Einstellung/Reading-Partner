@@ -27,9 +27,12 @@ function candidate(over: Partial<PaperCandidate> = {}): PaperCandidate {
     doi: null,
     arxivId: null,
     pmid: null,
+    openAlexId: null,
+    s2PaperId: null,
     venue: "PNAS",
     url: null,
     abstract: "Brains scale.",
+    citedByCount: null,
     ...over,
   };
 }
