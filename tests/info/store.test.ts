@@ -1,11 +1,12 @@
-// Briefing store date logic (src/info/briefing/store.ts) plus the item-snapshot leaning.
-// Only the pure helpers are exercised here; the fs read/write paths need the
-// Tauri plugin. Run: bun test.
+// Briefing store date logic (src/info/briefing/store.ts) plus the item-snapshot
+// leaning and the inlined-HTML merge. Only the pure helpers are exercised here;
+// the fs read/write paths need the Tauri plugin. Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
   leanItems,
   localDateString,
+  mergeInlinedHtml,
   staleDailyFiles,
   todayLocal,
 } from "../../src/info/briefing/store";
@@ -92,4 +93,16 @@ test("staleDailyFiles ignores names whose date suffix is malformed", () => {
 
 test("staleDailyFiles on an empty listing is empty", () => {
   expect(staleDailyFiles([], "2026-07-25")).toEqual([]);
+});
+
+test("mergeInlinedHtml swaps contentHtml, preserves textContent", () => {
+  const articles = { x: { contentHtml: "<p>old</p>", textContent: "old text" } };
+  const merged = mergeInlinedHtml(articles, "x", "<p>new</p>");
+  expect(merged.x).toEqual({ contentHtml: "<p>new</p>", textContent: "old text" });
+  expect(articles.x.contentHtml).toBe("<p>old</p>"); // input not mutated
+});
+
+test("mergeInlinedHtml is a no-op (same reference) for an unknown item", () => {
+  const articles = { x: { contentHtml: "<p>a</p>" } };
+  expect(mergeInlinedHtml(articles, "y", "<p>b</p>")).toBe(articles);
 });

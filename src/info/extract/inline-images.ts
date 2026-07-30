@@ -7,9 +7,8 @@
 //
 // This module is the pure, testable half: src extraction, src rewrite, caps,
 // and the data-URL encoder. The fetch is injected (see fetchImageBytes in
-// http.ts); the orchestration and persist-back live in the article view host.
-
-import type { CachedArticle } from "../briefing/store";
+// http.ts); the orchestration lives in the article view host and the persist-back
+// in the briefing store, which owns the article cache the HTML goes into.
 
 // Caps: an article rarely has more than a handful of real images, and a data:
 // URL bloats the cache by ~4/3 of the image's bytes, so bound both counts.
@@ -104,16 +103,4 @@ export async function inlineArticleImages(
     opts.onProgress?.(current);
   }
   return current;
-}
-
-// Merge inlined HTML back into a day's article record, preserving textContent.
-// Pure so the persist-back path is testable without the Tauri fs plugin.
-export function mergeInlinedHtml(
-  articles: Record<string, CachedArticle>,
-  itemId: string,
-  contentHtml: string,
-): Record<string, CachedArticle> {
-  const prev = articles[itemId];
-  if (!prev) return articles;
-  return { ...articles, [itemId]: { ...prev, contentHtml } };
 }

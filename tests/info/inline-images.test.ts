@@ -5,7 +5,6 @@ import {
   bytesToDataUrl,
   extractImageSrcs,
   inlineArticleImages,
-  mergeInlinedHtml,
   removeImage,
   rewriteImageSrc,
   type ImageBytes,
@@ -93,16 +92,4 @@ test("inlineArticleImages honors the image cap", async () => {
   const out = await inlineArticleImages(html, fetchImage, { maxImages: 2 });
   expect(calls).toBe(2);
   expect(out).toContain("https://cdn/2.jpg"); // beyond cap, left external (CSS hides it)
-});
-
-test("mergeInlinedHtml swaps contentHtml, preserves textContent", () => {
-  const articles = { x: { contentHtml: "<p>old</p>", textContent: "old text" } };
-  const merged = mergeInlinedHtml(articles, "x", "<p>new</p>");
-  expect(merged.x).toEqual({ contentHtml: "<p>new</p>", textContent: "old text" });
-  expect(articles.x.contentHtml).toBe("<p>old</p>"); // input not mutated
-});
-
-test("mergeInlinedHtml is a no-op (same reference) for an unknown item", () => {
-  const articles = { x: { contentHtml: "<p>a</p>" } };
-  expect(mergeInlinedHtml(articles, "y", "<p>b</p>")).toBe(articles);
 });

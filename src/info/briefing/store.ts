@@ -11,7 +11,6 @@ import {
   remove,
 } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
-import { mergeInlinedHtml } from "../extract/inline-images";
 import { INFO_RUN_VERSION, type InfoRunState } from "./run-state";
 import type { Briefing, InfoItem } from "./types";
 
@@ -206,6 +205,18 @@ export async function pruneStaleDailyFiles(today: string): Promise<void> {
       // Locked or already gone; keep going through the rest.
     }
   }
+}
+
+// Merge inlined HTML back into a day's article record, preserving textContent.
+// Pure so the persist-back path is testable without the Tauri fs plugin.
+export function mergeInlinedHtml(
+  articles: Record<string, CachedArticle>,
+  itemId: string,
+  contentHtml: string,
+): Record<string, CachedArticle> {
+  const prev = articles[itemId];
+  if (!prev) return articles;
+  return { ...articles, [itemId]: { ...prev, contentHtml } };
 }
 
 // Persist image-inlined article HTML back into the day's cache, preserving the
