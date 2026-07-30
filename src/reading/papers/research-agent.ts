@@ -15,7 +15,11 @@
 // case-insensitively) on the OAuth channel, so a tool whose name collides goes out
 // impersonating a different tool with different semantics (docs/24).
 
-import { DEFAULT_SUBAGENT_ROUNDS, type SubagentDefinition, type SubagentProgress } from "../../ai/subagent";
+import {
+  DEFAULT_SUBAGENT_ROUNDS,
+  type SubagentDefinition,
+  type SubagentProgress,
+} from "../../ai/subagent";
 import type { AgentTool } from "../../ai/agent";
 import { buildCitationTools } from "./citation-tool";
 import type { CitationDeps } from "./citations";
