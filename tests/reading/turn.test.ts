@@ -114,7 +114,13 @@ beforeEach(() => {
 test("companion turn: reading tools only, kickoff as the first message", async () => {
   const turn = await buildReadingTurn(input());
   expect(turn).not.toBeNull();
-  expect(names(turn!.tools)).toEqual(["read_pages", "search_papers", "search_topic"]);
+  expect(names(turn!.tools)).toEqual([
+    "find_paper",
+    "read_pages",
+    "search_papers",
+    "search_topic",
+    "walk_citations",
+  ]);
   expect(turn!.messages).toEqual([{ role: "user", text: EXPLAIN_KICKOFF }]);
   expect(turn!.systemPrompt).toContain("inline caches");
 });
@@ -123,7 +129,7 @@ test("companion turn: reading tools only, kickoff as the first message", async (
 // text layer mounts nothing that can read it, and the literature is still open.
 test("a book with no text layer gets no read_pages tool", async () => {
   const turn = await buildReadingTurn(input({ fulltext: fulltext("no-text-layer") }));
-  expect(names(turn!.tools)).toEqual(["search_papers"]);
+  expect(names(turn!.tools)).toEqual(["find_paper", "search_papers", "walk_citations"]);
 });
 
 test("a topic id mounts the memory tools", async () => {
@@ -131,19 +137,28 @@ test("a topic id mounts the memory tools", async () => {
     input({ context: { ...input().context, topicId: "topic-1" } }),
   );
   expect(names(turn!.tools)).toEqual([
+    "find_paper",
     "memory_read",
     "memory_search",
     "memory_update",
     "read_pages",
     "search_papers",
     "search_topic",
+    "walk_citations",
   ]);
 });
 
 test("a figure index mounts view_figure and the catalog", async () => {
   const figures: Figure[] = [{ id: "1", page: 2, caption: "Inline cache layout", bbox: null }];
   const turn = await buildReadingTurn(input({ figures }));
-  expect(names(turn!.tools)).toEqual(["read_pages", "search_papers", "search_topic", "view_figure"]);
+  expect(names(turn!.tools)).toEqual([
+    "find_paper",
+    "read_pages",
+    "search_papers",
+    "search_topic",
+    "view_figure",
+    "walk_citations",
+  ]);
   expect(turn!.systemPrompt).toContain("[fig:1]");
 });
 
@@ -153,11 +168,13 @@ test("companion mode with a live pipeline: source + paper tools, mounted once", 
   const turn = await buildReadingTurn(input({ getPipeline: () => pipeline(prepState()) }));
   expect(names(turn!.tools)).toEqual([
     "add_source",
+    "find_paper",
     "read_note",
     "read_pages",
     "read_paper",
     "search_papers",
     "search_topic",
+    "walk_citations",
   ]);
   expect(turn!.systemPrompt).toContain("add_source");
 });
@@ -168,11 +185,13 @@ test("classroom mode with a live pipeline: source + paper tools, mounted once", 
   );
   expect(names(turn!.tools)).toEqual([
     "add_source",
+    "find_paper",
     "read_note",
     "read_pages",
     "read_paper",
     "search_papers",
     "search_topic",
+    "walk_citations",
   ]);
 });
 
@@ -180,19 +199,32 @@ test("classroom mode without a plan yet mounts no paper tools", async () => {
   const turn = await buildReadingTurn(
     input({ classroom: true, getPipeline: () => pipeline(null) }),
   );
-  expect(names(turn!.tools)).toEqual(["add_source", "read_pages", "search_papers", "search_topic"]);
+  expect(names(turn!.tools)).toEqual([
+    "add_source",
+    "find_paper",
+    "read_pages",
+    "search_papers",
+    "search_topic",
+    "walk_citations",
+  ]);
 });
 
 test("no pipeline means no link ingestion", async () => {
   const turn = await buildReadingTurn(input({ classroom: true }));
-  expect(names(turn!.tools)).toEqual(["read_pages", "search_papers", "search_topic"]);
+  expect(names(turn!.tools)).toEqual([
+    "find_paper",
+    "read_pages",
+    "search_papers",
+    "search_topic",
+    "walk_citations",
+  ]);
   expect(turn!.systemPrompt).not.toContain("add_source");
 });
 
-// docs/24: the literature question can arrive on any page of any book, so
-// search_papers is not gated on classroom mode, on a prep pipeline, or on the book
-// having a text layer — unlike everything else here.
-test("search_papers is mounted on every reading turn, with its prompt line", async () => {
+// docs/24: the literature question can arrive on any page of any book, so the three
+// literature tools are not gated on classroom mode, on a prep pipeline, or on the
+// book having a text layer — unlike everything else here.
+test("the literature tools are mounted on every reading turn, with their prompt lines", async () => {
   const cases = [
     input(),
     input({ classroom: true }),
@@ -202,9 +234,19 @@ test("search_papers is mounted on every reading turn, with its prompt line", asy
   ];
   for (const c of cases) {
     const turn = await buildReadingTurn(c);
-    expect(names(turn!.tools)).toContain("search_papers");
-    expect(turn!.systemPrompt).toContain("search_papers");
+    for (const tool of ["search_papers", "find_paper", "walk_citations"]) {
+      expect(names(turn!.tools)).toContain(tool);
+      expect(turn!.systemPrompt).toContain(tool);
+    }
   }
+});
+
+// The citation path is only reachable if the prompt says it exists: keyword search
+// is what the model reaches for unprompted, and the graph would go unused.
+test("the prompt points from the book's own citations into the recent literature", async () => {
+  const turn = await buildReadingTurn(input());
+  expect(turn!.systemPrompt).toContain("find_paper");
+  expect(turn!.systemPrompt).toContain("older than itself");
 });
 
 test("classroom mode swaps the system prompt", async () => {

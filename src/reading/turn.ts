@@ -57,6 +57,7 @@ import { ADD_SOURCE_PROMPT, buildSourceTools } from "./prep/source-tool";
 import { prepFetch } from "./prep/http";
 import { searchPapers, type PaperSearchFn } from "./prep/paper-search";
 import { buildPaperSearchTools, SEARCH_PAPERS_PROMPT } from "./prep/search-tool";
+import { buildCitationTools, SEARCH_CITATIONS_PROMPT } from "./prep/citation-tool";
 import type { PrepPipeline } from "./prep/pipeline";
 
 // Auto-explanation kickoff (docs/03: the bubble starts explaining, unprompted).
@@ -338,16 +339,21 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   // gated on the prep pipeline or on classroom mode: "what is the latest research
   // on this" is a question the reader can have on any page of any book, and a tool
   // that is only sometimes there is one the model cannot learn to reach for.
+  const literatureDeps = {
+    fetchFn: prepFetch,
+    s2ApiKey: s.semanticScholarApiKey ?? undefined,
+  };
   tools = [
     ...tools,
     ...buildPaperSearchTools({
       search: ((query, opts) =>
-        searchPapers(query, opts, {
-          fetchFn: prepFetch,
-          s2ApiKey: s.semanticScholarApiKey ?? undefined,
-        })) satisfies PaperSearchFn,
+        searchPapers(query, opts, literatureDeps)) satisfies PaperSearchFn,
       canIngest: canIngestUrl,
     }),
+    // The citation graph rides along with the topic search on the same reasoning:
+    // the reader's way into recent work often starts at a citation in the book they
+    // are holding, which does not depend on prep or on classroom mode either.
+    ...buildCitationTools({ ...literatureDeps, canIngest: canIngestUrl }),
   ];
   // The cross-scenario user profile: who the companion is reading with, so it
   // pitches explanation depth to their background. Empty profile → no section.
@@ -408,6 +414,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     if (notesOverview && !dropped.has("notes-overview")) prompt += "\n\n" + notesOverview;
     if (canIngestUrl) prompt += "\n\n" + ADD_SOURCE_PROMPT;
     prompt += "\n\n" + SEARCH_PAPERS_PROMPT;
+    prompt += "\n\n" + SEARCH_CITATIONS_PROMPT;
     return prompt;
   }
 
