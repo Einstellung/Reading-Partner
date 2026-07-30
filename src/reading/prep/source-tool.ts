@@ -7,7 +7,7 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../ai/agent";
-import { isHttpsUrl } from "./sources/url";
+import { isHttpsUrl } from "../sources";
 import type { PaperStatus } from "./types";
 
 export interface IngestResult {

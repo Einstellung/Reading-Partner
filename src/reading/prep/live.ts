@@ -10,7 +10,7 @@ import { FULLTEXT_VERSION, type Fulltext } from "../../fulltext/types";
 import { buildFigureCatalog, ensureFigures } from "../figures";
 import { loadSettings } from "../../platform/app/settings";
 import { recordParse } from "../../platform/app/structured-output";
-import { extractArticle } from "./sources/article";
+import { extractArticle, looksLikeHttpUrl, sniffContentType } from "../sources";
 import { fetchFromArxiv, normalizeArxivId } from "../papers/arxiv";
 import { fetchFromOpenAlex } from "../papers/openalex";
 import { fetchWithRetry } from "../papers/http";
@@ -23,7 +23,6 @@ import {
   uniqueSlug,
   PLAN_SYSTEM_PROMPT,
 } from "./plan";
-import { looksLikeHttpUrl, sniffContentType } from "./sources/url";
 import {
   loadPrepState,
   paperFulltextHash,

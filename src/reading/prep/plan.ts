@@ -6,7 +6,7 @@
 // Slug naming lives here too, and with it the other way a queued paper is minted
 // — from a link the user pasted rather than from the survey's reference list.
 
-import { resolveUrlSource } from "./sources/url";
+import { resolveUrlSource } from "../sources";
 import type { PrepChapter, PrepPaper, PrepReference } from "./types";
 import type { ParseTally } from "../../platform/app/structured-output";
 import type { Fulltext } from "../../fulltext/types";

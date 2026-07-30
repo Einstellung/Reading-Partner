@@ -1,4 +1,4 @@
-// Unit tests for URL reading + content sniffing (src/reading/prep/sources/url.ts).
+// Unit tests for URL reading + content sniffing (src/reading/sources/url.ts).
 // Run: bun test.
 
 import { expect, test } from "bun:test";
@@ -9,7 +9,7 @@ import {
   resolveUrlSource,
   slugBaseFromUrl,
   sniffContentType,
-} from "../../../src/reading/prep/sources/url";
+} from "../../../src/reading/sources/url";
 
 test("looksLikeHttpUrl / isHttpsUrl", () => {
   expect(looksLikeHttpUrl("https://a.test/x")).toBe(true);
