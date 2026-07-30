@@ -21,7 +21,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { runAgentTurn } from "../../../ai/agent";
 import { loadSettings, toReasoning } from "../../../platform/app/settings";
 import { appendMessage, createThread, getThread, loadThreads, patchThreadMessage } from "../../../platform/app/threads";
-import { buildLiveCompanionTools } from "../../../info/sources/source-live";
+import { buildLiveCompanionTools } from "../../../info/companion/companion-live";
 import { companionToolStatusLabel } from "../../../info/companion/companion-tools";
 import {
   BRIEFING_CARD_ID,
@@ -55,7 +55,8 @@ import {
 import type { ComposerVoice } from "../chat/chat";
 import type { ChatMessage } from "../../../ai/providers";
 import type { InfoPipeline } from "../../../info/briefing/pipeline";
-import type { ProbeConfirmCardData, ProfileUpdateCardData } from "../../../info/briefing/cards";
+import type { ProfileUpdateCardData } from "../../../info/briefing/cards";
+import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { ThreadMessage as UiMessage } from "../common/types";
 
 export interface InfoCallAnchor {

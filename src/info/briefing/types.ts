@@ -1,34 +1,7 @@
-// Data model for the daily info briefing (docs/16). An InfoItem is one fetched
-// article; a Briefing is the AI's triage of a day's items into tiers. Both are
-// derived and rebuildable: the briefing and the article cache stay out of sync
-// range, only the profile and feedback log travel between devices.
-
-export interface InfoItem {
-  // Stable hash of source + slug/url, so the same article keeps its id across
-  // refetches and the feedback log can reference it (see itemId below).
-  id: string;
-  // The source id (descriptor id, docs/17) — no longer a closed union, since
-  // sources are user data now.
-  source: string;
-  // The source's display name (descriptor.name), denormalized so triage prompts
-  // and briefing cards render a label without the descriptor at hand.
-  sourceName: string;
-  title: string;
-  url: string;
-  // ISO-ish string as the feed/API supplies it; may be "" if none was given.
-  publishedAt: string;
-  // Short list-view summary (jiqizhixin ships one; qbitai's is usually empty).
-  summary?: string;
-  // Full readable article HTML, sanitized at render time. Cached separately from
-  // the briefing (per day) so the article view and chat can read it.
-  contentHtml?: string;
-  // Plain text of the article, fed to triage (trimmed) and to the chat context.
-  textContent?: string;
-  // True when only a summary/headline was obtained (a discovery-layer-only
-  // source, a fetch that failed, or a paywall-truncated feed body). Triage marks
-  // these so the model does not pretend to have read the full text (docs/17).
-  summaryOnly?: boolean;
-}
+// Data model for the daily info briefing (docs/16): a Briefing is the AI's triage
+// of a day's items (sources/item.ts) into tiers. Derived and rebuildable — the
+// briefing and the article cache stay out of sync range, only the profile and
+// feedback log travel between devices.
 
 // Each tier references an item by id; the Briefing carries a denormalized
 // `items` map so the page can render titles/links without the article cache.

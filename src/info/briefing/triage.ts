@@ -7,7 +7,8 @@
 import { aiLanguageName, type AiLanguage } from "../../platform/app/settings";
 import type { ParseTally } from "../../platform/app/structured-output";
 import type { FeedbackEvent } from "../../memory/feedback";
-import type { InfoItem, TriageResult } from "./types";
+import type { TriageResult } from "./types";
+import type { InfoItem } from "../sources/item";
 
 // How much of each article's text the model sees. Enough to judge substance
 // without blowing up the prompt across ~30 items.

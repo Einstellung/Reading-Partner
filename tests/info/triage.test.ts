@@ -9,7 +9,7 @@ import {
   triageUserMessage,
 } from "../../src/info/briefing/triage";
 import type { FeedbackEvent } from "../../src/memory/feedback";
-import type { InfoItem } from "../../src/info/briefing/types";
+import type { InfoItem } from "../../src/info/sources/item";
 import { languageInstruction } from "../../src/platform/app/settings";
 
 const ITEMS: InfoItem[] = [

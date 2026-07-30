@@ -9,16 +9,16 @@
 import { fetchText, infoFetch, type FetchFn } from "../extract/http";
 import { itemId } from "../extract/id";
 import { htmlToText } from "../extract/sanitize";
+import type { ExtractReadable } from "../extract/readable-select";
 import { parseFeed, feedFieldBody } from "./feed";
 import {
   dotPath,
   pickString,
-  type ExtractReadable,
   type FieldPath,
   type JsonApiDiscovery,
   type SourceDescriptor,
 } from "./descriptor";
-import type { InfoItem } from "../briefing/types";
+import type { InfoItem } from "./item";
 
 export interface CollectDeps {
   fetchFn?: FetchFn;

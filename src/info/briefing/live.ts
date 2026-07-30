@@ -34,7 +34,8 @@ import {
   type ParseOutcome,
 } from "./triage";
 import type { FeedbackEvent } from "../../memory/feedback";
-import type { InfoItem, TriageResult } from "./types";
+import type { TriageResult } from "./types";
+import type { InfoItem } from "../sources/item";
 
 // One tool-less streaming call. `extra` lets the parse-retry append a corrective
 // nudge. Triage wants some deliberation but not a marathon, so it reuses the

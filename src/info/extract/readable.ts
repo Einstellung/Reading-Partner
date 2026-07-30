@@ -8,8 +8,12 @@
 import { Readability } from "@mozilla/readability";
 import Defuddle from "defuddle";
 import { sanitizeArticleHtml, htmlToText } from "./sanitize";
-import { pickExtraction, MIN_BODY_CHARS, type Extraction } from "./readable-select";
-import type { ExtractReadable } from "../sources/descriptor";
+import {
+  pickExtraction,
+  MIN_BODY_CHARS,
+  type Extraction,
+  type ExtractReadable,
+} from "./readable-select";
 
 function parseDoc(html: string, url: string): Document | null {
   if (typeof DOMParser === "undefined") return null;

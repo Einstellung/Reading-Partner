@@ -13,7 +13,8 @@ import {
   type InfoSourceRef,
 } from "../../src/info/briefing/pipeline";
 import type { InfoRunState } from "../../src/info/briefing/run-state";
-import type { Briefing, InfoItem, TriageResult } from "../../src/info/briefing/types";
+import type { Briefing, TriageResult } from "../../src/info/briefing/types";
+import type { InfoItem } from "../../src/info/sources/item";
 
 const TODAY = "2026-07-22";
 

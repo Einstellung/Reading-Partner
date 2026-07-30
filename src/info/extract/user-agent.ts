@@ -1,7 +1,7 @@
 // The default request identity for the info engine (docs/17). Endpoints and
-// per-source headers now live in the source descriptors (descriptor.ts /
-// builtins.ts); only the shared default User-Agent stays here, since the http
-// wrapper forces it onto every request when a descriptor doesn't override it.
+// per-source headers live in the source descriptors (sources/descriptor.ts /
+// sources/builtins.ts); the shared default User-Agent lives here, next to the
+// http wrapper that forces it onto every request a descriptor doesn't override.
 
 // A plain desktop-browser UA. Feeds/APIs reject the polite bot UA the prep
 // pipeline uses (arxiv/openalex), so this path presents as an ordinary browser.

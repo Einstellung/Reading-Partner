@@ -35,7 +35,8 @@ import {
   type SourceResult,
 } from "./run-state";
 import type { FeedbackEvent } from "../../memory/feedback";
-import type { Briefing, BriefingItemMeta, InfoItem, TriageResult } from "./types";
+import type { Briefing, BriefingItemMeta, TriageResult } from "./types";
+import type { InfoItem } from "../sources/item";
 
 export type { AiCallOptions };
 export type { CollectProgress, InfoSourceRef, SourceResult };

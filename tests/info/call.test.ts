@@ -13,7 +13,8 @@ import {
 } from "../../src/info/companion/call";
 import type { InfoSnapshot } from "../../src/info/briefing/pipeline";
 import type { Briefing } from "../../src/info/briefing/types";
-import type { ProbeConfirmCardData, ProfileUpdateCardData } from "../../src/info/briefing/cards";
+import type { ProfileUpdateCardData } from "../../src/info/briefing/cards";
+import type { ProbeConfirmCardData } from "../../src/info/sources/source-cards";
 
 const IDLE: InfoSnapshot = {
   briefing: null,

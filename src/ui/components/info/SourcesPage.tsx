@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { SourceDescriptor } from "../../../info/sources/descriptor";
 import type { SourceHealth } from "../../../info/sources/engine";
-import type { ProbeConfirmCardData } from "../../../info/briefing/cards";
+import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { ProbeAddOutcome } from "../../../info/sources/source-live";
 import { pipeLabel } from "../../../info/sources/probe";
 import { ProbeConfirmCard } from "./InfoCards";

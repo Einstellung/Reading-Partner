@@ -1,30 +1,12 @@
-// Chat-card payloads for the info add-source flow (docs/17). These are transient
-// UI data (never persisted, like the tool trace): a trial's result shown for
-// confirmation, and the first briefing's readiness/failure. Kept in the info
-// layer (not components/) so both the source tools and the card components import
-// one definition, matching the components -> info dependency direction.
+// Chat-card payloads for the info briefing (docs/17). These are transient UI data
+// (never persisted, like the tool trace): the first briefing's progress and its
+// readiness/failure, and a drafted profile change. Kept in the info layer (not
+// components/) so both the tools and the card components import one definition,
+// matching the components -> info dependency direction. The InfoCard union at the
+// bottom is the whole set the chat renders, add-source cards included.
 
-import type { SourceDescriptor } from "../sources/descriptor";
+import type { ProbeConfirmCardData } from "../sources/source-cards";
 import type { CollectProgress } from "./pipeline";
-
-export interface TrialSample {
-  title: string;
-  // Plain-text characters obtained for the article (body, else summary).
-  chars: number;
-  // True when the full body was retrieved (not a headline/summary only).
-  fullText: boolean;
-}
-
-// Shown after trial_source fetches 3 articles: the candidate source, its pipe
-// type in plain words, the samples, and an "Add source" button. `added` flips
-// once the user adds it so the button disables.
-export interface ProbeConfirmCardData {
-  kind: "probe-confirm";
-  descriptor: SourceDescriptor;
-  pipeLabel: string;
-  samples: TrialSample[];
-  added?: boolean;
-}
 
 // A persistent progress card shown while the first briefing generates in the
 // background: it updates in place from the pipeline snapshot (collection counts,

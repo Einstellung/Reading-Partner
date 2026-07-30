@@ -21,7 +21,7 @@ import {
 } from "../../../src/ui/components/chat/chatParts";
 import type { ThreadMessage } from "../../../src/ui/components/common/types";
 import type { ThreadMessage as StoredMessage } from "../../../src/platform/app/threads";
-import type { ProbeConfirmCardData } from "../../../src/info/briefing/cards";
+import type { ProbeConfirmCardData } from "../../../src/info/sources/source-cards";
 
 const probe = (added?: boolean): ProbeConfirmCardData => ({
   kind: "probe-confirm",
