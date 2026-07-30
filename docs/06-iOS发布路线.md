@@ -8,7 +8,7 @@
 
 App Store 的使用条款与 AGPL 第 6 条冲突(FSF 反复确认过,VLC 曾因此下架)。只有版权持有人能豁免。reader 版权属 Corporation for Digital Scholarship,纯 AGPLv3,无 App Store 例外条款;且 Zotero 在主动执法(2026-03 对第三方工具 Vibero 发过整改要求)。
 
-我们的姿态比违规者干净:全项目 AGPL 开源、守 copyleft、不用 Zotero 商标。但上架前必须拿到 CDS 的书面许可(对 reader 加 section 7 App Store 例外,或一句书面允许)。信稿见本文末。拿不到则三选一:换阅读引擎 / 放弃商店只自行分发 ipa / 明知有下架风险硬上(不建议)。
+我们的姿态比违规者干净:全项目 AGPL 开源、守 copyleft、不用 Zotero 商标。但上架前必须拿到 CDS 的书面许可(对 reader 加 section 7 App Store 例外,或一句书面允许)。拿不到则三选一:换阅读引擎 / 放弃商店只自行分发 ipa / 明知有下架风险硬上(不建议)。
 
 我们自己持版权的壳代码,LICENSE 要加 section 7 App Store 例外(上架前做)。
 
