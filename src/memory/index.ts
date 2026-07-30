@@ -23,16 +23,20 @@ export {
 } from "./assemble";
 export { buildMemoryTools, type MemoryToolOptions, type MemoryWriteAction } from "./tools";
 export {
+  buildDistillAgent,
   buildDistillSystemPrompt,
   buildDistillUserMessage,
   formatSilentMarks,
   runDistillation,
   selectSilentMarks,
+  DISTILL_AGENT_NAME,
+  DISTILL_BRIEF_TOKENS,
+  DISTILL_MAX_ROUNDS,
   type DistillAnnotation,
+  type DistillDeps,
   type DistillInput,
   type DistillMessage,
   type DistillResult,
-  type DistillRunner,
 } from "./distill";
 export {
   distillThread,

@@ -1,11 +1,28 @@
-// Distillation (docs/02 part 2, write side): a silent agent turn over a
+// Distillation (docs/02 part 2, write side): a silent sub-agent run over a
 // finished conversation's transcript that curates the topic memory through the
-// memory tools. Dep-injected agent runner so tests never touch a provider.
-// Triggered on hangup, with a fallback when the replayed history is trimmed
-// (see live.ts / App).
+// memory tools. Triggered on hangup, with a fallback when the replayed history is
+// trimmed (see live.ts / App).
+//
+// This was the codebase's first isolated silent run and predates the capability
+// that now describes the shape (docs/25). It runs on `runSubagent` for the three
+// things it used to lack: a failed pass says so instead of being swallowed, a
+// pass can be cancelled, and the one thing that crosses back out of the run —
+// the model's final text — has a cap on it rather than happening to be harmless.
+//
+// The turn is still injected (SubagentTurnFn), so every test here runs with no
+// provider, no credentials and no network.
 
 import type { AgentTool } from "../ai/agent";
+import {
+  runSubagent,
+  type SubagentDefinition,
+  type SubagentModel,
+  type SubagentOutcome,
+  type SubagentTurnFn,
+} from "../ai/subagent";
 import type { MemoryAdapter } from "./adapter";
+import { isoDate } from "./files";
+import type { MemoryMeta } from "./store";
 import { buildMemoryTools, type MemoryWriteAction } from "./tools";
 
 export interface DistillMessage {
@@ -81,18 +98,91 @@ export function formatSilentMarks(marks: DistillAnnotation[], capped: boolean): 
   return lines.join("\n");
 }
 
-// Runs one silent agent turn to completion. Resolves on the model's final text,
-// rejects on error. live.ts backs this with runAgentTurn; tests script it.
-export type DistillRunner = (params: {
-  systemPrompt: string;
-  userText: string;
-  tools: AgentTool[];
-}) => Promise<void>;
+export interface DistillDeps {
+  // One sub-agent turn, run to completion. live.ts backs it with the app's
+  // provider; tests script it over the real agent loop.
+  run: SubagentTurnFn;
+  // Cancels the pass. Neither trigger point owns one today — see live.ts, where
+  // the reason each of them cannot is written down.
+  signal?: AbortSignal;
+  // The model the pass runs on. Resolved by the caller because only it knows
+  // which of the app's thinking settings a silent turn of the reader's own
+  // conversation belongs to.
+  model?: SubagentModel;
+}
 
 export interface DistillResult {
   created: number;
   updated: number;
   deleted: number;
+  // Whether the pass finished. False means the sub-agent gave up or the call did
+  // not complete, and the caller must not advance its distillation timestamps:
+  // the next trigger has to be able to redo this transcript.
+  //
+  // Returned rather than thrown. A pass has six ways to not finish and a caller
+  // that had to tell them apart by catching would get one of them wrong; the
+  // counts also matter on a pass that failed half-way, because the writes it did
+  // make are already on disk.
+  ok: boolean;
+  outcome: SubagentOutcome;
+  // The sub-agent's own sentence about why the pass did not finish. Set only when
+  // ok is false, and this is the only use the brief's text has here: a pass that
+  // did finish ends with the word "done" (the prompt asks for it) and its product
+  // is the memory writes, so that text is discarded. Do not start relaying it —
+  // there is no reader-facing place for a memory bookkeeping message.
+  failure?: string;
+}
+
+// The sub-agent's name, which is what its honest-failure sentences are about
+// ("The memory_distiller sub-agent could not complete: …"). Lowercase with
+// underscores, like every other tool name in the app (docs/24).
+export const DISTILL_AGENT_NAME = "memory_distiller";
+
+// Model turns one pass may spend: read the index, make its memory_update calls,
+// finish. The same cap the agent loop's default gave this pass before it moved
+// onto the capability, kept rather than dropped to the capability's 6 because
+// nobody is waiting on a background pass and a curation run that reads before it
+// writes uses more turns than a lookup.
+export const DISTILL_MAX_ROUNDS = 8;
+
+// Tokens the final text may occupy. Nothing reads it, so the cap exists to bound
+// what a run can hand back at all; it is low because the contract prompt derives
+// its word limit from this number and the expected answer is one word.
+export const DISTILL_BRIEF_TOKENS = 200;
+
+// The distiller as a sub-agent definition: the prompt, the tools and the caps are
+// the memory domain's, the loop and the failure mapping are the capability's.
+//
+// `evidence` is "optional", and this is the one field here that would do real
+// damage at its default. The default is "required" as soon as tools are mounted,
+// because a sub-agent given a search tool exists precisely because the answer is
+// not in the model's memory, so an answer with no successful tool call behind it
+// is invented. Distillation is not a lookup. Its prompt says outright that a
+// short or shallow conversation may yield nothing worth keeping and that making
+// no tool call at all is a fine outcome — so the correct pass over a thin
+// conversation calls nothing. Under "required" every one of those would come back
+// "no-evidence", be recorded as a failed pass, and hold the timestamps back, so
+// the next trigger would distil the same transcript again and again.
+export function buildDistillAgent(
+  input: DistillInput,
+  tools: AgentTool[],
+  model?: SubagentModel,
+): SubagentDefinition {
+  return {
+    name: DISTILL_AGENT_NAME,
+    // Never mounted as a tool: no parent model chooses to distil, the app does,
+    // on hangup and on a trimmed history. Nothing reads these two lines, and the
+    // label is here because the type asks for one — no progress is subscribed to,
+    // since a silent pass has nothing to show the reader.
+    description: "Curate this topic's long-term memory from a finished conversation.",
+    label: "Distilling memory",
+    systemPrompt: buildDistillSystemPrompt(input),
+    tools,
+    maxRounds: DISTILL_MAX_ROUNDS,
+    model,
+    evidence: "optional",
+    briefTokenCap: DISTILL_BRIEF_TOKENS,
+  };
 }
 
 export function buildDistillSystemPrompt(input: DistillInput): string {
@@ -158,23 +248,112 @@ export function buildDistillUserMessage(input: DistillInput): string {
   return lines.join("\n");
 }
 
+// One distillation pass. Rejects only for cancellation (StoppedError, raised by
+// the capability); every other way of not finishing comes back in `ok`.
 export async function runDistillation(
   input: DistillInput,
   adapter: MemoryAdapter,
-  run: DistillRunner,
+  deps: DistillDeps,
 ): Promise<DistillResult> {
-  const result: DistillResult = { created: 0, updated: 0, deleted: 0 };
+  const counts = { created: 0, updated: 0, deleted: 0 };
   const tools = buildMemoryTools(adapter, {
     onWrite: (action: MemoryWriteAction) => {
-      if (action === "create") result.created++;
-      else if (action === "update") result.updated++;
-      else result.deleted++;
+      if (action === "create") counts.created++;
+      else if (action === "update") counts.updated++;
+      else counts.deleted++;
     },
   });
-  await run({
-    systemPrompt: buildDistillSystemPrompt(input),
-    userText: buildDistillUserMessage(input),
-    tools,
+  const brief = await runSubagent(
+    {
+      definition: buildDistillAgent(input, tools, deps.model),
+      task: buildDistillUserMessage(input),
+      signal: deps.signal,
+    },
+    // No ledger. A ledger stops a parent model from calling the same sub-agent
+    // nine times in one reader turn; nothing here is called by a model. The app
+    // starts a pass on hangup or on a trim, one at a time per thread (live.ts),
+    // so the run gets its own cap outright.
+    { run: deps.run },
+  );
+  // The pass finished when the sub-agent ended a turn of its own accord. The
+  // outcome is read rather than `usable`, which asks whether the text may be
+  // relayed — a question with no meaning here, since the text is discarded.
+  const ok = brief.outcome === "answered";
+  return {
+    ...counts,
+    ok,
+    outcome: brief.outcome,
+    failure: ok ? undefined : brief.brief,
+  };
+}
+
+// --- one pass over a thread, with the timestamp discipline ---
+
+// What a pass needs of the topic's memory store. Narrow so the discipline below
+// runs against a fake fs in tests.
+export interface DistillPassStore {
+  getMeta(): Promise<MemoryMeta>;
+  setMeta(meta: MemoryMeta): Promise<void>;
+  readIndexText(): Promise<string>;
+}
+
+export interface DistillPassDeps extends DistillDeps {
+  store: DistillPassStore;
+  adapter: MemoryAdapter;
+  now?: () => number;
+}
+
+// The thread a pass is about. The live triggers add a topic id on top of this
+// (live.ts) to resolve the store, the adapter and the event log.
+export interface DistillPassInput {
+  topicName: string;
+  bookName: string;
+  threadId: string;
+  annotationId: string;
+  page: number | null;
+  markedText: string;
+  messages: DistillMessage[];
+  // The book's marks, filtered here against the store's cursor.
+  annotations?: DistillAnnotation[];
+}
+
+// Assemble the input, run the pass, and advance the two timestamps only if it
+// finished. Both stamps are one decision: they say what has already been folded
+// into memory, so moving them after a pass that did not write is how a
+// conversation silently loses its memory for good.
+export async function runDistillPass(
+  input: DistillPassInput,
+  deps: DistillPassDeps,
+): Promise<DistillResult> {
+  const now = deps.now ?? Date.now;
+  const meta = await deps.store.getMeta();
+  const { marks, capped } = selectSilentMarks(
+    input.annotations ?? [],
+    meta.lastAnnotationDistillAt,
+  );
+  const result = await runDistillation(
+    {
+      topicName: input.topicName,
+      bookName: input.bookName,
+      threadId: input.threadId,
+      annotationId: input.annotationId,
+      page: input.page,
+      markedText: input.markedText,
+      messages: input.messages,
+      indexText: await deps.store.readIndexText(),
+      today: isoDate(now()),
+      silentMarks: marks,
+      silentMarksCapped: capped,
+    },
+    deps.adapter,
+    { run: deps.run, model: deps.model, signal: deps.signal },
+  );
+  if (!result.ok) return result;
+  // The transcript's stamp, and — when this pass actually saw the marks — the
+  // silent-marks cursor.
+  await deps.store.setMeta({
+    lastDistilledAt: now(),
+    lastAnnotationDistillAt: marks.length > 0 ? marks[0].createdAt : meta.lastAnnotationDistillAt,
   });
   return result;
 }
