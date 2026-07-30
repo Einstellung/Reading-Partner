@@ -12,19 +12,14 @@ import {
   remove,
 } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../platform/app/atomic-fs";
-import { runAgentTurn } from "../ai/agent";
 import { resolveModel } from "../ai/model-call";
+import { runSubagentTurnLive } from "../ai/subagent";
+import { StoppedError } from "../ai/watchdog";
 import { logEvent } from "../platform/app/events";
 import { FileMemoryAdapter, type MemoryAdapter } from "./adapter";
-import { isoDate } from "./files";
 import { MemoryFileStore, type MemoryFs } from "./store";
 import type { MemoryIndexEntry } from "./types";
-import {
-  runDistillation,
-  selectSilentMarks,
-  type DistillAnnotation,
-  type DistillMessage,
-} from "./distill";
+import { runDistillPass, type DistillAnnotation, type DistillMessage } from "./distill";
 
 const tauriFs: MemoryFs = {
   async read(path) {
@@ -106,6 +101,21 @@ export interface DistillThreadOptions {
   // The book's annotations, so distillation can fold in silent marks made since
   // the last pass (docs/02 part 2). Absent/empty is fine.
   annotations?: DistillAnnotation[];
+  // Cancels the pass. Neither of the two triggers passes one, and the reason is
+  // the same for both: a pass has to outlive the thing that started it.
+  //
+  // Hangup (App.tsx captureHangup) fires the pass and then aborts the chat turn's
+  // controller — that controller is the only signal in scope and handing it over
+  // would kill every pass the moment it started. The trim fallback
+  // (buildReadingTurn) runs inside a turn that does own a signal, but that signal
+  // is aborted by Stop and by hangup, and hangup is exactly when this pass matters
+  // most. Nothing else can own it either: memory bookkeeping has no UI, so there
+  // is no Stop for the reader to press.
+  //
+  // So the signal is here for a caller that does have a claim on a pass — thread
+  // deletion is the candidate — rather than being wired to a controller that
+  // would cancel the wrong thing.
+  signal?: AbortSignal;
 }
 
 // Message count per thread at its last distillation, so hangup after a trim
@@ -114,10 +124,18 @@ export interface DistillThreadOptions {
 const distilledCounts = new Map<string, number>();
 const inFlight = new Set<string>();
 
-// One silent distillation turn for a finished (or long-running) thread.
-// Never throws and never surfaces UI: memory is derived, a failed pass just
-// means the next trigger tries again. `minNewMessages` gates the trim fallback
-// so it doesn't re-fire on every turn of a long conversation.
+// One silent distillation pass for a finished (or long-running) thread.
+//
+// Never throws and never surfaces UI: memory is derived, and there is no place in
+// the reader's world for a message about memory bookkeeping — a dialog saying a
+// distillation pass failed would be an interruption about something the reader
+// never asked for and cannot act on. A failed pass is therefore recorded and
+// nothing else: one warn line with the sub-agent's own sentence, one
+// `distill-failed` event in the topic's log, and the two timestamps left where
+// they were, which is what actually makes the next trigger redo the work.
+//
+// `minNewMessages` gates the trim fallback so it doesn't re-fire on every turn of
+// a long conversation.
 export async function distillThread(
   opts: DistillThreadOptions,
   minNewMessages = 1,
@@ -133,16 +151,10 @@ export async function distillThread(
   inFlight.add(threadId);
   try {
     // Distillation runs on the chat model config, not the pipelines' — it is a
-    // silent turn of the same conversation.
+    // silent turn of the same conversation, so the sub-agent's own default
+    // (the background-pipeline thinking setting) is overridden here.
     const model = await resolveModel("chat");
-    const store = getStore(opts.topicId);
-    const adapter = getMemoryAdapter(opts.topicId);
-    const meta = await store.getMeta();
-    const { marks, capped } = selectSilentMarks(
-      opts.annotations ?? [],
-      meta.lastAnnotationDistillAt,
-    );
-    const result = await runDistillation(
+    const result = await runDistillPass(
       {
         topicName: opts.topicName,
         bookName: opts.bookName,
@@ -151,36 +163,38 @@ export async function distillThread(
         page: opts.page,
         markedText: opts.markedText,
         messages,
-        indexText: await store.readIndexText(),
-        today: isoDate(Date.now()),
-        silentMarks: marks,
-        silentMarksCapped: capped,
+        annotations: opts.annotations,
       },
-      adapter,
-      ({ systemPrompt, userText, tools }) =>
-        new Promise<void>((resolve, reject) => {
-          void runAgentTurn({
-            providerId: model.providerId,
-            modelId: model.modelId,
-            systemPrompt,
-            messages: [{ role: "user", text: userText }],
-            tools,
-            reasoning: model.reasoning,
-            onDelta: () => {},
-            onToolStart: () => {},
-            onToolEnd: () => {},
-            onDone: () => resolve(),
-            onError: (m) => reject(new Error(m)),
-          });
-        }),
+      {
+        store: getStore(opts.topicId),
+        adapter: getMemoryAdapter(opts.topicId),
+        run: runSubagentTurnLive,
+        model: {
+          providerId: model.providerId,
+          modelId: model.modelId,
+          reasoning: model.reasoning,
+        },
+        signal: opts.signal,
+      },
     );
+    if (!result.ok) {
+      // The pass did not finish, so neither stamp moved (runDistillPass) and the
+      // next trigger will redo this transcript. Whatever writes it managed are
+      // already on disk, so the panel is still told about those.
+      console.warn("memory distillation did not finish:", result.failure);
+      logEvent(opts.topicId, "distill-failed", {
+        threadId,
+        outcome: result.outcome,
+        created: result.created,
+        updated: result.updated,
+        deleted: result.deleted,
+      });
+      if (result.created + result.updated + result.deleted > 0) {
+        notifyMemoryChange(opts.topicId);
+      }
+      return;
+    }
     distilledCounts.set(threadId, messages.length);
-    // Advance both stamps only after a successful pass: the transcript's, and —
-    // when this pass actually saw the marks — the silent-marks cursor.
-    await store.setMeta({
-      lastDistilledAt: Date.now(),
-      lastAnnotationDistillAt: marks.length > 0 ? marks[0].createdAt : meta.lastAnnotationDistillAt,
-    });
     logEvent(opts.topicId, "distill-run", {
       threadId,
       created: result.created,
@@ -189,7 +203,13 @@ export async function distillThread(
     });
     notifyMemoryChange(opts.topicId);
   } catch (e) {
-    console.warn("memory distillation failed", e);
+    // Cancellation is not a failure and is not logged as one: whoever raised the
+    // signal already knows, and the stamps stay put so the next trigger redoes it.
+    if (e instanceof StoppedError) return;
+    // The pass never got as far as the sub-agent — no provider configured, or a
+    // store read that threw. Same discipline as a pass that failed inside the run.
+    console.warn("memory distillation could not start", e);
+    logEvent(opts.topicId, "distill-failed", { threadId, outcome: "failed" });
   } finally {
     inFlight.delete(threadId);
   }
