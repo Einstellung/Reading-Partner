@@ -96,8 +96,10 @@ import ReadingPipCard from "./ui/components/chat/ReadingPipCard";
 import ChatPipCard from "./ui/components/chat/ChatPipCard";
 import SettingsView from "./ui/components/SettingsView";
 import { buildReadingTurn, turnFailureView, type TurnFailure } from "./reading/turn";
+import { researchStatusLabel, RESEARCH_TOOL_NAME } from "./reading/papers/research-agent";
+import type { SubagentProgress } from "./ai/subagent";
 import { BTN, BTN_PRIMARY } from "./ui/components/common/buttons";
-import { appendRunningTool, resolveToolStatus } from "./ui/components/common/toolTrace";
+import { appendRunningTool, relabelRunningTool, resolveToolStatus } from "./ui/components/common/toolTrace";
 import LibraryScreen from "./ui/components/library/LibraryScreen";
 import Toast, { useToasts } from "./ui/components/common/Toast";
 import SettingsButton from "./ui/components/common/SettingsButton";
@@ -761,6 +763,19 @@ export default function App() {
         return tools ? { ...m, tools } : m;
       }, ts);
 
+    // A research sub-agent run, in the row the reader already has for the tool call
+    // that started it (docs/25). One line, rewritten in place: not the sub-agent's
+    // own tool calls, not its queries, not what it read.
+    const onSubagentProgress = (progress: SubagentProgress, ts: number) =>
+      patch((m) => {
+        const tools = relabelRunningTool(
+          m.tools,
+          RESEARCH_TOOL_NAME,
+          researchStatusLabel(progress),
+        );
+        return tools ? { ...m, tools } : m;
+      }, ts);
+
     // A turn that ends without a reply. The row it leaves behind, whether a
     // toast goes up and whether Retry is offered all follow from which kind it
     // was (reading/turn.ts), so the refusal paths cannot pick up the error
@@ -802,6 +817,7 @@ export default function App() {
         getPipeline: () => pipelineRef.current,
         distillAnnotations,
         signal: controller.signal,
+        onSubagentProgress: (progress) => onSubagentProgress(progress, ts),
       });
       if (!turn) return;
       // The turn could not be assembled small enough to leave the model room to
