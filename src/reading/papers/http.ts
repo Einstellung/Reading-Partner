@@ -23,7 +23,11 @@ const POLITE_HEADERS = {
     "Reading-Partner/0.2 (https://github.com/Einstellung/Reading-Partner; mailto:einstellungsu@gmail.com)",
 };
 
-export const prepFetch: FetchFn = (url, init) => {
+// The reading domain's outbound fetch, the counterpart of info's infoFetch: any
+// host the reading side talks to (literature APIs, a PDF mirror, a pasted
+// article) goes through here, so nothing reading fetches is subject to the
+// webview's CORS and CSP.
+export const readingFetch: FetchFn = (url, init) => {
   if (isTauri()) {
     const headers = new Headers(init?.headers);
     for (const [k, v] of Object.entries(POLITE_HEADERS)) {
@@ -167,7 +171,7 @@ export function interactiveRetry(fetchFn?: FetchFn): RetryOptions {
 // pipeline can cool the paper down instead of failing it.
 export async function fetchWithRetry(url: string, init?: RequestInit, opts?: RetryOptions): Promise<Response> {
   const retries = opts?.retries ?? 3;
-  const doFetch = opts?.fetchFn ?? prepFetch;
+  const doFetch = opts?.fetchFn ?? readingFetch;
   const sleep = opts?.sleep ?? defaultSleep;
   // An injected fetchFn means a fake: don't make it wait on the real per-host
   // gate. The live path (no fetchFn) keeps the process-wide spacing.

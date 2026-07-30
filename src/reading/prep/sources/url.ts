@@ -1,7 +1,7 @@
 // User-pasted-link resolution, pure (docs/09 link ingestion). Turns an http(s)
 // URL into a PrepPaper stub with a provisional title/slug (both refined after
 // the fetch), and sniffs a fetched response's content type. No IO here — live.ts
-// wires these to prepFetch; tests drive them directly.
+// wires these to readingFetch; tests drive them directly.
 
 import { slugify, uniqueSlug } from "../plan";
 import type { PrepPaper } from "../types";

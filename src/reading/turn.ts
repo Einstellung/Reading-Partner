@@ -54,7 +54,7 @@ import { parseNote } from "./prep/notes";
 import { buildClassroomSystemPrompt, type ClassroomNote } from "./prep/classroom";
 import { buildClassroomTools } from "./prep/tools";
 import { ADD_SOURCE_PROMPT, buildSourceTools } from "./prep/sources/source-tool";
-import { prepFetch } from "./papers/http";
+import { readingFetch } from "./papers/http";
 import { searchPapers, type PaperSearchFn } from "./papers/paper-search";
 import { buildFindPaperTool, FIND_PAPER_PROMPT } from "./papers/citation-tool";
 import {
@@ -363,7 +363,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   // on this" is a question the reader can have on any page of any book, and a tool
   // that is only sometimes there is one the model cannot learn to reach for.
   const literatureDeps = {
-    fetchFn: prepFetch,
+    fetchFn: readingFetch,
     s2ApiKey: s.semanticScholarApiKey ?? undefined,
   };
   // A pot for the whole turn. Without one, runSubagent grants every request in
