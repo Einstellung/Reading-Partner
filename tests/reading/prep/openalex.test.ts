@@ -10,6 +10,15 @@ import {
   openAlexTopicSearchUrl,
   parseOpenAlexSearch,
   searchOpenAlexTopic,
+  bareOpenAlexId,
+  fetchOpenAlexCitedBy,
+  fetchOpenAlexWork,
+  openAlexCitedByUrl,
+  openAlexReferencedWorks,
+  openAlexWorksByIdUrl,
+  parseOpenAlexPage,
+  parseOpenAlexWork,
+  OA_MAX_OR_IDS,
 } from "../../../src/reading/prep/openalex";
 
 test("reconstructAbstract rebuilds word order from the inverted index", () => {
@@ -202,5 +211,61 @@ test("parseOpenAlexSearch maps a work to a candidate's worth of fields", () => {
 test("a spent free quota is a 409 that throws rather than an empty result", async () => {
   await expect(
     searchOpenAlexTopic("x", {}, async () => new Response("out of credits", { status: 409 })),
+  ).rejects.toThrow(/409/);
+});
+
+// --- citation graph (docs/24) ---
+
+test("the forward query filters by date and sorts by citation count", () => {
+  const u = decodeURIComponent(openAlexCitedByUrl("W2033231119", { sinceYear: 2024, limit: 10 }));
+  expect(u).toContain("filter=cites:W2033231119,from_publication_date:2024-01-01");
+  // Measured 2026-07-30 on this seed: a date sort returns 2026 papers with no
+  // citations at all, a citation sort returns the work the field built on.
+  expect(u).toContain("sort=cited_by_count:desc");
+  expect(u).toContain("per-page=10");
+  expect(decodeURIComponent(openAlexCitedByUrl("W1"))).not.toContain("from_publication_date");
+});
+
+test("the backward batch ORs the reference ids and caps the list", () => {
+  const many = Array.from({ length: 80 }, (_, i) => `W${i}`);
+  const u = decodeURIComponent(openAlexWorksByIdUrl(many));
+  const ids = /openalex_id:([^&,]+)/.exec(u)![1].split("|");
+  expect(ids).toHaveLength(OA_MAX_OR_IDS);
+  expect(u).toContain("sort=cited_by_count:desc");
+});
+
+test("bareOpenAlexId reduces either spelling of a work id", () => {
+  expect(bareOpenAlexId("https://openalex.org/W2033231119")).toBe("W2033231119");
+  expect(bareOpenAlexId("W2033231119")).toBe("W2033231119");
+  expect(bareOpenAlexId("not-an-id")).toBeNull();
+  expect(bareOpenAlexId(null)).toBeNull();
+});
+
+test("a work parses into a hit plus its outgoing edges", () => {
+  const body = {
+    id: "https://openalex.org/W2033231119",
+    display_name: "Cellular scaling rules for primate brains",
+    publication_year: 2007,
+    cited_by_count: 423,
+    referenced_works: ["https://openalex.org/W312766858", "junk"],
+  };
+  const hit = parseOpenAlexWork(body);
+  expect(hit?.openAlexId).toBe("W2033231119");
+  expect(hit?.citedByCount).toBe(423);
+  expect(openAlexReferencedWorks(body)).toEqual(["W312766858"]);
+  expect(parseOpenAlexWork({ publication_year: 2007 })).toBeNull();
+});
+
+test("a page carries the size of the whole edge set, not just the rows", () => {
+  const page = parseOpenAlexPage({ meta: { count: 423 }, results: [{ display_name: "A paper" }] });
+  expect(page.total).toBe(423);
+  expect(page.hits).toHaveLength(1);
+  expect(parseOpenAlexPage(null)).toEqual({ hits: [], total: null });
+});
+
+test("a seed OpenAlex does not know is a miss; a refusal still throws", async () => {
+  expect(await fetchOpenAlexWork("doi:10.1/nope", async () => new Response("", { status: 404 }))).toBeNull();
+  await expect(
+    fetchOpenAlexCitedBy("W1", {}, async () => new Response("out of credits", { status: 409 })),
   ).rejects.toThrow(/409/);
 });
