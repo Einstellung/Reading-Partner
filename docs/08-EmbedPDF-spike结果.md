@@ -34,10 +34,6 @@
 - 壳真机全链路：App 集成层（`EmbedReaderPane`）已接线并通过类型检查、开 flag 后 App 能正常启动到 Topics 库，但"打开书"要 Tauri `readFile`，未在纯浏览器里跑通开书后的完整交互；引擎本体交互已在 harness 里全测。
 - ink 压感、highlight 精确页内滚动还原、点批注 popup 的精确视口锚点（当前用视口中心兜底，原生 `AnnotationLayer` 的 `selectionMenu` 是精确锚点路径）。
 
-## 开关
-
-`VITE_ENGINE=embedpdf`（环境变量）走 EmbedPDF，默认（不设）走 zotero iframe。见 `src/reader-embedpdf/engine-flag.ts`。zotero 路径未改动。
-
 ## 性能迭代（2026-07-16，真机 WebKitGTK 反馈"缩放和 AI 弹窗卡"后）
 
 两处卡顿根因不同，分别处理。
