@@ -51,6 +51,10 @@ const LAYER: Record<string, Layer> = {
   fulltext: "capability",
 
   info: "domain",
+  "info/briefing": "domain",
+  "info/companion": "domain",
+  "info/extract": "domain",
+  "info/sources": "domain",
   memory: "domain",
   reading: "domain",
   "reading/engine": "domain",
