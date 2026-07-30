@@ -6,7 +6,8 @@
 import { expect, test } from "bun:test";
 import { buildSourceTools, sourceToolStatusLabel, trialSource } from "../../src/info/sources/source-tools";
 import type { ProbeConfirmCardData } from "../../src/info/briefing/cards";
-import type { ExtractReadable, SourceDescriptor } from "../../src/info/sources/descriptor";
+import type { ExtractReadable } from "../../src/info/extract/readable-select";
+import type { SourceDescriptor } from "../../src/info/sources/descriptor";
 
 const extract: ExtractReadable = (_html, url) => ({
   title: `Title of ${url}`,

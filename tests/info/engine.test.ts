@@ -6,7 +6,8 @@
 
 import { expect, test } from "bun:test";
 import { collectSource, collectAll, type SourceSettled } from "../../src/info/sources/engine";
-import type { ExtractReadable, SourceDescriptor } from "../../src/info/sources/descriptor";
+import type { ExtractReadable } from "../../src/info/extract/readable-select";
+import type { SourceDescriptor } from "../../src/info/sources/descriptor";
 
 const extract: ExtractReadable = (_html, url) => ({
   title: "Extracted title",

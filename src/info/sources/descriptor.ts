@@ -5,14 +5,6 @@
 // is the type + runtime validator + the small path helpers the engine shares;
 // it is pure (no DOM/fs) so it and the engine are unit-testable in bun.
 
-// A readable-article extraction: (page HTML, its URL) -> body. Wired to
-// Readability/defuddle in readable.ts; injected into the engine so the collect
-// logic stays DOM-free and testable. (Was defined in qbitai.ts.)
-export type ExtractReadable = (
-  html: string,
-  url: string,
-) => { title: string; contentHtml: string; textContent: string } | null;
-
 // A field path into a JSON row: one dot-path, or several candidates tried in
 // order (the first non-empty wins) so undocumented APIs with key variants
 // (publishedAt / published_at) resolve without brittle per-source code.

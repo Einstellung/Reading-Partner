@@ -10,7 +10,8 @@
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../ai/agent";
 import type { FetchFn } from "../extract/http";
-import type { ExtractReadable, SourceDescriptor } from "./descriptor";
+import type { ExtractReadable } from "../extract/readable-select";
+import type { SourceDescriptor } from "./descriptor";
 import { validateDescriptor } from "./descriptor";
 import { collectSource } from "./engine";
 import { probeSource, pipeLabel } from "./probe";

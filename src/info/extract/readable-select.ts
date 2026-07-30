@@ -1,13 +1,20 @@
-// Choosing between two readable extractions (docs/17): Readability is the
-// primary, defuddle the fallback for pages it under-extracts. The decision is
-// pure (no DOM) so it is unit-tested; readable.ts runs the two DOM extractors
-// and hands their results here.
+// The readable-extraction contract, and choosing between two extractions
+// (docs/17): Readability is the primary, defuddle the fallback for pages it
+// under-extracts. Both live here because both are pure (no DOM) — readable.ts
+// runs the two DOM extractors and hands their results here, and everything that
+// only injects an extractor (the source engine, the tools) depends on this
+// module instead of on the DOM half.
 
 export interface Extraction {
   title: string;
   contentHtml: string;
   textContent: string;
 }
+
+// A readable-article extraction: (page HTML, its URL) -> body. Wired to
+// Readability/defuddle in readable.ts; injected into the source engine so the
+// collect logic stays DOM-free and testable.
+export type ExtractReadable = (html: string, url: string) => Extraction | null;
 
 // Below this many characters of body text, the primary extraction is treated as
 // having failed to get the real article, and the fallback is consulted.

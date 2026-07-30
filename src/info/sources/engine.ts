@@ -9,11 +9,11 @@
 import { fetchText, infoFetch, type FetchFn } from "../extract/http";
 import { itemId } from "../extract/id";
 import { htmlToText } from "../extract/sanitize";
+import type { ExtractReadable } from "../extract/readable-select";
 import { parseFeed, feedFieldBody } from "./feed";
 import {
   dotPath,
   pickString,
-  type ExtractReadable,
   type FieldPath,
   type JsonApiDiscovery,
   type SourceDescriptor,

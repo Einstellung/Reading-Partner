@@ -13,7 +13,7 @@ import {
   type BriefingScope,
 } from "../../src/info/companion/companion-tools";
 import type { ProfileUpdateCardData } from "../../src/info/briefing/cards";
-import type { ExtractReadable } from "../../src/info/sources/descriptor";
+import type { ExtractReadable } from "../../src/info/extract/readable-select";
 
 const extract: ExtractReadable = () => ({ title: "t", contentHtml: "<p>b</p>", textContent: "b" });
 
