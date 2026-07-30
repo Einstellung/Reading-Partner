@@ -4,7 +4,7 @@
 // it runs in bun tests and the webview alike — arXiv's feed shape is stable and
 // we only need five fields per entry.
 
-import { fetchWithRetry, type FetchFn } from "./http";
+import { fetchWithRetry, HttpStatusError, interactiveRetry, type FetchFn } from "./http";
 import { pickByTitle } from "./match";
 
 export interface ArxivEntry {
@@ -13,6 +13,9 @@ export interface ArxivEntry {
   summary: string;
   authors: string[];
   pdfUrl: string;
+  // Submission date as the feed gives it (ISO 8601), or "" when absent. Only the
+  // topic search reads it (to show the year); the title lookup ignores it.
+  published: string;
 }
 
 // "arXiv:2303.12345v2" / a full abs URL / bare id -> "2303.12345". Old-style
@@ -76,6 +79,7 @@ export function parseArxivAtom(xml: string): ArxivEntry[] {
       summary: tagText(entry, "summary"),
       authors,
       pdfUrl: `https://arxiv.org/pdf/${id}`,
+      published: tagText(entry, "published"),
     });
   }
   return out;
@@ -83,6 +87,71 @@ export function parseArxivAtom(xml: string): ArxivEntry[] {
 
 export function pickArxivMatch(entries: ArxivEntry[], title: string): ArxivEntry | null {
   return pickByTitle(entries, title, (e) => e.title);
+}
+
+// --- topic search (docs/24: what is the latest work on X) ---
+
+// Words that carry no retrieval signal in an `all:` term. Deliberately short:
+// only function words and the phrasing a question drags in. Domain words the
+// reader might actually mean ("study", "review") are left alone.
+const STOPWORDS = new Set([
+  "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "how", "in", "into", "is", "it",
+  "its", "latest", "new", "of", "on", "or", "recent", "that", "the", "their", "there", "to", "was",
+  "what", "when", "where", "which", "who", "why", "with",
+]);
+
+// Terms at most, so a long question cannot AND itself down to zero hits.
+const MAX_TERMS = 6;
+
+// A natural-language query reduced to the terms an `all:` search can use. The
+// export API's parser has no notion of a free-text query: a bare string with
+// spaces is read as an implicit boolean over undeclared fields and returns
+// nonsense, so every term is prefixed and ANDed explicitly.
+export function arxivQueryTerms(query: string): string[] {
+  const words = query
+    .toLowerCase()
+    .replace(/[^\p{Letter}\p{Number}\s-]+/gu, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !STOPWORDS.has(w));
+  return [...new Set(words)].slice(0, MAX_TERMS);
+}
+
+export interface ArxivTopicOptions {
+  limit?: number;
+  // Only papers submitted in or after this year. Recency is a filter rather than
+  // a sort on every library here: sorting by date returns the newest match
+  // instead of the best one, and on arXiv `sortBy=submittedDate` does not answer
+  // at all (docs/pitfall/72).
+  sinceYear?: number | null;
+}
+
+// The export API's date field wants a closed range of minute-precision stamps,
+// so an open-ended "since" needs an upper bound; 2100 is one no submission will
+// reach.
+export function arxivTopicSearchUrl(query: string, opts: ArxivTopicOptions = {}): string {
+  const terms = arxivQueryTerms(query);
+  const clauses = (terms.length ? terms : [query.trim()]).map((t) => `all:${t}`);
+  if (opts.sinceYear) {
+    clauses.push(`submittedDate:[${opts.sinceYear}01010000 TO 210001010000]`);
+  }
+  const q = encodeURIComponent(clauses.join(" AND "));
+  return `https://export.arxiv.org/api/query?search_query=${q}&max_results=${opts.limit ?? 5}`;
+}
+
+// Search arXiv by topic. Returns [] when arXiv has nothing; throws on a bad
+// status or exhausted retries (a terminal 429 is a RateLimitError), so the caller
+// can report which library did not answer instead of showing an empty result as
+// "no such research exists". arXiv's limiter is strict — six requests in a row
+// were enough to earn a 429 — so this goes through fetchWithRetry's per-host
+// spacing and backoff like every other call here.
+export async function searchArxivTopic(
+  query: string,
+  opts: ArxivTopicOptions = {},
+  fetchFn?: FetchFn,
+): Promise<ArxivEntry[]> {
+  const res = await fetchWithRetry(arxivTopicSearchUrl(query, opts), undefined, interactiveRetry(fetchFn));
+  if (!res.ok) throw new HttpStatusError(res.status, "export.arxiv.org");
+  return parseArxivAtom(await res.text());
 }
 
 export interface ArxivResult {

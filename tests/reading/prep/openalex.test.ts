@@ -7,6 +7,9 @@ import {
   extractArxivId,
   extractPdfUrl,
   openAlexSearchUrl,
+  openAlexTopicSearchUrl,
+  parseOpenAlexSearch,
+  searchOpenAlexTopic,
 } from "../../../src/reading/prep/openalex";
 
 test("reconstructAbstract rebuilds word order from the inverted index", () => {
@@ -142,4 +145,62 @@ test("fetchFromOpenAlex returns abstract-only when there is no pdf url at all", 
   const res = await fetchFromOpenAlex({ title: "Target Paper", arxivId: null }, fetchFn);
   expect(res?.pdfBytes).toBeNull();
   expect(res?.abstract).toBe("An abstract");
+});
+
+// --- topic search (docs/24) ---
+
+test("the topic query filters by date and does not sort by it", () => {
+  const u = decodeURIComponent(openAlexTopicSearchUrl("brain evolution", { limit: 4, sinceYear: 2025 }));
+  expect(u).toContain("search=brain evolution");
+  expect(u).toContain("per-page=4");
+  expect(u).toContain("filter=from_publication_date:2025-01-01");
+  expect(u).toContain("authorships");
+  // A date sort returns the newest paper in any field rather than the best match.
+  expect(u).not.toContain("sort=");
+  expect(openAlexTopicSearchUrl("x")).not.toContain("filter=");
+});
+
+const SEARCH_BODY = {
+  results: [
+    {
+      display_name: "Cellular scaling rules for primate brains",
+      publication_year: 2007,
+      doi: "https://doi.org/10.1073/pnas.0611396104",
+      abstract_inverted_index: { Brains: [0], scale: [1] },
+      authorships: [
+        { author: { display_name: "Suzana Herculano-Houzel" } },
+        { author: { display_name: null } },
+      ],
+      primary_location: {
+        landing_page_url: "https://www.pnas.org/doi/10.1073/pnas.0611396104",
+        source: { display_name: "PNAS" },
+      },
+      best_oa_location: { pdf_url: "https://pnas.org/x.pdf" },
+      locations: [{ landing_page_url: "https://arxiv.org/abs/2303.12345" }],
+    },
+    // No title: nothing to show and nothing to dedupe on, so it is dropped.
+    { publication_year: 2020 },
+  ],
+};
+
+test("parseOpenAlexSearch maps a work to a candidate's worth of fields", () => {
+  const hits = parseOpenAlexSearch(SEARCH_BODY);
+  expect(hits).toHaveLength(1);
+  const [h] = hits;
+  expect(h.title).toBe("Cellular scaling rules for primate brains");
+  expect(h.year).toBe(2007);
+  expect(h.doi).toBe("https://doi.org/10.1073/pnas.0611396104");
+  expect(h.authors).toEqual(["Suzana Herculano-Houzel"]);
+  expect(h.venue).toBe("PNAS");
+  // The open-access PDF wins over the landing page.
+  expect(h.url).toBe("https://pnas.org/x.pdf");
+  expect(h.arxivId).toBe("2303.12345");
+  expect(h.abstract).toBe("Brains scale");
+  expect(parseOpenAlexSearch(null)).toEqual([]);
+});
+
+test("a spent free quota is a 409 that throws rather than an empty result", async () => {
+  await expect(
+    searchOpenAlexTopic("x", {}, async () => new Response("out of credits", { status: 409 })),
+  ).rejects.toThrow(/409/);
 });

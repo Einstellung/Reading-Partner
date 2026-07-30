@@ -1,7 +1,12 @@
 // Semantic Scholar client tests. Fake fetch only. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { fetchFromS2 } from "../../../src/reading/prep/s2";
+import {
+  fetchFromS2,
+  parseS2Search,
+  s2TopicSearchUrl,
+  searchS2Topic,
+} from "../../../src/reading/prep/s2";
 
 test("fetchFromS2 sends the api key as x-api-key and keeps it out of the url", async () => {
   const seen: { url: string; key: string | null }[] = [];
@@ -28,4 +33,52 @@ test("fetchFromS2 without a key sends no x-api-key header", async () => {
   };
   await fetchFromS2({ title: "T", arxivId: null }, fetchFn);
   expect(seenKey).toBeNull();
+});
+
+// --- topic search (docs/24) ---
+
+test("the topic query asks for the candidate fields and an open-ended year range", () => {
+  const u = decodeURIComponent(s2TopicSearchUrl("brain evolution", { limit: 4, sinceYear: 2025 }));
+  expect(u).toContain("query=brain evolution");
+  expect(u).toContain("limit=4");
+  expect(u).toContain("authors");
+  expect(u).toContain("venue");
+  expect(u).toContain("year=2025-");
+  expect(decodeURIComponent(s2TopicSearchUrl("x"))).not.toContain("year=");
+});
+
+test("parseS2Search maps ids, venue and a fallback link", () => {
+  const hits = parseS2Search({
+    data: [
+      {
+        paperId: "abc123",
+        title: "Cellular scaling rules",
+        abstract: "Brains scale.",
+        year: 2007,
+        venue: "PNAS",
+        authors: [{ name: "Suzana Herculano-Houzel" }, { name: null }],
+        externalIds: { DOI: "10.1073/pnas.0611396104", ArXiv: "2303.12345", PubMed: "17553422" },
+      },
+      // No open-access PDF: the S2 landing page is still somewhere to click.
+      { paperId: "def456", title: "No pdf here" },
+      { title: "" },
+    ],
+  });
+  expect(hits).toHaveLength(2);
+  expect(hits[0].doi).toBe("10.1073/pnas.0611396104");
+  expect(hits[0].arxivId).toBe("2303.12345");
+  expect(hits[0].pmid).toBe("17553422");
+  expect(hits[0].authors).toEqual(["Suzana Herculano-Houzel"]);
+  expect(hits[0].venue).toBe("PNAS");
+  expect(hits[1].url).toBe("https://www.semanticscholar.org/paper/def456");
+  expect(parseS2Search(null)).toEqual([]);
+});
+
+// A 429 is not tested here: fetchWithRetry sleeps its 429 backoff, and this call
+// site has no sleep to inject. The classification of that outcome is covered in
+// paper-search.test.ts, where the error is constructed directly.
+test("a status the search cannot use throws instead of reading as no results", async () => {
+  await expect(
+    searchS2Topic("x", {}, async () => new Response("nope", { status: 403 })),
+  ).rejects.toThrow(/403/);
 });

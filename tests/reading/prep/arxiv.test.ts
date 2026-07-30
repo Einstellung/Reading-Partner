@@ -4,11 +4,14 @@
 import { expect, test } from "bun:test";
 import {
   arxivIdUrl,
+  arxivQueryTerms,
   arxivTitleSearchUrl,
+  arxivTopicSearchUrl,
   fetchFromArxiv,
   normalizeArxivId,
   parseArxivAtom,
   pickArxivMatch,
+  searchArxivTopic,
 } from "../../../src/reading/prep/arxiv";
 import { backoffMs, fetchWithRetry } from "../../../src/reading/prep/http";
 
@@ -35,6 +38,7 @@ const ATOM = `<?xml version="1.0" encoding="UTF-8"?>
   <title>ArXiv Query</title>
   <entry>
     <id>http://arxiv.org/abs/2212.06817v2</id>
+    <published>2022-12-13T18:55:22Z</published>
     <title>RT-1: Robotics Transformer for Real-World Control at Scale</title>
     <summary>  We present RT-1, a &amp;quot;scalable&amp;quot; model.
       Second line.</summary>
@@ -58,6 +62,46 @@ test("parseArxivAtom extracts entries with normalized ids", () => {
   expect(entries[0].summary).not.toContain("\n");
   expect(entries[0].authors).toEqual(["Anthony Brohan", "Noah Brown"]);
   expect(entries[0].pdfUrl).toBe("https://arxiv.org/pdf/2212.06817");
+  expect(entries[0].published).toBe("2022-12-13T18:55:22Z");
+  // An entry without <published> parses; only the year in a candidate list is lost.
+  expect(entries[1].published).toBe("");
+});
+
+test("arxivQueryTerms keeps the terms an all: search can use", () => {
+  expect(arxivQueryTerms("What is the latest research on brain evolution?")).toEqual([
+    "research",
+    "brain",
+    "evolution",
+  ]);
+  // Duplicates collapse; the cap holds a long question to six terms.
+  expect(arxivQueryTerms("neuron neuron scaling cortex mammals primates energy budget")).toEqual([
+    "neuron",
+    "scaling",
+    "cortex",
+    "mammals",
+    "primates",
+    "energy",
+  ]);
+});
+
+test("the topic query ANDs prefixed terms and puts recency in the date range", () => {
+  const plain = decodeURIComponent(arxivTopicSearchUrl("brain evolution", { limit: 3 }));
+  expect(plain).toContain("search_query=all:brain AND all:evolution");
+  expect(plain).toContain("max_results=3");
+  // docs/pitfall/72: sortBy=submittedDate is the one parameter that must not appear.
+  expect(plain).not.toContain("sortBy");
+
+  const recent = decodeURIComponent(arxivTopicSearchUrl("brain evolution", { sinceYear: 2025 }));
+  expect(recent).toContain("submittedDate:[202501010000 TO 210001010000]");
+});
+
+test("searchArxivTopic parses the feed and surfaces a bad status", async () => {
+  const entries = await searchArxivTopic("brain evolution", {}, async () => new Response(ATOM, { status: 200 }));
+  expect(entries.map((e) => e.id)).toEqual(["2212.06817", "1706.03762"]);
+
+  await expect(
+    searchArxivTopic("x", {}, async () => new Response("Rate exceeded.", { status: 403 })),
+  ).rejects.toThrow(/403/);
 });
 
 test("pickArxivMatch requires a real title match", () => {
