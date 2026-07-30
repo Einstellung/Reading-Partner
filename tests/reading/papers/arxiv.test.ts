@@ -12,8 +12,8 @@ import {
   parseArxivAtom,
   pickArxivMatch,
   searchArxivTopic,
-} from "../../../src/reading/prep/arxiv";
-import { backoffMs, fetchWithRetry } from "../../../src/reading/prep/http";
+} from "../../../src/reading/papers/arxiv";
+import { backoffMs, fetchWithRetry } from "../../../src/reading/papers/http";
 
 test("normalizeArxivId accepts the shapes references use", () => {
   expect(normalizeArxivId("2212.06817")).toBe("2212.06817");

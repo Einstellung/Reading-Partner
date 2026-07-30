@@ -131,7 +131,7 @@ Drive sync needs your own Google OAuth Desktop client: copy `.env.example` to `.
 
 - `src/reading/engine/` — the engine adapter: assembles EmbedPDF's headless core + plugins, renders from in-memory bytes, and converts annotations at the boundary (the shell persists its own JSON schema). All UI around it (toolbar, annotations list, AI) is the shell's.
 - `public/pdfium/pdfium.wasm` — the PDFium engine binary, self-hosted (gitignored; staged by `bun run wasm` from the npm package, no CDN at build or runtime).
-- `src/ai/` — provider streaming and the agent tool loop. `src/reading/prep/` — the lesson-prep pipeline. `src/memory/` — the per-topic memory store. `src/reading/figures/` — figure extraction and rendering. `src-tauri/` — Tauri 2 app.
+- `src/ai/` — provider streaming and the agent tool loop. `src/reading/prep/` — the lesson-prep pipeline. `src/reading/papers/` — academic literature search and the citation graph. `src/memory/` — the per-topic memory store. `src/reading/figures/` — figure extraction and rendering. `src-tauri/` — Tauri 2 app.
 - Design consensus documents (in Chinese) live in `docs/`; hard-won engine/Tauri surprises are indexed in `docs/pitfall/`.
 
 ## Status

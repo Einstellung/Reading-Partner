@@ -1,4 +1,4 @@
-// Citation-graph tests (src/reading/prep/citations.ts): identifier recognition,
+// Citation-graph tests (src/reading/papers/citations.ts): identifier recognition,
 // the title matching that turns a book's endnote into a paper record, the ranking
 // the forward direction depends on, and the library cascade. Fake fetch only, no
 // network. Run: bun test.
@@ -17,8 +17,8 @@ import {
   walkCitations,
   WALK_ORDER,
   type WalkResult,
-} from "../../../src/reading/prep/citations";
-import type { PaperCandidate } from "../../../src/reading/prep/paper-search";
+} from "../../../src/reading/papers/citations";
+import type { PaperCandidate } from "../../../src/reading/papers/paper-search";
 
 function candidate(over: Partial<PaperCandidate> = {}): PaperCandidate {
   return {

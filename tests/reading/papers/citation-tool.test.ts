@@ -7,7 +7,7 @@ import { expect, test } from "bun:test";
 import {
   buildCitationTools,
   SEARCH_CITATIONS_PROMPT,
-} from "../../../src/reading/prep/citation-tool";
+} from "../../../src/reading/papers/citation-tool";
 import type { AgentTool } from "../../../src/ai/agent";
 
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });

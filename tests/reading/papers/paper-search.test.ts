@@ -1,10 +1,10 @@
-// Unit tests for the cross-library topic search (src/reading/prep/paper-search.ts):
+// Unit tests for the cross-library topic search (src/reading/papers/paper-search.ts):
 // the merge (round-robin plus dedupe), the rendering, and the failure reporting
 // that keeps a dead library from reading as an empty field. Fake fetch only, no
 // network. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { RateLimitError, HttpStatusError } from "../../../src/reading/prep/http";
+import { RateLimitError, HttpStatusError } from "../../../src/reading/papers/http";
 import {
   clipAbstract,
   describeFailure,
@@ -16,7 +16,7 @@ import {
   searchPapers,
   type PaperCandidate,
   type PaperLibrary,
-} from "../../../src/reading/prep/paper-search";
+} from "../../../src/reading/papers/paper-search";
 
 function candidate(over: Partial<PaperCandidate> = {}): PaperCandidate {
   return {

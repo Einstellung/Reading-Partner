@@ -6,7 +6,7 @@
 
 解法（两层）：
 
-1. `src/tauri-fetch.ts` 的 `cleanTauriFetch` 包住插件 fetch：abort 时把面向调用方的拒绝统一成标准 `AbortError`（插件本来抛的是 `Error("Request cancelled")` 或 resource-id 串）。prep/http 和 AI fetch 桥都走它。这只修调用方能拿到的那条 promise，管不到内部 `void` 掉的两个 invoke。
+1. `src/tauri-fetch.ts` 的 `cleanTauriFetch` 包住插件 fetch：abort 时把面向调用方的拒绝统一成标准 `AbortError`（插件本来抛的是 `Error("Request cancelled")` 或 resource-id 串）。papers/http 和 AI fetch 桥都走它。这只修调用方能拿到的那条 promise，管不到内部 `void` 掉的两个 invoke。
 2. `src/main.tsx` dev-only 的 `unhandledrejection` 网：只吞 `/resource id \d+ is invalid/i` 这条，debug 级别记一次，其余原样放行。正则锚在插件原话上，别的应用拒绝匹配不到。这是唯一能盖住内部 promise 的地方。
 
 关联坑：15（同一个 http 插件）。

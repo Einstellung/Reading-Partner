@@ -54,10 +54,10 @@ import { parseNote } from "./prep/notes";
 import { buildClassroomSystemPrompt, type ClassroomNote } from "./prep/classroom";
 import { buildClassroomTools } from "./prep/tools";
 import { ADD_SOURCE_PROMPT, buildSourceTools } from "./prep/source-tool";
-import { prepFetch } from "./prep/http";
-import { searchPapers, type PaperSearchFn } from "./prep/paper-search";
-import { buildPaperSearchTools, SEARCH_PAPERS_PROMPT } from "./prep/search-tool";
-import { buildCitationTools, SEARCH_CITATIONS_PROMPT } from "./prep/citation-tool";
+import { prepFetch } from "./papers/http";
+import { searchPapers, type PaperSearchFn } from "./papers/paper-search";
+import { buildPaperSearchTools, SEARCH_PAPERS_PROMPT } from "./papers/search-tool";
+import { buildCitationTools, SEARCH_CITATIONS_PROMPT } from "./papers/citation-tool";
 import type { PrepPipeline } from "./prep/pipeline";
 
 // Auto-explanation kickoff (docs/03: the bubble starts explaining, unprompted).

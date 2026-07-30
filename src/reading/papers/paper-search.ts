@@ -107,8 +107,8 @@ export const ABSTRACT_CHARS = 420;
 // --- normalization ---
 
 // Trim to `max` characters on a word boundary. (A local copy rather than an
-// import from reading/context: prep must not import its own group root, which
-// imports prep — tests/layering.test.ts would report the cycle.)
+// import from reading/context: papers must not import its own group root, which
+// imports papers — tests/layering.test.ts would report the cycle.)
 export function clipAbstract(text: string, max = ABSTRACT_CHARS): string {
   const t = text.replace(/\s+/g, " ").trim();
   if (t.length <= max) return t;

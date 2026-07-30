@@ -11,9 +11,9 @@ import { buildFigureCatalog, ensureFigures } from "../figures";
 import { loadSettings } from "../../platform/app/settings";
 import { recordParse } from "../../platform/app/structured-output";
 import { extractArticle } from "./article";
-import { fetchFromArxiv, normalizeArxivId } from "./arxiv";
-import { fetchFromOpenAlex } from "./openalex";
-import { fetchWithRetry } from "./http";
+import { fetchFromArxiv, normalizeArxivId } from "../papers/arxiv";
+import { fetchFromOpenAlex } from "../papers/openalex";
+import { fetchWithRetry } from "../papers/http";
 import { runDigest } from "./digest";
 import { serializeNote } from "./notes";
 import { parsePlan, planUserMessage, uniqueSlug, PLAN_SYSTEM_PROMPT } from "./plan";
@@ -26,7 +26,7 @@ import {
   writePaperPdf,
   writePrepNote,
 } from "./store";
-import { fetchFromS2 } from "./s2";
+import { fetchFromS2 } from "../papers/s2";
 import type { DigestOutcome, FetchOutcome, PipelineDeps } from "./pipeline";
 import { PrepPipeline } from "./pipeline";
 import type { PrepPaper } from "./types";

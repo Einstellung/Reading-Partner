@@ -1,4 +1,4 @@
-// HTTP for the info briefing. Same posture as prep/http: inside Tauri requests
+// HTTP for the info briefing. Same posture as papers/http: inside Tauri requests
 // go through the http plugin (the webview's CSP/CORS never sees them; the
 // https://* scope in capabilities/default.json allows the hosts), outside Tauri
 // the native fetch is used so bun/dev at least runs. Both feeds gate on a

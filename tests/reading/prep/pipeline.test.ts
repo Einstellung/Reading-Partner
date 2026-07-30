@@ -18,7 +18,7 @@ import {
   type PrepActivity,
 } from "../../../src/reading/prep/pipeline";
 import { streamChatCore, type SimpleStreamFn } from "../../../src/ai/providers";
-import { RateLimitError } from "../../../src/reading/prep/http";
+import { RateLimitError } from "../../../src/reading/papers/http";
 import type { PrepPaper, PrepState } from "../../../src/reading/prep/types";
 
 function paper(slug: string, chapters: number[]): PrepPaper {

@@ -54,6 +54,7 @@ const LAYER: Record<string, Layer> = {
   "reading/engine": "domain",
   "reading/figures": "domain",
   "reading/notes": "domain",
+  "reading/papers": "domain",
   "reading/prep": "domain",
   "reading/slides": "domain",
 
