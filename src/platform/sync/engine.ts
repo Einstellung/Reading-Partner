@@ -93,6 +93,12 @@ export interface EngineDeps {
   // copies and dropped records can be pinned without depending on which
   // strategy the merge module happens to apply today.
   merge?: MergeFile;
+  // When this device last completed a clean pass, as sync-state.json remembers
+  // it from a previous run. Read once at construction and never written here —
+  // it is not the time of this pass, and a pass that fails leaves it as it came
+  // in. Without it a restarted engine reports "never synced" until its first
+  // clean pass, on a device that has been syncing for months.
+  restoredLastSyncAt?: number | null;
   now?: () => number;
   // Called after a pass writes files pulled from remote, with their paths, so
   // the shell can refresh the shelf / drop stale caches.
@@ -153,7 +159,7 @@ export class SyncEngine {
   private readonly now: () => number;
   private snapshot: Snapshot;
   private running = false;
-  private lastSyncAt: number | null = null;
+  private lastSyncAt: number | null;
   private lastError: string | null = null;
   private lastPullAt = 0;
   // When the last pass began, whatever triggered it and whether it succeeded.
@@ -166,6 +172,7 @@ export class SyncEngine {
     this.d = deps;
     this.now = deps.now ?? Date.now;
     this.snapshot = deps.snapshot;
+    this.lastSyncAt = deps.restoredLastSyncAt ?? null;
   }
 
   start(): void {

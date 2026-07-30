@@ -116,6 +116,7 @@ function makeEngine(): SyncEngine {
     base: tauriBaseStore,
     trash: tauriTrashJournal,
     snapshot: state.snapshot,
+    restoredLastSyncAt: state.lastSyncAt,
     onPulled: (paths) => {
       for (const l of pulledListeners) l(paths);
     },
