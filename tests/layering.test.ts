@@ -23,6 +23,12 @@
 // Grouping must not cost the graph its resolution: a LAYER key may name a unit
 // inside a grouping directory ("reading/prep"), and every such unit stays a node
 // of its own, so the edges between reading's parts are still checked.
+//
+// Resolution stops there. A directory one level deeper ("reading/prep/sources",
+// "ui/components/chat") folds into the unit above it, needs no key, and its
+// imports of its parent are not edges. That is the place for a group of files
+// whose coupling to the unit around it genuinely runs both ways; a unit that can
+// be depended on in one direction belongs at the level above, with a key.
 
 import { expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";

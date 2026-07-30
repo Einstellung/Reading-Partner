@@ -9,7 +9,7 @@
 
 这两条都不能松：CSP 放开 `img-src https:` 是安全倒退；COEP 一去掉 PDFium 就加载不了。所以外链图永远进不来。
 
-解法：图片字节走 Tauri http 路由（和 `src/info/http.ts` 的 `infoFetch` 同一条 `cleanTauriFetch` 通道，webview 的 CSP/CORS 看不到它），拿到 bytes + content-type 后编码成 `data:<type>;base64,...` 换掉 `src`。data: 在 CSP 里是放行的。
+解法：图片字节走 Tauri http 路由（和 `src/info/extract/http.ts` 的 `infoFetch` 同一条 `cleanTauriFetch` 通道，webview 的 CSP/CORS 看不到它），拿到 bytes + content-type 后编码成 `data:<type>;base64,...` 换掉 `src`。data: 在 CSP 里是放行的。
 
 - 纯逻辑在 `src/info/inline-images.ts`：抽外链 src、改写 src、编码 data URL、caps（每篇最多 30 张、单张超 5MB 跳过）。fetch 注入，可测。
 - 文章视图 `ArticleView` 打开时先渲染缓存 HTML（文字立刻出），后台逐张内联，换好一张换一张，全部完成后把改写过的 HTML 写回当天的文章缓存（`store.ts` 的 `saveInlinedArticleHtml`），下次打开秒开且离线可用。
