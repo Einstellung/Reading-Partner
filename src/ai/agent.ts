@@ -94,6 +94,12 @@ export interface AgentCallbacks {
 	onThinking?(delta: string): void;
 	onToolStart(info: AgentToolStart): void;
 	onToolEnd(info: AgentToolEnd): void;
+	// A model turn is about to be streamed: `round` is 1-based, `rounds` the cap.
+	// Fires after the round has passed its budget check, so it counts turns that
+	// were really sent — which is what a caller reporting "3 of 6 turns used" has
+	// to mean. Optional; the conversational paths have no use for it, the
+	// sub-agent runner (ai/subagent) reports its turn count from it.
+	onRound?(info: { round: number; rounds: number }): void;
 	// The HTTP response head of each round, before its body is read: request id
 	// and rate-limit headers. Fires once per streamed model turn.
 	onResponse?: ResponseHead;
@@ -201,7 +207,7 @@ export interface AgentLoopParams extends AgentCallbacks {
 // the signal, so it already knows; no onDone/onError fires.
 export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 	const { stream, model, apiKey, systemPrompt, tools, signal, reasoning, transport, maxRounds } = params;
-	const { onDelta, onThinking, onResponse, onToolStart, onToolEnd, onDone, onError } = params;
+	const { onDelta, onThinking, onResponse, onRound, onToolStart, onToolEnd, onDone, onError } = params;
 	const maxRetries = params.maxRetries ?? DEFAULT_MAX_RETRIES;
 	const refuse = params.onRefusal ?? ((message: string) => onError(message));
 
@@ -252,6 +258,7 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 					return;
 				}
 			}
+			onRound?.({ round: round + 1, rounds: maxRounds });
 			const s = stream(model, context, {
 				apiKey,
 				signal,
@@ -373,6 +380,7 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
 		onDelta,
 		onThinking,
 		onResponse,
+		onRound,
 		onToolStart,
 		onToolEnd,
 		onDone,
@@ -398,6 +406,7 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
 			onDelta,
 			onThinking,
 			onResponse,
+			onRound,
 			onToolStart,
 			onToolEnd,
 			onDone,
