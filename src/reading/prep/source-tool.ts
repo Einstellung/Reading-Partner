@@ -6,9 +6,9 @@
 // testable with no network/AI.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../../ai/agent";
-import type { PaperStatus } from "../types";
-import { isHttpsUrl } from "./url";
+import type { AgentTool } from "../../ai/agent";
+import { isHttpsUrl } from "../sources";
+import type { PaperStatus } from "./types";
 
 export interface IngestResult {
   slug: string;

@@ -1,4 +1,4 @@
-// Unit tests for the add_source chat tool (src/reading/prep/sources/source-tool.ts).
+// Unit tests for the add_source chat tool (src/reading/prep/source-tool.ts).
 // The pipeline work is a fake ingestor, so there is no network/AI. Run: bun test.
 
 import { expect, test } from "bun:test";
@@ -6,7 +6,7 @@ import {
   buildSourceTools,
   type IngestResult,
   type SourceIngestor,
-} from "../../../src/reading/prep/sources/source-tool";
+} from "../../../src/reading/prep/source-tool";
 
 function tool(ingestor: SourceIngestor) {
   const [t] = buildSourceTools(ingestor);

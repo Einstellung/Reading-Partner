@@ -2,7 +2,11 @@
 // that reads the whole survey and returns the citation map plus 15-20
 // load-bearing nominations, and the robust parsing of that JSON back into the
 // prep data model. The AI call itself lives in live.ts.
+//
+// Slug naming lives here too, and with it the other way a queued paper is minted
+// — from a link the user pasted rather than from the survey's reference list.
 
+import { resolveUrlSource } from "../sources";
 import type { PrepChapter, PrepPaper, PrepReference } from "./types";
 import type { ParseTally } from "../../platform/app/structured-output";
 import type { Fulltext } from "../../fulltext/types";
@@ -117,6 +121,26 @@ export function uniqueSlug(taken: Set<string>, title: string): string {
     const candidate = `${base}-${i}`;
     if (!taken.has(candidate)) return candidate;
   }
+}
+
+// The queued PrepPaper a user's pasted link becomes (docs/09 link ingestion).
+// Reading the URL is sources/'s job; the title and slug it hands back are
+// provisional, refined once the fetch sees the PDF metadata or the <title>.
+// Throws (via resolveUrlSource) on a non-https URL.
+export function resolveUrlAddition(url: string, taken: Set<string>): PrepPaper {
+  const src = resolveUrlSource(url);
+  return {
+    slug: uniqueSlug(taken, src.slugBase),
+    title: src.title,
+    authors: [],
+    year: null,
+    arxivId: null,
+    citedInChapters: [],
+    reason: "added by the user",
+    status: "queued",
+    addedByUser: true,
+    sourceUrl: src.url,
+  };
 }
 
 // Parse the plan call's output into chapters + references + nominated papers.

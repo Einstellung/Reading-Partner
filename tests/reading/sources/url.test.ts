@@ -1,14 +1,15 @@
-// Unit tests for URL resolution + content sniffing (src/reading/prep/sources/url.ts). Run: bun test.
+// Unit tests for URL reading + content sniffing (src/reading/sources/url.ts).
+// Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
   isHttpsUrl,
   looksLikeHttpUrl,
   provisionalTitleFromUrl,
-  resolveUrlAddition,
-  slugFromUrl,
+  resolveUrlSource,
+  slugBaseFromUrl,
   sniffContentType,
-} from "../../../src/reading/prep/sources/url";
+} from "../../../src/reading/sources/url";
 
 test("looksLikeHttpUrl / isHttpsUrl", () => {
   expect(looksLikeHttpUrl("https://a.test/x")).toBe(true);
@@ -18,10 +19,14 @@ test("looksLikeHttpUrl / isHttpsUrl", () => {
   expect(isHttpsUrl("http://a.test")).toBe(false);
 });
 
-test("slugFromUrl uses the filename, else the hostname", () => {
-  expect(slugFromUrl("https://arxiv.org/pdf/2303.12345")).toBe("2303-12345");
-  expect(slugFromUrl("https://blog.example.com/posts/great-article.html")).toBe("great-article");
-  expect(slugFromUrl("https://openreview.net/")).toBe("openreview-net");
+test("slugBaseFromUrl uses the filename, else the hostname", () => {
+  // The stem is raw: the caller's slugify turns the dots into hyphens.
+  expect(slugBaseFromUrl("https://arxiv.org/pdf/2303.12345")).toBe("2303.12345");
+  expect(slugBaseFromUrl("https://blog.example.com/posts/great-article.html")).toBe(
+    "great-article",
+  );
+  expect(slugBaseFromUrl("https://openreview.net/")).toBe("openreview.net");
+  expect(slugBaseFromUrl("not a url at all")).toBe("source");
 });
 
 test("provisionalTitleFromUrl is hostname + path", () => {
@@ -29,23 +34,15 @@ test("provisionalTitleFromUrl is hostname + path", () => {
   expect(provisionalTitleFromUrl("https://arxiv.org/abs/2303.12345")).toBe("arxiv.org/abs/2303.12345");
 });
 
-test("resolveUrlAddition builds a queued user source with a provisional title/slug", () => {
-  const p = resolveUrlAddition("https://arxiv.org/pdf/2303.12345", new Set());
-  expect(p.sourceUrl).toBe("https://arxiv.org/pdf/2303.12345");
-  expect(p.addedByUser).toBe(true);
-  expect(p.status).toBe("queued");
-  expect(p.slug).toBe("2303-12345");
-  expect(p.title).toBe("arxiv.org/pdf/2303.12345");
-  expect(p.arxivId).toBeNull();
+test("resolveUrlSource reads the URL, a provisional title and a slug stem", () => {
+  const s = resolveUrlSource("  https://arxiv.org/pdf/2303.12345  ");
+  expect(s.url).toBe("https://arxiv.org/pdf/2303.12345");
+  expect(s.title).toBe("arxiv.org/pdf/2303.12345");
+  expect(s.slugBase).toBe("2303.12345");
 });
 
-test("resolveUrlAddition dedups slugs against taken", () => {
-  const p = resolveUrlAddition("https://arxiv.org/pdf/2303.12345", new Set(["2303-12345"]));
-  expect(p.slug).toBe("2303-12345-2");
-});
-
-test("resolveUrlAddition rejects a non-https URL", () => {
-  expect(() => resolveUrlAddition("http://insecure.test/x", new Set())).toThrow(/https/);
+test("resolveUrlSource rejects a non-https URL", () => {
+  expect(() => resolveUrlSource("http://insecure.test/x")).toThrow(/https/);
 });
 
 test("sniffContentType: PDF magic bytes win over any header", () => {
