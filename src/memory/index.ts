@@ -27,6 +27,7 @@ export {
   buildDistillSystemPrompt,
   buildDistillUserMessage,
   formatSilentMarks,
+  runDistillPass,
   runDistillation,
   selectSilentMarks,
   DISTILL_AGENT_NAME,
@@ -36,6 +37,9 @@ export {
   type DistillDeps,
   type DistillInput,
   type DistillMessage,
+  type DistillPassDeps,
+  type DistillPassInput,
+  type DistillPassStore,
   type DistillResult,
 } from "./distill";
 export {

@@ -107,10 +107,10 @@ export interface DistillThreadOptions {
   // Hangup (App.tsx captureHangup) fires the pass and then aborts the chat turn's
   // controller — that controller is the only signal in scope and handing it over
   // would kill every pass the moment it started. The trim fallback
-  // (buildReadingTurn) runs inside a turn that does own a signal, but
-  // that signal is aborted by Stop and by hangup, and hangup is exactly when the
-  // pass matters most. Nothing else can own it either: memory bookkeeping has no
-  // UI, so there is no Stop for the reader to press.
+  // (buildReadingTurn) runs inside a turn that does own a signal, but that signal
+  // is aborted by Stop and by hangup, and hangup is exactly when this pass matters
+  // most. Nothing else can own it either: memory bookkeeping has no UI, so there
+  // is no Stop for the reader to press.
   //
   // So the signal is here for a caller that does have a claim on a pass — thread
   // deletion is the candidate — rather than being wired to a controller that
