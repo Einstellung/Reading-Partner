@@ -40,10 +40,18 @@
 
 调用方需要在跑的时候给读者显示一行，但不能拿到工具调用流。`SubagentProgress` 只带 phase、定义里那句 `label`、轮次计数，以及 phase 为 `"tool"` 时一个工具名——而且只是调用方自己注入过的名字。参数和结果永远不出现：子 agent 自己想出来的 query 是它自己的中间产物，结果正是这个模块要挡住的东西。
 
+## 第一个调用方：文献检索
+
+`src/reading/papers/research-agent.ts`。`search_papers`、`find_paper`、`walk_citations` 从读者那一轮上撤下来，变成这个子 agent 自己的工具集；对话上只剩 `research_literature(task)`，和一个仍然直挂的 `find_paper`（一条引文换一条记录，用不着委派）。提示词放在 reading 领域，不进 capability——怎么给一个读到一半的人查文献是领域知识。
+
+brief 的形状写死在提示词里：最多五条，每条标题（作者、年份、venue）加链接或 DOI，加一句"这篇为什么答的是这个问题"。留在外面的是排序、候选数、来自哪个库、被引数、成段摘要、看过又放弃的论文。理由是 brief 就是读者从一次检索里看到的全部，而这些东西一条也用不上。`briefTokenCap` 压到 700，因为契约提示词的字数上限是从这个数推出来的，1200 会请回来一篇综述。
+
+接线上三件事必须成立：`buildReadingTurn` 每个读者轮建一个 `SubagentLedger`（池子 10 轮）；轮的 `AbortSignal` 一路传到 `runSubagent`，读者挂断即杀；进度只用来改写聊天里那一行状态，不展开子 agent 的工具调用。`usable: false` 由 `subagentTool` throw 出来，在读者的 loop 里就是一次失败的工具调用。
+
 ## 留给以后
 
 轮数用光的运行现在什么都不带回来。loop 走 `REFUSE_ROUNDS` 出口时没有最终文本，那一轮读到的东西就地丢失。补法是补一次无工具的"现在收尾"turn，需要把运行的 message 列表交回来，这次不做。
 
-memory 蒸馏（`src/memory/distill.ts`）是代码里已有的同形东西：一次静默的 agent turn，自己的 prompt、自己的工具、注入式的 runner。它本该长在这个抽象上——差的正是这里补的那几样（诚实失败、取消、brief 上限）。这次不改它，等第一个真实调用方落地、契约挨过一轮真实使用再说。
+memory 蒸馏（`src/memory/distill.ts`）是代码里已有的同形东西：一次静默的 agent turn，自己的 prompt、自己的工具、注入式的 runner。它本该长在这个抽象上——差的正是这里补的那几样（诚实失败、取消、brief 上限）。
 
-接线也不在这次：文献检索、简报生成都还没挂子 agent。这次交付的是能力本身。
+简报生成也还没挂上来。
