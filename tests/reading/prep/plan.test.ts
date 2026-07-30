@@ -2,7 +2,14 @@
 // call that produces the text is mocked by literal strings. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { extractJson, parsePlan, planUserMessage, slugify, uniqueSlug } from "../../../src/reading/prep/plan";
+import {
+  extractJson,
+  parsePlan,
+  planUserMessage,
+  resolveUrlAddition,
+  slugify,
+  uniqueSlug,
+} from "../../../src/reading/prep/plan";
 import type { Fulltext } from "../../../src/fulltext/types";
 
 const PLAN = {
@@ -96,6 +103,30 @@ test("slugify and uniqueSlug produce filesystem-safe unique names", () => {
   expect(slugify("???")).toBe("paper");
   const taken = new Set(["diffusion-policy"]);
   expect(uniqueSlug(taken, "Diffusion Policy")).toBe("diffusion-policy-2");
+});
+
+test("resolveUrlAddition builds a queued user source with a provisional title/slug", () => {
+  const p = resolveUrlAddition("https://arxiv.org/pdf/2303.12345", new Set());
+  expect(p.sourceUrl).toBe("https://arxiv.org/pdf/2303.12345");
+  expect(p.addedByUser).toBe(true);
+  expect(p.status).toBe("queued");
+  expect(p.slug).toBe("2303-12345");
+  expect(p.title).toBe("arxiv.org/pdf/2303.12345");
+  expect(p.arxivId).toBeNull();
+});
+
+test("resolveUrlAddition slugifies the stem it is handed", () => {
+  const p = resolveUrlAddition("https://blog.example.com/posts/A Great Post!.html", new Set());
+  expect(p.slug).toBe("a-great-post");
+});
+
+test("resolveUrlAddition dedups slugs against taken", () => {
+  const p = resolveUrlAddition("https://arxiv.org/pdf/2303.12345", new Set(["2303-12345"]));
+  expect(p.slug).toBe("2303-12345-2");
+});
+
+test("resolveUrlAddition rejects a non-https URL", () => {
+  expect(() => resolveUrlAddition("http://insecure.test/x", new Set())).toThrow(/https/);
 });
 
 test("planUserMessage carries page markers", () => {

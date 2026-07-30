@@ -16,8 +16,14 @@ import { fetchFromOpenAlex } from "../papers/openalex";
 import { fetchWithRetry } from "../papers/http";
 import { runDigest } from "./digest";
 import { serializeNote } from "./notes";
-import { parsePlan, planUserMessage, uniqueSlug, PLAN_SYSTEM_PROMPT } from "./plan";
-import { looksLikeHttpUrl, resolveUrlAddition, sniffContentType } from "./sources/url";
+import {
+  parsePlan,
+  planUserMessage,
+  resolveUrlAddition,
+  uniqueSlug,
+  PLAN_SYSTEM_PROMPT,
+} from "./plan";
+import { looksLikeHttpUrl, sniffContentType } from "./sources/url";
 import {
   loadPrepState,
   paperFulltextHash,

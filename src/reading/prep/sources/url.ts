@@ -1,10 +1,9 @@
-// User-pasted-link resolution, pure (docs/09 link ingestion). Turns an http(s)
-// URL into a PrepPaper stub with a provisional title/slug (both refined after
-// the fetch), and sniffs a fetched response's content type. No IO here — live.ts
-// wires these to readingFetch; tests drive them directly.
-
-import { slugify, uniqueSlug } from "../plan";
-import type { PrepPaper } from "../types";
+// Reading a pasted http(s) link, pure (docs/09 link ingestion). Recognises an
+// http(s) URL, reads a provisional title and a slug stem out of it (both refined
+// after the fetch), and sniffs a fetched response's content type. Nothing here
+// knows the prep model: turning a read link into the record the pipeline stores
+// is prep's job (resolveUrlAddition in plan.ts). No IO either — live.ts wires
+// these to readingFetch; tests drive them directly.
 
 export function looksLikeHttpUrl(s: string): boolean {
   return /^https?:\/\//i.test(s.trim());
@@ -14,9 +13,10 @@ export function isHttpsUrl(s: string): boolean {
   return /^https:\/\//i.test(s.trim());
 }
 
-// A short slug base from the URL: the filename (last path segment, extension
-// dropped) when it carries one, else the hostname. slugify handles the cleanup.
-export function slugFromUrl(url: string): string {
+// A short slug stem from the URL: the filename (last path segment, extension
+// dropped) when it carries one, else the hostname. Raw text — the caller runs it
+// through its own slugify, which does the cleanup.
+export function slugBaseFromUrl(url: string): string {
   let host = "";
   let path = "";
   try {
@@ -31,7 +31,7 @@ export function slugFromUrl(url: string): string {
   // arXiv id's ".12345" — extensions start with a letter.
   const last = segs.length ? segs[segs.length - 1].replace(/\.[a-z][a-z0-9]{0,4}$/i, "") : "";
   const base = last || host;
-  return slugify(decodeURIComponent(base));
+  return decodeURIComponent(base);
 }
 
 // A human-ish provisional title until the real one is read from PDF metadata or
@@ -47,24 +47,27 @@ export function provisionalTitleFromUrl(url: string): string {
   }
 }
 
-// Build the queued PrepPaper stub for a pasted URL. Throws on a non-https URL so
-// the caller (add_source tool / PrepPanel) can surface a clear rejection.
-export function resolveUrlAddition(url: string, taken: Set<string>): PrepPaper {
+// Everything a pasted link says about itself before anything is fetched. The
+// boundary type: this side reads it, the prep side records it.
+export interface UrlSource {
+  // The trimmed URL, the fetch target.
+  url: string;
+  title: string;
+  // Stem for the slug, not yet slugified or deduplicated.
+  slugBase: string;
+}
+
+// Read a pasted link. Throws on a non-https URL so the caller (add_source tool /
+// PrepPanel) can surface a clear rejection.
+export function resolveUrlSource(url: string): UrlSource {
   const trimmed = url.trim();
   if (!isHttpsUrl(trimmed)) {
     throw new Error("Only https URLs can be ingested.");
   }
   return {
-    slug: uniqueSlug(taken, slugFromUrl(trimmed)),
+    url: trimmed,
     title: provisionalTitleFromUrl(trimmed),
-    authors: [],
-    year: null,
-    arxivId: null,
-    citedInChapters: [],
-    reason: "added by the user",
-    status: "queued",
-    addedByUser: true,
-    sourceUrl: trimmed,
+    slugBase: slugBaseFromUrl(trimmed),
   };
 }
 
