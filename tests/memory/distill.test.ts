@@ -1,7 +1,8 @@
 // Distillation flow tests (src/memory/distill.ts) with a mocked AI turn: the
-// runner is backed by runAgentLoop over a scripted fake stream (same pattern
-// as tests/ai/agent.test.ts), so the real memory tools run against the fake
-// store with no provider, network, or token spend. Run: bun test.
+// sub-agent turn is backed by runAgentLoop over a scripted fake stream (same
+// pattern as tests/ai/subagent.test.ts), so the real memory tools, the real
+// honest-failure mapping and the real abort path run against the fake store with
+// no provider, network, or token spend. Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
@@ -15,24 +16,34 @@ import {
   type Model,
 } from "@earendil-works/pi-ai";
 import { runAgentLoop, type StreamFn } from "../../src/ai/agent";
+import { createTurnSettler } from "../../src/ai/subagent/turn";
+import type { SubagentTurnFn, SubagentTurnRequest } from "../../src/ai/subagent/types";
+import { StoppedError } from "../../src/ai/watchdog";
 import { FileMemoryAdapter } from "../../src/memory/adapter";
 import {
+  buildDistillAgent,
   buildDistillSystemPrompt,
   buildDistillUserMessage,
   formatSilentMarks,
+  runDistillPass,
   runDistillation,
   selectSilentMarks,
+  DISTILL_BRIEF_TOKENS,
   type DistillAnnotation,
   type DistillInput,
-  type DistillRunner,
+  type DistillPassInput,
 } from "../../src/memory/distill";
 import { MemoryFileStore } from "../../src/memory/store";
 import { JULY_17, makeFakeFs } from "./fakefs";
 
 type ToolReq = { name: string; args: Record<string, any>; id: string };
-type Turn = { text?: string; calls?: ToolReq[] };
+type Turn = { text?: string; calls?: ToolReq[] } | { error: string };
 
 function turnEvents(turn: Turn): AssistantMessageEvent[] {
+  if ("error" in turn) {
+    const errMsg = fauxAssistantMessage("", { stopReason: "error", errorMessage: turn.error });
+    return [{ type: "error", reason: "error", error: errMsg }];
+  }
   const blocks = [
     ...(turn.text ? [fauxText(turn.text)] : []),
     ...(turn.calls ?? []).map((c) => fauxToolCall(c.name, c.args, { id: c.id })),
@@ -44,40 +55,46 @@ function turnEvents(turn: Turn): AssistantMessageEvent[] {
   return [{ type: "done", reason: hasCalls ? "toolUse" : "stop", message }];
 }
 
-function scriptStream(turns: Turn[]): StreamFn {
+// A SubagentTurnFn backed by the real loop over a scripted model, recording what
+// each run was asked for. `beforeRound` fires as each round is asked for
+// (0-based), which is where a test cancelling an in-flight pass raises its signal.
+function loopRunner(turns: Turn[], beforeRound?: (round: number) => void) {
+  const requests: SubagentTurnRequest[] = [];
   let round = 0;
-  return () => {
+  const stream: StreamFn = () => {
+    beforeRound?.(round);
     const events = turnEvents(turns[round++] ?? { text: "done" });
-    const stream = createAssistantMessageEventStream();
+    const s = createAssistantMessageEventStream();
     void (async () => {
       for (const ev of events) {
         await Promise.resolve();
-        stream.push(ev);
+        s.push(ev);
       }
-      stream.end();
+      s.end();
     })();
-    return stream;
+    return s;
   };
+  const run: SubagentTurnFn = (request) => {
+    requests.push(request);
+    const settler = createTurnSettler(request.signal, request.onRound);
+    void runAgentLoop({
+      stream,
+      model: {} as Model<Api>,
+      systemPrompt: request.systemPrompt,
+      messages: [{ role: "user", content: request.task, timestamp: 0 }],
+      tools: request.tools,
+      signal: request.signal,
+      maxRounds: request.maxRounds,
+      purpose: request.purpose,
+      ...settler.callbacks,
+    });
+    return settler.outcome.finally(() => settler.dispose());
+  };
+  return { run, requests, streamed: () => round };
 }
 
-// A DistillRunner backed by the real agent loop over a scripted model.
-function scriptedRunner(turns: Turn[]): DistillRunner {
-  return ({ systemPrompt, userText, tools }) =>
-    new Promise<void>((resolve, reject) => {
-      void runAgentLoop({
-        stream: scriptStream(turns),
-        model: {} as Model<Api>,
-        systemPrompt,
-        messages: [{ role: "user", content: userText, timestamp: 0 }],
-        tools,
-        maxRounds: 8,
-        onDelta: () => {},
-        onToolStart: () => {},
-        onToolEnd: () => {},
-        onDone: () => resolve(),
-        onError: (m) => reject(new Error(m)),
-      });
-    });
+function scriptedRunner(turns: Turn[]): { run: SubagentTurnFn } {
+  return { run: loopRunner(turns).run };
 }
 
 function makeInput(overrides: Partial<DistillInput> = {}): DistillInput {
@@ -130,7 +147,7 @@ test("distillation creates memories through the real tools and counts them", asy
     ]),
   );
 
-  expect(result).toEqual({ created: 1, updated: 0, deleted: 0 });
+  expect(result).toEqual({ created: 1, updated: 0, deleted: 0, ok: true, outcome: "answered" });
   const entries = await store.list();
   expect(entries).toHaveLength(1);
   expect(entries[0].type).toBe("stuck-point");
@@ -176,7 +193,7 @@ test("distillation updates (evolution) and deletes existing memories", async () 
     ]),
   );
 
-  expect(result).toEqual({ created: 0, updated: 1, deleted: 1 });
+  expect(result).toEqual({ created: 0, updated: 1, deleted: 1, ok: true, outcome: "answered" });
   const entries = await store.list();
   expect(entries).toHaveLength(1);
   expect(entries[0].id).toBe(stuck.id); // evolution rewrote, never re-created
@@ -187,7 +204,8 @@ test("distillation updates (evolution) and deletes existing memories", async () 
 test("a no-op distillation (nothing worth keeping) writes nothing", async () => {
   const { store, adapter } = makeStore();
   const result = await runDistillation(makeInput(), adapter, scriptedRunner([{ text: "done" }]));
-  expect(result).toEqual({ created: 0, updated: 0, deleted: 0 });
+  // ok, with no tool call at all: the point of evidence "optional" (see below).
+  expect(result).toEqual({ created: 0, updated: 0, deleted: 0, ok: true, outcome: "answered" });
   expect(await store.list()).toEqual([]);
 });
 
@@ -210,8 +228,182 @@ test("invalid tool args become a tool error the loop survives, not a write", asy
       { text: "done" },
     ]),
   );
-  expect(result).toEqual({ created: 0, updated: 0, deleted: 0 });
+  expect(result).toEqual({ created: 0, updated: 0, deleted: 0, ok: true, outcome: "answered" });
   expect(await store.list()).toEqual([]);
+});
+
+// --- the sub-agent definition ---
+
+test("the distiller mounts tools but does not require evidence", () => {
+  const definition = buildDistillAgent(makeInput(), []);
+  // "required" (the default once tools are mounted) would turn every correct pass
+  // over a thin conversation — the ones the prompt tells the model to make no tool
+  // call in — into a failed pass, and the timestamps would never advance.
+  expect(definition.evidence).toBe("optional");
+  expect(definition.briefTokenCap).toBe(DISTILL_BRIEF_TOKENS);
+  // The prompt the capability sends is the curation prompt, with the brief
+  // contract appended by the runner.
+  expect(definition.systemPrompt).toContain("Update, don't duplicate");
+});
+
+// --- a pass that does not finish ---
+
+test("a failed call is a failed pass, with the writes it did make counted", async () => {
+  const { store, adapter } = makeStore();
+  const result = await runDistillation(
+    makeInput(),
+    adapter,
+    scriptedRunner([
+      {
+        calls: [
+          {
+            name: "memory_update",
+            id: "c1",
+            args: {
+              action: "create",
+              type: "belief",
+              summary: "Suspects the survey overstates the result",
+              body: "Voiced on 2026-07-17.",
+            },
+          },
+        ],
+      },
+      { error: "connection reset" },
+    ]),
+  );
+
+  expect(result.ok).toBe(false);
+  expect(result.outcome).toBe("failed");
+  // Recorded honestly: the sentence names the sub-agent and says what happened,
+  // instead of the pass being swallowed by a warn nobody can act on.
+  expect(result.failure).toContain("memory_distiller");
+  expect(result.failure).toContain("connection reset");
+  // The write it managed before the call died is on disk, and counted.
+  expect(result.created).toBe(1);
+  expect(await store.list()).toHaveLength(1);
+});
+
+test("a pass that never writes a final message is not a finished pass", async () => {
+  const { adapter } = makeStore();
+  const result = await runDistillation(makeInput(), adapter, scriptedRunner([{ text: "" }]));
+  expect(result.ok).toBe(false);
+  expect(result.outcome).toBe("refused");
+});
+
+// --- the timestamp discipline (runDistillPass) ---
+
+function passInput(overrides: Partial<DistillPassInput> = {}): DistillPassInput {
+  return {
+    topicName: "attention",
+    bookName: "survey.pdf",
+    threadId: "thread-1",
+    annotationId: "ann-1",
+    page: 12,
+    markedText: "the marked sentence",
+    messages: [
+      { role: "user", text: "why is this quadratic?", ts: 100 },
+      { role: "ai", text: "because every token attends to every token", ts: 200 },
+    ],
+    annotations: [
+      { id: "a1", page: 3, text: "softmax", createdAt: 700 },
+      { id: "a2", page: 9, text: "kv cache", createdAt: 900 },
+    ],
+    ...overrides,
+  };
+}
+
+test("a finished pass advances both stamps", async () => {
+  const { store, adapter } = makeStore();
+  const result = await runDistillPass(passInput(), {
+    store,
+    adapter,
+    now: () => JULY_17,
+    ...scriptedRunner([{ text: "done" }]),
+  });
+
+  expect(result.ok).toBe(true);
+  expect(await store.getMeta()).toEqual({
+    lastDistilledAt: JULY_17,
+    lastAnnotationDistillAt: 900, // the newest mark this pass was shown
+  });
+});
+
+test("a failed pass leaves both stamps where they were", async () => {
+  const { store, adapter } = makeStore();
+  const result = await runDistillPass(passInput(), {
+    store,
+    adapter,
+    now: () => JULY_17,
+    ...scriptedRunner([{ error: "connection reset" }]),
+  });
+
+  expect(result.ok).toBe(false);
+  // Nothing moved, so the next trigger distils this transcript and these marks
+  // again — the alternative is a conversation whose memory is never written and
+  // nothing left to say so.
+  expect(await store.getMeta()).toEqual({
+    lastDistilledAt: null,
+    lastAnnotationDistillAt: null,
+  });
+});
+
+// --- cancellation ---
+
+test("an aborted pass stops, and does not advance the stamps", async () => {
+  const { store, adapter } = makeStore();
+  const controller = new AbortController();
+  const runner = loopRunner(
+    [
+      {
+        calls: [
+          {
+            name: "memory_update",
+            id: "c1",
+            args: {
+              action: "create",
+              type: "reading-position",
+              summary: "Reading the attention chapter",
+              body: "On page 12 on 2026-07-17.",
+            },
+          },
+        ],
+      },
+      { text: "should never be asked for" },
+    ],
+    // Hung up between the write and the round that would have finished the pass.
+    (round) => {
+      if (round === 1) controller.abort();
+    },
+  );
+
+  const attempt = runDistillPass(passInput(), {
+    store,
+    adapter,
+    run: runner.run,
+    signal: controller.signal,
+    now: () => JULY_17,
+  });
+
+  await expect(attempt).rejects.toBeInstanceOf(StoppedError);
+  // The loop stopped there: a run that carried on would have asked for a third.
+  expect(runner.streamed()).toBe(2);
+  expect(await store.list()).toHaveLength(1); // the write it made stays on disk
+  expect(await store.getMeta()).toEqual({
+    lastDistilledAt: null,
+    lastAnnotationDistillAt: null,
+  });
+});
+
+test("a signal already aborted never reaches the model", async () => {
+  const { adapter } = makeStore();
+  const controller = new AbortController();
+  controller.abort();
+  const runner = loopRunner([{ text: "done" }]);
+
+  await expect(
+    runDistillation(makeInput(), adapter, { run: runner.run, signal: controller.signal }),
+  ).rejects.toBeInstanceOf(StoppedError);
+  expect(runner.requests.length).toBe(0);
 });
 
 test("system prompt carries the curation rules, the date, and the index", () => {
