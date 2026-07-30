@@ -22,7 +22,7 @@
 
 ## 解法
 
-**`data` 当成可能为 null 来解析，并且空结果要能往下降级。** `src/reading/prep/s2.ts` 的 `parseS2Edges` 用 `Array.isArray` 判断，非数组一律当成"S2 给不出边"。上层 `walkCitations`（`citations.ts`）在拿到空结果时**继续试下一个库**，不只在报错时才降级——因为"S2 返回空"最常见的原因就是这条字段被抽掉了，而 OpenAlex 那边有这篇论文的 `referenced_works`。
+**`data` 当成可能为 null 来解析，并且空结果要能往下降级。** `src/reading/papers/s2.ts` 的 `parseS2Edges` 用 `Array.isArray` 判断，非数组一律当成"S2 给不出边"。上层 `walkCitations`（`citations.ts`）在拿到空结果时**继续试下一个库**，不只在报错时才降级——因为"S2 返回空"最常见的原因就是这条字段被抽掉了，而 OpenAlex 那边有这篇论文的 `referenced_works`。
 
 **别发 `year=`，过滤和排序都在本地做。** 这就决定了两个方向各由哪个库领跑：
 

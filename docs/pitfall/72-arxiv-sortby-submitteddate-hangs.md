@@ -23,10 +23,10 @@
 search_query=all:brain AND all:evolution AND submittedDate:[202501010000 TO 210001010000]
 ```
 
-区间是闭区间、分钟精度，所以"某年以来"也得给个上界（`src/reading/prep/arxiv.ts` 用 2100）。这条路 0.75 秒的那档速度不变。
+区间是闭区间、分钟精度，所以"某年以来"也得给个上界（`src/reading/papers/arxiv.ts` 用 2100）。这条路 0.75 秒的那档速度不变。
 
 顺带一条结论：**别的库也不要按日期排序**。同一天实测 OpenAlex 的 `sort=publication_date:desc` 配全文检索 `search=brain evolution intelligence`，第一条是一篇讲德国经理人的管理学论文——日期排序把相关性排名整个扔了。四个库统一成"新"是过滤条件（arXiv 的 `submittedDate` 区间、OpenAlex 的 `from_publication_date`、S2 的 `year=2025-`、PubMed 的 `mindate/maxdate`），排序一律留给各库自己的相关性。
 
-**限流按现成的来。** 主题检索走 `fetchWithRetry`（`src/reading/prep/http.ts`），它有按 host 的最小间隔（arXiv 3000ms）和 429 退避，终态 429 抛 `RateLimitError`。检索工具把这个抛出报成"arXiv 这一趟没答上来"，其余三个库照常返回——四个库并发扇出，一个挂掉不能带走整次检索。
+**限流按现成的来。** 主题检索走 `fetchWithRetry`（`src/reading/papers/http.ts`），它有按 host 的最小间隔（arXiv 3000ms）和 429 退避，终态 429 抛 `RateLimitError`。检索工具把这个抛出报成"arXiv 这一趟没答上来"，其余三个库照常返回——四个库并发扇出，一个挂掉不能带走整次检索。
 
 *实测：2026-07-30*
