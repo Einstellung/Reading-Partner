@@ -404,7 +404,7 @@ test("mounted as a tool, a usable brief is the tool result", async () => {
   expect(await tool.execute({ task: "find recent work" })).toBe("One paper: Liu 2025.");
 });
 
-// Same discipline as src/reading/prep/search-tool.ts: a result the model reads as
+// Same discipline as src/reading/papers/search-tool.ts: a result the model reads as
 // an answer is how "stopped early" becomes "the literature is silent".
 test("mounted as a tool, a run that established nothing throws its own words", async () => {
   const runner = loopRunner([

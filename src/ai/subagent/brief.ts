@@ -6,7 +6,7 @@
 // caller will relay. It must be impossible to read a brief as "there is nothing
 // to find" when what happened was "this run stopped early", and impossible for a
 // fluent answer with nothing behind it to arrive as an answer at all. The
-// precedent is src/reading/prep/search-tool.ts, which throws rather than return
+// precedent is src/reading/papers/search-tool.ts, which throws rather than return
 // an empty candidate list when no library answered.
 
 import { estimateTextTokens } from "../../budget";

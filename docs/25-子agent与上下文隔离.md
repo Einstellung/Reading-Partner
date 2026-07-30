@@ -26,7 +26,7 @@
 
 工具挂了但模型照样写出答案，这份答案不返回——不裁剪、不引用、不加标签地丢掉，因为带标签的引文仍然是调用方可以转述的一段话。默认只要挂了工具就要求有证据（`evidence: "required"`），一次工具都没调就作答同样按无证据处理。部分工具失败时 brief 可用，末尾附一行说明哪个工具怎么失败的。
 
-调用方只需要看 `usable` 一位。`tool.ts` 把不可用的运行 throw 出去而不是 return，和 `src/reading/prep/search-tool.ts` 一个规矩：模型会把 tool result 当答案读，"提前停了"就是这样变成"文献里没有"的。
+调用方只需要看 `usable` 一位。`tool.ts` 把不可用的运行 throw 出去而不是 return，和 `src/reading/papers/search-tool.ts` 一个规矩：模型会把 tool result 当答案读，"提前停了"就是这样变成"文献里没有"的。
 
 ## 预算与取消
 

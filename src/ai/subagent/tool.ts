@@ -61,7 +61,7 @@ export function subagentTool(definition: SubagentDefinition, deps: SubagentToolD
         deps,
       );
       // A run that established nothing is thrown, not returned. Same discipline
-      // as src/reading/prep/search-tool.ts: a tool result the model reads as an
+      // as src/reading/papers/search-tool.ts: a tool result the model reads as an
       // answer is how "the search stopped early" becomes "the literature is
       // silent". The text is identical either way — only a thrown result is
       // marked as an error the model has to account for, and shows up red in the
