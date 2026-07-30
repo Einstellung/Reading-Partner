@@ -1,6 +1,6 @@
 # iOS 发布路线
 
-> historical：本文的头号阻塞（zotero/reader 的 AGPL 挡 App Store、要等 CDS 授权）随引擎换成 EmbedPDF 一起消失，许可证也已改为 PolyForm-NC，末尾那封请求信不必发。实际发布流程见 [11](./11-iOS-TestFlight发布.md)、[19](./19-iOS侧载安装.md)、[18](./18-iOS-Google登录.md)。中国区、审核条款、账号那几节仍然有效。
+> historical：本文的头号阻塞（zotero/reader 的 AGPL 挡 App Store、要等 CDS 授权）随引擎换成 EmbedPDF 一起消失，许可证也已改为 PolyForm-NC。实际发布流程见 [11](./11-iOS-TestFlight发布.md)、[19](./19-iOS侧载安装.md)、[18](./18-iOS-Google登录.md)。中国区、审核条款、账号那几节仍然有效。
 
 2026-07-14 调研定稿。目标:Apple 个人开发者账号,TestFlight 先行,美区公开上架,中国区暂缓。开发者无 Mac,构建全程走 GitHub Actions 的 macOS runner(公开仓库免费)。
 
@@ -46,26 +46,3 @@ v1 决定:iPad 上走手动粘贴 code(兜底已实现,授权页带 code=true �
 | 3 | TestFlight 内测→外测 | 1-2 周 | 外测过一次 beta 审核 |
 | 4 | 美区上架 | 审核 1-3 天 | 阶段 0 的许可 |
 | 5 | 中国区 | 暂缓 | 备案 |
-
-## 给 CDS/Zotero 的许可请求信(用户以本人名义发)
-
-发送渠道:zotero/reader 仓库开 GitHub issue,或论坛 forums.zotero.org。信稿:
-
----
-
-Subject: Request for an App Store exception for zotero/reader (AGPL section 7)
-
-Hi Zotero team,
-
-I'm building Reading-Partner (https://github.com/Einstellung/Reading-Partner), an open-source AI reading companion. It embeds zotero/reader as its reading and annotation engine — unmodified, pinned as a git submodule, built with a small build-config-only patch. The whole application is licensed under AGPL-3.0, the source is public, and we don't use the Zotero name or branding anywhere in the product.
-
-I'd like to distribute the app on the Apple App Store (a free, open-source listing — no paid features). As you know, the App Store's usage rules conflict with AGPL section 6, and only the copyright holder can resolve this. So I'm asking: would the Corporation for Digital Scholarship be willing to grant an additional permission under AGPL section 7 allowing distribution of zotero/reader through the Apple App Store — either as a general exception in the repository, or as a written permission specific to this project?
-
-I'm happy to add any attribution you'd like in the app and its listing, and to keep the full corresponding source public as we already do. If there's anything about our usage you'd like changed, I'll gladly comply.
-
-Thank you for open-sourcing the reader — it's a remarkable piece of engineering.
-
-Best regards,
-Xinyuan (github.com/Einstellung)
-
----
