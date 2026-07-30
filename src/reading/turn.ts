@@ -56,8 +56,19 @@ import { buildClassroomTools } from "./prep/tools";
 import { ADD_SOURCE_PROMPT, buildSourceTools } from "./prep/source-tool";
 import { prepFetch } from "./papers/http";
 import { searchPapers, type PaperSearchFn } from "./papers/paper-search";
-import { buildPaperSearchTools, SEARCH_PAPERS_PROMPT } from "./papers/search-tool";
-import { buildCitationTools, SEARCH_CITATIONS_PROMPT } from "./papers/citation-tool";
+import { buildFindPaperTool, FIND_PAPER_PROMPT } from "./papers/citation-tool";
+import {
+  buildResearchAgent,
+  RESEARCH_PROMPT,
+  RESEARCH_TURN_ROUNDS,
+} from "./papers/research-agent";
+import {
+  createSubagentLedger,
+  runSubagentTurnLive,
+  subagentTool,
+  type SubagentProgress,
+  type SubagentTurnFn,
+} from "../ai/subagent";
 import type { PrepPipeline } from "./prep/pipeline";
 
 // Auto-explanation kickoff (docs/03: the bubble starts explaining, unprompted).
@@ -115,7 +126,17 @@ export interface ReadingTurnInput {
   // the pipeline the reader is on now, matching the pre-extraction behaviour.
   getPipeline: () => PrepPipeline | null;
   distillAnnotations: () => DistillAnnotation[];
+  // The turn's abort signal. It drops the assembly when the reader has already
+  // moved on, and it is the signal the research sub-agent runs under, so hanging
+  // up mid-search kills the run rather than leaving it fetching in the background.
   signal?: AbortSignal;
+  // One line for the reader while the research sub-agent runs. Never its tool
+  // calls: what arrives here is a phase, the label this turn wrote, and a round
+  // count (src/ai/subagent/types.ts).
+  onSubagentProgress?: (progress: SubagentProgress) => void;
+  // The sub-agent turn behind research_literature. Injected so the assembly and
+  // its research tool can be exercised with no provider, no key and no network.
+  runSubagentTurn?: SubagentTurnFn;
 }
 
 export interface ReadingTurn {
@@ -208,6 +229,8 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     getPipeline,
     distillAnnotations,
     signal,
+    onSubagentProgress,
+    runSubagentTurn = runSubagentTurnLive,
   } = input;
   const { topicId, topicName, fileName, pageLabel, pageIndex, files } = context;
   const materials = await gatherTopicMaterials(files, bookId, currentFulltext, annotations);
@@ -331,11 +354,11 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   }
 
   // Whether anything that reads *this book* was wired. Captured before the
-  // literature search joins the list, because the tools paragraph in the system
+  // literature tools join the list, because the tools paragraph in the system
   // prompt describes the reading tools by name: a book with no text layer mounts
-  // none of them, and search_papers must not make that paragraph appear.
+  // none of them, and the literature tools must not make that paragraph appear.
   const hasReadingTools = tools.length > 0;
-  // Academic literature search (docs/24), mounted on every reading turn. Not
+  // Academic literature (docs/24, docs/25), mounted on every reading turn. Not
   // gated on the prep pipeline or on classroom mode: "what is the latest research
   // on this" is a question the reader can have on any page of any book, and a tool
   // that is only sometimes there is one the model cannot learn to reach for.
@@ -343,17 +366,33 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     fetchFn: prepFetch,
     s2ApiKey: s.semanticScholarApiKey ?? undefined,
   };
+  // A pot for the whole turn. Without one, runSubagent grants every request in
+  // full and a model that calls the research tool nine times spends nine times
+  // the turns, each call perfectly legal on its own.
+  const researchLedger = createSubagentLedger(RESEARCH_TURN_ROUNDS);
   tools = [
     ...tools,
-    ...buildPaperSearchTools({
-      search: ((query, opts) =>
-        searchPapers(query, opts, literatureDeps)) satisfies PaperSearchFn,
-      canIngest: canIngestUrl,
-    }),
-    // The citation graph rides along with the topic search on the same reasoning:
-    // the reader's way into recent work often starts at a citation in the book they
-    // are holding, which does not depend on prep or on classroom mode either.
-    ...buildCitationTools({ ...literatureDeps, canIngest: canIngestUrl }),
+    // Topic search and the citation walk live inside this run, not out here: their
+    // candidate lists and abstract extracts are what the reader's context cannot
+    // afford. Only the brief comes back.
+    subagentTool(
+      buildResearchAgent({
+        ...literatureDeps,
+        search: ((query, opts) =>
+          searchPapers(query, opts, literatureDeps)) satisfies PaperSearchFn,
+      }),
+      {
+        run: runSubagentTurn,
+        ledger: researchLedger,
+        signal,
+        onProgress: onSubagentProgress,
+      },
+    ),
+    // find_paper stays on the reader's turn. Pointing at one endnote is a different
+    // job from a topic search: the answer is a single record, the companion wants
+    // that record rather than prose about it, and delegating it would spend model
+    // turns to come back with less.
+    buildFindPaperTool(literatureDeps),
   ];
   // The cross-scenario user profile: who the companion is reading with, so it
   // pitches explanation depth to their background. Empty profile → no section.
@@ -413,8 +452,8 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     if (profileSection && !dropped.has("reader-profile")) prompt += "\n\n" + profileSection;
     if (notesOverview && !dropped.has("notes-overview")) prompt += "\n\n" + notesOverview;
     if (canIngestUrl) prompt += "\n\n" + ADD_SOURCE_PROMPT;
-    prompt += "\n\n" + SEARCH_PAPERS_PROMPT;
-    prompt += "\n\n" + SEARCH_CITATIONS_PROMPT;
+    prompt += "\n\n" + FIND_PAPER_PROMPT;
+    prompt += "\n\n" + RESEARCH_PROMPT;
     return prompt;
   }
 

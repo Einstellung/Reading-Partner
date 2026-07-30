@@ -117,19 +117,18 @@ test("companion turn: reading tools only, kickoff as the first message", async (
   expect(names(turn!.tools)).toEqual([
     "find_paper",
     "read_pages",
-    "search_papers",
+    "research_literature",
     "search_topic",
-    "walk_citations",
   ]);
   expect(turn!.messages).toEqual([{ role: "user", text: EXPLAIN_KICKOFF }]);
   expect(turn!.systemPrompt).toContain("inline caches");
 });
 
-// search_papers is the one tool that does not depend on the book: a book with no
+// The literature tools are the ones that do not depend on the book: a book with no
 // text layer mounts nothing that can read it, and the literature is still open.
 test("a book with no text layer gets no read_pages tool", async () => {
   const turn = await buildReadingTurn(input({ fulltext: fulltext("no-text-layer") }));
-  expect(names(turn!.tools)).toEqual(["find_paper", "search_papers", "walk_citations"]);
+  expect(names(turn!.tools)).toEqual(["find_paper", "research_literature"]);
 });
 
 test("a topic id mounts the memory tools", async () => {
@@ -142,9 +141,8 @@ test("a topic id mounts the memory tools", async () => {
     "memory_search",
     "memory_update",
     "read_pages",
-    "search_papers",
+    "research_literature",
     "search_topic",
-    "walk_citations",
   ]);
 });
 
@@ -154,10 +152,9 @@ test("a figure index mounts view_figure and the catalog", async () => {
   expect(names(turn!.tools)).toEqual([
     "find_paper",
     "read_pages",
-    "search_papers",
+    "research_literature",
     "search_topic",
     "view_figure",
-    "walk_citations",
   ]);
   expect(turn!.systemPrompt).toContain("[fig:1]");
 });
@@ -172,9 +169,8 @@ test("companion mode with a live pipeline: source + paper tools, mounted once", 
     "read_note",
     "read_pages",
     "read_paper",
-    "search_papers",
+    "research_literature",
     "search_topic",
-    "walk_citations",
   ]);
   expect(turn!.systemPrompt).toContain("add_source");
 });
@@ -189,9 +185,8 @@ test("classroom mode with a live pipeline: source + paper tools, mounted once", 
     "read_note",
     "read_pages",
     "read_paper",
-    "search_papers",
+    "research_literature",
     "search_topic",
-    "walk_citations",
   ]);
 });
 
@@ -203,9 +198,8 @@ test("classroom mode without a plan yet mounts no paper tools", async () => {
     "add_source",
     "find_paper",
     "read_pages",
-    "search_papers",
+    "research_literature",
     "search_topic",
-    "walk_citations",
   ]);
 });
 
@@ -214,14 +208,13 @@ test("no pipeline means no link ingestion", async () => {
   expect(names(turn!.tools)).toEqual([
     "find_paper",
     "read_pages",
-    "search_papers",
+    "research_literature",
     "search_topic",
-    "walk_citations",
   ]);
   expect(turn!.systemPrompt).not.toContain("add_source");
 });
 
-// docs/24: the literature question can arrive on any page of any book, so the three
+// docs/24: the literature question can arrive on any page of any book, so the two
 // literature tools are not gated on classroom mode, on a prep pipeline, or on the
 // book having a text layer — unlike everything else here.
 test("the literature tools are mounted on every reading turn, with their prompt lines", async () => {
@@ -234,10 +227,26 @@ test("the literature tools are mounted on every reading turn, with their prompt 
   ];
   for (const c of cases) {
     const turn = await buildReadingTurn(c);
-    for (const tool of ["search_papers", "find_paper", "walk_citations"]) {
+    for (const tool of ["research_literature", "find_paper"]) {
       expect(names(turn!.tools)).toContain(tool);
       expect(turn!.systemPrompt).toContain(tool);
     }
+  }
+});
+
+// docs/25: the candidate lists and the citation walk live inside the sub-agent. A
+// reading turn that mounts them again puts back exactly the context the sub-agent
+// was introduced to keep out.
+test("topic search and the citation walk are not reachable from the reader's turn", async () => {
+  const cases = [
+    input(),
+    input({ classroom: true, getPipeline: () => pipeline(prepState()) }),
+    input({ context: { ...input().context, topicId: "topic-1" } }),
+  ];
+  for (const c of cases) {
+    const turn = await buildReadingTurn(c);
+    expect(names(turn!.tools)).not.toContain("search_papers");
+    expect(names(turn!.tools)).not.toContain("walk_citations");
   }
 });
 

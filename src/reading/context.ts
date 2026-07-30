@@ -8,6 +8,7 @@ import type { AgentTool } from "../ai/agent";
 import { chapterAt, textAround } from "../fulltext/query";
 import { formatPages, formatSearch, MAX_PAGES, type TopicMaterial } from "../fulltext/format";
 import type { Fulltext } from "../fulltext/types";
+import { RESEARCH_LABEL, RESEARCH_TOOL_NAME } from "./papers/research-agent";
 
 const SURROUND_RADIUS = 200;
 const SURROUND_MAX = 700;
@@ -74,14 +75,13 @@ export function toolStatusLabel(name: string, args: Record<string, any>): string
       return `Searching the topic for “${args.query}”`;
     case "read_annotations":
       return `Reading your notes on ${args.material}`;
-    case "search_papers":
-      return `Searching the literature for “${args.query}”`;
     case "find_paper":
       return `Looking up “${args.paper}”`;
-    case "walk_citations":
-      return args.direction === "references"
-        ? `Reading what “${args.paper}” cites`
-        : `Finding papers that cite “${args.paper}”`;
+    // The research sub-agent. Its own task is not shown: the companion writes it,
+    // it is long, and it is a restatement of what the reader just said. The line
+    // gains a round count from researchStatusLabel once the run is under way.
+    case RESEARCH_TOOL_NAME:
+      return RESEARCH_LABEL;
     case "memory_search":
       return `Searching memory for “${args.query}”`;
     case "memory_read":
