@@ -6,7 +6,8 @@
 // Store + display only. Nothing here feeds a prompt, packs a fulltext, or
 // proposes a topic — those are later slices.
 
-import type { BriefingItemMeta, InfoItem } from "../../../info/briefing/types";
+import type { BriefingItemMeta } from "../../../info/briefing/types";
+import type { InfoItem } from "../../../info/sources/item";
 import type { SavedArticleInput } from "../../../reading/saved-articles";
 
 // What the host has in hand at the moment the reader hits Save.

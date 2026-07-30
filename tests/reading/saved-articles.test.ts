@@ -20,7 +20,7 @@ import {
   type SavedArticleInput,
 } from "../../src/reading/saved-articles";
 import { resolveSummaryOnly } from "../../src/ui/components/info/saveArticle";
-import type { InfoItem } from "../../src/info/briefing/types";
+import type { InfoItem } from "../../src/info/sources/item";
 
 function input(over: Partial<SavedArticleInput> = {}): SavedArticleInput {
   return {

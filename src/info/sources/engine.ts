@@ -18,7 +18,7 @@ import {
   type JsonApiDiscovery,
   type SourceDescriptor,
 } from "./descriptor";
-import type { InfoItem } from "../briefing/types";
+import type { InfoItem } from "./item";
 
 export interface CollectDeps {
   fetchFn?: FetchFn;

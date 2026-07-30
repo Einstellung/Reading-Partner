@@ -12,7 +12,8 @@ import {
 } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { INFO_RUN_VERSION, type InfoRunState } from "./run-state";
-import type { Briefing, InfoItem } from "./types";
+import type { Briefing } from "./types";
+import type { InfoItem } from "../sources/item";
 
 // The full article body kept per item, split out of the briefing so the briefing
 // file stays small and the article view / chat load bodies on demand.

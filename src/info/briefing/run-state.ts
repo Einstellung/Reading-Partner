@@ -8,7 +8,7 @@
 //
 // Pure: the clock, the filesystem, and the fetching are the caller's business.
 
-import type { InfoItem } from "./types";
+import type { InfoItem } from "../sources/item";
 
 export const INFO_RUN_VERSION = 1 as const;
 
