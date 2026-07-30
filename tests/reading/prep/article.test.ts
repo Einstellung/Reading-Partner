@@ -1,4 +1,4 @@
-// Unit tests for the pure HTML main-content extractor (src/reading/prep/article.ts).
+// Unit tests for the pure HTML main-content extractor (src/reading/prep/sources/article.ts).
 // Run: bun test. No DOM, no network.
 
 import { expect, test } from "bun:test";
@@ -7,7 +7,7 @@ import {
   TRUNCATION_MARKER,
   extractArticle,
   extractArticleTitle,
-} from "../../../src/reading/prep/article";
+} from "../../../src/reading/prep/sources/article";
 
 test("prefers <article> over surrounding nav/footer chrome", () => {
   const html = `

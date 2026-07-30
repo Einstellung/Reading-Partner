@@ -53,7 +53,7 @@ import { paperFulltextHash, readPrepNote } from "./prep/store";
 import { parseNote } from "./prep/notes";
 import { buildClassroomSystemPrompt, type ClassroomNote } from "./prep/classroom";
 import { buildClassroomTools } from "./prep/tools";
-import { ADD_SOURCE_PROMPT, buildSourceTools } from "./prep/source-tool";
+import { ADD_SOURCE_PROMPT, buildSourceTools } from "./prep/sources/source-tool";
 import { prepFetch } from "./papers/http";
 import { searchPapers, type PaperSearchFn } from "./papers/paper-search";
 import { buildFindPaperTool, FIND_PAPER_PROMPT } from "./papers/citation-tool";

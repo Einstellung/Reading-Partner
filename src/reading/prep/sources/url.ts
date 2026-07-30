@@ -3,8 +3,8 @@
 // the fetch), and sniffs a fetched response's content type. No IO here — live.ts
 // wires these to prepFetch; tests drive them directly.
 
-import { slugify, uniqueSlug } from "./plan";
-import type { PrepPaper } from "./types";
+import { slugify, uniqueSlug } from "../plan";
+import type { PrepPaper } from "../types";
 
 export function looksLikeHttpUrl(s: string): boolean {
   return /^https?:\/\//i.test(s.trim());

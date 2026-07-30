@@ -42,4 +42,4 @@ export {
   ADD_SOURCE_PROMPT,
   type SourceIngestor,
   type IngestResult,
-} from "./source-tool";
+} from "./sources/source-tool";
