@@ -62,7 +62,7 @@ Actions → iOS TestFlight → Run workflow(main 分支)。20-40 分钟。
 
 ## 7. 之后每次迭代
 
-改完代码合进 main,回到第 5 步再点一次 Run workflow。内部测试组会自动收到新 build。改版本号(如 0.2.0 → 0.3.0)时同步改 `tauri.conf.json`、`package.json`、`src-tauri/Cargo.toml` 三处;不改版本号只发新 build 也行,build number 自增保证可上传。
+改完代码合进 main,回到第 5 步再点一次 Run workflow。内部测试组会自动收到新 build。改版本号(如 0.2.0 → 0.3.0)时同步改 `tauri.conf.json`、`package.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock` 四处;不改版本号只发新 build 也行,build number 自增保证可上传。
 
 ## 已知限制
 
