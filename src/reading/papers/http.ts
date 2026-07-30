@@ -1,6 +1,7 @@
-// HTTP for the prep pipeline. Inside Tauri, requests go through the http
-// plugin (same posture as the AI fetch bridge): the webview's CORS never sees
-// them, and the allowed hosts live in src-tauri/capabilities/default.json
+// HTTP for the literature clients and the prep pipeline. Inside Tauri, requests
+// go through the http plugin (same posture as the AI fetch bridge): the
+// webview's CORS never sees them, and the allowed hosts live in
+// src-tauri/capabilities/default.json
 // (export.arxiv.org / arxiv.org / api.openalex.org / api.semanticscholar.org).
 // Outside Tauri
 // (plain vite dev) the native fetch is used and CORS failures surface as

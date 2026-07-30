@@ -1,4 +1,4 @@
-// Unit tests for the PubMed client (src/reading/prep/pubmed.ts): query URLs, the
+// Unit tests for the PubMed client (src/reading/papers/pubmed.ts): query URLs, the
 // esearch id list, and the efetch XML reader. The fixture is trimmed from a real
 // efetch response (2026-07-30) and keeps the shapes that bite: a structured
 // abstract, inline markup in a title, a consortium byline, a free-text
@@ -13,7 +13,7 @@ import {
   pubmedSearchUrl,
   pubmedUrl,
   searchPubmed,
-} from "../../../src/reading/prep/pubmed";
+} from "../../../src/reading/papers/pubmed";
 
 test("esearch URL asks for relevance, not the sort schema E-utilities ignores", () => {
   const u = pubmedSearchUrl("cortical neuron scaling", { limit: 7 });

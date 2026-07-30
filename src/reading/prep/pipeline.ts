@@ -13,7 +13,7 @@ import {
   type WatchdogConfig,
 } from "../../ai/watchdog";
 import { ObservableRun, type RunSnapshot } from "../../ai/observable-run";
-import { isRateLimitError } from "./http";
+import { isRateLimitError } from "../papers/http";
 import { abstractNoteBody } from "./notes";
 import { earliestCooldown, nextQueued, normalizeOnLoad } from "./scheduler";
 import { createPrepState, type PrepPaper, type PrepState } from "./types";

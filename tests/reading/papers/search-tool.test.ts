@@ -1,4 +1,4 @@
-// Unit tests for the search_papers chat tool (src/reading/prep/search-tool.ts).
+// Unit tests for the search_papers chat tool (src/reading/papers/search-tool.ts).
 // The search is a fake, so there is no network. Run: bun test.
 
 import { expect, test } from "bun:test";
@@ -6,8 +6,8 @@ import {
   buildPaperSearchTools,
   parseLibraries,
   parseSinceYear,
-} from "../../../src/reading/prep/search-tool";
-import type { PaperCandidate, PaperSearchOptions, PaperSearchResult } from "../../../src/reading/prep/paper-search";
+} from "../../../src/reading/papers/search-tool";
+import type { PaperCandidate, PaperSearchOptions, PaperSearchResult } from "../../../src/reading/papers/paper-search";
 
 function hit(title: string): PaperCandidate {
   return {
