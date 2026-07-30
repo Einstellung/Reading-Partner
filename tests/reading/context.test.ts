@@ -55,6 +55,17 @@ test("toolStatusLabel phrases each tool, single vs range pages", () => {
   expect(toolStatusLabel("mystery", {})).toBe("Running mystery");
 });
 
+// The research sub-agent's row. The task the companion wrote is not shown, and the
+// wording matches the definition's label so the row does not change the moment the
+// first progress event lands (src/reading/papers/research-agent.ts).
+test("toolStatusLabel names the research sub-agent without quoting its task", () => {
+  const line = toolStatusLabel("research_literature", {
+    task: "what does the recent work say about cortical neuron scaling in primates",
+  });
+  expect(line).toBe("Searching the literature");
+  expect(line).not.toContain("cortical");
+});
+
 test("findMaterial matches exact case-insensitively, then substring", () => {
   const materials: TopicMaterial[] = [
     { label: "The Black Swan", fulltext: null, annotations: [] },

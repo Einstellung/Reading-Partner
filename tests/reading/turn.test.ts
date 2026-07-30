@@ -9,6 +9,7 @@ import { DEFAULT_SETTINGS, type Settings } from "../../src/platform/app/settings
 import type { Fulltext } from "../../src/fulltext/types";
 import type { Figure } from "../../src/reading/figures/types";
 import type { PrepPaper, PrepState } from "../../src/reading/prep/types";
+import type { SubagentTurnFn } from "../../src/ai/subagent";
 
 // Headless: no AppData, so every optional read misses (the overview note, the
 // memory index). The turn treats all of them as "not there yet".
@@ -27,6 +28,10 @@ const { buildReadingTurn, turnFailureView, EXPLAIN_KICKOFF, HISTORY_KEEP } = awa
   "../../src/reading/turn"
 );
 const { REFUSE_MIDTURN, REFUSE_ROUNDS } = await import("../../src/ai/agent");
+const { StoppedError } = await import("../../src/ai/watchdog");
+const { RESEARCH_TOOL_NAME, RESEARCH_TURN_ROUNDS } = await import(
+  "../../src/reading/papers/research-agent"
+);
 const { appendMessage, createThread, dropThreadCache } = await import("../../src/platform/app/threads");
 
 const BOOK = "book-hash";
@@ -434,4 +439,87 @@ test("a pre-send refusal and a mid-turn refusal are presented identically", asyn
   expect(before.text).toBe(turn!.refusal);
   expect(before.toast).toBe(during.toast);
   expect(before.retry).toBe(during.retry);
+});
+
+// --- the research sub-agent on the reader's turn (docs/25) ---
+
+// The sub-agent turn is injected, so nothing here touches a provider or the network.
+// The fake reports the rounds it spent, so the turn's shared pot actually moves.
+function subagentRun(text: string) {
+  const asked: number[] = [];
+  const run: SubagentTurnFn = async (request) => {
+    asked.push(request.maxRounds);
+    for (let r = 1; r <= request.maxRounds; r++) {
+      request.onRound({ round: r, rounds: request.maxRounds });
+    }
+    return { kind: "answer", text };
+  };
+  return { run, asked };
+}
+
+function researchTool(turn: NonNullable<Awaited<ReturnType<typeof buildReadingTurn>>>) {
+  return turn.tools.find((t) => t.name === RESEARCH_TOOL_NAME)!;
+}
+
+// The one correctness requirement of the whole wiring: a run that established nothing
+// arrives at the companion as a failed tool call, in the words the brief chose, and
+// never as "nothing was found".
+test("an unusable research run arrives as a failed tool call, not as an answer", async () => {
+  const { run } = subagentRun("There is no recent research on inline caches.");
+  const turn = await buildReadingTurn(input({ runSubagentTurn: run }));
+
+  const attempt = researchTool(turn!).execute({ task: "recent work on inline caches" });
+  // Evidence is required the moment tools are mounted: this run answered without a
+  // single library call, so its words are dropped rather than relayed.
+  await expect(attempt).rejects.toThrow("without calling any of its 3 tools");
+  await expect(attempt).rejects.toThrow("not a finding");
+  await expect(attempt).rejects.not.toThrow("no recent research");
+});
+
+test("one reader turn has one pot, and the call after it is spent is never sent", async () => {
+  const { run, asked } = subagentRun("answered");
+  const turn = await buildReadingTurn(input({ runSubagentTurn: run }));
+  const research = researchTool(turn!);
+
+  // Each run spends every turn it was granted, so the pot empties in two.
+  await research.execute({ task: "first" }).catch(() => {});
+  await research.execute({ task: "second" }).catch(() => {});
+  await expect(research.execute({ task: "third" })).rejects.toThrow("did not run at all");
+  await expect(research.execute({ task: "third" })).rejects.toThrow("Nothing was looked up");
+
+  expect(asked).toEqual([6, RESEARCH_TURN_ROUNDS - 6]);
+});
+
+test("a fresh reader turn gets a fresh pot", async () => {
+  const { run, asked } = subagentRun("answered");
+  for (const _ of [1, 2]) {
+    const turn = await buildReadingTurn(input({ runSubagentTurn: run }));
+    await researchTool(turn!)
+      .execute({ task: "first" })
+      .catch(() => {});
+  }
+  expect(asked).toEqual([6, 6]);
+});
+
+// Cancellation, end to end: the AbortController App raises for a hangup is the turn's
+// signal, and the turn's signal is the sub-agent's.
+test("the reader's abort signal is the one the sub-agent runs under", async () => {
+  const controller = new AbortController();
+  let seen: AbortSignal | undefined;
+  const run: SubagentTurnFn = async (request) => {
+    seen = request.signal;
+    // What the live runner does on abort: the agent loop returns silently and the
+    // settler turns that into a rejection.
+    controller.abort();
+    throw new StoppedError();
+  };
+  const turn = await buildReadingTurn(input({ signal: controller.signal, runSubagentTurn: run }));
+  const research = researchTool(turn!);
+
+  await expect(research.execute({ task: "recent work" })).rejects.toBeInstanceOf(StoppedError);
+  expect(seen).toBe(controller.signal);
+  // And once the reader has hung up, a further call stops before anything is sent.
+  seen = undefined;
+  await expect(research.execute({ task: "recent work" })).rejects.toBeInstanceOf(StoppedError);
+  expect(seen).toBeUndefined();
 });
