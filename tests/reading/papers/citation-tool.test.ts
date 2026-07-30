@@ -6,7 +6,7 @@
 import { expect, test } from "bun:test";
 import {
   buildCitationTools,
-  SEARCH_CITATIONS_PROMPT,
+  FIND_PAPER_PROMPT,
 } from "../../../src/reading/papers/citation-tool";
 import type { AgentTool } from "../../../src/ai/agent";
 
@@ -149,8 +149,10 @@ test("without add_source the results never promise to fetch a paper", async () =
   expect(await find.execute({ paper: "10.1073/pnas.0611396104" })).not.toContain("add_source");
 });
 
-test("the prompt line names the path from the book's notes into recent work", () => {
-  expect(SEARCH_CITATIONS_PROMPT).toContain("find_paper");
-  expect(SEARCH_CITATIONS_PROMPT).toContain("walk_citations");
-  expect(SEARCH_CITATIONS_PROMPT).toContain("Never invent a paper");
+// find_paper is the one literature tool left on the reader's own turn, and the
+// endnote path is only reachable if the prompt says the notes name real papers.
+test("the prompt line points at the citations in the book the reader is holding", () => {
+  expect(FIND_PAPER_PROMPT).toContain("find_paper");
+  expect(FIND_PAPER_PROMPT).toContain("endnote");
+  expect(FIND_PAPER_PROMPT).toContain("Never invent a paper");
 });
