@@ -14,7 +14,7 @@ descriptor 只扩两个口：discovery 的 `webview-listpage`、fulltext 的 `we
 
 ## 为什么现在不做
 
-0.6.0 发版后再 spike。descriptor 体系（[17](../17-信息源系统.md)）先立住，webview 是它的扩展口，不是另起炉灶。
+还没 spike。descriptor 体系（[17](../17-信息源系统.md)）已经立住，webview 是它的扩展口，不是另起炉灶，没有别的前置了。
 
 ## 将来做时已知的事实
 
@@ -24,4 +24,4 @@ descriptor 只扩两个口：discovery 的 `webview-listpage`、fulltext 的 `we
 - cookie 跨 app 重启的持久性（Linux 和 macOS 可能不同）。
 - 隐藏 webview 与主窗口的资源竞争（预计串行化，一次一个）。
 
-节奏：0.6.0 发版后 spike；第一根管子用项目发起人的经济学人会员端到端验证；M-info-3 头牌。
+节奏：第一根管子用项目发起人的经济学人会员端到端验证；M-info-3 头牌。

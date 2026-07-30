@@ -19,7 +19,7 @@
 ## 采纳理由
 
 1. **pi-ai 明确支持浏览器环境**（核心代码无副作用，可打进前端 bundle）。我们零后端，AI 循环必须跑在 Tauri webview 里，iPad 无 Node 是死约束——pi-ai 正好匹配这个约束。
-2. **MIT 协议**，与 AGPL 的壳（zotero/reader）兼容。
+2. **MIT 协议**，与壳的许可证（PolyForm-NC）兼容。
 3. **模型可插拔**（Claude/GPT/Gemini/DeepSeek/Kimi/Ollama）：陪读可用便宜模型，共创用最强模型。
 4. **我们的 AI 是 agentic 形态**——回答前可能要调工具取上下文、检索材料。自写"流式 + 工具调用 + 重试"循环是几百行易错胶水，pi 把这层做掉了。
 
@@ -50,13 +50,13 @@
 
 # 第二部分：memory 设计
 
-> 落地状态（2026-07-14）：memory 整体后移至北极星（[north-star/memory.md](./north-star/memory.md)），本部分是届时的设计依据。先行的 M6 只做"让 AI 看得见书"：全文提取缓存（按页，带 PDF 大纲）、开场上下文装配（书名/章节/选区周边原文/主题书单，实时算不存储）、agent 工具（翻页读原文、主题内全文 BM25 检索、读划线批注）、工具调用过程在聊天中可见；prompt 约束为用户提到才查、不主动发散。历史对话不进 M6 检索。agent 工具循环（本文第一部分的 agentic 形态）随 M6 落地。
+> 落地状态（2026-07-14）：先行的 M6 只做"让 AI 看得见书"：全文提取缓存（按页，带 PDF 大纲）、开场上下文装配（书名/章节/选区周边原文/主题书单，实时算不存储）、agent 工具（翻页读原文、主题内全文 BM25 检索、读划线批注）、工具调用过程在聊天中可见；prompt 约束为用户提到才查、不主动发散。历史对话不进 M6 检索。agent 工具循环（本文第一部分的 agentic 形态）随 M6 落地。
 >
-> 落地状态（2026-07-17）：memory v1 随 M8 落地（`src/memory/`）。按主题的文件存储（一事一文件 + 常驻索引 + 证据锚点，类型五种：reading-position / stuck-point / understood-concept / belief / correction）、Memory Adapter 窄接口（文件引擎 + 复用 M6 的 BM25 召回）、挂断触发静默蒸馏（对话历史裁剪时兜底）、开场注入主题快照、agent 工具 memory_read / memory_update / memory_search（prompt 带主动回忆与对话纠错约束）、只读 Memory 侧栏面板；另加每主题本地 JSONL 事件日志（`src/events.ts`，仅本机）。推迟：高信号事件即时写入通道（划线/⭐ 暂不直写 memory，仍靠蒸馏）、时间衰减、混合检索、跨书主动联想。
+> 落地状态（2026-07-17）：memory v1 随 M8 落地（`src/memory/`）。按主题的文件存储（一事一文件 + 常驻索引 + 证据锚点，类型五种：reading-position / stuck-point / understood-concept / belief / correction）、Memory Adapter 窄接口（文件引擎 + 复用 M6 的 BM25 召回）、挂断触发静默蒸馏（对话历史裁剪时兜底）、开场注入主题快照、agent 工具 memory_read / memory_update / memory_search（prompt 带主动回忆与对话纠错约束）、只读 Memory 侧栏面板；另加每主题本地 JSONL 事件日志（`src/platform/app/events.ts`，仅本机）。推迟：高信号事件即时写入通道（划线/⭐ 暂不直写 memory，仍靠蒸馏）、时间衰减、混合检索、跨书主动联想。
 >
 > 落地状态（2026-07-19）：蒸馏新增"上次以来的安静划线"输入——按 `meta.json` 的 `lastAnnotationDistillAt` 取本书此后创建的批注（页/选中文/批注，最多 40 条最近的，超出在 prompt 里标注），作为独立块喂给蒸馏，prompt 指示判断这些多为静默的划线是否成一个值得记的 PATTERN（读者反复划什么、在哪些主题/页停留），成则写一条聚合 memory（通常 understood-concept / belief / stuck-point，锚到这些批注 id），绝不一划一条，可以不记；蒸馏成功后才推进时间戳。过滤与格式化是纯函数，单测。另：开场上下文装配在本书有 overview.md 时加入"读者笔记的全书框架"块（按段落边界截到约 1500 字）。
 >
-> 落地状态（2026-07-30）：蒸馏改跑在子 agent capability 上（`src/ai/subagent/`，见 [25](./25-子agent与上下文隔离.md)）。蒸馏什么、怎么策展、两个触发点都不变，换来三样：不完成的 pass 通过 `DistillResult.ok` 说出来（一行 warn 带子 agent 自己那句话 + 一条 `distill-failed` 事件，读者那边不出任何界面），时间戳纪律搬进 `runDistillPass` 单测，以及运行能被 abort（signal 通了，但两个触发点都没有能取消它的主人，见 25）。`evidence: "optional"`：蒸馏不是查找，一次工具都不调是正确结局，默认的 `"required"` 会把它记成失败并卡住时间戳。
+> 落地状态（2026-07-30）：蒸馏改跑在子 agent capability 上（`src/ai/subagent/`）。蒸馏什么、怎么策展、两个触发点都不变；不完成的 pass、时间戳纪律和 `evidence: "optional"` 的理由见 [25](./25-子agent与上下文隔离.md)。
 
 ## 决策背景：否掉重型 memory 引擎路线
 

@@ -2,6 +2,8 @@
 
 > 本文记录"info 侧的材料怎么进 reading"的共识，是 [16](./16-知识图谱.md)、[17](./17-信息源系统.md) 的下游；落法依赖 [13](./13-账户同步.md) 的三方合并模型和 [02](./02-AI核心与memory设计.md) 的记忆设计。文中的现状按 2026-07-27 的代码查证。
 
+> 落地状态（2026-07-30）：收下的存储已落地。`saved-articles.json`（`src/reading/saved-articles.ts`）在同步范围里（`src/platform/sync/syncFs.ts`），也登记进了合并契约的 `RECORD_FILES`（`src/platform/sync/merge/contract.ts`）。内容寻址的快照通道还没有：正文快照现在直接躺在记录里（`SavedArticle` 的 `text` / `html`）。
+
 ---
 
 ## 原则
@@ -16,9 +18,9 @@
 
 ## 入口
 
-只有用户的主动行为能让 info 材料进入 reading。两个入口：briefing 卡片上的星标，以及在聊天里说"这篇存一下"。AI 只能执行，不能自己决定存什么。
+只有用户的主动行为能让 info 材料进入 reading。两个入口：文章页上的 Keep 按钮（`src/ui/components/info/ArticleView.tsx`，接线在 `InfoHome.tsx`），以及在聊天里说"这篇存一下"。AI 只能执行，不能自己决定存什么。
 
-星标的语义是"这条要进我的阅读上下文"，不是喜欢、不是稍后读。图标和文案不能长得像收藏夹。
+Keep 的语义是"这条要进我的阅读上下文"，不是喜欢、不是稍后读。图标和文案不能长得像收藏夹。
 
 briefing 卡片今天只有三个手势：打开、×（dismiss）、滤掉区的 Show anyway（`src/ui/components/info/BriefingPage.tsx`），没有任何星标或收藏入口。reading 侧已有的 `starred` 是批注上的标记（`src/reading/engine/convert.ts`），跟这件事无关，但名字会撞。
 
@@ -72,7 +74,7 @@ AI 这次用了哪几条外部材料，用户要看得见。可见性是闸的�
 
 - 收下的存储。一份新的 records 文件（进同步范围 + 两处合并登记），加一条内容寻址的正文快照通道。现在的 blob 通道只认书：接口方法叫 `hasBook` / `uploadBook` / `downloadBook`，Drive 侧写死 `books/` 文件夹和 `.pdf` 后缀（`src/platform/sync/driveBackend.ts`），驱动它的是 `library.json` 的 hash 列表。要么泛化成按 kind 分文件夹的 blob 通道，要么另开一条。
 
-- Topic 装得下文章。`Topic = { id, name, createdAt, files: FileRef[] }`，`FileRef` 的身份是本地 PDF 路径，`hash` 是打开时回填的书 id，下游全按 hash 读 `reading-state` / `fulltext` / `annotations`；UI 只有一个 "Add PDF" 按钮，`addFileToTopic` 只有文件选择器一个调用者。文章没有 path、没有页码、没有批注，塞进 `files` 会污染整条链路——要给 topic 加一类成员，不是往 `FileRef` 上挂可选字段。默认 topic 也在这一层：`topics.json` 里没有任何"默认"的概念，创建、识别、清空都要新加。prep 抓来的论文是同一个坑的既有案例，它至今没进 topic，住在 `prep-<bookHash>/` 里。
+- Topic 装得下文章。`Topic = { id, name, createdAt, files: FileRef[] }`，`FileRef` 的身份是本地 PDF 路径，`hash` 是打开时回填的书 id，下游全按 hash 读 `reading-state` / `fulltext` / `annotations`；UI 只有一个 "Add PDF" 按钮，`addFileToTopic` 只有文件选择器一个调用者。文章没有 path、没有页码、没有批注，塞进 `files` 会污染整条链路——要给 topic 加一类成员，不是往 `FileRef` 上挂可选字段。默认 topic 已经有了：固定 id 的 Brief topic，首次收下时创建，按 id 幂等（`ensureBriefTopic`，`src/platform/app/topics.ts`）；清空还要新加。prep 抓来的论文是同一个坑的既有案例，它至今没进 topic，住在 `prep-<bookHash>/` 里。
 
 - 保存那一刻的编排。工具形状现成（`AgentTool`：name / description / TypeBox schema / execute），`src/ai/` 只有机器、零领域工具，收藏工具属于领域。卡片这边三处要动：联合类型 `CardPayload = InfoCard` 指向 `src/info/briefing/cards.ts`，收藏卡是 reading 的概念，联合要拆成两半；`isPersistableCardKind` 的白名单要加一项；reading 侧的聊天还在老字段上（`messageToParts` 兼容），卡片协议对它可用但一张 reading 侧的卡都还没有。工具名要避开 `add_source`——info 的"订阅源"和 prep 的"摄入 URL"已经各占一次。
 
