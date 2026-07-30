@@ -1,6 +1,7 @@
 // The sync engine's pass (src/platform/sync/engine.ts) over a fake backend + fake fs +
 // fake book store: push, pull, three-way merge, the books channel, the pulled
-// callback, single-flight, and what a pass does when part of it fails. No timers
+// callback, single-flight, what a pass does when part of it fails, and what a
+// restarted engine still knows about the last one. No timers
 // (syncNow drives a pass directly), no network. Run: bun test.
 
 import { expect, test } from "bun:test";
@@ -30,6 +31,7 @@ import type {
 } from "../../../src/platform/sync/merge/contract";
 import type { ScannedFile, SyncFs } from "../../../src/platform/sync/syncFs";
 import type { Snapshot } from "../../../src/platform/sync/reconcile";
+import { emptyState, recordPassResult } from "../../../src/platform/sync/state";
 
 import { hashBytes } from "../../../src/platform/sync/content";
 
@@ -974,4 +976,64 @@ test("a book that will not upload does not stop the next one", async () => {
   expect(be.books.has("bad")).toBe(false);
   expect(engine.status().lastSyncAt).toBeNull();
   expect(engine.status().lastError).toStartWith("book bad failed:");
+});
+
+// --- the last sync survives a restart ---------------------------------------
+//
+// The reported failure: a device that syncs fine showed "Last sync: Never"
+// after every launch. The engine had no seat for the timestamp sync-state.json
+// keeps, so it started each launch at null — and runPass emits its status once
+// before doing any work, so that null reached the persistence side and
+// overwrote the good value before the pass could earn a new one. onStatus here
+// is wired the way index.ts wires it.
+
+test("a restarted engine reports the last sync it was seeded with, before any pass runs", () => {
+  const { engine } = makeEngine({ snapshot: {}, restoredLastSyncAt: 1234 });
+
+  expect(engine.status().lastSyncAt).toBe(1234);
+});
+
+test("a seeded engine whose first pass fails keeps the timestamp, in status and on disk", async () => {
+  const be = makeBackend({ "a.json": { rev: 1, mtime: 1, size: 1 } }, { "a.json": "A" });
+  be.backend.download = async () => {
+    throw new Error("error sending request for url (https://…)");
+  };
+  const state = emptyState();
+  state.lastSyncAt = 1234;
+  const emitted: (number | null)[] = [];
+  const { engine } = makeEngine({
+    backend: be.backend,
+    snapshot: {},
+    restoredLastSyncAt: state.lastSyncAt,
+    now: () => 9000,
+    onStatus: (r) => {
+      emitted.push(r.lastSyncAt);
+      recordPassResult(state, r);
+    },
+  });
+
+  await engine.syncNow();
+
+  // Nothing advances it — the pass failed — and nothing may erase it either.
+  expect(engine.status().lastSyncAt).toBe(1234);
+  // Two emits: the one runPass makes before any work, and the one after.
+  expect(emitted).toEqual([1234, 1234]);
+  expect(state.lastSyncAt).toBe(1234);
+  expect(state.lastError).toStartWith("download a.json failed:");
+});
+
+test("a clean pass still moves a seeded timestamp forward", async () => {
+  const state = emptyState();
+  state.lastSyncAt = 1234;
+  const { engine } = makeEngine({
+    snapshot: {},
+    restoredLastSyncAt: state.lastSyncAt,
+    now: () => 9000,
+    onStatus: (r) => recordPassResult(state, r),
+  });
+
+  await engine.syncNow();
+
+  expect(engine.status().lastSyncAt).toBe(9000);
+  expect(state.lastSyncAt).toBe(9000);
 });

@@ -3,7 +3,8 @@
 // these pin what "empty" costs — the Drive ids and the snapshot are rebuildable
 // (the backend searches by name before creating, and reconcile falls back to
 // comparing mtimes), while the autoSync toggle is not, and quietly reverts to
-// off. The fs plugin is in-memory. Run: bun test.
+// off. Also recordPassResult, the one path by which a pass result reaches the
+// file. The fs plugin is in-memory. Run: bun test.
 
 import { expect, mock, test } from "bun:test";
 
@@ -20,7 +21,9 @@ mock.module("@tauri-apps/plugin-fs", () => ({
   },
 }));
 
-const { emptyState, loadState } = await import("../../../src/platform/sync/state");
+const { emptyState, loadState, recordPassResult } = await import(
+  "../../../src/platform/sync/state"
+);
 
 test("a first run with no state file loads the defaults", async () => {
   file = null;
@@ -79,4 +82,30 @@ test("a complete state file loads back exactly as written", async () => {
   // Dropping any of this on the way back in is what makes the next pass
   // re-adopt, or re-create, every remote file.
   expect(await loadState()).toEqual(state);
+});
+
+// recordPassResult is the only way a pass result reaches the file. lastSyncAt
+// is the one field it will not take a null for: the emit runPass makes before
+// it has done any work carries one, and writing it through is what showed
+// "Last sync: Never" on a device that syncs fine.
+test("a status emit without a timestamp leaves the recorded one alone", () => {
+  const state = emptyState();
+  state.lastSyncAt = 1234;
+
+  recordPassResult(state, { lastSyncAt: null, lastError: null });
+
+  expect(state.lastSyncAt).toBe(1234);
+});
+
+test("a status emit with a timestamp records it, and its error either way", () => {
+  const state = emptyState();
+  state.lastSyncAt = 1234;
+
+  recordPassResult(state, { lastSyncAt: 5678, lastError: "upload a.json failed: offline" });
+  expect(state.lastSyncAt).toBe(5678);
+  expect(state.lastError).toBe("upload a.json failed: offline");
+
+  // A null error is a real value — the pass that clears it has to be able to.
+  recordPassResult(state, { lastSyncAt: null, lastError: null });
+  expect(state.lastError).toBeNull();
 });
