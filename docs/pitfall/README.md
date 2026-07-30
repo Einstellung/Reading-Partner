@@ -63,6 +63,7 @@
 - [29-voice-stt-fetch-and-ipc-bytes](./29-voice-stt-fetch-and-ipc-bytes.md) — 跨源请求必须走 cleanTauriFetch（CSP + CORS 双杀直连）；Rust 返回 Vec<u8> 到 JS 是数字数组
 - [30-webview-csp-coep-block-external-img](./30-webview-csp-coep-block-external-img.md) — webview 的 CSP + COEP 双杀外链图片，文章图片要走 http 路由取字节内联成 data: URL
 - [54-plugin-http-body-json-per-byte](./54-plugin-http-body-json-per-byte.md) — 交给 http 插件的 body 被逐字节 JSON 化（实测 3.54 字符/字节，一次请求 ~20 倍自身大小），26 MB 的书上传峰值 400 MB 触发 iPad jetsam；大 blob 必须分块 PUT
+- [72-arxiv-sortby-submitteddate-hangs](./72-arxiv-sortby-submitteddate-hangs.md) — arXiv 加 `sortBy=submittedDate` 25 秒不返回或 429，六个请求就把 IP 限流几分钟；"最新"要用 `submittedDate` 区间过滤，四个文献库一律"新是过滤、排序留给相关性"（OpenAlex 按日期排序会把管理学论文排到神经科学查询第一位）
 
 ## 存储与数据目录
 

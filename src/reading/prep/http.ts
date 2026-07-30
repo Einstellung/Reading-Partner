@@ -46,6 +46,25 @@ export function isRateLimitError(e: unknown): e is RateLimitError {
   return e instanceof RateLimitError;
 }
 
+// Thrown by a client when the server answered with a status it cannot use. The
+// status is carried rather than folded into a sentence because callers have to
+// tell a refusal apart from a miss: OpenAlex answers 409 when the keyless free
+// credits are spent, and reporting that as "found nothing" would read to the
+// user as "nobody researches this" (docs/24).
+export class HttpStatusError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly host: string,
+  ) {
+    super(`HTTP ${status} from ${host}`);
+    this.name = "HttpStatusError";
+  }
+}
+
+export function isHttpStatusError(e: unknown): e is HttpStatusError {
+  return e instanceof HttpStatusError;
+}
+
 // --- per-host request spacing ---
 
 // Minimum gap between requests to the same host (ms). arXiv's usage policy
@@ -58,6 +77,9 @@ export const HOST_MIN_INTERVAL_MS: Record<string, number> = {
   "api.semanticscholar.org": 1500,
   // Polite pool allows 10 req/s; stay well under it.
   "api.openalex.org": 500,
+  // NCBI E-utilities allow 3 requests/second without a key, and a topic search
+  // is two calls (esearch then efetch) back to back.
+  "eutils.ncbi.nlm.nih.gov": 400,
 };
 
 // A modest default for hosts not in the table — user-pasted links (link
@@ -123,6 +145,20 @@ export interface RetryOptions {
 }
 
 const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+// Retry budget for a lookup someone is waiting on — a chat tool mid-conversation,
+// as opposed to the prep pipeline's background fetches. The default budget is
+// three retries with a 5s base on 429, which is right for a pipeline that can
+// wait out a rate limiter and wrong here: measured 2026-07-30, one four-library
+// search where two libraries were rate-limited took 122 seconds, nearly all of it
+// backoff. One retry and a short base fails fast enough to still be an answer.
+export const INTERACTIVE_RETRY: RetryOptions = { retries: 1, baseMs: 500, base429Ms: 1500 };
+
+// The interactive budget with a test's fake fetch folded in, for the chat-side
+// lookups (topic search, citation graph).
+export function interactiveRetry(fetchFn?: FetchFn): RetryOptions {
+  return fetchFn ? { ...INTERACTIVE_RETRY, fetchFn } : INTERACTIVE_RETRY;
+}
 
 // Fetch with retry on 429/5xx/network errors, honouring Retry-After when the
 // server sends one. Other non-OK statuses (404, 400) return immediately — the
