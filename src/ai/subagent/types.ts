@@ -58,9 +58,10 @@ export interface SubagentDefinition {
   // reach the reader as a finding. "optional" is for a sub-agent whose job is
   // not lookup — rewriting, planning, judging.
   evidence?: "required" | "optional";
-  // Token ceiling on the returned brief (src/budget prices it). A nested run
-  // must not be able to push the caller's next round over the window, and the
-  // one thing that crosses back is this text.
+  // Token ceiling on the model's own text in the brief (src/budget prices it);
+  // the runner's own status lines are short and always kept on top of it. A
+  // nested run must not be able to push the caller's next round over the window,
+  // and the one thing that crosses back is this text.
   briefTokenCap?: number;
 }
 

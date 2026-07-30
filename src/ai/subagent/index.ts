@@ -6,19 +6,13 @@
 // the two (tests/layering.test.ts checks exactly this). Callers import
 // "../ai/subagent" directly, the way they already do for "../ai/voice".
 
+// Only the surface a caller wires. The brief composition and the turn settler
+// are internals with their own tests, reachable by path when a caller genuinely
+// needs to supply its own turn.
 export { runSubagent, type SubagentDeps, type SubagentRequest } from "./run";
 export { subagentTool, type SubagentToolDeps } from "./tool";
 export { createSubagentLedger, type SubagentLedger } from "./ledger";
 export { runSubagentTurnLive } from "./live";
-export { createTurnSettler, type TurnSettler } from "./turn";
-export {
-  briefContractPrompt,
-  clipToTokens,
-  composeBrief,
-  subagentSystemPrompt,
-  type BriefFacts,
-  type ComposedBrief,
-} from "./brief";
 export {
   DEFAULT_BRIEF_TOKEN_CAP,
   DEFAULT_SUBAGENT_ROUNDS,
