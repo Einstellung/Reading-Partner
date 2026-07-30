@@ -49,6 +49,26 @@ export function emptyState(): SyncState {
   };
 }
 
+// Fold one engine status emit into the state that gets written to disk.
+//
+// lastError takes the emit as it comes: null there is a real value, meaning
+// nothing is wrong right now. lastSyncAt does not. An emit carries null both
+// for "this device has never had a clean pass" and for any pass that has not
+// reached the point of setting it — runPass emits once before it does any work
+// — so writing null through would erase a timestamp the engine never disputed.
+// That is what put a device syncing fine at "Last sync: Never" on every launch.
+//
+// Not redundant with restoredLastSyncAt seeding the engine. Seeding fixes the
+// one emitter that was known to be wrong; this makes the file itself incapable
+// of losing a good timestamp to any emitter that arrives without one.
+export function recordPassResult(
+  state: SyncState,
+  result: { lastSyncAt: number | null; lastError: string | null },
+): void {
+  if (result.lastSyncAt !== null) state.lastSyncAt = result.lastSyncAt;
+  state.lastError = result.lastError;
+}
+
 export async function loadState(): Promise<SyncState> {
   try {
     if (!(await exists(STATE_FILE, { baseDir: BaseDirectory.AppData }))) return emptyState();

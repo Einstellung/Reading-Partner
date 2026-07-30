@@ -27,7 +27,13 @@ import {
   signOut,
 } from "./auth";
 import { syncStartAction } from "./health";
-import { emptyState, loadState, saveState, type SyncState } from "./state";
+import {
+  emptyState,
+  loadState,
+  recordPassResult,
+  saveState,
+  type SyncState,
+} from "./state";
 
 export { isGoogleConfigured } from "./googleConfig";
 export {
@@ -121,8 +127,7 @@ function makeEngine(): SyncEngine {
       for (const l of pulledListeners) l(paths);
     },
     onStatus: (r) => {
-      state.lastSyncAt = r.lastSyncAt;
-      state.lastError = r.lastError;
+      recordPassResult(state, r);
       void saveState(state);
       notify();
     },
