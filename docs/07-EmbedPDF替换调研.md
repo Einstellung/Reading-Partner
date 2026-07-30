@@ -10,7 +10,7 @@
 
 代价在适配层形态变了。现在是"在 iframe 里调一个 window.createView,拿回封装好的 view 实例";换 EmbedPDF 后要自己装配 PdfiumEngine + PDFCore + 约十二个 plugin,并把 zotero 那套聚合好的回调(onChangeViewStats、onSetAnnotationPopup 的视口 rect 等)从各插件 state 里自己拼出来。不是难,是工作量前移。另有五处必须 spike 实测才能定(坐标系原点、位置精确还原、程序化滚动到标注、iOS/WKWebView、highlight 取原文)。
 
-一个前置澄清,直接影响工作量:我们壳对引擎的真实依赖面比 docs/04 小得多。outline、全文搜索、页码、缩略图全部是壳自己用独立 pdfjs-dist 4.10.38 抽的(src/fulltext/、src/components/OutlineView.tsx),引擎的 onSetOutline/onSetPageLabels/onSetThumbnails/onFindResult/onSetSelectionPopup 在 src/reader.ts 的 CALLBACK_DEFAULTS 里全是 noop,App.tsx 的 createPdfView 也只传了 7 个回调。换引擎不碰这块——替换成本最大的省项。
+一个前置澄清,直接影响工作量:我们壳对引擎的真实依赖面比 docs/04 小得多。outline、全文搜索、页码、缩略图全部是壳自己用独立 pdfjs-dist 4.10.38 抽的(src/fulltext/),引擎的 onSetOutline/onSetPageLabels/onSetThumbnails/onFindResult/onSetSelectionPopup 在适配层的回调默认值里全是 noop,壳建 view 时也只传了 7 个回调。换引擎不碰这块——替换成本最大的省项。
 
 ## 契约映射表(我们 App.tsx 真接的,不是 docs/04 的全部)
 
@@ -42,7 +42,7 @@
 
 ## 批注数据迁移方案
 
-现有落盘是 zotero 格式 JSON(pageIndex + position.rects PDF pt + sortIndex + text + aiThreadId + type/color/comment/tags),host 自己按文件存(src/annotations.ts)。存储层结构不变,只换对象 schema,写一个双向转换器:
+现有落盘是 zotero 格式 JSON(pageIndex + position.rects PDF pt + sortIndex + text + aiThreadId + type/color/comment/tags),host 自己按文件存。存储层结构不变,只换对象 schema,写一个双向转换器:
 
 - 形状:zotero position.rects [[l,t,r,b]…] ↔ EmbedPDF segmentRects [{origin:{x,y},size:{w,h}}](highlight/underline)。
 - 坐标:EmbedPDF Rect 是 top-left 原点(从 geometry.ts 的 rotateRect 推断,未逐字验证),zotero 是 PDF pt bottom-left,需 Y 翻转,要页高(pdfium 可查 page size)。纯函数,好写好测。
@@ -74,7 +74,7 @@
 
 ## 粗略工作量估计
 
-- 适配层重写(src/reader.ts 等价物:pdfium+core+plugin 装配、openDocumentBuffer、封装 setTool/CRUD/navigate/zoom/spread、把 viewStats/viewState 从插件 state 聚合、批注事件桥):6-10 人日。重点在状态聚合和插件装配,不在单个 API。
+- 适配层重写(pdfium+core+plugin 装配、openDocumentBuffer、封装 setTool/CRUD/navigate/zoom/spread、把 viewStats/viewState 从插件 state 聚合、批注事件桥):6-10 人日。重点在状态聚合和插件装配,不在单个 API。
 - 坐标/schema 转换器 + 一次性数据迁移脚本 + 单测:2-4 人日。纯函数,可 headless 测(沿用 src/fulltext 的 pure-function 测法)。
 - UI 接线(App.tsx/PenToolbar/TraceList/AnnotationPopup 改用新桥,浮窗锚点改用 selection rect,sortIndex 换自算文档序;OutlineView 和 src/fulltext 壳侧 pdfjs 原样保留不动):3-5 人日。
 - spike(前 8 项)+ iOS/WebKitGTK 复测:另计,是风险闸门不是线性工时。
