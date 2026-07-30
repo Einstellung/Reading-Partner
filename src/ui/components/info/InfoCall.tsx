@@ -55,7 +55,8 @@ import {
 import type { ComposerVoice } from "../chat/chat";
 import type { ChatMessage } from "../../../ai/providers";
 import type { InfoPipeline } from "../../../info/briefing/pipeline";
-import type { ProbeConfirmCardData, ProfileUpdateCardData } from "../../../info/briefing/cards";
+import type { ProfileUpdateCardData } from "../../../info/briefing/cards";
+import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { ThreadMessage as UiMessage } from "../common/types";
 
 export interface InfoCallAnchor {

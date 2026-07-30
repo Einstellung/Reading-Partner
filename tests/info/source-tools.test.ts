@@ -5,7 +5,7 @@
 
 import { expect, test } from "bun:test";
 import { buildSourceTools, sourceToolStatusLabel, trialSource } from "../../src/info/sources/source-tools";
-import type { ProbeConfirmCardData } from "../../src/info/briefing/cards";
+import type { ProbeConfirmCardData } from "../../src/info/sources/source-cards";
 import type { ExtractReadable } from "../../src/info/extract/readable-select";
 import type { SourceDescriptor } from "../../src/info/sources/descriptor";
 

@@ -9,9 +9,9 @@ import type {
   BriefingFailedCardData,
   BriefingProgressCardData,
   BriefingReadyCardData,
-  ProbeConfirmCardData,
   ProfileUpdateCardData,
 } from "../briefing/cards";
+import type { ProbeConfirmCardData } from "../sources/source-cards";
 import type { InfoSnapshot } from "../briefing/pipeline";
 import type { Briefing } from "../briefing/types";
 

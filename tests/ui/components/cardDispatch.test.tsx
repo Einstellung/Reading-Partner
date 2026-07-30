@@ -11,8 +11,8 @@ import type { CardAction } from "../../../src/ui/components/chat/chatParts";
 import type {
   BriefingFailedCardData,
   BriefingReadyCardData,
-  ProbeConfirmCardData,
 } from "../../../src/info/briefing/cards";
+import type { ProbeConfirmCardData } from "../../../src/info/sources/source-cards";
 
 // Walk a React element tree collecting every <button> that has an onClick.
 function buttons(node: unknown, out: { props: Record<string, any> }[] = []): { props: Record<string, any> }[] {

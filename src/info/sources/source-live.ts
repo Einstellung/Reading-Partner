@@ -11,7 +11,8 @@ import { probeSource } from "./probe";
 import { buildSourceTools, trialSource } from "./source-tools";
 import { buildCompanionTools, type BriefingScope } from "../companion/companion-tools";
 import { addSource } from "./source-store";
-import type { ProbeConfirmCardData, ProfileUpdateCardData } from "../briefing/cards";
+import type { ProbeConfirmCardData } from "./source-cards";
+import type { ProfileUpdateCardData } from "../briefing/cards";
 import type { AgentTool } from "../../ai/agent";
 
 // The three add-source tools bound to the live fetch/extract/store. `onProbeCard`

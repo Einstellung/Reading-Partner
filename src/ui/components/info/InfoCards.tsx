@@ -15,9 +15,9 @@ import type {
   BriefingFailedCardData,
   BriefingProgressCardData,
   BriefingReadyCardData,
-  ProbeConfirmCardData,
   ProfileUpdateCardData,
 } from "../../../info/briefing/cards";
+import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { CardComponentProps, CardKind, CardPayload } from "../chat/chatParts";
 
 const PIPE_BADGE =
