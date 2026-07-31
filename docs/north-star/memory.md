@@ -12,3 +12,4 @@
 - 检索第一版 BM25 已落地；长大后再评估混合检索（memsearch）与时间衰减。
 - 高信号事件即时写入通道（划线、批注、⭐ 发生时直写 memory）M8 未做，联想要用到用户信号权重时先补这条。
 - Memory Adapter 窄接口（retain/recall/listObservations/correct/rebuild）已就位，引擎可替换；联想只应写在 adapter 之上。
+- 重做记忆与画像的证据底账在 [28](../28-记忆与画像调研.md)：外部系统与评测的实测结论、可以借鉴的做法、以及我们现在的缺口。
