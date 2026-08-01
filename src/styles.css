@@ -12,6 +12,64 @@
 @custom-variant can-hover (@media (hover: hover));
 @custom-variant coarse (@media (pointer: coarse));
 
+/* Safe-area utilities (iOS, `viewport-fit=cover`). This file is the only place
+   that names env(): the shells pad themselves by the insets, but a
+   `position: fixed` child resolves against the viewport and never inherits that
+   padding, so every fixed overlay has to ask for its own (docs/pitfall/74).
+   env() is 0 wherever there is no inset, so all of these are inert on desktop.
+
+   `p-safe` is the shell form: the insets are the whole padding. The `-safe-<n>`
+   forms take max(<spacing n>, inset) rather than adding the two — the design's
+   own gap has to survive on a device that reports no inset, and where an inset
+   exists it already clears the notch or the home indicator. */
+@utility p-safe {
+  padding-top: env(safe-area-inset-top);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+}
+
+@utility pt-safe-* {
+  padding-top: max(calc(var(--spacing) * --value(integer)), env(safe-area-inset-top));
+}
+
+@utility pr-safe-* {
+  padding-right: max(calc(var(--spacing) * --value(integer)), env(safe-area-inset-right));
+}
+
+@utility pb-safe-* {
+  padding-bottom: max(calc(var(--spacing) * --value(integer)), env(safe-area-inset-bottom));
+}
+
+@utility pl-safe-* {
+  padding-left: max(calc(var(--spacing) * --value(integer)), env(safe-area-inset-left));
+}
+
+/* For an overlay that is its own painted box (a pill, a card), where padding
+   would inflate the box instead of moving it. */
+@utility bottom-safe-* {
+  bottom: max(calc(var(--spacing) * --value(integer)), env(safe-area-inset-bottom));
+}
+
+/* A fixed overlay pinned near a point: the anchor goes in --anchor-x/--anchor-y
+   (viewport px) and the overlay's own size in --anchor-w/--anchor-h, and the
+   clamp keeps it 2 spacing units inside the safe area on both axes. The clamp
+   is here rather than in JS so a rotation, a resize or a keyboard re-solves it
+   without a listener; a min above the max collapses to the min, which is the
+   wanted answer on a viewport too small for the overlay. */
+@utility anchor-safe {
+  left: clamp(
+    calc(env(safe-area-inset-left) + var(--spacing) * 2),
+    var(--anchor-x),
+    calc(100dvw - env(safe-area-inset-right) - var(--spacing) * 2 - var(--anchor-w))
+  );
+  top: clamp(
+    calc(env(safe-area-inset-top) + var(--spacing) * 2),
+    var(--anchor-y),
+    calc(100dvh - env(safe-area-inset-bottom) - var(--spacing) * 2 - var(--anchor-h))
+  );
+}
+
 /* The only global rules: preflight is off, so box-sizing, the root sizing
    chain, and the base font/color are not otherwise established. */
 * {

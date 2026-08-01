@@ -44,7 +44,9 @@ const KIND_CLASS: Record<ToastKind, string> = {
 export default function Toast({ toasts, onDismiss }: { toasts: ToastItem[]; onDismiss(id: string): void }) {
 	if (toasts.length === 0) return null;
 	return (
-		<div className="pointer-events-none fixed bottom-6 left-1/2 z-30 flex -translate-x-1/2 flex-col items-center gap-2">
+		// bottom-safe-6: fixed, so the shell's safe-area padding does not reach
+		// here and bottom-6 alone lands on the home indicator (docs/pitfall/74).
+		<div className="pointer-events-none fixed bottom-safe-6 left-1/2 z-30 flex -translate-x-1/2 flex-col items-center gap-2">
 			{toasts.map((t) => (
 				<div
 					key={t.id}

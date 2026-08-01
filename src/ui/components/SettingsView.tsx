@@ -76,7 +76,9 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
 
   return (
     <div className="fixed inset-0 z-[70] overflow-y-auto bg-white">
-      <div className="mx-auto w-[min(680px,100%)] px-6 py-10">
+      {/* fixed: the shell's safe-area padding does not reach here, so the title
+          row and Done would sit under the notch (docs/pitfall/74). */}
+      <div className="mx-auto w-[min(680px,100%)] pb-safe-10 pl-safe-6 pr-safe-6 pt-safe-10">
         <div className="mb-6 flex items-center justify-between">
           <h1 className="m-0 text-[22px]">Settings</h1>
           <button type="button" className={BTN} onClick={onClose}>
