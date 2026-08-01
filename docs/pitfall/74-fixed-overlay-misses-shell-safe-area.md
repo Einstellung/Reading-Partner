@@ -36,4 +36,4 @@ left: clamp(
 
 夹在 CSS 里还顺手修掉一件事：原来的 JS 版本读 `window.innerWidth` 且不监听 resize，转屏后卡片就出界。
 
-Tailwind v4 只引 utilities 没引 preflight，自定义工具类走 `@utility`，功能型的（`-*`）用 `--value(integer)` 拿数字。加完 `bun run build`，在 `dist/assets/*.css` 里 grep 一下确认真的编出来了。
+Tailwind v4 的自定义工具类走 `@utility`，功能型的（`-*`）用 `--value(integer)` 拿数字。加完 `bun run build`，在 `dist/assets/*.css` 里 grep 一下确认真的编出来了。

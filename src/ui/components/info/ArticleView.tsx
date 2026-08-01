@@ -1,8 +1,8 @@
 // The article reading view (docs/16): a clean typographic page for one briefing
 // item's sanitized HTML, prose width, images no-referrer. Opens fast from cache.
 // No highlights/annotations in v1. The host logs "opened" feedback on mount and
-// owns the back / ask actions. Because preflight is off and the body is injected
-// HTML (utilities can't reach it), a scoped <style> establishes the prose look.
+// owns the back / ask actions. The body is injected HTML that utilities can't
+// reach, so a scoped <style> establishes the prose look (proseCss).
 
 import { useMemo } from "react";
 import { IconCheck, IconFileInto, IconSparkle } from "../common/icons";
@@ -80,7 +80,7 @@ export function ArticleView({
             dangerouslySetInnerHTML={{ __html: body }}
           />
         ) : (
-          <p className="text-[15px] leading-relaxed text-[#777]">
+          <p className="my-3.5 text-[15px] leading-relaxed text-[#777]">
             The full text of this article could not be retrieved. It may be summarized in the
             briefing above.
           </p>

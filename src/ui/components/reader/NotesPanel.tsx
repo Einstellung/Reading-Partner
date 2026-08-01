@@ -130,7 +130,7 @@ function ChapterSection({
       {steering && (
         <div className="mt-1.5 flex gap-1.5">
           <input
-            className="min-w-0 flex-1 rounded-md border border-[#dcdcdc] px-2 py-1 text-[12px] coarse:text-base [font:inherit]"
+            className="min-w-0 flex-1 rounded-md border border-[#dcdcdc] bg-white px-2 py-1 text-[12px] coarse:text-base"
             placeholder="Optional: how to change it"
             value={instruction}
             onChange={(e) => setInstruction(e.target.value)}

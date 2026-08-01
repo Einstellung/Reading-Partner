@@ -80,7 +80,7 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
           row and Done would sit under the notch (docs/pitfall/74). */}
       <div className="mx-auto w-[min(680px,100%)] pb-safe-10 pl-safe-6 pr-safe-6 pt-safe-10">
         <div className="mb-6 flex items-center justify-between">
-          <h1 className="m-0 text-[22px]">Settings</h1>
+          <h1 className="m-0 text-[22px] font-bold">Settings</h1>
           <button type="button" className={BTN} onClick={onClose}>
             Done
           </button>

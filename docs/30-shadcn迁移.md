@@ -2,7 +2,7 @@
 
 > 本文记录 UI 组件迁到 shadcn/ui 的共识。现状按 2026-08-01 的代码查证（`dab38fa` 之后）。
 >
-> 落地状态（2026-08-01）：第一步（引 preflight）在做，未合并。其余未开始。
+> 落地状态（2026-08-01）：第一步的 preflight 部分已落地（`src/styles.css`），token 映射和 Button/Input 等原语未开始。
 
 ---
 
@@ -74,7 +74,11 @@ sanitize 仍是安全边界。速读正文是第三方 HTML，任何组件替换
 
 已知会变的：描边按钮今天静息态是浏览器的 `buttonface` 灰、悬停变浅灰，跟作者写的 `hover:bg-[#f4f4f4]` 意图相反，preflight 一上自动修好；12 个文本输入框靠 UA 白底，要补 `bg-white`；聊天输入框今天是 monospace（textarea 的 UA 字体）；`FigureCard` 的 `em` 字号今天相对 UA 的 13.333px 算，之后跟随正文，和旁边视觉一样的 chip 自动一致。
 
-风险面两处：阅读区页面是 blob `<img>` 光栅，preflight 的 `img { display: block; max-width: 100% }` 直接命中；速读正文是第三方 HTML，preflight 清掉 `p`、`table`、`code`、`blockquote` 等默认样式后会塌成没有段间距的一片，`proseCss.ts` 要补成完整的 prose 样式表。
+风险面两处，都已实测：
+
+阅读区安全。页面光栅的 `width`/`height` 是引擎写在行内的，`max-width: 100%` 解析到同一个包含块因此不夹取；`display: inline → block` 反而消掉了每个页容器 5px 的行盒溢出。demo.pdf 在 fit / 两级放大 / fit-width / 跳页 / 选中标注五个状态下截图逐字节相同，`scrollHeight` 每一档都不变。只有翻页模式差 1px，成因见坑 76。
+
+速读正文按预期塌了，`proseCss.ts` 已补成完整 prose 样式表（标题到 h6、列表标记、dl、hr、pre、table 外边距、caption、kbd/samp）。
 
 坑 43（tap highlight）引 preflight 后自动消失。坑 49（阅读区的 `user-select`）不受影响，手工处理仍然必要——preflight 不管 `user-select`。
 

@@ -195,7 +195,7 @@ export function SourcesPage(props: SourcesPageProps) {
 
       {/* The list. */}
       {props.sources.length === 0 ? (
-        <p className="text-[14px] text-[#999]">No sources yet. Paste a URL above to add one.</p>
+        <p className="my-3.5 text-[14px] text-[#999]">No sources yet. Paste a URL above to add one.</p>
       ) : (
         <ul className="m-0 flex list-none flex-col gap-2 p-0">
           {props.sources.map((s) => (

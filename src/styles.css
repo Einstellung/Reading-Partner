@@ -1,7 +1,13 @@
-/* Tailwind v4, utilities only — preflight (base reset) is deliberately NOT
-   imported (components style their own controls explicitly, e.g. border-0 /
-   bg-transparent on buttons). All UI is Tailwind utility classes. */
+/* Tailwind v4: theme, preflight and utilities, imported one by one rather than
+   through `@import "tailwindcss"` so the layer order can be stated here.
+   The @layer statement is load-bearing — layer order follows first appearance,
+   so without it `base` would sort wherever preflight happens to be imported and
+   could outrank every utility class. Verify in the build output: the first
+   `@layer` line of dist/assets/index-*.css must list base before utilities. */
+@layer theme, base, components, utilities;
+
 @import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
 @import "tailwindcss/utilities.css" layer(utilities);
 
 /* Touch/pointer variants (iPad adaptation). `can-hover` gates hover-only
@@ -70,26 +76,16 @@
   );
 }
 
-/* The only global rules: preflight is off, so box-sizing, the root sizing
-   chain, and the base font/color are not otherwise established. */
-* {
-  box-sizing: border-box;
-}
-
+/* Global baseline on top of preflight. box-sizing, the margin reset and
+   -webkit-tap-highlight-color come from preflight now (docs/pitfall/43); what
+   is left is what preflight does not carry. */
 html,
 body,
 #root {
-  margin: 0;
   height: 100%;
 }
 
-/* preflight also carries this one. Without it WKWebView paints its native tap
-   highlight over the pressed element, and a control that unmounts on tap (the
-   annotation popup's Delete, a More-menu item) leaves the highlight behind as an
-   orphan shadow for a few frames. Controls that want press feedback declare an
-   `active:` style instead, which unmounts with them. */
 html {
-  -webkit-tap-highlight-color: transparent;
   /* The app has no browser history to walk, and something has to say so: a
      horizontal overscroll that reaches the viewport is the browser's own
      back/forward gesture, which cancels the pointer mid-swipe and then leaves
@@ -99,16 +95,18 @@ html {
   overscroll-behavior-x: none;
 }
 
+/* The app's own stack, kept over preflight's `--default-font-family` on <html>
+   (a rule on body outranks an inherited one). Controls inherit it too, since
+   preflight gives them `font: inherit`. */
 body {
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   color: #1b1b1b;
 }
 
-/* Same family as the tap highlight above: a WebKit default that preflight would
-   have neutralised, left live because preflight is off (docs/pitfall/43, 49).
-   The reader surface must never be natively selectable. WebKit asks the hit
-   element for `user-select` before it lets its own selection gesture start
-   (PositionInformationForWebPage.mm sets Selectability::UnselectableDueTo-
+/* preflight does not touch user-select, so this one stays hand-written
+   (docs/pitfall/49). The reader surface must never be natively selectable.
+   WebKit asks the hit element for `user-select` before it lets its own
+   selection gesture start (PositionInformationForWebPage.mm sets Selectability::UnselectableDueTo-
    UserSelectNoneOrQuirk, and WKContentViewInteraction refuses the loupe on it);
    with the default `auto` a finger that rests ~100ms before it moves starts an
    iOS selection over the page, and the page divs are touch-action:none so no

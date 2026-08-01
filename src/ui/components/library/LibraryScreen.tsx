@@ -25,7 +25,7 @@ import {
 import { BTN, BTN_SM, BTN_SM_DANGER } from "../common/buttons";
 import SavedArticleView from "./SavedArticleView";
 
-const INPUT = "flex-1 px-2.5 py-2 border border-[#dcdcdc] rounded-md [font:inherit]";
+const INPUT = "flex-1 px-2.5 py-2 border border-[#dcdcdc] rounded-md bg-white";
 const LIBRARY = "w-[min(680px,100%)] mx-auto px-6 py-10";
 const TOPIC_LIST = "list-none m-0 p-0 flex flex-col gap-1.5";
 const TOPIC_ROW = "flex items-center gap-2 border border-[#dcdcdc] rounded-lg py-1 pl-1 pr-1.5";
@@ -138,7 +138,7 @@ function TopicLibrary(props: {
 }) {
   return (
     <div className={LIBRARY}>
-      <h1 className="mt-0 mb-5 mx-0 text-[22px]">Topics</h1>
+      <h1 className="mt-0 mb-5 mx-0 text-[22px] font-bold">Topics</h1>
       <div className="flex gap-2 mb-5">
         <input
           className={INPUT}
@@ -151,7 +151,7 @@ function TopicLibrary(props: {
           Add
         </button>
       </div>
-      {props.topics.length === 0 && <p className="text-[#777] text-sm">No topics yet. Create one to start reading.</p>}
+      {props.topics.length === 0 && <p className="my-3.5 text-[#777] text-sm">No topics yet. Create one to start reading.</p>}
       <ul className={TOPIC_LIST}>
         {props.topics.map((t) => (
           <li key={t.id} className={TOPIC_ROW}>
@@ -266,12 +266,12 @@ function TopicDetail(props: {
   return (
     <div className={LIBRARY}>
       <div className="flex items-center justify-between mb-4">
-        <h1 className="m-0 text-[22px]">{props.topic.name}</h1>
+        <h1 className="m-0 text-[22px] font-bold">{props.topic.name}</h1>
         <button className={BTN} onClick={props.onAddFile}>
           Add PDF
         </button>
       </div>
-      {files.length === 0 && <p className="text-[#777] text-sm">No files yet. Add a PDF to this topic.</p>}
+      {files.length === 0 && <p className="my-3.5 text-[#777] text-sm">No files yet. Add a PDF to this topic.</p>}
       <ul className={TOPIC_LIST}>
         {files.map((f) => {
           const line = metaLine(meta[f.path], f.lastOpenedAt);
