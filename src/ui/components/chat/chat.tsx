@@ -1,5 +1,4 @@
 // Shared chat pieces for the call UI (CallBubble, CallView). Tailwind-only.
-// No preflight in this project, so box-sizing and control resets are explicit.
 
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { HIT_44 } from '../common/buttons';

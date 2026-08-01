@@ -202,7 +202,7 @@ export default function SlidesDialog({
           <div>
             <div className="mb-1.5 text-[12px] font-semibold text-[#777]">Talk instruction (optional)</div>
             <textarea
-              className="min-h-16 w-full rounded-md border border-[#dcdcdc] px-2.5 py-2 text-[13px] coarse:text-base [font:inherit]"
+              className="min-h-16 w-full rounded-md border border-[#dcdcdc] bg-white px-2.5 py-2 text-[13px] coarse:text-base"
               placeholder="Theme, audience, angle… e.g. a 15-minute talk for engineers on the core argument."
               value={instruction}
               onChange={(e) => setInstruction(e.target.value)}

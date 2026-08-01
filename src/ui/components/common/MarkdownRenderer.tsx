@@ -64,10 +64,10 @@ function makeAnchor(onCitation: CitationHandler) {
 }
 
 // A quiet, chat-density typography set. Tailwind arbitrary variants keep it all
-// in one place; there's no preflight in this project, so every block element is
-// styled explicitly rather than relying on a base reset. Font size and color
-// inherit from the bubble so the same component fits the narrow bubble and the
-// wide full-window view.
+// in one place; preflight strips the browser defaults, so every block element is
+// styled explicitly here rather than relying on a base reset. Font size and
+// color inherit from the bubble so the same component fits the narrow bubble and
+// the wide full-window view.
 const MD = [
 	'text-[inherit] leading-relaxed break-words',
 	// Outer edges hug the bubble padding; inner rhythm is compact.

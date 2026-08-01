@@ -119,7 +119,7 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 			</div>
 
 			<textarea
-				className="max-h-40 min-h-[60px] w-full resize-y rounded-md border border-black/15 bg-white px-2 py-1.5 text-[13px] coarse:text-base text-neutral-800 select-text [font:inherit] focus:border-sky-600 focus:outline-none"
+				className="max-h-40 min-h-[60px] w-full resize-y rounded-md border border-black/15 bg-white px-2 py-1.5 text-[13px] coarse:text-base text-neutral-800 select-text focus:border-sky-600 focus:outline-none"
 				placeholder="Add a comment"
 				value={draft}
 				onChange={(e) => {
@@ -132,7 +132,7 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 			<div className="flex items-center justify-end">
 				<button
 					type="button"
-					className="inline-flex cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-2 py-1 text-xs text-red-700 [font:inherit] can-hover:hover:bg-red-700/10 active:bg-red-700/10 coarse:px-3 coarse:py-2.5"
+					className="inline-flex cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-2 py-1 text-xs text-red-700 can-hover:hover:bg-red-700/10 active:bg-red-700/10 coarse:px-3 coarse:py-2.5"
 					title="Delete"
 					onClick={() => onDelete(annotation.id)}
 				>

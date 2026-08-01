@@ -61,7 +61,7 @@ export default function SavedArticleView({
         ) : article.text ? (
           <div className={`${ARTICLE_PROSE_CLASS} whitespace-pre-wrap`}>{article.text}</div>
         ) : (
-          <p className="text-[15px] leading-relaxed text-[#777]">
+          <p className="my-3.5 text-[15px] leading-relaxed text-[#777]">
             No body was saved with this article.
           </p>
         )}

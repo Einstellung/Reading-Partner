@@ -17,6 +17,7 @@
 | 桌面 webview 行为异常 | WebKit / webview |
 | 调模型、改 provider 层、组装提示词、加长上下文 | AI 调用与上下文窗口 |
 | 顶栏、工具条、下拉浮层的定位 | 界面与布局 |
+| 全局样式、Tailwind layer、字体与行高 | 界面与布局 + EmbedPDF 引擎 |
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
@@ -51,7 +52,7 @@
 - [44-finger-draw-heuristic-kills-scrolling](./44-finger-draw-heuristic-kills-scrolling.md) — "没见过笔就让手指画"让选了标注工具的手指在 vertical 下彻底滑不动；删掉启发式，改成默认关闭的 fingerDraw 设置项
 - [45-vertical-band-cannot-move-scroll-content](./45-vertical-band-cannot-move-scroll-content.md) — 平移滚动内容会改可滚溢出区，浏览器夹紧 scrollTop 正好抵消掉偏移；纵向橡皮筋要平移滚动容器自己
 - [46-navlock-pen-still-drags-selection](./46-navlock-pen-still-drags-selection.md) — navlock 下笔的 move 仍放行给引擎，滚动正常但照样拖出选区；逐指针拦 move、放行 down/up，保住 tap
-- [49-webkit-native-selection-over-page](./49-webkit-native-selection-over-page.md) — 阅读区没 DOM 文本也照样能起原生选区（WebKit 只看 `user-select` 用值），整页变蓝加系统 callout；阅读区根节点关掉 user-select 和 touch-callout，引擎选区不受影响。与坑 43 同族
+- [49-webkit-native-selection-over-page](./49-webkit-native-selection-over-page.md) — 阅读区没 DOM 文本也照样能起原生选区（WebKit 只看 `user-select` 用值），整页变蓝加系统 callout；阅读区根节点关掉 user-select 和 touch-callout，引擎选区不受影响。preflight 不含 user-select，这条手写规则引入 preflight 之后仍然必需（与坑 43 同族、结局相反）
 - [70-browser-claims-the-swipe-before-the-pointer-does](./70-browser-claims-the-swipe-before-the-pointer-does.md) — 只用 pointer 事件写的左缘右滑必被 `pointercancel` 掐死（浏览器判滚动不看方向可行性），`touch-action` 的交集只算到滚动容器为止、挂外层无效；要在非 passive 的 `touchmove` 上 3px 就抢并全程 prevent，另加 `overscroll-behavior-x: none` 挡掉浏览器自己的历史手势
 - [71-first-touchmove-is-already-past-the-slop](./71-first-touchmove-is-already-past-the-slop.md) — 抢触摸的阈值在 1–16px 之间毫无区别：浏览器越过自己的 slop 才派发第一个 `touchmove`，那一下的位移已经是 16（手指更快就更大）；这个数只需小到任何第一个 move 都能满足，不是调参
 
@@ -92,13 +93,15 @@
 
 - [12-webkitgtk-drag-latency](./12-webkitgtk-drag-latency.md) — WebKitGTK 拖选高亮时选区滞后于鼠标（根因未定，换引擎后没复测）
 - [16-webkitgtk-clipboard-image](./16-webkitgtk-clipboard-image.md) — DOM paste 事件不带图片，贴图要从 Rust 读剪贴板
-- [43-webkit-tap-highlight-orphan-shadow](./43-webkit-tap-highlight-orphan-shadow.md) — 不引 preflight 也就没关掉 WKWebView 的原生点击高亮；点完即卸载的按钮会留下孤儿阴影，按下反馈改用 active:（同族还有坑 49 的原生选区，收在「触摸与手势」）
+- [43-webkit-tap-highlight-orphan-shadow](./43-webkit-tap-highlight-orphan-shadow.md) — 不引 preflight 也就没关掉 WKWebView 的原生点击高亮；点完即卸载的按钮会留下孤儿阴影。引入 preflight 后自动消失，手写那条已删；按下反馈仍要用 active:（同族的坑 49 反过来，preflight 管不着，收在「触摸与手势」）
 - [67-webkit-tap-does-not-focus-a-button](./67-webkit-tap-does-not-focus-a-button.md) — WebKit 点击不给按钮焦点，靠 `.focus()` + `onBlur` 收起的二次确认在 iPad 上按了等于没按（blur 抢在 click 前面解除武装，React 又复用同一个 button 节点，这一下变成解除再武装）；收起改用 document 上 capture 的 pointerdown
 - [69-visibilitychange-misses-window-switching](./69-visibilitychange-misses-window-switching.md) — 切到别的窗口再切回来不发 `visibilitychange`（页面一直是 visible），只有最小化和 unmap 才翻；`present()` 之后焦点还会回弹补一个 `blur`。"在前台"要当状态维护（visible && focused，四个事件一起），离开那侧要便宜、回来那侧要有下限
 
 ## 界面与布局
 
 - [68-overflow-x-auto-clips-the-other-axis](./68-overflow-x-auto-clips-the-other-axis.md) — 手机上让工具条横滑的那条 `overflow-x-auto` 把 `overflow-y` 也变成裁剪，带子里的下拉浮层整个看不见，z-index 救不了；浮层改 `fixed` + 开面板时量锚点矩形
+- [75-split-tailwind-import-sorts-base-last](./75-split-tailwind-import-sorts-base-last.md) — 拆开 import 的 Tailwind 少了 `@layer theme, base, components, utilities;` 那行声明，layer 顺序按物理位置排，preflight 落到 utilities 后面，反过来压过每一个 utility class；验收看产物里 `@layer` 的首次出现顺序
+- [76-paged-strip-rides-the-line-box-strut](./76-paged-strip-rides-the-line-box-strut.md) — 翻页模式的页带是 inline-block，竖向落点被继承来的 `line-height` 拉动；preflight 的 1.5 把整页挪了 1px（竖排模式逐字节不变）。以后动全局排版要单独复测翻页
 - [74-fixed-overlay-misses-shell-safe-area](./74-fixed-overlay-misses-shell-safe-area.md) — `position: fixed` 的包含块是视口，外壳按 `env(safe-area-inset-*)` 加的 padding 对它不存在，设置页被灵动岛压住、toast 落在 home indicator 上；`env()` 收进 `src/styles.css` 一组 `@utility`（`p-safe` / `pt-safe-*` / `bottom-safe-*` / `anchor-safe`），取 max(原有间距, inset) 而不是相加
 
 ## AI 调用与上下文窗口

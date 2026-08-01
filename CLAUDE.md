@@ -34,7 +34,7 @@ AI 陪读软件。设计共识在 `docs/`。阅读引擎用 EmbedPDF（PDFium WA
 
 - 包管理器用 bun。
 
-- 样式:Tailwind v4(只引 utilities,不引 preflight),UI 一律用 Tailwind utility class。
+- 样式:Tailwind v4(theme + preflight + utilities,拆开 import,layer 顺序在 `src/styles.css` 顶部显式声明,见坑 75),UI 一律用 Tailwind utility class。`styles.css` 只放全局基线。
 
 ## 发布
 
