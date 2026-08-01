@@ -5,7 +5,6 @@
 // browser User-Agent (see user-agent.ts), so it is forced on the plugin path.
 
 import { cleanTauriFetch } from "../../platform/app/tauri-fetch";
-import type { ImageBytes } from "./inline-images";
 import { INFO_USER_AGENT } from "./user-agent";
 
 export type FetchFn = (url: string, init?: RequestInit) => Promise<Response>;
@@ -51,17 +50,4 @@ export async function fetchText(
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
-}
-
-// Fetch an image's raw bytes + content-type through the Tauri http route, for
-// inlining article images as data: URLs (the webview's CSP/COEP block external
-// <img> loads — see docs/pitfall/30). Injected into the pure inliner.
-export async function fetchImageBytes(
-  url: string,
-  fetchFn: FetchFn = infoFetch,
-): Promise<ImageBytes> {
-  const res = await fetchFn(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status} from ${url}`);
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  return { bytes, contentType: res.headers.get("content-type") };
 }

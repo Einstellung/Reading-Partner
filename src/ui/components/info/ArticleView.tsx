@@ -4,8 +4,10 @@
 // owns the back / ask actions. Because preflight is off and the body is injected
 // HTML (utilities can't reach it), a scoped <style> establishes the prose look.
 
+import { useMemo } from "react";
 import { IconCheck, IconFileInto, IconSparkle } from "../common/icons";
-import { ARTICLE_PROSE_CLASS, ARTICLE_PROSE_CSS } from "../common/proseCss";
+import { ARTICLE_PROSE_CLASS, ARTICLE_PROSE_CSS, hideBrokenImage } from "../common/proseCss";
+import { articleHtmlForWebview } from "../../../platform/app/image-proxy";
 import type { BriefingItemMeta } from "../../../info/briefing/types";
 
 export function ArticleView({
@@ -24,6 +26,12 @@ export function ArticleView({
   onAsk: () => void;
   onSave: () => void;
 }) {
+  // External images are pointed at the img: proxy here rather than in what the
+  // host holds, so the HTML that gets kept keeps its original URLs.
+  const body = useMemo(
+    () => (contentHtml === null ? null : articleHtmlForWebview(contentHtml)),
+    [contentHtml],
+  );
   return (
     <div className="h-full overflow-y-auto bg-white">
       <style>{ARTICLE_PROSE_CSS}</style>
@@ -65,8 +73,12 @@ export function ArticleView({
 
         <h1 className="m-0 mb-4 text-[22px] font-semibold leading-tight text-[#141414] sm:mb-6 sm:text-[26px]">{meta.title}</h1>
 
-        {contentHtml ? (
-          <div className={ARTICLE_PROSE_CLASS} dangerouslySetInnerHTML={{ __html: contentHtml }} />
+        {body ? (
+          <div
+            className={ARTICLE_PROSE_CLASS}
+            onErrorCapture={(e) => hideBrokenImage(e.target)}
+            dangerouslySetInnerHTML={{ __html: body }}
+          />
         ) : (
           <p className="text-[15px] leading-relaxed text-[#777]">
             The full text of this article could not be retrieved. It may be summarized in the

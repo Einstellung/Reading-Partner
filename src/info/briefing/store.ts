@@ -207,29 +207,3 @@ export async function pruneStaleDailyFiles(today: string): Promise<void> {
     }
   }
 }
-
-// Merge inlined HTML back into a day's article record, preserving textContent.
-// Pure so the persist-back path is testable without the Tauri fs plugin.
-export function mergeInlinedHtml(
-  articles: Record<string, CachedArticle>,
-  itemId: string,
-  contentHtml: string,
-): Record<string, CachedArticle> {
-  const prev = articles[itemId];
-  if (!prev) return articles;
-  return { ...articles, [itemId]: { ...prev, contentHtml } };
-}
-
-// Persist image-inlined article HTML back into the day's cache, preserving the
-// item's textContent, so later opens are instant and offline. A no-op if the
-// item is not in the cache (e.g. the day's briefing was regenerated meanwhile).
-export async function saveInlinedArticleHtml(
-  date: string,
-  itemId: string,
-  contentHtml: string,
-): Promise<void> {
-  const all = await loadArticles(date);
-  const merged = mergeInlinedHtml(all, itemId, contentHtml);
-  if (merged === all) return;
-  await saveArticles(date, merged);
-}
