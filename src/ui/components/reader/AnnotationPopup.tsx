@@ -4,6 +4,8 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconClose, IconColorSwatch, IconTrash } from '../common/icons';
+import { placePanel, pointAnchor } from '../common/panel-position';
+import { useViewportSize } from '../common/useViewportSize';
 import type { Annotation, ColorEntry } from '../common/types';
 
 interface AnnotationPopupProps {
@@ -29,6 +31,10 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 	const ref = useRef<HTMLDivElement>(null);
 	const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
 	const [draft, setDraft] = useState(annotation.comment ?? '');
+	// The usable viewport. The comment box is the point of this popup, so the
+	// height has to be the visual viewport's: the keyboard that opens when the box
+	// is tapped would otherwise cover the popup it was opened from.
+	const viewport = useViewportSize();
 
 	// Keep the draft in sync if a different annotation is shown in the same popup.
 	useEffect(() => {
@@ -36,32 +42,31 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 	}, [annotation.id]);
 
 	// Position near the anchor, flipping above when it would overflow the bottom
-	// and clamping horizontally to the viewport.
+	// and clamping to the viewport. Re-run when the keyboard opens or the device
+	// rotates, both of which change the viewport under a popup already placed.
 	useLayoutEffect(() => {
 		const el = ref.current;
 		if (!el) return;
 		const { width, height } = el.getBoundingClientRect();
-		const vw = window.innerWidth;
-		const vh = window.innerHeight;
+		setPos(
+			placePanel({
+				anchor: pointAnchor(anchor.x, anchor.y),
+				panel: { width, height },
+				viewport,
+				gap: GAP,
+				margin: MARGIN,
+			}),
+		);
+	}, [anchor.x, anchor.y, annotation.id, viewport]);
 
-		let left = anchor.x - width / 2;
-		left = Math.max(MARGIN, Math.min(left, vw - width - MARGIN));
-
-		let top = anchor.y + GAP;
-		if (top + height > vh - MARGIN) {
-			const above = anchor.y - GAP - height;
-			top = above >= MARGIN ? above : Math.max(MARGIN, vh - height - MARGIN);
-		}
-		setPos({ left, top });
-	}, [anchor.x, anchor.y, annotation.id]);
-
-	// Close on outside click (within this document).
+	// A press outside closes the popup. pointerdown, not mousedown, and capture:
+	// docs/pitfall/67-webkit-tap-does-not-focus-a-button.md.
 	useEffect(() => {
-		function onDown(e: MouseEvent) {
+		function onDown(e: PointerEvent) {
 			if (ref.current && !ref.current.contains(e.target as Node)) onClose();
 		}
-		document.addEventListener('mousedown', onDown);
-		return () => document.removeEventListener('mousedown', onDown);
+		document.addEventListener('pointerdown', onDown, true);
+		return () => document.removeEventListener('pointerdown', onDown, true);
 	}, [onClose]);
 
 	// Debounced comment commit; flushed on blur.
