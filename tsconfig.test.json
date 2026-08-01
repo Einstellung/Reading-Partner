@@ -1,13 +1,13 @@
-// Typecheck config for the test suite. Same strictness as the app config, plus
-// the bun runtime types (`bun:test`, `Bun.*`) that only tests are allowed to
-// see — tsconfig.json pins `types: []` so a `Bun.` call can never compile into
-// shipped webview code. Run by `bun run typecheck`, which `build` calls, so CI
-// fails on a type error in a test file.
+// Typecheck config for the test suite and the bun scripts under scripts/. Same
+// strictness as the app config, plus the bun runtime types (`bun:test`, `Bun.*`)
+// that only these are allowed to see — tsconfig.json pins `types: []` so a
+// `Bun.` call can never compile into shipped webview code. Run by
+// `bun run typecheck`, which `build` calls, so CI fails on a type error here.
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "types": ["bun"]
   },
-  "include": ["src", "tests"],
+  "include": ["src", "tests", "scripts"],
   "exclude": []
 }

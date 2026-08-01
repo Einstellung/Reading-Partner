@@ -38,6 +38,9 @@ export interface GenerateParams {
   // Optional reference image (a prior illustration) as a data URL, for style
   // consistency across the deck.
   image?: string;
+  // Aspect ratio. Optional because deck illustrations are always landscape;
+  // other callers of the relay (a portrait poster, say) need to say so.
+  size?: string;
 }
 
 export interface HttpRequest {
@@ -58,7 +61,7 @@ export function buildGenerationRequest(config: ImageGenConfig, params: GenerateP
     prompt: params.prompt,
     async: true,
     n: 1,
-    size: "16:9",
+    size: params.size ?? "16:9",
   };
   if (params.image) body.image = [params.image];
   return {

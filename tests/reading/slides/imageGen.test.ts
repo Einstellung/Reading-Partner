@@ -40,6 +40,11 @@ test("buildGenerationRequest omits image when none is given", () => {
   expect("image" in body).toBe(false);
 });
 
+test("buildGenerationRequest honors an explicit size", () => {
+  const body = JSON.parse(buildGenerationRequest(config, { prompt: "x", size: "3:4" }).init.body!);
+  expect(body.size).toBe("3:4");
+});
+
 test("buildPollRequest targets the task and authenticates", () => {
   const req = buildPollRequest(config, "task-42");
   expect(req.url).toBe("https://www.right.codes/v1/tasks/task-42");

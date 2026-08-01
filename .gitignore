@@ -26,6 +26,10 @@ npm-debug.log*
 # Local test fixture, not shipped
 /public/demo.pdf
 
+# Poster bench output: generated images and their prompt records stay local.
+# The script that makes them (scripts/poster/generate.ts) is tracked.
+/scripts/poster/out/
+
 # EmbedPDF PDFium wasm: self-hosted from node_modules, not vendored into git.
 # Run scripts/copy-pdfium-wasm.sh (offline, sourced from @embedpdf/pdfium).
 /public/pdfium/
