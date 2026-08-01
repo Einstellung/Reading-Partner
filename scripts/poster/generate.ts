@@ -4,7 +4,7 @@
 // back and iterated on. Experimental tooling, not a product path.
 //
 // Usage:
-//   bun run scripts/poster/generate.ts --prompt "..." --size 3:4 --ref out/prev.png
+//   bun run scripts/poster/generate.ts --prompt "..." --size 9:16 --ref out/prev.png
 //
 // IMAGE_API_KEY must be set (bun reads the repo-root .env). IMAGE_API_BASE and
 // IMAGE_MODEL override the relay defaults. Every run spends money.
@@ -20,7 +20,11 @@ import {
 } from "../../src/reading/slides/imageGen";
 
 const OUT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "out");
-const DEFAULT_SIZE = "3:4";
+const DEFAULT_SIZE = "9:16";
+// The relay's documented allow-lists. Checked here so a typo costs nothing
+// instead of a rejected paid call.
+const ASPECT_RATIOS = ["1:1", "16:9", "9:16", "4:3"];
+const IMAGE_SIZES = ["1K", "2K", "4K"] as const;
 
 const USAGE = `Generate one reading-group poster through the image relay.
 
@@ -30,6 +34,8 @@ Usage: bun run scripts/poster/generate.ts [options]
   --prompt-file <path>  Read the prompt from a file instead.
                         With neither flag the prompt is read from stdin.
   --size <str>          Aspect ratio, default ${DEFAULT_SIZE} (posters are portrait).
+                        One of ${ASPECT_RATIOS.join(", ")}, or pixels like 1024x1024.
+  --image-size <str>    Resolution tier: ${IMAGE_SIZES.join(", ")}. Relay default if unset.
   --ref <path>          Local image to carry as a style reference.
   --out <name>          Output basename, without extension.
   -h, --help            Show this.
@@ -40,9 +46,21 @@ interface Args {
   prompt?: string;
   promptFile?: string;
   size: string;
+  imageSize?: (typeof IMAGE_SIZES)[number];
   ref?: string;
   out?: string;
   help: boolean;
+}
+
+function parseSize(raw: string): string {
+  if (ASPECT_RATIOS.includes(raw) || /^\d+x\d+$/.test(raw)) return raw;
+  throw new Error(`--size must be one of ${ASPECT_RATIOS.join(", ")} or WxH pixels, got ${raw}`);
+}
+
+function parseImageSize(raw: string): (typeof IMAGE_SIZES)[number] {
+  const found = IMAGE_SIZES.find((s) => s === raw.toUpperCase());
+  if (!found) throw new Error(`--image-size must be one of ${IMAGE_SIZES.join(", ")}, got ${raw}`);
+  return found;
 }
 
 // Hand-rolled because the flag set is tiny and the script has no deps.
@@ -63,7 +81,10 @@ function parseArgs(argv: string[]): Args {
         args.promptFile = value();
         break;
       case "--size":
-        args.size = value();
+        args.size = parseSize(value());
+        break;
+      case "--image-size":
+        args.imageSize = parseImageSize(value());
         break;
       case "--ref":
         args.ref = value();
@@ -208,12 +229,18 @@ async function main(): Promise<number> {
   // Ctrl-C aborts the in-flight poll instead of leaving the process hanging on it.
   process.on("SIGINT", () => abort.abort());
 
-  console.log(`${config.model} @ ${config.apiBase} — size ${args.size}${args.ref ? `, ref ${args.ref}` : ""}`);
+  const extras = [args.imageSize ? `, ${args.imageSize}` : "", args.ref ? `, ref ${args.ref}` : ""];
+  console.log(`${config.model} @ ${config.apiBase} — size ${args.size}${extras.join("")}`);
   let dataUrl: string;
   try {
     dataUrl = await generateImage(
       config,
-      { prompt, size: args.size, ...(reference ? { image: reference } : {}) },
+      {
+        prompt,
+        size: args.size,
+        ...(args.imageSize ? { imageSize: args.imageSize } : {}),
+        ...(reference ? { image: reference } : {}),
+      },
       makeDeps(abort.signal),
     );
   } catch (err) {
@@ -231,6 +258,7 @@ async function main(): Promise<number> {
       {
         prompt,
         size: args.size,
+        imageSize: args.imageSize ?? null,
         model: config.model,
         apiBase: config.apiBase,
         reference: args.ref ?? null,

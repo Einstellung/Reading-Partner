@@ -5,7 +5,7 @@
 // request-building and poll-state logic is pure and fetch-injectable so the flow
 // runs in bun tests with a scripted fetch — no network, no spend.
 
-export const DEFAULT_IMAGE_API_BASE = "https://www.right.codes";
+export const DEFAULT_IMAGE_API_BASE = "https://www.rightapi.ai";
 export const DEFAULT_IMAGE_MODEL = "gpt-image-2";
 
 // Async submit → poll cadence and ceiling. Backoff starts short and settles at
@@ -39,8 +39,11 @@ export interface GenerateParams {
   // consistency across the deck.
   image?: string;
   // Aspect ratio. Optional because deck illustrations are always landscape;
-  // other callers of the relay (a portrait poster, say) need to say so.
+  // other callers of the relay (a portrait poster, say) need to say so. The
+  // relay takes "1:1" | "16:9" | "9:16" | "4:3" or a pixel form like "1024x1024".
   size?: string;
+  // Output resolution tier. Left unset the relay applies its own default.
+  imageSize?: "1K" | "2K" | "4K";
 }
 
 export interface HttpRequest {
@@ -63,6 +66,7 @@ export function buildGenerationRequest(config: ImageGenConfig, params: GenerateP
     n: 1,
     size: params.size ?? "16:9",
   };
+  if (params.imageSize) body.imageSize = params.imageSize;
   if (params.image) body.image = [params.image];
   return {
     url: `${config.apiBase}/draw/v1/images/generations`,
@@ -113,16 +117,10 @@ export interface TaskState {
 
 // Normalize a poll response into a phase + any images. Tolerant of the shapes the
 // relay uses: status/state fields, data/images/output arrays, url/image_url or
-// b64_json/base64 per item. Anything unrecognized reads as still pending.
+// b64_json/base64 per item.
 export function parseTaskState(json: unknown): TaskState {
   const o = (json ?? {}) as Record<string, any>;
   const raw = String(o.status ?? o.state ?? "").toLowerCase();
-  const phase: TaskPhase =
-    raw === "completed" || raw === "succeeded" || raw === "success"
-      ? "completed"
-      : raw === "failed" || raw === "error"
-        ? "failed"
-        : "pending";
 
   const items: any[] = Array.isArray(o.data)
     ? o.data
@@ -146,6 +144,21 @@ export function parseTaskState(json: unknown): TaskState {
     if (typeof url === "string") images.push({ url });
     else if (typeof b64 === "string") images.push({ b64 });
   }
+
+  // The relay drops the status field entirely on the terminal success response —
+  // it answers with just { created, data: [...] }. Reading that as pending polls
+  // a finished task until the overall timeout, so an unrecognized status that
+  // carries images counts as completed.
+  const phase: TaskPhase =
+    raw === "completed" || raw === "succeeded" || raw === "success"
+      ? "completed"
+      : raw === "failed" || raw === "error"
+        ? "failed"
+        : raw === "queued" || raw === "in_progress" || raw === "processing" || raw === "pending"
+          ? "pending"
+          : images.length > 0
+            ? "completed"
+            : "pending";
 
   const error =
     phase === "failed"
