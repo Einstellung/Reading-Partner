@@ -8,9 +8,9 @@
 // would overwrite each other's. Here the record is the article, so both survive.
 //
 // The body is kept twice: `text` for the future AI path, `html` for reading it
-// today. Both are stripped of inlined data: images first (the article cache
-// rewrites external <img> to base64 data: URLs, which runs a day's cache to
-// megabytes); the article view hides still-external images anyway.
+// today. The html keeps its external image URLs — they render through the img:
+// proxy (docs/pitfall/30) — but any data: image is stripped, since a base64
+// body would dominate a record that syncs.
 
 import {
   BaseDirectory,
@@ -93,11 +93,12 @@ export function savedArticleId(url: string, title: string): string {
   return t === "" ? "" : `title:${t}`;
 }
 
-// Drop every <img> whose src is a data: URL, tag and all. The article cache
-// rewrites external images to base64 (docs/pitfall/30), which is most of a day's
-// 4MB cache file; a saved article travels through sync, so it carries text, not
-// re-encoded JPEGs. External <img> tags are left alone: they cost a URL each and
-// the prose stylesheet hides them until a data: URL swaps in.
+// Drop every <img> whose src is a data: URL, tag and all. A saved article
+// travels through sync, so it carries text, not base64 JPEGs — one inlined
+// image can outweigh the whole record. Two sources of those remain: a page that
+// shipped its images inline, and a day cache written before the img: proxy
+// (docs/pitfall/30) replaced the base64 inliner. External <img> tags are kept:
+// they cost a URL each and render through the proxy.
 export function stripDataImages(html: string): string {
   return html.replace(/<img\b[^>]*>/gi, (tag) =>
     /\ssrc\s*=\s*(?:"\s*data:|'\s*data:|data:)/i.test(tag) ? "" : tag,

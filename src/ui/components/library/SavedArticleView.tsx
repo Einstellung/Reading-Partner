@@ -3,7 +3,9 @@
 // ArticleView owns all of that and takes info's own item shape, so this is a
 // separate screen rather than a reuse. The prose look is shared (proseCss).
 
-import { ARTICLE_PROSE_CLASS, ARTICLE_PROSE_CSS } from "../common/proseCss";
+import { useMemo } from "react";
+import { ARTICLE_PROSE_CLASS, ARTICLE_PROSE_CSS, hideBrokenImage } from "../common/proseCss";
+import { articleHtmlForWebview } from "../../../platform/app/image-proxy";
 import { formatPublishedAt, type SavedArticle } from "../../../reading/saved-articles";
 
 export default function SavedArticleView({
@@ -18,6 +20,9 @@ export default function SavedArticleView({
   backLabel?: string;
 }) {
   const published = formatPublishedAt(article.publishedAt);
+  // The stored HTML keeps the original image URLs; the img: proxy is applied on
+  // the way to the webview (docs/pitfall/30).
+  const body = useMemo(() => articleHtmlForWebview(article.html), [article.html]);
   return (
     <div className="absolute inset-0 overflow-y-auto bg-white">
       <style>{ARTICLE_PROSE_CSS}</style>
@@ -47,8 +52,12 @@ export default function SavedArticleView({
           </p>
         )}
 
-        {article.html ? (
-          <div className={ARTICLE_PROSE_CLASS} dangerouslySetInnerHTML={{ __html: article.html }} />
+        {body ? (
+          <div
+            className={ARTICLE_PROSE_CLASS}
+            onErrorCapture={(e) => hideBrokenImage(e.target)}
+            dangerouslySetInnerHTML={{ __html: body }}
+          />
         ) : article.text ? (
           <div className={`${ARTICLE_PROSE_CLASS} whitespace-pre-wrap`}>{article.text}</div>
         ) : (

@@ -9,7 +9,7 @@ import { loadSettings } from "../../../platform/app/settings";
 import { buildGlossary } from "../../../ai/voice";
 import { getInfoPipeline } from "../../../info/briefing/live";
 import type { InfoPipeline, InfoSnapshot } from "../../../info/briefing/pipeline";
-import { loadArticle, loadItems, saveInlinedArticleHtml, todayLocal } from "../../../info/briefing/store";
+import { loadArticle, loadItems, todayLocal } from "../../../info/briefing/store";
 import type { BriefingItemMeta } from "../../../info/briefing/types";
 import { ensureBriefTopic } from "../../../platform/app/topics";
 import {
@@ -21,8 +21,6 @@ import { toSavedArticleInput } from "./saveArticle";
 import { appendFeedback } from "../../../memory/feedback";
 import { loadProfile } from "../../../memory/profile";
 import { sanitizeArticleHtml } from "../../../info/extract/sanitize";
-import { extractImageSrcs, inlineArticleImages } from "../../../info/extract/inline-images";
-import { fetchImageBytes } from "../../../info/extract/http";
 import { articleChatSystemPrompt, briefingChatSystemPrompt } from "../../../info/companion/chat";
 import { addSourceSystemPrompt } from "../../../info/sources/source-skill";
 import {
@@ -109,8 +107,6 @@ export default function InfoHome(props: {
   const infoRef = useRef<InfoPipeline | null>(null);
   const [openArticleId, setOpenArticleId] = useState<string | null>(null);
   const [articleHtml, setArticleHtml] = useState<string | null>(null);
-  // Aborts the previous article's background image-inlining when another opens.
-  const articleInlineAbort = useRef<AbortController | null>(null);
   const [openedItemIds, setOpenedItemIds] = useState<Set<string>>(new Set());
   const [dismissedItemIds, setDismissedItemIds] = useState<Set<string>>(new Set());
   const [infoCall, setInfoCall] = useState<InfoCallAnchor | null>(null);
@@ -218,10 +214,6 @@ export default function InfoHome(props: {
     async (itemId: string) => {
       const briefing = infoRef.current?.snapshot().briefing ?? null;
       const date = briefing?.date ?? todayLocal();
-      // Stop the previously opened article's image-inlining before starting this one.
-      articleInlineAbort.current?.abort();
-      const ac = new AbortController();
-      articleInlineAbort.current = ac;
       setOpenArticleId(itemId);
       setArticleHtml(null);
       onNavigate("article");
@@ -232,39 +224,22 @@ export default function InfoHome(props: {
         setOpenedItemIds((s) => new Set(s).add(itemId));
         appendFeedback({ itemId, title: meta.title, action: "opened" }).catch(() => {});
       }
-      let sanitized: string | null = null;
+      // The sanitized HTML keeps its external image URLs; ArticleView points
+      // them at the img: proxy on its way into the DOM (docs/pitfall/30).
       try {
         const cached = await loadArticle(date, itemId);
-        sanitized = cached?.contentHtml ? sanitizeArticleHtml(cached.contentHtml) : null;
-        setArticleHtml(sanitized);
+        setArticleHtml(cached?.contentHtml ? sanitizeArticleHtml(cached.contentHtml) : null);
       } catch {
         setArticleHtml(null);
-      }
-      // External <img> loads are blocked by the webview's CSP/COEP (docs/pitfall/30):
-      // fetch each through the Tauri http route, swap in data: URLs as they arrive,
-      // then persist the rewritten HTML so later opens are instant and offline.
-      if (ac.signal.aborted || !sanitized || extractImageSrcs(sanitized).length === 0) return;
-      try {
-        const inlined = await inlineArticleImages(sanitized, fetchImageBytes, {
-          signal: ac.signal,
-          onProgress: (html) => {
-            if (!ac.signal.aborted) setArticleHtml(html);
-          },
-        });
-        if (ac.signal.aborted) return;
-        setArticleHtml(inlined);
-        await saveInlinedArticleHtml(date, itemId, inlined);
-      } catch {
-        // Leave the text-only render in place; a later open retries the images.
       }
     },
     [openedItemIds, onNavigate],
   );
 
   // Keep the open article: file it under the Brief topic with its body snapshot
-  // (docs/21, store-and-display slice). The HTML kept is the one on screen —
-  // possibly with data: images already inlined, which the store strips — and the
-  // plain text comes from the day's cache, which the future AI path reads.
+  // (docs/21, store-and-display slice). The HTML kept is what the host holds,
+  // whose images are still plain https URLs (the img: proxy is applied in the
+  // view), and the plain text comes from the day's cache, which the AI reads.
   // The on-screen HTML has been through sanitizeArticleHtml; the day cache holds
   // what the site served, so the fallback has to be sanitized here. A saved
   // article is rendered with dangerouslySetInnerHTML, and it is rendered again

@@ -1,4 +1,5 @@
 mod atomic_fs;
+mod image_proxy;
 mod migrate;
 mod oauth_callback;
 // Voice capture records the mic in Rust via cpal (WebKitGTK's getUserMedia is
@@ -15,7 +16,8 @@ mod voice;
 // os (platform detection to fork the OAuth flow). Custom commands: the one-shot
 // OAuth loopback listener (desktop-only in practice; registered everywhere) and
 // the atomic data-file writer (atomic_fs), which the fs plugin has no equivalent
-// for.
+// for. The `img:` URI scheme (image_proxy) serves the article images the
+// webview's CSP/COEP would otherwise drop.
 //
 // mobile_entry_point generates the entry the iOS/Android wrapper calls; it is
 // inert on desktop, where main.rs calls run() directly.
@@ -51,6 +53,7 @@ pub fn run() {
     ]);
 
     builder
+        .register_asynchronous_uri_scheme_protocol(image_proxy::SCHEME, image_proxy::handle)
         .setup(|app| {
             // App-wide root directory guarantee. Tauri derives the per-app data
             // dir from the bundle identifier but never creates it, and

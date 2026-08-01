@@ -32,6 +32,9 @@ tauri-plugin-os = "2"
 # Read images from the system clipboard: WebKitGTK's DOM paste event often
 # omits image data, so the shell reads the clipboard through Rust as a fallback.
 tauri-plugin-clipboard-manager = "2"
+# Decode the image URL the `img:` protocol handler receives as one encoded path
+# segment (src/image_proxy.rs), the same way Tauri's own asset protocol does.
+percent-encoding = "2"
 serde = { version = "1", features = ["derive"] }
 # generate_context! expands the deep-link plugin config into serde_json values,
 # so the app crate needs serde_json as a direct dependency.
