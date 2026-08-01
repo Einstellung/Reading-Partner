@@ -29,8 +29,10 @@ const INPUT = "flex-1 px-2.5 py-2 border border-[#dcdcdc] rounded-md [font:inher
 const LIBRARY = "w-[min(680px,100%)] mx-auto px-6 py-10";
 const TOPIC_LIST = "list-none m-0 p-0 flex flex-col gap-1.5";
 const TOPIC_ROW = "flex items-center gap-2 border border-[#dcdcdc] rounded-lg py-1 pl-1 pr-1.5";
+// min-w-0: without it a flex item cannot shrink below its content, and a long
+// topic name pushes the row past the container into a horizontal scroll.
 const TOPIC_NAME =
-  "flex-1 flex items-baseline gap-2.5 text-left px-2.5 py-2 border-0 bg-transparent cursor-pointer text-[15px] rounded-md hover:bg-[#f0f0f0]";
+  "min-w-0 flex-1 flex items-baseline gap-2.5 text-left px-2.5 py-2 border-0 bg-transparent cursor-pointer text-[15px] rounded-md hover:bg-[#f0f0f0]";
 
 export default function LibraryScreen(props: {
   topics: Topic[];
@@ -164,8 +166,8 @@ function TopicLibrary(props: {
               />
             ) : (
               <button className={TOPIC_NAME} onClick={() => props.onOpen(t)}>
-                {t.name}
-                <span className="text-xs text-[#777]">{t.files.length} file{t.files.length === 1 ? "" : "s"}</span>
+                <span className="truncate">{t.name}</span>
+                <span className="shrink-0 text-xs text-[#777]">{t.files.length} file{t.files.length === 1 ? "" : "s"}</span>
               </button>
             )}
             <div className="flex gap-1">

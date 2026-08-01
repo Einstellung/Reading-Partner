@@ -114,7 +114,10 @@ export default function CallView({
 				</div>
 			) : (
 				<>
-					<div className="min-h-0 flex-1 overflow-y-auto px-4 pt-16">
+					{/* pt-36 clears the reading card in the top-right corner (120px tall,
+					    top-3), not just the hang-up button — below that the first message
+					    renders under the card. */}
+					<div className="min-h-0 flex-1 overflow-y-auto px-4 pt-36">
 						<MessageList messages={messages} size="lg" className="mx-auto max-w-3xl pb-6" onCardAction={onCardAction} />
 					</div>
 					<div className="px-4 pb-6">
