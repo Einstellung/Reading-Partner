@@ -6,7 +6,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconExpand } from '../common/icons';
 import { Composer, MessageList, type ComposerVoice } from './chat';
 import DeleteThreadButton from './DeleteThreadButton';
-import { useKeyboardInset } from '../common/useKeyboardInset';
+import { fitPanelWidth, placePanel, pointAnchor } from '../common/panel-position';
+import { useViewportSize } from '../common/useViewportSize';
 import type { PendingImage, ThreadMessage } from '../common/types';
 
 interface CallBubbleProps {
@@ -45,44 +46,43 @@ export default function CallBubble({
 }: CallBubbleProps) {
 	const ref = useRef<HTMLDivElement>(null);
 	const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
-	// Re-clamp above the soft keyboard when it opens/closes (iPad).
-	const keyboardInset = useKeyboardInset();
+	// The usable viewport, re-read when the keyboard opens and when the device
+	// rotates; both the width and the placement follow it.
+	const viewport = useViewportSize();
 	// The bubble's fixed width, shrunk on a phone narrower than WIDTH+margins so it
 	// never spills past the viewport edge. Inert on desktop/iPad (WIDTH fits).
-	const [width, setWidth] = useState(WIDTH);
-
-	useLayoutEffect(() => {
-		const vw = window.innerWidth;
-		setWidth(Math.min(WIDTH, vw - 2 * MARGIN));
-	}, []);
+	const width = fitPanelWidth(WIDTH, viewport.width, MARGIN);
 
 	useLayoutEffect(() => {
 		const el = ref.current;
 		if (!el) return;
 		const { height } = el.getBoundingClientRect();
-		const vw = window.innerWidth;
-		// The visual viewport height already excludes the keyboard; fall back to the
-		// layout height where the API is unavailable (desktop).
-		const vh = window.visualViewport?.height ?? window.innerHeight;
+		setPos(
+			placePanel({
+				anchor: pointAnchor(anchor.x, anchor.y),
+				panel: { width, height },
+				viewport,
+				gap: GAP,
+				margin: MARGIN,
+			}),
+		);
+	}, [anchor.x, anchor.y, messages.length, width, viewport]);
 
-		let left = anchor.x - width / 2;
-		left = Math.max(MARGIN, Math.min(left, vw - width - MARGIN));
-
-		let top = anchor.y + GAP;
-		if (top + height > vh - MARGIN) {
-			const above = anchor.y - GAP - height;
-			top = above >= MARGIN ? above : Math.max(MARGIN, vh - height - MARGIN);
-		}
-		setPos({ left, top });
-	}, [anchor.x, anchor.y, messages.length, keyboardInset, width]);
-
+	// A press outside closes the bubble. pointerdown, not mousedown, and capture:
+	// docs/pitfall/67-webkit-tap-does-not-focus-a-button.md — on touch the mouse
+	// events are compatibility events and the reader's taps on the top bar and the
+	// sidebar never reached this.
 	useEffect(() => {
-		function onDown(e: MouseEvent) {
+		// A streaming reply is not dismissable by pressing away: closing aborts the
+		// turn and throws the half-written answer out. Stop it, or dismiss it once
+		// it lands.
+		if (streaming) return;
+		function onDown(e: PointerEvent) {
 			if (ref.current && !ref.current.contains(e.target as Node)) onClose();
 		}
-		document.addEventListener('mousedown', onDown);
-		return () => document.removeEventListener('mousedown', onDown);
-	}, [onClose]);
+		document.addEventListener('pointerdown', onDown, true);
+		return () => document.removeEventListener('pointerdown', onDown, true);
+	}, [onClose, streaming]);
 
 	return (
 		<div

@@ -4,6 +4,8 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconColorSwatch, IconHighlight, IconPointer, IconSparkle, IconUnderline } from '../common/icons';
+import { placePanel } from '../common/panel-position';
+import { useViewportSize } from '../common/useViewportSize';
 import type { ColorEntry, Tool, ToolType } from '../common/types';
 
 interface PenToolbarProps {
@@ -32,6 +34,8 @@ const TOOL_BTN =
 const CARD = 'rounded-xl border border-black/10 bg-white shadow-lg';
 // Distance from the swatch to the palette that opens off it.
 const GAP = 8;
+// Smallest distance from the palette to a viewport edge.
+const MARGIN = 8;
 
 export default function PenToolbar({ tool, colors, onToolChange, orientation = 'vertical' }: PenToolbarProps) {
 	const [paletteOpen, setPaletteOpen] = useState(false);
@@ -41,33 +45,38 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 	// hanging below the bar never reaches the screen.
 	const [palettePos, setPalettePos] = useState<{ left: number; top: number } | null>(null);
 	const paletteRef = useRef<HTMLDivElement>(null);
+	const popoverRef = useRef<HTMLDivElement>(null);
 	const swatchRef = useRef<HTMLButtonElement>(null);
+	const viewport = useViewportSize();
 	const horizontal = orientation === 'horizontal';
 	// Only the painting tools carry a color; the navigation lock, the AI pen and
 	// the all-unselected state do not.
 	const hasColor = tool.type === 'highlight' || tool.type === 'underline';
 
+	// Horizontal hangs the palette below the swatch and centres it on it; vertical
+	// opens it to the swatch's side. Both are measured and clamped to the viewport:
+	// the header's tool band scrolls, so the swatch can sit against the screen edge
+	// with half the palette's colors past it.
 	useLayoutEffect(() => {
 		if (!paletteOpen) {
 			setPalettePos(null);
 			return;
 		}
 		const swatch = swatchRef.current;
-		if (!swatch) return;
-		// Horizontal hangs below the swatch and is centred on it (the popover
-		// carries the -50% itself); vertical opens to its right, top-aligned.
-		const place = () => {
-			const r = swatch.getBoundingClientRect();
-			setPalettePos(
-				horizontal
-					? { left: r.left + r.width / 2, top: r.bottom + GAP }
-					: { left: r.right + GAP, top: r.top },
-			);
-		};
-		place();
-		window.addEventListener('resize', place);
-		return () => window.removeEventListener('resize', place);
-	}, [paletteOpen, horizontal]);
+		const popover = popoverRef.current;
+		if (!swatch || !popover) return;
+		const rect = popover.getBoundingClientRect();
+		setPalettePos(
+			placePanel({
+				anchor: swatch.getBoundingClientRect(),
+				panel: { width: rect.width, height: rect.height },
+				viewport,
+				placement: horizontal ? 'below' : 'right',
+				gap: GAP,
+				margin: MARGIN,
+			}),
+		);
+	}, [paletteOpen, horizontal, viewport]);
 
 	// A press outside shuts the palette. pointerdown, not mousedown, and capture:
 	// docs/pitfall/67-webkit-tap-does-not-focus-a-button.md.
@@ -174,15 +183,22 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 					<IconColorSwatch color={tool.color} size={20} />
 				</button>
 
-				{paletteOpen && palettePos && (
+				{paletteOpen && (
 					<div
-						style={{ left: palettePos.left, top: palettePos.top }}
+						ref={popoverRef}
+						// Hidden at the origin until it has been measured: clamping needs the
+						// palette's own size, which the swatch cannot supply. The layout
+						// effect places it before the browser paints.
+						style={
+							palettePos
+								? { left: palettePos.left, top: palettePos.top, visibility: 'visible' }
+								: { left: 0, top: 0, visibility: 'hidden' }
+						}
 						className={
 							// Fixed column tracks: the popover shrinks to its content, so 1fr
 							// tracks would collapse. A track has to hold a whole swatch button,
 							// which is finger-sized on a touch device.
-							`fixed z-[1000] grid grid-cols-[repeat(4,1.75rem)] coarse:grid-cols-[repeat(4,2.75rem)] gap-0.5 p-1.5 shadow-xl ${CARD} ` +
-							(horizontal ? '-translate-x-1/2' : '')
+							`fixed z-[1000] grid grid-cols-[repeat(4,1.75rem)] coarse:grid-cols-[repeat(4,2.75rem)] gap-0.5 p-1.5 shadow-xl ${CARD}`
 						}
 						role="listbox"
 						aria-label="Colors"
