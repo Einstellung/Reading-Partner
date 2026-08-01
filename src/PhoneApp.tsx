@@ -208,19 +208,9 @@ export default function PhoneApp() {
     // The backdrop the swipe reveals, and the clip that hides whatever has left
     // the screen. Only ever visible while a gesture or its animation is running.
     <div className="relative h-full overflow-hidden bg-[#f1f3f5]">
-      <div
-        ref={surfaceRef}
-        className="flex h-full flex-col bg-white"
-        style={{
-          // Safe-area insets (viewport-fit=cover): the notch and the home
-          // indicator. All env() values are 0 in a browser window, so this is
-          // inert there.
-          paddingTop: "env(safe-area-inset-top)",
-          paddingLeft: "env(safe-area-inset-left)",
-          paddingRight: "env(safe-area-inset-right)",
-          paddingBottom: "env(safe-area-inset-bottom)",
-        }}
-      >
+      {/* p-safe: the notch and the home indicator (viewport-fit=cover). Fixed
+          overlays are not covered by it and pad themselves — docs/pitfall/74. */}
+      <div ref={surfaceRef} className="flex h-full flex-col bg-white p-safe">
         {/* No shell header: every screen carries its own top bar, and a second
             one above them would cost a phone a line of reading height for
             nothing. */}

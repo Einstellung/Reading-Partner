@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import {
@@ -1639,18 +1639,10 @@ export default function App() {
   return (
     <CitationContext.Provider value={onCitation}>
     <FigureContext.Provider value={figureHost}>
-    {/* Safe-area insets (iPad, viewport-fit=cover). All env() values are 0 on
-        desktop, so this is inert there. box-sizing:border-box keeps the padding
-        inside the full-height shell. */}
-    <div
-      className="flex flex-col h-full"
-      style={{
-        paddingTop: "env(safe-area-inset-top)",
-        paddingLeft: "env(safe-area-inset-left)",
-        paddingRight: "env(safe-area-inset-right)",
-        paddingBottom: "env(safe-area-inset-bottom)",
-      }}
-    >
+    {/* p-safe: the insets (iPad, viewport-fit=cover). box-sizing:border-box
+        keeps the padding inside the full-height shell. Fixed overlays are not
+        covered by it and pad themselves — see docs/pitfall/74. */}
+    <div className="flex flex-col h-full p-safe">
       {/* z-10: the color palette drops out of the header into the reader area,
           and <main> is positioned too — without this it would paint over it.
           Three sections: left = navigation, center = tool group, right = AI +
@@ -1825,11 +1817,19 @@ export default function App() {
         {/* No provider configured: guide to Settings instead of chatting. */}
         {showGuidance && call && (
           <div
-            className="fixed z-[1000] flex w-[300px] flex-col gap-3 rounded-xl border border-black/10 bg-white p-4 shadow-[0_8px_40px_rgba(0,0,0,0.18)]"
-            style={{
-              left: Math.max(8, Math.min(call.anchor.x - 150, window.innerWidth - 308)),
-              top: Math.max(8, Math.min(call.anchor.y + 10, window.innerHeight - 160)),
-            }}
+            className="fixed anchor-safe z-[1000] flex w-[300px] flex-col gap-3 rounded-xl border border-black/10 bg-white p-4 shadow-[0_8px_40px_rgba(0,0,0,0.18)]"
+            // anchor-safe clamps this inside the safe area (docs/pitfall/74) and
+            // re-solves on resize and rotation, which the viewport width read
+            // once at render did not. --anchor-h is an estimate: the card holds
+            // one line and a button row.
+            style={
+              {
+                "--anchor-x": `${call.anchor.x - 150}px`,
+                "--anchor-y": `${call.anchor.y + 10}px`,
+                "--anchor-w": "300px",
+                "--anchor-h": "160px",
+              } as CSSProperties
+            }
           >
             <p className="m-0 text-sm text-neutral-700">Configure a provider in Settings to start chatting.</p>
             <div className="flex justify-end gap-2">
@@ -1846,7 +1846,7 @@ export default function App() {
         {/* A failed turn stays visible; offer a retry (docs/03: errors not swallowed). */}
         {call?.error && (
           <button
-            className="fixed bottom-6 left-1/2 z-[1001] -translate-x-1/2 rounded-full border border-[#dcdcdc] bg-white px-4 py-1.5 text-sm shadow-md hover:bg-[#f0f0f0]"
+            className="fixed bottom-safe-6 left-1/2 z-[1001] -translate-x-1/2 rounded-full border border-[#dcdcdc] bg-white px-4 py-1.5 text-sm shadow-md hover:bg-[#f0f0f0]"
             onClick={retryCall}
           >
             Retry

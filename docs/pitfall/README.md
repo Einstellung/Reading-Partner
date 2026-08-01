@@ -99,6 +99,7 @@
 ## 界面与布局
 
 - [68-overflow-x-auto-clips-the-other-axis](./68-overflow-x-auto-clips-the-other-axis.md) — 手机上让工具条横滑的那条 `overflow-x-auto` 把 `overflow-y` 也变成裁剪，带子里的下拉浮层整个看不见，z-index 救不了；浮层改 `fixed` + 开面板时量锚点矩形
+- [74-fixed-overlay-misses-shell-safe-area](./74-fixed-overlay-misses-shell-safe-area.md) — `position: fixed` 的包含块是视口，外壳按 `env(safe-area-inset-*)` 加的 padding 对它不存在，设置页被灵动岛压住、toast 落在 home indicator 上；`env()` 收进 `src/styles.css` 一组 `@utility`（`p-safe` / `pt-safe-*` / `bottom-safe-*` / `anchor-safe`），取 max(原有间距, inset) 而不是相加
 
 ## AI 调用与上下文窗口
 
