@@ -291,7 +291,7 @@ export default function PrepPanel({
       <div className="border-t border-[#eee] p-2">
         <div className="flex gap-1.5">
           <input
-            className="min-w-0 flex-1 rounded-md border border-[#dcdcdc] px-2 py-1.5 text-[12px] [font:inherit]"
+            className="min-w-0 flex-1 rounded-md border border-[#dcdcdc] px-2 py-1.5 text-[12px] coarse:text-base [font:inherit]"
             placeholder="Add paper (title, arXiv id, or URL)"
             value={addText}
             onChange={(e) => setAddText(e.target.value)}
