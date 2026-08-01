@@ -11,6 +11,7 @@ import type { SourceHealth } from "../../../info/sources/engine";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { ProbeAddOutcome } from "../../../info/sources/source-live";
 import { pipeLabel } from "../../../info/sources/probe";
+import { HIT_44 } from "../common/buttons";
 import { ProbeConfirmCard } from "./InfoCards";
 
 function timeAgo(ts: number): string {
@@ -54,11 +55,13 @@ function HealthDot({ health }: { health: SourceHealth | undefined }) {
 
   return (
     <div className="relative" ref={ref}>
+      {/* The dot stays 10px — it reads as a status light, not a control — and
+          HIT_44 makes it tappable. */}
       <button
         type="button"
         aria-label="Source health"
         onClick={() => setOpen((v) => !v)}
-        className={`h-2.5 w-2.5 rounded-full ${color}`}
+        className={`relative h-2.5 w-2.5 rounded-full ${HIT_44} ${color}`}
       />
       {open && health && (
         <div className="absolute right-0 top-4 z-10 w-56 rounded-lg border border-black/10 bg-white p-3 text-left text-[12px] shadow-lg">
@@ -79,6 +82,7 @@ function HealthDot({ health }: { health: SourceHealth | undefined }) {
   );
 }
 
+// The track keeps its 20×36 look; HIT_44 takes the tap out to 44×44.
 function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
@@ -87,7 +91,8 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
       aria-checked={on}
       onClick={() => onChange(!on)}
       className={
-        "relative h-5 w-9 flex-none rounded-full transition-colors " + (on ? "bg-[#6d5ae0]" : "bg-[#d4d4d4]")
+        `relative h-5 w-9 flex-none rounded-full transition-colors ${HIT_44} ` +
+        (on ? "bg-[#6d5ae0]" : "bg-[#d4d4d4]")
       }
     >
       <span
@@ -139,10 +144,10 @@ export function SourcesPage(props: SourcesPageProps) {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col px-6 py-8">
+    <div className="mx-auto flex w-full max-w-3xl flex-col px-4 py-5 sm:px-6 sm:py-8">
       <div className="mb-6 flex items-center gap-3">
         <button
-          className="rounded-lg border border-[#dcdcdc] px-2.5 py-1 text-[13px] text-[#555] hover:bg-[#f4f4f4]"
+          className="rounded-lg border border-[#dcdcdc] px-2.5 py-1 text-[13px] text-[#555] coarse:min-h-[44px] hover:bg-[#f4f4f4]"
           onClick={props.onBack}
         >
           ‹ Briefing
@@ -163,13 +168,13 @@ export function SourcesPage(props: SourcesPageProps) {
               }
             }}
             placeholder="Paste a site or RSS URL…"
-            className="min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 text-[14px] text-[#1b1b1b] outline-none placeholder:text-neutral-400 focus:border-[#6d5ae0]"
+            className="min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 text-[14px] text-[#1b1b1b] outline-none coarse:min-h-[44px] coarse:text-[16px] placeholder:text-neutral-400 focus:border-[#6d5ae0]"
           />
           <button
             type="button"
             onClick={() => void probe()}
             disabled={!url.trim() || probing}
-            className="rounded-lg bg-[#6d5ae0] px-4 py-2 text-[14px] font-medium text-white hover:bg-[#5d4bd0] disabled:opacity-40"
+            className="rounded-lg bg-[#6d5ae0] px-4 py-2 text-[14px] font-medium text-white coarse:min-h-[44px] hover:bg-[#5d4bd0] disabled:opacity-40"
           >
             {probing ? "Checking…" : "Add"}
           </button>

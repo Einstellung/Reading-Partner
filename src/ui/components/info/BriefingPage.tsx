@@ -6,6 +6,7 @@
 
 import { useState } from "react";
 import type { Briefing, BriefingItemMeta } from "../../../info/briefing/types";
+import { HIT_44 } from "../common/buttons";
 import { IconSparkle } from "../common/icons";
 
 function SourceTag({ name }: { name: string }) {
@@ -143,8 +144,10 @@ export function BriefingPage(props: BriefingPageProps) {
                   <span className="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-[#d0d0d0]" />
                   <span className="min-w-0 flex-1 text-[14px] leading-relaxed text-[#333]">
                     {r.line}{" "}
+                    {/* Inline in the sentence, so the target comes from HIT_44:
+                        padding here would break the line. */}
                     <button
-                      className="text-[12px] text-[#8a7fd0] hover:underline"
+                      className={`relative text-[12px] text-[#8a7fd0] ${HIT_44} hover:underline`}
                       onClick={() => props.onOpenArticle(r.itemId)}
                     >
                       {m.sourceName} ↗
@@ -226,7 +229,7 @@ function FilteredSection({
   return (
     <section className="mb-2">
       <button
-        className="flex w-full items-center gap-2 rounded-lg px-1 py-2 text-left text-[13px] text-[#888] hover:text-[#555]"
+        className="flex w-full items-center gap-2 rounded-lg px-1 py-2 text-left text-[13px] text-[#888] coarse:min-h-[44px] hover:text-[#555]"
         onClick={() => setOpen((v) => !v)}
       >
         <span className="text-[11px]">{open ? "▾" : "▸"}</span>
@@ -244,7 +247,7 @@ function FilteredSection({
                 <span className="min-w-0 flex-1 truncate text-[13px] text-[#777]">{m.title}</span>
                 {openedIds.has(f.itemId) && <span className="text-[11px] text-[#bbb]">Read</span>}
                 <button
-                  className="flex-none text-[12px] text-[#8a7fd0] can-hover:opacity-0 transition-opacity hover:underline group-hover:opacity-100"
+                  className="flex-none text-[12px] text-[#8a7fd0] can-hover:opacity-0 transition-opacity coarse:min-h-[44px] coarse:px-2 hover:underline group-hover:opacity-100"
                   onClick={() => onAppeal(f.itemId, m, f.category)}
                 >
                   Show anyway

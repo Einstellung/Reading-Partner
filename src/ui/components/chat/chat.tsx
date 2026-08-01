@@ -2,6 +2,7 @@
 // No preflight in this project, so box-sizing and control resets are explicit.
 
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { HIT_44 } from '../common/buttons';
 import { IconCheck, IconCopy, IconSend, IconStop } from '../common/icons';
 import { Markdown } from '../common/Markdown';
 import { MicButton } from './MicButton';
@@ -328,7 +329,9 @@ export function MessageList({
 }
 
 // Staged images inside the composer: a placeholder card with a spinner while the
-// paste compresses, then the preview. Black round ✕ at the top-right removes one.
+// paste compresses, then the preview. Black round ✕ at the top-right removes one;
+// the badge stays 20px and HIT_44 carries the touch target, so it does not cover
+// the thumbnail it sits on. Already absolute, so no `relative`.
 function StagingCards({ images, onRemove, size }: { images: PendingImage[]; onRemove?: (id: string) => void; size: number }) {
 	return (
 		<div className="flex flex-wrap gap-2">
@@ -349,7 +352,7 @@ function StagingCards({ images, onRemove, size }: { images: PendingImage[]; onRe
 						type="button"
 						aria-label="Remove image"
 						onClick={() => onRemove?.(img.id)}
-						className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black text-[10px] leading-none text-white shadow"
+						className={`absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black text-[10px] leading-none text-white shadow ${HIT_44}`}
 					>
 						✕
 					</button>
@@ -434,11 +437,13 @@ export function Composer({
 		: 'box-border rounded-xl border border-black/10 bg-white p-2 focus-within:border-blue-500';
 	// box-border: the auto-grow sets height from scrollHeight, which includes the
 	// padding. Hidden scrollbar: an appearing gutter would reflow the text mid-typing.
+	// 16px on a coarse pointer: WKWebView zooms the whole page in when a field
+	// smaller than that takes focus, and the reader needs pinch-zoom left on.
 	const field =
-		'box-border min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent outline-none placeholder:text-neutral-400 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ' +
+		'box-border min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent outline-none coarse:text-[16px] placeholder:text-neutral-400 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ' +
 		(pill
 			? 'py-1.5 text-[15px] leading-6 text-neutral-800'
-			: 'px-1 py-1 text-[13px] leading-5 text-neutral-800');
+			: 'px-1 py-1 text-[13px] leading-5 coarse:leading-6 text-neutral-800');
 	const stopBtn = 'flex shrink-0 items-center justify-center rounded-full bg-neutral-800 text-white';
 
 	return (
@@ -485,7 +490,7 @@ export function Composer({
 							</button>
 						))}
 					{!pill && streaming && (
-						<button type="button" aria-label="Stop" onClick={onStop} className={`${stopBtn} mb-0.5 h-6 w-6`}>
+						<button type="button" aria-label="Stop" onClick={onStop} className={`${stopBtn} mb-0.5 h-6 w-6 coarse:h-11 coarse:w-11`}>
 							<IconStop size={12} />
 						</button>
 					)}

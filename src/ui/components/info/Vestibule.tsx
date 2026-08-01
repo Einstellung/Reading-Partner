@@ -54,7 +54,7 @@ export function Vestibule({
                 Nothing open yet. Add a book to a topic in the library.
               </p>
               <button
-                className="mt-4 w-fit rounded-lg border border-[#dcdcdc] px-4 py-2 text-[14px] text-[#555] hover:bg-[#f4f4f4]"
+                className="mt-4 w-fit rounded-lg border border-[#dcdcdc] px-4 py-2 text-[14px] text-[#555] coarse:min-h-[44px] hover:bg-[#f4f4f4]"
                 onClick={onOpenLibrary}
               >
                 Go to library
@@ -79,7 +79,7 @@ export function Vestibule({
       </div>
 
       <button
-        className="mt-8 w-fit text-[14px] text-[#888] underline-offset-4 hover:text-[#555] hover:underline"
+        className="mt-8 inline-flex w-fit items-center text-[14px] text-[#888] underline-offset-4 coarse:mt-5 coarse:min-h-[44px] hover:text-[#555] hover:underline"
         onClick={onOpenLibrary}
       >
         Library
