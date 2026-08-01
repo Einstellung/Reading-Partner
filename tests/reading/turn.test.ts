@@ -24,9 +24,8 @@ mock.module("@tauri-apps/plugin-fs", () => ({
   remove: async () => {},
 }));
 
-const { buildReadingTurn, turnFailureView, EXPLAIN_KICKOFF, HISTORY_KEEP } = await import(
-  "../../src/reading/turn"
-);
+const { backgroundFailureToast, buildReadingTurn, turnFailureView, EXPLAIN_KICKOFF, HISTORY_KEEP } =
+  await import("../../src/reading/turn");
 const { REFUSE_MIDTURN, REFUSE_ROUNDS } = await import("../../src/ai/agent");
 const { StoppedError } = await import("../../src/ai/watchdog");
 const { RESEARCH_TOOL_NAME, RESEARCH_TURN_ROUNDS } = await import(
@@ -418,6 +417,25 @@ test("an error keeps its toast, its Retry and its cause", () => {
   expect(view.text).toContain("fetch failed");
   expect(view.toast).toBe("AI reply failed");
   expect(view.retry).toBe(true);
+});
+
+// A turn whose bubble was closed keeps running (docs/03), so its failure has no
+// row to land in and no Retry to offer. The toast is the whole of it, for both
+// kinds, and it names the passage — several threads can be running at once.
+test("a failure with its conversation closed is carried by a toast that names the passage", () => {
+  expect(backgroundFailureToast("error", "神经节细胞越密越清晰")).toBe(
+    "AI reply failed on “神经节细胞越密越清晰”",
+  );
+  expect(backgroundFailureToast("refusal", "神经节细胞越密越清晰")).toBe(
+    "AI reply stopped on “神经节细胞越密越清晰”",
+  );
+});
+
+test("a long passage is cut to a glance, and the book-level thread has none", () => {
+  const toast = backgroundFailureToast("error", "编译器内联缓存 ".repeat(20));
+  expect(toast.length).toBeLessThan(70);
+  expect(toast).toContain("…");
+  expect(backgroundFailureToast("error", "  ")).toBe("AI reply failed on a closed conversation");
 });
 
 // The refusal assembled before the call and the one the loop reaches mid-turn

@@ -95,7 +95,8 @@ import CallView from "./ui/components/chat/CallView";
 import ReadingPipCard from "./ui/components/chat/ReadingPipCard";
 import ChatPipCard from "./ui/components/chat/ChatPipCard";
 import SettingsView from "./ui/components/SettingsView";
-import { buildReadingTurn, turnFailureView, type TurnFailure } from "./reading/turn";
+import { backgroundFailureToast, buildReadingTurn, turnFailureView, type TurnFailure } from "./reading/turn";
+import { createLiveTurns, type LiveTurn } from "./reading/live-turns";
 import { researchStatusLabel, RESEARCH_TOOL_NAME } from "./reading/papers/research-agent";
 import type { SubagentProgress } from "./ai/subagent";
 import { BTN, BTN_PRIMARY } from "./ui/components/common/buttons";
@@ -192,12 +193,9 @@ export default function App() {
   // Last pen-lift position over the reader pane (viewport coordinates) — the
   // AI-pen bubble anchor, since drawing a pen stroke yields no popup coordinates.
   const penUpRef = useRef<{ x: number; y: number } | null>(null);
-  // Abort controller for the in-flight stream (cancelled on hangup / switch).
-  const abortRef = useRef<AbortController | null>(null);
-  // Text streamed so far in the current turn, so stopping can keep it.
-  const partialRef = useRef("");
-  // Whether a turn is streaming, mirrored for the pdf-iframe pointerdown listener.
-  const streamingRef = useRef(false);
+  // Turns still streaming, one per thread (reading/live-turns). Closing a bubble
+  // leaves its turn running; only a deleted thread or a closed book cuts one off.
+  const liveTurnsRef = useRef(createLiveTurns<CallMessage>());
   // The current book's full text, extracted fire-and-forget on open. A call's
   // context assembly awaits this so the AI can see the page even if extraction
   // is still finishing; null once resolved when the book has no text layer.
@@ -301,8 +299,6 @@ export default function App() {
   useEffect(() => {
     callViewRef.current = call?.view ?? "none";
     callRef.current = call;
-    const last = call?.messages[call.messages.length - 1];
-    streamingRef.current = !!(last?.role === "ai" && last.streaming);
   }, [call]);
 
   // Prewarm the PDFium engine so the wasm is compiled before the first book
@@ -717,23 +713,43 @@ export default function App() {
     });
   }, []);
 
+  // Thread history the way an opening view shows it: what the file holds, plus
+  // the reply still being written if that thread has a turn running. Reopening a
+  // mark mid-answer joins the stream where it is, instead of showing nothing
+  // until the answer lands.
+  const openMessages = useCallback(
+    (threadId: string, msgs: ThreadMessage[]) =>
+      liveTurnsRef.current.withLive(threadId, toDisplayMessages(msgs)),
+    [],
+  );
+
+  // Whether opening this thread should start the explanation itself: an empty
+  // thread that is not already being answered in the background.
+  const needsFirstTurn = useCallback(
+    (threadId: string, msgs: ThreadMessage[]) => msgs.length === 0 && !liveTurnsRef.current.has(threadId),
+    [],
+  );
+
   // Run one assistant turn for a thread: assemble the reading context, stream the
   // reply into the bubble, persist on done. Stable (reads refs). No-ops (leaving
   // the bubble empty for the guidance) when no provider is configured.
+  //
+  // The turn belongs to its thread, not to the view: closing the bubble leaves it
+  // running (docs/03) and every callback below writes through liveTurns, so the
+  // row survives a bubble that stopped re-rendering.
   const runTurn = useCallback((threadId: string, annotationId: string) => {
     const bookId = bookIdRef.current;
     const s = settingsRef.current;
     if (!bookId || !s.defaultProviderId || !s.defaultModelId) return;
-    abortRef.current?.abort();
+    const liveTurns = liveTurnsRef.current;
     const controller = new AbortController();
-    abortRef.current = controller;
-    partialRef.current = "";
 
     const patch = (
       fn: (m: CallMessage) => CallMessage,
       ts: number,
       error?: boolean,
-    ) =>
+    ) => {
+      liveTurns.patch(threadId, ts, fn);
       setCall((c) =>
         !c || c.threadId !== threadId
           ? c
@@ -743,11 +759,11 @@ export default function App() {
               messages: c.messages.map((m) => (m.ts === ts && m.role === "ai" ? fn(m) : m)),
             },
       );
+    };
 
     // Push a running tool status onto the streaming reply; clearing any partial
     // text discards inter-round preamble so only the final answer shows (M6).
     const onToolStart = (info: { name: string; args: Record<string, any> }, ts: number) => {
-      partialRef.current = "";
       patch(
         (m) => ({
           ...m,
@@ -780,20 +796,33 @@ export default function App() {
     // toast goes up and whether Retry is offered all follow from which kind it
     // was (reading/turn.ts), so the refusal paths cannot pick up the error
     // path's red banner or its "couldn't reach the model".
+    //
+    // With the conversation closed there is no row to leave behind and no Retry
+    // to press: the toast carries the whole failure, for every kind. The turn is
+    // then gone — reopening the mark shows the thread as it was, and asking
+    // again is the way back.
     const showFailure = (kind: TurnFailure, message: string, ts: number) => {
-      if (abortRef.current === controller) abortRef.current = null;
-      if (controller.signal.aborted) return; // switch/hangup, not a failure
+      const live = liveTurns.settle(threadId, controller);
+      if (controller.signal.aborted) return; // deleted thread / closed book, not a failure
       const view = turnFailureView(kind, message);
-      if (view.toast) pushToast("error", view.toast);
-      patch(() => ({ role: "ai", text: view.text, ts, failed: true }), ts, view.retry);
+      if (callRef.current?.threadId === threadId) {
+        if (view.toast) pushToast("error", view.toast);
+        patch(() => ({ role: "ai", text: view.text, ts, failed: true }), ts, view.retry);
+      } else {
+        const marked = annsRef.current.get(annotationId)?.text;
+        pushToast("error", backgroundFailureToast(kind, typeof marked === "string" ? marked : ""));
+      }
+      live?.onSettled?.();
     };
 
     const ann = annsRef.current.get(annotationId);
     const ts = Date.now();
+    const streamingRow: CallMessage = { role: "ai", text: "", ts, streaming: true };
+    liveTurns.start({ threadId, bookId, controller, message: streamingRow });
     setCall((c) => {
       if (!c || c.threadId !== threadId) return c;
       const kept = c.messages.filter((m) => !(m.role === "ai" && (m.failed || m.streaming)));
-      return { ...c, error: false, messages: [...kept, { role: "ai", text: "", ts, streaming: true }] };
+      return { ...c, error: false, messages: [...kept, streamingRow] };
     });
 
     void (async () => {
@@ -819,7 +848,10 @@ export default function App() {
         signal: controller.signal,
         onSubagentProgress: (progress) => onSubagentProgress(progress, ts),
       });
-      if (!turn) return;
+      if (!turn) {
+        liveTurns.settle(threadId, controller); // aborted while reading history
+        return;
+      }
       // The turn could not be assembled small enough to leave the model room to
       // answer. Say so instead of sending it: an over-full request comes back one
       // token long with a normal `done` and no error (docs/pitfall/65), which
@@ -839,13 +871,12 @@ export default function App() {
         signal: controller.signal,
         reasoning: toReasoning(s.chatThinking),
         onDelta: (chunk) => {
-          partialRef.current += chunk;
           patch((m) => ({ ...m, text: m.text + chunk }), ts);
         },
         onToolStart: (info) => onToolStart(info, ts),
         onToolEnd: (info) => onToolEnd(info, ts),
         onDone: (full) => {
-          if (abortRef.current === controller) abortRef.current = null;
+          const live = liveTurns.settle(threadId, controller);
           if (controller.signal.aborted) return; // stopTurn already kept the partial
           // The notice rides the displayed row only. Persisting it would replay it
           // next turn as if the model had written it, and it would then describe a
@@ -861,6 +892,9 @@ export default function App() {
             ts,
           );
           appendMessage(bookId, threadId, { role: "ai", text: full, ts });
+          // A hangup that happened mid-answer waited for this (see captureHangup):
+          // distillation reads the thread file, which only now holds the reply.
+          live?.onSettled?.();
         },
         onError: (message: string) => {
           if (!controller.signal.aborted) console.error("agent turn failed", message);
@@ -952,17 +986,16 @@ export default function App() {
     if (threadId) {
       const bookId = bookIdRef.current;
       const thread = bookId ? getThread(bookId, threadId) : undefined;
-      abortRef.current?.abort(); // stop any stream from a previously open thread
       setPopup(null);
       const msgs = thread?.messages ?? [];
-      setCall({ threadId, annotationId: ann.id, view: "bubble", anchor, messages: toDisplayMessages(msgs) });
+      setCall({ threadId, annotationId: ann.id, view: "bubble", anchor, messages: openMessages(threadId, msgs) });
       hydrateThreadImages(threadId, msgs);
       // Empty thread (e.g. created before a provider was configured) → explain now.
-      if (msgs.length === 0) runTurn(threadId, ann.id);
+      if (needsFirstTurn(threadId, msgs)) runTurn(threadId, ann.id);
     } else {
       setPopup({ annotation: ann, anchor });
     }
-  }, [runTurn, hydrateThreadImages]);
+  }, [runTurn, hydrateThreadImages, openMessages, needsFirstTurn]);
 
   // The pen stroke gives the host no coordinates, so track the last pen-lift
   // over the reader pane as the AI-pen bubble anchor (capture phase, so nothing
@@ -974,11 +1007,9 @@ export default function App() {
   // Touching the book dismisses the bubble / chat corner card (docs/03).
   // chat-main is not dismissable this way (CallView covers the reader). AI-pen
   // draws and mark clicks fire this on pointerdown, then re-open on save/select.
+  // A reply in flight is no reason to hold the bubble open: it keeps writing and
+  // lands in the thread either way.
   const onPanePointerDown = useCallback(() => {
-    // A streaming reply is not dismissable this way: the click would abort the
-    // turn and throw the half-written answer away. Stop it, or dismiss once it
-    // lands.
-    if (streamingRef.current) return;
     if (callViewRef.current === "bubble" || callViewRef.current === "chat-pip") {
       setCall(null);
     }
@@ -1334,20 +1365,26 @@ export default function App() {
     if (c) runTurn(c.threadId, c.annotationId);
   }, [runTurn]);
 
-  // Stop a streaming turn and keep what it wrote: the abort silences the agent
-  // (no onDone/onError follows), so persisting the partial here is the only way
-  // it survives a reopen. Nothing generated yet → drop the empty reply.
+  // Keep what a cut-short turn wrote: the abort silences the agent (no
+  // onDone/onError follows), so persisting the partial here is the only way it
+  // survives. Nothing generated yet → nothing to keep. Returns the kept text.
+  const keepPartial = useCallback((live: LiveTurn<CallMessage>) => {
+    const partial = live.message.text.trim();
+    if (partial) {
+      appendMessage(live.bookId, live.threadId, { role: "ai", text: partial, ts: live.message.ts });
+    }
+    live.onSettled?.();
+    return partial;
+  }, []);
+
+  // The stop button: end the open thread's turn, keeping the half sentence.
   const stopTurn = useCallback(() => {
     const c = callRef.current;
-    const bookId = bookIdRef.current;
-    abortRef.current?.abort();
-    abortRef.current = null;
-    if (!c || !bookId) return;
-    const streamingMsg = [...c.messages].reverse().find((m) => m.role === "ai" && m.streaming);
-    if (!streamingMsg) return;
-    const { ts } = streamingMsg;
-    const partial = partialRef.current.trim();
-    partialRef.current = "";
+    if (!c) return;
+    const live = liveTurnsRef.current.stop(c.threadId);
+    if (!live) return;
+    const { ts } = live.message;
+    const partial = keepPartial(live);
     setCall((cur) =>
       !cur || cur.threadId !== c.threadId
         ? cur
@@ -1358,8 +1395,7 @@ export default function App() {
               : cur.messages.filter((m) => !(m.ts === ts && m.role === "ai")),
           },
     );
-    if (partial) appendMessage(bookId, c.threadId, { role: "ai", text: partial, ts });
-  }, []);
+  }, [keepPartial]);
 
   // Chat takes the whole window: from the bubble (reading shrinks to the corner
   // card) and back from the chat corner card.
@@ -1370,38 +1406,44 @@ export default function App() {
   // kick the silent memory distillation over its persisted transcript. Reads
   // refs so it is stable; no-ops when nothing is open. Distillation runs in the
   // background with no UI — the memory panel shows when it last ran.
+  //
+  // Hanging up mid-answer waits: the reply is still being written and the
+  // transcript would be a half sentence, so the distillation is handed to the
+  // turn and runs when it lands. The event is logged now — it is the hangup that
+  // happened now.
   const captureHangup = useCallback(() => {
     const c = callRef.current;
     const bookId = bookIdRef.current;
     const { topicId, topicName, fileName, pageIndex } = ctxRef.current;
     if (!c || !bookId || !topicId) return;
     logEvent(topicId, "call-end", { threadId: c.threadId, book: c.isBook ?? false });
-    const msgs = getThread(bookId, c.threadId)?.messages ?? [];
     const ann = annsRef.current.get(c.annotationId);
-    void distillThread({
-      topicId,
-      topicName,
-      bookName: fileName,
-      threadId: c.threadId,
-      annotationId: c.annotationId,
-      // The book-level thread has no mark: pin its position to the current page.
-      page: c.isBook
-        ? pageIndex !== null
-          ? pageIndex + 1
-          : null
-        : annotationPage(ann as { position?: { pageIndex?: number } } | undefined),
-      markedText: c.isBook ? "" : typeof ann?.text === "string" ? ann.text : "",
-      messages: msgs.map(({ role, text, ts }) => ({ role, text, ts })),
-      annotations: distillAnnotations(),
-    });
+    const distill = () =>
+      void distillThread({
+        topicId,
+        topicName,
+        bookName: fileName,
+        threadId: c.threadId,
+        annotationId: c.annotationId,
+        // The book-level thread has no mark: pin its position to the current page.
+        page: c.isBook
+          ? pageIndex !== null
+            ? pageIndex + 1
+            : null
+          : annotationPage(ann as { position?: { pageIndex?: number } } | undefined),
+        markedText: c.isBook ? "" : typeof ann?.text === "string" ? ann.text : "",
+        messages: (getThread(bookId, c.threadId)?.messages ?? []).map(({ role, text, ts }) => ({ role, text, ts })),
+        annotations: distillAnnotations(),
+      });
+    if (!liveTurnsRef.current.whenSettled(c.threadId, distill)) distill();
   }, [distillAnnotations]);
 
-  // ✕ hangs up, and touching the book dismisses too: the view goes away (the
-  // stream is aborted), the thread stays on its mark (docs/03).
+  // ✕ hangs up, and touching the book dismisses too: the view goes away, the
+  // thread stays on its mark (docs/03). An answer still being written is not
+  // interrupted — it finishes into the thread file, and the mark shows it whole
+  // when it is next opened.
   const endCall = useCallback(() => {
     captureHangup();
-    abortRef.current?.abort();
-    abortRef.current = null;
     setCall(null);
     clearPendingImages();
   }, [clearPendingImages, captureHangup]);
@@ -1417,8 +1459,9 @@ export default function App() {
     const c = callRef.current;
     const bookId = bookIdRef.current;
     if (!c || !bookId) return;
-    abortRef.current?.abort();
-    abortRef.current = null;
+    // The one close that does stop the turn: the conversation it would land in
+    // is being thrown away.
+    liveTurnsRef.current.stop(c.threadId);
     deleteThread(bookId, c.threadId);
     if (!c.isBook && c.annotationId) removeAnnotation(c.annotationId);
     const topicId = ctxRef.current.topicId;
@@ -1448,11 +1491,11 @@ export default function App() {
       // live bubble and leaving the bubble on screen reads as a bug even when it
       // is not.
       if (callRef.current?.annotationId === id) {
-        abortRef.current?.abort();
-        abortRef.current = null;
         setCall(null);
         clearPendingImages();
       }
+      // The turn goes with the thread wherever it was started from.
+      if (threadId) liveTurnsRef.current.stop(threadId);
       if (bookId && threadId && deleteThread(bookId, threadId)) {
         const topicId = ctxRef.current.topicId;
         if (topicId) logEvent(topicId, "thread-delete", { threadId, book: false });
@@ -1469,16 +1512,15 @@ export default function App() {
       const bookId = bookIdRef.current;
       if (!threadId || !bookId) return;
       const thread = getThread(bookId, threadId);
-      abortRef.current?.abort();
       viewRef.current?.selectAnnotations([annotationId]);
       viewRef.current?.navigate({ annotationID: annotationId });
       setSelectedAnnId(annotationId);
       const msgs = thread?.messages ?? [];
-      setCall({ threadId, annotationId, view: "chat-main", anchor: { x: 0, y: 0 }, messages: toDisplayMessages(msgs) });
+      setCall({ threadId, annotationId, view: "chat-main", anchor: { x: 0, y: 0 }, messages: openMessages(threadId, msgs) });
       hydrateThreadImages(threadId, msgs);
-      if (msgs.length === 0) runTurn(threadId, annotationId);
+      if (needsFirstTurn(threadId, msgs)) runTurn(threadId, annotationId);
     },
-    [runTurn, hydrateThreadImages],
+    [runTurn, hydrateThreadImages, openMessages, needsFirstTurn],
   );
 
   // Top-bar AI button: the selection-free entry (docs/03). One persistent
@@ -1490,7 +1532,6 @@ export default function App() {
     const bookId = bookIdRef.current;
     if (!bookId) return;
     const thread = getBookThread(bookId) ?? createBookThread(bookId, crypto.randomUUID());
-    abortRef.current?.abort();
     setPopup(null);
     const msgs = thread.messages;
     setCall({
@@ -1499,11 +1540,11 @@ export default function App() {
       isBook: true,
       view: "chat-main",
       anchor: { x: 0, y: 0 },
-      messages: toDisplayMessages(msgs),
+      messages: openMessages(thread.id, msgs),
     });
     hydrateThreadImages(thread.id, msgs);
-    if (msgs.length === 0) runTurn(thread.id, "");
-  }, [runTurn, hydrateThreadImages]);
+    if (needsFirstTurn(thread.id, msgs)) runTurn(thread.id, "");
+  }, [runTurn, hydrateThreadImages, openMessages, needsFirstTurn]);
 
   // Jump the reading back to the thread's mark (from the reading corner card).
   // The book-level thread has no mark, so there is nothing to jump to.
@@ -1518,14 +1559,18 @@ export default function App() {
   }, []);
 
   const closeReader = useCallback(() => {
+    // Leaving the book ends every turn it has running, each keeping what it
+    // wrote. A background reply is tied to the book being read, not to the app;
+    // this is where it stops. Turns on other books are left alone. Before the
+    // hangup, so the distillation reads the partials too.
+    const bookId = bookIdRef.current;
+    if (bookId) for (const live of liveTurnsRef.current.stopBook(bookId)) keepPartial(live);
     // Closing the book with a call open ends that conversation too.
     captureHangup();
     // The last chapter can't be reached by a "next chapter" highlight, so on
     // close evaluate the notes frontier once with the inclusive rule (docs/14).
     // Fire before the refs are torn down below.
     finalPassNotes();
-    abortRef.current?.abort();
-    abortRef.current = null;
     setCall(null);
     clearPendingImages();
     setTitle(null);
@@ -1538,7 +1583,7 @@ export default function App() {
     bookIdRef.current = null;
     viewRef.current = null;
     pageDwellRef.current = null;
-  }, [clearPendingImages, captureHangup, finalPassNotes, resetPrep]);
+  }, [clearPendingImages, captureHangup, finalPassNotes, resetPrep, keepPartial]);
 
   // Stable handlers for the EmbedPDF pane so its React.memo actually holds: any
   // new prop identity here would re-render the whole engine subtree on every

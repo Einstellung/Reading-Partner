@@ -188,6 +188,16 @@ export function turnFailureView(kind: TurnFailure, message: string): TurnFailure
   };
 }
 
+// The same failure, for a turn whose conversation is no longer on screen: it
+// kept running after the bubble was closed (docs/03), so the row it writes is
+// nowhere to be seen and a toast is the only place left to say so. Named by the
+// marked passage, since several threads can be running at once.
+export function backgroundFailureToast(kind: TurnFailure, markedText: string): string {
+  const trimmed = markedText.trim().replace(/\s+/g, " ");
+  const where = trimmed ? `“${trimmed.length > 40 ? `${trimmed.slice(0, 40)}…` : trimmed}”` : "a closed conversation";
+  return kind === "refusal" ? `AI reply stopped on ${where}` : `AI reply failed on ${where}`;
+}
+
 // The configured model's metadata (its context window is all we want). A
 // synchronous catalog lookup — no credentials, no network. Null when settings
 // name a provider or model pi doesn't know, in which case the turn is assembled

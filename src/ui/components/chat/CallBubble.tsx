@@ -1,6 +1,7 @@
 // CallBubble: the bubble state of a reading call (docs/03). Anchored beside the
 // mark, the AI starts answering; the reader can follow up, expand, or click away
-// to keep reading (close, not hang up). Tailwind-only.
+// to keep reading (close, not hang up). Closing at any time is safe, mid-answer
+// included: the turn goes on writing into the thread. Tailwind-only.
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconExpand } from '../common/icons';
@@ -73,16 +74,12 @@ export default function CallBubble({
 	// events are compatibility events and the reader's taps on the top bar and the
 	// sidebar never reached this.
 	useEffect(() => {
-		// A streaming reply is not dismissable by pressing away: closing aborts the
-		// turn and throws the half-written answer out. Stop it, or dismiss it once
-		// it lands.
-		if (streaming) return;
 		function onDown(e: PointerEvent) {
 			if (ref.current && !ref.current.contains(e.target as Node)) onClose();
 		}
 		document.addEventListener('pointerdown', onDown, true);
 		return () => document.removeEventListener('pointerdown', onDown, true);
-	}, [onClose, streaming]);
+	}, [onClose]);
 
 	return (
 		<div
