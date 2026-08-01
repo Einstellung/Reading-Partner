@@ -58,7 +58,7 @@ export default function Toast({ toasts, onDismiss }: { toasts: ToastItem[]; onDi
 						type="button"
 						aria-label="Dismiss"
 						onClick={() => onDismiss(t.id)}
-						className="flex shrink-0 items-center justify-center opacity-60 hover:opacity-100 coarse:h-9 coarse:w-9"
+						className="flex h-6 w-6 shrink-0 items-center justify-center opacity-60 hover:opacity-100 coarse:h-11 coarse:w-11"
 					>
 						<IconClose size={12} />
 					</button>
