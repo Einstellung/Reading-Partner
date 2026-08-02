@@ -7,6 +7,8 @@ import { useEffect, useState } from "react";
 import type { PrepActivity, PrepSnapshot } from "../../../reading/prep/pipeline";
 import type { PaperStatus, PrepPaper } from "../../../reading/prep/types";
 import { CitationContext, Markdown } from "../common/Markdown";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
 
 // "1234" -> "1.2k", "812" -> "812". Keeps the liveness line compact.
 function compactChars(chars: number): string {
@@ -52,9 +54,6 @@ const STATUS_STYLE: Record<PaperStatus, string> = {
   cooldown: "bg-amber-50 text-amber-600",
   skipped: "bg-neutral-100 text-neutral-400",
 };
-
-const SMALL_BTN =
-  "rounded border border-[#dcdcdc] bg-white px-1.5 py-0.5 text-[11px] leading-none text-neutral-500 cursor-pointer hover:bg-[#f0f0f0] coarse:px-2.5 coarse:py-2";
 
 interface PrepPanelProps {
   snapshot: PrepSnapshot | null;
@@ -143,14 +142,14 @@ function PaperRow({
       )}
       <div className="mt-1 flex gap-1.5">
         {active && (
-          <button type="button" className={SMALL_BTN} onClick={onSkip}>
+          <Button type="button" variant="outline" size="xs" className="text-neutral-500" onClick={onSkip}>
             Skip
-          </button>
+          </Button>
         )}
         {(paper.status === "skipped" || paper.status === "failed" || paper.status === "cooldown") && (
-          <button type="button" className={SMALL_BTN} onClick={onRequeue}>
+          <Button type="button" variant="outline" size="xs" className="text-neutral-500" onClick={onRequeue}>
             Retry
-          </button>
+          </Button>
         )}
       </div>
       {expanded && (
@@ -201,13 +200,16 @@ export default function PrepPanel({
         <p className="m-0 text-sm text-neutral-500">
           No lesson prep for this book yet. Start it here or with the Classroom button in a chat.
         </p>
-        <button
+        <Button
           type="button"
-          className="rounded-md border border-[#c9c2e8] bg-[#efecfb] px-3 py-1.5 text-sm text-[#4a3a9e] cursor-pointer hover:bg-[#e7e3f7] coarse:py-2.5"
+          variant="secondary"
+          // leading-5 puts back what text-sm carries on its own; the size adds
+          // leading-none, which this button never had.
+          className="leading-5 coarse:py-2.5"
           onClick={onStartPrep}
         >
           Start prep
-        </button>
+        </Button>
       </div>
     );
   }
@@ -230,14 +232,16 @@ export default function PrepPanel({
         <div className="flex items-center justify-between gap-2">
           <div className="text-[13px] text-[#1b1b1b]">Lesson prep</div>
           {state.planStatus === "done" && (
-            <button
+            <Button
               type="button"
-              className="cursor-pointer border-0 bg-transparent p-0 text-[11px] text-neutral-400 hover:text-neutral-600 disabled:cursor-default disabled:opacity-50 coarse:px-2 coarse:py-1.5"
+              variant="link"
+              size="link"
+              className="text-[11px] text-neutral-400 hover:text-neutral-600 disabled:opacity-50 coarse:py-0"
               onClick={onReplan}
               disabled={running}
             >
               Replan
-            </button>
+            </Button>
           )}
         </div>
         <div className="mt-0.5 text-[11px] text-neutral-400">
@@ -256,14 +260,16 @@ export default function PrepPanel({
           {state.planStatus === "failed" && (
             <span className="flex items-center gap-1.5">
               <span className="text-red-600/90">Plan failed: {state.planError}</span>
-              <button
+              <Button
                 type="button"
-                className={SMALL_BTN}
+                variant="outline"
+                size="xs"
+                className="text-neutral-500"
                 onClick={onRetryPlan}
                 disabled={running}
               >
                 Retry
-              </button>
+              </Button>
             </span>
           )}
           {state.planStatus === "done" && `${doneCount} of ${state.papers.length} papers ready`}
@@ -290,16 +296,16 @@ export default function PrepPanel({
 
       <div className="border-t border-[#eee] p-2">
         <div className="flex gap-1.5">
-          <input
-            className="min-w-0 flex-1 rounded-md border border-[#dcdcdc] bg-white px-2 py-1.5 text-[12px] coarse:text-base"
+          <Input
+            className="px-2 py-1.5 text-[12px]"
             placeholder="Add paper (title, arXiv id, or URL)"
             value={addText}
             onChange={(e) => setAddText(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submitAdd()}
           />
-          <button type="button" className={SMALL_BTN} onClick={submitAdd}>
+          <Button type="button" variant="outline" size="xs" className="text-neutral-500" onClick={submitAdd}>
             Add
-          </button>
+          </Button>
         </div>
       </div>
     </div>

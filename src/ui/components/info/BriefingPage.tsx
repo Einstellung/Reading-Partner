@@ -6,13 +6,13 @@
 
 import { useState } from "react";
 import type { Briefing, BriefingItemMeta } from "../../../info/briefing/types";
-import { HIT_44 } from "../common/buttons";
+import { Button } from "../ui/button";
 import { IconSparkle } from "../common/icons";
 
 function SourceTag({ name }: { name: string }) {
   if (!name) return null;
   return (
-    <span className="rounded-full bg-[#f0eefb] px-2 py-0.5 text-[11px] font-medium text-[#6d5ae0]">
+    <span className="rounded-full bg-[#f0eefb] px-2 py-0.5 text-[11px] font-medium text-primary">
       {name}
     </span>
   );
@@ -21,17 +21,19 @@ function SourceTag({ name }: { name: string }) {
 // A hover/touch × that logs a dismissal without opening anything.
 function DismissButton({ onDismiss }: { onDismiss: () => void }) {
   return (
-    <button
+    <Button
+      variant="ghost"
+      size="icon"
       aria-label="Dismiss"
       title="Not for me"
       onClick={(e) => {
         e.stopPropagation();
         onDismiss();
       }}
-      className="flex h-6 w-6 flex-none items-center justify-center rounded-full text-[#bbb] can-hover:opacity-0 transition-opacity hover:bg-[#f0f0f0] hover:text-[#666] group-hover:opacity-100 coarse:h-11 coarse:w-11"
+      className="h-6 w-6 flex-none rounded-full text-[#bbb] can-hover:opacity-0 transition-opacity can-hover:hover:text-[#666] group-hover:opacity-100"
     >
       ✕
-    </button>
+    </Button>
   );
 }
 
@@ -55,28 +57,17 @@ export function BriefingPage(props: BriefingPageProps) {
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col px-4 py-5 sm:px-6 sm:py-8">
       <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-2 border-b border-[#ececec] bg-white/85 px-4 py-2 backdrop-blur sm:-mx-6 sm:mb-6 sm:gap-3 sm:px-6 sm:py-3">
-        <button
-          className="rounded-lg border border-[#dcdcdc] px-2.5 py-1 text-[13px] text-[#555] coarse:min-h-[44px] hover:bg-[#f4f4f4]"
-          onClick={props.onBack}
-        >
+        <Button variant="subtle" size="chip" onClick={props.onBack}>
           ‹ Today
-        </button>
+        </Button>
         <span className="text-[13px] text-[#999]">{b.date}</span>
         <span className="flex-1" />
-        <button
-          className="rounded-lg border border-[#dcdcdc] px-2.5 py-1 text-[13px] text-[#555] coarse:min-h-[44px] hover:bg-[#f4f4f4]"
-          onClick={props.onOpenSources}
-          title="Manage sources"
-        >
+        <Button variant="subtle" size="chip" onClick={props.onOpenSources} title="Manage sources">
           Sources
-        </button>
-        <button
-          className="flex items-center gap-1.5 rounded-lg border border-[#c9c2e8] bg-[#efecfb] px-2.5 py-1 text-[13px] text-[#4a3a9e] coarse:min-h-[44px] hover:bg-[#e7e3f7]"
-          onClick={props.onAskBriefing}
-          title="Ask about this briefing"
-        >
+        </Button>
+        <Button variant="secondary" size="chip" onClick={props.onAskBriefing} title="Ask about this briefing">
           <IconSparkle size={14} /> Ask
-        </button>
+        </Button>
       </div>
 
       {/* Overview: one honest line. */}
@@ -112,14 +103,16 @@ export function BriefingPage(props: BriefingPageProps) {
                       <div className="mt-1.5 text-[14px] leading-relaxed text-[#555]">{r.reason}</div>
                     </button>
                     <div className="flex flex-none items-center gap-1 self-end sm:self-auto">
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         aria-label="Ask about this"
                         title="Ask about this"
                         onClick={() => props.onAskArticle(r.itemId)}
-                        className="flex h-6 w-6 items-center justify-center rounded-full text-[#c3bce6] can-hover:opacity-0 transition-opacity hover:bg-[#f0eefb] hover:text-[#6d5ae0] group-hover:opacity-100 coarse:h-11 coarse:w-11"
+                        className="h-6 w-6 rounded-full text-[#c3bce6] can-hover:opacity-0 transition-opacity can-hover:hover:bg-[#f0eefb] can-hover:hover:text-primary group-hover:opacity-100"
                       >
                         <IconSparkle size={14} />
-                      </button>
+                      </Button>
                       <DismissButton onDismiss={() => props.onDismiss(r.itemId, m, "must-read")} />
                     </div>
                   </div>
@@ -146,12 +139,14 @@ export function BriefingPage(props: BriefingPageProps) {
                     {r.line}{" "}
                     {/* Inline in the sentence, so the target comes from HIT_44:
                         padding here would break the line. */}
-                    <button
-                      className={`relative text-[12px] text-[#8a7fd0] ${HIT_44} hover:underline`}
+                    <Button
+                      variant="link"
+                      size="link"
+                      className="coarse:px-0 coarse:py-0 text-[12px] text-[#8a7fd0] hover:underline"
                       onClick={() => props.onOpenArticle(r.itemId)}
                     >
                       {m.sourceName} ↗
-                    </button>
+                    </Button>
                   </span>
                   <DismissButton onDismiss={() => props.onDismiss(r.itemId, m, "one-liner")} />
                 </li>
@@ -246,12 +241,14 @@ function FilteredSection({
                 <span className="w-24 flex-none truncate text-[11px] text-[#bbb]">{f.category}</span>
                 <span className="min-w-0 flex-1 truncate text-[13px] text-[#777]">{m.title}</span>
                 {openedIds.has(f.itemId) && <span className="text-[11px] text-[#bbb]">Read</span>}
-                <button
-                  className="flex-none text-[12px] text-[#8a7fd0] can-hover:opacity-0 transition-opacity coarse:min-h-[44px] coarse:px-2 hover:underline group-hover:opacity-100"
+                <Button
+                  variant="link"
+                  size="link"
+                  className="flex-none text-[12px] text-[#8a7fd0] can-hover:opacity-0 transition-opacity coarse:min-h-[44px] coarse:px-2 coarse:py-0 hover:underline group-hover:opacity-100"
                   onClick={() => onAppeal(f.itemId, m, f.category)}
                 >
                   Show anyway
-                </button>
+                </Button>
               </li>
             );
           })}

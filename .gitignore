@@ -3,6 +3,9 @@ node_modules/
 
 # 构建产物
 dist/
+# Screen-probe builds used to diff a stylesheet or component change against
+# origin/main (docs/30, 验证方法). Scratch, never committed.
+dist-probe*/
 build/
 src-tauri/target/
 src-tauri/gen/

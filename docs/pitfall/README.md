@@ -102,6 +102,9 @@
 - [68-overflow-x-auto-clips-the-other-axis](./68-overflow-x-auto-clips-the-other-axis.md) — 手机上让工具条横滑的那条 `overflow-x-auto` 把 `overflow-y` 也变成裁剪，带子里的下拉浮层整个看不见，z-index 救不了；浮层改 `fixed` + 开面板时量锚点矩形
 - [75-split-tailwind-import-sorts-base-last](./75-split-tailwind-import-sorts-base-last.md) — 拆开 import 的 Tailwind 少了 `@layer theme, base, components, utilities;` 那行声明，layer 顺序按物理位置排，preflight 落到 utilities 后面，反过来压过每一个 utility class；验收看产物里 `@layer` 的首次出现顺序
 - [76-paged-strip-rides-the-line-box-strut](./76-paged-strip-rides-the-line-box-strut.md) — 翻页模式的页带是 inline-block，竖向落点被继承来的 `line-height` 拉动；preflight 的 1.5 把整页挪了 1px（竖排模式逐字节不变）。以后动全局排版要单独复测翻页
+- [77-abspos-in-a-button-starts-from-its-centre](./77-abspos-in-a-button-starts-from-its-centre.md) — 只写 `top` 不写 `left` 的绝对定位子元素放在 `<button>` 里，静态位置在按钮水平中心（Chrome 给按钮内容包了匿名居中盒），开关圆点偏了半个轨道宽；给按钮显式 `display` 或给子元素显式 `left`
+- [78-tailwind-merge-only-dedupes-identical-modifier-chains](./78-tailwind-merge-only-dedupes-identical-modifier-chains.md) — `cn()` 只在修饰符串一模一样时才去重，`can-hover:hover:` 覆盖不掉 `can-hover:enabled:hover:`，两条都留下按特异性决胜；`data-[orientation=vertical]:h-full` 同理压过 `h-5`
+- [79-entry-chunk-reinjects-its-own-stylesheet](./79-entry-chunk-reinjects-its-own-stylesheet.md) — Vite 入口 chunk 运行期再插一遍原始样式表，改 HTML 里的 `<link>` 指向改造过的副本无效；要整份 dist 复制后原地改 CSS
 - [74-fixed-overlay-misses-shell-safe-area](./74-fixed-overlay-misses-shell-safe-area.md) — `position: fixed` 的包含块是视口，外壳按 `env(safe-area-inset-*)` 加的 padding 对它不存在，设置页被灵动岛压住、toast 落在 home indicator 上；`env()` 收进 `src/styles.css` 一组 `@utility`（`p-safe` / `pt-safe-*` / `bottom-safe-*` / `anchor-safe`），取 max(原有间距, inset) 而不是相加
 
 ## AI 调用与上下文窗口

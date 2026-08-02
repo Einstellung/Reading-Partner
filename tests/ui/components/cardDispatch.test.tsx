@@ -7,6 +7,7 @@
 import { expect, test } from "bun:test";
 import type { ReactElement } from "react";
 import { BriefingFailedCard, BriefingReadyCard, ProbeConfirmCard } from "../../../src/ui/components/info/InfoCards";
+import { Button } from "../../../src/ui/components/ui/button";
 import type { CardAction } from "../../../src/ui/components/chat/chatParts";
 import type {
   BriefingFailedCardData,
@@ -14,7 +15,9 @@ import type {
 } from "../../../src/info/briefing/cards";
 import type { ProbeConfirmCardData } from "../../../src/info/sources/source-cards";
 
-// Walk a React element tree collecting every <button> that has an onClick.
+// Walk a React element tree collecting every button with an onClick. A card's
+// buttons are <Button> now, so the type is that component rather than the "button"
+// string; both are matched, since a card may still hand-roll one.
 function buttons(node: unknown, out: { props: Record<string, any> }[] = []): { props: Record<string, any> }[] {
   if (Array.isArray(node)) {
     for (const c of node) buttons(c, out);
@@ -22,7 +25,7 @@ function buttons(node: unknown, out: { props: Record<string, any> }[] = []): { p
   }
   if (!node || typeof node !== "object") return out;
   const el = node as { type?: unknown; props?: Record<string, any> };
-  if (el.type === "button" && el.props?.onClick) out.push({ props: el.props });
+  if ((el.type === "button" || el.type === Button) && el.props?.onClick) out.push({ props: el.props });
   if (el.props && "children" in el.props) buttons(el.props.children, out);
   return out;
 }

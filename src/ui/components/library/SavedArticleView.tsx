@@ -7,6 +7,7 @@ import { useMemo } from "react";
 import { ARTICLE_PROSE_CLASS, ARTICLE_PROSE_CSS, hideBrokenImage } from "../common/proseCss";
 import { articleHtmlForWebview } from "../../../platform/app/image-proxy";
 import { formatPublishedAt, type SavedArticle } from "../../../reading/saved-articles";
+import { Button } from "../ui/button";
 
 export default function SavedArticleView({
   article,
@@ -28,14 +29,11 @@ export default function SavedArticleView({
       <style>{ARTICLE_PROSE_CSS}</style>
       <div className="mx-auto flex w-full max-w-[46rem] flex-col px-4 py-5 sm:px-6 sm:py-8">
         <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-2 border-b border-[#ececec] bg-white/85 px-4 py-2 backdrop-blur sm:-mx-6 sm:mb-6 sm:gap-3 sm:px-6 sm:py-3">
-          <button
-            className="rounded-lg border border-[#dcdcdc] px-2.5 py-1 text-[13px] text-[#555] coarse:min-h-[44px] hover:bg-[#f4f4f4]"
-            onClick={onBack}
-          >
+          <Button variant="subtle" size="chip" onClick={onBack}>
             ‹ {backLabel}
-          </button>
+          </Button>
           {article.sourceName && (
-            <span className="rounded-full bg-[#f0eefb] px-2 py-0.5 text-[11px] font-medium text-[#6d5ae0]">
+            <span className="rounded-full bg-[#f0eefb] px-2 py-0.5 text-[11px] font-medium text-primary">
               {article.sourceName}
             </span>
           )}

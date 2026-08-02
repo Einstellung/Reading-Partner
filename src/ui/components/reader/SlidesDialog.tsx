@@ -19,7 +19,9 @@ import {
   type SlidesSnapshot,
   type TalkEntry,
 } from "../../../reading/slides";
-import { BTN, BTN_PRIMARY } from "../common/buttons";
+import { Button } from "../ui/button";
+import { Label } from "../ui/label";
+import { Textarea } from "../ui/textarea";
 
 function LivenessHint({ activity }: { activity: SlidesActivity }) {
   const [now, setNow] = useState(() => Date.now());
@@ -77,9 +79,9 @@ function RunView({ snap, onStop }: { snap: SlidesSnapshot; onStop: () => void })
       <div className="flex items-center justify-between gap-2">
         <div className="text-[13px] font-semibold text-[#1b1b1b]">{st.title}</div>
         {running && (
-          <button type="button" className="cursor-pointer border-0 bg-transparent p-0 text-[11px] text-neutral-400 hover:text-neutral-600" onClick={onStop}>
+          <Button type="button" variant="link" size="link" className="text-[11px] text-neutral-400 hover:text-neutral-600" onClick={onStop}>
             Stop
-          </button>
+          </Button>
         )}
       </div>
       <div className="mt-0.5 text-[11px] text-neutral-400">
@@ -177,9 +179,9 @@ export default function SlidesDialog({
       >
         <div className="flex items-center justify-between border-b border-[#eee] px-4 py-3">
           <div className="text-[15px] font-semibold text-[#1b1b1b]">Generate a talk deck</div>
-          <button type="button" className={BTN} onClick={onClose}>
+          <Button type="button" variant="outline" onClick={onClose}>
             Close
-          </button>
+          </Button>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
@@ -190,10 +192,10 @@ export default function SlidesDialog({
             ) : (
               <div className="flex flex-col gap-1">
                 {books.map((b) => (
-                  <label key={b.bookId} className="flex items-center gap-2 text-[13px] text-neutral-700">
+                  <Label key={b.bookId} className="text-[13px] text-neutral-700">
                     <input type="checkbox" checked={selected.has(b.bookId)} onChange={() => toggle(b.bookId)} />
                     <span className="min-w-0 truncate">{b.title}</span>
-                  </label>
+                  </Label>
                 ))}
               </div>
             )}
@@ -201,8 +203,8 @@ export default function SlidesDialog({
 
           <div>
             <div className="mb-1.5 text-[12px] font-semibold text-[#777]">Talk instruction (optional)</div>
-            <textarea
-              className="min-h-16 w-full rounded-md border border-[#dcdcdc] bg-white px-2.5 py-2 text-[13px] coarse:text-base"
+            <Textarea
+              className="text-[13px]"
               placeholder="Theme, audience, angle… e.g. a 15-minute talk for engineers on the core argument."
               value={instruction}
               onChange={(e) => setInstruction(e.target.value)}
@@ -210,14 +212,13 @@ export default function SlidesDialog({
           </div>
 
           <div className="flex items-center gap-3">
-            <button
+            <Button
               type="button"
-              className={BTN_PRIMARY}
               disabled={running || selected.size === 0}
               onClick={generate}
             >
               {running ? "Generating…" : "Generate"}
-            </button>
+            </Button>
             <span className="text-[11px] text-neutral-400">
               Without an illustration key (Settings), decks generate without AI images.
             </span>
@@ -237,9 +238,9 @@ export default function SlidesDialog({
                       <div className="truncate text-[13px] text-neutral-700">{t.title}</div>
                       <div className="truncate text-[11px] text-neutral-400">{t.file}</div>
                     </div>
-                    <button type="button" className={BTN} onClick={() => open(t.file)}>
+                    <Button type="button" variant="outline" onClick={() => open(t.file)}>
                       Open
-                    </button>
+                    </Button>
                   </div>
                 ))}
               </div>

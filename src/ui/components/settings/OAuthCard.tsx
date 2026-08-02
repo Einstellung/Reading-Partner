@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { type DeviceCodeState, type ProviderInfo } from "../../../ai/aiClient";
 import { isIOS } from "../../../platform/app/platform";
-import { BTN, BTN_PRIMARY } from "../common/buttons";
-import { CARD, FIELD } from "./cardStyles";
+import { CARD } from "./cardStyles";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
 
-const LINK = "self-start bg-transparent border-0 p-0 text-xs text-[#6c4fd0] cursor-pointer hover:underline disabled:opacity-40 disabled:cursor-default";
+// The inline "or do it the other way" links under the sign-in button.
+const LINK = "self-start text-xs text-primary hover:underline";
 
 // The loopback-free login path for a provider. Anthropic pastes the code the
 // authorize page prints; OpenAI runs the ChatGPT device-code flow (with a
@@ -142,34 +144,34 @@ export default function OAuthCard({
         {provider?.configured && <span className="text-xs text-[#5fb236]">Connected</span>}
       </div>
       {provider?.configured ? (
-        <button
+        <Button
           type="button"
-          className={BTN}
+          variant="outline"
           onClick={async () => {
             await logout();
             onChanged();
           }}
         >
           Sign out
-        </button>
+        </Button>
       ) : (
         <>
           {ios ? (
             // No loopback on iOS: the code flow is the primary action.
             mode === "idle" && (
-              <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={startCodeFlow}>
+              <Button type="button" disabled={busy} onClick={startCodeFlow}>
                 {busy ? "Opening the sign-in page…" : signInLabel}
-              </button>
+              </Button>
             )
           ) : (
             <>
-              <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={signIn}>
+              <Button type="button" disabled={busy} onClick={signIn}>
                 {busy ? "Complete authorization in your browser…" : signInLabel}
-              </button>
+              </Button>
               {mode === "idle" && (
-                <button type="button" className={LINK} disabled={busy} onClick={startCodeFlow}>
+                <Button type="button" variant="link" size="link" className={LINK} disabled={busy} onClick={startCodeFlow}>
                   Sign in with a code
-                </button>
+                </Button>
               )}
             </>
           )}
@@ -187,15 +189,14 @@ export default function OAuthCard({
           {mode === "paste" && (
             <div className="flex flex-col gap-1.5">
               <div className="flex gap-2">
-                <input
-                  className={FIELD}
+                <Input
                   placeholder="Paste sign-in code or URL"
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
                 />
-                <button type="button" className={BTN} disabled={busy || !code.trim()} onClick={submitCode}>
+                <Button type="button" variant="outline" disabled={busy || !code.trim()} onClick={submitCode}>
                   Submit
-                </button>
+                </Button>
               </div>
               <p className="m-0 text-xs text-[#777]">{pasteHint}</p>
             </div>
@@ -234,16 +235,16 @@ function DeviceCodePanel({
           <span className="rounded-md border border-[#dcdcdc] px-3 py-1.5 font-mono text-lg tracking-widest">
             {state.userCode}
           </span>
-          <button type="button" className={BTN} onClick={() => onOpen(state.verificationUri)}>
+          <Button type="button" variant="outline" onClick={() => onOpen(state.verificationUri)}>
             Open sign-in page
-          </button>
+          </Button>
         </div>
         <p className="m-0 text-xs text-[#777]">
           Enter this code at {state.verificationUri}. Waiting for authorization…
         </p>
-        <button type="button" className={LINK} onClick={onCancel}>
+        <Button type="button" variant="link" size="link" className={LINK} onClick={onCancel}>
           Cancel
-        </button>
+        </Button>
       </div>
     );
   }
@@ -253,13 +254,13 @@ function DeviceCodePanel({
         <p className="m-0 text-xs text-[#b91c1c]">{state.message}</p>
         <div className="flex gap-3">
           {state.canPaste && (
-            <button type="button" className={LINK} onClick={onPaste}>
+            <Button type="button" variant="link" size="link" className={LINK} onClick={onPaste}>
               Paste the sign-in URL instead
-            </button>
+            </Button>
           )}
-          <button type="button" className={LINK} onClick={onRetry}>
+          <Button type="button" variant="link" size="link" className={LINK} onClick={onRetry}>
             Try again
-          </button>
+          </Button>
         </div>
       </div>
     );

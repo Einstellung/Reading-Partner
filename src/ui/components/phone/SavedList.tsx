@@ -4,6 +4,7 @@
 // topic the article was filed under.
 
 import { formatPublishedAt, type SavedArticle } from "../../../reading/saved-articles";
+import { Button } from "../ui/button";
 
 export default function SavedList({
   articles,
@@ -18,12 +19,9 @@ export default function SavedList({
     <div className="absolute inset-0 overflow-y-auto bg-white">
       <div className="mx-auto flex w-full max-w-lg flex-col px-4 py-5">
         <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-3 border-b border-[#ececec] bg-white/85 px-4 py-3 backdrop-blur">
-          <button
-            className="rounded-lg border border-[#dcdcdc] px-2.5 py-1 text-[13px] text-[#555] coarse:min-h-[44px] hover:bg-[#f4f4f4]"
-            onClick={onBack}
-          >
+          <Button variant="subtle" size="chip" onClick={onBack}>
             ‹ Today
-          </button>
+          </Button>
           <span className="text-[13px] text-[#999]">
             {articles.length} saved article{articles.length === 1 ? "" : "s"}
           </span>
@@ -41,7 +39,7 @@ export default function SavedList({
                   <span className="text-[15px] font-medium leading-snug text-[#1b1b1b]">{a.title}</span>
                   <span className="flex items-center gap-2">
                     {a.sourceName && (
-                      <span className="rounded-full bg-[#f0eefb] px-2 py-0.5 text-[11px] font-medium text-[#6d5ae0]">
+                      <span className="rounded-full bg-[#f0eefb] px-2 py-0.5 text-[11px] font-medium text-primary">
                         {a.sourceName}
                       </span>
                     )}

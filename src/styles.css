@@ -18,6 +18,94 @@
 @custom-variant can-hover (@media (hover: hover));
 @custom-variant coarse (@media (pointer: coarse));
 
+/* The design tokens shadcn/ui is generated against, mapped onto the colours the
+   app already ships rather than shadcn's own grey-blue set, so a component
+   pulled in with `bunx shadcn add` lands on this palette without editing.
+   Every value below is a hex that was already in src/ (docs/30).
+
+   Two deliberate convergences, both recorded in docs/30:
+   - one --primary. The three purples (#6c4fd0 on the settings buttons, #6d5ae0
+     on the info CTA and on the InfoCards CTA) collapse to #6c4fd0.
+   - one hover fill. #f4f4f4 (info) and #f0f0f0 (shell, reader) collapse to
+     #f0f0f0.
+
+   --primary-hover exists because shadcn's `hover:bg-primary/90` lightens a
+   colour over a white page, and every filled button here darkens on hover.
+   --secondary is the violet-tinted chip, which is what a second-rank button
+   looks like in this app; --accent keeps shadcn's meaning (the subtle fill a
+   ghost control takes on hover) and so equals --muted, as it does in shadcn's
+   own default theme. */
+@layer base {
+  :root {
+    --background: #ffffff;
+    --foreground: #1b1b1b;
+
+    --card: #ffffff;
+    --card-foreground: #1b1b1b;
+    --popover: #ffffff;
+    --popover-foreground: #1b1b1b;
+
+    --primary: #6c4fd0;
+    --primary-foreground: #ffffff;
+    --primary-hover: #5a3fbf;
+
+    --secondary: #efecfb;
+    --secondary-foreground: #4a3a9e;
+    --secondary-border: #c9c2e8;
+    --secondary-hover: #e7e3f7;
+
+    --muted: #f0f0f0;
+    --muted-foreground: #555555;
+    --accent: #f0f0f0;
+    --accent-foreground: #1b1b1b;
+
+    --destructive: #b91c1c;
+    --destructive-foreground: #ffffff;
+    --destructive-border: #f0c8c8;
+
+    --border: #dcdcdc;
+    --input: #dcdcdc;
+    --ring: #6c4fd0;
+
+    /* 8px. The three radii in use fall straight out of it: rounded-sm 4px on
+       the reader's small buttons, rounded-md 6px on the shell buttons and
+       fields, rounded-lg 8px on the info chips. The arithmetic below reproduces
+       Tailwind's own defaults exactly at this value, so nothing moves. */
+    --radius: 0.5rem;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary-border: var(--secondary-border);
+  --color-secondary-hover: var(--secondary-hover);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-border: var(--destructive-border);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
 /* Safe-area utilities (iOS, `viewport-fit=cover`). This file is the only place
    that names env(): the shells pad themselves by the insets, but a
    `position: fixed` child resolves against the viewport and never inherits that

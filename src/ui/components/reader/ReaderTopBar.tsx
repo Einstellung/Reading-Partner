@@ -20,6 +20,8 @@ import {
 } from "../common/icons";
 import MoreMenu, { type MoreItem } from "./MoreMenu";
 import PenToolbar from "./PenToolbar";
+import { Button } from "../ui/button";
+import { Separator } from "../ui/separator";
 
 export default function ReaderTopBar(props: {
   view: RefObject<ViewInstance | null>;
@@ -102,8 +104,10 @@ export default function ReaderTopBar(props: {
     <>
       {/* LEFT: navigation */}
       <div className="flex shrink-0 items-center gap-1">
-        <button
-          className="relative flex h-8 w-8 flex-none items-center justify-center rounded-md border-0 bg-transparent text-[#555] cursor-pointer can-hover:hover:bg-black/5 coarse:h-11 coarse:w-11"
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative flex-none text-[#555]"
           title={sidebarOpen ? "Close panel" : "Open panel"}
           aria-label={sidebarOpen ? "Close panel" : "Open panel"}
           aria-pressed={sidebarOpen}
@@ -113,20 +117,22 @@ export default function ReaderTopBar(props: {
           {/* Background-work dot: prep/notes generating while the drawer is
               shut (docs: iPad adaptation). */}
           {props.sidebarBusy && (
-            <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[#6c4fd0] ring-2 ring-[#fafafa]" />
+            <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-primary ring-2 ring-[#fafafa]" />
           )}
-        </button>
+        </Button>
         {/* Library: full label from sm up, back-chevron only on a phone,
             where every pixel of center width counts. */}
-        <button
-          className="flex h-8 flex-none items-center justify-center rounded-md border-0 bg-transparent px-1 text-[13px] text-[#555] cursor-pointer can-hover:hover:bg-black/5 coarse:h-11 coarse:min-w-[44px] sm:px-2"
+        <Button
+          variant="ghost"
+          size="icon"
+          className="w-auto flex-none gap-0 px-1 text-[13px] text-[#555] coarse:w-auto coarse:min-w-[44px] sm:px-2"
           title="Back to library"
           aria-label="Back to library"
           onClick={props.onCloseReader}
         >
           <span aria-hidden className="sm:hidden">‹</span>
           <span className="hidden sm:inline">‹ Library</span>
-        </button>
+        </Button>
         {/* No title breadcrumb: the book is open in front of the reader, so
             its name carries no information and the width is better spent on
             the tool group (tight on a phone). */}
@@ -146,7 +152,7 @@ export default function ReaderTopBar(props: {
           colors={ANNOTATION_COLORS}
           onToolChange={props.onToolChange}
         />
-        <span className="h-5 w-px flex-none bg-[#dcdcdc]" />
+        <Separator orientation="vertical" className="flex-none data-[orientation=vertical]:h-5" />
         <span className="flex-none [font-variant-numeric:tabular-nums] text-[13px] text-[#555] whitespace-nowrap px-0.5">
           {pageText}
         </span>
@@ -154,14 +160,16 @@ export default function ReaderTopBar(props: {
 
       {/* RIGHT: AI entry + overflow */}
       <div className="flex shrink-0 items-center justify-end gap-0.5 sm:gap-1">
-        <button
-          className="flex h-8 w-8 flex-none items-center justify-center rounded-md border-0 bg-transparent text-[#555] cursor-pointer can-hover:hover:bg-black/5 coarse:h-11 coarse:w-11"
+        <Button
+          variant="ghost"
+          size="icon"
+          className="flex-none text-[#555]"
           title="Talk about this book"
           aria-label="Talk about this book"
           onClick={props.onOpenBookThread}
         >
           <IconSparkle size={18} />
-        </button>
+        </Button>
         <MoreMenu items={moreItems} alert={props.settingsAlert} />
       </div>
     </>

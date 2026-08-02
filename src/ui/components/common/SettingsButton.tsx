@@ -3,7 +3,7 @@
 // The same idea as the reader sidebar's background-work dot: state rides on the
 // affordance that leads to it, instead of a banner that has to be dismissed.
 
-import { BTN } from "./buttons";
+import { Button } from "../ui/button";
 
 export default function SettingsButton({
   alert,
@@ -13,8 +13,9 @@ export default function SettingsButton({
   onClick: () => void;
 }) {
   return (
-    <button
-      className={`${BTN} relative coarse:min-w-[44px]`}
+    <Button
+      variant="outline"
+      className="relative coarse:min-w-[44px]"
       title={alert ? "Settings — sync needs attention" : "Settings"}
       aria-label={alert ? "Settings — sync needs attention" : "Settings"}
       onClick={onClick}
@@ -23,6 +24,6 @@ export default function SettingsButton({
       {alert && (
         <span className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-[#b45309] ring-2 ring-[#fafafa]" />
       )}
-    </button>
+    </Button>
   );
 }

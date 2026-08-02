@@ -18,7 +18,12 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "types": []
+    "types": [],
+    // `@/` is what the shadcn CLI writes into a generated component. It is
+    // reserved for that: app code imports relatively, so tests/layering.test.ts
+    // sees every cross-directory edge as a path it can resolve.
+    "baseUrl": ".",
+    "paths": { "@/*": ["./src/*"] }
   },
   "include": ["src"],
   "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"],

@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { InfoSnapshot } from "../../../info/briefing/pipeline";
+import { Button } from "../ui/button";
 
 // Live elapsed seconds since a generation started, for the running state.
 function useElapsed(running: boolean): number {
@@ -83,19 +84,16 @@ export function BriefingCardBody({
       <div className="flex flex-1 flex-col justify-between">
         <div>
           <div className="flex items-center gap-2 text-[15px] text-[#333]">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-[#6d5ae0]" />
+            <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
             {phase}…
           </div>
           <div className="mt-1 text-[13px] tabular-nums text-[#999]">
             {elapsed}s{detail ? ` · ${detail}` : ""}
           </div>
         </div>
-        <button
-          className="mt-4 w-fit rounded-lg border border-[#dcdcdc] px-3 py-1.5 text-[13px] text-[#555] coarse:min-h-[44px] hover:bg-[#f4f4f4]"
-          onClick={onStop}
-        >
+        <Button variant="subtle" size="chip" className="mt-4 w-fit px-3 py-1.5" onClick={onStop}>
           Stop
-        </button>
+        </Button>
       </div>
     );
   }
@@ -112,7 +110,7 @@ export function BriefingCardBody({
         <p className="m-0 text-[15px] leading-relaxed text-[#2a2a2a]">{briefing.overview}</p>
         <div className="mt-4 flex items-center justify-between">
           <span className="text-[13px] text-[#888]">{counts}</span>
-          <span className="text-[13px] font-medium text-[#6d5ae0]">Open →</span>
+          <span className="text-[13px] font-medium text-primary">Open →</span>
         </div>
       </button>
     );
@@ -132,12 +130,9 @@ export function BriefingCardBody({
           Subscribe to what you follow — AI sources, robotics, anything with a feed — and get a
           triaged briefing each day.
         </p>
-        <button
-          className="mt-4 w-fit rounded-lg bg-[#6d5ae0] px-4 py-2 text-[14px] font-medium text-white coarse:min-h-[44px] hover:bg-[#5d4bd0]"
-          onClick={onStartSubscribing}
-        >
+        <Button variant="cta" size="lg" className="mt-4 w-fit" onClick={onStartSubscribing}>
           Start subscribing
-        </button>
+        </Button>
       </div>
     );
   }
@@ -150,19 +145,13 @@ export function BriefingCardBody({
       </p>
       {snap?.error && <p className="mt-2 text-[13px] text-[#c0392b]">{snap.error}</p>}
       {configured ? (
-        <button
-          className="mt-4 w-fit rounded-lg bg-[#6d5ae0] px-4 py-2 text-[14px] font-medium text-white coarse:min-h-[44px] hover:bg-[#5d4bd0]"
-          onClick={onGenerate}
-        >
+        <Button variant="cta" size="lg" className="mt-4 w-fit" onClick={onGenerate}>
           Generate briefing
-        </button>
+        </Button>
       ) : (
-        <button
-          className="mt-4 w-fit rounded-lg border border-[#dcdcdc] px-4 py-2 text-[14px] text-[#555] coarse:min-h-[44px] hover:bg-[#f4f4f4]"
-          onClick={onOpenSettings}
-        >
+        <Button variant="subtle" size="lg" className="mt-4 w-fit" onClick={onOpenSettings}>
           Configure a provider to begin
-        </button>
+        </Button>
       )}
     </div>
   );
