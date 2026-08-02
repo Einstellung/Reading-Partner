@@ -15,6 +15,7 @@
 | 全文/图片提取、裁图 | 提取（壳侧 pdf.js） |
 | 出 iOS 包、签名、图标、深链接 | iOS 构建与签名 |
 | 桌面 webview 行为异常 | WebKit / webview |
+| 渲染链接、点外链、开系统浏览器 | WebKit / webview |
 | 调模型、改 provider 层、组装提示词、加长上下文 | AI 调用与上下文窗口 |
 | 顶栏、工具条、下拉浮层的定位 | 界面与布局 |
 | 全局样式、Tailwind layer、字体与行高 | 界面与布局 + EmbedPDF 引擎 |
@@ -98,6 +99,7 @@
 - [43-webkit-tap-highlight-orphan-shadow](./43-webkit-tap-highlight-orphan-shadow.md) — 不引 preflight 也就没关掉 WKWebView 的原生点击高亮；点完即卸载的按钮会留下孤儿阴影。引入 preflight 后自动消失，手写那条已删；按下反馈仍要用 active:（同族的坑 49 反过来，preflight 管不着，收在「触摸与手势」）
 - [67-webkit-tap-does-not-focus-a-button](./67-webkit-tap-does-not-focus-a-button.md) — WebKit 点击不给按钮焦点，靠 `.focus()` + `onBlur` 收起的二次确认在 iPad 上按了等于没按（blur 抢在 click 前面解除武装，React 又复用同一个 button 节点，这一下变成解除再武装）；收起改用 document 上 capture 的 pointerdown
 - [69-visibilitychange-misses-window-switching](./69-visibilitychange-misses-window-switching.md) — 切到别的窗口再切回来不发 `visibilitychange`（页面一直是 visible），只有最小化和 unmap 才翻；`present()` 之后焦点还会回弹补一个 `blur`。"在前台"要当状态维护（visible && focused，四个事件一起），离开那侧要便宜、回来那侧要有下限
+- [94-a-bare-anchor-navigates-the-whole-app-away](./94-a-bare-anchor-navigates-the-whole-app-away.md) — 不注册 `on_navigation` 的 Tauri app 里，AI 回答中一个裸 `<a href>` 就把 webview 导航到外站，书和对话一起丢；带 `target="_blank"` 的那条被 opener 插件的注入脚本接管，却被 `opener:allow-open-url` 的 scope 静默拒掉。Rust 侧加导航拦截 + 前端显式 `openUrl` + 放开 opener scope，Rust 里必须用 `OpenerExt::opener()`（自由函数 `open_url` 在 iOS 上不工作）
 
 ## 界面与布局
 

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "M1 capabilities: open any user file, persist reading state under appdata. HTTP scope is widened to any https host (see the http:default allow list) so user-pasted links (link ingestion, docs/09) can be fetched from anywhere; still https-only, so no plaintext http is permitted.",
+  "description": "M1 capabilities: open any user file, persist reading state under appdata. HTTP scope is widened to any https host (see the http:default allow list) so user-pasted links (link ingestion, docs/09) can be fetched from anywhere; still https-only, so no plaintext http is permitted. The opener URL scope is any web link, because every external link now leaves through the system browser (src/platform/app/external-link.ts, src-tauri/src/navigation.rs) instead of navigating the webview away from the app.",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -67,9 +67,10 @@
     {
       "identifier": "opener:allow-open-url",
       "allow": [
-        { "url": "https://claude.ai/*" },
-        { "url": "https://auth.openai.com/*" },
-        { "url": "https://accounts.google.com/*" }
+        { "url": "http://*" },
+        { "url": "https://*" },
+        { "url": "mailto:*" },
+        { "url": "tel:*" }
       ]
     },
     {

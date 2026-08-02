@@ -8,6 +8,7 @@ import { useMemo } from "react";
 import { IconCheck, IconFileInto, IconSparkle } from "../common/icons";
 import { ARTICLE_PROSE_CLASS, ARTICLE_PROSE_CSS, hideBrokenImage } from "../common/proseCss";
 import { articleHtmlForWebview } from "../../../platform/app/image-proxy";
+import { handleDelegatedLinkClick } from "../../../platform/app/external-link";
 import type { BriefingItemMeta } from "../../../info/briefing/types";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -72,6 +73,9 @@ export function ArticleView({
           <div
             className={ARTICLE_PROSE_CLASS}
             onErrorCapture={(e) => hideBrokenImage(e.target)}
+            // The links in here are injected HTML, so one delegated listener is
+            // what sends them to the system browser (docs/pitfall/94).
+            onClick={handleDelegatedLinkClick}
             dangerouslySetInnerHTML={{ __html: body }}
           />
         ) : (

@@ -20,6 +20,7 @@ import rehypeHighlight from 'rehype-highlight';
 import 'katex/dist/katex.min.css';
 import 'highlight.js/styles/github.css';
 import { linkifyCitations, parseCitationHref } from '../../../reading/prep/anchors';
+import { linkActionFor, openExternal } from '../../../platform/app/external-link';
 import { CitationContext, FigureContext, type CitationHandler } from './Markdown';
 import FigureCard from '../reader/FigureCard';
 
@@ -28,15 +29,26 @@ const remarkPlugins = [remarkGfm, remarkMath];
 const rehypePlugins = [rehypeHighlight, rehypeKatex];
 
 // Citation links ([p.12] rewritten to #rp-… hrefs by linkifyCitations) render
-// as quiet chips that call back into the host instead of navigating; every
-// other link keeps the default anchor behavior.
-function makeAnchor(onCitation: CitationHandler) {
+// as quiet chips that call back into the host instead of navigating. Every
+// other link is a link the model wrote, and none of them may navigate the
+// webview: that would replace the app (docs/pitfall/94). A web link opens in
+// the system browser, anything that would reload our own page does nothing.
+function makeAnchor(onCitation: CitationHandler | null) {
 	return function Anchor({ href, children, ...rest }: AnchorHTMLAttributes<HTMLAnchorElement>) {
 		const figureHost = useContext(FigureContext);
-		const citation = parseCitationHref(href);
+		const citation = onCitation ? parseCitationHref(href) : null;
 		if (!citation) {
 			return (
-				<a href={href} {...rest}>
+				<a
+					href={href}
+					{...rest}
+					onClick={(e) => {
+						const action = linkActionFor(href);
+						if (action.kind === 'pass') return;
+						e.preventDefault();
+						if (action.kind === 'external') openExternal(action.url);
+					}}
+				>
 					{children}
 				</a>
 			);
@@ -54,7 +66,7 @@ function makeAnchor(onCitation: CitationHandler) {
 				className="!no-underline rounded bg-[#efecfb] px-1 py-0.5 !text-[#4a3a9e] text-[0.9em] hover:bg-[#e2dcf6]"
 				onClick={(e) => {
 					e.preventDefault();
-					onCitation(citation);
+					onCitation?.(citation);
 				}}
 			>
 				{children}
@@ -109,10 +121,9 @@ const MD = [
 export default function MarkdownRenderer({ text }: { text: string }) {
 	const onCitation = useContext(CitationContext);
 	const source = useMemo(() => (onCitation ? linkifyCitations(text) : text), [text, onCitation]);
-	const components = useMemo<Components | undefined>(
-		() => (onCitation ? { a: makeAnchor(onCitation) } : undefined),
-		[onCitation],
-	);
+	// The anchor override is installed whether or not there is a citation host:
+	// without it, a plain link in a reply navigates the webview away from the app.
+	const components = useMemo<Components>(() => ({ a: makeAnchor(onCitation) }), [onCitation]);
 	return (
 		<div className={MD}>
 			<ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
