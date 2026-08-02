@@ -72,7 +72,7 @@ sanitize 仍是安全边界。速读正文是第三方 HTML，任何组件替换
 |---|---|---|
 | `--background` / `--card` / `--popover` | `#ffffff` | `bg-white` |
 | `--foreground` / `--card-foreground` / `--popover-foreground` | `#1b1b1b` | `body { color }` |
-| `--primary` | `#6c4fd0` | `BTN_PRIMARY` |
+| `--primary` | `#6c4fd0` | `BTN_PRIMARY`，2026-08-02 定案 |
 | `--primary-foreground` | `#ffffff` | 同上 |
 | `--primary-hover` | `#5a3fbf` | 同上 |
 | `--secondary` | `#efecfb` | info / 阅读侧的紫底 chip |
@@ -151,7 +151,5 @@ hover 底色统一在 `can-hover:` 后面，避免触摸上点一下就卡住 ho
 纯浏览器里能起来的界面只有 Vestibule / Library / Settings（Tauri 存储调用会报错但 UI 正常渲染），其余全靠探针页。
 
 ## 未决
-
-`--primary` 取哪一档紫。这一版先取 `#6c4fd0`；`#6d5ae0` 的对照图一起给了，改动只是 `styles.css` 里两个值。
 
 第四版的 Dialog 是否连 `SettingsView` 一起换——它是全屏页而不是对话框，用 Dialog 包可能是削足适履。
