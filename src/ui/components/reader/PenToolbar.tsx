@@ -6,6 +6,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconColorSwatch, IconHighlight, IconPointer, IconSparkle, IconUnderline } from '../common/icons';
 import { placePanel } from '../common/panel-position';
 import { useViewportSize } from '../common/useViewportSize';
+import { Button, buttonVariants } from '../ui/button';
+import { cn } from '../lib/utils';
 import type { ColorEntry, Tool, ToolType } from '../common/types';
 
 interface PenToolbarProps {
@@ -29,8 +31,6 @@ const TOOLS: { type: ToolType; label: string; Icon: (p: { size?: number }) => JS
 // The two tools that paint in a color.
 type PenType = 'highlight' | 'underline';
 
-const TOOL_BTN =
-	'flex items-center justify-center rounded-lg border-0 bg-transparent p-0 text-neutral-700';
 const CARD = 'rounded-xl border border-black/10 bg-white shadow-lg';
 // Distance from the swatch to the palette that opens off it.
 const GAP = 8;
@@ -125,21 +125,23 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 		? 'inline-flex flex-row items-center gap-0.5 p-0.5 select-none'
 		: `inline-flex flex-col items-center gap-1 p-1.5 select-none ${CARD}`;
 	const toolSize = (horizontal ? 'h-8 w-8' : 'h-9 w-9') + ' coarse:h-11 coarse:w-11';
-	// The AI pen keeps violet as its theme accent, but shares the tool rack's one
-	// visual language: same size, same light-tinted-fill selected state as the
-	// blue tools — no gradient block, no size change.
+	// One selected state for the whole rack: --secondary, the tinted fill this app
+	// gives a control that is standing on. The AI pen keeps an accent of its own in
+	// the resting state (--primary) rather than a second selected colour.
+	// `can-hover:hover:bg-secondary` is not a no-op: it holds the selected fill
+	// against the ghost variant's hover fill, and has to repeat the modifier chain
+	// exactly to replace it (docs/pitfall/78).
 	// The navigation lock is a latch, not a tool, so its pressed state carries an
 	// extra inset ring — it has to read as held down across a whole reading
 	// session, not just as "most recently tapped".
 	const toolBtn = (active: boolean, type: ToolType) =>
-		`${TOOL_BTN} ${toolSize} cursor-pointer ` +
-		(type === 'ai'
-			? active
-				? 'bg-violet-100 text-violet-700'
-				: 'text-violet-500 hover:bg-black/5'
-			: active
-				? 'bg-sky-100 text-sky-700' + (type === 'navlock' ? ' ring-2 ring-inset ring-sky-600' : '')
-				: 'hover:bg-black/5');
+		`rounded-lg ${toolSize} ` +
+		(active
+			? 'bg-secondary text-secondary-foreground can-hover:hover:bg-secondary' +
+				(type === 'navlock' ? ' ring-2 ring-inset ring-primary' : '')
+			: type === 'ai'
+				? 'text-primary'
+				: 'text-neutral-700');
 
 	return (
 		<div
@@ -149,9 +151,13 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 			aria-label="Reading tools"
 		>
 			{TOOLS.map(({ type, label, Icon }) => (
-				<button
+				<Button
 					key={type}
 					type="button"
+					variant="ghost"
+					// The rack sets its own square geometry, so no size variant: the
+					// table's `icon` is 32px and these are 32 or 36 by orientation.
+					size={null}
 					className={toolBtn(tool.type === type, type)}
 					title={label}
 					aria-label={label}
@@ -159,7 +165,7 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 					onClick={() => pickTool(type)}
 				>
 					<Icon size={20} />
-				</button>
+				</Button>
 			))}
 
 			{/* The divider and swatch always hold their place so the rack width never
@@ -167,13 +173,18 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 			<div className={horizontal ? 'mx-1 h-5 w-px bg-black/10' : 'my-0.5 h-px w-6 bg-black/10'} />
 
 			<div className="relative flex" ref={paletteRef}>
+				{/* A plain <button>, not <Button>: the swatch is the palette's anchor and
+				    has to hand back a node. Button is a function component with no
+				    forwardRef, so a ref on it never resolves (docs/pitfall/95). It wears
+				    the same variant through buttonVariants. */}
 				<button
 					ref={swatchRef}
 					type="button"
-					className={
-						`${TOOL_BTN} ${toolSize} cursor-pointer ` +
-						(paletteOpen ? 'bg-sky-100 text-sky-700' : 'hover:bg-black/5')
-					}
+					className={cn(
+						buttonVariants({ variant: 'ghost', size: null }),
+						`rounded-lg ${toolSize} text-neutral-700`,
+						paletteOpen && 'bg-secondary text-secondary-foreground can-hover:hover:bg-secondary',
+					)}
 					title="Color"
 					aria-label="Color"
 					aria-haspopup="true"
@@ -204,20 +215,22 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 						aria-label="Colors"
 					>
 						{colors.map((c) => (
-							<button
+							<Button
 								key={c.color}
 								type="button"
+								variant="ghost"
+								size={null}
 								role="option"
 								aria-selected={tool.color === c.color}
 								className={
-									'flex h-7 w-7 coarse:h-11 coarse:w-11 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 hover:bg-black/5' +
-									(tool.color === c.color ? ' ring-2 ring-inset ring-sky-600' : '')
+									'h-7 w-7 coarse:h-11 coarse:w-11 rounded-md' +
+									(tool.color === c.color ? ' ring-2 ring-inset ring-primary' : '')
 								}
 								title={c.name}
 								onClick={() => pickColor(c.color)}
 							>
 								<IconColorSwatch color={c.color} size={18} />
-							</button>
+							</Button>
 						))}
 					</div>
 				)}

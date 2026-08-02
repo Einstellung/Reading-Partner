@@ -17,7 +17,7 @@ export function figureChipLabel(figure: Figure): string {
 }
 
 const CHIP =
-  "!no-underline rounded bg-[#efecfb] px-1 py-0.5 !text-[#4a3a9e] text-[0.9em] hover:bg-[#e2dcf6] cursor-pointer";
+  "!no-underline rounded bg-secondary px-1 py-0.5 !text-secondary-foreground text-[0.9em] can-hover:hover:bg-secondary-hover cursor-pointer";
 
 // A quiet clickable chip — the unknown-figure / failed-render fallback.
 function Chip({ label, onClick }: { label: string; onClick?: () => void }) {
@@ -87,7 +87,7 @@ export default function FigureCard({ host, id }: { host: FigureHost; id: string 
       ref={ref}
       type="button"
       onClick={() => host.onJump(figure)}
-      className="mx-auto my-2 flex w-fit max-w-full cursor-pointer flex-col items-center gap-1 rounded-lg border border-black/10 bg-white p-1.5 text-left hover:border-[#c9bff0]"
+      className="mx-auto my-2 flex w-fit max-w-full cursor-pointer flex-col items-center gap-1 rounded-lg border border-black/10 bg-white p-1.5 text-left can-hover:hover:border-secondary-border"
     >
       {card ? (
         <img
@@ -105,7 +105,7 @@ export default function FigureCard({ host, id }: { host: FigureHost; id: string 
         </span>
       )}
       <span className="px-0.5 text-[0.8em] leading-snug text-neutral-500">
-        <span className="font-medium text-[#4a3a9e]">Fig. {figure.id}</span> · p.{figure.page}
+        <span className="font-medium text-secondary-foreground">Fig. {figure.id}</span> · p.{figure.page}
         {figure.caption ? ` — ${figure.caption}` : ""}
       </span>
     </button>

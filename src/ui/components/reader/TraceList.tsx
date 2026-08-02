@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { IconArea, IconHighlight, IconSparkle, IconTrash, IconUnderline } from '../common/icons';
+import { Button } from '../ui/button';
 import type { Annotation } from '../common/types';
 import {
 	SWIPE_ACTION_WIDTH,
@@ -36,11 +37,9 @@ interface TraceListProps {
 // The sliding content needs an opaque background of its own: the delete drawer
 // sits behind it, and a translucent hover tint would show it through.
 const ITEM = 'relative flex cursor-pointer items-start gap-2 py-2 pl-3 pr-2 touch-pan-y';
-const ITEM_REST = 'bg-white can-hover:hover:bg-neutral-100';
+const ITEM_REST = 'bg-background can-hover:hover:bg-accent';
 const ITEM_SELECTED =
-	"bg-sky-50 can-hover:hover:bg-sky-100 before:content-[''] before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-sky-600";
-const ICON_BTN =
-	'flex cursor-pointer items-center justify-center border-0 bg-transparent p-0.5 rounded coarse:h-11 coarse:w-11';
+	"bg-secondary can-hover:hover:bg-secondary-hover before:content-[''] before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-primary";
 
 function TypeMark({ annotation }: { annotation: Annotation }) {
 	// Region-select is retired; legacy image annotations still render on the page
@@ -128,7 +127,7 @@ function TraceRow({ annotation, selected, open, onOpenChange, onSelect, onDelete
 			{actionVisible(swipe) && (
 				<button
 					type="button"
-					className="absolute inset-y-0 right-0 flex cursor-pointer items-center justify-center border-0 bg-red-600 text-[13px] font-medium text-white can-hover:hover:bg-red-700 active:bg-red-700"
+					className="absolute inset-y-0 right-0 flex cursor-pointer items-center justify-center border-0 bg-destructive text-[13px] font-medium text-destructive-foreground can-hover:hover:bg-destructive-hover active:bg-destructive-hover"
 					style={{ width: SWIPE_ACTION_WIDTH }}
 					title="Confirm delete"
 					onClick={(e) => {
@@ -170,9 +169,11 @@ function TraceRow({ annotation, selected, open, onOpenChange, onSelect, onDelete
 					<div className="flex items-center gap-1.5">
 						{pageLabel && <span className="text-[11px] text-neutral-400">Page {pageLabel}</span>}
 						{hasThread && (
-							<button
+							<Button
 								type="button"
-								className={`${ICON_BTN} text-violet-500 hover:bg-violet-500/10`}
+								variant="ghost"
+								size={null}
+								className="rounded p-0.5 text-primary can-hover:hover:bg-primary/10 coarse:h-11 coarse:w-11"
 								title="Open AI thread"
 								aria-label="Open AI thread"
 								onClick={(e) => {
@@ -181,7 +182,7 @@ function TraceRow({ annotation, selected, open, onOpenChange, onSelect, onDelete
 								}}
 							>
 								<IconSparkle size={14} />
-							</button>
+							</Button>
 						)}
 					</div>
 				</div>
@@ -190,9 +191,11 @@ function TraceRow({ annotation, selected, open, onOpenChange, onSelect, onDelete
 				    desktop reader would think to try, so a hover-capable pointer gets
 				    the same reveal on a click here; it uncovers the Delete rather than
 				    deleting, so both devices pay the same two acts. */}
-				<button
+				<Button
 					type="button"
-					className="hidden h-6 w-6 flex-none cursor-pointer items-center justify-center rounded border-0 bg-transparent p-0 text-neutral-400 opacity-0 transition-opacity can-hover:flex group-hover:opacity-100 focus-visible:opacity-100 can-hover:hover:bg-red-700/10 can-hover:hover:text-red-700"
+					variant="ghost"
+					size={null}
+					className="hidden h-6 w-6 flex-none rounded p-0 text-neutral-400 opacity-0 transition-opacity can-hover:flex group-hover:opacity-100 focus-visible:opacity-100 can-hover:hover:bg-destructive/10 can-hover:hover:text-destructive"
 					title="Delete mark"
 					aria-label="Delete mark"
 					aria-expanded={actionVisible(swipe)}
@@ -202,7 +205,7 @@ function TraceRow({ annotation, selected, open, onOpenChange, onSelect, onDelete
 					}}
 				>
 					<IconTrash size={14} />
-				</button>
+				</Button>
 			</div>
 		</div>
 	);

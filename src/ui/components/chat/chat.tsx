@@ -2,6 +2,7 @@
 
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { HIT_44 } from '../common/buttons';
+import { Button } from '../ui/button';
 import { IconCheck, IconCopy, IconSend, IconStop } from '../common/icons';
 import { Markdown } from '../common/Markdown';
 import { MicButton } from './MicButton';
@@ -104,15 +105,17 @@ function CopyButton({ text }: { text: string }) {
 	}
 
 	return (
-		<button
+		<Button
 			type="button"
+			variant="ghost"
+			size={null}
 			aria-label={copied ? 'Copied' : 'Copy'}
 			onClick={copy}
-			className="flex w-fit items-center gap-1 rounded-md px-1.5 py-1 text-[12px] leading-none text-neutral-400 can-hover:opacity-0 transition-opacity hover:bg-black/5 hover:text-neutral-600 focus-visible:opacity-100 group-hover:opacity-100 coarse:px-2.5 coarse:py-2"
+			className="w-fit gap-1 rounded-md px-1.5 py-1 text-[12px] leading-none text-neutral-400 can-hover:opacity-0 transition-opacity can-hover:hover:text-neutral-600 focus-visible:opacity-100 group-hover:opacity-100 coarse:px-2.5 coarse:py-2"
 		>
 			{copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
 			{copied && 'Copied'}
-		</button>
+		</Button>
 	);
 }
 
@@ -147,14 +150,14 @@ function TypingDots() {
 }
 
 // Tool-call trace above a streaming AI reply (M6): a running tool is a subdued
-// line ending in an ellipsis; a failed one reuses the soft-error red.
+// line ending in an ellipsis; a failed one takes --destructive, the app's one red.
 function ToolTrace({ tools, size }: { tools: ToolStatus[]; size: 'sm' | 'lg' }) {
 	const text = size === 'lg' ? 'text-sm' : 'text-xs';
 	return (
 		<div className="flex flex-col gap-0.5">
 			{tools.map((t, i) =>
 				t.state === 'error' ? (
-					<div key={i} className={'text-red-600/90 ' + text}>
+					<div key={i} className={'text-destructive ' + text}>
 						{t.label} — failed
 					</div>
 				) : (
@@ -271,7 +274,7 @@ const MessageBubble = memo(function MessageBubble({
 	// AI: failed turns are a muted notice, not prose.
 	if (failed) {
 		return (
-			<div className={'text-red-600/90 ' + (lg ? 'text-[15px] leading-7' : 'text-[13px] leading-relaxed')}>
+			<div className={'text-destructive ' + (lg ? 'text-[15px] leading-7' : 'text-[13px] leading-relaxed')}>
 				{message.text}
 			</div>
 		);
@@ -433,7 +436,7 @@ export function Composer({
 	const cardSize = pill ? 96 : 72;
 	const container = pill
 		? 'box-border rounded-3xl border border-black/10 bg-white px-2 py-2 shadow-sm'
-		: 'box-border rounded-xl border border-black/10 bg-white p-2 focus-within:border-blue-500';
+		: 'box-border rounded-xl border border-black/10 bg-white p-2 focus-within:border-primary';
 	// box-border: the auto-grow sets height from scrollHeight, which includes the
 	// padding. Hidden scrollbar: an appearing gutter would reflow the text mid-typing.
 	// 16px on a coarse pointer: WKWebView zooms the whole page in when a field
@@ -483,7 +486,7 @@ export function Composer({
 								aria-label="Send"
 								onClick={send}
 								disabled={!canSend}
-								className="flex h-9 w-9 coarse:h-11 coarse:w-11 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white disabled:opacity-40"
+								className="flex h-9 w-9 coarse:h-11 coarse:w-11 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-40"
 							>
 								<IconSend size={17} />
 							</button>

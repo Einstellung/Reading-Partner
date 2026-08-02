@@ -3,6 +3,7 @@
 // conversation back to full screen; the small ✕ hangs up. Tailwind-only.
 
 import { IconClose, IconSparkle } from '../common/icons';
+import { Button } from '../ui/button';
 
 interface ChatPipCardProps {
 	lastMessage: string | null;
@@ -19,24 +20,26 @@ export default function ChatPipCard({ lastMessage, onClick, onHangUp }: ChatPipC
 			title="Back to conversation"
 			className="group box-border flex w-60 items-start gap-2 rounded-xl border border-black/10 bg-white p-3 shadow-[0_6px_24px_rgba(0,0,0,0.16)] hover:border-black/20 hover:shadow-[0_10px_32px_rgba(0,0,0,0.22)]"
 		>
-			<span className="mt-0.5 shrink-0 text-[#7c5cff]">
+			<span className="mt-0.5 shrink-0 text-primary">
 				<IconSparkle size={16} />
 			</span>
 			<span className="line-clamp-2 flex-1 text-[12px] leading-snug text-neutral-600">
 				{lastMessage ?? 'AI call ongoing'}
 			</span>
-			<button
+			<Button
 				type="button"
+				variant="ghost"
+				size={null}
 				aria-label="Hang up"
 				title="Hang up"
 				onClick={(e) => {
 					e.stopPropagation();
 					onHangUp();
 				}}
-				className="-mr-1 -mt-1 flex h-5 w-5 coarse:h-9 coarse:w-9 shrink-0 items-center justify-center rounded-full text-neutral-400 hover:bg-black/5 hover:text-neutral-600"
+				className="-mr-1 -mt-1 h-5 w-5 shrink-0 rounded-full text-neutral-400 can-hover:hover:text-neutral-600 coarse:h-9 coarse:w-9"
 			>
 				<IconClose size={11} />
-			</button>
+			</Button>
 		</div>
 	);
 }

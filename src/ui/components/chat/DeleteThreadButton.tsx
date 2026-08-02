@@ -38,7 +38,7 @@ export default function DeleteThreadButton({ onDelete }: DeleteThreadButtonProps
 					size="icon"
 					title="Delete conversation"
 					aria-label="Delete conversation"
-					className="h-6 w-6 text-neutral-400 can-hover:hover:bg-red-700/10 can-hover:hover:text-red-700"
+					className="h-6 w-6 text-neutral-400 can-hover:hover:bg-destructive/10 can-hover:hover:text-destructive"
 				>
 					<IconTrash size={15} />
 				</Button>

@@ -7,6 +7,7 @@ import { IconClose, IconColorSwatch, IconTrash } from '../common/icons';
 import { overlayLayerOpen } from '../common/overlay-layer';
 import { placePanel, pointAnchor } from '../common/panel-position';
 import { useViewportSize } from '../common/useViewportSize';
+import { Button } from '../ui/button';
 import type { Annotation, ColorEntry } from '../common/types';
 
 interface AnnotationPopupProps {
@@ -24,9 +25,9 @@ const COMMENT_DEBOUNCE = 400;
 
 // The 9-colour palette is too dense for a full 44px per swatch; a 36px coarse
 // target is the practical compromise (the popup widens and the row wraps to
-// keep the swatches reachable on touch).
-const ICON_BTN =
-	'flex h-6 w-6 coarse:h-9 coarse:w-9 cursor-pointer items-center justify-center rounded border-0 bg-transparent p-0 can-hover:hover:bg-black/5 active:bg-black/5';
+// keep the swatches reachable on touch). Geometry only: the fill and the hover
+// come from the ghost variant.
+const ICON_BTN = 'h-6 w-6 coarse:h-9 coarse:w-9 rounded active:bg-accent';
 
 export default function AnnotationPopup({ annotation, anchor, colors, onChange, onDelete, onClose }: AnnotationPopupProps) {
 	const ref = useRef<HTMLDivElement>(null);
@@ -99,31 +100,35 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 		>
 			<div className="flex flex-wrap items-center gap-0.5">
 				{colors.map((c) => (
-					<button
+					<Button
 						key={c.color}
 						type="button"
-						className={ICON_BTN + (annotation.color === c.color ? ' ring-2 ring-inset ring-sky-600' : '')}
+						variant="ghost"
+						size={null}
+						className={ICON_BTN + (annotation.color === c.color ? ' ring-2 ring-inset ring-primary' : '')}
 						title={c.name}
 						aria-label={c.name}
 						aria-pressed={annotation.color === c.color}
 						onClick={() => onChange(annotation.id, { color: c.color })}
 					>
 						<IconColorSwatch color={c.color} size={18} />
-					</button>
+					</Button>
 				))}
-				<button
+				<Button
 					type="button"
+					variant="ghost"
+					size={null}
 					className={`${ICON_BTN} ml-auto text-neutral-500`}
 					title="Close"
 					aria-label="Close"
 					onClick={onClose}
 				>
 					<IconClose size={14} />
-				</button>
+				</Button>
 			</div>
 
 			<textarea
-				className="max-h-40 min-h-[60px] w-full resize-y rounded-md border border-black/15 bg-white px-2 py-1.5 text-[13px] coarse:text-base text-neutral-800 select-text focus:border-sky-600 focus:outline-none"
+				className="max-h-40 min-h-[60px] w-full resize-y rounded-md border border-black/15 bg-white px-2 py-1.5 text-[13px] coarse:text-base text-neutral-800 select-text focus:border-primary focus:outline-none"
 				placeholder="Add a comment"
 				value={draft}
 				onChange={(e) => {
@@ -134,15 +139,17 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 			/>
 
 			<div className="flex items-center justify-end">
-				<button
+				<Button
 					type="button"
-					className="inline-flex cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-2 py-1 text-xs text-red-700 can-hover:hover:bg-red-700/10 active:bg-red-700/10 coarse:px-3 coarse:py-2.5"
+					variant="ghost"
+					size={null}
+					className="gap-1 rounded-md px-2 py-1 text-xs text-destructive can-hover:hover:bg-destructive/10 active:bg-destructive/10 coarse:px-3 coarse:py-2.5"
 					title="Delete"
 					onClick={() => onDelete(annotation.id)}
 				>
 					<IconTrash size={15} />
 					<span>Delete</span>
-				</button>
+				</Button>
 			</div>
 		</div>
 	);

@@ -135,7 +135,7 @@ function PaperRow({
         </span>
       </button>
       {paper.status === "failed" && paper.error && (
-        <div className="mt-1 text-[11px] text-red-600/90">{paper.error}</div>
+        <div className="mt-1 text-[11px] text-destructive">{paper.error}</div>
       )}
       {paper.status === "cooldown" && (
         <div className="mt-1 text-[11px] text-amber-600/90">rate-limited, retrying later</div>
@@ -259,7 +259,7 @@ export default function PrepPanel({
           {state.planStatus === "pending" && "Waiting to plan…"}
           {state.planStatus === "failed" && (
             <span className="flex items-center gap-1.5">
-              <span className="text-red-600/90">Plan failed: {state.planError}</span>
+              <span className="text-destructive">Plan failed: {state.planError}</span>
               <Button
                 type="button"
                 variant="outline"

@@ -201,7 +201,7 @@ export function MicButton({
 			? cancelArmed
 				? 'bg-neutral-200 text-neutral-500'
 				: 'bg-red-50 text-red-600'
-			: 'text-neutral-400 hover:bg-black/5 hover:text-neutral-600 disabled:opacity-40');
+			: 'text-neutral-400 can-hover:hover:bg-accent can-hover:hover:text-neutral-600 disabled:opacity-40');
 
 	return (
 		<>

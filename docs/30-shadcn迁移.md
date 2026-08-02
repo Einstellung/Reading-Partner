@@ -2,7 +2,7 @@
 
 > 本文记录 UI 组件迁到 shadcn/ui 的共识。现状按 2026-08-01 的代码查证（`dab38fa` 之后）。
 >
-> 落地状态（2026-08-02）：五版全部落地，迁移完成。
+> 落地状态（2026-08-03）：五版全部落地，迁移完成。之后补了一次阅读区的配色收敛，见「阅读区的收敛」。
 >
 > 一：preflight、token 映射、Button / Input / Textarea / Label / Switch / Separator 六个原语，以及 `BTN` / `BTN_PRIMARY` / `BTN_SM` / `BTN_SM_DANGER` / `FIELD` / `INPUT` 全部调用点。
 >
@@ -368,6 +368,59 @@ trigger 的宽度要自己占住：原生 `<select>` 按最宽的 option 定宽�
 - 列表行 6 个：prep 的三条论文行（335×35.5–38）、库的两条主题行和一条文件行（489×38.5）。行高由内容定，撑到 44 会把列表拉散；整行都是命中区，宽度有几百像素。
 - prep 的 Add 按钮 1 个，42.6×44——差的是宽度，1.4px。给按钮尺寸表加一条 `coarse:min-w-[44px]` 会动到全项目每一个窄按钮，为这一个不划算。
 
+## 阅读区的收敛
+
+五版没碰阅读区那一侧，它一直是另一套写法。这一次只统一外观：颜色换成 token，能用变体表说清楚的换成 `<Button>`，行为一行没动。
+
+盘出来的手写控件按视觉分五类：图标按钮（笔工具 4 个 + 色板开关 + 色板里每个颜色、标注气泡的 9 个色块和关闭、痕迹行的 AI 线索和删除、气泡的展开、通话卡的挂断、回复下的 Copy）、文字按钮（标注气泡的 Delete、滑动删除的那条红条）、选中态（笔工具选中、色板当前色、标注气泡当前色、痕迹选中行、侧栏当前标签）、危险操作（上面那三处红）、列表行（大纲、记忆、prep、痕迹）。
+
+**颜色的判断**：
+
+| 原来 | 现在 | 判断 |
+|---|---|---|
+| `bg-sky-100 text-sky-700`（笔工具/色板选中） | `bg-secondary text-secondary-foreground` | 选中是一种级别不是一种色相，token 里没有蓝 |
+| `bg-violet-100 text-violet-700`（AI 笔选中） | 同上 | 同一个选中态，不再分两种 |
+| `text-violet-500`（AI 笔静息、痕迹里的 AI 线索）、`text-[#7c5cff]`（通话卡） | `text-primary` | 表达的是「AI 的东西」，那就是品牌紫 `#6c4fd0` |
+| `ring-sky-600`（选中环） | `ring-primary` | 同上 |
+| `bg-sky-50` / `hover:bg-sky-100`（痕迹选中行） | `bg-secondary` / `bg-secondary-hover` | 同选中态 |
+| `before:bg-sky-600`（选中行左边那条） | `before:bg-primary` | 同上 |
+| `hover:bg-black/5`、`bg-black/[0.06]`、`hover:bg-neutral-100` | `bg-accent` | `#f2f2f2` / `#f0f0f0` / `#f5f5f5` 三个几乎一样的灰合成一个 |
+| `text-[#555]`、`text-[#1b1b1b]`、`border-[#dcdcdc]` | `text-muted-foreground`、`text-foreground` / `text-accent-foreground`、`border-border` | 取值本来就相同，纯换名 |
+| `text-red-700`、`bg-red-600`、`text-red-600/90` | `text-destructive` / `bg-destructive`（`#b91c1c`） | 三种红收敛成一个 |
+| `bg-[#efecfb]` / `#4a3a9e` / `#e2dcf6` / `#c9bff0`（图卡片） | `secondary` 那一组 | 前两个取值相同，后两个各差一点 |
+| `bg-blue-600`（发送）、`focus-within:border-blue-500`（输入框） | `bg-primary` / `border-primary` | 全项目仅有的蓝，主操作就是品牌紫 |
+
+红取 `#b91c1c`：它是 `--destructive`，也是原来 `text-red-700` 和滑动删除按下态 `bg-red-700` 的值。滑动删除那条红条因此从 `#dc2626` 变深到 `#b91c1c`，按下态 `#991b1b`。
+
+**换成 `<Button>` 的**：笔工具的 4 个工具键和色板里的颜色键、标注气泡的 9 个色块 / 关闭 / Delete、痕迹行的 AI 线索和悬停删除、侧栏的 5 个标签、气泡的展开、通话卡的挂断、回复下的 Copy。全部是 `variant="ghost"` 加 `size={null}`——这些控件自带方形几何，尺寸表里的 `icon` 是 32px 而它们是 24/28/36/44。`size={null}` 是 cva 的显式退出（`variantProp === null` 时连 `defaultVariants` 都不套）。`TraceList` 的 `ICON_BTN`、`PenToolbar` 的 `TOOL_BTN` 删掉，`AnnotationPopup` 的 `ICON_BTN` 和 `Sidebar` 的 `TAB_BTN` 只剩几何。
+
+覆盖 ghost 的悬停底色一律写一模一样的修饰符链（坑 78）。选中态要写 `can-hover:hover:bg-secondary`：不写的话 ghost 的悬停灰会盖掉选中的紫。
+
+`hover:` 一律挪到 `can-hover:hover:` 后面，触摸上不再有点一下卡住的悬停态。
+
+**留在原地的**：
+
+- 笔工具的颜色点和痕迹行的类型图标：颜色由标注本身决定，走 inline style。
+- 麦克风键的录音三态背景（`bg-red-50` / `bg-neutral-200`）：红是「正在录」，灰是「松手取消」，是状态不是级别。静息态的悬停灰换了。
+- 滑动删除那条红条的宽度：`SWIPE_ACTION_WIDTH` 走 inline style，手势逻辑按它算。只换了颜色。
+- 状态 chip 的色阶（`PrepPanel` / `NotesPanel` / `MemoryPanel` / `SlidesDialog` 的 amber/green/sky/violet/red/neutral）：这是一组互相区分的分类色，不是控件级别。
+- 停止键的深灰（`bg-neutral-800`）、暂存图片的黑色 ✕：token 里没有对应角色。
+- 中性灰文字（`text-neutral-400/500/600/700/800`）和卡片描边（`border-black/10`）：整套表面色阶，换名会动到几十个节点的实际色值，和这一版的目的无关。
+- 聊天输入区（textarea、发送、停止）、`ReadingPipCard`、`FigureCard` 的卡片本体、各处列表行：仍是手写 `<button>`，理由见「最终还剩的手写控件」。只换了颜色。
+- 笔工具的色板开关：它是色板的锚点，必须拿到节点，而 `<Button>` 吃掉 ref（坑 95）。保持原生 `<button>` 加 `buttonVariants()`，样式和 `<Button>` 一致。
+
+**验证**。探针页加了 9 个静态节区（笔工具四态、横排、痕迹列表、侧栏、大纲、记忆、图卡片、两张 pip 卡、麦克风三档、流式输入框）和 2 个驱动节区（色板展开、痕迹行滑开）。驱动节区单开一页（`#drive`）：`SettingsView` 是常开的 Radix 模态，`body` 上的 `pointer-events: none` 让同一页上别的东西一个都点不动。
+
+几何零变化。32 个节区共 1132 个节点，前后无一增删，170 个节点有属性变化，全部落在 `color` / `border-*-color`（跟着 `currentColor`）/ `background-color` / `cursor` / `gap`（`normal → 6px`，单子元素）/ `flex-shrink`（`[&_svg]:shrink-0`）/ `justify-content`（内容定宽的按钮）上。`_x/_y/_w/_h`、`padding`、`margin`、`min-height`、`border-width`、`font-size`、`line-height`、`border-radius`、`position`、`transform` 一个都没进差异表。coarse 那份跑同一段脚本，差异表逐条相同。
+
+驱动态同样：色板相对色板开关的位置、每个颜色键的盒子、痕迹行的位移和红条宽度前后相同，只有颜色变了。
+
+逐像素：18 个节区完全相同，变的 9 个各有一条原因——选中态换紫（`pen-toolbar` 5040、`trace-list` 27786、`sidebar` 30959、`reader-chrome` 2428、`annotation-popup` 530）、发送键换紫（`chat` / `call` / `call-classroom-off` 各 1049）、错误红变深（`prep-panel` 292、`notes-panel` 294）、AI 星标换紫（`pip-cards` 62）。`home-cards` 那 52 个像素是转圈动画的取帧，base 自己跟自己比也差。
+
+触摸目标：coarse 档位下 202 个可点元素，45 个低于 44px，逐行（节区 + 标签 + 文本 + 宽高 + 字号）前后完全相同。其中原有的 23 个节区仍是 143 个可点元素、27 个低于 44px，和第五版记的数字一致。
+
+`<Button>` 的透传实测（生产构建）：渲染出来的是原生 `<button>`，属性只多一个 `data-slot="button"`，`type` / `title` / `aria-label` / `aria-expanded` 原样带过，`onClick` 照常触发（痕迹行的删除是靠它驱动出来的）。唯一不透传的是 `ref`，见坑 95。
+
 ## 没引的
 
 **Tabs**。唯一像样的场景是阅读区侧栏顶上那五个标签（`reader/Sidebar.tsx`）。没换：它们已经是 `h-11` 的 44px 按钮，换过去买到的是方向键漫游和 `role="tablist"` 语义，代价是把抽屉的高度链（`min-h-0 flex-1` 那条）拆开重接。这条是真未决，哪天侧栏因为别的原因动的时候顺手做。
@@ -385,7 +438,9 @@ trigger 的宽度要自己占住：原生 `<select>` 按最宽的 option 定宽�
 - 侧栏标签行、`Sidebar` 的抽屉和背板、`LibraryScreen` / `BriefingPage` / `PrepPanel` 的列表行：`<button>` 就是它们该有的样子，包一层组件不会少写一行。
 - `HomeCard` / `InfoCards` 的卡片外壳、`settings/cardStyles.ts` 的 `CARD`：shadcn 的 Card 是 header/content/footer 三段式，这里的卡片没有那个结构。
 
-`src/` 里现在没有 `<select>`、没有原生复选框；`<input>` 只剩 `ui/input.tsx` 里那一个和 `SourcesPage` 的 URL 输入框（info 侧的圆角和描边是另一套，coarse 下本来就是 44px / 16px）；`<textarea>` 只剩 `ui/textarea.tsx`、`AnnotationPopup` 和聊天输入区；`<button>` 37 处，全部落在上面这几类里。
+`src/` 里现在没有 `<select>`、没有原生复选框；`<input>` 只剩 `ui/input.tsx` 里那一个和 `SourcesPage` 的 URL 输入框（info 侧的圆角和描边是另一套，coarse 下本来就是 44px / 16px）；`<textarea>` 只剩 `ui/textarea.tsx`、`AnnotationPopup` 和聊天输入区。
+
+这份清单说的是组件：这几个组件仍然自己写，不套 Radix。它们内部的按钮在「阅读区的收敛」里换成了 `<Button variant="ghost">`（同一个原生 `<button>`，样式来自变体表），侧栏标签行同理。裸 `<button>` 从 37 处降到 28 处：列表行、聊天输入区的三个键、`ReadingPipCard`、`FigureCard` 的卡片本体，以及笔工具的色板开关（要 ref，见坑 95）。
 
 ## 第一版的视觉变化
 
@@ -435,6 +490,13 @@ trigger 的宽度要自己占住：原生 `<select>` 按最宽的 option 定宽�
 - 模态对话框不能挂在静态探针页里长期开着：`modal` 给 `body` 加的 `pointer-events: none` 会让页面上其它节区一个都点不动。逐节点 dump 的页面和驱动页分开。
 - 软键盘造不出来。桌面 Chromium 没有软键盘，CDP 也没有对应的开关，能做的只有几何模拟：假定底部 K 像素不可见，逐个字段 `focus()` 之后量它落在哪。这能证明"新旧一样"，不能证明"iOS 上够用"。
 - 两个 dist 的同一个浮层，逐像素差异先看有多少超过阈值再下结论：背板透明度改了 10% 就会让盒子边缘和圆角上的每一个像素都进差异表（白底透出来 152 → 126），数字很大但只有一条原因。
+
+阅读区收敛加的几条：
+
+- 静态 dump 的页面里挂着一个常开的 Radix 模态（`SettingsView`），它给 `body` 的 `pointer-events: none` 让整页都点不动。驱动节区要么单开一个入口（这次用 `#drive` 的 hash 分叉，同一份产物两个页面），要么另建一份探针。
+- 探针页整体是一列，`MessageList` 挂载时把最后一行滚进视口，等于把页面滚到几千像素外；驱动脚本先回滚到顶再点，或者干脆让驱动页只装要驱动的东西。
+- 新加的节区容器不要写死高度：coarse 那份每个控件 44px，短容器会把 flex 子元素压扁，量出来的是被挤过的尺寸（笔工具的 44×44 量成 44×23.4）。
+- `<Button>` 不透传 `ref` 而且不报错（坑 95）。换掉一个被 `ref` 拿着的按钮之前，先在产物里读一次 `ref.current`。
 
 第五版加的几条：
 

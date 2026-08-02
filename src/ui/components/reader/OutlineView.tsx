@@ -26,11 +26,11 @@ export default function OutlineView({ fulltext, pending, onNavigatePage }: Outli
 				<button
 					key={i}
 					type="button"
-					className="flex w-full items-baseline gap-2 border-0 bg-transparent py-1.5 pr-3 text-left cursor-pointer hover:bg-black/5 coarse:py-3"
+					className="flex w-full items-baseline gap-2 border-0 bg-transparent py-1.5 pr-3 text-left cursor-pointer can-hover:hover:bg-accent coarse:py-3"
 					style={{ paddingLeft: 12 + item.level * 14 }}
 					onClick={() => onNavigatePage(item.page)}
 				>
-					<span className="min-w-0 flex-1 truncate text-[13px] text-[#1b1b1b]">{item.title}</span>
+					<span className="min-w-0 flex-1 truncate text-[13px] text-foreground">{item.title}</span>
 					<span className="shrink-0 [font-variant-numeric:tabular-nums] text-[11px] text-[#999]">{item.page}</span>
 				</button>
 			))}

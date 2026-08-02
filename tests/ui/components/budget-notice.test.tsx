@@ -43,5 +43,5 @@ test("a refusal is a failed turn, in the failure style", () => {
     <MessageList messages={[{ role: "ai", text: "This material is too large", ts: 1, failed: true }]} />,
   );
   expect(html).toContain("This material is too large");
-  expect(html).toContain("text-red-600/90");
+  expect(html).toContain("text-destructive");
 });

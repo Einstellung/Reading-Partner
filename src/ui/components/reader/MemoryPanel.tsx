@@ -30,7 +30,7 @@ function MemoryRow({ entry }: { entry: MemoryEntry }) {
         className="flex w-full cursor-pointer flex-col items-start gap-1 border-0 bg-transparent p-0 text-left"
         onClick={() => setExpanded((v) => !v)}
       >
-        <span className="text-[13px] leading-snug text-[#1b1b1b]">{entry.summary}</span>
+        <span className="text-[13px] leading-snug text-foreground">{entry.summary}</span>
         <span className="flex items-center gap-1.5">
           <span className={`rounded px-1.5 py-0.5 text-[10px] leading-none ${TYPE_STYLE[entry.type]}`}>
             {entry.type}
@@ -62,7 +62,7 @@ export default function MemoryPanel({ entries, lastDistilledAt }: MemoryPanelPro
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-[#eee] px-3 py-2">
-        <div className="text-[13px] text-[#1b1b1b]">Memory</div>
+        <div className="text-[13px] text-foreground">Memory</div>
         <div className="mt-0.5 text-[11px] text-neutral-400">
           {lastDistilledAt
             ? `Last distilled ${new Date(lastDistilledAt).toLocaleString()}`
