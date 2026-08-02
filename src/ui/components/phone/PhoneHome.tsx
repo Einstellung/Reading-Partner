@@ -56,7 +56,7 @@ export default function PhoneHome({
                 <span className="text-[13px] text-[#888]">
                   {savedCount} article{savedCount === 1 ? "" : "s"}
                 </span>
-                <span className="text-[13px] font-medium text-[#6d5ae0]">Open →</span>
+                <span className="text-[13px] font-medium text-primary">Open →</span>
               </div>
             </button>
           ) : (

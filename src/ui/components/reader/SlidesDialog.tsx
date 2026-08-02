@@ -24,6 +24,7 @@ import {
   type TalkEntry,
 } from "../../../reading/slides";
 import { Button } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
 import { Dialog, DialogContent, DialogTitle } from "../ui/dialog";
 import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
@@ -211,7 +212,7 @@ export default function SlidesDialog({
               <div className="flex flex-col gap-1">
                 {books.map((b) => (
                   <Label key={b.bookId} className="text-[13px] text-neutral-700">
-                    <input type="checkbox" checked={selected.has(b.bookId)} onChange={() => toggle(b.bookId)} />
+                    <Checkbox checked={selected.has(b.bookId)} onCheckedChange={() => toggle(b.bookId)} />
                     <span className="min-w-0 truncate">{b.title}</span>
                   </Label>
                 ))}

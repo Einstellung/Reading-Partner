@@ -7,6 +7,7 @@ import { useMemo } from "react";
 import { ARTICLE_PROSE_CLASS, ARTICLE_PROSE_CSS, hideBrokenImage } from "../common/proseCss";
 import { articleHtmlForWebview } from "../../../platform/app/image-proxy";
 import { formatPublishedAt, type SavedArticle } from "../../../reading/saved-articles";
+import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 
 export default function SavedArticleView({
@@ -33,9 +34,7 @@ export default function SavedArticleView({
             ‹ {backLabel}
           </Button>
           {article.sourceName && (
-            <span className="rounded-full bg-[#f0eefb] px-2 py-0.5 text-[11px] font-medium text-primary">
-              {article.sourceName}
-            </span>
+            <Badge>{article.sourceName}</Badge>
           )}
           {published && <span className="text-[12px] text-[#888]">{published}</span>}
         </div>

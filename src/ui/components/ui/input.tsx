@@ -11,13 +11,16 @@ import type * as React from "react";
 
 import { cn } from "@/ui/components/lib/utils";
 
-// Exported because <select> wears the same chrome and has no primitive yet
-// (Select lands in the fifth pass, docs/30). One string, so the two cannot drift.
-const inputClassName =
-  "min-w-0 flex-1 rounded-md border border-input bg-background px-2.5 py-2 text-sm coarse:text-base";
+// The chrome a field wears, shared with the Select trigger (ui/select.tsx) so a
+// dropdown and a text box on the same row cannot drift. One string, not two.
+// `coarse:min-h-[44px]` is here rather than on the call sites for the same
+// reason the button sizes carry theirs: a field is a touch target too, and 42px
+// was the last thing in Settings still under the line.
+const fieldClassName =
+  "min-w-0 flex-1 rounded-md border border-input bg-background px-2.5 py-2 text-sm coarse:text-base coarse:min-h-[44px]";
 
 function Input({ className, ...props }: React.ComponentProps<"input">) {
-  return <input data-slot="input" className={cn(inputClassName, className)} {...props} />;
+  return <input data-slot="input" className={cn(fieldClassName, className)} {...props} />;
 }
 
-export { Input, inputClassName };
+export { fieldClassName, Input };

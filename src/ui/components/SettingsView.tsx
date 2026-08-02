@@ -28,10 +28,12 @@ import { AI_LANGUAGE_OPTIONS, type AiLanguage, type Settings, type ThinkingSetti
 import { CARD } from "./settings/cardStyles";
 import { cn } from "./lib/utils";
 import { Button } from "./ui/button";
+import { Checkbox } from "./ui/checkbox";
 import { Dialog, DialogFullScreenContent, DialogTitle } from "./ui/dialog";
-import { Input, inputClassName } from "./ui/input";
+import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { OVERLAY_SAFE } from "./ui/overlay";
+import { ChoiceField } from "./settings/ChoiceField";
 import IllustrationsCard from "./settings/IllustrationsCard";
 import KeyCard from "./settings/KeyCard";
 import OAuthCard from "./settings/OAuthCard";
@@ -154,45 +156,23 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
               <p className="m-0 text-sm text-[#777]">Connect a provider above to choose a default.</p>
             ) : (
               <div className="flex flex-wrap items-center gap-3">
-                <Label>
-                  Provider
-                  <select
-                    className={inputClassName}
-                    value={settings.defaultProviderId ?? ""}
-                    onChange={(e) =>
-                      onSettingsChange({
-                        ...settings,
-                        defaultProviderId: e.target.value || null,
-                        defaultModelId: null,
-                      })
-                    }
-                  >
-                    <option value="">Select…</option>
-                    {connectedProviders.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </Label>
-                <Label>
-                  Model
-                  <select
-                    className={inputClassName}
-                    value={settings.defaultModelId ?? ""}
-                    disabled={!settings.defaultProviderId || models.length === 0}
-                    onChange={(e) =>
-                      onSettingsChange({ ...settings, defaultModelId: e.target.value || null })
-                    }
-                  >
-                    <option value="">Select…</option>
-                    {models.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </select>
-                </Label>
+                <ChoiceField
+                  label="Provider"
+                  placeholder="Select…"
+                  value={settings.defaultProviderId ?? undefined}
+                  choices={connectedProviders.map((p) => ({ value: p.id, label: p.name }))}
+                  onChange={(defaultProviderId) =>
+                    onSettingsChange({ ...settings, defaultProviderId, defaultModelId: null })
+                  }
+                />
+                <ChoiceField
+                  label="Model"
+                  placeholder="Select…"
+                  value={settings.defaultModelId ?? undefined}
+                  disabled={!settings.defaultProviderId || models.length === 0}
+                  choices={models.map((m) => ({ value: m.id, label: m.label }))}
+                  onChange={(defaultModelId) => onSettingsChange({ ...settings, defaultModelId })}
+                />
                 <ThinkingField
                   value={settings.chatThinking}
                   onChange={(chatThinking) => onSettingsChange({ ...settings, chatThinking })}
@@ -210,22 +190,12 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
 
           <h2 className="mb-2 mt-8 text-sm font-semibold text-[#777]">AI output language</h2>
           <div className={CARD}>
-            <Label>
-              Language
-              <select
-                className={inputClassName}
-                value={settings.aiLanguage}
-                onChange={(e) =>
-                  onSettingsChange({ ...settings, aiLanguage: e.target.value as AiLanguage })
-                }
-              >
-                {AI_LANGUAGE_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </Label>
+            <ChoiceField
+              label="Language"
+              value={settings.aiLanguage}
+              choices={AI_LANGUAGE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+              onChange={(v) => onSettingsChange({ ...settings, aiLanguage: v as AiLanguage })}
+            />
             <p className="m-0 text-xs text-[#777]">
               The language the AI writes chat replies, notes, slides, and the news briefing in. Auto
               follows the language you write in. Voice transcription always follows what you speak.
@@ -260,10 +230,9 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
           <h2 className="mb-2 mt-8 text-sm font-semibold text-[#777]">Book notes</h2>
           <div className={CARD}>
             <Label>
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={settings.autoNotes}
-                onChange={(e) => onSettingsChange({ ...settings, autoNotes: e.target.checked })}
+                onCheckedChange={(v) => onSettingsChange({ ...settings, autoNotes: v === true })}
               />
               Generate chapter notes automatically from your highlights
             </Label>
@@ -277,10 +246,9 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
           <h2 className="mb-2 mt-8 text-sm font-semibold text-[#777]">Reader input</h2>
           <div className={CARD}>
             <Label>
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={settings.fingerDraw}
-                onChange={(e) => onSettingsChange({ ...settings, fingerDraw: e.target.checked })}
+                onCheckedChange={(v) => onSettingsChange({ ...settings, fingerDraw: v === true })}
               />
               Draw with your finger
             </Label>
@@ -315,20 +283,12 @@ function ThinkingField({
 }) {
   return (
     <>
-      <Label>
-        Thinking
-        <select
-          className={inputClassName}
-          value={value}
-          onChange={(e) => onChange(e.target.value as ThinkingSetting)}
-        >
-          {THINKING_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      </Label>
+      <ChoiceField
+        label="Thinking"
+        value={value}
+        choices={THINKING_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+        onChange={(v) => onChange(v as ThinkingSetting)}
+      />
       <p className="m-0 basis-full text-xs text-[#777]">{THINKING_HINT}</p>
     </>
   );
