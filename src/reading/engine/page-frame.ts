@@ -70,7 +70,7 @@ export const PAGE_FRAMES = { hairline: HAIRLINE_FRAME, float: FLOAT_FRAME } as c
 export type PageFrameName = keyof typeof PAGE_FRAMES;
 
 // The one in effect. Switching this is the whole of choosing between them.
-export const PAGE_FRAME_NAME: PageFrameName = "hairline";
+export const PAGE_FRAME_NAME: PageFrameName = "float";
 export const PAGE_FRAME: PageFrame = PAGE_FRAMES[PAGE_FRAME_NAME];
 
 // The separator as the reader sees it: the model's gap taken to the scale the
