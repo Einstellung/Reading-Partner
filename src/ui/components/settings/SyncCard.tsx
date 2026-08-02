@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { BTN, BTN_PRIMARY } from "../common/buttons";
 import {
   setAutoSyncEnabled,
   signInToGoogle,
@@ -10,6 +9,8 @@ import {
   type SyncStatus,
 } from "../../../platform/sync";
 import { CARD } from "./cardStyles";
+import { Button } from "../ui/button";
+import { Label } from "../ui/label";
 
 function formatSyncTime(ts: number | null): string {
   if (!ts) return "Never";
@@ -53,9 +54,9 @@ export default function SyncCard() {
       <div className={CARD}>
         <span className="font-medium">Google Drive</span>
         <p className="m-0 text-sm text-[#777]">Google client not configured.</p>
-        <button type="button" className={BTN_PRIMARY} disabled>
+        <Button type="button" disabled>
           Sign in with Google
-        </button>
+        </Button>
       </div>
     );
   }
@@ -75,14 +76,9 @@ export default function SyncCard() {
             Sync reading progress, marks, and books to your own Google Drive.
           </p>
         )}
-        <button
-          type="button"
-          className={BTN_PRIMARY}
-          disabled={busy}
-          onClick={() => run(signInToGoogle)}
-        >
+        <Button type="button" disabled={busy} onClick={() => run(signInToGoogle)}>
           {busy ? "Complete sign-in in your browser…" : "Sign in with Google"}
-        </button>
+        </Button>
         {broken && (
           <span className="text-xs text-[#777]">Last sync: {formatSyncTime(status.lastSyncAt)}</span>
         )}
@@ -97,7 +93,7 @@ export default function SyncCard() {
         <span className="font-medium">Google Drive</span>
         <span className="text-xs text-[#5fb236]">{status.email ?? "Connected"}</span>
       </div>
-      <label className="flex items-center gap-2 text-sm">
+      <Label>
         <input
           type="checkbox"
           checked={status.autoSync}
@@ -105,19 +101,19 @@ export default function SyncCard() {
           onChange={(e) => void run(() => setAutoSyncEnabled(e.target.checked))}
         />
         Sync automatically
-      </label>
+      </Label>
       <div className="flex flex-wrap items-center gap-3">
-        <button
+        <Button
           type="button"
-          className={BTN}
+          variant="outline"
           disabled={busy || status.running}
           onClick={() => run(syncNow)}
         >
           {status.running ? "Syncing…" : "Sync now"}
-        </button>
-        <button type="button" className={BTN} disabled={busy} onClick={() => run(signOutOfGoogle)}>
+        </Button>
+        <Button type="button" variant="outline" disabled={busy} onClick={() => run(signOutOfGoogle)}>
           Sign out
-        </button>
+        </Button>
         <span className="text-xs text-[#777]">Last sync: {formatSyncTime(status.lastSyncAt)}</span>
       </div>
       {report.message && (

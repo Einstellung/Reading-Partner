@@ -19,6 +19,7 @@ import type {
 } from "../../../info/briefing/cards";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { CardComponentProps, CardKind, CardPayload } from "../chat/chatParts";
+import { Button } from "../ui/button";
 
 const PIPE_BADGE =
   "shrink-0 rounded-full bg-[#f0eefb] px-2 py-0.5 text-[11px] font-medium text-[#6d5ae0]";
@@ -67,15 +68,17 @@ export function ProbeConfirmCard({ payload, dispatch }: CardComponentProps<Probe
       </ul>
       <div className="mt-3.5 flex items-center justify-end">
         {added ? (
-          <span className="text-[13px] font-medium text-[#6d5ae0]">Added ✓</span>
+          <span className="text-[13px] font-medium text-primary">Added ✓</span>
         ) : (
-          <button
+          <Button
             type="button"
+            variant="cta"
+            size="chip"
+            className="px-3.5 py-1.5"
             onClick={() => dispatch({ kind: "mutate", op: "add-source" })}
-            className="rounded-lg bg-[#6d5ae0] px-3.5 py-1.5 text-[13px] font-medium text-white hover:bg-[#5d4bd0]"
           >
             Add source
-          </button>
+          </Button>
         )}
       </div>
     </div>
@@ -138,7 +141,7 @@ export function BriefingReadyCard({ payload, dispatch }: CardComponentProps<Brie
       <div className="mt-1 text-[15px] font-medium text-[#1b1b1b]">{payload.date}</div>
       <div className="mt-1 text-[13px] text-[#666]">{counts}</div>
       <div className="mt-2 text-[12px] leading-snug text-[#999]">{note}</div>
-      <div className="mt-2 text-[13px] font-medium text-[#6d5ae0]">Open →</div>
+      <div className="mt-2 text-[13px] font-medium text-primary">Open →</div>
     </button>
   );
 }
@@ -160,24 +163,28 @@ export function ProfileUpdateCard({ payload, dispatch }: CardComponentProps<Prof
       <div className="mt-3 flex items-center justify-end gap-2">
         {applied ? (
           payload.canRetriage ? (
-            <button
+            <Button
               type="button"
+              variant="cta"
+              size="chip"
+              className="px-3.5 py-1.5"
               onClick={() => dispatch({ kind: "mutate", op: "retriage" })}
-              className="rounded-lg bg-[#6d5ae0] px-3.5 py-1.5 text-[13px] font-medium text-white hover:bg-[#5d4bd0]"
             >
               Re-run today's triage
-            </button>
+            </Button>
           ) : (
             <span className="text-[12px] text-[#999]">Applies to your next briefing.</span>
           )
         ) : (
-          <button
+          <Button
             type="button"
+            variant="cta"
+            size="chip"
+            className="px-3.5 py-1.5"
             onClick={() => dispatch({ kind: "mutate", op: "apply-profile" })}
-            className="rounded-lg bg-[#6d5ae0] px-3.5 py-1.5 text-[13px] font-medium text-white hover:bg-[#5d4bd0]"
           >
             Apply
-          </button>
+          </Button>
         )}
       </div>
     </div>
@@ -190,13 +197,17 @@ export function BriefingFailedCard({ payload, dispatch }: CardComponentProps<Bri
       <div className="text-[11px] font-medium uppercase tracking-wider text-[#c0392b]">Briefing failed</div>
       <div className="mt-1 text-[13px] leading-relaxed text-[#8a4b40]">{payload.message}</div>
       <div className="mt-3 flex justify-end">
-        <button
+        {/* Its own red, not --destructive: this card is a warm-red surface of its
+            own and docs/30 converges the purples, not the reds. */}
+        <Button
           type="button"
+          variant="subtle"
+          size="chip"
+          className="border-[#e6c3bd] px-3 py-1.5 font-medium text-[#c0392b] can-hover:enabled:hover:bg-[#f8e8e4]"
           onClick={() => dispatch({ kind: "mutate", op: "retry-briefing" })}
-          className="rounded-lg border border-[#e6c3bd] px-3 py-1.5 text-[13px] font-medium text-[#c0392b] hover:bg-[#f8e8e4]"
         >
           Try again
-        </button>
+        </Button>
       </div>
     </div>
   );

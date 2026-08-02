@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
-import { BTN } from "../common/buttons";
 import { hasImageGenKey, setImageGenKey } from "../../../ai/credentials";
 import { DEFAULT_IMAGE_API_BASE, DEFAULT_IMAGE_MODEL } from "../../../reading/slides";
 import { type Settings } from "../../../platform/app/settings";
-import { CARD, FIELD } from "./cardStyles";
+import { CARD } from "./cardStyles";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { Label } from "../ui/label";
 
 // Deck illustrations (docs/14): the paid image-relay key (stored with the AI
 // credentials, not synced) plus the harmless base URL / model (settings.json).
@@ -35,44 +37,41 @@ export default function IllustrationsCard({
 
   return (
     <div className={CARD}>
-      <label className="flex flex-col gap-1.5 text-sm">
+      <Label layout="stack">
         API key
         <div className="flex gap-2">
-          <input
+          <Input
             type="password"
-            className={FIELD}
             placeholder={configured ? "Replace image API key" : "Image API key"}
             value={key}
             onChange={(e) => setKey(e.target.value)}
           />
-          <button type="button" className={BTN} disabled={busy || !key.trim()} onClick={saveKey}>
+          <Button type="button" variant="outline" disabled={busy || !key.trim()} onClick={saveKey}>
             Save
-          </button>
+          </Button>
           {configured && <span className="self-center text-xs text-[#5fb236]">Connected</span>}
         </div>
-      </label>
-      <label className="flex flex-col gap-1.5 text-sm">
+      </Label>
+      <Label layout="stack">
         Model
-        <input
-          className={FIELD}
+        <Input
           placeholder={DEFAULT_IMAGE_MODEL}
           value={settings.illustrationModel ?? ""}
           onChange={(e) =>
             onSettingsChange({ ...settings, illustrationModel: e.target.value.trim() || null })
           }
         />
-      </label>
-      <label className="flex flex-col gap-1.5 text-sm">
+      </Label>
+      <Label layout="stack">
         Base URL
-        <input
-          className={FIELD}
+        <Input
           placeholder={DEFAULT_IMAGE_API_BASE}
           value={settings.illustrationApiBase ?? ""}
           onChange={(e) =>
             onSettingsChange({ ...settings, illustrationApiBase: e.target.value.trim() || null })
           }
         />
-      </label>
+      </Label>
       <p className="m-0 text-xs text-[#777]">
         Without a key, talk decks are generated without AI illustrations.
       </p>

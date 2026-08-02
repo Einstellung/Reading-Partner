@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { fileURLToPath } from "node:url";
 
 // The PDFium wasm is a pthread build: it needs SharedArrayBuffer, which the
 // browser grants only to a cross-origin-isolated page (pitfall 18). Production
@@ -14,6 +15,11 @@ const isolationHeaders = {
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   clearScreen: false,
+  // Matches the `paths` entry in tsconfig.json; the shadcn CLI writes `@/`
+  // imports into every component it generates.
+  resolve: {
+    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+  },
   server: {
     port: 1420,
     strictPort: true,

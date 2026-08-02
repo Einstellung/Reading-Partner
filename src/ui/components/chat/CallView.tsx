@@ -10,6 +10,7 @@ import DeleteThreadButton from './DeleteThreadButton';
 import { useKeyboardInset } from '../common/useKeyboardInset';
 import type { PendingImage, ThreadMessage } from '../common/types';
 import type { CardActionHandler } from './chatParts';
+import { Button } from '../ui/button';
 
 interface CallViewProps {
 	messages: ThreadMessage[];
@@ -70,33 +71,33 @@ export default function CallView({
 			style={{ paddingBottom: keyboardInset || undefined }}
 		>
 			<div className="absolute left-4 top-4 z-10 flex items-center gap-1">
-				<button
+				<Button
 					type="button"
+					variant="ghost"
+					size="icon"
 					title="Hang up"
 					aria-label="Hang up"
 					onClick={onHangUp}
-					className="flex h-9 w-9 coarse:h-11 coarse:w-11 items-center justify-center rounded-full text-neutral-500 hover:bg-black/5"
+					className="h-9 w-9 rounded-full text-neutral-500"
 				>
 					<IconClose size={18} />
-				</button>
+				</Button>
 				{onDelete && <DeleteThreadButton onDelete={onDelete} />}
 			</div>
 
 			{onToggleClassroom && (
 				<div className="absolute left-1/2 top-4 z-10 flex -translate-x-1/2 items-center gap-2">
-					<button
+					<Button
 						type="button"
+						variant={classroomOn ? 'secondary' : 'outline'}
 						aria-pressed={classroomOn}
 						onClick={onToggleClassroom}
 						className={
-							'rounded-full border px-3 py-1.5 text-sm leading-none cursor-pointer coarse:py-2.5 ' +
-							(classroomOn
-								? 'border-[#c9c2e8] bg-[#efecfb] text-[#4a3a9e] hover:bg-[#e7e3f7]'
-								: 'border-[#dcdcdc] bg-white text-neutral-600 hover:bg-[#f0f0f0]')
+							'rounded-full coarse:py-2.5 ' + (classroomOn ? '' : 'text-neutral-600')
 						}
 					>
 						Classroom
-					</button>
+					</Button>
 					{classroomOn && classroomStatus && (
 						<span className="text-xs text-neutral-400">{classroomStatus}</span>
 					)}

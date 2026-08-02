@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { setApiKey, type ProviderInfo } from "../../../ai/aiClient";
-import { BTN } from "../common/buttons";
-import { CARD, FIELD } from "./cardStyles";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { CARD } from "./cardStyles";
 
 export default function KeyCard({
   providerId,
@@ -36,16 +37,15 @@ export default function KeyCard({
         {provider?.configured && <span className="text-xs text-[#5fb236]">Connected</span>}
       </div>
       <div className="flex gap-2">
-        <input
+        <Input
           type="password"
-          className={FIELD}
           placeholder={provider?.configured ? "Replace API key" : "API key"}
           value={key}
           onChange={(e) => setKey(e.target.value)}
         />
-        <button type="button" className={BTN} disabled={busy || !key.trim()} onClick={save}>
+        <Button type="button" variant="outline" disabled={busy || !key.trim()} onClick={save}>
           Save
-        </button>
+        </Button>
       </div>
       <p className="m-0 text-xs text-[#777]">Saving a key here signs out other providers.</p>
     </div>

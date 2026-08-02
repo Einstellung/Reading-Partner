@@ -99,7 +99,7 @@ import { backgroundFailureToast, buildReadingTurn, turnFailureView, type TurnFai
 import { createLiveTurns, type LiveTurn } from "./reading/live-turns";
 import { researchStatusLabel, RESEARCH_TOOL_NAME } from "./reading/papers/research-agent";
 import type { SubagentProgress } from "./ai/subagent";
-import { BTN, BTN_PRIMARY } from "./ui/components/common/buttons";
+import { Button } from "./ui/components/ui/button";
 import { appendRunningTool, relabelRunningTool, resolveToolStatus } from "./ui/components/common/toolTrace";
 import LibraryScreen from "./ui/components/library/LibraryScreen";
 import Toast, { useToasts } from "./ui/components/common/Toast";
@@ -1718,13 +1718,13 @@ export default function App() {
         ) : homeScreen === "library" ? (
           <>
             {activeTopic ? (
-              <button className={BTN} onClick={() => setActiveTopicId(null)}>
+              <Button variant="outline" onClick={() => setActiveTopicId(null)}>
                 ‹ Topics
-              </button>
+              </Button>
             ) : (
-              <button className={BTN} onClick={() => setHomeScreen("vestibule")}>
+              <Button variant="outline" onClick={() => setHomeScreen("vestibule")}>
                 ‹ Today
-              </button>
+              </Button>
             )}
             {activeTopic && <span className="text-[13px] text-[#1b1b1b] overflow-hidden text-ellipsis whitespace-nowrap max-w-[40vw]">{activeTopic.name}</span>}
             <span className="flex-1" />
@@ -1878,12 +1878,12 @@ export default function App() {
           >
             <p className="m-0 text-sm text-neutral-700">Configure a provider in Settings to start chatting.</p>
             <div className="flex justify-end gap-2">
-              <button className={BTN} onClick={endCall}>
+              <Button variant="outline" onClick={endCall}>
                 Dismiss
-              </button>
-              <button className={BTN_PRIMARY} onClick={() => setShowSettings(true)}>
+              </Button>
+              <Button onClick={() => setShowSettings(true)}>
                 Open Settings
-              </button>
+              </Button>
             </div>
           </div>
         )}

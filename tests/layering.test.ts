@@ -153,7 +153,12 @@ function entryOf(rel: string): string {
 // "reading/prep" is a unit, "reading/turn" is a file of the group itself — and
 // need the same stat.
 function resolveEntry(fromFile: string, spec: string): string | null {
-  const abs = resolve(dirname(fromFile), spec);
+  // `@/x` is the alias the shadcn CLI writes into a generated component; it
+  // means src/x. Resolved here rather than skipped, or an aliased import would
+  // be a hole in every rule below.
+  const abs = spec.startsWith("@/")
+    ? resolve(SRC, spec.slice(2))
+    : resolve(dirname(fromFile), spec);
   const rel = relative(SRC, abs);
   if (rel === "" || rel.startsWith("..")) return null;
   const parts = rel.split("/");
@@ -192,7 +197,7 @@ function collectEdges(): Edge[] {
     const text = readFileSync(file, "utf8");
     for (const m of text.matchAll(IMPORT_RE)) {
       const spec = m[1];
-      if (!spec.startsWith(".")) continue;
+      if (!spec.startsWith(".") && !spec.startsWith("@/")) continue;
       const to = resolveEntry(file, spec);
       if (to === null || to === from) continue;
       edges.push({ from, to, file: `src/${rel}`, spec });

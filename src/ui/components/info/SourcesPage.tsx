@@ -12,6 +12,8 @@ import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { ProbeAddOutcome } from "../../../info/sources/source-live";
 import { pipeLabel } from "../../../info/sources/probe";
 import { HIT_44 } from "../common/buttons";
+import { Button } from "../ui/button";
+import { Switch } from "../ui/switch";
 import { ProbeConfirmCard } from "./InfoCards";
 
 function timeAgo(ts: number): string {
@@ -82,26 +84,6 @@ function HealthDot({ health }: { health: SourceHealth | undefined }) {
   );
 }
 
-// The track keeps its 20×36 look; HIT_44 takes the tap out to 44×44.
-function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      onClick={() => onChange(!on)}
-      className={
-        `relative h-5 w-9 flex-none rounded-full transition-colors ${HIT_44} ` +
-        (on ? "bg-[#6d5ae0]" : "bg-[#d4d4d4]")
-      }
-    >
-      <span
-        className={"absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform " + (on ? "translate-x-4" : "translate-x-0.5")}
-      />
-    </button>
-  );
-}
-
 export interface SourcesPageProps {
   sources: SourceDescriptor[];
   health: Record<string, SourceHealth>;
@@ -146,12 +128,9 @@ export function SourcesPage(props: SourcesPageProps) {
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col px-4 py-5 sm:px-6 sm:py-8">
       <div className="mb-6 flex items-center gap-3">
-        <button
-          className="rounded-lg border border-[#dcdcdc] px-2.5 py-1 text-[13px] text-[#555] coarse:min-h-[44px] hover:bg-[#f4f4f4]"
-          onClick={props.onBack}
-        >
+        <Button variant="subtle" size="chip" onClick={props.onBack}>
           ‹ Briefing
-        </button>
+        </Button>
         <span className="text-[15px] font-medium text-[#1b1b1b]">Sources</span>
       </div>
 
@@ -168,16 +147,11 @@ export function SourcesPage(props: SourcesPageProps) {
               }
             }}
             placeholder="Paste a site or RSS URL…"
-            className="min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 text-[14px] text-[#1b1b1b] outline-none coarse:min-h-[44px] coarse:text-[16px] placeholder:text-neutral-400 focus:border-[#6d5ae0]"
+            className="min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 text-[14px] text-[#1b1b1b] outline-none coarse:min-h-[44px] coarse:text-[16px] placeholder:text-neutral-400 focus:border-primary"
           />
-          <button
-            type="button"
-            onClick={() => void probe()}
-            disabled={!url.trim() || probing}
-            className="rounded-lg bg-[#6d5ae0] px-4 py-2 text-[14px] font-medium text-white coarse:min-h-[44px] hover:bg-[#5d4bd0] disabled:opacity-40"
-          >
+          <Button type="button" variant="cta" size="lg" onClick={() => void probe()} disabled={!url.trim() || probing}>
             {probing ? "Checking…" : "Add"}
-          </button>
+          </Button>
         </div>
         {error && <div className="mt-2 text-[13px] text-[#c0392b]">{error}</div>}
         {pending && (
@@ -210,15 +184,21 @@ export function SourcesPage(props: SourcesPageProps) {
                   {[s.line, pipeLabel(s)].filter(Boolean).join(" · ")}
                 </div>
               </div>
-              <Toggle on={s.enabled} onChange={(v) => props.onToggle(s.id, v)} />
-              <button
+              <Switch
+                checked={s.enabled}
+                aria-label={`Enable ${s.name}`}
+                onCheckedChange={(v) => props.onToggle(s.id, v)}
+              />
+              <Button
+                variant="ghost"
+                size="icon"
                 aria-label="Remove source"
                 title="Remove"
                 onClick={() => props.onRemove(s.id)}
-                className="flex h-7 w-7 flex-none items-center justify-center rounded-full text-[#bbb] can-hover:opacity-0 transition-opacity hover:bg-[#f0f0f0] hover:text-[#c0392b] group-hover:opacity-100 coarse:h-11 coarse:w-11"
+                className="h-7 w-7 flex-none rounded-full text-[#bbb] can-hover:opacity-0 transition-opacity can-hover:hover:text-[#c0392b] group-hover:opacity-100"
               >
                 ✕
-              </button>
+              </Button>
             </li>
           ))}
         </ul>

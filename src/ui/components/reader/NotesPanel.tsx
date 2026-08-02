@@ -10,6 +10,8 @@ import type { NotesActivity, NotesSnapshot } from "../../../reading/notes";
 import type { ChapterStatus, NoteChapter } from "../../../reading/notes";
 import { Markdown } from "../common/Markdown";
 import SlidesDialog from "./SlidesDialog";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
 
 function compactChars(chars: number): string {
   return chars < 1000 ? String(chars) : `${(chars / 1000).toFixed(1)}k`;
@@ -41,9 +43,6 @@ const STATUS_STYLE: Record<ChapterStatus, string> = {
   failed: "bg-red-100 text-red-700",
   skipped: "bg-neutral-100 text-neutral-400",
 };
-
-const SMALL_BTN =
-  "rounded border border-[#dcdcdc] bg-white px-1.5 py-0.5 text-[11px] leading-none text-neutral-500 cursor-pointer hover:bg-[#f0f0f0] coarse:px-2.5 coarse:py-2";
 
 interface NotesPanelProps {
   snapshot: NotesSnapshot | null;
@@ -107,19 +106,19 @@ function ChapterSection({
           </div>
         </div>
         {chapter.status === "done" && !disabled && (
-          <button type="button" className={SMALL_BTN} onClick={() => setSteering((v) => !v)}>
+          <Button type="button" variant="outline" size="xs" className="text-neutral-500" onClick={() => setSteering((v) => !v)}>
             Regenerate
-          </button>
+          </Button>
         )}
         {chapter.status === "failed" && !disabled && (
-          <button type="button" className={SMALL_BTN} onClick={onRetry}>
+          <Button type="button" variant="outline" size="xs" className="text-neutral-500" onClick={onRetry}>
             Retry
-          </button>
+          </Button>
         )}
         {chapter.status === "skipped" && !disabled && (
-          <button type="button" className={SMALL_BTN} onClick={onGenerate}>
+          <Button type="button" variant="outline" size="xs" className="text-neutral-500" onClick={onGenerate}>
             Generate
-          </button>
+          </Button>
         )}
       </div>
 
@@ -129,17 +128,17 @@ function ChapterSection({
 
       {steering && (
         <div className="mt-1.5 flex gap-1.5">
-          <input
-            className="min-w-0 flex-1 rounded-md border border-[#dcdcdc] bg-white px-2 py-1 text-[12px] coarse:text-base"
+          <Input
+            className="px-2 py-1 text-[12px]"
             placeholder="Optional: how to change it"
             value={instruction}
             onChange={(e) => setInstruction(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submit()}
             autoFocus
           />
-          <button type="button" className={SMALL_BTN} onClick={submit}>
+          <Button type="button" variant="outline" size="xs" className="text-neutral-500" onClick={submit}>
             Go
-          </button>
+          </Button>
         </div>
       )}
 
@@ -215,13 +214,16 @@ export default function NotesPanel({
         <p className="m-0 text-sm text-neutral-500">
           No notes for this book yet. Generate lecture notes, one section per chapter.
         </p>
-        <button
+        <Button
           type="button"
-          className="rounded-md border border-[#c9c2e8] bg-[#efecfb] px-3 py-1.5 text-sm text-[#4a3a9e] cursor-pointer hover:bg-[#e7e3f7] coarse:py-2.5"
+          variant="secondary"
+          // leading-5 puts back what text-sm carries on its own; the size adds
+          // leading-none, which this button never had.
+          className="leading-5 coarse:py-2.5"
           onClick={onGenerate}
         >
           Generate notes
-        </button>
+        </Button>
       </div>
     );
   }
@@ -238,32 +240,32 @@ export default function NotesPanel({
           <div className="flex items-center gap-2">
             <div className="text-[13px] text-[#1b1b1b]">Notes</div>
             {doneCount > 0 && (
-              <button
-                type="button"
-                className="rounded border border-[#c9c2e8] bg-[#efecfb] px-1.5 py-0.5 text-[11px] leading-none text-[#4a3a9e] cursor-pointer hover:bg-[#e7e3f7] coarse:px-2.5 coarse:py-2"
-                onClick={() => setShowSlides(true)}
-              >
+              <Button type="button" variant="secondary" size="xs" onClick={() => setShowSlides(true)}>
                 Slides
-              </button>
+              </Button>
             )}
           </div>
           {running ? (
-            <button
+            <Button
               type="button"
-              className="cursor-pointer border-0 bg-transparent p-0 text-[11px] text-neutral-400 hover:text-neutral-600 coarse:px-2 coarse:py-1.5"
+              variant="link"
+              size="link"
+              className="text-[11px] text-neutral-400 hover:text-neutral-600 coarse:py-0"
               onClick={onStop}
             >
               Stop
-            </button>
+            </Button>
           ) : (
             state.planStatus === "done" && (
-              <button
+              <Button
                 type="button"
-                className="cursor-pointer border-0 bg-transparent p-0 text-[11px] text-neutral-400 hover:text-neutral-600 coarse:px-2 coarse:py-1.5"
+                variant="link"
+                size="link"
+                className="text-[11px] text-neutral-400 hover:text-neutral-600 coarse:py-0"
                 onClick={onGenerate}
               >
                 Resume
-              </button>
+              </Button>
             )
           )}
         </div>
@@ -283,9 +285,9 @@ export default function NotesPanel({
           {state.planStatus === "failed" && (
             <span className="flex items-center gap-1.5">
               <span className="text-red-600/90">Plan failed: {state.planError}</span>
-              <button type="button" className={SMALL_BTN} onClick={onRetryPlan} disabled={running}>
+              <Button type="button" variant="outline" size="xs" className="text-neutral-500" onClick={onRetryPlan} disabled={running}>
                 Retry
-              </button>
+              </Button>
             </span>
           )}
           {state.planStatus === "done" && `${doneCount} of ${state.chapters.length} chapters ready`}
@@ -298,9 +300,9 @@ export default function NotesPanel({
             <div className="flex items-center justify-between gap-2">
               <div className="text-[13px] font-semibold text-[#1b1b1b]">Whole-book framework</div>
               {state.overviewStatus === "stale" && !running && (
-                <button type="button" className={SMALL_BTN} onClick={onRegenerateOverview}>
+                <Button type="button" variant="outline" size="xs" className="text-neutral-500" onClick={onRegenerateOverview}>
                   Regenerate
-                </button>
+                </Button>
               )}
             </div>
             {state.overviewStatus === "stale" && (
@@ -331,9 +333,9 @@ export default function NotesPanel({
         {state.overviewStatus === "failed" && (
           <div className="border-b border-[#eee] px-3 py-2 text-[11px]">
             <span className="text-red-600/90">Framework failed: {state.overviewError}</span>{" "}
-            <button type="button" className={SMALL_BTN} onClick={onRegenerateOverview} disabled={running}>
+            <Button type="button" variant="outline" size="xs" className="text-neutral-500" onClick={onRegenerateOverview} disabled={running}>
               Retry
-            </button>
+            </Button>
           </div>
         )}
 

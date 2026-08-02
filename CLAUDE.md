@@ -36,6 +36,8 @@ AI 陪读软件。设计共识在 `docs/`。阅读引擎用 EmbedPDF（PDFium WA
 
 - 样式:Tailwind v4(theme + preflight + utilities,拆开 import,layer 顺序在 `src/styles.css` 顶部显式声明,见坑 75),UI 一律用 Tailwind utility class。`styles.css` 只放全局基线。
 
+- 原语用 shadcn/ui（`components.json`，`bunx shadcn@latest add <component>` 写进 `src/ui/components/ui/`）。设计 token 在 `styles.css` 的 `:root` + `@theme inline`，取值映射到现有配色，见 `docs/30`。`@/` 别名指向 `src/`，只给 shadcn 生成的文件用；应用代码一律相对路径 import。按钮尺寸和 44px 触摸目标写在 `ui/button.tsx` 的变体表里，调用点不要各自补 `coarse:`。
+
 ## 发布
 
 说「构建」就是补丁号 +1 再发 TestFlight，不用问。版本号在 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock` 四处，一起改。主次版本号由项目发起人定。构建号是 workflow run number，不用管。

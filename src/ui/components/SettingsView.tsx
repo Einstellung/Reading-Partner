@@ -19,9 +19,11 @@ import {
   type ProviderId,
   type ProviderInfo,
 } from "../../ai/aiClient";
-import { BTN } from "./common/buttons";
 import { AI_LANGUAGE_OPTIONS, type AiLanguage, type Settings, type ThinkingSetting } from "../../platform/app/settings";
-import { CARD, FIELD } from "./settings/cardStyles";
+import { CARD } from "./settings/cardStyles";
+import { Button } from "./ui/button";
+import { Input, inputClassName } from "./ui/input";
+import { Label } from "./ui/label";
 import IllustrationsCard from "./settings/IllustrationsCard";
 import KeyCard from "./settings/KeyCard";
 import OAuthCard from "./settings/OAuthCard";
@@ -81,9 +83,9 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
       <div className="mx-auto w-[min(680px,100%)] pb-safe-10 pl-safe-6 pr-safe-6 pt-safe-10">
         <div className="mb-6 flex items-center justify-between">
           <h1 className="m-0 text-[22px] font-bold">Settings</h1>
-          <button type="button" className={BTN} onClick={onClose}>
+          <Button type="button" variant="outline" onClick={onClose}>
             Done
-          </button>
+          </Button>
         </div>
 
         <h2 className="mb-2 mt-0 text-sm font-semibold text-[#777]">Providers</h2>
@@ -128,10 +130,10 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
             <p className="m-0 text-sm text-[#777]">Connect a provider above to choose a default.</p>
           ) : (
             <div className="flex flex-wrap items-center gap-3">
-              <label className="flex items-center gap-2 text-sm">
+              <Label>
                 Provider
                 <select
-                  className={FIELD}
+                  className={inputClassName}
                   value={settings.defaultProviderId ?? ""}
                   onChange={(e) =>
                     onSettingsChange({
@@ -148,11 +150,11 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
                     </option>
                   ))}
                 </select>
-              </label>
-              <label className="flex items-center gap-2 text-sm">
+              </Label>
+              <Label>
                 Model
                 <select
-                  className={FIELD}
+                  className={inputClassName}
                   value={settings.defaultModelId ?? ""}
                   disabled={!settings.defaultProviderId || models.length === 0}
                   onChange={(e) =>
@@ -166,7 +168,7 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
                     </option>
                   ))}
                 </select>
-              </label>
+              </Label>
               <ThinkingField
                 value={settings.chatThinking}
                 onChange={(chatThinking) => onSettingsChange({ ...settings, chatThinking })}
@@ -184,10 +186,10 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
 
         <h2 className="mb-2 mt-8 text-sm font-semibold text-[#777]">AI output language</h2>
         <div className={CARD}>
-          <label className="flex items-center gap-2 text-sm">
+          <Label>
             Language
             <select
-              className={FIELD}
+              className={inputClassName}
               value={settings.aiLanguage}
               onChange={(e) =>
                 onSettingsChange({ ...settings, aiLanguage: e.target.value as AiLanguage })
@@ -199,7 +201,7 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
                 </option>
               ))}
             </select>
-          </label>
+          </Label>
           <p className="m-0 text-xs text-[#777]">
             The language the AI writes chat replies, notes, slides, and the news briefing in. Auto
             follows the language you write in. Voice transcription always follows what you speak.
@@ -208,18 +210,17 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
 
         <h2 className="mb-2 mt-8 text-sm font-semibold text-[#777]">Lesson prep</h2>
         <div className={CARD}>
-          <label className="flex flex-col gap-1.5 text-sm">
+          <Label layout="stack">
             Semantic Scholar API key
-            <input
+            <Input
               type="password"
-              className={FIELD}
               placeholder="Optional"
               value={settings.semanticScholarApiKey ?? ""}
               onChange={(e) =>
                 onSettingsChange({ ...settings, semanticScholarApiKey: e.target.value.trim() || null })
               }
             />
-          </label>
+          </Label>
           <p className="m-0 text-xs text-[#777]">
             A free key from semanticscholar.org avoids the shared rate limits that make paper
             fetching stall.
@@ -234,14 +235,14 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
 
         <h2 className="mb-2 mt-8 text-sm font-semibold text-[#777]">Book notes</h2>
         <div className={CARD}>
-          <label className="flex items-center gap-2 text-sm">
+          <Label>
             <input
               type="checkbox"
               checked={settings.autoNotes}
               onChange={(e) => onSettingsChange({ ...settings, autoNotes: e.target.checked })}
             />
             Generate chapter notes automatically from your highlights
-          </label>
+          </Label>
           <p className="m-0 text-xs text-[#777]">
             As you mark up the book, notes for the chapters you have finished are written in the
             background. Chapters you marked nothing in are skipped. The manual Generate button always
@@ -251,14 +252,14 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
 
         <h2 className="mb-2 mt-8 text-sm font-semibold text-[#777]">Reader input</h2>
         <div className={CARD}>
-          <label className="flex items-center gap-2 text-sm">
+          <Label>
             <input
               type="checkbox"
               checked={settings.fingerDraw}
               onChange={(e) => onSettingsChange({ ...settings, fingerDraw: e.target.checked })}
             />
             Draw with your finger
-          </label>
+          </Label>
           <p className="m-0 text-xs text-[#777]">
             Off, a finger only moves the page and a stylus does the marking, whatever tool is
             selected. Turn it on for a device with no stylus, where the finger has to be able to
@@ -289,10 +290,10 @@ function ThinkingField({
 }) {
   return (
     <>
-      <label className="flex items-center gap-2 text-sm">
+      <Label>
         Thinking
         <select
-          className={FIELD}
+          className={inputClassName}
           value={value}
           onChange={(e) => onChange(e.target.value as ThinkingSetting)}
         >
@@ -302,7 +303,7 @@ function ThinkingField({
             </option>
           ))}
         </select>
-      </label>
+      </Label>
       <p className="m-0 basis-full text-xs text-[#777]">{THINKING_HINT}</p>
     </>
   );

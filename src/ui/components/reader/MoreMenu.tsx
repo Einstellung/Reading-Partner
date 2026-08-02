@@ -6,6 +6,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { IconChevronDown } from "../common/icons";
+import { Separator } from "../ui/separator";
 
 // A menu entry: a plain action, or a toggle that shows a lit state when on.
 export type MoreItem =
@@ -81,7 +82,7 @@ export default function MoreMenu({ items, alert }: { items: MoreItem[]; alert?: 
 				>
 					{items.map((item, i) => {
 						if (item.kind === "divider") {
-							return <div key={`d${i}`} className="my-1 h-px bg-black/10" />;
+							return <Separator key={`d${i}`} className="my-1 bg-black/10" />;
 						}
 						const Icon = item.icon;
 						const on = item.kind === "toggle" && item.on;

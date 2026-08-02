@@ -6,6 +6,7 @@
 
 import type { InfoSnapshot } from "../../../info/briefing/pipeline";
 import { BriefingCardBody, Card, CardLabel } from "./HomeCard";
+import { Button } from "../ui/button";
 
 export function Vestibule({
   continueBook,
@@ -46,19 +47,16 @@ export function Vestibule({
                 <div className="text-[16px] font-medium leading-snug text-[#2a2a2a]">{continueBook.title}</div>
                 <div className="mt-1 text-[13px] text-[#999]">{continueBook.topicName}</div>
               </div>
-              <span className="mt-4 text-[13px] font-medium text-[#6d5ae0]">Resume →</span>
+              <span className="mt-4 text-[13px] font-medium text-primary">Resume →</span>
             </button>
           ) : (
             <div className="flex flex-1 flex-col justify-between">
               <p className="m-0 text-[14px] leading-relaxed text-[#777]">
                 Nothing open yet. Add a book to a topic in the library.
               </p>
-              <button
-                className="mt-4 w-fit rounded-lg border border-[#dcdcdc] px-4 py-2 text-[14px] text-[#555] coarse:min-h-[44px] hover:bg-[#f4f4f4]"
-                onClick={onOpenLibrary}
-              >
+              <Button variant="subtle" size="lg" className="mt-4 w-fit" onClick={onOpenLibrary}>
                 Go to library
-              </button>
+              </Button>
             </div>
           )}
         </Card>
@@ -78,12 +76,14 @@ export function Vestibule({
         </Card>
       </div>
 
-      <button
-        className="mt-8 inline-flex w-fit items-center text-[14px] text-[#888] underline-offset-4 coarse:mt-5 coarse:min-h-[44px] hover:text-[#555] hover:underline"
+      <Button
+        variant="link"
+        size="link"
+        className="mt-8 w-fit text-[14px] text-[#888] underline-offset-4 coarse:mt-5 coarse:min-h-[44px] coarse:px-0 coarse:py-0 hover:text-[#555] hover:underline"
         onClick={onOpenLibrary}
       >
         Library
-      </button>
+      </Button>
     </div>
   );
 }
