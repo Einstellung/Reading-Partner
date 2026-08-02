@@ -96,12 +96,12 @@ function RunView({ snap, onStop }: { snap: SlidesSnapshot; onStop: () => void })
             Planning the deck…{activity?.kind === "plan" && <> <LivenessHint activity={activity} /></>}
           </>
         )}
-        {st.planStatus === "failed" && <span className="text-red-600/90">Plan failed: {st.planError}</span>}
+        {st.planStatus === "failed" && <span className="text-destructive">Plan failed: {st.planError}</span>}
         {st.planStatus === "done" && st.assembleStatus !== "done" && st.runStatus === "running" && (
           <>Writing {st.slides.length} slides…{activity?.kind === "assemble" && " assembling…"}</>
         )}
         {st.runStatus === "done" && <span className="text-green-700">Deck ready.</span>}
-        {st.runStatus === "failed" && <span className="text-red-600/90">{st.runError}</span>}
+        {st.runStatus === "failed" && <span className="text-destructive">{st.runError}</span>}
         {st.runStatus === "stopped" && "Stopped."}
       </div>
 
@@ -264,7 +264,7 @@ export default function SlidesDialog({
                 ))}
               </div>
             )}
-            {openError && <p className="m-0 mt-1 text-[11px] text-red-600/90">{openError}</p>}
+            {openError && <p className="m-0 mt-1 text-[11px] text-destructive">{openError}</p>}
           </div>
         </div>
       </DialogContent>

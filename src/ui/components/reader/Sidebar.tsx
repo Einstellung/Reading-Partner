@@ -12,6 +12,7 @@
 
 import type { ReactNode } from "react";
 import { IconHighlight, IconMemory, IconNotes, IconOutline, IconSparkle } from "../common/icons";
+import { Button } from "../ui/button";
 import OutlineView from "./OutlineView";
 import TraceList from "./TraceList";
 import type { Annotation } from "../common/types";
@@ -33,10 +34,10 @@ const TABS: { id: SidebarTab; label: string; Icon: (p: { size?: number }) => JSX
 
 // A tab button. The active tab shows its label beside the icon so the panel is
 // self-describing without hover tooltips (which never fire on touch); inactive
-// tabs are icon-only. h-11 keeps every tab a 44px touch target.
-const TAB_BTN =
-	"flex h-11 items-center justify-center gap-1.5 rounded-md border-0 bg-transparent px-2 cursor-pointer text-[#555] can-hover:hover:bg-black/5 coarse:min-w-[44px]";
-const TAB_BTN_ACTIVE = "bg-black/[0.06] text-[#1b1b1b]";
+// tabs are icon-only. h-11 keeps every tab a 44px touch target. Geometry only:
+// the fill, the hover and the label colour come from the ghost variant.
+const TAB_BTN = "h-11 rounded-md px-2 text-muted-foreground coarse:min-w-[44px]";
+const TAB_BTN_ACTIVE = "bg-accent text-accent-foreground can-hover:hover:bg-accent";
 
 interface SidebarProps {
 	open: boolean;
@@ -94,19 +95,21 @@ export default function Sidebar({
 			    keeps the slide off the main thread. */}
 			<aside
 				className={
-					"absolute left-0 top-0 z-30 flex h-full flex-col border-r border-[#dcdcdc] bg-white shadow-xl [will-change:transform] transition-transform duration-200 ease-out " +
+					"absolute left-0 top-0 z-30 flex h-full flex-col border-r border-border bg-white shadow-xl [will-change:transform] transition-transform duration-200 ease-out " +
 					(open ? "translate-x-0" : "pointer-events-none -translate-x-full")
 				}
 				style={{ width: `min(${PANEL_WIDTH}px, 85vw)` }}
 				aria-hidden={!open}
 			>
-				<div className="flex flex-none items-center gap-0.5 border-b border-[#dcdcdc] px-1.5 py-1">
+				<div className="flex flex-none items-center gap-0.5 border-b border-border px-1.5 py-1">
 					{TABS.map(({ id, label, Icon }) => {
 						const active = tab === id;
 						return (
-							<button
+							<Button
 								key={id}
 								type="button"
+								variant="ghost"
+								size={null}
 								className={`${TAB_BTN} ${active ? TAB_BTN_ACTIVE : ""}`}
 								title={label}
 								aria-label={label}
@@ -115,7 +118,7 @@ export default function Sidebar({
 							>
 								<Icon size={18} />
 								{active && <span className="text-[13px] font-medium">{label}</span>}
-							</button>
+							</Button>
 						);
 					})}
 				</div>

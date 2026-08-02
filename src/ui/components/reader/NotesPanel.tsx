@@ -143,7 +143,7 @@ function ChapterSection({
       )}
 
       {chapter.status === "failed" && chapter.error && (
-        <div className="mt-1 text-[11px] text-red-600/90">{chapter.error}</div>
+        <div className="mt-1 text-[11px] text-destructive">{chapter.error}</div>
       )}
 
       {chapter.status === "done" && (
@@ -284,7 +284,7 @@ export default function NotesPanel({
           {state.planStatus === "pending" && "Waiting to plan…"}
           {state.planStatus === "failed" && (
             <span className="flex items-center gap-1.5">
-              <span className="text-red-600/90">Plan failed: {state.planError}</span>
+              <span className="text-destructive">Plan failed: {state.planError}</span>
               <Button type="button" variant="outline" size="xs" className="text-neutral-500" onClick={onRetryPlan} disabled={running}>
                 Retry
               </Button>
@@ -332,7 +332,7 @@ export default function NotesPanel({
         )}
         {state.overviewStatus === "failed" && (
           <div className="border-b border-[#eee] px-3 py-2 text-[11px]">
-            <span className="text-red-600/90">Framework failed: {state.overviewError}</span>{" "}
+            <span className="text-destructive">Framework failed: {state.overviewError}</span>{" "}
             <Button type="button" variant="outline" size="xs" className="text-neutral-500" onClick={onRegenerateOverview} disabled={running}>
               Retry
             </Button>

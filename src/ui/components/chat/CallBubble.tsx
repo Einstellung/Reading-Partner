@@ -6,6 +6,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconExpand } from '../common/icons';
 import { Composer, MessageList, type ComposerVoice } from './chat';
+import { Button } from '../ui/button';
 import DeleteThreadButton from './DeleteThreadButton';
 import { overlayLayerOpen } from '../common/overlay-layer';
 import { fitPanelWidth, placePanel, pointAnchor } from '../common/panel-position';
@@ -100,15 +101,17 @@ export default function CallBubble({
 				<span className="text-[11px] font-medium uppercase tracking-wide text-neutral-400">Reading with AI</span>
 				<div className="flex items-center gap-0.5">
 					{onDelete && <DeleteThreadButton onDelete={onDelete} />}
-					<button
+					<Button
 						type="button"
+						variant="ghost"
+						size={null}
 						title="Expand"
 						aria-label="Expand"
 						onClick={onExpand}
-						className="flex h-6 w-6 coarse:h-11 coarse:w-11 items-center justify-center rounded-md text-neutral-500 hover:bg-black/5"
+						className="h-6 w-6 rounded-md text-neutral-500 coarse:h-11 coarse:w-11"
 					>
 						<IconExpand size={15} />
-					</button>
+					</Button>
 				</div>
 			</div>
 
