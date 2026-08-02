@@ -8,8 +8,12 @@
 // while the window is not focused), a live region announcement, swipe to
 // dismiss, and F8 to move focus into the stack.
 
+//
+// Every wrapper here is a forwardRef: React 18 drops a ref given to a plain
+// function component and warns only in a development build (docs/pitfall/95).
+
 import { cva, type VariantProps } from "class-variance-authority";
-import type * as React from "react";
+import * as React from "react";
 import { Toast as ToastPrimitive } from "radix-ui";
 
 import { cn } from "@/ui/components/lib/utils";
@@ -20,12 +24,13 @@ const ToastProvider = ToastPrimitive.Provider;
 // The viewport is an <ol> rendered where it is mounted rather than portalled,
 // but it is `fixed` and so is outside the shell's padding all the same — the
 // safe area comes from the shared recipe (docs/pitfall/74).
-function ToastViewport({
-  className,
-  ...props
-}: React.ComponentProps<typeof ToastPrimitive.Viewport>) {
+const ToastViewport = React.forwardRef<
+  React.ElementRef<typeof ToastPrimitive.Viewport>,
+  React.ComponentProps<typeof ToastPrimitive.Viewport>
+>(function ToastViewport({ className, ...props }, ref) {
   return (
     <ToastPrimitive.Viewport
+      ref={ref}
       data-slot="toast-viewport"
       className={cn(
         "pointer-events-none fixed left-1/2 z-30 flex -translate-x-1/2 flex-col items-center gap-2",
@@ -35,7 +40,7 @@ function ToastViewport({
       {...props}
     />
   );
-}
+});
 
 const toastVariants = cva(
   "pointer-events-auto flex max-w-[420px] items-start gap-2 rounded-lg border px-3 py-2 text-sm shadow-md data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none",
@@ -50,42 +55,43 @@ const toastVariants = cva(
   },
 );
 
-function Toast({
-  className,
-  kind,
-  ...props
-}: React.ComponentProps<typeof ToastPrimitive.Root> &
-  VariantProps<typeof toastVariants>) {
+const Toast = React.forwardRef<
+  React.ElementRef<typeof ToastPrimitive.Root>,
+  React.ComponentProps<typeof ToastPrimitive.Root> & VariantProps<typeof toastVariants>
+>(function Toast({ className, kind, ...props }, ref) {
   return (
     <ToastPrimitive.Root
+      ref={ref}
       data-slot="toast"
       className={cn(toastVariants({ kind }), className)}
       {...props}
     />
   );
-}
+});
 
-function ToastDescription({
-  className,
-  ...props
-}: React.ComponentProps<typeof ToastPrimitive.Description>) {
+const ToastDescription = React.forwardRef<
+  React.ElementRef<typeof ToastPrimitive.Description>,
+  React.ComponentProps<typeof ToastPrimitive.Description>
+>(function ToastDescription({ className, ...props }, ref) {
   return (
     <ToastPrimitive.Description
+      ref={ref}
       data-slot="toast-description"
       className={cn("flex-1", className)}
       {...props}
     />
   );
-}
+});
 
 // The touch target is the button's own box, not a pseudo-element: there is room
 // beside the message for a 44px square.
-function ToastClose({
-  className,
-  ...props
-}: React.ComponentProps<typeof ToastPrimitive.Close>) {
+const ToastClose = React.forwardRef<
+  React.ElementRef<typeof ToastPrimitive.Close>,
+  React.ComponentProps<typeof ToastPrimitive.Close>
+>(function ToastClose({ className, ...props }, ref) {
   return (
     <ToastPrimitive.Close
+      ref={ref}
       data-slot="toast-close"
       className={cn(
         "flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center opacity-60 can-hover:hover:opacity-100 coarse:h-11 coarse:w-11",
@@ -94,6 +100,6 @@ function ToastClose({
       {...props}
     />
   );
-}
+});
 
 export { Toast, ToastClose, ToastDescription, ToastProvider, ToastViewport };

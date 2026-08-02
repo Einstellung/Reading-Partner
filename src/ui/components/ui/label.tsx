@@ -4,9 +4,13 @@
 // shadcn's generated Label is `font-medium leading-none select-none` — not
 // adopted: the labels here are regular weight, and taking the weight up would
 // reprint every settings card.
+//
+// forwardRef: LabelPrimitive.Root forwards its own ref to the <label>, but the
+// wrapper here is what a caller hands the ref to, and on React 18 a plain
+// function component drops it in silence (docs/pitfall/95).
 import * as LabelPrimitive from "@radix-ui/react-label";
 import { cva, type VariantProps } from "class-variance-authority";
-import type * as React from "react";
+import * as React from "react";
 
 import { cn } from "@/ui/components/lib/utils";
 
@@ -22,18 +26,18 @@ const labelVariants = cva("text-sm", {
   defaultVariants: { layout: "row" },
 });
 
-function Label({
-  className,
-  layout,
-  ...props
-}: React.ComponentProps<typeof LabelPrimitive.Root> & VariantProps<typeof labelVariants>) {
+const Label = React.forwardRef<
+  React.ElementRef<typeof LabelPrimitive.Root>,
+  React.ComponentProps<typeof LabelPrimitive.Root> & VariantProps<typeof labelVariants>
+>(function Label({ className, layout, ...props }, ref) {
   return (
     <LabelPrimitive.Root
+      ref={ref}
       data-slot="label"
       className={cn(labelVariants({ layout, className }))}
       {...props}
     />
   );
-}
+});
 
 export { Label, labelVariants };
