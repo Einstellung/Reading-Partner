@@ -1,6 +1,7 @@
 mod atomic_fs;
 mod image_proxy;
 mod migrate;
+mod navigation;
 mod oauth_callback;
 // Voice capture records the mic in Rust via cpal (WebKitGTK's getUserMedia is
 // unreliable on the Linux desktop). It is desktop-only: mobile webviews handle
@@ -21,9 +22,14 @@ mod voice;
 //
 // mobile_entry_point generates the entry the iOS/Android wrapper calls; it is
 // inert on desktop, where main.rs calls run() directly.
+//
+// navigation is ours: a plugin only because that is the one hook that reaches
+// windows created from tauri.conf.json. It cancels every navigation that would
+// leave the app's own page (navigation.rs).
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
+        .plugin(navigation::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_http::init())
