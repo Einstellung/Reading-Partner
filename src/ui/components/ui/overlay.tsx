@@ -18,6 +18,11 @@
 //
 // An anchored one takes a third thing, useOverlaySafePadding(), because half of
 // its clamping is Radix's and Radix's half is JS.
+//
+// One shape is not portalled — the full-screen page, which has to stay inside
+// the phone shell's sliding surface (ui/dialog.tsx). It still takes both of the
+// above: it is still fixed, so the shell's padding still misses it, and a press
+// on it still has to stop belonging to whatever is underneath.
 
 import { useEffect, useMemo, useState } from "react";
 
@@ -31,11 +36,20 @@ import {
 } from "@/ui/components/common/safe-area";
 
 export const OVERLAY_SAFE = {
-  // Centred in the viewport: AlertDialog, and Dialog in the fourth pass.
+  // Centred in the viewport: AlertDialog and Dialog.
   centered: "overlay-safe",
   // Pinned to the bottom edge: the toast viewport. An edge-pinned overlay only
   // needs the axis it is pinned to; its own max width keeps it off the sides.
   bottom: "bottom-safe-6",
+  // Covering the whole app: Settings, and whatever the fifth pass makes a page.
+  // Nothing is clamped, because the overlay is the viewport — what needs the
+  // insets is the column of content inside it, so this goes on that column and
+  // not on the page box. Keeping the box itself full-bleed is what lets its
+  // background reach the edges of the screen behind the notch while the text
+  // stays clear of it. max() rather than sum, for the reason in styles.css: the
+  // page's own margin has to survive a device that reports no inset, and where
+  // there is one it has already cleared the notch.
+  fullscreen: "pt-safe-10 pr-safe-6 pb-safe-10 pl-safe-6",
   // Anchored to a trigger: DropdownMenu, and Popover / Select later. This is
   // only the size half of the recipe — the position half is collisionPadding,
   // see useOverlaySafePadding. An anchored box moves rather than shrinks, so
