@@ -170,6 +170,22 @@
   overflow-y: auto;
 }
 
+/* The insets as a readable length. JS gets `env(safe-area-inset-*)` back
+   unresolved from getComputedStyle, so an overlay that clamps itself in JS
+   (Radix's popper takes its margin as a number) measures this hidden element's
+   padding instead — common/safe-area.ts. It carries no size and never paints. */
+@utility safe-probe {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  visibility: hidden;
+  pointer-events: none;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
 /* A fixed overlay pinned near a point: the anchor goes in --anchor-x/--anchor-y
    (viewport px) and the overlay's own size in --anchor-w/--anchor-h, and the
    clamp keeps it 2 spacing units inside the safe area on both axes. The clamp
