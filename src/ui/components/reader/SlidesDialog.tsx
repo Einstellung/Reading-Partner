@@ -3,6 +3,10 @@
 // in flight it shows the same visual language as notes generation — stage, per
 // slide progress, liveness seconds, Stop. Done runs list under "Generated decks"
 // with Open (system browser) and the file path. Tailwind-only, no emoji.
+//
+// A centred Dialog (docs/30, fourth pass). NotesPanel still mounts and unmounts
+// it, so `open` is constant and onOpenChange reports the closes Radix decides
+// on: Escape, and a press outside the box.
 
 import { useEffect, useState } from "react";
 import { openPath } from "@tauri-apps/plugin-opener";
@@ -20,6 +24,7 @@ import {
   type TalkEntry,
 } from "../../../reading/slides";
 import { Button } from "../ui/button";
+import { Dialog, DialogContent, DialogTitle } from "../ui/dialog";
 import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
 
@@ -172,13 +177,26 @@ export default function SlidesDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-6" onClick={onClose}>
-      <div
-        className="flex max-h-[85vh] w-[min(560px,100%)] flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+    >
+      {/* The height clamp is overlay-safe's alone (docs/30): a second max-height
+          at the same specificity would be settled by emit order. `w-[min(...)]`
+          rather than a max width for the same reason. `border-0` and `p-0`
+          because the box draws its own chrome; the flex column plus min-h-0 on
+          the body is what keeps the header in place while the body scrolls, so
+          the content's own overflow never has anything to do. */}
+      <DialogContent
+        aria-describedby={undefined}
+        className="z-[80] flex w-[min(35rem,100%)] flex-col gap-0 rounded-xl border-0 p-0 shadow-2xl"
       >
         <div className="flex items-center justify-between border-b border-[#eee] px-4 py-3">
-          <div className="text-[15px] font-semibold text-[#1b1b1b]">Generate a talk deck</div>
+          <DialogTitle className="text-[15px] font-semibold leading-normal text-[#1b1b1b]">
+            Generate a talk deck
+          </DialogTitle>
           <Button type="button" variant="outline" onClick={onClose}>
             Close
           </Button>
@@ -248,7 +266,7 @@ export default function SlidesDialog({
             {openError && <p className="m-0 mt-1 text-[11px] text-red-600/90">{openError}</p>}
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

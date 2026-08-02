@@ -2,13 +2,15 @@
 
 > 本文记录 UI 组件迁到 shadcn/ui 的共识。现状按 2026-08-01 的代码查证（`dab38fa` 之后）。
 >
-> 落地状态（2026-08-02）：第一、二、三版落地。
+> 落地状态（2026-08-02）：第一到第四版落地。
 >
 > 一：preflight、token 映射、Button / Input / Textarea / Label / Switch / Separator 六个原语，以及 `BTN` / `BTN_PRIMARY` / `BTN_SM` / `BTN_SM_DANGER` / `FIELD` / `INPUT` 全部调用点。
 >
 > 二：Toast 换 Radix Toast，`DeleteThreadButton` 换 AlertDialog，浮层安全区那层（`ui/overlay.tsx` + `overlay-safe`）和浮层层级登记（`common/overlay-layer.ts`）立起来。
 >
-> 三：`MoreMenu` 换 DropdownMenu，速读的 Filtered 折叠换 Collapsible，锚定型浮层的安全区补进 `ui/overlay.tsx`。Popover 没用上，没引。四五版未开始。
+> 三：`MoreMenu` 换 DropdownMenu，速读的 Filtered 折叠换 Collapsible，锚定型浮层的安全区补进 `ui/overlay.tsx`。Popover 没用上，没引。
+>
+> 四：`SlidesDialog` 换居中的 Dialog，`SettingsView` 换新的全屏 content 变体。第五版未开始。
 
 ---
 
@@ -44,7 +46,7 @@
 
 三、菜单。`MoreMenu` 换 DropdownMenu，速读的 Filtered 折叠换 Collapsible。Popover 只用在新地方。
 
-四、对话框。`SettingsView` 的全屏和 `SlidesDialog` 换 Dialog。风险最高，单独发一版：它同时碰到安全区、软键盘和滚动锁。
+四、对话框。`SettingsView` 的全屏和 `SlidesDialog` 换 Dialog。风险最高，单独发一版：它同时碰到安全区、软键盘和滚动锁。`SettingsView` 也换，走一个新的全屏 content 变体。
 
 五、收尾。Select、Tabs、Badge 按需要上。删掉过渡期留下的常量。
 
@@ -137,7 +139,7 @@ hover 底色统一在 `can-hover:` 后面，避免触摸上点一下就卡住 ho
 
 ## 浮层的规矩
 
-第三、四版的每个浮层照这一节抄。两件事都由 `src/ui/components/ui/overlay.tsx` 一处提供，`ui/` 下的每个 content 组件都要做。
+第三版起的每个浮层照这一节抄。两件事都由 `src/ui/components/ui/overlay.tsx` 一处提供，`ui/` 下的每个 content 组件都要做。
 
 **安全区**。`ui/overlay.tsx` 导出 `OVERLAY_SAFE`，content 组件用 `cn()` 把对应那条拼进自己的 className：
 
@@ -153,7 +155,19 @@ className={cn(OVERLAY_SAFE.centered, "fixed top-[50%] left-[50%] ...", className
 
   能保证的上限是锚点本身：`limitShift()` 不让浮层脱离锚点，所以锚点贴在视口边缘时浮层只能退到锚点边缘（坑 85）。外壳的 `p-safe` 把锚点推进安全区，这条才成立。
 
+- `fullscreen`（盖住整个 app 的页：`SettingsView`，第五版可能还有）= `pt-safe-10 pr-safe-6 pb-safe-10 pl-safe-6`，加在页面自己那根内容列上，不加在 content 盒上。content 盒是 `fixed inset-0 overflow-y-auto bg-background`，不夹取——它就是视口，`overlay-safe` 那套 `max-w` / `max-h` 对它没有意义，而它的底色必须铺到屏幕边缘，安全区只推内容。数值是原来写在 `SettingsView` 里那一组，搬进来一处，调用点不再各写各的。
+
+  这个变体的 content 有两处和别人不一样，都是必须的。
+
+  **不 Portal。** 手机壳的左缘返回手势拿 `transform` 平移整个界面，`position: fixed` 的子元素只有还在那棵子树里才跟着走；Portal 出去之后它既不动，也收不到挂在那个元素上的 capture 监听（坑 89）。渲染在原地，DOM 位置和换之前一样。实测：把壳平移 120px，旧版全屏页移 120、新版也移 120，居中那个 Portal 出去的移 0。
+
+  **不渲染 `DialogOverlay`。** Radix 把 `RemoveScroll` 放在 Overlay 里而不是 Content 里（坑 88），所以不渲染 Overlay 就没有滚动锁——全屏页盖住整个视口、自带滚动容器，底下没有东西需要锁，少一把锁就少一批要还原的 `body` 状态。也没有东西需要调暗，页面本身不透明。`modal` 仍然是 `true`：要的是焦点陷阱、身后一切的 `aria-hidden`、外部指针关掉，和 Escape。
+
 必须用 `cn()` 而不是拼字符串：`max-width` 只能有一条。shadcn 生成的 AlertDialogContent 自带 `max-w-[calc(100%-2rem)]` 和 `sm:max-w-lg`，和 `overlay-safe` 特异性相同，谁赢取决于 Tailwind 把自定义 utility 排在哪里。改成 `w-full` / `sm:w-[32rem]`，`max-width` 归 `overlay-safe` 独占。
+
+`cn()` 也只到修饰符串一模一样为止（坑 78）。DialogContent 原来照 AlertDialog 留了一条 `sm:w-[32rem]`，调用点写的 `w-[min(35rem,100%)]` 没有 `sm:`，去重去不掉，640px 以上一直是 512px 宽——盒子从 560 缩到 512，节点 diff 里看得清清楚楚。带断点的默认尺寸整条删掉，宽度归调用点，`w-full` 只做兜底。
+
+`asChild` 干脆不过 `cn()`，它把两串 className 拼起来（坑 87）。用 `asChild` 保住原来的标签时，样式写在包装组件上而不是子元素上。
 
 **层级登记**。content 组件的 children 里放一个 `<OverlayLayer />`，它不渲染 DOM，只在挂载期间给 `common/overlay-layer.ts` 的计数加一。放在 children 里而不是组件顶层：AlertDialogContent 一直在树上，真正随开关挂载卸载的是 Portal 里那棵。
 
@@ -211,6 +225,74 @@ Radix 带进来三件行为上的变化：倒计时在指针停在浮层上时�
 
 **依赖**：`dropdown-menu` 和 `collapsible` 的 registry 版本都不带新 npm 包（`radix-ui` 伞包已经在）。生成的 `dropdown-menu.tsx` 删掉了 Sub / RadioGroup / RadioItem / Shortcut 和 CheckboxItem 的对勾指示器——只有它们要 `lucide-react`，本项目不装。这次 `add` 没有覆盖 `button.tsx`（坑 81 仍然要每次 `git status`）。`collapsible.tsx` 生成时用了 `React.ComponentProps` 却没 import React，补上。产物：App chunk 637.6 → 682.4 KB（gzip 182.7 → 198.7），CSS 62.7 → 65.8 KB，涨的是 popper 那一套和 `tw-animate-css` 里菜单用到的进出场。
 
+## 第四版：两个对话框
+
+**都不用 `DialogTrigger`。** 两处的宿主（`App` / `PhoneApp` 的 `showSettings`、`NotesPanel` 的 `showSlides`）本来就挂载卸载这两个组件，保持原样：`open` 常真，`onOpenChange` 只用来接 Radix 自己决定的关闭。调用点一个字没改。顺带绕开了坑 83——Radix 的 Dialog trigger 开在 click 上，但根本没有 trigger 就不必论证。
+
+**`SlidesDialog`** 换居中的 `DialogContent`，`modal` 保持默认的 `true`：底下是阅读区，模态期间它不该滚也不该被点到。外壳那个手写的 `fixed inset-0 bg-black/40` 背板连同 `onClick={onClose}` 和内层的 `stopPropagation` 一起删掉，改由 Radix 的 Overlay 和 DismissableLayer 负责。盒子里的分工没动：头固定、`flex-1 min-h-0 overflow-y-auto` 的身子滚动，所以 `overlay-safe` 带来的那个 `overflow-y: auto` 在 content 上永远没事可做。
+
+**`SettingsView`** 换全屏变体，做法见「浮层的规矩」。原来写在内容列上的 `pt-safe-10` 那一组换成 `OVERLAY_SAFE.fullscreen`，值不变。
+
+**滚动锁**，开→关一轮实测（Chromium，鼠标与触摸各一遍，页面本身可滚且里面另有一个滚动容器）：
+
+| | `SlidesDialog` 开着 | 全屏设置页开着 |
+|---|---|---|
+| `body` `overflow` | hidden | visible |
+| `data-scroll-locked` | 在 | 无 |
+| `<head>` 里注进去的 `<style>` | 1 | 0 |
+| `body` `pointer-events` | none | none |
+| 兄弟节点 `aria-hidden` | 全部 true | 全部 true |
+| `padding-right` 补偿 | 0 | 0 |
+
+关闭之后两条路都逐项还原，`window.scrollY` 三次读数都是 500，里层滚动容器的 `scrollTop` 三次都是 300，页面中心 `elementFromPoint` 命中的元素 `pointer-events: auto`。唯一残留仍是 `body` 上一个空的 `style=""`（第二版同样）。
+
+**幽灵点击**。量的是它的前提：打开对话框的那一按抬手时，对话框在不在 DOM 里。Chromium 的触摸上下文（`hasTouch` + `isMobile`）里跑，三份产物同一段脚本：
+
+| | pointerup 时对话框已存在 | 同一按顺手触发了里面的控件 |
+|---|---|---|
+| 旧版 | 否 | 否 |
+| 新版 | 否 | 否 |
+
+Radix 的 Dialog trigger 开在 click 上，而且这里连 trigger 都没有，宿主的 `onClick` 就是原来那个。无头 WebKit 在这台机器上仍然起不来（缺 `libavif16`，没有 sudo），iOS 上的幽灵点击本身还是没有实机验证。
+
+**返回导航**。手机壳的 `goBack` 走 `resolveBack` → `pop`，Escape 走 Radix 的 `onOpenChange` → `onClose` → 同一个 `goBack`，两条路不交叉：Escape 那条不改栈以外的任何东西，系统返回键和左缘手势那条根本不经过 Radix。实测 Escape 关掉两个对话框各一次（旧版两个都关不掉，本来就没有 Escape）。左缘手势那条靠"不 Portal"成立，见上。
+
+**软键盘不做避让。** 两个对话框都是 `position: fixed` 贴在 layout viewport 上，`overlay-safe` 夹的是 `dvh`——iOS 的键盘只改 visual viewport，这两样都不动，所以键盘弹起时对话框一寸没移，WebKit 自己把 visual viewport 平移到聚焦的字段上，和换之前完全一样。加一个 `useKeyboardInset` 的偏移反而会和那次平移叠加。`CallView` 需要它是因为它的输入条钉在底边，必须在键盘上方待着而不是被滚动到。
+
+能量的部分（视口 900×800，模拟 336px 键盘，逐个字段 `focus()` 后取几何）两份产物逐字节相同：居中盒 `[162, 638]`、被盖住 174px、textarea `[362, 426]` 未被盖住；设置页四个字段的位置和"是否被盖"四项相同。量不到的是 WebKit 那次平移本身——桌面 Chromium 造不出真的软键盘，CDP 也没有对应的开关。
+
+**视觉变化清单**。除下面这些之外，23 个节区逐节点相同（`home-cards` 里那个转圈动画的取帧仍然是唯一噪声），两个对话框打开态各自 35 / 93 个节点的几何与计算样式逐字节相同：
+
+- 背板从 `bg-black/40` 变成 `bg-black/50`，和第二版的 AlertDialog 统一。居中盒的逐像素对比里 11134 个差异像素全部是这一条：超过 20 的 2052 个都在盒子边缘和圆角，白底透出来的灰从 152 变成 126。
+- 居中盒的高度上限从 `max-h-[85vh]` 变成 `overlay-safe`（`100dvh - 2 * max(inset, 16px)`），横向从"背板 `p-6` 撑出的 24px 边距"变成 16px 槽宽。这是「浮层的规矩」要求的：高度只能有一条。实际内容撑不到上限，桌面上盒子仍是 560×476。
+- 对话框标题从 `<div>` 变成 `DialogTitle`（`<h2>` / `<h1 asChild>`），行高显式写成 `leading-normal`（坑 90）。
+- 打开时 Radix 把焦点放到第一个可聚焦元素（Done / Close）。用指针打开时 `:focus-visible` 不成立，看不见焦点环——探针页里那 358 个差异像素是因为它从加载起就没有过任何交互，实测点击打开后 `focusVisible: false`。
+- Escape 现在能关掉两个对话框，原来都不能。
+
+**安全区**（`-safe` 改造产物，三组 inset）：
+
+| | 无 inset | 竖屏 59/34 | 横屏 50/50 |
+|---|---|---|---|
+| 全屏页盒子 | 900×800 | 900×800 | 900×800 |
+| 内容列 padding | 40/24/40/24 | 59/24/40/24 | 40/50/40/50 |
+| 居中盒 `max-w`/`max-h` | 868/768 | 868/682 | 800/758 |
+
+页面盒子在任何一组 inset 下都铺满，底色到边；内容列吃掉 inset。居中盒原来完全不跟 inset 走（`max-h` 恒为 680），现在跟。
+
+**层级登记**的对照（拆掉 `<OverlayLayer />` 单独构建一份 `dist-probe-noguard`，键盘打开对话框，再用指针按里面的一个按钮）：
+
+| | 气泡 | 按钮 |
+|---|---|---|
+| 有 `<OverlayLayer />` | 还在 | 触发一次 |
+| 没有 | 关闭并卸载 | 照样触发一次 |
+| 旧版 | 关闭并卸载 | 照样触发一次 |
+
+两个对话框各跑一遍，结果相同。
+
+**44px 与字号**（coarse 档位）：全项目 143 个可点元素、36 个低于 44px、2 个字段低于 16px，逐行和旧版相同（那 2 个是原生复选框，13×13）。对话框内部单独量：`SlidesDialog` 8 个可点元素、3 个低于 44px（三个原生复选框），Close / Generate / Open 都是 44 高，textarea 16px；设置页 21 个、9 个低于 44px（两个原生复选框和七个 42px 高的字段行，和旧版同数），所有文本字段与 select 都是 16px。
+
+**依赖**：`dialog` 的 registry 版本不带新 npm 包，这次 `add` 也没有覆盖 `button.tsx`（坑 81 仍然要每次 `git status`）。生成的文件删掉了右上角那个关闭按钮——全文件只有它要 `lucide-react`，而且两个对话框各自都有 Done / Close。`ui/dialog.tsx` 的这些约定由 `tests/ui/components/dialog-contract.test.ts` 盯着，因为一次 `shadcn add dialog` 就能把它们全部换回默认那份。产物：App chunk 682.38 → 682.34 KB，CSS 65.75 → 65.96 KB。Dialog 和 AlertDialog 共用同一批内部件，JS 一点没涨（换掉的手写背板和外壳正好抵掉）。
+
 ## 第一版的视觉变化
 
 逐屏对比的做法在下一节。除下面这些之外，22 个屏的每个节点的几何和计算样式逐字节相同。
@@ -252,6 +334,10 @@ Radix 带进来三件行为上的变化：倒计时在指针停在浮层上时�
 - `(hover: none)` 在桌面浏览器里改不出来，`-coarse` 那份改造只动 `pointer: coarse`。要量 `can-hover:` 的实际效果得开 Chromium 的移动模拟（`isMobile: true`），那时两个媒体查询才都成立。
 - 「换了实现之后行为等价」这类结论，对照组不止旧版：把新版里那一处保护单独去掉再构建一份（`--outDir dist-probe-noguard` / `-stock`），同一段脚本跑三份，才知道保护是不是真的在起作用。
 
-## 未决
+第四版加的几条：
 
-第四版的 Dialog 是否连 `SettingsView` 一起换——它是全屏页而不是对话框，用 Dialog 包可能是削足适履。
+- 驱动页要真的能滚：`html, body, #root { height: 100% }` 的探针页里 `window.scrollY` 恒为 0，滚动锁就没有东西可锁，还原也证明不了。另外给页面一个自己的滚动容器，两个 `scrollTop` 一起对照。
+- 打开对话框的那个按钮要 `position: fixed`。playwright 的 `click` 会先 `scrollIntoViewIfNeeded`，滚动位置本身是被测量的东西，被它改掉的话每一栏都对不上。
+- 模态对话框不能挂在静态探针页里长期开着：`modal` 给 `body` 加的 `pointer-events: none` 会让页面上其它节区一个都点不动。逐节点 dump 的页面和驱动页分开。
+- 软键盘造不出来。桌面 Chromium 没有软键盘，CDP 也没有对应的开关，能做的只有几何模拟：假定底部 K 像素不可见，逐个字段 `focus()` 之后量它落在哪。这能证明"新旧一样"，不能证明"iOS 上够用"。
+- 两个 dist 的同一个浮层，逐像素差异先看有多少超过阈值再下结论：背板透明度改了 10% 就会让盒子边缘和圆角上的每一个像素都进差异表（白底透出来 152 → 126），数字很大但只有一条原因。
