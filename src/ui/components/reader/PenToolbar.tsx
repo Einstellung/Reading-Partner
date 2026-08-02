@@ -6,8 +6,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconColorSwatch, IconHighlight, IconPointer, IconSparkle, IconUnderline } from '../common/icons';
 import { placePanel } from '../common/panel-position';
 import { useViewportSize } from '../common/useViewportSize';
-import { Button, buttonVariants } from '../ui/button';
-import { cn } from '../lib/utils';
+import { Button } from '../ui/button';
 import type { ColorEntry, Tool, ToolType } from '../common/types';
 
 interface PenToolbarProps {
@@ -173,18 +172,17 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 			<div className={horizontal ? 'mx-1 h-5 w-px bg-black/10' : 'my-0.5 h-px w-6 bg-black/10'} />
 
 			<div className="relative flex" ref={paletteRef}>
-				{/* A plain <button>, not <Button>: the swatch is the palette's anchor and
-				    has to hand back a node. Button is a function component with no
-				    forwardRef, so a ref on it never resolves (docs/pitfall/95). It wears
-				    the same variant through buttonVariants. */}
-				<button
+				{/* The swatch is the palette's anchor, so the ref has to resolve: Button
+				    forwards it (docs/pitfall/95). */}
+				<Button
 					ref={swatchRef}
 					type="button"
-					className={cn(
-						buttonVariants({ variant: 'ghost', size: null }),
-						`rounded-lg ${toolSize} text-neutral-700`,
-						paletteOpen && 'bg-secondary text-secondary-foreground can-hover:hover:bg-secondary',
-					)}
+					variant="ghost"
+					size={null}
+					className={
+						`rounded-lg ${toolSize} text-neutral-700` +
+						(paletteOpen ? ' bg-secondary text-secondary-foreground can-hover:hover:bg-secondary' : '')
+					}
 					title="Color"
 					aria-label="Color"
 					aria-haspopup="true"
@@ -192,7 +190,7 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 					onClick={pickSwatch}
 				>
 					<IconColorSwatch color={tool.color} size={20} />
-				</button>
+				</Button>
 
 				{paletteOpen && (
 					<div

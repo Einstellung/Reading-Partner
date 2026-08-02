@@ -9,10 +9,13 @@
 // - `size="link"` carries the 44px target as HIT_44's centred pseudo-element
 //   instead, because a text link inside a sentence cannot grow (docs/pitfall/75).
 // - hover fills are behind `can-hover:`, so a tap never leaves one stuck on.
+// - it is a forwardRef. The generated file is written for React 19, where `ref`
+//   is an ordinary prop; on React 18 a plain function component drops it and
+//   says nothing in a production build (docs/pitfall/95).
 
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
-import type * as React from "react";
+import * as React from "react";
 
 import { HIT_44 } from "@/ui/components/common/buttons";
 import { cn } from "@/ui/components/lib/utils";
@@ -72,22 +75,22 @@ const buttonVariants = cva(
   },
 );
 
-function Button({
-  className,
-  variant,
-  size,
-  asChild = false,
-  ...props
-}: React.ComponentProps<"button"> &
-  VariantProps<typeof buttonVariants> & { asChild?: boolean }) {
+// Under `asChild` the ref goes to Slot, which merges it with whatever ref the
+// replaced child already carries, so it still lands on that child's DOM node.
+const Button = React.forwardRef<
+  HTMLButtonElement,
+  React.ComponentProps<"button"> &
+    VariantProps<typeof buttonVariants> & { asChild?: boolean }
+>(function Button({ className, variant, size, asChild = false, ...props }, ref) {
   const Comp = asChild ? Slot : "button";
   return (
     <Comp
+      ref={ref}
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />
   );
-}
+});
 
 export { Button, buttonVariants };

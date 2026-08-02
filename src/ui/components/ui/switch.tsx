@@ -4,15 +4,22 @@
 //
 // The track stays 20px tall — it reads as a switch, not as a 44px slab — so
 // HIT_44 carries the touch target as a centred pseudo-element instead.
+//
+// forwardRef, like every wrapper here: React 18 drops a ref given to a plain
+// function component and warns only in a development build (docs/pitfall/95).
 import * as SwitchPrimitive from "@radix-ui/react-switch";
-import type * as React from "react";
+import * as React from "react";
 
 import { HIT_44 } from "@/ui/components/common/buttons";
 import { cn } from "@/ui/components/lib/utils";
 
-function Switch({ className, ...props }: React.ComponentProps<typeof SwitchPrimitive.Root>) {
+const Switch = React.forwardRef<
+  React.ElementRef<typeof SwitchPrimitive.Root>,
+  React.ComponentProps<typeof SwitchPrimitive.Root>
+>(function Switch({ className, ...props }, ref) {
   return (
     <SwitchPrimitive.Root
+      ref={ref}
       data-slot="switch"
       className={cn(
         "relative inline-flex h-5 w-9 flex-none cursor-pointer rounded-full transition-colors",
@@ -30,6 +37,6 @@ function Switch({ className, ...props }: React.ComponentProps<typeof SwitchPrimi
       />
     </SwitchPrimitive.Root>
   );
-}
+});
 
 export { Switch };

@@ -2,8 +2,11 @@
 // The `source` one appeared verbatim in six files and in two shades of purple;
 // one string ends that. Non-interactive, so there is no touch target and no
 // hover state here.
+//
+// forwardRef anyway: a pill is measured often enough, and React 18 drops a ref
+// handed to a plain function component without a word (docs/pitfall/95).
 import { cva, type VariantProps } from "class-variance-authority";
-import type * as React from "react";
+import * as React from "react";
 
 import { cn } from "@/ui/components/lib/utils";
 
@@ -22,14 +25,18 @@ const badgeVariants = cva("rounded-full px-2 py-0.5 text-[11px] font-medium", {
   defaultVariants: { variant: "source" },
 });
 
-function Badge({
-  className,
-  variant,
-  ...props
-}: React.ComponentProps<"span"> & VariantProps<typeof badgeVariants>) {
+const Badge = React.forwardRef<
+  HTMLSpanElement,
+  React.ComponentProps<"span"> & VariantProps<typeof badgeVariants>
+>(function Badge({ className, variant, ...props }, ref) {
   return (
-    <span data-slot="badge" className={cn(badgeVariants({ variant }), className)} {...props} />
+    <span
+      ref={ref}
+      data-slot="badge"
+      className={cn(badgeVariants({ variant }), className)}
+      {...props}
+    />
   );
-}
+});
 
 export { Badge, badgeVariants };

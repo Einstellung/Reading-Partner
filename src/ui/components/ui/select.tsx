@@ -10,8 +10,13 @@
 // The trigger wears the field chrome (ui/input.tsx) so it still matches the text
 // fields it sits beside, plus the 44px minimum every touch target in this app
 // keeps.
+//
+// Everything that renders a DOM node is a forwardRef. The generated file is
+// written for React 19, where `ref` is an ordinary prop; on React 18 the ref
+// never reaches the Radix part underneath and nothing says so
+// (docs/pitfall/95). Select itself stays plain: the root renders no DOM.
 import { Select as SelectPrimitive } from "radix-ui";
-import type * as React from "react";
+import * as React from "react";
 
 import { IconCheck, IconChevronDown, IconChevronUp } from "@/ui/components/common/icons";
 import { cn } from "@/ui/components/lib/utils";
@@ -22,17 +27,20 @@ function Select({ ...props }: React.ComponentProps<typeof SelectPrimitive.Root>)
   return <SelectPrimitive.Root data-slot="select" {...props} />;
 }
 
-function SelectValue({ ...props }: React.ComponentProps<typeof SelectPrimitive.Value>) {
-  return <SelectPrimitive.Value data-slot="select-value" {...props} />;
-}
+const SelectValue = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.Value>,
+  React.ComponentProps<typeof SelectPrimitive.Value>
+>(function SelectValue({ ...props }, ref) {
+  return <SelectPrimitive.Value ref={ref} data-slot="select-value" {...props} />;
+});
 
-function SelectTrigger({
-  className,
-  children,
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.Trigger>) {
+const SelectTrigger = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.Trigger>,
+  React.ComponentProps<typeof SelectPrimitive.Trigger>
+>(function SelectTrigger({ className, children, ...props }, ref) {
   return (
     <SelectPrimitive.Trigger
+      ref={ref}
       data-slot="select-trigger"
       className={cn(
         fieldClassName,
@@ -51,16 +59,16 @@ function SelectTrigger({
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   );
-}
+});
 
-function SelectContent({
-  className,
-  children,
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.Content>) {
+const SelectContent = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.Content>,
+  React.ComponentProps<typeof SelectPrimitive.Content>
+>(function SelectContent({ className, children, ...props }, ref) {
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content
+        ref={ref}
         data-slot="select-content"
         position="popper"
         sideOffset={4}
@@ -83,17 +91,17 @@ function SelectContent({
       </SelectPrimitive.Content>
     </SelectPrimitive.Portal>
   );
-}
+});
 
 // A row keeps the menu geometry of docs/30's third pass: 36px resting, 44px
 // under a coarse pointer, highlight left to Radix's own focus.
-function SelectItem({
-  className,
-  children,
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.Item>) {
+const SelectItem = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.Item>,
+  React.ComponentProps<typeof SelectPrimitive.Item>
+>(function SelectItem({ className, children, ...props }, ref) {
   return (
     <SelectPrimitive.Item
+      ref={ref}
       data-slot="select-item"
       className={cn(
         "relative flex w-full cursor-pointer items-center gap-2 rounded-md py-0 pr-8 pl-2.5",
@@ -112,14 +120,15 @@ function SelectItem({
       </span>
     </SelectPrimitive.Item>
   );
-}
+});
 
-function SelectScrollUpButton({
-  className,
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.ScrollUpButton>) {
+const SelectScrollUpButton = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.ScrollUpButton>,
+  React.ComponentProps<typeof SelectPrimitive.ScrollUpButton>
+>(function SelectScrollUpButton({ className, ...props }, ref) {
   return (
     <SelectPrimitive.ScrollUpButton
+      ref={ref}
       data-slot="select-scroll-up-button"
       className={cn("flex cursor-default items-center justify-center py-1 text-[#555]", className)}
       {...props}
@@ -127,14 +136,15 @@ function SelectScrollUpButton({
       <IconChevronUp size={16} />
     </SelectPrimitive.ScrollUpButton>
   );
-}
+});
 
-function SelectScrollDownButton({
-  className,
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.ScrollDownButton>) {
+const SelectScrollDownButton = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.ScrollDownButton>,
+  React.ComponentProps<typeof SelectPrimitive.ScrollDownButton>
+>(function SelectScrollDownButton({ className, ...props }, ref) {
   return (
     <SelectPrimitive.ScrollDownButton
+      ref={ref}
       data-slot="select-scroll-down-button"
       className={cn("flex cursor-default items-center justify-center py-1 text-[#555]", className)}
       {...props}
@@ -142,6 +152,6 @@ function SelectScrollDownButton({
       <IconChevronDown size={16} />
     </SelectPrimitive.ScrollDownButton>
   );
-}
+});
 
 export { Select, SelectContent, SelectItem, SelectTrigger, SelectValue };

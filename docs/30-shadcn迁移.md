@@ -2,7 +2,7 @@
 
 > 本文记录 UI 组件迁到 shadcn/ui 的共识。现状按 2026-08-01 的代码查证（`dab38fa` 之后）。
 >
-> 落地状态（2026-08-03）：五版全部落地，迁移完成。之后补了一次阅读区的配色收敛，见「阅读区的收敛」。
+> 落地状态（2026-08-03）：五版全部落地，迁移完成。之后补了一次阅读区的配色收敛（见「阅读区的收敛」）和一次 ref 透传修复（见「ref 透传」）。
 >
 > 一：preflight、token 映射、Button / Input / Textarea / Label / Switch / Separator 六个原语，以及 `BTN` / `BTN_PRIMARY` / `BTN_SM` / `BTN_SM_DANGER` / `FIELD` / `INPUT` 全部调用点。
 >
@@ -407,7 +407,7 @@ trigger 的宽度要自己占住：原生 `<select>` 按最宽的 option 定宽�
 - 停止键的深灰（`bg-neutral-800`）、暂存图片的黑色 ✕：token 里没有对应角色。
 - 中性灰文字（`text-neutral-400/500/600/700/800`）和卡片描边（`border-black/10`）：整套表面色阶，换名会动到几十个节点的实际色值，和这一版的目的无关。
 - 聊天输入区（textarea、发送、停止）、`ReadingPipCard`、`FigureCard` 的卡片本体、各处列表行：仍是手写 `<button>`，理由见「最终还剩的手写控件」。只换了颜色。
-- 笔工具的色板开关：它是色板的锚点，必须拿到节点，而 `<Button>` 吃掉 ref（坑 95）。保持原生 `<button>` 加 `buttonVariants()`，样式和 `<Button>` 一致。
+- 笔工具的色板开关一度留成原生 `<button>` 加 `buttonVariants()`，因为当时 `<Button>` 吃掉 ref。原语改成 `forwardRef` 之后换回 `<Button>`，见「ref 透传」。
 
 **验证**。探针页加了 9 个静态节区（笔工具四态、横排、痕迹列表、侧栏、大纲、记忆、图卡片、两张 pip 卡、麦克风三档、流式输入框）和 2 个驱动节区（色板展开、痕迹行滑开）。驱动节区单开一页（`#drive`）：`SettingsView` 是常开的 Radix 模态，`body` 上的 `pointer-events: none` 让同一页上别的东西一个都点不动。
 
@@ -419,7 +419,21 @@ trigger 的宽度要自己占住：原生 `<select>` 按最宽的 option 定宽�
 
 触摸目标：coarse 档位下 202 个可点元素，45 个低于 44px，逐行（节区 + 标签 + 文本 + 宽高 + 字号）前后完全相同。其中原有的 23 个节区仍是 143 个可点元素、27 个低于 44px，和第五版记的数字一致。
 
-`<Button>` 的透传实测（生产构建）：渲染出来的是原生 `<button>`，属性只多一个 `data-slot="button"`，`type` / `title` / `aria-label` / `aria-expanded` 原样带过，`onClick` 照常触发（痕迹行的删除是靠它驱动出来的）。唯一不透传的是 `ref`，见坑 95。
+`<Button>` 的透传实测（生产构建）：渲染出来的是原生 `<button>`，属性只多一个 `data-slot="button"`，`type` / `title` / `aria-label` / `aria-expanded` 原样带过，`onClick` 照常触发（痕迹行的删除是靠它驱动出来的）。`ref` 当时不透传，后来修了，见「ref 透传」。
+
+## ref 透传
+
+shadcn 生成的组件是照 React 19 写的（那里 `ref` 是普通 prop），本项目在 React 18，`ui/` 下没有一个是 `forwardRef`，传进去的 ref 恒为 `null`，`tsc` 全绿、生产构建没有警告（坑 95）。包 Radix 的那些也一样：接到 ref 的是这里的包装函数，ref 在到达 Radix 之前就没了。
+
+现在 `ui/` 下每个渲染 DOM 节点的组件都是 `forwardRef`，ref 落在它实际渲染的那个元素上。不改的是只有 context 和状态、不产生 DOM 的那几个：Radix 的 `Dialog` / `AlertDialog` / `DropdownMenu` / `Select` 根、各种 `Portal`、`ToastProvider`、`OverlayLayer`。
+
+`asChild` 下 ref 交给 `Slot`，它和被替换子元素自带的 ref 合并到同一个节点。实测（生产构建）：`<Button asChild ref={a}><a ref={b} /></Button>`，两个 ref 都拿到那个 `<a>`，`a.current === b.current`；旧版 `a.current` 是 `null`。
+
+`AlertDialogAction` / `AlertDialogCancel` 的 ref 写在里面那个 Radix 部件上，不写在外面的 `Button` 上——`asChild` 的那个是 `Button`，它渲染出来的就是这个子元素。
+
+护栏：`tests/ui/components/forward-ref-contract.test.ts`。`ui/` 下每个文件都要登记在表里，每个大写开头的导出要么是 `forwardRef` 产物要么在「不渲染 DOM」的名单里，每个 `React.forwardRef<` 都要有一处 `ref={ref}`。测试环境只有静态渲染，跑不到 ref，所以断言的是让 ref 能落地的那两件事；另外直接调 `Button.render(props, ref)` 看 ref 落在哪个元素上。
+
+笔工具的色板开关跟着换回 `<Button>`。它是色板的锚点，`useLayoutEffect` 量不到节点就整条早退、色板停在原点。实测（两份产物，同一段驱动脚本）：笔工具静息态和色板展开态共 21 + 若干节点的盒子、class 串和计算样式逐字节相同，属性只多一个 `data-slot="button"`；色板相对开关的位置三档都相同——正常展开 `dx 44`、贴视口右缘夹取 `dx 1`、右边放不下翻到左边 `dx -140`。32 个静态节区逐节点 diff 只有 1 处变化，是 `home-cards` 那个转圈动画的取帧（base 自己跟自己比也差）。
 
 ## 没引的
 
@@ -440,7 +454,7 @@ trigger 的宽度要自己占住：原生 `<select>` 按最宽的 option 定宽�
 
 `src/` 里现在没有 `<select>`、没有原生复选框；`<input>` 只剩 `ui/input.tsx` 里那一个和 `SourcesPage` 的 URL 输入框（info 侧的圆角和描边是另一套，coarse 下本来就是 44px / 16px）；`<textarea>` 只剩 `ui/textarea.tsx`、`AnnotationPopup` 和聊天输入区。
 
-这份清单说的是组件：这几个组件仍然自己写，不套 Radix。它们内部的按钮在「阅读区的收敛」里换成了 `<Button variant="ghost">`（同一个原生 `<button>`，样式来自变体表），侧栏标签行同理。裸 `<button>` 从 37 处降到 28 处：列表行、聊天输入区的三个键、`ReadingPipCard`、`FigureCard` 的卡片本体，以及笔工具的色板开关（要 ref，见坑 95）。
+这份清单说的是组件：这几个组件仍然自己写，不套 Radix。它们内部的按钮在「阅读区的收敛」里换成了 `<Button variant="ghost">`（同一个原生 `<button>`，样式来自变体表），侧栏标签行同理。裸 `<button>` 从 37 处降到 27 处：列表行、聊天输入区的三个键、`ReadingPipCard`、`FigureCard` 的卡片本体。
 
 ## 第一版的视觉变化
 
@@ -496,7 +510,7 @@ trigger 的宽度要自己占住：原生 `<select>` 按最宽的 option 定宽�
 - 静态 dump 的页面里挂着一个常开的 Radix 模态（`SettingsView`），它给 `body` 的 `pointer-events: none` 让整页都点不动。驱动节区要么单开一个入口（这次用 `#drive` 的 hash 分叉，同一份产物两个页面），要么另建一份探针。
 - 探针页整体是一列，`MessageList` 挂载时把最后一行滚进视口，等于把页面滚到几千像素外；驱动脚本先回滚到顶再点，或者干脆让驱动页只装要驱动的东西。
 - 新加的节区容器不要写死高度：coarse 那份每个控件 44px，短容器会把 flex 子元素压扁，量出来的是被挤过的尺寸（笔工具的 44×44 量成 44×23.4）。
-- `<Button>` 不透传 `ref` 而且不报错（坑 95）。换掉一个被 `ref` 拿着的按钮之前，先在产物里读一次 `ref.current`。
+- 原语当时不透传 `ref` 而且不报错（坑 95）。换掉一个被 `ref` 拿着的按钮之前，先在产物里读一次 `ref.current`。
 
 第五版加的几条：
 

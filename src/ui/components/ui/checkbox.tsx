@@ -5,16 +5,23 @@
 // pseudo-element, the same deal Switch takes: a 44px box beside a line of label
 // text would be a different control. Nothing in the layout moves and a fine
 // pointer sees no change.
+//
+// forwardRef, like every wrapper here: React 18 drops a ref given to a plain
+// function component and warns only in a development build (docs/pitfall/95).
 import { Checkbox as CheckboxPrimitive } from "radix-ui";
-import type * as React from "react";
+import * as React from "react";
 
 import { IconCheck } from "@/ui/components/common/icons";
 import { HIT_44 } from "@/ui/components/common/buttons";
 import { cn } from "@/ui/components/lib/utils";
 
-function Checkbox({ className, ...props }: React.ComponentProps<typeof CheckboxPrimitive.Root>) {
+const Checkbox = React.forwardRef<
+  React.ElementRef<typeof CheckboxPrimitive.Root>,
+  React.ComponentProps<typeof CheckboxPrimitive.Root>
+>(function Checkbox({ className, ...props }, ref) {
   return (
     <CheckboxPrimitive.Root
+      ref={ref}
       data-slot="checkbox"
       className={cn(
         "relative size-4 shrink-0 cursor-pointer rounded-[4px] border border-input bg-background",
@@ -33,6 +40,6 @@ function Checkbox({ className, ...props }: React.ComponentProps<typeof CheckboxP
       </CheckboxPrimitive.Indicator>
     </CheckboxPrimitive.Root>
   );
-}
+});
 
 export { Checkbox };

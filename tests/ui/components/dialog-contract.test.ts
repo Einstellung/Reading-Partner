@@ -22,12 +22,15 @@ const source = readFileSync(SRC, "utf8")
   .filter((line) => !line.trimStart().startsWith("//"))
   .join("\n");
 
-// The body of one exported component, from its declaration to the next one.
+// The body of one exported component, from its declaration to the next one. A
+// declaration is either a plain function or a forwardRef wrapping one.
+const DECL = /^(?:function (\w+)\(|const (\w+) = React\.forwardRef<)/gm;
+
 function component(name: string): string {
-  const start = source.indexOf(`function ${name}(`);
-  expect(start).toBeGreaterThan(-1);
-  const next = source.indexOf("\nfunction ", start + 1);
-  return source.slice(start, next === -1 ? undefined : next);
+  const decls = [...source.matchAll(DECL)];
+  const index = decls.findIndex((m) => (m[1] ?? m[2]) === name);
+  expect(index).toBeGreaterThan(-1);
+  return source.slice(decls[index].index, decls[index + 1]?.index);
 }
 
 test("the centred content clamps itself against the safe area", () => {

@@ -45,9 +45,11 @@ test("the select list is a popper, clamped and padded against the safe area", ()
 test("the select list registers an overlay layer, inside the content", () => {
   // Inside the content, not at the top of the component: what mounts and
   // unmounts with the list is the portalled subtree (docs/pitfall/80).
-  const start = select.indexOf("function SelectContent(");
-  const end = select.indexOf("\nfunction ", start + 1);
-  expect(select.slice(start, end)).toContain("<OverlayLayer />");
+  // A declaration is either a plain function or a forwardRef wrapping one.
+  const decls = [...select.matchAll(/^(?:function (\w+)\(|const (\w+) = React\.forwardRef<)/gm)];
+  const index = decls.findIndex((m) => (m[1] ?? m[2]) === "SelectContent");
+  expect(index).toBeGreaterThan(-1);
+  expect(select.slice(decls[index].index, decls[index + 1]?.index)).toContain("<OverlayLayer />");
 });
 
 test("the select trigger and its rows keep the 44px minimum", () => {
