@@ -2,7 +2,11 @@
 
 > 本文记录 UI 组件迁到 shadcn/ui 的共识。现状按 2026-08-01 的代码查证（`dab38fa` 之后）。
 >
-> 落地状态（2026-08-02）：第一版全部落地。preflight、token 映射、Button / Input / Textarea / Label / Switch / Separator 六个原语，以及 `BTN` / `BTN_PRIMARY` / `BTN_SM` / `BTN_SM_DANGER` / `FIELD` / `INPUT` 全部调用点。二到五版未开始。
+> 落地状态（2026-08-02）：第一、二版落地。
+>
+> 一：preflight、token 映射、Button / Input / Textarea / Label / Switch / Separator 六个原语，以及 `BTN` / `BTN_PRIMARY` / `BTN_SM` / `BTN_SM_DANGER` / `FIELD` / `INPUT` 全部调用点。
+>
+> 二：Toast 换 Radix Toast，`DeleteThreadButton` 换 AlertDialog，浮层安全区那层（`ui/overlay.tsx` + `overlay-safe`）和浮层层级登记（`common/overlay-layer.ts`）立起来。三到五版未开始。
 
 ---
 
@@ -46,7 +50,7 @@
 
 44px。shadcn 的按钮默认高 36/40px，触摸下不够。`coarse:` 变体要加到迁过去的组件上，不能因为换库丢掉这条线。`can-hover:` 同理——hover 才出现的控件在触摸上必须常驻可见。
 
-Portal 与安全区。Radix 的浮层挂到 `body` 底下，不在 shell 那个带 `p-safe` 的容器里，拿不到它的内边距。这和坑 74 同族。第一版就要把规矩定死：包一层统一的 content 组件，安全区在那里加一次，后面每个浮层都从它出。
+Portal 与安全区。Radix 的浮层挂到 `body` 底下，不在 shell 那个带 `p-safe` 的容器里，拿不到它的内边距。这和坑 74 同族。第二版把规矩立起来了，做法见「浮层的规矩」。
 
 `@layer` 顺序。项目是拆开 import 的（`theme.css` 和 `utilities.css` 分别引），Tailwind 不会替你排层。不显式写 `@layer theme, base, components, utilities;`，`@layer base` 会排到 utilities 之后，反过来压过每一个 utility class。层级顺序在级联里排在特异性之前。改动 `styles.css` 之后用 `grep '@layer' dist/assets/index-*.css` 确认首次出现顺序。
 
@@ -62,7 +66,13 @@ sanitize 仍是安全边界。速读正文是第三方 HTML，任何组件替换
 
 应用代码仍然用相对路径 import，`@/` 只留给 shadcn 生成的文件。
 
-依赖：`class-variance-authority`、`clsx`、`tailwind-merge`、`@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-separator`、`@radix-ui/react-switch`。没装 `lucide-react`（图标用项目自己的 `common/icons.tsx`）；以后 add 一个带图标的组件时会要它。也没装 `tw-animate-css`，第二版的 Toast / AlertDialog 会要。
+依赖：`class-variance-authority`、`clsx`、`tailwind-merge`、`@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-separator`、`@radix-ui/react-switch`，第二版加 `radix-ui` 和 `tw-animate-css`。没装 `lucide-react`（图标用项目自己的 `common/icons.tsx`）；以后 add 一个带图标的组件时会要它。
+
+`radix-ui` 是伞包，现在的 shadcn 生成的就是 `import { AlertDialog } from "radix-ui"`，不再是单包。它 `sideEffects: false`，rollup 只把用到的那个打进去：第二版整套 Toast + AlertDialog 只让产物 JS 涨 55 KB（未压缩），产物里 grep 不到 Accordion / NavigationMenu / Menubar。第一版的单包留着不动，`button.tsx` 仍从 `@radix-ui/react-slot` 进。
+
+`tw-animate-css` 不带 layer 引（`@import "tw-animate-css";`）：它自己有 `@theme` 和 `@utility`，套一层 layer 会把它们废掉。引完确认产物首次出现的层序仍是 properties → theme → base → components → utilities。
+
+`bunx shadcn@latest add` 会顺手覆盖 `button.tsx`。第一版那份变体表是手写的，add 之后 `git checkout src/ui/components/ui/button.tsx` 找回来。
 
 ## token 映射
 
@@ -85,6 +95,7 @@ sanitize 仍是安全边界。速读正文是第三方 HTML，任何组件替换
 | `--destructive` | `#b91c1c` | `BTN_SM_DANGER` |
 | `--destructive-foreground` | `#ffffff` | — |
 | `--destructive-border` | `#f0c8c8` | `BTN_SM_DANGER` |
+| `--destructive-hover` | `#991b1b` | 第二版加，`--primary-hover` 同理（实心红悬停变深） |
 | `--border` / `--input` | `#dcdcdc` | 到处 |
 | `--ring` | `#6c4fd0` | 定义了但这一版没用（现在没有一处自定义 focus 环，加上去就是视觉变化） |
 | `--radius` | `0.5rem` | `rounded-lg`；`--radius-sm/md/lg/xl` 由它算出来，数值和 Tailwind 默认完全相同 |
@@ -114,13 +125,58 @@ sanitize 仍是安全边界。速读正文是第三方 HTML，任何组件替换
 
 变体只管颜色和边框，尺寸只管几何，两者组合。表是从现有 122 个按钮归类出来的，不是 shadcn 的默认。
 
-变体：`default`（实心紫，带透明边框——它要和 `outline` 并排且不能矮 1px）、`cta`（实心紫、无边框、字重 medium，info 的样子）、`outline`（白底描边，`BTN` 那 17 处）、`subtle`（透明底描边、灰字，info 的 chip）、`secondary`（紫底 chip）、`destructive-outline`（红字描边，`BTN_SM_DANGER`）、`ghost`（图标按钮和阅读区顶栏）、`link`（无框无底，颜色留给调用点）。
+变体：`default`（实心紫，带透明边框——它要和 `outline` 并排且不能矮 1px）、`cta`（实心紫、无边框、字重 medium，info 的样子）、`outline`（白底描边，`BTN` 那 17 处）、`subtle`（透明底描边、灰字，info 的 chip）、`secondary`（紫底 chip）、`destructive-outline`（红字描边，`BTN_SM_DANGER`）、`destructive`（实心红，第二版加，AlertDialog 的 action）、`ghost`（图标按钮和阅读区顶栏）、`link`（无框无底，颜色留给调用点）。
 
 尺寸：`default`（`text-sm px-3 py-1.5 rounded-md`）、`sm`（`text-xs px-2 py-1`）、`xs`（阅读侧面板的 11px）、`chip`（info 的 13px `rounded-lg`）、`lg`（info 的 14px CTA）、`icon`（`h-8 w-8`，调用点用 `h-6`/`h-7`/`h-9` 覆盖）、`link`（`p-0` + `HIT_44`）。
 
 44px 写在尺寸里：会随内容长高的尺寸都以 `coarse:min-h-[44px]` 结尾，定尺寸的 `icon` 是 `coarse:h-11 coarse:w-11`，`link` 用 `HIT_44` 的居中伪元素（句子里的链接长不了）。调用点不再各自补。
 
 hover 底色统一在 `can-hover:` 后面，避免触摸上点一下就卡住 hover 态。覆盖变体的 hover 底色要写一模一样的修饰符链，见坑 78。
+
+## 浮层的规矩
+
+第三、四版的每个浮层照这一节抄。两件事都由 `src/ui/components/ui/overlay.tsx` 一处提供，`ui/` 下的每个 content 组件都要做。
+
+**安全区**。`ui/overlay.tsx` 导出 `OVERLAY_SAFE`，content 组件用 `cn()` 把对应那条拼进自己的 className：
+
+```tsx
+className={cn(OVERLAY_SAFE.centered, "fixed top-[50%] left-[50%] ...", className)}
+```
+
+- `centered`（Dialog / AlertDialog）= `overlay-safe` 这个 `@utility`，在 `styles.css` 里定义，同时管 `max-width`、`max-height` 和 `overflow-y: auto`。居中的盒子只能缩不能挪，所以每根轴夹的是两侧 inset 里较大的那个，另有 4 个 spacing 单位的槽宽兜底。
+- `bottom`（toast viewport）= `bottom-safe-6`。贴边的浮层只需要它贴的那根轴，横向由自己的 `max-w` 管。
+- 锚定型（第三版的 DropdownMenu / Popover）这一版没做。它的碰撞是 Radix 自己算的，要给它 `collisionPadding`，而 JS 读不到 `env()`；落这一版时在这里加 `anchored` 并写清楚怎么把 inset 送进去。
+
+必须用 `cn()` 而不是拼字符串：`max-width` 只能有一条。shadcn 生成的 AlertDialogContent 自带 `max-w-[calc(100%-2rem)]` 和 `sm:max-w-lg`，和 `overlay-safe` 特异性相同，谁赢取决于 Tailwind 把自定义 utility 排在哪里。改成 `w-full` / `sm:w-[32rem]`，`max-width` 归 `overlay-safe` 独占。
+
+**层级登记**。content 组件的 children 里放一个 `<OverlayLayer />`，它不渲染 DOM，只在挂载期间给 `common/overlay-layer.ts` 的计数加一。放在 children 里而不是组件顶层：AlertDialogContent 一直在树上，真正随开关挂载卸载的是 Portal 里那棵。
+
+计数是给应用自己那批「点外面就关」的浮层看的（`CallBubble`、`AnnotationPopup`，第三版还有 `MoreMenu`、`SourcesPage` 的 HealthDot、`PenToolbar`）。它们用 `ref.contains(e.target)` 判断，而 Portal 出去的子树永远不在那个 ref 里，于是落在对话框按钮上的那一按被读成「按在外面」，气泡先关掉，按钮再也收不到 click。改成先问一句 `if (overlayLayerOpen()) return;`：有层开着的时候，任何一按都属于那一层。用计数不用 DOM 归属，是因为要挡住的不只是 content，还有背板和 popper 的包装节点。
+
+## 第二版：Toast 与 AlertDialog
+
+**Toast 选 Radix Toast，不是 Sonner。** 硬要求是调用点 API 不变、种类和自动消失语义不变、视觉不变。Sonner 自带 store、自带注进 `<head>` 的样式表、自带堆叠几何（默认折叠成一摞，每条用 transform 绝对定位），要还原现在这个「amber/red 描边盒子、竖排、gap-2」得逐条盖它的内部结构，而且 `useToasts` 的列表会和它的 store 变成两份状态。Radix Toast 无样式，DOM 是自己的，所以盒子、堆叠和 44px 关闭按钮都还是现在这套。
+
+分工：列表还是 `common/Toast.tsx` 的 `useToasts`（`push` / `dismiss` 签名一个字没动），盒子和倒计时是 `ui/toast.tsx`。原来的 `window.setTimeout` 删掉，`duration` 交给 Radix。
+
+Radix 带进来三件行为上的变化：倒计时在指针停在浮层上时暂停，在窗口失焦时也暂停（`window.addEventListener("blur")`），焦点回来才续；Escape 关掉整摞；向右滑可以划掉一条。前两条是好的——用户没看见的 toast 不该过期——但要知道它在：Tauri 里弹原生文件对话框会让窗口失焦，那期间的 toast 不会自己走。
+
+**AlertDialog 替两步确认。** 原来是按一下变红「Confirm delete」、再按一下才删。换成 trigger + AlertDialog，语义等价（仍是一次明确确认），多了标题、说明和 Cancel，也多了背板。坑 67 那套 document 级 `pointerdown` 监听在 `DeleteThreadButton` 里整个删掉了：不再有任何东西挂在焦点上，Radix 自己管焦点陷阱。
+
+**视觉变化清单**。除下面这些之外，23 个节区逐节点相同、逐像素相同（`home-cards` 里 60 个像素差是那个转圈动画的取帧，base 自己跟自己比也差，`opacity` 0.818 / 0.669 / 0.656）：
+
+- toast 关闭按钮拿到 `cursor: pointer`，hover 变透明度移到 `can-hover:` 后面。
+- 删除按钮从裸 `<button>` 换成 `Button variant="ghost" size="icon"`，带来 `display: flex → inline-flex`、`gap: normal → 6px`、图标 `flex-shrink: 1 → 0`、`cursor: pointer`，几何不变；hover 底色跟着第一版的规矩挪到 `can-hover:` 后面。
+- toast 的 DOM 结构变了（Radix 加了一个 `role="region"` 的包装 div、一个 `<ol>`，每条从 `<div>` 变 `<li>`，另有一个只活 1 秒的朗读节点 portal 到 body），但两条 toast 的盒子位置、尺寸和每一条计算样式都逐字节相同。
+- 确认从行内红药丸变成对话框，红色取 `--destructive`（`#b91c1c`），不再是 `red-600`。
+
+**44px**（coarse 下）：toast 关闭 44×44，删除 trigger 44×44，Cancel 69.6×44，Delete 68.6×44。细指针下分别是 24×24 / 24×24 / 69.6×28 / 68.6×28，桌面密度没被撑大。全项目的触摸目标普查（143 个可点元素，36 个低于 44px）前后逐行相同。
+
+**Radix 模态副作用**，开→关一轮实测（Chromium，鼠标与触摸各一遍）：`body` 上的 `pointer-events: none`、`data-scroll-locked`、`overflow: hidden`、`<head>` 里那个 `<style>`、兄弟节点的 `aria-hidden` / `data-aria-hidden` 全部干净撤销，`window.scrollY` 一格没动（9876 → 9876 → 9876），`padding-right` 补偿始终是 0（这个 app 的 body 本来就不滚）。唯一残留是 `body` 上留下一个空的 `style=""` 属性。阅读区的 `user-select`（坑 49）不受影响：Radix 只碰 body 和它自己的 portal 根。
+
+单独验了最容易脏的那条路：删除本身会把整个通话关掉，宿主连着开着的对话框一起 unmount，对话框不是「关闭」而是「消失」。这一路同样干净——`pointer-events` 回 `auto`、滚动锁和注进去的 `<style>` 都没了，事后在页面中心做 `elementFromPoint` 命中的元素 `pointer-events: auto`。
+
+**WebKit 上的 tap**：无头 WebKit 跑不起来（本机 webkit-2215 缺 `libavif16`，装不了），只在 Chromium 的 `hasTouch` 上下文里验了——开对话框一按、Delete 一按就生效，不需要按两次。真机上还没验的是 iOS 的幽灵点击：从 tap 打开一个正好落在手指下方的浮层，touchend 合成的 click 可能直接打到刚挂上来的按钮。这里的对话框居中、trigger 在气泡右上角，两者不重叠，但第四版的全屏 Dialog 要留意。
 
 ## 第一版的视觉变化
 
@@ -147,6 +203,10 @@ hover 底色统一在 `can-hover:` 后面，避免触摸上点一下就卡住 ho
 探针页里 `position: fixed` 的东西（`SettingsView`、`Toast`、`AnnotationPopup`）会盖满整页，每个节区截的都是同一张图；给节区加 `transform: translate(0)` 让它成为 fixed 的包含块就好了。
 
 测 `coarse:` 变体：整份 dist 复制一遍，在副本的 CSS 里把 `@media (pointer:coarse)` 换成 `@media all`，另起一个端口。不能只在 HTML 里加一个改造过的 `<link>`，原因见坑 79。
+
+测安全区：同样的复制手法，把副本 CSS 里每个 `env(safe-area-inset-*)` 换成 `var(--sa-*, 0px)`，驱动脚本往 `:root` 上设这四个自定义属性就能给页面任意一组 inset。桌面浏览器的 `env()` 恒为 0，没有别的办法。改完等 400ms 再量：开场动画没跑完时 `getComputedStyle` 给的是过程值（150ms 时量到的 `max-height` 是 788.465px，实际是 782px）。
+
+要驱动的交互（浮层开合、确认、点外面）单独一个脚本，不走静态 dump：Portal 出去的节点不在任何 `[data-screen]` 里，逐节点 dump 看不见它们。探针里那个宿主组件要真的会卸载——`onClose` 只记一笔数不卸载的话，两种实现都能把删除跑通，问题就测不出来。想证明某个保护确实必要，就把它拆掉再单独构建一份产物（`--outDir dist-probe-noguard`）跑同一段脚本，对照两边的计数。
 
 纯浏览器里能起来的界面只有 Vestibule / Library / Settings（Tauri 存储调用会报错但 UI 正常渲染），其余全靠探针页。
 

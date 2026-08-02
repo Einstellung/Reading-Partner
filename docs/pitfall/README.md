@@ -106,6 +106,9 @@
 - [78-tailwind-merge-only-dedupes-identical-modifier-chains](./78-tailwind-merge-only-dedupes-identical-modifier-chains.md) — `cn()` 只在修饰符串一模一样时才去重，`can-hover:hover:` 覆盖不掉 `can-hover:enabled:hover:`，两条都留下按特异性决胜；`data-[orientation=vertical]:h-full` 同理压过 `h-5`
 - [79-entry-chunk-reinjects-its-own-stylesheet](./79-entry-chunk-reinjects-its-own-stylesheet.md) — Vite 入口 chunk 运行期再插一遍原始样式表，改 HTML 里的 `<link>` 指向改造过的副本无效；要整份 dist 复制后原地改 CSS
 - [74-fixed-overlay-misses-shell-safe-area](./74-fixed-overlay-misses-shell-safe-area.md) — `position: fixed` 的包含块是视口，外壳按 `env(safe-area-inset-*)` 加的 padding 对它不存在，设置页被灵动岛压住、toast 落在 home indicator 上；`env()` 收进 `src/styles.css` 一组 `@utility`（`p-safe` / `pt-safe-*` / `bottom-safe-*` / `anchor-safe`），取 max(原有间距, inset) 而不是相加
+- [80-portalled-overlay-trips-the-host-outside-press](./80-portalled-overlay-trips-the-host-outside-press.md) — Radix 浮层 Portal 到 `<body>`，宿主那条「点外面就关」的 `pointerdown` 把落在对话框按钮上的第一按判成点外面，气泡先关、按钮收不到 click；改成全局层级计数 `overlayLayerOpen()`，有层开着就整条让路
+- [81-shadcn-add-rewrites-the-components-it-depends-on](./81-shadcn-add-rewrites-the-components-it-depends-on.md) — `shadcn add alert-dialog` 顺手把手写过的 `button.tsx` 换成默认那份（紫色、44px、`can-hover:` 全没），输出里只有一行 "Updated"；add 完先看 `git status`
+- [82-duration-200-alone-transitions-every-property](./82-duration-200-alone-transitions-every-property.md) — `duration-*` 不设 `transition-property`，初始值 `all` 让这个元素每个属性都走 200ms 过渡；量计算样式要等满动画时长，否则读到过程值
 
 ## AI 调用与上下文窗口
 

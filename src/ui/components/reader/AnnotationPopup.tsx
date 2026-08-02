@@ -4,6 +4,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconClose, IconColorSwatch, IconTrash } from '../common/icons';
+import { overlayLayerOpen } from '../common/overlay-layer';
 import { placePanel, pointAnchor } from '../common/panel-position';
 import { useViewportSize } from '../common/useViewportSize';
 import type { Annotation, ColorEntry } from '../common/types';
@@ -60,9 +61,12 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 	}, [anchor.x, anchor.y, annotation.id, viewport]);
 
 	// A press outside closes the popup. pointerdown, not mousedown, and capture:
-	// docs/pitfall/67-webkit-tap-does-not-focus-a-button.md.
+	// docs/pitfall/67-webkit-tap-does-not-focus-a-button.md. A press while an
+	// overlay layer is up belongs to that layer, which is portalled under <body>
+	// and so is never inside this ref (common/overlay-layer).
 	useEffect(() => {
 		function onDown(e: PointerEvent) {
+			if (overlayLayerOpen()) return;
 			if (ref.current && !ref.current.contains(e.target as Node)) onClose();
 		}
 		document.addEventListener('pointerdown', onDown, true);

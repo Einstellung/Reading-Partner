@@ -40,6 +40,11 @@ const buttonVariants = cva(
           "border border-secondary-border bg-secondary text-secondary-foreground can-hover:enabled:hover:bg-secondary-hover",
         "destructive-outline":
           "border border-destructive-border bg-background text-destructive can-hover:enabled:hover:bg-muted",
+        // Filled red. The second pass adds it for AlertDialog's action, the one
+        // place a destructive act is the main button of a dialog rather than an
+        // inline second press.
+        destructive:
+          "border border-transparent bg-destructive text-destructive-foreground can-hover:enabled:hover:bg-destructive-hover",
         // No `enabled:` here, unlike the variants above: these are overridden
         // with a different fill often enough that the modifier chain has to be
         // the one a call site would write, or tailwind-merge keeps both and the
