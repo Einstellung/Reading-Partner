@@ -44,6 +44,7 @@ import {
   type GestureState,
 } from "./paged-gesture";
 import { LAYOUT_SETTINGS, readingPosition, type VisiblePage, type ZoomLock } from "./layout-modes";
+import { PAGE_FRAME } from "./page-frame";
 import {
   centeredScrollX,
   geometrySettled,
@@ -1214,12 +1215,19 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
       // The document is opened explicitly in wireEngine (initialDocuments can
       // hang at progress 0 when the load races the engine coming up).
       createPluginRegistration(DocumentManagerPluginPackage, {}),
-      createPluginRegistration(ViewportPluginPackage),
+      // The gap is the padding the viewport puts around the whole document, and
+      // the number every fit is resolved against (page-frame.ts). Zero: the
+      // sheet reaches the edges of the screen.
+      createPluginRegistration(ViewportPluginPackage, { viewportGap: PAGE_FRAME.viewportGap }),
       // No spread plugin: the reader is one page per row, always. Scroll and
       // zoom both take it as optional and fall back to a page per row, which is
       // exactly the layout paged mode is locked to.
       createPluginRegistration(ScrollPluginPackage, {
         defaultBufferSize: 1,
+        // Unscaled page units; the plugin multiplies by the current scale. The
+        // separator between two sheets, and in paged mode the only thing that
+        // keeps the next page off a screen its neighbour exactly fills.
+        defaultPageGap: PAGE_FRAME.pageGap,
         // Paged mode lays pages out in a horizontal strip so the neighbour page
         // is already rendered adjacent for the follow-finger flip.
         defaultStrategy:
@@ -1314,7 +1322,7 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
         width: "100%",
         position: "relative",
         overflow: "hidden",
-        backgroundColor: "#f1f3f5",
+        backgroundColor: PAGE_FRAME.background,
         ...props.style,
       }}
       className={props.className}
@@ -1322,7 +1330,10 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
       <EmbedPDF engine={engine} plugins={plugins} onInitialized={onInitialized}>
         {({ activeDocumentId }) =>
           activeDocumentId && (
-            <Viewport documentId={activeDocumentId} style={{ height: "100%", width: "100%", backgroundColor: "#f1f3f5" }}>
+            <Viewport
+              documentId={activeDocumentId}
+              style={{ height: "100%", width: "100%", backgroundColor: PAGE_FRAME.background }}
+            >
               {/* enableWheel:false keeps the desktop scroll-wheel scrolling (not
                   zooming); pinch only fires on a two-finger touch, so mouse and
                   keyboard paths are untouched. */}
@@ -1331,6 +1342,22 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
                 documentId={activeDocumentId}
                 renderPage={({ pageIndex, width, height }) => (
                   <PagePointerProvider documentId={activeDocumentId} pageIndex={pageIndex}>
+                    {/* The sheet: the paper under the raster and the edge that
+                        separates it from the next one. Its box is the page box
+                        (inset:0), so it cannot move a tile, a selection rect or
+                        an annotation relative to the page; the edge is a
+                        box-shadow, which paints outside that box and does not
+                        enter the scrollable area. */}
+                    <div
+                      aria-hidden
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        backgroundColor: PAGE_FRAME.pageBackground,
+                        boxShadow: PAGE_FRAME.pageEdge,
+                        pointerEvents: "none",
+                      }}
+                    />
                     {/* Base raster fixed at scale 1 (CSS-scaled by the page box);
                         tiles carry the crisp high-res for the visible area only.
                         Both are non-interactive so pointer events reach selection. */}

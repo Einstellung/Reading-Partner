@@ -74,3 +74,24 @@ worker 引擎（本想拿它把光栅化挪出主线程）实测在 openDocument
 对照组（回答"是不是本来就慢"）：zotero 引擎同一本 PDF，`createView` → `onInitialized` ~1020ms（dev）。即换 EmbedPDF 前基线也在 1s 量级。用户感到的"变慢"是真回归——改前 EmbedPDF 冷 dev 首开 2.9s（每次重建引擎 + 默认 buffer），修后 prod 947ms / 暖 dev 929ms，回到与 zotero 同量级甚至更快。
 
 WebKitGTK 真机毫秒数没量（同缩放，pitfall 14 OOM 顾虑没跑 tauri dev）。埋点留在代码里（`window.__epdfPerf`，开销可忽略），真机可直接读。
+
+## 阅读区排版（2026-08-03，"页面四周有留白、页与页之间一条灰带"）
+
+留白只有一个来源：`Viewport` 组件把 viewport 插件的 `viewportGap` 当 `padding` 写在滚动容器上。它同时是 zoom 插件解 fit 的减数（`clientWidth - 2*gap`）和 scroll 插件每个页面滚动位置的加数——所以那 10px 不只是边距，还让"整页适配"比屏幕小 2×gap（坑 95）。页与页之间的灰带是 scroll 插件的 `defaultPageGap`（未缩放页单位，乘 scale 后既是 DOM 的 flex `gap` 也是 virtual items 的步长，坑 96），缝里露出的就是视口背景色。
+
+改前后的实测数（demo.pdf，页 612×792；`spike-harness` + playwright 逐状态量页盒）：
+
+| | 竖屏 834×1194 | 横屏 1194×834 |
+|---|---|---|
+| 改前 fit-width | 1.33，页宽 813.95，四周 10px | 1.918，页宽 1173.81 |
+| 改前 fit-page（翻页） | 1.33，同上 | 1.027，页宽 628.52 |
+| 改前页间距 | 13.3px（竖排与翻页同） | 19.18px / 翻页 10.27px |
+| 改后 fit-width | 1.362，页宽 833.53，四周 0 | 1.95，页宽 1193.39 |
+| 改后 fit-page（翻页） | 1.362，页宽 833.53 | 1.053，页宽 644.42 |
+
+现在这几个数由 `src/reading/engine/page-frame.ts` 一处给出（有单测），两套取值：
+
+- `hairline`：`pageGap 2`（竖屏 fit 下 2.72px）+ 每页 1px 描边 `0 0 0 1px rgba(15,23,42,.10)`，底色 `#dfe3e8`。两页之间是一条线。
+- `float`：`pageGap 8`（10.9px）+ 每页投影 `0 1px 4px rgba(15,23,42,.22)`，底色 `#d5d9de`。纸浮在深一点的桌面上。
+
+纸张底色和描边画在 `inset: 0` 的一层上，也就是页盒本身，所以标注层、选区层、tile 层的坐标一个像素都没动。验证方式是把种子高亮换算回未缩放页坐标：两种朝向、竖排/翻页、fit / 两级放大 / fit-width / 跳页 / 选中标注各状态下恒为 `(100, 130, 200, 12)`，最大偏差 0.009 页单位。`box-shadow` 不进滚动区，竖排下 `scrollWidth` 仍等于 `clientWidth`。
