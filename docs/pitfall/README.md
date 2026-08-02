@@ -113,6 +113,10 @@
 - [84-js-cannot-read-env-safe-area-inset](./84-js-cannot-read-env-safe-area-inset.md) — 自定义属性里的 `env(safe-area-inset-*)` 从 `getComputedStyle` 拿回来还是那串原文，`parseFloat` 得 NaN；要读数字得让真属性吃掉它（隐藏探针元素的 padding），只有夹取在 JS 里的浮层才需要
 - [85-collision-padding-does-not-save-an-anchor-inside-the-inset](./85-collision-padding-does-not-save-an-anchor-inside-the-inset.md) — `limitShift()` 不让浮层脱离锚点，锚点贴着视口边缘时菜单只能退到锚点边缘；锚定型浮层最多和它的锚点一样安全，外壳的 `p-safe` 才是根
 - [86-transformed-popper-drops-subpixel-text](./86-transformed-popper-drops-subpixel-text.md) — popper 的 `transform` 让浮层成为合成层，字从次像素抗锯齿变灰度，逐像素对比每一行文字都在差异图上发亮；两边都加 `--disable-lcd-text` 再比
+- [87-aschild-concatenates-classnames](./87-aschild-concatenates-classnames.md) — `asChild` 把包装组件和子元素的 className 拼成一串而不是过 `cn()`，写在子元素上的 `font-bold` 压不掉默认的 `font-semibold`，谁赢看 Tailwind 的排序；样式一律写在包装组件上
+- [88-radix-dialog-keeps-the-scroll-lock-on-the-overlay](./88-radix-dialog-keeps-the-scroll-lock-on-the-overlay.md) — `RemoveScroll` 包在 `DialogOverlay` 里，不渲染 Overlay 就没有滚动锁，`modal={true}` 也没用（它只管焦点陷阱、`aria-hidden` 和外部指针）；全屏页正好不需要那把锁
+- [89-portalled-overlay-leaves-the-phone-sliding-surface](./89-portalled-overlay-leaves-the-phone-sliding-surface.md) — Portal 出去的全屏页既不跟着手机壳的 `transform` 平移（`fixed` 的包含块回到视口），也接不到挂在那个元素上的手势监听；全屏那种 content 渲染在原地，`Dialog.Portal` 本来就是可选的
+- [90-leading-normal-is-not-the-inherited-line-height](./90-leading-normal-is-not-the-inherited-line-height.md) — shadcn 的文本原语自带 `leading-none`，还原原来的行高要写 `leading-normal`（1.5，preflight 给 `html` 的那个），`leading-[normal]` 是字体建议行距、少 3px
 
 ## AI 调用与上下文窗口
 
