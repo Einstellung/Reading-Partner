@@ -56,6 +56,7 @@
 - [70-browser-claims-the-swipe-before-the-pointer-does](./70-browser-claims-the-swipe-before-the-pointer-does.md) — 只用 pointer 事件写的左缘右滑必被 `pointercancel` 掐死（浏览器判滚动不看方向可行性），`touch-action` 的交集只算到滚动容器为止、挂外层无效；要在非 passive 的 `touchmove` 上 3px 就抢并全程 prevent，另加 `overscroll-behavior-x: none` 挡掉浏览器自己的历史手势
 - [71-first-touchmove-is-already-past-the-slop](./71-first-touchmove-is-already-past-the-slop.md) — 抢触摸的阈值在 1–16px 之间毫无区别：浏览器越过自己的 slop 才派发第一个 `touchmove`，那一下的位移已经是 16（手指更快就更大）；这个数只需小到任何第一个 move 都能满足，不是调参
 - [83-radix-menu-opens-on-pointerdown-and-the-lift-picks-a-row](./83-radix-menu-opens-on-pointerdown-and-the-lift-picks-a-row.md) — Radix 的菜单 trigger 在 pointerdown 上开，`MenuItem` 又会在没见过 pointerdown 的 pointerup 上自己 click，同一次点按能既开菜单又选中手指下方那一行；trigger 改成在 click 上开，并记住按下时的开合状态（关闭走的是 document 上的 dismiss，排在 React 之后）
+- [92-radix-select-already-opens-on-click-for-a-finger](./92-radix-select-already-opens-on-click-for-a-finger.md) — `SelectTrigger` 按指针类型分路（鼠标 pointerdown、手指和笔 click），坑 83 那套绕法照抄过去会双开；实测一按抬手时列表还不在 DOM 里
 
 ## 网络与 CSP
 
@@ -117,6 +118,8 @@
 - [88-radix-dialog-keeps-the-scroll-lock-on-the-overlay](./88-radix-dialog-keeps-the-scroll-lock-on-the-overlay.md) — `RemoveScroll` 包在 `DialogOverlay` 里，不渲染 Overlay 就没有滚动锁，`modal={true}` 也没用（它只管焦点陷阱、`aria-hidden` 和外部指针）；全屏页正好不需要那把锁
 - [89-portalled-overlay-leaves-the-phone-sliding-surface](./89-portalled-overlay-leaves-the-phone-sliding-surface.md) — Portal 出去的全屏页既不跟着手机壳的 `transform` 平移（`fixed` 的包含块回到视口），也接不到挂在那个元素上的手势监听；全屏那种 content 渲染在原地，`Dialog.Portal` 本来就是可选的
 - [90-leading-normal-is-not-the-inherited-line-height](./90-leading-normal-is-not-the-inherited-line-height.md) — shadcn 的文本原语自带 `leading-none`，还原原来的行高要写 `leading-normal`（1.5，preflight 给 `html` 的那个），`leading-[normal]` 是字体建议行距、少 3px
+- [91-select-item-aligned-ignores-the-safe-area-recipe](./91-select-item-aligned-ignores-the-safe-area-recipe.md) — shadcn 生成的 `SelectContent` 是 `position="item-aligned"`，不发布 `--radix-popper-available-*` 也不收 `collisionPadding`，`OVERLAY_SAFE.anchored` 和安全区那半全部静默失效；写死 `position="popper"`
+- [93-a-select-trigger-is-as-wide-as-the-chosen-value](./93-a-select-trigger-is-as-wide-as-the-chosen-value.md) — 原生 `<select>` 按最宽的 option 定宽，Radix 的 trigger 只装选中那一行，换值就跳宽；把所有选项零高 `invisible` 叠进同一个 grid 单元格占住列宽
 
 ## AI 调用与上下文窗口
 

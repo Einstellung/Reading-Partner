@@ -348,6 +348,21 @@ export function IconChevronDown({ size = 20 }: IconProps) {
 	);
 }
 
+// Up chevron for a select list that has more above the visible rows.
+export function IconChevronUp({ size = 20 }: IconProps) {
+	return (
+		<svg
+			{...svgProps(size)}
+			stroke="currentColor"
+			strokeWidth="1.6"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<path d="M5.5 12.5L10 8L14.5 12.5" />
+		</svg>
+	);
+}
+
 // Gear for the settings entry.
 export function IconGear({ size = 20 }: IconProps) {
 	return (

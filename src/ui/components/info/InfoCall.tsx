@@ -36,6 +36,7 @@ import {
 import { addSource, hasSources } from "../../../info/sources/source-store";
 import { saveProfile } from "../../../memory/profile";
 import { getInfoPipeline } from "../../../info/briefing/live";
+import { Badge } from "../ui/badge";
 import CallView from "../chat/CallView";
 import ChatPipCard from "../chat/ChatPipCard";
 import { callLayout, navigateAway } from "../chat/call-layout";
@@ -472,9 +473,7 @@ export function InfoCall({
             title={position.title}
             badge={
               position.sourceName ? (
-                <span className="shrink-0 rounded-full bg-[#f0eefb] px-2 py-0.5 text-[11px] font-medium text-[#6d5ae0]">
-                  {position.sourceName}
-                </span>
+                <Badge className="shrink-0">{position.sourceName}</Badge>
               ) : undefined
             }
             body={

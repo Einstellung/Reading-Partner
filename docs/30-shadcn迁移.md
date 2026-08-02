@@ -2,7 +2,7 @@
 
 > 本文记录 UI 组件迁到 shadcn/ui 的共识。现状按 2026-08-01 的代码查证（`dab38fa` 之后）。
 >
-> 落地状态（2026-08-02）：第一到第四版落地。
+> 落地状态（2026-08-02）：五版全部落地，迁移完成。
 >
 > 一：preflight、token 映射、Button / Input / Textarea / Label / Switch / Separator 六个原语，以及 `BTN` / `BTN_PRIMARY` / `BTN_SM` / `BTN_SM_DANGER` / `FIELD` / `INPUT` 全部调用点。
 >
@@ -10,7 +10,11 @@
 >
 > 三：`MoreMenu` 换 DropdownMenu，速读的 Filtered 折叠换 Collapsible，锚定型浮层的安全区补进 `ui/overlay.tsx`。Popover 没用上，没引。
 >
-> 四：`SlidesDialog` 换居中的 Dialog，`SettingsView` 换新的全屏 content 变体。第五版未开始。
+> 四：`SlidesDialog` 换居中的 Dialog，`SettingsView` 换新的全屏 content 变体。
+>
+> 五：四个 `<select>` 换 Select，四个原生复选框换 Checkbox，紫底 chip 换 Badge，过渡期的常量清干净。Tabs / Tooltip 没引，理由见「没引的」。
+>
+> `src/ui/components/ui/` 最终一共 15 个文件：alert-dialog、badge、button、checkbox、collapsible、dialog、dropdown-menu、input、label、overlay、select、separator、switch、textarea、toast。
 
 ---
 
@@ -38,6 +42,8 @@
 
 现有浮层留着不动，新浮层用 Radix，两者共存。
 
+迁完之后这份清单没有变，最终还剩下什么、为什么留，见「最终还剩的手写控件」。
+
 ## 分版
 
 一、基座。引 Tailwind 完整 preflight，定 token 映射，上 Button、Input、Textarea、Label、Switch、Separator。全是叶子，逐项肉眼对比即可验收。
@@ -48,7 +54,7 @@
 
 四、对话框。`SettingsView` 的全屏和 `SlidesDialog` 换 Dialog。风险最高，单独发一版：它同时碰到安全区、软键盘和滚动锁。`SettingsView` 也换，走一个新的全屏 content 变体。
 
-五、收尾。Select、Tabs、Badge 按需要上。删掉过渡期留下的常量。
+五、收尾。Select、Checkbox、Badge，删掉过渡期留下的常量，全项目触摸目标复核。
 
 ## 必须守住的
 
@@ -70,7 +76,7 @@ sanitize 仍是安全边界。速读正文是第三方 HTML，任何组件替换
 
 应用代码仍然用相对路径 import，`@/` 只留给 shadcn 生成的文件。
 
-依赖：`class-variance-authority`、`clsx`、`tailwind-merge`、`@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-separator`、`@radix-ui/react-switch`，第二版加 `radix-ui` 和 `tw-animate-css`。没装 `lucide-react`（图标用项目自己的 `common/icons.tsx`）；以后 add 一个带图标的组件时会要它。
+依赖：`class-variance-authority`、`clsx`、`tailwind-merge`、`@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-separator`、`@radix-ui/react-switch`，第二版加 `radix-ui` 和 `tw-animate-css`。没装 `lucide-react`（图标用项目自己的 `common/icons.tsx`）：`shadcn add` 生成的 dialog / dropdown-menu / select / checkbox 都从它取图标，每次都要换成 `common/icons.tsx` 的，或者连那一段一起删掉。五版下来 npm 依赖一个没再加，Select / Checkbox / Badge 全在 `radix-ui` 伞包和 cva 里。整包体积（JS + CSS，未压缩）第四版 3451.6 KB → 第五版 3478.0 KB，涨的 26.4 KB 是 Select 那一套；CSS 66.0 → 66.6 KB。
 
 `radix-ui` 是伞包，现在的 shadcn 生成的就是 `import { AlertDialog } from "radix-ui"`，不再是单包。它 `sideEffects: false`，rollup 只把用到的那个打进去：第二版整套 Toast + AlertDialog 只让产物 JS 涨 55 KB（未压缩），产物里 grep 不到 Accordion / NavigationMenu / Menubar。第一版的单包留着不动，`button.tsx` 仍从 `@radix-ui/react-slot` 进。
 
@@ -293,6 +299,94 @@ Radix 的 Dialog trigger 开在 click 上，而且这里连 trigger 都没有，
 
 **依赖**：`dialog` 的 registry 版本不带新 npm 包，这次 `add` 也没有覆盖 `button.tsx`（坑 81 仍然要每次 `git status`）。生成的文件删掉了右上角那个关闭按钮——全文件只有它要 `lucide-react`，而且两个对话框各自都有 Done / Close。`ui/dialog.tsx` 的这些约定由 `tests/ui/components/dialog-contract.test.ts` 盯着，因为一次 `shadcn add dialog` 就能把它们全部换回默认那份。产物：App chunk 682.38 → 682.34 KB，CSS 65.75 → 65.96 KB。Dialog 和 AlertDialog 共用同一批内部件，JS 一点没涨（换掉的手写背板和外壳正好抵掉）。
 
+## 第五版：Select、Checkbox、Badge
+
+**四个 `<select>` 换 Select**，都走同一个 `settings/ChoiceField.tsx`：`<Label>` 包 trigger，选项从一个 `{value,label}[]` 来。原来四处各写一遍 `<option>` 循环。
+
+`position="popper"`，不是生成的 `item-aligned`——只有 popper 发布 `--radix-popper-available-*` 也只有它收 `collisionPadding`，item-aligned 下「浮层的规矩」那两半一句都不生效（坑 91）。安全区照 `OVERLAY_SAFE.anchored` 加 `useOverlaySafePadding()`，`<OverlayLayer />` 在 content 的 children 里。
+
+trigger 穿 `ui/input.tsx` 导出的字段外衣（`fieldClassName`），所以它和旁边的文本框同宽同边框同圆角；行的几何抄第三版的菜单行（36px，coarse 下 44px）。
+
+trigger 的宽度要自己占住：原生 `<select>` 按最宽的 option 定宽，Radix 的只装选中那一行（坑 93）。
+
+`modal` 保持默认的 `true`。开→关一轮实测（页面预先滚到 500，按坐标点击以免 playwright 自己滚页）：开着时 `body` 是 `pointer-events: none` / `overflow: hidden` / `data-scroll-locked` / `<head>` 里一个注进去的 `<style>` / 兄弟节点 `aria-hidden`，`padding-right` 补偿 0；关掉之后逐项还原，`window.scrollY` 三次都是 300，事后页面中心 `elementFromPoint` 命中的元素 `pointer-events: auto`。残留仍是 `body` 上一个空的 `style=""`。
+
+**触摸不用绕**。坑 83 那套是给 DropdownMenu 写的，Select 自己就按指针类型分路（坑 92），照抄反而双开。
+
+**四个原生复选框换 Checkbox**（`SettingsView` 两个、`SlidesDialog` 三个里的那一批、`SyncCard` 一个）。方块从 13×13 的 UA 控件变成 16×16 的紫色方块，触摸目标由 `HIT_44` 的居中伪元素扛，和 Switch 同一套。`<Label>` 仍然包着它：`<label>` 会把点在文字上的那一下转给里面的 `<button role="checkbox">`，实测点方块 toggle 一次、点文字再 toggle 一次，没有重复触发。
+
+**紫底 chip 换 Badge**。同一串 className 在六个文件里出现过，其中两处还停在 `#6d5ae0`。变体两个：`source`（来源名）和 `aside`（"Out of your lane"）。是 `<span>` 不是 shadcn 的 `inline-flex`——这些 chip 只装一行字，改成 inline-flex 会动它在行内的落位。
+
+**顺手收掉的紫**。第一版说 `#6d5ae0` 全部改掉，其实还剩 7 处：速读正文的链接色（`proseCss.ts`）、`PhoneHome` 的 "Open →"、`InfoCards` 的活动圆点、`PullToAsk` armed 态的药丸边和底、以及 Badge 收进来的两处。现在 `src/` 里除 `styles.css` 的注释外不再出现这个值。
+
+**删掉的过渡期东西**：`ui/input.tsx` 的 `inputClassName` 改名 `fieldClassName`（它现在是两个原语共用的字段外衣，不再是"给还没有原语的 `<select>` 顶着"）、`InfoCards` 的 `PIPE_BADGE` 常量、`settings/cardStyles.ts` 和 `common/buttons.ts` 里已经过时的注释。`common/buttons.ts` 只剩 `HIT_44`；`cardStyles.ts` 只剩 `CARD`，六个设置卡片在用，留着。
+
+**新增的护栏**：`tests/ui/components/primitive-contract.test.ts`，盯 select / checkbox / badge 里一次 `shadcn add` 就会消失的那些约定（`position="popper"`、`collisionPadding`、`<OverlayLayer />`、44px、`HIT_44`、不 import lucide、Badge 的两个变体）。`dialog-contract` 是它的第四版同类。
+
+**视觉变化清单**。23 个节区里 18 个逐节点、逐像素完全相同，其余五处：
+
+- 速读正文的链接、`article-saved` 的链接、`InfoCards` 的 RSS chip：`#6d5ae0 → #6c4fd0`。逐像素分别 258 / 258 / 119 个像素，最大差 16。
+- 设置页：Language 字段 524.5×39 → 524.5×38，Thinking 字段 97×39 → 100.6×38（`line-height: normal` 变成 20px 少 1px；宽度见坑 93），两个复选框 13×13 → 16×16。整页因此矮 2px。把这 1/2px 的整体上移抵掉之后，页面上其余每一个像素都相同——四个控件之外没有任何东西动过。
+- `SlidesDialog`：盒子仍是 560×476，差异像素 5080 个全部落在三个复选框那一小块 (15,95)–(431,159) 里，书名文字因方块变宽右移 3px。
+- 三处 chip 的盒子、字号、内边距一个字节没变（Badge 的基串和原来那串完全相同）。
+- 设置页的文本字段在 coarse 下从 42px 长到 44px（`fieldClassName` 加了 `coarse:min-h-[44px]`），细指针下不变。
+
+**安全区**（`-safe` 改造产物，trigger 贴视口右缘）：
+
+| | 列表右侧余量 | `max-width` | `max-height` |
+|---|---|---|---|
+| 无 inset | 8 | 884 | 742 |
+| 竖屏 59/34 | 8 | 884 | 657 |
+| 横屏 50/50 | 50 | 800 | 729 |
+
+贴着底边的那个 trigger 上方开（`data-side: top`），列表整体在 trigger 之上。
+
+**层级登记的对照**（拆掉 `<OverlayLayer />` 单独构建一份 `dist-probe-noguard`，键盘开列表，再用指针按一行）：
+
+| | 气泡 | 那一行 |
+|---|---|---|
+| 有 `<OverlayLayer />` | 还在 | 选中一次 |
+| 没有 | 关闭并卸载 | 照样选中一次 |
+
+旧版没有这一栏：原生 `<select>` 的列表是浏览器画的，不是 DOM，压根没有"按在外面"这个问题。
+
+**触摸目标的最终数字**（coarse 档位，全项目探针 23 个节区）：
+
+| | 可点元素 | 低于 44px | 字段小于 16px |
+|---|---|---|---|
+| 第一版之前 | — | 52 | — |
+| 第四版之后 | 143 | 36 | 2 |
+| 第五版之后 | 143 | 27 | 0 |
+
+清掉的 9 个都在设置页：两个 select（42→44）、两个复选框（13→44）、五个文本字段（42→44）。两个对话框内部单独量，`SlidesDialog` 8 个可点元素和设置页 21 个，现在低于 44px 的都是 0。
+
+剩下的 27 个，逐项：
+
+- 正文和聊天里的行内链接 6 个（`<a>`，21.7×18 到 28.4×23）。加 padding 会在句子里断行。
+- 聊天/通话的输入框 4 个（textarea，高 32–36）和它们旁边的 Copy 按钮 3 个（34×30）。`docs/30` 不迁聊天输入区。
+- `AnnotationPopup` 的色板和按钮 7 个（36×36、79.5×36）。不迁清单里。
+- 列表行 6 个：prep 的三条论文行（335×35.5–38）、库的两条主题行和一条文件行（489×38.5）。行高由内容定，撑到 44 会把列表拉散；整行都是命中区，宽度有几百像素。
+- prep 的 Add 按钮 1 个，42.6×44——差的是宽度，1.4px。给按钮尺寸表加一条 `coarse:min-w-[44px]` 会动到全项目每一个窄按钮，为这一个不划算。
+
+## 没引的
+
+**Tabs**。唯一像样的场景是阅读区侧栏顶上那五个标签（`reader/Sidebar.tsx`）。没换：它们已经是 `h-11` 的 44px 按钮，换过去买到的是方向键漫游和 `role="tablist"` 语义，代价是把抽屉的高度链（`min-h-0 flex-1` 那条）拆开重接。这条是真未决，哪天侧栏因为别的原因动的时候顺手做。
+
+**Tooltip**。全项目 32 个 `title=`，都是图标按钮的悬停提示。触摸上不触发，所以每个需要说明的控件本来就有 `aria-label`，激活态还会把文字显出来（侧栏标签、MoreMenu 的行）。加一层 Radix Tooltip 只对鼠标有用，且要处理它自己的 Portal 和安全区。
+
+**Popover**。第三版就说了没用上，第五版也没有新的锚定型浮层。现存的 `CallBubble` / `AnnotationPopup` 在不迁清单里。
+
+## 最终还剩的手写控件
+
+不是遗留，是终态。
+
+- 阅读区标注层、`PenToolbar` 的色板、`AnnotationPopup`、`CallBubble`、`MicButton` 的按住录音、`TraceList` 的滑动删除、`ReadingPipCard`：没有对应的 Radix 原语，或者已经按实测结论调过（坑 67、`panel-position.ts`、`useKeyboardInset`）。
+- 聊天输入区（`chat.tsx` 的 Composer、`ChatPipCard`）：自动增高、图片贴片、语音接管都是自己的逻辑，textarea 只是里面的一块。
+- 侧栏标签行、`Sidebar` 的抽屉和背板、`LibraryScreen` / `BriefingPage` / `PrepPanel` 的列表行：`<button>` 就是它们该有的样子，包一层组件不会少写一行。
+- `HomeCard` / `InfoCards` 的卡片外壳、`settings/cardStyles.ts` 的 `CARD`：shadcn 的 Card 是 header/content/footer 三段式，这里的卡片没有那个结构。
+
+`src/` 里现在没有 `<select>`、没有原生复选框；`<input>` 只剩 `ui/input.tsx` 里那一个和 `SourcesPage` 的 URL 输入框（info 侧的圆角和描边是另一套，coarse 下本来就是 44px / 16px）；`<textarea>` 只剩 `ui/textarea.tsx`、`AnnotationPopup` 和聊天输入区；`<button>` 37 处，全部落在上面这几类里。
+
 ## 第一版的视觉变化
 
 逐屏对比的做法在下一节。除下面这些之外，22 个屏的每个节点的几何和计算样式逐字节相同。
@@ -341,3 +435,10 @@ Radix 的 Dialog trigger 开在 click 上，而且这里连 trigger 都没有，
 - 模态对话框不能挂在静态探针页里长期开着：`modal` 给 `body` 加的 `pointer-events: none` 会让页面上其它节区一个都点不动。逐节点 dump 的页面和驱动页分开。
 - 软键盘造不出来。桌面 Chromium 没有软键盘，CDP 也没有对应的开关，能做的只有几何模拟：假定底部 K 像素不可见，逐个字段 `focus()` 之后量它落在哪。这能证明"新旧一样"，不能证明"iOS 上够用"。
 - 两个 dist 的同一个浮层，逐像素差异先看有多少超过阈值再下结论：背板透明度改了 10% 就会让盒子边缘和圆角上的每一个像素都进差异表（白底透出来 152 → 126），数字很大但只有一条原因。
+
+第五版加的几条：
+
+- 换掉的控件会让节区里的 DOM 序号整体错位，逐节点 diff 全是噪声。按「标签 + `type`/`role` + 文本 + 第几个」重新配对（`diff-pair.ts`），才看得出别的东西有没有动。
+- 整页高度变了 1–2px 的时候，逐像素对比会把下面每一行字都算成差异。把页面按节点 dump 给出的位移分带，各带按各自的位移裁一次再比：位移抵掉之后剩下的才是真差异。
+- 原生 `<select>` 的列表是浏览器画的，不在 DOM 里，旧版没有可比的开态。开态那一版只有新版这一份产物，它的对照是第三版的 DropdownMenu 和把某个保护拆掉的那份。
+- 探针页里贴边的控件不要放在固定宽度的容器里：`coarse` 那份的字号更大，控件会溢出容器跑到视口外，playwright 的点击点被夹回来就落到别的元素上。让节区跟着视口宽。

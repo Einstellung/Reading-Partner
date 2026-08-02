@@ -19,10 +19,8 @@ import type {
 } from "../../../info/briefing/cards";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { CardComponentProps, CardKind, CardPayload } from "../chat/chatParts";
+import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-
-const PIPE_BADGE =
-  "shrink-0 rounded-full bg-[#f0eefb] px-2 py-0.5 text-[11px] font-medium text-[#6d5ae0]";
 
 // Live seconds since a start timestamp, for the triage activity readout. Ticks
 // on its own so the card keeps moving even while the user scrolls or chats.
@@ -50,7 +48,7 @@ export function ProbeConfirmCard({ payload, dispatch }: CardComponentProps<Probe
     <div className="w-full max-w-md rounded-xl border border-black/10 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
       <div className="flex items-center gap-2">
         <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-[#1b1b1b]">{descriptor.name}</span>
-        <span className={PIPE_BADGE}>{pipeLabel}</span>
+        <Badge className="shrink-0">{pipeLabel}</Badge>
       </div>
       {descriptor.line && <div className="mt-0.5 text-[12px] text-[#999]">{descriptor.line}</div>}
       <ul className="m-0 mt-3 flex list-none flex-col gap-1.5 p-0">
@@ -112,7 +110,7 @@ export function BriefingProgressCard({ payload }: CardComponentProps<BriefingPro
   return (
     <div className="w-full max-w-md rounded-xl border border-[#c9c2e8] bg-[#faf9ff] p-4">
       <div className="flex items-center gap-2">
-        <span className="h-2 w-2 animate-pulse rounded-full bg-[#6d5ae0]" />
+        <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
         <span className="text-[11px] font-medium uppercase tracking-wider text-[#8a7fd0]">{heading}</span>
       </div>
       <div className="mt-1.5 text-[14px] text-[#2a2a2a]">{main}…</div>

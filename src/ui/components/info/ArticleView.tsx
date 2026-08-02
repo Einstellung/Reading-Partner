@@ -9,6 +9,7 @@ import { IconCheck, IconFileInto, IconSparkle } from "../common/icons";
 import { ARTICLE_PROSE_CLASS, ARTICLE_PROSE_CSS, hideBrokenImage } from "../common/proseCss";
 import { articleHtmlForWebview } from "../../../platform/app/image-proxy";
 import type { BriefingItemMeta } from "../../../info/briefing/types";
+import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 
 export function ArticleView({
@@ -42,9 +43,7 @@ export function ArticleView({
             ‹ Briefing
           </Button>
           {meta.sourceName && (
-            <span className="rounded-full bg-[#f0eefb] px-2 py-0.5 text-[11px] font-medium text-primary">
-              {meta.sourceName}
-            </span>
+            <Badge>{meta.sourceName}</Badge>
           )}
           <span className="flex-1" />
           <Button

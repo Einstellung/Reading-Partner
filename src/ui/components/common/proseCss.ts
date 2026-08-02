@@ -50,7 +50,7 @@ export const ARTICLE_PROSE_CSS = `
 .info-article-body img { max-width: 100%; height: auto; border-radius: 8px; margin: 1em 0; display: block; }
 .info-article-body figure { margin: 1.2em 0; }
 .info-article-body figcaption { font-size: 0.85em; color: #888; text-align: center; margin-top: 0.5em; }
-.info-article-body a { color: #6d5ae0; text-decoration: underline; text-underline-offset: 2px; }
+.info-article-body a { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
 `;
 
 // Hide an image that failed to load: the img: proxy refused the host, the

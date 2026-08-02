@@ -10,6 +10,7 @@ import {
 } from "../../../platform/sync";
 import { CARD } from "./cardStyles";
 import { Button } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
 import { Label } from "../ui/label";
 
 function formatSyncTime(ts: number | null): string {
@@ -94,11 +95,10 @@ export default function SyncCard() {
         <span className="text-xs text-[#5fb236]">{status.email ?? "Connected"}</span>
       </div>
       <Label>
-        <input
-          type="checkbox"
+        <Checkbox
           checked={status.autoSync}
           disabled={busy}
-          onChange={(e) => void run(() => setAutoSyncEnabled(e.target.checked))}
+          onCheckedChange={(v) => void run(() => setAutoSyncEnabled(v === true))}
         />
         Sync automatically
       </Label>

@@ -6,6 +6,7 @@
 
 import { useState } from "react";
 import type { Briefing, BriefingItemMeta } from "../../../info/briefing/types";
+import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 import { IconSparkle } from "../common/icons";
@@ -13,9 +14,7 @@ import { IconSparkle } from "../common/icons";
 function SourceTag({ name }: { name: string }) {
   if (!name) return null;
   return (
-    <span className="rounded-full bg-[#f0eefb] px-2 py-0.5 text-[11px] font-medium text-primary">
-      {name}
-    </span>
+    <Badge>{name}</Badge>
   );
 }
 
@@ -169,9 +168,7 @@ export function BriefingPage(props: BriefingPageProps) {
                 <div className="flex items-start gap-3">
                   <button className="min-w-0 flex-1 text-left" onClick={() => props.onOpenArticle(r.itemId)}>
                     <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-[#f2e4c4] px-2 py-0.5 text-[11px] font-medium text-[#8a6d1f]">
-                        Out of your lane
-                      </span>
+                      <Badge variant="aside">Out of your lane</Badge>
                       <SourceTag name={m.sourceName} />
                     </div>
                     <div className="mt-1.5 text-[16px] font-medium leading-snug text-[#3a2f12]">{m.title}</div>

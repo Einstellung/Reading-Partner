@@ -6,7 +6,7 @@
 // control declares would shrink an inset target. The element must be positioned
 // — add `relative` unless it already is.
 //
-// Button's `size="link"` and Switch build it in; everywhere else it is applied
-// by hand, because the control is not a Button.
+// Button's `size="link"`, Switch and Checkbox build it in; everywhere else it
+// is applied by hand, because the control is not a Button.
 export const HIT_44 =
   "coarse:before:absolute coarse:before:top-1/2 coarse:before:left-1/2 coarse:before:h-11 coarse:before:w-11 coarse:before:-translate-x-1/2 coarse:before:-translate-y-1/2 coarse:before:content-['']";

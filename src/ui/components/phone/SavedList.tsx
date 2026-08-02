@@ -4,6 +4,7 @@
 // topic the article was filed under.
 
 import { formatPublishedAt, type SavedArticle } from "../../../reading/saved-articles";
+import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 
 export default function SavedList({
@@ -39,9 +40,7 @@ export default function SavedList({
                   <span className="text-[15px] font-medium leading-snug text-[#1b1b1b]">{a.title}</span>
                   <span className="flex items-center gap-2">
                     {a.sourceName && (
-                      <span className="rounded-full bg-[#f0eefb] px-2 py-0.5 text-[11px] font-medium text-primary">
-                        {a.sourceName}
-                      </span>
+                      <Badge>{a.sourceName}</Badge>
                     )}
                     {published && <span className="text-[12px] text-[#888]">{published}</span>}
                     {a.summaryOnly && <span className="text-[12px] text-[#b08a3a]">summary only</span>}
