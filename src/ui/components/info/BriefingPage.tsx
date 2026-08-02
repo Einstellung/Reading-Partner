@@ -7,6 +7,7 @@
 import { useState } from "react";
 import type { Briefing, BriefingItemMeta } from "../../../info/briefing/types";
 import { Button } from "../ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 import { IconSparkle } from "../common/icons";
 
 function SourceTag({ name }: { name: string }) {
@@ -221,39 +222,40 @@ function FilteredSection({
     .map(([cat, n]) => `${cat} ×${n}`)
     .join(", ");
 
+  // Controlled: the arrow is a glyph swap rather than a rotation, so the render
+  // needs the state either way.
   return (
-    <section className="mb-2">
-      <button
-        className="flex w-full items-center gap-2 rounded-lg px-1 py-2 text-left text-[13px] text-[#888] coarse:min-h-[44px] hover:text-[#555]"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span className="text-[11px]">{open ? "▾" : "▸"}</span>
-        <span className="font-medium">Filtered {filtered.length}</span>
-        <span className="min-w-0 flex-1 truncate text-[#aaa]">— {summary}</span>
-      </button>
-      {open && (
-        <ul className="m-0 mt-1 flex list-none flex-col gap-1 p-0">
-          {filtered.map((f) => {
-            const m = meta(f.itemId);
-            if (!m) return null;
-            return (
-              <li key={f.itemId} className="group flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-[#fafafa]">
-                <span className="w-24 flex-none truncate text-[11px] text-[#bbb]">{f.category}</span>
-                <span className="min-w-0 flex-1 truncate text-[13px] text-[#777]">{m.title}</span>
-                {openedIds.has(f.itemId) && <span className="text-[11px] text-[#bbb]">Read</span>}
-                <Button
-                  variant="link"
-                  size="link"
-                  className="flex-none text-[12px] text-[#8a7fd0] can-hover:opacity-0 transition-opacity coarse:min-h-[44px] coarse:px-2 coarse:py-0 hover:underline group-hover:opacity-100"
-                  onClick={() => onAppeal(f.itemId, m, f.category)}
-                >
-                  Show anyway
-                </Button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </section>
+    <Collapsible open={open} onOpenChange={setOpen} asChild>
+      <section className="mb-2">
+        <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-lg px-1 py-2 text-left text-[13px] text-[#888] coarse:min-h-[44px] hover:text-[#555]">
+          <span className="text-[11px]">{open ? "▾" : "▸"}</span>
+          <span className="font-medium">Filtered {filtered.length}</span>
+          <span className="min-w-0 flex-1 truncate text-[#aaa]">— {summary}</span>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <ul className="m-0 mt-1 flex list-none flex-col gap-1 p-0">
+            {filtered.map((f) => {
+              const m = meta(f.itemId);
+              if (!m) return null;
+              return (
+                <li key={f.itemId} className="group flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-[#fafafa]">
+                  <span className="w-24 flex-none truncate text-[11px] text-[#bbb]">{f.category}</span>
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-[#777]">{m.title}</span>
+                  {openedIds.has(f.itemId) && <span className="text-[11px] text-[#bbb]">Read</span>}
+                  <Button
+                    variant="link"
+                    size="link"
+                    className="flex-none text-[12px] text-[#8a7fd0] can-hover:opacity-0 transition-opacity coarse:min-h-[44px] coarse:px-2 coarse:py-0 hover:underline group-hover:opacity-100"
+                    onClick={() => onAppeal(f.itemId, m, f.category)}
+                  >
+                    Show anyway
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        </CollapsibleContent>
+      </section>
+    </Collapsible>
   );
 }
