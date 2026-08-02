@@ -55,6 +55,7 @@
 - [49-webkit-native-selection-over-page](./49-webkit-native-selection-over-page.md) — 阅读区没 DOM 文本也照样能起原生选区（WebKit 只看 `user-select` 用值），整页变蓝加系统 callout；阅读区根节点关掉 user-select 和 touch-callout，引擎选区不受影响。preflight 不含 user-select，这条手写规则引入 preflight 之后仍然必需（与坑 43 同族、结局相反）
 - [70-browser-claims-the-swipe-before-the-pointer-does](./70-browser-claims-the-swipe-before-the-pointer-does.md) — 只用 pointer 事件写的左缘右滑必被 `pointercancel` 掐死（浏览器判滚动不看方向可行性），`touch-action` 的交集只算到滚动容器为止、挂外层无效；要在非 passive 的 `touchmove` 上 3px 就抢并全程 prevent，另加 `overscroll-behavior-x: none` 挡掉浏览器自己的历史手势
 - [71-first-touchmove-is-already-past-the-slop](./71-first-touchmove-is-already-past-the-slop.md) — 抢触摸的阈值在 1–16px 之间毫无区别：浏览器越过自己的 slop 才派发第一个 `touchmove`，那一下的位移已经是 16（手指更快就更大）；这个数只需小到任何第一个 move 都能满足，不是调参
+- [83-radix-menu-opens-on-pointerdown-and-the-lift-picks-a-row](./83-radix-menu-opens-on-pointerdown-and-the-lift-picks-a-row.md) — Radix 的菜单 trigger 在 pointerdown 上开，`MenuItem` 又会在没见过 pointerdown 的 pointerup 上自己 click，同一次点按能既开菜单又选中手指下方那一行；trigger 改成在 click 上开，并记住按下时的开合状态（关闭走的是 document 上的 dismiss，排在 React 之后）
 
 ## 网络与 CSP
 
@@ -109,6 +110,9 @@
 - [80-portalled-overlay-trips-the-host-outside-press](./80-portalled-overlay-trips-the-host-outside-press.md) — Radix 浮层 Portal 到 `<body>`，宿主那条「点外面就关」的 `pointerdown` 把落在对话框按钮上的第一按判成点外面，气泡先关、按钮收不到 click；改成全局层级计数 `overlayLayerOpen()`，有层开着就整条让路
 - [81-shadcn-add-rewrites-the-components-it-depends-on](./81-shadcn-add-rewrites-the-components-it-depends-on.md) — `shadcn add alert-dialog` 顺手把手写过的 `button.tsx` 换成默认那份（紫色、44px、`can-hover:` 全没），输出里只有一行 "Updated"；add 完先看 `git status`
 - [82-duration-200-alone-transitions-every-property](./82-duration-200-alone-transitions-every-property.md) — `duration-*` 不设 `transition-property`，初始值 `all` 让这个元素每个属性都走 200ms 过渡；量计算样式要等满动画时长，否则读到过程值
+- [84-js-cannot-read-env-safe-area-inset](./84-js-cannot-read-env-safe-area-inset.md) — 自定义属性里的 `env(safe-area-inset-*)` 从 `getComputedStyle` 拿回来还是那串原文，`parseFloat` 得 NaN；要读数字得让真属性吃掉它（隐藏探针元素的 padding），只有夹取在 JS 里的浮层才需要
+- [85-collision-padding-does-not-save-an-anchor-inside-the-inset](./85-collision-padding-does-not-save-an-anchor-inside-the-inset.md) — `limitShift()` 不让浮层脱离锚点，锚点贴着视口边缘时菜单只能退到锚点边缘；锚定型浮层最多和它的锚点一样安全，外壳的 `p-safe` 才是根
+- [86-transformed-popper-drops-subpixel-text](./86-transformed-popper-drops-subpixel-text.md) — popper 的 `transform` 让浮层成为合成层，字从次像素抗锯齿变灰度，逐像素对比每一行文字都在差异图上发亮；两边都加 `--disable-lcd-text` 再比
 
 ## AI 调用与上下文窗口
 

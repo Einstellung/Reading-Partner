@@ -2,11 +2,13 @@
 
 > 本文记录 UI 组件迁到 shadcn/ui 的共识。现状按 2026-08-01 的代码查证（`dab38fa` 之后）。
 >
-> 落地状态（2026-08-02）：第一、二版落地。
+> 落地状态（2026-08-02）：第一、二、三版落地。
 >
 > 一：preflight、token 映射、Button / Input / Textarea / Label / Switch / Separator 六个原语，以及 `BTN` / `BTN_PRIMARY` / `BTN_SM` / `BTN_SM_DANGER` / `FIELD` / `INPUT` 全部调用点。
 >
-> 二：Toast 换 Radix Toast，`DeleteThreadButton` 换 AlertDialog，浮层安全区那层（`ui/overlay.tsx` + `overlay-safe`）和浮层层级登记（`common/overlay-layer.ts`）立起来。三到五版未开始。
+> 二：Toast 换 Radix Toast，`DeleteThreadButton` 换 AlertDialog，浮层安全区那层（`ui/overlay.tsx` + `overlay-safe`）和浮层层级登记（`common/overlay-layer.ts`）立起来。
+>
+> 三：`MoreMenu` 换 DropdownMenu，速读的 Filtered 折叠换 Collapsible，锚定型浮层的安全区补进 `ui/overlay.tsx`。Popover 没用上，没引。四五版未开始。
 
 ---
 
@@ -145,7 +147,11 @@ className={cn(OVERLAY_SAFE.centered, "fixed top-[50%] left-[50%] ...", className
 
 - `centered`（Dialog / AlertDialog）= `overlay-safe` 这个 `@utility`，在 `styles.css` 里定义，同时管 `max-width`、`max-height` 和 `overflow-y: auto`。居中的盒子只能缩不能挪，所以每根轴夹的是两侧 inset 里较大的那个，另有 4 个 spacing 单位的槽宽兜底。
 - `bottom`（toast viewport）= `bottom-safe-6`。贴边的浮层只需要它贴的那根轴，横向由自己的 `max-w` 管。
-- 锚定型（第三版的 DropdownMenu / Popover）这一版没做。它的碰撞是 Radix 自己算的，要给它 `collisionPadding`，而 JS 读不到 `env()`；落这一版时在这里加 `anchored` 并写清楚怎么把 inset 送进去。
+- `anchored`（DropdownMenu，以后的 Popover / Select）分两半，两半都要。位置那半是 Radix 的：content 上传 `collisionPadding={useOverlaySafePadding()}`，每边取 max(inset, 8px)。JS 读不到 `env()`（坑 84），所以 inset 是从一个隐藏探针元素的计算 padding 量来的（`common/safe-area.ts` + `styles.css` 的 `safe-probe`），在挂载和 resize 时量。尺寸那半是 CSS 的：`max-w-(--radix-popper-available-width) max-h-(--radix-popper-available-height)`，这两个变量是 Radix 按同一份 collisionPadding 算出来的剩余空间，配 content 自带的 `overflow-y: auto`，把「比它能待的地方还大」变成盒子内部滚动。用 popper 级的变量而不是每个组件自己的别名，同一串对每个 popper 浮层都成立。
+
+  锚定型不写 `overlay-safe`：那条夹的是居中盒，锚定盒是移动而不是收缩。也不写 `anchor-safe`：那个 `@utility` 是给自己算坐标的 `position: fixed` 浮层用的（`CallBubble`），Radix 的坐标写在 popper 包装节点的 transform 上，`left`/`top` 夹取碰不到它。
+
+  能保证的上限是锚点本身：`limitShift()` 不让浮层脱离锚点，所以锚点贴在视口边缘时浮层只能退到锚点边缘（坑 85）。外壳的 `p-safe` 把锚点推进安全区，这条才成立。
 
 必须用 `cn()` 而不是拼字符串：`max-width` 只能有一条。shadcn 生成的 AlertDialogContent 自带 `max-w-[calc(100%-2rem)]` 和 `sm:max-w-lg`，和 `overlay-safe` 特异性相同，谁赢取决于 Tailwind 把自定义 utility 排在哪里。改成 `w-full` / `sm:w-[32rem]`，`max-width` 归 `overlay-safe` 独占。
 
@@ -178,6 +184,33 @@ Radix 带进来三件行为上的变化：倒计时在指针停在浮层上时�
 
 **WebKit 上的 tap**：无头 WebKit 跑不起来（本机 webkit-2215 缺 `libavif16`，装不了），只在 Chromium 的 `hasTouch` 上下文里验了——开对话框一按、Delete 一按就生效，不需要按两次。真机上还没验的是 iOS 的幽灵点击：从 tap 打开一个正好落在手指下方的浮层，touchend 合成的 click 可能直接打到刚挂上来的按钮。这里的对话框居中、trigger 在气泡右上角，两者不重叠，但第四版的全屏 Dialog 要留意。
 
+## 第三版：菜单与折叠
+
+**`MoreMenu`**。`MoreItem` 那个类型和 `ReaderTopBar` 的调用点一个字没动。trigger 是原来那个按钮加 `asChild`（`aria-haspopup` / `aria-expanded` 交给 Radix，开着的样子改用 `data-[state=open]:`），action 行是 `DropdownMenuItem`，toggle 行是 `DropdownMenuCheckboxItem` 加 `onSelect` 里 `preventDefault()` 再调 `onClick`——不 prevent 就会关掉菜单，而 toggle 要留着连续翻。
+
+行的几何自己写：13px、`min-h-[36px] coarse:min-h-[44px]`、`py-0`。菜单默认的 `[&_svg:not([class*='size-'])]:size-4` 和 `[&_svg:not([class*='text-'])]:text-muted-foreground` 是给 lucide 画的，会把本项目 18px 的自绘图标压成 16px 并改色，用一模一样的修饰符链覆盖成 `size-auto` / `text-current`（坑 78）。悬停底色不再自己写：Radix 在鼠标下会给行真正的焦点，`focus:bg-accent` 就是原来那个 `#f0f0f0`，而手指不会触发（Radix 的 `onPointerMove` 只认 mouse），比原来的 `hover:` 干净。
+
+原来那条 document 上的 `pointerdown` 和 Escape 监听整个删掉，Radix 自己有。换来的是键盘可达：ArrowDown / Enter 开、方向键走、首字母跳、Escape 关，原来一样都没有。
+
+**`modal={false}`**。默认的 `true` 会锁 body 滚动、给兄弟节点加 `aria-hidden`、用 `disableOutsidePointerEvents` 吞掉外面的第一按。阅读区不能接受这三条中的任何一条：书要能继续滚，屏幕阅读器不该在开着一个五行菜单时看不见整本书，点回书上应该直接生效。实测（开→关一轮，鼠标与触摸各一遍）`pointer-events`、`overflow`、`data-scroll-locked`、兄弟节点的 `aria-hidden` 全程没出现过，`window.scrollY` 三次读数相同，关闭后 body 上连空的 `style=""` 都没留下（第二版的模态对话框会留一个）。
+
+**触摸**。trigger 改成在 click 上开，理由和做法见坑 83。无头 WebKit 在这台机器上仍然起不来，所以在 Chromium 的触摸上下文（`hasTouch` 加 `isMobile`，后者让 `(hover: none)` 和 `(pointer: coarse)` 真的成立）里验：一按开、再按关、按外面关、按行选中一次、toggle 不关，全部一次到位，不需要按两次。真机上没验的是 iOS 的幽灵点击本身，验的是它的前提——pointerup 那一刻 DOM 里有没有菜单。
+
+**层级登记**。`DropdownMenuContent` 的 children 里挂 `<OverlayLayer />`。对 `MoreMenu` 这一处买到的是：菜单开着时按菜单里的行，不再被 `CallBubble` / `AnnotationPopup` 读成"按在外面"。用键盘开菜单（这样开菜单的那一按不参与）再按一行，对照两份产物：
+
+| | 按菜单里的一行 |
+|---|---|
+| 有 `<OverlayLayer />` | 气泡还在，行触发一次 |
+| 没有 | 气泡关闭并卸载，行照样触发一次 |
+
+用指针按 trigger 打开菜单时气泡仍然会关——那一按发生在还没有任何层的时候，属于气泡，新旧一致。`App.tsx` 那条挂在阅读区 pane 上的 `onPointerDownCapture` 不受影响：Portal 出去的节点在 React 树里的父级是顶栏，事件不经过 pane。`PenToolbar` 的色板和 `SourcesPage` 的 HealthDot 不会和这个菜单同时开着，没动。
+
+**Collapsible**。`Collapsible asChild` 套在原来的 `<section>` 上，头换 `CollapsibleTrigger`，列表包进 `CollapsibleContent`。`open` 仍然受控，因为箭头是 `▾`/`▸` 字形切换而不是旋转。`can-hover:opacity-0` 的 "Show anyway" 一个字没改，在触摸档位下量到 opacity 1、92.1×44。关闭态多一个空的隐藏 `div`（Radix 的 content 包装节点即使关着也渲染，子树仍然不挂载）。
+
+**视觉变化**：两处，都是"亮起来的状态原来没亮"。lit 的 toggle 行的文字从 `#333` 变成 `#4a3a9e`，开着的 trigger 的箭头从 `#555` 变成 `#1b1b1b`。原来两处都是把两个 `text-*` 直接拼在一个 className 里，谁赢由 Tailwind 把它们排在哪决定，赢的都是不该赢的那个；现在一个走 `cn()`，一个走 `data-[state=open]:` 修饰符。除此之外菜单打开态逐行逐属性相同，面板相对触发器的位置 `[-192, 36, 224×220]` 两边一致。
+
+**依赖**：`dropdown-menu` 和 `collapsible` 的 registry 版本都不带新 npm 包（`radix-ui` 伞包已经在）。生成的 `dropdown-menu.tsx` 删掉了 Sub / RadioGroup / RadioItem / Shortcut 和 CheckboxItem 的对勾指示器——只有它们要 `lucide-react`，本项目不装。这次 `add` 没有覆盖 `button.tsx`（坑 81 仍然要每次 `git status`）。`collapsible.tsx` 生成时用了 `React.ComponentProps` 却没 import React，补上。产物：App chunk 637.6 → 682.4 KB（gzip 182.7 → 198.7），CSS 62.7 → 65.8 KB，涨的是 popper 那一套和 `tw-animate-css` 里菜单用到的进出场。
+
 ## 第一版的视觉变化
 
 逐屏对比的做法在下一节。除下面这些之外，22 个屏的每个节点的几何和计算样式逐字节相同。
@@ -209,6 +242,15 @@ Radix 带进来三件行为上的变化：倒计时在指针停在浮层上时�
 要驱动的交互（浮层开合、确认、点外面）单独一个脚本，不走静态 dump：Portal 出去的节点不在任何 `[data-screen]` 里，逐节点 dump 看不见它们。探针里那个宿主组件要真的会卸载——`onClose` 只记一笔数不卸载的话，两种实现都能把删除跑通，问题就测不出来。想证明某个保护确实必要，就把它拆掉再单独构建一份产物（`--outDir dist-probe-noguard`）跑同一段脚本，对照两边的计数。
 
 纯浏览器里能起来的界面只有 Vestibule / Library / Settings（Tauri 存储调用会报错但 UI 正常渲染），其余全靠探针页。
+
+第三版加的几条：
+
+- 要驱动的浮层单独开节区，标 `data-drive` 而不是 `data-screen`，逐节点 dump 就自动跳过它们。同一个浮层在旧版是在流里、在新版是 Portal 出去的，节区内的 DOM 序号对不上，比的应该是「面板相对触发器的位置」和「每一行的盒子」。
+- 那种节区不能带 `transform`：popper 是 `position: fixed`，有 transform 的祖先会变成它的包含块，这是探针独有的假象。
+- 加了包装节点的组件（Collapsible 关着也渲染一个隐藏 div）会把 DOM 序号整体推后一位，逐节点 diff 全是噪声。按「标签 + 文本 + class + 第几个」重新配对再比，才看得出除了那个包装节点之外有没有东西真的动了。
+- 逐像素比浮层要给两边都加 `--disable-lcd-text`（坑 86）。
+- `(hover: none)` 在桌面浏览器里改不出来，`-coarse` 那份改造只动 `pointer: coarse`。要量 `can-hover:` 的实际效果得开 Chromium 的移动模拟（`isMobile: true`），那时两个媒体查询才都成立。
+- 「换了实现之后行为等价」这类结论，对照组不止旧版：把新版里那一处保护单独去掉再构建一份（`--outDir dist-probe-noguard` / `-stock`），同一段脚本跑三份，才知道保护是不是真的在起作用。
 
 ## 未决
 
