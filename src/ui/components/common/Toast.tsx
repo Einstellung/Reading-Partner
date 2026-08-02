@@ -2,68 +2,56 @@
 // status string. Bottom-center, above the reader (z-0) but below the call
 // overlays (z-40/z-50) so a full-window call is never covered by a toast about
 // something that happened before it opened.
+//
+// The list is the app's (this hook), the box and the countdown are Radix's
+// (ui/toast.tsx). Both call sites (App, PhoneApp) render one of these.
 
 import { useCallback, useState } from 'react';
 import { IconClose } from './icons';
+import { addToast, DISMISS_MS, removeToast, type ToastItem, type ToastKind } from './toast-list';
+import { Toast as ToastBox, ToastClose, ToastDescription, ToastProvider, ToastViewport } from '../ui/toast';
 
-export type ToastKind = 'warn' | 'error';
-
-export interface ToastItem {
-	id: string;
-	kind: ToastKind;
-	message: string;
-}
-
-const DISMISS_MS = 5000;
+export type { ToastItem, ToastKind };
 
 // App owns the list via this hook; Toast below only renders it.
 export function useToasts() {
 	const [toasts, setToasts] = useState<ToastItem[]>([]);
 
 	const dismiss = useCallback((id: string) => {
-		setToasts((cur) => cur.filter((t) => t.id !== id));
+		setToasts((cur) => removeToast(cur, id));
 	}, []);
 
-	const push = useCallback(
-		(kind: ToastKind, message: string) => {
-			const id = crypto.randomUUID();
-			setToasts((cur) => [...cur, { id, kind, message }]);
-			window.setTimeout(() => dismiss(id), DISMISS_MS);
-		},
-		[dismiss],
-	);
+	// No timer here: the countdown belongs to the toast that is showing, so it can
+	// be paused while it is under the pointer and resumed after.
+	const push = useCallback((kind: ToastKind, message: string) => {
+		setToasts((cur) => addToast(cur, { id: crypto.randomUUID(), kind, message }));
+	}, []);
 
 	return { toasts, push, dismiss };
 }
 
-const KIND_CLASS: Record<ToastKind, string> = {
-	warn: 'border-amber-300 bg-amber-50 text-amber-800',
-	error: 'border-red-300 bg-red-50 text-red-800',
-};
-
 export default function Toast({ toasts, onDismiss }: { toasts: ToastItem[]; onDismiss(id: string): void }) {
-	if (toasts.length === 0) return null;
 	return (
-		// bottom-safe-6: fixed, so the shell's safe-area padding does not reach
-		// here and bottom-6 alone lands on the home indicator (docs/pitfall/74).
-		<div className="pointer-events-none fixed bottom-safe-6 left-1/2 z-30 flex -translate-x-1/2 flex-col items-center gap-2">
-			{toasts.map((t) => (
-				<div
-					key={t.id}
-					role="alert"
-					className={`pointer-events-auto flex max-w-[420px] items-start gap-2 rounded-lg border px-3 py-2 text-sm shadow-md ${KIND_CLASS[t.kind]}`}
-				>
-					<span className="flex-1">{t.message}</span>
-					<button
-						type="button"
-						aria-label="Dismiss"
-						onClick={() => onDismiss(t.id)}
-						className="flex h-6 w-6 shrink-0 items-center justify-center opacity-60 hover:opacity-100 coarse:h-11 coarse:w-11"
+		<ToastProvider duration={DISMISS_MS} swipeDirection="right">
+			<ToastViewport>
+				{toasts.map((t) => (
+					<ToastBox
+						key={t.id}
+						kind={t.kind}
+						// Controlled: the countdown, a swipe and the close button all
+						// arrive here as the same close, and the list is the one state.
+						open
+						onOpenChange={(open) => {
+							if (!open) onDismiss(t.id);
+						}}
 					>
-						<IconClose size={12} />
-					</button>
-				</div>
-			))}
-		</div>
+						<ToastDescription>{t.message}</ToastDescription>
+						<ToastClose aria-label="Dismiss">
+							<IconClose size={12} />
+						</ToastClose>
+					</ToastBox>
+				))}
+			</ToastViewport>
+		</ToastProvider>
 	);
 }

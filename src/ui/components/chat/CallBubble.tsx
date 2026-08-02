@@ -7,6 +7,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconExpand } from '../common/icons';
 import { Composer, MessageList, type ComposerVoice } from './chat';
 import DeleteThreadButton from './DeleteThreadButton';
+import { overlayLayerOpen } from '../common/overlay-layer';
 import { fitPanelWidth, placePanel, pointAnchor } from '../common/panel-position';
 import { useViewportSize } from '../common/useViewportSize';
 import type { PendingImage, ThreadMessage } from '../common/types';
@@ -73,8 +74,14 @@ export default function CallBubble({
 	// docs/pitfall/67-webkit-tap-does-not-focus-a-button.md — on touch the mouse
 	// events are compatibility events and the reader's taps on the top bar and the
 	// sidebar never reached this.
+	//
+	// While an overlay layer is up, every press belongs to it. The bubble's own
+	// delete confirmation is one of those layers, and it renders under <body>, so
+	// containment would read the press on its Delete button as a press outside
+	// and close the bubble out from under it (common/overlay-layer).
 	useEffect(() => {
 		function onDown(e: PointerEvent) {
+			if (overlayLayerOpen()) return;
 			if (ref.current && !ref.current.contains(e.target as Node)) onClose();
 		}
 		document.addEventListener('pointerdown', onDown, true);

@@ -10,6 +10,12 @@
 @import "tailwindcss/preflight.css" layer(base);
 @import "tailwindcss/utilities.css" layer(utilities);
 
+/* The enter/exit keyframes shadcn's overlays are generated against
+   (`animate-in`, `fade-out-0`, `zoom-in-95`). It declares its own @theme and
+   @utility blocks, so it is imported unlayered and sorts itself into the layers
+   declared above rather than being wrapped in one. */
+@import "tw-animate-css";
+
 /* Touch/pointer variants (iPad adaptation). `can-hover` gates hover-only
    enhancements so a reveal-on-hover control stays visible on touch (where hover
    never fires); `coarse` expands hit areas to the 44px touch target only on a
@@ -62,6 +68,7 @@
     --destructive: #b91c1c;
     --destructive-foreground: #ffffff;
     --destructive-border: #f0c8c8;
+    --destructive-hover: #991b1b;
 
     --border: #dcdcdc;
     --input: #dcdcdc;
@@ -96,6 +103,7 @@
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-destructive-border: var(--destructive-border);
+  --color-destructive-hover: var(--destructive-hover);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -143,6 +151,23 @@
    would inflate the box instead of moving it. */
 @utility bottom-safe-* {
   bottom: max(calc(var(--spacing) * --value(integer)), env(safe-area-inset-bottom));
+}
+
+/* A fixed overlay centred in the viewport (Radix's dialog content, which pins
+   itself at 50%/50% and pulls itself back by half its size). Centred means the
+   box can only shrink, never shift, so each axis clamps against the larger of
+   its two insets; the 4-unit gutter is the design's own margin and is what
+   applies wherever there is no inset. The scroll is part of the clamp: a dialog
+   taller than the safe viewport has to scroll inside itself rather than run off
+   the top and bottom of the screen. */
+@utility overlay-safe {
+  max-width: calc(
+    100dvw - 2 * max(env(safe-area-inset-left), env(safe-area-inset-right), var(--spacing) * 4)
+  );
+  max-height: calc(
+    100dvh - 2 * max(env(safe-area-inset-top), env(safe-area-inset-bottom), var(--spacing) * 4)
+  );
+  overflow-y: auto;
 }
 
 /* A fixed overlay pinned near a point: the anchor goes in --anchor-x/--anchor-y
