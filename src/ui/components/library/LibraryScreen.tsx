@@ -1,6 +1,7 @@
-// The library home screen: the topic list and one topic's file list. Owns the
-// topic CRUD form state (new name, rename-in-place); the topic list itself and
-// which one is active stay on App, which needs them for the reading context.
+// The library home screen: the shelf of topics and one topic's file list. Owns
+// which dialog is open (new topic, rename, delete confirmation); the topic list
+// itself and which one is active stay on App, which needs them for the reading
+// context.
 
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -23,11 +24,18 @@ import {
   type SavedArticle,
 } from "../../../reading/saved-articles";
 import { Button } from "../ui/button";
-import { Input } from "../ui/input";
 import DeleteTopicButton from "./DeleteTopicButton";
 import SavedArticleView from "./SavedArticleView";
+import TopicCard from "./TopicCard";
+import TopicNameDialog from "./TopicNameDialog";
+import { shelfOrder, TOPIC_GRID_COLUMNS_CLASS } from "./topic-shelf";
 
 const LIBRARY = "w-[min(680px,100%)] mx-auto px-6 py-10";
+// The shelf is wider than a list ever was: five columns of cards need the room,
+// and a topic name is short. The safe-area padding is the design's own gutter
+// wherever there is no inset (styles.css takes the larger of the two), so this
+// column never has to know which device it is on.
+const SHELF_PAGE = "w-[min(1180px,100%)] mx-auto pt-8 pb-safe-10 pl-safe-6 pr-safe-6";
 const TOPIC_LIST = "list-none m-0 p-0 flex flex-col gap-1.5";
 const TOPIC_ROW = "flex items-center gap-2 border border-[#dcdcdc] rounded-lg py-1 pl-1 pr-1.5";
 // min-w-0: without it a flex item cannot shrink below its content, and a long
@@ -44,9 +52,6 @@ export default function LibraryScreen(props: {
   // A topic or file was created / renamed / deleted on disk: reload the list.
   onTopicsChanged: () => Promise<void> | void;
 }) {
-  const [newTopicName, setNewTopicName] = useState("");
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [renameText, setRenameText] = useState("");
   // Articles kept out of a briefing (docs/21), and which one is being read.
   const [savedArticles, setSavedArticles] = useState<SavedArticle[]>([]);
   const [openSavedArticle, setOpenSavedArticle] = useState<SavedArticle | null>(null);
@@ -92,24 +97,12 @@ export default function LibraryScreen(props: {
       ) : (
         <TopicLibrary
           topics={props.topics}
-          newTopicName={newTopicName}
-          setNewTopicName={setNewTopicName}
-          renamingId={renamingId}
-          renameText={renameText}
-          setRenameText={setRenameText}
-          onCreate={async () => {
-            if (!newTopicName.trim()) return;
-            await createTopic(newTopicName);
-            setNewTopicName("");
+          onCreate={async (name) => {
+            await createTopic(name);
             await props.onTopicsChanged();
           }}
-          onStartRename={(t) => {
-            setRenamingId(t.id);
-            setRenameText(t.name);
-          }}
-          onCommitRename={async () => {
-            if (renamingId) await renameTopic(renamingId, renameText);
-            setRenamingId(null);
+          onRename={async (topic, name) => {
+            await renameTopic(topic.id, name);
             await props.onTopicsChanged();
           }}
           // Confirmed in DeleteTopicButton, which is what calls this.
@@ -124,60 +117,111 @@ export default function LibraryScreen(props: {
   );
 }
 
+// A topic is a question, so the placeholder is one and so is the empty state's
+// sentence.
+const NEW_TOPIC_PLACEHOLDER = "e.g. what makes JITs fast";
+const NEW_TOPIC_BLURB = "A topic is one question and the books you read against it.";
+
+// The card that creates a topic. Same corner radius and column width as a topic
+// card, dashed rather than drawn, and no cover area of its own — an outline of a
+// card is a slot, and a slot is what an empty place on a shelf looks like. The
+// minimum height keeps it card-shaped when it is alone on its row, where a grid
+// item has no siblings to take its height from.
+const NEW_CARD =
+  "flex h-full min-h-[14rem] w-full cursor-pointer flex-col items-center justify-center gap-2 " +
+  "rounded-xl border-2 border-dashed border-border bg-background text-muted-foreground " +
+  "can-hover:hover:border-primary can-hover:hover:text-primary";
+
 function TopicLibrary(props: {
   topics: Topic[];
-  newTopicName: string;
-  setNewTopicName: (v: string) => void;
-  renamingId: string | null;
-  renameText: string;
-  setRenameText: (v: string) => void;
-  onCreate: () => void;
-  onStartRename: (t: Topic) => void;
-  onCommitRename: () => void;
-  onDelete: (t: Topic) => void;
-  onOpen: (t: Topic) => void;
+  onCreate: (name: string) => void;
+  onRename: (topic: Topic, name: string) => void;
+  onDelete: (topic: Topic) => void;
+  onOpen: (topic: Topic) => void;
 }) {
+  // Which dialog is up. Each is mounted only while it is open, so its field
+  // starts from the right value every time.
+  const [creating, setCreating] = useState(false);
+  const [renaming, setRenaming] = useState<Topic | null>(null);
+  const [deleting, setDeleting] = useState<Topic | null>(null);
+  const topics = shelfOrder(props.topics);
+
   return (
-    <div className={LIBRARY}>
-      <h1 className="mt-0 mb-5 mx-0 text-[22px] font-bold">Topics</h1>
-      <div className="flex gap-2 mb-5">
-        <Input
-          placeholder="New topic (e.g. what makes JITs fast)"
-          value={props.newTopicName}
-          onChange={(e) => props.setNewTopicName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && props.onCreate()}
-        />
-        <Button variant="outline" onClick={props.onCreate}>
-          Add
-        </Button>
-      </div>
-      {props.topics.length === 0 && <p className="my-3.5 text-[#777] text-sm">No topics yet. Create one to start reading.</p>}
-      <ul className={TOPIC_LIST}>
-        {props.topics.map((t) => (
-          <li key={t.id} className={TOPIC_ROW}>
-            {props.renamingId === t.id ? (
-              <Input
-                autoFocus
-                value={props.renameText}
-                onChange={(e) => props.setRenameText(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && props.onCommitRename()}
-                onBlur={props.onCommitRename}
-              />
-            ) : (
-              <button className={TOPIC_NAME} onClick={() => props.onOpen(t)}>
-                <span className="truncate">{t.name}</span>
-                <span className="shrink-0 text-xs text-[#777]">{t.files.length} file{t.files.length === 1 ? "" : "s"}</span>
-              </button>
-            )}
-            <div className="flex gap-1">
-              <Button variant="outline" size="sm" onClick={() => props.onStartRename(t)}>
-                Rename
-              </Button>
-              <DeleteTopicButton topicName={t.name} onDelete={() => props.onDelete(t)} />
-            </div>
+    <div className={SHELF_PAGE}>
+      <h1 className="mt-0 mb-6 mx-0 text-[22px] font-bold">Topics</h1>
+
+      {topics.length === 0 ? (
+        <div className="mx-auto max-w-sm pt-14 pb-16 text-center">
+          {/* An empty shelf drawn the way a card's is, so the empty screen says
+              what a full one will look like instead of being white. */}
+          <div
+            aria-hidden
+            className="mx-auto flex h-36 w-52 items-end justify-center gap-2 rounded-xl bg-muted p-4"
+          >
+            <span className="block h-[64%] w-[24%] rounded-[3px] border border-dashed border-secondary-border bg-background/60" />
+            <span className="block h-[86%] w-[24%] rounded-[3px] border border-dashed border-secondary-border bg-background/60" />
+            <span className="block h-[72%] w-[24%] rounded-[3px] border border-dashed border-secondary-border bg-background/60" />
+          </div>
+          <p className="mt-7 mb-0 text-[17px] font-medium">Nothing on the shelf yet</p>
+          <p className="mt-2 mb-0 text-sm text-muted-foreground">
+            {NEW_TOPIC_BLURB} Name the question first; the PDFs go in after.
+          </p>
+          <Button size="lg" className="mt-6" onClick={() => setCreating(true)}>
+            New topic
+          </Button>
+        </div>
+      ) : (
+        <ul className={`grid list-none m-0 p-0 gap-x-5 gap-y-7 ${TOPIC_GRID_COLUMNS_CLASS}`}>
+          {topics.map((t) => (
+            <TopicCard
+              key={t.id}
+              topic={t}
+              onOpen={() => props.onOpen(t)}
+              onRename={() => setRenaming(t)}
+              onDelete={() => setDeleting(t)}
+            />
+          ))}
+          <li>
+            <button className={NEW_CARD} onClick={() => setCreating(true)}>
+              <span aria-hidden className="text-[30px] leading-none font-light">
+                +
+              </span>
+              <span className="text-sm">New topic</span>
+            </button>
           </li>
-        ))}
-      </ul>
+        </ul>
+      )}
+
+      {creating && (
+        <TopicNameDialog
+          open
+          onOpenChange={setCreating}
+          title="New topic"
+          description={NEW_TOPIC_BLURB}
+          placeholder={NEW_TOPIC_PLACEHOLDER}
+          confirmLabel="Create"
+          onConfirm={props.onCreate}
+        />
+      )}
+      {renaming && (
+        <TopicNameDialog
+          open
+          onOpenChange={(open) => !open && setRenaming(null)}
+          title="Rename topic"
+          description="Only the name changes. The reading list stays as it is."
+          confirmLabel="Save"
+          initialValue={renaming.name}
+          onConfirm={(name) => props.onRename(renaming, name)}
+        />
+      )}
+      {deleting && (
+        <DeleteTopicButton
+          topicName={deleting.name}
+          open
+          onOpenChange={(open) => !open && setDeleting(null)}
+          onDelete={() => props.onDelete(deleting)}
+        />
+      )}
     </div>
   );
 }
