@@ -1,11 +1,11 @@
 // The shelf, minus React: how wide the grid is at a given viewport, the order
-// the cards come in, how big a cover is and where it sits, and the labels a
-// card carries. None of it depends on the DOM, so the phone form factor can
-// render the same shelf differently without re-deriving any of it (CLAUDE.md).
+// the cards come in, which covers a card shows, and the labels under them. None
+// of it depends on the DOM, so the phone form factor can render the same shelf
+// differently without re-deriving any of it (CLAUDE.md).
 //
-// Both library screens use this: the topics grid stacks up to three covers per
-// card, the files inside a topic show one each, and the numbers come from here
-// either way.
+// Both library screens use this: a topic card shows the book it was last read
+// against with the others as page edges beside it, a file card shows its own
+// book, and the numbers come from here either way.
 
 import { sortedFiles, type FileRef, type Topic } from "../../../platform/app/topics";
 
@@ -20,14 +20,15 @@ export interface GridStep {
   className: string;
 }
 
-// Column counts are set by how big a cover has to be to be read as a cover, not
-// by how much width there is to fill: two on iPad portrait (820, a ~300px
-// cover), three on landscape (1180), four before a desktop window makes the
-// cards absurd. Two is also the floor — one column is the list this replaced.
+// A cover is the whole card, so a column is only as wide as it needs to be for
+// a cover to be legible — around 240px, which is three across an iPad in
+// portrait and four in landscape. The screen is a shelf: several rows of books
+// at once, not a row and a half of framed pictures.
 export const TOPIC_GRID_STEPS: readonly GridStep[] = [
   { minWidth: 0, columns: 2, className: "grid-cols-2" },
-  { minWidth: 1024, columns: 3, className: "lg:grid-cols-3" },
-  { minWidth: 1280, columns: 4, className: "xl:grid-cols-4" },
+  { minWidth: 768, columns: 3, className: "md:grid-cols-3" },
+  { minWidth: 1024, columns: 4, className: "lg:grid-cols-4" },
+  { minWidth: 1280, columns: 5, className: "xl:grid-cols-5" },
 ];
 
 export const TOPIC_GRID_COLUMNS_CLASS = TOPIC_GRID_STEPS.map((s) => s.className).join(" ");
@@ -47,136 +48,65 @@ export function shelfOrder(topics: Topic[]): Topic[] {
   return [...topics].sort((a, b) => b.createdAt - a.createdAt || a.name.localeCompare(b.name));
 }
 
+// The front cover plus this many page edges beside it.
 export const MAX_COVERS = 3;
 
-// The shape of a cover's box, width over height. A trade paperback is about
-// 0.66 and a US Letter page 0.77, so this sits between them; the image inside
-// is contained rather than cropped, which is what keeps a book whose first page
-// is a different shape from losing its bottom line of type. What varies per
-// book is how much of the box it fills, never how much of it survives.
+// The shape a cover box is given before the image has said what shape it is:
+// between a trade paperback (0.66) and a US Letter page (0.77). It only decides
+// how much room is held while a cover loads.
 export const COVER_ASPECT = 0.72;
 
-// One cover in a stack. Everything is a percentage of the band's inner box, not
-// of the card: the card grows with the column count and the covers grow with it.
-//
-// Size is given as a height, because that is what a shelf holds constant — books
-// standing next to each other are as tall as each other whatever shape they are,
-// and the width follows from the book. Position is given per anchor: a lone
-// cover is centred, so it sits in the middle of the card whatever its shape; a
-// stack is anchored by left edges, which is the only arrangement where a cover
-// behind is guaranteed to show a strip of itself no matter how much narrower
-// than the one in front it turns out to be.
-export interface CoverSlot {
-  file: FileRef;
-  anchor: "centre" | "left";
-  // The centre, or the left edge, depending on the anchor.
-  leftPercent: number;
-  heightPercent: number;
-  // What a landscape first page — a slide deck — is allowed to grow to before
-  // it is capped and shortened instead of running out of the card.
-  maxWidthPercent: number;
-  // Each cover is in front of the one to its left, so the stack fans the way a
-  // row of leaning books does and the last one — the most recently read — is a
-  // whole cover rather than a strip.
-  z: number;
+// How wide one page edge is, as a percentage of the card. Enough to see that
+// the topic holds more than one book, not enough to take room from the cover.
+export const SPINE_WIDTH_PERCENT = 7;
+
+// What a card shows: one cover across the full width of the card, and the
+// covers of the other books as edges to the right of it, the way books stand
+// next to each other on a shelf. The card has no padding, so the front cover
+// and the edges together are exactly the width of the card.
+export interface CoverStack {
+  front: FileRef;
+  // Most recently read first, so the nearest edge is the next book.
+  spines: FileRef[];
+  spineWidthPercent: number;
 }
 
-// The band's inner box is this many times taller than it is wide: it is 4:5 with
-// a 4-unit inset at the top and none at the bottom, which lands between 1.32 and
-// 1.35 across the card widths this grid produces. It is what converts a height
-// into a width, and being 2% out only moves an edge by a pixel or two.
-const INNER_RATIO = 1.33;
-
-// Cover height, per stack size, as a percentage of the band's inner height. A
-// stack is a little shorter than a lone book so that the strips behind it have
-// somewhere to be; the three numbers are close together on purpose, so that a
-// card with one book and a card with three do not look like different screens.
-const HEIGHT_PERCENT: Record<number, number> = { 1: 90, 2: 86, 3: 80 };
-
-// How far apart two neighbouring left edges are, which is exactly how much of
-// the cover behind stays visible.
-const STEP_PERCENT: Record<number, number> = { 1: 0, 2: 14, 3: 10 };
-
-// The most of the band's width a whole stack may take, which is what the two
-// tables above are chosen against: a stack always has a margin either side.
-export const MAX_SPAN_PERCENT = 98;
-
-// The outline a topic with no files shows. Smaller than a real cover: it is a
-// space for a book, not a book.
-export const EMPTY_SLOT_WIDTH_PERCENT = 60;
-
-export function coverSlots(topic: Topic): CoverSlot[] {
-  // The three most recently read books — the shelf shows what the topic is
-  // currently about, not what was added to it first — laid out oldest first, so
-  // that the most recent one ends up on the right, in front and whole.
-  return layout(sortedFiles(topic).slice(0, MAX_COVERS).reverse());
+export function coverStack(topic: Topic): CoverStack | null {
+  // Most recently read first: the shelf shows what the topic is currently
+  // about, not what was added to it first.
+  return stack(sortedFiles(topic).slice(0, MAX_COVERS));
 }
 
-// The same box for a screen that shows one book per card. It goes through the
-// same layout so a single cover is the same size on both screens.
-export function singleCoverSlot(file: FileRef): CoverSlot[] {
-  return layout([file]);
+// A screen that shows one book per card: the same front cover, no edges.
+export function singleCover(file: FileRef): CoverStack {
+  return stack([file]) as CoverStack;
 }
 
-function layout(files: FileRef[]): CoverSlot[] {
-  const count = files.length;
-  const height = HEIGHT_PERCENT[count] ?? 0;
-  const step = STEP_PERCENT[count] ?? 0;
-  // What a book-shaped cover of this height would be wide. It is also the cap:
-  // no cover is ever wider than a book, so a landscape deck behind a book stays
-  // behind it instead of sticking out past its edge.
-  const nominalWidth = height * INNER_RATIO * COVER_ASPECT;
-  if (count === 1) {
-    return [
-      {
-        file: files[0],
-        anchor: "centre",
-        leftPercent: 50,
-        heightPercent: height,
-        maxWidthPercent: nominalWidth,
-        z: 1,
-      },
-    ];
-  }
-  // The stack is centred as a group, at that nominal width: the first left edge
-  // is wherever that leaves it.
-  const base = Math.max(0, (100 - (nominalWidth + (count - 1) * step)) / 2);
-  return files.map((file, i) => ({
-    file,
-    anchor: "left",
-    leftPercent: base + i * step,
-    heightPercent: height,
-    maxWidthPercent: nominalWidth,
-    z: i + 1,
-  }));
-}
-
-// Where one cover's box goes, as inline style. Both edges are worked out here
-// rather than left to `aspect-ratio`, because the box has to be exactly the
-// artwork: the hairline edge and the shadow are what make a white first page
-// visible on a white card, and a frame with air in it would show that air.
-//
-// `ratio` is the image's own width over height, known once it has loaded; until
-// then a book-shaped guess stands in. A cover wider than its slot allows — a
-// landscape slide deck — is capped by width and gets shorter, which is what a
-// wide flat thing on a shelf looks like anyway.
-export function coverBox(
-  slot: CoverSlot,
-  ratio: number | undefined,
-): { left: string; width: string; height: string; zIndex: number } {
-  const shape = ratio && ratio > 0 ? ratio : COVER_ASPECT;
-  let height = slot.heightPercent;
-  let width = height * INNER_RATIO * shape;
-  if (width > slot.maxWidthPercent) {
-    width = slot.maxWidthPercent;
-    height = width / (INNER_RATIO * shape);
-  }
+function stack(files: FileRef[]): CoverStack | null {
+  if (files.length === 0) return null;
   return {
-    left: `${slot.leftPercent}%`,
-    width: `${width}%`,
-    height: `${height}%`,
-    zIndex: slot.z,
+    front: files[0],
+    spines: files.slice(1),
+    spineWidthPercent: SPINE_WIDTH_PERCENT,
   };
+}
+
+// Every file a card needs a cover image for.
+export function stackFiles(stack: CoverStack | null): FileRef[] {
+  return stack ? [stack.front, ...stack.spines] : [];
+}
+
+// The shape the front cover's box is given: its own, once the image has
+// reported it, and the standing guess until then. Guards the shapes an image
+// can report when it fails to decode.
+export function coverAspect(ratio: number | undefined): number {
+  return ratio && ratio > 0 && Number.isFinite(ratio) ? ratio : COVER_ASPECT;
+}
+
+// How wide the front cover is, as a percentage of the card: whatever the page
+// edges beside it do not take.
+export function frontWidthPercent(stack: CoverStack): number {
+  return 100 - stack.spines.length * stack.spineWidthPercent;
 }
 
 export function fileCountLabel(count: number): string {

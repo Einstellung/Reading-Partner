@@ -1,92 +1,107 @@
-// The covers on a card: one book, a stack of three, or the outline of the book
-// a topic does not have yet. Both library grids use this, so a cover looks the
-// same wherever it appears.
+// The covers on a card. The front one is the card: it runs to both edges and
+// the card is as tall as it is. The other books in a topic stand to its right
+// as page edges, which is the whole of what is left of the stack — a cover
+// pulled back into the middle of a frame is what this replaced.
 //
-// A cover is never cropped. Its box takes the width the slot gives it and the
-// shape the image reports on load (topic-shelf.ts), so the hairline edge and
-// the shadow are exactly the artwork — a first page is whatever shape it is,
-// and cropping one to a fixed frame takes the bottom line of type off the front
-// of the book. Until the image answers, the box is a book-shaped guess.
+// A cover is never cropped to a shape someone else chose. The box takes the
+// shape the image reports on load (topic-shelf.ts); until then it holds a
+// book-shaped space so the grid does not jump when the image arrives.
 
-import { useState } from "react";
-import { COVER_BAND } from "./cardStyles";
+import { useState, type SyntheticEvent } from "react";
+import { COVER_ROW } from "./cardStyles";
 import {
-  coverBox,
+  coverAspect,
   coverInitial,
-  COVER_ASPECT,
-  EMPTY_SLOT_WIDTH_PERCENT,
-  type CoverSlot,
+  frontWidthPercent,
+  stackFiles,
+  type CoverStack,
 } from "./topic-shelf";
 import { useCovers } from "./useCovers";
 
-// Bottom-aligned, so books stand on one line. A lone cover is centred on the
-// band; a stack is placed by left edges (topic-shelf.ts).
-const COVER = "absolute bottom-0 block rounded-[2px]";
-const CENTRED = "-translate-x-1/2";
-// The edge and the lift. Both are needed on a white first page, which is
-// otherwise invisible on a white card.
-const COVER_EDGE = "border border-black/10 shadow-[0_3px_8px_rgba(0,0,0,0.18)]";
+// The placeholder a book with no cover gets: the whole card in the tinted
+// second rank with the title's first letter set into the corner, not a small
+// book shape floating in a bigger box.
+const PLACEHOLDER =
+  "flex h-full w-full items-start justify-start bg-secondary p-2.5 text-xl leading-none font-medium text-secondary-foreground";
 
-export default function CoverBand({ slots }: { slots: CoverSlot[] }) {
-  const { covers, markFailed } = useCovers(slots.map((s) => s.file));
+export default function CoverBand({ stack }: { stack: CoverStack | null }) {
+  const { covers, markFailed } = useCovers(stackFiles(stack));
   // Natural width over height, per path, once the image has loaded.
   const [ratios, setRatios] = useState<Record<string, number>>({});
 
+  if (!stack) {
+    // A topic with no files still gets a book-shaped space, so the card reads
+    // as a shelf waiting for something rather than as a broken one. Outlined
+    // rather than filled: a grey fill is what a cover on its way looks like.
+    return (
+      <span
+        className="block w-full border border-dashed border-border bg-background"
+        style={{ aspectRatio: coverAspect(undefined) }}
+      />
+    );
+  }
+
+  const front = stack.front.path;
+  const frontUrl = covers[front];
+
+  const onLoad = (path: string) => (e: SyntheticEvent<HTMLImageElement>) => {
+    const { naturalWidth, naturalHeight } = e.currentTarget;
+    if (!naturalWidth || !naturalHeight) return;
+    setRatios((prev) => (prev[path] ? prev : { ...prev, [path]: naturalWidth / naturalHeight }));
+  };
+
   return (
-    <span className={COVER_BAND}>
-      <span className="relative block h-full w-full">
-        {slots.length === 0 ? (
-          // An empty topic still gets a book-shaped space, so the card reads as
-          // a shelf waiting for something rather than as a broken one.
-          <span
-            className={`${COVER} ${CENTRED} left-1/2 border border-dashed border-secondary-border`}
-            style={{ width: `${EMPTY_SLOT_WIDTH_PERCENT}%`, aspectRatio: COVER_ASPECT }}
-          />
+    <span className={COVER_ROW}>
+      {/* The front cover. Its aspect ratio is what gives the row its height,
+          which is why the page edges beside it need no height of their own. */}
+      <span
+        className="relative block"
+        style={{
+          width: `${frontWidthPercent(stack)}%`,
+          aspectRatio: coverAspect(ratios[front]),
+        }}
+      >
+        {frontUrl === undefined ? (
+          <span className="block h-full w-full animate-pulse bg-muted" />
+        ) : frontUrl === null ? (
+          <span className={PLACEHOLDER}>{coverInitial(stack.front.name)}</span>
         ) : (
-          slots.map((slot) => {
-            const path = slot.file.path;
-            const url = covers[path];
-            const box = coverBox(slot, ratios[path]);
-            const place = slot.anchor === "centre" ? `${COVER} ${CENTRED}` : COVER;
-            if (url === undefined) {
-              return <span key={path} className={`${place} animate-pulse bg-muted`} style={box} />;
-            }
-            if (url === null) {
-              return (
-                <span
-                  key={path}
-                  // The letter sits top-left, where a spine carries its title:
-                  // in a stack of three only the left strip of the covers behind
-                  // is visible, and a centred letter hides under the one in
-                  // front of it.
-                  className={`${place} ${COVER_EDGE} flex items-start justify-start bg-secondary px-2 pt-2 text-2xl leading-none font-medium text-secondary-foreground`}
-                  style={box}
-                >
-                  {coverInitial(slot.file.name)}
-                </span>
-              );
-            }
-            return (
-              <img
-                key={path}
-                src={url}
-                alt=""
-                className={`${place} ${COVER_EDGE} object-contain object-bottom`}
-                style={box}
-                onLoad={(e) => {
-                  const { naturalWidth, naturalHeight } = e.currentTarget;
-                  if (!naturalWidth || !naturalHeight) return;
-                  setRatios((prev) =>
-                    prev[path] ? prev : { ...prev, [path]: naturalWidth / naturalHeight },
-                  );
-                }}
-                // A URL that will not decode is the same as no cover.
-                onError={() => markFailed(path)}
-              />
-            );
-          })
+          <img
+            src={frontUrl}
+            alt=""
+            className="block h-full w-full object-cover"
+            onLoad={onLoad(front)}
+            // A URL that will not decode is the same as no cover.
+            onError={() => markFailed(front)}
+          />
         )}
       </span>
+
+      {stack.spines.map((file) => {
+        const url = covers[file.path];
+        return (
+          <span
+            key={file.path}
+            className="relative block self-stretch border-l border-black/10"
+            style={{ width: `${stack.spineWidthPercent}%` }}
+          >
+            {url === undefined ? (
+              <span className="block h-full w-full animate-pulse bg-muted" />
+            ) : url === null ? (
+              <span className="block h-full w-full bg-secondary" />
+            ) : (
+              // The left edge of that book's cover, which is the part of it a
+              // book standing behind another one shows.
+              <img
+                src={url}
+                alt=""
+                className="block h-full w-full object-cover object-left"
+                onError={() => markFailed(file.path)}
+              />
+            )}
+          </span>
+        );
+      })}
     </span>
   );
 }

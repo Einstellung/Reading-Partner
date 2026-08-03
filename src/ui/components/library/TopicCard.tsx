@@ -1,9 +1,10 @@
-// One topic on the shelf: the covers of its three most recently read books, its
-// name, and how many files it holds. Nothing else — reading position, marks and
-// last-opened all belong to a book, not to the question the books are read
-// against, and a grid of numbers stops being a shelf.
+// One topic on the shelf: the cover of the book it was last read against, the
+// other books as page edges beside it, its name and how many files it holds.
+// Nothing else — reading position, marks and last-opened all belong to a book,
+// not to the question the books are read against, and a grid of numbers stops
+// being a shelf.
 //
-// The geometry, the ordering and the labels are in topic-shelf.ts; this file
+// The ordering, the widths and the labels are in topic-shelf.ts; this file
 // renders them and binds the events.
 
 import { useMemo } from "react";
@@ -11,7 +12,7 @@ import type { Topic } from "../../../platform/app/topics";
 import { CARD_LABEL, LIBRARY_CARD } from "./cardStyles";
 import CardMenu from "./CardMenu";
 import CoverBand from "./CoverBand";
-import { coverSlots, fileCountLabel } from "./topic-shelf";
+import { coverStack, fileCountLabel } from "./topic-shelf";
 
 export default function TopicCard(props: {
   topic: Topic;
@@ -20,23 +21,27 @@ export default function TopicCard(props: {
   onDelete: () => void;
 }) {
   const { topic } = props;
-  const slots = useMemo(() => coverSlots(topic), [topic]);
+  const stack = useMemo(() => coverStack(topic), [topic]);
 
   return (
     <li className="relative">
       <button className={LIBRARY_CARD} onClick={props.onOpen}>
-        <CoverBand slots={slots} />
+        <CoverBand stack={stack} />
         <span className={CARD_LABEL}>
-          <span className="block truncate text-[15px] text-foreground">{topic.name}</span>
-          <span className="mt-0.5 block text-xs text-muted-foreground">
+          <span className="block truncate text-[13px] font-medium text-foreground">
+            {topic.name}
+          </span>
+          <span className="mt-0.5 block text-[11px] text-muted-foreground">
             {fileCountLabel(topic.files.length)}
           </span>
         </span>
       </button>
 
       {/* Outside the card's button rather than inside it: a button inside a
-          button is neither valid nor clickable. */}
-      <div className="absolute right-1 bottom-1.5">
+          button is neither valid nor clickable. It sits over the label strip,
+          whose right padding is its room; the target is 44px and reaches up
+          over the bottom of the cover, the glyph is small. */}
+      <div className="absolute right-0 bottom-0">
         <CardMenu
           label={`Actions for ${topic.name}`}
           items={[

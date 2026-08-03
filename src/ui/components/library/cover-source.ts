@@ -2,7 +2,7 @@
 // PDF's first page into an <img src> lands as src/reading/covers.ts on another
 // branch; until the two meet every cover resolves to null, which is the same
 // answer a book with no readable first page gives and which the card already
-// draws (a spine with the title's first letter).
+// draws (a tinted block with the title's first letter).
 //
 // The whole file is the seam. Replace its body with
 //
