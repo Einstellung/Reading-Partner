@@ -16,6 +16,7 @@
 | 出 iOS 包、签名、图标、深链接 | iOS 构建与签名 |
 | 桌面 webview 行为异常 | WebKit / webview |
 | 渲染链接、点外链、开系统浏览器 | WebKit / webview |
+| 确认框、删除之类的破坏性操作 | WebKit / webview |
 | 调模型、改 provider 层、组装提示词、加长上下文 | AI 调用与上下文窗口 |
 | 顶栏、工具条、下拉浮层的定位 | 界面与布局 |
 | 全局样式、Tailwind layer、字体与行高 | 界面与布局 + EmbedPDF 引擎 |
@@ -103,6 +104,7 @@
 - [67-webkit-tap-does-not-focus-a-button](./67-webkit-tap-does-not-focus-a-button.md) — WebKit 点击不给按钮焦点，靠 `.focus()` + `onBlur` 收起的二次确认在 iPad 上按了等于没按（blur 抢在 click 前面解除武装，React 又复用同一个 button 节点，这一下变成解除再武装）；收起改用 document 上 capture 的 pointerdown
 - [69-visibilitychange-misses-window-switching](./69-visibilitychange-misses-window-switching.md) — 切到别的窗口再切回来不发 `visibilitychange`（页面一直是 visible），只有最小化和 unmap 才翻；`present()` 之后焦点还会回弹补一个 `blur`。"在前台"要当状态维护（visible && focused，四个事件一起），离开那侧要便宜、回来那侧要有下限
 - [94-a-bare-anchor-navigates-the-whole-app-away](./94-a-bare-anchor-navigates-the-whole-app-away.md) — 不注册 `on_navigation` 的 Tauri app 里，AI 回答中一个裸 `<a href>` 就把 webview 导航到外站，书和对话一起丢；带 `target="_blank"` 的那条被 opener 插件的注入脚本接管，却被 `opener:allow-open-url` 的 scope 静默拒掉。Rust 侧加导航拦截 + 前端显式 `openUrl` + 放开 opener scope，Rust 里必须用 `OpenerExt::opener()`（自由函数 `open_url` 在 iOS 上不工作）
+- [98-tauri-replaces-window-confirm-with-a-promise](./98-tauri-replaces-window-confirm-with-a-promise.md) — dialog 插件的 init 脚本把 `window.confirm` 换成 async 版本，返回的 Promise 恒为真值（`lib.dom.d.ts` 仍写 `boolean`，tsc 全绿），`if (!confirm(...)) return` 形同虚设；那次 invoke 还被 ACL 拒掉，只留一条没人接的 rejection。破坏性确认一律走 AlertDialog
 
 ## 界面与布局
 
