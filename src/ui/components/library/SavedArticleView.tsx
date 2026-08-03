@@ -24,8 +24,12 @@ export default function SavedArticleView({
 }) {
   const published = formatPublishedAt(article.publishedAt);
   // The stored HTML keeps the original image URLs; the img: proxy is applied on
-  // the way to the webview (docs/pitfall/30).
-  const body = useMemo(() => articleHtmlForWebview(article.html), [article.html]);
+  // the way to the webview (docs/pitfall/30), with the saved article's own URL
+  // as the Referer the image hosts ask for.
+  const body = useMemo(
+    () => articleHtmlForWebview(article.html, article.url),
+    [article.html, article.url],
+  );
   return (
     <div className="absolute inset-0 overflow-y-auto bg-white">
       <style>{ARTICLE_PROSE_CSS}</style>

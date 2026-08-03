@@ -4,8 +4,12 @@
 // bun tests; not a general-purpose sanitizer, but the article view renders the
 // result with dangerouslySetInnerHTML, so it removes every script/handler/plugin
 // vector and neutralizes javascript: URLs. Remote images are kept (news pages
-// are mostly images) but forced to referrerpolicy="no-referrer" — the CDNs use
-// Referer-based hotlink protection, so a referrer leak would blank them out.
+// are mostly images) and left to load lazily.
+//
+// They used to be given referrerpolicy="no-referrer". That attribute no longer
+// reaches anything: the webview does not fetch these images at all, the Rust
+// img: handler does (docs/pitfall/30), and hotlink protection wants the
+// article's URL in the Referer rather than nothing at all.
 
 // Whole elements dropped with their content (they carry no readable text).
 const DROP_WITH_CONTENT = ["script", "style", "noscript", "iframe", "object", "embed", "video", "audio", "canvas", "svg", "form", "head"];
@@ -47,7 +51,7 @@ function toHttpUrl(value: string): string {
 }
 
 function buildImg(url: string): string {
-  return `<img src="${url.replace(/"/g, "&quot;")}" referrerpolicy="no-referrer" loading="lazy">`;
+  return `<img src="${url.replace(/"/g, "&quot;")}" loading="lazy">`;
 }
 
 // Lazy-load-agnostic image rewrite. Instead of a hard-coded attribute-name list

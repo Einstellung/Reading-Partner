@@ -3,8 +3,8 @@
 // and COEP require-corp (the PDFium WASM engine needs cross-origin isolation)
 // drops every subresource that arrives without a CORP header. Neither can be
 // relaxed, so the bytes come back through here: the frontend rewrites
-// `<img src="https://cdn/a.jpg">` to convertFileSrc(url, "img"), this handler
-// fetches the original and replays it with `Cross-Origin-Resource-Policy:
+// `<img src="https://cdn/a.jpg">` to convertFileSrc(payload, "img"), this
+// handler fetches the original and replays it with `Cross-Origin-Resource-Policy:
 // cross-origin`, which is exactly what COEP is looking for.
 //
 // This is the app's only outbound request driven by third-party markup, so it
@@ -12,12 +12,17 @@
 // loopback/private/link-local host (before or after a redirect), an image
 // content type, and a hard byte cap. Beyond that it fetches nothing the article
 // view would not have fetched itself.
+//
+// The request carries the article's own URL as Referer, which is what the CDNs
+// with hotlink protection want to see. The payload keeps it in a segment of its
+// own, filled in by the host from the article record; nothing read out of the
+// markup ever reaches a request header.
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::sync::OnceLock;
 use std::time::Duration;
 
-use tauri::http::{header, Method, Request, Response, StatusCode};
+use tauri::http::{header, HeaderValue, Method, Request, Response, StatusCode};
 use tauri::{Runtime, UriSchemeContext, UriSchemeResponder};
 use tauri_plugin_http::reqwest::{redirect, Client, Url};
 
@@ -34,9 +39,7 @@ const MAX_REDIRECTS: usize = 5;
 const TIMEOUT: Duration = Duration::from_secs(20);
 
 // Same identity as infoFetch (src/info/extract/user-agent.ts): news CDNs serve
-// a placeholder or a 403 to anything that does not look like a browser. No
-// Referer is sent — reqwest sends none by default, and the CDNs' hotlink
-// protection is what would blank the image out.
+// a placeholder or a 403 to anything that does not look like a browser.
 const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 const ACCEPT: &str = "image/avif,image/webp,image/apng,image/*,*/*;q=0.8";
 
@@ -46,27 +49,54 @@ pub fn handle<R: Runtime>(
     responder: UriSchemeResponder,
 ) {
     if !matches!(*request.method(), Method::GET | Method::HEAD) {
-        responder.respond(fail(StatusCode::METHOD_NOT_ALLOWED));
+        responder.respond(refuse(
+            StatusCode::METHOD_NOT_ALLOWED,
+            format_args!("{} is not allowed", request.method()),
+        ));
         return;
     }
-    let Some(url) = target_url(request.uri().path()) else {
-        responder.respond(fail(StatusCode::BAD_REQUEST));
+    let Some(target) = target(request.uri().path()) else {
+        responder.respond(refuse(
+            StatusCode::BAD_REQUEST,
+            format_args!("unusable payload {}", request.uri().path()),
+        ));
         return;
     };
     // The handler is called on the webview's thread; the fetch runs on Tauri's
     // async runtime so nothing blocks the UI.
-    tauri::async_runtime::spawn(async move { responder.respond(fetch(url).await) });
+    tauri::async_runtime::spawn(async move { responder.respond(fetch(target).await) });
 }
 
-// The image URL arrives as one percent-encoded path segment: the frontend uses
-// convertFileSrc, which runs the whole URL through encodeURIComponent, so the
-// scheme, query and any non-ASCII characters land here escaped and the payload
-// can never be confused with a path of our own. Decoded once, then validated.
-fn target_url(path: &str) -> Option<Url> {
-    let raw = percent_encoding::percent_decode(path.strip_prefix('/')?.as_bytes())
+// What one proxied image request is: the picture to fetch and the page it
+// appears on, if the host knew one.
+struct Target {
+    url: Url,
+    referer: Option<String>,
+}
+
+// The payload arrives as one percent-encoded path segment holding two of its
+// own: `<image url>/<page url>`, each percent-encoded by the frontend
+// (imageProxyPayload in src/platform/app/image-proxy.ts) before convertFileSrc
+// escapes the lot again. So one decode leaves the separator as the only bare
+// "/" — an image URL cannot widen into the referer half whatever it contains,
+// and neither half can be confused with a path of our own. Then each half is
+// decoded once more and validated.
+fn target(path: &str) -> Option<Target> {
+    let payload = decode(path.strip_prefix('/')?)?;
+    let (image, page) = payload.split_once('/')?;
+    let url = remote_http_url(&decode(image)?)?;
+    Some(Target { url, referer: referer(&decode(page)?) })
+}
+
+fn decode(raw: &str) -> Option<String> {
+    percent_encoding::percent_decode(raw.as_bytes())
         .decode_utf8()
-        .ok()?;
-    let url = Url::parse(&raw).ok()?;
+        .ok()
+        .map(|s| s.into_owned())
+}
+
+fn remote_http_url(raw: &str) -> Option<Url> {
+    let url = Url::parse(raw).ok()?;
     if !matches!(url.scheme(), "http" | "https") {
         return None;
     }
@@ -74,6 +104,19 @@ fn target_url(path: &str) -> Option<Url> {
         return None;
     }
     Some(url)
+}
+
+// The Referer to send, or None. Empty means the caller had no page URL; a value
+// that is not an ordinary http(s) URL, or that a header cannot hold, is dropped
+// rather than failing the image — the picture still has a chance without it.
+fn referer(raw: &str) -> Option<String> {
+    let url = Url::parse(raw).ok()?;
+    if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
+        return None;
+    }
+    let value = url.to_string();
+    HeaderValue::from_str(&value).ok()?;
+    Some(value)
 }
 
 // Whether a host may be fetched. Rejects the loopback/private/link-local ranges
@@ -132,7 +175,11 @@ fn client() -> &'static Client {
             // Every hop is re-checked: a public host that redirects to
             // 127.0.0.1 must not be followed.
             .redirect(redirect::Policy::custom(|attempt| {
-                if attempt.previous().len() >= MAX_REDIRECTS || !host_allowed(attempt.url()) {
+                if attempt.previous().len() >= MAX_REDIRECTS {
+                    eprintln!("image proxy: too many redirects for {}", attempt.url());
+                    attempt.stop()
+                } else if !host_allowed(attempt.url()) {
+                    eprintln!("image proxy: refused a redirect to {}", attempt.url());
                     attempt.stop()
                 } else {
                     attempt.follow()
@@ -143,15 +190,36 @@ fn client() -> &'static Client {
     })
 }
 
-async fn fetch(url: Url) -> Response<Vec<u8>> {
-    let Ok(mut res) = client().get(url).header(header::ACCEPT, ACCEPT).send().await else {
-        return fail(StatusCode::BAD_GATEWAY);
+async fn fetch(target: Target) -> Response<Vec<u8>> {
+    let url = target.url.clone();
+    let mut req = client().get(target.url).header(header::ACCEPT, ACCEPT);
+    // Hotlink protection: image.jiqizhixin.com answers 403 to a request with no
+    // Referer and 200 to the same one carrying the article's own site, and it
+    // is not alone. The article URL is what a browser loading that page would
+    // have sent, so this tells the image host nothing it would not already know.
+    if let Some(referer) = target.referer {
+        req = req.header(header::REFERER, referer);
+    }
+    let res = req.send().await;
+    let mut res = match res {
+        Ok(res) => res,
+        Err(err) => {
+            return refuse(StatusCode::BAD_GATEWAY, format_args!("{url} failed: {err}"))
+        }
     };
     if !res.status().is_success() {
-        return fail(StatusCode::BAD_GATEWAY);
+        // 403 here is hotlink protection turning the picture down; the Referer
+        // sent with the request is the first thing to look at.
+        return refuse(
+            StatusCode::BAD_GATEWAY,
+            format_args!("{url} answered {}", res.status()),
+        );
     }
     if res.content_length().is_some_and(|n| n > MAX_IMAGE_BYTES as u64) {
-        return fail(StatusCode::PAYLOAD_TOO_LARGE);
+        return refuse(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            format_args!("{url} declares {:?} bytes", res.content_length()),
+        );
     }
     let declared = res
         .headers()
@@ -165,17 +233,30 @@ async fn fetch(url: Url) -> Response<Vec<u8>> {
         match res.chunk().await {
             Ok(Some(chunk)) => {
                 if body.len() + chunk.len() > MAX_IMAGE_BYTES {
-                    return fail(StatusCode::PAYLOAD_TOO_LARGE);
+                    return refuse(
+                        StatusCode::PAYLOAD_TOO_LARGE,
+                        format_args!("{url} is over {MAX_IMAGE_BYTES} bytes"),
+                    );
                 }
                 body.extend_from_slice(&chunk);
             }
             Ok(None) => break,
-            Err(_) => return fail(StatusCode::BAD_GATEWAY),
+            Err(err) => {
+                return refuse(
+                    StatusCode::BAD_GATEWAY,
+                    format_args!("{url} broke off mid-body: {err}"),
+                )
+            }
         }
     }
     match image_content_type(declared.as_deref(), &body) {
         Some(content_type) => ok(&content_type, body),
-        None => fail(StatusCode::UNSUPPORTED_MEDIA_TYPE),
+        // Hotlink protection sometimes answers 200 with an HTML notice, so this
+        // is the same story as a 403 wearing a different hat.
+        None => refuse(
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            format_args!("{url} is not an image: {}", declared.as_deref().unwrap_or("no type")),
+        ),
     }
 }
 
@@ -233,6 +314,16 @@ fn ok(content_type: &str, body: Vec<u8>) -> Response<Vec<u8>> {
         .unwrap_or_else(|_| Response::new(Vec::new()))
 }
 
+// A refusal, said out loud. Nothing outside can tell these apart otherwise: the
+// article view only sees an <img> that failed and hides it, and the CSP has no
+// img: in connect-src, so the frontend cannot fetch the response to read a
+// status or a header off it. Stderr is where the rest of the shell writes
+// (migrate.rs, voice.rs); a device build is read with the app attached.
+fn refuse(status: StatusCode, reason: std::fmt::Arguments<'_>) -> Response<Vec<u8>> {
+    eprintln!("image proxy: {reason}");
+    fail(status)
+}
+
 // An empty body with a status. The article view hides the <img> on the load
 // error rather than showing a broken-image icon.
 fn fail(status: StatusCode) -> Response<Vec<u8>> {
@@ -248,44 +339,123 @@ fn fail(status: StatusCode) -> Response<Vec<u8>> {
 mod tests {
     use super::*;
 
-    fn decode(path: &str) -> Option<String> {
-        target_url(path).map(|u| u.to_string())
+    // What the frontend puts on the wire: each half percent-encoded, joined by
+    // "/", the pair escaped once more into a single path segment. Mirrors
+    // imageProxyPayload + convertFileSrc, so the tests exercise the real shape.
+    fn path_for(image: &str, page: &str) -> String {
+        let encode = |s: &str| {
+            percent_encoding::utf8_percent_encode(s, percent_encoding::NON_ALPHANUMERIC).to_string()
+        };
+        format!("/{}", encode(&format!("{}/{}", encode(image), encode(page))))
+    }
+
+    fn image_of(path: &str) -> Option<String> {
+        target(path).map(|t| t.url.to_string())
+    }
+
+    fn referer_of(image: &str, page: &str) -> Option<String> {
+        target(&path_for(image, page))?.referer
     }
 
     #[test]
     fn accepts_an_encoded_absolute_https_url() {
         assert_eq!(
-            decode("/https%3A%2F%2Fcdn.example.com%2Fa.jpg%3Fw%3D640%26h%3D480"),
+            image_of(&path_for("https://cdn.example.com/a.jpg?w=640&h=480", "")),
             Some("https://cdn.example.com/a.jpg?w=640&h=480".to_string())
         );
     }
 
     #[test]
     fn keeps_non_ascii_paths_intact() {
-        let encoded = "/https%3A%2F%2Fcdn.example.com%2F%E5%9B%BE%E7%89%87.jpg";
         assert_eq!(
-            decode(encoded),
+            image_of(&path_for("https://cdn.example.com/图片.jpg", "")),
             Some("https://cdn.example.com/%E5%9B%BE%E7%89%87.jpg".to_string())
         );
     }
 
     #[test]
+    fn carries_the_page_url_as_the_referer() {
+        assert_eq!(
+            referer_of("https://image.example.com/a.png", "https://www.example.com/articles/1"),
+            Some("https://www.example.com/articles/1".to_string())
+        );
+        // A page URL with a query and non-ASCII survives its own round trip.
+        assert_eq!(
+            referer_of("https://image.example.com/a.png", "https://www.example.com/文章?id=7"),
+            Some("https://www.example.com/%E6%96%87%E7%AB%A0?id=7".to_string())
+        );
+    }
+
+    #[test]
+    fn sends_no_referer_when_the_page_url_is_missing_or_unusable() {
+        for page in ["", "about:blank", "javascript:alert(1)", "/relative", "https://"] {
+            assert_eq!(
+                referer_of("https://image.example.com/a.png", page),
+                None,
+                "{page} should not become a Referer"
+            );
+        }
+    }
+
+    // Paths produced by running imageProxyPayload through convertFileSrc's
+    // encodeURIComponent, pasted verbatim: encodeURIComponent leaves a few
+    // characters (-_.!~*'()) alone that a Rust encoder would escape, so this is
+    // the shape the handler really gets rather than the one the tests build.
+    #[test]
+    fn decodes_what_the_frontend_actually_sends() {
+        let article = target("/https%253A%252F%252Fimage.jiqizhixin.com%252Fuploads%252Feditor%252F8c619e12-fd2d-4fc5-a1b6-2beaccf0fa0d%252F640.png%2Fhttps%253A%252F%252Fwww.jiqizhixin.com%252Farticles%252F2025-01-01-9").unwrap();
+        assert_eq!(
+            article.url.as_str(),
+            "https://image.jiqizhixin.com/uploads/editor/8c619e12-fd2d-4fc5-a1b6-2beaccf0fa0d/640.png"
+        );
+        assert_eq!(
+            article.referer.as_deref(),
+            Some("https://www.jiqizhixin.com/articles/2025-01-01-9")
+        );
+
+        let non_ascii = target("/https%253A%252F%252Fcdn.example.com%252F%25E5%259B%25BE%25E7%2589%2587.jpg%253Fw%253D640%2526h%253D480%2Fhttps%253A%252F%252Fwww.example.com%252F%25E6%2596%2587%25E7%25AB%25A0%253Fid%253D7").unwrap();
+        assert_eq!(
+            non_ascii.url.as_str(),
+            "https://cdn.example.com/%E5%9B%BE%E7%89%87.jpg?w=640&h=480"
+        );
+        assert_eq!(
+            non_ascii.referer.as_deref(),
+            Some("https://www.example.com/%E6%96%87%E7%AB%A0?id=7")
+        );
+
+        let no_page = target("/https%253A%252F%252Fcdn%252Fa.jpg%2F").unwrap();
+        assert_eq!(no_page.url.as_str(), "https://cdn/a.jpg");
+        assert_eq!(no_page.referer, None);
+    }
+
+    #[test]
+    fn rejects_a_payload_that_is_not_the_two_segment_shape() {
+        // The old single-segment shape, and an empty one.
+        assert_eq!(image_of("/https%3A%2F%2Fcdn.example.com%2Fa.jpg"), None);
+        assert_eq!(image_of(""), None);
+        assert_eq!(image_of("/"), None);
+    }
+
+    #[test]
     fn rejects_everything_that_is_not_a_remote_http_url() {
-        for path in [
-            "/file%3A%2F%2F%2Fetc%2Fpasswd",
-            "/data%3Atext%2Fhtml%2C%3Cscript%3E",
-            "/..%2F..%2Fsecret.png",
-            "/a.jpg",
+        for image in [
+            "file:///etc/passwd",
+            "data:text/html,<script>",
+            "../../secret.png",
+            "a.jpg",
             "",
-            "/",
-            "/http%3A%2F%2F127.0.0.1%2Fa.png",
-            "/http%3A%2F%2Flocalhost%3A1420%2Fa.png",
-            "/http%3A%2F%2F192.168.1.1%2Fa.png",
-            "/http%3A%2F%2F169.254.169.254%2Flatest%2Fmeta-data",
-            "/http%3A%2F%2F%5B%3A%3A1%5D%2Fa.png",
-            "/http%3A%2F%2Fprinter.local%2Fa.png",
+            "http://127.0.0.1/a.png",
+            "http://localhost:1420/a.png",
+            "http://192.168.1.1/a.png",
+            "http://169.254.169.254/latest/meta-data",
+            "http://[::1]/a.png",
+            "http://printer.local/a.png",
         ] {
-            assert_eq!(decode(path), None, "{path} should be refused");
+            assert_eq!(
+                image_of(&path_for(image, "https://www.example.com/a")),
+                None,
+                "{image} should be refused"
+            );
         }
     }
 

@@ -14,10 +14,13 @@ test("drops scripts, styles, iframes, and event handlers", () => {
   expect(out).not.toContain("x{}");
 });
 
-test("keeps http(s) images and forces no-referrer", () => {
+test("keeps http(s) images and lets them load lazily", () => {
   const out = sanitizeArticleHtml(`<img src="https://cdn.qbitai.com/a.jpg" onerror="x()" width="600">`);
   expect(out).toContain('src="https://cdn.qbitai.com/a.jpg"');
-  expect(out).toContain('referrerpolicy="no-referrer"');
+  expect(out).toContain('loading="lazy"');
+  // The img: proxy fetches these, so a referrer policy on the tag would decide
+  // nothing (docs/pitfall/30).
+  expect(out).not.toContain("referrerpolicy");
   expect(out).not.toContain("onerror");
   expect(out).not.toContain("width");
 });
@@ -34,7 +37,7 @@ test("recovers lazy-loaded images from data-src/srcset (WeChat/mmbiz mirrors)", 
     `<img class="rich_pages" data-src="https://mmbiz.qpic.cn/sz_mmbiz_gif/a.gif?wx_fmt=gif&from=appmsg#imgIndex=1" data-ratio="0.51" data-type="gif">`,
   );
   expect(mm).toContain('src="https://mmbiz.qpic.cn/sz_mmbiz_gif/a.gif?wx_fmt=gif&from=appmsg#imgIndex=1"');
-  expect(mm).toContain('referrerpolicy="no-referrer"');
+  expect(mm).toContain('loading="lazy"');
   expect(mm).not.toContain("data-src");
   expect(mm).not.toContain("data-ratio");
 
