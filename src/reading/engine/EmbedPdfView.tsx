@@ -1928,14 +1928,15 @@ async function wireEngine(
     scrollScope.scrollToPage({ ...opts, behavior: "instant" });
   };
 
-  // A jump to a mark inside a page: the trace list, an AI citation. The mark
-  // decides how far down the page the viewport lands and nothing else — where
-  // the page itself goes is the layout's to say, and markPlacement says it.
-  const jumpToMark = (pageNumber: number, markY: number, alignY: number) =>
+  // A jump to a mark inside a page: the trace list, an AI citation. Where the
+  // mark ends up is the layout's to say, not the caller's — markPlacement says
+  // it, and the mark's own coordinates are only ever an input to that.
+  const jumpToMark = (pageNumber: number, mark: Rect["origin"], alignY: number) =>
     jumpToPage({
       pageNumber,
       ...markPlacement(layout, {
-        markY,
+        markX: mark.x,
+        markY: mark.y,
         alignY,
         pageWidthPx: pageWidthPx(pageNumber),
         clientWidth: viewportScope.getMetrics().clientWidth,
@@ -2266,7 +2267,7 @@ async function wireEngine(
       const rects = await findQuoteRects(engine, d, pageIndex, req.searchText);
       if (rects && rects.length > 0) {
         setQuoteHlRef.current({ pageIndex, kind: "rects", rects });
-        jumpToMark(pageIndex + 1, rects[0].origin.y, 60);
+        jumpToMark(pageIndex + 1, rects[0].origin, 60);
         return true;
       }
       // Tier B: could not locate the quote geometrically — show it as a banner.
@@ -2284,7 +2285,7 @@ async function wireEngine(
       const pageIndex = obj.pageIndex;
       annScope.selectAnnotation(pageIndex, id);
       // rect.origin is top-left page coordinates: scroll the mark near the top.
-      jumpToMark(pageIndex + 1, obj.rect.origin.y, 20);
+      jumpToMark(pageIndex + 1, obj.rect.origin, 20);
     },
     updateAnnotation(id, patch) {
       const pageIndex = pageOf.get(id);

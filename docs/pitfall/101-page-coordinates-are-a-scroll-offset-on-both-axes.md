@@ -13,4 +13,6 @@ if (alignX !== void 0) finalX = x - metrics.clientWidth * (alignX / 100);
 
 其它跳转路径不传 `pageCoordinates`，页内 x 恒 0，撞不上；它们又都经 `centerPage` 补了 `alignX`，所以翻页模式的居中义务（`layout-modes.ts` 的 `placePage: "center"`）只有标注跳转这一条没履行。错位一直存在，是 `viewportGap` 改成 0 之后竖屏页宽正好等于视口宽、两侧再无余量，才第一次可见。
 
-解法：跳到页内某点时，页内坐标只给竖直方向用，水平方向按布局补对齐参数——`x` 传 0，`alignX` 翻页模式传 `pageCenterAlign(页宽px, 视口宽)`（和翻页时同一个数），竖排传 0。纯函数 `markPlacement` 在 `src/reading/engine/layout-settle.ts`，有单测；调用点是 `EmbedPdfView.tsx` 的 `jumpToMark`。
+解法：水平方向永远显式给 `alignX`，规则是"把该看的东西放到屏幕中间"。翻页模式下页面放得下时该看的是整页——`x` 传 0，`alignX` 传 `pageCenterAlign(页宽px, 视口宽)`，和翻页时同一个数；捏合放大后页宽超过视口、横向有得滚，该看的是标注本身——`x` 传标注 x，`alignX` 传 50，落点两端由浏览器钳住，标注贴页面左右边缘时也不会跳出可视区。竖排两种情况都是 0。纯函数 `markPlacement` 在 `src/reading/engine/layout-settle.ts`，有单测；调用点是 `EmbedPdfView.tsx` 的 `jumpToMark`。
+
+另：`getScrollPositionForPage` 里的 `transformPosition` 施加的是**查看器**的旋转，宿主没注册 rotate 插件，这个值恒为 0，所以上面传的 x 原样进滚动位置（PDF 自己的 `/Rotate` 由 PDFium 烘进 `rotatedWidth/rotatedHeight`，不走这条）。哪天真开旋转功能，`x: 0` 在 rotation≠0 时会被映射出非零的 x 分量，这里要重算。
