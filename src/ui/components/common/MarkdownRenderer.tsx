@@ -23,10 +23,21 @@ import { linkifyCitations, parseCitationHref } from '../../../reading/prep/ancho
 import { linkActionFor, openExternal } from '../../../platform/app/external-link';
 import { CitationContext, FigureContext, type CitationHandler } from './Markdown';
 import FigureCard from '../reader/FigureCard';
+import { HIT_44 } from './buttons';
 
 // Module-level constants so the plugin arrays aren't recreated each render.
 const remarkPlugins = [remarkGfm, remarkMath];
 const rehypePlugins = [rehypeHighlight, rehypeKatex];
+
+// The citation chip. It sits in a line of prose but it is a control, not a run
+// of words: its own background, radius and padding draw it as one, and it is the
+// way back to the page a note or a reply came from. At 18–22px tall it is far
+// under a finger, so it takes HIT_44 — a centred pseudo-element carries the
+// target, which is why `relative` here costs the line box nothing.
+const CITATION_CHIP = [
+	'relative !no-underline rounded bg-[#efecfb] px-1 py-0.5 !text-[#4a3a9e] text-[0.9em] hover:bg-[#e2dcf6]',
+	HIT_44,
+].join(' ');
 
 // Citation links ([p.12] rewritten to #rp-… hrefs by linkifyCitations) render
 // as quiet chips that call back into the host instead of navigating. Every
@@ -63,7 +74,7 @@ function makeAnchor(onCitation: CitationHandler | null) {
 			<a
 				href={href}
 				{...rest}
-				className="!no-underline rounded bg-[#efecfb] px-1 py-0.5 !text-[#4a3a9e] text-[0.9em] hover:bg-[#e2dcf6]"
+				className={CITATION_CHIP}
 				onClick={(e) => {
 					e.preventDefault();
 					onCitation?.(citation);

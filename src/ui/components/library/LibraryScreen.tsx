@@ -24,6 +24,7 @@ import {
 } from "../../../reading/saved-articles";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import DeleteTopicButton from "./DeleteTopicButton";
 import SavedArticleView from "./SavedArticleView";
 
 const LIBRARY = "w-[min(680px,100%)] mx-auto px-6 py-10";
@@ -111,8 +112,8 @@ export default function LibraryScreen(props: {
             setRenamingId(null);
             await props.onTopicsChanged();
           }}
+          // Confirmed in DeleteTopicButton, which is what calls this.
           onDelete={async (t) => {
-            if (!window.confirm(`Delete topic "${t.name}"? Files stay on disk.`)) return;
             await deleteTopic(t.id);
             await props.onTopicsChanged();
           }}
@@ -172,9 +173,7 @@ function TopicLibrary(props: {
               <Button variant="outline" size="sm" onClick={() => props.onStartRename(t)}>
                 Rename
               </Button>
-              <Button variant="destructive-outline" size="sm" onClick={() => props.onDelete(t)}>
-                Delete
-              </Button>
+              <DeleteTopicButton topicName={t.name} onDelete={() => props.onDelete(t)} />
             </div>
           </li>
         ))}
