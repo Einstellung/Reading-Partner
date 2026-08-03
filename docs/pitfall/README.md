@@ -44,9 +44,10 @@
 - [61-viewport-metrics-never-see-their-own-padding](./61-viewport-metrics-never-see-their-own-padding.md) — 视口插件的 ResizeObserver 看 content box，而它自己的 padding 只改 client box，度量停在 padding 之前就再也不更新；fit 永远小 2×gap，一整页填不满屏幕、邻页露一条，重发 requestZoom 修不了。几何判据加"插件度量等于元素度量"和"scale 等于该视口解出的 fit"，打开时的还原也走 settle
 - [62-paged-strip-topmost-visible-page-is-the-previous-one](./62-paged-strip-topmost-visible-page-is-the-previous-one.md) — 横排页带两侧邻页常露一条，坑 23 的"最顶上的可见页"在翻页模式下指的是上一页，存的位置每次退一页；锚点按布局分，翻页用插件的 `getCurrentPage()`（居中那页）且不存页内偏移
 - [63-first-painted-frame-is-always-page-one](./63-first-painted-frame-is-always-page-one.md) — 放置要等几何，等的那几帧照画，画的是滚动容器的原点即第 1 页，缩窗口去不掉；视口插件的 gate 会把 Scroller 卸掉（等于死锁），要的是滚动容器上的 `visibility:hidden`，落点确认或 settle 停下就放出来
-- [95-the-viewport-gap-is-charged-twice](./95-the-viewport-gap-is-charged-twice.md) — `viewportGap` 同时是页面四周的 padding、每个 fit 的减数（`clientWidth - 2*gap`）和每个 `scrollToPage` 的加数，改留白就是改整套几何；传 0 能生效只因为 reducer 初值也是 0（`if (config.viewportGap)` 根本不 dispatch）
 - [96-the-page-gap-is-not-a-css-length](./96-the-page-gap-is-not-a-css-length.md) — 页间距是未缩放页单位，DOM 的 `gap` 和 virtual items 的步长是同一个数，用 CSS 压掉就让模型和屏幕对不上；只能调注册期的 `defaultPageGap`，且不能为 0（翻页模式靠它把邻页挡在屏外）
 - [97-the-spike-harness-measured-a-different-box-model](./97-the-spike-harness-measured-a-different-box-model.md) — harness 不 import `styles.css`，没有 preflight 的 `border-box`，滚动容器比窗口宽 2×gap；引擎调试入口要和 app 用同一份全局基线才量得准
+- [100-the-viewport-gap-is-charged-twice](./100-the-viewport-gap-is-charged-twice.md) — `viewportGap` 同时是页面四周的 padding、每个 fit 的减数（`clientWidth - 2*gap`）和每个 `scrollToPage` 的加数，改留白就是改整套几何；传 0 能生效只因为 reducer 初值也是 0（`if (config.viewportGap)` 根本不 dispatch）
+- [101-page-coordinates-are-a-scroll-offset-on-both-axes](./101-page-coordinates-are-a-scroll-offset-on-both-axes.md) — `scrollToPage` 的 `pageCoordinates.x` 会原样加进水平滚动位置，`alignX` 不传就没人减回去；跳到标注时页面被拉走"标注离页左边缘多远"那么多（实测 60px），左边距的标注偏一点、右半页的标注偏半屏。跳到页内某点仍然要按布局补 `alignX`
 
 ## 触摸与手势
 

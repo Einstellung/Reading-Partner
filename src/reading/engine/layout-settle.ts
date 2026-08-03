@@ -216,6 +216,47 @@ export function landedAt(actual: number, want: number, tolerance = SETTLE_TOLERA
   return Math.abs(actual - want) <= tolerance;
 }
 
+export interface MarkTarget {
+  // The mark's top edge in unscaled page coordinates.
+  markY: number;
+  // How far down the viewport the mark is put, as a percentage.
+  alignY: number;
+  // The page's scaled width and the viewport's visible width, the pair a
+  // centring percentage comes out of.
+  pageWidthPx: number;
+  clientWidth: number;
+}
+
+// What a host jump to a mark inside a page — a highlight in the trace list, an
+// AI citation — asks scrollToPage for, minus the page number.
+export interface MarkPlacement {
+  pageCoordinates: { x: number; y: number };
+  alignX: number;
+  alignY: number;
+}
+
+// A mark jump asks two different questions on the two axes. Down the page it is
+// a jump to the mark: its y is the target and alignY says where in the viewport
+// it lands. Across the page it is not a jump at all — a page is shown the one
+// way its layout shows it (LayoutSettings.placePage), and which mark is being
+// visited does not change where the page goes. Paged centres the page on the
+// strip, the same alignX a page turn uses; vertical's column is the viewport's
+// own width and starts at its left edge, which is an alignX of 0.
+//
+// Either way the x is 0. The scroll plugin adds the in-page coordinate to the
+// page's left edge and hands the sum over as a scroll position, so an x here is
+// a horizontal scroll offset in disguise: it drags the page left by the mark's
+// own distance from the page edge — 60px for a highlight in the left margin,
+// half a screen for one on the right-hand side (pitfall 101).
+export function markPlacement(layout: ReadingLayout, t: MarkTarget): MarkPlacement {
+  const centred = LAYOUT_SETTINGS[layout].placePage === "center";
+  return {
+    pageCoordinates: { x: 0, y: t.markY },
+    alignX: centred ? pageCenterAlign(t.pageWidthPx, t.clientWidth) : 0,
+    alignY: t.alignY,
+  };
+}
+
 // The zoom scale a fit resolves to, by the same rule the zoom plugin uses: the
 // largest page box in the document against the viewport minus its padding.
 // Worth having as a function because the two fits coincide more often than the

@@ -77,7 +77,7 @@ WebKitGTK 真机毫秒数没量（同缩放，pitfall 14 OOM 顾虑没跑 tauri 
 
 ## 阅读区排版（2026-08-03，"页面四周有留白、页与页之间一条灰带"）
 
-留白只有一个来源：`Viewport` 组件把 viewport 插件的 `viewportGap` 当 `padding` 写在滚动容器上。它同时是 zoom 插件解 fit 的减数（`clientWidth - 2*gap`）和 scroll 插件每个页面滚动位置的加数——所以那 10px 不只是边距，还让"整页适配"比屏幕小 2×gap（坑 95）。页与页之间的灰带是 scroll 插件的 `defaultPageGap`（未缩放页单位，乘 scale 后既是 DOM 的 flex `gap` 也是 virtual items 的步长，坑 96），缝里露出的就是视口背景色。
+留白只有一个来源：`Viewport` 组件把 viewport 插件的 `viewportGap` 当 `padding` 写在滚动容器上。它同时是 zoom 插件解 fit 的减数（`clientWidth - 2*gap`）和 scroll 插件每个页面滚动位置的加数——所以那 10px 不只是边距，还让"整页适配"比屏幕小 2×gap（坑 100）。页与页之间的灰带是 scroll 插件的 `defaultPageGap`（未缩放页单位，乘 scale 后既是 DOM 的 flex `gap` 也是 virtual items 的步长，坑 96），缝里露出的就是视口背景色。
 
 改前后的实测数（demo.pdf，页 612×792；`spike-harness` + playwright 逐状态量页盒）：
 

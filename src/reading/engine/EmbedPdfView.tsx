@@ -49,6 +49,7 @@ import {
   centeredScrollX,
   geometrySettled,
   landedAt,
+  markPlacement,
   pageTopScrollY,
   settleGap,
   type LayoutGeometry,
@@ -1913,10 +1914,34 @@ async function wireEngine(
   // the reader can neither see nor stop — on iOS it is dispatched to the
   // scrolling thread, off the main thread entirely — and it writes the same
   // property the router writes every frame (pitfall 50).
+  //
+  // Three: the page it lands on is the newest word on where the layout should
+  // sit, exactly as a turn is. A settle still confirming an older target stands
+  // down rather than pulling it back, and the page area comes back with it; and
+  // the next viewport resize re-places the page the jump asked for instead of
+  // the one the reader was on before it (targetedPage says why it asks).
   const jumpToPage = (opts: Parameters<typeof scrollScope.scrollToPage>[0]) => {
     pagedRef.current.resetGestures?.();
+    settleSerial += 1;
+    settleTarget = { serial: settleSerial, page: opts.pageNumber };
+    if (heldBy !== 0) showPageArea();
     scrollScope.scrollToPage({ ...opts, behavior: "instant" });
   };
+
+  // A jump to a mark inside a page: the trace list, an AI citation. The mark
+  // decides how far down the page the viewport lands and nothing else — where
+  // the page itself goes is the layout's to say, and markPlacement says it.
+  const jumpToMark = (pageNumber: number, markY: number, alignY: number) =>
+    jumpToPage({
+      pageNumber,
+      ...markPlacement(layout, {
+        markY,
+        alignY,
+        pageWidthPx: pageWidthPx(pageNumber),
+        clientWidth: viewportScope.getMetrics().clientWidth,
+      }),
+    });
+
   pagedRef.current.turnToPage = (pageNumber) => turnToPage(pageNumber);
 
   // Rotating the iPad (or any viewport resize) must not leave paged mode
@@ -2241,11 +2266,7 @@ async function wireEngine(
       const rects = await findQuoteRects(engine, d, pageIndex, req.searchText);
       if (rects && rects.length > 0) {
         setQuoteHlRef.current({ pageIndex, kind: "rects", rects });
-        jumpToPage({
-          pageNumber: pageIndex + 1,
-          pageCoordinates: { x: rects[0].origin.x, y: rects[0].origin.y },
-          alignY: 60,
-        });
+        jumpToMark(pageIndex + 1, rects[0].origin.y, 60);
         return true;
       }
       // Tier B: could not locate the quote geometrically — show it as a banner.
@@ -2263,11 +2284,7 @@ async function wireEngine(
       const pageIndex = obj.pageIndex;
       annScope.selectAnnotation(pageIndex, id);
       // rect.origin is top-left page coordinates: scroll the mark near the top.
-      jumpToPage({
-        pageNumber: pageIndex + 1,
-        pageCoordinates: { x: obj.rect.origin.x, y: obj.rect.origin.y },
-        alignY: 20,
-      });
+      jumpToMark(pageIndex + 1, obj.rect.origin.y, 20);
     },
     updateAnnotation(id, patch) {
       const pageIndex = pageOf.get(id);
