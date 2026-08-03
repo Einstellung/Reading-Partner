@@ -1,18 +1,17 @@
-// One topic on the shelf: the cover of the book it was last read against, the
-// other books as page edges beside it, its name and how many files it holds.
-// Nothing else — reading position, marks and last-opened all belong to a book,
-// not to the question the books are read against, and a grid of numbers stops
-// being a shelf.
+// One topic on the shelf: the covers of the books it was most recently read
+// against, its name and how many files it holds. Nothing else — reading
+// position, marks and last-opened all belong to a book, not to the question the
+// books are read against, and a grid of numbers stops being a shelf.
 //
-// The ordering, the widths and the labels are in topic-shelf.ts; this file
+// The ordering, the cells and the labels are in topic-shelf.ts; this file
 // renders them and binds the events.
 
 import { useMemo } from "react";
 import type { Topic } from "../../../platform/app/topics";
-import { CARD_LABEL, LIBRARY_CARD } from "./cardStyles";
+import { CARD_LABEL, CARD_META, CARD_TITLE, LIBRARY_CARD } from "./cardStyles";
 import CardMenu from "./CardMenu";
 import CoverBand from "./CoverBand";
-import { coverStack, fileCountLabel } from "./topic-shelf";
+import { coverTiles, fileCountLabel } from "./topic-shelf";
 
 export default function TopicCard(props: {
   topic: Topic;
@@ -21,19 +20,15 @@ export default function TopicCard(props: {
   onDelete: () => void;
 }) {
   const { topic } = props;
-  const stack = useMemo(() => coverStack(topic), [topic]);
+  const tiles = useMemo(() => coverTiles(topic), [topic]);
 
   return (
     <li className="relative">
       <button className={LIBRARY_CARD} onClick={props.onOpen}>
-        <CoverBand stack={stack} />
+        <CoverBand tiles={tiles} />
         <span className={CARD_LABEL}>
-          <span className="block truncate text-[13px] font-medium text-foreground">
-            {topic.name}
-          </span>
-          <span className="mt-0.5 block text-[11px] text-muted-foreground">
-            {fileCountLabel(topic.files.length)}
-          </span>
+          <span className={CARD_TITLE}>{topic.name}</span>
+          <span className={CARD_META}>{fileCountLabel(topic.files.length)}</span>
         </span>
       </button>
 

@@ -8,16 +8,14 @@ import { expect, test } from "bun:test";
 import type { FileRef, Topic } from "../../../src/platform/app/topics";
 import {
   COVER_ASPECT,
-  coverAspect,
+  coverGridTemplate,
   coverInitial,
-  coverStack,
+  coverTiles,
   fileCountLabel,
-  frontWidthPercent,
   MAX_COVERS,
   shelfOrder,
-  singleCover,
-  SPINE_WIDTH_PERCENT,
-  stackFiles,
+  singleCoverTile,
+  tileStyle,
   TOPIC_GRID_COLUMNS_CLASS,
   TOPIC_GRID_STEPS,
   topicGridColumns,
@@ -62,60 +60,80 @@ test("shelfOrder copies rather than sorting the caller's array", () => {
   expect(topics.map((t) => t.name)).toEqual(["a", "b"]);
 });
 
-test("the front cover is the most recently read book, the edges follow it", () => {
+test("the covers are the most recently read books, at most four", () => {
   const t = topic("t", [
     file("added-first.pdf", 1),
-    file("read-last.pdf", 2, 500),
-    file("read-first.pdf", 3, 100),
-    file("read-middle.pdf", 4, 300),
+    file("read-4th.pdf", 2, 200),
+    file("read-1st.pdf", 3, 500),
+    file("read-3rd.pdf", 4, 300),
+    file("read-2nd.pdf", 5, 400),
   ]);
-  const stack = coverStack(t)!;
-  expect(stack.front.name).toBe("read-last.pdf");
-  expect(stack.spines.map((f) => f.name)).toEqual(["read-middle.pdf", "read-first.pdf"]);
-  // The card asks for one image per cover it draws, and no more.
-  expect(stackFiles(stack)).toHaveLength(MAX_COVERS);
+  const tiles = coverTiles(t);
+  expect(tiles).toHaveLength(MAX_COVERS);
+  expect(tiles.map((c) => c.file.name)).toEqual([
+    "read-1st.pdf",
+    "read-2nd.pdf",
+    "read-3rd.pdf",
+    "read-4th.pdf",
+  ]);
 });
 
-test("the covers take the whole width of the card, never less", () => {
-  for (const count of [1, 2, 3]) {
+// A cell left empty is what makes a card look unfinished, and one covered twice
+// is a cover hidden under another. Both are counted here by walking the grid.
+test("every layout fills its grid exactly once", () => {
+  for (const count of [1, 2, 3, 4]) {
     const t = topic("t", Array.from({ length: count }, (_, i) => file(`${i}.pdf`, i)));
-    const stack = coverStack(t)!;
-    const total = frontWidthPercent(stack) + stack.spines.length * stack.spineWidthPercent;
-    expect(total).toBe(100);
+    const tiles = coverTiles(t);
+    expect(tiles).toHaveLength(count);
+    const template = coverGridTemplate(count);
+    const columns = template.columns.split(" ").length;
+    const rows = template.rows.split(" ").length;
+    const cells: Record<string, number> = {};
+    for (const tile of tiles) {
+      for (let c = tile.column; c < tile.column + tile.columnSpan; c++) {
+        for (let r = tile.row; r < tile.row + tile.rowSpan; r++) {
+          expect(c).toBeLessThanOrEqual(columns);
+          expect(r).toBeLessThanOrEqual(rows);
+          cells[`${c},${r}`] = (cells[`${c},${r}`] ?? 0) + 1;
+        }
+      }
+    }
+    expect(Object.keys(cells)).toHaveLength(columns * rows);
+    expect(Object.values(cells).every((n) => n === 1)).toBe(true);
   }
 });
 
-test("one book means one cover across the whole card", () => {
-  const stack = coverStack(topic("t", [file("only.pdf", 1)]))!;
-  expect(stack.spines).toEqual([]);
-  expect(frontWidthPercent(stack)).toBe(100);
+test("the most recently read book gets the biggest cell", () => {
+  const area = (t: { columnSpan: number; rowSpan: number }) => t.columnSpan * t.rowSpan;
+  for (const count of [1, 2, 3, 4]) {
+    const topicOf = topic("t", Array.from({ length: count }, (_, i) => file(`${i}.pdf`, i)));
+    const tiles = coverTiles(topicOf);
+    for (const tile of tiles.slice(1)) {
+      expect(area(tiles[0])).toBeGreaterThanOrEqual(area(tile));
+    }
+  }
+  // Three books: one tall cover beside two half ones.
+  const three = coverTiles(topic("t", [file("a.pdf", 1), file("b.pdf", 2), file("c.pdf", 3)]));
+  expect(three[0].rowSpan).toBe(2);
+  expect(three[1].rowSpan).toBe(1);
 });
 
-test("an edge is a slice, not a share of the card", () => {
-  const three = coverStack(topic("t", [file("a.pdf", 1), file("b.pdf", 2), file("c.pdf", 3)]))!;
-  expect(three.spineWidthPercent).toBe(SPINE_WIDTH_PERCENT);
-  // Whatever else changes, the front cover stays the card.
-  expect(frontWidthPercent(three)).toBeGreaterThanOrEqual(80);
-});
-
-test("a topic with no files has no stack at all", () => {
-  expect(coverStack(topic("t", []))).toBeNull();
-  expect(stackFiles(null)).toEqual([]);
-});
-
-test("a book on its own screen is the same front cover", () => {
+test("one book fills the box, on either screen", () => {
   const one = file("only.pdf", 1);
-  expect(singleCover(one)).toEqual(coverStack(topic("t", [one]))!);
+  const tiles = coverTiles(topic("t", [one]));
+  expect(tiles).toEqual(singleCoverTile(one));
+  expect(coverGridTemplate(1)).toEqual({ columns: "1fr", rows: "1fr" });
+  expect(tileStyle(tiles[0])).toEqual({ gridColumn: "1 / span 1", gridRow: "1 / span 1" });
 });
 
-test("the cover box takes the image's shape, and a book's until it has one", () => {
-  expect(coverAspect(0.66)).toBe(0.66);
-  expect(coverAspect(16 / 9)).toBe(16 / 9);
-  // Everything an image that failed to decode can report.
-  expect(coverAspect(undefined)).toBe(COVER_ASPECT);
-  expect(coverAspect(0)).toBe(COVER_ASPECT);
-  expect(coverAspect(Number.NaN)).toBe(COVER_ASPECT);
-  expect(coverAspect(Number.POSITIVE_INFINITY)).toBe(COVER_ASPECT);
+test("a topic with no files has no covers at all", () => {
+  expect(coverTiles(topic("t", []))).toEqual([]);
+});
+
+test("every card on the page is the same shape", () => {
+  // Fixed, and taller than it is wide: the cover is cropped to the card, never
+  // the card to the cover, or a row of cards is a saw edge.
+  expect(COVER_ASPECT).toBe(0.75);
 });
 
 test("the count label carries the empty case and the plural", () => {
