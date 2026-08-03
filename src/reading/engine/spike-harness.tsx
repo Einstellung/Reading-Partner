@@ -6,6 +6,11 @@
 
 import { memo, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
+// The app's global baseline. Without it the harness measures a different box
+// model from the app: preflight's `box-sizing: border-box` is what keeps the
+// viewport's own padding inside the frame, and its `line-height` moves the
+// paged strip (pitfall 76). A layout measured here has to be the app's layout.
+import "../../styles.css";
 import { flushSync } from "react-dom";
 import EmbedPdfView, {
   type AnnotationAnchor,

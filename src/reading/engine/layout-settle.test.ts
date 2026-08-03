@@ -15,17 +15,25 @@ import {
   SETTLE_TOLERANCE_PX,
   type LayoutGeometry,
 } from "./layout-settle";
+import { PAGE_FRAME } from "./page-frame";
 
 // A 14-page letter-size document (612x792) in a portrait iPad viewport, at the
-// numbers measured in the browser: page gap 10, viewport gap 10, fit 1.33.
+// numbers measured in the browser with the frame the reader ships (page-frame.ts):
+// no viewport gap, so fit resolves against the whole 834 and the sheet reaches
+// both edges — 834/612 floored to 1.362.
 const PAGE = { width: 612, height: 792 };
 const IPAD_PORTRAIT = { clientWidth: 834, clientHeight: 1194 };
-const GAP = 10;
-const SCALE = 1.33;
+const GAP = PAGE_FRAME.viewportGap;
+const PAGE_GAP = PAGE_FRAME.pageGap;
+const SCALE = 1.362;
 const PAGES = 14;
+// The gap the viewport plugin defaults to, kept as a number the tests can name.
+// The reader does not use it, but the arithmetic it drives is still the plugin's
+// and still what a stale measurement is measured against.
+const PADDED_GAP = 10;
 
-const columnHeight = PAGES * PAGE.height + (PAGES - 1) * 10;
-const stripWidth = PAGES * PAGE.width + (PAGES - 1) * 10;
+const columnHeight = PAGES * PAGE.height + (PAGES - 1) * PAGE_GAP;
+const stripWidth = PAGES * PAGE.width + (PAGES - 1) * PAGE_GAP;
 
 // The viewport as both the element and the plugin see it while nothing is
 // stale. Every page is the same size in this document, so the largest item is
@@ -42,7 +50,7 @@ const measured = {
 // What the host reads while resting in each layout.
 const verticalGeometry = (): LayoutGeometry => ({
   firstItem: { x: 0, y: 0 },
-  secondItem: { x: 0, y: PAGE.height + 10 },
+  secondItem: { x: 0, y: PAGE.height + PAGE_GAP },
   contentWidth: PAGE.width,
   contentHeight: columnHeight,
   scale: SCALE,
@@ -54,7 +62,7 @@ const verticalGeometry = (): LayoutGeometry => ({
 
 const pagedGeometry = (): LayoutGeometry => ({
   firstItem: { x: 0, y: 0 },
-  secondItem: { x: PAGE.width + 10, y: 0 },
+  secondItem: { x: PAGE.width + PAGE_GAP, y: 0 },
   contentWidth: stripWidth,
   contentHeight: PAGE.height,
   scale: SCALE,
@@ -108,15 +116,18 @@ test("a settled geometry has no gap left", () => {
 });
 
 test("a viewport the plugin has not measured since it padded itself is not settled", () => {
-  // Measured on the open path: the viewport applies its own gap as padding one
-  // commit after it mounts, which changes the client box and not the content
-  // box, so the ResizeObserver behind the plugin's metrics never fires. The
-  // plugin then holds a viewport 2*gap narrower than the one on screen for the
-  // rest of the session.
+  // Measured on the open path, back when the viewport had a gap: it applies that
+  // gap as padding one commit after it mounts, which changes the client box and
+  // not the content box, so the ResizeObserver behind the plugin's metrics never
+  // fires. The plugin then holds a viewport 2*gap narrower than the one on
+  // screen for the rest of the session. The reader's gap is zero now, so this
+  // particular staleness cannot arise — a rotation's can, and it is the same
+  // disagreement.
   const stale: LayoutGeometry = {
     ...pagedGeometry(),
-    pluginClientWidth: IPAD_PORTRAIT.clientWidth - 2 * GAP,
-    pluginClientHeight: IPAD_PORTRAIT.clientHeight - 2 * GAP,
+    viewportGap: PADDED_GAP,
+    pluginClientWidth: IPAD_PORTRAIT.clientWidth - 2 * PADDED_GAP,
+    pluginClientHeight: IPAD_PORTRAIT.clientHeight - 2 * PADDED_GAP,
   };
   expect(metricsFresh(stale)).toBe(false);
   expect(geometrySettled(stale, "paged")).toBe(false);
@@ -130,7 +141,7 @@ test("stale metrics are still stale when the zoom is wrong too", () => {
     ...pagedGeometry(),
     scale: 1.3,
     zoomLock: "fit-width",
-    pluginClientWidth: IPAD_PORTRAIT.clientWidth - 2 * GAP,
+    pluginClientWidth: IPAD_PORTRAIT.clientWidth - 2 * PADDED_GAP,
     pluginClientHeight: IPAD_PORTRAIT.clientHeight,
   };
   expect(settleGap(stale, "paged")).toBe("metrics");
@@ -150,9 +161,8 @@ test("a fit that is the layout's in name but not in number is a zoom gap", () =>
 test("the expected fit is floored the way the zoom plugin floors it", () => {
   // The plugin keeps three decimals (Math.floor(x * 1e3) / 1e3), so a host that
   // compares against the exact quotient never agrees with it.
-  const wide = { ...pagedGeometry(), domClientWidth: 854, pluginClientWidth: 854 };
-  expect(fitScale("fit-width", PAGE, { clientWidth: 854, clientHeight: 1214 }, GAP)).toBeCloseTo(1.3627, 4);
-  expect(lockedFitScale({ ...wide, domClientHeight: 1214, pluginClientHeight: 1214 }, "paged")).toBe(1.362);
+  expect(fitScale("fit-width", PAGE, IPAD_PORTRAIT, GAP)).toBeCloseTo(1.36275, 5);
+  expect(lockedFitScale(pagedGeometry(), "paged")).toBe(1.362);
   // And the slack covers that last place without covering a stale fit.
   expect(scaleIsFit({ ...pagedGeometry(), scale: SCALE + SETTLE_SCALE_TOLERANCE / 2 }, "paged")).toBe(true);
   expect(scaleIsFit({ ...pagedGeometry(), scale: SCALE + 0.01 }, "paged")).toBe(false);
@@ -184,8 +194,8 @@ test("each layout is checked against its own fit", () => {
   };
   const fitWidth = lockedFitScale({ ...verticalGeometry(), ...onWide }, "vertical")!;
   const fitPage = lockedFitScale({ ...pagedGeometry(), ...onWide }, "paged")!;
-  expect(fitWidth).toBe(1.437);
-  expect(fitPage).toBe(1.237);
+  expect(fitWidth).toBe(1.47);
+  expect(fitPage).toBe(1.262);
   const vertical: LayoutGeometry = {
     ...verticalGeometry(),
     ...onWide,
@@ -231,7 +241,7 @@ test("a DOM within sub-pixel slack of the model counts as caught up", () => {
 
 test("centring puts a page narrower than the viewport in the middle", () => {
   // Page 8 of the strip, at the numbers the browser reported.
-  const pageX = 7 * (PAGE.width + 10);
+  const pageX = 7 * (PAGE.width + PAGE_GAP);
   const x = centeredScrollX({
     pageX,
     pageWidth: PAGE.width,
@@ -286,7 +296,7 @@ test("the target is clamped the way the browser clamps it", () => {
 test("vertical puts the page top at the top of the viewport, not in the middle", () => {
   // Page 8 of the column, at the numbers the browser reported: the switch out of
   // paged mode lands here and the reader reads on from the page's first line.
-  const pageY = 7 * (PAGE.height + 10);
+  const pageY = 7 * (PAGE.height + PAGE_GAP);
   expect(
     pageTopScrollY({ pageY, scale: SCALE, viewportGap: GAP, maxScrollY: Number.POSITIVE_INFINITY }),
   ).toBeCloseTo(pageY * SCALE + GAP, 6);
@@ -314,20 +324,30 @@ test("landing is measured with slack, never for equality", () => {
 });
 
 test("fit-page and fit-width are the same number on a portrait screen", () => {
-  // Measured: 834x1194 viewport, 612x792 page, both fits resolve to 1.33. The
+  // Measured: 834x1194 viewport, 612x792 page, both fits resolve to 1.3627. The
   // switch's zoom request therefore changes no scale, fires no scale change,
   // and recomputes nothing — which is why the switch cannot lean on it.
   expect(fitsCoincide(PAGE, IPAD_PORTRAIT, GAP)).toBe(true);
-  expect(fitScale("fit-width", PAGE, IPAD_PORTRAIT, GAP)).toBeCloseTo(1.33, 3);
-  expect(fitScale("fit-page", PAGE, IPAD_PORTRAIT, GAP)).toBeCloseTo(1.33, 3);
+  expect(fitScale("fit-width", PAGE, IPAD_PORTRAIT, GAP)).toBeCloseTo(1.3627, 4);
+  expect(fitScale("fit-page", PAGE, IPAD_PORTRAIT, GAP)).toBeCloseTo(1.3627, 4);
 });
 
 test("on a shorter viewport the two fits differ", () => {
-  // Measured: 900x1000, same page. fit-width 1.4379, fit-page 1.2374.
+  // Measured: 900x1000, same page. fit-width 1.4706, fit-page 1.2626.
   const wide = { clientWidth: 900, clientHeight: 1000 };
   expect(fitsCoincide(PAGE, wide, GAP)).toBe(false);
-  expect(fitScale("fit-width", PAGE, wide, GAP)).toBeCloseTo(1.4379, 4);
-  expect(fitScale("fit-page", PAGE, wide, GAP)).toBeCloseTo(1.2374, 4);
+  expect(fitScale("fit-width", PAGE, wide, GAP)).toBeCloseTo(1.4706, 4);
+  expect(fitScale("fit-page", PAGE, wide, GAP)).toBeCloseTo(1.2626, 4);
+});
+
+test("a viewport gap costs the fit twice over, which is why the reader has none", () => {
+  // The plugin resolves every fit against clientWidth - 2*gap, so the padding
+  // is not only a margin: it is a page that stops short of the screen it was
+  // asked to fill. On the paged strip that is the neighbour showing at the edge.
+  const withGap = fitScale("fit-width", PAGE, IPAD_PORTRAIT, PADDED_GAP);
+  const withNone = fitScale("fit-width", PAGE, IPAD_PORTRAIT, 0);
+  expect(PAGE.width * withGap).toBeCloseTo(IPAD_PORTRAIT.clientWidth - 2 * PADDED_GAP, 6);
+  expect(PAGE.width * withNone).toBeCloseTo(IPAD_PORTRAIT.clientWidth, 6);
 });
 
 test("a viewport with no room yet resolves to no scale at all", () => {

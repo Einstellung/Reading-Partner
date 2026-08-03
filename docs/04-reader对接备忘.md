@@ -1,6 +1,6 @@
 # reader 对接备忘
 
-> historical：本文写的是已被替换掉的 zotero/reader 引擎（现用 EmbedPDF，见 [07](./07-EmbedPDF替换调研.md)、[08](./08-EmbedPDF-spike结果.md)），接法整体不适用。仍然管用的两处：回调契约里那份标注 JSON 就是现在落盘的 schema（`src/reading/engine/convert.ts` 的 `ZoteroAnnotation`），以及"自定义字段"一节说的 `aiThreadId` 透传。
+> historical：本文写的是已被替换掉的 zotero/reader 引擎（现用 EmbedPDF，见 [07](./07-EmbedPDF替换调研.md)、[08](./08-EmbedPDF-spike结果.md)），接法整体不适用。仍然管用的两处：回调契约里那份标注 JSON 就是现在落盘的 schema（`src/reading/engine/convert.ts` 的 `ZoteroAnnotation`），以及"自定义字段"一节说的 `aiThreadId` 透传。本文没有排版数值：阅读区的页面留白、页间距、fit 的算法在 [08](./08-EmbedPDF-spike结果.md) 的「阅读区排版」一节和 `src/reading/engine/page-frame.ts`。
 
 壳走 `createView`（引擎只做渲染加批注的画布，工具栏侧栏全自建），不走 `createReader`。本文是实测出来的对接手册：怎么构建出能嵌的产物、怎么起、回调收到什么、有哪些坑。基于 reader commit `8cb2963`，只测了 PDF。
 
