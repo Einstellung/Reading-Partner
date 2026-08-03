@@ -50,6 +50,18 @@ function toHttpUrl(value: string): string {
   return /^https?:\/\//i.test(url) ? url : "";
 }
 
+// Does this URL name a picture? Used only where the attribute name says nothing
+// (see keepImg step 3): every URL that gets through becomes an outbound request
+// from the device, so an off-list attribute has to earn it with the URL itself —
+// a file extension on the path, or a format parameter (mmbiz and other CDNs
+// serve extensionless paths with `wx_fmt=jpeg` and the like).
+const IMAGE_PATH = /\.(?:jpe?g|png|gif|webp|avif|bmp|ico|tiff?|heic|heif|svg)$/i;
+const IMAGE_FORMAT_PARAM = /[?&](?:wx_fmt|format|fmt|f|ext)=(?:jpe?g|png|gif|webp|avif|bmp|heic|heif)\b/i;
+function looksLikeImageUrl(url: string): boolean {
+  const path = url.split(/[?#]/)[0] ?? "";
+  return IMAGE_PATH.test(path) || IMAGE_FORMAT_PARAM.test(url);
+}
+
 function buildImg(url: string): string {
   return `<img src="${url.replace(/"/g, "&quot;")}" loading="lazy">`;
 }
@@ -60,11 +72,13 @@ function buildImg(url: string): string {
 // lazy page keep their images instead of being blanked out. Priority:
 //   1. a real http(s) src wins outright (about:blank / data: / relative fail it);
 //   2. any *src*-named attribute (data-src, data-lazy-src, data-srcset, *-src);
-//   3. any remaining attribute whose value is an http(s) URL (covers off-list
-//      names like data-echo/data-image). On an <img>, an http URL is in practice
-//      the image or a lazy variant of it, so the risk of grabbing a stray
-//      non-image URL (e.g. a share link) is low and accepted; and this branch
-//      only fires when no src/*src* candidate exists, which a real image has.
+//   3. any remaining attribute whose value is an http(s) URL that looks like a
+//      picture (covers off-list names like data-echo/data-image). The shape
+//      test is the whole point of this step: the src it produces is fetched by
+//      the img: proxy, which is the app's only outbound request driven by
+//      third-party markup, and an <img> also carries share links, analytics
+//      endpoints and canonical URLs. Taking any URL here would turn every one
+//      of them into a GET that tells its host the device's IP and the time.
 function keepImg(tag: string): string {
   const attrs = parseAttrs(tag);
   const rawSrc = attrs.find((a) => a.name === "src")?.value ?? "";
@@ -81,7 +95,7 @@ function keepImg(tag: string): string {
   for (const a of attrs) {
     if (a.name === "src" || a.name.includes("src")) continue;
     const u = toHttpUrl(a.value);
-    if (u) return buildImg(u);
+    if (u && looksLikeImageUrl(u)) return buildImg(u);
   }
   // 4. A genuine inline data: image with no http(s) candidate (kept as-is).
   if (/^data:image\//i.test(rawSrc)) return buildImg(rawSrc);

@@ -71,6 +71,31 @@ test("recovers images from off-list lazy attribute names (generic, not a whiteli
   expect(sanitizeArticleHtml(`<img data-echo="https://x/e.jpg">`)).toContain('src="https://x/e.jpg"');
   expect(sanitizeArticleHtml(`<img data-image="https://x/i.jpg">`)).toContain('src="https://x/i.jpg"');
   expect(sanitizeArticleHtml(`<img data-flickity-lazyload="https://x/f.jpg">`)).toContain('src="https://x/f.jpg"');
+  // Extensionless CDN paths still qualify through the format parameter.
+  expect(sanitizeArticleHtml(`<img data-echo="https://mmbiz.qpic.cn/mmbiz_jpg/abc/640?wx_fmt=jpeg">`)).toContain(
+    'src="https://mmbiz.qpic.cn/mmbiz_jpg/abc/640?wx_fmt=jpeg"',
+  );
+});
+
+test("an off-list attribute that is not a picture never becomes a request", () => {
+  // Every src the sanitizer emits is fetched by the img: proxy, the app's only
+  // outbound request driven by third-party markup. Share links, analytics
+  // endpoints and canonical URLs sitting on an <img> must not reach it.
+  const beacons = sanitizeArticleHtml(
+    `<img data-share-url="https://social.example/post/1" data-track="https://beacon.example/p?id=1" data-canonical="https://news.example/article/9" title="https://ads.example/x">`,
+  );
+  expect(beacons).toBe("");
+
+  // Even alone, with nothing else on the tag to prefer.
+  expect(sanitizeArticleHtml(`<img data-open="https://news.example/article/9">`)).toBe("");
+  expect(sanitizeArticleHtml(`<img data-echo="https://x/e">`)).toBe("");
+
+  // A real image on the same tag is unaffected: it is reached first.
+  const mixed = sanitizeArticleHtml(
+    `<img data-track="https://beacon.example/p?id=1" data-echo="https://x/photo.jpg">`,
+  );
+  expect(mixed).toContain('src="https://x/photo.jpg"');
+  expect(mixed).not.toContain("beacon.example");
 });
 
 test("prefers the image URL over a stray non-image link on the same img", () => {
@@ -87,9 +112,8 @@ test("prefers the image URL over a stray non-image link on the same img", () => 
   );
   expect(withLazySrc).toContain('src="https://x/photo.jpg"');
   expect(withLazySrc).not.toContain("social.example");
-  // Documented tradeoff: an img carrying only a non-image http URL and no real
-  // image anywhere would grab that URL. That shape does not occur for real
-  // images, so the risk is accepted rather than guarded with a name whitelist.
+  // An img carrying only a non-image http URL yields nothing at all; see the
+  // next test.
 });
 
 test("neutralizes javascript: anchors, keeps http links with rel/noreferrer", () => {
