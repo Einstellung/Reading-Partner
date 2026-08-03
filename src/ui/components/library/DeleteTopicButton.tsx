@@ -1,6 +1,11 @@
-// Delete control for a topic row. Deleting a topic drops the reading list it
-// stands for, so it is never one press: the button opens an AlertDialog and the
-// delete runs from the dialog's action, the same shape as DeleteThreadButton.
+// Delete confirmation for a topic. Deleting a topic drops the reading list it
+// stands for, so it is never one press: the delete runs from an AlertDialog's
+// action, the same shape as DeleteThreadButton.
+//
+// The press that starts it is the card menu's Delete row (TopicCard), which is
+// why the open state comes from outside instead of from a trigger of its own: a
+// menu row cannot be the trigger, because picking it closes the menu and takes
+// everything portalled under it — the dialog included — down with it.
 //
 // Not window.confirm. Under Tauri the dialog plugin replaces it with a
 // promise-returning version, so `!confirm(...)` is false whatever the answer and
@@ -16,23 +21,23 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "../ui/alert-dialog";
-import { Button } from "../ui/button";
 
 interface DeleteTopicButtonProps {
   topicName: string;
+  open: boolean;
+  onOpenChange(open: boolean): void;
   onDelete(): void;
 }
 
-export default function DeleteTopicButton({ topicName, onDelete }: DeleteTopicButtonProps) {
+export default function DeleteTopicButton({
+  topicName,
+  open,
+  onOpenChange,
+  onDelete,
+}: DeleteTopicButtonProps) {
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button variant="destructive-outline" size="sm">
-          Delete
-        </Button>
-      </AlertDialogTrigger>
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Delete “{topicName}”?</AlertDialogTitle>
