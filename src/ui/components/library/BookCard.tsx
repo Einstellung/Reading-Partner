@@ -7,11 +7,11 @@
 
 import { useMemo } from "react";
 import type { FileRef } from "../../../platform/app/topics";
-import { CARD_LABEL, LIBRARY_CARD } from "./cardStyles";
+import { CARD_LABEL, CARD_META, CARD_TITLE, LIBRARY_CARD } from "./cardStyles";
 import CardMenu from "./CardMenu";
 import CoverBand from "./CoverBand";
 import { displayFileTitle, readingLabel, readingProgress, type BookMeta } from "./file-title";
-import { singleCover } from "./topic-shelf";
+import { singleCoverTile } from "./topic-shelf";
 
 export default function BookCard(props: {
   file: FileRef;
@@ -20,7 +20,7 @@ export default function BookCard(props: {
   onRemove: () => void;
 }) {
   const { file, meta } = props;
-  const stack = useMemo(() => singleCover(file), [file]);
+  const tiles = useMemo(() => singleCoverTile(file), [file]);
   const title = displayFileTitle(file.name);
   const line = readingLabel(meta);
   const progress = readingProgress(meta);
@@ -29,7 +29,7 @@ export default function BookCard(props: {
     <li className="relative">
       <button className={LIBRARY_CARD} onClick={props.onOpen}>
         <span className="relative block">
-          <CoverBand stack={stack} />
+          <CoverBand tiles={tiles} />
           {/* On the cover's bottom edge, where a bookmark would be, rather than
               on a line of its own: the cover owns the whole width of the card. */}
           {progress !== null && (
@@ -42,13 +42,10 @@ export default function BookCard(props: {
           )}
         </span>
         <span className={CARD_LABEL}>
-          <span
-            className="block truncate text-[13px] font-medium text-foreground"
-            title={file.name}
-          >
+          <span className={CARD_TITLE} title={file.name}>
             {title}
           </span>
-          <span className="mt-0.5 block h-[15px] text-[11px] text-muted-foreground">{line}</span>
+          <span className={CARD_META}>{line}</span>
         </span>
       </button>
 

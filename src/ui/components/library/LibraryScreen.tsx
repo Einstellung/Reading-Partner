@@ -26,7 +26,7 @@ import {
 } from "../../../reading/saved-articles";
 import { Button } from "../ui/button";
 import BookCard from "./BookCard";
-import { ADD_CARD, LIBRARY_GRID, LIBRARY_PAGE } from "./cardStyles";
+import { ADD_CARD, ADD_CARD_BOX, CARD_LABEL, LIBRARY_GRID, LIBRARY_PAGE } from "./cardStyles";
 import DeleteTopicButton from "./DeleteTopicButton";
 import { displayFileTitle, type BookMeta } from "./file-title";
 import RemoveFileButton from "./RemoveFileButton";
@@ -154,14 +154,18 @@ function EmptyState(props: { title: string; blurb: string; action: string; onAct
 }
 
 // The last tile in a grid: the one that adds something rather than opening it.
+// Same two pieces as a card, so it is the same size as the cards beside it.
 function AddCard(props: { label: string; onClick: () => void }) {
   return (
     <li>
       <button className={ADD_CARD} onClick={props.onClick}>
-        <span aria-hidden className="text-[30px] leading-none font-light">
-          +
+        <span className={ADD_CARD_BOX}>
+          <span aria-hidden className="text-[30px] leading-none font-light">
+            +
+          </span>
+          <span className="text-[13px]">{props.label}</span>
         </span>
-        <span className="text-sm">{props.label}</span>
+        <span className={CARD_LABEL} />
       </button>
     </li>
   );

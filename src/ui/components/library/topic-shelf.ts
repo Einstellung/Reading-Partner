@@ -48,65 +48,89 @@ export function shelfOrder(topics: Topic[]): Topic[] {
   return [...topics].sort((a, b) => b.createdAt - a.createdAt || a.name.localeCompare(b.name));
 }
 
-// The front cover plus this many page edges beside it.
-export const MAX_COVERS = 3;
+// How many books a topic card shows at once. Four is what a 2x2 of legible
+// covers holds; the label says how many the topic actually has.
+export const MAX_COVERS = 4;
 
-// The shape a cover box is given before the image has said what shape it is:
-// between a trade paperback (0.66) and a US Letter page (0.77). It only decides
-// how much room is held while a cover loads.
-export const COVER_ASPECT = 0.72;
+// The shape of every cover box on both screens, width over height. One number
+// for the whole page, not each book's own shape: cards of different heights in
+// one row are a saw edge, and a shelf of books that do not line up is worse than
+// a book cropped by a few percent. 3:4 sits just below a US Letter page (0.77)
+// and just above a trade paperback (0.66), so most covers lose very little.
+//
+// What is cropped is the bottom (`object-top` at the call site): a title and an
+// author are in the upper half of a cover, and a landscape first page — a slide
+// deck — loses a lot, which is the price of the row lining up.
+export const COVER_ASPECT = 3 / 4;
 
-// How wide one page edge is, as a percentage of the card. Enough to see that
-// the topic holds more than one book, not enough to take room from the cover.
-export const SPINE_WIDTH_PERCENT = 7;
-
-// What a card shows: one cover across the full width of the card, and the
-// covers of the other books as edges to the right of it, the way books stand
-// next to each other on a shelf. The card has no padding, so the front cover
-// and the edges together are exactly the width of the card.
-export interface CoverStack {
-  front: FileRef;
-  // Most recently read first, so the nearest edge is the next book.
-  spines: FileRef[];
-  spineWidthPercent: number;
+// The cover box is split into cells and every cell holds a whole cover. A
+// spine showing a few percent of its edge said only "there are more"; four
+// covers you can recognise say which books they are, and that is the same
+// glance. The layouts leave no empty cell — a 2x2 with a hole in it reads as
+// unfinished — so three books are a tall cover beside two half ones.
+//
+// Cells are grid placements rather than percentages: the browser divides the
+// box, and the 1px seams between cells come from the grid's own gap.
+export interface CoverTile {
+  file: FileRef;
+  // 1-based, in the CSS grid sense.
+  column: number;
+  row: number;
+  columnSpan: number;
+  rowSpan: number;
 }
 
-export function coverStack(topic: Topic): CoverStack | null {
-  // Most recently read first: the shelf shows what the topic is currently
+// The grid a given number of covers is laid into, as CSS track lists.
+export function coverGridTemplate(count: number): { columns: string; rows: string } {
+  if (count <= 1) return { columns: "1fr", rows: "1fr" };
+  if (count === 2) return { columns: "1fr 1fr", rows: "1fr" };
+  return { columns: "1fr 1fr", rows: "1fr 1fr" };
+}
+
+// Where each cover goes, most recently read first: the biggest cell, then left
+// to right and top to bottom.
+const LAYOUTS: Record<number, Array<Omit<CoverTile, "file">>> = {
+  1: [{ column: 1, row: 1, columnSpan: 1, rowSpan: 1 }],
+  2: [
+    { column: 1, row: 1, columnSpan: 1, rowSpan: 1 },
+    { column: 2, row: 1, columnSpan: 1, rowSpan: 1 },
+  ],
+  3: [
+    { column: 1, row: 1, columnSpan: 1, rowSpan: 2 },
+    { column: 2, row: 1, columnSpan: 1, rowSpan: 1 },
+    { column: 2, row: 2, columnSpan: 1, rowSpan: 1 },
+  ],
+  4: [
+    { column: 1, row: 1, columnSpan: 1, rowSpan: 1 },
+    { column: 2, row: 1, columnSpan: 1, rowSpan: 1 },
+    { column: 1, row: 2, columnSpan: 1, rowSpan: 1 },
+    { column: 2, row: 2, columnSpan: 1, rowSpan: 1 },
+  ],
+};
+
+export function coverTiles(topic: Topic): CoverTile[] {
+  // Most recently read first: the card shows what the topic is currently
   // about, not what was added to it first.
-  return stack(sortedFiles(topic).slice(0, MAX_COVERS));
+  return tile(sortedFiles(topic).slice(0, MAX_COVERS));
 }
 
-// A screen that shows one book per card: the same front cover, no edges.
-export function singleCover(file: FileRef): CoverStack {
-  return stack([file]) as CoverStack;
+// A screen that shows one book per card: the same cover, filling the box.
+export function singleCoverTile(file: FileRef): CoverTile[] {
+  return tile([file]);
 }
 
-function stack(files: FileRef[]): CoverStack | null {
-  if (files.length === 0) return null;
+function tile(files: FileRef[]): CoverTile[] {
+  const layout = LAYOUTS[files.length];
+  if (!layout) return [];
+  return files.map((file, i) => ({ file, ...layout[i] }));
+}
+
+// One tile's placement, as inline style.
+export function tileStyle(tile: CoverTile): { gridColumn: string; gridRow: string } {
   return {
-    front: files[0],
-    spines: files.slice(1),
-    spineWidthPercent: SPINE_WIDTH_PERCENT,
+    gridColumn: `${tile.column} / span ${tile.columnSpan}`,
+    gridRow: `${tile.row} / span ${tile.rowSpan}`,
   };
-}
-
-// Every file a card needs a cover image for.
-export function stackFiles(stack: CoverStack | null): FileRef[] {
-  return stack ? [stack.front, ...stack.spines] : [];
-}
-
-// The shape the front cover's box is given: its own, once the image has
-// reported it, and the standing guess until then. Guards the shapes an image
-// can report when it fails to decode.
-export function coverAspect(ratio: number | undefined): number {
-  return ratio && ratio > 0 && Number.isFinite(ratio) ? ratio : COVER_ASPECT;
-}
-
-// How wide the front cover is, as a percentage of the card: whatever the page
-// edges beside it do not take.
-export function frontWidthPercent(stack: CoverStack): number {
-  return 100 - stack.spines.length * stack.spineWidthPercent;
 }
 
 export function fileCountLabel(count: number): string {
