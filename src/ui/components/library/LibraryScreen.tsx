@@ -131,11 +131,11 @@ function EmptyShelf() {
   return (
     <div
       aria-hidden
-      className="mx-auto flex h-36 w-52 items-end justify-center gap-3 border-b border-border"
+      className="mx-auto flex h-32 w-44 items-end justify-center gap-2.5 border-b border-border"
     >
-      <span className="block h-[64%] w-[26%] rounded-[2px] border border-dashed border-secondary-border" />
-      <span className="block h-[88%] w-[26%] rounded-[2px] border border-dashed border-secondary-border" />
-      <span className="block h-[74%] w-[26%] rounded-[2px] border border-dashed border-secondary-border" />
+      <span className="block h-[64%] w-[28%] rounded-[2px] border border-dashed border-secondary-border" />
+      <span className="block h-[88%] w-[28%] rounded-[2px] border border-dashed border-secondary-border" />
+      <span className="block h-[74%] w-[28%] rounded-[2px] border border-dashed border-secondary-border" />
     </div>
   );
 }

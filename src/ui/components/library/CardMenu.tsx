@@ -1,11 +1,13 @@
 // The menu on a library card: rename, delete, remove — the things that used to
 // be buttons sitting in a row, which is most of why the row was a row.
 //
-// It sits in the label strip rather than on the cover, and carries no fill of
-// its own: on a card whose subject is a book cover, a white pill floating over
-// the artwork reads as something that got in by mistake. It stays visible under
-// a finger (no `can-hover:` gating) and keeps the 44px target the button size
-// table gives it.
+// It sits at the end of the label strip rather than on the cover, and carries
+// no fill of its own: on a card whose subject is a book cover, a white pill
+// floating over the artwork reads as something that got in by mistake. The
+// glyph is small and the target is the 44px the button size table gives it,
+// which is taller than the strip and reaches up over the bottom of the cover —
+// invisibly, since the button has no fill. It stays visible under a finger (no
+// `can-hover:` gating), because a touch screen has no hover to reveal it.
 
 import { useRef, useState } from "react";
 import { IconChevronDown } from "../common/icons";
@@ -57,7 +59,7 @@ export default function CardMenu({ label, items }: { label: string; items: CardM
           }}
           onClick={() => setOpen(!wasOpen.current)}
         >
-          <IconChevronDown size={16} />
+          <IconChevronDown size={14} />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
