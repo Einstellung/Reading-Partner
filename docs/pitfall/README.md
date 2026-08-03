@@ -48,6 +48,7 @@
 - [97-the-spike-harness-measured-a-different-box-model](./97-the-spike-harness-measured-a-different-box-model.md) — harness 不 import `styles.css`，没有 preflight 的 `border-box`，滚动容器比窗口宽 2×gap；引擎调试入口要和 app 用同一份全局基线才量得准
 - [100-the-viewport-gap-is-charged-twice](./100-the-viewport-gap-is-charged-twice.md) — `viewportGap` 同时是页面四周的 padding、每个 fit 的减数（`clientWidth - 2*gap`）和每个 `scrollToPage` 的加数，改留白就是改整套几何；传 0 能生效只因为 reducer 初值也是 0（`if (config.viewportGap)` 根本不 dispatch）
 - [101-page-coordinates-are-a-scroll-offset-on-both-axes](./101-page-coordinates-are-a-scroll-offset-on-both-axes.md) — `scrollToPage` 的 `pageCoordinates.x` 会原样加进水平滚动位置，`alignX` 不传就没人减回去；跳到标注时页面被拉走"标注离页左边缘多远"那么多（实测 60px），左边距的标注偏一点、右半页的标注偏半屏。跳到页内某点一律显式补 `alignX`：页面放得下就居中页面（`x` 传 0），放大到超出视口就居中标注（`x` 传标注 x、`alignX` 传 50）
+- [102-render-quality-option-is-read-under-another-name](./102-render-quality-option-is-read-under-another-name.md) — `renderPage` 的 `imageQuality` 调 0.01 和 1.0 出来一样大：编码器读的是 `options.quality`（类型里没有这个字段），质量永远落在 canvas 默认；两个名字都传
 
 ## 触摸与手势
 
