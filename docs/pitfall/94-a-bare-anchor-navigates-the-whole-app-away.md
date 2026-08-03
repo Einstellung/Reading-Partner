@@ -29,6 +29,8 @@ capabilities 里 `opener:allow-open-url` 必须放开到 `http://*` / `https://*
 
 ## 验的和没验的
 
-浏览器里实测过 DOM 那半：外链被接管且不导航，相对链接被拦住，`#hash` 放行，无 href 的 `<a>` 不动；React 的 onClick 排在 opener 注入脚本的 window 监听之前，所以不会开两次。Rust 的判断规则有单测。
+浏览器里实测过 DOM 那半：外链被接管且不导航，相对链接被拦住，`#hash` 放行，无 href 的 `<a>` 不动。Rust 的判断规则有单测。
+
+不会开两次的依据不在这一半——浏览器里根本没有那段注入脚本，实测碰不到它。真正的依据是 `tauri-plugin-opener` 2.5.4 的 `init-iife.js` 第一行：`if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.altKey) return`（`~/.cargo/registry/src/*/tauri-plugin-opener-*/src/init-iife.js`）。我们的 handler 先 `preventDefault`，脚本就不再 invoke，和监听器谁先注册无关。插件改掉这一行就要重验。
 
 没验的：真机上的完整链路（iPad 切 Safari 再切回来、桌面起默认浏览器），无头环境跑不了。
