@@ -216,6 +216,66 @@ export function landedAt(actual: number, want: number, tolerance = SETTLE_TOLERA
   return Math.abs(actual - want) <= tolerance;
 }
 
+export interface MarkTarget {
+  // The mark's top-left in unscaled page coordinates.
+  markX: number;
+  markY: number;
+  // How far down the viewport the mark is put, as a percentage.
+  alignY: number;
+  // The page's scaled width and the viewport's visible width. Their ratio is
+  // the centring percentage, and which of the two is larger decides whether
+  // there is any horizontal room to move in at all.
+  pageWidthPx: number;
+  clientWidth: number;
+}
+
+// What a host jump to a mark inside a page — a highlight in the trace list, an
+// AI citation — asks scrollToPage for, minus the page number.
+export interface MarkPlacement {
+  pageCoordinates: { x: number; y: number };
+  alignX: number;
+  alignY: number;
+}
+
+// A mark jump asks two different questions on the two axes. Down the page it is
+// a jump to the mark: its y is the target and alignY says where in the viewport
+// it lands. Across the page the rule is to put whatever the reader came to see
+// in the middle of the screen — which is the whole page while the page fits,
+// and the mark itself once it does not.
+//
+// Both halves of that have to be said out loud, because the plugins' default is
+// neither. The scroll plugin adds the in-page coordinate to the page's left
+// edge and hands the sum over as a scroll position, and the viewport plugin
+// subtracts nothing from it without an alignX — so a bare pageCoordinates.x is
+// a horizontal scroll offset in disguise, dragging the page left by the mark's
+// own distance from the page edge: 60px for a highlight in the left margin,
+// half a screen for one on the right-hand side (pitfall 101).
+//
+// So while the page fits, the x is 0 and the alignX is the page's own — the
+// same number a page turn centres with (pitfall 40). Once a pinch has made the
+// page wider than the viewport there is horizontal room to move in, and giving
+// it back to the mark is what keeps the reader's magnification: the mark's x
+// with alignX 50 puts the mark in the middle of the screen, and the browser
+// clamps that at either end, so a mark against the page's left or right edge
+// still lands on screen instead of past it.
+//
+// Vertical does neither. Its column is the viewport's own width and starts at
+// its left edge (LayoutSettings.placePage), which is an alignX of 0 against the
+// page origin, and a mark inside the page is no reason to leave it.
+export function markPlacement(layout: ReadingLayout, t: MarkTarget): MarkPlacement {
+  if (LAYOUT_SETTINGS[layout].placePage !== "center") {
+    return { pageCoordinates: { x: 0, y: t.markY }, alignX: 0, alignY: t.alignY };
+  }
+  if (t.pageWidthPx > t.clientWidth) {
+    return { pageCoordinates: { x: t.markX, y: t.markY }, alignX: 50, alignY: t.alignY };
+  }
+  return {
+    pageCoordinates: { x: 0, y: t.markY },
+    alignX: pageCenterAlign(t.pageWidthPx, t.clientWidth),
+    alignY: t.alignY,
+  };
+}
+
 // The zoom scale a fit resolves to, by the same rule the zoom plugin uses: the
 // largest page box in the document against the viewport minus its padding.
 // Worth having as a function because the two fits coincide more often than the

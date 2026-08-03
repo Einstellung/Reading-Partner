@@ -6,6 +6,8 @@ import {
   geometrySettled,
   landedAt,
   lockedFitScale,
+  markPlacement,
+  type MarkPlacement,
   metricsFresh,
   modelAxis,
   pageTopScrollY,
@@ -353,4 +355,134 @@ test("a viewport gap costs the fit twice over, which is why the reader has none"
 test("a viewport with no room yet resolves to no scale at all", () => {
   expect(fitScale("fit-page", PAGE, { clientWidth: 0, clientHeight: 0 }, GAP)).toBe(0);
   expect(fitScale("fit-width", { width: 0, height: 0 }, IPAD_PORTRAIT, GAP)).toBe(0);
+});
+
+// --- jumping to a mark inside a page ---------------------------------------
+// At the numbers measured on the iPad that reported this: a 318-page book in
+// paged mode, a viewport 820 wide, the page rendered 819.5 wide, and a
+// highlight starting 45pt in from the page's left edge.
+const DEVICE_WIDTH = 820;
+const DEVICE_PAGE_WIDTH = 819.5;
+const DEVICE_SCALE = DEVICE_PAGE_WIDTH / PAGE.width;
+const MARK_X = 45;
+const MARK_Y = 236;
+
+// The two plugins' arithmetic end to end, as the scroll offset a placement
+// produces: the scroll plugin adds the in-page coordinate to the page's scaled
+// left edge and its own gap, and the viewport plugin subtracts the alignment.
+const scrollLeftOf = (
+  p: Pick<MarkPlacement, "pageCoordinates" | "alignX">,
+  pageX: number,
+  scale: number,
+  clientWidth: number,
+): number => pageX * scale + p.pageCoordinates.x * scale + GAP - clientWidth * (p.alignX / 100);
+
+// Where the browser stops: the scroll offset a placement actually produces.
+const clampScroll = (x: number, maxScrollX: number) => Math.min(Math.max(x, 0), maxScrollX);
+
+const deviceMark = (layout: "paged" | "vertical", markX = MARK_X, pageWidthPx = DEVICE_PAGE_WIDTH) =>
+  markPlacement(layout, {
+    markX,
+    markY: MARK_Y,
+    alignY: 20,
+    pageWidthPx,
+    clientWidth: DEVICE_WIDTH,
+  });
+
+test("a mark jump that fits the page on screen sends only the mark's y", () => {
+  for (const layout of ["paged", "vertical"] as const) {
+    const p = deviceMark(layout);
+    // The x is what the plugin would read as a horizontal scroll offset.
+    expect([layout, p.pageCoordinates.x]).toEqual([layout, 0]);
+    expect([layout, p.pageCoordinates.y]).toEqual([layout, MARK_Y]);
+    expect([layout, p.alignY]).toEqual([layout, 20]);
+  }
+});
+
+test("the strip puts the page a mark is on exactly where a page turn puts it", () => {
+  // Page 194 of the strip, far enough in that nothing here is near a clamp.
+  const pageX = 193 * (PAGE.width + PAGE_GAP);
+  const want = centeredScrollX({
+    pageX,
+    pageWidth: PAGE.width,
+    scale: DEVICE_SCALE,
+    viewportGap: GAP,
+    clientWidth: DEVICE_WIDTH,
+    maxScrollX: Number.POSITIVE_INFINITY,
+  });
+  expect(scrollLeftOf(deviceMark("paged"), pageX, DEVICE_SCALE, DEVICE_WIDTH)).toBeCloseTo(want, 6);
+});
+
+test("the mark's own x used to drag the page off the strip", () => {
+  const pageX = 193 * (PAGE.width + PAGE_GAP);
+  const pageLeftPx = pageX * DEVICE_SCALE;
+  // Where the page's left edge lands, measured from the viewport's: the page is
+  // half a pixel narrower than the screen, so centred is a hair inside it.
+  const placed = scrollLeftOf(deviceMark("paged"), pageX, DEVICE_SCALE, DEVICE_WIDTH);
+  expect(pageLeftPx - placed).toBeCloseTo((DEVICE_WIDTH - DEVICE_PAGE_WIDTH) / 2, 6);
+  // What the old form did: the mark's x, scaled, straight into the scroll
+  // offset, and no alignment at all. Measured on the device as a page whose
+  // left edge sat at -60.1 with a strip of desk the same width showing on the
+  // right.
+  const old = scrollLeftOf(
+    { pageCoordinates: { x: MARK_X, y: MARK_Y }, alignX: 0 },
+    pageX,
+    DEVICE_SCALE,
+    DEVICE_WIDTH,
+  );
+  expect(pageLeftPx - old).toBeCloseTo(-60.26, 2);
+});
+
+test("the column does not move sideways for a mark", () => {
+  // Vertical is one page per row at the viewport's own width: the page's left
+  // edge is the column's, and a mark inside it is no reason to leave it. Even
+  // pinched wider than the screen, which is the one case where it could.
+  expect(scrollLeftOf(deviceMark("vertical"), 0, DEVICE_SCALE, DEVICE_WIDTH)).toBe(GAP);
+  const zoomed = deviceMark("vertical", PAGE.width, 2 * DEVICE_PAGE_WIDTH);
+  expect(zoomed.pageCoordinates.x).toBe(0);
+  expect(zoomed.alignX).toBe(0);
+});
+
+// --- and once a pinch has made the page wider than the screen ---------------
+// The reader magnified the page to read it, and a jump must not undo that. The
+// page no longer fits, so there is horizontal room to move in, and the mark
+// takes it: alignX 50 puts the mark itself in the middle of the screen.
+const ZOOM_PAGE_WIDTH = 2 * DEVICE_PAGE_WIDTH;
+const ZOOM_SCALE = ZOOM_PAGE_WIDTH / PAGE.width;
+const ZOOM_MAX_SCROLL_X = stripWidth * ZOOM_SCALE + 2 * GAP - DEVICE_WIDTH;
+
+// Where the mark itself ends up, measured from the viewport's left edge.
+const markOnScreen = (markX: number, pageX: number): number => {
+  const p = deviceMark("paged", markX, ZOOM_PAGE_WIDTH);
+  const at = clampScroll(scrollLeftOf(p, pageX, ZOOM_SCALE, DEVICE_WIDTH), ZOOM_MAX_SCROLL_X);
+  return pageX * ZOOM_SCALE + markX * ZOOM_SCALE + GAP - at;
+};
+
+test("a mark on a magnified page lands in the middle of the screen", () => {
+  const pageX = 7 * (PAGE.width + PAGE_GAP);
+  // Halfway across the page: nothing to clamp, so the mark is centred exactly.
+  expect(markOnScreen(PAGE.width / 2, pageX)).toBeCloseTo(DEVICE_WIDTH / 2, 6);
+  // The regression this replaces: a mark on the right-hand side used to be the
+  // worst case. Now it is the same case as any other.
+  expect(markOnScreen(500, pageX)).toBeCloseTo(DEVICE_WIDTH / 2, 6);
+  const p = deviceMark("paged", 500, ZOOM_PAGE_WIDTH);
+  expect(clampScroll(scrollLeftOf(p, pageX, ZOOM_SCALE, DEVICE_WIDTH), ZOOM_MAX_SCROLL_X)).toBeGreaterThan(0);
+});
+
+test("a mark against either edge of the strip stays on screen", () => {
+  // The first page's left edge: centring it would scroll past the start, so the
+  // browser stops at 0 and the mark sits at its own distance from that edge.
+  const first = deviceMark("paged", 0, ZOOM_PAGE_WIDTH);
+  expect(clampScroll(scrollLeftOf(first, 0, ZOOM_SCALE, DEVICE_WIDTH), ZOOM_MAX_SCROLL_X)).toBe(0);
+  expect(markOnScreen(0, 0)).toBeCloseTo(GAP, 6);
+  // The last page's right edge: past the end of the strip, so the browser stops
+  // there instead, and the mark is still inside the viewport.
+  const lastPageX = (PAGES - 1) * (PAGE.width + PAGE_GAP);
+  const last = deviceMark("paged", PAGE.width, ZOOM_PAGE_WIDTH);
+  expect(
+    clampScroll(scrollLeftOf(last, lastPageX, ZOOM_SCALE, DEVICE_WIDTH), ZOOM_MAX_SCROLL_X),
+  ).toBe(ZOOM_MAX_SCROLL_X);
+  const on = markOnScreen(PAGE.width, lastPageX);
+  expect(on).toBeGreaterThan(0);
+  expect(on).toBeLessThanOrEqual(DEVICE_WIDTH);
 });
