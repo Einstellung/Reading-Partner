@@ -1,0 +1,76 @@
+// The menu on a library card: rename, delete, remove — the things that used to
+// be buttons sitting in a row, which is most of why the row was a row.
+//
+// It sits in the label strip rather than on the cover, and carries no fill of
+// its own: on a card whose subject is a book cover, a white pill floating over
+// the artwork reads as something that got in by mistake. It stays visible under
+// a finger (no `can-hover:` gating) and keeps the 44px target the button size
+// table gives it.
+
+import { useRef, useState } from "react";
+import { IconChevronDown } from "../common/icons";
+import { Button } from "../ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
+
+export interface CardMenuItem {
+  label: string;
+  onSelect: () => void;
+  destructive?: boolean;
+}
+
+// The row's geometry, the same one the reader's overflow menu uses: 13px, 36px
+// tall and 44px under a finger, with no padding of its own so the minimum is
+// what decides the height.
+const ROW =
+  "w-full rounded-md px-2.5 py-0 text-left text-[13px] min-h-[36px] coarse:min-h-[44px] cursor-pointer";
+
+export default function CardMenu({ label, items }: { label: string; items: CardMenuItem[] }) {
+  const [open, setOpen] = useState(false);
+  // Whether the menu was up when the press started. Radix opens on pointerdown,
+  // and a row clicks itself on a pointerup it never saw a pointerdown for, so
+  // one tap can both open the menu and pick the row under the finger
+  // (docs/pitfall/83). Opening on click keeps that tap out of the menu; closing
+  // still goes through the dismiss layer, which fires on pointerdown and has
+  // already run by the time the click arrives — hence the state from before it.
+  const wasOpen = useRef(false);
+
+  return (
+    // modal={false}: the grid stays scrollable while the menu is up, and `body`
+    // keeps its pointer events, which is what a dialog opened from a row has to
+    // survive.
+    <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-muted-foreground can-hover:hover:bg-muted"
+          aria-label={label}
+          title={label}
+          onPointerDown={(e) => {
+            wasOpen.current = open;
+            e.preventDefault();
+          }}
+          onClick={() => setOpen(!wasOpen.current)}
+        >
+          <IconChevronDown size={16} />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {items.map((item) => (
+          <DropdownMenuItem
+            key={item.label}
+            className={item.destructive ? `${ROW} text-destructive focus:text-destructive` : ROW}
+            onSelect={item.onSelect}
+          >
+            {item.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
