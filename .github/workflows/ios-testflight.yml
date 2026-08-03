@@ -28,6 +28,11 @@ name: iOS TestFlight
 
 on:
   workflow_dispatch:
+    inputs:
+      inspectable:
+        description: "Build with WKWebView.isInspectable (lets a debugger attach; never for a build others install)"
+        type: boolean
+        default: false
 
 # One upload at a time; a second dispatch queues instead of racing the first.
 concurrency:
@@ -136,6 +141,7 @@ jobs:
         run: >-
           bun tauri ios build
           --export-method app-store-connect
+          ${{ inputs.inspectable && '--features inspectable' || '' }}
           --config '{"bundle":{"iOS":{"bundleVersion":"${{ github.run_number }}"}}}'
 
       # altool is still the supported CLI for App Store uploads (it was

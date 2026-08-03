@@ -12,6 +12,15 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
+# Off by default. With it, wry sets WKWebView.isInspectable, which is what lets
+# Safari's Web Inspector — or ios_webkit_debug_proxy from a Linux box — attach
+# to a release build on a device. An inspectable build exposes everything the
+# webview holds, tokens included, to anyone with the device and a debugger, so
+# it is a per-build opt-in (the TestFlight workflow's `inspectable` input) and
+# must stay off once the app has users other than its author.
+[features]
+inspectable = ["tauri/devtools"]
+
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
