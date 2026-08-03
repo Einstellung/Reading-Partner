@@ -19,7 +19,7 @@ Tauri 默认允许任何导航。不注册 `on_navigation`，webview 就是一�
 
 两层。
 
-Rust 侧 `src-tauri/src/navigation.rs`：一个只为了 `on_navigation` 而存在的插件（这是唯一能盖住 `tauri.conf.json` 里声明的窗口的钩子），非本 app 页面的导航一律取消，是 http/https/mailto/tel 的交给系统浏览器。放行的是 `tauri:`（macOS/iOS/Linux 的生产 origin）、`img:`（图片代理）、`about:`、`http(s)://tauri.localhost` 和 `http(s)://img.localhost`（Windows/Android 上 wry 的等价形态），dev 构建再加 localhost 和私有 IPv4（`tauri ios dev` 从开发机 LAN 地址提供 vite）。OAuth 不受影响：桌面走 loopback socket，iOS 走 deep-link 插件，两条都不是 webview 导航。
+Rust 侧 `src-tauri/src/navigation.rs`：一个只为了 `on_navigation` 而存在的插件（这是唯一能盖住 `tauri.conf.json` 里声明的窗口的钩子），非本 app 页面的导航一律取消，是 http/https/mailto/tel 的交给系统浏览器。放行的是 `tauri:`（macOS/iOS/Linux 的生产 origin）、`img:`（图片代理）、`about:`，dev 构建再加 localhost 和私有 IPv4（`tauri ios dev` 从开发机 LAN 地址提供 vite）。`http(s)://tauri.localhost` 和 `http(s)://img.localhost` 是 wry 在 Windows/Android 上的等价形态，只在这两个平台的构建里放行，且必须没有显式端口；别的平台上没有任何东西在那儿应答，而文章正文能写出任意 http(s) 的 `<a href>`，无条件放行等于给第三方 markup 留了一个自己人的 host 名。OAuth 不受影响：桌面走 loopback socket，iOS 走 deep-link 插件，两条都不是 webview 导航。
 
 前端 `src/platform/app/external-link.ts`：`MarkdownRenderer` 的 anchor 和两个文章正文（事件委托，不动 sanitize）显式调 `openUrl`。同源链接也要拦——相对路径同样会重载 SPA，状态一样丢。
 
