@@ -20,13 +20,30 @@ function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
+// What the handler receives: the image URL and the page it appears on, each
+// percent-encoded, joined by "/". convertFileSrc escapes the whole thing again
+// into one path segment, so the separator is the only bare "/" the handler sees
+// after decoding once and neither half can widen into the other.
+//
+// The page URL becomes the Referer of the outbound request. CDNs with hotlink
+// protection (image.jiqizhixin.com among them) answer 403 to a request without
+// one and 200 to the same request with the article's own site, so it decides
+// whether the article has pictures at all. It is empty when the caller has no
+// page URL — which is why it is a separate segment rather than something read
+// out of the markup: only the host knows it, and markup must never be able to
+// set an outbound request header.
+export function imageProxyPayload(imageUrl: string, pageUrl?: string | null): string {
+  const referer = pageUrl && /^https?:\/\//i.test(pageUrl) ? pageUrl : "";
+  return `${encodeURIComponent(imageUrl)}/${encodeURIComponent(referer)}`;
+}
+
 // The webview URL for one external image, or null when there is no route for
 // it: outside Tauri (bun dev, tests) the protocol does not exist, and a data:
 // or relative src needs no rewrite. A null leaves the src untouched.
-export function proxyImageUrl(url: string): string | null {
+export function proxyImageUrl(url: string, pageUrl?: string | null): string | null {
   if (!/^https?:\/\//i.test(url)) return null;
   if (!isTauri()) return null;
-  return convertFileSrc(url, IMAGE_PROXY_SCHEME);
+  return convertFileSrc(imageProxyPayload(url, pageUrl), IMAGE_PROXY_SCHEME);
 }
 
 // Point every external <img> in sanitized article HTML at `toProxy(src)`, only
@@ -48,8 +65,10 @@ export function rewriteImageSrcs(html: string, toProxy: (url: string) => string 
   );
 }
 
-// Sanitized article HTML ready for the webview. Outside Tauri the HTML comes
-// back unchanged, so bun/dev renders the original https URLs.
-export function articleHtmlForWebview(html: string): string {
-  return rewriteImageSrcs(html, proxyImageUrl);
+// Sanitized article HTML ready for the webview. `pageUrl` is the article's own
+// URL as the host knows it (never anything parsed out of the body). Outside
+// Tauri the HTML comes back unchanged, so bun/dev renders the original https
+// URLs.
+export function articleHtmlForWebview(html: string, pageUrl?: string | null): string {
+  return rewriteImageSrcs(html, (src) => proxyImageUrl(src, pageUrl));
 }

@@ -1,5 +1,6 @@
 // The article reading view (docs/16): a clean typographic page for one briefing
-// item's sanitized HTML, prose width, images no-referrer. Opens fast from cache.
+// item's sanitized HTML, prose width, images through the img: proxy carrying
+// this article's URL as their Referer. Opens fast from cache.
 // No highlights/annotations in v1. The host logs "opened" feedback on mount and
 // owns the back / ask actions. The body is injected HTML that utilities can't
 // reach, so a scoped <style> establishes the prose look (proseCss).
@@ -30,10 +31,12 @@ export function ArticleView({
   onSave: () => void;
 }) {
   // External images are pointed at the img: proxy here rather than in what the
-  // host holds, so the HTML that gets kept keeps its original URLs.
+  // host holds, so the HTML that gets kept keeps its original URLs. meta.url is
+  // the article URL the briefing recorded — the proxy sends it as Referer, and
+  // it has to come from here rather than from anything inside the body.
   const body = useMemo(
-    () => (contentHtml === null ? null : articleHtmlForWebview(contentHtml)),
-    [contentHtml],
+    () => (contentHtml === null ? null : articleHtmlForWebview(contentHtml, meta.url)),
+    [contentHtml, meta.url],
   );
   return (
     <div className="h-full overflow-y-auto bg-white">
