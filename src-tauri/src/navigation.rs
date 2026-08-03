@@ -85,12 +85,23 @@ pub fn decide(url: &Url, build: Build) -> Decision {
         // Our own schemes. `tauri:` is the production asset protocol, `img:` the
         // image proxy, `about:` the blank document a webview starts on.
         "tauri" | "img" | "about" => return Decision::Allow,
+        // Ours as well: a blob: URL exists only because our own page made one,
+        // and it carries our origin. It reaches this function at all because
+        // wry hands every frame's navigation to the same callback, not just the
+        // main document's (docs/pitfall/99), so a blob: preview or export frame
+        // would otherwise be cancelled with nothing to show for it anywhere.
+        // Note the CSP still has to list blob: under frame-src for that to work.
+        "blob" => return Decision::Allow,
         "http" | "https" => {}
         // Not a page, but still something the system knows how to handle. The
         // OAuth redirect schemes never appear here: the desktop flow comes back
         // over a loopback socket and the iOS one through the deep-link plugin,
         // neither of which is a webview navigation.
         "mailto" | "tel" | "sms" => return Decision::HandOff,
+        // Everything else, `data:` included. A data: document is not a product
+        // of ours the way a blob: URL is — anything that can put text on the
+        // screen can write one, and loading it would replace the app with
+        // someone else's markup on an opaque origin. Cancelled on purpose.
         _ => return Decision::Cancel,
     }
     if is_workaround_host(url.host_str()) {
@@ -117,6 +128,16 @@ pub fn decide(url: &Url, build: Build) -> Decision {
     Decision::HandOff
 }
 
+// A cancelled navigation is invisible from the page: no error, no console
+// message, no CSP report — the click just does nothing (docs/pitfall/99). This
+// line is the only trace it leaves, so a link or a frame that silently refuses
+// to load can be recognised for what it is. stderr reaches a terminal running
+// `tauri dev` and Xcode's console with a device attached; a TestFlight build
+// has nowhere to put it.
+fn report(what: std::fmt::Arguments<'_>) {
+    eprintln!("navigation-guard: {what}");
+}
+
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("navigation-guard")
         .on_navigation(|webview, url| match decide(url, Build::current()) {
@@ -131,12 +152,17 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
                 // nothing there.
                 tauri::async_runtime::spawn_blocking(move || {
                     if let Err(err) = app.opener().open_url(&target, None::<&str>) {
-                        eprintln!("failed to open {target} in the system browser: {err}");
+                        report(format_args!(
+                            "failed to open {target} in the system browser: {err}"
+                        ));
                     }
                 });
                 false
             }
-            Decision::Cancel => false,
+            Decision::Cancel => {
+                report(format_args!("cancelled a navigation to {url}"));
+                false
+            }
         })
         .build()
 }
@@ -206,8 +232,23 @@ mod tests {
     }
 
     #[test]
+    fn a_blob_url_is_our_own_document() {
+        // Only our own page can mint one, and wry sends frame navigations here
+        // too, so this is what keeps a blob: frame from being dropped in
+        // silence.
+        for url in [
+            "blob:tauri://localhost/8f1e7b0c-1f5a-4a1d-9a9e-1b2c3d4e5f60",
+            "blob:http://tauri.localhost/8f1e7b0c-1f5a-4a1d-9a9e-1b2c3d4e5f60",
+        ] {
+            assert_eq!(decide_url(url, NATIVE), Decision::Allow, "{url}");
+        }
+    }
+
+    #[test]
     fn unknown_schemes_are_dropped() {
         for url in [
+            // A data: document is not ours: it can hold anyone's markup on an
+            // opaque origin, so it is cancelled where blob: is allowed.
             "data:text/html,<h1>hi</h1>",
             "javascript:alert(1)",
             "file:///etc/passwd",

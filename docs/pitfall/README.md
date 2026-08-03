@@ -105,6 +105,7 @@
 - [69-visibilitychange-misses-window-switching](./69-visibilitychange-misses-window-switching.md) — 切到别的窗口再切回来不发 `visibilitychange`（页面一直是 visible），只有最小化和 unmap 才翻；`present()` 之后焦点还会回弹补一个 `blur`。"在前台"要当状态维护（visible && focused，四个事件一起），离开那侧要便宜、回来那侧要有下限
 - [94-a-bare-anchor-navigates-the-whole-app-away](./94-a-bare-anchor-navigates-the-whole-app-away.md) — 不注册 `on_navigation` 的 Tauri app 里，AI 回答中一个裸 `<a href>` 就把 webview 导航到外站，书和对话一起丢；带 `target="_blank"` 的那条被 opener 插件的注入脚本接管，却被 `opener:allow-open-url` 的 scope 静默拒掉。Rust 侧加导航拦截 + 前端显式 `openUrl` + 放开 opener scope，Rust 里必须用 `OpenerExt::opener()`（自由函数 `open_url` 在 iOS 上不工作）
 - [98-tauri-replaces-window-confirm-with-a-promise](./98-tauri-replaces-window-confirm-with-a-promise.md) — dialog 插件的 init 脚本把 `window.confirm` 换成 async 版本，返回的 Promise 恒为真值（`lib.dom.d.ts` 仍写 `boolean`，tsc 全绿），`if (!confirm(...)) return` 形同虚设；那次 invoke 还被 ACL 拒掉，只留一条没人接的 rejection。破坏性确认一律走 AlertDialog
+- [99-on-navigation-sees-every-frame-and-cancels-in-silence](./99-on-navigation-sees-every-frame-and-cancels-in-silence.md) — `on_navigation` 拿到的是每个 frame 的导航（WKWebView 不看 `targetFrame`，WebKitGTK 的 NavigationAction 含子框架；Windows 只接顶层，反而盖不到 iframe），而取消是静默的：没有 error、不算 CSP 违规、控制台无输出。`blob:` 放行（自己页面的产物），`data:` 继续取消，所有 Cancel 打日志
 
 ## 界面与布局
 
