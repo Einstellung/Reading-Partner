@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reading Partner — Privacy Policy</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --muted: #5c5c5c;
+    --rule: #e3e3e3;
+    --link: #1a56b8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16181c;
+      --fg: #e6e6e6;
+      --muted: #a0a4ab;
+      --rule: #2c2f36;
+      --link: #7aa7f0;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 3rem 1.25rem 6rem;
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  main { max-width: 42rem; margin: 0 auto; }
+  h1 { font-size: 1.65rem; line-height: 1.25; margin: 0 0 .35rem; }
+  h2 { font-size: 1.1rem; margin: 2.4rem 0 .6rem; padding-top: 1.4rem; border-top: 1px solid var(--rule); }
+  h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+  p, ul, ol { margin: 0 0 1rem; }
+  ul, ol { padding-left: 1.35rem; }
+  li { margin-bottom: .35rem; }
+  a { color: var(--link); }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .9em; word-break: break-word; }
+  .meta { color: var(--muted); font-size: .9rem; margin: 0 0 2rem; }
+  .lead { font-size: 1.05rem; }
+  footer { margin-top: 3rem; padding-top: 1.4rem; border-top: 1px solid var(--rule); color: var(--muted); font-size: .9rem; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Reading Partner — Privacy Policy</h1>
+<p class="meta">Effective August 4, 2026</p>
+
+<p class="lead">Reading Partner does not collect your data. There is no Reading Partner account, no Reading Partner server, and no analytics, crash reporting, advertising, or tracking of any kind in the app. Everything the app produces stays on your device unless you turn on a feature that sends it somewhere you chose.</p>
+
+<h2>Who this policy is from</h2>
+<p>Reading Partner is an independent app published by Xinyuan (GitHub: <a href="https://github.com/Einstellung">Einstellung</a>). Its source is public at <a href="https://github.com/Einstellung/Reading-Partner">github.com/Einstellung/Reading-Partner</a>, so every claim below can be checked against the code.</p>
+
+<h2>What is collected</h2>
+<p>Nothing. The developer operates no backend, receives no copy of your books, notes, conversations, or usage, and has no way to identify you. The app contains no analytics SDK, no crash reporter, no advertising SDK, and no third-party tracking library.</p>
+
+<h2>What the app stores, and where</h2>
+<p>All app data is written to the app's own private data directory on your device: the sandboxed application-support container on iOS and iPadOS, <code>~/Library/Application Support/com.xinyuan.readingpartner</code> on macOS, <code>%APPDATA%\com.xinyuan.readingpartner</code> on Windows, <code>~/.local/share/com.xinyuan.readingpartner</code> on Linux.</p>
+<p>That includes:</p>
+<ul>
+  <li>Copies of the PDFs you open, imported into the app's library.</li>
+  <li>Reading positions, highlights and handwritten marks, chapter and overview notes, lesson-prep plans and their downloaded papers, generated slide decks.</li>
+  <li>Your conversations with the AI, images you paste into them, the per-topic memory the app distills from those conversations, and the reader profile it builds from your feedback.</li>
+  <li>Your topics, your subscribed news sources, articles you saved, and cached article bodies.</li>
+  <li>App settings, cover thumbnails rendered locally from your own PDFs, and search indexes built locally from your own books.</li>
+  <li>Credentials for the services you connected (see below), in a local file that is never synced.</li>
+</ul>
+<p>None of this is transmitted anywhere by default.</p>
+
+<h2>When data leaves your device</h2>
+<p>Only through features you enable, and only to the service you picked. In every case the request goes straight from the app to that service — it is never relayed through a server operated by the developer, because there is none.</p>
+
+<h3>Google Drive sync (optional, off until you sign in)</h3>
+<p>Sync targets <em>your own</em> Google Drive, not anyone else's storage. The app creates a visible folder named "Reading Partner" in your Drive with <code>books/</code> and <code>data/</code> inside it, and keeps it in step across your devices.</p>
+<p>Synced: your imported books, library index, reading positions, highlights, AI conversation threads, topics, per-topic memory, reader profile, lesson-prep plans and notes, book notes, subscribed sources, saved articles, info feedback log, and app settings.</p>
+<p>Not synced: your provider credentials, derived caches (full-text indexes, extracted figures, downloaded prep PDFs, daily briefings and article caches), cover thumbnails, images pasted into conversations, generated slide decks, and sync's own local bookkeeping.</p>
+<p>The app requests only the <code>drive.file</code> scope, which limits it to files it created itself — the rest of your Drive stays invisible to it — plus <code>openid</code> and <code>email</code> so the app can display which account is linked. Your Google account email is used for that display only; it is not sent anywhere else. Google's handling of your Drive is governed by the <a href="https://policies.google.com/privacy">Google Privacy Policy</a>. You can revoke the app at any time at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</p>
+
+<h3>AI providers (optional, off until you connect one)</h3>
+<p>You connect your own account: a Claude subscription, a ChatGPT subscription, or a DeepSeek API key. Requests then go directly from the app to that provider (<code>api.anthropic.com</code>, <code>chatgpt.com</code>, or <code>api.deepseek.com</code>).</p>
+<p>A request carries what the AI needs to answer: passages of the book or article you are reading, images of pages or figures when you ask about them, your highlights and notes, the conversation itself, and the topic memory and reader profile the app has built. Send nothing you would not want that provider to see.</p>
+<p>Your tokens and API keys are stored in the app's local credentials file, are excluded from Drive sync, and are sent to no one but the provider they belong to. What the provider does with a request is governed by its own policy — <a href="https://www.anthropic.com/legal/privacy">Anthropic</a>, <a href="https://openai.com/policies/privacy-policy/">OpenAI</a>, <a href="https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html">DeepSeek</a> — and by the terms of the account you signed in with. Signing out from Settings deletes the stored credential.</p>
+
+<h3>Voice input (optional, needs your own transcription key)</h3>
+<p>Holding the microphone button records audio into memory. The recording is never written to disk. When you release the button it is encoded as a WAV and posted to the speech-to-text endpoint configured in Settings — SiliconFlow by default, or any OpenAI-compatible endpoint you point it at — and discarded once the transcript comes back. The transcript is then sent to your AI provider for a cleanup pass before it appears in the input box. Without a transcription key configured, the microphone is not used at all.</p>
+
+<h3>Illustration generation (optional, needs your own key)</h3>
+<p>When you ask for illustrated slides, the app sends the image prompt it wrote, and optionally a previous illustration for style consistency, to the image endpoint configured in Settings (rightapi.ai by default, or any endpoint you point it at). It sends nothing else.</p>
+
+<h3>Literature search</h3>
+<p>Paper lookups query arXiv, OpenAlex, Semantic Scholar, and PubMed, and download open-access PDFs from the links those services return. What is sent is the search query or the paper identifier. These requests carry no account, no device id, and no identifier for you; they carry a fixed contact string naming the app and its developer, which is what those services' usage policies ask of API clients. Like any web request, they reveal your IP address to the service.</p>
+
+<h3>News and article sources</h3>
+<p>The app fetches feeds and pages from the sites you subscribe to and the links you paste, directly from your device, presenting an ordinary browser user-agent. Images inside an article are fetched by a request handler running inside the app on your device — not a remote proxy — which sends the article's own page URL as the <code>Referer</code>, as a browser loading that page would. Those sites see the requests, and your IP address, exactly as they would if you had opened the page in a browser.</p>
+
+<h3>Links you open</h3>
+<p>Tapping an external link hands the URL to your system browser. From that point your browser's own privacy behavior applies.</p>
+
+<h2>Third-party services</h2>
+<p>Google, your AI provider, your transcription and image endpoints, the literature databases, and the sites you subscribe to are independent services with their own privacy policies and their own relationship with you. The developer of Reading Partner is not a party to them, receives nothing from them, and cannot access what you send them. Review their policies before connecting them.</p>
+
+<h2>Device permissions</h2>
+<ul>
+  <li><strong>Microphone</strong> — only while you hold the push-to-talk button, and only if you configured a transcription key.</li>
+  <li><strong>Files</strong> — to read a PDF you explicitly choose to open.</li>
+  <li><strong>Network</strong> — for the features above. With none of them enabled, the app makes no network requests.</li>
+</ul>
+
+<h2>Deleting your data</h2>
+<p>The developer holds nothing to delete, so there is no request to make. You control every copy:</p>
+<ul>
+  <li>Delete individual books, notes, conversations, and saved articles inside the app.</li>
+  <li>Uninstalling the app removes its entire local data container.</li>
+  <li>If you enabled sync, delete the "Reading Partner" folder in your Google Drive, and revoke the app at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</li>
+  <li>Signing out of a provider in Settings deletes its stored credential from the device.</li>
+  <li>Data already sent to an AI provider is subject to that provider's retention policy and its own deletion controls.</li>
+</ul>
+
+<h2>Security</h2>
+<p>App data, credentials included, is stored unencrypted by the app inside its private data directory, protected by the operating system's app sandbox and by device-level encryption. Anyone with unlocked access to your device or its backups can read it. All outbound requests use HTTPS.</p>
+
+<h2>Children</h2>
+<p>Reading Partner is not directed at children under 13 and no data is collected from anyone, of any age.</p>
+
+<h2>Changes to this policy</h2>
+<p>Changes are published on this page with a new effective date. This page has no other version; its full edit history is public in the repository. If a future version of the app ever collects anything, this document will say so before that version ships.</p>
+
+<h2>Contact</h2>
+<p><a href="mailto:einstellungsu@gmail.com">einstellungsu@gmail.com</a></p>
+
+<footer>Reading Partner is source-available under PolyForm Noncommercial 1.0.0.</footer>
+
+</main>
+</body>
+</html>
