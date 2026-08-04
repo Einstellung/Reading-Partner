@@ -91,7 +91,7 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
         if (!next) onClose();
       }}
     >
-      <DialogFullScreenContent className="z-[70]" aria-describedby={undefined}>
+      <DialogFullScreenContent aria-describedby={undefined}>
         {/* The page is fixed, so the shell's safe-area padding does not reach
             it and the title row and Done would sit under the notch
             (docs/pitfall/74). OVERLAY_SAFE.fullscreen is that inset, on the

@@ -100,6 +100,7 @@ import { createLiveTurns, type LiveTurn } from "./reading/live-turns";
 import { researchStatusLabel, RESEARCH_TOOL_NAME } from "./reading/papers/research-agent";
 import type { SubagentProgress } from "./ai/subagent";
 import { Button } from "./ui/components/ui/button";
+import { OVERLAY_Z } from "./ui/components/ui/overlay";
 import { appendRunningTool, relabelRunningTool, resolveToolStatus } from "./ui/components/common/toolTrace";
 import LibraryScreen from "./ui/components/library/LibraryScreen";
 import Toast, { useToasts } from "./ui/components/common/Toast";
@@ -1862,7 +1863,7 @@ export default function App() {
         {/* No provider configured: guide to Settings instead of chatting. */}
         {showGuidance && call && (
           <div
-            className="fixed anchor-safe z-[1000] flex w-[300px] flex-col gap-3 rounded-xl border border-black/10 bg-white p-4 shadow-[0_8px_40px_rgba(0,0,0,0.18)]"
+            className={`fixed anchor-safe ${OVERLAY_Z.floating} flex w-[300px] flex-col gap-3 rounded-xl border border-black/10 bg-white p-4 shadow-[0_8px_40px_rgba(0,0,0,0.18)]`}
             // anchor-safe clamps this inside the safe area (docs/pitfall/74) and
             // re-solves on resize and rotation, which the viewport width read
             // once at render did not. --anchor-h is an estimate: the card holds
@@ -1891,7 +1892,7 @@ export default function App() {
         {/* A failed turn stays visible; offer a retry (docs/03: errors not swallowed). */}
         {call?.error && (
           <button
-            className="fixed bottom-safe-6 left-1/2 z-[1001] -translate-x-1/2 rounded-full border border-[#dcdcdc] bg-white px-4 py-1.5 text-sm shadow-md hover:bg-[#f0f0f0]"
+            className={`fixed bottom-safe-6 left-1/2 ${OVERLAY_Z.floatingTop} -translate-x-1/2 rounded-full border border-[#dcdcdc] bg-white px-4 py-1.5 text-sm shadow-md hover:bg-[#f0f0f0]`}
             onClick={retryCall}
           >
             Retry

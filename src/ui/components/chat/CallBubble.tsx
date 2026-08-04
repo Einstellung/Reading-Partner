@@ -7,6 +7,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconExpand } from '../common/icons';
 import { Composer, MessageList, type ComposerVoice } from './chat';
 import { Button } from '../ui/button';
+import { OVERLAY_Z } from '../ui/overlay';
 import DeleteThreadButton from './DeleteThreadButton';
 import { overlayLayerOpen } from '../common/overlay-layer';
 import { fitPanelWidth, placePanel, pointAnchor } from '../common/panel-position';
@@ -95,7 +96,7 @@ export default function CallBubble({
 			role="dialog"
 			aria-label="AI conversation"
 			style={{ width, left: pos?.left, top: pos?.top, visibility: pos ? 'visible' : 'hidden' }}
-			className="fixed z-[1000] box-border flex flex-col gap-2 rounded-xl border border-black/10 bg-white p-3 shadow-[0_8px_40px_rgba(0,0,0,0.18)]"
+			className={`fixed ${OVERLAY_Z.floating} box-border flex flex-col gap-2 rounded-xl border border-black/10 bg-white p-3 shadow-[0_8px_40px_rgba(0,0,0,0.18)]`}
 		>
 			<div className="flex items-center justify-between">
 				<span className="text-[11px] font-medium uppercase tracking-wide text-neutral-400">Reading with AI</span>

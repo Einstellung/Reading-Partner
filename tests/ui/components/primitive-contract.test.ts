@@ -42,6 +42,14 @@ test("the select list is a popper, clamped and padded against the safe area", ()
   expect(select).toContain("collisionPadding={useOverlaySafePadding()}");
 });
 
+test("the select list paints above the surface its trigger sits on", () => {
+  // The generated z-50 sits under every full-screen page and floater this app
+  // has, and an open list under an opaque page still answers elementFromPoint —
+  // it reads as a dropdown that will not open (docs/pitfall/103).
+  expect(select).toContain("OVERLAY_Z.anchored");
+  expect(select).not.toMatch(/(^|[^\w-])z-(\[|\d)/m);
+});
+
 test("the select list registers an overlay layer, inside the content", () => {
   // Inside the content, not at the top of the component: what mounts and
   // unmounts with the list is the portalled subtree (docs/pitfall/80).

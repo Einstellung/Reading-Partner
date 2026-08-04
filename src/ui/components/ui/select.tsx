@@ -7,6 +7,11 @@
 // against, and only popper takes collisionPadding. Item-aligned would put the
 // list over the trigger with neither.
 //
+// The layer is OVERLAY_Z.anchored, not the generated `z-50`: the list has to
+// paint over whatever surface the trigger sits on, and the surfaces go well
+// above 50 (docs/pitfall/103). Radix copies this off the content onto the popper
+// wrapper it positions, so the class on the content is what decides both.
+//
 // The trigger wears the field chrome (ui/input.tsx) so it still matches the text
 // fields it sits beside, plus the 44px minimum every touch target in this app
 // keeps.
@@ -20,7 +25,12 @@ import * as React from "react";
 
 import { IconCheck, IconChevronDown, IconChevronUp } from "@/ui/components/common/icons";
 import { cn } from "@/ui/components/lib/utils";
-import { OVERLAY_SAFE, OverlayLayer, useOverlaySafePadding } from "@/ui/components/ui/overlay";
+import {
+  OVERLAY_SAFE,
+  OVERLAY_Z,
+  OverlayLayer,
+  useOverlaySafePadding,
+} from "@/ui/components/ui/overlay";
 import { fieldClassName } from "@/ui/components/ui/input";
 
 function Select({ ...props }: React.ComponentProps<typeof SelectPrimitive.Root>) {
@@ -75,7 +85,8 @@ const SelectContent = React.forwardRef<
         collisionPadding={useOverlaySafePadding()}
         className={cn(
           OVERLAY_SAFE.anchored,
-          "relative z-50 min-w-[var(--radix-select-trigger-width)] overflow-x-hidden overflow-y-auto",
+          OVERLAY_Z.anchored,
+          "relative min-w-[var(--radix-select-trigger-width)] overflow-x-hidden overflow-y-auto",
           "rounded-lg border border-black/10 bg-popover p-1 text-popover-foreground shadow-lg",
           "data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2",
           "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",

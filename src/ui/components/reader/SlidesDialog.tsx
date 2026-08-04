@@ -23,10 +23,12 @@ import {
   type SlidesSnapshot,
   type TalkEntry,
 } from "../../../reading/slides";
+import { cn } from "../lib/utils";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { Dialog, DialogContent, DialogTitle } from "../ui/dialog";
 import { Label } from "../ui/label";
+import { OVERLAY_Z } from "../ui/overlay";
 import { Textarea } from "../ui/textarea";
 
 function LivenessHint({ activity }: { activity: SlidesActivity }) {
@@ -192,7 +194,10 @@ export default function SlidesDialog({
           the content's own overflow never has anything to do. */}
       <DialogContent
         aria-describedby={undefined}
-        className="z-[80] flex w-[min(35rem,100%)] flex-col gap-0 rounded-xl border-0 p-0 shadow-2xl"
+        className={cn(
+          OVERLAY_Z.pageDialog,
+          "flex w-[min(35rem,100%)] flex-col gap-0 rounded-xl border-0 p-0 shadow-2xl",
+        )}
       >
         <div className="flex items-center justify-between border-b border-[#eee] px-4 py-3">
           <DialogTitle className="text-[15px] font-semibold leading-normal text-[#1b1b1b]">
