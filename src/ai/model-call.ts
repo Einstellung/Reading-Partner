@@ -20,18 +20,18 @@ import type { AiCallOptions } from "./watchdog";
 
 export type ThinkingKind = "chat" | "prep";
 
-// Settings read off disk with a default model that no longer qualifies swapped
-// for one that does — the model floor applies to what was stored, not only to
-// what can be picked from now on. A settings file predates the floor, or arrives
-// from a device that was on an older build, or came in over sync; none of those
-// may leave the app pointing at a model it will not offer.
+// Settings read off disk with a default model the provider's catalog no longer
+// carries swapped for one it does. A settings file names a model that has since
+// been retired, or arrives from a device on an older build, or came in over
+// sync; none of those may leave the app pointing at a model that cannot be
+// called.
 //
 // `notice` is the sentence to show the user, and it is the point: swapping the
 // model under someone silently is worse than the stale value. null means nothing
-// changed. The model is only ever cleared when the provider has nothing over the
-// floor at all, and the app then behaves as it does before any provider is set
-// up, rather than failing at the first call.
-export function enforceModelFloor(settings: Settings): { settings: Settings; notice: string | null } {
+// changed. The model is only ever cleared when the provider lists nothing at
+// all, and the app then behaves as it does before any provider is set up, rather
+// than failing at the first call.
+export function enforceKnownModel(settings: Settings): { settings: Settings; notice: string | null } {
 	const providerId = settings.defaultProviderId;
 	if (!providerId || !(providerId in providers) || !settings.defaultModelId) {
 		return { settings, notice: null };
@@ -45,8 +45,8 @@ export function enforceModelFloor(settings: Settings): { settings: Settings; not
 	return {
 		settings: { ...settings, defaultModelId: replacement },
 		notice: replacement
-			? `${stale} no longer meets this app's context-window minimum; switched to ${replacement}.`
-			: `${stale} no longer meets this app's context-window minimum, and ${name} has no model that does. Pick another provider in Settings.`,
+			? `${name} no longer offers ${stale}; switched to ${replacement}.`
+			: `${name} no longer offers ${stale}, and lists no model to switch to. Pick another provider in Settings.`,
 	};
 }
 

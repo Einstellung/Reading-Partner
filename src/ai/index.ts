@@ -26,8 +26,8 @@ export {
 	isSelectableModel,
 	modelSupportsImages,
 	streamChat,
-	MIN_CONTEXT_WINDOW,
 	ModelCallError,
+	type ModelChoice,
 	type ProviderId,
 	type ProviderInfo,
 	type ChatMessage,
@@ -35,7 +35,8 @@ export {
 	type StreamChatOptions,
 	type StreamOutcome,
 } from "./providers";
-export { enforceModelFloor } from "./model-call";
+export { formatContextWindow, modelChoiceLabel } from "./model-label";
+export { enforceKnownModel } from "./model-call";
 export {
 	runAgentTurn,
 	type AgentTool,

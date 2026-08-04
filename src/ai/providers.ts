@@ -138,39 +138,45 @@ export async function setApiKey(id: "deepseek", key: string): Promise<void> {
 	await setActiveCredential(id, { type: "apiKey", key });
 }
 
-// The context window a model must have before this app will offer it. The
-// catalog comes in tiers — 128k, 200k, 272k, 1M — and the product runs on the
-// top one only; a book plus its notes plus a conversation does not fit in 200k,
-// and being one dropdown entry away from a 200k model is how you end up in one
-// without noticing. Everything below the floor is invisible: not listed, not
-// selectable, never the default. tests/ai/model-floor.test.ts checks the value
-// against the live catalog rather than restating it.
-export const MIN_CONTEXT_WINDOW = 1_000_000;
-
-// The models of `id` this app will offer, in catalog order. The raw list stays
-// reachable through providers[id].getModels() for lookups that must still
-// resolve a model the settings already point at (see resolveCall): the floor
-// governs what can be chosen, not what can be called, so a stale stored id
-// degrades into a notice instead of an app with no working AI.
-function selectableModels(id: ProviderId): Model<Api>[] {
-	return providers[id].getModels().filter((m) => m.contextWindow >= MIN_CONTEXT_WINDOW);
+// One entry in the model picker: the catalog id, the name to show, and the
+// context window behind that name. The window travels with the entry because it
+// is shown (src/ai/model-label.ts) — the app offers every model the provider
+// lists, so what a small window costs is stated instead of enforced.
+export interface ModelChoice {
+	id: string;
+	label: string;
+	contextWindow: number;
 }
 
-export function getModels(id: ProviderId): { id: string; label: string }[] {
-	return selectableModels(id).map((m) => ({ id: m.id, label: m.name || m.id }));
+// Every model of `id`, in catalog order. Nothing is withheld: a window too small
+// for a whole book is the user's call, and the reading path already gives up
+// optional material and says so when the call does not fit (src/budget).
+export function getModels(id: ProviderId): ModelChoice[] {
+	return providers[id]
+		.getModels()
+		.map((m) => ({ id: m.id, label: m.name || m.id, contextWindow: m.contextWindow }));
 }
 
-// Whether `modelId` may be chosen for `id` — in the catalog and over the floor.
+// Whether `modelId` may be chosen for `id` — i.e. the catalog still carries it.
+// A stored id that no longer resolves degrades into a notice rather than an app
+// with no working AI (see enforceKnownModel).
 export function isSelectableModel(id: ProviderId, modelId: string | null): boolean {
-	return !!modelId && selectableModels(id).some((m) => m.id === modelId);
+	return !!modelId && providers[id].getModels().some((m) => m.id === modelId);
 }
 
-// The model a freshly-activated provider defaults to: the first offered one. pi
-// exposes no "recommended" flag, so first-listed is the deterministic pick; the
-// user can change it in Settings. Null when the provider offers nothing that
-// meets the floor, which callers must handle rather than assume away.
+// The model a freshly-activated provider defaults to: the widest context window
+// it offers, catalog order breaking ties. pi exposes no "recommended" flag, and
+// the window is the one property this app's own work turns on — a book plus its
+// notes plus a conversation. So nothing is hidden from the picker, but nobody
+// lands on a 128k model without having asked for it. Null only when the provider
+// lists no models at all, which callers must handle rather than assume away.
 export function defaultModelFor(id: ProviderId): string | null {
-	return selectableModels(id)[0]?.id ?? null;
+	const models = providers[id].getModels();
+	let best: Model<Api> | null = null;
+	for (const m of models) {
+		if (!best || m.contextWindow > best.contextWindow) best = m;
+	}
+	return best?.id ?? null;
 }
 
 // Default provider/model to write after `id` becomes the active provider. Keeps

@@ -298,6 +298,14 @@ test("the book-level thread carries no marked passage", async () => {
 // A 200k window, against the 1M one the other tests use.
 const small: Settings = { ...settings, defaultModelId: "claude-opus-4-5" };
 
+// The narrowest window in the whole catalog (128k). Reachable since the picker
+// stopped hiding models under a floor, so the ladder has to hold there too.
+const tiny: Settings = {
+  ...settings,
+  defaultProviderId: "openai",
+  defaultModelId: "gpt-5.3-codex-spark",
+};
+
 // A Chinese survey, the shape that actually overflows: pi prices it at chars/4
 // and sees room to spare, the script-aware estimate prices it by the character
 // and does not.
@@ -363,6 +371,27 @@ test("a marked passage larger than the window is refused, not quietly shrunk", a
   expect(turn!.notice).toBe("");
   // The passage is still whole: the caller shows the refusal instead of sending.
   expect(turn!.systemPrompt.length).toBeGreaterThan(200_000);
+});
+
+// The smallest window a user can now pick. A short turn still goes out whole,
+// and a long book gives way rung by rung rather than being sent over the line.
+test("the narrowest window in the catalog still assembles an ordinary turn", async () => {
+  const turn = await buildReadingTurn(input({ settings: tiny }));
+  expect(turn!.refusal).toBe("");
+  expect(turn!.notice).toBe("");
+  expect(turn!.systemPrompt).toContain("inline caches");
+});
+
+test("the narrowest window gives up the book and says so, rather than overflowing", async () => {
+  const turn = await buildReadingTurn(
+    input({ classroom: true, fulltext: cjkSurvey(300), settings: tiny }),
+  );
+  expect(turn!.refusal).toBe("");
+  expect(turn!.notice).toBe(
+    "Note: the book didn't fit in context, so I read the pages I needed instead of having all of it in view.",
+  );
+  expect(turn!.systemPrompt).not.toContain("=== Page 2 ===");
+  expect(names(turn!.tools)).toContain("read_pages");
 });
 
 test("a model the catalog doesn't know skips the budget rather than blocking the turn", async () => {
