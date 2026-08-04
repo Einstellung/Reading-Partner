@@ -2,10 +2,16 @@
 // the four of them cannot drift in chrome, in row height, or in what the empty
 // state looks like.
 //
-// The label wraps the trigger the way every other label in this app wraps its
-// control, and repeats itself as aria-label: a <label> names a <button> in the
-// browsers this ships on, but the trigger is role="combobox" and that pairing is
-// worth stating outright rather than inheriting.
+// The label names the trigger by id instead of wrapping it — the one place in
+// this app that does. A <button> is a labelable element, so a wrapping <label>
+// takes the trigger as its labeled control and forwards a synthetic click to it
+// for every click that lands in the label but outside the button; on touch that
+// is the same event Radix's Select opens on, and the pairing is a reported
+// defect upstream (radix-ui/primitives#3679). The row is the row it was: the
+// flex box moved off the <label> onto a <div> around it. aria-label stays on the
+// trigger, which is role="combobox" rather than a form control.
+
+import { useId } from "react";
 
 import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
@@ -32,11 +38,15 @@ export function ChoiceField({
   disabled?: boolean;
   onChange: (value: string) => void;
 }) {
+  const triggerId = useId();
+
   return (
-    <Label>
-      {label}
+    <div className="flex items-center gap-2">
+      <Label layout="detached" htmlFor={triggerId}>
+        {label}
+      </Label>
       <Select value={value} onValueChange={onChange} disabled={disabled}>
-        <SelectTrigger aria-label={label}>
+        <SelectTrigger id={triggerId} aria-label={label}>
           {/* A native <select> is as wide as its widest option and does not
               resize when the value changes. Radix's trigger holds only the
               chosen label, so the width is reserved here: every label is laid
@@ -66,6 +76,6 @@ export function ChoiceField({
           ))}
         </SelectContent>
       </Select>
-    </Label>
+    </div>
   );
 }
