@@ -14,13 +14,14 @@ import {
   anthropicLogout,
   getModels,
   listProviders,
-  MIN_CONTEXT_WINDOW,
+  modelChoiceLabel,
   nextDefaultsForActive,
   openaiLogin,
   openaiLoginDeviceCode,
   openaiLoginManualStart,
   openaiLoginWithManualCode,
   openaiLogout,
+  type ModelChoice,
   type ProviderId,
   type ProviderInfo,
 } from "../../ai/aiClient";
@@ -39,8 +40,6 @@ import KeyCard from "./settings/KeyCard";
 import OAuthCard from "./settings/OAuthCard";
 import SyncCard from "./settings/SyncCard";
 import VoiceInputCard from "./settings/VoiceInputCard";
-
-type ModelInfo = { id: string; label: string };
 
 const THINKING_OPTIONS: { value: ThinkingSetting; label: string }[] = [
   { value: "off", label: "Off" },
@@ -78,11 +77,10 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
   };
 
   // Models for the currently chosen default provider (getModels is synchronous).
-  // Already filtered by the context-window floor, so a provider can offer none.
-  const models: ModelInfo[] = settings.defaultProviderId
+  // Every model the provider lists, each labelled with its context window.
+  const models: ModelChoice[] = settings.defaultProviderId
     ? getModels(settings.defaultProviderId as ProviderId)
     : [];
-  const noQualifyingModel = !!settings.defaultProviderId && models.length === 0;
 
   const connectedProviders = providers.filter((p) => p.configured);
 
@@ -170,20 +168,17 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
                   placeholder="Select…"
                   value={settings.defaultModelId ?? undefined}
                   disabled={!settings.defaultProviderId || models.length === 0}
-                  choices={models.map((m) => ({ value: m.id, label: m.label }))}
+                  choices={models.map((m) => ({ value: m.id, label: modelChoiceLabel(m) }))}
                   onChange={(defaultModelId) => onSettingsChange({ ...settings, defaultModelId })}
                 />
+                <p className="m-0 basis-full text-xs text-[#777]">
+                  The number beside each model is its context window. This app reads a whole book into
+                  it; on a smaller window a reply drops material to fit and says what it dropped.
+                </p>
                 <ThinkingField
                   value={settings.chatThinking}
                   onChange={(chatThinking) => onSettingsChange({ ...settings, chatThinking })}
                 />
-                {noQualifyingModel && (
-                  <p className="m-0 basis-full text-xs text-[#a33]">
-                    None of this provider's models has a context window of{" "}
-                    {MIN_CONTEXT_WINDOW / 1_000_000}M tokens, which is what this app reads books with.
-                    Choose another provider.
-                  </p>
-                )}
               </div>
             )}
           </div>

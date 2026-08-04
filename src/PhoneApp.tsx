@@ -23,7 +23,7 @@ import {
   saveSettings,
   type Settings,
 } from "./platform/app/settings";
-import { enforceModelFloor, listProviders, type ProviderInfo } from "./ai/aiClient";
+import { enforceKnownModel, listProviders, type ProviderInfo } from "./ai/aiClient";
 import {
   loadSavedArticles,
   savedArticlesForTopic,
@@ -119,7 +119,7 @@ export default function PhoneApp() {
 
   // Settings, and the failure paths that must not be silent: a data file that
   // cannot be read is set aside and said out loud, and a stored default model
-  // below the context floor is corrected and said out loud too (see App).
+  // the catalog no longer carries is corrected and said out loud too (see App).
   useEffect(() => {
     onCorruptFile(({ file, savedAs }) => {
       pushToast(
@@ -131,7 +131,7 @@ export default function PhoneApp() {
     });
     loadSettings()
       .then((loaded) => {
-        const { settings: next, notice } = enforceModelFloor(loaded);
+        const { settings: next, notice } = enforceKnownModel(loaded);
         setSettings(next);
         if (notice) {
           saveSettings(next);

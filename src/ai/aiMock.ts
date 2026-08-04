@@ -13,6 +13,12 @@ export interface ProviderInfo {
   configured: boolean;
 }
 
+export interface ModelChoice {
+  id: string;
+  label: string;
+  contextWindow: number;
+}
+
 export interface ChatMessage {
   role: "user" | "ai";
   text: string;
@@ -38,13 +44,13 @@ export interface StreamChatOptions {
 
 const configured: Record<ProviderId, boolean> = { anthropic: false, openai: false, deepseek: false };
 
-const MODELS: Record<ProviderId, { id: string; label: string }[]> = {
+const MODELS: Record<ProviderId, ModelChoice[]> = {
   anthropic: [
-    { id: "claude-opus-4-8", label: "Claude Opus 4.8" },
-    { id: "claude-sonnet-5", label: "Claude Sonnet 5" },
+    { id: "claude-opus-4-8", label: "Claude Opus 4.8", contextWindow: 1_000_000 },
+    { id: "claude-sonnet-5", label: "Claude Sonnet 5", contextWindow: 1_000_000 },
   ],
-  openai: [{ id: "gpt-5.5", label: "GPT-5.5" }],
-  deepseek: [{ id: "deepseek-chat", label: "DeepSeek Chat" }],
+  openai: [{ id: "gpt-5.5", label: "GPT-5.5", contextWindow: 272_000 }],
+  deepseek: [{ id: "deepseek-chat", label: "DeepSeek Chat", contextWindow: 1_000_000 }],
 };
 
 const NAMES: Record<ProviderId, string> = {
@@ -78,7 +84,7 @@ export async function setApiKey(id: "deepseek", key: string): Promise<void> {
   configured[id] = key.trim().length > 0;
 }
 
-export function getModels(id: ProviderId): { id: string; label: string }[] {
+export function getModels(id: ProviderId): ModelChoice[] {
   return MODELS[id] ?? [];
 }
 
