@@ -1,5 +1,7 @@
-// shadcn/ui Label. Every label in this app wraps its control rather than
-// pointing at it by id, in one of two shapes, so the shape is the variant.
+// shadcn/ui Label. A label in this app wraps its control rather than pointing at
+// it by id, in one of two shapes, so the shape is the variant. The exception is
+// `detached`, for the one control that cannot be a descendant
+// (settings/ChoiceField).
 //
 // shadcn's generated Label is `font-medium leading-none select-none` — not
 // adopted: the labels here are regular weight, and taking the weight up would
@@ -21,6 +23,9 @@ const labelVariants = cva("text-sm", {
       row: "flex items-center gap-2",
       // A caption over the field it names.
       stack: "flex flex-col gap-1.5",
+      // Text alone, named control elsewhere by htmlFor. The row it sits in
+      // belongs to the caller.
+      detached: "",
     },
   },
   defaultVariants: { layout: "row" },
