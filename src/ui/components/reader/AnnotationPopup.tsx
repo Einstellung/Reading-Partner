@@ -8,6 +8,7 @@ import { overlayLayerOpen } from '../common/overlay-layer';
 import { placePanel, pointAnchor } from '../common/panel-position';
 import { useViewportSize } from '../common/useViewportSize';
 import { Button } from '../ui/button';
+import { OVERLAY_Z } from '../ui/overlay';
 import type { Annotation, ColorEntry } from '../common/types';
 
 interface AnnotationPopupProps {
@@ -93,7 +94,7 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 	return (
 		<div
 			ref={ref}
-			className="fixed z-[1000] flex w-60 coarse:w-72 flex-col gap-2 rounded-lg border border-black/10 bg-white p-2.5 text-neutral-800 shadow-xl select-none"
+			className={`fixed ${OVERLAY_Z.floating} flex w-60 coarse:w-72 flex-col gap-2 rounded-lg border border-black/10 bg-white p-2.5 text-neutral-800 shadow-xl select-none`}
 			style={pos ? { left: pos.left, top: pos.top, visibility: 'visible' } : { visibility: 'hidden' }}
 			role="dialog"
 			aria-label="Annotation"

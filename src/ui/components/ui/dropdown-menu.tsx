@@ -4,7 +4,10 @@
 //   useOverlaySafePadding() and renders <OverlayLayer />: the safe area of an
 //   anchored overlay is half CSS and half Radix's own collision maths, and the
 //   layer is how a portalled subtree announces itself to the app's own
-//   click-outside overlays (ui/overlay.tsx).
+//   click-outside overlays (ui/overlay.tsx). Its layer is OVERLAY_Z.anchored
+//   rather than the generated `z-50`: an anchored overlay has to paint over the
+//   surface its trigger sits on, and those go well above 50
+//   (docs/pitfall/103).
 // - Sub, RadioGroup, RadioItem and Shortcut are dropped, and CheckboxItem's
 //   indicator with them. They were the only users of lucide-react, which this
 //   project does not carry (icons come from common/icons.tsx). Add them back
@@ -23,6 +26,7 @@ import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui"
 import { cn } from "@/ui/components/lib/utils"
 import {
   OVERLAY_SAFE,
+  OVERLAY_Z,
   OverlayLayer,
   useOverlaySafePadding,
 } from "@/ui/components/ui/overlay"
@@ -70,7 +74,8 @@ const DropdownMenuContent = React.forwardRef<
         sideOffset={sideOffset}
         collisionPadding={collisionPadding ?? safePadding}
         className={cn(
-          "z-50 min-w-[8rem] origin-(--radix-dropdown-menu-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
+          OVERLAY_Z.anchored,
+          "min-w-[8rem] origin-(--radix-dropdown-menu-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
           OVERLAY_SAFE.anchored,
           className
         )}

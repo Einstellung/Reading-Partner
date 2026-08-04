@@ -17,7 +17,7 @@ import * as React from "react";
 import { Toast as ToastPrimitive } from "radix-ui";
 
 import { cn } from "@/ui/components/lib/utils";
-import { OVERLAY_SAFE } from "@/ui/components/ui/overlay";
+import { OVERLAY_SAFE, OVERLAY_Z } from "@/ui/components/ui/overlay";
 
 const ToastProvider = ToastPrimitive.Provider;
 
@@ -33,7 +33,8 @@ const ToastViewport = React.forwardRef<
       ref={ref}
       data-slot="toast-viewport"
       className={cn(
-        "pointer-events-none fixed left-1/2 z-30 flex -translate-x-1/2 flex-col items-center gap-2",
+        "pointer-events-none fixed left-1/2 flex -translate-x-1/2 flex-col items-center gap-2",
+        OVERLAY_Z.toast,
         OVERLAY_SAFE.bottom,
         className,
       )}

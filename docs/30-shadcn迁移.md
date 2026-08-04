@@ -179,6 +179,8 @@ className={cn(OVERLAY_SAFE.centered, "fixed top-[50%] left-[50%] ...", className
 
 计数是给应用自己那批「点外面就关」的浮层看的（`CallBubble`、`AnnotationPopup`，第三版还有 `MoreMenu`、`SourcesPage` 的 HealthDot、`PenToolbar`）。它们用 `ref.contains(e.target)` 判断，而 Portal 出去的子树永远不在那个 ref 里，于是落在对话框按钮上的那一按被读成「按在外面」，气泡先关掉，按钮再也收不到 click。改成先问一句 `if (overlayLayerOpen()) return;`：有层开着的时候，任何一按都属于那一层。用计数不用 DOM 归属，是因为要挡住的不只是 content，还有背板和 popper 的包装节点。
 
+**层级**。`ui/overlay.tsx` 的 `OVERLAY_Z` 是全 app 唯一一条 z 阶梯，每层的数字只在那里写一次：toast 30、dialog 50、page 70、pageDialog 80、floating 1000、floatingTop 1001、anchored 1100。要守的不变量是「锚定浮层画在它触发器所在的那层之上」，而触发器可以坐在阶梯的任何一层，所以 anchored 排在整条阶梯之上。调用点不写数字，`className` 里取 `OVERLAY_Z.<层名>`；全屏页那层归 `DialogFullScreenContent` 自己。这条阶梯是坑 103 立起来的。
+
 ## 第二版：Toast 与 AlertDialog
 
 **Toast 选 Radix Toast，不是 Sonner。** 硬要求是调用点 API 不变、种类和自动消失语义不变、视觉不变。Sonner 自带 store、自带注进 `<head>` 的样式表、自带堆叠几何（默认折叠成一摞，每条用 transform 绝对定位），要还原现在这个「amber/red 描边盒子、竖排、gap-2」得逐条盖它的内部结构，而且 `useToasts` 的列表会和它的 store 变成两份状态。Radix Toast 无样式，DOM 是自己的，所以盒子、堆叠和 44px 关闭按钮都还是现在这套。

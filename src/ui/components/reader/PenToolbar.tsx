@@ -7,6 +7,7 @@ import { IconColorSwatch, IconHighlight, IconPointer, IconSparkle, IconUnderline
 import { placePanel } from '../common/panel-position';
 import { useViewportSize } from '../common/useViewportSize';
 import { Button } from '../ui/button';
+import { OVERLAY_Z } from '../ui/overlay';
 import type { ColorEntry, Tool, ToolType } from '../common/types';
 
 interface PenToolbarProps {
@@ -207,7 +208,7 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 							// Fixed column tracks: the popover shrinks to its content, so 1fr
 							// tracks would collapse. A track has to hold a whole swatch button,
 							// which is finger-sized on a touch device.
-							`fixed z-[1000] grid grid-cols-[repeat(4,1.75rem)] coarse:grid-cols-[repeat(4,2.75rem)] gap-0.5 p-1.5 shadow-xl ${CARD}`
+							`fixed ${OVERLAY_Z.floating} grid grid-cols-[repeat(4,1.75rem)] coarse:grid-cols-[repeat(4,2.75rem)] gap-0.5 p-1.5 shadow-xl ${CARD}`
 						}
 						role="listbox"
 						aria-label="Colors"

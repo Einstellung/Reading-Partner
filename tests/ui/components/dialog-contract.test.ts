@@ -37,6 +37,16 @@ test("the centred content clamps itself against the safe area", () => {
   expect(component("DialogContent")).toContain("OVERLAY_SAFE.centered");
 });
 
+test("every box here takes its layer from the scale, and spells none of its own", () => {
+  // The generated file writes z-50 on all three. A page raised past that at the
+  // call site is what put the Settings dropdowns behind the page that opened
+  // them (docs/pitfall/103); the ordering is decided in ui/overlay.tsx now.
+  expect(component("DialogOverlay")).toContain("OVERLAY_Z.dialog");
+  expect(component("DialogContent")).toContain("OVERLAY_Z.dialog");
+  expect(component("DialogFullScreenContent")).toContain("OVERLAY_Z.page");
+  expect(source).not.toMatch(/(^|[^\w-])z-(\[|\d)/m);
+});
+
 test("max-width belongs to the safe-area utility alone", () => {
   // A second max-width at the same specificity is settled by the order Tailwind
   // emits the two in, which is not a decision anyone made (docs/30).

@@ -1,4 +1,11 @@
-// The two things every portalled overlay in this directory needs, in one place.
+// What every overlay in this app needs, in one place: the paint order it takes,
+// the safe area it keeps, and the layer it registers.
+//
+// Paint order. One z scale, named, with the number for a layer written once
+// (OVERLAY_Z). The invariant it exists to hold is that an overlay anchored to a
+// trigger paints above the surface holding that trigger — nothing enforces that
+// per pair, and a Select opened from a page one layer higher than the list is
+// open, hit-testable and invisible (docs/pitfall/103).
 //
 // Safe area. Radix mounts an overlay under <body>, not inside the shell's
 // `p-safe` container, so it gets none of that padding and can land under the
@@ -9,18 +16,18 @@
 // a portalled subtree as "inside" them, so a layer announces itself instead
 // (common/overlay-layer).
 //
-// A content component in this directory does both:
+// A content component in this directory takes all three:
 //
-//   className={cn(OVERLAY_SAFE.centered, "...", className)}
+//   className={cn(OVERLAY_Z.dialog, OVERLAY_SAFE.centered, "...", className)}
 //
 // and renders <OverlayLayer /> among its children, so that registration mounts
 // and unmounts with the portalled content rather than with the trigger.
 //
-// An anchored one takes a third thing, useOverlaySafePadding(), because half of
+// An anchored one takes a fourth thing, useOverlaySafePadding(), because half of
 // its clamping is Radix's and Radix's half is JS.
 //
 // One shape is not portalled — the full-screen page, which has to stay inside
-// the phone shell's sliding surface (ui/dialog.tsx). It still takes both of the
+// the phone shell's sliding surface (ui/dialog.tsx). It still takes all of the
 // above: it is still fixed, so the shell's padding still misses it, and a press
 // on it still has to stop belonging to whatever is underneath.
 
@@ -34,6 +41,39 @@ import {
   sameInsets,
   type SafeAreaInsets,
 } from "@/ui/components/common/safe-area";
+
+// The app's layers, low to high. A call site takes its layer from here rather
+// than writing a number: a number invented next to this scale is how the next
+// surface ends up over the overlays opened from it.
+export const OVERLAY_Z = {
+  // The toast stack, below the dialogs, so a notice never covers what the user
+  // opened.
+  toast: "z-30",
+  // A dialog and its backdrop.
+  dialog: "z-50",
+  // A page that covers the whole app rather than a box floating over it
+  // (Settings).
+  page: "z-[70]",
+  // A dialog raised over such a page.
+  pageDialog: "z-[80]",
+  // The app's own hand-placed floaters: the call bubble, the annotation editor,
+  // the pen palette, the provider hint.
+  floating: "z-[1000]",
+  // A control that has to stay reachable over those.
+  floatingTop: "z-[1001]",
+  // Anchored to a trigger: Select and DropdownMenu. Above the whole scale,
+  // because a trigger can sit on any surface in it.
+  anchored: "z-[1100]",
+} as const;
+
+export type OverlayLayerName = keyof typeof OVERLAY_Z;
+
+// The scale as numbers, for anything that has to compare two layers. Read off
+// the class strings above, which stay the only place a layer's number is
+// written.
+export function overlayZIndex(layer: OverlayLayerName): number {
+  return Number(OVERLAY_Z[layer].match(/\d+/)![0]);
+}
 
 export const OVERLAY_SAFE = {
   // Centred in the viewport: AlertDialog and Dialog.
