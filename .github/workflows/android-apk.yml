@@ -40,13 +40,16 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # NDK r28c. Two reasons to pin it rather than take the image default
-  # (27.3.13750724): r28 is the first NDK that links shared libraries with a
-  # 16 KB max-page-size by default, and pinning stops an image bump from moving
-  # the toolchain under us. Devices shipping a 16 KB kernel refuse to load a
-  # 4 KB-aligned .so. See docs/23-Android落地调研.md.
+  # NDK r28c, not the image's oldest (27.3.13750724): r28 is the first NDK that
+  # links shared libraries with a 16 KB max-page-size by default, and a device
+  # with a 16 KB kernel refuses to load a 4 KB-aligned .so. The ubuntu-24.04
+  # image preinstalls 27.3.13750724, 28.2.13676358 and 29.0.14206865, so this
+  # pin costs no download while stopping an image bump from moving the toolchain
+  # under us. See docs/23-Android落地调研.md.
   NDK_VERSION: "28.2.13676358"
-  BUILD_TOOLS_VERSION: "34.0.0"
+  # 36.0.0 rather than the spike's 34.0.0: zipalign only grew -P (page size in
+  # KB) in build-tools 35, and 34's zipalign dies on the flag.
+  BUILD_TOOLS_VERSION: "36.0.0"
   BUNDLE_ID: com.xinyuan.readingpartner
 
 jobs:
@@ -170,9 +173,14 @@ jobs:
           unzip -q -o "$SIGNED_APK" 'lib/*' -d "$WORK"
           BAD=0
           for SO in $(find "$WORK/lib" -name '*.so'); do
-            ALIGN=$(readelf -lW "$SO" | awk '$1=="LOAD"{print $NF}' | sort -u | tr '\n' ' ')
-            echo "$(basename "$SO"): LOAD align $ALIGN"
-            echo "$ALIGN" | grep -qE '0x(4000|10000)' || BAD=1
+            ALIGNS=$(readelf -lW "$SO" | awk '$1=="LOAD"{print $NF}' | sort -u)
+            echo "$SO: LOAD align $(echo $ALIGNS)"
+            for A in $ALIGNS; do
+              case "$A" in
+                0x4000|0x10000) ;;
+                *) BAD=1 ;;
+              esac
+            done
           done
           [ "$BAD" -eq 0 ] || {
             echo "::error::a shared library is not aligned for 16 KB pages"; exit 1
