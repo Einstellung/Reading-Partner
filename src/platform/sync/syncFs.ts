@@ -3,8 +3,8 @@
 //
 // Sync range (docs/13): the user's own data — reading position, marks, AI
 // threads, topics, per-topic memory, lesson-prep plans and notes, book notes
-// (docs/14), the cross-scenario user profile and info feedback log (docs/16), and app
-// settings. Book PDFs travel the separate books channel
+// (docs/14), rehearsal decisions (docs/31), the cross-scenario user profile and
+// info feedback log (docs/16), and app settings. Book PDFs travel the separate books channel
 // (content-addressed blobs), never the data channel. Excluded: derived caches
 // (fulltext-*, figures-*, prep-*/pdf and its caches), generated slide decks
 // (slides/**, docs/14 — a build output, rebuildable from notes), the local
@@ -79,7 +79,14 @@ export function inSyncRange(path: string): boolean {
   const top = parts[0];
   if (parts.length === 1) {
     if (ROOT_FILES.has(top)) return true;
-    return /^annotations-.+\.json$/.test(top) || /^threads-.+\.json$/.test(top);
+    return (
+      /^annotations-.+\.json$/.test(top) ||
+      /^threads-.+\.json$/.test(top) ||
+      // Rehearsal decisions (docs/31): what the reader and the AI settled a
+      // chapter contributes to the talk. Nothing can rebuild it from the book,
+      // so it travels like marks and threads rather than like a cache.
+      /^rehearsal-.+\.json$/.test(top)
+    );
   }
   // Per-topic memory: every file under memory-<topicId>/ (entries, index, meta).
   if (top.startsWith("memory-")) return true;

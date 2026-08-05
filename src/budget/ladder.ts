@@ -25,8 +25,10 @@ export type ReductionId =
   | "notes-overview"
   | "booklist-thin"
   | "memory-trim"
+  | "rehearsal-notes"
   | "tool-result-stubs"
   | "classroom-inline"
+  | "rehearsal-marks"
   | "history-trim";
 
 interface Rung {
@@ -45,11 +47,25 @@ export const LADDER: readonly Rung[] = [
   { id: "booklist-thin" },
   { id: "memory-trim" },
   // tier 2: gone from the prompt, still reachable by a tool, and the stub says so.
+  // The rehearsal's inlined chapter note goes before the tool results: the model
+  // asked for those and is working from them, while the note was put in front of
+  // it unasked and read_chapter_note fetches it straight back.
+  { id: "rehearsal-notes" },
   { id: "tool-result-stubs" },
   // tier 3: evidence.
   {
     id: "classroom-inline",
     notice: "the book didn't fit in context, so I read the pages I needed instead of having all of it in view",
+  },
+  // The reader's own marks, in the one mode where they are the material rather
+  // than a hint (docs/31). Trimmed, not dropped: a rehearsal with no marks in
+  // front of it stops being a rehearsal of *their* reading, so what goes is the
+  // long tail of each chapter and the length of each quote. It never co-occurs
+  // with classroom-inline — the two modes are mutually exclusive — so their
+  // order relative to each other is not a judgement about the two.
+  {
+    id: "rehearsal-marks",
+    notice: "your highlights are shortened here to fit; ask me to pull a chapter's marks up in full and I'll read them again",
   },
   // Last, below even the inlined book, because of what it costs: the fallback
   // distillation meant to capture an older stretch of a thread before it falls
