@@ -436,6 +436,10 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
           await recordDecision(bookId, decision);
         },
         readNote: (n) => readChapterNote(bookId, n).catch(() => null),
+        // Re-read, not the copy loaded above: read_talk_outline has to answer
+        // "what does my talk look like now" including the chapter that was
+        // recorded a moment ago in this same turn.
+        readPlan: () => loadRehearsalPlan(bookId).catch(() => null),
         onCard: onDecisionCard,
       }),
     ];

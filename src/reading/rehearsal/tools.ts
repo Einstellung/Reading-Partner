@@ -11,7 +11,8 @@
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../ai/agent";
 import type { RehearsalDecisionCardData } from "./cards";
-import type { RehearsalChapter, RehearsalDecision } from "./types";
+import { formatOutline } from "./plan";
+import type { RehearsalChapter, RehearsalDecision, RehearsalPlan } from "./types";
 
 export interface RehearsalToolDeps {
   chapters: readonly RehearsalChapter[];
@@ -20,6 +21,9 @@ export interface RehearsalToolDeps {
   record(decision: RehearsalDecision): Promise<void>;
   // A chapter note's body, or null when the reader never generated one.
   readNote(chapter: number): Promise<string | null>;
+  // The decision file as it is on disk right now — re-read rather than closed
+  // over, so a decision recorded earlier in this same turn is in the answer.
+  readPlan(): Promise<RehearsalPlan | null>;
   // Raise the decision card in the conversation. Absent in headless tests.
   onCard?(card: RehearsalDecisionCardData): void;
   now?(): number;
@@ -104,6 +108,15 @@ export function buildRehearsalTools(deps: RehearsalToolDeps): AgentTool[] {
         if (!body) return `No note on file for chapter ${chapter} ("${target.title}").`;
         return body;
       },
+    },
+    {
+      name: "read_talk_outline",
+      description:
+        "Read the whole talk outline back: every chapter settled so far, what each " +
+        "one contributes, which were cut, and which are not settled yet. Use it when " +
+        "the reader asks what their talk looks like now. Read-only.",
+      parameters: Type.Object({}),
+      execute: async () => formatOutline(deps.chapters, await deps.readPlan()),
     },
   ];
 }

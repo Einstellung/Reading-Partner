@@ -51,12 +51,34 @@ export function contentSystemPrompt(aiLanguage: AiLanguage = "auto"): string {
   ].join("\n");
 }
 
-// The kickoff for one slide: its title/kind, asset slot, the relevant notes, and
-// — on a re-run — the one-line steer the user typed.
-export function contentUserMessage(slide: SlideRun, notes: string, instruction?: string): string {
+// The kickoff for one slide: its title/kind, asset slot, the reader's own points
+// when the talk was rehearsed, the relevant notes, and — on a re-run — the
+// one-line steer the user typed.
+//
+// `readerPoints` are the lines the reader settled in rehearsal mode (docs/31),
+// verbatim: they arrive here exactly as recorded, never having passed through
+// the plan stage's wording. They are the slide, and the notes below them are
+// only background for filling it out.
+export function contentUserMessage(
+  slide: SlideRun,
+  notes: string,
+  instruction?: string,
+  readerPoints: readonly string[] = [],
+): string {
   const parts: string[] = [
     `Slide ${slide.index} of the deck. Kind: ${slide.kind}. Title: "${slide.title}".`,
   ];
+  if (readerPoints.length) {
+    parts.push(
+      [
+        "What this slide has to say — the reader settled these themselves, in these",
+        "words. Say these things and no others. Keep their framing and their terms;",
+        "you may shorten a line to fit a bullet, but do not replace it with your own",
+        "phrasing and do not add a point they did not make:",
+        ...readerPoints.map((p) => `- ${p}`),
+      ].join("\n"),
+    );
+  }
   if (slide.illustration) {
     parts.push(
       `This slide has an illustration slot (place <!--illustration-->). Intended image: ${slide.illustration.prompt}`,
@@ -66,8 +88,13 @@ export function contentUserMessage(slide: SlideRun, notes: string, instruction?:
     parts.push(`This slide has a figure slot (place <!--figure-->), citing figure ${slide.figure.figId}.`);
   }
   if (notes.trim()) {
-    parts.push("Source notes to distill from:", notes.trim());
-  } else {
+    parts.push(
+      readerPoints.length
+        ? "Background from the reader's chapter notes, to fill the points out — not a second source of points:"
+        : "Source notes to distill from:",
+      notes.trim(),
+    );
+  } else if (!readerPoints.length) {
     parts.push(
       "No source notes for this slide — write it from the title and the deck's arc (typical for title/section/closing slides).",
     );

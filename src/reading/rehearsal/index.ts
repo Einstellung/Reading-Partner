@@ -15,6 +15,7 @@ export { bucketMarks, formatMarks, markCounts } from "./marks";
 export {
   createPlan,
   decisionFor,
+  formatOutline,
   formatPlan,
   nextChapter,
   normalizePlan,
@@ -28,7 +29,13 @@ export {
   type RehearsalNote,
 } from "./prompt";
 export { buildSkeleton, chapterOfPage, formatSkeleton, type SkeletonInput } from "./skeleton";
-export { loadRehearsalPlan, recordDecision, rehearsalFile, saveRehearsalPlan } from "./store";
+export {
+  listRehearsedBooks,
+  loadRehearsalPlan,
+  recordDecision,
+  rehearsalFile,
+  saveRehearsalPlan,
+} from "./store";
 export { buildRehearsalTools, type RehearsalToolDeps } from "./tools";
 export { useRehearsal, type RehearsalController, type RehearsalHost } from "./use-rehearsal";
 export {

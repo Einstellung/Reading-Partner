@@ -103,33 +103,34 @@ function chapterLine(c: PlanChapter): string {
   return `${c.index}. ${c.title} (pp.${c.startPage}-${c.endPage}) ${note}${digest}`;
 }
 
-// Build the plan call's user message: for each book its overview (the
-// through-line) and its chapter list (what the slides can actually be sourced
-// from), then the figure list, then the talk instruction.
-export function planUserMessage(books: PlanBook[], instruction: string): string {
-  const parts: string[] = [];
-  for (const b of books) {
-    const lines = [`=== Book "${b.title}" (bookId: ${b.bookId}) ===`];
-    if (b.overview.trim()) {
-      lines.push("Whole-book overview (the through-line):", b.overview.trim(), "");
-    }
-    if (b.chapters.length) {
-      lines.push(
-        "Chapters (cite these numbers in sourceChapters):",
-        ...b.chapters.map(chapterLine),
-      );
-    } else {
-      lines.push("No chapter list is available for this book.");
-    }
-    if (b.figures.length) {
-      lines.push(
-        "",
-        "Available figures (cite by figId):",
-        ...b.figures.slice(0, 40).map((f) => `- ${f.id}: ${f.caption}`),
-      );
-    }
-    parts.push(lines.join("\n"));
+// One book as the planner reads it: overview (the through-line), chapter list
+// (what the slides can be sourced from), figure list. Shared with the
+// rehearsal-outline path (outline.ts), which renders rehearsed books its own way
+// but still needs this one for the books that were never rehearsed.
+export function bookBlock(b: PlanBook): string {
+  const lines = [`=== Book "${b.title}" (bookId: ${b.bookId}) ===`];
+  if (b.overview.trim()) {
+    lines.push("Whole-book overview (the through-line):", b.overview.trim(), "");
   }
+  if (b.chapters.length) {
+    lines.push("Chapters (cite these numbers in sourceChapters):", ...b.chapters.map(chapterLine));
+  } else {
+    lines.push("No chapter list is available for this book.");
+  }
+  if (b.figures.length) {
+    lines.push(
+      "",
+      "Available figures (cite by figId):",
+      ...b.figures.slice(0, 40).map((f) => `- ${f.id}: ${f.caption}`),
+    );
+  }
+  return lines.join("\n");
+}
+
+// Build the plan call's user message: each book's block, then the talk
+// instruction.
+export function planUserMessage(books: PlanBook[], instruction: string): string {
+  const parts: string[] = books.map(bookBlock);
   const steer = instruction.trim();
   parts.push(
     steer

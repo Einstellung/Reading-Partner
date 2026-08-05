@@ -178,6 +178,11 @@ export function buildRehearsalSystemPrompt(ctx: RehearsalContext): string {
     // Always offered, not only when nothing was inlined: only the chapter coming
     // up is inlined, so every other chapter's note is behind this tool.
     "read_chapter_note(chapter) returns a chapter note the reader already wrote.",
+    // The record below is this turn's; after recording a chapter the reader often
+    // asks what the whole thing adds up to now, and that answer has to be read
+    // back rather than remembered.
+    "read_talk_outline() reads the whole outline back — what is in, what was cut,",
+    "what is not settled yet.",
   ];
   if (ctx.hasReadingTools) {
     tools.push(

@@ -292,12 +292,13 @@ function twoChapters(): Fulltext {
   };
 }
 
-test("rehearsal mode mounts its two tools and swaps the prompt", async () => {
+test("rehearsal mode mounts its own tools and swaps the prompt", async () => {
   const turn = await buildReadingTurn(bookLevel({ rehearsal: true }));
   expect(names(turn!.tools)).toEqual([
     "find_paper",
     "read_chapter_note",
     "read_pages",
+    "read_talk_outline",
     "record_chapter_decision",
     "research_literature",
     "search_topic",
