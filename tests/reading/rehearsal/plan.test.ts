@@ -1,18 +1,20 @@
-// The decision file's pure operations (src/reading/rehearsal/plan.ts): merging a
-// chapter's decision in, where the rehearsal is up to, and how the record reads
-// to the model at the top of a turn. Run: bun test.
+// How the record of a rehearsal reads to the model at the top of a turn
+// (src/reading/rehearsal/plan.ts). Where the record is kept and in what order is
+// the talk's (tests/reading/talks/outline.test.ts); this is the read-back.
+// Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
-  createPlan,
   decisionFor,
   formatOutline,
   formatPlan,
   nextChapter,
-  normalizePlan,
-  upsertDecision,
 } from "../../../src/reading/rehearsal/plan";
-import type { RehearsalChapter, RehearsalDecision } from "../../../src/reading/rehearsal/types";
+import type {
+  RehearsalChapter,
+  RehearsalDecision,
+  RehearsalPlan,
+} from "../../../src/reading/rehearsal/types";
 
 const chapters: RehearsalChapter[] = [
   { index: 1, title: "Openings", startPage: 1, endPage: 10, hasNote: false },
@@ -31,35 +33,35 @@ function decision(over: Partial<RehearsalDecision> = {}): RehearsalDecision {
   };
 }
 
-test("a decision is added and the list stays in chapter order", () => {
-  let plan = createPlan("book", 1);
-  plan = upsertDecision(plan, decision({ chapter: 3, title: "Endings" }));
-  plan = upsertDecision(plan, decision({ chapter: 1 }));
-  expect(plan.decisions.map((d) => d.chapter)).toEqual([1, 3]);
-});
+function plan(...decisions: RehearsalDecision[]): RehearsalPlan {
+  return { version: 1, createdAt: 1, updatedAt: 100, decisions };
+}
 
-// The reader comes back to a chapter and changes their mind; the file has to end
-// up saying the new thing, not both things.
-test("recording a chapter again replaces its decision", () => {
-  let plan = createPlan("book", 1);
-  plan = upsertDecision(plan, decision({ points: ["first take"] }));
-  plan = upsertDecision(plan, decision({ points: ["second take"], updatedAt: 200 }));
-  expect(plan.decisions).toHaveLength(1);
-  expect(decisionFor(plan, 1)?.points).toEqual(["second take"]);
-  expect(plan.updatedAt).toBe(200);
+test("a chapter's decision is found by its number", () => {
+  const p = plan(decision(), decision({ chapter: 3, title: "Endings" }));
+  expect(decisionFor(p, 3)?.title).toBe("Endings");
+  expect(decisionFor(p, 2)).toBeUndefined();
+  expect(decisionFor(null, 1)).toBeUndefined();
 });
 
 // Not "the last one plus one": the reader may jump around, and the gap is what
 // is actually left to do.
 test("the next chapter is the lowest one with no decision", () => {
-  let plan = createPlan("book", 1);
-  expect(nextChapter(chapters, plan)).toBe(1);
-  plan = upsertDecision(plan, decision({ chapter: 2, title: "Middlegame" }));
-  expect(nextChapter(chapters, plan)).toBe(1);
-  plan = upsertDecision(plan, decision({ chapter: 1 }));
-  expect(nextChapter(chapters, plan)).toBe(3);
-  plan = upsertDecision(plan, decision({ chapter: 3, title: "Endings" }));
-  expect(nextChapter(chapters, plan)).toBeNull();
+  expect(nextChapter(chapters, null)).toBe(1);
+  expect(nextChapter(chapters, plan(decision({ chapter: 2, title: "Middlegame" })))).toBe(1);
+  expect(
+    nextChapter(chapters, plan(decision({ chapter: 2, title: "Middlegame" }), decision())),
+  ).toBe(3);
+  expect(
+    nextChapter(
+      chapters,
+      plan(
+        decision(),
+        decision({ chapter: 2, title: "Middlegame" }),
+        decision({ chapter: 3, title: "Endings" }),
+      ),
+    ),
+  ).toBeNull();
 });
 
 test("an empty record tells the model this is the opening, not chapter one", () => {
@@ -76,10 +78,13 @@ test("an empty record also says not to redo an opening that already happened", (
 });
 
 test("the record names what was settled and where to pick up", () => {
-  let plan = createPlan("book", 1);
-  plan = upsertDecision(plan, decision({ figure: "[fig:3]", note: "thin on evidence" }));
-  plan = upsertDecision(plan, decision({ chapter: 2, title: "Middlegame", include: false, points: [] }));
-  const text = formatPlan(chapters, plan);
+  const text = formatPlan(
+    chapters,
+    plan(
+      decision({ figure: "[fig:3]", note: "thin on evidence" }),
+      decision({ chapter: 2, title: "Middlegame", include: false, points: [] }),
+    ),
+  );
   expect(text).toContain("Chapter 1. Openings — in the talk");
   expect(text).toContain("the argument rests on the 1962 data");
   expect(text).toContain("figure: [fig:3]");
@@ -88,43 +93,33 @@ test("the record names what was settled and where to pick up", () => {
   expect(text).toContain("Next up: chapter 3");
 });
 
-test("a finished rehearsal is told not to walk the chapters again", () => {
-  let plan = createPlan("book", 1);
-  for (const c of chapters) plan = upsertDecision(plan, decision({ chapter: c.index, title: c.title }));
-  const text = formatPlan(chapters, plan);
-  expect(text).toContain("Every chapter has a decision");
-  expect(text).not.toContain("Next up");
+// The record is read in the order the talk holds it, not sorted back into
+// chapter order: the reader may have moved an entry, and the model has to see
+// the talk as it now stands.
+test("the record keeps the order it was given in", () => {
+  const text = formatPlan(
+    chapters,
+    plan(decision({ chapter: 3, title: "Endings" }), decision({ chapter: 1 })),
+  );
+  expect(text.indexOf("Chapter 3.")).toBeLessThan(text.indexOf("Chapter 1."));
 });
 
-test("a decision the file cannot use is dropped, not thrown", () => {
-  const raw = {
-    version: 1 as const,
-    bookId: "book",
-    createdAt: 1,
-    updatedAt: 5,
-    decisions: [
-      { chapter: 2, title: "Two", include: true, points: ["a", 3], updatedAt: 5 },
-      { chapter: "nope", title: "x", include: true, points: [], updatedAt: 5 },
-      { chapter: 2, title: "duplicate", include: false, points: [], updatedAt: 6 },
-      { chapter: 1, title: "One", include: false, points: [], updatedAt: 4 },
-    ],
-  } as never;
-  const plan = normalizePlan(raw);
-  expect(plan.decisions.map((d) => d.chapter)).toEqual([1, 2]);
-  expect(decisionFor(plan, 2)?.points).toEqual(["a"]);
-  expect(decisionFor(plan, 2)?.title).toBe("Two");
+test("a finished rehearsal is told not to walk the chapters again", () => {
+  const text = formatPlan(chapters, plan(...chapters.map((c) => decision({ chapter: c.index, title: c.title }))));
+  expect(text).toContain("Every chapter has a decision");
+  expect(text).not.toContain("Next up");
 });
 
 // formatOutline is what read_talk_outline reads back to the reader, so unlike
 // formatPlan it carries no instruction about what the model should do next.
 test("formatOutline lists what is in, what was cut, and what is not settled", () => {
-  let plan = createPlan("book", 1);
-  plan = upsertDecision(plan, decision({ chapter: 1, points: ["p one", "p two"], figure: "fig:3" }));
-  plan = upsertDecision(
-    plan,
-    decision({ chapter: 2, title: "Middlegame", include: false, points: [], note: "thin" }),
+  const text = formatOutline(
+    chapters,
+    plan(
+      decision({ chapter: 1, points: ["p one", "p two"], figure: "fig:3" }),
+      decision({ chapter: 2, title: "Middlegame", include: false, points: [], note: "thin" }),
+    ),
   );
-  const text = formatOutline(chapters, plan);
   expect(text).toContain("1 chapter(s), 2 point(s)");
   expect(text).toContain("p one");
   expect(text).toContain("figure: fig:3");
@@ -135,13 +130,21 @@ test("formatOutline lists what is in, what was cut, and what is not settled", ()
 
 test("formatOutline says there is no outline before the first decision", () => {
   expect(formatOutline(chapters, null)).toContain("No chapter has been settled yet");
-  expect(formatOutline(chapters, createPlan("book", 1))).toContain("No chapter has been settled yet");
+  expect(formatOutline(chapters, plan())).toContain("No chapter has been settled yet");
 });
 
 test("formatOutline does not claim a talk when every settled chapter was cut", () => {
-  let plan = createPlan("book", 1);
-  plan = upsertDecision(plan, decision({ chapter: 1, include: false, points: [] }));
-  const text = formatOutline(chapters, plan);
+  const text = formatOutline(chapters, plan(decision({ chapter: 1, include: false, points: [] })));
   expect(text).toContain("Nothing is in the talk yet");
   expect(text).toContain("Cut:");
+});
+
+// The outline is read in the order the talk holds it, like formatPlan: a reader
+// who moved an entry has to hear their talk in the order it will be given.
+test("formatOutline keeps the order the talk holds", () => {
+  const text = formatOutline(
+    chapters,
+    plan(decision({ chapter: 3, title: "Endings" }), decision({ chapter: 1 })),
+  );
+  expect(text.indexOf("3. Endings")).toBeLessThan(text.indexOf("1. Openings"));
 });

@@ -1,8 +1,10 @@
 // Left sidebar as an overlay drawer (docs: touch/iPad adaptation). Default
 // closed on every surface (PC too); the reader top-bar button toggles it. It
 // slides in from the left over the reader, dims the page behind it, and closes
-// on a backdrop tap, Esc, or the toggle button. Five tabs live along its top:
-// Outline, Marks (annotations), Prep (docs/09), Notes (docs/14), Memory (docs/02).
+// on a backdrop tap, Esc, or the toggle button. Four tabs live along its top:
+// Outline, Marks (annotations), Prep (docs/09), Notes (docs/14). Memory is not
+// among them: it is per topic (docs/02, docs/31) and lives in the topic's own
+// sidebar, which is now the only place it is.
 //
 // Pure and controlled: App owns `open`/`tab` state and the toggle; this renders
 // the backdrop, the sliding panel, and the tab row, and forwards clicks. The
@@ -11,14 +13,14 @@
 // reserving an in-flow column, so opening it costs the reader nothing.
 
 import type { ReactNode } from "react";
-import { IconHighlight, IconMemory, IconNotes, IconOutline, IconSparkle } from "../common/icons";
+import { IconHighlight, IconNotes, IconOutline, IconSparkle } from "../common/icons";
 import { Button } from "../ui/button";
 import OutlineView from "./OutlineView";
 import TraceList from "./TraceList";
 import type { Annotation } from "../common/types";
 import type { Fulltext } from "../../../fulltext/types";
 
-export type SidebarTab = "outline" | "traces" | "prep" | "notes" | "memory";
+export type SidebarTab = "outline" | "traces" | "prep" | "notes";
 
 // Drawer width: the old panel width, capped so a narrow window (portrait iPad,
 // Split View) never gives it more than a reasonable slice of the viewport.
@@ -29,7 +31,6 @@ const TABS: { id: SidebarTab; label: string; Icon: (p: { size?: number }) => JSX
 	{ id: "traces", label: "Marks", Icon: IconHighlight },
 	{ id: "prep", label: "Prep", Icon: IconSparkle },
 	{ id: "notes", label: "Notes", Icon: IconNotes },
-	{ id: "memory", label: "Memory", Icon: IconMemory },
 ];
 
 // A tab button. The active tab shows its label beside the icon so the panel is
@@ -57,8 +58,6 @@ interface SidebarProps {
 	prepPanel: ReactNode;
 	// The notes tab's content, owned by App (docs/14).
 	notesPanel: ReactNode;
-	// The memory tab's content, owned by App (entry loading, refresh).
-	memoryPanel: ReactNode;
 }
 
 export default function Sidebar({
@@ -76,7 +75,6 @@ export default function Sidebar({
 	onOpenThread,
 	prepPanel,
 	notesPanel,
-	memoryPanel,
 }: SidebarProps) {
 	return (
 		<>
@@ -136,10 +134,8 @@ export default function Sidebar({
 						/>
 					) : tab === "prep" ? (
 						prepPanel
-					) : tab === "notes" ? (
-						notesPanel
 					) : (
-						memoryPanel
+						notesPanel
 					)}
 				</div>
 			</aside>

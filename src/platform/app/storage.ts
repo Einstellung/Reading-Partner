@@ -44,21 +44,11 @@ const DEFAULT_VIEW_STATE: ViewState = {
 };
 
 // Pure: merge the sticky mode flags into a view state (or a default base when
-// the book has none yet). Kept pure so the persistence logic is testable.
-//
-// Both flags are always written, never one of them: they are mutually exclusive
-// (src/reading/rehearsal/mode.ts) and a merge that touched only the pressed one
-// would leave a file saying both modes are on. The parameter is structural
-// rather than the domain's ModeFlags because platform/app imports nothing.
-export function withModes(
-  state: ViewState | null,
-  modes: { classroom: boolean; rehearsal: boolean },
-): ViewState {
-  return {
-    ...(state ?? DEFAULT_VIEW_STATE),
-    classroom: modes.classroom,
-    rehearsal: modes.rehearsal,
-  };
+// the book has none yet). Kept pure so the persistence logic is testable. The
+// parameter is structural rather than a domain type because platform/app imports
+// nothing.
+export function withModes(state: ViewState | null, modes: { classroom: boolean }): ViewState {
+  return { ...(state ?? DEFAULT_VIEW_STATE), classroom: modes.classroom };
 }
 
 async function load(): Promise<Store> {

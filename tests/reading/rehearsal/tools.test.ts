@@ -5,8 +5,8 @@
 
 import { expect, test } from "bun:test";
 import { buildRehearsalTools } from "../../../src/reading/rehearsal/tools";
-import { createPlan, upsertDecision } from "../../../src/reading/rehearsal/plan";
 import type { RehearsalDecisionCardData } from "../../../src/reading/rehearsal/cards";
+import { REHEARSAL_VERSION } from "../../../src/reading/rehearsal/types";
 import type {
   RehearsalChapter,
   RehearsalDecision,
@@ -21,14 +21,20 @@ const chapters: RehearsalChapter[] = [
 function harness(notes: Record<number, string> = {}) {
   const recorded: RehearsalDecision[] = [];
   const cards: RehearsalDecisionCardData[] = [];
-  // Stands in for the file: what record writes is what readPlan hands back, so
-  // read_talk_outline is tested against decisions made in the same run.
+  // Stands in for the talk: what record writes is what readPlan hands back, so
+  // read_talk_outline is tested against decisions made in the same run. Appended
+  // rather than sorted, because the talk keeps the order it recorded in.
   let plan: RehearsalPlan | null = null;
   const tools = buildRehearsalTools({
     chapters,
     record: async (d) => {
       recorded.push(d);
-      plan = upsertDecision(plan ?? createPlan("b1", d.updatedAt), d);
+      plan = {
+        version: REHEARSAL_VERSION,
+        createdAt: plan?.createdAt ?? d.updatedAt,
+        updatedAt: d.updatedAt,
+        decisions: [...(plan?.decisions ?? []).filter((x) => x.chapter !== d.chapter), d],
+      };
     },
     readNote: async (n) => notes[n] ?? null,
     readPlan: async () => plan,

@@ -10,7 +10,8 @@ import { BaseDirectory, writeTextFile } from "@tauri-apps/plugin-fs";
 
 export type EventType =
   | "classroom-toggle" // { on: boolean }
-  | "rehearsal-toggle" // { on: boolean } — docs/31, mutually exclusive with classroom
+  | "talk-start" // { talkId, materials } — a talk was started (docs/31)
+  | "talk-open" // { talkId } — a talk was opened from the topic's list
   | "citation-click" // { kind: "page", page } | { kind: "paper", slug }
   | "page-nav" // { from, to, dwellMs } — dwell is time spent on the previous page
   | "call-start" // { threadId }
@@ -22,7 +23,6 @@ export type EventType =
   // (src/ai/subagent), e.g. "out-of-turns" or "failed".
   | "distill-failed" // { threadId, outcome, created?, updated?, deleted? }
   | "prep-status" // { slug, status }
-  | "memory-tab-open" // {}
   | "notes-run" // { phase: "start" | "done" | "failed" }
   | "notes-chapter-regenerate" // { index }
   | "notes-tab-open" // {}

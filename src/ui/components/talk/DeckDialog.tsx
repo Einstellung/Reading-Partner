@@ -1,48 +1,45 @@
-// Slides dialog (docs/14, docs/29): pick the books (with notes) a talk draws on,
-// give a free-text instruction, and generate a self-contained HTML deck. While a
-// run is in flight it shows the same visual language as notes generation —
-// stage, per slide progress, liveness seconds, Stop. Done runs list under
-// "Generated decks" with Open (system browser) and the file path.
+// This talk's deck (docs/31: the PPT is the talk's product, the last step of the
+// loop). Opened from the talk it belongs to, so there is nothing to pick and no
+// talk to describe — the materials and the outline are the talk's, and the deck
+// lands under the talk's own id.
 //
-// The talk's state is on disk now, so this dialog also drives the three
-// re-runs: one slide's body (with an optional one-line steer, the same shape as
-// the notes panel's per-chapter Regenerate), one slide's image, and the deck
-// itself. Everything a slide had to settle for — a chapter that had no note, a
-// figure that could not be cropped, a body that will not fit the stage — is
-// printed on its row. Tailwind-only, no emoji.
+// It is a dialog rather than a third pane in TalkView: a deck run is a list of
+// twenty rows with per-row controls, and the talk's two panes (the conversation
+// and the outline) are where the reader is actually working. Opening it over the
+// talk keeps one entry point and leaves that layout alone.
 //
-// A centred Dialog (docs/30, fourth pass). NotesPanel still mounts and unmounts
-// it, so `open` is constant and onOpenChange reports the closes Radix decides
-// on: Escape, and a press outside the box.
+// While a run is in flight it shows the same visual language as notes generation
+// — stage, per slide progress, liveness seconds, Stop — and it drives the three
+// re-runs the resumable pipeline supports: one slide's body (with an optional
+// one-line steer), one slide's image, and the deck itself. Everything a slide had
+// to settle for — a chapter that had no note, a figure that could not be cropped,
+// a body that will not fit the stage — is printed on its row.
+//
+// A centred Dialog (docs/30, fourth pass). TalkView mounts and unmounts it, so
+// `open` is constant and onOpenChange reports the closes Radix decides on:
+// Escape, and a press outside the box.
 
 import { useEffect, useState } from "react";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { appDataDir, join } from "@tauri-apps/api/path";
 import {
-  getCurrentTalk,
-  hasPendingWork,
+  getCurrentDeck,
   hasUnrunSlides,
-  listTalkBooks,
-  listTalks,
-  listTalkStates,
-  openTalk,
-  startTalk,
-  type TalkBook,
+  listDecks,
+  listDeckTalks,
+  openDeck,
+  startDeck,
   type SlideRun,
   type SlidesActivity,
   type SlidesPipeline,
   type SlidesSnapshot,
-  type SlidesState,
   type TalkEntry,
 } from "../../../reading/slides";
 import { cn } from "../lib/utils";
 import { Button } from "../ui/button";
-import { Checkbox } from "../ui/checkbox";
 import { Dialog, DialogContent, DialogTitle } from "../ui/dialog";
 import { Input } from "../ui/input";
-import { Label } from "../ui/label";
 import { OVERLAY_Z } from "../ui/overlay";
-import { Textarea } from "../ui/textarea";
 
 function LivenessHint({ activity }: { activity: SlidesActivity }) {
   const [now, setNow] = useState(() => Date.now());
@@ -242,28 +239,49 @@ function RunView({
   );
 }
 
-export default function SlidesDialog({
-  currentBookId,
+export default function DeckDialog({
+  talkId,
+  talkName,
   onClose,
 }: {
-  currentBookId: string;
+  talkId: string;
+  talkName: string;
   onClose: () => void;
 }) {
-  const [books, setBooks] = useState<TalkBook[]>([]);
-  const [selected, setSelected] = useState<Set<string>>(() => new Set([currentBookId]));
   const [instruction, setInstruction] = useState("");
-  const [talks, setTalks] = useState<TalkEntry[]>([]);
-  const [states, setStates] = useState<SlidesState[]>([]);
+  const [deck, setDeck] = useState<TalkEntry | null>(null);
+  // null while the check is running; false when the talk has nothing to build a
+  // deck from, which is a state the reader has to be told about rather than a
+  // button that does nothing.
+  const [buildable, setBuildable] = useState<boolean | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
 
-  const [pipeline, setPipeline] = useState<SlidesPipeline | null>(() => getCurrentTalk());
-  const [snap, setSnap] = useState<SlidesSnapshot | null>(() => getCurrentTalk()?.snapshot() ?? null);
+  // A run this talk started before the dialog was closed and reopened. Another
+  // talk's run is not ours to show, so it is filtered out rather than attached.
+  const mine = (): SlidesPipeline | null => {
+    const p = getCurrentDeck();
+    return p?.snapshot().state.id === talkId ? p : null;
+  };
+  const [pipeline, setPipeline] = useState<SlidesPipeline | null>(mine);
+  const [snap, setSnap] = useState<SlidesSnapshot | null>(() => mine()?.snapshot() ?? null);
 
+  // Attach to this talk's deck run if one is already on disk, and pick up the
+  // instruction it was started with so a re-plan does not silently lose it.
   useEffect(() => {
-    listTalkBooks().then(setBooks);
-    listTalks().then(setTalks);
-    listTalkStates().then(setStates);
-  }, []);
+    let cancelled = false;
+    void (async () => {
+      const p = await openDeck(talkId);
+      if (!cancelled && p) {
+        setPipeline(p);
+        setInstruction(p.snapshot().state.instruction);
+      }
+      const talks = await listDeckTalks();
+      if (!cancelled) setBuildable(talks.some((t) => t.talkId === talkId));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [talkId]);
 
   useEffect(() => {
     if (!pipeline) {
@@ -274,35 +292,27 @@ export default function SlidesDialog({
     return pipeline.subscribe(() => setSnap(pipeline.snapshot()));
   }, [pipeline]);
 
-  // Refresh the deck list whenever a deck lands on disk.
+  // The deck file, refreshed whenever one lands on disk.
   const outputFile = snap?.state?.outputFile;
   const assembleStatus = snap?.state?.assembleStatus;
   useEffect(() => {
-    if (assembleStatus === "done") listTalks().then(setTalks);
-  }, [assembleStatus, outputFile]);
-
-  const toggle = (id: string) =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
+    let cancelled = false;
+    void listDecks().then((all) => {
+      if (!cancelled) setDeck(all.find((d) => d.talkId === talkId) ?? null);
     });
+    return () => {
+      cancelled = true;
+    };
+  }, [talkId, assembleStatus, outputFile]);
 
   const running = snap?.running ?? false;
-  const currentId = snap?.state?.id;
-  // Talks with work left that this dialog is not already attached to.
-  const resumable = states.filter((s) => s.id !== currentId && hasPendingWork(s));
+  const planned = !!snap?.state && snap.state.slides.length > 0;
 
   const generate = () => {
-    const ids = books.map((b) => b.bookId).filter((id) => selected.has(id));
-    if (ids.length === 0 || running) return;
-    setPipeline(startTalk(ids, instruction.trim()));
-  };
-
-  const reopen = async (talkId: string) => {
-    const p = await openTalk(talkId);
-    if (p) setPipeline(p);
+    if (running || buildable === false) return;
+    void startDeck(talkId, instruction.trim()).then((p) => {
+      if (p) setPipeline(p);
+    });
   };
 
   const open = async (file: string) => {
@@ -335,8 +345,8 @@ export default function SlidesDialog({
         )}
       >
         <div className="flex items-center justify-between border-b border-[#eee] px-4 py-3">
-          <DialogTitle className="text-[15px] font-semibold leading-normal text-[#1b1b1b]">
-            Generate a talk deck
+          <DialogTitle className="min-w-0 truncate text-[15px] font-semibold leading-normal text-[#1b1b1b]">
+            The deck for “{talkName}”
           </DialogTitle>
           <Button type="button" variant="outline" onClick={onClose}>
             Close
@@ -344,101 +354,54 @@ export default function SlidesDialog({
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
-          <div>
-            <div className="mb-1.5 text-[12px] font-semibold text-[#777]">Books to draw on</div>
-            {books.length === 0 ? (
-              <p className="m-0 text-[12px] text-neutral-400">
-                No book has notes or a rehearsal yet.
-              </p>
-            ) : (
-              <div className="flex flex-col gap-1">
-                {books.map((b) => (
-                  <Label key={b.bookId} className="text-[13px] text-neutral-700">
-                    <Checkbox checked={selected.has(b.bookId)} onCheckedChange={() => toggle(b.bookId)} />
-                    <span className="min-w-0 truncate">{b.title}</span>
-                  </Label>
-                ))}
+          {buildable === false ? (
+            <p className="m-0 text-[12px] text-neutral-400">
+              Nothing has been settled in this talk yet, and none of its materials has notes — go
+              through a chapter or two first and the deck follows from the outline.
+            </p>
+          ) : (
+            <>
+              <div>
+                {/* Not a description of the talk: the outline already is the talk.
+                    This only steers the shape of the pages. */}
+                <div className="mb-1.5 text-[12px] font-semibold text-[#777]">
+                  Theme or audience (optional)
+                </div>
+                <Input
+                  className="text-[13px]"
+                  placeholder="e.g. 15 minutes, for engineers"
+                  value={instruction}
+                  onChange={(e) => setInstruction(e.target.value)}
+                />
               </div>
-            )}
-          </div>
 
-          <div>
-            <div className="mb-1.5 text-[12px] font-semibold text-[#777]">Talk instruction (optional)</div>
-            <Textarea
-              className="text-[13px]"
-              placeholder="Theme, audience, angle… e.g. a 15-minute talk for engineers on the core argument."
-              value={instruction}
-              onChange={(e) => setInstruction(e.target.value)}
-            />
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Button
-              type="button"
-              disabled={running || selected.size === 0}
-              onClick={generate}
-            >
-              {running ? "Generating…" : "Generate"}
-            </Button>
-            <span className="text-[11px] text-neutral-400">
-              Without an illustration key (Settings), decks generate without AI images.
-            </span>
-          </div>
-
-          {resumable.length > 0 && (
-            <div>
-              <div className="mb-1.5 text-[12px] font-semibold text-[#777]">Unfinished talks</div>
-              <div className="flex flex-col gap-1.5">
-                {resumable.map((s) => (
-                  <div
-                    key={s.id}
-                    className="flex items-center justify-between gap-2 rounded-md border border-[#eee] px-2.5 py-1.5"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate text-[13px] text-neutral-700">{s.title}</div>
-                      <div className="truncate text-[11px] text-neutral-400">
-                        {s.slides.filter((sl) => sl.contentStatus === "done").length}/{s.slides.length} slides written
-                      </div>
-                    </div>
-                    <Button type="button" variant="outline" onClick={() => void reopen(s.id)}>
-                      Open
-                    </Button>
-                  </div>
-                ))}
+              <div className="flex items-center gap-3">
+                <Button type="button" disabled={running || buildable === null} onClick={generate}>
+                  {running ? "Generating…" : planned ? "Plan again" : "Generate the deck"}
+                </Button>
+                <span className="text-[11px] text-neutral-400">
+                  {planned
+                    ? "Planning again replaces the pages below."
+                    : "Without an illustration key (Settings), decks generate without AI images."}
+                </span>
               </div>
-            </div>
+            </>
           )}
 
           {snap && pipeline && <RunView snap={snap} pipeline={pipeline} onStop={() => pipeline.stop()} />}
 
-          <div>
-            <div className="mb-1.5 text-[12px] font-semibold text-[#777]">Generated decks</div>
-            {talks.length === 0 ? (
-              <p className="m-0 text-[12px] text-neutral-400">None yet.</p>
-            ) : (
-              <div className="flex flex-col gap-1.5">
-                {talks.map((t) => (
-                  <div key={t.file} className="flex items-center justify-between gap-2 rounded-md border border-[#eee] px-2.5 py-1.5">
-                    <div className="min-w-0">
-                      <div className="truncate text-[13px] text-neutral-700">{t.title}</div>
-                      <div className="truncate text-[11px] text-neutral-400">{t.file}</div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      {t.talkId && t.talkId !== currentId && (
-                        <Button type="button" variant="outline" onClick={() => void reopen(t.talkId!)}>
-                          Edit
-                        </Button>
-                      )}
-                      <Button type="button" variant="outline" onClick={() => open(t.file)}>
-                        Open
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+          {deck && (
+            <div className="flex items-center justify-between gap-2 rounded-md border border-[#eee] px-2.5 py-1.5">
+              <div className="min-w-0">
+                <div className="truncate text-[13px] text-neutral-700">{deck.title}</div>
+                <div className="truncate text-[11px] text-neutral-400">{deck.file}</div>
               </div>
-            )}
-            {openError && <p className="m-0 mt-1 text-[11px] text-destructive">{openError}</p>}
-          </div>
+              <Button type="button" variant="outline" onClick={() => open(deck.file)}>
+                Open
+              </Button>
+            </div>
+          )}
+          {openError && <p className="m-0 text-[11px] text-destructive">{openError}</p>}
         </div>
       </DialogContent>
     </Dialog>

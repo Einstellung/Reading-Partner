@@ -1,5 +1,6 @@
-// The two rehearsal-mode agent tools: write a chapter's decision to the talk's
-// outline, and read back a chapter note the reader already wrote.
+// The rehearsal's agent tools: write a chapter's decision to the talk's outline,
+// read back a chapter note the reader already wrote, and read the outline as it
+// now stands.
 //
 // record_chapter_decision is the one tool in this app whose side effect is not
 // derived from anything (docs/31: the decisions are the outline of the talk).
