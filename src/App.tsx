@@ -97,6 +97,7 @@ import ChatPipCard from "./ui/components/chat/ChatPipCard";
 import SettingsView from "./ui/components/SettingsView";
 import { backgroundFailureToast, buildReadingTurn, turnFailureView, type TurnFailure } from "./reading/turn";
 import { createLiveTurns, type LiveTurn } from "./reading/live-turns";
+import { createPendingImages } from "./reading/pending-images";
 import { researchStatusLabel, RESEARCH_TOOL_NAME } from "./reading/papers/research-agent";
 import type { SubagentProgress } from "./ai/subagent";
 import { Button } from "./ui/components/ui/button";
@@ -114,7 +115,11 @@ import type { Annotation as PopupAnnotation, PendingImage, ToolStatus, ToolType 
 // strokes by the active tool, not the color.
 const AI_PEN_COLOR = "#a28ae5";
 // Cap on images attached to one chat turn (docs/03: paste screenshots to ask).
+// Per conversation, like the staging list itself.
 const MAX_PENDING_IMAGES = 3;
+// What the composer renders with no call open. A constant, so hanging up twice
+// does not hand React a second empty array.
+const NO_PENDING_IMAGES: PendingImage[] = [];
 
 // Reading layout for a book that has never chosen one: vertical continuous
 // scroll on every surface (the correct PDF-reading default; a finger swipe
@@ -283,15 +288,12 @@ export default function App() {
   // Images pasted into the composer, awaiting send: a placeholder appears while
   // the async compression runs, then resolves to a ready preview. A single
   // document-level paste listener fills these; the composer only renders them.
-  // The ref mirrors state synchronously so bursts of pastes and the stable send
-  // handler all see the current list without waiting for a re-render.
-  const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
-  const pendingImagesRef = useRef<PendingImage[]>([]);
-  const mutatePending = useCallback((fn: (cur: PendingImage[]) => PendingImage[]) => {
-    const next = fn(pendingImagesRef.current);
-    pendingImagesRef.current = next;
-    setPendingImages(next);
-  }, []);
+  // The store keys them by thread (src/reading/pending-images) so an unsent image
+  // stays on its own conversation, and holding it in a ref keeps bursts of pastes
+  // and the stable send handler on the current list without waiting for a
+  // re-render. The two states below are only what the open thread renders.
+  const pendingRef = useRef(createPendingImages<PendingImage>(MAX_PENDING_IMAGES));
+  const [pendingImages, setPendingImages] = useState<PendingImage[]>(NO_PENDING_IMAGES);
   // Inline note under the composer when a paste is rejected (model can't see it).
   const [imageHint, setImageHint] = useState("");
 
@@ -300,6 +302,12 @@ export default function App() {
   useEffect(() => {
     callViewRef.current = call?.view ?? "none";
     callRef.current = call;
+    // The composer shows the open conversation's own staging, and nothing when
+    // no call is open. This runs on every call change, so switching threads and
+    // hanging up both land here; the store hands back the same list identity
+    // when nothing moved, so a streamed token does not re-render the composer.
+    setPendingImages(call ? pendingRef.current.images(call.threadId) : NO_PENDING_IMAGES);
+    setImageHint(call ? pendingRef.current.hint(call.threadId) : "");
   }, [call]);
 
   // Prewarm the PDFium engine so the wasm is compiled before the first book
@@ -1070,6 +1078,10 @@ export default function App() {
       // at the book being left.
       captureHangup();
       setCall(null);
+      // The images staged in this book's conversations go with it, same as
+      // closing the reader: they are in memory only, and every thread they
+      // belong to is about to be out of reach.
+      pendingRef.current.clearAll();
       setSelectedAnnId(null);
       // Every book opens with nothing selected. The tool state lives on App and
       // would otherwise carry the previous book's annotation tool into the next
@@ -1259,41 +1271,59 @@ export default function App() {
     setSelectedAnnId(id);
   }, []);
 
-  // Stage an image for the next send: a placeholder shows immediately, the async
-  // compression runs, then the ready preview swaps in (or it's dropped + a hint
-  // on failure). Capped at MAX_PENDING_IMAGES.
+  // Push a thread's staging into what the composer renders. Every write goes
+  // through here, and a write to a thread that is not the one on screen (a
+  // compression landing after the user moved on) only updates the store.
+  const showPending = useCallback((threadId: string) => {
+    if (callRef.current?.threadId !== threadId) return;
+    setPendingImages(pendingRef.current.images(threadId));
+    setImageHint(pendingRef.current.hint(threadId));
+  }, []);
+
+  const noteImageHint = useCallback(
+    (threadId: string, hint: string) => {
+      pendingRef.current.setHint(threadId, hint);
+      showPending(threadId);
+    },
+    [showPending],
+  );
+
+  // Stage an image for the next send on one thread: a placeholder shows
+  // immediately, the async compression runs, then the ready preview swaps in (or
+  // it's dropped + a hint on failure). Capped at MAX_PENDING_IMAGES per thread.
   const stageImage = useCallback(
-    (produce: () => Promise<CompressedImage>) => {
-      if (pendingImagesRef.current.length >= MAX_PENDING_IMAGES) {
-        setImageHint(`You can attach up to ${MAX_PENDING_IMAGES} images.`);
+    (threadId: string, produce: () => Promise<CompressedImage>) => {
+      const pending = pendingRef.current;
+      const id = crypto.randomUUID();
+      if (!pending.add(threadId, { id, status: "loading" })) {
+        noteImageHint(threadId, `You can attach up to ${MAX_PENDING_IMAGES} images.`);
         return;
       }
-      const id = crypto.randomUUID();
-      mutatePending((cur) => [...cur, { id, status: "loading" }]);
+      showPending(threadId);
       produce().then(
-        (img) =>
-          mutatePending((cur) =>
-            cur.map((p) => (p.id === id ? { id, status: "ready", data: img.data, mediaType: img.mediaType } : p)),
-          ),
+        (img) => {
+          pending.replace(threadId, id, { id, status: "ready", data: img.data, mediaType: img.mediaType });
+          showPending(threadId);
+        },
         (e) => {
           console.error("failed to process pasted image", e);
-          mutatePending((cur) => cur.filter((p) => p.id !== id));
-          setImageHint(e instanceof Error ? e.message : "Couldn't process that image");
+          pending.remove(threadId, id);
+          noteImageHint(threadId, e instanceof Error ? e.message : "Couldn't process that image");
         },
       );
     },
-    [mutatePending],
+    [showPending, noteImageHint],
   );
 
   const removePendingImage = useCallback(
-    (id: string) => mutatePending((cur) => cur.filter((p) => p.id !== id)),
-    [mutatePending],
+    (id: string) => {
+      const threadId = callRef.current?.threadId;
+      if (!threadId) return;
+      pendingRef.current.remove(threadId, id);
+      showPending(threadId);
+    },
+    [showPending],
   );
-
-  const clearPendingImages = useCallback(() => {
-    mutatePending(() => []);
-    setImageHint("");
-  }, [mutatePending]);
 
   // Does the active default model accept images? (Gates a paste up front.)
   const modelTakesImages = useCallback(() => {
@@ -1312,6 +1342,9 @@ export default function App() {
   // pitfall 16). Any failure surfaces an inline hint — never a silent drop.
   useEffect(() => {
     if (!call) return;
+    // Whatever is pasted belongs to the conversation that was open when it was
+    // pasted, even if the answer to it arrives after the user has moved on.
+    const threadId = call.threadId;
     const onPaste = (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
       const blobs: Blob[] = [];
@@ -1327,11 +1360,11 @@ export default function App() {
       if (blobs.length > 0) {
         e.preventDefault();
         if (!modelTakesImages()) {
-          setImageHint("This model can't read images. Switch to a vision model in Settings.");
+          noteImageHint(threadId, "This model can't read images. Switch to a vision model in Settings.");
           return;
         }
-        setImageHint("");
-        for (const b of blobs) stageImage(() => compressImage(b));
+        noteImageHint(threadId, "");
+        for (const b of blobs) stageImage(threadId, () => compressImage(b));
         return;
       }
       // No image in the DOM event. Text paste keeps its default behaviour.
@@ -1342,20 +1375,20 @@ export default function App() {
       void (async () => {
         const img = await readClipboardImage();
         if (!img) {
-          setImageHint("Couldn't read an image from the clipboard.");
+          noteImageHint(threadId, "Couldn't read an image from the clipboard.");
           return;
         }
         if (!modelTakesImages()) {
-          setImageHint("This model can't read images. Switch to a vision model in Settings.");
+          noteImageHint(threadId, "This model can't read images. Switch to a vision model in Settings.");
           return;
         }
-        setImageHint("");
-        stageImage(() => compressImageData(img.rgba, img.width, img.height));
+        noteImageHint(threadId, "");
+        stageImage(threadId, () => compressImageData(img.rgba, img.width, img.height));
       })();
     };
     document.addEventListener("paste", onPaste);
     return () => document.removeEventListener("paste", onPaste);
-  }, [call, stageImage, modelTakesImages]);
+  }, [call, stageImage, noteImageHint, modelTakesImages]);
 
   // Sending appends the user line (with any ready staged images, persisted to
   // disk) then streams the reply. Empty text with images is allowed; images
@@ -1364,16 +1397,20 @@ export default function App() {
     (text: string) => {
       const c = callRef.current;
       const bookId = bookIdRef.current;
-      const staged = pendingImagesRef.current;
+      if (!c || !bookId) return;
+      const pending = pendingRef.current;
+      const staged = pending.images(c.threadId);
       const trimmed = text.trim();
       if (staged.some((p) => p.status === "loading")) return; // wait for compression
       const images = staged.flatMap((p) =>
         p.status === "ready" ? [{ data: p.data, mediaType: p.mediaType }] : [],
       );
-      if (!c || !bookId || (!trimmed && images.length === 0)) return;
+      if (!trimmed && images.length === 0) return;
       const ts = Date.now();
-      mutatePending(() => []);
-      setImageHint("");
+      // Only this conversation's staging goes; another thread's images are still
+      // waiting for their own send.
+      pending.take(c.threadId);
+      showPending(c.threadId);
       void (async () => {
         let imageNames: string[] = [];
         if (images.length > 0) {
@@ -1382,7 +1419,8 @@ export default function App() {
           } catch (e) {
             console.error("failed to persist pasted images", e);
             pushToast("warn", "Pasted image could not be saved");
-            mutatePending(() => staged); // give them back so the send can be retried
+            pending.restore(c.threadId, staged); // give them back so the send can be retried
+            showPending(c.threadId);
             return;
           }
         }
@@ -1406,7 +1444,7 @@ export default function App() {
         runTurn(c.threadId, c.annotationId);
       })();
     },
-    [runTurn, mutatePending, pushToast],
+    [runTurn, showPending, pushToast],
   );
 
   // Retry the last (failed) turn.
@@ -1456,11 +1494,12 @@ export default function App() {
   // closing the reader, Esc): the view goes away, the thread stays on its mark
   // (docs/03). An answer still being written is not interrupted — it finishes
   // into the thread file, and the mark shows it whole when it is next opened.
+  // Images pasted but not sent stay on the thread, like the talk itself: this is
+  // a way out of the view, not a way to throw the conversation away.
   const endCall = useCallback(() => {
     captureHangup();
     setCall(null);
-    clearPendingImages();
-  }, [clearPendingImages, captureHangup]);
+  }, [captureHangup]);
 
   // Delete the open conversation. Destructive and confirmed at the button
   // (DeleteThreadButton's two-step). Removes the thread from its threads file and,
@@ -1480,9 +1519,10 @@ export default function App() {
     if (!c.isBook && c.annotationId) removeAnnotation(c.annotationId);
     const topicId = ctxRef.current.topicId;
     if (topicId) logEvent(topicId, "thread-delete", { threadId: c.threadId, book: c.isBook ?? false });
+    // Nothing is left to send them to.
+    pendingRef.current.clear(c.threadId);
     setCall(null);
-    clearPendingImages();
-  }, [clearPendingImages, removeAnnotation]);
+  }, [removeAnnotation]);
 
   // Delete a mark from the trace list. This is the only way to get rid of an
   // AI-pen mark: tapping one on the page opens its conversation, so the
@@ -1504,19 +1544,20 @@ export default function App() {
       // A conversation open on this mark goes with it. Deleting the mark under a
       // live bubble and leaving the bubble on screen reads as a bug even when it
       // is not.
-      if (callRef.current?.annotationId === id) {
-        setCall(null);
-        clearPendingImages();
+      if (callRef.current?.annotationId === id) setCall(null);
+      // The turn and the unsent images go with the thread wherever it was
+      // started from.
+      if (threadId) {
+        liveTurnsRef.current.stop(threadId);
+        pendingRef.current.clear(threadId);
       }
-      // The turn goes with the thread wherever it was started from.
-      if (threadId) liveTurnsRef.current.stop(threadId);
       if (bookId && threadId && deleteThread(bookId, threadId)) {
         const topicId = ctxRef.current.topicId;
         if (topicId) logEvent(topicId, "thread-delete", { threadId, book: false });
       }
       removeAnnotation(id);
     },
-    [removeAnnotation, clearPendingImages],
+    [removeAnnotation],
   );
 
   const openThreadForAnnotation = useCallback(
@@ -1586,7 +1627,9 @@ export default function App() {
     // Fire before the refs are torn down below.
     finalPassNotes();
     setCall(null);
-    clearPendingImages();
+    // Staged images only ever lived in memory, so they were never going to
+    // outlast the book anyway; they go with it.
+    pendingRef.current.clearAll();
     setTitle(null);
     setPopup(null);
     setFulltext(null);
@@ -1597,7 +1640,7 @@ export default function App() {
     bookIdRef.current = null;
     viewRef.current = null;
     pageDwellRef.current = null;
-  }, [clearPendingImages, captureHangup, finalPassNotes, resetPrep, keepPartial]);
+  }, [captureHangup, finalPassNotes, resetPrep, keepPartial]);
 
   // Stable handlers for the EmbedPDF pane so its React.memo actually holds: any
   // new prop identity here would re-render the whole engine subtree on every
