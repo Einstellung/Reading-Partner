@@ -1,19 +1,40 @@
 // Slides plan (docs/14), pure parts: turn a set of books' notes plus a talk
 // instruction into an ordered deck outline. One AI call feeds each book's
-// overview (or a fallback summary) and the instruction; the model returns JSON —
-// a deck title and ordered slides, each tagged with a kind and optional
-// book/chapter provenance and asset slots. The AI call itself lives in live.ts.
+// chapter list (plus its overview as the through-line) and the instruction; the
+// model returns JSON — a deck title and ordered slides, each tagged with a kind
+// and optional book/chapter provenance and asset slots. The AI call itself lives
+// in live.ts.
+//
+// The plan always sees the chapter list (docs/29: it used to see only the
+// overview, whose own prompt says it is a cross-chapter synthesis with no
+// chapter numbers in it — so every sourceChapters number was a guess, and a
+// wrong guess silently fed the same overview to every slide). What the model
+// returns is then checked against the same list by validateDeckPlan, so a
+// chapter that does not exist or has no note is caught here rather than at
+// content time.
 
 import { languageInstruction, type AiLanguage } from "../../platform/app/settings";
 import type { ParseTally } from "../../platform/app/structured-output";
 import type { SlideKind, SlideOutline } from "./types";
 
-// The plan input for one book: its whole-book overview (or a fallback summary
-// when no overview exists yet) and the figures available to cite.
+// One chapter as the planner sees it: where it is in the book, whether a note
+// exists to distil from, and the note's opening words as a hint of its content.
+export interface PlanChapter {
+  index: number; // 1-based reading order
+  title: string;
+  startPage: number;
+  endPage: number;
+  hasNote: boolean;
+  digest?: string;
+}
+
+// The plan input for one book: its chapter list, its whole-book overview when
+// one has been written, and the figures available to cite.
 export interface PlanBook {
   bookId: string;
   title: string;
-  material: string;
+  overview: string;
+  chapters: PlanChapter[];
   figures: { id: string; caption: string }[];
 }
 
@@ -53,6 +74,12 @@ export const SLIDES_PLAN_SYSTEM_PROMPT = [
   "- bookId / sourceChapters mark which book and chapters a content slide draws",
   "  on, so the next stage can feed it the right notes. Omit them on title,",
   "  section, and pure-synthesis slides.",
+  "- sourceChapters are chapter numbers taken from that book's chapter list below.",
+  "  Only chapters marked [note] have a note to distil — citing any other number",
+  "  leaves the slide with nothing specific to say. Never invent a number.",
+  "- Most content slides should name the one or two chapters they come from. A",
+  "  deck where every slide cites the same chapters, or none, is a deck that says",
+  "  the same thing on every page.",
   "- illustration is optional: add it to slides that benefit from a conceptual",
   "  image; give a short prompt describing what to depict (no text in the image).",
   "- figure is optional: cite an existing book figure by its id from the figure",
@@ -68,12 +95,32 @@ export function slidesPlanSystemPrompt(aiLanguage: AiLanguage = "auto"): string 
   return lang ? `${SLIDES_PLAN_SYSTEM_PROMPT}\n\n${lang}` : SLIDES_PLAN_SYSTEM_PROMPT;
 }
 
-// Build the plan call's user message: each book's material and figure list,
-// followed by the talk instruction.
+// One chapter line for the plan message: number, title, pages, whether a note
+// exists, and the note's first words.
+function chapterLine(c: PlanChapter): string {
+  const note = c.hasNote ? "[note]" : "[no note]";
+  const digest = c.digest?.trim() ? ` — ${c.digest.trim()}` : "";
+  return `${c.index}. ${c.title} (pp.${c.startPage}-${c.endPage}) ${note}${digest}`;
+}
+
+// Build the plan call's user message: for each book its overview (the
+// through-line) and its chapter list (what the slides can actually be sourced
+// from), then the figure list, then the talk instruction.
 export function planUserMessage(books: PlanBook[], instruction: string): string {
   const parts: string[] = [];
   for (const b of books) {
-    const lines = [`=== Book "${b.title}" (bookId: ${b.bookId}) ===`, b.material.trim()];
+    const lines = [`=== Book "${b.title}" (bookId: ${b.bookId}) ===`];
+    if (b.overview.trim()) {
+      lines.push("Whole-book overview (the through-line):", b.overview.trim(), "");
+    }
+    if (b.chapters.length) {
+      lines.push(
+        "Chapters (cite these numbers in sourceChapters):",
+        ...b.chapters.map(chapterLine),
+      );
+    } else {
+      lines.push("No chapter list is available for this book.");
+    }
     if (b.figures.length) {
       lines.push(
         "",
@@ -177,4 +224,69 @@ export function parseSlidePlan(text: string, tally?: ParseTally): DeckPlan {
     throw new Error("plan produced no slides");
   }
   return { title, slides };
+}
+
+// Check a parsed plan against the books it claims to draw on, and say so when it
+// does not line up (docs/29: an invented chapter number used to travel all the
+// way to the content stage and silently become "distil the overview again", and
+// an invented figure id was only discovered in the asset stage, which then
+// marked itself done).
+//
+// Repairs, never drops a slide: a slide with a bad citation still gets written,
+// it just carries a planNotice saying what it lost.
+export function validateDeckPlan(plan: DeckPlan, books: PlanBook[]): DeckPlan {
+  const byId = new Map(books.map((b) => [b.bookId, b]));
+  const slides = plan.slides.map((slide) => {
+    const notices: string[] = [];
+    const out: SlideOutline = { ...slide };
+
+    const book = out.bookId ? byId.get(out.bookId) : undefined;
+    if (out.bookId && !book) {
+      notices.push(`Unknown book id "${out.bookId}" — the slide falls back to the shared overviews.`);
+      delete out.bookId;
+      delete out.sourceChapters;
+    }
+
+    if (book && out.sourceChapters?.length) {
+      const known = new Map(book.chapters.map((c) => [c.index, c]));
+      const kept: number[] = [];
+      const missing: number[] = [];
+      const noNote: number[] = [];
+      for (const i of out.sourceChapters) {
+        const ch = known.get(i);
+        if (!ch) missing.push(i);
+        else if (!ch.hasNote) noNote.push(i);
+        else kept.push(i);
+      }
+      if (missing.length) {
+        notices.push(
+          `Chapter ${missing.join(", ")} does not exist in "${book.title}" (it has ${book.chapters.length}).`,
+        );
+      }
+      if (noNote.length) notices.push(`Chapter ${noNote.join(", ")} has no note yet.`);
+      if (kept.length) out.sourceChapters = kept;
+      else {
+        delete out.sourceChapters;
+        if (missing.length || noNote.length) {
+          notices.push("No chapter note left to draw on — this slide falls back to the book overview.");
+        }
+      }
+    }
+
+    if (out.figure) {
+      const figBook = byId.get(out.figure.bookId);
+      const figId = out.figure.figId.toLowerCase();
+      const known = figBook?.figures.some((f) => f.id.toLowerCase() === figId) ?? false;
+      if (!known) {
+        notices.push(
+          `Figure "${out.figure.figId}" is not in ${figBook ? `"${figBook.title}"` : "any selected book"}'s figure index — the slide has no figure.`,
+        );
+        delete out.figure;
+      }
+    }
+
+    if (notices.length) out.planNotice = notices.join(" ");
+    return out;
+  });
+  return { title: plan.title, slides };
 }

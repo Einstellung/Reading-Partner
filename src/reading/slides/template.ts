@@ -203,19 +203,36 @@ const STYLE = `
     position:fixed;left:20px;bottom:16px;
     color:#5b6270;font-size:12.5px;font-weight:500;letter-spacing:.04em;
   }
+  /* Shown only while the active slide is taller than the stage. The stage clips
+     overflow, so without this the last bullets are simply not there and nobody
+     finds out until the talk. It sits in the dark surround, outside the 16:9
+     frame, so it marks the problem without landing on the slide itself. */
+  .overflow-warn{
+    position:fixed;right:20px;bottom:38px;
+    display:none;
+    color:#f0a24a;font-size:12.5px;font-weight:600;letter-spacing:.04em;
+  }
+  .overflow-warn.on{display:block}
 `;
 
 const SCRIPT = `
   const slides = Array.from(document.querySelectorAll('.slide'));
   const counter = document.getElementById('counter');
   const progress = document.getElementById('progress');
+  const warn = document.getElementById('overflow-warn');
   let i = 0;
   function show(n){
     i = Math.max(0, Math.min(slides.length - 1, n));
     slides.forEach((s, k) => s.classList.toggle('active', k === i));
     counter.textContent = (i + 1) + ' / ' + slides.length;
     progress.style.width = ((i + 1) / slides.length * 100) + '%';
+    // The stage clips what does not fit; measure the slide now that it is laid
+    // out and say so, rather than letting the last points vanish quietly.
+    const active = slides[i];
+    const over = active && active.scrollHeight > active.clientHeight + 2;
+    warn.classList.toggle('on', !!over);
   }
+  addEventListener('resize', () => show(i));
   function next(){ show(i + 1); }
   function prev(){ show(i - 1); }
   document.addEventListener('keydown', e => {
@@ -258,6 +275,7 @@ ${sections}
 
 <div class="counter" id="counter">1 / ${total}</div>
 <div class="hint">&larr; &rarr; / space / click</div>
+<div class="overflow-warn" id="overflow-warn">this slide is clipped &mdash; content runs past the bottom</div>
 
 <script>${SCRIPT}</script>
 </body>
