@@ -73,10 +73,11 @@ PPT 用于线下分享，形态是 HTML slides，从笔记派生而非直接从�
 ## 落地：M-ppt-1
 
 - 单位是一场 talk：入口在 Notes 面板顶部的 Slides 按钮（本书有笔记时出现），弹窗勾选所有有笔记的书 + 一句 talk 说明，Generate。生成的 deck 在弹窗里列出，Open 用系统浏览器打开（opener 插件，`opener:allow-open-path` 限 `$APPDATA/slides/*`）。
-- 三段管线 `src/reading/slides/`（同构笔记管线，纯逻辑注入式可测，AI 调用在 `live.ts`，看门狗共用 `src/ai/watchdog.ts`）：plan 一次调用出 deck 大纲（喂各书 overview，缺则章节标题＋每章前 40 词）；content 每页一次调用出受限 HTML 片段（蒸馏不摘录，产出后 `sanitizeFragment` 去脚本/外链）；assets 每个插图槽调生图、每个图槽走 app 内裁剪路径；assemble 注入固定壳模板 `template.ts` 写到 `slides/<时间戳>-<slug>.html` 并追加 `slides/talks.json`。
+- 三段管线 `src/reading/slides/`（同构笔记管线，纯逻辑注入式可测，AI 调用在 `live.ts`，看门狗共用 `src/ai/watchdog.ts`）：plan 一次调用出 deck 大纲（喂各书章节清单——章号、标题、页码、有没有笔记、笔记前 40 词——overview 有就一起给当主线；`validateDeckPlan` 当场校验 `sourceChapters` 与 `figId` 存在，改动记在该页的 planNotice 上）；content 每页一次调用出受限 HTML 片段（蒸馏不摘录，产出后 `sanitizeFragment` 去脚本/外链）；assets 每个插图槽调生图、每个图槽走 app 内裁剪路径；assemble 读盘上的片段与素材注入固定壳模板 `template.ts`，写 `slides/<talkId>-<slug>.html` 并登记 `slides/talks.json`。
+- 中间表示落盘（2026-08-05）：一场讲一个目录 `slides/<talkId>/`，`state.json` 是恢复点，每页正文 `slide-NN.html`、素材 `asset-NN.txt` 各一个文件。中断的 running 归回 pending，重进接着跑，done 的页不重跑；重跑粒度三个——一页正文（可带一句指示）、一页素材、重新拼装（不花钱，assemble 退化成纯拼装）。
 - 生图可选：OpenAI-Images 异步中继（right.codes 式，`imageGen.ts`），key 存 `credentials.json`（不同步），apiBase/model 存 `settings.json`（无害、同步）；首张成功插画作后续调用的参考图保风格；无 key 则跳过所有插图槽，deck 照出。HTTP scope 已是 `https://*` 通配，无需为 right.codes 加白名单。
-- 同步：`slides/` 不入同步范围（build 产物，可从笔记重建；`inSyncRange` 默认已排除，测试断言）。
-- 已知限制：bbox 为 null 的图裁剪不了，静默丢槽；无重启恢复（一次 talk 一次性跑完，Stop 中止；不落 state.json）；plan/content 失败即整场失败，插图失败只丢该槽。
+- 同步：`slides/` 不入同步范围，落盘之后也不进（`inSyncRange` 默认已排除，测试断言）。`state.json` 单独同步重建不出任何东西——正文片段和 base64 素材才是内容，是几兆的派生数据；只同步索引会让另一台设备看到一个"已完成"而文件不存在的 deck。
+- 已知限制：bbox 为 null 的图裁不出来，这一页的素材状态是 missing 并写明原因（不再标 done）；正文失败即整场失败，素材失败只影响该槽；溢出只报不排版——生成时按模板尺寸估算记在该页状态里，放映时壳自己量 `scrollHeight` 在暗场里出提示。
 
 ## 后续待定
 

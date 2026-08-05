@@ -59,6 +59,12 @@ test("caches, logs, sync internals, and book blobs are out of range", () => {
     "notes-deadbeef/cache/raster.png",
     "slides/talks.json",
     "slides/1737000000000-my-talk.html",
+    // A talk's own state and products stay out too, unlike notes-*/state.json:
+    // the index alone rebuilds nothing, and what it indexes is megabytes of
+    // slide bodies and base64 images (src/reading/slides/store.ts).
+    "slides/1737000000000/state.json",
+    "slides/1737000000000/slide-01.html",
+    "slides/1737000000000/asset-03.txt",
     "library/abc123.pdf",
     "images/threads/t1/photo.png",
     // Info triage: the daily briefing and article cache are derived, not synced.

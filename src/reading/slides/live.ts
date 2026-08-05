@@ -1,9 +1,12 @@
-// Live wiring of the slides pipeline (docs/14): real deps bound to the
-// dep-injected SlidesPipeline. A talk is a one-shot run over a chosen set of
-// books that have notes plus a free-text instruction; a single module-level
-// pipeline holds the current/last run so the UI can attach to it. Source
-// material (overviews, chapter notes, figures) is read straight from disk by
-// book id, so a talk can span books that aren't the one currently open.
+// Live wiring of the slides pipeline (docs/14, docs/29): real deps bound to the
+// dep-injected SlidesPipeline. A talk is a run over a chosen set of books that
+// have notes plus a free-text instruction; a single module-level pipeline holds
+// the current talk so the UI can attach to it. Source material (overviews,
+// chapter notes, figures) is read straight from disk by book id, so a talk can
+// span books that aren't the one currently open.
+//
+// A talk's own state and products live under slides/<talkId>/ (store.ts), which
+// is what lets a talk be resumed after a restart and re-run one page at a time.
 
 import { BaseDirectory, readDir } from "@tauri-apps/plugin-fs";
 import { getImageGenKey } from "../../ai/credentials";
@@ -21,12 +24,30 @@ import {
   parseSlidePlan,
   planUserMessage,
   slidesPlanSystemPrompt,
+  validateDeckPlan,
   type PlanBook,
+  type PlanChapter,
 } from "./plan";
-import { SlidesPipeline, type AssembleInput, type SlidesDeps } from "./pipeline";
-import { appendTalk, loadTalks, writeDeck } from "./store";
-import { assembleDeck } from "./template";
-import type { SlideFigureRef, SlideRun, TalkEntry } from "./types";
+import {
+  SlidesPipeline,
+  type AssembleInput,
+  type AssetOutcome,
+  type SlidesDeps,
+} from "./pipeline";
+import {
+  listSlidesStates,
+  loadSlidesState,
+  loadTalks,
+  readAsset,
+  readFragment,
+  recordTalk,
+  saveSlidesState,
+  writeAsset,
+  writeDeck,
+  writeFragment,
+} from "./store";
+import { assembleDeck, slugify } from "./template";
+import type { SlideFigureRef, SlideRun, SlidesState, TalkEntry } from "./types";
 
 // A fixed deck-wide illustration style, prefixed to every slide illustration
 // prompt so the images read as one set. Text-free by instruction.
@@ -75,54 +96,89 @@ export async function listBooksWithNotes(): Promise<BookWithNotes[]> {
   return out;
 }
 
-// Build the plan input for one book: its overview (or a fallback summary from
-// the chapter notes) plus the figure list to cite.
+// Build the plan input for one book: the real chapter list (number, title, page
+// range, whether a note exists, and its opening words), the whole-book overview
+// when there is one, and the figures available to cite. The chapter list is not
+// optional — the overview contains no chapter numbers, so a plan built on it
+// alone can only guess at sourceChapters (docs/29).
 async function planMaterial(bookId: string): Promise<PlanBook> {
   const entry = await getLibraryEntry(bookId);
   const title = entry?.title ?? bookId;
 
-  let material = (await readOverviewNote(bookId))?.trim() ?? "";
-  if (!material) {
-    const st = await loadNotesState(bookId);
-    const lines: string[] = [];
-    for (const c of st?.chapters ?? []) {
-      if (c.status !== "done") continue;
-      const note = (await readChapterNote(bookId, c.index)) ?? "";
-      lines.push(`Chapter ${c.index}: ${c.title} — ${first40Words(note)}`);
-    }
-    material = lines.join("\n");
+  const overview = (await readOverviewNote(bookId))?.trim() ?? "";
+  const st = await loadNotesState(bookId);
+  const chapters: PlanChapter[] = [];
+  for (const c of st?.chapters ?? []) {
+    const note = c.status === "done" ? await readChapterNote(bookId, c.index) : null;
+    chapters.push({
+      index: c.index,
+      title: c.title,
+      startPage: c.startPage,
+      endPage: c.endPage,
+      hasNote: !!note,
+      digest: note ? first40Words(note) : undefined,
+    });
   }
 
   const figures = ((await getFigures(bookId))?.figures ?? []).map((f) => ({
     id: f.id,
     caption: f.caption,
   }));
-  return { bookId, title, material, figures };
+  return { bookId, title, overview, chapters, figures };
 }
 
-// The chapter notes a content slide distills from. Book-and-chapter scoped when
+interface GatheredNotes {
+  text: string;
+  // Set when the slide is not being written from what the plan asked for.
+  notice?: string;
+}
+
+// The chapter notes a content slide distils from. Book-and-chapter scoped when
 // the plan named them; otherwise the book's overview; otherwise (a synthesis
-// slide) the overviews of every selected book.
-async function gatherSlideNotes(slide: SlideRun, bookIds: string[]): Promise<string> {
+// slide) the overviews of every selected book. Every fallback is reported: a
+// slide silently written from the same overview as every other slide is the
+// failure mode docs/29 describes.
+async function gatherSlideNotes(slide: SlideRun, bookIds: string[]): Promise<GatheredNotes> {
   const parts: string[] = [];
   if (slide.bookId && slide.sourceChapters?.length) {
+    const missing: number[] = [];
     for (const i of slide.sourceChapters) {
       const note = await readChapterNote(slide.bookId, i);
       if (note) parts.push(note.trim());
+      else missing.push(i);
     }
-    if (parts.length) return clip(parts.join("\n\n"));
+    if (parts.length) {
+      return {
+        text: clip(parts.join("\n\n")),
+        notice: missing.length
+          ? `Chapter ${missing.join(", ")} had no note on disk; written from the others.`
+          : undefined,
+      };
+    }
   }
+  const lost = slide.sourceChapters?.length
+    ? `Chapter ${slide.sourceChapters.join(", ")} had no note on disk. `
+    : "";
   if (slide.bookId) {
     const ov = await readOverviewNote(slide.bookId);
-    if (ov) return clip(ov.trim());
-  }
-  if (!slide.bookId) {
-    for (const id of bookIds) {
-      const ov = await readOverviewNote(id);
-      if (ov) parts.push(`# ${(await getLibraryEntry(id))?.title ?? id}\n${ov.trim()}`);
+    if (ov) {
+      return {
+        text: clip(ov.trim()),
+        notice: lost
+          ? `${lost}Written from the book overview instead — the same source every other fallback slide gets.`
+          : undefined,
+      };
     }
+    return {
+      text: "",
+      notice: `${lost}This book has no overview either, so the slide was written from its title alone.`,
+    };
   }
-  return clip(parts.join("\n\n"));
+  for (const id of bookIds) {
+    const ov = await readOverviewNote(id);
+    if (ov) parts.push(`# ${(await getLibraryEntry(id))?.title ?? id}\n${ov.trim()}`);
+  }
+  return { text: clip(parts.join("\n\n")) };
 }
 
 function clip(text: string): string {
@@ -152,7 +208,7 @@ function imageDeps(signal: AbortSignal): ImageGenDeps {
   };
 }
 
-function makeDeps(bookIds: string[], instruction: string): SlidesDeps {
+function makeDeps(talkId: string, bookIds: string[], instruction: string): SlidesDeps {
   return {
     async buildPlan(opts) {
       const model = await resolveModel("prep");
@@ -164,10 +220,14 @@ function makeDeps(bookIds: string[], instruction: string): SlidesDeps {
         planUserMessage(books, instruction),
         opts,
       );
-      return recordParse("slides-plan", model, text, (tally) => parseSlidePlan(text, tally));
+      const plan = recordParse("slides-plan", model, text, (tally) => parseSlidePlan(text, tally));
+      // Check the plan's citations against the books it claims to draw on, so a
+      // chapter or figure that does not exist is caught here, with a note the
+      // user can see, instead of becoming a silent fallback two stages later.
+      return validateDeckPlan(plan, books);
     },
 
-    async generateContent(slide, opts) {
+    async generateContent({ slide, instruction: steer }, opts) {
       const { aiLanguage } = await resolveModel("prep");
       const notes = await gatherSlideNotes(slide, bookIds);
       // One slide's body from the gathered notes: a single unit of prose, so it
@@ -176,15 +236,16 @@ function makeDeps(bookIds: string[], instruction: string): SlidesDeps {
         "prep",
         "chapter-note",
         contentSystemPrompt(aiLanguage),
-        contentUserMessage(slide, notes),
+        contentUserMessage(slide, notes.text, steer),
         opts,
       );
-      return sanitizeFragment(text);
+      return { html: sanitizeFragment(text), sourceNotice: notes.notice };
     },
 
-    async generateIllustration(slide, refImage, opts) {
+    async generateIllustration(slide, refImage, opts): Promise<AssetOutcome> {
+      if (!slide.illustration) return { url: null, reason: "This slide has no illustration prompt." };
       const key = await getImageGenKey();
-      if (!key || !slide.illustration) return null;
+      if (!key) return { url: null, reason: "No illustration key is configured (Settings)." };
       const s = await loadSettings();
       const config = resolveImageGenConfig({
         apiBase: s.illustrationApiBase,
@@ -192,48 +253,62 @@ function makeDeps(bookIds: string[], instruction: string): SlidesDeps {
         apiKey: key,
       });
       const deps = imageDeps(opts.signal);
-      return generateImage(
+      const url = await generateImage(
         config,
         { prompt: DECK_ILLUSTRATION_STYLE + slide.illustration.prompt, image: refImage ?? undefined },
         deps,
       );
+      return url ? { url } : { url: null, reason: "The image service returned no image." };
     },
 
-    async renderFigureAsset(ref: SlideFigureRef) {
-      // Known extraction gap (docs/14): a figure with no bbox can't be cropped —
-      // drop the slot silently.
+    async renderFigureAsset(ref: SlideFigureRef): Promise<AssetOutcome> {
       const figures = (await getFigures(ref.bookId))?.figures ?? [];
+      if (!figures.length) return { url: null, reason: "This book has no figure index." };
       const fig = figures.find((f) => f.id === ref.figId);
-      if (!fig || !fig.bbox) return null;
-      try {
-        const bytes = await readLibraryBook(ref.bookId);
-        const rendered = await renderFigure(
-          ref.bookId,
-          bytes.slice().buffer as ArrayBuffer,
-          fig,
-          "view",
-        );
-        return rendered?.dataUrl ?? null;
-      } catch (e) {
-        console.warn("figure crop failed", ref, e);
-        return null;
+      if (!fig) return { url: null, reason: `Figure ${ref.figId} is not in this book's figure index.` };
+      // Known extraction gap (docs/29): a figure whose caption sits above the
+      // artwork gets no bbox, so there is no region to crop.
+      if (!fig.bbox) {
+        return {
+          url: null,
+          reason: `Figure ${ref.figId} has no usable area in the figure index, so it cannot be cropped.`,
+        };
       }
+      const bytes = await readLibraryBook(ref.bookId);
+      const rendered = await renderFigure(
+        ref.bookId,
+        bytes.slice().buffer as ArrayBuffer,
+        fig,
+        "view",
+      );
+      return rendered?.dataUrl
+        ? { url: rendered.dataUrl }
+        : { url: null, reason: `Figure ${ref.figId} could not be rendered from the page.` };
     },
+
+    saveState: (state) => saveSlidesState(state),
+    writeFragment: (index, html) => writeFragment(talkId, index, html),
+    readFragment: (index) => readFragment(talkId, index),
+    writeAsset: (index, dataUrl) => writeAsset(talkId, index, dataUrl),
+    readAsset: (index) => readAsset(talkId, index),
 
     async assemble(input: AssembleInput) {
       const html = assembleDeck({
         title: input.title,
         slides: input.slides.map((s) => ({ kind: s.kind, fragment: s.fragment, asset: s.asset })),
       });
-      const file = await writeDeck(input.id, html);
+      const file = await writeDeck(input.id, slugify(input.title), html);
       const entry: TalkEntry = {
+        talkId: input.id,
         title: input.title,
         file,
         createdAt: input.createdAt,
         bookIds: input.bookIds,
         instruction: input.instruction,
       };
-      await appendTalk(entry);
+      // Recorded after the deck is on disk; re-assembling replaces this talk's
+      // row instead of adding a second one for the same talk.
+      await recordTalk(entry);
       return file;
     },
 
@@ -248,12 +323,14 @@ function makeDeps(bookIds: string[], instruction: string): SlidesDeps {
 
 let current: SlidesPipeline | null = null;
 
-// Start a new talk run: a fresh pipeline over the chosen books + instruction.
-// Replaces any prior run's pipeline (v1 runs one talk at a time). Returns the
-// pipeline so the UI can subscribe.
+// Start a new talk: a fresh pipeline over the chosen books + instruction, with
+// its own directory under slides/. Returns the pipeline so the UI can subscribe.
 export function startTalk(bookIds: string[], instruction: string): SlidesPipeline {
-  const pipeline = new SlidesPipeline(makeDeps(bookIds, instruction), {
-    createdAt: Date.now(),
+  const createdAt = Date.now();
+  const talkId = `${createdAt}`;
+  const pipeline = SlidesPipeline.create(makeDeps(talkId, bookIds, instruction), {
+    talkId,
+    createdAt,
     instruction,
     bookIds,
   });
@@ -262,9 +339,30 @@ export function startTalk(bookIds: string[], instruction: string): SlidesPipelin
   return pipeline;
 }
 
+// Re-attach to a talk that is already on disk: a run a restart interrupted, or a
+// finished deck whose pages the user wants to re-run. The caller decides what to
+// run (resume, one page, re-assemble) — reopening by itself spends nothing.
+export async function openTalk(talkId: string): Promise<SlidesPipeline | null> {
+  if (current?.snapshot().state.id === talkId) return current;
+  const state = await loadSlidesState(talkId);
+  if (!state) return null;
+  const pipeline = new SlidesPipeline(
+    makeDeps(state.id, state.bookIds, state.instruction),
+    state,
+  );
+  current = pipeline;
+  return pipeline;
+}
+
 // The current/last talk pipeline, if any (lets the UI re-attach after a remount).
 export function getCurrentTalk(): SlidesPipeline | null {
   return current;
+}
+
+// Every talk with a state on disk, newest first: what the dialog can resume or
+// re-run.
+export function listTalkStates(): Promise<SlidesState[]> {
+  return listSlidesStates();
 }
 
 // The generated-deck registry, newest first, for the UI list.

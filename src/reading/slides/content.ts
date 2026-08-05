@@ -51,8 +51,9 @@ export function contentSystemPrompt(aiLanguage: AiLanguage = "auto"): string {
   ].join("\n");
 }
 
-// The kickoff for one slide: its title/kind, asset slot, and the relevant notes.
-export function contentUserMessage(slide: SlideRun, notes: string): string {
+// The kickoff for one slide: its title/kind, asset slot, the relevant notes, and
+// — on a re-run — the one-line steer the user typed.
+export function contentUserMessage(slide: SlideRun, notes: string, instruction?: string): string {
   const parts: string[] = [
     `Slide ${slide.index} of the deck. Kind: ${slide.kind}. Title: "${slide.title}".`,
   ];
@@ -69,6 +70,12 @@ export function contentUserMessage(slide: SlideRun, notes: string): string {
   } else {
     parts.push(
       "No source notes for this slide — write it from the title and the deck's arc (typical for title/section/closing slides).",
+    );
+  }
+  const steer = instruction?.trim();
+  if (steer) {
+    parts.push(
+      `This slide is being rewritten. What to change: ${steer}`,
     );
   }
   parts.push("Write the slide fragment now.");
