@@ -55,6 +55,53 @@ export function normalizePlan(plan: RehearsalPlan): RehearsalPlan {
   return { ...plan, decisions };
 }
 
+// The whole outline as something to read back to the reader when they ask what
+// their talk looks like (read_talk_outline). Different from formatPlan, which is
+// the model's working record: this one is ordered as the talk will run, says
+// what is still undecided, and carries no instructions about what to do next.
+export function formatOutline(
+  chapters: readonly RehearsalChapter[],
+  plan: RehearsalPlan | null,
+): string {
+  const decisions = plan?.decisions ?? [];
+  if (decisions.length === 0) {
+    return "No chapter has been settled yet, so there is no outline — the talk starts taking shape after the first chapter is recorded.";
+  }
+  const byChapter = new Map(decisions.map((d) => [d.chapter, d]));
+  const included = decisions.filter((d) => d.include);
+  const cut = decisions.filter((d) => !d.include);
+  const undecided = chapters.filter((c) => !byChapter.has(c.index));
+
+  const lines = ["The talk as it stands."];
+  if (included.length) {
+    const points = included.reduce((n, d) => n + d.points.length, 0);
+    lines.push(
+      "",
+      `In the talk — ${included.length} chapter(s), ${points} point(s), in this order:`,
+    );
+    for (const d of included) {
+      lines.push("", `${d.chapter}. ${d.title}`);
+      for (const p of d.points) lines.push(`  - ${p}`);
+      if (!d.points.length) lines.push("  (recorded as in, but with no points yet)");
+      if (d.figure) lines.push(`  figure: ${d.figure}`);
+      if (d.note) lines.push(`  note: ${d.note}`);
+    }
+  } else {
+    lines.push("", "Nothing is in the talk yet — every chapter settled so far was cut.");
+  }
+  if (cut.length) {
+    lines.push("", "Cut:");
+    for (const d of cut) lines.push(`  ${d.chapter}. ${d.title}${d.note ? ` — ${d.note}` : ""}`);
+  }
+  if (undecided.length) {
+    lines.push(
+      "",
+      `Not settled yet: ${undecided.map((c) => `${c.index}. ${c.title}`).join("; ")}.`,
+    );
+  }
+  return lines.join("\n");
+}
+
 // The chapter the rehearsal is up to: the lowest chapter with no decision yet,
 // or null when every chapter has one. Not "the last one recorded plus one" —
 // the reader may jump around, and the gap is what is actually left to do.

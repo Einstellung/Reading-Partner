@@ -6,6 +6,7 @@ import { expect, test } from "bun:test";
 import {
   createPlan,
   decisionFor,
+  formatOutline,
   formatPlan,
   nextChapter,
   normalizePlan,
@@ -112,4 +113,35 @@ test("a decision the file cannot use is dropped, not thrown", () => {
   expect(plan.decisions.map((d) => d.chapter)).toEqual([1, 2]);
   expect(decisionFor(plan, 2)?.points).toEqual(["a"]);
   expect(decisionFor(plan, 2)?.title).toBe("Two");
+});
+
+// formatOutline is what read_talk_outline reads back to the reader, so unlike
+// formatPlan it carries no instruction about what the model should do next.
+test("formatOutline lists what is in, what was cut, and what is not settled", () => {
+  let plan = createPlan("book", 1);
+  plan = upsertDecision(plan, decision({ chapter: 1, points: ["p one", "p two"], figure: "fig:3" }));
+  plan = upsertDecision(
+    plan,
+    decision({ chapter: 2, title: "Middlegame", include: false, points: [], note: "thin" }),
+  );
+  const text = formatOutline(chapters, plan);
+  expect(text).toContain("1 chapter(s), 2 point(s)");
+  expect(text).toContain("p one");
+  expect(text).toContain("figure: fig:3");
+  expect(text).toContain("2. Middlegame — thin");
+  expect(text).toContain("Not settled yet: 3. Endings.");
+  expect(text).not.toContain("Next up");
+});
+
+test("formatOutline says there is no outline before the first decision", () => {
+  expect(formatOutline(chapters, null)).toContain("No chapter has been settled yet");
+  expect(formatOutline(chapters, createPlan("book", 1))).toContain("No chapter has been settled yet");
+});
+
+test("formatOutline does not claim a talk when every settled chapter was cut", () => {
+  let plan = createPlan("book", 1);
+  plan = upsertDecision(plan, decision({ chapter: 1, include: false, points: [] }));
+  const text = formatOutline(chapters, plan);
+  expect(text).toContain("Nothing is in the talk yet");
+  expect(text).toContain("Cut:");
 });

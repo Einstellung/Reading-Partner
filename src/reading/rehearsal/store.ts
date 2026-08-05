@@ -7,7 +7,7 @@
 // (platform/sync/syncFs.ts) and why a read failure returns null rather than
 // throwing: a turn that cannot see the record is worse when it cannot run.
 
-import { BaseDirectory, exists, readTextFile } from "@tauri-apps/plugin-fs";
+import { BaseDirectory, exists, readDir, readTextFile } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { createPlan, normalizePlan, upsertDecision } from "./plan";
 import { REHEARSAL_VERSION, type RehearsalDecision, type RehearsalPlan } from "./types";
@@ -32,6 +32,28 @@ export async function loadRehearsalPlan(bookId: string): Promise<RehearsalPlan |
     console.warn("failed to read the rehearsal plan", e);
     return null;
   }
+}
+
+// Every book with decisions recorded against it. This and loadRehearsalPlan are
+// the only two ways anything outside this module finds the record — the slides
+// pipeline reads decisions through them and never touches a file name, so where
+// the decisions live (per book today, per talk once a talk is its own object)
+// stays this module's business.
+export async function listRehearsedBooks(): Promise<string[]> {
+  let entries;
+  try {
+    entries = await readDir(".", { baseDir: BaseDirectory.AppData });
+  } catch {
+    return [];
+  }
+  const out: string[] = [];
+  for (const e of entries) {
+    if (e.isDirectory || !e.name?.startsWith("rehearsal-") || !e.name.endsWith(".json")) continue;
+    const bookId = e.name.slice("rehearsal-".length, -".json".length);
+    if (!bookId) continue;
+    if ((await loadRehearsalPlan(bookId))?.decisions.length) out.push(bookId);
+  }
+  return out;
 }
 
 export async function saveRehearsalPlan(plan: RehearsalPlan): Promise<void> {

@@ -5,8 +5,13 @@
 
 import { expect, test } from "bun:test";
 import { buildRehearsalTools } from "../../../src/reading/rehearsal/tools";
+import { createPlan, upsertDecision } from "../../../src/reading/rehearsal/plan";
 import type { RehearsalDecisionCardData } from "../../../src/reading/rehearsal/cards";
-import type { RehearsalChapter, RehearsalDecision } from "../../../src/reading/rehearsal/types";
+import type {
+  RehearsalChapter,
+  RehearsalDecision,
+  RehearsalPlan,
+} from "../../../src/reading/rehearsal/types";
 
 const chapters: RehearsalChapter[] = [
   { index: 1, title: "Openings", startPage: 1, endPage: 10, hasNote: true },
@@ -16,12 +21,17 @@ const chapters: RehearsalChapter[] = [
 function harness(notes: Record<number, string> = {}) {
   const recorded: RehearsalDecision[] = [];
   const cards: RehearsalDecisionCardData[] = [];
+  // Stands in for the file: what record writes is what readPlan hands back, so
+  // read_talk_outline is tested against decisions made in the same run.
+  let plan: RehearsalPlan | null = null;
   const tools = buildRehearsalTools({
     chapters,
     record: async (d) => {
       recorded.push(d);
+      plan = upsertDecision(plan ?? createPlan("b1", d.updatedAt), d);
     },
     readNote: async (n) => notes[n] ?? null,
+    readPlan: async () => plan,
     onCard: (c) => cards.push(c),
     now: () => 4242,
   });
@@ -121,4 +131,41 @@ test("read_chapter_note returns the note, or says there is none", async () => {
   expect(String(await h.byName("read_chapter_note").execute({ chapter: 9 }))).toContain(
     "No chapter 9",
   );
+});
+
+test("read_talk_outline reads the outline back, including the chapter just recorded", async () => {
+  const h = harness();
+  // Before anything is settled there is no outline, and saying so is the answer.
+  expect(String(await h.byName("read_talk_outline").execute({}))).toContain(
+    "No chapter has been settled yet",
+  );
+
+  await h.byName("record_chapter_decision").execute({
+    chapter: 1,
+    include: true,
+    points: ["the 1962 data does the work"],
+    figure: "fig:2",
+  });
+  await h.byName("record_chapter_decision").execute({
+    chapter: 2,
+    include: false,
+    points: [],
+    note: "could not say anything about it",
+  });
+
+  const out = String(await h.byName("read_talk_outline").execute({}));
+  expect(out).toContain("1. Openings");
+  expect(out).toContain("the 1962 data does the work");
+  expect(out).toContain("figure: fig:2");
+  expect(out).toContain("Cut:");
+  expect(out).toContain("could not say anything about it");
+});
+
+test("read_talk_outline is read-only: it records nothing and raises no card", async () => {
+  const h = harness();
+  await h.byName("record_chapter_decision").execute({ chapter: 1, include: true, points: ["a"] });
+  const before = h.recorded.length;
+  await h.byName("read_talk_outline").execute({});
+  expect(h.recorded.length).toBe(before);
+  expect(h.cards.length).toBe(1);
 });

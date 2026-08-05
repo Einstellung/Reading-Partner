@@ -22,12 +22,12 @@ import {
   getCurrentTalk,
   hasPendingWork,
   hasUnrunSlides,
-  listBooksWithNotes,
+  listTalkBooks,
   listTalks,
   listTalkStates,
   openTalk,
   startTalk,
-  type BookWithNotes,
+  type TalkBook,
   type SlideRun,
   type SlidesActivity,
   type SlidesPipeline,
@@ -249,7 +249,7 @@ export default function SlidesDialog({
   currentBookId: string;
   onClose: () => void;
 }) {
-  const [books, setBooks] = useState<BookWithNotes[]>([]);
+  const [books, setBooks] = useState<TalkBook[]>([]);
   const [selected, setSelected] = useState<Set<string>>(() => new Set([currentBookId]));
   const [instruction, setInstruction] = useState("");
   const [talks, setTalks] = useState<TalkEntry[]>([]);
@@ -260,7 +260,7 @@ export default function SlidesDialog({
   const [snap, setSnap] = useState<SlidesSnapshot | null>(() => getCurrentTalk()?.snapshot() ?? null);
 
   useEffect(() => {
-    listBooksWithNotes().then(setBooks);
+    listTalkBooks().then(setBooks);
     listTalks().then(setTalks);
     listTalkStates().then(setStates);
   }, []);
@@ -347,7 +347,9 @@ export default function SlidesDialog({
           <div>
             <div className="mb-1.5 text-[12px] font-semibold text-[#777]">Books to draw on</div>
             {books.length === 0 ? (
-              <p className="m-0 text-[12px] text-neutral-400">No books have notes yet.</p>
+              <p className="m-0 text-[12px] text-neutral-400">
+                No book has notes or a rehearsal yet.
+              </p>
             ) : (
               <div className="flex flex-col gap-1">
                 {books.map((b) => (

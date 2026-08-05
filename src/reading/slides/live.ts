@@ -20,6 +20,7 @@ import { recordParse } from "../../platform/app/structured-output";
 import { contentSystemPrompt, contentUserMessage, sanitizeFragment } from "./content";
 import { generateImage, resolveImageGenConfig, type ImageGenDeps } from "./imageGen";
 import { cleanTauriFetch } from "../../platform/app/tauri-fetch";
+import { listRehearsedBooks, loadRehearsalPlan } from "../rehearsal/store";
 import {
   parseSlidePlan,
   planUserMessage,
@@ -28,6 +29,15 @@ import {
   type PlanBook,
   type PlanChapter,
 } from "./plan";
+import {
+  applyTalkOutline,
+  buildTalkOutline,
+  citableWithOutline,
+  outlinePlanSystemPrompt,
+  outlinePlanUserMessage,
+  readerPointsFor,
+  type TalkOutline,
+} from "./outline";
 import {
   SlidesPipeline,
   type AssembleInput,
@@ -70,27 +80,36 @@ async function bookHasNotes(bookId: string): Promise<boolean> {
   return !!st && st.chapters.some((c) => c.status === "done");
 }
 
-export interface BookWithNotes {
+export interface TalkBook {
   bookId: string;
   title: string;
+  // A rehearsal settled at least one chapter of this book (docs/31). Such a book
+  // can carry a talk on its own: the decisions are the material, so it belongs in
+  // the picker even with no notes pass ever run on it.
+  rehearsed: boolean;
 }
 
-// Every book that has notes (a done chapter), for the talk picker. Reads the
-// notes-<bookId>/ directories under AppData and joins titles from the library.
-export async function listBooksWithNotes(): Promise<BookWithNotes[]> {
+// Every book a talk can be built from: one with notes (a done chapter), or one
+// the reader rehearsed. Notes are found by their directories under AppData;
+// rehearsed books are asked of the rehearsal store rather than found by file
+// name, since that store is about to key its records by talk instead of by book.
+export async function listTalkBooks(): Promise<TalkBook[]> {
   let entries;
   try {
     entries = await readDir(".", { baseDir: BaseDirectory.AppData });
   } catch {
     return [];
   }
-  const out: BookWithNotes[] = [];
+  const rehearsed = new Set(await listRehearsedBooks());
+  const candidates = new Set(rehearsed);
   for (const e of entries) {
-    if (!e.isDirectory || !e.name?.startsWith("notes-")) continue;
-    const bookId = e.name.slice("notes-".length);
-    if (!(await bookHasNotes(bookId))) continue;
+    if (e.isDirectory && e.name?.startsWith("notes-")) candidates.add(e.name.slice("notes-".length));
+  }
+  const out: TalkBook[] = [];
+  for (const bookId of candidates) {
+    if (!rehearsed.has(bookId) && !(await bookHasNotes(bookId))) continue;
     const entry = await getLibraryEntry(bookId);
-    out.push({ bookId, title: entry?.title ?? bookId });
+    out.push({ bookId, title: entry?.title ?? bookId, rehearsed: rehearsed.has(bookId) });
   }
   out.sort((a, b) => a.title.localeCompare(b.title));
   return out;
@@ -125,6 +144,26 @@ async function planMaterial(bookId: string): Promise<PlanBook> {
     caption: f.caption,
   }));
   return { bookId, title, overview, chapters, figures };
+}
+
+// Getting this talk's settled decisions: the one place the deck pipeline asks
+// for them, and the only place that knows they are keyed by book. The decisions
+// are moving to being keyed by the talk instead, at which point this function is
+// what changes — everything downstream of it works on the TalkOutline shape,
+// where each entry already says which book and which chapter it came from.
+//
+// Null means no material in this talk was rehearsed, which is what puts the plan
+// stage back on its old path. Read fresh per run rather than cached across a
+// talk's lifetime: the reader may go back into rehearsal and change their mind.
+export async function readTalkOutline(bookIds: readonly string[]): Promise<TalkOutline | null> {
+  const sources = await Promise.all(
+    bookIds.map(async (bookId) => ({
+      bookId,
+      title: (await getLibraryEntry(bookId))?.title ?? bookId,
+      plan: await loadRehearsalPlan(bookId),
+    })),
+  );
+  return buildTalkOutline(sources);
 }
 
 interface GatheredNotes {
@@ -209,37 +248,59 @@ function imageDeps(signal: AbortSignal): ImageGenDeps {
 }
 
 function makeDeps(talkId: string, bookIds: string[], instruction: string): SlidesDeps {
+  // One read of the decision files per pipeline instance, shared by the plan and
+  // content stages of that run.
+  let outlineOnce: Promise<TalkOutline | null> | null = null;
+  const outline = () => (outlineOnce ??= readTalkOutline(bookIds));
+
   return {
     async buildPlan(opts) {
       const model = await resolveModel("prep");
       const books = await Promise.all(bookIds.map(planMaterial));
+      // A rehearsed book's outline is the deck's skeleton (docs/31). The plan
+      // call then only pages it out; with no decision file anywhere, the model
+      // designs the outline from the chapter list as before.
+      const settled = await outline();
       const text = await callModel(
         "prep",
         "plan",
-        slidesPlanSystemPrompt(model.aiLanguage),
-        planUserMessage(books, instruction),
+        settled ? outlinePlanSystemPrompt(model.aiLanguage) : slidesPlanSystemPrompt(model.aiLanguage),
+        settled
+          ? outlinePlanUserMessage(books, settled, instruction)
+          : planUserMessage(books, instruction),
         opts,
       );
       const plan = recordParse("slides-plan", model, text, (tally) => parseSlidePlan(text, tally));
       // Check the plan's citations against the books it claims to draw on, so a
       // chapter or figure that does not exist is caught here, with a note the
       // user can see, instead of becoming a silent fallback two stages later.
-      return validateDeckPlan(plan, books);
+      const checked = validateDeckPlan(plan, citableWithOutline(books, settled));
+      // Then against the decisions: a cut chapter gets no page, a kept chapter
+      // that the plan skipped gets one back.
+      return settled ? applyTalkOutline(checked, settled) : checked;
     },
 
     async generateContent({ slide, instruction: steer }, opts) {
       const { aiLanguage } = await resolveModel("prep");
       const notes = await gatherSlideNotes(slide, bookIds);
+      const points = readerPointsFor(await outline(), slide);
       // One slide's body from the gathered notes: a single unit of prose, so it
       // is held to the same output floor as a chapter note.
       const text = await callModel(
         "prep",
         "chapter-note",
         contentSystemPrompt(aiLanguage),
-        contentUserMessage(slide, notes.text, steer),
+        contentUserMessage(slide, notes.text, steer, points),
         opts,
       );
-      return { html: sanitizeFragment(text), sourceNotice: notes.notice };
+      return {
+        html: sanitizeFragment(text),
+        // "This chapter had no note, so the slide fell back to the overview" is a
+        // downgrade only when the notes were the material. With the reader's own
+        // points in hand they are the material and the notes are background, so
+        // the warning would be false.
+        sourceNotice: points.length ? undefined : notes.notice,
+      };
     },
 
     async generateIllustration(slide, refImage, opts): Promise<AssetOutcome> {

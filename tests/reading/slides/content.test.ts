@@ -63,6 +63,28 @@ test("contentUserMessage handles a slide with no notes", () => {
   expect(contentUserMessage(slide, "")).toContain("No source notes");
 });
 
+// The reader's own points come from the rehearsal (docs/31) and reach this stage
+// without having gone through the plan call's wording. They are what the slide
+// says; the chapter notes under them are only background for filling them out.
+test("contentUserMessage carries the reader's points verbatim, above the notes", () => {
+  const slide: SlideRun = { index: 2, title: "Openings", kind: "content", contentStatus: "pending" };
+  const points = ["the 1962 data does the work", "and nothing else does"];
+  const msg = contentUserMessage(slide, "chapter note text", undefined, points);
+  for (const p of points) expect(msg).toContain(`- ${p}`);
+  expect(msg.indexOf(points[0])).toBeLessThan(msg.indexOf("chapter note text"));
+  expect(msg).toContain("do not replace it with your own");
+  expect(msg).toContain("not a second source of points");
+});
+
+// A rehearsed chapter may have no note at all; the points still carry the slide,
+// so it must not be told it has nothing to write from.
+test("a slide with points and no notes is not told it has no material", () => {
+  const slide: SlideRun = { index: 2, title: "Openings", kind: "content", contentStatus: "pending" };
+  const msg = contentUserMessage(slide, "", undefined, ["it ends where it started"]);
+  expect(msg).toContain("it ends where it started");
+  expect(msg).not.toContain("No source notes");
+});
+
 // Against languageInstruction rather than a retyped copy of its wording — see
 // the note in slides/plan.test.ts.
 test("contentSystemPrompt appends the output-language instruction only when set", () => {

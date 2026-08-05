@@ -21,6 +21,7 @@ export {
   upsertTalk,
 } from "./types";
 export {
+  bookBlock,
   parseSlidePlan,
   planUserMessage,
   slidesPlanSystemPrompt,
@@ -30,6 +31,21 @@ export {
   type PlanBook,
   type PlanChapter,
 } from "./plan";
+export {
+  applyTalkOutline,
+  buildTalkOutline,
+  citableWithOutline,
+  outlineFor,
+  outlinePlanSystemPrompt,
+  outlinePlanUserMessage,
+  readerPointsFor,
+  SLIDES_OUTLINE_PLAN_SYSTEM_PROMPT,
+  type BookOutline,
+  type OutlineCut,
+  type OutlineEntry,
+  type OutlineSource,
+  type TalkOutline,
+} from "./outline";
 export { contentSystemPrompt, contentUserMessage, sanitizeFragment } from "./content";
 export { estimateOverflow, overflowNotice, type OverflowEstimate } from "./overflow";
 export { assembleDeck, slugify, type AssembledSlide } from "./template";
@@ -56,11 +72,12 @@ export {
 } from "./pipeline";
 export {
   getCurrentTalk,
-  listBooksWithNotes,
+  listTalkBooks,
   listTalks,
   listTalkStates,
   openTalk,
+  readTalkOutline,
   startTalk,
-  type BookWithNotes,
+  type TalkBook,
 } from "./live";
 export { deckFile, loadTalks, SLIDES_DIR } from "./store";
