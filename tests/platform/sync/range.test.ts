@@ -20,6 +20,10 @@ test("core user-data files are in range", () => {
     "notes-deadbeef/state.json",
     "notes-deadbeef/overview.md",
     "notes-deadbeef/chapter-01.md",
+    // Rehearsal decisions (docs/31): what the reader and the AI settled a chapter
+    // contributes to the talk. Nothing rebuilds it from the book, so it travels
+    // like marks and threads rather than like the caches below.
+    "rehearsal-deadbeef.json",
     // The cross-scenario user profile and the info feedback log are the user's
     // data (docs/16); info-profile.md is the profile's old name, kept in range
     // through the transition.

@@ -10,15 +10,16 @@
 // which MessageBubble looks up by the payload's kind. Adding a card kind means:
 // a payload variant in info/cards.ts, a component here, and a registry entry.
 
-import { useEffect, useState, type FC } from "react";
+import { useEffect, useState } from "react";
 import type {
   BriefingFailedCardData,
   BriefingProgressCardData,
   BriefingReadyCardData,
+  InfoCard,
   ProfileUpdateCardData,
 } from "../../../info/briefing/cards";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
-import type { CardComponentProps, CardKind, CardPayload } from "../chat/chatParts";
+import type { CardComponentProps, CardRegistryFor } from "../chat/chatParts";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 
@@ -211,14 +212,9 @@ export function BriefingFailedCard({ payload, dispatch }: CardComponentProps<Bri
   );
 }
 
-// The module-level card registry: MessageBubble renders a card part by looking up
-// its kind here. The mapped type narrows each component's payload to its kind, so
-// a mismatched pairing is a compile error.
-type CardRegistry = {
-  [K in CardKind]: FC<CardComponentProps<Extract<CardPayload, { kind: K }>>>;
-};
-
-export const CARD_REGISTRY: CardRegistry = {
+// The info domain's share of the card registry, merged with the other domains'
+// in chat/cardRegistry.ts — which is where the render layer looks a card up.
+export const INFO_CARD_REGISTRY: CardRegistryFor<InfoCard["kind"]> = {
   "probe-confirm": ProbeConfirmCard,
   "briefing-progress": BriefingProgressCard,
   "briefing-ready": BriefingReadyCard,

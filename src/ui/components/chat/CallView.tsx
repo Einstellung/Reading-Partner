@@ -30,6 +30,10 @@ interface CallViewProps {
 	onToggleClassroom?(): void;
 	// One-line prep status shown beside the toggle while classroom is on.
 	classroomStatus?: string | null;
+	// Rehearsal mode (docs/31), the third posture, beside the classroom toggle.
+	// The two are mutually exclusive; the host owns that, not this row.
+	rehearsalOn?: boolean;
+	onToggleRehearsal?(): void;
 	// The empty-state heading and composer placeholder. Default to the passage
 	// wording; the book-level thread (docs/03: top-bar AI button) passes the book
 	// title and "Ask about this book…".
@@ -53,6 +57,8 @@ export default function CallView({
 	classroomOn = false,
 	onToggleClassroom,
 	classroomStatus,
+	rehearsalOn = false,
+	onToggleRehearsal,
 	emptyTitle = 'Ask about this passage',
 	placeholder = 'Ask about this passage…',
 	voice,
@@ -85,19 +91,34 @@ export default function CallView({
 				{onDelete && <DeleteThreadButton onDelete={onDelete} />}
 			</div>
 
-			{onToggleClassroom && (
+			{(onToggleClassroom || onToggleRehearsal) && (
 				<div className="absolute left-1/2 top-4 z-10 flex -translate-x-1/2 items-center gap-2">
-					<Button
-						type="button"
-						variant={classroomOn ? 'secondary' : 'outline'}
-						aria-pressed={classroomOn}
-						onClick={onToggleClassroom}
-						className={
-							'rounded-full coarse:py-2.5 ' + (classroomOn ? '' : 'text-neutral-600')
-						}
-					>
-						Classroom
-					</Button>
+					{onToggleClassroom && (
+						<Button
+							type="button"
+							variant={classroomOn ? 'secondary' : 'outline'}
+							aria-pressed={classroomOn}
+							onClick={onToggleClassroom}
+							className={
+								'rounded-full coarse:py-2.5 ' + (classroomOn ? '' : 'text-neutral-600')
+							}
+						>
+							Classroom
+						</Button>
+					)}
+					{onToggleRehearsal && (
+						<Button
+							type="button"
+							variant={rehearsalOn ? 'secondary' : 'outline'}
+							aria-pressed={rehearsalOn}
+							onClick={onToggleRehearsal}
+							className={
+								'rounded-full coarse:py-2.5 ' + (rehearsalOn ? '' : 'text-neutral-600')
+							}
+						>
+							Rehearsal
+						</Button>
+					)}
 					{classroomOn && classroomStatus && (
 						<span className="text-xs text-neutral-400">{classroomStatus}</span>
 					)}

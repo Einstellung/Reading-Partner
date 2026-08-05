@@ -9,7 +9,7 @@ import {
   type ViewStats,
 } from "./platform/app/reader-contract";
 import { onCorruptFile } from "./platform/app/atomic-fs";
-import { getViewState, hashPath, saveViewState } from "./platform/app/storage";
+import { getViewState, hashPath, saveViewState, withModes } from "./platform/app/storage";
 import { importBook, libraryHas, readLibraryBook } from "./platform/app/library";
 import { migrateBookLive } from "./platform/app/migrate";
 import { ensureFulltext, onFulltextError, type Fulltext } from "./fulltext";
@@ -62,6 +62,15 @@ import {
 } from "./ai/aiClient";
 import { locateQuote, type Citation } from "./reading/prep";
 import { usePrep } from "./reading/prep/use-prep";
+import {
+  flagsOf,
+  modeOf,
+  pressMode,
+  useRehearsal,
+  type ModeButton,
+  type ModeFlags,
+  type RehearsalDecisionCardData,
+} from "./reading/rehearsal";
 import { useNotes } from "./reading/notes/use-notes";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import {
@@ -108,6 +117,14 @@ import Toast, { useToasts } from "./ui/components/common/Toast";
 import SettingsButton from "./ui/components/common/SettingsButton";
 import { useSyncHealth } from "./ui/components/common/useSyncHealth";
 import type { Annotation as PopupAnnotation, PendingImage, ToolStatus, ToolType } from "./ui/components/common/types";
+import {
+  cardRow,
+  insertBeforeLast,
+  nextCardId,
+  rehydrateParts,
+  toPersistedCardPart,
+  type ChatPart,
+} from "./ui/components/chat/chatParts";
 
 // The AI pen maps to the engine's underline tool in a fixed purple (the palette's
 // Purple). Owning this one color for the AI pen is a v1 implementation
@@ -142,6 +159,10 @@ type CallMessage = {
   images?: { data: string; mediaType: string }[];
   streaming?: boolean;
   failed?: boolean;
+  // The durable parts of the row (chatParts.ts). Present on rows that carry a
+  // card — a recorded rehearsal decision — and absent on plain prose, which
+  // renders from `text`.
+  parts?: ChatPart[];
   // Transient tool-call trace for a streaming AI turn (M6); never persisted.
   tools?: ToolStatus[];
   // What the turn left out to fit the context window (src/budget). Display-only,
@@ -150,9 +171,16 @@ type CallMessage = {
 };
 
 // Persisted thread messages -> display messages. Image bytes are loaded
-// separately (hydrateThreadImages), so images start absent here.
+// separately (hydrateThreadImages), so images start absent here. Stored parts
+// come back as render parts, so a rehearsal decision card is still there when
+// the conversation is reopened days later.
 function toDisplayMessages(msgs: ThreadMessage[]): CallMessage[] {
-  return msgs.map((m) => ({ role: m.role, text: m.text, ts: m.ts }));
+  return msgs.map((m) => ({
+    role: m.role,
+    text: m.text,
+    ts: m.ts,
+    ...(m.parts && m.parts.length ? { parts: rehydrateParts(m.parts) } : {}),
+  }));
 }
 
 // A live AI "call" — one thread anchored on one AI-pen underline (docs/03).
@@ -380,7 +408,7 @@ export default function App() {
     classroomRef,
     pipelineRef,
     setSelectedSlug: setSelectedPrepSlug,
-    toggleClassroom,
+    setClassroom,
     reset: resetPrep,
     resume: resumePrep,
   } = usePrep({
@@ -388,9 +416,47 @@ export default function App() {
     bookIdRef,
     ctxRef,
     currentFulltextRef,
-    lastStateRef: lastState,
     pushToast,
   });
+
+  // Rehearsal mode (docs/31), the classroom toggle's sibling on the book-level
+  // conversation. Its own state lives here; the two flags are persisted together
+  // below, because they are mutually exclusive.
+  const {
+    rehearsalOn,
+    rehearsalRef,
+    setRehearsal,
+    reset: resetRehearsal,
+  } = useRehearsal({ ctxRef });
+
+  // Write both mode flags at once. Immediately rather than on the debounced
+  // position save, so the mode survives a book that is closed without the reader
+  // scrolling again.
+  const persistModes = useCallback((flags: ModeFlags) => {
+    const bookId = bookIdRef.current;
+    if (!bookId) return;
+    const merged = withModes(lastState.current, flags);
+    lastState.current = merged;
+    saveViewState(bookId, merged).catch((e) => {
+      console.error("failed to persist the reading mode", e);
+    });
+  }, []);
+
+  // One press of either mode button. The exclusion rule is in the domain
+  // (reading/rehearsal/mode.ts); this only applies its answer to both hooks and
+  // to disk, so no press can leave both modes on or persist half a switch.
+  const onPressMode = useCallback(
+    (pressed: ModeButton) => {
+      const current = modeOf({ classroom: classroomRef.current, rehearsal: rehearsalRef.current });
+      const flags = flagsOf(pressMode(current, pressed));
+      setClassroom(flags.classroom);
+      setRehearsal(flags.rehearsal);
+      persistModes(flags);
+    },
+    [classroomRef, rehearsalRef, setClassroom, setRehearsal, persistModes],
+  );
+  const toggleClassroom = useCallback(() => onPressMode("classroom"), [onPressMode]);
+  const toggleRehearsal = useCallback(() => onPressMode("rehearsal"), [onPressMode]);
 
   // Page-navigation events, with the dwell time on the page being left. The
   // ref makes this idempotent under StrictMode's double effect runs.
@@ -548,9 +614,12 @@ export default function App() {
   const persist = useCallback((state: ViewState) => {
     const bookId = bookIdRef.current;
     if (!bookId) return;
-    // Carry the sticky classroom flag (docs/09) alongside the reader-owned
-    // position fields, which never carry it.
-    const merged = { ...state, classroom: classroomRef.current };
+    // Carry the sticky mode flags (docs/09, docs/31) alongside the reader-owned
+    // position fields, which never carry them.
+    const merged = withModes(state, {
+      classroom: classroomRef.current,
+      rehearsal: rehearsalRef.current,
+    });
     lastState.current = merged;
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
@@ -824,6 +893,26 @@ export default function App() {
       live?.onSettled?.();
     };
 
+    // A chapter decision the rehearsal just wrote (docs/31). It goes in as its
+    // own row above the reply being written, and it is persisted: the decision
+    // itself is already on disk, and a receipt the reader cannot find again when
+    // they come back to the rehearsal tomorrow is not a receipt.
+    const showDecisionCard = (payload: RehearsalDecisionCardData) => {
+      const cardId = nextCardId("rehearsal");
+      const cardTs = Date.now();
+      setCall((c) =>
+        !c || c.threadId !== threadId
+          ? c
+          : { ...c, messages: insertBeforeLast(c.messages, cardRow(cardId, payload, cardTs)) },
+      );
+      appendMessage(bookId, threadId, {
+        role: "ai",
+        text: "",
+        ts: cardTs,
+        parts: [toPersistedCardPart(cardId, payload)],
+      });
+    };
+
     const ann = annsRef.current.get(annotationId);
     const ts = Date.now();
     const streamingRow: CallMessage = { role: "ai", text: "", ts, streaming: true };
@@ -851,11 +940,13 @@ export default function App() {
         buffer: bufferRef.current,
         context: ctxRef.current,
         classroom: classroomRef.current,
+        rehearsal: rehearsalRef.current,
         settings: s,
         getPipeline: () => pipelineRef.current,
         distillAnnotations,
         signal: controller.signal,
         onSubagentProgress: (progress) => onSubagentProgress(progress, ts),
+        onDecisionCard: showDecisionCard,
       });
       if (!turn) {
         liveTurns.settle(threadId, controller); // aborted while reading history
@@ -1108,18 +1199,23 @@ export default function App() {
       setViewReady(false);
       bookIdRef.current = bookId;
       bookNameRef.current = name;
-      // Seed the persist base with the loaded state so an early classroom toggle
+      // Seed the persist base with the loaded state so an early mode press
       // (before the reader emits a position) merges onto the right book.
       lastState.current = state;
       // Dwell tracking restarts per book (never a cross-book page-nav event).
       pageDwellRef.current = null;
-      // Classroom mode is per book and sticky (docs/09): restore its saved flag,
-      // detaching the previous book's prep panel first (the pipeline itself keeps
-      // running in the background as a module singleton). A restored "on" attaches
-      // the pipeline below once the fulltext is ready, degrading exactly like a
-      // manual toggle-on when the book has no readable text.
-      const restoreClassroom = !!state?.classroom;
+      // A restored classroom "on" attaches the pipeline below once the fulltext
+      // is ready, degrading exactly like a manual toggle-on when the book has no
+      // readable text.
+      // The book-level chat's mode is per book and sticky (docs/09, docs/31):
+      // restore the saved one, detaching the previous book's prep panel first
+      // (the pipeline itself keeps running in the background as a module
+      // singleton). Read through modeOf so a file with both flags set — which
+      // this build cannot write — still restores exactly one.
+      const restored = flagsOf(modeOf(state));
+      const restoreClassroom = restored.classroom;
       resetPrep(restoreClassroom);
+      resetRehearsal(restored.rehearsal);
       // Notes are per book too; detach the previous book's panel.
       resetNotes();
       // Extract the full text in the background so the AI can see the book
@@ -1179,7 +1275,7 @@ export default function App() {
       });
       setTitle(name);
     },
-    [pushToast, resetPrep, resumePrep, resetNotes, resumeNotes, captureHangup],
+    [pushToast, resetPrep, resetRehearsal, resumePrep, resetNotes, resumeNotes, captureHangup],
   );
 
   // Open a topic file. If its book id is known and the library holds the
@@ -1973,6 +2069,11 @@ export default function App() {
                 classroomOn={classroomOn}
                 onToggleClassroom={toggleClassroom}
                 classroomStatus={prepStatusLine}
+                // Rehearsal is a whole-book posture (docs/31), so it is offered
+                // only on the book-level thread; a conversation anchored on one
+                // marked passage keeps the two postures it had.
+                rehearsalOn={rehearsalOn}
+                onToggleRehearsal={call.isBook ? toggleRehearsal : undefined}
                 emptyTitle={call.isBook ? title ?? "This book" : undefined}
                 placeholder={call.isBook ? "Ask about this book…" : undefined}
                 voice={callVoice}

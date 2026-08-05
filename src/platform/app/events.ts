@@ -10,6 +10,7 @@ import { BaseDirectory, writeTextFile } from "@tauri-apps/plugin-fs";
 
 export type EventType =
   | "classroom-toggle" // { on: boolean }
+  | "rehearsal-toggle" // { on: boolean } — docs/31, mutually exclusive with classroom
   | "citation-click" // { kind: "page", page } | { kind: "paper", slug }
   | "page-nav" // { from, to, dwellMs } — dwell is time spent on the previous page
   | "call-start" // { threadId }

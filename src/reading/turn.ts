@@ -47,7 +47,19 @@ import {
   type DistillAnnotation,
   type MemoryEntry,
 } from "../memory";
-import { readOverviewNote } from "./notes/store";
+import { loadNotesState, readChapterNote, readOverviewNote } from "./notes/store";
+import type { RehearsalDecisionCardData } from "./rehearsal/cards";
+import { bucketMarks } from "./rehearsal/marks";
+import { nextChapter } from "./rehearsal/plan";
+import {
+  buildRehearsalSystemPrompt,
+  REHEARSAL_KICKOFF,
+  type RehearsalNote,
+} from "./rehearsal/prompt";
+import { buildSkeleton } from "./rehearsal/skeleton";
+import { loadRehearsalPlan, recordDecision } from "./rehearsal/store";
+import { buildRehearsalTools } from "./rehearsal/tools";
+import type { Mark, RehearsalPlan, Skeleton } from "./rehearsal/types";
 import { chapterIndexForPage, papersForChapter } from "./prep/scheduler";
 import { paperFulltextHash, readPrepNote } from "./prep/store";
 import { parseNote } from "./prep/notes";
@@ -121,6 +133,10 @@ export interface ReadingTurnInput {
   buffer: ArrayBuffer | null;
   context: ReadingTurnContext;
   classroom: boolean;
+  // Rehearsal mode (docs/31): the AI questions and the reader answers. Only ever
+  // true on the book-level thread, and never at the same time as `classroom`
+  // (src/reading/rehearsal/mode.ts owns that rule).
+  rehearsal?: boolean;
   settings: Settings;
   // Read live rather than captured: a classroom tool invoked mid-turn should see
   // the pipeline the reader is on now, matching the pre-extraction behaviour.
@@ -134,6 +150,10 @@ export interface ReadingTurnInput {
   // calls: what arrives here is a phase, the label this turn wrote, and a round
   // count (src/ai/subagent/types.ts).
   onSubagentProgress?: (progress: SubagentProgress) => void;
+  // Raised when record_chapter_decision writes a chapter's decision, so the shell
+  // can put the card in the conversation. Absent = the decision is still written,
+  // it just is not shown (headless tests, a closed conversation).
+  onDecisionCard?: (card: RehearsalDecisionCardData) => void;
   // The sub-agent turn behind research_literature. Injected so the assembly and
   // its research tool can be exercised with no provider, no key and no network.
   runSubagentTurn?: SubagentTurnFn;
@@ -235,11 +255,13 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     buffer,
     context,
     classroom,
+    rehearsal = false,
     settings: s,
     getPipeline,
     distillAnnotations,
     signal,
     onSubagentProgress,
+    onDecisionCard,
     runSubagentTurn = runSubagentTurnLive,
   } = input;
   const { topicId, topicName, fileName, pageLabel, pageIndex, files } = context;
@@ -363,11 +385,62 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     }
   }
 
-  // Whether anything that reads *this book* was wired. Captured before the
-  // literature tools join the list, because the tools paragraph in the system
-  // prompt describes the reading tools by name: a book with no text layer mounts
-  // none of them, and the literature tools must not make that paragraph appear.
+  // Whether anything that reads *this book* was wired. Captured here, before the
+  // rehearsal and literature tools join the list, because the tools paragraph in
+  // the system prompt describes the reading tools by name: a book with no text
+  // layer mounts none of them, and the tools added below must not make that
+  // paragraph appear.
   const hasReadingTools = tools.length > 0;
+
+  // Rehearsal mode (docs/31): the whole-book skeleton, the reader's marks
+  // bucketed under it, the decisions recorded so far, and the note for the
+  // chapter coming up. Book-level thread only — a conversation anchored on one
+  // mark is a different scale of thing and is left exactly as it was.
+  //
+  // Nothing here starts an AI call. The skeleton comes from the chapter plan the
+  // notes pass already wrote, or from the PDF's own table of contents, or (last)
+  // from treating the book as one stretch: the reader pressed a button and is
+  // waiting, and a planning call would be a minute of nothing.
+  const isRehearsal = rehearsal && isBook;
+  let skeleton: Skeleton | null = null;
+  let marks: Map<number, Mark[]> = new Map();
+  let rehearsalPlan: RehearsalPlan | null = null;
+  let rehearsalNotes: RehearsalNote[] = [];
+  if (isRehearsal) {
+    const notesState = await loadNotesState(bookId).catch(() => null);
+    skeleton = buildSkeleton({
+      notesChapters: notesState?.chapters ?? null,
+      outline: currentFulltext?.outline ?? [],
+      pageCount: currentFulltext?.pages.length ?? 0,
+    });
+    marks = bucketMarks(
+      skeleton.chapters,
+      annotations.map(toAnnotationLite).filter((a): a is AnnotationLite => a !== null),
+    );
+    rehearsalPlan = await loadRehearsalPlan(bookId);
+    // Only the chapter about to be walked is inlined. Every other chapter's note
+    // is a read_chapter_note away, and twelve of them would be fifty thousand
+    // words of material the reader has already stopped reading (docs/31).
+    const upcoming = nextChapter(skeleton.chapters, rehearsalPlan) ?? skeleton.chapters[0]?.index;
+    const chapter = skeleton.chapters.find((c) => c.index === upcoming);
+    if (chapter?.hasNote) {
+      const body = await readChapterNote(bookId, chapter.index).catch(() => null);
+      if (body) rehearsalNotes = [{ chapter: chapter.index, title: chapter.title, body }];
+    }
+    const chapters = skeleton.chapters;
+    tools = [
+      ...tools,
+      ...buildRehearsalTools({
+        chapters,
+        record: async (decision) => {
+          await recordDecision(bookId, decision);
+        },
+        readNote: (n) => readChapterNote(bookId, n).catch(() => null),
+        onCard: onDecisionCard,
+      }),
+    ];
+  }
+
   // Academic literature (docs/24, docs/25), mounted on every reading turn. Not
   // gated on the prep pipeline or on classroom mode: "what is the latest research
   // on this" is a question the reader can have on any page of any book, and a tool
@@ -421,7 +494,24 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   function composePrompt(dropped: ReadonlySet<ReductionId>): string {
     const catalog = dropped.has("figure-catalog") ? "" : figureCatalog;
     let prompt: string;
-    if (isClassroom) {
+    if (isRehearsal && skeleton) {
+      prompt = buildRehearsalSystemPrompt({
+        topicName,
+        bookName: fileName,
+        pageLabel,
+        skeleton,
+        marks,
+        notes: dropped.has("rehearsal-notes") ? [] : rehearsalNotes,
+        plan: rehearsalPlan,
+        figureCatalog: catalog,
+        hasReadingTools,
+        fullMarks: !dropped.has("rehearsal-marks"),
+      });
+      // Rehearsal shares the AI output-language setting the same way classroom
+      // does; the companion prompt gets it inside buildSystemPrompt.
+      const lang = languageInstruction(s.aiLanguage);
+      if (lang) prompt += "\n\n" + lang;
+    } else if (isClassroom) {
       prompt = buildClassroomSystemPrompt({
         topicName,
         surveyName: fileName,
@@ -499,7 +589,11 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   function composeMessages(dropped: ReadonlySet<ReductionId>): ReadingTurnMessage[] {
     const keep = dropped.has("history-trim") ? HISTORY_KEEP_TIGHT : HISTORY_KEEP;
     const tail = prior.length > keep ? prior.slice(prior.length - keep) : prior;
-    return [{ role: "user" as const, text: EXPLAIN_KICKOFF }, ...tail];
+    // Rehearsal gets its own opening line: the companion's kickoff asks the model
+    // to explain the marked passage, which is the one move this mode exists to
+    // prevent.
+    const kickoff = isRehearsal ? REHEARSAL_KICKOFF : EXPLAIN_KICKOFF;
+    return [{ role: "user" as const, text: kickoff }, ...tail];
   }
 
   const none: ReadonlySet<ReductionId> = new Set();
@@ -516,13 +610,22 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   if (model) {
     const budget = contextBudget(model, piContext(systemPrompt, messages, tools));
     if (!fitsBudget(budget, "chat")) {
-      // Price each rung by composing without it. The classroom body dominates,
-      // so it is held out of the base and priced as the difference — the small
-      // rungs are then measured against a prompt that does not carry the book.
-      const withoutBook: ReadonlySet<ReductionId> = new Set<ReductionId>(["classroom-inline"]);
-      const baseTokens = estimateTextTokens(composePrompt(withoutBook));
+      // Price each rung by composing without it. A few rungs carry material an
+      // order of magnitude bigger than the rest — the inlined survey, and the
+      // rehearsal's marks and chapter note — so they are held out of the base and
+      // priced as the difference: the small rungs are then measured against a
+      // prompt that does not carry any of them.
+      const bulk: ReductionId[] = ["classroom-inline", "rehearsal-marks", "rehearsal-notes"];
+      const withoutBulk: ReadonlySet<ReductionId> = new Set<ReductionId>(bulk);
+      const baseTokens = estimateTextTokens(composePrompt(withoutBulk));
       const priceOf = (id: ReductionId): number =>
-        Math.max(0, baseTokens - estimateTextTokens(composePrompt(new Set([...withoutBook, id]))));
+        Math.max(0, baseTokens - estimateTextTokens(composePrompt(new Set([...withoutBulk, id]))));
+      // A bulk rung's own contribution: what the full prompt loses by dropping
+      // only that one. Measured this way rather than as "everything above the
+      // base" so that two of them present at once are not both charged for the
+      // other's bytes.
+      const priceBulk = (id: ReductionId): number =>
+        Math.max(0, estimateTextTokens(systemPrompt) - estimateTextTokens(composePrompt(new Set([id]))));
       const tightMessages = composeMessages(new Set<ReductionId>(["history-trim"]));
       // The catalog is only redundant while nothing is leaning on it: once the
       // conversation has cited a [fig:N], dropping the list of figures makes the
@@ -534,7 +637,15 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
         "notes-overview": priceOf("notes-overview"),
         "booklist-thin": priceOf("booklist-thin"),
         "memory-trim": priceOf("memory-trim"),
-        "classroom-inline": Math.max(0, estimateTextTokens(systemPrompt) - baseTokens),
+        // Only the mode that is actually on is priced: composing the other one's
+        // prompt would cost a full re-render of material this turn does not have.
+        ...(isClassroom ? { "classroom-inline": priceBulk("classroom-inline") } : {}),
+        ...(isRehearsal
+          ? {
+              "rehearsal-notes": priceBulk("rehearsal-notes"),
+              "rehearsal-marks": priceBulk("rehearsal-marks"),
+            }
+          : {}),
         "history-trim": Math.max(
           0,
           estimateContextTokens({ messages: toPiMessages(messages) }) -
