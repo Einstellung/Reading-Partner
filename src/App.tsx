@@ -1005,21 +1005,70 @@ export default function App() {
     penUpRef.current = { x: e.clientX, y: e.clientY };
   }, []);
 
+  // Hangup bookkeeping (docs/02, docs/03): log the end of the conversation and
+  // kick the silent memory distillation over its persisted transcript. Reads
+  // refs so it is stable; no-ops when nothing is open. Distillation runs in the
+  // background with no UI — the memory panel shows when it last ran. Declared up
+  // here because every way out of a call is below and all of them go through it.
+  //
+  // Hanging up mid-answer waits: the reply is still being written and the
+  // transcript would be a half sentence, so the distillation is handed to the
+  // turn and runs when it lands. The event is logged now — it is the hangup that
+  // happened now. The marks are read now too: a deferred pass can land after the
+  // reader has moved to another book, and annsRef would by then hold that book's
+  // marks — the wrong input, and it would push the silent-marks cursor past them.
+  const captureHangup = useCallback(() => {
+    const c = callRef.current;
+    const bookId = bookIdRef.current;
+    const { topicId, topicName, fileName, pageIndex } = ctxRef.current;
+    if (!c || !bookId || !topicId) return;
+    logEvent(topicId, "call-end", { threadId: c.threadId, book: c.isBook ?? false });
+    const ann = annsRef.current.get(c.annotationId);
+    const annotations = distillAnnotations();
+    const distill = () =>
+      void distillThread({
+        topicId,
+        topicName,
+        bookName: fileName,
+        threadId: c.threadId,
+        annotationId: c.annotationId,
+        // The book-level thread has no mark: pin its position to the current page.
+        page: c.isBook
+          ? pageIndex !== null
+            ? pageIndex + 1
+            : null
+          : annotationPage(ann as { position?: { pageIndex?: number } } | undefined),
+        markedText: c.isBook ? "" : typeof ann?.text === "string" ? ann.text : "",
+        messages: (getThread(bookId, c.threadId)?.messages ?? []).map(({ role, text, ts }) => ({ role, text, ts })),
+        annotations,
+      });
+    if (!liveTurnsRef.current.whenSettled(c.threadId, distill)) distill();
+  }, [distillAnnotations]);
+
   // Touching the book dismisses the bubble / chat corner card (docs/03).
   // chat-main is not dismissable this way (CallView covers the reader). AI-pen
   // draws and mark clicks fire this on pointerdown, then re-open on save/select.
   // A reply in flight is no reason to hold the bubble open: it keeps writing and
   // lands in the thread either way.
+  //
+  // This is a hangup, not a lesser dismissal: the conversation is over either
+  // way, so it does the same bookkeeping the ✕ does. On a tablet it is the exit
+  // that actually gets used.
   const onPanePointerDown = useCallback(() => {
     if (callViewRef.current === "bubble" || callViewRef.current === "chat-pip") {
+      captureHangup();
       setCall(null);
     }
-  }, []);
+  }, [captureHangup]);
 
   const openInReader = useCallback(
     async (bookId: string, name: string, bytes: Uint8Array) => {
       setStatus("Rendering…");
       setPopup(null);
+      // Leaving a book with a call open ends that conversation, same as closing
+      // the reader. First thing in, while the refs the hangup reads still point
+      // at the book being left.
+      captureHangup();
       setCall(null);
       setSelectedAnnId(null);
       // Every book opens with nothing selected. The tool state lives on App and
@@ -1118,7 +1167,7 @@ export default function App() {
       });
       setTitle(name);
     },
-    [pushToast, resetPrep, resumePrep, resetNotes, resumeNotes],
+    [pushToast, resetPrep, resumePrep, resetNotes, resumeNotes, captureHangup],
   );
 
   // Open a topic file. If its book id is known and the library holds the
@@ -1403,46 +1452,10 @@ export default function App() {
   const showChatMain = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-main" } : c)), []);
   // The other picture-in-picture swap: reading is back, chat shrinks.
   const swapToReading = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-pip" } : c)), []);
-  // Hangup bookkeeping (docs/02, docs/03): log the end of the conversation and
-  // kick the silent memory distillation over its persisted transcript. Reads
-  // refs so it is stable; no-ops when nothing is open. Distillation runs in the
-  // background with no UI — the memory panel shows when it last ran.
-  //
-  // Hanging up mid-answer waits: the reply is still being written and the
-  // transcript would be a half sentence, so the distillation is handed to the
-  // turn and runs when it lands. The event is logged now — it is the hangup that
-  // happened now.
-  const captureHangup = useCallback(() => {
-    const c = callRef.current;
-    const bookId = bookIdRef.current;
-    const { topicId, topicName, fileName, pageIndex } = ctxRef.current;
-    if (!c || !bookId || !topicId) return;
-    logEvent(topicId, "call-end", { threadId: c.threadId, book: c.isBook ?? false });
-    const ann = annsRef.current.get(c.annotationId);
-    const distill = () =>
-      void distillThread({
-        topicId,
-        topicName,
-        bookName: fileName,
-        threadId: c.threadId,
-        annotationId: c.annotationId,
-        // The book-level thread has no mark: pin its position to the current page.
-        page: c.isBook
-          ? pageIndex !== null
-            ? pageIndex + 1
-            : null
-          : annotationPage(ann as { position?: { pageIndex?: number } } | undefined),
-        markedText: c.isBook ? "" : typeof ann?.text === "string" ? ann.text : "",
-        messages: (getThread(bookId, c.threadId)?.messages ?? []).map(({ role, text, ts }) => ({ role, text, ts })),
-        annotations: distillAnnotations(),
-      });
-    if (!liveTurnsRef.current.whenSettled(c.threadId, distill)) distill();
-  }, [distillAnnotations]);
-
-  // ✕ hangs up, and touching the book dismisses too: the view goes away, the
-  // thread stays on its mark (docs/03). An answer still being written is not
-  // interrupted — it finishes into the thread file, and the mark shows it whole
-  // when it is next opened.
+  // The ✕ is one of several ways out (touching the book, opening another book,
+  // closing the reader, Esc): the view goes away, the thread stays on its mark
+  // (docs/03). An answer still being written is not interrupted — it finishes
+  // into the thread file, and the mark shows it whole when it is next opened.
   const endCall = useCallback(() => {
     captureHangup();
     setCall(null);
