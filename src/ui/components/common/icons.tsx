@@ -483,3 +483,46 @@ export function IconTrash({ size = 16 }: IconProps) {
 		</svg>
 	);
 }
+
+// Two books standing on a shelf: the Materials section of a topic, which is the
+// shelf itself.
+export function IconBooks({ size = 20 }: IconProps) {
+	return (
+		<svg
+			width={size}
+			height={size}
+			viewBox="0 0 20 20"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			xmlns="http://www.w3.org/2000/svg"
+		>
+			<path d="M3.25 4.25H7.25V16.25H3.25V4.25Z" />
+			<path d="M9.25 4.25H13.25V16.25H9.25V4.25Z" />
+			<path d="M15 5L17.25 15.75" />
+		</svg>
+	);
+}
+
+// A screen on a stand: a talk, which is a deck shown to someone.
+export function IconTalk({ size = 20 }: IconProps) {
+	return (
+		<svg
+			width={size}
+			height={size}
+			viewBox="0 0 20 20"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			xmlns="http://www.w3.org/2000/svg"
+		>
+			<path d="M3.25 3.75H16.75V12.25H3.25V3.75Z" />
+			<path d="M10 12.25V15.25" />
+			<path d="M7 17.25L10 15.25L13 17.25" />
+		</svg>
+	);
+}
