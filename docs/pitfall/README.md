@@ -14,6 +14,7 @@
 | 同步引擎、Drive 后端 | 存储与数据目录 + 网络与 CSP + WebKit / webview |
 | 全文/图片提取、裁图 | 提取（壳侧 pdf.js） |
 | 出 iOS 包、签名、图标、深链接 | iOS 构建与签名 |
+| 出 Android 包、签名、对齐 | Android 构建与签名 |
 | 桌面 webview 行为异常 | WebKit / webview |
 | 渲染链接、点外链、开系统浏览器 | WebKit / webview |
 | 确认框、删除之类的破坏性操作 | WebKit / webview |
@@ -97,6 +98,10 @@
 - [35-ios-unsigned-linkedit-vmsize](./35-ios-unsigned-linkedit-vmsize.md) — 完全无签名 Mach-O 过第三方重签名器时 __LINKEDIT vmsize 不更新，真机秒崩；产线预 ad-hoc 签名规避
 - [47-asc-key-role-cloud-signing](./47-asc-key-role-cloud-signing.md) — CI 云签名要 Admin 权限的 App Store Connect API key，App Manager 在 export 阶段被拒；试探权限不能用坏 payload
 - [48-tauri-ios-signing-log-noise](./48-tauri-ios-signing-log-noise.md) — "找不到证书"警告和 `Apple Distribution: Tauri (unset)` 证书都是 Tauri 自己的噪音，签名成没成看 export 阶段
+
+## Android 构建与签名
+
+- [104-zipalign-page-size-flag-needs-build-tools-35](./104-zipalign-page-size-flag-needs-build-tools-35.md) — `zipalign -P 16`（16 KB 页对齐）是 build-tools 35 才加的参数，34.0.0 上直接退 2；对齐真正来自 NDK r28+，产物上用 readelf 逐段断言
 
 ## WebKit / webview
 
