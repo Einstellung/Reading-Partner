@@ -3,7 +3,7 @@
 //
 // Sync range (docs/13): the user's own data — reading position, marks, AI
 // threads, topics, per-topic memory, lesson-prep plans and notes, book notes
-// (docs/14), rehearsal decisions (docs/31), the cross-scenario user profile and
+// (docs/14), talks and what their rehearsal settled (docs/31), the cross-scenario user profile and
 // info feedback log (docs/16), and app settings. Book PDFs travel the separate books channel
 // (content-addressed blobs), never the data channel. Excluded: derived caches
 // (fulltext-*, figures-*, prep-*/pdf and its caches), generated slide decks
@@ -81,11 +81,14 @@ export function inSyncRange(path: string): boolean {
     if (ROOT_FILES.has(top)) return true;
     return (
       /^annotations-.+\.json$/.test(top) ||
+      // A talk's conversation is threads-talk-<talkId>.json, so it is already
+      // covered by the line above.
       /^threads-.+\.json$/.test(top) ||
-      // Rehearsal decisions (docs/31): what the reader and the AI settled a
-      // chapter contributes to the talk. Nothing can rebuild it from the book,
-      // so it travels like marks and threads rather than like a cache.
-      /^rehearsal-.+\.json$/.test(top)
+      // Talks (docs/31): the materials, the outline the rehearsal settled and the
+      // order the reader put it in. Nothing can rebuild it from the books, so it
+      // travels like marks and threads rather than like a cache. The deck it
+      // produces (slides/**) stays out: that is a build output.
+      /^talk-.+\.json$/.test(top)
     );
   }
   // Per-topic memory: every file under memory-<topicId>/ (entries, index, meta).

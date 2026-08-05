@@ -1,14 +1,14 @@
-// Live wiring of the slides pipeline (docs/14, docs/29): real deps bound to the
-// dep-injected SlidesPipeline. A talk is a run over a chosen set of books that
-// have notes plus a free-text instruction; a single module-level pipeline holds
-// the current talk so the UI can attach to it. Source material (overviews,
-// chapter notes, figures) is read straight from disk by book id, so a talk can
-// span books that aren't the one currently open.
+// Live wiring of the slides pipeline (docs/14, docs/29, docs/31): real deps
+// bound to the dep-injected SlidesPipeline. A deck is the product of one talk
+// (reading/talks) — its materials are the talk's, its spine is the outline the
+// talk settled — and it carries the talk's own id, so slides/<talkId>/ is where
+// that talk's deck keeps its state and its pages (store.ts). One id, one talk,
+// one deck, whichever end you come at it from.
 //
-// A talk's own state and products live under slides/<talkId>/ (store.ts), which
-// is what lets a talk be resumed after a restart and re-run one page at a time.
+// A single module-level pipeline holds the deck run in flight so the UI can
+// attach to it. Source material (overviews, chapter notes, figures) is read
+// straight from disk by book id, so no reader has to be mounted.
 
-import { BaseDirectory, readDir } from "@tauri-apps/plugin-fs";
 import { getImageGenKey } from "../../ai/credentials";
 import { callModel, resolveModel } from "../../ai/model-call";
 import { getFigures } from "../figures/store";
@@ -20,7 +20,7 @@ import { recordParse } from "../../platform/app/structured-output";
 import { contentSystemPrompt, contentUserMessage, sanitizeFragment } from "./content";
 import { generateImage, resolveImageGenConfig, type ImageGenDeps } from "./imageGen";
 import { cleanTauriFetch } from "../../platform/app/tauri-fetch";
-import { listRehearsedBooks, loadRehearsalPlan } from "../rehearsal/store";
+import { listAllTalks, loadTalk } from "../talks/store";
 import {
   parseSlidePlan,
   planUserMessage,
@@ -80,38 +80,39 @@ async function bookHasNotes(bookId: string): Promise<boolean> {
   return !!st && st.chapters.some((c) => c.status === "done");
 }
 
-export interface TalkBook {
-  bookId: string;
-  title: string;
-  // A rehearsal settled at least one chapter of this book (docs/31). Such a book
-  // can carry a talk on its own: the decisions are the material, so it belongs in
-  // the picker even with no notes pass ever run on it.
-  rehearsed: boolean;
+// A talk that has something to build a deck out of.
+export interface DeckTalk {
+  talkId: string;
+  name: string;
+  topicId: string;
+  // How many of the talk's entries are in the talk. Zero means the deck falls
+  // back to planning from the materials' notes, the way it did before a talk was
+  // an object.
+  settled: number;
 }
 
-// Every book a talk can be built from: one with notes (a done chapter), or one
-// the reader rehearsed. Notes are found by their directories under AppData;
-// rehearsed books are asked of the rehearsal store rather than found by file
-// name, since that store is about to key its records by talk instead of by book.
-export async function listTalkBooks(): Promise<TalkBook[]> {
-  let entries;
-  try {
-    entries = await readDir(".", { baseDir: BaseDirectory.AppData });
-  } catch {
-    return [];
+// Every talk a deck can be built from (docs/31: the deck is a talk's product, so
+// what gets listed is talks, not books). A talk qualifies when its rehearsal
+// settled at least one entry as in — the decisions are the material, whether or
+// not a notes pass ever ran — or, failing that, when one of its materials has
+// notes for the old plan path to work from.
+export async function listDeckTalks(): Promise<DeckTalk[]> {
+  const talks = await listAllTalks();
+  const out: DeckTalk[] = [];
+  for (const talk of talks) {
+    const settled = talk.decisions.filter((d) => d.include).length;
+    if (settled === 0) {
+      let usable = false;
+      for (const m of talk.materials) {
+        if (await bookHasNotes(m.bookId)) {
+          usable = true;
+          break;
+        }
+      }
+      if (!usable) continue;
+    }
+    out.push({ talkId: talk.id, name: talk.name, topicId: talk.topicId, settled });
   }
-  const rehearsed = new Set(await listRehearsedBooks());
-  const candidates = new Set(rehearsed);
-  for (const e of entries) {
-    if (e.isDirectory && e.name?.startsWith("notes-")) candidates.add(e.name.slice("notes-".length));
-  }
-  const out: TalkBook[] = [];
-  for (const bookId of candidates) {
-    if (!rehearsed.has(bookId) && !(await bookHasNotes(bookId))) continue;
-    const entry = await getLibraryEntry(bookId);
-    out.push({ bookId, title: entry?.title ?? bookId, rehearsed: rehearsed.has(bookId) });
-  }
-  out.sort((a, b) => a.title.localeCompare(b.title));
   return out;
 }
 
@@ -146,24 +147,17 @@ async function planMaterial(bookId: string): Promise<PlanBook> {
   return { bookId, title, overview, chapters, figures };
 }
 
-// Getting this talk's settled decisions: the one place the deck pipeline asks
-// for them, and the only place that knows they are keyed by book. The decisions
-// are moving to being keyed by the talk instead, at which point this function is
-// what changes — everything downstream of it works on the TalkOutline shape,
-// where each entry already says which book and which chapter it came from.
+// This talk's settled outline: the one place the deck pipeline reads it, and the
+// only place that knows where a talk lives. Everything downstream works on the
+// TalkOutline shape, where each entry already says which material and which
+// chapter it came from and the order is the talk's.
 //
-// Null means no material in this talk was rehearsed, which is what puts the plan
-// stage back on its old path. Read fresh per run rather than cached across a
-// talk's lifetime: the reader may go back into rehearsal and change their mind.
-export async function readTalkOutline(bookIds: readonly string[]): Promise<TalkOutline | null> {
-  const sources = await Promise.all(
-    bookIds.map(async (bookId) => ({
-      bookId,
-      title: (await getLibraryEntry(bookId))?.title ?? bookId,
-      plan: await loadRehearsalPlan(bookId),
-    })),
-  );
-  return buildTalkOutline(sources);
+// Null means the talk has settled nothing, which is what puts the plan stage
+// back on its old path. Read fresh per run rather than cached across the deck's
+// lifetime: the reader goes back into the rehearsal and changes their mind, and
+// the next re-run has to see that.
+export async function readDeckOutline(talkId: string): Promise<TalkOutline | null> {
+  return buildTalkOutline(await loadTalk(talkId));
 }
 
 interface GatheredNotes {
@@ -248,18 +242,18 @@ function imageDeps(signal: AbortSignal): ImageGenDeps {
 }
 
 function makeDeps(talkId: string, bookIds: string[], instruction: string): SlidesDeps {
-  // One read of the decision files per pipeline instance, shared by the plan and
-  // content stages of that run.
+  // One read of the talk per pipeline instance, shared by the plan and content
+  // stages of that run.
   let outlineOnce: Promise<TalkOutline | null> | null = null;
-  const outline = () => (outlineOnce ??= readTalkOutline(bookIds));
+  const outline = () => (outlineOnce ??= readDeckOutline(talkId));
 
   return {
     async buildPlan(opts) {
       const model = await resolveModel("prep");
       const books = await Promise.all(bookIds.map(planMaterial));
-      // A rehearsed book's outline is the deck's skeleton (docs/31). The plan
-      // call then only pages it out; with no decision file anywhere, the model
-      // designs the outline from the chapter list as before.
+      // The talk's outline is the deck's skeleton (docs/31). The plan call then
+      // only pages it out; with nothing settled, the model designs the outline
+      // from the chapter list as before.
       const settled = await outline();
       const text = await callModel(
         "prep",
@@ -384,14 +378,25 @@ function makeDeps(talkId: string, bookIds: string[], instruction: string): Slide
 
 let current: SlidesPipeline | null = null;
 
-// Start a new talk: a fresh pipeline over the chosen books + instruction, with
-// its own directory under slides/. Returns the pipeline so the UI can subscribe.
-export function startTalk(bookIds: string[], instruction: string): SlidesPipeline {
-  const createdAt = Date.now();
-  const talkId = `${createdAt}`;
+// Build this talk's deck: a fresh pipeline over the talk's materials, under the
+// talk's own id. The instruction is a steer on top of the settled outline
+// (theme, audience, length), not the description of the talk — the talk already
+// says what it is.
+//
+// Starting again on a talk that already has a deck re-plans it from scratch,
+// which is what the reader asked for by pressing it; the finer-grained re-runs
+// (one page, one image, re-assemble) are on the pipeline itself. Null when the
+// talk is gone.
+export async function startDeck(
+  talkId: string,
+  instruction: string,
+): Promise<SlidesPipeline | null> {
+  const talk = await loadTalk(talkId);
+  if (!talk) return null;
+  const bookIds = talk.materials.map((m) => m.bookId);
   const pipeline = SlidesPipeline.create(makeDeps(talkId, bookIds, instruction), {
     talkId,
-    createdAt,
+    createdAt: Date.now(),
     instruction,
     bookIds,
   });
@@ -400,10 +405,10 @@ export function startTalk(bookIds: string[], instruction: string): SlidesPipelin
   return pipeline;
 }
 
-// Re-attach to a talk that is already on disk: a run a restart interrupted, or a
-// finished deck whose pages the user wants to re-run. The caller decides what to
-// run (resume, one page, re-assemble) — reopening by itself spends nothing.
-export async function openTalk(talkId: string): Promise<SlidesPipeline | null> {
+// Re-attach to a deck that is already on disk: a run a restart interrupted, or a
+// finished deck whose pages the reader wants to re-run. The caller decides what
+// to run (resume, one page, re-assemble) — reopening by itself spends nothing.
+export async function openDeck(talkId: string): Promise<SlidesPipeline | null> {
   if (current?.snapshot().state.id === talkId) return current;
   const state = await loadSlidesState(talkId);
   if (!state) return null;
@@ -415,18 +420,17 @@ export async function openTalk(talkId: string): Promise<SlidesPipeline | null> {
   return pipeline;
 }
 
-// The current/last talk pipeline, if any (lets the UI re-attach after a remount).
-export function getCurrentTalk(): SlidesPipeline | null {
+// The current/last deck pipeline, if any (lets the UI re-attach after a remount).
+export function getCurrentDeck(): SlidesPipeline | null {
   return current;
 }
 
-// Every talk with a state on disk, newest first: what the dialog can resume or
-// re-run.
-export function listTalkStates(): Promise<SlidesState[]> {
+// Every deck with a state on disk, newest first.
+export function listDeckStates(): Promise<SlidesState[]> {
   return listSlidesStates();
 }
 
 // The generated-deck registry, newest first, for the UI list.
-export async function listTalks(): Promise<TalkEntry[]> {
+export async function listDecks(): Promise<TalkEntry[]> {
   return (await loadTalks()).slice().reverse();
 }

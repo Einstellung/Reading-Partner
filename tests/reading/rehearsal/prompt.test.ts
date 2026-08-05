@@ -9,8 +9,7 @@ import {
   type RehearsalContext,
 } from "../../../src/reading/rehearsal/prompt";
 import { bucketMarks } from "../../../src/reading/rehearsal/marks";
-import { createPlan, upsertDecision } from "../../../src/reading/rehearsal/plan";
-import type { Skeleton } from "../../../src/reading/rehearsal/types";
+import type { RehearsalPlan, Skeleton } from "../../../src/reading/rehearsal/types";
 
 const skeleton: Skeleton = {
   source: "notes-plan",
@@ -81,13 +80,20 @@ test("the reading position is labelled as not being the rehearsal's position", (
 });
 
 test("a recorded decision moves the prompt on to the next chapter", () => {
-  const plan = upsertDecision(createPlan("book", 1), {
-    chapter: 1,
-    title: "Openings",
-    include: true,
-    points: ["the 1962 data does the work"],
+  const plan: RehearsalPlan = {
+    version: 1,
+    createdAt: 1,
     updatedAt: 2,
-  });
+    decisions: [
+      {
+        chapter: 1,
+        title: "Openings",
+        include: true,
+        points: ["the 1962 data does the work"],
+        updatedAt: 2,
+      },
+    ],
+  };
   const text = buildRehearsalSystemPrompt(ctx({ plan }));
   expect(text).toContain("Chapter 1. Openings — in the talk");
   expect(text).toContain("Next up: chapter 2");

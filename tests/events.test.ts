@@ -17,13 +17,13 @@ test("logger appends per topic with the injected clock; payload defaults empty",
   }, () => 42);
 
   log("topic-a", "call-start", { threadId: "t1" });
-  log("topic-b", "memory-tab-open");
+  log("topic-b", "notes-tab-open");
   await Promise.resolve();
 
   expect(appended).toHaveLength(2);
   expect(appended[0].topicId).toBe("topic-a");
   expect(JSON.parse(appended[0].line)).toEqual({ ts: 42, type: "call-start", threadId: "t1" });
-  expect(JSON.parse(appended[1].line)).toEqual({ ts: 42, type: "memory-tab-open" });
+  expect(JSON.parse(appended[1].line)).toEqual({ ts: 42, type: "notes-tab-open" });
 });
 
 test("a failing append never throws out of the logger", async () => {

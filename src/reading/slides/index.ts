@@ -35,15 +35,13 @@ export {
   applyTalkOutline,
   buildTalkOutline,
   citableWithOutline,
-  outlineFor,
+  entriesFor,
   outlinePlanSystemPrompt,
   outlinePlanUserMessage,
   readerPointsFor,
   SLIDES_OUTLINE_PLAN_SYSTEM_PROMPT,
-  type BookOutline,
   type OutlineCut,
   type OutlineEntry,
-  type OutlineSource,
   type TalkOutline,
 } from "./outline";
 export { contentSystemPrompt, contentUserMessage, sanitizeFragment } from "./content";
@@ -71,13 +69,13 @@ export {
   type SlidesSnapshot,
 } from "./pipeline";
 export {
-  getCurrentTalk,
-  listTalkBooks,
-  listTalks,
-  listTalkStates,
-  openTalk,
-  readTalkOutline,
-  startTalk,
-  type TalkBook,
+  getCurrentDeck,
+  listDecks,
+  listDeckStates,
+  listDeckTalks,
+  openDeck,
+  readDeckOutline,
+  startDeck,
+  type DeckTalk,
 } from "./live";
 export { deckFile, loadTalks, SLIDES_DIR } from "./store";

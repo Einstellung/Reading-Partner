@@ -65,6 +65,7 @@ const LAYER: Record<string, Layer> = {
   "reading/rehearsal": "domain",
   "reading/slides": "domain",
   "reading/sources": "domain",
+  "reading/talks": "domain",
 
   ui: "ui",
   "ui/components": "ui",

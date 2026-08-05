@@ -8,6 +8,11 @@
 // A topic has a sidebar down its left (docs/31, "界面"): Materials, Talks,
 // Memory. Which section is showing and whether the sidebar is open live here —
 // they are view state of this screen and nothing above it reads them.
+//
+// An open talk replaces the whole topic while it lasts (the same move the saved
+// article reader makes), so entering one needs no route and leaving it puts the
+// topic back as it was. A talk runs on material read from disk, so nothing above
+// this screen has to know a rehearsal is happening.
 
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -19,6 +24,7 @@ import {
   type FileRef,
   type Topic,
 } from "../../../platform/app/topics";
+import { logEvent } from "../../../platform/app/events";
 import { getViewState } from "../../../platform/app/storage";
 import { getFulltext } from "../../../fulltext";
 import { loadAnnotations } from "../../../platform/app/annotations";
@@ -29,6 +35,8 @@ import {
   savedArticlesForTopic,
   type SavedArticle,
 } from "../../../reading/saved-articles";
+import { startTalk } from "../../../reading/talks";
+import TalkView from "../talk/TalkView";
 import { Button } from "../ui/button";
 import BookCard from "./BookCard";
 import { ADD_CARD, ADD_CARD_BOX, CARD_LABEL, LIBRARY_GRID, LIBRARY_PAGE } from "./cardStyles";
@@ -80,6 +88,9 @@ export default function LibraryScreen(props: {
   // closed. The section resets to Materials with every topic — a topic is
   // entered to read, and Talks is where you go on purpose.
   const [section, setSection] = useState<TopicSection>(DEFAULT_SECTION);
+  // The talk being prepared, if any. Nothing else on this screen changes while
+  // one is open, so leaving it is one setState.
+  const [openTalkId, setOpenTalkId] = useState<string | null>(null);
   const [navOpen, setNavOpen] = useState(() =>
     readNavOpen(browserNavStore(window), readNavEnv(window)),
   );
@@ -91,7 +102,24 @@ export default function LibraryScreen(props: {
   }, []);
   useEffect(() => {
     setSection(DEFAULT_SECTION);
+    setOpenTalkId(null);
   }, [activeTopic?.id]);
+
+  // Rehearse one book: a talk of its own, entered straight away (docs/31 — the
+  // entry is in the topic, on the material). A file with no book id has nothing
+  // on disk to rehearse from, so the card does not offer it.
+  const startTalkOn = useCallback(
+    async (file: FileRef) => {
+      if (!activeTopic || !file.hash) return;
+      const talk = await startTalk({
+        topicId: activeTopic.id,
+        materials: [{ bookId: file.hash, title: displayFileTitle(file.name) }],
+      });
+      logEvent(activeTopic.id, "talk-start", { talkId: talk.id, materials: 1 });
+      setOpenTalkId(talk.id);
+    },
+    [activeTopic],
+  );
 
   // Reloaded whenever the open topic changes: a keep that happened while the
   // reader was over in the briefing has to show up here.
@@ -110,6 +138,17 @@ export default function LibraryScreen(props: {
 
   if (openSavedArticle) {
     return <SavedArticleView article={openSavedArticle} onBack={() => setOpenSavedArticle(null)} />;
+  }
+
+  if (activeTopic && openTalkId) {
+    return (
+      <TalkView
+        key={openTalkId}
+        talkId={openTalkId}
+        topicName={activeTopic.name}
+        onBack={() => setOpenTalkId(null)}
+      />
+    );
   }
 
   // One topic: the sidebar beside a column that scrolls. The sidebar is a column
@@ -135,13 +174,14 @@ export default function LibraryScreen(props: {
             <div className={LIBRARY_PAGE}>
               <h1 className={PAGE_TITLE}>{activeTopic.name}</h1>
               {section === "talks" ? (
-                <TalksSection topic={activeTopic} />
+                <TalksSection topic={activeTopic} onOpenTalk={setOpenTalkId} />
               ) : (
                 <TopicMaterials
                   topic={activeTopic}
                   savedArticles={savedArticles}
                   onAddFile={props.onAddFile}
                   onOpenFile={props.onOpenFile}
+                  onRehearse={(f) => void startTalkOn(f)}
                   onRemoveFile={async (p) => {
                     await removeFileFromTopic(activeTopic.id, p);
                     await props.onTopicsChanged();
@@ -317,6 +357,8 @@ function TopicMaterials(props: {
   savedArticles: SavedArticle[];
   onAddFile: () => void;
   onOpenFile: (file: FileRef) => void;
+  // Start a talk about this one book and go straight into it.
+  onRehearse: (file: FileRef) => void;
   onRemoveFile: (path: string) => void;
   onOpenSavedArticle: (article: SavedArticle) => void;
   onRemoveSavedArticle: (id: string) => void;
@@ -373,6 +415,7 @@ function TopicMaterials(props: {
               file={f}
               meta={meta[f.path]}
               onOpen={() => props.onOpenFile(f)}
+              onRehearse={f.hash ? () => props.onRehearse(f) : undefined}
               onRemove={() => setRemoving(f)}
             />
           ))}
