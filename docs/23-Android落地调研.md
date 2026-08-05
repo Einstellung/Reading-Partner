@@ -94,7 +94,9 @@ NDK 从 spike 的 `26.3.11579264` 换成 `28.2.13676358`(r28c)。理由是 16 KB
 
 `android-apk.yml` 同时是 `workflow_call`,`release.yml` 打 tag 时把它当第四个平台调,`secrets: inherit`,`needs: app`。desktop 那三个包由 `tauri-apps/tauri-action` 出,顺手建那份 draft release —— release 是它建的,所以 APK 这一步必须排在它后面,建完才有东西可挂。挂的动作是 `gh release upload <tag> <apk> --clobber`;`gh` 认 draft release 的 tag 名(实测过一次:建一个 draft、传一个文件、再传一次覆盖,都成,`isDraft: true`)。没有 tag 时(`workflow_dispatch`、push)`release_tag` 是空的,那一步跳过,APK 只留在 workflow artifact 里 —— run 30972780114 实测就是 skipped。APK 只构建一次,不复制第二条产线。
 
-没验的只剩一件事:整条 `release.yml` 从 tag 触发跑通。`workflow_call` 的传参、`needs` 的次序、`gh release upload` 认 draft、没 tag 时跳过,四件分别验过,但四件串起来只有真打一个 tag 才知道。
+这条线分开验过四件:`gh release upload` 认 draft 的 tag 名;没 tag 时那一步 skipped(run 30972780114);`release.yml` 在 android-spike 上 `workflow_dispatch` 一次,GitHub 把 `android` 解析成了真的一个 job 并挂在 `needs: app` 后面(run 30973489551,起来几秒就取消掉了,desktop 那三条没跑完,也没建出 release);APK 本身出货。没验的是把这四件串起来:tag 触发、`release_tag` 真的非空、挂到 tauri-action 刚建的那份 draft 上。要知道只有真打一个 tag。
+
+还有一条形状上的取舍:`needs: app` 意味着 desktop 三个平台里任何一个红了,APK 这一步就不跑。draft release 仍然在(先跑完的那条腿建的),但里面没有 APK。
 
 Android 的构建不注入任何 `VITE_GOOGLE_*`。`selectAuthFlow()` 没有 android 分支,把 desktop client 烤进去等于让 Android 走一条没人跑过的 loopback;不注入就是 Settings > Sync 显示"Google client not configured",按钮禁用。等 OAuth 路线拍板再说。
 
@@ -165,7 +167,7 @@ WebView 侧按 Google 自己的[文档](https://developer.android.com/develop/ui
 
 少一个已经答过的风险点,不是少一半工作量。
 
-引擎闸门 2026-07-24 就在 Android 模拟器上绿过了 —— PDFium WASM 能不能在 Android WebView 里渲染,不是未知数,是已知的"能"。真正贵的是触摸那一大摊(坑 37-46、50、56-63 全是引擎和手势,几乎全在 iPad 上一条条踩出来的),而那本来就不在手机形态的范围里。
+引擎闸门在 Android 模拟器上绿过两次(2026-07-24、2026-08-05)—— PDFium WASM 能不能在 Android WebView 里渲染,不是未知数,是已知的"能"。真正贵的是触摸那一大摊(坑 37-46、50、56-63 全是引擎和手势,几乎全在 iPad 上一条条踩出来的),而那本来就不在手机形态的范围里。
 
 包体积一分没省:外壳是运行时按宽度选的,`pdfium.wasm`(4.6 MB)还在包里。docs/22 已经写了这条,Android 上同样成立。
 
