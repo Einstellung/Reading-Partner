@@ -3,9 +3,11 @@
 // already has) and the decisions the rehearsal produces (one per chapter: does
 // it go in the talk, what does it contribute, which figure carries it).
 //
-// The skeleton is derived and never stored — it is rebuilt from the notes plan
-// or the PDF outline each turn. The decisions are not derivable from anything,
-// so they are the file: rehearsal-<bookId>.json, in sync range.
+// Both are derived here and neither is stored here. The skeleton is rebuilt from
+// the notes plan or the PDF outline each turn. The decisions are the one thing
+// nothing can rebuild, and they belong to the talk rather than to any one book
+// (reading/talks): this module only says what one looks like and how a set of
+// them reads back to the model.
 
 export const REHEARSAL_VERSION = 1 as const;
 
@@ -60,10 +62,11 @@ export interface RehearsalDecision {
   updatedAt: number;
 }
 
-// The decision file. Ordered by chapter, one entry per chapter at most.
+// The record of a rehearsal so far, as the prompt reads it: one entry per
+// chapter at most, in the order the talk will be given. It carries no id of its
+// own — it is a projection of the talk that owns it (reading/talks/outline.ts).
 export interface RehearsalPlan {
   version: typeof REHEARSAL_VERSION;
-  bookId: string;
   createdAt: number;
   updatedAt: number;
   decisions: RehearsalDecision[];

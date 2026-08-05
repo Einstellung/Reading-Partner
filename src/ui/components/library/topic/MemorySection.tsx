@@ -1,6 +1,8 @@
 // The Memory section of a topic (docs/31, "界面"). Memory has always been stored
-// per topic (docs/02, src/memory), so this is where it belongs; the reader's
-// Memory tab keeps working unchanged until the review mode lands.
+// per topic (docs/02, src/memory), so this is where it belongs, and it is the
+// only place it shows: the reader's sidebar used to carry a second copy keyed to
+// whichever topic the open book was in, and two views of one thing is one too
+// many.
 //
 // It loads its own entries rather than taking them from the shell: the topic is
 // the only input, and the reader's copy is keyed to whichever topic the open
