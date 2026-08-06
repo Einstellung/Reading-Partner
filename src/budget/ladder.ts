@@ -24,7 +24,7 @@ export type ReductionId =
   | "reader-profile"
   | "notes-overview"
   | "booklist-thin"
-  | "memory-trim"
+  | "observation-trim"
   | "rehearsal-notes"
   | "tool-result-stubs"
   | "classroom-inline"
@@ -45,7 +45,7 @@ export const LADDER: readonly Rung[] = [
   { id: "reader-profile" },
   { id: "notes-overview" },
   { id: "booklist-thin" },
-  { id: "memory-trim" },
+  { id: "observation-trim" },
   // tier 2: gone from the prompt, still reachable by a tool, and the stub says so.
   // The rehearsal's inlined chapter note goes before the tool results: the model
   // asked for those and is working from them, while the note was put in front of

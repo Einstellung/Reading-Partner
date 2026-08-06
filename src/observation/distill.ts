@@ -1,7 +1,7 @@
 // Distillation (docs/02 part 2, write side): a silent sub-agent run over a
-// finished conversation's transcript that curates the topic memory through the
-// memory tools. Triggered on hangup, with a fallback when the replayed history is
-// trimmed (see live.ts / App).
+// finished conversation's transcript that curates the topic's observations
+// through the observation tools. Triggered on hangup, with a fallback when the
+// replayed history is trimmed (see live.ts / App).
 //
 // This was the codebase's first isolated silent run and predates the capability
 // that now describes the shape (docs/25). It runs on `runSubagent` for the three
@@ -20,10 +20,10 @@ import {
   type SubagentOutcome,
   type SubagentTurnFn,
 } from "../ai/subagent";
-import type { MemoryAdapter } from "./adapter";
+import type { ObservationAdapter } from "./adapter";
 import { isoDate } from "./files";
-import type { MemoryMeta } from "./store";
-import { buildMemoryTools, type MemoryWriteAction } from "./tools";
+import type { ObservationMeta } from "./store";
+import { buildObservationTools, type ObservationWriteAction } from "./tools";
 
 export interface DistillMessage {
   role: "user" | "ai";
@@ -49,7 +49,7 @@ export interface DistillInput {
   page: number | null; // 1-based, where the thread's mark sits
   markedText: string;
   messages: DistillMessage[];
-  // The current memory index text (what "update, don't duplicate" checks against).
+  // The current observation index (what "update, don't duplicate" checks against).
   indexText: string;
   today: string; // YYYY-MM-DD, so the model writes absolute dates
   // The reader's silent marks since the last distillation, already filtered and
@@ -81,7 +81,7 @@ export function selectSilentMarks(
 }
 
 // The silent-marks block for the user message, or "" when there are none. Framed
-// as a pattern signal, with annotation ids so a memory can anchor to them.
+// as a pattern signal, with annotation ids so an observation can anchor to them.
 export function formatSilentMarks(marks: DistillAnnotation[], capped: boolean): string {
   if (marks.length === 0) return "";
   const lines = [
@@ -128,17 +128,17 @@ export interface DistillResult {
   // The sub-agent's own sentence about why the pass did not finish. Set only when
   // ok is false, and this is the only use the brief's text has here: a pass that
   // did finish ends with the word "done" (the prompt asks for it) and its product
-  // is the memory writes, so that text is discarded. Do not start relaying it —
-  // there is no reader-facing place for a memory bookkeeping message.
+  // is the observation writes, so that text is discarded. Do not start relaying
+  // it — there is no reader-facing place for a bookkeeping message.
   failure?: string;
 }
 
 // The sub-agent's name, which is what its honest-failure sentences are about
-// ("The memory_distiller sub-agent could not complete: …"). Lowercase with
+// ("The observation_distiller sub-agent could not complete: …"). Lowercase with
 // underscores, like every other tool name in the app (docs/24).
-export const DISTILL_AGENT_NAME = "memory_distiller";
+export const DISTILL_AGENT_NAME = "observation_distiller";
 
-// Model turns one pass may spend: read the index, make its memory_update calls,
+// Model turns one pass may spend: read the index, make its observation_update calls,
 // finish. The same cap the agent loop's default gave this pass before it moved
 // onto the capability, kept rather than dropped to the capability's 6 because
 // nobody is waiting on a background pass and a curation run that reads before it
@@ -151,7 +151,7 @@ export const DISTILL_MAX_ROUNDS = 8;
 export const DISTILL_BRIEF_TOKENS = 200;
 
 // The distiller as a sub-agent definition: the prompt, the tools and the caps are
-// the memory domain's, the loop and the failure mapping are the capability's.
+// the observation domain's, the loop and the failure mapping are the capability's.
 //
 // `evidence` is "optional", and this is the one field here that would do real
 // damage at its default. The default is "required" as soon as tools are mounted,
@@ -174,8 +174,8 @@ export function buildDistillAgent(
     // on hangup and on a trimmed history. Nothing reads these two lines, and the
     // label is here because the type asks for one — no progress is subscribed to,
     // since a silent pass has nothing to show the reader.
-    description: "Curate this topic's long-term memory from a finished conversation.",
-    label: "Distilling memory",
+    description: "Curate this topic's observations from a finished conversation.",
+    label: "Distilling observations",
     systemPrompt: buildDistillSystemPrompt(input),
     tools,
     maxRounds: DISTILL_MAX_ROUNDS,
@@ -187,13 +187,14 @@ export function buildDistillAgent(
 
 export function buildDistillSystemPrompt(input: DistillInput): string {
   return [
-    "You are the memory keeper of a reading companion. A conversation with the",
-    "reader just ended; distill from its transcript what is worth remembering",
-    "about the reader into this topic's long-term memory, using the memory tools.",
+    "You keep a reading companion's observations of its reader. A conversation",
+    "with the reader just ended; distill from its transcript what is worth",
+    "observing about the reader into this topic's observations, using the",
+    "observation tools.",
     "This is a silent background pass: the reader sees nothing. Make your tool",
     'calls, then finish with the single word "done".',
     "",
-    "Memory types (one fact per memory):",
+    "Observation types (one fact per observation):",
     "- reading-position: where the reader is in a material",
     "- stuck-point: something the reader is stuck on or confused by",
     "- understood-concept: something the reader has worked out",
@@ -201,31 +202,33 @@ export function buildDistillSystemPrompt(input: DistillInput): string {
     "- correction: the reader corrected you or the material",
     "",
     "Curation rules:",
-    "- Update, don't duplicate: when the index below already has a related memory,",
-    "  update it (memory_update action \"update\") instead of creating another.",
+    "- Update, don't duplicate: when the index below already has a related",
+    "  observation, update it (observation_update action \"update\") instead of",
+    "  creating another.",
     "- Delete what turned out wrong.",
-    "- On contradiction with an existing memory (e.g. the reader was stuck and now",
-    "  gets it), never silently drop the old state: rewrite that memory as an",
-    '  evolution — "was stuck on X, resolved on <date>" — so both states stay visible.',
+    "- On contradiction with an existing observation (e.g. the reader was stuck and",
+    "  now gets it), never silently drop the old state: rewrite that observation as",
+    '  an evolution — "was stuck on X, resolved on <date>" — so both states stay visible.',
     `- Write absolute dates (today is ${input.today}); never "recently" or "last week".`,
     "- Record only what cannot be re-derived from the book or the reader's",
     "  annotations: their understanding, confusions, beliefs, corrections, and where",
-    "  they are. Do not copy book content or annotation text into memory.",
-    "- Anchor evidence: pass the annotation id and the message ids a memory came from.",
+    "  they are. Do not copy book content or annotation text into an observation.",
+    "- Anchor evidence: pass the annotation id and the message ids an observation",
+    "  came from.",
     "- A short or shallow conversation may yield nothing worth keeping; making no",
     "  tool call at all is a fine outcome.",
     ...((input.silentMarks?.length ?? 0) > 0
       ? [
           "- Silent marks: the message below lists marks the reader made since the last",
           "  distillation, most without any conversation. Judge whether they show a",
-          "  PATTERN worth remembering (what the reader keeps marking, which themes or",
-          "  pages they lingered on). If so, write ONE aggregated memory (usually",
+          "  PATTERN worth recording (what the reader keeps marking, which themes or",
+          "  pages they lingered on). If so, write ONE aggregated observation (usually",
           "  understood-concept, belief, or stuck-point, as fits) anchored to those",
-          "  annotation ids — never one memory per mark. Recording nothing is fine.",
+          "  annotation ids — never one observation per mark. Recording nothing is fine.",
         ]
       : []),
     "",
-    "Current memory index for this topic:",
+    "Current observation index for this topic:",
     input.indexText.trim() || "(empty)",
   ].join("\n");
 }
@@ -252,12 +255,12 @@ export function buildDistillUserMessage(input: DistillInput): string {
 // the capability); every other way of not finishing comes back in `ok`.
 export async function runDistillation(
   input: DistillInput,
-  adapter: MemoryAdapter,
+  adapter: ObservationAdapter,
   deps: DistillDeps,
 ): Promise<DistillResult> {
   const counts = { created: 0, updated: 0, deleted: 0 };
-  const tools = buildMemoryTools(adapter, {
-    onWrite: (action: MemoryWriteAction) => {
+  const tools = buildObservationTools(adapter, {
+    onWrite: (action: ObservationWriteAction) => {
       if (action === "create") counts.created++;
       else if (action === "update") counts.updated++;
       else counts.deleted++;
@@ -289,17 +292,17 @@ export async function runDistillation(
 
 // --- one pass over a thread, with the timestamp discipline ---
 
-// What a pass needs of the topic's memory store. Narrow so the discipline below
-// runs against a fake fs in tests.
+// What a pass needs of the topic's observation store. Narrow so the discipline
+// below runs against a fake fs in tests.
 export interface DistillPassStore {
-  getMeta(): Promise<MemoryMeta>;
-  setMeta(meta: MemoryMeta): Promise<void>;
+  getMeta(): Promise<ObservationMeta>;
+  setMeta(meta: ObservationMeta): Promise<void>;
   readIndexText(): Promise<string>;
 }
 
 export interface DistillPassDeps extends DistillDeps {
   store: DistillPassStore;
-  adapter: MemoryAdapter;
+  adapter: ObservationAdapter;
   now?: () => number;
 }
 
@@ -319,8 +322,8 @@ export interface DistillPassInput {
 
 // Assemble the input, run the pass, and advance the two timestamps only if it
 // finished. Both stamps are one decision: they say what has already been folded
-// into memory, so moving them after a pass that did not write is how a
-// conversation silently loses its memory for good.
+// into the observations, so moving them after a pass that did not write is how a
+// conversation silently loses its observations for good.
 export async function runDistillPass(
   input: DistillPassInput,
   deps: DistillPassDeps,

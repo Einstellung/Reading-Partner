@@ -1,16 +1,16 @@
 // The pure reading-episode signal builder (src/observation/assemble.ts): it distills
-// per-topic memory indexes into a short, recency-ordered plain-text summary of
+// per-topic observation indexes into a short, recency-ordered plain-text summary of
 // what the reader is reading and stuck on, honoring a character budget. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { assembleReadingSignal, type TopicMemorySignal } from "../../src/observation/assemble";
-import type { MemoryIndexEntry } from "../../src/observation/types";
+import { assembleReadingSignal, type TopicObservationSignal } from "../../src/observation/assemble";
+import type { ObservationIndexEntry } from "../../src/observation/types";
 
 function e(
-  type: MemoryIndexEntry["type"],
+  type: ObservationIndexEntry["type"],
   summary: string,
   updated: string,
-): MemoryIndexEntry {
+): ObservationIndexEntry {
   return { id: `m-${summary.slice(0, 4)}`, type, summary, updated };
 }
 
@@ -20,7 +20,7 @@ test("empty input yields an empty signal", () => {
 });
 
 test("groups reading positions and stuck points under labeled sections", () => {
-  const topics: TopicMemorySignal[] = [
+  const topics: TopicObservationSignal[] = [
     {
       topicName: "Embodied AI",
       entries: [
@@ -36,8 +36,8 @@ test("groups reading positions and stuck points under labeled sections", () => {
   expect(out).toContain("- Embodied AI: confused about the value of world models");
 });
 
-test("ignores memory types that are not part of the signal", () => {
-  const topics: TopicMemorySignal[] = [
+test("ignores observation types that are not part of the signal", () => {
+  const topics: TopicObservationSignal[] = [
     {
       topicName: "T",
       entries: [
@@ -51,7 +51,7 @@ test("ignores memory types that are not part of the signal", () => {
 });
 
 test("newest entries win under a tight budget, oldest dropped", () => {
-  const topics: TopicMemorySignal[] = [
+  const topics: TopicObservationSignal[] = [
     {
       topicName: "T",
       entries: [
@@ -66,7 +66,7 @@ test("newest entries win under a tight budget, oldest dropped", () => {
 });
 
 test("at least one line survives even when it exceeds the budget", () => {
-  const topics: TopicMemorySignal[] = [
+  const topics: TopicObservationSignal[] = [
     { topicName: "T", entries: [e("reading-position", "a very long reading position line", "2026-07-22")] },
   ];
   const out = assembleReadingSignal(topics, { budget: 5 });
@@ -74,7 +74,7 @@ test("at least one line survives even when it exceeds the budget", () => {
 });
 
 test("skips blank summaries and empty topic names fall back to Untitled", () => {
-  const topics: TopicMemorySignal[] = [
+  const topics: TopicObservationSignal[] = [
     {
       topicName: "  ",
       entries: [e("reading-position", "position here", "2026-07-22"), e("stuck-point", "   ", "2026-07-22")],

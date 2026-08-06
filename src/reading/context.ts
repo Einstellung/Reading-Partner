@@ -82,12 +82,12 @@ export function toolStatusLabel(name: string, args: Record<string, any>): string
     // gains a round count from researchStatusLabel once the run is under way.
     case RESEARCH_TOOL_NAME:
       return RESEARCH_LABEL;
-    case "memory_search":
-      return `Searching memory for “${args.query}”`;
-    case "memory_read":
-      return "Reading a memory";
-    case "memory_update":
-      return args.action === "delete" ? "Forgetting a memory" : "Updating memory";
+    case "observation_search":
+      return `Searching its observations for “${args.query}”`;
+    case "observation_read":
+      return "Reading an observation";
+    case "observation_update":
+      return args.action === "delete" ? "Dropping an observation" : "Updating an observation";
     default:
       return `Running ${name}`;
   }

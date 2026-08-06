@@ -1,39 +1,42 @@
-// Per-topic memory store over an injected filesystem, so the whole write path
-// runs headless in tests (live.ts binds the Tauri fs). Layout, one directory
-// per topic under AppData:
-//   memory-<topicId>/<id>.md   — one memory per file (frontmatter + body)
-//   memory-<topicId>/index.md  — one line per memory; what gets loaded into context
+// Per-topic observation store over an injected filesystem, so the whole write
+// path runs headless in tests (live.ts binds the Tauri fs). Layout, one
+// directory per topic under AppData:
+//   memory-<topicId>/<id>.md   — one observation per file (frontmatter + body)
+//   memory-<topicId>/index.md  — one line per observation; loaded into context
 //   memory-<topicId>/meta.json — bookkeeping (when the last distillation ran)
+// The "memory-" prefix is the historical on-disk name, kept deliberately: the
+// feature was renamed to AI observations on 2026-08-06 but the directories hold
+// real synced data, so the paths and the meta.json field names never moved.
 // The entry files are the source of truth; the index is derived and rebuilt
-// after every mutation (a topic holds tens of memories, not thousands).
+// after every mutation (a topic holds tens of observations, not thousands).
 
 import {
   buildIndex,
   isoDate,
   oneLine,
   parseIndex,
-  parseMemory,
-  serializeMemory,
+  parseObservation,
+  serializeObservation,
 } from "./files";
 import type {
   EvidenceAnchors,
-  MemoryEntry,
-  MemoryIndexEntry,
-  MemoryPatch,
+  Observation,
+  ObservationIndexEntry,
+  ObservationPatch,
   RetainInput,
 } from "./types";
 
 // The few fs operations the store needs, relative paths under the app data dir.
-export interface MemoryFs {
+export interface ObservationFs {
   read(path: string): Promise<string | null>; // null when missing
   write(path: string, content: string): Promise<void>;
   remove(path: string): Promise<void>;
   listDir(path: string): Promise<string[]>; // file names; [] when the dir is missing
 }
 
-export interface MemoryMeta {
+export interface ObservationMeta {
   lastDistilledAt: number | null;
-  // When the reader's silent marks were last folded into memory (docs/02 part 2).
+  // When the reader's silent marks were last folded in (docs/02 part 2).
   // Distillation gathers annotations created after this, then advances it.
   lastAnnotationDistillAt: number | null;
 }
@@ -51,14 +54,15 @@ function normalizeAnchors(a?: Partial<EvidenceAnchors>): EvidenceAnchors {
   };
 }
 
-export class MemoryFileStore {
+export class ObservationFileStore {
   private dir: string;
 
   constructor(
     topicId: string,
-    private fs: MemoryFs,
+    private fs: ObservationFs,
     private now: () => number = Date.now,
   ) {
+    // Historical directory name, not a leftover: see the header.
     this.dir = `memory-${topicId}`;
   }
 
@@ -66,28 +70,28 @@ export class MemoryFileStore {
     return `${this.dir}/${id}.md`;
   }
 
-  async get(id: string): Promise<MemoryEntry | null> {
+  async get(id: string): Promise<Observation | null> {
     const text = await this.fs.read(this.entryPath(id));
-    return text === null ? null : parseMemory(text);
+    return text === null ? null : parseObservation(text);
   }
 
-  // All memories, read from the entry files (index-independent), newest first.
-  async list(): Promise<MemoryEntry[]> {
+  // All observations, read from the entry files (index-independent), newest first.
+  async list(): Promise<Observation[]> {
     const names = await this.fs.listDir(this.dir);
-    const entries: MemoryEntry[] = [];
+    const entries: Observation[] = [];
     for (const name of names) {
       if (!ENTRY_FILE.test(name)) continue;
       const text = await this.fs.read(`${this.dir}/${name}`);
-      const entry = text === null ? null : parseMemory(text);
+      const entry = text === null ? null : parseObservation(text);
       if (entry) entries.push(entry);
     }
     entries.sort((a, b) => b.updated.localeCompare(a.updated) || a.id.localeCompare(b.id));
     return entries;
   }
 
-  async create(input: RetainInput): Promise<MemoryEntry> {
+  async create(input: RetainInput): Promise<Observation> {
     const today = isoDate(this.now());
-    const entry: MemoryEntry = {
+    const entry: Observation = {
       id: newId(),
       type: input.type,
       summary: oneLine(input.summary),
@@ -96,7 +100,7 @@ export class MemoryFileStore {
       updated: today,
       anchors: normalizeAnchors(input.anchors),
     };
-    await this.fs.write(this.entryPath(entry.id), serializeMemory(entry));
+    await this.fs.write(this.entryPath(entry.id), serializeObservation(entry));
     await this.rebuildIndex();
     return entry;
   }
@@ -104,10 +108,10 @@ export class MemoryFileStore {
   // Update in place: `created` is preserved, `updated` bumps to today. This is
   // also the evolution path — the distiller rewrites summary/body to carry both
   // the old state and the resolution.
-  async update(id: string, patch: MemoryPatch): Promise<MemoryEntry | null> {
+  async update(id: string, patch: ObservationPatch): Promise<Observation | null> {
     const prev = await this.get(id);
     if (!prev) return null;
-    const entry: MemoryEntry = {
+    const entry: Observation = {
       ...prev,
       type: patch.type ?? prev.type,
       summary: patch.summary !== undefined ? oneLine(patch.summary) : prev.summary,
@@ -115,7 +119,7 @@ export class MemoryFileStore {
       anchors: patch.anchors !== undefined ? normalizeAnchors(patch.anchors) : prev.anchors,
       updated: isoDate(this.now()),
     };
-    await this.fs.write(this.entryPath(id), serializeMemory(entry));
+    await this.fs.write(this.entryPath(id), serializeObservation(entry));
     await this.rebuildIndex();
     return entry;
   }
@@ -132,7 +136,7 @@ export class MemoryFileStore {
     return (await this.fs.read(`${this.dir}/index.md`)) ?? "";
   }
 
-  async readIndex(): Promise<MemoryIndexEntry[]> {
+  async readIndex(): Promise<ObservationIndexEntry[]> {
     return parseIndex(await this.readIndexText());
   }
 
@@ -145,11 +149,11 @@ export class MemoryFileStore {
     );
   }
 
-  async getMeta(): Promise<MemoryMeta> {
+  async getMeta(): Promise<ObservationMeta> {
     try {
       const raw = await this.fs.read(`${this.dir}/meta.json`);
       if (raw === null) return { lastDistilledAt: null, lastAnnotationDistillAt: null };
-      const parsed = JSON.parse(raw) as Partial<MemoryMeta>;
+      const parsed = JSON.parse(raw) as Partial<ObservationMeta>;
       return {
         lastDistilledAt: parsed.lastDistilledAt ?? null,
         lastAnnotationDistillAt: parsed.lastAnnotationDistillAt ?? null,
@@ -159,7 +163,7 @@ export class MemoryFileStore {
     }
   }
 
-  async setMeta(meta: MemoryMeta): Promise<void> {
+  async setMeta(meta: ObservationMeta): Promise<void> {
     await this.fs.write(`${this.dir}/meta.json`, JSON.stringify(meta, null, 2));
   }
 }

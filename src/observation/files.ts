@@ -1,12 +1,12 @@
-// Memory file formats, pure. One memory per markdown file with a flat
+// Observation file formats, pure. One observation per markdown file with a flat
 // "key: value" frontmatter (same YAML-lite dialect as prep notes), and an index
-// file with one parseable line per memory. Parsing is tolerant: a malformed
+// file with one parseable line per observation. Parsing is tolerant: a malformed
 // file or line reads as null and is skipped by the store.
 
 import {
-  isMemoryType,
-  type MemoryEntry,
-  type MemoryIndexEntry,
+  isObservationType,
+  type Observation,
+  type ObservationIndexEntry,
 } from "./types";
 
 export function isoDate(now: number): string {
@@ -23,7 +23,7 @@ function line(key: string, value: string): string | null {
   return value === "" ? null : `${key}: ${value}`;
 }
 
-export function serializeMemory(entry: MemoryEntry): string {
+export function serializeObservation(entry: Observation): string {
   const lines = [
     line("id", entry.id),
     line("type", entry.type),
@@ -43,7 +43,7 @@ function splitList(value: string): string[] {
     .filter(Boolean);
 }
 
-export function parseMemory(text: string): MemoryEntry | null {
+export function parseObservation(text: string): Observation | null {
   const m = /^---\n([\s\S]*?)\n---\n?/.exec(text);
   if (!m) return null;
   const fields = new Map<string, string>();
@@ -54,7 +54,7 @@ export function parseMemory(text: string): MemoryEntry | null {
   }
   const id = fields.get("id") ?? "";
   const type = fields.get("type") ?? "";
-  if (!id || !isMemoryType(type)) return null;
+  if (!id || !isObservationType(type)) return null;
   return {
     id,
     type,
@@ -69,31 +69,31 @@ export function parseMemory(text: string): MemoryEntry | null {
   };
 }
 
-// --- index file: one line per memory, loaded into context as-is ---
+// --- index file: one line per observation, loaded into context as-is ---
 
-export function serializeIndexLine(e: MemoryIndexEntry): string {
+export function serializeIndexLine(e: ObservationIndexEntry): string {
   return `- [${e.type}] ${oneLine(e.summary)} (updated ${e.updated}, id ${e.id})`;
 }
 
 const INDEX_LINE = /^- \[([a-z-]+)\] (.*) \(updated (\d{4}-\d{2}-\d{2}), id ([\w-]+)\)$/;
 
-export function parseIndexLine(lineText: string): MemoryIndexEntry | null {
+export function parseIndexLine(lineText: string): ObservationIndexEntry | null {
   const m = INDEX_LINE.exec(lineText.trim());
-  if (!m || !isMemoryType(m[1])) return null;
+  if (!m || !isObservationType(m[1])) return null;
   return { type: m[1], summary: m[2], updated: m[3], id: m[4] };
 }
 
 // Newest-updated first, ties broken by id for a stable file.
-export function buildIndex(entries: MemoryIndexEntry[]): string {
+export function buildIndex(entries: ObservationIndexEntry[]): string {
   const sorted = [...entries].sort(
     (a, b) => b.updated.localeCompare(a.updated) || a.id.localeCompare(b.id),
   );
   return sorted.map(serializeIndexLine).join("\n") + (sorted.length ? "\n" : "");
 }
 
-export function parseIndex(text: string): MemoryIndexEntry[] {
+export function parseIndex(text: string): ObservationIndexEntry[] {
   return text
     .split("\n")
     .map(parseIndexLine)
-    .filter((e): e is MemoryIndexEntry => e !== null);
+    .filter((e): e is ObservationIndexEntry => e !== null);
 }

@@ -2,15 +2,15 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { buildMemorySnapshot, memoryPromptSection } from "../../src/observation/snapshot";
-import type { MemoryIndexEntry, MemoryType } from "../../src/observation/types";
+import { buildObservationSnapshot, observationPromptSection } from "../../src/observation/snapshot";
+import type { ObservationIndexEntry, ObservationType } from "../../src/observation/types";
 
-function e(type: MemoryType, summary: string, updated: string, id = "m-00000001"): MemoryIndexEntry {
+function e(type: ObservationType, summary: string, updated: string, id = "m-00000001"): ObservationIndexEntry {
   return { id, type, summary, updated };
 }
 
 test("snapshot orders sections position → stuck → understood and keeps newest first", () => {
-  const snap = buildMemorySnapshot([
+  const snap = buildObservationSnapshot([
     e("understood-concept", "got residuals", "2026-07-10", "m-cccccccc"),
     e("stuck-point", "stuck on attention", "2026-07-12", "m-bbbbbbbb"),
     e("reading-position", "page 40 of the survey", "2026-07-15", "m-aaaaaaaa"),
@@ -24,32 +24,32 @@ test("snapshot orders sections position → stuck → understood and keeps newes
 });
 
 test("snapshot caps per type and overall", () => {
-  const entries: MemoryIndexEntry[] = [];
+  const entries: ObservationIndexEntry[] = [];
   for (let i = 0; i < 10; i++) {
     entries.push(e("stuck-point", `stuck ${i}`, "2026-07-10", `m-0000000${i}`));
     entries.push(e("belief", `belief ${i}`, "2026-07-10", `m-1000000${i}`));
     entries.push(e("understood-concept", `got ${i}`, "2026-07-10", `m-2000000${i}`));
   }
-  const lines = buildMemorySnapshot(entries).split("\n");
+  const lines = buildObservationSnapshot(entries).split("\n");
   expect(lines.filter((l) => l.includes("[stuck-point]"))).toHaveLength(4);
   expect(lines.length).toBeLessThanOrEqual(12);
 });
 
 test("empty entries yield an empty snapshot", () => {
-  expect(buildMemorySnapshot([])).toBe("");
+  expect(buildObservationSnapshot([])).toBe("");
 });
 
 test("prompt section: snapshot text, recall discipline, and correction ownership", () => {
-  const section = memoryPromptSection("- [stuck-point] x (updated 2026-07-17, id m-00000001)", true);
-  expect(section).toContain("What you remember about this reader");
+  const section = observationPromptSection("- [stuck-point] x (updated 2026-07-17, id m-00000001)", true);
+  expect(section).toContain("Your observations of this reader");
   expect(section).toContain("[stuck-point] x");
   expect(section).toContain("re-search with");
-  expect(section).toContain("memory_update");
+  expect(section).toContain("observation_update");
 });
 
 test("prompt section without tools carries only the snapshot; empty both is empty", () => {
-  const s = memoryPromptSection("- line", false);
+  const s = observationPromptSection("- line", false);
   expect(s).toContain("- line");
-  expect(s).not.toContain("memory_search");
-  expect(memoryPromptSection("", false)).toBe("");
+  expect(s).not.toContain("observation_search");
+  expect(observationPromptSection("", false)).toBe("");
 });

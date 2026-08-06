@@ -1,6 +1,6 @@
 # 子 agent 与上下文隔离
 
-> 本文记录 `src/ai/subagent/` 的契约。上游是 [24](./24-联网搜索.md)（对话开始要去外面找东西）和 [02](./02-AI核心与memory设计.md)（memory 蒸馏是这个抽象的先例）。代码按 2026-07-30 的实现写。
+> 本文记录 `src/ai/subagent/` 的契约。上游是 [24](./24-联网搜索.md)（对话开始要去外面找东西）和 [02](./02-AI核心与memory设计.md)（观察蒸馏是这个抽象的先例）。代码按 2026-07-30 的实现写。
 
 ---
 
@@ -48,15 +48,15 @@ brief 的形状写死在提示词里：最多五条，每条标题（作者、�
 
 接线上三件事必须成立：`buildReadingTurn` 每个读者轮建一个 `SubagentLedger`（池子 10 轮）；轮的 `AbortSignal` 一路传到 `runSubagent`，读者挂断即杀；进度只用来改写聊天里那一行状态，不展开子 agent 的工具调用。`usable: false` 由 `subagentTool` throw 出来，在读者的 loop 里就是一次失败的工具调用。
 
-## 第二个调用方：memory 蒸馏
+## 第二个调用方：AI observations 蒸馏
 
-`src/memory/distill.ts`。它比这个 capability 更早写，形状一样：一次静默运行、自己的 prompt、自己的工具、注入式的 runner，所有流式回调接空。现在长在 `runSubagent` 上。
+`src/observation/distill.ts`。它比这个 capability 更早写，形状一样：一次静默运行、自己的 prompt、自己的工具、注入式的 runner，所有流式回调接空。现在长在 `runSubagent` 上。
 
 `evidence: "optional"`，这是这里唯一一个用错默认值就有害的字段。挂了工具就默认 `"required"`，因为查找型子 agent 存在的前提是答案不在模型记忆里。蒸馏不是查找：prompt 明说浅对话可以什么都不记、一次工具都不调是正常结局，那么一次正确的空运行在 `"required"` 下就是 `no-evidence`，会被记成失败、时间戳永不推进，下一次触发再蒸馏同一份 transcript，无穷循环。
 
-失败的处置：`DistillResult` 加 `ok` / `outcome` / `failure` 返回给调用方，不 throw——不完成有六种形状，靠 catch 分辨必错一种，而且半途失败已经写进磁盘的那几条计数仍然要交回去。调用方（`live.ts`）拿到 `ok: false` 就一行 warn 带上子 agent 自己那句话、一条 `distill-failed` 事件，两个时间戳原地不动，此外什么都不做：memory 记账在读者那边没有落点，弹窗说"蒸馏失败了"是拿读者没要求也无法处理的事去打断他。真正让下一次触发重做的是时间戳没动，所以时间戳纪律搬进了 `runDistillPass`，对着假 fs 单测。
+失败的处置：`DistillResult` 加 `ok` / `outcome` / `failure` 返回给调用方，不 throw——不完成有六种形状，靠 catch 分辨必错一种，而且半途失败已经写进磁盘的那几条计数仍然要交回去。调用方（`live.ts`）拿到 `ok: false` 就一行 warn 带上子 agent 自己那句话、一条 `distill-failed` 事件，两个时间戳原地不动，此外什么都不做：观察的记账在读者那边没有落点，弹窗说"蒸馏失败了"是拿读者没要求也无法处理的事去打断他。真正让下一次触发重做的是时间戳没动，所以时间戳纪律搬进了 `runDistillPass`，对着假 fs 单测。
 
-brief 的文本只在失败时有用（那句诚实失败的句子进日志）。成功的运行按 prompt 以 "done" 结尾，产物是 memory 文件的写入，文本照旧丢掉——`briefTokenCap` 压到 200，是给"能交回来的东西"设个上限，不是因为要读它。
+brief 的文本只在失败时有用（那句诚实失败的句子进日志）。成功的运行按 prompt 以 "done" 结尾，产物是观察文件的写入，文本照旧丢掉——`briefTokenCap` 压到 200，是给"能交回来的东西"设个上限，不是因为要读它。
 
 不给 ledger：ledger 拦的是父模型一轮里连叫同一个子 agent 九次，而蒸馏没有模型来调它，是 app 在挂断和历史裁剪时各起一次，同一 thread 一次只跑一个。
 
@@ -66,6 +66,6 @@ brief 的文本只在失败时有用（那句诚实失败的句子进日志）�
 
 轮数用光的运行现在什么都不带回来。loop 走 `REFUSE_ROUNDS` 出口时没有最终文本，那一轮读到的东西就地丢失。补法是补一次无工具的"现在收尾"turn，需要把运行的 message 列表交回来，这次不做。
 
-蒸馏的 `signal` 等一个真正有资格取消它的调用方：删除对话时，一次正在给已经不存在的消息写 memory 的 pass 该停。
+蒸馏的 `signal` 等一个真正有资格取消它的调用方：删除对话时，一次正在给已经不存在的消息写观察的 pass 该停。
 
 简报生成也还没挂上来。

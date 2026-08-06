@@ -1,16 +1,16 @@
-// Unit tests for the memory file store (src/observation/store.ts), over the fake
+// Unit tests for the observation file store (src/observation/store.ts), over the fake
 // fs — write/index/update/evolution rewrite/delete/rebuild. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { MemoryFileStore } from "../../src/observation/store";
+import { ObservationFileStore } from "../../src/observation/store";
 import { JULY_17, JULY_20, makeFakeFs } from "./fakefs";
 
 function makeStore(now: () => number = () => JULY_17) {
   const { fs, files } = makeFakeFs();
-  return { store: new MemoryFileStore("topic-1", fs, now), files };
+  return { store: new ObservationFileStore("topic-1", fs, now), files };
 }
 
-test("create writes one file per memory and an index line", async () => {
+test("create writes one file per observation and an index line", async () => {
   const { store, files } = makeStore();
   const entry = await store.create({
     type: "stuck-point",
@@ -38,7 +38,7 @@ test("update rewrites in place: created kept, updated bumped, one file, one inde
     body: "Didn't click.",
   });
 
-  // The evolution rewrite: same memory, summary/body carry the resolution.
+  // The evolution rewrite: same observation, summary/body carry the resolution.
   now = JULY_20;
   const updated = await store.update(entry.id, {
     type: "understood-concept",
@@ -49,7 +49,7 @@ test("update rewrites in place: created kept, updated bumped, one file, one inde
   expect(updated?.created).toBe("2026-07-17");
   expect(updated?.updated).toBe("2026-07-20");
   expect(updated?.type).toBe("understood-concept");
-  // Still one memory file (plus the index), not a new entry.
+  // Still one observation file (plus the index), not a new entry.
   expect([...files.keys()].filter((k) => /m-[0-9a-f]{8}\.md$/.test(k))).toHaveLength(1);
   const index = await store.readIndex();
   expect(index).toHaveLength(1);
@@ -97,7 +97,7 @@ test("rebuildIndex regenerates the index from the entry files", async () => {
 test("list skips non-entry and malformed files", async () => {
   const { store, files } = makeStore();
   const a = await store.create({ type: "belief", summary: "s", body: "b" });
-  files.set("memory-topic-1/m-deadbeef.md", "not a memory");
+  files.set("memory-topic-1/m-deadbeef.md", "not an observation");
   files.set("memory-topic-1/notes.md", "unrelated");
 
   expect((await store.list()).map((e) => e.id)).toEqual([a.id]);

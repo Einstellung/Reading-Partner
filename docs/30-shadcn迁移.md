@@ -405,7 +405,7 @@ trigger 的宽度要自己占住：原生 `<select>` 按最宽的 option 定宽�
 - 笔工具的颜色点和痕迹行的类型图标：颜色由标注本身决定，走 inline style。
 - 麦克风键的录音三态背景（`bg-red-50` / `bg-neutral-200`）：红是「正在录」，灰是「松手取消」，是状态不是级别。静息态的悬停灰换了。
 - 滑动删除那条红条的宽度：`SWIPE_ACTION_WIDTH` 走 inline style，手势逻辑按它算。只换了颜色。
-- 状态 chip 的色阶（`PrepPanel` / `NotesPanel` / `MemoryPanel` / `SlidesDialog` 的 amber/green/sky/violet/red/neutral）：这是一组互相区分的分类色，不是控件级别。
+- 状态 chip 的色阶（`PrepPanel` / `NotesPanel` / `ObservationPanel` / `SlidesDialog` 的 amber/green/sky/violet/red/neutral）：这是一组互相区分的分类色，不是控件级别。
 - 停止键的深灰（`bg-neutral-800`）、暂存图片的黑色 ✕：token 里没有对应角色。
 - 中性灰文字（`text-neutral-400/500/600/700/800`）和卡片描边（`border-black/10`）：整套表面色阶，换名会动到几十个节点的实际色值，和这一版的目的无关。
 - 聊天输入区（textarea、发送、停止）、`ReadingPipCard`、`FigureCard` 的卡片本体、各处列表行：仍是手写 `<button>`，理由见「最终还剩的手写控件」。只换了颜色。

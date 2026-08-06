@@ -17,7 +17,7 @@ test("open, the three sections read as text in order", () => {
   const html = render(true);
   expect(html.indexOf(">Materials<")).toBeGreaterThan(-1);
   expect(html.indexOf(">Talks<")).toBeGreaterThan(html.indexOf(">Materials<"));
-  expect(html.indexOf(">Memory<")).toBeGreaterThan(html.indexOf(">Talks<"));
+  expect(html.indexOf(">AI observations<")).toBeGreaterThan(html.indexOf(">Talks<"));
 });
 
 // Collapsed it is an icon rail: the labels leave the flow, but the buttons keep

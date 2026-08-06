@@ -3,12 +3,12 @@
 // (docs/31, "界面"). None of it touches the DOM, so the rendering can change
 // without re-deriving any of it (CLAUDE.md).
 
-export type TopicSection = "materials" | "talks" | "memory";
+export type TopicSection = "materials" | "talks" | "observations";
 
 export const TOPIC_SECTIONS: readonly { id: TopicSection; label: string }[] = [
   { id: "materials", label: "Materials" },
   { id: "talks", label: "Talks" },
-  { id: "memory", label: "Memory" },
+  { id: "observations", label: "AI observations" },
 ];
 
 export const DEFAULT_SECTION: TopicSection = "materials";

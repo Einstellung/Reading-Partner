@@ -1,27 +1,27 @@
-// Public surface of the per-topic memory module (docs/02 part 2, M8).
+// Public surface of the per-topic AI observations module (docs/02 part 2, M8).
 
 export type {
   EvidenceAnchors,
-  MemoryEntry,
-  MemoryHit,
-  MemoryIndexEntry,
-  MemoryPatch,
-  MemoryType,
+  Observation,
+  ObservationHit,
+  ObservationIndexEntry,
+  ObservationPatch,
+  ObservationType,
   RetainInput,
 } from "./types";
-export { MEMORY_TYPES, isMemoryType } from "./types";
-export { isoDate, parseIndex, parseMemory, serializeMemory } from "./files";
-export { MemoryFileStore, type MemoryFs, type MemoryMeta } from "./store";
-export { FileMemoryAdapter, type MemoryAdapter } from "./adapter";
-export { buildMemorySnapshot, memoryPromptSection } from "./snapshot";
+export { OBSERVATION_TYPES, isObservationType } from "./types";
+export { isoDate, parseIndex, parseObservation, serializeObservation } from "./files";
+export { ObservationFileStore, type ObservationFs, type ObservationMeta } from "./store";
+export { FileObservationAdapter, type ObservationAdapter } from "./adapter";
+export { buildObservationSnapshot, observationPromptSection } from "./snapshot";
 export {
   assembleIdentity,
   assembleReadingContext,
   assembleReadingSignal,
   READING_SIGNAL_BUDGET,
-  type TopicMemorySignal,
+  type TopicObservationSignal,
 } from "./assemble";
-export { buildMemoryTools, type MemoryToolOptions, type MemoryWriteAction } from "./tools";
+export { buildObservationTools, type ObservationToolOptions, type ObservationWriteAction } from "./tools";
 export {
   buildDistillAgent,
   buildDistillSystemPrompt,
@@ -45,8 +45,8 @@ export {
 export {
   distillThread,
   getLastDistillation,
-  getMemoryAdapter,
-  notifyMemoryChange,
-  onMemoryChange,
+  getObservationAdapter,
+  notifyObservationChange,
+  onObservationChange,
   type DistillThreadOptions,
 } from "./live";

@@ -1,8 +1,9 @@
-// Per-topic memory (docs/02 part 2, M8): one fact per markdown file with a
-// small frontmatter, plus an index file (one line per memory) that is what gets
-// loaded into context. Dates are absolute ("YYYY-MM-DD") at write time.
+// Per-topic AI observations (docs/02 part 2, M8): one observation per markdown
+// file with a small frontmatter, plus an index file (one line per observation)
+// that is what gets loaded into context. Dates are absolute ("YYYY-MM-DD") at
+// write time.
 
-export const MEMORY_TYPES = [
+export const OBSERVATION_TYPES = [
   "reading-position",
   "stuck-point",
   "understood-concept",
@@ -10,23 +11,23 @@ export const MEMORY_TYPES = [
   "correction",
 ] as const;
 
-export type MemoryType = (typeof MEMORY_TYPES)[number];
+export type ObservationType = (typeof OBSERVATION_TYPES)[number];
 
-export function isMemoryType(v: string): v is MemoryType {
-  return (MEMORY_TYPES as readonly string[]).includes(v);
+export function isObservationType(v: string): v is ObservationType {
+  return (OBSERVATION_TYPES as readonly string[]).includes(v);
 }
 
-// Evidence anchors: a memory points back to its sources — annotation ids and/or
-// message ids ("<threadId>:<ts>") — so it can be traced to the original marks
-// and conversation turns.
+// Evidence anchors: an observation points back to its sources — annotation ids
+// and/or message ids ("<threadId>:<ts>") — so it can be traced to the original
+// marks and conversation turns.
 export interface EvidenceAnchors {
   annotationIds: string[];
   messageIds: string[];
 }
 
-export interface MemoryEntry {
+export interface Observation {
   id: string;
-  type: MemoryType;
+  type: ObservationType;
   // One line, shown in the index and the opening snapshot.
   summary: string;
   // Full markdown body; evolutions ("was stuck on X, resolved on <date>") live here.
@@ -37,31 +38,31 @@ export interface MemoryEntry {
 }
 
 // The per-line view of the index file — everything the snapshot needs without
-// reading the memory bodies.
-export interface MemoryIndexEntry {
+// reading the observation bodies.
+export interface ObservationIndexEntry {
   id: string;
-  type: MemoryType;
+  type: ObservationType;
   summary: string;
   updated: string; // YYYY-MM-DD
 }
 
 export interface RetainInput {
-  type: MemoryType;
+  type: ObservationType;
   summary: string;
   body: string;
   anchors?: Partial<EvidenceAnchors>;
 }
 
 // A correction patch; every field optional, anchors replace when given.
-export interface MemoryPatch {
-  type?: MemoryType;
+export interface ObservationPatch {
+  type?: ObservationType;
   summary?: string;
   body?: string;
   anchors?: Partial<EvidenceAnchors>;
 }
 
-export interface MemoryHit {
-  entry: MemoryEntry;
+export interface ObservationHit {
+  entry: Observation;
   score: number;
   snippet: string;
 }

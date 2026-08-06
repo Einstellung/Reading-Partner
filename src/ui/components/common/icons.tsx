@@ -136,8 +136,8 @@ export function IconSparkle({ size = 20 }: IconProps) {
 	);
 }
 
-// Memory chip for the memory tab.
-export function IconMemory({ size = 20 }: IconProps) {
+// Memory-chip glyph for the AI observations tab.
+export function IconObservations({ size = 20 }: IconProps) {
 	return (
 		<svg
 			width={size}

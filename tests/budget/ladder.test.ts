@@ -28,7 +28,7 @@ const EVEN: Record<ReductionId, number> = {
   "reader-profile": 5_000,
   "notes-overview": 5_000,
   "booklist-thin": 5_000,
-  "memory-trim": 5_000,
+  "observation-trim": 5_000,
   "rehearsal-notes": 5_000,
   "tool-result-stubs": 5_000,
   "classroom-inline": 5_000,
@@ -71,7 +71,7 @@ test("rungs are given up in the declared order, cheapest loss first", () => {
     "reader-profile",
     "notes-overview",
     "booklist-thin",
-    "memory-trim",
+    "observation-trim",
   ]);
   expect(p.outcome).toBe("ok");
   expect(p.notice).toBe("");
@@ -168,7 +168,7 @@ test("a model with no declared window never triggers the ladder", () => {
 
 test("budgetNotice only speaks for the rungs that owe an explanation", () => {
   expect(budgetNotice([])).toBe("");
-  expect(budgetNotice(["figure-catalog", "memory-trim", "tool-result-stubs"])).toBe("");
+  expect(budgetNotice(["figure-catalog", "observation-trim", "tool-result-stubs"])).toBe("");
   expect(budgetNotice(["history-trim"])).toBe(
     "Note: earlier turns of this conversation were left out to make room.",
   );

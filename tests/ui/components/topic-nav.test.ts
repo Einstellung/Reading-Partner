@@ -15,8 +15,8 @@ import {
 } from "../../../src/ui/components/library/topic/topic-nav";
 
 test("the sidebar has exactly the three sections, Materials first", () => {
-  expect(TOPIC_SECTIONS.map((s) => s.id)).toEqual(["materials", "talks", "memory"]);
-  expect(TOPIC_SECTIONS.map((s) => s.label)).toEqual(["Materials", "Talks", "Memory"]);
+  expect(TOPIC_SECTIONS.map((s) => s.id)).toEqual(["materials", "talks", "observations"]);
+  expect(TOPIC_SECTIONS.map((s) => s.label)).toEqual(["Materials", "Talks", "AI observations"]);
 });
 
 test("a section name is validated, not trusted", () => {

@@ -12,6 +12,7 @@ test("core user-data files are in range", () => {
     "topics.json",
     "annotations-abc123.json",
     "threads-abc123.json",
+    // "memory-" is the AI observations directories' historical on-disk name.
     "memory-topic1/m-ab12cd34.md",
     "memory-topic1/index.md",
     "memory-topic1/meta.json",

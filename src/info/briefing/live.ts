@@ -141,7 +141,7 @@ export function getInfoPipeline(): InfoPipeline {
       loadBriefing,
       loadProfile,
       loadFeedback,
-      // Reading-side signal for triage: assembled from per-topic memory, guarded
+      // Reading-side signal for triage: assembled from per-topic observations, guarded
       // so a failure yields "" and the section is simply omitted.
       loadReaderContext: () => assembleReadingContext(),
       listSources,

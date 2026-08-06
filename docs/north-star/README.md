@@ -5,7 +5,7 @@
 每个文件记三件事:愿景、为什么现在不做、将来做时已知的事实(带出处)。一事一文件。
 
 - [epub](./epub.md) — EPUB 支持
-- [memory](./memory.md) — 挂断蒸馏、主题快照、主动联想、查看面板、纠错
+- [observations](./observations.md) — 挂断蒸馏、主题快照、主动联想、查看面板、纠错
 - [companion](./companion.md) — 伴读宠物:常驻形象、逗弄、主动说话、语音开聊
 - [podcast-video](./podcast-video.md) — 播客与视频:info 线和读书线的交集,蒸馏两小时访谈,手动喂链接先行
 - [webview-pipe](./webview-pipe.md) — webview 渲染管子:隐藏 WebviewWindow 当渲染引擎,解锁 SPA 站和用户自有会员的登录墙站,还没 spike

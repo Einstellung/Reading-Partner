@@ -18,8 +18,8 @@ export type EventType =
   | "call-end" // { threadId } — hangup
   | "thread-delete" // { threadId, book } — conversation deleted (and its mark, if any)
   | "distill-run" // { threadId, created, updated, deleted } — a pass that finished
-  // A distillation pass that did not finish, so this thread's memory was never
-  // written and its timestamps did not advance. `outcome` is the sub-agent's
+  // A distillation pass that did not finish, so nothing was observed from this
+  // thread and its timestamps did not advance. `outcome` is the sub-agent's
   // (src/ai/subagent), e.g. "out-of-turns" or "failed".
   | "distill-failed" // { threadId, outcome, created?, updated?, deleted? }
   | "prep-status" // { slug, status }

@@ -1,6 +1,6 @@
 // Distillation flow tests (src/observation/distill.ts) with a mocked AI turn: the
 // sub-agent turn is backed by runAgentLoop over a scripted fake stream (same
-// pattern as tests/ai/subagent.test.ts), so the real memory tools, the real
+// pattern as tests/ai/subagent.test.ts), so the real observation tools, the real
 // honest-failure mapping and the real abort path run against the fake store with
 // no provider, network, or token spend. Run: bun test.
 
@@ -19,7 +19,7 @@ import { runAgentLoop, type StreamFn } from "../../src/ai/agent";
 import { createTurnSettler } from "../../src/ai/subagent/turn";
 import type { SubagentTurnFn, SubagentTurnRequest } from "../../src/ai/subagent/types";
 import { StoppedError } from "../../src/ai/watchdog";
-import { FileMemoryAdapter } from "../../src/observation/adapter";
+import { FileObservationAdapter } from "../../src/observation/adapter";
 import {
   buildDistillAgent,
   buildDistillSystemPrompt,
@@ -33,7 +33,7 @@ import {
   type DistillInput,
   type DistillPassInput,
 } from "../../src/observation/distill";
-import { MemoryFileStore } from "../../src/observation/store";
+import { ObservationFileStore } from "../../src/observation/store";
 import { JULY_17, makeFakeFs } from "./fakefs";
 
 type ToolReq = { name: string; args: Record<string, any>; id: string };
@@ -117,11 +117,11 @@ function makeInput(overrides: Partial<DistillInput> = {}): DistillInput {
 
 function makeStore() {
   const { fs } = makeFakeFs();
-  const store = new MemoryFileStore("t", fs, () => JULY_17);
-  return { store, adapter: new FileMemoryAdapter(store) };
+  const store = new ObservationFileStore("t", fs, () => JULY_17);
+  return { store, adapter: new FileObservationAdapter(store) };
 }
 
-test("distillation creates memories through the real tools and counts them", async () => {
+test("distillation creates observations through the real tools and counts them", async () => {
   const { store, adapter } = makeStore();
   const result = await runDistillation(
     makeInput(),
@@ -130,7 +130,7 @@ test("distillation creates memories through the real tools and counts them", asy
       {
         calls: [
           {
-            name: "memory_update",
+            name: "observation_update",
             id: "c1",
             args: {
               action: "create",
@@ -156,7 +156,7 @@ test("distillation creates memories through the real tools and counts them", asy
   expect(await store.readIndexText()).toContain("Stuck on quadratic attention cost");
 });
 
-test("distillation updates (evolution) and deletes existing memories", async () => {
+test("distillation updates (evolution) and deletes existing observations", async () => {
   const { store, adapter } = makeStore();
   const stuck = await adapter.retain({
     type: "stuck-point",
@@ -176,7 +176,7 @@ test("distillation updates (evolution) and deletes existing memories", async () 
       {
         calls: [
           {
-            name: "memory_update",
+            name: "observation_update",
             id: "c1",
             args: {
               action: "update",
@@ -186,7 +186,7 @@ test("distillation updates (evolution) and deletes existing memories", async () 
               body: "Was stuck (2026-07-10) on why attention is O(n^2); resolved on 2026-07-17.",
             },
           },
-          { name: "memory_update", id: "c2", args: { action: "delete", id: wrong.id } },
+          { name: "observation_update", id: "c2", args: { action: "delete", id: wrong.id } },
         ],
       },
       { text: "done" },
@@ -219,7 +219,7 @@ test("invalid tool args become a tool error the loop survives, not a write", asy
       {
         calls: [
           {
-            name: "memory_update",
+            name: "observation_update",
             id: "c1",
             args: { action: "create", type: "stuck-point", summary: "s" },
           },
@@ -257,7 +257,7 @@ test("a failed call is a failed pass, with the writes it did make counted", asyn
       {
         calls: [
           {
-            name: "memory_update",
+            name: "observation_update",
             id: "c1",
             args: {
               action: "create",
@@ -276,7 +276,7 @@ test("a failed call is a failed pass, with the writes it did make counted", asyn
   expect(result.outcome).toBe("failed");
   // Recorded honestly: the sentence names the sub-agent and says what happened,
   // instead of the pass being swallowed by a warn nobody can act on.
-  expect(result.failure).toContain("memory_distiller");
+  expect(result.failure).toContain("observation_distiller");
   expect(result.failure).toContain("connection reset");
   // The write it managed before the call died is on disk, and counted.
   expect(result.created).toBe(1);
@@ -339,7 +339,7 @@ test("a failed pass leaves both stamps where they were", async () => {
 
   expect(result.ok).toBe(false);
   // Nothing moved, so the next trigger distils this transcript and these marks
-  // again — the alternative is a conversation whose memory is never written and
+  // again — the alternative is a conversation that is never observed and
   // nothing left to say so.
   expect(await store.getMeta()).toEqual({
     lastDistilledAt: null,
@@ -357,7 +357,7 @@ test("an aborted pass stops, and does not advance the stamps", async () => {
       {
         calls: [
           {
-            name: "memory_update",
+            name: "observation_update",
             id: "c1",
             args: {
               action: "create",
