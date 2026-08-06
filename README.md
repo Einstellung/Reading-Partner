@@ -4,7 +4,7 @@ An AI reading companion for academic surveys and technical books. It doesn't jus
 
 ![Reading a survey with the lesson-prep panel open](docs/assets/app-overview.png)
 
-Local-first and backend-free: sign in with your Claude or ChatGPT subscription, or use a DeepSeek API key. Books, annotations, notes, memory, and credentials never leave your machine.
+Local-first and backend-free: sign in with your Claude or ChatGPT subscription, or use a DeepSeek API key. Books, annotations, notes, observations, and credentials never leave your machine.
 
 ## Daily briefing
 
@@ -74,9 +74,9 @@ The AI cites what it teaches. Page references render as chips — click one and 
 
 ![Page citations inline in an explanation](docs/assets/citations.png)
 
-## Memory
+## AI observations
 
-When you hang up a conversation, the AI silently distills it: where you are in the book, what you now understand, where you were stuck, what you corrected it about. One fact per file, on your disk, inspectable in the sidebar's Memory tab. The next conversation opens with a snapshot — the AI knows you read to section 4.2, struggled with the KV cache last week, and resolved it. Corrections happen in conversation ("you remembered that wrong") rather than by editing files.
+When you hang up a conversation, the AI silently distills what it noticed about you: where you are in the book, what you now understand, where you were stuck, what you corrected it about. One observation per file, on your disk, inspectable in the topic's AI observations tab. The next conversation opens with a snapshot — the AI knows you read to section 4.2, struggled with the KV cache last week, and resolved it. These are its notes on you, not a transcript, so you can argue with one: say "that's not right" in conversation and it rewrites it, rather than you editing files.
 
 ## Feed it links
 
@@ -131,7 +131,7 @@ Drive sync needs your own Google OAuth Desktop client: copy `.env.example` to `.
 
 - `src/reading/engine/` — the engine adapter: assembles EmbedPDF's headless core + plugins, renders from in-memory bytes, and converts annotations at the boundary (the shell persists its own JSON schema). All UI around it (toolbar, annotations list, AI) is the shell's.
 - `public/pdfium/pdfium.wasm` — the PDFium engine binary, self-hosted (gitignored; staged by `bun run wasm` from the npm package, no CDN at build or runtime).
-- `src/ai/` — provider streaming and the agent tool loop. `src/reading/prep/` — the lesson-prep pipeline. `src/reading/sources/` — fetching and extracting a pasted link. `src/reading/papers/` — academic literature search and the citation graph. `src/memory/` — the per-topic memory store. `src/reading/figures/` — figure extraction and rendering. `src-tauri/` — Tauri 2 app.
+- `src/ai/` — provider streaming and the agent tool loop. `src/reading/prep/` — the lesson-prep pipeline. `src/reading/sources/` — fetching and extracting a pasted link. `src/reading/papers/` — academic literature search and the citation graph. `src/observation/` — the per-topic store of what the AI has observed about the reader. `src/reading/figures/` — figure extraction and rendering. `src-tauri/` — Tauri 2 app.
 - Design consensus documents (in Chinese) live in `docs/`; hard-won engine/Tauri surprises are indexed in `docs/pitfall/`.
 
 ## Status

@@ -22,7 +22,7 @@ export interface LiveTurn<M extends LiveMessage> {
   // keeps, which is why it is tracked here and not only in React state: a closed
   // bubble stops re-rendering, and the turn keeps writing.
   message: M;
-  // Run once the turn lands. Hanging up mid-stream defers the memory
+  // Run once the turn lands. Hanging up mid-stream defers the observation
   // distillation to here, so it reads a whole answer instead of half a sentence.
   onSettled?: () => void;
 }

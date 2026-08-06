@@ -85,13 +85,15 @@ test("the book-level prompt drops every selection-derived part but keeps positio
   expect(out).not.toContain("marking a passage with an AI pen");
 });
 
-test("the memory snapshot appends the same way for a book-level prompt", () => {
-  // The opening context is buildSystemPrompt + the memory section (App joins
-  // them); the join is orthogonal to bookLevel, so a snapshot still lands.
+test("the observation snapshot appends the same way for a book-level prompt", () => {
+  // The opening context is buildSystemPrompt + the observation section (App
+  // joins them); the join is orthogonal to bookLevel, so a snapshot still lands.
   const out =
-    buildSystemPrompt({ ...base, bookLevel: true }) + "\n\n" + "## Memory\n- reading-position: on chapter 5";
+    buildSystemPrompt({ ...base, bookLevel: true }) +
+    "\n\n" +
+    "## Observations\n- reading-position: on chapter 5";
   expect(out).toContain("about the book as a whole");
-  expect(out).toContain("## Memory");
+  expect(out).toContain("## Observations");
   expect(out).toContain("reading-position: on chapter 5");
 });
 

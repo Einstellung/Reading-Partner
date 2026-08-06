@@ -1,11 +1,11 @@
-// In-memory MemoryFs for the memory tests: the store runs its whole write path
-// against a Map, no Tauri involved.
+// In-memory ObservationFs for the observation tests: the store runs its whole
+// write path against a Map, no Tauri involved.
 
-import type { MemoryFs } from "../../src/memory/store";
+import type { ObservationFs } from "../../src/observation/store";
 
-export function makeFakeFs(): { fs: MemoryFs; files: Map<string, string> } {
+export function makeFakeFs(): { fs: ObservationFs; files: Map<string, string> } {
   const files = new Map<string, string>();
-  const fs: MemoryFs = {
+  const fs: ObservationFs = {
     async read(path) {
       return files.get(path) ?? null;
     },

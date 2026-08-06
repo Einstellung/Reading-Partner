@@ -64,7 +64,7 @@ import { locateQuote, type Citation } from "./reading/prep";
 import { usePrep } from "./reading/prep/use-prep";
 import { useNotes } from "./reading/notes/use-notes";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
-import { distillThread, type DistillAnnotation } from "./memory";
+import { distillThread, type DistillAnnotation } from "./observation";
 import { logEvent } from "./platform/app/events";
 import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
 import EmbedReaderPane from "./reading/engine/EmbedReaderPane";
@@ -666,10 +666,10 @@ export default function App() {
     setCall((cur) => (cur && cur.view === "chat-main" ? { ...cur, view: "chat-pip" } : cur));
   }, [jumpToQuote]);
 
-  // Memory is a topic-level thing and shows in the topic's sidebar
-  // (ui/components/library/topic/MemorySection.tsx, docs/31); the reader has no
-  // copy of it. What is left here is the panel's old refresh signal, which the
-  // topic panel subscribes to itself.
+  // AI observations are a topic-level thing and show in the topic's sidebar
+  // (ui/components/library/topic/ObservationSection.tsx, docs/31); the reader has
+  // no copy of them. What is left here is the panel's old refresh signal, which
+  // the topic panel subscribes to itself.
 
   // The book-notes feature (docs/14): the panel's state and every callback that
   // serves it. It reads the open book through the shell's refs, so what it
@@ -1000,10 +1000,10 @@ export default function App() {
   }, []);
 
   // Hangup bookkeeping (docs/02, docs/03): log the end of the conversation and
-  // kick the silent memory distillation over its persisted transcript. Reads
+  // kick the silent observation distillation over its persisted transcript. Reads
   // refs so it is stable; no-ops when nothing is open. Distillation runs in the
-  // background with no UI — the memory panel shows when it last ran. Declared up
-  // here because every way out of a call is below and all of them go through it.
+  // background with no UI — the observations panel shows when it last ran. Declared
+  // up here because every way out of a call is below and all go through it.
   //
   // Hanging up mid-answer waits: the reply is still being written and the
   // transcript would be a half sentence, so the distillation is handed to the
@@ -1493,7 +1493,7 @@ export default function App() {
   // its trace-list entry disappear); the book-level thread has no mark, so only
   // the thread goes. Both removals are in-file rewrites, so per-file LWW sync
   // carries them to other devices. Unlike a hangup this does not distill — the
-  // talk is being thrown away — and any memory already distilled from it stays.
+  // talk is being thrown away — and anything already distilled from it stays.
   const deleteCallThread = useCallback(() => {
     const c = callRef.current;
     const bookId = bookIdRef.current;
@@ -1520,7 +1520,7 @@ export default function App() {
   // is the same pairing deleteCallThread already makes from the other end. The
   // mark goes through removeAnnotation like every other deletion, so the
   // annotations file, the in-memory map and sync stay in agreement; the thread
-  // goes through deleteThread, an in-file rewrite its own cache owns. Memory
+  // goes through deleteThread, an in-file rewrite its own cache owns. What was
   // distilled from the talk stays, and the event log is appended to, not
   // rewritten.
   const deleteTraceAnnotation = useCallback(

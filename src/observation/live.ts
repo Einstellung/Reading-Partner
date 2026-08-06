@@ -1,7 +1,7 @@
-// Live wiring of the memory module: the Tauri fs behind MemoryFs, one adapter
-// per topic for the app's lifetime, the hangup/trim distillation entry points
-// (real model through runAgentTurn, same provider config as chat), and a tiny
-// change feed so the memory panel refreshes after background writes.
+// Live wiring of the observation module: the Tauri fs behind ObservationFs, one
+// adapter per topic for the app's lifetime, the hangup/trim distillation entry
+// points (real model through runAgentTurn, same provider config as chat), and a
+// tiny change feed so the observations panel refreshes after background writes.
 
 import {
   BaseDirectory,
@@ -16,12 +16,12 @@ import { resolveModel } from "../ai/model-call";
 import { runSubagentTurnLive } from "../ai/subagent";
 import { StoppedError } from "../ai/watchdog";
 import { logEvent } from "../platform/app/events";
-import { FileMemoryAdapter, type MemoryAdapter } from "./adapter";
-import { MemoryFileStore, type MemoryFs } from "./store";
-import type { MemoryIndexEntry } from "./types";
+import { FileObservationAdapter, type ObservationAdapter } from "./adapter";
+import { ObservationFileStore, type ObservationFs } from "./store";
+import type { ObservationIndexEntry } from "./types";
 import { runDistillPass, type DistillAnnotation, type DistillMessage } from "./distill";
 
-const tauriFs: MemoryFs = {
+const tauriFs: ObservationFs = {
   async read(path) {
     if (!(await exists(path, { baseDir: BaseDirectory.AppData }))) return null;
     return readTextFile(path, { baseDir: BaseDirectory.AppData });
@@ -41,22 +41,22 @@ const tauriFs: MemoryFs = {
   },
 };
 
-const stores = new Map<string, MemoryFileStore>();
-const adapters = new Map<string, FileMemoryAdapter>();
+const stores = new Map<string, ObservationFileStore>();
+const adapters = new Map<string, FileObservationAdapter>();
 
-function getStore(topicId: string): MemoryFileStore {
+function getStore(topicId: string): ObservationFileStore {
   let s = stores.get(topicId);
   if (!s) {
-    s = new MemoryFileStore(topicId, tauriFs);
+    s = new ObservationFileStore(topicId, tauriFs);
     stores.set(topicId, s);
   }
   return s;
 }
 
-export function getMemoryAdapter(topicId: string): MemoryAdapter {
+export function getObservationAdapter(topicId: string): ObservationAdapter {
   let a = adapters.get(topicId);
   if (!a) {
-    a = new FileMemoryAdapter(getStore(topicId));
+    a = new FileObservationAdapter(getStore(topicId));
     adapters.set(topicId, a);
   }
   return a;
@@ -66,24 +66,24 @@ export async function getLastDistillation(topicId: string): Promise<number | nul
   return (await getStore(topicId).getMeta()).lastDistilledAt;
 }
 
-// The parsed memory index for one topic (what a prompt would load), read through
-// the live store. Used by the cross-scenario assembly (assemble.ts) to gather a
-// reading-episode signal across every topic.
-export function readMemoryIndex(topicId: string): Promise<MemoryIndexEntry[]> {
+// The parsed observation index for one topic (what a prompt would load), read
+// through the live store. Used by the cross-scenario assembly (assemble.ts) to
+// gather a reading-episode signal across every topic.
+export function readObservationIndex(topicId: string): Promise<ObservationIndexEntry[]> {
   return getStore(topicId).readIndex();
 }
 
-// --- change feed (memory panel refresh after background writes) ---
+// --- change feed (observations panel refresh after background writes) ---
 
-type MemoryListener = (topicId: string) => void;
-const listeners = new Set<MemoryListener>();
+type ObservationListener = (topicId: string) => void;
+const listeners = new Set<ObservationListener>();
 
-export function onMemoryChange(cb: MemoryListener): () => void {
+export function onObservationChange(cb: ObservationListener): () => void {
   listeners.add(cb);
   return () => listeners.delete(cb);
 }
 
-export function notifyMemoryChange(topicId: string): void {
+export function notifyObservationChange(topicId: string): void {
   for (const cb of listeners) cb(topicId);
 }
 
@@ -109,7 +109,7 @@ export interface DistillThreadOptions {
   // would kill every pass the moment it started. The trim fallback
   // (buildReadingTurn) runs inside a turn that does own a signal, but that signal
   // is aborted by Stop and by hangup, and hangup is exactly when this pass matters
-  // most. Nothing else can own it either: memory bookkeeping has no UI, so there
+  // most. Nothing else can own it either: this bookkeeping has no UI, so there
   // is no Stop for the reader to press.
   //
   // So the signal is here for a caller that does have a claim on a pass — thread
@@ -126,11 +126,11 @@ const inFlight = new Set<string>();
 
 // One silent distillation pass for a finished (or long-running) thread.
 //
-// Never throws and never surfaces UI: memory is derived, and there is no place in
-// the reader's world for a message about memory bookkeeping — a dialog saying a
-// distillation pass failed would be an interruption about something the reader
-// never asked for and cannot act on. A failed pass is therefore recorded and
-// nothing else: one warn line with the sub-agent's own sentence, one
+// Never throws and never surfaces UI: observations are derived, and there is no
+// place in the reader's world for a message about this bookkeeping — a dialog
+// saying a distillation pass failed would be an interruption about something the
+// reader never asked for and cannot act on. A failed pass is therefore recorded
+// and nothing else: one warn line with the sub-agent's own sentence, one
 // `distill-failed` event in the topic's log, and the two timestamps left where
 // they were, which is what actually makes the next trigger redo the work.
 //
@@ -167,7 +167,7 @@ export async function distillThread(
       },
       {
         store: getStore(opts.topicId),
-        adapter: getMemoryAdapter(opts.topicId),
+        adapter: getObservationAdapter(opts.topicId),
         run: runSubagentTurnLive,
         model: {
           providerId: model.providerId,
@@ -181,7 +181,7 @@ export async function distillThread(
       // The pass did not finish, so neither stamp moved (runDistillPass) and the
       // next trigger will redo this transcript. Whatever writes it managed are
       // already on disk, so the panel is still told about those.
-      console.warn("memory distillation did not finish:", result.failure);
+      console.warn("observation distillation did not finish:", result.failure);
       logEvent(opts.topicId, "distill-failed", {
         threadId,
         outcome: result.outcome,
@@ -190,7 +190,7 @@ export async function distillThread(
         deleted: result.deleted,
       });
       if (result.created + result.updated + result.deleted > 0) {
-        notifyMemoryChange(opts.topicId);
+        notifyObservationChange(opts.topicId);
       }
       return;
     }
@@ -201,14 +201,14 @@ export async function distillThread(
       updated: result.updated,
       deleted: result.deleted,
     });
-    notifyMemoryChange(opts.topicId);
+    notifyObservationChange(opts.topicId);
   } catch (e) {
     // Cancellation is not a failure and is not logged as one: whoever raised the
     // signal already knows, and the stamps stay put so the next trigger redoes it.
     if (e instanceof StoppedError) return;
     // The pass never got as far as the sub-agent — no provider configured, or a
     // store read that threw. Same discipline as a pass that failed inside the run.
-    console.warn("memory distillation could not start", e);
+    console.warn("observation distillation could not start", e);
     logEvent(opts.topicId, "distill-failed", { threadId, outcome: "failed" });
   } finally {
     inFlight.delete(threadId);

@@ -1,4 +1,4 @@
-// Unit tests for the memory file formats (src/memory/files.ts). Run: bun test.
+// Unit tests for the observation file formats (src/observation/files.ts). Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
@@ -7,13 +7,13 @@ import {
   oneLine,
   parseIndex,
   parseIndexLine,
-  parseMemory,
+  parseObservation,
   serializeIndexLine,
-  serializeMemory,
-} from "../../src/memory/files";
-import type { MemoryEntry } from "../../src/memory/types";
+  serializeObservation,
+} from "../../src/observation/files";
+import type { Observation } from "../../src/observation/types";
 
-const ENTRY: MemoryEntry = {
+const ENTRY: Observation = {
   id: "m-1a2b3c4d",
   type: "stuck-point",
   summary: "Stuck on why attention scales quadratically",
@@ -23,27 +23,27 @@ const ENTRY: MemoryEntry = {
   anchors: { annotationIds: ["ann-1", "ann-2"], messageIds: ["t1:100"] },
 };
 
-test("memory file round-trips through serialize/parse", () => {
-  const parsed = parseMemory(serializeMemory(ENTRY));
+test("an observation file round-trips through serialize/parse", () => {
+  const parsed = parseObservation(serializeObservation(ENTRY));
   expect(parsed).toEqual(ENTRY);
 });
 
 test("empty anchors are omitted from the frontmatter and parse back empty", () => {
   const entry = { ...ENTRY, anchors: { annotationIds: [], messageIds: [] } };
-  const text = serializeMemory(entry);
+  const text = serializeObservation(entry);
   expect(text).not.toContain("annotations:");
   expect(text).not.toContain("messages:");
-  expect(parseMemory(text)).toEqual(entry);
+  expect(parseObservation(text)).toEqual(entry);
 });
 
 test("a multi-line summary is collapsed to one line on write", () => {
-  const text = serializeMemory({ ...ENTRY, summary: "line one\nline  two" });
-  expect(parseMemory(text)?.summary).toBe("line one line two");
+  const text = serializeObservation({ ...ENTRY, summary: "line one\nline  two" });
+  expect(parseObservation(text)?.summary).toBe("line one line two");
 });
 
 test("malformed file or unknown type parses as null", () => {
-  expect(parseMemory("no frontmatter here")).toBeNull();
-  expect(parseMemory("---\nid: m-1\ntype: nonsense\n---\nbody")).toBeNull();
+  expect(parseObservation("no frontmatter here")).toBeNull();
+  expect(parseObservation("---\nid: m-1\ntype: nonsense\n---\nbody")).toBeNull();
 });
 
 test("index line round-trips, including a summary with brackets and colons", () => {

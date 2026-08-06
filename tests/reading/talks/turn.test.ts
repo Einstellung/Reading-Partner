@@ -10,7 +10,7 @@ import type { Fulltext } from "../../../src/fulltext/types";
 import type { Figure } from "../../../src/reading/figures/types";
 
 // No filesystem mock on purpose: every disk read this assembly makes is
-// optional and already wrapped (a chapter note, the topic's memory index), so
+// optional and already wrapped (a chapter note, the topic's observation index), so
 // with no Tauri host under it they all miss, which is exactly the case being
 // assembled for. Mocking the fs plugin here would swap it out for every other
 // test file in the run as well.
@@ -93,9 +93,9 @@ test("the rehearsal prompt and its own tools, with no book open", async () => {
   expect(turn.systemPrompt).toContain("You are sitting in on a rehearsal");
   expect(turn.systemPrompt).toContain("nothing recorded yet");
   expect(names(turn.tools)).toEqual([
-    "memory_read",
-    "memory_search",
-    "memory_update",
+    "observation_read",
+    "observation_search",
+    "observation_update",
     "read_chapter_note",
     "read_pages",
     "read_talk_outline",

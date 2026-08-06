@@ -1,4 +1,4 @@
-// User profile persistence + one-time rename migration (src/memory/profile.ts).
+// User profile persistence + one-time rename migration (src/observation/profile.ts).
 // There is no factory seed, so a first run (no file) returns an empty profile and
 // writes nothing; an existing file is read verbatim. When only the old
 // info-profile.md exists, loadProfile promotes it to user-profile.md once and
@@ -34,7 +34,7 @@ mock.module("../../src/platform/app/atomic-fs", () => ({
 }));
 
 const { loadProfile, saveProfile, PROFILE_FILE, LEGACY_PROFILE_FILE } = await import(
-  "../../src/memory/profile"
+  "../../src/observation/profile"
 );
 
 beforeEach(() => {

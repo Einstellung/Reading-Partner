@@ -1,18 +1,18 @@
-// Unit tests for the file-backed Memory Adapter (src/memory/adapter.ts) —
-// BM25 recall over memory bodies, correct-with-null deletion. Run: bun test.
+// Unit tests for the file-backed Observation Adapter (src/observation/adapter.ts) —
+// BM25 recall over observation bodies, correct-with-null deletion. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { FileMemoryAdapter } from "../../src/memory/adapter";
-import { MemoryFileStore } from "../../src/memory/store";
+import { FileObservationAdapter } from "../../src/observation/adapter";
+import { ObservationFileStore } from "../../src/observation/store";
 import { JULY_17, makeFakeFs } from "./fakefs";
 
 function makeAdapter() {
   const { fs } = makeFakeFs();
-  const store = new MemoryFileStore("t", fs, () => JULY_17);
-  return { adapter: new FileMemoryAdapter(store), store };
+  const store = new ObservationFileStore("t", fs, () => JULY_17);
+  return { adapter: new FileObservationAdapter(store), store };
 }
 
-test("recall ranks the relevant memory first and carries the entry", async () => {
+test("recall ranks the relevant observation first and carries the entry", async () => {
   const { adapter } = makeAdapter();
   const hit = await adapter.retain({
     type: "stuck-point",
@@ -51,8 +51,8 @@ test("correct patches an entry; correct(id, null) deletes it", async () => {
 
 test("rebuild restores a broken index from the files", async () => {
   const { fs, files } = makeFakeFs();
-  const store = new MemoryFileStore("t", fs, () => JULY_17);
-  const adapter = new FileMemoryAdapter(store);
+  const store = new ObservationFileStore("t", fs, () => JULY_17);
+  const adapter = new FileObservationAdapter(store);
   const e = await adapter.retain({ type: "correction", summary: "s", body: "b" });
   files.delete("memory-t/index.md");
 

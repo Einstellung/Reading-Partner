@@ -6,7 +6,7 @@
 
 import { aiLanguageName, type AiLanguage } from "../../platform/app/settings";
 import type { ParseTally } from "../../platform/app/structured-output";
-import type { FeedbackEvent } from "../../memory/feedback";
+import type { FeedbackEvent } from "../../observation/feedback";
 import type { TriageResult } from "./types";
 import type { InfoItem } from "../sources/item";
 

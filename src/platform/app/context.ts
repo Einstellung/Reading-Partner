@@ -1,7 +1,7 @@
 // Context assembly (docs/02, first segment: live reading context). Pure
 // function: given where the reader is, what they just marked, and — for M6 — the
 // surrounding text, chapter, topic booklist, and whether tools are available,
-// produce the system prompt. Later segments (memory recall, evidence) attach here.
+// produce the system prompt. Later segments (observation recall, evidence) attach here.
 
 import { languageInstruction, type AiLanguage } from "./settings";
 

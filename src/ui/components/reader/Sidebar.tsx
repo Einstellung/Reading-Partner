@@ -2,9 +2,9 @@
 // closed on every surface (PC too); the reader top-bar button toggles it. It
 // slides in from the left over the reader, dims the page behind it, and closes
 // on a backdrop tap, Esc, or the toggle button. Four tabs live along its top:
-// Outline, Marks (annotations), Prep (docs/09), Notes (docs/14). Memory is not
-// among them: it is per topic (docs/02, docs/31) and lives in the topic's own
-// sidebar, which is now the only place it is.
+// Outline, Marks (annotations), Prep (docs/09), Notes (docs/14). AI observations
+// are not among them: they are per topic (docs/02, docs/31) and live in the
+// topic's own sidebar, which is now the only place they are.
 //
 // Pure and controlled: App owns `open`/`tab` state and the toggle; this renders
 // the backdrop, the sliding panel, and the tab row, and forwards clicks. The

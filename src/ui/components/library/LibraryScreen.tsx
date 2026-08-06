@@ -5,9 +5,9 @@
 // itself and which one is active stay on App, which needs them for the reading
 // context.
 //
-// A topic has a sidebar down its left (docs/31, "界面"): Materials, Talks,
-// Memory. Which section is showing and whether the sidebar is open live here —
-// they are view state of this screen and nothing above it reads them.
+// A topic has a sidebar down its left (docs/31, "界面"): Materials, Talks, AI
+// observations. Which section is showing and whether the sidebar is open live
+// here — they are view state of this screen and nothing above it reads them.
 //
 // An open talk replaces the whole topic while it lasts (the same move the saved
 // article reader makes), so entering one needs no route and leaving it puts the
@@ -47,7 +47,7 @@ import SavedArticleView from "./SavedArticleView";
 import TopicCard from "./TopicCard";
 import TopicNameDialog from "./TopicNameDialog";
 import { shelfOrder, TOPIC_GRID_COLUMNS_CLASS } from "./topic-shelf";
-import MemorySection from "./topic/MemorySection";
+import ObservationSection from "./topic/ObservationSection";
 import TalksSection from "./topic/TalksSection";
 import TopicNav from "./topic/TopicNav";
 import {
@@ -158,14 +158,14 @@ export default function LibraryScreen(props: {
     return (
       <div className="absolute inset-0 flex items-stretch bg-white">
         <TopicNav section={section} onSelect={setSection} open={navOpen} onToggle={toggleNav} />
-        {section === "memory" ? (
+        {section === "observations" ? (
           // The panel scrolls inside itself, so this column does not scroll.
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
             {/* No second width utility here: LIBRARY_PAGE owns it (docs/30). */}
             <div className={`${LIBRARY_PAGE} flex min-h-0 flex-1 flex-col`}>
               <h1 className={PAGE_TITLE}>{activeTopic.name}</h1>
               <div className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border">
-                <MemorySection topicId={activeTopic.id} />
+                <ObservationSection topicId={activeTopic.id} />
               </div>
             </div>
           </div>

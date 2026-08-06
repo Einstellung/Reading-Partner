@@ -1,5 +1,5 @@
 // The default-model lookup and the one plain streaming call every unattended
-// feature makes (lesson prep, book notes, slides, news triage, memory
+// feature makes (lesson prep, book notes, slides, news triage, observation
 // distillation). `thinking` picks which effort setting applies: "chat" for the
 // conversational path, "prep" for the background pipelines.
 

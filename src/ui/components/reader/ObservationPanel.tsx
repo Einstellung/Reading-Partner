@@ -1,13 +1,13 @@
-// Memory panel (docs/02 part 2): the "see what the AI remembers" face of the
-// per-topic memory. Read-only by design — corrections go through conversation
-// ("you got that wrong"), never direct editing. Same plain visual pattern as
-// the prep panel.
+// AI observations panel (docs/02 part 2): the "see what the AI noticed" face of
+// the per-topic observations. Read-only by design — corrections go through
+// conversation ("you got that wrong"), never direct editing. Same plain visual
+// pattern as the prep panel.
 
 import { useState } from "react";
-import type { MemoryEntry, MemoryType } from "../../../memory";
+import type { Observation, ObservationType } from "../../../observation";
 import { CitationContext, Markdown } from "../common/Markdown";
 
-const TYPE_STYLE: Record<MemoryType, string> = {
+const TYPE_STYLE: Record<ObservationType, string> = {
   "reading-position": "bg-sky-100 text-sky-700",
   "stuck-point": "bg-amber-100 text-amber-700",
   "understood-concept": "bg-green-100 text-green-700",
@@ -15,13 +15,13 @@ const TYPE_STYLE: Record<MemoryType, string> = {
   correction: "bg-red-100 text-red-700",
 };
 
-interface MemoryPanelProps {
-  // null while loading; [] when the topic has no memories yet.
-  entries: MemoryEntry[] | null;
+interface ObservationPanelProps {
+  // null while loading; [] when the topic has no observations yet.
+  entries: Observation[] | null;
   lastDistilledAt: number | null;
 }
 
-function MemoryRow({ entry }: { entry: MemoryEntry }) {
+function ObservationRow({ entry }: { entry: Observation }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <li className="border-b border-[#eee] px-3 py-2">
@@ -58,11 +58,11 @@ function MemoryRow({ entry }: { entry: MemoryEntry }) {
   );
 }
 
-export default function MemoryPanel({ entries, lastDistilledAt }: MemoryPanelProps) {
+export default function ObservationPanel({ entries, lastDistilledAt }: ObservationPanelProps) {
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-[#eee] px-3 py-2">
-        <div className="text-[13px] text-foreground">Memory</div>
+        <div className="text-[13px] text-foreground">AI observations</div>
         <div className="mt-0.5 text-[11px] text-neutral-400">
           {lastDistilledAt
             ? `Last distilled ${new Date(lastDistilledAt).toLocaleString()}`
@@ -76,14 +76,14 @@ export default function MemoryPanel({ entries, lastDistilledAt }: MemoryPanelPro
         )}
         {entries !== null && entries.length === 0 && (
           <li className="px-3 py-4 text-center text-sm text-neutral-400">
-            Nothing remembered yet. Memories are distilled when a conversation ends.
+            Nothing observed yet. Observations are distilled when a conversation ends.
           </li>
         )}
-        {entries?.map((e) => <MemoryRow key={e.id} entry={e} />)}
+        {entries?.map((e) => <ObservationRow key={e.id} entry={e} />)}
       </ul>
 
       <div className="border-t border-[#eee] px-3 py-2 text-[11px] text-neutral-400">
-        Memory is maintained by the AI. To fix something, tell it in a conversation.
+        Observations are maintained by the AI. If one is off, say so in a conversation.
       </div>
     </div>
   );

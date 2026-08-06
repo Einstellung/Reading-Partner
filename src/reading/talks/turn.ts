@@ -4,8 +4,8 @@
 // one assembles a conversation about the page the reader is on, out of the book
 // the reader has open. This one assembles a conversation about a talk, out of
 // materials read from disk, with no reader mounted. The two share the pieces
-// that are the same (the reading tools, memory, the budget ladder) and nothing
-// else.
+// that are the same (the reading tools, observations, the budget ladder) and
+// nothing else.
 //
 // Pure assembly plus reads. It never touches React state and never starts the
 // stream; the caller owns runAgentTurn.
@@ -25,13 +25,13 @@ import {
 import { languageInstruction, type Settings } from "../../platform/app/settings";
 import type { TopicMaterial } from "../../fulltext/format";
 import {
-  buildMemorySnapshot,
-  buildMemoryTools,
-  getMemoryAdapter,
-  memoryPromptSection,
-  notifyMemoryChange,
-  type MemoryEntry,
-} from "../../memory";
+  buildObservationSnapshot,
+  buildObservationTools,
+  getObservationAdapter,
+  observationPromptSection,
+  notifyObservationChange,
+  type Observation,
+} from "../../observation";
 import { buildReadingTools } from "../context";
 import { buildFigureCatalog } from "../figures/catalog";
 import { buildFigureTools } from "../figures/tools";
@@ -63,7 +63,7 @@ import type { Talk, TalkDecision } from "./types";
 // numbers as the reading turn: a rehearsal is the same kind of conversation.
 export const HISTORY_KEEP = 40;
 export const HISTORY_KEEP_TIGHT = 6;
-const MEMORY_KEEP_TIGHT = 3;
+const OBSERVATION_KEEP_TIGHT = 3;
 
 export interface TalkTurnMessage {
   role: "user" | "ai";
@@ -199,22 +199,24 @@ export async function buildTalkTurn(input: TalkTurnInput): Promise<TalkTurn> {
   });
   const hasReadingTools = tools.length > 0;
 
-  // Per-topic memory (docs/02, docs/31: the rehearsal opens by handing the
-  // reader their own trail back).
-  let memorySection = "";
-  let memorySectionTight = "";
+  // Per-topic AI observations (docs/02, docs/31: the rehearsal opens by handing
+  // the reader their own trail back).
+  let observationSection = "";
+  let observationSectionTight = "";
   if (talk.topicId) {
-    const memory = getMemoryAdapter(talk.topicId);
-    const observations = await memory.listObservations().catch((): MemoryEntry[] => []);
+    const observationsAdapter = getObservationAdapter(talk.topicId);
+    const observations = await observationsAdapter.listObservations().catch((): Observation[] => []);
     tools = [
       ...tools,
-      ...buildMemoryTools(memory, { onWrite: () => notifyMemoryChange(talk.topicId) }),
+      ...buildObservationTools(observationsAdapter, {
+        onWrite: () => notifyObservationChange(talk.topicId),
+      }),
     ];
-    memorySection = memoryPromptSection(buildMemorySnapshot(observations), true);
+    observationSection = observationPromptSection(buildObservationSnapshot(observations), true);
     const recent = [...observations]
       .sort((a, b) => b.updated.localeCompare(a.updated))
-      .slice(0, MEMORY_KEEP_TIGHT);
-    memorySectionTight = memoryPromptSection(buildMemorySnapshot(recent), true);
+      .slice(0, OBSERVATION_KEEP_TIGHT);
+    observationSectionTight = observationPromptSection(buildObservationSnapshot(recent), true);
   }
 
   // Figures. Judging whether a figure can carry a point is the whole reason a
@@ -296,8 +298,8 @@ export async function buildTalkTurn(input: TalkTurnInput): Promise<TalkTurn> {
     });
     const lang = languageInstruction(s.aiLanguage);
     if (lang) prompt += "\n\n" + lang;
-    const memory = dropped.has("memory-trim") ? memorySectionTight : memorySection;
-    if (memory) prompt += "\n\n" + memory;
+    const observed = dropped.has("observation-trim") ? observationSectionTight : observationSection;
+    if (observed) prompt += "\n\n" + observed;
     return prompt;
   }
 
@@ -339,7 +341,7 @@ export async function buildTalkTurn(input: TalkTurnInput): Promise<TalkTurn> {
       const figuresInPlay = messages.some((m) => m.text.includes("[fig:"));
       const savings: Partial<Record<ReductionId, number>> = {
         "figure-catalog": figuresInPlay ? 0 : priceOf("figure-catalog"),
-        "memory-trim": priceOf("memory-trim"),
+        "observation-trim": priceOf("observation-trim"),
         "rehearsal-notes": priceBulk("rehearsal-notes"),
         "rehearsal-marks": priceBulk("rehearsal-marks"),
         "history-trim": Math.max(

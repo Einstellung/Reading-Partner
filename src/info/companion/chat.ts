@@ -6,7 +6,7 @@
 // agent loop, and the tools surface confirm cards.
 
 import { languageInstruction, type AiLanguage } from "../../platform/app/settings";
-import { PROFILE_SKELETON_GUIDANCE } from "../../memory/profile";
+import { PROFILE_SKELETON_GUIDANCE } from "../../observation/profile";
 import { DESCRIPTOR_GUIDE, type SourceDescriptor } from "../sources/descriptor";
 import type { Briefing } from "../briefing/types";
 

@@ -23,7 +23,7 @@ import {
 //   threads-<key>.json         { threads: Record<id, Thread> } (platform/app/threads.ts)
 //   library.json               { books: Record<hash, Entry> }  (platform/app/library.ts)
 //   reading-state.json         { states: Record<bookId, ViewState> } (platform/app/storage.ts)
-//   info-feedback.jsonl        one JSON object per line        (memory/feedback.ts)
+//   info-feedback.jsonl        one JSON object per line        (observation/feedback.ts)
 // A map's key is the identity. A JSONL line is its own identity: the events
 // carry no id of their own and the log is append-only.
 export interface RecordShape {

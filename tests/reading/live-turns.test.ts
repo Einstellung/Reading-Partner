@@ -104,7 +104,7 @@ test("closing a book stops its turns and leaves another book's running", () => {
   expect(turns.has("b")).toBe(true);
 });
 
-// Hanging up mid-answer defers the memory distillation to the moment the reply
+// Hanging up mid-answer defers the observation distillation to the moment the reply
 // lands, so it reads a whole answer.
 test("work handed to a running turn runs when it settles", () => {
   const turns = createLiveTurns<Msg>();

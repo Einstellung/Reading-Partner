@@ -1,20 +1,20 @@
-// The memory module's single assembly exit. Two narrow reads over what the system
-// knows about the user:
+// The observation module's single assembly exit. Two narrow reads over what the
+// system knows about the user:
 //
 //   assembleIdentity()        — the full profile text (the cross-scenario identity
 //                               document), a semantic wrapper over loadProfile.
 //   assembleReadingContext()  — a short plain-text signal of what the user has been
 //                               reading and stuck on lately, distilled from the
-//                               per-topic memory indexes, recent first.
+//                               per-topic observation indexes, recent first.
 //
 // The reading-signal builder is pure (assembleReadingSignal, over given index
 // entries) so it unit-tests without a filesystem; the async wrapper wires it to
-// the live store and topic list. Nothing here changes the memory storage format.
+// the live store and topic list. Nothing here changes the storage format.
 
 import { listTopics } from "../platform/app/topics";
-import { readMemoryIndex } from "./live";
+import { readObservationIndex } from "./live";
 import { loadProfile } from "./profile";
-import type { MemoryIndexEntry, MemoryType } from "./types";
+import type { ObservationIndexEntry, ObservationType } from "./types";
 
 // The identity document, verbatim (empty string when the user has no profile yet).
 export function assembleIdentity(): Promise<string> {
@@ -25,30 +25,30 @@ export function assembleIdentity(): Promise<string> {
 // cut mid-line: whole lines are added until the next one would exceed it.
 export const READING_SIGNAL_BUDGET = 500;
 
-// The two memory types that make up the signal: where the reader is, and what
+// The two observation types that make up the signal: where the reader is, and what
 // they are stuck on / asking. Each maps to a labeled section in the output.
-const SIGNAL_SECTIONS: { type: MemoryType; heading: string }[] = [
+const SIGNAL_SECTIONS: { type: ObservationType; heading: string }[] = [
   { type: "reading-position", heading: "Reading recently" },
   { type: "stuck-point", heading: "Open questions and stuck points" },
 ];
 
-export interface TopicMemorySignal {
+export interface TopicObservationSignal {
   topicName: string;
-  entries: MemoryIndexEntry[];
+  entries: ObservationIndexEntry[];
 }
 
 interface SignalLine {
-  type: MemoryType;
+  type: ObservationType;
   text: string;
   updated: string;
 }
 
-// Build the reading-episode signal from each topic's memory index. Pure: no I/O.
+// Build the reading-episode signal from each topic's observation index. Pure: no I/O.
 // Lines are picked newest-updated first across all topics until the budget would
 // be exceeded, then rendered grouped under their section headings (each group
 // keeps newest-first order). Returns "" when nothing qualifies.
 export function assembleReadingSignal(
-  topics: TopicMemorySignal[],
+  topics: TopicObservationSignal[],
   opts: { budget?: number } = {},
 ): string {
   const budget = opts.budget ?? READING_SIGNAL_BUDGET;
@@ -88,7 +88,7 @@ export function assembleReadingSignal(
   return out.join("\n");
 }
 
-// Live assembly: gather every topic's memory index and distill the signal. Never
+// Live assembly: gather every topic's observation index and distill the signal. Never
 // throws — a failed topic read contributes nothing rather than blocking a caller
 // (a briefing must not depend on this). Returns "" when there is no signal.
 export async function assembleReadingContext(
@@ -96,9 +96,9 @@ export async function assembleReadingContext(
 ): Promise<string> {
   try {
     const topics = await listTopics();
-    const signals: TopicMemorySignal[] = [];
+    const signals: TopicObservationSignal[] = [];
     for (const t of topics) {
-      const entries = await readMemoryIndex(t.id).catch((): MemoryIndexEntry[] => []);
+      const entries = await readObservationIndex(t.id).catch((): ObservationIndexEntry[] => []);
       if (entries.length) signals.push({ topicName: t.name, entries });
     }
     return assembleReadingSignal(signals, opts);

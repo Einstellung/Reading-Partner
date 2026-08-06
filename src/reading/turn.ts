@@ -1,7 +1,7 @@
 // Assembly of one reading-companion turn (M6/M9, docs/03, docs/09, docs/14,
 // docs/24): system prompt, tool set and replayed history for the AI-pen bubble and
 // the book-level thread. Extracted from App so the branching (classroom vs
-// companion, figure tools, link ingestion, literature search, memory, history
+// companion, figure tools, link ingestion, literature search, observations, history
 // trimming) is testable on its own. Pure assembly plus reads — it never touches React state
 // and never starts the stream; the caller owns runAgentTurn.
 
@@ -38,15 +38,15 @@ import { renderFigure } from "./figures/render";
 import type { Figure } from "./figures/types";
 import {
   assembleIdentity,
-  buildMemorySnapshot,
-  buildMemoryTools,
+  buildObservationSnapshot,
+  buildObservationTools,
   distillThread,
-  getMemoryAdapter,
-  memoryPromptSection,
-  notifyMemoryChange,
+  getObservationAdapter,
+  observationPromptSection,
+  notifyObservationChange,
   type DistillAnnotation,
-  type MemoryEntry,
-} from "../memory";
+  type Observation,
+} from "../observation";
 import { readOverviewNote } from "./notes/store";
 import { chapterIndexForPage, papersForChapter } from "./prep/scheduler";
 import { paperFulltextHash, readPrepNote } from "./prep/store";
@@ -75,7 +75,7 @@ import type { PrepPipeline } from "./prep/pipeline";
 export const EXPLAIN_KICKOFF =
   "Please explain the passage I just marked, using the reading context above.";
 // Replayed thread history is trimmed to this many messages per turn; crossing
-// the cap fires the fallback memory distillation before older turns fall out
+// the cap fires the fallback distillation before older turns fall out
 // of context (docs/02: hangup is the main trigger, trimming the backstop).
 export const HISTORY_KEEP = 40;
 // The trim-triggered distillation re-fires only after this many new messages.
@@ -84,8 +84,8 @@ export const TRIM_DISTILL_MIN_NEW = 20;
 // rung. Three exchanges: above the two rounds that are never dropped, below
 // anything that would still be called a conversation.
 export const HISTORY_KEEP_TIGHT = 6;
-// Memory observations kept when the ladder trims the opening snapshot.
-const MEMORY_KEEP_TIGHT = 3;
+// Observations kept when the ladder trims the opening snapshot.
+const OBSERVATION_KEEP_TIGHT = 3;
 
 // The live reading position and topic scope for the turn (App's ctxRef).
 export interface ReadingTurnContext {
@@ -272,19 +272,24 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   // rides in a stable prompt prefix, this chapter's prep notes follow, and
   // paper tools join the M6 reading tools. Companion mode is untouched.
   let tools = buildReadingTools({ currentFulltext, materials });
-  // Per-topic memory (M8): the memory tools join the same loop as the
-  // reading tools; the opening snapshot rides the system prompt below.
-  let memorySection = "";
-  let memorySectionTight = "";
+  // Per-topic AI observations (M8): the observation tools join the same loop as
+  // the reading tools; the opening snapshot rides the system prompt below.
+  let observationSection = "";
+  let observationSectionTight = "";
   if (topicId) {
-    const memory = getMemoryAdapter(topicId);
-    const observations = await memory.listObservations().catch((): MemoryEntry[] => []);
-    tools = [...tools, ...buildMemoryTools(memory, { onWrite: () => notifyMemoryChange(topicId) })];
-    memorySection = memoryPromptSection(buildMemorySnapshot(observations), true);
+    const observationsAdapter = getObservationAdapter(topicId);
+    const observations = await observationsAdapter.listObservations().catch((): Observation[] => []);
+    tools = [
+      ...tools,
+      ...buildObservationTools(observationsAdapter, {
+        onWrite: () => notifyObservationChange(topicId),
+      }),
+    ];
+    observationSection = observationPromptSection(buildObservationSnapshot(observations), true);
     const recent = [...observations]
       .sort((a, b) => b.updated.localeCompare(a.updated))
-      .slice(0, MEMORY_KEEP_TIGHT);
-    memorySectionTight = memoryPromptSection(buildMemorySnapshot(recent), true);
+      .slice(0, OBSERVATION_KEEP_TIGHT);
+    observationSectionTight = observationPromptSection(buildObservationSnapshot(recent), true);
   }
   // Figure catalog + view_figure tool (M9): the model can cite figures as
   // [fig:N] (rendered inline in chat) and open one to actually see it.
@@ -458,8 +463,8 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
         aiLanguage: s.aiLanguage,
       });
     }
-    const memory = dropped.has("memory-trim") ? memorySectionTight : memorySection;
-    if (memory) prompt += "\n\n" + memory;
+    const observed = dropped.has("observation-trim") ? observationSectionTight : observationSection;
+    if (observed) prompt += "\n\n" + observed;
     if (profileSection && !dropped.has("reader-profile")) prompt += "\n\n" + profileSection;
     if (notesOverview && !dropped.has("notes-overview")) prompt += "\n\n" + notesOverview;
     if (canIngestUrl) prompt += "\n\n" + ADD_SOURCE_PROMPT;
@@ -540,7 +545,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
         "reader-profile": priceOf("reader-profile"),
         "notes-overview": priceOf("notes-overview"),
         "booklist-thin": priceOf("booklist-thin"),
-        "memory-trim": priceOf("memory-trim"),
+        "observation-trim": priceOf("observation-trim"),
         // Only priced when classroom is on: composing the inlined survey for a
         // turn that does not carry it would cost a full re-render for nothing.
         ...(isClassroom ? { "classroom-inline": priceBulk("classroom-inline") } : {}),

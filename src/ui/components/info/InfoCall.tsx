@@ -34,7 +34,7 @@ import {
   type BriefingJob,
 } from "../../../info/companion/call";
 import { addSource, hasSources } from "../../../info/sources/source-store";
-import { saveProfile } from "../../../memory/profile";
+import { saveProfile } from "../../../observation/profile";
 import { getInfoPipeline } from "../../../info/briefing/live";
 import { Badge } from "../ui/badge";
 import CallView from "../chat/CallView";

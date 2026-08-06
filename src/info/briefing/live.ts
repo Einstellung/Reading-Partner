@@ -12,9 +12,9 @@ import { browserWakeLockTarget, createScreenWakeLock } from "../../platform/app/
 import { collectAll } from "../sources/engine";
 import { extractReadable } from "../extract/readable";
 import { loadSources, loadSourceHealth, saveSourceHealth } from "../sources/source-store";
-import { loadFeedback } from "../../memory/feedback";
-import { loadProfile } from "../../memory/profile";
-import { assembleReadingContext } from "../../memory/assemble";
+import { loadFeedback } from "../../observation/feedback";
+import { loadProfile } from "../../observation/profile";
+import { assembleReadingContext } from "../../observation/assemble";
 import { InfoPipeline, type InfoSourceRef, type SourceResult } from "./pipeline";
 import {
   clearRun,
@@ -33,7 +33,7 @@ import {
   triageUserMessage,
   type ParseOutcome,
 } from "./triage";
-import type { FeedbackEvent } from "../../memory/feedback";
+import type { FeedbackEvent } from "../../observation/feedback";
 import type { TriageResult } from "./types";
 import type { InfoItem } from "../sources/item";
 
@@ -141,7 +141,7 @@ export function getInfoPipeline(): InfoPipeline {
       loadBriefing,
       loadProfile,
       loadFeedback,
-      // Reading-side signal for triage: assembled from per-topic memory, guarded
+      // Reading-side signal for triage: assembled from per-topic observations, guarded
       // so a failure yields "" and the section is simply omitted.
       loadReaderContext: () => assembleReadingContext(),
       listSources,
