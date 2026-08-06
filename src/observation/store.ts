@@ -39,6 +39,13 @@ export interface ObservationMeta {
   // When the reader's silent marks were last folded in (docs/02 part 2).
   // Distillation gathers annotations created after this, then advances it.
   lastAnnotationDistillAt: number | null;
+  // How many messages of a conversation have already been distilled, by thread
+  // id. A rehearsal is left and re-entered over days (docs/31), so its pass
+  // needs to know where the last one stopped; that has to survive a restart,
+  // which the reading path's in-memory counter (live.ts) does not have to.
+  // Absent until a rehearsal has been distilled — the reading path never writes
+  // it, and neither path may drop the other's bookkeeping when it writes here.
+  distilledMessages?: Record<string, number>;
 }
 
 const ENTRY_FILE = /^(m-[0-9a-f]{8})\.md$/;
@@ -157,6 +164,7 @@ export class ObservationFileStore {
       return {
         lastDistilledAt: parsed.lastDistilledAt ?? null,
         lastAnnotationDistillAt: parsed.lastAnnotationDistillAt ?? null,
+        ...(parsed.distilledMessages ? { distilledMessages: parsed.distilledMessages } : {}),
       };
     } catch {
       return { lastDistilledAt: null, lastAnnotationDistillAt: null };

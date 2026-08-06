@@ -43,10 +43,26 @@ export {
   type DistillResult,
 } from "./distill";
 export {
+  buildRehearsalDistillAgent,
+  buildRehearsalDistillSystemPrompt,
+  buildRehearsalDistillUserMessage,
+  runRehearsalDistillation,
+  runRehearsalDistillPass,
+  selectNewMessages,
+  REHEARSAL_DISTILL_AGENT_NAME,
+  type RehearsalDistillInput,
+  type RehearsalPassDeps,
+  type RehearsalPassInput,
+  type RehearsalPassResult,
+  type RehearsalPassStore,
+} from "./rehearsal";
+export {
+  distillRehearsal,
   distillThread,
   getLastDistillation,
   getObservationAdapter,
   notifyObservationChange,
   onObservationChange,
+  type DistillRehearsalOptions,
   type DistillThreadOptions,
 } from "./live";

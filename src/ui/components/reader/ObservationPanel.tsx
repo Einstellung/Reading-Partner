@@ -10,6 +10,8 @@ import { CitationContext, Markdown } from "../common/Markdown";
 const TYPE_STYLE: Record<ObservationType, string> = {
   "reading-position": "bg-sky-100 text-sky-700",
   "stuck-point": "bg-amber-100 text-amber-700",
+  "cannot-explain": "bg-orange-100 text-orange-700",
+  "can-explain": "bg-teal-100 text-teal-700",
   "understood-concept": "bg-green-100 text-green-700",
   belief: "bg-violet-100 text-violet-700",
   correction: "bg-red-100 text-red-700",

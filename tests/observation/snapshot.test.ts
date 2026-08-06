@@ -39,6 +39,21 @@ test("snapshot caps per type and overall", () => {
   expect(lines.length).toBeLessThanOrEqual(12);
 });
 
+// A chapter the reader could not give out loud belongs beside the stuck-points,
+// not at the bottom with the things that are going well.
+test("snapshot puts cannot-explain behind stuck-point and can-explain further down", () => {
+  const lines = buildObservationSnapshot([
+    e("can-explain", "gives chapter 22 unprompted", "2026-08-07", "m-yyyyyyyy"),
+    e("understood-concept", "got predictive coding", "2026-08-07", "m-cccccccc"),
+    e("cannot-explain", "chapter 23: conclusion only", "2026-08-01", "m-nnnnnnnn"),
+    e("stuck-point", "stuck on volition", "2026-07-12", "m-bbbbbbbb"),
+  ]).split("\n");
+  expect(lines[0]).toContain("volition");
+  expect(lines[1]).toContain("chapter 23");
+  expect(lines[2]).toContain("predictive coding");
+  expect(lines[3]).toContain("chapter 22");
+});
+
 test("empty entries yield an empty snapshot", () => {
   expect(buildObservationSnapshot([])).toBe("");
 });

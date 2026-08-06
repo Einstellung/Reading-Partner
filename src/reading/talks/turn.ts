@@ -70,10 +70,17 @@ const OBSERVATION_KEEP_TIGHT = 3;
 // first question from where this reader got stuck and pitches its language at
 // what they turn out to know (reading/rehearsal/prompt.ts), so those two types
 // go first; reading position is last because the book is finished.
-const OBSERVATION_ORDER_TIGHT: ObservationType[] = [
+// cannot-explain rides directly behind stuck-point: a chapter the reader read
+// but could not give out loud last time is the strongest candidate there is for
+// this rehearsal's next question, and with three lines to spend it has to be one
+// of them. can-explain earns its place further down — it says where not to
+// spend a question, which is worth less than knowing where to.
+export const OBSERVATION_ORDER_TIGHT: ObservationType[] = [
   "stuck-point",
+  "cannot-explain",
   "belief",
   "understood-concept",
+  "can-explain",
   "correction",
   "reading-position",
 ];
