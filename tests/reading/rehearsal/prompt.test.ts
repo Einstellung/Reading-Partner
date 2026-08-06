@@ -43,6 +43,38 @@ test("the instructions forbid the moves that would make the mode useless", () =>
   expect(REHEARSAL_INSTRUCTIONS).toContain("One question, two at most");
 });
 
+// The observations tell the AI where this reader broke down last time, which is
+// the strongest pull there is towards teaching the chapter instead of examining
+// it. The four rules that put them to work are each checked here.
+test("the opening hands the reader their trail back rather than reading it out", () => {
+  expect(REHEARSAL_INSTRUCTIONS).toContain("handing the reader their own trail");
+  expect(REHEARSAL_INSTRUCTIONS).toContain("where they got stuck, whether");
+  expect(REHEARSAL_INSTRUCTIONS).toContain("never the observations read out as a list");
+});
+
+test("a stuck-point outranks a question invented from the chapter", () => {
+  expect(REHEARSAL_INSTRUCTIONS).toContain("Where the chapter's first question comes from");
+  expect(REHEARSAL_INSTRUCTIONS).toContain("never heard them use it afterwards");
+  expect(REHEARSAL_INSTRUCTIONS).toContain("An understanding that was never");
+});
+
+test("what was observed of the reader sets the level, and absence assumes nothing", () => {
+  expect(REHEARSAL_INSTRUCTIONS).toContain("puts this reader in a field");
+  expect(REHEARSAL_INSTRUCTIONS).toContain("skip the groundwork");
+  expect(REHEARSAL_INSTRUCTIONS).toContain("assume no background and say it plainly");
+  // The correction rule itself lives with the observations (observation/
+  // snapshot.ts); what the rehearsal adds is that it must not become the subject.
+  expect(REHEARSAL_INSTRUCTIONS).toContain("go straight back to the chapter");
+});
+
+// Knowing where they got stuck says what to ask, not what to explain. Getting
+// this backwards puts the answer in front of the reader before the question.
+test("knowing where they got stuck does not license explaining it", () => {
+  expect(REHEARSAL_INSTRUCTIONS).toContain("This binds hardest where you know");
+  expect(REHEARSAL_INSTRUCTIONS).toContain("never what to explain first");
+  expect(REHEARSAL_INSTRUCTIONS).toContain("Ask, and open the book only once");
+});
+
 test("the instructions say what to do with a thin answer: name the gap, then teach", () => {
   expect(REHEARSAL_INSTRUCTIONS).toContain("Say which part is missing or wrong");
   expect(REHEARSAL_INSTRUCTIONS).toContain("walk that stretch through once");

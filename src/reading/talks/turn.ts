@@ -30,7 +30,9 @@ import {
   getObservationAdapter,
   observationPromptSection,
   notifyObservationChange,
+  trimObservations,
   type Observation,
+  type ObservationType,
 } from "../../observation";
 import { buildReadingTools } from "../context";
 import { buildFigureCatalog } from "../figures/catalog";
@@ -64,6 +66,17 @@ import type { Talk, TalkDecision } from "./types";
 export const HISTORY_KEEP = 40;
 export const HISTORY_KEEP_TIGHT = 6;
 const OBSERVATION_KEEP_TIGHT = 3;
+// Which observations survive that cut here. The rehearsal sources a chapter's
+// first question from where this reader got stuck and pitches its language at
+// what they turn out to know (reading/rehearsal/prompt.ts), so those two types
+// go first; reading position is last because the book is finished.
+const OBSERVATION_ORDER_TIGHT: ObservationType[] = [
+  "stuck-point",
+  "belief",
+  "understood-concept",
+  "correction",
+  "reading-position",
+];
 
 export interface TalkTurnMessage {
   role: "user" | "ai";
@@ -213,10 +226,8 @@ export async function buildTalkTurn(input: TalkTurnInput): Promise<TalkTurn> {
       }),
     ];
     observationSection = observationPromptSection(buildObservationSnapshot(observations), true);
-    const recent = [...observations]
-      .sort((a, b) => b.updated.localeCompare(a.updated))
-      .slice(0, OBSERVATION_KEEP_TIGHT);
-    observationSectionTight = observationPromptSection(buildObservationSnapshot(recent), true);
+    const kept = trimObservations(observations, OBSERVATION_KEEP_TIGHT, OBSERVATION_ORDER_TIGHT);
+    observationSectionTight = observationPromptSection(buildObservationSnapshot(kept), true);
   }
 
   // Figures. Judging whether a figure can carry a point is the whole reason a
