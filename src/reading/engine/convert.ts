@@ -62,7 +62,39 @@ interface ShellCustom {
   legacyId?: string;
 }
 
-const DEFAULT_OPACITY = 0.4;
+// The one opacity a highlight or an underline is ever drawn at. It has to serve
+// both directions: the shell's JSON stores no opacity, so every reopen would
+// otherwise fall back to whatever this file says, while a freshly drawn markup
+// takes its opacity from the annotation plugin's tool defaults (1, verified
+// against the package). Two numbers meant the same highlight looked solid the
+// moment it was drawn and translucent after a reopen.
+export const MARKUP_OPACITY = 0.4;
+
+// Tool-default overrides for the annotation plugin's registration, so a markup
+// created by the reader starts out at exactly the opacity zoteroToEmbed gives
+// it when the book is opened again. Merged into the plugin's own defaults by
+// `id`, so nothing else about the tools is disturbed.
+export const MARKUP_TOOL_OVERRIDES = [
+  { id: "highlight", defaults: { opacity: MARKUP_OPACITY } },
+  { id: "underline", defaults: { opacity: MARKUP_OPACITY } },
+];
+
+// EmbedPDF renders a markup from `strokeColor` and treats `color` as a
+// deprecated alias — an object carrying only `color` is drawn in the renderer's
+// fallback yellow, whatever the reader picked. Every write of a markup colour
+// goes through here so both fields move together.
+export function markupColorPatch(color: string): { color: string; strokeColor: string } {
+  return { color, strokeColor: color };
+}
+
+// The colour of a markup as EmbedPDF resolves it: `strokeColor` first, the
+// deprecated `color` second (annotations imported before both were written).
+export function markupColorOf(
+  obj: { strokeColor?: string; color?: string },
+  fallback: string,
+): string {
+  return obj.strokeColor ?? obj.color ?? fallback;
+}
 
 function pad(n: number, width: number): string {
   const v = Math.max(0, Math.round(n));
@@ -183,14 +215,15 @@ export function zoteroToEmbed(
     const rects = ann.position?.rects ?? [];
     const segmentRects = rects.map((r) => zoteroRectToEmbed(r, pageHeight));
     const rect = boundingRect(segmentRects);
+    const color = markupColorPatch(normColor(ann.color, "#ffd400"));
     if (ann.type === "highlight") {
       const obj: PdfHighlightAnnoObject = {
         ...common,
         type: PdfAnnotationSubtype.HIGHLIGHT,
         rect,
         segmentRects,
-        color: normColor(ann.color, "#ffd400"),
-        opacity: DEFAULT_OPACITY,
+        ...color,
+        opacity: MARKUP_OPACITY,
       };
       return obj;
     }
@@ -199,8 +232,8 @@ export function zoteroToEmbed(
       type: PdfAnnotationSubtype.UNDERLINE,
       rect,
       segmentRects,
-      color: normColor(ann.color, "#ffd400"),
-      opacity: DEFAULT_OPACITY,
+      ...color,
+      opacity: MARKUP_OPACITY,
     };
     return obj;
   }
@@ -262,7 +295,7 @@ export function embedToZotero(
     return {
       ...base,
       type: obj.type === PdfAnnotationSubtype.HIGHLIGHT ? "highlight" : "underline",
-      color: (obj as PdfHighlightAnnoObject).color ?? "#ffd400",
+      color: markupColorOf(obj as PdfHighlightAnnoObject, "#ffd400"),
       position: { pageIndex, rects },
       sortIndex: makeSortIndex(pageIndex, bb.origin.y, bb.origin.x),
     };

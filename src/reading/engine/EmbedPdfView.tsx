@@ -33,7 +33,13 @@ import { HistoryPluginPackage } from "@embedpdf/plugin-history/react";
 import { AnnotationPluginPackage, AnnotationLayer } from "@embedpdf/plugin-annotation/react";
 import type { AnnotationCapability } from "@embedpdf/plugin-annotation";
 
-import { embedToZotero, zoteroToEmbed, type ZoteroAnnotation } from "./convert";
+import {
+  embedToZotero,
+  markupColorPatch,
+  zoteroToEmbed,
+  MARKUP_TOOL_OVERRIDES,
+  type ZoteroAnnotation,
+} from "./convert";
 import { SELECT_AFTER_CREATE, selectionChanged } from "./annotation-selection";
 import {
   initGestureState,
@@ -1249,6 +1255,9 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
         annotationAuthor: props.authorName ?? "Reading-Partner",
         // Finishing a stroke leaves nothing selected (annotation-selection.ts).
         selectAfterCreate: SELECT_AFTER_CREATE,
+        // A markup is drawn at the same opacity whether it was just made or
+        // just re-imported (convert.ts owns the number).
+        tools: MARKUP_TOOL_OVERRIDES,
       }),
     ],
     // The buffer identifies the document; other props are read live via propsRef.
@@ -2238,8 +2247,7 @@ async function wireEngine(
     },
     setColor(color) {
       const id = activeToolId();
-      if (id === "ink") annotation.setToolDefaults("ink", { strokeColor: color, color });
-      else if (id !== "pointer") annotation.setToolDefaults(id, { color });
+      if (id !== "pointer") annotation.setToolDefaults(id, markupColorPatch(color));
     },
     zoomIn: () => zoomScope.zoomIn(),
     zoomOut: () => zoomScope.zoomOut(),
@@ -2291,7 +2299,7 @@ async function wireEngine(
       const pageIndex = pageOf.get(id);
       if (pageIndex === undefined) return;
       const p: Record<string, unknown> = {};
-      if (patch.color !== undefined) p.color = patch.color;
+      if (patch.color !== undefined) Object.assign(p, markupColorPatch(patch.color));
       if (patch.comment !== undefined) p.contents = patch.comment;
       if (patch.starred !== undefined) {
         const cur = annScope.getAnnotationById(id)?.object.custom ?? {};
@@ -2319,7 +2327,8 @@ async function wireEngine(
           if (!obj) continue;
           if (pageOf.has(obj.id)) {
             const patch: Record<string, unknown> = { custom: obj.custom };
-            if ("color" in obj) patch.color = (obj as { color?: string }).color;
+            const c = (obj as { color?: string }).color;
+            if (c !== undefined) Object.assign(patch, markupColorPatch(c));
             if (typeof obj.contents === "string") patch.contents = obj.contents;
             annScope.updateAnnotation(pageOf.get(obj.id)!, obj.id, patch);
           } else {
