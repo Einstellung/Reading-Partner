@@ -6,11 +6,11 @@
 
 分叉点收敛在 `src/platform/sync` 内部，调用方（index.ts、SettingsView）无感。
 
-- `authFlow.ts`：纯函数。`selectAuthFlow(platform, env)` 按平台返回 `AuthFlow`（`desktop-loopback` 或 `ios-scheme`），未配置返回 null。`buildAuthUrl`、`authCodeBody`、`refreshBody`、`matchesRedirect`、`parseCallbackParams`、`reversedClientId`、`iosRedirectUri` 都在这里，全部单测覆盖（`authFlow.test.ts`）。
+- `authFlow.ts`：纯函数。`selectAuthFlow(platform, env)` 按平台返回 `AuthFlow`（`desktop-loopback` / `ios-scheme` / `android-scheme`），未配置返回 null。`buildAuthUrl`、`authCodeBody`、`refreshBody`、`matchesRedirect`、`parseCallbackParams`、`reversedClientId`、`schemeRedirectUri` 都在这里，全部单测覆盖（`authFlow.test.ts`）。`schemeRedirectUri` 原名 `iosRedirectUri`，Android 接上后泛化成两个 mobile client 共用（[23](./23-Android落地调研.md)）。
 - `googleConfig.ts`：读 env（`VITE_GOOGLE_CLIENT_ID`/`VITE_GOOGLE_CLIENT_SECRET` 桌面，`VITE_GOOGLE_IOS_CLIENT_ID` iOS），用 `@tauri-apps/plugin-os` 的 `platform()`（同步）判平台，`isGoogleConfigured()` 和 `activeAuthFlow()` 都平台感知。
 - `auth.ts`：`signIn()` 按 `flow.kind` 分叉。桌面走 `captureLoopbackCode`（原封不动，复用 Rust `start_oauth_callback_listener`）。iOS 走 `captureSchemeCode`（deep-link 收回调）。token 交换共用 `tokenRequest`，body 由 `authCodeBody`/`refreshBody` 决定——iOS 不带 `client_secret`，桌面带。PKCE(S256) 两边都有，桌面本来就有，直接复用。
 
-平台判定：`platform()` 只识别 `"ios"` 走 scheme 流，其余（macos/windows/linux/未知）一律 loopback。非 Tauri 环境（纯 vite dev）catch 成 `"unknown"`，登录按钮 disabled，app 照常加载。
+平台判定：`platform()` 认 `"ios"` 走 scheme 流（`"android"` 是同形态的另一条，见 [23](./23-Android落地调研.md)），其余（macos/windows/linux/未知）一律 loopback。非 Tauri 环境（纯 vite dev）catch 成 `"unknown"`，登录按钮 disabled，app 照常加载。
 
 ## deep-link 接法与版本
 
