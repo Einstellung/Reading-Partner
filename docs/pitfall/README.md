@@ -7,6 +7,7 @@
 | 你要动的 | 扫这几组 |
 |---|---|
 | 阅读引擎、页面渲染、滚动定位 | EmbedPDF 引擎 |
+| 标注的颜色、不透明度、创建与导入 | EmbedPDF 引擎 |
 | iPad 触摸、笔、缩放、翻页 | 触摸与手势 + EmbedPDF 引擎 |
 | 手机上的手势、页面导航 | 触摸与手势 |
 | 发请求、外链资源、CSP | 网络与 CSP |
@@ -50,6 +51,7 @@
 - [100-the-viewport-gap-is-charged-twice](./100-the-viewport-gap-is-charged-twice.md) — `viewportGap` 同时是页面四周的 padding、每个 fit 的减数（`clientWidth - 2*gap`）和每个 `scrollToPage` 的加数，改留白就是改整套几何；传 0 能生效只因为 reducer 初值也是 0（`if (config.viewportGap)` 根本不 dispatch）
 - [101-page-coordinates-are-a-scroll-offset-on-both-axes](./101-page-coordinates-are-a-scroll-offset-on-both-axes.md) — `scrollToPage` 的 `pageCoordinates.x` 会原样加进水平滚动位置，`alignX` 不传就没人减回去；跳到标注时页面被拉走"标注离页左边缘多远"那么多（实测 60px），左边距的标注偏一点、右半页的标注偏半屏。跳到页内某点一律显式补 `alignX`：页面放得下就居中页面（`x` 传 0），放大到超出视口就居中标注（`x` 传标注 x、`alignX` 传 50）
 - [102-render-quality-option-is-read-under-another-name](./102-render-quality-option-is-read-under-another-name.md) — `renderPage` 的 `imageQuality` 调 0.01 和 1.0 出来一样大：编码器读的是 `options.quality`（类型里没有这个字段），质量永远落在 canvas 默认；两个名字都传
+- [105-markup-is-drawn-from-strokecolor-and-tool-opacity](./105-markup-is-drawn-from-strokecolor-and-tool-opacity.md) — 高亮/下划线渲染读的是 `strokeColor`（`color` 是 deprecated 别名），只写 `color` 就画成兜底黄；不透明度又分两处（导入写死 0.4、创建取工具默认值 1），于是刚划的那一下深、重开变浅，两次都不是选的那个颜色。颜色两个字段一起写，不透明度收成一个数、注册期用 `tools` 覆盖工具默认值
 
 ## 触摸与手势
 
