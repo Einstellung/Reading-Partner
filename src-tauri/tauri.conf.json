@@ -44,7 +44,10 @@
     "deep-link": {
       "mobile": [
         {
-          "scheme": ["com.googleusercontent.apps.379091688229-esc23unqq02igufrjr9jjvtsug49j097"],
+          "scheme": [
+            "com.googleusercontent.apps.379091688229-esc23unqq02igufrjr9jjvtsug49j097",
+            "com.googleusercontent.apps.379091688229-8mb45l09bamhv2ln623knt4kob14folb"
+          ],
           "appLink": false
         }
       ]
