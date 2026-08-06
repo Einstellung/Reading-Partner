@@ -1,5 +1,5 @@
 // The Memory section of a topic (docs/31, "界面"). Memory has always been stored
-// per topic (docs/02, src/memory), so this is where it belongs, and it is the
+// per topic (docs/02, src/observation), so this is where it belongs, and it is the
 // only place it shows: the reader's sidebar used to carry a second copy keyed to
 // whichever topic the open book was in, and two views of one thing is one too
 // many.
@@ -14,7 +14,7 @@ import {
   getMemoryAdapter,
   onMemoryChange,
   type MemoryEntry,
-} from "../../../../memory";
+} from "../../../../observation";
 import MemoryPanel from "../../reader/MemoryPanel";
 
 export default function MemorySection({ topicId }: { topicId: string }) {

@@ -1,8 +1,8 @@
-// Unit tests for the memory file store (src/memory/store.ts), over the fake
+// Unit tests for the memory file store (src/observation/store.ts), over the fake
 // fs — write/index/update/evolution rewrite/delete/rebuild. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { MemoryFileStore } from "../../src/memory/store";
+import { MemoryFileStore } from "../../src/observation/store";
 import { JULY_17, JULY_20, makeFakeFs } from "./fakefs";
 
 function makeStore(now: () => number = () => JULY_17) {

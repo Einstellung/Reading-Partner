@@ -1,9 +1,9 @@
-// Unit tests for the opening snapshot assembly (src/memory/snapshot.ts).
+// Unit tests for the opening snapshot assembly (src/observation/snapshot.ts).
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { buildMemorySnapshot, memoryPromptSection } from "../../src/memory/snapshot";
-import type { MemoryIndexEntry, MemoryType } from "../../src/memory/types";
+import { buildMemorySnapshot, memoryPromptSection } from "../../src/observation/snapshot";
+import type { MemoryIndexEntry, MemoryType } from "../../src/observation/types";
 
 function e(type: MemoryType, summary: string, updated: string, id = "m-00000001"): MemoryIndexEntry {
   return { id, type, summary, updated };

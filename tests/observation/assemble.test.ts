@@ -1,10 +1,10 @@
-// The pure reading-episode signal builder (src/memory/assemble.ts): it distills
+// The pure reading-episode signal builder (src/observation/assemble.ts): it distills
 // per-topic memory indexes into a short, recency-ordered plain-text summary of
 // what the reader is reading and stuck on, honoring a character budget. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { assembleReadingSignal, type TopicMemorySignal } from "../../src/memory/assemble";
-import type { MemoryIndexEntry } from "../../src/memory/types";
+import { assembleReadingSignal, type TopicMemorySignal } from "../../src/observation/assemble";
+import type { MemoryIndexEntry } from "../../src/observation/types";
 
 function e(
   type: MemoryIndexEntry["type"],

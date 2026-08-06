@@ -1,7 +1,7 @@
 // In-memory MemoryFs for the memory tests: the store runs its whole write path
 // against a Map, no Tauri involved.
 
-import type { MemoryFs } from "../../src/memory/store";
+import type { MemoryFs } from "../../src/observation/store";
 
 export function makeFakeFs(): { fs: MemoryFs; files: Map<string, string> } {
   const files = new Map<string, string>();

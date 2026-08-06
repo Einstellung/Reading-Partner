@@ -34,7 +34,7 @@ import {
   type InfoSourceRef,
   type SourceResult,
 } from "./run-state";
-import type { FeedbackEvent } from "../../memory/feedback";
+import type { FeedbackEvent } from "../../observation/feedback";
 import type { Briefing, BriefingItemMeta, TriageResult } from "./types";
 import type { InfoItem } from "../sources/item";
 

@@ -1,9 +1,9 @@
-// Unit tests for the file-backed Memory Adapter (src/memory/adapter.ts) —
+// Unit tests for the file-backed Memory Adapter (src/observation/adapter.ts) —
 // BM25 recall over memory bodies, correct-with-null deletion. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { FileMemoryAdapter } from "../../src/memory/adapter";
-import { MemoryFileStore } from "../../src/memory/store";
+import { FileMemoryAdapter } from "../../src/observation/adapter";
+import { MemoryFileStore } from "../../src/observation/store";
 import { JULY_17, makeFakeFs } from "./fakefs";
 
 function makeAdapter() {

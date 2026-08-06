@@ -4,7 +4,7 @@
 // the prep panel.
 
 import { useState } from "react";
-import type { MemoryEntry, MemoryType } from "../../../memory";
+import type { MemoryEntry, MemoryType } from "../../../observation";
 import { CitationContext, Markdown } from "../common/Markdown";
 
 const TYPE_STYLE: Record<MemoryType, string> = {

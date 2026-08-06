@@ -1,4 +1,4 @@
-// Distillation flow tests (src/memory/distill.ts) with a mocked AI turn: the
+// Distillation flow tests (src/observation/distill.ts) with a mocked AI turn: the
 // sub-agent turn is backed by runAgentLoop over a scripted fake stream (same
 // pattern as tests/ai/subagent.test.ts), so the real memory tools, the real
 // honest-failure mapping and the real abort path run against the fake store with
@@ -19,7 +19,7 @@ import { runAgentLoop, type StreamFn } from "../../src/ai/agent";
 import { createTurnSettler } from "../../src/ai/subagent/turn";
 import type { SubagentTurnFn, SubagentTurnRequest } from "../../src/ai/subagent/types";
 import { StoppedError } from "../../src/ai/watchdog";
-import { FileMemoryAdapter } from "../../src/memory/adapter";
+import { FileMemoryAdapter } from "../../src/observation/adapter";
 import {
   buildDistillAgent,
   buildDistillSystemPrompt,
@@ -32,8 +32,8 @@ import {
   type DistillAnnotation,
   type DistillInput,
   type DistillPassInput,
-} from "../../src/memory/distill";
-import { MemoryFileStore } from "../../src/memory/store";
+} from "../../src/observation/distill";
+import { MemoryFileStore } from "../../src/observation/store";
 import { JULY_17, makeFakeFs } from "./fakefs";
 
 type ToolReq = { name: string; args: Record<string, any>; id: string };

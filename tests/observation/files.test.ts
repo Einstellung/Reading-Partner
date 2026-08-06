@@ -1,4 +1,4 @@
-// Unit tests for the memory file formats (src/memory/files.ts). Run: bun test.
+// Unit tests for the memory file formats (src/observation/files.ts). Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
@@ -10,8 +10,8 @@ import {
   parseMemory,
   serializeIndexLine,
   serializeMemory,
-} from "../../src/memory/files";
-import type { MemoryEntry } from "../../src/memory/types";
+} from "../../src/observation/files";
+import type { MemoryEntry } from "../../src/observation/types";
 
 const ENTRY: MemoryEntry = {
   id: "m-1a2b3c4d",

@@ -31,7 +31,7 @@ import {
   memoryPromptSection,
   notifyMemoryChange,
   type MemoryEntry,
-} from "../../memory";
+} from "../../observation";
 import { buildReadingTools } from "../context";
 import { buildFigureCatalog } from "../figures/catalog";
 import { buildFigureTools } from "../figures/tools";

@@ -46,7 +46,7 @@ import {
   notifyMemoryChange,
   type DistillAnnotation,
   type MemoryEntry,
-} from "../memory";
+} from "../observation";
 import { readOverviewNote } from "./notes/store";
 import { chapterIndexForPage, papersForChapter } from "./prep/scheduler";
 import { paperFulltextHash, readPrepNote } from "./prep/store";

@@ -64,7 +64,7 @@ import { locateQuote, type Citation } from "./reading/prep";
 import { usePrep } from "./reading/prep/use-prep";
 import { useNotes } from "./reading/notes/use-notes";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
-import { distillThread, type DistillAnnotation } from "./memory";
+import { distillThread, type DistillAnnotation } from "./observation";
 import { logEvent } from "./platform/app/events";
 import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
 import EmbedReaderPane from "./reading/engine/EmbedReaderPane";
