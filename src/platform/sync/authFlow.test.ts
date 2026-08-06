@@ -6,11 +6,11 @@ import { expect, test } from "bun:test";
 import {
   authCodeBody,
   buildAuthUrl,
-  iosRedirectUri,
   matchesRedirect,
   parseCallbackParams,
   refreshBody,
   reversedClientId,
+  schemeRedirectUri,
   selectAuthFlow,
   type AuthEnv,
 } from "./authFlow";
@@ -18,13 +18,19 @@ import {
 const IOS_ID = "1234567890-abcdef.apps.googleusercontent.com";
 const REVERSED = "com.googleusercontent.apps.1234567890-abcdef";
 const REDIRECT = `${REVERSED}:/oauth2redirect`;
+// A different client id from the iOS one: Google binds an Android client to the
+// package name plus signing certificate, so the two can never be the same client.
+const ANDROID_ID = "9876543210-ghijkl.apps.googleusercontent.com";
+const ANDROID_REDIRECT = "com.googleusercontent.apps.9876543210-ghijkl:/oauth2redirect";
 
 const env: AuthEnv = {
   desktopClientId: "desk-id",
   desktopClientSecret: "desk-secret",
   desktopRedirectUri: "http://127.0.0.1:53692/callback",
   iosClientId: IOS_ID,
-  iosRedirectUri: iosRedirectUri(IOS_ID),
+  iosRedirectUri: schemeRedirectUri(IOS_ID),
+  androidClientId: ANDROID_ID,
+  androidRedirectUri: schemeRedirectUri(ANDROID_ID),
 };
 
 // --- reverse client id -----------------------------------------------------
@@ -33,12 +39,13 @@ test("reversedClientId strips the googleusercontent suffix and prepends the reve
   expect(reversedClientId(IOS_ID)).toBe(REVERSED);
 });
 
-test("iosRedirectUri appends the oauth2redirect path with a single slash", () => {
-  expect(iosRedirectUri(IOS_ID)).toBe(REDIRECT);
+test("schemeRedirectUri appends the oauth2redirect path with a single slash", () => {
+  expect(schemeRedirectUri(IOS_ID)).toBe(REDIRECT);
+  expect(schemeRedirectUri(ANDROID_ID)).toBe(ANDROID_REDIRECT);
 });
 
-test("iosRedirectUri is empty when no iOS client is configured", () => {
-  expect(iosRedirectUri("")).toBe("");
+test("schemeRedirectUri is empty when no client is configured", () => {
+  expect(schemeRedirectUri("")).toBe("");
 });
 
 // --- platform fork ---------------------------------------------------------
@@ -49,6 +56,14 @@ test("iOS platform selects the scheme flow with no client secret", () => {
   expect(flow?.clientId).toBe(IOS_ID);
   expect(flow?.clientSecret).toBeUndefined();
   expect(flow?.redirectUri).toBe(REDIRECT);
+});
+
+test("Android platform selects the scheme flow with its own client and no secret", () => {
+  const flow = selectAuthFlow("android", env);
+  expect(flow?.kind).toBe("android-scheme");
+  expect(flow?.clientId).toBe(ANDROID_ID);
+  expect(flow?.clientSecret).toBeUndefined();
+  expect(flow?.redirectUri).toBe(ANDROID_REDIRECT);
 });
 
 test("macOS/windows/linux and unknown platforms all select the desktop loopback flow", () => {
@@ -63,6 +78,21 @@ test("macOS/windows/linux and unknown platforms all select the desktop loopback 
 
 test("iOS flow is null when the iOS client id is unset", () => {
   expect(selectAuthFlow("ios", { ...env, iosClientId: "", iosRedirectUri: "" })).toBeNull();
+});
+
+// An unconfigured mobile platform must report "not configured", never inherit the
+// desktop loopback: Google rejects a loopback redirect for a mobile client, and
+// the desktop secret is not in a mobile bundle to begin with.
+test("Android flow is null when the Android client id is unset, and never falls back to desktop", () => {
+  const unset = selectAuthFlow("android", { ...env, androidClientId: "", androidRedirectUri: "" });
+  expect(unset).toBeNull();
+});
+
+test("Android never selects the desktop loopback flow even with a full desktop client present", () => {
+  expect(selectAuthFlow("android", env)?.kind).not.toBe("desktop-loopback");
+  expect(selectAuthFlow("android", env)?.clientSecret).toBeUndefined();
+  const noAndroid = selectAuthFlow("android", { ...env, androidClientId: "", androidRedirectUri: "" });
+  expect(noAndroid?.kind).toBeUndefined();
 });
 
 test("desktop flow is null when id or secret is missing", () => {
@@ -107,6 +137,12 @@ test("authCodeBody includes the client secret on desktop and omits it on iOS", (
   expect(ios.code_verifier).toBe("verif");
   expect(ios.client_id).toBe(IOS_ID);
   expect(ios.redirect_uri).toBe(REDIRECT);
+
+  const android = authCodeBody(selectAuthFlow("android", env)!, "code123", "verif");
+  expect(android.client_secret).toBeUndefined();
+  expect(android.code_verifier).toBe("verif");
+  expect(android.client_id).toBe(ANDROID_ID);
+  expect(android.redirect_uri).toBe(ANDROID_REDIRECT);
 });
 
 test("refreshBody follows the same secret rule and sends the refresh token", () => {
@@ -118,6 +154,11 @@ test("refreshBody follows the same secret rule and sends the refresh token", () 
   const ios = refreshBody(selectAuthFlow("ios", env)!, "R");
   expect(ios.client_secret).toBeUndefined();
   expect(ios.refresh_token).toBe("R");
+
+  const android = refreshBody(selectAuthFlow("android", env)!, "R");
+  expect(android.client_secret).toBeUndefined();
+  expect(android.refresh_token).toBe("R");
+  expect(android.client_id).toBe(ANDROID_ID);
 });
 
 // --- deep-link callback parsing --------------------------------------------

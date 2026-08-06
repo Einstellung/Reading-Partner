@@ -14,11 +14,15 @@
 # The keystore is the app's UPGRADE IDENTITY: replacing it makes a phone refuse to
 # install the update over an existing install. Back it up (docs/23-Android落地调研.md).
 #
-# No VITE_GOOGLE_* is injected. selectAuthFlow() has no android branch, so an
-# Android build with the desktop client baked in would offer the loopback flow,
-# which nobody has ever run on Android; without it, Settings > Sync says "Google
-# client not configured" and the button is disabled. That is the honest state
-# until the OAuth route is decided (docs/23).
+# Google sign-in: only VITE_GOOGLE_ANDROID_CLIENT_ID is injected, and its value is
+# written here in the clear. An Android OAuth client has no secret — it is a public
+# client bound to the package name and the signing certificate's SHA-1, protected
+# by PKCE — so the id is not a credential, same as the iOS workflows. The desktop
+# client id and secret are deliberately NOT injected: they belong to a Desktop
+# client whose loopback redirect Google does not accept from an Android client, and
+# baking a secret into a shipped APK has no upside. Without this variable
+# selectAuthFlow() returns null on Android and Settings > Sync shows "Google client
+# not configured" with the button disabled.
 #
 # Independent of android-engine-smoke.yml (the emulator engine gate).
 
@@ -51,6 +55,11 @@ env:
   # KB) in build-tools 35, and 34's zipalign dies on the flag.
   BUILD_TOOLS_VERSION: "36.0.0"
   BUNDLE_ID: com.xinyuan.readingpartner
+  # Baked into the Vite build by tauri's beforeBuildCommand (bun run build), which
+  # inherits this env. Its reversed form is the deep-link scheme registered in
+  # tauri.conf.json, which becomes the Android intent-filter; the two must stay in
+  # sync or the redirect lands nowhere.
+  VITE_GOOGLE_ANDROID_CLIENT_ID: 379091688229-8mb45l09bamhv2ln623knt4kob14folb.apps.googleusercontent.com
 
 jobs:
   build:

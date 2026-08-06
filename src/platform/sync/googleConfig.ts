@@ -14,13 +14,19 @@
 // which must ALSO be registered statically in tauri.conf.json > plugins >
 // deep-link > mobile (the Info.plist CFBundleURLTypes are generated from there at
 // iOS build time; it cannot be injected from this env var). Keep the two in sync.
+//
+// Android: an "Android" OAuth client, VITE_GOOGLE_ANDROID_CLIENT_ID. Same shape as
+// iOS, but a separate client because Google binds an Android client to the package
+// name plus the signing certificate's SHA-1. Its reversed scheme goes into the
+// same tauri.conf.json array, which generates the Android intent-filter.
 
 import { platform } from "@tauri-apps/plugin-os";
-import { iosRedirectUri, selectAuthFlow, type AuthEnv, type AuthFlow } from "./authFlow";
+import { schemeRedirectUri, selectAuthFlow, type AuthEnv, type AuthFlow } from "./authFlow";
 
 export const GOOGLE_CLIENT_ID: string = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "";
 export const GOOGLE_CLIENT_SECRET: string = import.meta.env.VITE_GOOGLE_CLIENT_SECRET ?? "";
 export const GOOGLE_IOS_CLIENT_ID: string = import.meta.env.VITE_GOOGLE_IOS_CLIENT_ID ?? "";
+export const GOOGLE_ANDROID_CLIENT_ID: string = import.meta.env.VITE_GOOGLE_ANDROID_CLIENT_ID ?? "";
 
 // Loopback redirect captured by the Rust listener (oauth_callback.rs), shared
 // with the Anthropic login. Google Desktop clients accept a loopback redirect on
@@ -41,7 +47,9 @@ function authEnv(): AuthEnv {
     desktopClientSecret: GOOGLE_CLIENT_SECRET,
     desktopRedirectUri: GOOGLE_REDIRECT_URI,
     iosClientId: GOOGLE_IOS_CLIENT_ID,
-    iosRedirectUri: iosRedirectUri(GOOGLE_IOS_CLIENT_ID),
+    iosRedirectUri: schemeRedirectUri(GOOGLE_IOS_CLIENT_ID),
+    androidClientId: GOOGLE_ANDROID_CLIENT_ID,
+    androidRedirectUri: schemeRedirectUri(GOOGLE_ANDROID_CLIENT_ID),
   };
 }
 

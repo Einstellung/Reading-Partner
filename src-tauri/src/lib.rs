@@ -13,7 +13,8 @@ mod voice;
 // Plugins: dialog + fs (M1 file open / reading state), http (AI provider requests
 // routed through Rust to bypass CORS), opener (open the system browser for OAuth),
 // clipboard-manager (read pasted images on WebKitGTK, whose DOM paste event drops
-// image data), deep-link (receive the Google iOS OAuth custom-scheme redirect),
+// image data), deep-link (receive the Google mobile OAuth custom-scheme redirect
+// on iOS and Android),
 // os (platform detection to fork the OAuth flow). Custom commands: the one-shot
 // OAuth loopback listener (desktop-only in practice; registered everywhere) and
 // the atomic data-file writer (atomic_fs), which the fs plugin has no equivalent
