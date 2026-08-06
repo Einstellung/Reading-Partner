@@ -40,6 +40,28 @@ export function buildObservationSnapshot(entries: ObservationIndexEntry[]): stri
   return lines.join("\n");
 }
 
+// The few observations a shortened snapshot keeps (the budget ladder's
+// observation-trim rung). Newest-updated first inside a type, but the types are
+// walked in the caller's order, so a caller that leads with the type its prompt
+// leans on keeps those lines when the window forces the rest out. Types the
+// caller does not name follow in the default order rather than being dropped.
+export function trimObservations<T extends ObservationIndexEntry>(
+  entries: readonly T[],
+  limit: number,
+  order: readonly ObservationType[] = TYPE_ORDER,
+): T[] {
+  const walk = [...order, ...TYPE_ORDER.filter((t) => !order.includes(t))];
+  const out: T[] = [];
+  for (const type of walk) {
+    if (out.length >= limit) break;
+    const ofType = entries
+      .filter((e) => e.type === type)
+      .sort((a, b) => b.updated.localeCompare(a.updated));
+    out.push(...ofType.slice(0, limit - out.length));
+  }
+  return out;
+}
+
 // The observations paragraph appended to the conversation system prompt: the
 // snapshot plus the tool guidance (active recall discipline, correction
 // ownership).

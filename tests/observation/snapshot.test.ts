@@ -2,7 +2,11 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { buildObservationSnapshot, observationPromptSection } from "../../src/observation/snapshot";
+import {
+  buildObservationSnapshot,
+  observationPromptSection,
+  trimObservations,
+} from "../../src/observation/snapshot";
 import type { ObservationIndexEntry, ObservationType } from "../../src/observation/types";
 
 function e(type: ObservationType, summary: string, updated: string, id = "m-00000001"): ObservationIndexEntry {
@@ -37,6 +41,33 @@ test("snapshot caps per type and overall", () => {
 
 test("empty entries yield an empty snapshot", () => {
   expect(buildObservationSnapshot([])).toBe("");
+});
+
+// The rehearsal asks its first question about whatever the reader got stuck on,
+// so a trim by recency alone can take away the line that rule runs on: the two
+// beliefs below are newer than every stuck-point.
+test("a trim keeps the types the caller leads with, newest first inside a type", () => {
+  const entries = [
+    e("belief", "free will", "2026-07-20", "m-b1"),
+    e("belief", "rl background", "2026-07-19", "m-b2"),
+    e("stuck-point", "active inference", "2026-07-10", "m-s1"),
+    e("stuck-point", "predictive coding", "2026-07-12", "m-s2"),
+    e("reading-position", "p.204", "2026-07-21", "m-r1"),
+  ];
+  const kept = trimObservations(entries, 3, ["stuck-point", "belief"]);
+  expect(kept.map((k) => k.id)).toEqual(["m-s2", "m-s1", "m-b1"]);
+});
+
+// An order that names only some types is a preference, not a filter: a topic
+// with nothing of the named types still gets a snapshot.
+test("a trim falls through to the unnamed types and stops at the limit", () => {
+  const entries = [
+    e("reading-position", "p.204", "2026-07-21", "m-r1"),
+    e("correction", "not Hebbian", "2026-07-18", "m-c1"),
+  ];
+  expect(trimObservations(entries, 3, ["stuck-point"]).map((k) => k.id)).toEqual(["m-r1", "m-c1"]);
+  expect(trimObservations(entries, 1, ["stuck-point"]).map((k) => k.id)).toEqual(["m-r1"]);
+  expect(trimObservations([], 3)).toEqual([]);
 });
 
 test("prompt section: snapshot text, recall discipline, and correction ownership", () => {

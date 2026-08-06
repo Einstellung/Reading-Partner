@@ -13,7 +13,7 @@ export { OBSERVATION_TYPES, isObservationType } from "./types";
 export { isoDate, parseIndex, parseObservation, serializeObservation } from "./files";
 export { ObservationFileStore, type ObservationFs, type ObservationMeta } from "./store";
 export { FileObservationAdapter, type ObservationAdapter } from "./adapter";
-export { buildObservationSnapshot, observationPromptSection } from "./snapshot";
+export { buildObservationSnapshot, observationPromptSection, trimObservations } from "./snapshot";
 export {
   assembleIdentity,
   assembleReadingContext,
