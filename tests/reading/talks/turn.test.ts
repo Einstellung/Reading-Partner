@@ -8,13 +8,17 @@ import { expect, test } from "bun:test";
 import { DEFAULT_SETTINGS, type Settings } from "../../../src/platform/app/settings";
 import type { Fulltext } from "../../../src/fulltext/types";
 import type { Figure } from "../../../src/reading/figures/types";
+import { trimObservations } from "../../../src/observation/snapshot";
+import type { ObservationIndexEntry, ObservationType } from "../../../src/observation/types";
 
 // No filesystem mock on purpose: every disk read this assembly makes is
 // optional and already wrapped (a chapter note, the topic's observation index), so
 // with no Tauri host under it they all miss, which is exactly the case being
 // assembled for. Mocking the fs plugin here would swap it out for every other
 // test file in the run as well.
-const { buildTalkTurn, HISTORY_KEEP } = await import("../../../src/reading/talks/turn");
+const { buildTalkTurn, HISTORY_KEEP, OBSERVATION_ORDER_TIGHT } = await import(
+  "../../../src/reading/talks/turn",
+);
 const { combineChapters } = await import("../../../src/reading/talks/outline");
 import type { LoadedMaterial } from "../../../src/reading/talks/material";
 import type { Talk, TalkDecision } from "../../../src/reading/talks/types";
@@ -380,4 +384,29 @@ test("read_chapter_note answers in combined chapter numbers", async () => {
   // chapter of this talk at all.
   expect(String(await tool!.execute({ chapter: 4 }))).toContain("No note on file");
   expect(String(await tool!.execute({ chapter: 9 }))).toContain("No chapter 9");
+});
+
+// What survives when the window forces the observation section down to three
+// lines. A chapter the reader read but could not give out loud is where the next
+// question should go, so cannot-explain sits directly behind stuck-point — ahead
+// of a belief, which only shapes how the question is phrased.
+test("the tight observation order keeps what the rehearsal asks its next question from", () => {
+  const e = (type: ObservationType, id: string, updated: string): ObservationIndexEntry => ({
+    id,
+    type,
+    summary: id,
+    updated,
+  });
+  const entries = [
+    e("belief", "m-b1", "2026-08-06"),
+    e("can-explain", "m-y1", "2026-08-06"),
+    e("cannot-explain", "m-n1", "2026-08-01"),
+    e("stuck-point", "m-s1", "2026-07-20"),
+    e("reading-position", "m-r1", "2026-08-06"),
+  ];
+  expect(trimObservations(entries, 3, OBSERVATION_ORDER_TIGHT).map((k) => k.id)).toEqual([
+    "m-s1",
+    "m-n1",
+    "m-b1",
+  ]);
 });

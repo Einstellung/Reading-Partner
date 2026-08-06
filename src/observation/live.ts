@@ -1,7 +1,9 @@
 // Live wiring of the observation module: the Tauri fs behind ObservationFs, one
-// adapter per topic for the app's lifetime, the hangup/trim distillation entry
-// points (real model through runAgentTurn, same provider config as chat), and a
-// tiny change feed so the observations panel refreshes after background writes.
+// adapter per topic for the app's lifetime, the distillation entry points — a
+// reading conversation on hangup or a trim, a rehearsal when the reader leaves
+// the talk — all on the real model through runAgentTurn with the same provider
+// config as chat, and a tiny change feed so the observations panel refreshes
+// after background writes.
 
 import {
   BaseDirectory,
@@ -20,6 +22,7 @@ import { FileObservationAdapter, type ObservationAdapter } from "./adapter";
 import { ObservationFileStore, type ObservationFs } from "./store";
 import type { ObservationIndexEntry } from "./types";
 import { runDistillPass, type DistillAnnotation, type DistillMessage } from "./distill";
+import { runRehearsalDistillPass } from "./rehearsal";
 
 const tauriFs: ObservationFs = {
   async read(path) {
@@ -210,6 +213,90 @@ export async function distillThread(
     // store read that threw. Same discipline as a pass that failed inside the run.
     console.warn("observation distillation could not start", e);
     logEvent(opts.topicId, "distill-failed", { threadId, outcome: "failed" });
+  } finally {
+    inFlight.delete(threadId);
+  }
+}
+
+export interface DistillRehearsalOptions {
+  topicId: string;
+  topicName: string;
+  talkId: string;
+  talkName: string;
+  // The talk's materials by title.
+  materials: string[];
+  threadId: string;
+  // The rehearsal conversation as it stands on disk, oldest first. Which part of
+  // it is new is worked out from the stored cursor (rehearsal.ts).
+  messages: DistillMessage[];
+  signal?: AbortSignal;
+}
+
+// One silent distillation pass over a rehearsal the reader has just left
+// (docs/31). Same posture as distillThread: never throws, never surfaces UI, a
+// failed pass is a warn plus an event and the cursor stays where it was so the
+// next exit redoes the stretch.
+//
+// Unlike the reading trigger there is only one caller and one route into it —
+// the talk view unmounting — because every way out of a talk goes through that.
+export async function distillRehearsal(opts: DistillRehearsalOptions): Promise<void> {
+  const { threadId, topicId } = opts;
+  if (inFlight.has(threadId)) return;
+  inFlight.add(threadId);
+  try {
+    // The chat model config, like the reading pass: this is a silent turn of the
+    // reader's own conversation, not a background pipeline.
+    const model = await resolveModel("chat");
+    const result = await runRehearsalDistillPass(
+      {
+        topicName: opts.topicName,
+        talkName: opts.talkName,
+        materials: opts.materials,
+        threadId,
+        messages: opts.messages,
+      },
+      {
+        store: getStore(topicId),
+        adapter: getObservationAdapter(topicId),
+        run: runSubagentTurnLive,
+        model: {
+          providerId: model.providerId,
+          modelId: model.modelId,
+          reasoning: model.reasoning,
+        },
+        signal: opts.signal,
+      },
+    );
+    // Leaving a talk twice with nothing said in between is the ordinary case,
+    // not something to log: the reader steps out to check the outline and comes
+    // back. Nothing ran, so nothing changed.
+    if (!result.ran) return;
+    if (!result.ok) {
+      console.warn("rehearsal distillation did not finish:", result.failure);
+      logEvent(topicId, "distill-failed", {
+        threadId,
+        talkId: opts.talkId,
+        outcome: result.outcome,
+        created: result.created,
+        updated: result.updated,
+        deleted: result.deleted,
+      });
+      if (result.created + result.updated + result.deleted > 0) notifyObservationChange(topicId);
+      return;
+    }
+    logEvent(topicId, "distill-run", {
+      threadId,
+      talkId: opts.talkId,
+      messages: result.distilled,
+      created: result.created,
+      updated: result.updated,
+      deleted: result.deleted,
+    });
+    notifyObservationChange(topicId);
+  } catch (e) {
+    if (e instanceof StoppedError) return;
+    console.warn("rehearsal distillation could not start", e);
+    logEvent(topicId, "distill-failed", { threadId, talkId: opts.talkId, outcome: "failed" });
   } finally {
     inFlight.delete(threadId);
   }

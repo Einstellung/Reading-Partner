@@ -353,8 +353,11 @@ export async function runDistillPass(
   );
   if (!result.ok) return result;
   // The transcript's stamp, and — when this pass actually saw the marks — the
-  // silent-marks cursor.
+  // silent-marks cursor. Spread first: the rehearsal pass keeps its own
+  // per-thread cursor in the same file (rehearsal.ts) and a hangup here must not
+  // wipe it.
   await deps.store.setMeta({
+    ...meta,
     lastDistilledAt: now(),
     lastAnnotationDistillAt: marks.length > 0 ? marks[0].createdAt : meta.lastAnnotationDistillAt,
   });

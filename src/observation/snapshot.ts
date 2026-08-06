@@ -8,6 +8,8 @@ import type { ObservationIndexEntry, ObservationType } from "./types";
 const PER_TYPE_CAP: Record<ObservationType, number> = {
   "reading-position": 2,
   "stuck-point": 4,
+  "cannot-explain": 3,
+  "can-explain": 2,
   "understood-concept": 3,
   belief: 3,
   correction: 2,
@@ -18,7 +20,9 @@ const TOTAL_CAP = 12;
 const TYPE_ORDER: ObservationType[] = [
   "reading-position",
   "stuck-point",
+  "cannot-explain",
   "understood-concept",
+  "can-explain",
   "belief",
   "correction",
 ];

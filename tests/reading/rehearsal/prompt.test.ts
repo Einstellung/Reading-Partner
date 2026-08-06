@@ -58,6 +58,14 @@ test("a stuck-point outranks a question invented from the chapter", () => {
   expect(REHEARSAL_INSTRUCTIONS).toContain("An understanding that was never");
 });
 
+// A chapter they already failed to give out loud beats one they merely got stuck
+// reading — and naming the failure back to them is how a rehearsal turns into an
+// apology instead of a question.
+test("a cannot-explain outranks the stuck-point, and is not read back to the reader", () => {
+  expect(REHEARSAL_INSTRUCTIONS).toContain("A cannot-explain observation about this chapter");
+  expect(REHEARSAL_INSTRUCTIONS).toContain("Do not tell them it happened");
+});
+
 test("what was observed of the reader sets the level, and absence assumes nothing", () => {
   expect(REHEARSAL_INSTRUCTIONS).toContain("puts this reader in a field");
   expect(REHEARSAL_INSTRUCTIONS).toContain("skip the groundwork");

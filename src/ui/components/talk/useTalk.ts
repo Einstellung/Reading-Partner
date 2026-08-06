@@ -33,6 +33,7 @@ import {
   type LoadedMaterial,
   type Talk,
 } from "../../../reading/talks";
+import { distillRehearsal } from "../../../observation";
 import { appendRunningTool, resolveToolStatus } from "../common/toolTrace";
 import type { ThreadMessage } from "../common/types";
 import {
@@ -103,8 +104,70 @@ export function useTalk(talkId: string, topicName: string): TalkController {
   const key = talkThreadKey(talkId);
   const threadId = threadIdOf(talkId);
 
+  // Read by the exit capture, which must not be rebuilt when the topic is
+  // renamed: it is a dependency of the effect that opens the talk.
+  const topicNameRef = useRef(topicName);
+  useEffect(() => {
+    topicNameRef.current = topicName;
+  }, [topicName]);
+
+  // Work handed to the moment the turn in flight lands (the counterpart of
+  // liveTurns.whenSettled in the reader). Only the exit capture uses it.
+  const onSettledRef = useRef<(() => void) | null>(null);
+  const settleExit = useCallback(() => {
+    const pending = onSettledRef.current;
+    onSettledRef.current = null;
+    pending?.();
+  }, []);
+
+  // Leaving the talk is this conversation's hangup (docs/31: the rehearsal is
+  // the most worth observing stretch of conversation there is, and it had no
+  // distillation at all). Every way out of a talk — the Back button, switching
+  // topic, opening a book, moving to another home screen — unmounts this hook,
+  // so the one place that covers all of them is the cleanup below.
+  //
+  // Returns true when the pass was handed to a turn still streaming instead of
+  // being run now: half a sentence is not what the reader said, and summarising
+  // it would put a judgement about them on record over an answer they had not
+  // finished giving. A deferred pass is also why the turn is then left running
+  // rather than aborted — it has to land for there to be anything to read.
+  //
+  // A rehearsal the reader never spoke in is not deferred and not distilled: an
+  // opening question with no answer under it holds nothing that cannot be
+  // re-derived, and leaving it alone keeps a talk opened and closed at once from
+  // costing a model call.
+  const captureExit = useCallback((): boolean => {
+    const current = talkRef.current;
+    if (!current) return false;
+    const stored = getThread(key, threadId)?.messages ?? [];
+    const spoken = stored.filter((m) => m.text.trim() !== "");
+    if (!spoken.some((m) => m.role === "user")) return false;
+    const run = () =>
+      void distillRehearsal({
+        topicId: current.topicId,
+        topicName: topicNameRef.current,
+        talkId: current.id,
+        talkName: current.name,
+        materials: current.materials.map((m) => m.title),
+        threadId,
+        // Read at the moment the pass starts, not now: a deferred pass runs
+        // after the reply has been appended, and that reply is part of the
+        // stretch being distilled.
+        messages: (getThread(key, threadId)?.messages ?? [])
+          .filter((m) => m.text.trim() !== "")
+          .map(({ role, text, ts }) => ({ role, text, ts })),
+      });
+    if (abortRef.current) {
+      onSettledRef.current = run;
+      return true;
+    }
+    run();
+    return false;
+  }, [key, threadId]);
+
   // Open the talk: its file, its materials, its conversation. Runs once per
-  // talk; leaving the view unmounts the hook and stops any turn in flight.
+  // talk; leaving the view unmounts the hook, distils what was said and stops
+  // any turn that is not owed to the distillation.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -133,10 +196,14 @@ export function useTalk(talkId: string, topicName: string): TalkController {
     })();
     return () => {
       cancelled = true;
+      // The distillation first: it decides whether the turn in flight is still
+      // wanted. Aborting one it is waiting for would leave the pass hanging on a
+      // reply that is never coming.
+      if (captureExit()) return;
       abortRef.current?.abort();
       abortRef.current = null;
     };
-  }, [talkId, key, threadId]);
+  }, [talkId, key, threadId, captureExit]);
 
   const patchRow = useCallback((ts: number, fn: (m: ThreadMessage) => ThreadMessage) => {
     setMessages((rows) => rows.map((m) => (m.ts === ts && m.role === "ai" ? fn(m) : m)));
@@ -173,6 +240,10 @@ export function useTalk(talkId: string, topicName: string): TalkController {
     const fail = (text: string) => {
       finish();
       patchRow(ts, () => ({ role: "ai", text, ts, failed: true }));
+      // The turn is over, however it ended. A distillation waiting on it takes
+      // the conversation as it stands: the reader's half is on disk either way,
+      // and a failed reply is no reason to lose what they said.
+      settleExit();
     };
 
     const onDecisionCard = (payload: RehearsalDecisionCardData) => {
@@ -255,12 +326,15 @@ export function useTalk(talkId: string, topicName: string): TalkController {
             ...(turn.notice ? { notice: turn.notice } : {}),
           }));
           appendMessage(key, threadId, { role: "ai", text: full, ts });
+          // After the append, never before: a distillation deferred by an exit
+          // mid-answer reads the thread file, which only now holds the reply.
+          settleExit();
         },
         onError: (message) => fail(`⚠️ Couldn't reach the model. ${message}`),
         onRefusal: (message) => fail(message),
       });
     })();
-  }, [talkId, key, threadId, topicName, patchRow]);
+  }, [talkId, key, threadId, topicName, patchRow, settleExit]);
 
   // A talk opened with nothing in it starts itself: stage one of the rehearsal is
   // the AI laying out the skeleton and asking which thread the talk should

@@ -17,11 +17,14 @@ export type EventType =
   | "call-start" // { threadId }
   | "call-end" // { threadId } — hangup
   | "thread-delete" // { threadId, book } — conversation deleted (and its mark, if any)
-  | "distill-run" // { threadId, created, updated, deleted } — a pass that finished
+  // A pass that finished. A rehearsal's pass (docs/31) adds { talkId, messages }
+  // — which talk it was and how many messages of it this pass covered.
+  | "distill-run" // { threadId, created, updated, deleted, talkId?, messages? }
   // A distillation pass that did not finish, so nothing was observed from this
-  // thread and its timestamps did not advance. `outcome` is the sub-agent's
-  // (src/ai/subagent), e.g. "out-of-turns" or "failed".
-  | "distill-failed" // { threadId, outcome, created?, updated?, deleted? }
+  // thread and its timestamps (or, for a rehearsal, its message cursor) did not
+  // advance. `outcome` is the sub-agent's (src/ai/subagent), e.g. "out-of-turns"
+  // or "failed".
+  | "distill-failed" // { threadId, outcome, created?, updated?, deleted?, talkId? }
   | "prep-status" // { slug, status }
   | "notes-run" // { phase: "start" | "done" | "failed" }
   | "notes-chapter-regenerate" // { index }
