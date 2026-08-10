@@ -102,7 +102,7 @@
 - [35-ios-unsigned-linkedit-vmsize](./35-ios-unsigned-linkedit-vmsize.md) — 完全无签名 Mach-O 过第三方重签名器时 __LINKEDIT vmsize 不更新，真机秒崩；产线预 ad-hoc 签名规避
 - [47-asc-key-role-cloud-signing](./47-asc-key-role-cloud-signing.md) — CI 云签名要 Admin 权限的 App Store Connect API key，App Manager 在 export 阶段被拒；试探权限不能用坏 payload
 - [48-tauri-ios-signing-log-noise](./48-tauri-ios-signing-log-noise.md) — "找不到证书"警告和 `Apple Distribution: Tauri (unset)` 证书都是 Tauri 自己的噪音，签名成没成看 export 阶段
-- [106-testflight-upload-is-not-distribution](./106-testflight-upload-is-not-distribution.md) — altool 上传成功只是 ingest，build 不 link 到 beta 组就谁也装不到（内测组没开自动分发要逐个加，外测组还要 What's New 和 beta 审核）；上传后必须跑分发脚本
+- [107-testflight-upload-is-not-distribution](./107-testflight-upload-is-not-distribution.md) — altool 上传成功只是 ingest，build 不 link 到 beta 组就谁也装不到（内测组没开自动分发要逐个加，外测组还要 What's New 和 beta 审核）；上传后必须跑分发脚本
 
 ## Android 构建与签名
 
