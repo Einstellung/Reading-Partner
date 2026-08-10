@@ -6,6 +6,7 @@
 // agent loop, and the tools surface confirm cards.
 
 import { languageInstruction, type AiLanguage } from "../../platform/app/settings";
+import { profileForPrompt } from "../../observation/guess";
 import { PROFILE_SKELETON_GUIDANCE } from "../../observation/profile";
 import { DESCRIPTOR_GUIDE, type SourceDescriptor } from "../sources/descriptor";
 import type { Briefing } from "../briefing/types";
@@ -77,10 +78,16 @@ export function formatSources(sources: SourceDescriptor[]): string {
   return ["Subscribed sources:", ...lines].join("\n");
 }
 
-// The reading profile block, verbatim, so the companion can explain what triage
-// is optimizing for and draft precise edits.
+// The reading profile block, so the companion can explain what triage is
+// optimizing for and draft precise edits. The declared half only: update_profile
+// drafts a complete replacement of what it is shown, so showing it the AI's own
+// guess section (observation/guess.ts) would let a draft promote a guess into
+// the user's own words, where no later pass could revise or drop it.
 export function formatProfile(profile: string): string {
-  return ["Reading profile (what triage keeps or filters for):", profile.trim() || "(no profile set)"].join("\n");
+  return [
+    "Reading profile (what triage keeps or filters for):",
+    profileForPrompt(profile).declared || "(no profile set)",
+  ].join("\n");
 }
 
 // The full filtered list, not just a count: every dropped item with its source

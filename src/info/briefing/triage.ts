@@ -7,6 +7,7 @@
 import { aiLanguageName, type AiLanguage } from "../../platform/app/settings";
 import type { ParseTally } from "../../platform/app/structured-output";
 import type { FeedbackEvent } from "../../observation/feedback";
+import { profileForPrompt } from "../../observation/guess";
 import type { TriageResult } from "./types";
 import type { InfoItem } from "../sources/item";
 
@@ -42,6 +43,15 @@ export function triageSystemPrompt(aiLanguage: AiLanguage = "auto"): string {
     "field or vertical — judge each item on its own information value, universally:",
     "what carries real, specific, non-obvious substance stays; PR, recaps, and",
     "rehashes go. Do not invent a preference the profile does not state.",
+    "",
+    "You may also be given AI GUESSES ABOUT THE READER — inferences the system made",
+    "about them on its own, from what they read and mark. Nobody confirmed these and",
+    "some of them are wrong. Use them the way you would use a hunch: a guess may",
+    "break a tie or explain why an item that looks off-profile is worth a look, and",
+    "the reader's own profile always wins where the two disagree. Never treat a",
+    "guess as a stated preference, never filter an item solely because a guess says",
+    "so, and never write a `reason` that tells the reader they want something they",
+    "never said they wanted.",
     "",
     "You may also be given READER'S CURRENT CONTEXT — a short note on what they are",
     "reading and stuck on right now, drawn from their reading sessions. Treat it as a",
@@ -128,10 +138,17 @@ export function triageUserMessage(
 ): string {
   const textChars = opts.textChars ?? TRIAGE_TEXT_CHARS;
   const readerContext = opts.readerContext?.trim();
+  // The declared half and the AI's guess section are labelled apart, so the
+  // model can weigh them differently (see the system prompt). A profile with no
+  // guess section, or one whose markers do not parse, is all declared.
+  const identity = profileForPrompt(profile);
   return [
-    "READER PROFILE",
-    profile.trim() || "(no profile set)",
+    "READER PROFILE (what the reader has told us themselves)",
+    identity.declared || "(no profile set)",
     "",
+    ...(identity.guesses
+      ? ["AI GUESSES ABOUT THE READER (our own inferences, unconfirmed)", identity.guesses, ""]
+      : []),
     // Reading-side signal (docs/16): what the reader is reading and stuck on right
     // now. Omitted entirely when there is none, so it never adds noise.
     ...(readerContext ? ["READER'S CURRENT CONTEXT (from their reading)", readerContext, ""] : []),
