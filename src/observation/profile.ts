@@ -1,7 +1,13 @@
 // The user profile: a cross-scenario identity document, the system's one durable
 // statement about the user. Both scenarios read it — the daily briefing's triage
-// (docs/16) and the reading companion — and it is edited only through the chat
-// update_profile confirm card. It is the user's own data, synced between devices.
+// (docs/16) and the reading companion.
+//
+// It has two halves and two writers. Everything the user declared is written
+// only through the chat update_profile confirm card, with the user pressing
+// Apply. Below it sits a guess section the AI writes on its own (guess.ts),
+// which is the only thing an automatic write may ever touch — the declared half
+// comes back byte for byte because no automatic path hands it to a model.
+// It is the user's own data, synced between devices.
 // There is no factory seed: no interests are preset. The profile is written only
 // when the user (or the onboarding draft they Apply) puts taste into it; until
 // then it is empty and triage judges on an item's own merit.
@@ -13,6 +19,7 @@ import {
   readTextFile,
 } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../platform/app/atomic-fs";
+import type { GuessState } from "./guess";
 
 export const PROFILE_FILE = "user-profile.md";
 // The name an older build wrote (an info-only profile, before it was promoted to
@@ -72,4 +79,35 @@ export async function loadProfile(): Promise<string> {
 
 export async function saveProfile(text: string): Promise<void> {
   await writeTextAtomic(PROFILE_FILE, text);
+}
+
+// --- the guess pass's bookkeeping ---
+
+// When the guess pass last ran and how far the observations had got by then
+// (guess.ts). Its own file rather than a topic's meta.json: the pass looks
+// across every topic at once, so no topic owns the stamp. Local bookkeeping, not
+// content — a device that syncs the profile and re-runs the pass once loses
+// nothing.
+export const GUESS_STATE_FILE = "profile-guess.json";
+
+export async function loadGuessState(): Promise<GuessState> {
+  try {
+    if (!(await exists(GUESS_STATE_FILE, { baseDir: BaseDirectory.AppData }))) {
+      return { lastRunAt: null, lastMemoryAt: null };
+    }
+    const raw = await readTextFile(GUESS_STATE_FILE, { baseDir: BaseDirectory.AppData });
+    const parsed = JSON.parse(raw) as Partial<GuessState>;
+    return {
+      lastRunAt: typeof parsed.lastRunAt === "number" ? parsed.lastRunAt : null,
+      lastMemoryAt: typeof parsed.lastMemoryAt === "number" ? parsed.lastMemoryAt : null,
+    };
+  } catch {
+    // An unreadable stamp reads as "never ran". The gate then lets one pass
+    // through, which rewrites the file.
+    return { lastRunAt: null, lastMemoryAt: null };
+  }
+}
+
+export async function saveGuessState(state: GuessState): Promise<void> {
+  await writeTextAtomic(GUESS_STATE_FILE, JSON.stringify(state, null, 2));
 }

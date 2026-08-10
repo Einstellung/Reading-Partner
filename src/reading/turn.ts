@@ -44,6 +44,7 @@ import {
   getObservationAdapter,
   observationPromptSection,
   notifyObservationChange,
+  profileForPrompt,
   type DistillAnnotation,
   type Observation,
 } from "../observation";
@@ -412,7 +413,10 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   ];
   // The cross-scenario user profile: who the companion is reading with, so it
   // pitches explanation depth to their background. Empty profile → no section.
-  const profileSection = readerProfileSection(await assembleIdentity().catch(() => ""));
+  // The declared half and the AI's own guess section go in separately, and the
+  // guesses go in labelled as guesses (observation/guess.ts).
+  const identity = profileForPrompt(await assembleIdentity().catch(() => ""));
+  const profileSection = readerProfileSection(identity.declared, identity.guesses);
   // The whole-book outline from the reader's notes (docs/14), when they exist.
   const notesOverview = notesOverviewSection(await readOverviewNote(bookId));
   // A booklist entry with no text layer and no marks is a title the model can do

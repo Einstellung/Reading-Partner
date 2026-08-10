@@ -26,6 +26,13 @@ export type EventType =
   // cursors did not advance. `outcome` is the sub-agent's (src/ai/subagent), e.g.
   // "out-of-turns" or "failed".
   | "distill-failed" // { trigger, threadId?, bookId?, outcome, created?, updated?, deleted?, talkId? }
+  // A profile-guess pass that finished (observation/guess.ts), in events-ai.jsonl
+  // rather than a topic's log: the pass looks across every topic at once.
+  // `wrote` says whether the guess section actually changed.
+  | "guess-run" // { trigger, wrote, guesses, dropped }
+  // One that did not, so the profile was left alone and the stamp did not move.
+  // `outcome` is the sub-agent's, or a skip reason from before the model ran.
+  | "guess-failed" // { trigger, outcome }
   | "prep-status" // { slug, status }
   | "notes-run" // { phase: "start" | "done" | "failed" }
   | "notes-chapter-regenerate" // { index }

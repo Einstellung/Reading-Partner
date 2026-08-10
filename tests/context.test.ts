@@ -115,6 +115,21 @@ test("readerProfileSection injects the profile and depth guidance, empty when un
   expect(section).toMatch(/match the depth to their background/i);
   expect(readerProfileSection("")).toBe("");
   expect(readerProfileSection("   ")).toBe("");
+  expect(readerProfileSection("", "   ")).toBe("");
+});
+
+test("the AI's guesses go in as guesses, and never as a depth verdict", () => {
+  const guesses = "- Wants the era, not the method | basis: trends.pdf marks | since: 2026-08-01";
+  const section = readerProfileSection("Background: strong in ML.", guesses);
+  expect(section).toContain("Background: strong in ML.");
+  expect(section).toContain("Wants the era, not the method");
+  expect(section).toMatch(/nobody confirmed them/i);
+  expect(section).toMatch(/hypothesis to test/i);
+  // The self-fulfilling loop this guard exists for: a guess drawn from what the
+  // reader highlighted must not come back as a verdict on what they can handle.
+  expect(section).toMatch(/never pitch depth from a guess/i);
+  // Guesses alone still produce a section; the declared half is not required.
+  expect(readerProfileSection("", guesses)).toContain("Wants the era, not the method");
 });
 
 test("the tools paragraph and cross-book rule appear only with hasTools", () => {

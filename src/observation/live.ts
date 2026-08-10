@@ -20,8 +20,21 @@ import { StoppedError } from "../ai/watchdog";
 import { peekAnnotations } from "../platform/app/annotations";
 import { logEvent } from "../platform/app/events";
 import { observeAppLifecycle } from "../platform/app/lifecycle";
+import { AI_EVENT_TOPIC } from "../platform/app/structured-output";
 import { peekThreads } from "../platform/app/threads";
 import { listTopics } from "../platform/app/topics";
+import { loadFeedback } from "./feedback";
+import {
+  isGuessDue,
+  runProfileGuessPass,
+  type GuessTopicEvidence,
+} from "./guess";
+import {
+  loadGuessState,
+  loadProfile,
+  saveGuessState,
+  saveProfile,
+} from "./profile";
 import { FileObservationAdapter, type ObservationAdapter } from "./adapter";
 import {
   SWEEP_INTERVAL_MS,
@@ -445,15 +458,107 @@ export async function sweepDistillation(trigger: DistillTrigger): Promise<void> 
   }
 }
 
+// --- the profile-guess pass (guess.ts) ---
+
+let guessing = false;
+
+// Every topic's observation index, plus the newest distillation stamp across all
+// of them — which is the "has the memory actually moved" half of the gate.
+async function collectGuessEvidence(): Promise<{
+  topics: GuessTopicEvidence[];
+  newestMemoryAt: number | null;
+}> {
+  const topics: GuessTopicEvidence[] = [];
+  let newest: number | null = null;
+  for (const topic of await listTopics()) {
+    const store = getStore(topic.id);
+    const entries = await store.readIndex().catch((): ObservationIndexEntry[] => []);
+    if (entries.length) topics.push({ topicName: topic.name, entries });
+    const at = (await store.getMeta()).lastDistilledAt;
+    if (at !== null && (newest === null || at > newest)) newest = at;
+  }
+  return { topics, newestMemoryAt: newest };
+}
+
+// One look at whether the AI's guesses about the reader are worth redoing, and
+// at most one pass. Rides the arrears sweep's tick but gates itself on its own
+// far slower clock (isGuessDue): identity does not move at the speed of a
+// highlighter, and this pass reads every topic at once rather than one book.
+//
+// Same posture as distillation: never throws, never surfaces UI, and a pass that
+// did not finish leaves the stamp where it was so the next one redoes the work.
+export async function sweepProfileGuess(trigger: DistillTrigger): Promise<void> {
+  // A distillation pass in flight is this tick's one background run, and its
+  // writes are exactly the evidence this pass reads — going second, next tick,
+  // is strictly better.
+  if (guessing || inFlight.size > 0) return;
+  guessing = true;
+  try {
+    const state = await loadGuessState();
+    const { topics, newestMemoryAt } = await collectGuessEvidence();
+    if (!isGuessDue(state, newestMemoryAt, Date.now())) return;
+
+    const stamp = { lastRunAt: Date.now(), lastMemoryAt: newestMemoryAt };
+    const model = await resolveModel("chat");
+    const result = await runProfileGuessPass(
+      { topics, feedback: await loadFeedback() },
+      {
+        profile: { load: loadProfile, save: saveProfile },
+        run: runSubagentTurnLive,
+        model: {
+          providerId: model.providerId,
+          modelId: model.modelId,
+          reasoning: model.reasoning,
+        },
+      },
+    );
+    if (!result.ran) {
+      // Nothing was sent to a model, so the look itself counts as the pass: the
+      // stamp moves, or a profile whose markers do not parse would be looked at
+      // again every half hour for as long as it stays that way.
+      await saveGuessState(stamp);
+      if (result.skipped === "unparseable-profile") {
+        logEvent(AI_EVENT_TOPIC, "guess-failed", { trigger, outcome: result.skipped });
+      }
+      return;
+    }
+    if (!result.ok) {
+      console.warn("profile guess pass did not finish:", result.failure);
+      logEvent(AI_EVENT_TOPIC, "guess-failed", { trigger, outcome: result.outcome });
+      return;
+    }
+    await saveGuessState(stamp);
+    logEvent(AI_EVENT_TOPIC, "guess-run", {
+      trigger,
+      wrote: result.wrote,
+      guesses: result.guesses,
+      dropped: result.dropped,
+    });
+  } catch (e) {
+    if (e instanceof StoppedError) return;
+    console.warn("profile guess pass could not start", e);
+    logEvent(AI_EVENT_TOPIC, "guess-failed", { trigger, outcome: "failed" });
+  } finally {
+    guessing = false;
+  }
+}
+
 // Bind the sweep for the life of the app: once now, every half hour after that,
 // and again whenever the app comes back to the front (a laptop shut for a week
 // wakes with a timer that has not fired). Returns the undo.
+//
+// The guess pass rides the same tick, always after distillation: it reads what
+// distillation writes, and running the two at once would put two background
+// model runs on the reader's connection for no reason.
 export function startDistillSweeps(isThreadBusy: (threadId: string) => boolean): () => void {
   threadBusy = isThreadBusy;
-  void sweepDistillation("startup");
-  const timer = setInterval(() => void sweepDistillation("timer"), SWEEP_INTERVAL_MS);
+  const tick = (trigger: DistillTrigger): void => {
+    void sweepDistillation(trigger).then(() => sweepProfileGuess(trigger));
+  };
+  tick("startup");
+  const timer = setInterval(() => tick("timer"), SWEEP_INTERVAL_MS);
   const unobserve = observeAppLifecycle(window, {
-    onForeground: () => void sweepDistillation("foreground"),
+    onForeground: () => tick("foreground"),
     onBackground: () => {},
   });
   return () => {
