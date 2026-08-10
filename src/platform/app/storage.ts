@@ -25,11 +25,6 @@ export function hashPath(path: string): string {
   return h.toString(16);
 }
 
-export function basename(path: string): string {
-  const parts = path.split(/[/\\]/);
-  return parts[parts.length - 1] || path;
-}
-
 interface Store {
   states: Record<string, ViewState>;
 }

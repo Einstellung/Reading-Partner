@@ -4,6 +4,8 @@
 // notes and the overview it indexes. Notes are the intermediate product a future
 // PPT is derived from; generation and revision granularity is the chapter.
 
+import { decodeLegacyName } from "../../platform/app/path";
+
 export const NOTES_VERSION = 1 as const;
 
 // Status of a phase that runs one long AI call: pending (not started or
@@ -64,9 +66,14 @@ export function createNotesState(bookId: string, bookName: string, now: number):
 // mid-run ("running") goes back to "pending" so a restart resumes it instead of
 // hanging. Done/failed/stale phases are left alone (failed chapters wait for a
 // manual retry; a stale overview stays stale until the user regenerates it).
+// A book name left percent-encoded by an iOS import is decoded here too — it
+// goes into the chapter prompts, so a state written before path normalization
+// existed would otherwise keep telling the model the book is "%E5%85%A8...".
+// No write of its own: the repaired name reaches disk with the next save.
 export function normalizeNotesOnLoad(state: NotesState): NotesState {
   return {
     ...state,
+    bookName: decodeLegacyName(state.bookName),
     planStatus: state.planStatus === "running" ? "pending" : state.planStatus,
     overviewStatus: state.overviewStatus === "running" ? "pending" : state.overviewStatus,
     chapters: state.chapters.map((c) =>

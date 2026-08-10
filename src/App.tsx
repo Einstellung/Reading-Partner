@@ -10,7 +10,12 @@ import {
 } from "./platform/app/reader-contract";
 import { onCorruptFile } from "./platform/app/atomic-fs";
 import { getViewState, hashPath, saveViewState, withModes } from "./platform/app/storage";
-import { importBook, libraryHas, readLibraryBook } from "./platform/app/library";
+import {
+  importBook,
+  libraryHas,
+  readLibraryBook,
+  repairLibraryNames,
+} from "./platform/app/library";
 import { migrateBookLive } from "./platform/app/migrate";
 import { ensureFulltext, onFulltextError, type Fulltext } from "./fulltext";
 import Sidebar, { type SidebarTab } from "./ui/components/reader/Sidebar";
@@ -28,6 +33,7 @@ import {
   listTopics,
   markOpened,
   mostRecentlyOpened,
+  repairTopicPaths,
   setFileHash,
   type FileRef,
   type Topic,
@@ -482,7 +488,15 @@ export default function App() {
     if (migrationRan.current) return;
     migrationRan.current = true;
     void (async () => {
-      let changed = false;
+      // Names an iOS import left percent-encoded (docs/pitfall/106). Runs first
+      // so the backfill below reads the repaired paths, and writes nothing when
+      // there is nothing encoded, so it costs no sync revision.
+      let changed = await Promise.all([repairTopicPaths(), repairLibraryNames()])
+        .then((wrote) => wrote.some(Boolean))
+        .catch((e) => {
+          console.warn("name repair skipped", e);
+          return false;
+        });
       const all = await listTopics().catch((): Topic[] => []);
       for (const t of all) {
         for (const f of t.files) {

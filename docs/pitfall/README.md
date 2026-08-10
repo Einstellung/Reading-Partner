@@ -12,6 +12,7 @@
 | 手机上的手势、页面导航 | 触摸与手势 |
 | 发请求、外链资源、CSP | 网络与 CSP |
 | 读写 AppData | 存储与数据目录 |
+| 导入外部文件、拿文件选择器给的路径 | 存储与数据目录 |
 | 同步引擎、Drive 后端 | 存储与数据目录 + 网络与 CSP + WebKit / webview |
 | 全文/图片提取、裁图 | 提取（壳侧 pdf.js） |
 | 出 iOS 包、签名、图标、深链接 | iOS 构建与签名 |
@@ -86,6 +87,7 @@
 - [51-sync-stopped-looks-healthy](./51-sync-stopped-looks-healthy.md) — 凭据文件不在，引擎从不启动，`autoSync:true` + `lastError:null` 读起来完全健康，四天没人发现；启动的三选一和「该说什么」都收进 `platform/sync/health.ts`
 - [52-all-or-nothing-pass-never-completes](./52-all-or-nothing-pass-never-completes.md) — 一趟同步一个文件失败就整趟中止，丢包链路上 51 个请求的一趟几乎不可能跑完，`Last sync: Never`；改逐项 + 缓存 id 遇 404 自愈 + 重试超时
 - [53-identical-rewrite-wins-whole-file](./53-identical-rewrite-wins-whole-file.md) — app 用相同内容重写文件，按 mtime 判就是本地有改动，整文件 LWW 让"只是重存了一次"的设备静默覆盖掉另一台的批注；改内容 hash 判变更 + 三方合并
+- [106-ios-hands-over-a-percent-encoded-file-url](./106-ios-hands-over-a-percent-encoded-file-url.md) — iOS 文件选择器返回 percent-encoded 的 `file://` URL，`basename` 切出来的书名是 `%E5%85%A8...`；归一化收在 `addFileToTopic` 一道门，脏数据按"不变就不写"的纯函数读取时自愈
 
 ## 提取（壳侧 pdf.js）
 
