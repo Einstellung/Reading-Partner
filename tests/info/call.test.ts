@@ -19,6 +19,7 @@ import type { ProbeConfirmCardData } from "../../src/info/sources/source-cards";
 const IDLE: InfoSnapshot = {
   briefing: null,
   running: false,
+  stopping: false,
   phase: "idle",
   collect: null,
   activity: null,
@@ -64,6 +65,7 @@ test("the card a job starts with takes its phase from the job, not a snapshot", 
     phase: "fetching",
     collect: null,
     triage: null,
+    stopping: false,
     title: undefined,
   });
   // A re-triage never fetches: it opens straight in the triaging phase.
@@ -84,6 +86,7 @@ test("the progress card mirrors the snapshot's phase and collection counts", () 
     phase: "fetching",
     collect,
     triage: null,
+    stopping: false,
     title: undefined,
   });
 });

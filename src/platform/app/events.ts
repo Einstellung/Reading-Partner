@@ -33,6 +33,11 @@ export type EventType =
   // One that did not, so the profile was left alone and the stamp did not move.
   // `outcome` is the sub-agent's, or a skip reason from before the model ran.
   | "guess-failed" // { trigger, outcome }
+  // Where a briefing run's wall clock went, in events-info.jsonl rather than a
+  // topic's log: a briefing belongs to no book. One line per source as it
+  // settles, one for the triage call.
+  | "info-collect" // { source, ms, items, ok }
+  | "info-triage" // { ms, items, ok }
   | "prep-status" // { slug, status }
   | "notes-run" // { phase: "start" | "done" | "failed" }
   | "notes-chapter-regenerate" // { index }
@@ -41,6 +46,11 @@ export type EventType =
   // events-ai.jsonl rather than a topic's log. See structured-output.ts for the
   // fields and for why it has no topic.
   | "structured-parse";
+
+// The reserved topic id the briefing's timing lines are filed under:
+// events-info.jsonl. Topic ids are UUIDs, so this cannot collide with one —
+// same arrangement as the "ai" id in structured-output.ts.
+export const INFO_EVENT_TOPIC = "info";
 
 export type EventPayload = Record<string, string | number | boolean | null>;
 

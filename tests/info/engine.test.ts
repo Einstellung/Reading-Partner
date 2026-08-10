@@ -5,7 +5,12 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { collectSource, collectAll, type SourceSettled } from "../../src/info/sources/engine";
+import {
+  collectSource,
+  collectAll,
+  SOURCE_CONCURRENCY,
+  type SourceSettled,
+} from "../../src/info/sources/engine";
 import type { ExtractReadable } from "../../src/info/extract/readable-select";
 import type { SourceDescriptor } from "../../src/info/sources/descriptor";
 
@@ -293,4 +298,134 @@ test("collectAll hands each source over as it settles, items and all, once per e
   const badErr = settled.find((r) => r.source === "bad")!;
   expect(badErr.items).toEqual([]);
   expect(badErr.error).toBeTruthy();
+});
+
+// --- concurrency + cancellation --------------------------------------------
+
+// A feed of n entries, so a source's per-article half has something to overlap.
+function feedOf(n: number): string {
+  const items = Array.from(
+    { length: n },
+    (_, i) => `<item><title>T${i}</title><link>https://q/${i}.html</link></item>`,
+  ).join("");
+  return `<rss version="2.0"><channel>${items}</channel></rss>`;
+}
+
+test("a source fetches its articles several at a time, in feed order", async () => {
+  const pages: ((v: Response) => void)[] = [];
+  let inFlight = 0;
+  let peak = 0;
+  const fetchFn = async (url: string) => {
+    if (url.endsWith("/feed")) return res(feedOf(8));
+    inFlight++;
+    peak = Math.max(peak, inFlight);
+    const body = await new Promise<Response>((resolve) => pages.push(resolve));
+    inFlight--;
+    return body;
+  };
+  const run = collectSource(QBIT, { fetchFn, extract });
+  // Let the feed land and the first batch of page fetches go out.
+  await new Promise<void>((r) => setTimeout(r, 0));
+  expect(peak).toBeGreaterThan(1);
+  // Answer in reverse, so completion order is the opposite of feed order.
+  for (const resolve of [...pages].reverse()) resolve(res("<html>page</html>"));
+  await new Promise<void>((r) => setTimeout(r, 0));
+  for (const resolve of pages) resolve(res("<html>page</html>"));
+  const items = await run;
+  expect(items.map((i) => i.url)).toEqual(
+    Array.from({ length: 8 }, (_, i) => `https://q/${i}.html`),
+  );
+});
+
+test("an abort stops a source mid-collection and sends nothing more", async () => {
+  const controller = new AbortController();
+  let pageFetches = 0;
+  const fetchFn = async (url: string) => {
+    if (url.endsWith("/feed")) return res(feedOf(20));
+    pageFetches++;
+    // Slow enough that the abort lands while the first batch is in flight.
+    await new Promise<void>((r) => setTimeout(r, 5));
+    return res("<html>page</html>");
+  };
+  const run = collectSource(QBIT, { fetchFn, extract, signal: controller.signal });
+  await new Promise<void>((r) => setTimeout(r, 0));
+  controller.abort();
+  await expect(run).rejects.toThrow();
+  const sentBeforeAbort = pageFetches;
+  await new Promise<void>((r) => setTimeout(r, 20));
+  // Nothing left the queue after the abort: 20 articles, at most one batch sent.
+  expect(pageFetches).toBe(sentBeforeAbort);
+  expect(pageFetches).toBeLessThanOrEqual(SOURCE_CONCURRENCY);
+});
+
+test("a source already aborted is never fetched at all", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  let calls = 0;
+  const fetchFn = async () => {
+    calls++;
+    return res(feedOf(1));
+  };
+  await expect(collectSource(QBIT, { fetchFn, extract, signal: controller.signal })).rejects.toThrow();
+  expect(calls).toBe(0);
+});
+
+test("collectAll keeps the sources that settled and stays quiet about the aborted one", async () => {
+  const controller = new AbortController();
+  const fast: SourceDescriptor = {
+    id: "fast",
+    name: "Fast",
+    line: "AI",
+    enabled: true,
+    discovery: { kind: "json-api", listUrl: "https://fast/list", fields: { id: "id", title: "t", content: "c" } },
+    fulltext: { mode: "feed-field" },
+  };
+  const slow: SourceDescriptor = { ...QBIT, id: "slow", name: "Slow" };
+  const fetchFn = async (url: string) => {
+    if (url.includes("fast/list")) return res(JSON.stringify([{ id: "1", t: "One", c: "<p>b</p>" }]));
+    if (url.endsWith("/feed")) return res(feedOf(20));
+    await new Promise<void>((r) => setTimeout(r, 50));
+    return res("<html>page</html>");
+  };
+  const settled: SourceSettled[] = [];
+  const run = collectAll([fast, slow], {
+    fetchFn,
+    extract,
+    now: () => 1000,
+    signal: controller.signal,
+    onSourceSettled: (r) => void settled.push(r),
+  });
+  await new Promise<void>((r) => setTimeout(r, 5));
+  controller.abort();
+  const { items, health } = await run;
+  // The one that finished is kept and reported; the cancelled one is neither
+  // reported nor blamed in the health sidecar, so it stays pending for a resume.
+  expect(settled.map((r) => r.source)).toEqual(["fast"]);
+  expect(items.map((i) => i.source)).toEqual(["fast"]);
+  expect(health.fast.lastSuccess).toBe(1000);
+  expect(health.slow).toBeUndefined();
+});
+
+test("a settled source reports how long it took", async () => {
+  const desc: SourceDescriptor = {
+    id: "timed",
+    name: "Timed",
+    line: "AI",
+    enabled: true,
+    discovery: { kind: "json-api", listUrl: "https://timed/list", fields: { id: "id", title: "t", content: "c" } },
+    fulltext: { mode: "feed-field" },
+  };
+  let clock = 1000;
+  const settled: SourceSettled[] = [];
+  const { health } = await collectAll([desc], {
+    fetchFn: async () => {
+      clock += 250;
+      return res(JSON.stringify([{ id: "1", t: "One", c: "<p>b</p>" }]));
+    },
+    now: () => clock,
+    onSourceSettled: (r) => void settled.push(r),
+  });
+  expect(settled[0].durationMs).toBe(250);
+  expect(health.timed.lastDurationMs).toBe(250);
+  expect(health.timed.lastItems).toBe(1);
 });

@@ -60,11 +60,16 @@ export function BriefingCardBody({
   onStartSubscribing: () => void;
 }) {
   const running = !!snap?.running;
+  const stopping = !!snap?.stopping;
   const elapsed = useElapsed(running);
   const briefing = snap?.briefing ?? null;
 
   if (running) {
-    const phase = snap?.phase === "fetching" ? "Reading the sources" : "Triaging";
+    const phase = stopping
+      ? "Stopping"
+      : snap?.phase === "fetching"
+        ? "Reading the sources"
+        : "Triaging";
     const detail = (() => {
       if (snap?.phase === "fetching") {
         const c = snap.collect;
@@ -91,8 +96,14 @@ export function BriefingCardBody({
             {elapsed}s{detail ? ` · ${detail}` : ""}
           </div>
         </div>
-        <Button variant="subtle" size="chip" className="mt-4 w-fit px-3 py-1.5" onClick={onStop}>
-          Stop
+        <Button
+          variant="subtle"
+          size="chip"
+          className="mt-4 w-fit px-3 py-1.5"
+          disabled={stopping}
+          onClick={onStop}
+        >
+          {stopping ? "Stopping…" : "Stop"}
         </Button>
       </div>
     );

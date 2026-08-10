@@ -60,9 +60,16 @@ export interface InfoDeps {
   // the slow ones cannot lose the fast ones' work. Per-source isolation stays in
   // the engine — a failed source arrives here as a result with an error, not as
   // a thrown run.
+  //
+  // `signal` is the Stop, and it has to reach the fetches: collection is the
+  // long half of a run, so a Stop that only took effect at the phase boundary
+  // would look like a button that does nothing. A source cut off mid-fetch is
+  // not reported, so it stays pending and the resume refetches it; the ones
+  // that already settled are kept.
   collect(
     sources: InfoSourceRef[],
     onSettled: (result: SourceResult) => Promise<void>,
+    signal: AbortSignal,
   ): Promise<void>;
   // The one triage AI call, wrapped by the watchdog. Validates + retries parse
   // internally; throws on a stall/error so the watchdog can retry the attempt.
@@ -106,6 +113,10 @@ export interface InfoActivity {
 export interface InfoSnapshot {
   briefing: Briefing | null;
   running: boolean;
+  // Stop was pressed and the run has not unwound yet. It flips the instant the
+  // button is pressed, before anything is aborted, because the alternative is a
+  // UI that sits unchanged until the last fetch comes back.
+  stopping: boolean;
   phase: InfoPhase;
   collect: CollectProgress | null;
   activity: InfoActivity | null;
@@ -139,13 +150,22 @@ function articleCache(items: InfoItem[]): Record<string, CachedArticle> {
 export class InfoPipeline {
   private briefing: Briefing | null = null;
   private running = false;
+  private stopping = false;
   private phase: InfoPhase = "idle";
   private collect: CollectProgress | null = null;
   private activity: InfoActivity | null = null;
   private error: string | null = null;
   private lastActivityNotify = 0;
   private listeners = new Set<() => void>();
-  private snap: InfoSnapshot = { briefing: null, running: false, phase: "idle", collect: null, activity: null, error: null };
+  private snap: InfoSnapshot = {
+    briefing: null,
+    running: false,
+    stopping: false,
+    phase: "idle",
+    collect: null,
+    activity: null,
+    error: null,
+  };
   private readonly config: WatchdogConfig;
   private stopController: AbortController | null = null;
   // The run in flight and whether it has changes not yet on disk. Null between
@@ -198,6 +218,7 @@ export class InfoPipeline {
     this.snap = {
       briefing: this.briefing,
       running: this.running,
+      stopping: this.stopping,
       phase: this.phase,
       collect: this.collect,
       activity: this.activity,
@@ -279,8 +300,13 @@ export class InfoPipeline {
     await this.runRun({ retryFailed: false });
   }
 
+  // Publish the intent before acting on it: aborting is the slow part (a fetch
+  // has to unwind, the run has to be parked), and the user is owed an answer to
+  // the press itself.
   stop(): void {
-    if (!this.running) return;
+    if (!this.running || this.stopping) return;
+    this.stopping = true;
+    this.notify();
     this.stopController?.abort();
   }
 
@@ -299,6 +325,7 @@ export class InfoPipeline {
 
   private async runRun(opts: { retryFailed: boolean }): Promise<void> {
     this.running = true;
+    this.stopping = false;
     this.error = null;
     this.phase = "fetching";
     this.collect = null;
@@ -328,6 +355,7 @@ export class InfoPipeline {
       }
     } finally {
       this.running = false;
+      this.stopping = false;
       this.phase = "idle";
       this.collect = null;
       this.activity = null;
@@ -378,11 +406,15 @@ export class InfoPipeline {
     if (state.phase !== "collecting") return;
     const pending = pendingSources(state);
     if (pending.length > 0) {
-      await this.deps.collect(pending, async (result) => {
-        this.run = applySourceResult(this.run!, result, this.deps.now());
-        this.touch();
-        await this.persist();
-      });
+      await this.deps.collect(
+        pending,
+        async (result) => {
+          this.run = applySourceResult(this.run!, result, this.deps.now());
+          this.touch();
+          await this.persist();
+        },
+        this.stopController!.signal,
+      );
     }
     if (this.stopController!.signal.aborted) throw new StoppedError();
     if (this.run!.items.length === 0) {
@@ -423,6 +455,7 @@ export class InfoPipeline {
   async retriage(): Promise<void> {
     if (this.running) return;
     this.running = true;
+    this.stopping = false;
     this.error = null;
     this.phase = "triaging";
     this.activity = null;
@@ -453,6 +486,7 @@ export class InfoPipeline {
       else this.error = e instanceof Error ? e.message : String(e);
     } finally {
       this.running = false;
+      this.stopping = false;
       this.phase = "idle";
       this.collect = null;
       this.activity = null;

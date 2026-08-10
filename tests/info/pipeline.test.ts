@@ -527,3 +527,73 @@ test("a failing reader-context dep degrades to empty and still triages", async (
   expect(seen).toBe("");
   expect(p.snapshot().briefing?.overview).toBe("ok");
 });
+
+// --- Stop during collection ------------------------------------------------
+
+test("Stop during collection aborts the fetching, keeps what settled, and parks the run", async () => {
+  const fx = fixture([source("a"), source("b")]);
+  const snaps: InfoSnapshot[] = [];
+  let sawAbort = false;
+  const p = new InfoPipeline(
+    makeDeps(fx, {
+      collect: async (refs, onSettled, signal) => {
+        // The first source lands, then the user presses Stop while the second
+        // is still fetching — noticing the signal is the engine's job.
+        await onSettled({ id: refs[0].id, items: [item("a1")] });
+        p.stop();
+        await new Promise<void>((r) => setTimeout(r, 0));
+        sawAbort = signal.aborted;
+      },
+    }),
+  );
+  p.subscribe(() => snaps.push(p.snapshot()));
+  await p.generate();
+
+  expect(sawAbort).toBe(true);
+  // Pressing Stop is answered before the run unwinds.
+  expect(snaps.some((s) => s.running && s.stopping)).toBe(true);
+  // And it is over by the time the pipeline goes idle.
+  expect(p.snapshot().stopping).toBe(false);
+  expect(p.snapshot().error).toBeNull();
+  expect(fx.triaged).toBe(0);
+
+  // The source that settled is in the checkpoint; the other is still owed.
+  const parked = fx.disk.runs.get(TODAY)!;
+  expect(parked.halt).toEqual({ kind: "stopped" });
+  expect(parked.items.map((i) => i.id)).toEqual(["a1"]);
+  expect(parked.sources.map((s) => s.status)).toEqual(["done", "pending"]);
+});
+
+test("a second Stop while already stopping changes nothing", async () => {
+  const fx = fixture([source("a")]);
+  let aborts = 0;
+  const p = new InfoPipeline(
+    makeDeps(fx, {
+      collect: async (_refs, _onSettled, signal) => {
+        signal.addEventListener("abort", () => aborts++);
+        p.stop();
+        p.stop();
+      },
+    }),
+  );
+  await p.generate();
+  expect(aborts).toBe(1);
+});
+
+test("Stop during a re-triage flips stopping too", async () => {
+  const fx = fixture([source("a")]);
+  fx.disk.items.set(TODAY, [item("a1")]);
+  const snaps: InfoSnapshot[] = [];
+  const p = new InfoPipeline(
+    makeDeps(fx, {
+      triage: async () => {
+        p.stop();
+        throw new Error("cancelled by the user");
+      },
+    }),
+  );
+  p.subscribe(() => snaps.push(p.snapshot()));
+  await p.retriage();
+  expect(snaps.some((s) => s.running && s.stopping)).toBe(true);
+  expect(p.snapshot().stopping).toBe(false);
+});
