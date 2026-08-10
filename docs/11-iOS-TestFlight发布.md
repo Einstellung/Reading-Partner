@@ -62,9 +62,12 @@ Actions → iOS TestFlight → Run workflow(main 分支)。20-40 分钟。
 
 ## 7. 分发(每次自动)
 
-上传只是把包送进 App Store Connect,处理完就停在那里,谁也装不到。构建 workflow 的 `distribute` job 接着调 `.github/workflows/ios-testflight-distribute.yml`,它跑 `scripts/testflight-distribute.py`:等 Apple 把这个 build 处理成 `VALID`(最多等 40 分钟),把它加进这个 app 下的全部内测组和全部外测组;有外测组时还会写 What's New(已经写过的不覆盖)并提交 beta 审核。同一个 build 重复跑不会出错,也不会重复提交。
+上传只是把包送进 App Store Connect,处理完就停在那里,谁也装不到。构建 workflow 的 `distribute` job 接着调 `.github/workflows/ios-testflight-distribute.yml`,它跑 `scripts/testflight-distribute.py`:等 Apple 把这个 build 处理成 `VALID`(最多等 40 分钟),先把它加进全部内测组,再走外测那一套。同一个 build 重复跑不会出错,也不会重复提交。
+
+内测和外测分开跑,外测失败不影响内测的结果,结尾统一打一份小结:两边各做到哪一步、卡住的那步 Apple 原话是什么、要去 App Store Connect 补哪一项。有任何一步没做成,退出码非零。
 
 - 内测组:处理完就能装,不过审核。
+- 外测组顺序是「查资格 → 写 What's New → 提交 beta 审核 → 加组」。查资格看两个字段:`buildAudienceType` 是 `INTERNAL_ONLY` 的包外测组永远收不了(只能重新导出),`buildBetaDetail.externalBuildState` 是外测独立的状态机,`processingState: VALID` 只代表内测就绪。审核提交排在加组前面是照 fastlane 的顺序,见 `docs/pitfall/107`。
 - 外测组:要过 Apple 的 beta 审核,不是即时的;审核通过前外测设备上看不到这个 build。
 - beta 审核要 app 级的 Test Information 填全(Beta App Description、Feedback Email、联系人姓名/邮箱/电话,需要登录的还要演示账号)。缺哪项 Apple 在返回里点名,脚本把 `errors[].title` 和 `detail` 原样打出来,并指到 App Store Connect 的对应页面;这时内测已经分发完成,只有外测卡在审核。
 

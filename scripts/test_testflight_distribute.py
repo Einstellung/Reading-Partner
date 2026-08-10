@@ -7,7 +7,9 @@ touches the network or needs credentials.
   python3 -m unittest discover -s scripts -t scripts
 """
 
+import contextlib
 import importlib.util
+import io
 import time
 import unittest
 from pathlib import Path
@@ -18,9 +20,25 @@ td = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(td)
 
 
-def build(bid, version, uploaded="2026-08-10T00:00:00Z", state="VALID"):
-    return {"type": "builds", "id": bid,
-            "attributes": {"version": version, "uploadedDate": uploaded, "processingState": state}}
+def build(bid, version, uploaded="2026-08-10T00:00:00Z", state="VALID", audience=None, prerelease=None):
+    payload = {"type": "builds", "id": bid,
+               "attributes": {"version": version, "uploadedDate": uploaded, "processingState": state}}
+    if audience is not None:
+        payload["attributes"]["buildAudienceType"] = audience
+    if prerelease is not None:
+        payload["relationships"] = {
+            "preReleaseVersion": {"data": {"type": "preReleaseVersions", "id": prerelease}}
+        }
+    return payload
+
+
+def prerelease(pid, version):
+    return {"type": "preReleaseVersions", "id": pid, "attributes": {"version": version}}
+
+
+def beta_detail(external, internal="READY_FOR_BETA_TESTING"):
+    return {"type": "buildBetaDetails", "id": "d1",
+            "attributes": {"internalBuildState": internal, "externalBuildState": external}}
 
 
 def group(gid, name, internal, all_builds=False):
@@ -31,6 +49,50 @@ def group(gid, name, internal, all_builds=False):
 def localization(lid, locale, whats_new):
     return {"type": "betaBuildLocalizations", "id": lid,
             "attributes": {"locale": locale, "whatsNew": whats_new}}
+
+
+class QuietCase(unittest.TestCase):
+    """Swallows the progress lines the step functions print as they run.
+
+    self.output holds them, so a test can still assert on what was printed.
+    """
+
+    def setUp(self):
+        self.output = io.StringIO()
+        redirect = contextlib.redirect_stdout(self.output)
+        redirect.__enter__()
+        self.addCleanup(redirect.__exit__, None, None, None)
+
+
+def api_error(status, detail, method="POST", url="https://api.example/x"):
+    return td.ApiError(method, url, status, {"errors": [{"code": "NOT_FOUND", "detail": detail}]})
+
+
+class FakeClient:
+    """Enough of Client to drive the linking code without a network.
+
+    `answers` maps a (method, path) pair to a response dict or to an exception
+    to raise; every call is recorded in `calls`.
+    """
+
+    def __init__(self, answers=None, collections=None):
+        self.answers = dict(answers or {})
+        self.collections = dict(collections or {})
+        self.calls = []
+
+    def request(self, method, path, body=None, query=None, attempts=4):
+        self.calls.append((method, path, body))
+        answer = self.answers.get((method, path), {})
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    def get_all(self, path, query=None):
+        self.calls.append(("GET", path, None))
+        answer = self.collections.get(path, ([], []))
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
 
 
 class SelectBuild(unittest.TestCase):
@@ -74,6 +136,86 @@ class ProcessingVerdict(unittest.TestCase):
 
     def test_a_missing_state_is_treated_as_still_processing(self):
         self.assertEqual(td.processing_verdict({"id": "a"}), (td.WAIT, "UNKNOWN"))
+
+
+class PickIncluded(unittest.TestCase):
+    """Regression: run 31390099873 logged the marketing version as '?'.
+
+    fields[builds] left preReleaseVersion out, so the sparse fieldset dropped
+    the relationship and there was no id to match the included resource by.
+    """
+
+    def test_matches_the_relationship_id(self):
+        b = build("b1", "42", prerelease="pre-2")
+        included = [prerelease("pre-1", "0.8.21"), prerelease("pre-2", "0.8.22")]
+        found = td.pick_included(b, included, "preReleaseVersion", "preReleaseVersions")
+        self.assertEqual(td.attrs(found).get("version"), "0.8.22")
+
+    def test_falls_back_to_the_only_included_resource(self):
+        b = build("b1", "42")  # relationship missing from the response
+        found = td.pick_included(b, [prerelease("pre-1", "0.8.22")],
+                                 "preReleaseVersion", "preReleaseVersions")
+        self.assertEqual(td.attrs(found).get("version"), "0.8.22")
+
+    def test_refuses_to_guess_between_several(self):
+        b = build("b1", "42")
+        included = [prerelease("pre-1", "0.8.21"), prerelease("pre-2", "0.8.22")]
+        self.assertIsNone(td.pick_included(b, included, "preReleaseVersion", "preReleaseVersions"))
+
+    def test_ignores_other_resource_types(self):
+        b = build("b1", "42")
+        self.assertIsNone(td.pick_included(b, [beta_detail("READY_FOR_BETA_SUBMISSION")],
+                                           "preReleaseVersion", "preReleaseVersions"))
+
+    def test_a_dangling_relationship_id_finds_nothing(self):
+        b = build("b1", "42", prerelease="pre-9")
+        self.assertIsNone(td.pick_included(b, [prerelease("pre-1", "0.8.22")],
+                                           "preReleaseVersion", "preReleaseVersions"))
+
+    def test_the_recovered_version_reaches_the_whats_new_text(self):
+        b = build("b1", "42", prerelease="pre-1")
+        found = td.pick_included(b, [prerelease("pre-1", "0.8.22")],
+                                 "preReleaseVersion", "preReleaseVersions")
+        self.assertEqual(td.default_whats_new(td.attrs(found).get("version"), "42"),
+                         "Reading Partner 0.8.22, build 42.")
+
+
+class ExternalVerdict(unittest.TestCase):
+    def test_ready_to_submit_is_ready(self):
+        self.assertEqual(td.external_verdict(beta_detail("READY_FOR_BETA_SUBMISSION")),
+                         (td.READY, "READY_FOR_BETA_SUBMISSION"))
+
+    def test_still_processing_externally_waits(self):
+        self.assertEqual(td.external_verdict(beta_detail("PROCESSING")), (td.WAIT, "PROCESSING"))
+
+    def test_export_compliance_review_waits(self):
+        self.assertEqual(td.external_verdict(beta_detail("IN_EXPORT_COMPLIANCE_REVIEW"))[0], td.WAIT)
+
+    def test_missing_export_compliance_blocks(self):
+        self.assertEqual(td.external_verdict(beta_detail("MISSING_EXPORT_COMPLIANCE")),
+                         (td.BLOCKED, "MISSING_EXPORT_COMPLIANCE"))
+
+    def test_expired_and_processing_exception_block(self):
+        self.assertEqual(td.external_verdict(beta_detail("EXPIRED"))[0], td.BLOCKED)
+        self.assertEqual(td.external_verdict(beta_detail("PROCESSING_EXCEPTION"))[0], td.BLOCKED)
+
+    def test_an_unknown_state_never_blocks_distribution(self):
+        self.assertEqual(td.external_verdict(beta_detail("SOMETHING_NEW"))[0], td.READY)
+        self.assertEqual(td.external_verdict({}), (td.READY, "UNKNOWN"))
+        self.assertEqual(td.external_verdict(None), (td.READY, "UNKNOWN"))
+
+
+class AudienceVerdict(unittest.TestCase):
+    def test_internal_only_cannot_go_external(self):
+        self.assertEqual(td.audience_verdict(build("b1", "42", audience="INTERNAL_ONLY")),
+                         (td.BLOCKED, "INTERNAL_ONLY"))
+
+    def test_app_store_eligible_is_fine(self):
+        self.assertEqual(td.audience_verdict(build("b1", "42", audience="APP_STORE_ELIGIBLE")),
+                         (td.READY, "APP_STORE_ELIGIBLE"))
+
+    def test_an_absent_audience_is_not_treated_as_internal(self):
+        self.assertEqual(td.audience_verdict(build("b1", "42")), (td.READY, "UNKNOWN"))
 
 
 class SplitGroups(unittest.TestCase):
@@ -152,6 +294,180 @@ class ReviewPlan(unittest.TestCase):
     def test_a_rejected_submission_is_reported_not_resubmitted(self):
         submissions = [{"id": "s1", "attributes": {"betaReviewState": "REJECTED"}}]
         self.assertEqual(td.review_plan(submissions), ("skip", "REJECTED"))
+
+    def test_the_external_state_alone_can_show_it_was_already_submitted(self):
+        for state in ("WAITING_FOR_BETA_REVIEW", "IN_BETA_REVIEW", "BETA_APPROVED",
+                      "BETA_REJECTED", "READY_FOR_BETA_TESTING", "IN_BETA_TESTING"):
+            self.assertEqual(td.review_plan([], state), ("skip", state), state)
+
+    def test_ready_for_beta_submission_still_submits(self):
+        self.assertEqual(td.review_plan([], "READY_FOR_BETA_SUBMISSION"), ("submit", None))
+
+    def test_an_existing_submission_wins_over_the_external_state(self):
+        submissions = [{"id": "s1", "attributes": {"betaReviewState": "APPROVED"}}]
+        self.assertEqual(td.review_plan(submissions, "IN_BETA_REVIEW"), ("skip", "APPROVED"))
+
+
+class LinkBuildToGroup(QuietCase):
+    """The 404 from run 31390099873 came from the betaGroups-side endpoint.
+
+    fastlane only ever uses the builds-side one, so that is what this tries
+    first; the other direction is a single documented fallback.
+    """
+
+    PRIMARY = "/v1/builds/b1/relationships/betaGroups"
+    FALLBACK = "/v1/betaGroups/g1/relationships/builds"
+
+    def test_uses_the_builds_side_endpoint_first(self):
+        client = FakeClient()
+        self.assertEqual(td.link_build_to_group(client, "b1", "g1"), "linked")
+        self.assertEqual([(m, p) for m, p, _ in client.calls], [("POST", self.PRIMARY)])
+        self.assertEqual(client.calls[0][2], {"data": [{"type": "betaGroups", "id": "g1"}]})
+
+    def test_falls_back_to_the_other_direction_on_404(self):
+        client = FakeClient({("POST", self.PRIMARY): api_error(404, "no resource of type 'builds'")})
+        result = td.link_build_to_group(client, "b1", "g1")
+        self.assertIn("betaGroups endpoint", result)
+        self.assertEqual([p for _, p, _ in client.calls], [self.PRIMARY, self.FALLBACK])
+        self.assertEqual(client.calls[1][2], {"data": [{"type": "builds", "id": "b1"}]})
+
+    def test_a_409_on_the_first_call_means_the_edge_is_already_there(self):
+        client = FakeClient({("POST", self.PRIMARY): api_error(409, "already exists")})
+        self.assertIn("already linked", td.link_build_to_group(client, "b1", "g1"))
+        self.assertEqual(len(client.calls), 1)
+
+    def test_a_409_on_the_fallback_also_means_already_linked(self):
+        client = FakeClient({
+            ("POST", self.PRIMARY): api_error(404, "gone"),
+            ("POST", self.FALLBACK): api_error(409, "already exists"),
+        })
+        self.assertIn("already linked", td.link_build_to_group(client, "b1", "g1"))
+
+    def test_both_answers_are_carried_into_the_failure(self):
+        client = FakeClient({
+            ("POST", self.PRIMARY): api_error(404, "no resource of type 'builds' with id 'b1'"),
+            ("POST", self.FALLBACK): api_error(422, "TF_ASSIGN_MONOGRAMS_BUILD_GROUP_RESPONSE"),
+        })
+        with self.assertRaises(td.StepFailed) as caught:
+            td.link_build_to_group(client, "b1", "g1")
+        detail = caught.exception.detail
+        self.assertIn("HTTP 404", detail)
+        self.assertIn("no resource of type 'builds' with id 'b1'", detail)
+        self.assertIn("HTTP 422", detail)
+        self.assertIn("TF_ASSIGN_MONOGRAMS_BUILD_GROUP_RESPONSE", detail)
+
+
+class AddToGroups(QuietCase):
+    def test_skips_the_groups_that_need_nothing(self):
+        client = FakeClient(collections={"/v1/betaGroups/g1/builds": ([{"id": "b1"}], [])})
+        lines = td.add_to_groups(client, [group("g1", "Internal", True)], "b1", "internal", False)
+        self.assertEqual(len(lines), 1)
+        self.assertIn("already has the build", lines[0])
+        self.assertNotIn("POST", [m for m, _, _ in client.calls])
+
+    def test_dry_run_changes_nothing(self):
+        client = FakeClient(collections={"/v1/betaGroups/g1/builds": ([], [])})
+        lines = td.add_to_groups(client, [group("g1", "Friends", False)], "b1", "external", True)
+        self.assertIn("dry run", lines[0])
+        self.assertEqual([m for m, _, _ in client.calls], ["GET"])
+
+
+class ExternalDistribution(QuietCase):
+    """Failures in the external half must be reported, not thrown away."""
+
+    def collections(self, submissions=()):
+        return {
+            "/v1/builds/b1/betaBuildLocalizations": ([], []),
+            "/v1/betaAppReviewSubmissions": (list(submissions), []),
+            "/v1/betaGroups/g1/builds": ([], []),
+        }
+
+    def test_an_internal_only_build_is_refused_before_anything_is_written(self):
+        client = FakeClient(collections=self.collections())
+        b = build("b1", "42", audience="INTERNAL_ONLY")
+        lines, problems = td.distribute_external(
+            client, b, "0.8.22", [group("g1", "Friends", False)], None, 1, 0, False)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("INTERNAL_ONLY", problems[0].detail)
+        self.assertIn("INTERNAL_ONLY", lines[0])
+        self.assertEqual(client.calls, [])
+
+    def test_missing_export_compliance_stops_with_an_actionable_hint(self):
+        client = FakeClient(
+            {("GET", "/v1/builds/b1/buildBetaDetail"): {"data": beta_detail("MISSING_EXPORT_COMPLIANCE")}},
+            self.collections())
+        lines, problems = td.distribute_external(
+            client, build("b1", "42", audience="APP_STORE_ELIGIBLE"), "0.8.22",
+            [group("g1", "Friends", False)], None, 1, 0, False)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("MISSING_EXPORT_COMPLIANCE", problems[0].detail)
+        self.assertIn("ITSAppUsesNonExemptEncryption", problems[0].hint)
+        self.assertIn("stopped at", lines[-1])
+
+    def test_the_happy_path_writes_notes_then_submits_then_links(self):
+        client = FakeClient(
+            {("GET", "/v1/builds/b1/buildBetaDetail"): {"data": beta_detail("READY_FOR_BETA_SUBMISSION")}},
+            self.collections())
+        lines, problems = td.distribute_external(
+            client, build("b1", "42", audience="APP_STORE_ELIGIBLE"), "0.8.22",
+            [group("g1", "Friends", False)], None, 1, 0, False)
+        self.assertEqual(problems, [])
+        writes = [(m, p) for m, p, _ in client.calls if m in ("POST", "PATCH")]
+        self.assertEqual(writes, [
+            ("POST", "/v1/betaBuildLocalizations"),
+            ("POST", "/v1/betaAppReviewSubmissions"),
+            ("POST", "/v1/builds/b1/relationships/betaGroups"),
+        ])
+        self.assertIn("Reading Partner 0.8.22, build 42.", " ".join(lines))
+
+    def test_a_refused_review_submission_reports_the_test_information_hint(self):
+        client = FakeClient(
+            {
+                ("GET", "/v1/builds/b1/buildBetaDetail"): {"data": beta_detail("READY_FOR_BETA_SUBMISSION")},
+                ("POST", "/v1/betaAppReviewSubmissions"): api_error(409, "Missing Beta App Description"),
+            },
+            self.collections())
+        lines, problems = td.distribute_external(
+            client, build("b1", "42", audience="APP_STORE_ELIGIBLE"), "0.8.22",
+            [group("g1", "Friends", False)], None, 1, 0, False)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("Missing Beta App Description", problems[0].detail)
+        self.assertIn("Test Information", problems[0].hint)
+        # The group link is never attempted once the submission failed.
+        self.assertNotIn("/v1/builds/b1/relationships/betaGroups", [p for _, p, _ in client.calls])
+
+    def test_a_link_failure_still_leaves_the_earlier_steps_done(self):
+        client = FakeClient(
+            {
+                ("GET", "/v1/builds/b1/buildBetaDetail"): {"data": beta_detail("READY_FOR_BETA_SUBMISSION")},
+                ("POST", "/v1/builds/b1/relationships/betaGroups"): api_error(404, "no builds with that id"),
+                ("POST", "/v1/betaGroups/g1/relationships/builds"): api_error(404, "no builds with that id"),
+            },
+            self.collections())
+        lines, problems = td.distribute_external(
+            client, build("b1", "42", audience="APP_STORE_ELIGIBLE"), "0.8.22",
+            [group("g1", "Friends", False)], None, 1, 0, False)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("What's New created", " ".join(lines))
+        self.assertIn("beta review submitted", " ".join(lines))
+
+
+class Summary(unittest.TestCase):
+    def test_the_internal_result_survives_an_external_failure(self):
+        problem = td.StepFailed("linking the build to a beta group",
+                                "POST ... -> HTTP 404\n[NOT_FOUND] no such build",
+                                "Add the build by hand.")
+        text = td.format_summary(["'Internal': already has the build"],
+                                 ["stopped at: linking the build to a beta group"], [problem])
+        self.assertIn("'Internal': already has the build", text)
+        self.assertIn("Needs a human", text)
+        self.assertIn("[NOT_FOUND] no such build", text)
+        self.assertIn("-> Add the build by hand.", text)
+
+    def test_a_clean_run_says_so(self):
+        text = td.format_summary(["'Internal': linked"], ["'Friends': linked"], [])
+        self.assertIn("Nothing needs a human.", text)
+        self.assertNotIn("Needs a human", text)
 
 
 class Messages(unittest.TestCase):

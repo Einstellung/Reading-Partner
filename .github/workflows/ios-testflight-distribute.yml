@@ -4,8 +4,11 @@
 # Connect processes the build and then stops: until the build is linked to a
 # beta group nobody can install it, which is how a green build workflow leaves
 # every tester on the previous version. scripts/testflight-distribute.py does
-# the linking — internal groups, external groups, What's New text and the beta
-# review submission external testing requires.
+# the linking: internal groups first, then the external half — eligibility
+# check, What's New text, beta review submission, group link, in that order and
+# for the reasons in docs/pitfall/107. The two halves are independent, so a
+# failed external step still leaves the internal testers served; the script
+# prints a summary of both and exits non-zero if anything needs a human.
 #
 # Two ways in, one script:
 #   - workflow_call: ios-testflight.yml runs this right after its upload step.
@@ -36,9 +39,10 @@ on:
 jobs:
   distribute:
     runs-on: ubuntu-latest
-    # The script waits out Apple's processing (up to 40 minutes) before it can
-    # link anything; a fresh upload is usually VALID within a few minutes.
-    timeout-minutes: 60
+    # The script waits out Apple's processing (up to 40 minutes) and then the
+    # build's external testing state (up to 15 more) before it can link
+    # anything; a fresh upload usually clears both within a few minutes.
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
 
