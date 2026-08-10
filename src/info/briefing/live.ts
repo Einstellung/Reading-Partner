@@ -6,6 +6,7 @@
 
 import { callModel, resolveModel, type ResolvedModel } from "../../ai/model-call";
 import type { AiCallOptions } from "../../ai/watchdog";
+import { INFO_EVENT_TOPIC, logEvent } from "../../platform/app/events";
 import { newTally, reportParse } from "../../platform/app/structured-output";
 import { observeAppLifecycle } from "../../platform/app/lifecycle";
 import { browserWakeLockTarget, createScreenWakeLock } from "../../platform/app/wake-lock";
@@ -81,6 +82,29 @@ async function triage(
   input: { profile: string; feedback: FeedbackEvent[]; items: InfoItem[]; readerContext?: string },
   opts: AiCallOptions,
 ): Promise<TriageResult> {
+  // One watchdog attempt, timed against the collection numbers above: the two
+  // together are the only answer to "why did that take four minutes".
+  const startedAt = Date.now();
+  const done = (ok: boolean) =>
+    logEvent(INFO_EVENT_TOPIC, "info-triage", {
+      ms: Date.now() - startedAt,
+      items: input.items.length,
+      ok,
+    });
+  try {
+    const result = await runTriageAttempt(input, opts);
+    done(true);
+    return result;
+  } catch (e) {
+    done(false);
+    throw e;
+  }
+}
+
+async function runTriageAttempt(
+  input: { profile: string; feedback: FeedbackEvent[]; items: InfoItem[]; readerContext?: string },
+  opts: AiCallOptions,
+): Promise<TriageResult> {
   const userText = triageUserMessage(input.profile, input.feedback, input.items, {
     readerContext: input.readerContext,
   });
@@ -115,6 +139,7 @@ async function listSources(): Promise<InfoSourceRef[]> {
 async function collect(
   refs: InfoSourceRef[],
   onSettled: (result: SourceResult) => Promise<void>,
+  signal: AbortSignal,
 ): Promise<void> {
   const wanted = new Set(refs.map((r) => r.id));
   const sources = (await loadSources()).filter((d) => wanted.has(d.id));
@@ -123,7 +148,17 @@ async function collect(
     sources,
     {
       extract: extractReadable,
-      onSourceSettled: (r) => onSettled({ id: r.source, items: r.items, error: r.error }),
+      signal,
+      onSourceSettled: (r) => {
+        // Where a run's minutes go: per source, so a slow one is nameable.
+        logEvent(INFO_EVENT_TOPIC, "info-collect", {
+          source: r.source,
+          ms: Math.round(r.durationMs),
+          items: r.items.length,
+          ok: !r.error,
+        });
+        return onSettled({ id: r.source, items: r.items, error: r.error });
+      },
     },
     prior,
   );

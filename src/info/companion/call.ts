@@ -88,6 +88,7 @@ export function briefingProgressCard(job: BriefingJob, s: InfoSnapshot | null): 
           attempts: s.activity.attempts,
         }
       : null,
+    stopping: s?.stopping ?? false,
     title: progressTitle(job),
   };
 }

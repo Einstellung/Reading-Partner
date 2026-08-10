@@ -92,7 +92,10 @@ export function BriefingProgressCard({ payload }: CardComponentProps<BriefingPro
 
   let main: string;
   let sub: string | null = null;
-  if (payload.phase === "fetching") {
+  if (payload.stopping) {
+    main = "Stopping";
+    sub = c && c.done > 0 ? `${c.done} source${c.done === 1 ? "" : "s"} kept` : null;
+  } else if (payload.phase === "fetching") {
     main = c && c.total ? `Collecting sources ${c.done}/${c.total}` : "Collecting sources";
     const parts: string[] = [];
     if (c?.lastDone) parts.push(`${c.lastDone} done`);
