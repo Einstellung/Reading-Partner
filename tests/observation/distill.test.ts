@@ -25,16 +25,21 @@ import {
   buildDistillSystemPrompt,
   buildDistillUserMessage,
   formatSilentMarks,
+  buildMarksDistillSystemPrompt,
+  buildMarksDistillUserMessage,
+  countNewReaderMessages,
   runDistillPass,
   runDistillation,
+  runMarksDistillPass,
   selectSilentMarks,
   DISTILL_BRIEF_TOKENS,
   type DistillAnnotation,
   type DistillInput,
+  type DistillMessage,
   type DistillPassInput,
 } from "../../src/observation/distill";
 import { ObservationFileStore } from "../../src/observation/store";
-import { JULY_17, makeFakeFs } from "./fakefs";
+import { JULY_17, JULY_20, makeFakeFs } from "./fakefs";
 
 type ToolReq = { name: string; args: Record<string, any>; id: string };
 type Turn = { text?: string; calls?: ToolReq[] } | { error: string };
@@ -295,6 +300,7 @@ test("a pass that never writes a final message is not a finished pass", async ()
 function passInput(overrides: Partial<DistillPassInput> = {}): DistillPassInput {
   return {
     topicName: "attention",
+    bookId: "book-1",
     bookName: "survey.pdf",
     threadId: "thread-1",
     annotationId: "ann-1",
@@ -312,7 +318,7 @@ function passInput(overrides: Partial<DistillPassInput> = {}): DistillPassInput 
   };
 }
 
-test("a finished pass advances both stamps", async () => {
+test("a finished pass advances both cursors", async () => {
   const { store, adapter } = makeStore();
   const result = await runDistillPass(passInput(), {
     store,
@@ -321,14 +327,136 @@ test("a finished pass advances both stamps", async () => {
     ...scriptedRunner([{ text: "done" }]),
   });
 
-  expect(result.ok).toBe(true);
+  expect(result).toMatchObject({ ran: true, ok: true });
   expect(await store.getMeta()).toEqual({
     lastDistilledAt: JULY_17,
-    lastAnnotationDistillAt: 900, // the newest mark this pass was shown
+    lastAnnotationDistillAt: null,
+    distilledMessages: { "thread-1": 2 },
+    distilledMarks: { "book-1": 900 }, // the newest mark this pass was shown
   });
 });
 
-test("a failed pass leaves both stamps where they were", async () => {
+test("a second pass over the same transcript does not run", async () => {
+  const { store, adapter } = makeStore();
+  await runDistillPass(passInput(), {
+    store,
+    adapter,
+    now: () => JULY_17,
+    ...scriptedRunner([{ text: "done" }]),
+  });
+  const runner = loopRunner([{ text: "done" }]);
+  const again = await runDistillPass(passInput(), {
+    store,
+    adapter,
+    run: runner.run,
+    now: () => JULY_20,
+  });
+
+  expect(again).toEqual({ ran: false, skipped: "no-new-messages" });
+  expect(runner.requests.length).toBe(0);
+  // Cursors did not move on a pass that never ran.
+  expect((await store.getMeta()).lastDistilledAt).toBe(JULY_17);
+});
+
+test("the cursor is on disk, so a restart does not re-distill", async () => {
+  const { fs } = makeFakeFs();
+  const first = new ObservationFileStore("t", fs, () => JULY_17);
+  await runDistillPass(passInput(), {
+    store: first,
+    adapter: new FileObservationAdapter(first),
+    now: () => JULY_17,
+    ...scriptedRunner([{ text: "done" }]),
+  });
+  // A fresh store over the same files is what a relaunch has.
+  const reopened = new ObservationFileStore("t", fs, () => JULY_20);
+  const runner = loopRunner([{ text: "done" }]);
+  const again = await runDistillPass(passInput(), {
+    store: reopened,
+    adapter: new FileObservationAdapter(reopened),
+    run: runner.run,
+    now: () => JULY_20,
+  });
+
+  expect(again).toEqual({ ran: false, skipped: "no-new-messages" });
+  expect(runner.requests.length).toBe(0);
+});
+
+test("a new reader message after a pass is distilled again", async () => {
+  const { store, adapter } = makeStore();
+  await runDistillPass(passInput(), {
+    store,
+    adapter,
+    now: () => JULY_17,
+    ...scriptedRunner([{ text: "done" }]),
+  });
+  const longer = passInput({
+    messages: [
+      { role: "user", text: "why is this quadratic?", ts: 100 },
+      { role: "ai", text: "because every token attends to every token", ts: 200 },
+      { role: "user", text: "so what does flash attention change?", ts: 300 },
+    ],
+  });
+  const again = await runDistillPass(longer, {
+    store,
+    adapter,
+    now: () => JULY_20,
+    ...scriptedRunner([{ text: "done" }]),
+  });
+
+  expect(again).toMatchObject({ ran: true, ok: true });
+  expect((await store.getMeta()).distilledMessages).toEqual({ "thread-1": 3 });
+});
+
+test("a thread the reader never spoke in is not distilled", async () => {
+  const { store, adapter } = makeStore();
+  const runner = loopRunner([{ text: "done" }]);
+  const result = await runDistillPass(
+    passInput({ messages: [{ role: "ai", text: "here is the passage", ts: 100 }] }),
+    { store, adapter, run: runner.run, now: () => JULY_17 },
+  );
+
+  expect(result).toEqual({ ran: false, skipped: "reader-silent" });
+  expect(runner.requests.length).toBe(0);
+});
+
+test("minNewMessages holds the trim fallback back", async () => {
+  const { store, adapter } = makeStore();
+  const runner = loopRunner([{ text: "done" }]);
+  const result = await runDistillPass(passInput({ minNewMessages: 20 }), {
+    store,
+    adapter,
+    run: runner.run,
+    now: () => JULY_17,
+  });
+
+  expect(result).toEqual({ ran: false, skipped: "no-new-messages" });
+  expect(runner.requests.length).toBe(0);
+});
+
+test("a book's mark cursor is its own, so a sibling book's pass never buries it", async () => {
+  const { store, adapter } = makeStore();
+  await runDistillPass(passInput(), {
+    store,
+    adapter,
+    now: () => JULY_17,
+    ...scriptedRunner([{ text: "done" }]),
+  });
+  // The other book of the same topic, marked earlier and never distilled.
+  const other = await runMarksDistillPass(
+    {
+      topicName: "attention",
+      bookId: "book-2",
+      bookName: "primer.pdf",
+      annotations: [{ id: "b1", page: 2, text: "positional encoding", createdAt: 500 }],
+    },
+    { store, adapter, now: () => JULY_20, ...scriptedRunner([{ text: "done" }]) },
+  );
+
+  expect(other).toMatchObject({ ran: true, ok: true });
+  expect((await store.getMeta()).distilledMarks).toEqual({ "book-1": 900, "book-2": 500 });
+});
+
+test("a failed pass leaves both cursors where they were", async () => {
   const { store, adapter } = makeStore();
   const result = await runDistillPass(passInput(), {
     store,
@@ -337,7 +465,7 @@ test("a failed pass leaves both stamps where they were", async () => {
     ...scriptedRunner([{ error: "connection reset" }]),
   });
 
-  expect(result.ok).toBe(false);
+  expect(result).toMatchObject({ ran: true, ok: false });
   // Nothing moved, so the next trigger distils this transcript and these marks
   // again — the alternative is a conversation that is never observed and
   // nothing left to say so.
@@ -482,4 +610,106 @@ test("silent marks reach the prompts only when present", () => {
   const noMarks = makeInput();
   expect(buildDistillSystemPrompt(noMarks)).not.toContain("Silent marks");
   expect(buildDistillUserMessage(noMarks)).not.toContain("since the last distillation");
+});
+
+
+// --- marks with no conversation ---
+
+test("countNewReaderMessages counts only what the reader said after the cursor", () => {
+  const msgs: DistillMessage[] = [
+    { role: "user", text: "a", ts: 1 },
+    { role: "ai", text: "b", ts: 2 },
+    { role: "user", text: "c", ts: 3 },
+    { role: "ai", text: "d", ts: 4 },
+    { role: "user", text: "   ", ts: 5 }, // an empty row is not something said
+  ];
+  expect(countNewReaderMessages(msgs, 0)).toBe(2);
+  expect(countNewReaderMessages(msgs, 2)).toBe(1);
+  expect(countNewReaderMessages(msgs, 5)).toBe(0);
+  // A cursor past the end (a thread that shrank) is clamped, not negative.
+  expect(countNewReaderMessages(msgs, 99)).toBe(0);
+});
+
+test("a book with only marks is distilled on its own, and moves its cursor", async () => {
+  const { store, adapter } = makeStore();
+  const result = await runMarksDistillPass(
+    {
+      topicName: "investing",
+      bookId: "book-7",
+      bookName: "margin-of-safety.pdf",
+      annotations: [
+        mark({ id: "m1", page: 20, text: "owner earnings", createdAt: 100 }),
+        mark({ id: "m2", page: 140, text: "margin of safety", createdAt: 400 }),
+      ],
+    },
+    { store, adapter, now: () => JULY_17, ...scriptedRunner([{ text: "done" }]) },
+  );
+
+  expect(result).toMatchObject({ ran: true, ok: true });
+  expect(await store.getMeta()).toEqual({
+    lastDistilledAt: JULY_17,
+    lastAnnotationDistillAt: null,
+    distilledMarks: { "book-7": 400 },
+  });
+});
+
+test("a marks pass below its threshold does not reach the model", async () => {
+  const { store, adapter } = makeStore();
+  const runner = loopRunner([{ text: "done" }]);
+  const result = await runMarksDistillPass(
+    {
+      topicName: "investing",
+      bookId: "book-7",
+      bookName: "margin-of-safety.pdf",
+      annotations: [mark({ id: "m1", page: 20, text: "owner earnings", createdAt: 100 })],
+      minNewMarks: 5,
+    },
+    { store, adapter, run: runner.run, now: () => JULY_17 },
+  );
+
+  expect(result).toEqual({ ran: false, skipped: "no-new-marks" });
+  expect(runner.requests.length).toBe(0);
+});
+
+test("a failed marks pass leaves the book's cursor where it was", async () => {
+  const { store, adapter } = makeStore();
+  const result = await runMarksDistillPass(
+    {
+      topicName: "investing",
+      bookId: "book-7",
+      bookName: "margin-of-safety.pdf",
+      annotations: [mark({ id: "m1", page: 20, text: "owner earnings", createdAt: 100 })],
+    },
+    { store, adapter, now: () => JULY_17, ...scriptedRunner([{ error: "connection reset" }]) },
+  );
+
+  expect(result).toMatchObject({ ran: true, ok: false });
+  expect((await store.getMeta()).distilledMarks).toBeUndefined();
+});
+
+test("the marks prompt says there was no conversation and refuses comprehension claims", () => {
+  const input = {
+    topicName: "investing",
+    bookName: "margin-of-safety.pdf",
+    marks: [mark({ id: "m1", page: 20, text: "owner earnings", comment: "why not FCF?" })],
+    capped: false,
+    indexText: "- [belief] x (updated 2026-07-01, id m-11111111)",
+    today: "2026-07-17",
+  };
+  const prompt = buildMarksDistillSystemPrompt(input);
+  // It never claims a transcript it does not have.
+  expect(prompt).toContain("conversation to read");
+  expect(prompt).not.toContain("Transcript");
+  // What marks are, and are not, evidence of.
+  expect(prompt).toContain("distribution");
+  expect(prompt).toContain("Do not record understood-concept");
+  expect(prompt).toContain("Aggregate.");
+  expect(prompt).toContain("Update, don't duplicate");
+  expect(prompt).toContain("today is 2026-07-17");
+  expect(prompt).toContain("id m-11111111");
+
+  const msg = buildMarksDistillUserMessage(input);
+  expect(msg).toContain("margin-of-safety.pdf");
+  expect(msg).toContain("there is no transcript");
+  expect(msg).toContain('[m1] p20: "owner earnings" — note: why not FCF?');
 });

@@ -36,16 +36,22 @@ export interface ObservationFs {
 
 export interface ObservationMeta {
   lastDistilledAt: number | null;
-  // When the reader's silent marks were last folded in (docs/02 part 2).
-  // Distillation gathers annotations created after this, then advances it.
+  // Where the reader's silent marks had been folded in to, before the cursor
+  // became per book. Still read as the seed for a book that has never been
+  // distilled; no longer written. Keeping it means an upgrade does not re-distil
+  // every mark ever made.
   lastAnnotationDistillAt: number | null;
   // How many messages of a conversation have already been distilled, by thread
-  // id. A rehearsal is left and re-entered over days (docs/31), so its pass
-  // needs to know where the last one stopped; that has to survive a restart,
-  // which the reading path's in-memory counter (live.ts) does not have to.
-  // Absent until a rehearsal has been distilled — the reading path never writes
-  // it, and neither path may drop the other's bookkeeping when it writes here.
+  // id. Both paths write it, over disjoint thread ids: a rehearsal is left and
+  // re-entered over days (docs/31), and a reading thread is distilled again and
+  // again by the arrears sweep (arrears.ts). Neither may drop the other's
+  // bookkeeping when it writes here.
   distilledMessages?: Record<string, number>;
+  // The newest mark folded in, by book id. Per book because a topic is several
+  // books read against one question (docs/01 §1): one topic-wide cursor advanced
+  // by a pass over book A puts book B's older marks behind it, and they are then
+  // never observed.
+  distilledMarks?: Record<string, number>;
 }
 
 const ENTRY_FILE = /^(m-[0-9a-f]{8})\.md$/;
@@ -165,6 +171,7 @@ export class ObservationFileStore {
         lastDistilledAt: parsed.lastDistilledAt ?? null,
         lastAnnotationDistillAt: parsed.lastAnnotationDistillAt ?? null,
         ...(parsed.distilledMessages ? { distilledMessages: parsed.distilledMessages } : {}),
+        ...(parsed.distilledMarks ? { distilledMarks: parsed.distilledMarks } : {}),
       };
     } catch {
       return { lastDistilledAt: null, lastAnnotationDistillAt: null };

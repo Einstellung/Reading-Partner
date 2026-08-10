@@ -80,6 +80,17 @@ export function selectSilentMarks(
   return { marks: capped ? fresh.slice(0, cap) : fresh, capped };
 }
 
+// One bullet per mark: page, the passage, the reader's note. Shared by the two
+// prompts that list marks.
+function markLines(marks: DistillAnnotation[]): string[] {
+  return marks.map((a) => {
+    const head = a.page !== null ? `p${a.page}` : "—";
+    const quote = a.text.trim() ? `"${clip(a.text)}"` : "(no selected text)";
+    const note = (a.comment ?? "").trim() ? ` — note: ${clip(a.comment!, 80)}` : "";
+    return `- [${a.id}] ${head}: ${quote}${note}`;
+  });
+}
+
 // The silent-marks block for the user message, or "" when there are none. Framed
 // as a pattern signal, with annotation ids so an observation can anchor to them.
 export function formatSilentMarks(marks: DistillAnnotation[], capped: boolean): string {
@@ -89,13 +100,13 @@ export function formatSilentMarks(marks: DistillAnnotation[], capped: boolean): 
     "conversation). Look for a PATTERN across them, not one-off details:",
   ];
   if (capped) lines.push(`(showing the ${marks.length} most recent; there were more)`);
-  for (const a of marks) {
-    const head = a.page !== null ? `p${a.page}` : "—";
-    const quote = a.text.trim() ? `"${clip(a.text)}"` : "(no selected text)";
-    const note = (a.comment ?? "").trim() ? ` — note: ${clip(a.comment!, 80)}` : "";
-    lines.push(`- [${a.id}] ${head}: ${quote}${note}`);
-  }
-  return lines.join("\n");
+  return [...lines, ...markLines(marks)].join("\n");
+}
+
+// Where a book's marks had been folded in to. Per book, falling back to the
+// topic-wide stamp left by the versions that had only that (store.ts).
+export function markCursor(meta: ObservationMeta, bookId: string): number | null {
+  return meta.distilledMarks?.[bookId] ?? meta.lastAnnotationDistillAt;
 }
 
 export interface DistillDeps {
@@ -310,6 +321,7 @@ export interface DistillPassDeps extends DistillDeps {
 // (live.ts) to resolve the store, the adapter and the event log.
 export interface DistillPassInput {
   topicName: string;
+  bookId: string;
   bookName: string;
   threadId: string;
   annotationId: string;
@@ -318,21 +330,67 @@ export interface DistillPassInput {
   messages: DistillMessage[];
   // The book's marks, filtered here against the store's cursor.
   annotations?: DistillAnnotation[];
+  // How much new conversation the pass is worth. The whole transcript is still
+  // sent — a conversation about one passage is one unit — so this only decides
+  // whether to run at all.
+  minNewMessages?: number;
 }
 
-// Assemble the input, run the pass, and advance the two timestamps only if it
-// finished. Both stamps are one decision: they say what has already been folded
-// into the observations, so moving them after a pass that did not write is how a
-// conversation silently loses its observations for good.
+// Why a pass did nothing, when it did nothing. Both are ordinary now that a
+// sweep looks at every thread every half hour (arrears.ts).
+export type DistillSkip = "no-new-messages" | "reader-silent";
+
+export type DistillPassResult =
+  | { ran: false; skipped: DistillSkip }
+  | ({ ran: true } & DistillResult);
+
+// How many of a thread's messages have already been folded in.
+export function messageCursor(meta: ObservationMeta, threadId: string): number {
+  return meta.distilledMessages?.[threadId] ?? 0;
+}
+
+// New messages the reader themselves wrote, after the cursor. Empty rows and the
+// AI's own half do not count: neither is evidence about the reader, and counting
+// them would make every answer look like arrears. Pure — unit-tested.
+export function countNewReaderMessages(
+  messages: readonly DistillMessage[],
+  cursor: number,
+): number {
+  const from = Math.min(Math.max(cursor, 0), messages.length);
+  let n = 0;
+  for (let i = from; i < messages.length; i++) {
+    if (messages[i].role === "user" && messages[i].text.trim() !== "") n++;
+  }
+  return n;
+}
+
+// Assemble the input, run the pass, and advance the bookkeeping only if it
+// finished. The stamps say what has already been folded into the observations,
+// so moving them after a pass that did not write is how a conversation silently
+// loses its observations for good.
+//
+// The message cursor is on disk rather than in memory because the trigger is no
+// longer only hangup: the sweep comes back to the same thread every half hour,
+// and across restarts (arrears.ts).
 export async function runDistillPass(
   input: DistillPassInput,
   deps: DistillPassDeps,
-): Promise<DistillResult> {
+): Promise<DistillPassResult> {
   const now = deps.now ?? Date.now;
   const meta = await deps.store.getMeta();
+  const cursor = messageCursor(meta, input.threadId);
+  const fresh = countNewReaderMessages(input.messages, cursor);
+  // Nothing the reader said → nothing that can't be re-derived from the book and
+  // the mark itself. Marks with no conversation at all are a pass of their own
+  // (runMarksDistillPass), not a degenerate case of this one.
+  if (fresh === 0) {
+    return { ran: false, skipped: cursor >= input.messages.length ? "no-new-messages" : "reader-silent" };
+  }
+  if (fresh < (input.minNewMessages ?? 1)) return { ran: false, skipped: "no-new-messages" };
+
   const { marks, capped } = selectSilentMarks(
     input.annotations ?? [],
-    meta.lastAnnotationDistillAt,
+    markCursor(meta, input.bookId),
   );
   const result = await runDistillation(
     {
@@ -351,15 +409,202 @@ export async function runDistillPass(
     deps.adapter,
     { run: deps.run, model: deps.model, signal: deps.signal },
   );
-  if (!result.ok) return result;
-  // The transcript's stamp, and — when this pass actually saw the marks — the
-  // silent-marks cursor. Spread first: the rehearsal pass keeps its own
-  // per-thread cursor in the same file (rehearsal.ts) and a hangup here must not
-  // wipe it.
+  if (!result.ok) return { ran: true, ...result };
+  // The transcript's cursor, and — when this pass actually saw the marks — the
+  // book's mark cursor. Spread first: the rehearsal pass keeps its own per-thread
+  // cursor in the same file (rehearsal.ts) and a hangup here must not wipe it.
   await deps.store.setMeta({
     ...meta,
     lastDistilledAt: now(),
-    lastAnnotationDistillAt: marks.length > 0 ? marks[0].createdAt : meta.lastAnnotationDistillAt,
+    distilledMessages: { ...(meta.distilledMessages ?? {}), [input.threadId]: input.messages.length },
+    ...(marks.length > 0
+      ? { distilledMarks: { ...(meta.distilledMarks ?? {}), [input.bookId]: marks[0].createdAt } }
+      : {}),
   });
-  return result;
+  return { ran: true, ...result };
+}
+
+// --- marks with no conversation ---
+
+// The pass for a book the reader has only marked up: 34 highlights, not one
+// question asked. Its own prompt rather than a branch of the transcript one,
+// because the transcript prompt's whole footing — "a conversation just ended,
+// distill what the reader said" — is false here, and a prompt that says
+// something false about its own input gets answered as if it were true.
+export const MARKS_DISTILL_AGENT_NAME = "marks_distiller";
+
+export interface MarksDistillInput {
+  topicName: string;
+  bookName: string;
+  // The marks since the book's cursor, newest first, already capped.
+  marks: DistillAnnotation[];
+  capped: boolean;
+  indexText: string;
+  today: string; // YYYY-MM-DD, so the model writes absolute dates
+}
+
+export function buildMarksDistillSystemPrompt(input: MarksDistillInput): string {
+  return [
+    "You keep a reading companion's observations of its reader. This pass has no",
+    "conversation to read. The reader has been marking up a book on their own —",
+    "highlighting passages, now and then writing a note beside one — and has not",
+    "asked you about any of it. The marks listed in the message below are the",
+    "whole of what you have. Distill from them what is worth observing about the",
+    "reader, using the observation tools.",
+    "This is a silent background pass: the reader sees nothing. Make your tool",
+    'calls, then finish with the single word "done".',
+    "",
+    "Read the marks as a distribution, not as a list of quotes:",
+    "- How far they have got. The pages the marks span, and the furthest one,",
+    "  are where the reader is in this book (reading-position).",
+    "- What their attention settles on. Several marks that share a theme, or a",
+    "  handful of pages marked far more densely than the rest, say what this",
+    "  reader is actually reading the book for.",
+    "- Whether they keep coming back to something. The same idea marked at pages",
+    "  far apart is a stronger signal than any single mark, and is worth saying",
+    "  so in the body.",
+    "- What a note adds. A note phrased as a question, or as disagreement, is the",
+    "  one place in a silent stretch where the reader speaks (stuck-point, belief,",
+    "  correction).",
+    "",
+    "What marks cannot tell you: whether the reader understood any of it. A",
+    "highlight is attention, not comprehension. Do not record understood-concept",
+    "from marks alone, and say in the body that the observation comes from marks",
+    "with no conversation behind them, so a later pass knows how much weight it",
+    "carries.",
+    "",
+    "Observation types (one fact per observation):",
+    "- reading-position: where the reader is in a material",
+    "- stuck-point: something the reader is stuck on or confused by",
+    "- understood-concept: something the reader has worked out",
+    "- belief: an opinion, question, or hypothesis the reader voiced",
+    "- correction: the reader corrected you or the material",
+    "",
+    "Curation rules:",
+    "- Aggregate. A stretch of marks is worth one or two observations, never one",
+    "  per mark: the marks are on disk already, with their own text, and an",
+    "  observation that restates one adds nothing.",
+    "- Update, don't duplicate: when the index below already has a related",
+    '  observation, update it (observation_update action "update") instead of',
+    "  creating another. A reading-position for this book almost certainly exists",
+    "  already — move it rather than writing a second one.",
+    "- On contradiction with an existing observation, never silently drop the old",
+    "  state: rewrite it as an evolution — \"was stuck on X, marked it again on",
+    '  <date>" — so both states stay visible.',
+    `- Write absolute dates (today is ${input.today}); never "recently" or "last week".`,
+    "- Do not copy the marked passages into an observation. They are already",
+    "  stored; what is not stored is what marking them says about the reader.",
+    "- Anchor evidence: pass the annotation ids an observation came from.",
+    "- A short or scattered stretch of marks may yield nothing worth keeping;",
+    "  making no tool call at all is a fine outcome.",
+    "",
+    "Current observation index for this topic:",
+    input.indexText.trim() || "(empty)",
+  ].join("\n");
+}
+
+export function buildMarksDistillUserMessage(input: MarksDistillInput): string {
+  const lines = [
+    `Topic: ${input.topicName}`,
+    `Book: ${input.bookName}`,
+    `Date: ${input.today}`,
+    "",
+    `${input.marks.length} mark(s) since the last pass, newest first. None of them`,
+    "was discussed with you — there is no transcript for this stretch of reading.",
+  ];
+  if (input.capped) {
+    lines.push(`(showing the ${input.marks.length} most recent; there were more)`);
+  }
+  return [...lines, ...markLines(input.marks)].join("\n");
+}
+
+export function buildMarksDistillAgent(
+  input: MarksDistillInput,
+  tools: AgentTool[],
+  model?: SubagentModel,
+): SubagentDefinition {
+  return {
+    name: MARKS_DISTILL_AGENT_NAME,
+    description: "Curate this topic's observations from a stretch of silent reading.",
+    label: "Distilling observations",
+    systemPrompt: buildMarksDistillSystemPrompt(input),
+    tools,
+    maxRounds: DISTILL_MAX_ROUNDS,
+    model,
+    // Same reason as the transcript pass: a correct pass over a thin stretch of
+    // marks makes no tool call at all, and "required" would file every one of
+    // those as a failure and hold the cursor back.
+    evidence: "optional",
+    briefTokenCap: DISTILL_BRIEF_TOKENS,
+  };
+}
+
+export async function runMarksDistillation(
+  input: MarksDistillInput,
+  adapter: ObservationAdapter,
+  deps: DistillDeps,
+): Promise<DistillResult> {
+  const counts = { created: 0, updated: 0, deleted: 0 };
+  const tools = buildObservationTools(adapter, {
+    onWrite: (action: ObservationWriteAction) => {
+      if (action === "create") counts.created++;
+      else if (action === "update") counts.updated++;
+      else counts.deleted++;
+    },
+  });
+  const brief = await runSubagent(
+    {
+      definition: buildMarksDistillAgent(input, tools, deps.model),
+      task: buildMarksDistillUserMessage(input),
+      signal: deps.signal,
+    },
+    { run: deps.run },
+  );
+  const ok = brief.outcome === "answered";
+  return { ...counts, ok, outcome: brief.outcome, failure: ok ? undefined : brief.brief };
+}
+
+export interface MarksPassInput {
+  topicName: string;
+  bookId: string;
+  bookName: string;
+  // The book's marks, filtered here against the book's cursor.
+  annotations: DistillAnnotation[];
+  // How many new marks make a pass worth its cost. The sweep gates on this too,
+  // before it picks a job; the pass re-checks against the cursor it just read.
+  minNewMarks?: number;
+}
+
+export type MarksPassResult = { ran: false; skipped: "no-new-marks" } | ({ ran: true } & DistillResult);
+
+// One pass over a book's silent marks, with the same cursor discipline as the
+// transcript pass: the book's mark cursor moves only if the pass finished.
+export async function runMarksDistillPass(
+  input: MarksPassInput,
+  deps: DistillPassDeps,
+): Promise<MarksPassResult> {
+  const now = deps.now ?? Date.now;
+  const meta = await deps.store.getMeta();
+  const { marks, capped } = selectSilentMarks(input.annotations, markCursor(meta, input.bookId));
+  if (marks.length < (input.minNewMarks ?? 1)) return { ran: false, skipped: "no-new-marks" };
+
+  const result = await runMarksDistillation(
+    {
+      topicName: input.topicName,
+      bookName: input.bookName,
+      marks,
+      capped,
+      indexText: await deps.store.readIndexText(),
+      today: isoDate(now()),
+    },
+    deps.adapter,
+    { run: deps.run, model: deps.model, signal: deps.signal },
+  );
+  if (!result.ok) return { ran: true, ...result };
+  await deps.store.setMeta({
+    ...meta,
+    lastDistilledAt: now(),
+    distilledMarks: { ...(meta.distilledMarks ?? {}), [input.bookId]: marks[0].createdAt },
+  });
+  return { ran: true, ...result };
 }

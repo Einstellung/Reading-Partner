@@ -70,7 +70,13 @@ import { locateQuote, type Citation } from "./reading/prep";
 import { usePrep } from "./reading/prep/use-prep";
 import { useNotes } from "./reading/notes/use-notes";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
-import { distillThread, type DistillAnnotation } from "./observation";
+import {
+  distillThread,
+  startDistillSweeps,
+  sweepDistillation,
+  toDistillAnnotations,
+  type DistillAnnotation,
+} from "./observation";
 import { logEvent } from "./platform/app/events";
 import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
 import EmbedReaderPane from "./reading/engine/EmbedReaderPane";
@@ -325,6 +331,12 @@ export default function App() {
   useEffect(() => {
     prewarmPdfiumEngine();
   }, []);
+
+  // Pay down whatever the observations still owe, on a timer and whenever the
+  // app comes back (src/observation/arrears.ts). Silent throughout: a sweep that
+  // finds nothing owed does nothing, and one that runs a pass shows no UI. The
+  // predicate keeps it off a thread whose reply is still being written.
+  useEffect(() => startDistillSweeps((threadId) => liveTurnsRef.current.has(threadId)), []);
 
   // Install the Tauri fetch bridge + load settings once. A data file that can't
   // be read is set aside rather than silently replaced by defaults, and the user
@@ -710,16 +722,7 @@ export default function App() {
   // id, page, selected text, note, and creation time (from the engine's ISO
   // dateCreated) so the "since last distillation" filter can work.
   const distillAnnotations = useCallback((): DistillAnnotation[] => {
-    return [...annsRef.current.values()].map((a) => {
-      const created = typeof a.dateCreated === "string" ? Date.parse(a.dateCreated) : NaN;
-      return {
-        id: a.id,
-        page: annotationPage(a as { position?: { pageIndex?: number } }),
-        text: typeof a.text === "string" ? a.text : "",
-        comment: typeof a.comment === "string" ? a.comment : undefined,
-        createdAt: Number.isFinite(created) ? created : Date.now(),
-      };
-    });
+    return toDistillAnnotations([...annsRef.current.values()]);
   }, []);
 
   // Thread history the way an opening view shows it: what the file holds, plus
@@ -1037,8 +1040,10 @@ export default function App() {
       void distillThread({
         topicId,
         topicName,
+        bookId,
         bookName: fileName,
         threadId: c.threadId,
+        trigger: "hangup",
         annotationId: c.annotationId,
         // The book-level thread has no mark: pin its position to the current page.
         page: c.isBook
@@ -1077,6 +1082,9 @@ export default function App() {
       // the reader. First thing in, while the refs the hangup reads still point
       // at the book being left.
       captureHangup();
+      // And a look at what the book being left still owes: a stretch of reading
+      // with nothing said in it never reaches the hangup path at all.
+      void sweepDistillation("book-switch");
       setCall(null);
       // The images staged in this book's conversations go with it, same as
       // closing the reader: they are in memory only, and every thread they
@@ -1622,6 +1630,7 @@ export default function App() {
     if (bookId) for (const live of liveTurnsRef.current.stopBook(bookId)) keepPartial(live);
     // Closing the book with a call open ends that conversation too.
     captureHangup();
+    void sweepDistillation("book-switch");
     // The last chapter can't be reached by a "next chapter" highlight, so on
     // close evaluate the notes frontier once with the inclusive rule (docs/14).
     // Fire before the refs are torn down below.

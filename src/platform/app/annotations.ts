@@ -96,6 +96,25 @@ export async function loadAnnotations(bookId: string): Promise<Annotation[]> {
   return list;
 }
 
+// The on-disk marks of a book that is not being read, without touching the
+// cache. The observation sweep (src/observation/arrears.ts) walks every book of
+// every topic every half hour and must not go through loadAnnotations: that
+// seeds the cache from disk, and doing it while the open book has a debounced
+// write pending would flush the stale copy over the mark just made. Missing or
+// unreadable file reads as no marks — a sweep has nothing to warn anyone about.
+export async function peekAnnotations(bookId: string): Promise<Annotation[]> {
+  try {
+    const name = fileFor(bookId);
+    if (!(await exists(name, { baseDir: BaseDirectory.AppData }))) return [];
+    const parsed = JSON.parse(
+      await readTextFile(name, { baseDir: BaseDirectory.AppData }),
+    ) as Annotation[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 // Drop a book's cached annotations so the next loadAnnotations re-reads from
 // disk. Used after sync pulls a newer annotations-<bookId>.json (src/sync): the
 // cache is written back in full on the next mark, so a stale one would erase
