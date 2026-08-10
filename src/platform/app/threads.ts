@@ -188,6 +188,22 @@ export async function loadThreads(bookId: string): Promise<ThreadMap> {
   return threads;
 }
 
+// The on-disk threads of a book, without touching the cache — the sweep's read
+// path, for the same reason as peekAnnotations. A book that is open answers from
+// disk here, at most one debounce behind, rather than from the live cache.
+export async function peekThreads(bookId: string): Promise<Thread[]> {
+  try {
+    const name = `threads-${bookId}.json`;
+    if (!(await exists(name, { baseDir: BaseDirectory.AppData }))) return [];
+    const parsed = JSON.parse(
+      await readTextFile(name, { baseDir: BaseDirectory.AppData }),
+    ) as { threads?: ThreadMap };
+    return Object.values(parsed.threads ?? {});
+  } catch {
+    return [];
+  }
+}
+
 export function getThread(bookId: string, threadId: string): Thread | undefined {
   return cache.get(bookId)?.[threadId];
 }

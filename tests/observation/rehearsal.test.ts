@@ -268,6 +268,7 @@ test("the two passes do not overwrite each other's bookkeeping in meta.json", as
   await runDistillPass(
     {
       topicName: "minds",
+      bookId: "book-1",
       bookName: "history.pdf",
       threadId: "thread-9",
       annotationId: "ann-1",
@@ -281,8 +282,10 @@ test("the two passes do not overwrite each other's bookkeeping in meta.json", as
 
   expect(await store.getMeta()).toEqual({
     lastDistilledAt: JULY_20,
-    lastAnnotationDistillAt: 700,
-    distilledMessages: { "talk-1": 2 },
+    lastAnnotationDistillAt: null,
+    // The rehearsal's cursor survived the reading pass, and vice versa.
+    distilledMessages: { "talk-1": 2, "thread-9": 1 },
+    distilledMarks: { "book-1": 700 },
   });
 });
 

@@ -490,8 +490,10 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
       {
         topicId,
         topicName,
+        bookId,
         bookName: fileName,
         threadId,
+        trigger: "trim",
         annotationId,
         page,
         markedText: selectionText,
