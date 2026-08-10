@@ -22,6 +22,10 @@ src-tauri/gen/
 !.vscode/extensions.json
 *.swp
 
+# Python bytecode from the scripts/ helpers and their unittest run
+__pycache__/
+*.pyc
+
 # 日志
 *.log
 npm-debug.log*

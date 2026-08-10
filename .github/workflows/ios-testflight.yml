@@ -1,8 +1,14 @@
-# Build a signed iOS ipa on a macOS runner and upload it to TestFlight.
+# Build a signed iOS ipa on a macOS runner, upload it to TestFlight and hand it
+# to the testers.
 #
 # Trigger: manual (Run workflow). The marketing version comes from
 # src-tauri/tauri.conf.json; the build number (CFBundleVersion) is the
 # workflow run number, so every dispatch produces a strictly newer build.
+#
+# Two jobs: `build` produces and uploads the ipa on macOS, then `distribute`
+# calls ios-testflight-distribute.yml on ubuntu to link the build to every beta
+# group. Uploading alone reaches nobody — see that file for what distribution
+# involves.
 #
 # Required repository secrets (Settings -> Secrets and variables -> Actions):
 #   APPLE_API_ISSUER        App Store Connect API issuer ID (UUID shown on the
@@ -167,3 +173,15 @@ jobs:
           name: ios-ipa
           path: src-tauri/gen/apple/build/**/*.ipa
           if-no-files-found: ignore
+
+  # The upload above only ingests the build. This links it to the beta groups,
+  # which is what actually puts it on a tester's device. Same workflow as the
+  # manual rescue path, so there is one copy of the logic; it runs on ubuntu
+  # because it is nothing but HTTP calls, and it waits out Apple's processing
+  # on its own clock instead of holding the macOS runner.
+  distribute:
+    needs: build
+    uses: ./.github/workflows/ios-testflight-distribute.yml
+    with:
+      build: ${{ github.run_number }}
+    secrets: inherit
