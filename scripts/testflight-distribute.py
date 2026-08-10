@@ -9,15 +9,67 @@ previous version. This script does the second half of a release:
   1. find the app by bundle id, and the build by CFBundleVersion (our CI stamps
      the workflow run number there, so "build 178" means "run 178");
   2. wait out Apple's processing until the build is VALID;
-  3. add it to every internal beta group and every external beta group;
-  4. for external groups, write the What's New text and submit the build for
-     beta review, which external distribution requires and internal does not.
+  3. link it to every internal beta group;
+  4. for external groups: check the build is even eligible for external testing,
+     write the What's New text, submit it for beta review, then link the groups.
+
+Internal and external are independent: external testing can be impossible for
+reasons that have nothing to do with the internal testers (see EXTERNAL ORDER
+below), so the external half runs after the internal half is finished and its
+failures are collected into the closing summary instead of aborting the run.
 
 Every step is idempotent: a build already in a group is left alone, a
 localization that already has text is kept, a build that already has a review
 submission is not submitted again. So the same script is both the last step of
 the build workflow and the manual rescue for a build uploaded before that step
 existed.
+
+EXTERNAL ORDER
+--------------
+Run 31390099873 did What's New, then the group link, then the review
+submission, and Apple answered the group link with
+
+  POST /v1/betaGroups/{group}/relationships/builds -> 404
+  [NOT_FOUND] There is no resource of type 'builds' with id '<the build>'
+
+for a build that GET /v1/builds had returned seconds earlier with
+processingState VALID. The 404 names the *build*, not the group, so the group id
+resolved and the build id did not: Apple looked the build up inside some scope
+narrower than "builds of this app" and did not find it. Three things put a VALID
+build outside the scope of an external group, and the order below rules out or
+reports each one before the link is attempted:
+
+  - buildAudienceType INTERNAL_ONLY. Xcode can export an ipa marked for internal
+    testing only; App Store Connect then refuses it to external groups
+    ("Only internal tester groups can include builds marked as internal",
+    developer.apple.com/help/app-store-connect/test-a-beta-version/add-testers-to-builds).
+    No amount of retrying fixes it — the fix is a new export.
+  - buildBetaDetail.externalBuildState. processingState VALID is the *internal*
+    readiness signal; external readiness is tracked separately and lags it, and
+    MISSING_EXPORT_COMPLIANCE parks the build there until a human answers the
+    encryption question. So this script waits for the external state to settle
+    and reports it when it is stuck.
+  - Apple-side flake. The one public report of this exact error against this
+    exact endpoint (developer.apple.com/forums/thread/762624) resolved itself a
+    few hours later with no change on the caller's side.
+
+The link itself now goes the other way round the relationship:
+
+  POST /v1/builds/{build}/relationships/betaGroups
+
+which is the direction fastlane's spaceship has always used (`add_beta_groups`
+-> `add_beta_groups_to_build` in spaceship/lib/spaceship/connect_api/testflight/
+testflight.rb); it never calls the betaGroups-side endpoint. Both directions are
+documented and both are supposed to create the same edge, so if the build-side
+one 404s too the group-side one is tried once as a fallback and both answers are
+printed — that turns a re-run into evidence instead of a guess.
+
+The beta review submission also moved ahead of the external link, again matching
+fastlane, whose distribute_build submits for review before it adds any group.
+Submitting first also fails better: a build that is in review but in no group is
+one click away in App Store Connect, while a build in a group that was never
+submitted stays at "Ready to Submit" and silently reaches nobody
+(developer.apple.com/forums/thread/693864).
 
 Endpoints and payload shapes below were read off Apple's documentation on
 2026-08-10 (developer.apple.com/documentation/appstoreconnectapi/<slug>):
@@ -26,14 +78,23 @@ Endpoints and payload shapes below were read off Apple's documentation on
        filter[bundleId] is a documented filter.
   GET  /v1/builds                                  get-v1-builds
        filter[app], filter[version] (the CFBundleVersion string),
-       sort=-uploadedDate, include=preReleaseVersion.
+       sort=-uploadedDate, include=preReleaseVersion,buildBetaDetail.
        Build.attributes.processingState is one of PROCESSING/FAILED/INVALID/VALID.
+       fields[builds] is a sparse fieldset over attributes *and* relationships:
+       a relationship left out of it is missing from the response, which is how
+       an earlier version of this script lost preReleaseVersion. Its documented
+       values include preReleaseVersion, buildBetaDetail and buildAudienceType.
+  GET  /v1/builds/{id}/preReleaseVersion           get-v1-builds-_id_-prereleaseversion
+  GET  /v1/builds/{id}/buildBetaDetail             get-v1-builds-_id_-buildbetadetail
+       BuildBetaDetail.attributes: internalBuildState, externalBuildState.
   GET  /v1/apps/{id}/betaGroups                    get-v1-apps-_id_-betagroups
        BetaGroup.attributes: name, isInternalGroup, hasAccessToAllBuilds,
        publicLinkEnabled, createdDate.
   GET  /v1/betaGroups/{id}/builds                  get-v1-betagroups-_id_-builds
+  POST /v1/builds/{id}/relationships/betaGroups    post-v1-builds-_id_-relationships-betagroups
+       body {"data":[{"type":"betaGroups","id":...}]}, 204 on success.
   POST /v1/betaGroups/{id}/relationships/builds    post-v1-betagroups-_id_-relationships-builds
-       body BetaGroupBuildsLinkagesRequest: {"data":[{"type":"builds","id":...}]}, 204 on success.
+       body {"data":[{"type":"builds","id":...}]}, 204 on success. Fallback only.
   GET  /v1/builds/{id}/betaBuildLocalizations      get-v1-builds-_id_-betabuildlocalizations
        BetaBuildLocalization.attributes: whatsNew, locale.
   POST /v1/betaBuildLocalizations                  post-v1-betabuildlocalizations
@@ -90,6 +151,10 @@ DEFAULT_LOCALE = "en-US"
 TOKEN_LIFETIME_SECONDS = 15 * 60
 POLL_SECONDS = 30
 DEFAULT_WAIT_MINUTES = 40
+# The external state usually settles within a minute or two of processingState
+# going VALID; this only exists so a lagging state is waited out rather than
+# turned into a 404 at the link step.
+DEFAULT_EXTERNAL_WAIT_MINUTES = 15
 
 # Beta review needs one-time metadata on the app, not on the build. When it is
 # missing Apple answers the POST with an error naming the field; this is the
@@ -99,8 +164,17 @@ App Store Connect > Reading Partner > TestFlight > Test Information:
   - Beta App Description and Feedback Email (the betaAppLocalizations resource)
   - Contact first name, last name, email, phone (the betaAppReviewDetail resource)
   - A sign-in demo account, if the app requires an account
-Fill in whatever Apple named above and re-run this workflow. Internal testers
-already have the build; only the external groups wait on review."""
+Fill in whatever Apple named above and re-run this workflow."""
+
+INTERNAL_ONLY_HINT = """The ipa itself was exported for internal testing only, so App Store
+Connect will not let any external group have it. Nothing in App Store Connect
+fixes this — the export has to be redone without TestFlight-internal-only
+distribution, and the new ipa uploaded as a new build."""
+
+MISSING_COMPLIANCE_HINT = """The build is missing its export compliance answer. Set
+ITSAppUsesNonExemptEncryption in src-tauri/Info.ios.plist so future builds carry
+the answer, and answer the encryption question on this build in App Store
+Connect > TestFlight > the build, then re-run this workflow."""
 
 
 # --------------------------------------------------------------------------
@@ -110,11 +184,37 @@ already have the build; only the external groups wait on review."""
 READY = "ready"
 WAIT = "wait"
 DEAD = "dead"
+BLOCKED = "blocked"
+
+# buildBetaDetail.externalBuildState, from Apple's enum (the same list
+# spaceship's BuildBetaDetail::ExternalState carries).
+EXTERNAL_STATES_WAIT = ("PROCESSING", "IN_EXPORT_COMPLIANCE_REVIEW")
+EXTERNAL_STATES_BLOCKED = ("MISSING_EXPORT_COMPLIANCE", "PROCESSING_EXCEPTION", "EXPIRED")
+# States that mean the build is already at or past the review submission, so
+# submitting again would be an error.
+EXTERNAL_STATES_SUBMITTED = (
+    "WAITING_FOR_BETA_REVIEW",
+    "IN_BETA_REVIEW",
+    "BETA_APPROVED",
+    "BETA_REJECTED",
+    "READY_FOR_BETA_TESTING",
+    "IN_BETA_TESTING",
+)
 
 
 def attrs(resource):
     """The attributes dict of a JSON:API resource, never None."""
     return (resource or {}).get("attributes") or {}
+
+
+def relationship_id(resource, name):
+    """The id of a to-one relationship, or None when it was not returned.
+
+    A relationship left out of fields[builds] is absent from the response, so
+    "missing" here means "not asked for" as often as it means "not set".
+    """
+    rel = ((resource or {}).get("relationships") or {}).get(name) or {}
+    return (rel.get("data") or {}).get("id")
 
 
 def select_build(builds, version=None):
@@ -133,6 +233,21 @@ def select_build(builds, version=None):
     return max(candidates, key=lambda b: (attrs(b).get("uploadedDate") or "", b.get("id") or ""))
 
 
+def pick_included(build, included, relationship, resource_type):
+    """The included resource a build's to-one relationship points at.
+
+    Match by the relationship's id. When the relationship itself did not come
+    back (a sparse fieldset that forgot to list it) fall back to the included
+    array, but only when it holds exactly one resource of that type — with
+    several builds in the response there is no way to tell whose is whose.
+    """
+    pool = [r for r in (included or []) if r.get("type") == resource_type]
+    wanted = relationship_id(build, relationship)
+    if wanted:
+        return next((r for r in pool if r.get("id") == wanted), None)
+    return pool[0] if len(pool) == 1 else None
+
+
 def processing_verdict(build):
     """(verdict, state) for a build: READY to distribute, WAIT, or DEAD.
 
@@ -145,6 +260,37 @@ def processing_verdict(build):
     if state in ("FAILED", "INVALID"):
         return DEAD, state
     return WAIT, state
+
+
+def external_verdict(build_beta_detail):
+    """(verdict, state) for external testing: READY, WAIT or BLOCKED.
+
+    processingState VALID only says the build is testable internally. The
+    external side has its own state machine and can still be processing, or
+    parked on an unanswered export compliance question, at a point where the
+    build looks entirely fine on GET /v1/builds. An unknown or absent state is
+    treated as READY: never block distribution on an enum value Apple added
+    after this was written.
+    """
+    state = attrs(build_beta_detail).get("externalBuildState") or "UNKNOWN"
+    if state in EXTERNAL_STATES_WAIT:
+        return WAIT, state
+    if state in EXTERNAL_STATES_BLOCKED:
+        return BLOCKED, state
+    return READY, state
+
+
+def audience_verdict(build):
+    """(verdict, audience) — BLOCKED when the ipa is marked internal-only.
+
+    buildAudienceType is INTERNAL_ONLY or APP_STORE_ELIGIBLE. An internal-only
+    build can never join an external group, so this is worth checking before
+    writing What's New text and submitting a review for it.
+    """
+    audience = attrs(build).get("buildAudienceType") or "UNKNOWN"
+    if audience == "INTERNAL_ONLY":
+        return BLOCKED, audience
+    return READY, audience
 
 
 def split_groups(groups):
@@ -202,17 +348,22 @@ def localization_plan(localizations, whats_new, override=False, locale=DEFAULT_L
     return "update", preferred.get("id"), whats_new
 
 
-def review_plan(submissions):
+def review_plan(submissions, external_state=None):
     """(action, state) with action "submit" or "skip".
 
     One submission per build is all Apple accepts; re-submitting an existing one
-    is an error, so any existing submission means there is nothing to do. A
-    REJECTED build is reported and left alone — that needs a human.
+    is an error, so any existing submission means there is nothing to do. The
+    external build state is the second witness: a build already waiting for,
+    in, or past beta review has been submitted whether or not the
+    betaAppReviewSubmissions query saw it. A REJECTED build is reported and left
+    alone — that needs a human.
     """
     existing = list(submissions or [])
-    if not existing:
-        return "submit", None
-    return "skip", attrs(existing[0]).get("betaReviewState") or "UNKNOWN"
+    if existing:
+        return "skip", attrs(existing[0]).get("betaReviewState") or "UNKNOWN"
+    if external_state in EXTERNAL_STATES_SUBMITTED:
+        return "skip", external_state
+    return "submit", None
 
 
 def default_whats_new(marketing_version, build_version):
@@ -243,6 +394,31 @@ def format_api_errors(payload):
     return "\n".join(lines)
 
 
+def format_summary(internal_lines, external_lines, problems):
+    """The closing block: what happened to each half and what a human must do.
+
+    Written so one failed run answers "which step, what did Apple say, what do I
+    click" without opening the API docs.
+    """
+    out = ["", "Summary", "-------", "Internal testing:"]
+    out.extend(f"  {line}" for line in (internal_lines or ["nothing to do"]))
+    out.append("External testing:")
+    out.extend(f"  {line}" for line in (external_lines or ["nothing to do"]))
+    if not problems:
+        out.append("Nothing needs a human.")
+        return "\n".join(out)
+    out.append("")
+    out.append("Needs a human:")
+    for problem in problems:
+        out.append(f"  * {problem.step}")
+        for line in str(problem.detail).splitlines():
+            out.append(f"      {line}")
+        for line in (problem.hint or "").splitlines():
+            if line.strip():
+                out.append(f"      -> {line}")
+    return "\n".join(out)
+
+
 # --------------------------------------------------------------------------
 # API client
 # --------------------------------------------------------------------------
@@ -264,6 +440,21 @@ class ApiError(Exception):
         self.status = status
         self.payload = payload
         super().__init__(f"{method} {url} -> HTTP {status}\n{format_api_errors(payload)}")
+
+
+class StepFailed(Exception):
+    """A step that failed without invalidating the steps already done.
+
+    Carries what to tell the human so the closing summary can print it; the
+    external half raises this instead of exiting so the internal half's result
+    is not lost behind a stack trace.
+    """
+
+    def __init__(self, step, detail, hint=""):
+        self.step = step
+        self.detail = detail
+        self.hint = hint
+        super().__init__(f"{step}: {detail}")
 
 
 def _b64url(raw: bytes) -> str:
@@ -405,11 +596,17 @@ def find_app(client, bundle_id):
 
 
 def find_build(client, app_id, version):
+    # Every relationship this script reads has to be named in fields[builds]:
+    # the sparse fieldset drops the ones it does not list, relationships
+    # included.
     query = {
         "filter[app]": app_id,
         "sort": "-uploadedDate",
-        "include": "preReleaseVersion",
-        "fields[builds]": "version,uploadedDate,processingState,expired,usesNonExemptEncryption",
+        "include": "preReleaseVersion,buildBetaDetail",
+        "fields[builds]": ("version,uploadedDate,processingState,expired,buildAudienceType,"
+                           "usesNonExemptEncryption,preReleaseVersion,buildBetaDetail"),
+        "fields[preReleaseVersions]": "version,platform",
+        "fields[buildBetaDetails]": "internalBuildState,externalBuildState",
     }
     if version:
         query["filter[version]"] = str(version)
@@ -421,13 +618,18 @@ def find_build(client, app_id, version):
                      "Check that the upload finished and that the number is the build workflow's run number.")
         fail("this app has no builds at all")
 
-    marketing = None
-    prerelease_id = (((build.get("relationships") or {}).get("preReleaseVersion") or {}).get("data") or {}).get("id")
-    for resource in included:
-        if resource.get("type") == "preReleaseVersions" and resource.get("id") == prerelease_id:
-            marketing = attrs(resource).get("version")
+    marketing = attrs(pick_included(build, included, "preReleaseVersion", "preReleaseVersions")).get("version")
+    if not marketing:
+        # One extra GET rather than an unlabelled build: the marketing version
+        # is what the What's New text is for.
+        try:
+            payload = client.request("GET", f"/v1/builds/{build['id']}/preReleaseVersion")
+            marketing = attrs(payload.get("data")).get("version")
+        except ApiError as exc:
+            print(f"  could not read the marketing version: {exc}")
     print(f"Build: {marketing or '?'} ({attrs(build).get('version')}) id={build['id']} "
-          f"uploaded {attrs(build).get('uploadedDate')} state {attrs(build).get('processingState')}")
+          f"uploaded {attrs(build).get('uploadedDate')} state {attrs(build).get('processingState')} "
+          f"audience {attrs(build).get('buildAudienceType') or '?'}")
     return build, marketing
 
 
@@ -452,6 +654,49 @@ def wait_until_valid(client, build, wait_minutes, poll_seconds=POLL_SECONDS):
         build = client.request("GET", f"/v1/builds/{build['id']}").get("data") or build
 
 
+def read_beta_detail(client, build_id):
+    """buildBetaDetail for a build, or {} when Apple will not say."""
+    try:
+        return client.request("GET", f"/v1/builds/{build_id}/buildBetaDetail",
+                              query={"fields[buildBetaDetails]": "internalBuildState,externalBuildState"}
+                              ).get("data") or {}
+    except ApiError as exc:
+        print(f"  could not read buildBetaDetail: {exc}")
+        return {}
+
+
+def wait_for_external_readiness(client, build_id, detail, wait_minutes, poll_seconds=POLL_SECONDS):
+    """Block until externalBuildState settles; raise StepFailed if it cannot.
+
+    processingState VALID is not the external green light, so this is the check
+    that stands between "the build is fine" and the link that 404s.
+    """
+    deadline = time.monotonic() + wait_minutes * 60
+    while True:
+        verdict, state = external_verdict(detail)
+        if verdict == READY:
+            print(f"  External build state: {state}")
+            return detail, state
+        if verdict == BLOCKED:
+            hint = MISSING_COMPLIANCE_HINT if state == "MISSING_EXPORT_COMPLIANCE" else ""
+            raise StepFailed(
+                "the build is not eligible for external testing",
+                f"buildBetaDetail.externalBuildState is {state}.",
+                hint,
+            )
+        if time.monotonic() >= deadline:
+            raise StepFailed(
+                "the build never became ready for external testing",
+                f"buildBetaDetail.externalBuildState was still {state} after {wait_minutes} minutes.",
+                "Re-run the iOS TestFlight Distribute workflow with this build number once "
+                "App Store Connect shows the build as ready to submit.",
+            )
+        left = int(deadline - time.monotonic())
+        print(f"  external build state {state}; polling again in {poll_seconds}s ({left // 60}m left)", flush=True)
+        time.sleep(poll_seconds)
+        detail = read_beta_detail(client, build_id)
+
+
 def group_membership(client, groups):
     """{group id: set of build ids} for the groups we are about to touch.
 
@@ -465,36 +710,62 @@ def group_membership(client, groups):
     return membership
 
 
+def link_build_to_group(client, build_id, group_id):
+    """Create the build <-> group edge, reporting which endpoint made it.
+
+    The build-side endpoint is fastlane's and is tried first. Both directions
+    are documented to create the same edge, so the group-side one is worth one
+    fallback attempt when the first 404s — and printing both answers is what
+    turns the next failure into a diagnosis.
+    """
+    try:
+        client.request("POST", f"/v1/builds/{build_id}/relationships/betaGroups",
+                       body={"data": [{"type": "betaGroups", "id": group_id}]})
+        return "linked"
+    except ApiError as primary:
+        if primary.status == 409:
+            return "already linked (409)"
+        print(f"    {primary}")
+        print("    trying the other direction of the same relationship", flush=True)
+        try:
+            client.request("POST", f"/v1/betaGroups/{group_id}/relationships/builds",
+                           body={"data": [{"type": "builds", "id": build_id}]})
+            return "linked (via the betaGroups endpoint after the builds endpoint failed)"
+        except ApiError as fallback:
+            if fallback.status == 409:
+                return "already linked (409)"
+            raise StepFailed(
+                "linking the build to a beta group",
+                f"both directions of the relationship were refused.\n"
+                f"POST /v1/builds/{build_id}/relationships/betaGroups -> HTTP {primary.status}\n"
+                f"{format_api_errors(primary.payload)}\n"
+                f"POST /v1/betaGroups/{group_id}/relationships/builds -> HTTP {fallback.status}\n"
+                f"{format_api_errors(fallback.payload)}",
+                "Add the build to the group by hand in App Store Connect > TestFlight, "
+                "and check the build's audience and external state printed above.",
+            )
+
+
 def add_to_groups(client, groups, build_id, label, dry_run):
+    """Link the build to each group. Returns the lines for the summary."""
     if not groups:
-        print(f"{label} groups: none configured")
-        return 0
+        return [f"no {label} groups configured"]
     membership = group_membership(client, groups)
-    added = 0
+    lines = []
     for group, action, reason in group_add_plan(groups, membership, build_id):
         name = attrs(group).get("name")
         if action == "skip":
             print(f"  {label} group '{name}': skipped ({reason})")
+            lines.append(f"'{name}': already has the build ({reason})")
             continue
         if dry_run:
             print(f"  {label} group '{name}': would add the build")
+            lines.append(f"'{name}': would add the build (dry run)")
             continue
-        try:
-            client.request(
-                "POST",
-                f"/v1/betaGroups/{group['id']}/relationships/builds",
-                body={"data": [{"type": "builds", "id": build_id}]},
-            )
-        except ApiError as exc:
-            # 409 is Apple's answer to a link that already exists; a re-run must
-            # not fail on it.
-            if exc.status == 409:
-                print(f"  {label} group '{name}': already linked (409)")
-                continue
-            raise
-        added += 1
-        print(f"  {label} group '{name}': added")
-    return added
+        result = link_build_to_group(client, build_id, group["id"])
+        print(f"  {label} group '{name}': {result}")
+        lines.append(f"'{name}': {result}")
+    return lines
 
 
 def ensure_whats_new(client, build_id, text, override, dry_run):
@@ -503,10 +774,10 @@ def ensure_whats_new(client, build_id, text, override, dry_run):
     action, target, value = localization_plan(data, text, override=override)
     if action == "keep":
         print(f"  What's New: kept the existing text ({value[:60]!r})")
-        return
+        return f"What's New kept ({value[:60]!r})"
     if dry_run:
         print(f"  What's New: would {action} ({value!r})")
-        return
+        return f"What's New would be {action}d ({value!r})"
     if action == "create":
         client.request("POST", "/v1/betaBuildLocalizations", body={
             "data": {
@@ -516,28 +787,30 @@ def ensure_whats_new(client, build_id, text, override, dry_run):
             }
         })
         print(f"  What's New: created for {target} ({value!r})")
-    else:
-        client.request("PATCH", f"/v1/betaBuildLocalizations/{target}", body={
-            "data": {"type": "betaBuildLocalizations", "id": target, "attributes": {"whatsNew": value}}
-        })
-        print(f"  What's New: updated ({value!r})")
+        return f"What's New created ({value!r})"
+    client.request("PATCH", f"/v1/betaBuildLocalizations/{target}", body={
+        "data": {"type": "betaBuildLocalizations", "id": target, "attributes": {"whatsNew": value}}
+    })
+    print(f"  What's New: updated ({value!r})")
+    return f"What's New updated ({value!r})"
 
 
-def submit_for_review(client, build_id, dry_run):
+def submit_for_review(client, build_id, external_state, dry_run):
     data, _ = client.get_all("/v1/betaAppReviewSubmissions", {
         "filter[build]": build_id,
         "fields[betaAppReviewSubmissions]": "betaReviewState,submittedDate",
     })
-    action, state = review_plan(data)
+    action, state = review_plan(data, external_state)
     if action == "skip":
         print(f"  Beta review: already submitted, state {state}")
-        if state == "REJECTED":
+        if state in ("REJECTED", "BETA_REJECTED"):
             print("  ::warning::Apple rejected this build's beta review; external testers will not "
                   "get it until that is resolved in App Store Connect.")
-        return
+            return "beta review REJECTED — external testers are blocked until that is resolved"
+        return f"beta review already submitted (state {state})"
     if dry_run:
         print("  Beta review: would submit")
-        return
+        return "beta review would be submitted (dry run)"
     try:
         client.request("POST", "/v1/betaAppReviewSubmissions", body={
             "data": {
@@ -546,11 +819,56 @@ def submit_for_review(client, build_id, dry_run):
             }
         })
     except ApiError as exc:
-        print(f"::error::beta review submission refused by Apple (HTTP {exc.status}):")
-        print(format_api_errors(exc.payload))
-        print(REVIEW_METADATA_HINT)
-        raise SystemExit(1)
+        raise StepFailed(
+            "submitting the build for beta review",
+            f"POST /v1/betaAppReviewSubmissions -> HTTP {exc.status}\n{format_api_errors(exc.payload)}",
+            REVIEW_METADATA_HINT,
+        )
     print("  Beta review: submitted (external testers get the build once Apple approves it)")
+    return "beta review submitted"
+
+
+def distribute_external(client, build, marketing, groups, whats_new, wait_minutes, poll_seconds, dry_run):
+    """The whole external half: (summary lines, problems).
+
+    Ordered eligibility -> What's New -> beta review -> group link, for the
+    reasons in EXTERNAL ORDER at the top of this file. Each step's failure ends
+    the external half but never the run.
+    """
+    build_id = build["id"]
+    lines, problems = [], []
+    print("External testing:")
+
+    verdict, audience = audience_verdict(build)
+    if verdict == BLOCKED:
+        problem = StepFailed(
+            "the build cannot be distributed externally",
+            f"buildAudienceType is {audience}.",
+            INTERNAL_ONLY_HINT,
+        )
+        print(f"  ::error::{problem.step}: {problem.detail}")
+        return [f"skipped, buildAudienceType is {audience}"], [problem]
+
+    try:
+        detail = read_beta_detail(client, build_id)
+        detail, external_state = wait_for_external_readiness(
+            client, build_id, detail, wait_minutes, poll_seconds)
+        lines.append(f"external build state {external_state}")
+
+        text = whats_new or default_whats_new(marketing, attrs(build).get("version"))
+        lines.append(ensure_whats_new(client, build_id, text, override=bool(whats_new), dry_run=dry_run))
+        lines.append(submit_for_review(client, build_id, external_state, dry_run))
+        lines.extend(add_to_groups(client, groups, build_id, "external", dry_run))
+    except StepFailed as problem:
+        print(f"  ::error::{problem.step}: {problem.detail}")
+        lines.append(f"stopped at: {problem.step}")
+        problems.append(problem)
+    except ApiError as exc:
+        problem = StepFailed("an App Store Connect call in the external half", str(exc))
+        print(f"  ::error::{problem.step}: {problem.detail}")
+        lines.append(f"stopped at: {problem.step}")
+        problems.append(problem)
+    return lines, problems
 
 
 # --------------------------------------------------------------------------
@@ -565,6 +883,8 @@ def main():
                         help="What's New text for external testers. Overwrites whatever is there.")
     parser.add_argument("--wait-minutes", type=int, default=DEFAULT_WAIT_MINUTES,
                         help="how long to wait for Apple to finish processing the build")
+    parser.add_argument("--external-wait-minutes", type=int, default=DEFAULT_EXTERNAL_WAIT_MINUTES,
+                        help="how long to wait for the build's external testing state to settle")
     parser.add_argument("--poll-seconds", type=int, default=POLL_SECONDS)
     parser.add_argument("--dry-run", action="store_true", help="print the plan, change nothing")
     args = parser.parse_args()
@@ -584,19 +904,33 @@ def main():
     internal, external = split_groups(groups)
     print(f"Beta groups: {len(internal)} internal, {len(external)} external")
 
-    add_to_groups(client, internal, build_id, "internal", args.dry_run)
+    # Internal first and on its own: it needs none of what the external half
+    # can fail on, so it should never be lost to an external failure.
+    internal_lines, problems = [], []
+    print("Internal testing:")
+    try:
+        internal_lines = add_to_groups(client, internal, build_id, "internal", args.dry_run)
+    except (StepFailed, ApiError) as exc:
+        problem = exc if isinstance(exc, StepFailed) else StepFailed(
+            "linking the build to the internal groups", str(exc))
+        print(f"  ::error::{problem.step}: {problem.detail}")
+        internal_lines = [f"stopped at: {problem.step}"]
+        problems.append(problem)
 
     if external:
-        text = args.whats_new or default_whats_new(marketing, attrs(build).get("version"))
-        print("External testing:")
-        ensure_whats_new(client, build_id, text, override=bool(args.whats_new), dry_run=args.dry_run)
-        add_to_groups(client, external, build_id, "external", args.dry_run)
-        submit_for_review(client, build_id, args.dry_run)
+        external_lines, external_problems = distribute_external(
+            client, build, marketing, external, args.whats_new,
+            args.external_wait_minutes, args.poll_seconds, args.dry_run)
+        problems.extend(external_problems)
     else:
-        print("External testing: no external groups, nothing to review")
+        external_lines = ["no external groups configured"]
 
-    print(f"Done. Build {attrs(build).get('version')} "
-          f"({marketing or '?'}) is with the testers"
+    print(format_summary(internal_lines, external_lines, problems))
+    if problems:
+        print(f"::error::build {attrs(build).get('version')} was not fully distributed; "
+              f"{len(problems)} step(s) need a human — see the summary above.")
+        sys.exit(1)
+    print(f"\nDone. Build {attrs(build).get('version')} ({marketing or '?'}) is with the testers"
           + (" (external ones after Apple's beta review)." if external else "."))
 
 
