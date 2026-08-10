@@ -344,3 +344,22 @@ test("stop aborts the in-flight chapter and leaves it pending", async () => {
   expect(statuses(p)[2]).toBe("pending"); // never started
   expect(p.snapshot().state?.overviewStatus).toBe("pending");
 });
+
+// The book name goes into every chapter prompt. A state written before host
+// paths were normalized holds the percent-encoded filename, and the model was
+// being told the book is called "%E4%B8%AD%E6%96%87.pdf".
+test("resume: a book name left percent-encoded by an iOS import is decoded", async () => {
+  const initial: NotesState = {
+    version: 1,
+    bookId: "b",
+    bookName: "%E4%B8%AD%E6%96%87.pdf",
+    createdAt: 0,
+    planStatus: "done",
+    chapters: [{ ...chapter(1), status: "done" }],
+    overviewStatus: "done",
+  };
+  const { deps } = makeFakes({ initial });
+  const p = new NotesPipeline("b", "中文.pdf", deps, TEST_CONFIG);
+  await p.ensureStarted();
+  expect(p.snapshot().state?.bookName).toBe("中文.pdf");
+});
