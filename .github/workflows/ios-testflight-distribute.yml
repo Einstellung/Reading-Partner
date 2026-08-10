@@ -1,0 +1,73 @@
+# Put an already-uploaded TestFlight build in front of the testers.
+#
+# Uploading an ipa (xcrun altool --upload-app) only ingests it. App Store
+# Connect processes the build and then stops: until the build is linked to a
+# beta group nobody can install it, which is how a green build workflow leaves
+# every tester on the previous version. scripts/testflight-distribute.py does
+# the linking — internal groups, external groups, What's New text and the beta
+# review submission external testing requires.
+#
+# Two ways in, one script:
+#   - workflow_call: ios-testflight.yml runs this right after its upload step.
+#   - workflow_dispatch: rescue a build that was uploaded without distribution,
+#     or re-run after fixing something in App Store Connect. The script is
+#     idempotent, so re-running costs nothing.
+#
+# No macOS runner needed; this is only HTTP against Apple's API.
+#
+# Secrets (the same three ios-testflight.yml already uses):
+#   APPLE_API_ISSUER, APPLE_API_KEY_ID, APPLE_API_KEY_P8_BASE64
+
+name: iOS TestFlight Distribute
+
+on:
+  workflow_dispatch:
+    inputs:
+      build:
+        description: "CFBundleVersion to distribute — the run number of the iOS TestFlight build. Leave empty for the newest build."
+        type: string
+        required: false
+  workflow_call:
+    inputs:
+      build:
+        type: string
+        required: false
+
+jobs:
+  distribute:
+    runs-on: ubuntu-latest
+    # The script waits out Apple's processing (up to 40 minutes) before it can
+    # link anything; a fresh upload is usually VALID within a few minutes.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # cryptography signs the ES256 JWT Apple's API authenticates with. The
+      # rest of the script is standard library.
+      - name: Install cryptography
+        run: python3 -m pip install --quiet cryptography
+
+      # Cheap guard: catches an import or logic error in the script before it
+      # starts making calls against App Store Connect.
+      - name: Test the distribution logic
+        run: python3 -m unittest discover -s scripts -t scripts
+
+      - name: Add the build to every beta group
+        env:
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+          BUILD: ${{ inputs.build }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ -n "${BUILD:-}" ]; then
+            args+=(--build "$BUILD")
+          else
+            echo "No build number given; distributing the most recently uploaded build."
+          fi
+          python3 scripts/testflight-distribute.py "${args[@]}"
