@@ -56,6 +56,16 @@ serde_json = "1"
 cpal = "0.15"
 hound = "3.5"
 
+# Read the rendered DOM back out of the hidden article-fetch webview
+# (src/webview_fetch). Tauri's `eval` is fire-and-forget, so the result comes
+# through WebKitGTK's own run_javascript callback; `with_webview` hands us
+# exactly these types, so the versions are pinned to the ones wry 0.55 links
+# against — a different minor would be a second, incompatible GObject binding.
+# Linux only: this is the same engine the release .deb/AppImage ship on.
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = "=2.0.2"
+javascriptcore-rs = "=1.1.2"
+
 # Full dev rebuilds peak at many GB of linker memory, which has triggered
 # systemd-oomd to kill the whole desktop session (docs/pitfall/14).
 [profile.dev]

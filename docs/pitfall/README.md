@@ -18,6 +18,7 @@
 | 出 iOS 包、签名、图标、深链接 | iOS 构建与签名 |
 | 出 Android 包、签名、对齐 | Android 构建与签名 |
 | 桌面 webview 行为异常 | WebKit / webview |
+| 隐藏 webview 取正文、反爬、UA | WebKit / webview + 网络与 CSP |
 | 渲染链接、点外链、开系统浏览器 | WebKit / webview |
 | 确认框、删除之类的破坏性操作 | WebKit / webview |
 | 调模型、改 provider 层、组装提示词、加长上下文 | AI 调用与上下文窗口 |
@@ -118,6 +119,8 @@
 - [94-a-bare-anchor-navigates-the-whole-app-away](./94-a-bare-anchor-navigates-the-whole-app-away.md) — 不注册 `on_navigation` 的 Tauri app 里，AI 回答中一个裸 `<a href>` 就把 webview 导航到外站，书和对话一起丢；带 `target="_blank"` 的那条被 opener 插件的注入脚本接管，却被 `opener:allow-open-url` 的 scope 静默拒掉。Rust 侧加导航拦截 + 前端显式 `openUrl` + 放开 opener scope，Rust 里必须用 `OpenerExt::opener()`（自由函数 `open_url` 在 iOS 上不工作）
 - [98-tauri-replaces-window-confirm-with-a-promise](./98-tauri-replaces-window-confirm-with-a-promise.md) — dialog 插件的 init 脚本把 `window.confirm` 换成 async 版本，返回的 Promise 恒为真值（`lib.dom.d.ts` 仍写 `boolean`，tsc 全绿），`if (!confirm(...)) return` 形同虚设；那次 invoke 还被 ACL 拒掉，只留一条没人接的 rejection。破坏性确认一律走 AlertDialog
 - [99-on-navigation-sees-every-frame-and-cancels-in-silence](./99-on-navigation-sees-every-frame-and-cancels-in-silence.md) — `on_navigation` 拿到的是每个 frame 的导航（WKWebView 不看 `targetFrame`，WebKitGTK 的 NavigationAction 含子框架；Windows 只接顶层，反而盖不到 iframe），而取消是静默的：没有 error、不算 CSP 违规、控制台无输出。`blob:` 放行（自己页面的产物），`data:` 继续取消，所有 Cancel 打日志
+- [100-a-modernised-user-agent-is-what-gets-you-blocked](./100-a-modernised-user-agent-is-what-gets-you-blocked.md) — 把 WebKitGTK 默认 UA 的 `Version/60.5` 换新、或只去掉 `Ubuntu;`、或换成 Chrome UA，彭博冷 profile 一律 403 + 验证码；显式 pin 成引擎默认那一整条才 200。PerimeterX 拿 UA 和引擎其他特征对账，任何偏离都不行
+- [101-a-dead-host-never-fires-load-failed](./101-a-dead-host-never-fires-load-failed.md) — 域名解析不了时只发一个 `load-changed started`，25 秒不发 `load-failed` 也不发 `finished`；TLS 失败 1.3 秒就发。`network` 只能覆盖连上以后的失败，DNS 死掉的只能按 `timeout` 报
 
 ## 界面与布局
 

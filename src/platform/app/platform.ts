@@ -29,6 +29,22 @@ export function hasNativeRecorder(): boolean {
 	}
 }
 
+// Whether the host can render an article in a hidden webview
+// (src-tauri/src/webview_fetch, docs/17). Same shape as hasNativeRecorder: the
+// command is compiled `#[cfg(desktop)]`, and the DOM bridge behind it is
+// WebKitGTK's, so only Linux answers today. macOS and Windows are registered but
+// return `unsupported`; iOS has no command at all.
+const WEBVIEW_FETCH_PLATFORMS = new Set(["linux"]);
+
+export function hasWebviewFetch(): boolean {
+	try {
+		return WEBVIEW_FETCH_PLATFORMS.has(platform());
+	} catch {
+		// Not running under Tauri (unit tests, plain-browser dev).
+		return false;
+	}
+}
+
 export function isIOS(): boolean {
 	try {
 		return platform() === "ios";
