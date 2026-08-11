@@ -32,12 +32,26 @@ import {
   hasSources,
   loadSources,
   loadSourceHealth,
+  loadSiteSessions,
   removeSource,
+  saveSiteSessions,
   setSourceEnabled,
 } from "../../../info/sources/source-store";
 import { liveProbeAndTrial } from "../../../info/sources/source-live";
 import type { SourceDescriptor } from "../../../info/sources/descriptor";
 import type { SourceHealth } from "../../../info/sources/engine";
+import {
+  applySessionCheck,
+  forgetSession,
+  type SignInSite,
+  type SiteSessions,
+} from "../../../info/sources/site-session";
+import {
+  checkSiteSession,
+  clearSiteCookies,
+  openSiteSignIn,
+} from "../../../info/extract/webview-session";
+import { hasWebviewFetch } from "../../../platform/app/platform";
 import { Vestibule } from "./Vestibule";
 import { BriefingPage } from "./BriefingPage";
 import { SourcesPage } from "./SourcesPage";
@@ -108,6 +122,10 @@ export default function InfoHome(props: {
   const [hasSourcesState, setHasSourcesState] = useState<boolean | null>(null);
   const [sourcesList, setSourcesList] = useState<SourceDescriptor[]>([]);
   const [sourceHealth, setSourceHealth] = useState<Record<string, SourceHealth>>({});
+  // Last known sign-in state per site, and which site is being worked on. Both
+  // only mean anything where there is a webview to sign in with.
+  const [siteSessions, setSiteSessions] = useState<SiteSessions>({});
+  const [sessionBusy, setSessionBusy] = useState<string | null>(null);
   const infoRef = useRef<InfoPipeline | null>(null);
   const [openArticleId, setOpenArticleId] = useState<string | null>(null);
   const [articleHtml, setArticleHtml] = useState<string | null>(null);
@@ -156,10 +174,73 @@ export default function InfoHome(props: {
 
   // Reload the source list + health (source-list page) and the hasSources flag.
   const refreshSources = useCallback(async () => {
-    const [list, health] = await Promise.all([loadSources(), loadSourceHealth()]);
+    const [list, health, sessions] = await Promise.all([
+      loadSources(),
+      loadSourceHealth(),
+      loadSiteSessions(),
+    ]);
     setSourcesList(list);
     setSourceHealth(health);
+    setSiteSessions(sessions);
     setHasSourcesState(list.length > 0);
+  }, []);
+
+  // A site's session, checked by loading its front page in the hidden window and
+  // seeing whether it still offers a sign-in. Tens of seconds, so the row says
+  // it is working; the answer is cached because the check is not free and the
+  // reader wants to see where they stand on arrival, not after a wait.
+  const checkSession = useCallback(async (site: SignInSite) => {
+    setSessionBusy(site.host);
+    try {
+      const status = await checkSiteSession(site.checkUrl);
+      const next = applySessionCheck(
+        await loadSiteSessions(),
+        site.host,
+        status,
+        Date.now(),
+      );
+      await saveSiteSessions(next);
+      setSiteSessions(next);
+    } catch (e) {
+      console.warn("session check failed", e);
+    } finally {
+      setSessionBusy(null);
+    }
+  }, []);
+
+  // Sign in: the site's own page, in a window the user types into. It resolves
+  // when they close the window, and the state is checked right after — closing
+  // says the flow is over, not that it worked.
+  const signInToSite = useCallback(
+    async (site: SignInSite) => {
+      setSessionBusy(site.host);
+      try {
+        await openSiteSignIn(site.signInUrl);
+      } catch (e) {
+        console.warn("sign-in window failed", e);
+        setSessionBusy(null);
+        return;
+      }
+      setSessionBusy(null);
+      await checkSession(site);
+    },
+    [checkSession],
+  );
+
+  // Sign out: delete the site's cookies. Nothing else is held, so nothing else
+  // has to be undone.
+  const signOutOfSite = useCallback(async (site: SignInSite) => {
+    setSessionBusy(site.host);
+    try {
+      await clearSiteCookies(site.host);
+      const next = forgetSession(await loadSiteSessions(), site.host);
+      await saveSiteSessions(next);
+      setSiteSessions(next);
+    } catch (e) {
+      console.warn("sign-out failed", e);
+    } finally {
+      setSessionBusy(null);
+    }
   }, []);
 
   // Open the first-run / add-source chat: the info call in add-source mode.
@@ -431,6 +512,15 @@ export default function InfoHome(props: {
           <SourcesPage
             sources={sourcesList}
             health={sourceHealth}
+            sessions={siteSessions}
+            sessionBusy={sessionBusy}
+            {...(hasWebviewFetch()
+              ? {
+                  onSignIn: (site: SignInSite) => void signInToSite(site),
+                  onCheckSession: (site: SignInSite) => void checkSession(site),
+                  onSignOut: (site: SignInSite) => void signOutOfSite(site),
+                }
+              : {})}
             onToggle={toggleSource}
             onRemove={removeSourceById}
             onProbeAdd={liveProbeAndTrial}

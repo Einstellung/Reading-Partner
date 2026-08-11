@@ -44,6 +44,7 @@ use tauri::webview::PageLoadEvent;
 use tauri::{AppHandle, Manager, Runtime, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 pub mod policy;
+pub mod session;
 
 use policy::{Readout, Status};
 
@@ -62,20 +63,20 @@ const PROFILE_DIR: &str = "webview-fetch-profile";
 /// Everything the fetcher keeps between calls.
 #[derive(Default)]
 pub struct WebviewFetchState {
-    /// Labels of the hidden windows that exist right now. Read by the
-    /// navigation guard.
-    live: Mutex<HashSet<String>>,
+    /// Labels of the windows the fetcher owns right now — the hidden ones and
+    /// the visible sign-in window. Read by the navigation guard.
+    pub(crate) live: Mutex<HashSet<String>>,
     /// Which origins have been warmed, and when.
     ledger: Mutex<policy::WarmupLedger>,
     /// One fetch at a time. Two hidden windows sharing one cookie jar while a
     /// bot-detection script writes to it is not a race worth debugging, and the
     /// caller (a briefing run walking a feed) has no reason to parallelise.
-    gate: Mutex<()>,
+    pub(crate) gate: Mutex<()>,
     seq: AtomicU64,
 }
 
 impl WebviewFetchState {
-    fn next_label(&self) -> String {
+    pub(crate) fn next_label(&self) -> String {
         format!("{LABEL_PREFIX}{}", self.seq.fetch_add(1, Ordering::Relaxed))
     }
 }
@@ -302,10 +303,10 @@ enum Phase {
     Article,
 }
 
-struct PageOutcome {
-    status: Status,
+pub(crate) struct PageOutcome {
+    pub(crate) status: Status,
     readout: Option<Readout>,
-    detail: Option<String>,
+    pub(crate) detail: Option<String>,
 }
 
 impl PageOutcome {
@@ -320,7 +321,7 @@ impl PageOutcome {
 
 /// What the webview reports about a load, from Tauri's page-load hook and (on
 /// Linux) WebKit's `load-failed` signal.
-enum LoadEvent {
+pub(crate) enum LoadEvent {
     /// The document reached `finished`. Which document it was is not carried:
     /// the extractor reports `location.href` itself, so redirects are visible in
     /// the readout rather than in this channel.
@@ -348,7 +349,7 @@ fn run_page<R: Runtime>(
     };
 
     let (tx, rx) = mpsc::channel::<LoadEvent>();
-    let window = match build_window(app, &label, profile, tx.clone()) {
+    let window = match build_window(app, &label, profile, tx.clone(), Chrome::hidden()) {
         Ok(window) => window,
         Err(err) => return PageOutcome::failed(Status::Network, format!("window failed: {err}")),
     };
@@ -378,9 +379,9 @@ fn run_page<R: Runtime>(
 /// Removes the label from the live set and destroys the window, whichever way
 /// the fetch ends. A hidden window that outlives its fetch would keep a
 /// navigation exemption alive with it.
-struct LiveGuard<R: Runtime> {
-    app: AppHandle<R>,
-    label: String,
+pub(crate) struct LiveGuard<R: Runtime> {
+    pub(crate) app: AppHandle<R>,
+    pub(crate) label: String,
 }
 
 impl<R: Runtime> Drop for LiveGuard<R> {
@@ -398,24 +399,42 @@ impl<R: Runtime> Drop for LiveGuard<R> {
     }
 }
 
-fn build_window<R: Runtime>(
+/// Whether the window is the fetcher's own (hidden, and never shown) or the
+/// sign-in window, which exists to be looked at and typed into.
+pub(crate) struct Chrome<'a> {
+    pub visible: bool,
+    pub title: &'a str,
+}
+
+impl Chrome<'_> {
+    /// The hidden fetch window. Created invisible, never shown, destroyed with
+    /// the fetch.
+    pub(crate) fn hidden() -> Self {
+        Self { visible: false, title: "" }
+    }
+}
+
+pub(crate) fn build_window<R: Runtime>(
     app: &AppHandle<R>,
     label: &str,
     profile: &PathBuf,
     tx: Sender<LoadEvent>,
+    chrome: Chrome<'_>,
 ) -> tauri::Result<WebviewWindow<R>> {
     let sender = Mutex::new(tx);
+    let visible = chrome.visible;
     // `about:blank` costs nothing to load and is what tauri-runtime-wry treats
     // as "no initial URL"; the real navigation happens once the failure signal
     // is connected.
     let blank = Url::parse("about:blank").expect("about:blank parses");
     WebviewWindowBuilder::new(app, label, WebviewUrl::External(blank))
-        // Never on the user's screen. The window is created hidden and is never
-        // shown; nothing in this module calls show().
-        .visible(false)
-        .focused(false)
-        .skip_taskbar(true)
-        .title("")
+        // A fetch window is created hidden and never shown; nothing in this
+        // module calls show() on one. The sign-in window is the exception, and
+        // it is one the user asked for.
+        .visible(visible)
+        .focused(visible)
+        .skip_taskbar(!visible)
+        .title(chrome.title)
         .inner_size(policy::VIEWPORT.0, policy::VIEWPORT.1)
         .user_agent(policy::USER_AGENT)
         // The point of the exercise: one jar, on disk, shared by every window
@@ -425,9 +444,16 @@ fn build_window<R: Runtime>(
         // did it and the process it ran in.
         .data_directory(profile.clone())
         .incognito(false)
-        // A page in here may not open windows or download files. It is loaded
-        // to be read, not to act.
-        .on_new_window(|_url, _features| tauri::webview::NewWindowResponse::Deny)
+        // A page in a fetch window may not open windows or download files: it is
+        // loaded to be read, not to act. The sign-in window has to allow the
+        // popup, because that is what "continue with Google" is.
+        .on_new_window(move |_url, _features| {
+            if visible {
+                tauri::webview::NewWindowResponse::Allow
+            } else {
+                tauri::webview::NewWindowResponse::Deny
+            }
+        })
         .on_download(|_webview, _event| false)
         .on_page_load(move |_window, payload| {
             if payload.event() != PageLoadEvent::Finished {
@@ -465,7 +491,7 @@ fn build_window<R: Runtime>(
 /// the background is never seen, so each of those is answered here with "handled,
 /// and the answer is no".
 #[cfg(target_os = "linux")]
-fn connect_engine_signals<R: Runtime>(window: &WebviewWindow<R>, tx: Sender<LoadEvent>) {
+pub(crate) fn connect_engine_signals<R: Runtime>(window: &WebviewWindow<R>, tx: Sender<LoadEvent>) {
     let _ = window.with_webview(move |platform| {
         use webkit2gtk::{
             AuthenticationRequestExt, FileChooserRequestExt, PermissionRequestExt, WebViewExt,
@@ -503,10 +529,10 @@ fn connect_engine_signals<R: Runtime>(window: &WebviewWindow<R>, tx: Sender<Load
 }
 
 #[cfg(not(target_os = "linux"))]
-fn connect_engine_signals<R: Runtime>(_window: &WebviewWindow<R>, _tx: Sender<LoadEvent>) {}
+pub(crate) fn connect_engine_signals<R: Runtime>(_window: &WebviewWindow<R>, _tx: Sender<LoadEvent>) {}
 
 /// Wait for the page to reach `finished`, or for a reason it never will.
-fn wait_for_load(
+pub(crate) fn wait_for_load(
     rx: &Receiver<LoadEvent>,
     timeout: Duration,
     started: Instant,
@@ -650,13 +676,13 @@ fn settle_and_extract<R: Runtime>(
 
 /// Run the extractor in the page and parse what it returns.
 #[cfg(target_os = "linux")]
-fn extract<R: Runtime>(window: &WebviewWindow<R>) -> Result<Readout, String> {
+pub(crate) fn extract<R: Runtime>(window: &WebviewWindow<R>) -> Result<Readout, String> {
     let json = eval_string(window, include_str!("extract.js"), policy::EVAL_TIMEOUT)?;
     serde_json::from_str(&json).map_err(|e| format!("extractor returned unusable JSON: {e}"))
 }
 
 #[cfg(not(target_os = "linux"))]
-fn extract<R: Runtime>(_window: &WebviewWindow<R>) -> Result<Readout, String> {
+pub(crate) fn extract<R: Runtime>(_window: &WebviewWindow<R>) -> Result<Readout, String> {
     Err("no DOM bridge on this platform".to_string())
 }
 
@@ -703,7 +729,7 @@ fn eval_string<R: Runtime>(
 
 /// `<app data>/webview-fetch-profile`, created on demand. Same data root as
 /// every other file the app owns (lib.rs creates it at startup).
-fn profile_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
+pub(crate) fn profile_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
     let dir = app
         .path()
         .app_data_dir()

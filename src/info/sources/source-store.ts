@@ -14,10 +14,16 @@
 import { BaseDirectory, exists, readTextFile } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { validateDescriptor, type SourceDescriptor } from "./descriptor";
+import { parseSiteSessions, type SiteSessions } from "./site-session";
 import type { SourceHealth } from "./engine";
 
 export const SOURCES_FILE = "info-sources.json";
 const HEALTH_FILE = "info-source-health.json";
+const SESSIONS_FILE = "info-site-sessions.json";
+// Last known sign-in state per site. Like the health sidecar it is derived and
+// out of sync range — and here that is not an optimisation: the session it
+// describes is a cookie in this device's webview profile, and copying the
+// belief to another device would describe a session that device does not have.
 
 // --- pure helpers (unit-tested) --------------------------------------------
 
@@ -105,4 +111,19 @@ export async function loadSourceHealth(): Promise<Record<string, SourceHealth>> 
 
 export async function saveSourceHealth(health: Record<string, SourceHealth>): Promise<void> {
   await writeTextAtomic(HEALTH_FILE, JSON.stringify(health));
+}
+
+// --- site sessions (derived sidecar, not synced) ---------------------------
+
+export async function loadSiteSessions(): Promise<SiteSessions> {
+  try {
+    if (!(await exists(SESSIONS_FILE, { baseDir: BaseDirectory.AppData }))) return {};
+    return parseSiteSessions(await readTextFile(SESSIONS_FILE, { baseDir: BaseDirectory.AppData }));
+  } catch {
+    return {};
+  }
+}
+
+export async function saveSiteSessions(sessions: SiteSessions): Promise<void> {
+  await writeTextAtomic(SESSIONS_FILE, JSON.stringify(sessions));
 }

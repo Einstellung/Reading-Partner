@@ -4,6 +4,11 @@
 // a delete, and a paste-an-RSS-URL box at the top that probes + trials + adds in
 // place, without going through the chat. No drag/group/frequency — ranking is
 // triage's job. Presentational; the host owns the store writes and probing.
+//
+// Above the list, one row per site the reader can sign in to (site-session.ts):
+// Bloomberg gives an anonymous reader a fifth of an article, so signing in is
+// the difference between a headline and a story. Sites, not sources — seven
+// Bloomberg sections share one login.
 
 import { useEffect, useRef, useState } from "react";
 import type { SourceDescriptor } from "../../../info/sources/descriptor";
@@ -11,6 +16,12 @@ import type { SourceHealth } from "../../../info/sources/engine";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { ProbeAddOutcome } from "../../../info/sources/source-live";
 import { pipeLabel } from "../../../info/sources/probe";
+import {
+  sessionLabel,
+  signInSites,
+  type SiteSessions,
+  type SignInSite,
+} from "../../../info/sources/site-session";
 import { HIT_44 } from "../common/buttons";
 import { Button } from "../ui/button";
 import { Switch } from "../ui/switch";
@@ -84,9 +95,70 @@ function HealthDot({ health }: { health: SourceHealth | undefined }) {
   );
 }
 
+// One site's sign-in row. The state is the host's; the work (a window the user
+// types into, a page load, a cookie delete) belongs to the host too.
+function SignInRow(props: {
+  site: SignInSite;
+  sessions: SiteSessions;
+  busy: string | null;
+  onSignIn: (site: SignInSite) => void;
+  onCheck: (site: SignInSite) => void;
+  onSignOut: (site: SignInSite) => void;
+}) {
+  const { site, sessions, busy } = props;
+  const state = sessions[site.host];
+  const working = busy === site.host;
+  const signedIn = !!state && !state.unknown && state.signedIn;
+  return (
+    <li className="flex items-center gap-3 rounded-xl border border-[#e6e6e6] bg-white px-4 py-3">
+      <span
+        aria-hidden
+        className={`h-2.5 w-2.5 flex-none rounded-full ${signedIn ? "bg-[#3fb950]" : "bg-[#d0d0d0]"}`}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[14px] font-medium text-[#1b1b1b]">{site.label}</div>
+        <div className="truncate text-[12px] text-[#999]">
+          {working ? "Working…" : sessionLabel(state)}
+          {" · "}
+          {site.sourceNames.length === 1
+            ? site.sourceNames[0]
+            : `${site.sourceNames.length} sources`}
+        </div>
+      </div>
+      <Button
+        variant="subtle"
+        size="chip"
+        disabled={working}
+        onClick={() => props.onCheck(site)}
+        title="Load the site in the background and see whether it still asks you to sign in"
+      >
+        Check
+      </Button>
+      {signedIn ? (
+        <Button variant="subtle" size="chip" disabled={working} onClick={() => props.onSignOut(site)}>
+          Sign out
+        </Button>
+      ) : (
+        <Button variant="cta" size="chip" disabled={working} onClick={() => props.onSignIn(site)}>
+          Sign in
+        </Button>
+      )}
+    </li>
+  );
+}
+
 export interface SourcesPageProps {
   sources: SourceDescriptor[];
   health: Record<string, SourceHealth>;
+  // Last known sign-in state per site, and the three things a reader can do
+  // about it. Absent on a platform with no webview — the section then draws
+  // nothing, because there is nothing to sign in to.
+  sessions?: SiteSessions;
+  // The host of the site currently being worked on, so its row can say so.
+  sessionBusy?: string | null;
+  onSignIn?: (site: SignInSite) => void;
+  onCheckSession?: (site: SignInSite) => void;
+  onSignOut?: (site: SignInSite) => void;
   onToggle: (id: string, enabled: boolean) => void;
   onRemove: (id: string) => void;
   onProbeAdd: (url: string) => Promise<ProbeAddOutcome>;
@@ -99,6 +171,7 @@ export function SourcesPage(props: SourcesPageProps) {
   const [probing, setProbing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<ProbeConfirmCardData | null>(null);
+  const sites = signInSites(props.sources);
 
   async function probe() {
     const input = url.trim();
@@ -166,6 +239,33 @@ export function SourcesPage(props: SourcesPageProps) {
           </div>
         )}
       </div>
+
+      {/* Sites with a sign-in. Nothing to draw when no source has one, or when
+          the platform has no webview to sign in with. */}
+      {sites.length > 0 && props.onSignIn && (
+        <div className="mb-6">
+          <div className="mb-2 text-[12px] font-medium uppercase tracking-wide text-[#999]">
+            Signed-in sites
+          </div>
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+            {sites.map((site) => (
+              <SignInRow
+                key={site.host}
+                site={site}
+                sessions={props.sessions ?? {}}
+                busy={props.sessionBusy ?? null}
+                onSignIn={props.onSignIn!}
+                onCheck={props.onCheckSession ?? (() => {})}
+                onSignOut={props.onSignOut ?? (() => {})}
+              />
+            ))}
+          </ul>
+          <p className="mt-2 text-[12px] leading-relaxed text-[#999]">
+            Signing in opens the site's own page in a window. Close it when you are done — your
+            password never reaches this app, and only the site's cookie stays behind.
+          </p>
+        </div>
+      )}
 
       {/* The list. */}
       {props.sources.length === 0 ? (

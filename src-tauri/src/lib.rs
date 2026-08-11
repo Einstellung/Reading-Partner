@@ -61,7 +61,10 @@ pub fn run() {
             voice::start_voice_recording,
             voice::stop_voice_recording,
             voice::cancel_voice_recording,
-            webview_fetch::fetch_article_via_webview
+            webview_fetch::fetch_article_via_webview,
+            webview_fetch::session::open_site_sign_in,
+            webview_fetch::session::check_site_session,
+            webview_fetch::session::clear_site_cookies
         ]);
     #[cfg(mobile)]
     let builder = builder.invoke_handler(tauri::generate_handler![
@@ -96,7 +99,10 @@ pub fn run() {
             // through the hidden webview, print the results and exit. No-op
             // without the variable.
             #[cfg(desktop)]
-            webview_fetch::run_probe_from_env(app.handle());
+            {
+                webview_fetch::run_probe_from_env(app.handle());
+                webview_fetch::session::run_probe_from_env(app.handle());
+            }
             Ok(())
         })
         .run(tauri::generate_context!())
