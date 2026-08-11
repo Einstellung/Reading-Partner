@@ -95,15 +95,24 @@ export function BriefingProgressCard({ payload }: CardComponentProps<BriefingPro
   if (payload.stopping) {
     main = "Stopping";
     sub = c && c.done > 0 ? `${c.done} source${c.done === 1 ? "" : "s"} kept` : null;
-  } else if (payload.phase === "fetching") {
+  } else if (payload.phase === "discovering") {
     main = c && c.total ? `Collecting sources ${c.done}/${c.total}` : "Collecting sources";
     const parts: string[] = [];
     if (c?.lastDone) parts.push(`${c.lastDone} done`);
-    if (c && c.items > 0) parts.push(`${c.items} item${c.items === 1 ? "" : "s"}`);
+    if (c && c.items > 0) parts.push(`${c.items} headline${c.items === 1 ? "" : "s"}`);
     if (c && c.failed > 0) parts.push(`${c.failed} failed`);
     sub = parts.length ? parts.join(" · ") : null;
+  } else if (payload.phase === "screening") {
+    main = c && c.items ? `Screening ${c.screened}/${c.items} headlines` : "Screening headlines";
+    sub = c && c.screened > 0 ? `${c.kept} worth fetching` : null;
+  } else if (payload.phase === "fetching") {
+    main = c && c.bodiesTotal ? `Fetching articles ${c.bodies}/${c.bodiesTotal}` : "Fetching articles";
+    // A ceiling that trimmed the day says so here, not only in the log.
+    sub = c && c.cappedOut > 0 ? `${c.cappedOut} over the daily cap were left out` : null;
   } else {
-    const items = c?.items ?? 0;
+    // What triage is actually reading: the items that survived screening. On a
+    // re-triage there is no funnel, so the cached item count stands in.
+    const items = c?.bodiesTotal || c?.items || 0;
     main = items ? `Reading and triaging ${items} items` : "Reading and triaging";
     const parts: string[] = [`${secs}s`];
     if (t && t.chars > 0) parts.push(`${t.chars} chars`);

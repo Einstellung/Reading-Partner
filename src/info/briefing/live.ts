@@ -10,13 +10,21 @@ import { INFO_EVENT_TOPIC, logEvent } from "../../platform/app/events";
 import { newTally, reportParse } from "../../platform/app/structured-output";
 import { observeAppLifecycle } from "../../platform/app/lifecycle";
 import { browserWakeLockTarget, createScreenWakeLock } from "../../platform/app/wake-lock";
-import { collectAll } from "../sources/engine";
+import { collectAll, fetchBodies as fetchArticleBodies } from "../sources/engine";
 import { extractReadable } from "../extract/readable";
 import { loadSources, loadSourceHealth, saveSourceHealth } from "../sources/source-store";
 import { loadFeedback } from "../../observation/feedback";
 import { loadProfile } from "../../observation/profile";
 import { assembleReadingContext } from "../../observation/assemble";
 import { InfoPipeline, type InfoSourceRef, type SourceResult } from "./pipeline";
+import {
+  parseScreenVerdicts,
+  screenSystemPrompt,
+  screenUserMessage,
+  type ScreenParseOutcome,
+  type ScreenVerdict,
+} from "./screen";
+import type { InfoRunPhase } from "./run-state";
 import {
   clearRun,
   loadBriefing,
@@ -129,14 +137,68 @@ async function listSources(): Promise<InfoSourceRef[]> {
   return sources.filter((d) => d.enabled).map((d) => ({ id: d.id, name: d.name }));
 }
 
-// Run the requested sources through the generic engine (docs/17) — a subset of
+// One screening call: the model, then the validation, with the parse recorded
+// whichever way it lands (structured-output.ts).
+async function attemptScreen(
+  model: ResolvedModel,
+  userText: string,
+  validIds: Set<string>,
+  opts: AiCallOptions,
+  extra?: string,
+): Promise<ScreenParseOutcome> {
+  const text = await callModel(
+    "chat",
+    "plan",
+    (m) => screenSystemPrompt(m.aiLanguage) + (extra ?? ""),
+    userText,
+    opts,
+  );
+  const tally = newTally();
+  const parsed = parseScreenVerdicts(text, validIds, tally);
+  reportParse({
+    site: "info-screen",
+    model,
+    text,
+    tally,
+    error: parsed.ok ? undefined : parsed.error,
+  });
+  return parsed;
+}
+
+// The screening dep: one batch of headlines in, one verdict per item out. The
+// cheap model, on purpose — this is the stage that runs over the whole day, and
+// the question it answers ("is the body worth fetching") is a coarse one. A
+// parse failure gets one corrective retry, then throws so the watchdog treats it
+// as transient.
+async function screen(
+  input: { profile: string; items: InfoItem[] },
+  opts: AiCallOptions,
+): Promise<ScreenVerdict[]> {
+  const userText = screenUserMessage(input.profile, input.items);
+  const validIds = new Set(input.items.map((it) => it.id));
+  const model = await resolveModel("chat");
+  const parsed = await attemptScreen(model, userText, validIds, opts);
+  if (parsed.ok) return parsed.verdicts;
+  const reparsed = await attemptScreen(
+    model,
+    userText,
+    validIds,
+    opts,
+    "\n\nYour previous reply was not valid JSON in the required shape. Reply with ONLY the JSON object, no prose, no markdown fence.",
+  );
+  if (reparsed.ok) return reparsed.verdicts;
+  throw new Error(`screening produced invalid JSON: ${reparsed.error}`);
+}
+
+// Discovery (docs/35): run the requested sources through the generic engine for
+// their item lists only — one request per source, no article pages — a subset of
 // the roster when the pipeline is resuming, everything otherwise. Per-source
 // isolation lives in collectAll: one source failing degrades to no items rather
 // than failing the run (the pipeline fails only if the whole set comes back
 // empty). Each source is handed to the pipeline as it settles so the run's
 // checkpoint advances one source at a time. Health is recorded for the
 // source-list UI.
-async function collect(
+async function discover(
   refs: InfoSourceRef[],
   onSettled: (result: SourceResult) => Promise<void>,
   signal: AbortSignal,
@@ -148,6 +210,7 @@ async function collect(
     sources,
     {
       extract: extractReadable,
+      discoveryOnly: true,
       signal,
       onSourceSettled: (r) => {
         // Where a run's minutes go: per source, so a slow one is nameable.
@@ -165,6 +228,34 @@ async function collect(
   saveSourceHealth(health).catch(() => {});
 }
 
+// Material (docs/35): the article bodies of the items screening kept. The
+// descriptors come back off disk because an item carries only its source id —
+// the body's whereabouts (a page, a detail endpoint, the feed field it already
+// had) is the descriptor's business.
+async function fetchBodies(
+  items: InfoItem[],
+  onSettled: (item: InfoItem) => Promise<void>,
+  signal: AbortSignal,
+): Promise<void> {
+  const sources = await loadSources();
+  await fetchArticleBodies(items, sources, { extract: extractReadable, signal }, onSettled);
+}
+
+// The per-phase timing lines (events-info.jsonl), alongside the per-source ones
+// discovery writes and the triage line the call itself writes.
+const PHASE_EVENT: Record<InfoRunPhase, "info-discover" | "info-screen" | "info-material" | null> = {
+  discovering: "info-discover",
+  screening: "info-screen",
+  fetching: "info-material",
+  // Triage logs its own line, per watchdog attempt, with the outcome.
+  triaging: null,
+};
+
+function logPhase(phase: InfoRunPhase, data: Record<string, number>): void {
+  const type = PHASE_EVENT[phase];
+  if (type) logEvent(INFO_EVENT_TOPIC, type, data);
+}
+
 let pipeline: InfoPipeline | null = null;
 
 // One screen wake lock for the app, held while a briefing generates (docs/22).
@@ -180,8 +271,11 @@ export function getInfoPipeline(): InfoPipeline {
       // so a failure yields "" and the section is simply omitted.
       loadReaderContext: () => assembleReadingContext(),
       listSources,
-      collect,
+      discover,
+      screen,
+      fetchBodies,
       triage,
+      logPhase,
       saveBriefing,
       saveArticles,
       saveItems,

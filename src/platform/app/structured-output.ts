@@ -25,11 +25,13 @@ export const AI_EVENT_TOPIC = "ai";
 // Where a structured reply was asked for. The unit `seen`/`kept` counts differs
 // per site: prep-plan counts chapters + references + nominations, notes-plan
 // counts chapters, slides-plan counts slides, info-triage counts item
-// references across the four tiers. tool-args counts nothing.
+// references across the four tiers, info-screen counts per-item verdicts in one
+// screening batch. tool-args counts nothing.
 export type ParseSite =
   | "prep-plan"
   | "notes-plan"
   | "slides-plan"
+  | "info-screen"
   | "info-triage"
   | "tool-args";
 

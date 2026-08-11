@@ -67,18 +67,32 @@ export function BriefingCardBody({
   if (running) {
     const phase = stopping
       ? "Stopping"
-      : snap?.phase === "fetching"
+      : snap?.phase === "discovering"
         ? "Reading the sources"
-        : "Triaging";
+        : snap?.phase === "screening"
+          ? "Screening headlines"
+          : snap?.phase === "fetching"
+            ? "Fetching articles"
+            : "Triaging";
     const detail = (() => {
-      if (snap?.phase === "fetching") {
-        const c = snap.collect;
+      const c = snap?.collect ?? null;
+      if (snap?.phase === "discovering") {
         if (!c || !c.total) return null;
         const parts = [`${c.done}/${c.total} sources`];
-        if (c.items > 0) parts.push(`${c.items} items`);
+        if (c.items > 0) parts.push(`${c.items} headlines`);
         return parts.join(" · ");
       }
-      const items = snap?.collect?.items ?? 0;
+      if (snap?.phase === "screening") {
+        if (!c || !c.items) return null;
+        return `${c.screened}/${c.items} judged · ${c.kept} kept`;
+      }
+      if (snap?.phase === "fetching") {
+        if (!c || !c.bodiesTotal) return null;
+        const parts = [`${c.bodies}/${c.bodiesTotal} articles`];
+        if (c.cappedOut > 0) parts.push(`${c.cappedOut} over the cap`);
+        return parts.join(" · ");
+      }
+      const items = c?.bodiesTotal || c?.items || 0;
       const chars = snap?.activity?.chars ?? 0;
       const parts: string[] = [];
       if (items) parts.push(`${items} items`);

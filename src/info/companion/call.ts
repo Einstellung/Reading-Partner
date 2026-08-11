@@ -53,10 +53,16 @@ function readyCopy(job: BriefingJob): { title?: string; note?: string } {
 function completionNote(job: BriefingJob, b: Briefing): string {
   const worth = b.mustRead.length + b.outOfLane.length;
   const verb = job === "retriage" ? "re-sorted" : job === "full" ? "regenerated" : "generated";
+  // The screened-out count belongs in the note for the same reason it belongs in
+  // the chat prompt (docs/35): "filtered: 3" over a day of four hundred headlines
+  // would otherwise read as a quiet day.
+  const screened = b.screen?.dropped
+    ? `, screened out before fetching: ${b.screen.dropped} of ${b.screen.discovered} discovered`
+    : "";
   return (
     `Today's briefing has been ${verb}. Overview: ${b.overview} — worth your time: ${worth}, ` +
-    `one-liners: ${b.oneLiners.length}, filtered: ${b.filtered.length}. Answer from this updated ` +
-    `briefing now, not the earlier one.`
+    `one-liners: ${b.oneLiners.length}, filtered: ${b.filtered.length}${screened}. Answer from ` +
+    `this updated briefing now, not the earlier one.`
   );
 }
 
@@ -69,13 +75,8 @@ function failureNote(job: BriefingJob, error: string | null): string {
 // card appears the moment the job starts) the phase comes from the job itself —
 // a re-triage never fetches; afterwards it comes from the snapshot.
 export function briefingProgressCard(job: BriefingJob, s: InfoSnapshot | null): BriefingProgressCardData {
-  const phase = s
-    ? s.phase === "fetching"
-      ? "fetching"
-      : "triaging"
-    : job === "retriage"
-      ? "triaging"
-      : "fetching";
+  const phase =
+    s && s.phase !== "idle" ? s.phase : job === "retriage" ? "triaging" : "discovering";
   return {
     kind: "briefing-progress",
     phase,

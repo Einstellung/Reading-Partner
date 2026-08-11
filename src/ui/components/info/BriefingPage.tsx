@@ -181,10 +181,14 @@ export function BriefingPage(props: BriefingPageProps) {
           );
         })()}
 
-      {/* Filtered: collapsed summary expanding to titles with "Show anyway". */}
-      {b.filtered.length > 0 && (
+      {/* Filtered: collapsed summary expanding to titles with "Show anyway".
+          Shown for a screen-only day too (docs/35): the day's discards are
+          mostly headlines that never got fetched, and a page that stayed silent
+          about them would read as a day with nothing in it. */}
+      {(b.filtered.length > 0 || !!b.screen?.dropped) && (
         <FilteredSection
           filtered={b.filtered}
+          screen={b.screen}
           meta={meta}
           onAppeal={props.onAppeal}
           openedIds={props.openedIds}
@@ -200,11 +204,13 @@ export function BriefingPage(props: BriefingPageProps) {
 
 function FilteredSection({
   filtered,
+  screen,
   meta,
   onAppeal,
   openedIds,
 }: {
   filtered: Briefing["filtered"];
+  screen: Briefing["screen"];
   meta: (id: string) => BriefingItemMeta | undefined;
   onAppeal: (itemId: string, meta: BriefingItemMeta, category: string) => void;
   openedIds: Set<string>;
@@ -219,6 +225,15 @@ function FilteredSection({
     .map(([cat, n]) => `${cat} ×${n}`)
     .join(", ");
 
+  // What the screen dropped on headlines alone (docs/35). A count, not a list:
+  // the titles were never fetched, and appealing one means widening the profile,
+  // not reopening an article.
+  const dropped = screen?.dropped ?? 0;
+  const screenLine = dropped
+    ? `${dropped} more of the day's ${screen!.discovered} headlines were skipped before fetching` +
+      (screen!.cappedOut ? `, ${screen!.cappedOut} of them at the daily fetch cap` : "")
+    : null;
+
   // Controlled: the arrow is a glyph swap rather than a rotation, so the render
   // needs the state either way.
   return (
@@ -227,7 +242,10 @@ function FilteredSection({
         <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-lg px-1 py-2 text-left text-[13px] text-[#888] coarse:min-h-[44px] hover:text-[#555]">
           <span className="text-[11px]">{open ? "▾" : "▸"}</span>
           <span className="font-medium">Filtered {filtered.length}</span>
-          <span className="min-w-0 flex-1 truncate text-[#aaa]">— {summary}</span>
+          <span className="min-w-0 flex-1 truncate text-[#aaa]">
+            {summary && `— ${summary}`}
+            {screenLine && `${summary ? " · " : "— "}+${dropped} skipped on the headline`}
+          </span>
         </CollapsibleTrigger>
         <CollapsibleContent>
           <ul className="m-0 mt-1 flex list-none flex-col gap-1 p-0">
@@ -251,6 +269,9 @@ function FilteredSection({
               );
             })}
           </ul>
+          {screenLine && (
+            <div className="mt-1 px-2 py-1.5 text-[12px] text-[#bbb]">{screenLine}.</div>
+          )}
         </CollapsibleContent>
       </section>
     </Collapsible>

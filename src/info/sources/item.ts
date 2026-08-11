@@ -14,6 +14,12 @@ export interface InfoItem {
   // The source's display name (descriptor.name), denormalized so triage prompts
   // and briefing cards render a label without the descriptor at hand.
   sourceName: string;
+  // The source's own key for the article — a feed link, a list-page URL, the
+  // slug an internal API addresses it by — as discovery received it, before it
+  // was hashed into `id`. The funnel (docs/35) fetches bodies in a step of its
+  // own, long after discovery has been forgotten, and a detail-endpoint source
+  // cannot be asked for a body without the key it knows the article by.
+  sourceKey?: string;
   title: string;
   url: string;
   // ISO-ish string as the feed/API supplies it; may be "" if none was given.

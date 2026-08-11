@@ -34,9 +34,13 @@ export type EventType =
   // `outcome` is the sub-agent's, or a skip reason from before the model ran.
   | "guess-failed" // { trigger, outcome }
   // Where a briefing run's wall clock went, in events-info.jsonl rather than a
-  // topic's log: a briefing belongs to no book. One line per source as it
-  // settles, one for the triage call.
-  | "info-collect" // { source, ms, items, ok }
+  // topic's log: a briefing belongs to no book. One line per source as it is
+  // discovered, then one per funnel phase (docs/35) — so "why did that take four
+  // minutes" is answerable both by source and by stage.
+  | "info-collect" // { source, ms, items, ok } — one source's discovery
+  | "info-discover" // { ms, sources, items }
+  | "info-screen" // { ms, items, batches, kept, dropped, cappedOut }
+  | "info-material" // { ms, items, fetched }
   | "info-triage" // { ms, items, ok }
   | "prep-status" // { slug, status }
   | "notes-run" // { phase: "start" | "done" | "failed" }

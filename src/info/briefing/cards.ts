@@ -14,8 +14,10 @@ import type { CollectProgress } from "./pipeline";
 // scroll away — it stays in the flow and becomes the ready/failed card on finish.
 export interface BriefingProgressCardData {
   kind: "briefing-progress";
-  phase: "fetching" | "triaging";
-  // Collection counts (present from the fetching phase onward).
+  // The funnel phase (docs/35). "fetching" is the article-body step, after
+  // screening, not the whole collection.
+  phase: "discovering" | "screening" | "fetching" | "triaging";
+  // Funnel counts (present from the first phase onward).
   collect: CollectProgress | null;
   // Triage streaming liveness, once the AI call starts.
   triage: { startedAt: number; chars: number; attempt: number; attempts: number } | null;
