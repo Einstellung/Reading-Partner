@@ -124,12 +124,17 @@ pub struct FetchResult {
     /// Where the webview ended up, redirects included.
     pub final_url: Option<String>,
     pub title: Option<String>,
-    /// The article container's rendered text.
+    /// The article's own paragraphs, joined.
     pub text: Option<String>,
-    /// That container's markup, for the extraction stack.
+    /// Those paragraphs' markup, for the extraction stack.
     pub html: Option<String>,
-    /// Which selector produced the body, or `p-merge`.
+    /// Which selector produced the body.
     pub selector: Option<String>,
+    /// Inline "Read More:" promo lines dropped from the body.
+    pub promos_dropped: usize,
+    /// Whether the page still showed a way to sign in — i.e. whether this body
+    /// came back as an anonymous reader or as the signed-in one.
+    pub sees_sign_in: bool,
     /// `application/ld+json` blocks from the page.
     pub ld_json: Vec<String>,
     pub chars: usize,
@@ -151,6 +156,8 @@ impl FetchResult {
             text: None,
             html: None,
             selector: None,
+            promos_dropped: 0,
+            sees_sign_in: false,
             ld_json: Vec::new(),
             chars: 0,
             warmed: false,
@@ -277,6 +284,8 @@ fn fetch_blocking<R: Runtime>(app: &AppHandle<R>, target: Url) -> FetchResult {
         html: (body && !readout.html.is_empty())
             .then(|| policy::truncate_chars(&readout.html, policy::MAX_HTML_CHARS)),
         selector: (!readout.selector.is_empty()).then(|| readout.selector.clone()),
+        promos_dropped: readout.promos_dropped,
+        sees_sign_in: readout.sees_sign_in,
         ld_json: if body { readout.ld_json } else { Vec::new() },
         warmed,
         elapsed_ms: started.elapsed().as_millis() as u64,

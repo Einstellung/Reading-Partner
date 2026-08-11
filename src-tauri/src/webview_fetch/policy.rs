@@ -161,17 +161,27 @@ pub enum Status {
 pub struct Readout {
     pub title: String,
     pub url: String,
-    /// Text of the best article container the selector list found.
+    /// The body: the article's own paragraphs, joined.
     pub text: String,
-    /// That container's markup, for the extraction stack downstream.
+    /// Those paragraphs' markup, for the extraction stack downstream.
     pub html: String,
     /// How much text the container held, before any `<p>`-merge fallback
     /// replaced it. The bot-wall check reads this and not `text`.
     #[serde(default)]
     pub container_chars: usize,
-    /// Which selector won, or `p-merge`. For diagnosing a site that changed its
+    /// Which selector produced the body. For diagnosing a site that changed its
     /// markup.
     pub selector: String,
+    /// How many inline "Read More: <other headline>" promo lines were dropped
+    /// from the body. Site self-promotion sitting in the prose, not sentences of
+    /// this article; counted so the removal is visible.
+    #[serde(default)]
+    pub promos_dropped: usize,
+    /// Whether the page still offers a way to sign in. The signal a logged-in
+    /// session is checked by: measured against three Bloomberg articles, it went
+    /// true → false when the session was real, with no paywall marker left.
+    #[serde(default)]
+    pub sees_sign_in: bool,
     /// Head of `document.body.innerText`, for the bot-wall check.
     pub body_head: String,
     /// `application/ld+json` blocks, which carry headline/author/date and
@@ -414,7 +424,11 @@ mod tests {
                 .into(),
             html: String::new(),
             container_chars: 0,
-            selector: "p-merge".into(),
+            selector: "p".into(),
+            promos_dropped: 0,
+            // The wall is what an anonymous reader sees, so of course it offers
+            // no sign-in link of its own.
+            sees_sign_in: false,
             body_head: "BloombergNeed help? Contact us We've detected unusual activity from your \
                         computer network To continue, please click the box below to let us know \
                         you're not a robot. Why did this happen? Please make sure your browser \
@@ -436,8 +450,11 @@ mod tests {
             url: "https://www.bloomberg.com/news/articles/2026-08-11/aluminum-hits".into(),
             container_chars: body.chars().count(),
             text: body,
-            html: "<article>…</article>".into(),
-            selector: "article".into(),
+            html: "<p>…</p>".into(),
+            selector: "[data-component=\"paragraph\"]".into(),
+            promos_dropped: 1,
+            // Read anonymously: the header still offers a sign-in.
+            sees_sign_in: true,
             body_head: "Bloomberg the Company & Its Products Markets Commodities Aluminum Hits \
                         Seven-Week High"
                 .into(),
