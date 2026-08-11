@@ -326,18 +326,27 @@ function sameSite(a: string, b: string): boolean {
 
 // The builtin descriptor whose site the input names, or undefined. Returned
 // enabled, paired with the source's engineering caveat when it has one.
+// A site can be covered by several builtins (one per section — Bloomberg's feeds,
+// the Economist's sections). When the input names a path one of them already
+// discovers, that section wins; otherwise the first listed for the site is the
+// site's default answer.
 export function matchBuiltinSource(
   input: string,
 ): { descriptor: SourceDescriptor; note?: string } | undefined {
   const n = normalizeSiteInput(input);
   if (!n) return undefined;
   const inHost = n.host.replace(/^www\./i, "").toLowerCase();
-  for (const d of BUILTIN_SOURCES) {
-    if (descriptorHosts(d).some((h) => sameSite(inHost, h))) {
-      return { descriptor: { ...d, enabled: true }, note: builtinCaveat(d.id) };
-    }
-  }
-  return undefined;
+  const sameSiteMatches = BUILTIN_SOURCES.filter((d) =>
+    descriptorHosts(d).some((h) => sameSite(inHost, h)),
+  );
+  if (sameSiteMatches.length === 0) return undefined;
+  const inPath = normalizedPath(n.url);
+  const exact = sameSiteMatches.find((d) => {
+    const du = discoveryUrl(d);
+    return du != null && normalizedPath(du) === inPath;
+  });
+  const d = exact ?? sameSiteMatches[0];
+  return { descriptor: { ...d, enabled: true }, note: builtinCaveat(d.id) };
 }
 
 // The primary discovery URL a descriptor points at (the feed/listpage/stream

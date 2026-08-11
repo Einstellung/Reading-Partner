@@ -210,6 +210,71 @@ test("probeSource probes a different path on a covered site and offers the built
   expect(r.steps.some((s) => /borrowed the same-site/i.test(s))).toBe(true);
 });
 
+test("matchBuiltinSource covers the four premium sites by bare domain", () => {
+  // A site with several section builtins answers with the first listed one.
+  expect(matchBuiltinSource("bloomberg.com")?.descriptor.id).toBe("bloomberg-markets");
+  expect(matchBuiltinSource("https://www.economist.com")?.descriptor.id).toBe("economist-latest");
+  expect(matchBuiltinSource("nature.com")?.descriptor.id).toBe("nature");
+  expect(matchBuiltinSource("science.org")?.descriptor.id).toBe("science-news");
+  // The Crossref-backed Science research pipe is reachable by its own host.
+  expect(matchBuiltinSource("api.crossref.org")?.descriptor.id).toBe("science-journal");
+  for (const site of ["bloomberg.com", "economist.com", "nature.com", "science.org"]) {
+    expect(matchBuiltinSource(site)?.note).toBeTruthy();
+  }
+});
+
+test("matchBuiltinSource picks the section whose feed URL the input names", () => {
+  // Same site, several builtins: the pasted feed path decides which one.
+  expect(matchBuiltinSource("https://www.bloomberg.com/feeds/technology/news.rss")?.descriptor.id).toBe(
+    "bloomberg-technology",
+  );
+  expect(matchBuiltinSource("https://www.economist.com/china/rss.xml")?.descriptor.id).toBe("economist-china");
+  expect(matchBuiltinSource("https://www.nature.com/natmachintell.rss")?.descriptor.id).toBe(
+    "nature-machine-intelligence",
+  );
+});
+
+test("probeSource short-circuits a premium site's own feed path without fetching", async () => {
+  let fetched = 0;
+  const fetchFn = async () => {
+    fetched += 1;
+    return res("", "text/html", 403);
+  };
+  const r = await probeSource("https://www.economist.com/finance-and-economics/rss.xml", { fetchFn });
+  expect(r.ok).toBe(true);
+  expect(r.descriptor?.id).toBe("economist-finance-and-economics");
+  expect(r.descriptor?.enabled).toBe(true);
+  expect(r.pipeLabel).toBe("Headlines only, opens in browser");
+  expect(r.note).toMatch(/Cloudflare/);
+  expect(fetched).toBe(0);
+});
+
+test("probeSource does not short-circuit an uncovered path on a covered site", async () => {
+  // An Economist section with no builtin of its own: probed for real, with the
+  // site's verified builtin offered as a shape to clone.
+  const feed = `<rss><channel><item><title>T</title><link>https://www.economist.com/graphic-detail/1</link><description>d</description></item></channel></rss>`;
+  const tried: string[] = [];
+  const fetchFn = async (url: string) => {
+    tried.push(url);
+    if (url === "https://www.economist.com/graphic-detail/rss.xml") return res(feed);
+    return res("", "text/html", 403);
+  };
+  const r = await probeSource("https://www.economist.com/graphic-detail/rss.xml", { fetchFn });
+  expect(tried.length).toBeGreaterThan(0);
+  expect(r.ok).toBe(true);
+  expect((r.descriptor?.discovery as { url: string }).url).toBe(
+    "https://www.economist.com/graphic-detail/rss.xml",
+  );
+  expect(r.steps.some((s) => /verified built-in/i.test(s) && /economist-latest/.test(s))).toBe(true);
+});
+
+test("probeSource probes a Bloomberg article path rather than returning a section feed", async () => {
+  const fetchFn = async () => res("", "text/html", 403);
+  const r = await probeSource("https://www.bloomberg.com/news/articles/2026-08-11/x", { fetchFn });
+  expect(r.ok).toBe(false); // everything 403s; the honest answer is "can't"
+  expect(r.steps.some((s) => /verified built-in/i.test(s) && /bloomberg-markets/.test(s))).toBe(true);
+});
+
 // --- orchestrator (injected fetch) -----------------------------------------
 
 test("probeSource returns a feed descriptor from the first working path", async () => {
