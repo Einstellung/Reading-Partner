@@ -3,6 +3,7 @@
 // AppData cache) is exercised by the app, not here. Run with `bun test`.
 
 import { test, expect } from "bun:test";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 // Legacy build so pdf.js runs under bun without a browser.
@@ -51,8 +52,12 @@ test("extracts per-page text and a resolvable outline from a small PDF", async (
   }
 });
 
-test("extracts a rich multi-page text layer (demo.pdf)", async () => {
-  const ft = await extract(fixture("../public/demo.pdf"));
+// public/demo.pdf is a 1MB sample kept out of the repo (.gitignore), so a fresh
+// worktree does not have it. Skipped rather than failed there: a red that every
+// new worktree shows on its first test run reads as "I broke something".
+const demoPdf = fixture("../public/demo.pdf");
+(existsSync(demoPdf) ? test : test.skip)("extracts a rich multi-page text layer (demo.pdf)", async () => {
+  const ft = await extract(demoPdf);
   expect(ft.status).toBe("ok");
   expect(ft.pages.length).toBe(14);
   expect(ft.pages[0].toLowerCase()).toContain("trace");
