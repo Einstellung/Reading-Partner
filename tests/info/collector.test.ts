@@ -50,6 +50,13 @@ class Harness {
   fails = new Set<string>();
   timer: { at: number; cb: () => void } | null = null;
   logs: Record<string, number>[] = [];
+  // With this set, a poll parks instead of returning, so a test can act while a
+  // request is in flight — which is where an abort actually lands. It resolves
+  // when released, never throws: collectAll answers an abort by handing back
+  // whatever settled first, and a source that did not settle simply yields
+  // nothing.
+  hold = false;
+  private waiting: Array<() => void> = [];
 
   deps(): CollectorDeps {
     return {
@@ -61,6 +68,7 @@ class Harness {
       listSources: async () => this.sources,
       poll: async (sources) => {
         this.polls.push(sources.map((d) => d.id));
+        if (this.hold) await new Promise<void>((r) => this.waiting.push(r));
         const out: InfoItem[] = [];
         for (const d of sources) {
           if (this.fails.has(d.id)) throw new Error(`${d.id} is down`);
@@ -81,6 +89,15 @@ class Harness {
       },
       log: (data) => void this.logs.push(data),
     };
+  }
+
+  // Let the parked polls return, and let what they fed into run to a stop.
+  async release(): Promise<void> {
+    const waiting = this.waiting;
+    this.waiting = [];
+    this.hold = false;
+    for (const r of waiting) r();
+    await settle();
   }
 
   // Move the clock forward and fire the pending timer if it has come due, the
@@ -200,6 +217,61 @@ test("a poll that failed does not count as polled, so the next cycle tries it ag
   await h.tick(2 * MIN);
   expect(h.polls[1]).toEqual(["fast"]);
   expect(h.days.get("2026-08-11")!.map((it) => it.id)).toEqual(["f1"]);
+});
+
+test("a cycle the app interrupted does not count as polled, and comes back a minute later", async () => {
+  const h = new Harness();
+  h.sources = [source("fast", 30), source("slow", 180)];
+  h.hold = true;
+  // "fast" settled before the app went away; "slow" was still in flight, and an
+  // abort brings it back empty rather than as an error.
+  h.yields.set("fast", [item("f1", "fast")]);
+  const c = new InfoCollector(h.deps());
+
+  c.start();
+  await settle();
+  expect(h.polls).toEqual([["fast", "slow"]]);
+
+  // The app goes away — on iOS a blur is enough — with the request in flight.
+  c.background();
+  await h.release();
+
+  // The headlines that did settle are kept: they cost a request already.
+  expect(h.days.get("2026-08-11")!.map((it) => it.id)).toEqual(["f1"]);
+  // Nothing is marked polled, though. This cycle collected almost none of what
+  // it asked for, and treating it as done would sit on "slow" for three hours.
+  expect(h.polledWrites).toBe(0);
+  expect((await c.toPoll(h.sources, { force: false })).poll.map((d) => d.id)).toEqual([
+    "fast",
+    "slow",
+  ]);
+
+  // Which is why nothing else has to remember the interrupted cycle: the wake
+  // the unmarked sources ask for is immediate, held to the floor.
+  expect(h.timer!.at).toBe(h.now + MIN);
+  await h.tick(MIN);
+  expect(h.polls[1]).toEqual(["fast", "slow"]);
+  expect(h.polledWrites).toBe(1);
+});
+
+test("a run the user stopped leaves its sources unpolled too", async () => {
+  const h = new Harness();
+  h.sources = [source("fast", 30), source("slow", 180)];
+  const c = new InfoCollector(h.deps());
+  const stop = new AbortController();
+
+  // The shape of a run's discovery (live.ts): each source goes into the pool as
+  // it settles, and the batch is marked polled at the end.
+  await c.ingest([item("f1", "fast")]);
+  stop.abort();
+  await c.notePolled(["fast", "slow"], stop.signal);
+
+  expect(h.polledWrites).toBe(0);
+  expect(h.days.get("2026-08-11")!.map((it) => it.id)).toEqual(["f1"]);
+  expect((await c.toPoll(h.sources, { force: false })).poll.map((d) => d.id)).toEqual([
+    "fast",
+    "slow",
+  ]);
 });
 
 test("the draw resolves already-fetched bodies against the day's article cache, and drops the ones that are gone", async () => {

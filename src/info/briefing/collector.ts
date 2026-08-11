@@ -144,9 +144,13 @@ export class InfoCollector {
     };
   }
 
-  // Record that these sources were just polled, whoever polled them.
-  async notePolled(sourceIds: string[]): Promise<void> {
-    if (sourceIds.length === 0) return;
+  // Record that these sources were just polled, whoever polled them. An aborted
+  // poll is not a poll: the abort is answered by resolving with whatever had
+  // already settled, not by throwing, so the caller passes its signal here to
+  // say so. Marking them polled would sit on sources that returned nothing for
+  // a whole interval — three hours, on the slowest of them.
+  async notePolled(sourceIds: string[], signal?: AbortSignal): Promise<void> {
+    if (sourceIds.length === 0 || signal?.aborted) return;
     const pool = await this.ready();
     this.pool = markPolled(pool, sourceIds, this.deps.now());
     const next = this.pool;
@@ -273,14 +277,22 @@ export class InfoCollector {
       const pool = await this.ready();
       const due = dueSources(sources, pool, this.deps.now());
       if (due.length > 0) {
-        this.controller = new AbortController();
-        const items = await this.deps.poll(due, this.controller.signal);
-        this.controller = null;
+        // Held locally as well, because the field is cleared by whoever aborts
+        // and the answer to "was this cycle interrupted" has to survive that.
+        const controller = new AbortController();
+        this.controller = controller;
+        const items = await this.deps.poll(due, controller.signal);
+        if (this.controller === controller) this.controller = null;
         polled = due.length;
         const before = poolSize(await this.ready()).items;
+        // Whatever settled before the abort is free material; only the marking
+        // is withheld, so the next cycle asks these sources again.
         await this.ingest(items);
         added = poolSize(await this.ready()).items - before;
-        await this.notePolled(due.map((d) => d.id));
+        await this.notePolled(
+          due.map((d) => d.id),
+          controller.signal,
+        );
       }
     } catch (e) {
       // A cycle that fails costs one round of headlines; the next one tries the

@@ -248,7 +248,13 @@ async function discover(
     },
     prior,
   );
-  await collector.notePolled(poll.map((d) => d.id));
+  // Stopped means these sources were not polled: collectAll answers a stop by
+  // resolving with whatever settled, and marking the rest polled would keep the
+  // background collection off them until their next interval comes round.
+  await collector.notePolled(
+    poll.map((d) => d.id),
+    signal,
+  );
   saveSourceHealth(health).catch(() => {});
 }
 
