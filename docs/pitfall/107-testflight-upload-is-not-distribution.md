@@ -4,7 +4,22 @@
 
 原因：altool 只做 ingest。App Store Connect 收下包、处理到 `processingState: VALID` 之后就停在那里，build 和测试者之间的那条边要另外建——build 必须被加进某个 beta 组才对该组的测试者可见。内测组只有在组本身开了「自动分发新 build」（API 上是 `hasAccessToAllBuilds`）时才自动收，没开就得逐个 build 手动加；外测组还多两道：这个 build 要有 What's New 文本（`betaBuildLocalizations`），而且要提交并通过 beta 审核（`betaAppReviewSubmissions`）。上传成功和分发是两件事，workflow 只做了第一件。
 
-解法：上传后跑 `scripts/testflight-distribute.py`（`.github/workflows/ios-testflight-distribute.yml`，构建 workflow 的 `distribute` job 也调它）。它等处理到 VALID，把 build 加进全部内测组和全部外测组，外测再补 What's New 和 beta 审核提交；每一步都幂等，同一个 build 重复跑不会出错。已经传上去没分发的包，手动跑那个 workflow 填 run number 就能救回来，不用重新构建。做法和限制见 `docs/11-iOS-TestFlight发布.md` 的分发一节。
+解法：上传后跑 `scripts/testflight-distribute.py`（`.github/workflows/ios-testflight-distribute.yml`，构建 workflow 的 `distribute` job 也调它）。它等 build 出现、等处理到 VALID，把 build 加进全部内测组和全部外测组，外测再补 What's New 和 beta 审核提交；每一步都幂等，同一个 build 重复跑不会出错。已经传上去没分发的包，手动跑那个 workflow 填 run number 就能救回来，不用重新构建。做法和限制见 `docs/11-iOS-TestFlight发布.md` 的分发一节。
+
+## 上传返回不等于 build 已经存在，等待是两段
+
+run 31455103859：build job 上传成功，distribute job 紧接着起来，几秒内就挂了：
+
+```
+App: Reading Partner APP (com.xinyuan.readingpartner) id=6794613369
+##[error]no build with CFBundleVersion 43 under this app.
+```
+
+原因：`xcrun altool --upload-app` 返回只代表字节传完，Apple 侧的 ingestion 还要几分钟才把 build 资源建出来。在这中间 `GET /v1/builds?filter[version]=43` 返回空数组——不是「这个 build 状态还没好」，是「这个 build 还不存在」，所以没有任何状态可以轮询。脚本原来只有等 `processingState` 变 `VALID` 那一段循环，那是找到 build 之后的事；找不到直接判死。
+
+解法：找 build 自己一段轮询（`wait_for_build`，默认 20 分钟、30 秒一轮），它结束的地方才是等 VALID 那段（默认 40 分钟）的开始。两段的日志要能区分：一段打 `build 43 is not in App Store Connect yet`，另一段打 `processing state PROCESSING`。两段都走 `Client.request`，JWT 快到期时自己续签，所以等多久都不用额外处理。超时的报错说的是「别重新构建，去 Actions 手动跑 iOS TestFlight Distribute 填这个 build 号」——ipa 已经传上去了，重新构建只会换个新号。
+
+不带 build 号取「最新那个」不能等，而且比报错更坏：ingestion 期间 API 能看到的最新 build 正是被替换掉的上一个，分发它等于给所有测试者推旧版本还报成功。所以 build 号是必填的（两个 workflow 的 input 都 `required: true`，构建 workflow 一直传 `github.run_number`），脚本另留 `--newest` 给手动场景显式声明「现在没有上传在跑」。
 
 ## 加外测组时 Apple 说这个 build 不存在
 

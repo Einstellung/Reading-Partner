@@ -13,6 +13,7 @@ import io
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 SCRIPT = Path(__file__).resolve().parent / "testflight-distribute.py"
 _spec = importlib.util.spec_from_file_location("testflight_distribute", SCRIPT)
@@ -68,11 +69,25 @@ def api_error(status, detail, method="POST", url="https://api.example/x"):
     return td.ApiError(method, url, status, {"errors": [{"code": "NOT_FOUND", "detail": detail}]})
 
 
+class Answers:
+    """A different answer each time the same call is made; the last one sticks.
+
+    Polling only means anything against an API whose answer changes, which is
+    what "the build is not there, not there, there" needs.
+    """
+
+    def __init__(self, *answers):
+        self.answers = list(answers)
+
+    def take(self):
+        return self.answers.pop(0) if len(self.answers) > 1 else self.answers[0]
+
+
 class FakeClient:
     """Enough of Client to drive the linking code without a network.
 
-    `answers` maps a (method, path) pair to a response dict or to an exception
-    to raise; every call is recorded in `calls`.
+    `answers` maps a (method, path) pair to a response dict, an Answers
+    sequence, or an exception to raise; every call is recorded in `calls`.
     """
 
     def __init__(self, answers=None, collections=None):
@@ -80,19 +95,36 @@ class FakeClient:
         self.collections = dict(collections or {})
         self.calls = []
 
-    def request(self, method, path, body=None, query=None, attempts=4):
-        self.calls.append((method, path, body))
-        answer = self.answers.get((method, path), {})
+    @staticmethod
+    def _unwrap(answer):
+        if isinstance(answer, Answers):
+            answer = answer.take()
         if isinstance(answer, Exception):
             raise answer
         return answer
 
+    def request(self, method, path, body=None, query=None, attempts=4):
+        self.calls.append((method, path, body))
+        return self._unwrap(self.answers.get((method, path), {}))
+
     def get_all(self, path, query=None):
         self.calls.append(("GET", path, None))
-        answer = self.collections.get(path, ([], []))
-        if isinstance(answer, Exception):
-            raise answer
-        return answer
+        return self._unwrap(self.collections.get(path, ([], [])))
+
+
+class Clock:
+    """A monotonic clock that only moves when the code under test sleeps."""
+
+    def __init__(self):
+        self.t = 0.0
+        self.slept = []
+
+    def now(self):
+        return self.t
+
+    def sleep(self, seconds):
+        self.slept.append(seconds)
+        self.t += seconds
 
 
 class SelectBuild(unittest.TestCase):
@@ -121,6 +153,190 @@ class SelectBuild(unittest.TestCase):
 
     def test_no_builds_at_all(self):
         self.assertIsNone(td.select_build([], None))
+
+
+class SelectVersion(unittest.TestCase):
+    """Without a build number, guessing is refused rather than risked.
+
+    While Apple ingests a fresh upload the newest build the API can see is the
+    previous one, so "distribute the newest" run straight after an upload would
+    hand the testers the build that was just replaced — and report success.
+    """
+
+    def test_a_build_number_is_taken_as_given(self):
+        self.assertEqual(td.select_version("43"), "43")
+
+    def test_surrounding_whitespace_is_stripped(self):
+        self.assertEqual(td.select_version(" 43 "), "43")
+
+    def test_no_number_and_no_newest_is_refused(self):
+        with self.assertRaises(td.StepFailed) as caught:
+            td.select_version(None)
+        self.assertIn("--build", caught.exception.detail)
+        self.assertIn("--newest", caught.exception.detail)
+
+    def test_an_empty_string_is_refused_like_a_missing_one(self):
+        # The workflow passes "" when the dispatch field is left blank.
+        for empty in ("", "   ", None):
+            with self.assertRaises(td.StepFailed):
+                td.select_version(empty)
+
+    def test_newest_is_the_explicit_way_to_ask_for_a_guess(self):
+        self.assertIsNone(td.select_version(None, newest=True))
+        self.assertIsNone(td.select_version("", newest=True))
+
+    def test_an_explicit_number_wins_over_newest(self):
+        self.assertEqual(td.select_version("43", newest=True), "43")
+
+
+class WaitForBuild(QuietCase):
+    """The wait that run 31455103859 did not have.
+
+    altool returned, distribute started, GET /v1/builds had nothing yet, and
+    the script called that a missing build instead of an unfinished ingestion.
+    """
+
+    def lookup_appearing_on(self, nth, value="build"):
+        """A lookup that answers None until its nth call."""
+        state = {"calls": 0}
+
+        def lookup():
+            state["calls"] += 1
+            return value if state["calls"] >= nth else None
+
+        lookup.state = state
+        return lookup
+
+    def test_a_build_that_is_already_there_is_returned_without_waiting(self):
+        clock = Clock()
+        lookup = self.lookup_appearing_on(1)
+        found = td.wait_for_build(lookup, "43", 20, 30, now=clock.now, sleep=clock.sleep)
+        self.assertEqual(found, "build")
+        self.assertEqual(clock.slept, [])
+
+    def test_a_build_that_appears_on_the_third_poll(self):
+        clock = Clock()
+        lookup = self.lookup_appearing_on(3)
+        found = td.wait_for_build(lookup, "43", 20, 30, now=clock.now, sleep=clock.sleep)
+        self.assertEqual(found, "build")
+        self.assertEqual(lookup.state["calls"], 3)
+        self.assertEqual(clock.slept, [30, 30])
+        self.assertIn("appeared after", self.output.getvalue())
+
+    def test_the_waiting_log_says_which_of_the_two_waits_this_is(self):
+        clock = Clock()
+        td.wait_for_build(self.lookup_appearing_on(2), "43", 20, 30,
+                          now=clock.now, sleep=clock.sleep)
+        text = self.output.getvalue()
+        self.assertIn("build 43 is not in App Store Connect yet", text)
+        self.assertNotIn("processing state", text)
+
+    def test_it_gives_up_on_the_injected_clock_not_the_real_one(self):
+        clock = Clock()
+        lookup = self.lookup_appearing_on(99)
+        with self.assertRaises(td.StepFailed):
+            td.wait_for_build(lookup, "43", 1, 30, now=clock.now, sleep=clock.sleep)
+        # t=0, t=30, t=60 -> the third lookup is the one past the deadline.
+        self.assertEqual(lookup.state["calls"], 3)
+        self.assertEqual(clock.t, 60)
+
+    def test_the_default_wait_polls_for_twenty_minutes(self):
+        clock = Clock()
+        lookup = self.lookup_appearing_on(999)
+        with self.assertRaises(td.StepFailed):
+            td.wait_for_build(lookup, "43", td.DEFAULT_APPEAR_WAIT_MINUTES, td.POLL_SECONDS,
+                              now=clock.now, sleep=clock.sleep)
+        self.assertEqual(clock.t, td.DEFAULT_APPEAR_WAIT_MINUTES * 60)
+        self.assertEqual(lookup.state["calls"], td.DEFAULT_APPEAR_WAIT_MINUTES * 60 // td.POLL_SECONDS + 1)
+
+    def test_the_timeout_says_what_to_do_instead_of_building_again(self):
+        clock = Clock()
+        with self.assertRaises(td.StepFailed) as caught:
+            td.wait_for_build(self.lookup_appearing_on(999), "43", 1, 30,
+                              now=clock.now, sleep=clock.sleep)
+        problem = caught.exception
+        self.assertIn("43", problem.step)
+        self.assertIn("CFBundleVersion 43", problem.detail)
+        self.assertIn("Do not build again", problem.hint)
+        self.assertIn("iOS TestFlight Distribute", problem.hint)
+        self.assertIn("Actions tab", problem.hint)
+
+
+class FindBuild(QuietCase):
+    """find_build over a fake API: the two waits and the --newest semantics."""
+
+    def builds_answer(self, *pages):
+        return {"/v1/builds": Answers(*pages)}
+
+    def a_build(self, version="43", state="PROCESSING"):
+        return ([build("b1", version, state=state, prerelease="p1")], [prerelease("p1", "0.8.23")])
+
+    def test_it_keeps_looking_until_apple_has_the_build(self):
+        client = FakeClient(collections=self.builds_answer(([], []), ([], []), self.a_build()))
+        found, marketing = td.find_build(client, "app1", "43", appear_wait_minutes=1, poll_seconds=0)
+        self.assertEqual(found["id"], "b1")
+        self.assertEqual(marketing, "0.8.23")
+        self.assertEqual([p for _, p, _ in client.calls], ["/v1/builds"] * 3)
+
+    def test_a_build_that_never_appears_ends_with_the_manual_workflow(self):
+        client = FakeClient(collections={"/v1/builds": ([], [])})
+        with self.assertRaises(SystemExit):
+            td.find_build(client, "app1", "43", appear_wait_minutes=0, poll_seconds=0)
+        text = self.output.getvalue()
+        self.assertIn("never appeared in App Store Connect", text)
+        self.assertIn("Do not build again", text)
+        self.assertIn("iOS TestFlight Distribute", text)
+        # The annotation Actions shows keeps the whole message, newlines escaped.
+        self.assertIn("::error::", text)
+        self.assertIn("%0A", text)
+
+    def test_newest_takes_one_shot_and_warns_that_it_is_a_guess(self):
+        client = FakeClient(collections={"/v1/builds": self.a_build(state="VALID")})
+        found, _ = td.find_build(client, "app1", None, appear_wait_minutes=20, poll_seconds=0)
+        self.assertEqual(found["id"], "b1")
+        self.assertEqual(len(client.calls), 1)
+        self.assertIn("still being ingested is invisible", self.output.getvalue())
+
+    def test_newest_against_an_app_with_no_builds_at_all(self):
+        client = FakeClient(collections={"/v1/builds": ([], [])})
+        with self.assertRaises(SystemExit):
+            td.find_build(client, "app1", None, appear_wait_minutes=20, poll_seconds=0)
+        self.assertIn("no builds at all", self.output.getvalue())
+
+    def test_appearing_late_and_still_processing_runs_both_waits_in_order(self):
+        client = FakeClient(
+            {("GET", "/v1/builds/b1"): {"data": build("b1", "43", state="VALID")}},
+            self.builds_answer(([], []), self.a_build(state="PROCESSING")),
+        )
+        found, _ = td.find_build(client, "app1", "43", appear_wait_minutes=1, poll_seconds=0)
+        self.assertEqual(td.attrs(found).get("processingState"), "PROCESSING")
+        valid = td.wait_until_valid(client, found, wait_minutes=1, poll_seconds=0)
+        self.assertEqual(td.attrs(valid).get("processingState"), "VALID")
+        text = self.output.getvalue()
+        self.assertIn("not in App Store Connect yet", text)
+        self.assertIn("processing state PROCESSING", text)
+        self.assertLess(text.index("not in App Store Connect yet"), text.index("processing state"))
+
+
+class WaitUntilValid(QuietCase):
+    def test_a_build_that_is_already_valid_returns_at_once(self):
+        client = FakeClient()
+        b = build("b1", "43", state="VALID")
+        self.assertIs(td.wait_until_valid(client, b, 1, 0), b)
+        self.assertEqual(client.calls, [])
+
+    def test_a_rejected_build_stops_the_run(self):
+        with self.assertRaises(SystemExit):
+            td.wait_until_valid(FakeClient(), build("b1", "43", state="INVALID"), 1, 0)
+        self.assertIn("can never be distributed", self.output.getvalue())
+
+    def test_a_build_stuck_in_processing_points_at_the_manual_workflow(self):
+        with self.assertRaises(SystemExit):
+            td.wait_until_valid(FakeClient(), build("b1", "43", state="PROCESSING"), 0, 0)
+        text = self.output.getvalue()
+        self.assertIn("is in App Store Connect but is still PROCESSING", text)
+        self.assertIn("Do not build again", text)
+        self.assertIn("build = 43", text)
 
 
 class ProcessingVerdict(unittest.TestCase):
@@ -534,6 +750,25 @@ class Token(unittest.TestCase):
     def test_the_token_is_reused_until_it_nears_expiry(self):
         client = td.Client("KEYID123", "issuer-uuid", self.pem)
         self.assertEqual(client.token(), client.token())
+
+    def test_a_wait_longer_than_the_token_re_mints_it(self):
+        """Both polling loops outlive a 15-minute token; every poll goes through
+        Client.request, which asks for the token again, so this is the whole of
+        what keeps a 20- or 40-minute wait authenticated."""
+        client = td.Client("KEYID123", "issuer-uuid", self.pem)
+        # Stand in for the time module inside the script only, so the wall
+        # clock can jump a whole token's lifetime between the two calls.
+        ticks = iter([1000, 1000 + td.TOKEN_LIFETIME_SECONDS])
+        fake_time = mock.Mock(time=lambda: next(ticks, 1000 + td.TOKEN_LIFETIME_SECONDS),
+                              monotonic=time.monotonic, sleep=lambda _s: None)
+        with mock.patch.object(td, "time", fake_time):
+            first = client.token()
+            second = client.token()
+        self.assertNotEqual(first, second)
+        self.assertEqual(self.decode(first.split(".")[1])["iat"], 1000)
+        claims = self.decode(second.split(".")[1])
+        self.assertEqual(claims["iat"], 1000 + td.TOKEN_LIFETIME_SECONDS)
+        self.assertGreater(claims["exp"], claims["iat"])
 
 
 if __name__ == "__main__":

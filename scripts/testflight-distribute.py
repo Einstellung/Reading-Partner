@@ -7,7 +7,8 @@ is why a successful upload can sit there while every tester still sees the
 previous version. This script does the second half of a release:
 
   1. find the app by bundle id, and the build by CFBundleVersion (our CI stamps
-     the workflow run number there, so "build 178" means "run 178");
+     the workflow run number there, so "build 178" means "run 178") — waiting
+     for the build to exist at all, see TWO WAITS below;
   2. wait out Apple's processing until the build is VALID;
   3. link it to every internal beta group;
   4. for external groups: check the build is even eligible for external testing,
@@ -23,6 +24,30 @@ localization that already has text is kept, a build that already has a review
 submission is not submitted again. So the same script is both the last step of
 the build workflow and the manual rescue for a build uploaded before that step
 existed.
+
+TWO WAITS
+---------
+Steps 1 and 2 are two different waits and run 31455103859 is what happens when
+only the second one exists. `xcrun altool --upload-app` returns when the bytes
+are transferred; App Store Connect ingests the ipa afterwards and only then
+creates a build resource. Between those two moments GET /v1/builds answers
+filter[version]=43 with an empty list — the build has no state yet because the
+build does not exist yet — and the old script read that as "no such build" and
+exited within seconds of a perfectly good upload.
+
+So finding the build is its own polling loop (wait_for_build, default 20
+minutes) that ends where the processing loop (wait_until_valid, default 40
+minutes) begins, and the two print different lines: "not in App Store Connect
+yet" versus "processing state PROCESSING". Both go through Client.request,
+which re-mints the JWT as it nears expiry, so waits far longer than a token's
+15-minute life are fine.
+
+The first wait only makes sense for a build number the caller names. "Take the
+newest build" cannot be waited on: while a fresh upload is ingesting, the
+newest build the API can see is the *previous* one, and distributing that is
+worse than failing — it puts an old build on every tester's device and says it
+succeeded. So a build number is required unless the caller passes --newest to
+say it knows nothing is uploading.
 
 EXTERNAL ORDER
 --------------
@@ -120,9 +145,10 @@ Environment:
                             ~/private_keys/AuthKey_<key id>.p8 when neither is set)
 
 Usage:
-  python3 scripts/testflight-distribute.py                 # newest build
   python3 scripts/testflight-distribute.py --build 178     # that CFBundleVersion
   python3 scripts/testflight-distribute.py --build 178 --dry-run
+  python3 scripts/testflight-distribute.py --newest        # whatever is newest
+                                                           # (never right after an upload)
 
 Needs the `cryptography` package (pip install cryptography); nothing else
 outside the standard library.
@@ -150,6 +176,10 @@ DEFAULT_LOCALE = "en-US"
 # Apple caps a token at 20 minutes; stay under it and re-mint as needed.
 TOKEN_LIFETIME_SECONDS = 15 * 60
 POLL_SECONDS = 30
+# Ingestion (upload accepted -> build resource exists) is usually a couple of
+# minutes; the ceiling is generous because the alternative is failing a build
+# that was uploaded fine.
+DEFAULT_APPEAR_WAIT_MINUTES = 20
 DEFAULT_WAIT_MINUTES = 40
 # The external state usually settles within a minute or two of processingState
 # going VALID; this only exists so a lagging state is waited out rather than
@@ -170,6 +200,31 @@ INTERNAL_ONLY_HINT = """The ipa itself was exported for internal testing only, s
 Connect will not let any external group have it. Nothing in App Store Connect
 fixes this — the export has to be redone without TestFlight-internal-only
 distribution, and the new ipa uploaded as a new build."""
+
+NO_BUILD_NUMBER_HINT = """No build number was given.
+
+Pass --build <CFBundleVersion>; for a CI build that is the run number of the iOS
+TestFlight workflow, which is what stamps CFBundleVersion.
+
+There is deliberately no default. altool returns as soon as the ipa's bytes are
+transferred, and App Store Connect creates the build resource minutes later, so
+in exactly the window where this script is most often run "the newest build" is
+the *previous* build — distributing it would hand every tester an old version
+and report success. Pass --newest to distribute whatever is newest right now,
+which is safe only when nothing is uploading."""
+
+
+def not_appeared_hint(version):
+    """What to do when Apple never ingested the build. Do not build again."""
+    return f"""Do not build again — the ipa is already uploaded, this is Apple's
+ingestion being slow, and a new build would only take a new number.
+Watch App Store Connect > TestFlight > Builds for build {version}. Once it is
+there, go to the repository's Actions tab, run the "iOS TestFlight Distribute"
+workflow and enter {version} as the build; it picks up exactly where this run
+stopped and is safe to run more than once.
+If the build never shows up, Apple rejected the ipa during ingestion and mails
+the reason to the account holder — fix that and upload a new build."""
+
 
 MISSING_COMPLIANCE_HINT = """The build is missing its export compliance answer. Set
 ITSAppUsesNonExemptEncryption in src-tauri/Info.ios.plist so future builds carry
@@ -215,6 +270,22 @@ def relationship_id(resource, name):
     """
     rel = ((resource or {}).get("relationships") or {}).get(name) or {}
     return (rel.get("data") or {}).get("id")
+
+
+def select_version(build_arg, newest=False):
+    """The CFBundleVersion to distribute, or None meaning "the newest build".
+
+    Raises StepFailed when neither was asked for: guessing is the one failure
+    mode that is worse than stopping, because the guess is silently the
+    previous build while a fresh upload is still being ingested. An explicit
+    build number wins over --newest, so passing both is not an error.
+    """
+    version = str(build_arg or "").strip()
+    if version:
+        return version
+    if newest:
+        return None
+    raise StepFailed("no build to distribute", NO_BUILD_NUMBER_HINT)
 
 
 def select_build(builds, version=None):
@@ -427,10 +498,25 @@ def fail(message):
     """Stop with a GitHub-annotated error.
 
     On stdout: Actions only parses workflow commands (::error::) from a step's
-    stdout, and sys.exit(str) would write to stderr.
+    stdout, and sys.exit(str) would write to stderr. A workflow command is one
+    line, so a multi-line message is printed plainly first (that is the copy a
+    human reads in the log) and then again with the newlines escaped the way
+    Actions wants them, so the annotation at the top of the run keeps all of it.
     """
-    print(f"::error::{message}", flush=True)
+    text = str(message)
+    if "\n" in text:
+        print(text, flush=True)
+    escaped = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    print(f"::error::{escaped}", flush=True)
     sys.exit(1)
+
+
+def fail_with(problem):
+    """Stop on a StepFailed, keeping its step, detail and what-to-do-next."""
+    parts = [f"{problem.step}: {problem.detail}"]
+    if problem.hint:
+        parts.append(problem.hint)
+    fail("\n".join(parts))
 
 
 class ApiError(Exception):
@@ -595,7 +681,14 @@ def find_app(client, bundle_id):
     return app
 
 
-def find_build(client, app_id, version):
+def query_build(client, app_id, version):
+    """One lookup: (build, marketing version), or None when Apple has no such build.
+
+    None is the normal answer for the first minutes after an upload — the ipa
+    is ingesting and the build resource does not exist yet — so this returns it
+    rather than failing, and wait_for_build decides how long that is allowed to
+    go on.
+    """
     # Every relationship this script reads has to be named in fields[builds]:
     # the sparse fieldset drops the ones it does not list, relationships
     # included.
@@ -613,10 +706,7 @@ def find_build(client, app_id, version):
     data, included = client.get_all("/v1/builds", query)
     build = select_build(data, version)
     if not build:
-        if version:
-            fail(f"no build with CFBundleVersion {version} under this app. "
-                     "Check that the upload finished and that the number is the build workflow's run number.")
-        fail("this app has no builds at all")
+        return None
 
     marketing = attrs(pick_included(build, included, "preReleaseVersion", "preReleaseVersions")).get("version")
     if not marketing:
@@ -627,6 +717,74 @@ def find_build(client, app_id, version):
             marketing = attrs(payload.get("data")).get("version")
         except ApiError as exc:
             print(f"  could not read the marketing version: {exc}")
+    return build, marketing
+
+
+def wait_for_build(lookup, version, wait_minutes, poll_seconds=POLL_SECONDS,
+                   now=time.monotonic, sleep=time.sleep):
+    """Poll until App Store Connect has the build, and return what lookup found.
+
+    The first of the two waits described at the top of this file: it ends where
+    wait_until_valid begins. Until Apple finishes ingesting the upload the
+    build has no state to poll because it has no resource at all, so this loop
+    watches for existence and the next one watches processingState; the log
+    lines say which of the two a run is sitting in.
+
+    Time and the lookup are injected, so the loop is unit tested without a
+    clock or a network. Every lookup goes through Client.request, which
+    re-mints the JWT once the old one is within a minute of expiry, so waiting
+    here for longer than a token's 15-minute life needs nothing extra.
+    """
+    deadline = now() + wait_minutes * 60
+    waited = 0
+    while True:
+        found = lookup()
+        if found:
+            if waited:
+                print(f"Build {version} appeared after {waited // 60}m{waited % 60:02d}s of ingestion")
+            return found
+        if now() >= deadline:
+            raise StepFailed(
+                f"build {version} never appeared in App Store Connect",
+                f"Apple had not created a build resource for CFBundleVersion {version} "
+                f"{wait_minutes} minutes after the upload finished. altool only reports that the "
+                "bytes were transferred; ingestion happens afterwards and this one has not "
+                "produced a build.",
+                not_appeared_hint(version),
+            )
+        left = int(deadline - now())
+        print(f"  build {version} is not in App Store Connect yet (the upload is still being "
+              f"ingested); polling again in {poll_seconds}s ({left // 60}m left)", flush=True)
+        sleep(poll_seconds)
+        waited += poll_seconds
+
+
+def find_build(client, app_id, version, appear_wait_minutes=DEFAULT_APPEAR_WAIT_MINUTES,
+               poll_seconds=POLL_SECONDS):
+    """(build, marketing version) for the build to distribute.
+
+    With a version: wait for it to exist. Without one: whatever is newest right
+    now, taken in a single shot — there is nothing to wait for, since a newer
+    build appearing later is precisely the case this cannot tell from "no
+    newer build was uploaded" (see select_version).
+    """
+    def lookup():
+        return query_build(client, app_id, version)
+
+    if version:
+        try:
+            build, marketing = wait_for_build(lookup, version, appear_wait_minutes, poll_seconds)
+        except StepFailed as problem:
+            fail_with(problem)
+    else:
+        found = lookup()
+        if not found:
+            fail("this app has no builds at all")
+        build, marketing = found
+        print("  --newest was used: this is whatever App Store Connect had at this moment. "
+              "A build still being ingested is invisible here, so check the upload date below "
+              "is the one you meant.")
+
     print(f"Build: {marketing or '?'} ({attrs(build).get('version')}) id={build['id']} "
           f"uploaded {attrs(build).get('uploadedDate')} state {attrs(build).get('processingState')} "
           f"audience {attrs(build).get('buildAudienceType') or '?'}")
@@ -645,11 +803,14 @@ def wait_until_valid(client, build, wait_minutes, poll_seconds=POLL_SECONDS):
                      "rejected it during processing and it can never be distributed. "
                      "Look at the build in TestFlight for Apple's reason and upload a new one.")
         if time.monotonic() >= deadline:
-            fail(f"build {attrs(build).get('version')} is still {state} after "
-                     f"{wait_minutes} minutes. Processing usually takes a few minutes; re-run the "
-                     "iOS TestFlight Distribute workflow with this build number once it settles.")
+            version = attrs(build).get("version")
+            fail(f"build {version} is in App Store Connect but is still {state} after "
+                 f"{wait_minutes} minutes. Processing usually takes a few minutes.\n"
+                 f"Do not build again. Once TestFlight shows build {version} as ready, run the "
+                 f'"iOS TestFlight Distribute" workflow from the Actions tab with build = {version}.')
         left = int(deadline - time.monotonic())
-        print(f"  processing state {state}; polling again in {poll_seconds}s ({left // 60}m left)", flush=True)
+        print(f"  build {attrs(build).get('version')} is in App Store Connect; processing state "
+              f"{state}; polling again in {poll_seconds}s ({left // 60}m left)", flush=True)
         time.sleep(poll_seconds)
         build = client.request("GET", f"/v1/builds/{build['id']}").get("data") or build
 
@@ -877,24 +1038,39 @@ def main():
     parser = argparse.ArgumentParser(description="Distribute a TestFlight build to every beta group.")
     parser.add_argument("--build", default=None,
                         help="CFBundleVersion to distribute (the build workflow's run number). "
-                             "Omit to take the most recently uploaded build.")
+                             "Required: the script waits for this build to appear rather than "
+                             "guessing, because right after an upload the newest build Apple can "
+                             "see is still the previous one.")
+    parser.add_argument("--newest", action="store_true",
+                        help="distribute whatever build is newest right now instead of naming one. "
+                             "Only safe when no upload is in flight — an ipa that is uploaded but "
+                             "still being ingested is invisible here, so this can pick the build "
+                             "you are replacing. --build wins if both are given.")
     parser.add_argument("--bundle-id", default=DEFAULT_BUNDLE_ID)
     parser.add_argument("--whats-new", default=None,
                         help="What's New text for external testers. Overwrites whatever is there.")
+    parser.add_argument("--appear-wait-minutes", type=int, default=DEFAULT_APPEAR_WAIT_MINUTES,
+                        help="how long to wait for the build to show up in App Store Connect at "
+                             "all (Apple ingesting the upload; only used with --build)")
     parser.add_argument("--wait-minutes", type=int, default=DEFAULT_WAIT_MINUTES,
-                        help="how long to wait for Apple to finish processing the build")
+                        help="how long to wait for Apple to finish processing the build, once it "
+                             "has appeared")
     parser.add_argument("--external-wait-minutes", type=int, default=DEFAULT_EXTERNAL_WAIT_MINUTES,
                         help="how long to wait for the build's external testing state to settle")
     parser.add_argument("--poll-seconds", type=int, default=POLL_SECONDS)
     parser.add_argument("--dry-run", action="store_true", help="print the plan, change nothing")
     args = parser.parse_args()
 
-    version = (args.build or "").strip() or None
+    try:
+        version = select_version(args.build, args.newest)
+    except StepFailed as problem:
+        fail_with(problem)
     key_id, issuer, pem = load_credentials()
     client = Client(key_id, issuer, pem)
 
     app = find_app(client, args.bundle_id)
-    build, marketing = find_build(client, app["id"], version)
+    build, marketing = find_build(client, app["id"], version,
+                                  args.appear_wait_minutes, args.poll_seconds)
     build = wait_until_valid(client, build, args.wait_minutes, args.poll_seconds)
     build_id = build["id"]
 

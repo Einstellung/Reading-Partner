@@ -16,6 +16,15 @@
 #     or re-run after fixing something in App Store Connect. The script is
 #     idempotent, so re-running costs nothing.
 #
+# The build number is required both ways. altool returns when the ipa's bytes
+# are transferred, not when App Store Connect has ingested them, so for the
+# first minutes after an upload the newest build the API can see is the
+# previous one — "distribute the newest build" would then quietly ship the
+# build that was just replaced. Named a number, the script waits for that build
+# to appear (20 minutes) before it waits for it to finish processing (40).
+# Distributing whatever is newest is still possible on purpose, by running
+# scripts/testflight-distribute.py --newest by hand.
+#
 # No macOS runner needed; this is only HTTP against Apple's API.
 #
 # Secrets (the same three ios-testflight.yml already uses):
@@ -27,22 +36,22 @@ on:
   workflow_dispatch:
     inputs:
       build:
-        description: "CFBundleVersion to distribute — the run number of the iOS TestFlight build. Leave empty for the newest build."
+        description: "CFBundleVersion to distribute — the run number of the iOS TestFlight build that produced it. Required: the newest build cannot be guessed while an upload is still being ingested."
         type: string
-        required: false
+        required: true
   workflow_call:
     inputs:
       build:
         type: string
-        required: false
+        required: true
 
 jobs:
   distribute:
     runs-on: ubuntu-latest
-    # The script waits out Apple's processing (up to 40 minutes) and then the
-    # build's external testing state (up to 15 more) before it can link
-    # anything; a fresh upload usually clears both within a few minutes.
-    timeout-minutes: 75
+    # Three waits, worst case: the build appearing in App Store Connect at all
+    # (up to 20 minutes), Apple's processing (40), the build's external testing
+    # state (15). A fresh upload usually clears all three within a few minutes.
+    timeout-minutes: 95
     steps:
       - uses: actions/checkout@v4
 
@@ -68,10 +77,8 @@ jobs:
           BUILD: ${{ inputs.build }}
         run: |
           set -euo pipefail
-          args=()
-          if [ -n "${BUILD:-}" ]; then
-            args+=(--build "$BUILD")
-          else
-            echo "No build number given; distributing the most recently uploaded build."
+          if [ -z "${BUILD:-}" ]; then
+            echo "::error::No build number. Re-run this workflow with the run number of the iOS TestFlight build; the script does not guess which build to distribute."
+            exit 1
           fi
-          python3 scripts/testflight-distribute.py "${args[@]}"
+          python3 scripts/testflight-distribute.py --build "$BUILD"
