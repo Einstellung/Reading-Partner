@@ -1,17 +1,23 @@
-// The info-briefing orchestrator (docs/16): collect every source, run one triage
-// AI call under the stall watchdog, save the briefing + article cache. Like the
-// notes pipeline it is a resumable state machine — the run checkpoint in
-// run-state.ts is its state.json — with the same shape besides: injected deps so
-// it runs headless in tests, subscribe/snapshot so the vestibule can show
-// liveness, stoppable.
+// The info-briefing orchestrator (docs/16, docs/35): a funnel of four phases —
+// discover headlines, screen them, fetch the survivors' bodies, triage what is
+// left — ending in the briefing and the article cache. Like the notes pipeline
+// it is a resumable state machine — the run checkpoint in run-state.ts is its
+// state.json — with the same shape besides: injected deps so it runs headless in
+// tests, subscribe/snapshot so the vestibule can show liveness, stoppable.
 //
-// Resumable because of where it runs (docs/22): on a phone the collection of a
-// dozen sources takes minutes, and the OS may suspend or kill a backgrounded
-// webview at any point in them. Fetching is the expensive half of a run — in
-// wall clock, in the reader's patience, and in politeness to the sources — so a
-// run that is cut off keeps every source it already fetched and the next start
-// picks up the rest.
+// The funnel is what keeps a briefing's cost off the subscription count: the two
+// expensive steps (a page fetch per article, a triage prompt carrying every
+// article's text) only ever see the few items screening kept, while the cheap
+// steps scale with the day.
+//
+// Resumable because of where it runs (docs/22): on a phone a run takes minutes,
+// and the OS may suspend or kill a backgrounded webview at any point in it.
+// Every phase spends something the reader cannot get back — requests, tokens,
+// patience — so a run that is cut off keeps what each phase already paid for and
+// the next start picks up from there: discovered sources are not rediscovered,
+// judged items are not rejudged, fetched bodies are not refetched.
 
+import { isAbortError } from "../../platform/app/abort";
 import {
   resolveWatchdogConfig,
   runWithWatchdog,
@@ -19,29 +25,59 @@ import {
   type AiCallOptions,
   type WatchdogConfig,
 } from "../../ai/watchdog";
+import { mapSettled } from "../sources/pool";
+import {
+  SCREEN_BATCH_SIZE,
+  SCREEN_CONCURRENCY,
+  SCREEN_MAX_KEEP,
+  screenBatches,
+  type ScreenVerdict,
+} from "./screen";
 import type { CachedArticle } from "./store";
 import { todayLocal } from "./store";
 import {
+  applyBody,
   applySourceResult,
+  applyVerdicts,
   collectProgress,
   createRunState,
+  emptyProgress,
+  finishScreening,
   isResumable,
+  pendingBodies,
   pendingSources,
   retryFailedSources,
+  selectedItems,
   syncSources,
+  unscreenedItems,
   type CollectProgress,
+  type InfoRunPhase,
   type InfoRunState,
   type InfoSourceRef,
   type SourceResult,
 } from "./run-state";
 import type { FeedbackEvent } from "../../observation/feedback";
-import type { Briefing, BriefingItemMeta, TriageResult } from "./types";
+import type { Briefing, BriefingItemMeta, ScreenSummary, TriageResult } from "./types";
 import type { InfoItem } from "../sources/item";
 
 export type { AiCallOptions };
 export type { CollectProgress, InfoSourceRef, SourceResult };
 
 const ACTIVITY_NOTIFY_MS = 250;
+
+// How many settled bodies may accumulate before the checkpoint is written. Per
+// body would be correct and wasteful: the checkpoint is one self-contained file
+// holding every body collected so far, so writing it 120 times over would cost
+// more than the fetches it protects.
+const BODY_CHECKPOINT_EVERY = 10;
+
+// Phase order, so a resumed run can tell which phases it is already past.
+const PHASE_RANK: Record<InfoRunPhase, number> = {
+  discovering: 0,
+  screening: 1,
+  fetching: 2,
+  triaging: 3,
+};
 
 export interface InfoDeps {
   loadBriefing(date: string): Promise<Briefing | null>;
@@ -54,21 +90,38 @@ export interface InfoDeps {
   // The enabled sources, in list order. The run checkpoint is per source, so the
   // roster has to be known before any fetching starts.
   listSources(): Promise<InfoSourceRef[]>;
-  // Fetch the given sources fully (list + per-article bodies). A resumed run
-  // passes only what it still owes. `onSettled` is awaited as each source
-  // finishes, which is what makes the checkpoint per source rather than per run:
-  // the slow ones cannot lose the fast ones' work. Per-source isolation stays in
-  // the engine — a failed source arrives here as a result with an error, not as
-  // a thrown run.
+  // Discovery (docs/35): ask each source for its list of items — headlines,
+  // blurbs, dates, and whatever bodies the list response already carried — and
+  // send no per-article request. A resumed run passes only what it still owes.
+  // `onSettled` is awaited as each source finishes, which is what makes the
+  // checkpoint per source rather than per run: the slow ones cannot lose the
+  // fast ones' work. Per-source isolation stays in the engine — a failed source
+  // arrives here as a result with an error, not as a thrown run.
   //
-  // `signal` is the Stop, and it has to reach the fetches: collection is the
-  // long half of a run, so a Stop that only took effect at the phase boundary
-  // would look like a button that does nothing. A source cut off mid-fetch is
-  // not reported, so it stays pending and the resume refetches it; the ones
-  // that already settled are kept.
-  collect(
+  // `signal` is the Stop, and it has to reach the fetches: a Stop that only took
+  // effect at the phase boundary would look like a button that does nothing. A
+  // source cut off mid-fetch is not reported, so it stays pending and the resume
+  // rediscovers it; the ones that already settled are kept.
+  discover(
     sources: InfoSourceRef[],
     onSettled: (result: SourceResult) => Promise<void>,
+    signal: AbortSignal,
+  ): Promise<void>;
+  // Screening: one AI call over one batch of discovered items, answering only
+  // "is this worth fetching the body for". The pipeline owns the batching and
+  // the concurrency; this is the single call, wrapped by the watchdog outside.
+  // Throws on a stall/error so the watchdog can retry the attempt.
+  screen(
+    input: { profile: string; items: InfoItem[] },
+    opts: AiCallOptions,
+  ): Promise<ScreenVerdict[]>;
+  // Material: fetch the article bodies of the items screening kept. `onSettled`
+  // is awaited per item so a run cut off keeps the bodies it paid for. A body
+  // that will not come degrades the item to summary-only rather than failing;
+  // only a Stop throws.
+  fetchBodies(
+    items: InfoItem[],
+    onSettled: (item: InfoItem) => Promise<void>,
     signal: AbortSignal,
   ): Promise<void>;
   // The one triage AI call, wrapped by the watchdog. Validates + retries parse
@@ -77,6 +130,10 @@ export interface InfoDeps {
     input: { profile: string; feedback: FeedbackEvent[]; items: InfoItem[]; readerContext?: string },
     opts: AiCallOptions,
   ): Promise<TriageResult>;
+  // Where a run's wall clock went, one line per phase (live.ts writes them to
+  // events-info.jsonl). Optional: instrumentation never decides whether a
+  // briefing generates.
+  logPhase?(phase: InfoRunPhase, data: Record<string, number>): void;
   saveBriefing(briefing: Briefing): Promise<void>;
   saveArticles(date: string, articles: Record<string, CachedArticle>): Promise<void>;
   // Persist / load the day's item snapshot so a profile change can re-triage the
@@ -101,7 +158,9 @@ export interface InfoDeps {
   today?(): string;
 }
 
-export type InfoPhase = "idle" | "fetching" | "triaging";
+// The run phases as the UI names them, plus idle. Same four as InfoRunPhase
+// (docs/35): "fetching" is the article-body step, not the whole collection.
+export type InfoPhase = "idle" | InfoRunPhase;
 
 export interface InfoActivity {
   startedAt: number;
@@ -327,7 +386,7 @@ export class InfoPipeline {
     this.running = true;
     this.stopping = false;
     this.error = null;
-    this.phase = "fetching";
+    this.phase = "discovering";
     this.collect = null;
     this.activity = null;
     this.stopController = new AbortController();
@@ -337,7 +396,9 @@ export class InfoPipeline {
     try {
       await this.prune();
       await this.startOrContinue(date, opts.retryFailed);
-      await this.collectPhase();
+      await this.discoverPhase();
+      await this.screenPhase();
+      await this.materialPhase();
       await this.triagePhase(date);
     } catch (e) {
       const stopped = e instanceof StoppedError;
@@ -385,28 +446,56 @@ export class InfoPipeline {
       const adopted = retryFailed
         ? retryFailedSources(syncSources(prior, sources))
         : syncSources(prior, sources);
-      // A run that got as far as triage steps back to collecting when it turns
-      // out to owe a source after all — one that just failed and is being
-      // retried, or one subscribed to since. Triage reads every item at once,
-      // so a source collected late still lands in the same briefing.
-      const phase = pendingSources(adopted).length > 0 ? "collecting" : adopted.phase;
-      this.run = { ...adopted, phase, halt: undefined };
+      // A run that got past discovery steps back to it when it turns out to owe
+      // a source after all — one that just failed and is being retried, or one
+      // subscribed to since. The selection goes with it: items arriving late
+      // have to be screened alongside the rest, and the ceiling has to be
+      // applied to the day as a whole. The verdicts and the bodies already paid
+      // for are kept, so stepping back costs only the source that is owed.
+      const owed = pendingSources(adopted).length > 0;
+      this.run = owed
+        ? { ...adopted, phase: "discovering", selection: undefined, halt: undefined }
+        : { ...adopted, halt: undefined };
     } else {
       this.run = createRunState(date, this.deps.now(), sources);
     }
-    this.phase = this.run.phase === "triaging" ? "triaging" : "fetching";
+    this.phase = this.run.phase;
     this.touch();
     await this.persist();
   }
 
-  // Fetch every source the run still owes, checkpointing each as it settles. A
-  // run resumed into the triage phase skips this entirely.
-  private async collectPhase(): Promise<void> {
-    const state = this.run!;
-    if (state.phase !== "collecting") return;
-    const pending = pendingSources(state);
+  // A phase the run is already past. Phases only ever move forward within a run,
+  // so a resumed one skips straight to where it stopped.
+  private past(phase: InfoRunPhase): boolean {
+    return PHASE_RANK[this.run!.phase] > PHASE_RANK[phase];
+  }
+
+  // Enter a phase: publish it and start its clock.
+  private enter(phase: InfoRunPhase): number {
+    this.phase = phase;
+    this.notify();
+    return this.deps.now();
+  }
+
+  private logPhase(phase: InfoRunPhase, startedAt: number, data: Record<string, number>): void {
+    this.deps.logPhase?.(phase, { ms: Math.round(this.deps.now() - startedAt), ...data });
+  }
+
+  // Move the run to the next phase and checkpoint it there.
+  private async advance(state: InfoRunState): Promise<void> {
+    this.run = state;
+    this.touch();
+    await this.persist();
+  }
+
+  // Discovery: ask every source the run still owes for its item list — one
+  // request per source, no article pages — checkpointing each as it settles.
+  private async discoverPhase(): Promise<void> {
+    if (this.past("discovering")) return;
+    const startedAt = this.enter("discovering");
+    const pending = pendingSources(this.run!);
     if (pending.length > 0) {
-      await this.deps.collect(
+      await this.deps.discover(
         pending,
         async (result) => {
           this.run = applySourceResult(this.run!, result, this.deps.now());
@@ -420,9 +509,99 @@ export class InfoPipeline {
     if (this.run!.items.length === 0) {
       throw new Error("No articles could be fetched from any source.");
     }
-    this.run = { ...this.run!, phase: "triaging", updatedAt: this.deps.now() };
-    this.touch();
-    await this.persist();
+    this.logPhase("discovering", startedAt, {
+      sources: this.run!.sources.length,
+      items: this.run!.items.length,
+    });
+    await this.advance({ ...this.run!, phase: "screening", updatedAt: this.deps.now() });
+  }
+
+  // Screening: batches of headlines, a few calls at a time, each batch
+  // checkpointed as it lands so a Stop or a crash never buys the same verdicts
+  // twice. A batch that fails after its watchdog retries fails the run rather
+  // than guessing on the reader's behalf — the batches that landed are kept, so
+  // the next Generate pays only for the rest.
+  private async screenPhase(): Promise<void> {
+    if (this.past("screening")) return;
+    const startedAt = this.enter("screening");
+    const owed = unscreenedItems(this.run!);
+    const batches = screenBatches(owed, SCREEN_BATCH_SIZE);
+    if (batches.length > 0) {
+      const profile = await this.deps.loadProfile();
+      const signal = this.stopController!.signal;
+      const results = await mapSettled(
+        batches,
+        async (batch) => {
+          const ids = batch.map((it) => it.id);
+          const verdicts = await runWithWatchdog(
+            (opts) => this.deps.screen({ profile, items: batch }, opts),
+            this.config,
+            { now: this.deps.now, sleep: this.deps.sleep, setTimer: this.deps.setTimer },
+            { onAttempt: () => {}, onProgress: () => {} },
+            signal,
+          );
+          this.run = applyVerdicts(this.run!, ids, verdicts, this.deps.now());
+          this.touch();
+          await this.persist();
+        },
+        { limit: SCREEN_CONCURRENCY, signal },
+      );
+      for (const r of results) {
+        if (r.ok) continue;
+        if (signal.aborted || r.error instanceof StoppedError || isAbortError(r.error)) {
+          throw new StoppedError();
+        }
+        throw r.error;
+      }
+    }
+    if (this.stopController!.signal.aborted) throw new StoppedError();
+    const screened = finishScreening(this.run!, SCREEN_MAX_KEEP, this.deps.now());
+    const cappedOut = screened.selection!.cappedOut;
+    if (cappedOut > 0) {
+      // Never a silent trim: the log, the progress line and the briefing all
+      // carry it, so a day that lost items to the ceiling says so.
+      console.warn(
+        `briefing screen kept ${screened.selection!.ids.length} items and cut ${cappedOut} more at the ${SCREEN_MAX_KEEP} cap`,
+      );
+    }
+    this.logPhase("screening", startedAt, {
+      items: this.run!.items.length,
+      batches: batches.length,
+      kept: screened.selection!.ids.length,
+      dropped: this.run!.items.length - screened.selection!.ids.length,
+      cappedOut,
+    });
+    await this.advance(screened);
+  }
+
+  // Material: article bodies, for the survivors only. Checkpointed in small
+  // batches — one write per body would cost more than the fetches it protects.
+  private async materialPhase(): Promise<void> {
+    if (this.past("fetching")) return;
+    const startedAt = this.enter("fetching");
+    const owed = pendingBodies(this.run!);
+    if (owed.length > 0) {
+      let sinceWrite = 0;
+      await this.deps.fetchBodies(
+        owed,
+        async (item) => {
+          this.run = applyBody(this.run!, item, this.deps.now());
+          this.touch();
+          if (++sinceWrite >= BODY_CHECKPOINT_EVERY) {
+            sinceWrite = 0;
+            await this.persist();
+          }
+        },
+        this.stopController!.signal,
+      );
+      await this.persist();
+    }
+    if (this.stopController!.signal.aborted) throw new StoppedError();
+    this.logPhase("fetching", startedAt, {
+      items: this.run!.selection?.ids.length ?? 0,
+      fetched: this.run!.material.length,
+    });
+    await this.advance({ ...this.run!, phase: "triaging", updatedAt: this.deps.now() });
   }
 
   // The one AI call, then the day's files. The checkpoint goes last: until the
@@ -430,13 +609,24 @@ export class InfoPipeline {
   private async triagePhase(date: string): Promise<void> {
     this.phase = "triaging";
     this.notify();
-    const items = this.run!.items;
+    // Only what screening kept, with bodies: the screened-out items were never
+    // fetched, so they have nothing for triage to read. They survive in the
+    // briefing as a count and a list of ids (screenSummary).
+    const items = selectedItems(this.run!);
+    const screen = screenSummary(this.run!);
     const [profile, feedback, readerContext] = await Promise.all([
       this.deps.loadProfile(),
       this.deps.loadFeedback(),
       this.readerContext(),
     ]);
-    const briefing = await this.triageToBriefing(items, profile, feedback, readerContext, date);
+    const briefing = await this.triageToBriefing(
+      items,
+      profile,
+      feedback,
+      readerContext,
+      date,
+      screen,
+    );
     await this.deps.saveArticles(date, articleCache(items));
     await this.deps.saveItems(date, items);
     await this.deps.saveBriefing(briefing);
@@ -471,14 +661,26 @@ export class InfoPipeline {
       }
       if (this.stopController.signal.aborted) throw new StoppedError();
       // Surface the item total so the progress card reads "triaging N items".
-      this.collect = { total: 0, done: 0, failed: 0, items: items.length, lastDone: null };
+      this.collect = emptyProgress(items.length);
       this.notify();
       const [profile, feedback, readerContext] = await Promise.all([
         this.deps.loadProfile(),
         this.deps.loadFeedback(),
         this.readerContext(),
       ]);
-      const briefing = await this.triageToBriefing(items, profile, feedback, readerContext, date);
+      // The screen's tally belongs to the day, not to the triage call, so a
+      // re-triage carries the one the collecting run wrote rather than dropping
+      // it — otherwise the companion would read the new briefing as the whole
+      // day when most of it was screened out hours ago.
+      const screen = this.briefing?.date === date ? this.briefing.screen : undefined;
+      const briefing = await this.triageToBriefing(
+        items,
+        profile,
+        feedback,
+        readerContext,
+        date,
+        screen,
+      );
       await this.deps.saveBriefing(briefing);
       this.briefing = briefing;
     } catch (e) {
@@ -505,6 +707,7 @@ export class InfoPipeline {
     feedback: FeedbackEvent[],
     readerContext: string,
     date: string,
+    screen?: ScreenSummary,
   ): Promise<Briefing> {
     const validIds = new Set(items.map((it) => it.id));
     const result = await runWithWatchdog(
@@ -530,6 +733,22 @@ export class InfoPipeline {
       outOfLane: result.outOfLane.filter((r) => validIds.has(r.itemId)),
       filtered: result.filtered.filter((r) => validIds.has(r.itemId)),
       items: itemsMeta(items),
+      ...(screen ? { screen } : {}),
     };
   }
+}
+
+// What the screen did, for the briefing to carry (docs/35). Counts plus the ids
+// it dropped and nothing more: the companion can be asked about them, and they
+// can never fill its context the way the triage-level filtered list does.
+function screenSummary(state: InfoRunState): ScreenSummary {
+  const keptIds = new Set(state.selection?.ids ?? []);
+  const droppedIds = state.items.map((it) => it.id).filter((id) => !keptIds.has(id));
+  return {
+    discovered: state.items.length,
+    kept: keptIds.size,
+    dropped: droppedIds.length,
+    cappedOut: state.selection?.cappedOut ?? 0,
+    droppedIds,
+  };
 }

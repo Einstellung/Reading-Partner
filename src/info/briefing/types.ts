@@ -41,6 +41,20 @@ export interface BriefingItemMeta {
   publishedAt: string;
 }
 
+// What the screening stage did to the day (docs/35): how many items the sources
+// published, how many were judged worth fetching, and the ids of the ones that
+// were not. Counts and ids only — deliberately not titles or reasons. This is
+// the coarse half of a two-level filtered record: the fine half is the tiered
+// `filtered` list below, which triage wrote after reading the full text.
+export interface ScreenSummary {
+  discovered: number;
+  kept: number;
+  dropped: number;
+  // Keeps cut by the daily fetch ceiling rather than by the screen's judgement.
+  cappedOut: number;
+  droppedIds: string[];
+}
+
 export interface Briefing {
   // Local "YYYY-MM-DD" the briefing is for; only today's is ever shown.
   date: string;
@@ -53,6 +67,9 @@ export interface Briefing {
   outOfLane: OutOfLane[];
   filtered: Filtered[];
   items: Record<string, BriefingItemMeta>;
+  // Absent on briefings written before the funnel, and on any run where nothing
+  // was screened.
+  screen?: ScreenSummary;
 }
 
 // The strict JSON shape triage returns (tiers only; the host attaches `items`,

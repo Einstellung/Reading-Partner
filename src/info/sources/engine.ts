@@ -10,6 +10,12 @@
 // by the whole run, and every fetch takes the caller's AbortSignal: a Stop
 // pressed during collection has to reach the request in flight, not just the
 // phase boundary after it.
+//
+// Discovery and material are separable (docs/35). `discoveryOnly` runs a
+// descriptor for its headlines alone — no article-page request, no detail
+// endpoint — and fetchBodies fills the bodies in later, for a chosen few. A
+// body that the discovery response already carried (a feed that ships its own
+// full text) is kept either way: it cost nothing to bring back.
 
 import { isAbortError, throwIfAborted } from "../../platform/app/abort";
 import { fetchText, infoFetch, type FetchFn } from "../extract/http";
@@ -35,6 +41,13 @@ export interface CollectDeps {
   extract?: ExtractReadable;
   // Item text cap fed to triage/chat. Default 20k.
   textMaxChars?: number;
+  // Discovery only (docs/35): take the headlines, summaries and whatever bodies
+  // the list response already carried, and send no per-article request — no
+  // page fetch, no detail endpoint. This is what makes a briefing's cost
+  // independent of how much the reader subscribes to: hundreds of items are
+  // discovered for one request per source, and only the few that survive
+  // screening are ever fetched (fetchBodies).
+  discoveryOnly?: boolean;
   now?: () => number;
   // Cancels the whole collection: requests in flight are aborted and nothing
   // queued is sent. Sources that settled before the abort are still reported —
@@ -78,6 +91,18 @@ interface Filled {
   extract?: ExtractReadable;
   signal?: AbortSignal;
   gate?: Gate;
+  discoveryOnly?: boolean;
+}
+
+function fill(deps: CollectDeps): Filled {
+  return {
+    fetchFn: deps.fetchFn ?? infoFetch,
+    textMaxChars: deps.textMaxChars ?? 20_000,
+    extract: deps.extract,
+    signal: deps.signal,
+    gate: deps.gate,
+    discoveryOnly: deps.discoveryOnly,
+  };
 }
 
 function summaryText(html: string): string {
@@ -124,12 +149,20 @@ async function feedItem(desc: SourceDescriptor, e: FeedEntry, deps: Filled): Pro
     id: itemId(desc.id, key),
     source: desc.id,
     sourceName: desc.name,
+    sourceKey: key,
     title: e.title || key,
     url: e.link,
     publishedAt: e.publishedAt,
     summaryOnly: true,
   };
-  const listSummary = summaryText(e.description || e.summary) || e.category;
+  // The blurb, from whichever body-bearing field the feed actually filled.
+  // Nature's RDF puts its editorial summary in <content:encoded> and leaves
+  // <description> empty, which used to leave the item blurbless — and under the
+  // funnel (docs/35) a blurbless item is one the screen has to judge from its
+  // headline alone. The fallback order is feedFieldBody's, not a second one:
+  // this is the same question ("which field holds the text") asked for a shorter
+  // answer, and the HTML that comes back is flattened by summaryText.
+  const listSummary = summaryText(feedFieldBody(e, "description")) || e.category;
   if (listSummary) base.summary = listSummary;
 
   if (desc.fulltext.mode === "feed-field") {
@@ -137,33 +170,43 @@ async function feedItem(desc: SourceDescriptor, e: FeedEntry, deps: Filled): Pro
     const body = feedFieldBody(e, desc.fulltext.field);
     const truncated = !!(marker && body.includes(marker));
     // A metered-paywall source (noFetchPage) uses the feed body as-is; others
-    // may fall back to fetching the page when the feed body came up empty.
-    if (!body && !desc.noFetchPage && deps.extract) {
+    // may fall back to fetching the page when the feed body came up empty —
+    // which is a per-article request, so discovery leaves it to fetchBodies.
+    if (!body && !deps.discoveryOnly && !desc.noFetchPage && deps.extract) {
       const fetched = await fetchAndExtract(e.link, deps);
-      if (fetched) {
-        base.contentHtml = fetched.contentHtml;
-        base.textContent = fetched.textContent.slice(0, deps.textMaxChars);
-        if (fetched.title) base.title = fetched.title;
-        base.summaryOnly = false;
-        return base;
-      }
+      if (fetched) return applyPage(base, fetched, deps.textMaxChars);
     }
     if (body) {
       base.contentHtml = body;
       base.textContent = htmlToText(body).slice(0, deps.textMaxChars);
       base.summaryOnly = truncated; // full body -> not summary-only, unless truncated
     }
-  } else if (desc.fulltext.mode === "fetch-page" && !desc.noFetchPage && deps.extract) {
+  } else if (
+    desc.fulltext.mode === "fetch-page" &&
+    !deps.discoveryOnly &&
+    !desc.noFetchPage &&
+    deps.extract
+  ) {
     const fetched = await fetchAndExtract(e.link, deps);
-    if (fetched) {
-      base.contentHtml = fetched.contentHtml;
-      base.textContent = fetched.textContent.slice(0, deps.textMaxChars);
-      if (fetched.title) base.title = fetched.title;
-      base.summaryOnly = false;
-    }
+    if (fetched) applyPage(base, fetched, deps.textMaxChars);
   }
   // fulltext "none": summary-only by construction.
   return base;
+}
+
+// Fold an extracted article page into an item, in place. The extractor's title
+// wins over the list's when it has one: a list page often carries a slug where
+// the article carries the headline.
+function applyPage(
+  item: InfoItem,
+  fetched: { title: string; contentHtml: string; textContent: string },
+  textMaxChars: number,
+): InfoItem {
+  item.contentHtml = fetched.contentHtml;
+  item.textContent = fetched.textContent.slice(0, textMaxChars);
+  if (fetched.title) item.title = fetched.title;
+  item.summaryOnly = false;
+  return item;
 }
 
 // The per-article half of a source, run several at a time under the global cap.
@@ -224,23 +267,24 @@ async function collectListpage(desc: SourceDescriptor, deps: Filled): Promise<In
   return perItem(links, (link) => listpageItem(desc, link, deps), deps);
 }
 
+// A list page hands over links and nothing else, so a discovery-only run leaves
+// the URL standing in for the headline. That is thin material to screen on, and
+// it is the honest shape of this pipe: the headline lives on the article page,
+// which is exactly the request the funnel is refusing to make for every item.
 async function listpageItem(desc: SourceDescriptor, link: string, deps: Filled): Promise<InfoItem> {
   const base: InfoItem = {
     id: itemId(desc.id, link),
     source: desc.id,
     sourceName: desc.name,
+    sourceKey: link,
     title: link,
     url: link,
     publishedAt: "",
     summaryOnly: true,
   };
+  if (deps.discoveryOnly) return base;
   const fetched = await fetchAndExtract(link, deps);
-  if (fetched) {
-    base.contentHtml = fetched.contentHtml;
-    base.textContent = fetched.textContent.slice(0, deps.textMaxChars);
-    if (fetched.title) base.title = fetched.title;
-    base.summaryOnly = false;
-  }
+  if (fetched) applyPage(base, fetched, deps.textMaxChars);
   return base;
 }
 
@@ -284,6 +328,7 @@ async function jsonApiItem(
     id: itemId(desc.id, id),
     source: desc.id,
     sourceName: desc.name,
+    sourceKey: id,
     title: pickString(row, disc.fields.title) || id,
     url,
     publishedAt: pickString(row, disc.fields.publishedAt),
@@ -300,32 +345,43 @@ async function jsonApiItem(
       base.textContent = htmlToText(body).slice(0, deps.textMaxChars);
       base.summaryOnly = false;
     }
-  } else if (desc.fulltext.mode === "detail-endpoint") {
-    const ft = desc.fulltext;
-    try {
-      const detailJson = await fetchText(
-        fillTemplate(ft.urlTemplate, id),
-        deps.fetchFn,
-        requestInit(desc, ft.headers),
-        { signal: deps.signal },
-      );
-      const detail = JSON.parse(detailJson);
-      const body = detailContent(detail, ft.contentPath);
-      if (body) {
-        base.contentHtml = body;
-        base.textContent = htmlToText(body).slice(0, deps.textMaxChars);
-        base.summaryOnly = false;
-      }
-      const t = ft.titlePath ? detailContent(detail, ft.titlePath) : "";
-      if (t) base.title = t;
-      const p = ft.publishedAtPath ? detailContent(detail, ft.publishedAtPath) : "";
-      if (p) base.publishedAt = p;
-    } catch (e) {
-      // Detail fetch failed — keep the list-summary item, flagged summary-only.
-      if (isAbortError(e)) throw e;
-    }
+  } else if (desc.fulltext.mode === "detail-endpoint" && !deps.discoveryOnly) {
+    await fetchDetail(desc, base, deps);
   }
   return base;
+}
+
+// The detail-endpoint body for one item, folded in place. The article's own key
+// (sourceKey) addresses it, which is why discovery records that key: this runs
+// again in the material step, with only the item in hand.
+async function fetchDetail(desc: SourceDescriptor, item: InfoItem, deps: Filled): Promise<InfoItem> {
+  if (desc.fulltext.mode !== "detail-endpoint") return item;
+  const ft = desc.fulltext;
+  const key = item.sourceKey;
+  if (!key) return item;
+  try {
+    const detailJson = await fetchText(
+      fillTemplate(ft.urlTemplate, key),
+      deps.fetchFn,
+      requestInit(desc, ft.headers),
+      { signal: deps.signal },
+    );
+    const detail = JSON.parse(detailJson);
+    const body = detailContent(detail, ft.contentPath);
+    if (body) {
+      item.contentHtml = body;
+      item.textContent = htmlToText(body).slice(0, deps.textMaxChars);
+      item.summaryOnly = false;
+    }
+    const t = ft.titlePath ? detailContent(detail, ft.titlePath) : "";
+    if (t) item.title = t;
+    const p = ft.publishedAtPath ? detailContent(detail, ft.publishedAtPath) : "";
+    if (p) item.publishedAt = p;
+  } catch (e) {
+    // Detail fetch failed — keep the list-summary item, flagged summary-only.
+    if (isAbortError(e)) throw e;
+  }
+  return item;
 }
 
 // Merge a source's UA override + any per-request headers into a fetch init. The
@@ -351,13 +407,7 @@ export async function collectSource(
   deps: CollectDeps = {},
 ): Promise<InfoItem[]> {
   throwIfAborted(deps.signal);
-  const filled: Filled = {
-    fetchFn: deps.fetchFn ?? infoFetch,
-    textMaxChars: deps.textMaxChars ?? 20_000,
-    extract: deps.extract,
-    signal: deps.signal,
-    gate: deps.gate,
-  };
+  const filled = fill(deps);
   switch (desc.discovery.kind) {
     case "feed":
       return collectFeed(desc, filled);
@@ -370,6 +420,86 @@ export async function collectSource(
     default:
       return [];
   }
+}
+
+// --- material: bodies for a chosen few -------------------------------------
+
+// Fetch the article bodies of items discovery brought back headline-only
+// (docs/35). The counterpart to `discoveryOnly`: the funnel screens on
+// headlines, and only what survives gets a page request. Items are grouped by
+// source so the per-source politeness limit still applies, and the whole set
+// runs under one shared ceiling.
+//
+// Never throws for a body that would not come — a failed page fetch leaves the
+// item summary-only, which triage handles — so the only rejection is a
+// cancellation, which surfaces after the settled ones have been reported.
+// `onSettled` is awaited per item, so the caller can checkpoint what it paid
+// for before the slow hosts come back.
+//
+// The result keeps the input order, with every item either updated or handed
+// back untouched.
+export async function fetchBodies(
+  items: InfoItem[],
+  descriptors: SourceDescriptor[],
+  deps: CollectDeps = {},
+  onSettled?: (item: InfoItem) => Promise<void> | void,
+): Promise<InfoItem[]> {
+  throwIfAborted(deps.signal);
+  const filled = fill({ ...deps, discoveryOnly: false });
+  const gate = deps.gate ?? new Gate(GLOBAL_CONCURRENCY);
+  const descById = new Map(descriptors.map((d) => [d.id, d]));
+  const bySource = new Map<string, InfoItem[]>();
+  for (const it of items) {
+    const group = bySource.get(it.source);
+    if (group) group.push(it);
+    else bySource.set(it.source, [it]);
+  }
+  const done = new Map<string, InfoItem>();
+  await Promise.all(
+    [...bySource].map(async ([sourceId, group]) => {
+      const desc = descById.get(sourceId);
+      await mapSettled(
+        group,
+        async (it) => {
+          const out = desc ? await fetchBody(desc, it, filled) : it;
+          done.set(out.id, out);
+          await onSettled?.(out);
+        },
+        { limit: SOURCE_CONCURRENCY, gate, signal: filled.signal },
+      );
+    }),
+  );
+  throwIfAborted(filled.signal);
+  return items.map((it) => done.get(it.id) ?? it);
+}
+
+// One item's body, by the descriptor's fulltext mode. A body already in hand
+// (a feed that shipped its own full text) is left alone: re-fetching it would
+// be the request the funnel exists to avoid.
+async function fetchBody(
+  desc: SourceDescriptor,
+  item: InfoItem,
+  deps: Filled,
+): Promise<InfoItem> {
+  const next: InfoItem = { ...item };
+  switch (desc.fulltext.mode) {
+    case "none":
+      return next;
+    case "detail-endpoint":
+      return fetchDetail(desc, next, deps);
+    case "feed-field":
+      // The feed's own field is the body; a page fetch is only the fallback for
+      // when it came back empty, exactly as discovery would have done it.
+      if (next.textContent) return next;
+      if (desc.noFetchPage || !deps.extract) return next;
+      break;
+    case "fetch-page":
+      if (desc.noFetchPage || !deps.extract) return next;
+      break;
+  }
+  const fetched = await fetchAndExtract(next.url, deps);
+  if (fetched) applyPage(next, fetched, deps.textMaxChars);
+  return next;
 }
 
 // Per-source health, surfaced to the source-list UI later. Derived (not synced).

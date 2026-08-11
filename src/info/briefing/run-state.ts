@@ -1,16 +1,21 @@
-// The resumable state of one day's briefing generation (docs/16). Collecting the
-// sources takes minutes on a phone and is the expensive half of a run, so the run
-// carries a checkpoint: which sources have settled and the items they gave. Cut
-// off — backgrounded and killed, crashed, app closed — the next start picks the
-// run up and fetches only what is still owed. Same posture as the notes state
-// file (src/reading/notes/types.ts): a derived, rebuildable JSON the pipeline
-// reads once at startup and rewrites at every checkpoint.
+// The resumable state of one day's briefing generation (docs/16, docs/35). A run
+// is a funnel of four phases and every one of them costs money or minutes, so
+// the checkpoint records what each has already paid for: which sources have been
+// discovered, which items have been judged, which bodies have been fetched. Cut
+// off — backgrounded and killed, crashed, app closed, stopped — the next start
+// picks the run up and pays only for what is still owed. Same posture as the
+// notes state file (src/reading/notes/types.ts): a derived, rebuildable JSON the
+// pipeline reads once at startup and rewrites at every checkpoint.
 //
 // Pure: the clock, the filesystem, and the fetching are the caller's business.
 
+import { capKept, fillMissingVerdicts, type ScreenVerdict, type Selection } from "./screen";
 import type { InfoItem } from "../sources/item";
 
-export const INFO_RUN_VERSION = 1 as const;
+// Bumped for the funnel: a version-1 file is a two-phase run whose `items` are a
+// mix of fetched and unfetched, with no verdicts. loadRun rejects it, so the day
+// starts over rather than resuming into a shape this file cannot read.
+export const INFO_RUN_VERSION = 2 as const;
 
 // A source the run owes work for. Ids are descriptor ids (docs/17), stable
 // across runs, so a checkpoint can name what has already been fetched.
@@ -35,10 +40,16 @@ export interface SourceRun {
   error?: string;
 }
 
-// How far the run got. Collection is per source; triage is a single AI call, so
-// it is all or nothing — a run interrupted while triaging resumes straight into
-// the triage call with every collected item already in hand.
-export type InfoRunPhase = "collecting" | "triaging";
+// How far the run got, in funnel order (docs/35):
+//
+//   discovering — headlines from every source, one request each, no bodies.
+//   screening   — one cheap AI call per batch of headlines: fetch this or not.
+//   fetching    — article bodies, for the survivors only.
+//   triaging    — the one triage call, over what is left.
+//
+// The first three are checkpointed at a finer grain than the phase (per source,
+// per batch, per body); triage is a single AI call, so it is all or nothing.
+export type InfoRunPhase = "discovering" | "screening" | "fetching" | "triaging";
 
 // Why a parked run is not advancing. Absent means it was cut off mid-flight,
 // which is the only case a startup resume may spend tokens on unasked: the user
@@ -60,12 +71,23 @@ export interface InfoRunState {
   updatedAt: number;
   phase: InfoRunPhase;
   sources: SourceRun[];
-  // Every item collected so far, article bodies included: the whole point of the
-  // checkpoint is that a resume never refetches. It is the same payload the
-  // day's article cache and item snapshot are written from when the run ends,
-  // which is why the file is heavy and why it is deleted the moment the briefing
-  // lands.
+  // Every item discovered so far, and the bodies fetched for the ones that got
+  // that far: the whole point of the checkpoint is that a resume never pays
+  // twice. It is the same payload the day's article cache and item snapshot are
+  // written from when the run ends, which is why the file is heavy and why it is
+  // deleted the moment the briefing lands.
   items: InfoItem[];
+  // Screening verdicts by item id. An item absent from this map has not been
+  // judged, which is exactly what a resumed run still owes the screen — so a
+  // Stop halfway through the batches costs nothing already spent.
+  verdicts: Record<string, ScreenVerdict>;
+  // Set once every item has a verdict: what goes on to have a body fetched, and
+  // how many keeps the cap cut. Its presence is what says screening is finished.
+  selection?: Selection;
+  // Item ids whose body fetch has settled, either way. A body that would not
+  // come is not retried within a run: the item degrades to summary-only, which
+  // triage reads as such.
+  material: string[];
   // Display name of the source that settled last, for the progress caption.
   lastSettled?: string;
   halt?: RunHalt;
@@ -81,9 +103,11 @@ export function createRunState(
     date,
     startedAt: now,
     updatedAt: now,
-    phase: "collecting",
+    phase: "discovering",
     sources: sources.map((s) => ({ id: s.id, name: s.name, status: "pending", items: 0 })),
     items: [],
+    verdicts: {},
+    material: [],
   };
 }
 
@@ -169,14 +193,115 @@ export function applySourceResult(
   };
 }
 
-// Live collection progress derived from the checkpoint, so a resumed run's
-// progress bar carries on from where it stopped instead of restarting at zero.
+// --- screening --------------------------------------------------------------
+
+// The items the screen has not judged yet, in discovery order.
+export function unscreenedItems(state: InfoRunState): InfoItem[] {
+  return state.items.filter((it) => !state.verdicts[it.id]);
+}
+
+// Fold one screening batch into the run. Every id in the batch gets a verdict
+// whether or not the model returned one (fillMissingVerdicts), so a batch that
+// lands can never leave an item in limbo — which is what lets the resume treat
+// "has a verdict" as "already paid for".
+export function applyVerdicts(
+  state: InfoRunState,
+  batchIds: string[],
+  verdicts: ScreenVerdict[],
+  now: number,
+): InfoRunState {
+  const next = { ...state.verdicts };
+  for (const v of fillMissingVerdicts(batchIds, verdicts)) next[v.id] = v;
+  return { ...state, updatedAt: now, verdicts: next };
+}
+
+// Close the screening phase: rank the keeps, apply the ceiling, and record the
+// selection. Deterministic given the verdicts, so a run cut off right here
+// reproduces the same selection on the way back in.
+export function finishScreening(
+  state: InfoRunState,
+  max: number,
+  now: number,
+): InfoRunState {
+  const keptIds: string[] = [];
+  const confidence = new Map<string, number>();
+  for (const it of state.items) {
+    const v = state.verdicts[it.id];
+    if (!v || !v.keep) continue;
+    keptIds.push(it.id);
+    confidence.set(it.id, v.confidence);
+  }
+  return {
+    ...state,
+    updatedAt: now,
+    phase: "fetching",
+    selection: capKept(keptIds, confidence, max),
+  };
+}
+
+// --- material ---------------------------------------------------------------
+
+// The selected items, in discovery order. Empty before screening finishes.
+export function selectedItems(state: InfoRunState): InfoItem[] {
+  const ids = new Set(state.selection?.ids ?? []);
+  return state.items.filter((it) => ids.has(it.id));
+}
+
+// The selected items still owed a body fetch.
+export function pendingBodies(state: InfoRunState): InfoItem[] {
+  const done = new Set(state.material);
+  return selectedItems(state).filter((it) => !done.has(it.id));
+}
+
+// Fold one fetched body back into the run and mark it paid for.
+export function applyBody(state: InfoRunState, item: InfoItem, now: number): InfoRunState {
+  return {
+    ...state,
+    updatedAt: now,
+    items: state.items.map((it) => (it.id === item.id ? item : it)),
+    material: state.material.includes(item.id) ? state.material : [...state.material, item.id],
+  };
+}
+
+// --- progress ---------------------------------------------------------------
+
+// Live funnel progress derived from the checkpoint, so a resumed run's progress
+// carries on from where it stopped instead of restarting at zero. One shape for
+// all four phases: the UI reads the fields its current phase cares about.
 export interface CollectProgress {
+  // Discovery: sources.
   total: number;
   done: number;
   failed: number;
+  // Items discovered so far.
   items: number;
   lastDone: string | null;
+  // Screening: items judged, and how they went.
+  screened: number;
+  kept: number;
+  dropped: number;
+  // Keeps the ceiling cut. Carried through to the UI on purpose — a truncation
+  // nobody is told about is a briefing that quietly lost part of the day.
+  cappedOut: number;
+  // Material: bodies fetched, out of how many were selected.
+  bodies: number;
+  bodiesTotal: number;
+}
+
+export function emptyProgress(items = 0): CollectProgress {
+  return {
+    total: 0,
+    done: 0,
+    failed: 0,
+    items,
+    lastDone: null,
+    screened: 0,
+    kept: 0,
+    dropped: 0,
+    cappedOut: 0,
+    bodies: 0,
+    bodiesTotal: 0,
+  };
 }
 
 export function collectProgress(state: InfoRunState): CollectProgress {
@@ -187,11 +312,26 @@ export function collectProgress(state: InfoRunState): CollectProgress {
     done++;
     if (s.status === "failed") failed++;
   }
+  let screened = 0;
+  let kept = 0;
+  for (const v of Object.values(state.verdicts)) {
+    screened++;
+    if (v.keep) kept++;
+  }
+  const selection = state.selection;
   return {
     total: state.sources.length,
     done,
     failed,
     items: state.items.length,
     lastDone: state.lastSettled ?? null,
+    screened,
+    // Once the selection is settled the cap is part of the answer: what goes on
+    // is selection.ids, and everything else was dropped one way or the other.
+    kept: selection ? selection.ids.length : kept,
+    dropped: selection ? state.items.length - selection.ids.length : screened - kept,
+    cappedOut: selection?.cappedOut ?? 0,
+    bodies: state.material.length,
+    bodiesTotal: selection?.ids.length ?? 0,
   };
 }
