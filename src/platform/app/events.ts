@@ -38,7 +38,8 @@ export type EventType =
   // discovered, then one per funnel phase (docs/35) — so "why did that take four
   // minutes" is answerable both by source and by stage.
   | "info-collect" // { source, ms, items, ok } — one source's discovery
-  | "info-discover" // { ms, sources, items }
+  | "info-poll" // { ms, sources, added, pool } — one background collection cycle
+  | "info-discover" // { ms, sources, items, pooled }
   | "info-screen" // { ms, items, batches, kept, dropped, cappedOut }
   | "info-material" // { ms, items, fetched }
   | "info-triage" // { ms, items, ok }

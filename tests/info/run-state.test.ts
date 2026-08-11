@@ -13,6 +13,8 @@ import {
   finishScreening,
   isResumable,
   pendingBodies,
+  seedRun,
+  startupAction,
   pendingSources,
   retryFailedSources,
   selectedItems,
@@ -20,6 +22,7 @@ import {
   unscreenedItems,
   type CollectProgress,
   type InfoRunState,
+  type RunSeed,
 } from "../../src/info/briefing/run-state";
 import type { InfoItem } from "../../src/info/sources/item";
 
@@ -177,4 +180,104 @@ test("a fetched body is folded in and marked paid for, so a resume skips it", ()
   expect(collectProgress(withBody)).toMatchObject({ bodies: 1, bodiesTotal: 2 });
   // Applying the same body twice cannot double the tally.
   expect(applyBody(withBody, { ...item("a1"), textContent: "again" }, 7000).material).toEqual(["a1"]);
+});
+
+// --- seeding from the pool (docs/35) ----------------------------------------
+
+function seed(over: Partial<RunSeed> = {}): RunSeed {
+  return { items: [], verdicts: {}, bodies: {}, settled: [], ...over };
+}
+
+test("the pool's items join the run's own, after them and without duplicating them", () => {
+  const s = seedRun(discovered(), seed({ items: [item("a1"), item("p1"), item("p2")] }), 9000);
+  expect(s.items.map((i) => i.id)).toEqual(["a1", "a2", "b1", "b2", "p1", "p2"]);
+  expect(s.updatedAt).toBe(9000);
+});
+
+test("a carried verdict means the screen never sees that item again", () => {
+  const s = seedRun(
+    discovered(),
+    seed({ items: [item("p1")], verdicts: { a1: verdict("a1", false), p1: verdict("p1", true) } }),
+    9000,
+  );
+  expect(unscreenedItems(s).map((i) => i.id)).toEqual(["a2", "b1", "b2"]);
+});
+
+test("a verdict the run produced itself wins over the pool's older one", () => {
+  const judged = applyVerdicts(discovered(), ["a1"], [verdict("a1", true, 3)], 4000);
+  const s = seedRun(judged, seed({ verdicts: { a1: verdict("a1", false, 0) } }), 9000);
+  expect(s.verdicts.a1).toMatchObject({ keep: true, confidence: 3 });
+});
+
+test("a verdict for an item nobody is holding is not carried in", () => {
+  const s = seedRun(discovered(), seed({ verdicts: { ghost: verdict("ghost", true) } }), 9000);
+  expect(s.verdicts.ghost).toBeUndefined();
+});
+
+test("a body already on disk is folded in and counted as paid for, so the fetch step skips it", () => {
+  const judged = applyVerdicts(
+    discovered(),
+    ["a1", "a2", "b1", "b2"],
+    [verdict("a1", true), verdict("a2", true), verdict("b1", false), verdict("b2", false)],
+    4000,
+  );
+  const selected = finishScreening(judged, 120, 5000);
+  const s = seedRun(selected, seed({ bodies: { a1: { textContent: "cached body" } } }), 9000);
+  expect(s.items.find((i) => i.id === "a1")).toMatchObject({
+    textContent: "cached body",
+    summaryOnly: false,
+  });
+  expect(s.material).toEqual(["a1"]);
+  expect(pendingBodies(s).map((i) => i.id)).toEqual(["a2"]);
+});
+
+test("an item that shipped its own text keeps it rather than taking the cached copy", () => {
+  const own = { ...item("a1"), textContent: "from the feed" };
+  const state = applySourceResult(fresh(), { id: "a", items: [own] }, 2000);
+  const s = seedRun(state, seed({ bodies: { a1: { textContent: "from the cache" } } }), 9000);
+  expect(s.items[0].textContent).toBe("from the feed");
+});
+
+test("an item an earlier day settled is dropped even though a source just offered it again", () => {
+  // The re-delivery the marks exist to prevent: a three-week feed window means
+  // rediscovering what yesterday's briefing carried is the normal case.
+  const s = seedRun(discovered(), seed({ settled: ["a1", "b2"] }), 9000);
+  expect(s.items.map((i) => i.id)).toEqual(["a2", "b1"]);
+  expect(unscreenedItems(s).map((i) => i.id)).toEqual(["a2", "b1"]);
+});
+
+test("a settled item this run already judged stays, so the screen's count still names what it holds", () => {
+  const judged = applyVerdicts(discovered(), ["a1"], [verdict("a1", true)], 4000);
+  const s = seedRun(judged, seed({ settled: ["a1"] }), 9000);
+  expect(s.items.map((i) => i.id)).toEqual(["a1", "a2", "b1", "b2"]);
+});
+
+// --- what opening the app does (docs/35) -------------------------------------
+
+const TODAY = "2026-07-22";
+
+function halted(kind: "stopped" | "failed"): InfoRunState {
+  return { ...discovered(), halt: { kind } };
+}
+
+test("a run cut off mid-flight is finished without asking", () => {
+  expect(startupAction({ briefing: null, run: discovered(), today: TODAY })).toBe("resume");
+});
+
+test("a day with nothing to show collects itself", () => {
+  expect(startupAction({ briefing: null, run: null, today: TODAY })).toBe("generate");
+  // Yesterday's briefing is not today's, and neither is yesterday's leftover run.
+  expect(startupAction({ briefing: { date: "2026-07-21" }, run: null, today: TODAY })).toBe("generate");
+  expect(
+    startupAction({ briefing: null, run: { ...halted("failed"), date: "2026-07-21" }, today: TODAY }),
+  ).toBe("generate");
+});
+
+test("today's briefing already being here is the whole answer", () => {
+  expect(startupAction({ briefing: { date: TODAY }, run: null, today: TODAY })).toBe("none");
+});
+
+test("a run the user stopped or one that failed waits to be asked again", () => {
+  expect(startupAction({ briefing: null, run: halted("stopped"), today: TODAY })).toBe("none");
+  expect(startupAction({ briefing: null, run: halted("failed"), today: TODAY })).toBe("none");
 });

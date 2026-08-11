@@ -21,7 +21,11 @@ import { toSavedArticleInput } from "./saveArticle";
 import { appendFeedback } from "../../../observation/feedback";
 import { loadProfile } from "../../../observation/profile";
 import { sanitizeArticleHtml } from "../../../info/extract/sanitize";
-import { articleChatSystemPrompt, briefingChatSystemPrompt } from "../../../info/companion/chat";
+import {
+  articleChatSystemPrompt,
+  briefingChatSystemPrompt,
+  noBriefingChatSystemPrompt,
+} from "../../../info/companion/chat";
 import { addSourceSystemPrompt } from "../../../info/sources/source-skill";
 import {
   addSource as addSourceStore,
@@ -54,7 +58,7 @@ export interface LaunchProps {
   snap: InfoSnapshot | null;
   configured: boolean;
   hasSources: boolean | null;
-  onGenerate: () => void;
+  onAsk: () => void;
   onStop: () => void;
   onOpenBriefing: () => void;
   onOpenSettings: () => void;
@@ -146,9 +150,6 @@ export default function InfoHome(props: {
     [infoCall],
   );
 
-  const generateBriefing = useCallback(() => {
-    void infoRef.current?.generate();
-  }, []);
   const stopBriefing = useCallback(() => {
     infoRef.current?.stop();
   }, []);
@@ -304,6 +305,36 @@ export default function InfoHome(props: {
     });
   }, []);
 
+  // The launch card's way into the companion. With a briefing it is the same
+  // thread the briefing page's Ask opens; without one — the day's collection has
+  // not landed, or it failed — it is the same thread told so, which is where a
+  // regenerate is asked for now that no button offers one (docs/35).
+  const askLaunch = useCallback(async () => {
+    const snap = infoRef.current?.snapshot();
+    if (snap?.briefing) {
+      await askBriefing();
+      return;
+    }
+    const [profile, sources, settings] = await Promise.all([
+      loadProfile(),
+      loadSources(),
+      loadSettings(),
+    ]);
+    setInfoCall({
+      threadId: "briefing",
+      emptyTitle: "Today's briefing",
+      placeholder: "Ask about today's briefing…",
+      systemPrompt: noBriefingChatSystemPrompt(
+        { profile, sources, aiLanguage: settings.aiLanguage },
+        { error: snap?.error ?? undefined },
+      ),
+      position: {
+        title: "Today's briefing",
+        line: snap?.error ?? "Not collected yet",
+      },
+    });
+  }, [askBriefing]);
+
   const askArticle = useCallback(async (itemId: string) => {
     const b = infoRef.current?.snapshot().briefing;
     if (!b) return;
@@ -345,7 +376,7 @@ export default function InfoHome(props: {
               snap: infoSnap,
               configured: props.configured,
               hasSources: hasSourcesState,
-              onGenerate: generateBriefing,
+              onAsk: () => void askLaunch(),
               onStop: stopBriefing,
               onOpenBriefing: () => onNavigate("briefing"),
               onOpenSettings: props.onOpenSettings,
@@ -359,7 +390,7 @@ export default function InfoHome(props: {
               hasSources={hasSourcesState}
               onContinue={props.onContinue ?? (() => {})}
               onOpenLibrary={() => onNavigate("library")}
-              onGenerate={generateBriefing}
+              onAsk={() => void askLaunch()}
               onStop={stopBriefing}
               onOpenBriefing={() => onNavigate("briefing")}
               onOpenSettings={props.onOpenSettings}

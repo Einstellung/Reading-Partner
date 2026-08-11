@@ -101,6 +101,13 @@ export interface Settings {
   // Language the AI writes its user-facing output in. "auto" mirrors the user's
   // own language; every other value pins output to that language.
   aiLanguage: AiLanguage;
+  // Keep the item pool stocked in the background (docs/35). On, sources are
+  // polled on their own intervals while the app is open, so the day's briefing
+  // is assembled from what has already come in — which is the only way a feed
+  // that holds six hours of headlines does not lose the other eighteen. Off,
+  // nothing is collected until a briefing is generated, and that briefing sees
+  // only whatever the feeds happen to be showing at that moment.
+  backgroundCollect: boolean;
   // Whether a finger may mark the page in the reader. Off means the stylus
   // writes and the finger only ever moves the page, which is what a device with
   // a stylus wants; a device without one turns this on to reach annotation at
@@ -120,6 +127,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sttModel: null,
   autoNotes: true,
   aiLanguage: "auto",
+  backgroundCollect: true,
   fingerDraw: false,
 };
 

@@ -62,6 +62,7 @@ test("loadSettings round-trips a fully persisted object", async () => {
     sttModel: "sense",
     autoNotes: false,
     aiLanguage: "zh-CN",
+    backgroundCollect: false,
     fingerDraw: true,
   };
   fileContent = JSON.stringify(saved);

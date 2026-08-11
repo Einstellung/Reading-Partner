@@ -34,7 +34,7 @@ export default function PhoneHome({
             snap={launch.snap}
             configured={launch.configured}
             hasSources={launch.hasSources}
-            onGenerate={launch.onGenerate}
+            onAsk={launch.onAsk}
             onStop={launch.onStop}
             onOpen={launch.onOpenBriefing}
             onOpenSettings={launch.onOpenSettings}

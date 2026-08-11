@@ -1,10 +1,6 @@
 // Settings, second tab: what the app does with a book once a provider is
 // connected. Grouped by where the switch is felt — everywhere, in the reader,
 // in the briefing — with plain headings rather than another layer of folds.
-//
-// There is no Briefing group yet: nothing in the briefing is switchable today,
-// and an empty section is a promise the page cannot keep. It arrives with the
-// background collection toggles.
 
 import { AI_LANGUAGE_OPTIONS, type AiLanguage, type Settings } from "../../../platform/app/settings";
 import { Checkbox } from "../ui/checkbox";
@@ -67,6 +63,25 @@ export default function FeaturesPanel({
             highlight and draw. The navigation lock in the reader still overrides both.
           </p>
         </div>
+      </div>
+
+      <SectionHeading>Briefing</SectionHeading>
+      <div className={CARD}>
+        <Label>
+          <Checkbox
+            checked={settings.backgroundCollect}
+            onCheckedChange={(v) =>
+              onSettingsChange({ ...settings, backgroundCollect: v === true })
+            }
+          />
+          Collect from your sources in the background
+        </Label>
+        <p className="m-0 text-xs text-[#777]">
+          While the app is open, each source is checked on its own schedule and what it published
+          is kept until the day's briefing is built. Off, nothing is collected until the briefing
+          runs, and it sees only what the feeds happen to be showing at that moment — a feed that
+          holds six hours of headlines loses the other eighteen.
+        </p>
       </div>
     </>
   );

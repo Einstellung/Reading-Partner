@@ -9,6 +9,7 @@ import {
   briefingChatSystemPrompt,
   formatProfile,
   formatSources,
+  noBriefingChatSystemPrompt,
   type CompanionContext,
 } from "../../src/info/companion/chat";
 import type { SourceDescriptor } from "../../src/info/sources/descriptor";
@@ -147,6 +148,35 @@ test("a briefing trimmed by the fetch ceiling says so in the companion's context
     CTX,
   );
   expect(prompt).toContain("22 more cleared the screen but were cut by the daily fetch ceiling");
+});
+
+// --- the thread before there is a briefing (docs/35) -------------------------
+
+test("the no-briefing thread carries the companion's context and can still generate one", () => {
+  const prompt = noBriefingChatSystemPrompt(CTX);
+  expect(prompt).toContain("I like hard technical substance.");
+  expect(prompt).toContain("量子位");
+  expect(prompt).toContain("generate_briefing");
+  expect(prompt).toContain("There is no briefing for today yet.");
+  // There is no Generate button any more, so the companion has to know where the
+  // briefing comes from — and that it must not offer one unasked.
+  expect(prompt).toContain("there is no button for it");
+  expect(prompt).toContain("Do not offer");
+});
+
+test("the no-briefing thread passes on why the last attempt failed, and says nothing when there was none", () => {
+  expect(noBriefingChatSystemPrompt(CTX, { error: "no network" })).toContain(
+    "The last attempt to build one failed: no network",
+  );
+  expect(noBriefingChatSystemPrompt(CTX)).not.toContain("The last attempt");
+});
+
+test("the no-briefing thread pins output only when a language is set", () => {
+  const unset = noBriefingChatSystemPrompt(CTX);
+  expect(noBriefingChatSystemPrompt({ ...CTX, aiLanguage: "zh-CN" })).toContain(
+    languageInstruction("zh-CN"),
+  );
+  expect(unset).not.toContain(languageInstruction("zh-CN"));
 });
 
 test("formatSources marks disabled sources and handles an empty roster", () => {

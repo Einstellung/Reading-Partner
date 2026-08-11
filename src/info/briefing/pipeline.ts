@@ -10,6 +10,13 @@
 // article's text) only ever see the few items screening kept, while the cheap
 // steps scale with the day.
 //
+// Discovery is no longer where the day's material comes from — the pool is
+// (item-pool.ts, collector.ts). Background collection polls each source on its
+// own interval, and a run draws from what has accumulated: everything nobody has
+// judged, plus what today's briefing already carries, so a refresh merges into
+// the day's one briefing instead of starting a second. What the run settles goes
+// back into the pool, so tomorrow morning does not re-judge tonight's headlines.
+//
 // Resumable because of where it runs (docs/22): on a phone a run takes minutes,
 // and the OS may suspend or kill a backgrounded webview at any point in it.
 // Every phase spends something the reader cannot get back — requests, tokens,
@@ -43,19 +50,22 @@ import {
   createRunState,
   emptyProgress,
   finishScreening,
-  isResumable,
   pendingBodies,
   pendingSources,
   retryFailedSources,
+  seedRun,
   selectedItems,
+  startupAction,
   syncSources,
   unscreenedItems,
   type CollectProgress,
   type InfoRunPhase,
   type InfoRunState,
   type InfoSourceRef,
+  type RunSeed,
   type SourceResult,
 } from "./run-state";
+import type { PoolRecord } from "./item-pool";
 import type { FeedbackEvent } from "../../observation/feedback";
 import type { Briefing, BriefingItemMeta, ScreenSummary, TriageResult } from "./types";
 import type { InfoItem } from "../sources/item";
@@ -102,10 +112,17 @@ export interface InfoDeps {
   // effect at the phase boundary would look like a button that does nothing. A
   // source cut off mid-fetch is not reported, so it stays pending and the resume
   // rediscovers it; the ones that already settled are kept.
+  //
+  // `force` says whether this run was asked for by hand. Background collection
+  // keeps the pool stocked on each source's own interval (docs/35), so an
+  // automatic run polls only what is genuinely due and takes the rest from the
+  // pool; a regenerate the user asked for goes and looks regardless, because a
+  // schedule is not an answer to "re-collect everything".
   discover(
     sources: InfoSourceRef[],
     onSettled: (result: SourceResult) => Promise<void>,
     signal: AbortSignal,
+    opts: { force: boolean },
   ): Promise<void>;
   // Screening: one AI call over one batch of discovered items, answering only
   // "is this worth fetching the body for". The pipeline owns the batching and
@@ -145,6 +162,21 @@ export interface InfoDeps {
   loadRun(date: string): Promise<InfoRunState | null>;
   saveRun(state: InfoRunState): Promise<void>;
   clearRun(date: string): Promise<void>;
+  // The item pool (docs/35). Absent, a run is exactly what it was before the
+  // pool existed: it judges and fetches the day from scratch.
+  //
+  // poolDraw hands over the day's candidates — what nobody has judged yet, what
+  // was judged worth keeping but never delivered, and what today's briefing
+  // already carries — with the verdicts and bodies already paid for. poolRecord
+  // hands back what this run decided, so tomorrow morning does not re-judge
+  // tonight's headlines. Both are best effort: a pool that cannot be read or
+  // written costs requests and tokens, never a briefing.
+  poolDraw?(date: string): Promise<RunSeed>;
+  poolRecord?(date: string, record: PoolRecord): Promise<void>;
+  // Whether a briefing may be generated without being asked for: a provider is
+  // configured and at least one source is subscribed. Absent means no — nothing
+  // spends the reader's money on a guess.
+  canAutoGenerate?(): Promise<boolean>;
   // Optional housekeeping: drop the derived per-day info files of every day but
   // the given one. Absent, or throwing, leaves the old files on disk.
   pruneStaleDays?(today: string): Promise<void>;
@@ -232,6 +264,9 @@ export class InfoPipeline {
   private run: InfoRunState | null = null;
   private dirty = false;
   private writing: Promise<void> = Promise.resolve();
+  // Whether the run in flight was asked for by hand. It decides one thing: a
+  // hand-driven run polls every source, an automatic one only what is due.
+  private byHand = false;
 
   constructor(private readonly deps: InfoDeps, config: Partial<WatchdogConfig> = {}) {
     this.config = resolveWatchdogConfig(config);
@@ -331,32 +366,47 @@ export class InfoPipeline {
     return this.persist();
   }
 
-  // Load today's briefing from disk (if any) so the vestibule reflects it, then
-  // pick up a run the app was killed in the middle of. A briefing from a
-  // previous day is ignored — only today is ever shown.
+  // Opening the app is the trigger (docs/35): there is no Generate button any
+  // more. Load today's briefing so the launch screen reflects it, then either
+  // pick up a run the app was killed in the middle of, or — the day's first open
+  // with nothing to show — collect today's briefing out of the pool.
   //
-  // Resolves only when the resumed run does; callers fire and forget it.
+  // Called again every time the app comes back to the front, which is also how
+  // the day rolling over while the app sat open is noticed. It is cheap when
+  // there is nothing to do: a briefing already on disk for today answers it.
+  //
+  // Resolves only when the run it starts does; callers fire and forget it.
   async init(): Promise<void> {
     if (this.running) return;
-    if (!this.briefing) this.briefing = await this.deps.loadBriefing(this.today());
-    this.notify();
-    await this.resumeIfCutOff();
-  }
-
-  // Continue a run that was cut off mid-flight. Deliberately narrow: only
-  // today's, and only one that never got the chance to say why it stopped. A run
-  // the user stopped, or one that failed, is left parked — it spent the reader's
-  // money once already and the next spend should be something they asked for.
-  private async resumeIfCutOff(): Promise<void> {
     const date = this.today();
+    // Reloaded whenever what is held is not today's — the app may have been open
+    // across midnight, in which case what is held is yesterday's.
+    if (this.briefing?.date !== date) {
+      this.briefing = await this.deps.loadBriefing(date);
+      this.notify();
+    }
     let state: InfoRunState | null = null;
     try {
       state = await this.deps.loadRun(date);
     } catch {
       return;
     }
-    if (!isResumable(state, date)) return;
+    const action = startupAction({ briefing: this.briefing, run: state, today: date });
+    if (action === "none") return;
+    // A run cut off mid-flight is finished without asking: the reader asked for
+    // it and never got an answer. A first briefing of the day is only started
+    // when there is something to make it out of and something to make it with.
+    if (action === "generate" && !(await this.canAutoGenerate())) return;
     await this.runRun({ retryFailed: false });
+  }
+
+  private async canAutoGenerate(): Promise<boolean> {
+    if (!this.deps.canAutoGenerate) return false;
+    try {
+      return await this.deps.canAutoGenerate();
+    } catch {
+      return false;
+    }
   }
 
   // Publish the intent before acting on it: aborting is the slow part (a fetch
@@ -369,14 +419,18 @@ export class InfoPipeline {
     this.stopController?.abort();
   }
 
-  // Collect, triage, and save. A second call while running is a no-op.
-  // Regenerate is the same entry point — it overwrites today's briefing.
+  // Collect, triage, and save. A second call while running is a no-op. There is
+  // no button behind this any more (docs/35): the day's first briefing comes
+  // from init, and a regenerate comes from the companion's generate_briefing.
+  //
+  // A regenerate is a refresh, not a second briefing. It polls every source, and
+  // the pool hands back today's items alongside whatever has come in since, so
+  // the triage that follows produces one briefing for the day with the new
+  // material merged into it.
   //
   // It is also the resume the user asks for by hand: an unfinished run for today
-  // is continued, not restarted, so pressing Generate after a failed triage
-  // (a bad key, no network) costs one AI call and no refetching. A run that
-  // finished leaves no checkpoint behind, so a regenerate after a completed
-  // briefing does fetch everything again, which is what regenerate means.
+  // is continued, not restarted, so asking again after a failed triage (a bad
+  // key, no network) costs one AI call and no refetching.
   async generate(): Promise<void> {
     if (this.running) return;
     await this.runRun({ retryFailed: true });
@@ -384,6 +438,7 @@ export class InfoPipeline {
 
   private async runRun(opts: { retryFailed: boolean }): Promise<void> {
     this.running = true;
+    this.byHand = opts.retryFailed;
     this.stopping = false;
     this.error = null;
     this.phase = "discovering";
@@ -489,7 +544,8 @@ export class InfoPipeline {
   }
 
   // Discovery: ask every source the run still owes for its item list — one
-  // request per source, no article pages — checkpointing each as it settles.
+  // request per source, no article pages — checkpointing each as it settles,
+  // then take the rest of the day out of the pool.
   private async discoverPhase(): Promise<void> {
     if (this.past("discovering")) return;
     const startedAt = this.enter("discovering");
@@ -503,17 +559,54 @@ export class InfoPipeline {
           await this.persist();
         },
         this.stopController!.signal,
+        { force: this.byHand },
       );
     }
     if (this.stopController!.signal.aborted) throw new StoppedError();
+    const own = this.run!.items.length;
+    await this.seedFromPool();
     if (this.run!.items.length === 0) {
       throw new Error("No articles could be fetched from any source.");
     }
     this.logPhase("discovering", startedAt, {
       sources: this.run!.sources.length,
       items: this.run!.items.length,
+      // What the pool contributed on top of this run's own requests: on a device
+      // that has been collecting in the background, most of the day.
+      pooled: this.run!.items.length - own,
     });
     await this.advance({ ...this.run!, phase: "screening", updatedAt: this.deps.now() });
+  }
+
+  // Take the day's candidates out of the pool (docs/35), with the verdicts and
+  // bodies already paid for. Guarded: a pool that will not load leaves the run
+  // with exactly what it just discovered itself, which is what a run was before
+  // the pool existed.
+  private async seedFromPool(): Promise<void> {
+    if (!this.deps.poolDraw) return;
+    let seed: RunSeed;
+    try {
+      seed = await this.deps.poolDraw(this.run!.date);
+    } catch (e) {
+      console.warn("could not draw from the item pool", e);
+      return;
+    }
+    this.run = seedRun(this.run!, seed, this.deps.now());
+    this.touch();
+    await this.persist();
+  }
+
+  // Hand back to the pool what this run has settled. Called at the end of
+  // screening (so a crash before triage does not cost the verdicts) and again
+  // when the briefing lands (bodies and deliveries). Guarded for the same reason
+  // the draw is: the pool is a saving, not a dependency.
+  private async recordToPool(record: PoolRecord): Promise<void> {
+    if (!this.deps.poolRecord || !this.run) return;
+    try {
+      await this.deps.poolRecord(this.run.date, record);
+    } catch (e) {
+      console.warn("could not record the run into the item pool", e);
+    }
   }
 
   // Screening: batches of headlines, a few calls at a time, each batch
@@ -571,6 +664,7 @@ export class InfoPipeline {
       dropped: this.run!.items.length - screened.selection!.ids.length,
       cappedOut,
     });
+    await this.recordToPool({ verdicts: this.run!.verdicts });
     await this.advance(screened);
   }
 
@@ -630,6 +724,14 @@ export class InfoPipeline {
     await this.deps.saveArticles(date, articleCache(items));
     await this.deps.saveItems(date, items);
     await this.deps.saveBriefing(briefing);
+    // Before the checkpoint goes: every item this briefing carried is delivered,
+    // so a run tomorrow leaves it alone, and every body it fetched is on disk,
+    // so a refresh later today reads it instead of fetching it again.
+    await this.recordToPool({
+      verdicts: this.run!.verdicts,
+      bodies: this.run!.material,
+      briefed: items.map((it) => it.id),
+    });
     this.briefing = briefing;
     this.run = null;
     this.dirty = false;

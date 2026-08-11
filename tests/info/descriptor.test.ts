@@ -3,9 +3,13 @@
 
 import { expect, test } from "bun:test";
 import {
+  DEFAULT_POLL_MINUTES,
   DESCRIPTOR_GUIDE,
   dotPath,
+  MAX_POLL_MINUTES,
+  MIN_POLL_MINUTES,
   pickString,
+  pollIntervalMs,
   validateDescriptor,
 } from "../../src/info/sources/descriptor";
 
@@ -81,6 +85,32 @@ test("DESCRIPTOR_GUIDE lists every discovery kind and fulltext mode, with a vali
   expect(validateDescriptor(JSON.parse(example)).ok).toBe(true);
   // Compact — a grammar, not a tutorial.
   expect(DESCRIPTOR_GUIDE.split("\n").length).toBeLessThanOrEqual(30);
+});
+
+test("pollMinutes is optional, and an authoring slip is rejected rather than silently defaulted", () => {
+  // Every descriptor written before background collection existed omits it.
+  expect(validateDescriptor(FEED_DESC).ok).toBe(true);
+  expect(validateDescriptor({ ...FEED_DESC, pollMinutes: 30 }).ok).toBe(true);
+  expect(validateDescriptor({ ...FEED_DESC, pollMinutes: "2h" }).ok).toBe(false);
+  expect(validateDescriptor({ ...FEED_DESC, pollMinutes: 0 }).ok).toBe(false);
+  expect(validateDescriptor({ ...FEED_DESC, pollMinutes: -5 }).ok).toBe(false);
+});
+
+test("a source with no stated interval is polled at the default, and an absurd one is held to the band", () => {
+  expect(pollIntervalMs({})).toBe(DEFAULT_POLL_MINUTES * 60_000);
+  expect(pollIntervalMs({ pollMinutes: 45 })).toBe(45 * 60_000);
+  expect(pollIntervalMs({ pollMinutes: 1 })).toBe(MIN_POLL_MINUTES * 60_000);
+  expect(pollIntervalMs({ pollMinutes: 99_999 })).toBe(MAX_POLL_MINUTES * 60_000);
+  // A descriptor off disk is JSON the user (or the AI) wrote; a source whose
+  // interval cannot be read is polled at the default, never dropped.
+  expect(pollIntervalMs({ pollMinutes: Number.NaN })).toBe(DEFAULT_POLL_MINUTES * 60_000);
+});
+
+test("DESCRIPTOR_GUIDE tells the AI what pollMinutes is for, with the numbers it should reach for", () => {
+  const guide = DESCRIPTOR_GUIDE;
+  expect(guide).toContain("pollMinutes");
+  expect(guide).toContain(String(DEFAULT_POLL_MINUTES));
+  expect(guide).toContain(`${MIN_POLL_MINUTES}-${MAX_POLL_MINUTES}`);
 });
 
 test("dotPath / pickString read nested fields with candidate fallback", () => {
