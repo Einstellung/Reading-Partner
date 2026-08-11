@@ -95,7 +95,10 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     line: "robotics",
     builtin: true,
     enabled: false,
-    // Discovery-only: title + abstract; full text is PDF-only.
+    pollMinutes: 1440,
+    // Discovery-only: title + abstract; full text is PDF-only. Polled once a day
+    // because that is arXiv's own rhythm — and because the API 429s under
+    // anything faster (the RSS path is the one that survives).
     discovery: { kind: "feed", url: "https://rss.arxiv.org/rss/cs.RO", format: "rss" },
     fulltext: { mode: "none" },
   },
@@ -191,6 +194,9 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
   },
 
   // --- Bloomberg -----------------------------------------------------------
+  // pollMinutes 180 on every section: 20 items covering 6-22 hours means a feed
+  // read once a day shows a fraction of it. Three hours is half the shortest
+  // window measured, which is the margin the pool needs to see a section whole.
   // Official RSS, one feed per section: feeds.bloomberg.com/<section>/news.rss
   // now 301s to www.bloomberg.com/feeds/<section>/news.rss, so the descriptors
   // name the www path. Every section below returned items in the research round;
@@ -205,6 +211,7 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     builtin: true,
     enabled: false,
     limit: 20,
+    pollMinutes: 180,
     discovery: { kind: "feed", url: "https://www.bloomberg.com/feeds/markets/news.rss", format: "rss" },
     fulltext: { mode: "none" },
   },
@@ -215,6 +222,7 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     builtin: true,
     enabled: false,
     limit: 20,
+    pollMinutes: 180,
     discovery: { kind: "feed", url: "https://www.bloomberg.com/feeds/economics/news.rss", format: "rss" },
     fulltext: { mode: "none" },
   },
@@ -225,6 +233,7 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     builtin: true,
     enabled: false,
     limit: 20,
+    pollMinutes: 180,
     discovery: { kind: "feed", url: "https://www.bloomberg.com/feeds/business/news.rss", format: "rss" },
     fulltext: { mode: "none" },
   },
@@ -235,6 +244,7 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     builtin: true,
     enabled: false,
     limit: 20,
+    pollMinutes: 180,
     discovery: { kind: "feed", url: "https://www.bloomberg.com/feeds/industries/news.rss", format: "rss" },
     fulltext: { mode: "none" },
   },
@@ -245,6 +255,7 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     builtin: true,
     enabled: false,
     limit: 20,
+    pollMinutes: 180,
     discovery: { kind: "feed", url: "https://www.bloomberg.com/feeds/technology/news.rss", format: "rss" },
     fulltext: { mode: "none" },
   },
@@ -255,6 +266,7 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     builtin: true,
     enabled: false,
     limit: 20,
+    pollMinutes: 180,
     discovery: { kind: "feed", url: "https://www.bloomberg.com/feeds/politics/news.rss", format: "rss" },
     fulltext: { mode: "none" },
   },
@@ -265,6 +277,7 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     builtin: true,
     enabled: false,
     limit: 20,
+    pollMinutes: 180,
     // Thin: 2 items in the research round, same shape as the others.
     discovery: { kind: "feed", url: "https://www.bloomberg.com/feeds/crypto/news.rss", format: "rss" },
     fulltext: { mode: "none" },
@@ -276,6 +289,7 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     builtin: true,
     enabled: false,
     limit: 20,
+    pollMinutes: 180,
     // The opinion section's feed slug is "bview"; /feeds/opinion/news.rss 404s.
     discovery: { kind: "feed", url: "https://www.bloomberg.com/feeds/bview/news.rss", format: "rss" },
     fulltext: { mode: "none" },
@@ -286,6 +300,9 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
   // <description> is absent, which the engine's field fallback already covers, so
   // this stays honestly discovery-only. Subject feeds (/subjects/<x>.rss) parse
   // but carry empty descriptions — not usable for the funnel.
+  // pollMinutes 1440 on both Nature feeds: 75 items covering a week leaves a
+  // daily read nothing to miss, and these feeds 406 a burst — the cheapest way
+  // to stay under a rate limit is to want the feed less often.
   {
     id: "nature",
     name: "Nature",
@@ -293,6 +310,7 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     builtin: true,
     enabled: false,
     limit: 25,
+    pollMinutes: 1440,
     discovery: { kind: "feed", url: "https://www.nature.com/nature.rss", format: "rdf" },
     fulltext: { mode: "none" },
   },
@@ -303,11 +321,15 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     builtin: true,
     enabled: false,
     limit: 15,
+    pollMinutes: 1440,
     discovery: { kind: "feed", url: "https://www.nature.com/natmachintell.rss", format: "rdf" },
     fulltext: { mode: "none" },
   },
 
   // --- Science (AAAS) ------------------------------------------------------
+  // pollMinutes 1440: the newsroom feed carries ~10 items at about two a day,
+  // and the research side comes through Crossref's polite pool. Neither wants
+  // to be asked more often than the news arrives.
   {
     id: "science-news",
     name: "Science News",
@@ -315,6 +337,7 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     builtin: true,
     enabled: false,
     limit: 10,
+    pollMinutes: 1440,
     // The newsroom feed's <description> is a real dek; the journal eTOC feeds
     // (action/showFeed?type=etoc) put volume/page boilerplate there instead, so
     // research papers go through Crossref below rather than through eTOC.
@@ -328,6 +351,7 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     builtin: true,
     enabled: false,
     limit: 20,
+    pollMinutes: 1440,
     // Crossref as the discovery layer: science.org's own eTOC feed has no
     // abstracts, while Crossref carries them for AAAS (JATS XML, flattened by the
     // engine's summary pass). 0036-8075 is Science's ISSN; mailto is Crossref's
@@ -350,7 +374,8 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
 
   // --- The Economist -------------------------------------------------------
   // Official RSS per section, ~300 items each (weeks of backlog), standfirst in
-  // <description>. Bodies are 403 behind Cloudflare and paywalled, so every
+  // <description>. Three weeks of window is why pollMinutes is 1440 on all of
+  // them: a daily read misses nothing, and the first one backfills weeks. Bodies are 403 behind Cloudflare and paywalled, so every
   // section is discovery-only until the logged-in webview pipe exists.
   {
     id: "economist-latest",
@@ -359,6 +384,7 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     builtin: true,
     enabled: false,
     limit: 40,
+    pollMinutes: 1440,
     discovery: { kind: "feed", url: "https://www.economist.com/latest/rss.xml", format: "rss" },
     fulltext: { mode: "none" },
   },
@@ -369,6 +395,7 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     builtin: true,
     enabled: false,
     limit: 20,
+    pollMinutes: 1440,
     discovery: { kind: "feed", url: "https://www.economist.com/leaders/rss.xml", format: "rss" },
     fulltext: { mode: "none" },
   },
@@ -379,6 +406,7 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     builtin: true,
     enabled: false,
     limit: 20,
+    pollMinutes: 1440,
     discovery: { kind: "feed", url: "https://www.economist.com/briefing/rss.xml", format: "rss" },
     fulltext: { mode: "none" },
   },
@@ -389,6 +417,7 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     builtin: true,
     enabled: false,
     limit: 20,
+    pollMinutes: 1440,
     discovery: {
       kind: "feed",
       url: "https://www.economist.com/the-world-this-week/rss.xml",
@@ -403,6 +432,7 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     builtin: true,
     enabled: false,
     limit: 30,
+    pollMinutes: 1440,
     discovery: {
       kind: "feed",
       url: "https://www.economist.com/finance-and-economics/rss.xml",
@@ -417,6 +447,7 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     builtin: true,
     enabled: false,
     limit: 30,
+    pollMinutes: 1440,
     discovery: { kind: "feed", url: "https://www.economist.com/business/rss.xml", format: "rss" },
     fulltext: { mode: "none" },
   },
@@ -427,6 +458,7 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     builtin: true,
     enabled: false,
     limit: 30,
+    pollMinutes: 1440,
     discovery: {
       kind: "feed",
       url: "https://www.economist.com/science-and-technology/rss.xml",
@@ -441,6 +473,7 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     builtin: true,
     enabled: false,
     limit: 20,
+    pollMinutes: 1440,
     discovery: { kind: "feed", url: "https://www.economist.com/china/rss.xml", format: "rss" },
     fulltext: { mode: "none" },
   },
@@ -451,6 +484,7 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     builtin: true,
     enabled: false,
     limit: 20,
+    pollMinutes: 1440,
     discovery: { kind: "feed", url: "https://www.economist.com/united-states/rss.xml", format: "rss" },
     fulltext: { mode: "none" },
   },
@@ -461,6 +495,7 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     builtin: true,
     enabled: false,
     limit: 20,
+    pollMinutes: 1440,
     discovery: { kind: "feed", url: "https://www.economist.com/asia/rss.xml", format: "rss" },
     fulltext: { mode: "none" },
   },
@@ -471,6 +506,7 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     builtin: true,
     enabled: false,
     limit: 20,
+    pollMinutes: 1440,
     discovery: { kind: "feed", url: "https://www.economist.com/international/rss.xml", format: "rss" },
     fulltext: { mode: "none" },
   },

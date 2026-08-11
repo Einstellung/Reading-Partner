@@ -6,7 +6,7 @@
 
 import { expect, test } from "bun:test";
 import { BUILTIN_SOURCES, builtinById, builtinCaveat } from "../../src/info/sources/builtins";
-import { validateDescriptor } from "../../src/info/sources/descriptor";
+import { pollIntervalMs, validateDescriptor } from "../../src/info/sources/descriptor";
 
 test("builtin ids are unique and every descriptor validates", () => {
   const ids = BUILTIN_SOURCES.map((s) => s.id);
@@ -111,4 +111,39 @@ test("Economist sections share one pipe and one caveat", () => {
   }
   // The bare-domain default is the whole-magazine feed.
   expect(BUILTIN_SOURCES.find((s) => s.id.startsWith("economist"))?.id).toBe("economist-latest");
+});
+
+// --- how often each one is worth asking (docs/35) ----------------------------
+//
+// The interval is not a preference, it is the feed's window divided by a margin:
+// a source is polled often enough that what it published is still on the page
+// when the poll arrives. The windows below are the measured ones.
+
+test("Bloomberg is polled every three hours, because its window is six", () => {
+  for (const [id] of BLOOMBERG_SECTIONS) {
+    expect(builtinById(id)?.pollMinutes).toBe(180);
+    expect(pollIntervalMs(builtinById(id)!)).toBe(3 * 60 * 60_000);
+  }
+});
+
+test("the three-week and one-week windows are polled daily", () => {
+  const daily = [
+    "nature",
+    "nature-machine-intelligence",
+    "science-news",
+    "science-journal",
+    // arXiv publishes once a day and 429s under anything faster.
+    "arxiv-cs-ro",
+    ...BUILTIN_SOURCES.filter((s) => s.id.startsWith("economist-")).map((s) => s.id),
+  ];
+  for (const id of daily) expect(builtinById(id)?.pollMinutes).toBe(24 * 60);
+});
+
+test("a builtin with no measured window states no interval and takes the default", () => {
+  // Guessing at an interval for a feed nobody timed would be the same mistake in
+  // the other direction: a number in the file reads as a measurement.
+  const stated = BUILTIN_SOURCES.filter((s) => s.pollMinutes !== undefined).map((s) => s.id);
+  expect(stated).not.toContain("qbitai");
+  expect(stated).not.toContain("jiqizhixin");
+  expect(pollIntervalMs(builtinById("qbitai")!)).toBe(pollIntervalMs({}));
 });
