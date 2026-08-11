@@ -32,6 +32,7 @@ import * as overlay from "../../../src/ui/components/ui/overlay";
 import * as select from "../../../src/ui/components/ui/select";
 import * as separator from "../../../src/ui/components/ui/separator";
 import * as switchModule from "../../../src/ui/components/ui/switch";
+import * as tabs from "../../../src/ui/components/ui/tabs";
 import * as textarea from "../../../src/ui/components/ui/textarea";
 import * as toast from "../../../src/ui/components/ui/toast";
 
@@ -52,6 +53,7 @@ const MODULES: Record<string, Record<string, unknown>> = {
   "select.tsx": select,
   "separator.tsx": separator,
   "switch.tsx": switchModule,
+  "tabs.tsx": tabs,
   "textarea.tsx": textarea,
   "toast.tsx": toast,
 };
