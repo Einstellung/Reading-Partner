@@ -6,9 +6,12 @@ import { expect, test } from "bun:test";
 import { migratedSources, parseSources } from "../../src/info/sources/source-store";
 import { BUILTIN_SOURCES } from "../../src/info/sources/builtins";
 
-test("migratedSources: existing user gets the two original builtins, enabled", () => {
+test("migratedSources: an existing user gets the source they were reading, enabled", () => {
   const list = migratedSources(true);
-  expect(list.map((s) => s.id).sort()).toEqual(["jiqizhixin", "qbitai"]);
+  // qbitai was the other half of this until it stopped being a builtin. The
+  // migration can only write descriptors the table still has, which is the
+  // point: it hands over a source that still exists, never an empty shell.
+  expect(list.map((s) => s.id)).toEqual(["jiqizhixin"]);
   expect(list.every((s) => s.enabled)).toBe(true);
   expect(list.every((s) => s.builtin)).toBe(true);
 });
@@ -25,7 +28,7 @@ test("parseSources validates each entry and drops malformed ones", () => {
   ]);
   const list = parseSources(text);
   expect(list.length).toBe(2);
-  expect(list.map((s) => s.id)).toEqual(["jiqizhixin", "qbitai"]);
+  expect(list.map((s) => s.id)).toEqual([BUILTIN_SOURCES[0].id, BUILTIN_SOURCES[1].id]);
 });
 
 test("parseSources tolerates garbage", () => {

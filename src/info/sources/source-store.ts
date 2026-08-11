@@ -1,10 +1,10 @@
 // Source list persistence (docs/17): the user's subscribed sources, one JSON
 // array under AppData, in sync range (info-sources.json travels between devices
 // like info-profile.md). A new user starts empty (onboarding fills it); an
-// existing user — detected by prior info data — is migrated to the two original
-// builtins. Per-source health is a derived sidecar (not synced). The pure parts
-// (parse/validate, migration decision) are unit-tested; the fs wrappers mirror
-// profile.ts.
+// existing user — detected by prior info data — is migrated to the builtin they
+// were reading before source lists existed. Per-source health is a derived
+// sidecar (not synced). The pure parts (parse/validate, migration decision) are
+// unit-tested; the fs wrappers mirror profile.ts.
 
 import {
   BaseDirectory,
@@ -43,13 +43,22 @@ export function parseSources(text: string): SourceDescriptor[] {
   return out;
 }
 
-// The descriptors an existing user is migrated to: the two original builtins,
-// enabled. A new user (no prior info data) gets an empty list — onboarding fills
-// it. Pure so the migration policy is tested without the filesystem.
+// The descriptors an existing user is migrated to, enabled. A new user (no prior
+// info data) gets an empty list — onboarding fills it. Pure so the migration
+// policy is tested without the filesystem.
+//
+// This used to be jiqizhixin + qbitai, the two sources that predate the source
+// list. qbitai is no longer a builtin, and the migration follows: a descriptor
+// that is not in the table cannot be written into a user's list, and the one
+// that is still there is the one they were actually reading. An id that ever
+// disappears from BUILTIN_SOURCES drops out of the migration by itself rather
+// than writing an empty entry.
+const MIGRATED_IDS = ["jiqizhixin"];
+
 export function migratedSources(hasPriorInfoData: boolean): SourceDescriptor[] {
   if (!hasPriorInfoData) return [];
   const out: SourceDescriptor[] = [];
-  for (const id of ["jiqizhixin", "qbitai"]) {
+  for (const id of MIGRATED_IDS) {
     const d = builtinById(id);
     if (d) out.push({ ...d, enabled: true });
   }
@@ -79,8 +88,8 @@ export async function saveSources(sources: SourceDescriptor[]): Promise<void> {
 }
 
 // Load the source list. On first run (no file), migrate: an existing user gets
-// the two original builtins written out; a new user gets an empty list and no
-// file is written (onboarding owns first-source creation).
+// their pre-source-list builtin written out; a new user gets an empty list and
+// no file is written (onboarding owns first-source creation).
 export async function loadSources(): Promise<SourceDescriptor[]> {
   try {
     if (await exists(SOURCES_FILE, { baseDir: BaseDirectory.AppData })) {

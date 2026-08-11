@@ -127,21 +127,17 @@ test("pipeLabel phrases each pipe type", () => {
 // --- builtin domain matching -----------------------------------------------
 
 test("matchBuiltinSource matches a covered domain and carries its caveat", () => {
-  const m = matchBuiltinSource("https://www.qbitai.com");
-  expect(m?.descriptor.id).toBe("qbitai");
+  const m = matchBuiltinSource("https://www.jiqizhixin.com");
+  expect(m?.descriptor.id).toBe("jiqizhixin");
   expect(m?.descriptor.enabled).toBe(true);
-  expect(m?.note).toMatch(/browser UA/i);
+  expect(m?.note).toMatch(/internal JSON API/i);
 });
 
 test("matchBuiltinSource matches a bare domain and a subdomain of a builtin", () => {
   expect(matchBuiltinSource("jiqizhixin.com")?.descriptor.id).toBe("jiqizhixin");
-  // The arXiv builtin's feed host is rss.arxiv.org; the bare registrable domain matches.
-  expect(matchBuiltinSource("arxiv.org")?.descriptor.id).toBe("arxiv-cs-ro");
-});
-
-test("matchBuiltinSource matches a builtin by a non-discovery host (HN item page)", () => {
-  // Hacker News discovery is hn.algolia.com; the user names news.ycombinator.com.
-  expect(matchBuiltinSource("news.ycombinator.com")?.descriptor.id).toBe("hacker-news");
+  // Science's research feed is discovered through api.crossref.org, so the
+  // subdomain of a builtin's own discovery host resolves to it.
+  expect(matchBuiltinSource("api.crossref.org")?.descriptor.id).toBe("science-journal");
 });
 
 test("matchBuiltinSource returns undefined for an uncovered domain", () => {
@@ -155,10 +151,10 @@ test("probeSource short-circuits to a verified builtin without fetching", async 
     fetched += 1;
     return res("", "text/html", 404);
   };
-  const r = await probeSource("qbitai.com", { fetchFn });
+  const r = await probeSource("bloomberg.com", { fetchFn });
   expect(r.ok).toBe(true);
-  expect(r.descriptor?.id).toBe("qbitai");
-  expect(r.note).toMatch(/browser UA/i);
+  expect(r.descriptor?.id).toBe("bloomberg-markets");
+  expect(r.note).toMatch(/PerimeterX/i);
   expect(fetched).toBe(0);
   expect(r.steps.some((s) => /verified built-in/i.test(s))).toBe(true);
 });
