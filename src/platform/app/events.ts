@@ -10,18 +10,39 @@ import { BaseDirectory, writeTextFile } from "@tauri-apps/plugin-fs";
 
 export type EventType =
   | "classroom-toggle" // { on: boolean }
+  | "talk-start" // { talkId, materials } — a talk was started (docs/31)
+  | "talk-open" // { talkId } — a talk was opened from the topic's list
   | "citation-click" // { kind: "page", page } | { kind: "paper", slug }
   | "page-nav" // { from, to, dwellMs } — dwell is time spent on the previous page
   | "call-start" // { threadId }
   | "call-end" // { threadId } — hangup
   | "thread-delete" // { threadId, book } — conversation deleted (and its mark, if any)
-  | "distill-run" // { threadId, created, updated, deleted } — a pass that finished
-  // A distillation pass that did not finish, so this thread's memory was never
-  // written and its timestamps did not advance. `outcome` is the sub-agent's
-  // (src/ai/subagent), e.g. "out-of-turns" or "failed".
-  | "distill-failed" // { threadId, outcome, created?, updated?, deleted? }
+  // A pass that finished. `trigger` is what set it going (hangup, trim, timer,
+  // startup, foreground, book-switch, talk-exit). A transcript pass carries the
+  // threadId, a silent-marking pass the bookId, a rehearsal's pass (docs/31) also
+  // { talkId, messages } — which talk it was and how many messages it covered.
+  | "distill-run" // { trigger, threadId?, bookId?, created, updated, deleted, talkId?, messages? }
+  // A distillation pass that did not finish, so nothing was observed and its
+  // cursors did not advance. `outcome` is the sub-agent's (src/ai/subagent), e.g.
+  // "out-of-turns" or "failed".
+  | "distill-failed" // { trigger, threadId?, bookId?, outcome, created?, updated?, deleted?, talkId? }
+  // A profile-guess pass that finished (observation/guess.ts), in events-ai.jsonl
+  // rather than a topic's log: the pass looks across every topic at once.
+  // `wrote` says whether the guess section actually changed.
+  | "guess-run" // { trigger, wrote, guesses, dropped }
+  // One that did not, so the profile was left alone and the stamp did not move.
+  // `outcome` is the sub-agent's, or a skip reason from before the model ran.
+  | "guess-failed" // { trigger, outcome }
+  // Where a briefing run's wall clock went, in events-info.jsonl rather than a
+  // topic's log: a briefing belongs to no book. One line per source as it is
+  // discovered, then one per funnel phase (docs/35) — so "why did that take four
+  // minutes" is answerable both by source and by stage.
+  | "info-collect" // { source, ms, items, ok } — one source's discovery
+  | "info-discover" // { ms, sources, items }
+  | "info-screen" // { ms, items, batches, kept, dropped, cappedOut }
+  | "info-material" // { ms, items, fetched }
+  | "info-triage" // { ms, items, ok }
   | "prep-status" // { slug, status }
-  | "memory-tab-open" // {}
   | "notes-run" // { phase: "start" | "done" | "failed" }
   | "notes-chapter-regenerate" // { index }
   | "notes-tab-open" // {}
@@ -29,6 +50,11 @@ export type EventType =
   // events-ai.jsonl rather than a topic's log. See structured-output.ts for the
   // fields and for why it has no topic.
   | "structured-parse";
+
+// The reserved topic id the briefing's timing lines are filed under:
+// events-info.jsonl. Topic ids are UUIDs, so this cannot collide with one —
+// same arrangement as the "ai" id in structured-output.ts.
+export const INFO_EVENT_TOPIC = "info";
 
 export type EventPayload = Record<string, string | number | boolean | null>;
 

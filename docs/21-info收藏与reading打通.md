@@ -14,7 +14,7 @@
 
 重心在 reading。topic 是引力中心，info 是补给线，不是反过来。
 
-不引入第三套状态机。info 侧现有的 `opened` / `dismissed` / `appealed`（`src/memory/feedback.ts` 的 `FeedbackAction`）只喂 info 自己的筛选，一条都不进 reading，这条边界写死在代码里。收藏只有一个动作：收下。其余状态都是推导的。
+不引入第三套状态机。info 侧现有的 `opened` / `dismissed` / `appealed`（`src/observation/feedback.ts` 的 `FeedbackAction`）只喂 info 自己的筛选，一条都不进 reading，这条边界写死在代码里。收藏只有一个动作：收下。其余状态都是推导的。
 
 ## 入口
 
@@ -84,10 +84,10 @@ AI 这次用了哪几条外部材料，用户要看得见。可见性是闸的�
 
 - info 的根聊天跨天。现在按天分文件：`infoBookId(date)` 返回 `info-<date>`，落成 `threads-info-<date>.json`，thread id 只有 `briefing` / `onboarding` / itemId 三种（`src/info/companion/call.ts`、`InfoCall.tsx`）。"info 有一个根聊天"要一个跨天不变的 key，否则每天换一个根。
 
-- 共用的记忆作用域。memory 只有按 topic 一种形态：`MemoryFileStore` 的构造参数就是 topicId，目录是 `memory-<topicId>/`。info 侧一条 memory 也不写，只读画像和反馈日志。跨场景共用的今天只有 `user-profile.md` 一份文件。两个根共用记忆要一个不属于任何 topic 的记忆作用域，且从第一天就是它——先按 topic 建再合并就是那次要避免的迁移。
+- 共用的记忆作用域。AI observations 只有按 topic 一种形态：`ObservationFileStore` 的构造参数就是 topicId，目录是 `memory-<topicId>/`（历史名）。info 侧一条观察也不写，只读画像和反馈日志。跨场景共用的今天只有 `user-profile.md` 一份文件。两个根共用记忆要一个不属于任何 topic 的记忆作用域，且从第一天就是它——先按 topic 建再合并就是那次要避免的迁移。
 
 - 引用时的三件事。时效（`publishedAt` 已存，要进引用路径）、证据不全（`summaryOnly` 已存，要跟着材料进 reading 的 prompt）、用了哪几条材料的可见性。第三条现在没有落点：工具痕迹是瞬时的，成功即从行里消失，从不落盘（`src/ui/components/common/toolTrace.ts`）。可见性既然是闸的一部分，就不能靠一个成功就消失的东西。
 
-反向的边已经有一条：`assembleReadingContext()` 把各 topic 的 memory 索引拼成一段 READER'S CURRENT CONTEXT 喂给 triage（`src/memory/assemble.ts` → `src/info/briefing/live.ts`）。reading→info 通了，info→reading 一条都没有。
+反向的边已经有一条：`assembleReadingContext()` 把各 topic 的 observation 索引拼成一段 READER'S CURRENT CONTEXT 喂给 triage（`src/observation/assemble.ts` → `src/info/briefing/live.ts`）。reading→info 通了，info→reading 一条都没有。
 
 *讨论：2026-07-27*

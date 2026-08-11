@@ -34,7 +34,8 @@ import {
   type BriefingJob,
 } from "../../../info/companion/call";
 import { addSource, hasSources } from "../../../info/sources/source-store";
-import { saveProfile } from "../../../memory/profile";
+import { loadProfile, saveProfile } from "../../../observation/profile";
+import { replaceDeclared } from "../../../observation/guess";
 import { getInfoPipeline } from "../../../info/briefing/live";
 import { Badge } from "../ui/badge";
 import CallView from "../chat/CallView";
@@ -306,7 +307,10 @@ export function InfoCall({
       const card = found.payload;
       if (card.phase === "applied") return;
       try {
-        await saveProfile(card.profile);
+        // The card carries the declared half only (that is all the drafting model
+        // was shown), so the write splices it in and leaves the AI's guess section
+        // where it is (observation/guess.ts).
+        await saveProfile(replaceDeclared(await loadProfile(), card.profile));
       } catch {
         return;
       }

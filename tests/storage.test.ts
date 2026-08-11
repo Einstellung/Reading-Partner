@@ -1,8 +1,9 @@
-// Unit tests for the pure classroom-flag merge (src/platform/app/storage.ts withClassroom):
-// the per-book sticky Classroom mode (docs/09). Run: bun test.
+// Unit tests for the pure mode-flag merge (src/platform/app/storage.ts withModes):
+// the per-book sticky Classroom mode (docs/09), written alongside the reader's
+// own position fields without disturbing them. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { withClassroom } from "../src/platform/app/storage";
+import { withModes } from "../src/platform/app/storage";
 import type { ViewState } from "../src/platform/app/reader-contract";
 
 const base: ViewState = {
@@ -15,8 +16,10 @@ const base: ViewState = {
   pageY: 20,
 };
 
+const OFF = { classroom: false };
+
 test("sets the flag while preserving reader-owned position fields", () => {
-  const on = withClassroom(base, true);
+  const on = withModes(base, { classroom: true });
   expect(on.classroom).toBe(true);
   expect(on.pageIndex).toBe(7);
   expect(on.scale).toBe(1.25);
@@ -25,13 +28,13 @@ test("sets the flag while preserving reader-owned position fields", () => {
 });
 
 test("clears the flag to false (off, but explicit)", () => {
-  const off = withClassroom({ ...base, classroom: true }, false);
+  const off = withModes({ ...base, classroom: true }, OFF);
   expect(off.classroom).toBe(false);
   expect(off.pageIndex).toBe(7);
 });
 
 test("falls back to a default base when the book has no saved state", () => {
-  const on = withClassroom(null, true);
+  const on = withModes(null, { classroom: true });
   expect(on.classroom).toBe(true);
   expect(on.pageIndex).toBe(0);
   expect(on.scrollMode).toBe(0);
@@ -40,11 +43,20 @@ test("falls back to a default base when the book has no saved state", () => {
 });
 
 test("keeps a legacy spreadMode from an old file untouched", () => {
-  expect(withClassroom(base, true).spreadMode).toBe(0);
+  expect(withModes(base, OFF).spreadMode).toBe(0);
+});
+
+// A file written while rehearsal was briefly a mode of a book still carries the
+// key. Nothing reads it, and the merge neither writes nor removes it.
+test("leaves a stale rehearsal flag from an older build alone", () => {
+  const stale = { ...base, rehearsal: true } as ViewState & { rehearsal?: boolean };
+  const merged = withModes(stale, { classroom: true }) as ViewState & { rehearsal?: boolean };
+  expect(merged.rehearsal).toBe(true);
+  expect(merged.classroom).toBe(true);
 });
 
 test("does not mutate the input state", () => {
   const input: ViewState = { ...base };
-  withClassroom(input, true);
+  withModes(input, { classroom: true });
   expect("classroom" in input).toBe(false);
 });

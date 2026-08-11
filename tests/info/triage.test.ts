@@ -8,7 +8,8 @@ import {
   triageSystemPrompt,
   triageUserMessage,
 } from "../../src/info/briefing/triage";
-import type { FeedbackEvent } from "../../src/memory/feedback";
+import type { FeedbackEvent } from "../../src/observation/feedback";
+import { composeProfile, splitProfile } from "../../src/observation/guess";
 import type { InfoItem } from "../../src/info/sources/item";
 import { languageInstruction } from "../../src/platform/app/settings";
 
@@ -70,6 +71,32 @@ test("triageSystemPrompt judges an empty profile universally, assuming no field"
   const p = triageSystemPrompt("auto");
   expect(p).toMatch(/if the profile is empty/i);
   expect(p).toMatch(/its own information value/i);
+});
+
+test("the AI's guesses are labelled apart from what the reader declared", () => {
+  const profile = composeProfile(splitProfile("Interests: robotics.\n"), [
+    {
+      text: "Wants the era, not the method",
+      basis: "Marked capital flows in trends.pdf, 2026-08",
+      since: "2026-08-01",
+    },
+  ]);
+  const msg = triageUserMessage(profile, [], ITEMS, { textChars: 50 });
+  expect(msg).toContain("READER PROFILE (what the reader has told us themselves)");
+  expect(msg).toContain("Interests: robotics.");
+  expect(msg).toContain("AI GUESSES ABOUT THE READER");
+  expect(msg).toContain("Wants the era, not the method");
+  // The markers are file machinery and never reach the model.
+  expect(msg).not.toContain("ai-guess:begin");
+  // No guesses, no heading for them.
+  expect(triageUserMessage("Interests: robotics.", [], ITEMS)).not.toContain("AI GUESSES");
+});
+
+test("triageSystemPrompt tells triage a guess is not a stated preference", () => {
+  const p = triageSystemPrompt("auto");
+  expect(p).toContain("AI GUESSES ABOUT THE READER");
+  expect(p).toMatch(/some of them are wrong/i);
+  expect(p).toMatch(/never filter an item solely because a guess/i);
 });
 
 test("triageUserMessage marks an empty profile as unset", () => {

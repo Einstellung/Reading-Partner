@@ -28,9 +28,11 @@ const EVEN: Record<ReductionId, number> = {
   "reader-profile": 5_000,
   "notes-overview": 5_000,
   "booklist-thin": 5_000,
-  "memory-trim": 5_000,
+  "observation-trim": 5_000,
+  "rehearsal-notes": 5_000,
   "tool-result-stubs": 5_000,
   "classroom-inline": 5_000,
+  "rehearsal-marks": 5_000,
   "history-trim": 5_000,
 };
 
@@ -69,21 +71,31 @@ test("rungs are given up in the declared order, cheapest loss first", () => {
     "reader-profile",
     "notes-overview",
     "booklist-thin",
-    "memory-trim",
+    "observation-trim",
   ]);
   expect(p.outcome).toBe("ok");
   expect(p.notice).toBe("");
 });
 
 test("tool-result stubs come after every silent drop and before any evidence", () => {
-  const p = plan({ used: FITS_AT + 26_000 });
+  const p = plan({ used: FITS_AT + 31_000 });
   expect(p.apply[p.apply.length - 1]).toBe("tool-result-stubs");
   expect(p.apply).not.toContain("classroom-inline");
   expect(p.notice).toBe("");
 });
 
+// The rehearsal's inlined chapter note is tier 2 like the tool results: read_chapter_note
+// fetches it straight back, so it goes without a word, and it goes before the
+// results the model asked for itself.
+test("the rehearsal's chapter note goes silently, ahead of the tool results", () => {
+  const p = plan({ used: FITS_AT + 26_000 });
+  expect(p.apply[p.apply.length - 1]).toBe("rehearsal-notes");
+  expect(p.apply).not.toContain("tool-result-stubs");
+  expect(p.notice).toBe("");
+});
+
 test("dropping the inlined book is told to the user", () => {
-  const p = plan({ used: FITS_AT + 31_000 });
+  const p = plan({ used: FITS_AT + 36_000 });
   expect(p.apply).toContain("classroom-inline");
   expect(p.apply).not.toContain("history-trim");
   expect(p.notice).toBe(
@@ -91,14 +103,24 @@ test("dropping the inlined book is told to the user", () => {
   );
 });
 
+// The reader's own marks are evidence, so shortening them is said out loud — and
+// the line says how to get them back, because read_annotations really can.
+test("shortening the reader's marks is told to the user", () => {
+  const p = plan({ used: FITS_AT + 41_000 });
+  expect(p.apply[p.apply.length - 1]).toBe("rehearsal-marks");
+  expect(p.apply).not.toContain("history-trim");
+  expect(p.notice).toContain("your highlights are shortened here to fit");
+});
+
 // history-trim is last on purpose: the fallback distillation that is supposed to
 // preserve an older stretch of thread is fired and forgotten, so a trim before
 // it lands is a straight loss of the conversation.
 test("history is the last thing given up, and it is told to the user", () => {
-  const p = plan({ used: FITS_AT + 36_000 });
+  const p = plan({ used: FITS_AT + 46_000 });
   expect(p.apply[p.apply.length - 1]).toBe("history-trim");
   expect(p.notice).toBe(
     "Note: the book didn't fit in context, so I read the pages I needed instead of having all of it in view; " +
+      "your highlights are shortened here to fit; ask me to pull a chapter's marks up in full and I'll read them again; " +
       "earlier turns of this conversation were left out to make room.",
   );
 });
@@ -146,7 +168,7 @@ test("a model with no declared window never triggers the ladder", () => {
 
 test("budgetNotice only speaks for the rungs that owe an explanation", () => {
   expect(budgetNotice([])).toBe("");
-  expect(budgetNotice(["figure-catalog", "memory-trim", "tool-result-stubs"])).toBe("");
+  expect(budgetNotice(["figure-catalog", "observation-trim", "tool-result-stubs"])).toBe("");
   expect(budgetNotice(["history-trim"])).toBe(
     "Note: earlier turns of this conversation were left out to make room.",
   );

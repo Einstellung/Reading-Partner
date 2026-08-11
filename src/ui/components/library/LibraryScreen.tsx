@@ -1,8 +1,18 @@
-// The library home screen: the shelf of topics and, one level in, the books
-// inside one topic. Both are the same grid of cover cards (cardStyles.ts,
-// CoverBand, CardMenu); what differs is the label under the band and what the
-// menu offers. This file owns which dialog is open; the topic list itself and
-// which one is active stay on App, which needs them for the reading context.
+// The library home screen: the shelf of topics and, one level in, one topic.
+// The shelf and the topic's Materials section are the same grid of cover cards
+// (cardStyles.ts, CoverBand, CardMenu); what differs is the label under the band
+// and what the menu offers. This file owns which dialog is open; the topic list
+// itself and which one is active stay on App, which needs them for the reading
+// context.
+//
+// A topic has a sidebar down its left (docs/31, "界面"): Materials, Talks, AI
+// observations. Which section is showing and whether the sidebar is open live
+// here — they are view state of this screen and nothing above it reads them.
+//
+// An open talk replaces the whole topic while it lasts (the same move the saved
+// article reader makes), so entering one needs no route and leaving it puts the
+// topic back as it was. A talk runs on material read from disk, so nothing above
+// this screen has to know a rehearsal is happening.
 
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -14,6 +24,7 @@ import {
   type FileRef,
   type Topic,
 } from "../../../platform/app/topics";
+import { logEvent } from "../../../platform/app/events";
 import { getViewState } from "../../../platform/app/storage";
 import { getFulltext } from "../../../fulltext";
 import { loadAnnotations } from "../../../platform/app/annotations";
@@ -24,6 +35,8 @@ import {
   savedArticlesForTopic,
   type SavedArticle,
 } from "../../../reading/saved-articles";
+import { startTalk } from "../../../reading/talks";
+import TalkView from "../talk/TalkView";
 import { Button } from "../ui/button";
 import BookCard from "./BookCard";
 import { ADD_CARD, ADD_CARD_BOX, CARD_LABEL, LIBRARY_GRID, LIBRARY_PAGE } from "./cardStyles";
@@ -34,6 +47,17 @@ import SavedArticleView from "./SavedArticleView";
 import TopicCard from "./TopicCard";
 import TopicNameDialog from "./TopicNameDialog";
 import { shelfOrder, TOPIC_GRID_COLUMNS_CLASS } from "./topic-shelf";
+import ObservationSection from "./topic/ObservationSection";
+import TalksSection from "./topic/TalksSection";
+import TopicNav from "./topic/TopicNav";
+import {
+  browserNavStore,
+  DEFAULT_SECTION,
+  readNavEnv,
+  readNavOpen,
+  writeNavOpen,
+  type TopicSection,
+} from "./topic/topic-nav";
 
 const GRID = `${LIBRARY_GRID} ${TOPIC_GRID_COLUMNS_CLASS}`;
 const PAGE_TITLE = "mt-0 mb-6 mx-0 text-[22px] font-bold";
@@ -59,6 +83,44 @@ export default function LibraryScreen(props: {
   const [openSavedArticle, setOpenSavedArticle] = useState<SavedArticle | null>(null);
   const { activeTopic } = props;
 
+  // The sidebar. Read once at mount, like the shell choice it shares its
+  // measurements with: following a rotation would reopen a sidebar the user
+  // closed. The section resets to Materials with every topic — a topic is
+  // entered to read, and Talks is where you go on purpose.
+  const [section, setSection] = useState<TopicSection>(DEFAULT_SECTION);
+  // The talk being prepared, if any. Nothing else on this screen changes while
+  // one is open, so leaving it is one setState.
+  const [openTalkId, setOpenTalkId] = useState<string | null>(null);
+  const [navOpen, setNavOpen] = useState(() =>
+    readNavOpen(browserNavStore(window), readNavEnv(window)),
+  );
+  const toggleNav = useCallback(() => {
+    setNavOpen((open) => {
+      writeNavOpen(browserNavStore(window), !open);
+      return !open;
+    });
+  }, []);
+  useEffect(() => {
+    setSection(DEFAULT_SECTION);
+    setOpenTalkId(null);
+  }, [activeTopic?.id]);
+
+  // Rehearse one book: a talk of its own, entered straight away (docs/31 — the
+  // entry is in the topic, on the material). A file with no book id has nothing
+  // on disk to rehearse from, so the card does not offer it.
+  const startTalkOn = useCallback(
+    async (file: FileRef) => {
+      if (!activeTopic || !file.hash) return;
+      const talk = await startTalk({
+        topicId: activeTopic.id,
+        materials: [{ bookId: file.hash, title: displayFileTitle(file.name) }],
+      });
+      logEvent(activeTopic.id, "talk-start", { talkId: talk.id, materials: 1 });
+      setOpenTalkId(talk.id);
+    },
+    [activeTopic],
+  );
+
   // Reloaded whenever the open topic changes: a keep that happened while the
   // reader was over in the briefing has to show up here.
   const refreshSavedArticles = useCallback(async () => {
@@ -78,43 +140,85 @@ export default function LibraryScreen(props: {
     return <SavedArticleView article={openSavedArticle} onBack={() => setOpenSavedArticle(null)} />;
   }
 
+  if (activeTopic && openTalkId) {
+    return (
+      <TalkView
+        key={openTalkId}
+        talkId={openTalkId}
+        topicName={activeTopic.name}
+        onBack={() => setOpenTalkId(null)}
+      />
+    );
+  }
+
+  // One topic: the sidebar beside a column that scrolls. The sidebar is a column
+  // in the flow rather than a drawer over the content, so the shelf narrows
+  // instead of being covered and nothing has to be dismissed to reach a card.
+  if (activeTopic) {
+    return (
+      <div className="absolute inset-0 flex items-stretch bg-white">
+        <TopicNav section={section} onSelect={setSection} open={navOpen} onToggle={toggleNav} />
+        {section === "observations" ? (
+          // The panel scrolls inside itself, so this column does not scroll.
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+            {/* No second width utility here: LIBRARY_PAGE owns it (docs/30). */}
+            <div className={`${LIBRARY_PAGE} flex min-h-0 flex-1 flex-col`}>
+              <h1 className={PAGE_TITLE}>{activeTopic.name}</h1>
+              <div className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border">
+                <ObservationSection topicId={activeTopic.id} />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="min-w-0 flex-1 overflow-y-auto">
+            <div className={LIBRARY_PAGE}>
+              <h1 className={PAGE_TITLE}>{activeTopic.name}</h1>
+              {section === "talks" ? (
+                <TalksSection topic={activeTopic} onOpenTalk={setOpenTalkId} />
+              ) : (
+                <TopicMaterials
+                  topic={activeTopic}
+                  savedArticles={savedArticles}
+                  onAddFile={props.onAddFile}
+                  onOpenFile={props.onOpenFile}
+                  onRehearse={(f) => void startTalkOn(f)}
+                  onRemoveFile={async (p) => {
+                    await removeFileFromTopic(activeTopic.id, p);
+                    await props.onTopicsChanged();
+                  }}
+                  onOpenSavedArticle={setOpenSavedArticle}
+                  onRemoveSavedArticle={async (id) => {
+                    await removeSavedArticle(id);
+                    await refreshSavedArticles();
+                  }}
+                />
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="absolute inset-0 flex flex-col items-stretch justify-start gap-6 bg-white overflow-y-auto">
-      {activeTopic ? (
-        <TopicDetail
-          topic={activeTopic}
-          savedArticles={savedArticles}
-          onAddFile={props.onAddFile}
-          onOpenFile={props.onOpenFile}
-          onRemoveFile={async (p) => {
-            await removeFileFromTopic(activeTopic.id, p);
-            await props.onTopicsChanged();
-          }}
-          onOpenSavedArticle={setOpenSavedArticle}
-          onRemoveSavedArticle={async (id) => {
-            await removeSavedArticle(id);
-            await refreshSavedArticles();
-          }}
-        />
-      ) : (
-        <TopicLibrary
-          topics={props.topics}
-          onCreate={async (name) => {
-            await createTopic(name);
-            await props.onTopicsChanged();
-          }}
-          onRename={async (topic, name) => {
-            await renameTopic(topic.id, name);
-            await props.onTopicsChanged();
-          }}
-          // Confirmed in DeleteTopicButton, which is what calls this.
-          onDelete={async (t) => {
-            await deleteTopic(t.id);
-            await props.onTopicsChanged();
-          }}
-          onOpen={props.onOpenTopic}
-        />
-      )}
+      <TopicLibrary
+        topics={props.topics}
+        onCreate={async (name) => {
+          await createTopic(name);
+          await props.onTopicsChanged();
+        }}
+        onRename={async (topic, name) => {
+          await renameTopic(topic.id, name);
+          await props.onTopicsChanged();
+        }}
+        // Confirmed in DeleteTopicButton, which is what calls this.
+        onDelete={async (t) => {
+          await deleteTopic(t.id);
+          await props.onTopicsChanged();
+        }}
+        onOpen={props.onOpenTopic}
+      />
     </div>
   );
 }
@@ -245,12 +349,16 @@ function TopicLibrary(props: {
   );
 }
 
-function TopicDetail(props: {
+// The Materials section: the topic's shelf, unchanged. The page column and the
+// topic's name are the sidebar shell's now, because every section wears them.
+function TopicMaterials(props: {
   topic: Topic;
   // Already filtered to this topic and newest-first by the host.
   savedArticles: SavedArticle[];
   onAddFile: () => void;
   onOpenFile: (file: FileRef) => void;
+  // Start a talk about this one book and go straight into it.
+  onRehearse: (file: FileRef) => void;
   onRemoveFile: (path: string) => void;
   onOpenSavedArticle: (article: SavedArticle) => void;
   onRemoveSavedArticle: (id: string) => void;
@@ -291,9 +399,7 @@ function TopicDetail(props: {
   }, [props.topic]);
 
   return (
-    <div className={LIBRARY_PAGE}>
-      <h1 className={PAGE_TITLE}>{props.topic.name}</h1>
-
+    <>
       {files.length === 0 ? (
         <EmptyState
           title="No books in this topic yet"
@@ -309,6 +415,7 @@ function TopicDetail(props: {
               file={f}
               meta={meta[f.path]}
               onOpen={() => props.onOpenFile(f)}
+              onRehearse={f.hash ? () => props.onRehearse(f) : undefined}
               onRemove={() => setRemoving(f)}
             />
           ))}
@@ -358,6 +465,6 @@ function TopicDetail(props: {
           onRemove={() => props.onRemoveFile(removing.path)}
         />
       )}
-    </div>
+    </>
   );
 }

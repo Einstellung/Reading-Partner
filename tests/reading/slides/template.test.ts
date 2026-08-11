@@ -59,6 +59,14 @@ test("the assembled deck is self-contained: no external URLs", () => {
   expect(/https?:\/\//.test(html)).toBe(false);
 });
 
+test("the shell can report a clipped slide at playback", () => {
+  const html = assembleDeck({ title: "T", slides: [{ kind: "content", fragment: "<h2>x</h2>", asset: null }] });
+  // The marker element, its class toggle, and the measurement that drives it.
+  expect(html).toContain('id="overflow-warn"');
+  expect(html).toContain("scrollHeight");
+  expect(html).toContain("warn.classList.toggle('on'");
+});
+
 test("assembleDeck escapes the title", () => {
   const html = assembleDeck({ title: "A & B <x>", slides: [{ kind: "title", fragment: "", asset: null }] });
   expect(html).toContain("<title>A &amp; B &lt;x&gt;</title>");

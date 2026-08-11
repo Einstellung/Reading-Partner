@@ -5,7 +5,13 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { collectSource, collectAll, type SourceSettled } from "../../src/info/sources/engine";
+import {
+  collectSource,
+  collectAll,
+  fetchBodies,
+  SOURCE_CONCURRENCY,
+  type SourceSettled,
+} from "../../src/info/sources/engine";
 import type { ExtractReadable } from "../../src/info/extract/readable-select";
 import type { SourceDescriptor } from "../../src/info/sources/descriptor";
 
@@ -293,4 +299,300 @@ test("collectAll hands each source over as it settles, items and all, once per e
   const badErr = settled.find((r) => r.source === "bad")!;
   expect(badErr.items).toEqual([]);
   expect(badErr.error).toBeTruthy();
+});
+
+// --- concurrency + cancellation --------------------------------------------
+
+// A feed of n entries, so a source's per-article half has something to overlap.
+function feedOf(n: number): string {
+  const items = Array.from(
+    { length: n },
+    (_, i) => `<item><title>T${i}</title><link>https://q/${i}.html</link></item>`,
+  ).join("");
+  return `<rss version="2.0"><channel>${items}</channel></rss>`;
+}
+
+test("a source fetches its articles several at a time, in feed order", async () => {
+  const pages: ((v: Response) => void)[] = [];
+  let inFlight = 0;
+  let peak = 0;
+  const fetchFn = async (url: string) => {
+    if (url.endsWith("/feed")) return res(feedOf(8));
+    inFlight++;
+    peak = Math.max(peak, inFlight);
+    const body = await new Promise<Response>((resolve) => pages.push(resolve));
+    inFlight--;
+    return body;
+  };
+  const run = collectSource(QBIT, { fetchFn, extract });
+  // Let the feed land and the first batch of page fetches go out.
+  await new Promise<void>((r) => setTimeout(r, 0));
+  expect(peak).toBeGreaterThan(1);
+  // Answer in reverse, so completion order is the opposite of feed order.
+  for (const resolve of [...pages].reverse()) resolve(res("<html>page</html>"));
+  await new Promise<void>((r) => setTimeout(r, 0));
+  for (const resolve of pages) resolve(res("<html>page</html>"));
+  const items = await run;
+  expect(items.map((i) => i.url)).toEqual(
+    Array.from({ length: 8 }, (_, i) => `https://q/${i}.html`),
+  );
+});
+
+test("an abort stops a source mid-collection and sends nothing more", async () => {
+  const controller = new AbortController();
+  let pageFetches = 0;
+  const fetchFn = async (url: string) => {
+    if (url.endsWith("/feed")) return res(feedOf(20));
+    pageFetches++;
+    // Slow enough that the abort lands while the first batch is in flight.
+    await new Promise<void>((r) => setTimeout(r, 5));
+    return res("<html>page</html>");
+  };
+  const run = collectSource(QBIT, { fetchFn, extract, signal: controller.signal });
+  await new Promise<void>((r) => setTimeout(r, 0));
+  controller.abort();
+  await expect(run).rejects.toThrow();
+  const sentBeforeAbort = pageFetches;
+  await new Promise<void>((r) => setTimeout(r, 20));
+  // Nothing left the queue after the abort: 20 articles, at most one batch sent.
+  expect(pageFetches).toBe(sentBeforeAbort);
+  expect(pageFetches).toBeLessThanOrEqual(SOURCE_CONCURRENCY);
+});
+
+test("a source already aborted is never fetched at all", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  let calls = 0;
+  const fetchFn = async () => {
+    calls++;
+    return res(feedOf(1));
+  };
+  await expect(collectSource(QBIT, { fetchFn, extract, signal: controller.signal })).rejects.toThrow();
+  expect(calls).toBe(0);
+});
+
+test("collectAll keeps the sources that settled and stays quiet about the aborted one", async () => {
+  const controller = new AbortController();
+  const fast: SourceDescriptor = {
+    id: "fast",
+    name: "Fast",
+    line: "AI",
+    enabled: true,
+    discovery: { kind: "json-api", listUrl: "https://fast/list", fields: { id: "id", title: "t", content: "c" } },
+    fulltext: { mode: "feed-field" },
+  };
+  const slow: SourceDescriptor = { ...QBIT, id: "slow", name: "Slow" };
+  const fetchFn = async (url: string) => {
+    if (url.includes("fast/list")) return res(JSON.stringify([{ id: "1", t: "One", c: "<p>b</p>" }]));
+    if (url.endsWith("/feed")) return res(feedOf(20));
+    await new Promise<void>((r) => setTimeout(r, 50));
+    return res("<html>page</html>");
+  };
+  const settled: SourceSettled[] = [];
+  const run = collectAll([fast, slow], {
+    fetchFn,
+    extract,
+    now: () => 1000,
+    signal: controller.signal,
+    onSourceSettled: (r) => void settled.push(r),
+  });
+  await new Promise<void>((r) => setTimeout(r, 5));
+  controller.abort();
+  const { items, health } = await run;
+  // The one that finished is kept and reported; the cancelled one is neither
+  // reported nor blamed in the health sidecar, so it stays pending for a resume.
+  expect(settled.map((r) => r.source)).toEqual(["fast"]);
+  expect(items.map((i) => i.source)).toEqual(["fast"]);
+  expect(health.fast.lastSuccess).toBe(1000);
+  expect(health.slow).toBeUndefined();
+});
+
+test("a settled source reports how long it took", async () => {
+  const desc: SourceDescriptor = {
+    id: "timed",
+    name: "Timed",
+    line: "AI",
+    enabled: true,
+    discovery: { kind: "json-api", listUrl: "https://timed/list", fields: { id: "id", title: "t", content: "c" } },
+    fulltext: { mode: "feed-field" },
+  };
+  let clock = 1000;
+  const settled: SourceSettled[] = [];
+  const { health } = await collectAll([desc], {
+    fetchFn: async () => {
+      clock += 250;
+      return res(JSON.stringify([{ id: "1", t: "One", c: "<p>b</p>" }]));
+    },
+    now: () => clock,
+    onSourceSettled: (r) => void settled.push(r),
+  });
+  expect(settled[0].durationMs).toBe(250);
+  expect(health.timed.lastDurationMs).toBe(250);
+  expect(health.timed.lastItems).toBe(1);
+});
+
+// --- discovery only, and the material step (docs/35) ------------------------
+
+test("discoveryOnly takes the headlines and sends not one article request", async () => {
+  const calls: string[] = [];
+  const fetchFn = async (url: string) => {
+    calls.push(url);
+    return res(url.endsWith("/feed") ? RSS : "<html>page</html>");
+  };
+  const items = await collectSource(QBIT, { fetchFn, extract, discoveryOnly: true });
+  expect(calls).toEqual(["https://q/feed"]);
+  expect(items.length).toBe(1);
+  expect(items[0].title).toBe("大模型又出新活");
+  expect(items[0].textContent).toBeUndefined();
+  expect(items[0].summaryOnly).toBe(true);
+  // The source's own key for the article, so the body can be fetched later.
+  expect(items[0].sourceKey).toBe("https://q/2026/1.html");
+});
+
+test("discoveryOnly keeps a body the list response already carried", async () => {
+  const desc: SourceDescriptor = {
+    id: "sw",
+    name: "Simon Willison",
+    line: "AI",
+    enabled: true,
+    discovery: { kind: "feed", url: "https://sw/feed" },
+    fulltext: { mode: "feed-field", field: "description" },
+  };
+  const rss = `<rss><channel><item><title>Post</title><link>https://sw/1</link><description><![CDATA[<p>The whole post.</p>]]></description></item></channel></rss>`;
+  const calls: string[] = [];
+  const items = await collectSource(desc, {
+    fetchFn: async (url) => {
+      calls.push(url);
+      return res(rss);
+    },
+    extract,
+    discoveryOnly: true,
+  });
+  // One request, and the body came back with it: nothing was left to fetch.
+  expect(calls).toEqual(["https://sw/feed"]);
+  expect(items[0].textContent).toContain("The whole post");
+  expect(items[0].summaryOnly).toBe(false);
+});
+
+test("discoveryOnly skips the detail endpoint, and fetchBodies pays for it later", async () => {
+  const list = JSON.stringify({ articles: [{ slug: "s1", title: "T1", content: "<p>summary</p>" }] });
+  const detail = JSON.stringify({ title: "T1 full", content: "<p>The method reaches 42%.</p>" });
+  const calls: string[] = [];
+  const fetchFn = async (url: string) => {
+    calls.push(url);
+    return res(url.includes("/api/") ? detail : list);
+  };
+  const discovered = await collectSource(JQX, { fetchFn, discoveryOnly: true });
+  expect(calls).toEqual(["https://jqx/list"]);
+  expect(discovered[0].summaryOnly).toBe(true);
+  expect(discovered[0].sourceKey).toBe("s1");
+
+  const filled = await fetchBodies(discovered, [JQX], { fetchFn });
+  expect(calls).toEqual(["https://jqx/list", "https://jqx/api/s1.json"]);
+  expect(filled[0].textContent).toContain("42%");
+  expect(filled[0].title).toBe("T1 full");
+  expect(filled[0].summaryOnly).toBe(false);
+  // The item id is stable across the two steps, so the checkpoint can match them.
+  expect(filled[0].id).toBe(discovered[0].id);
+});
+
+test("fetchBodies fetches the page for a fetch-page source, reporting each as it settles", async () => {
+  const fetchFn = async (url: string) => res(url.endsWith("/feed") ? RSS : "<html>page</html>");
+  const discovered = await collectSource(QBIT, { fetchFn, extract, discoveryOnly: true });
+  const settled: string[] = [];
+  const filled = await fetchBodies(discovered, [QBIT], { fetchFn, extract }, (it) => {
+    settled.push(it.id);
+  });
+  expect(settled).toEqual([discovered[0].id]);
+  expect(filled[0].textContent).toContain("plain body of https://q/2026/1.html");
+  expect(filled[0].summaryOnly).toBe(false);
+});
+
+test("fetchBodies leaves an item summary-only when its page will not load", async () => {
+  const fetchFn = async (url: string) => (url.endsWith("/feed") ? res(RSS) : res("boom", 500));
+  const discovered = await collectSource(QBIT, { fetchFn, extract, discoveryOnly: true });
+  const filled = await fetchBodies(discovered, [QBIT], { fetchFn, extract });
+  expect(filled.length).toBe(1);
+  expect(filled[0].summaryOnly).toBe(true);
+  expect(filled[0].textContent).toBeUndefined();
+});
+
+test("fetchBodies never re-fetches a body the feed already gave, and skips unknown sources", async () => {
+  const desc: SourceDescriptor = {
+    id: "sw",
+    name: "Simon Willison",
+    line: "AI",
+    enabled: true,
+    discovery: { kind: "feed", url: "https://sw/feed" },
+    fulltext: { mode: "feed-field", field: "description" },
+  };
+  const withBody = {
+    id: "x1",
+    source: "sw",
+    sourceName: "Simon Willison",
+    title: "Post",
+    url: "https://sw/1",
+    publishedAt: "",
+    textContent: "The whole post.",
+    summaryOnly: false,
+  };
+  const orphan = { ...withBody, id: "x2", source: "gone" };
+  const calls: string[] = [];
+  const filled = await fetchBodies([withBody, orphan], [desc], {
+    fetchFn: async (url) => {
+      calls.push(url);
+      return res("<html/>");
+    },
+    extract,
+  });
+  expect(calls).toEqual([]);
+  expect(filled.map((i) => i.id)).toEqual(["x1", "x2"]);
+});
+
+test("a Stop during the material step surfaces rather than passing for a finished fetch", async () => {
+  const controller = new AbortController();
+  const fetchFn = async (url: string) => {
+    if (url.endsWith("/feed")) return res(RSS);
+    controller.abort();
+    return res("<html>page</html>");
+  };
+  const discovered = await collectSource(QBIT, { fetchFn, extract, discoveryOnly: true });
+  await expect(
+    fetchBodies(discovered, [QBIT], { fetchFn, extract, signal: controller.signal }),
+  ).rejects.toThrow();
+});
+
+// --- the blurb a feed actually carries --------------------------------------
+
+test("an entry whose only text is content:encoded still gets a blurb", async () => {
+  // Nature's RDF shape: an editorial summary in <content:encoded>, no
+  // <description> at all. Under the funnel a blurbless item is one the screen
+  // has to judge from its headline alone.
+  const rss = `<rss xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><item><title>A new state of matter</title><link>https://n/1</link><content:encoded><![CDATA[<p>Researchers report a lattice that stays coherent at 4K.</p>]]></content:encoded></item></channel></rss>`;
+  const desc: SourceDescriptor = {
+    id: "nature",
+    name: "Nature",
+    line: "science",
+    enabled: true,
+    discovery: { kind: "feed", url: "https://n/rss" },
+    fulltext: { mode: "none" },
+  };
+  const items = await collectSource(desc, { fetchFn: async () => res(rss) });
+  expect(items[0].summary).toContain("stays coherent at 4K");
+  // Flattened out of its HTML, like any other blurb.
+  expect(items[0].summary).not.toContain("<p>");
+});
+
+test("a feed with its own description is unaffected by that fallback", async () => {
+  const rss = `<rss xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><item><title>Paper</title><link>https://a/1</link><description>The list blurb.</description><content:encoded><![CDATA[<p>The whole body.</p>]]></content:encoded></item></channel></rss>`;
+  const desc: SourceDescriptor = {
+    id: "arx",
+    name: "arXiv",
+    line: "robotics",
+    enabled: true,
+    discovery: { kind: "feed", url: "https://a/rss" },
+    fulltext: { mode: "none" },
+  };
+  const items = await collectSource(desc, { fetchFn: async () => res(rss) });
+  expect(items[0].summary).toBe("The list blurb.");
 });

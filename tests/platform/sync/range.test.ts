@@ -12,6 +12,7 @@ test("core user-data files are in range", () => {
     "topics.json",
     "annotations-abc123.json",
     "threads-abc123.json",
+    // "memory-" is the AI observations directories' historical on-disk name.
     "memory-topic1/m-ab12cd34.md",
     "memory-topic1/index.md",
     "memory-topic1/meta.json",
@@ -20,6 +21,12 @@ test("core user-data files are in range", () => {
     "notes-deadbeef/state.json",
     "notes-deadbeef/overview.md",
     "notes-deadbeef/chapter-01.md",
+    // A talk (docs/31): its materials and the outline its rehearsal settled.
+    // Nothing rebuilds it from the books, so it travels like marks and threads
+    // rather than like the caches below — and so does its conversation, which is
+    // a thread file keyed by the talk.
+    "talk-1754400000000.json",
+    "threads-talk-1754400000000.json",
     // The cross-scenario user profile and the info feedback log are the user's
     // data (docs/16); info-profile.md is the profile's old name, kept in range
     // through the transition.
@@ -55,6 +62,12 @@ test("caches, logs, sync internals, and book blobs are out of range", () => {
     "notes-deadbeef/cache/raster.png",
     "slides/talks.json",
     "slides/1737000000000-my-talk.html",
+    // A talk's own state and products stay out too, unlike notes-*/state.json:
+    // the index alone rebuilds nothing, and what it indexes is megabytes of
+    // slide bodies and base64 images (src/reading/slides/store.ts).
+    "slides/1737000000000/state.json",
+    "slides/1737000000000/slide-01.html",
+    "slides/1737000000000/asset-03.txt",
     "library/abc123.pdf",
     "images/threads/t1/photo.png",
     // Info triage: the daily briefing and article cache are derived, not synced.

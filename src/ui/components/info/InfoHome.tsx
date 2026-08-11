@@ -18,8 +18,8 @@ import {
   savedArticleId,
 } from "../../../reading/saved-articles";
 import { toSavedArticleInput } from "./saveArticle";
-import { appendFeedback } from "../../../memory/feedback";
-import { loadProfile } from "../../../memory/profile";
+import { appendFeedback } from "../../../observation/feedback";
+import { loadProfile } from "../../../observation/profile";
 import { sanitizeArticleHtml } from "../../../info/extract/sanitize";
 import { articleChatSystemPrompt, briefingChatSystemPrompt } from "../../../info/companion/chat";
 import { addSourceSystemPrompt } from "../../../info/sources/source-skill";

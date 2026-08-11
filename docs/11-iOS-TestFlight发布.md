@@ -1,6 +1,6 @@
 # iOS TestFlight 发布
 
-账号批下来那天照这个清单做。构建全程在 GitHub Actions 的 macOS runner 上,本地不需要 Mac。CI 配置已就位:`.github/workflows/ios-testflight.yml`,bundle id `com.xinyuan.readingpartner`,应用名 Reading Partner。
+账号批下来那天照这个清单做。构建全程在 GitHub Actions 的 macOS runner 上,本地不需要 Mac。CI 配置已就位:`.github/workflows/ios-testflight.yml`(构建加上传加分发)和 `.github/workflows/ios-testflight-distribute.yml`(只分发,手动补救用),bundle id `com.xinyuan.readingpartner`,应用名 Reading Partner。
 
 ## 1. 注册 App ID(一次性)
 
@@ -56,13 +56,26 @@ Actions → iOS TestFlight → Run workflow(main 分支)。20-40 分钟。
 上传后几分钟到一小时,build 出现在 App Store Connect → 你的 App → TestFlight。
 
 - 出口合规已在包里预答(`ITSAppUsesNonExemptEncryption=false`,只用 HTTPS),正常不会被问。如果界面仍要求回答,选 "None of the algorithms mentioned above" / 不使用非豁免加密。
-- Internal Testing → 加号建组(如 `internal`),勾选自动分发新 build。
-- 添加测试员:测试员必须先是团队成员(Users and Access 里邀请);个人账号自己就是成员,直接把自己的 Apple ID 加进组。
-- iPad 上装 TestFlight app,用同一 Apple ID 登录,接受邮件邀请后即可安装。内部组的 build 不经 beta 审核,上传处理完就能装。
+- Internal Testing → 加号建组(如 `internal`)。External Testing 的组同理。组只在这里建,分发脚本不建组,但会自动带上新建的组。
+- 添加测试员:内测测试员必须先是团队成员(Users and Access 里邀请);个人账号自己就是成员,直接把自己的 Apple ID 加进组。外测测试员填邮箱或用公开链接即可。
+- iPad 上装 TestFlight app,用同一 Apple ID 登录,接受邮件邀请后即可安装。
 
-## 7. 之后每次迭代
+## 7. 分发(每次自动)
 
-改完代码合进 main,回到第 5 步再点一次 Run workflow。内部测试组会自动收到新 build。改版本号(如 0.2.0 → 0.3.0)时同步改 `tauri.conf.json`、`package.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock` 四处;不改版本号只发新 build 也行,build number 自增保证可上传。
+上传只是把包送进 App Store Connect,处理完就停在那里,谁也装不到。构建 workflow 的 `distribute` job 接着调 `.github/workflows/ios-testflight-distribute.yml`,它跑 `scripts/testflight-distribute.py`:先等这个 build 号在 App Store Connect 里出现(altool 返回时 Apple 还没 ingest 完,build 资源根本不存在,最多等 20 分钟),再等它处理成 `VALID`(最多等 40 分钟),然后加进全部内测组,再走外测那一套。同一个 build 重复跑不会出错,也不会重复提交。
+
+内测和外测分开跑,外测失败不影响内测的结果,结尾统一打一份小结:两边各做到哪一步、卡住的那步 Apple 原话是什么、要去 App Store Connect 补哪一项。有任何一步没做成,退出码非零。
+
+- 内测组:处理完就能装,不过审核。
+- 外测组顺序是「查资格 → 写 What's New → 提交 beta 审核 → 加组」。查资格看两个字段:`buildAudienceType` 是 `INTERNAL_ONLY` 的包外测组永远收不了(只能重新导出),`buildBetaDetail.externalBuildState` 是外测独立的状态机,`processingState: VALID` 只代表内测就绪。审核提交排在加组前面是照 fastlane 的顺序,见 `docs/pitfall/107`。
+- 外测组:要过 Apple 的 beta 审核,不是即时的;审核通过前外测设备上看不到这个 build。
+- beta 审核要 app 级的 Test Information 填全(Beta App Description、Feedback Email、联系人姓名/邮箱/电话,需要登录的还要演示账号)。缺哪项 Apple 在返回里点名,脚本把 `errors[].title` 和 `detail` 原样打出来,并指到 App Store Connect 的对应页面;这时内测已经分发完成,只有外测卡在审核。
+
+手动补救:Actions → iOS TestFlight Distribute → Run workflow,Build 填那次构建的 run number(就是 CFBundleVersion),必填。已经传上去但没分发的包靠这条救回来,不用重新构建一次。不填号取「最新那个」是不安全的:ingestion 期间 API 能看到的最新 build 是上一个,会把旧包分发出去;真要这么干只能本地跑脚本加 `--newest`。本地跑法:导出 `APPLE_API_ISSUER`、`APPLE_API_KEY_ID`、`APPLE_API_KEY_P8_BASE64`(或 `APPLE_API_KEY_PATH`)后 `python3 scripts/testflight-distribute.py --build <run number>`,加 `--dry-run` 只看计划不动东西。脚本的纯决策逻辑有单测:`python3 -m unittest discover -s scripts -t scripts`。
+
+## 8. 之后每次迭代
+
+改完代码合进 main,回到第 5 步再点一次 Run workflow。改版本号(如 0.2.0 → 0.3.0)时同步改 `tauri.conf.json`、`package.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock` 四处;不改版本号只发新 build 也行,build number 自增保证可上传。
 
 ## 已知限制
 

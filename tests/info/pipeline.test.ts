@@ -1,9 +1,10 @@
 // The info-briefing orchestrator (src/info/briefing/pipeline.ts) as a resumable
 // state machine: the snapshot it exposes must carry live progress so the
 // chat/vestibule UI can show a run is alive, and a run cut off halfway must come
-// back without refetching what it already has. Deps are injected, so this runs
-// headless — the "app was killed" tests abandon one pipeline mid-collection and
-// start a second one over the same fake disk. Run: bun test.
+// back without paying again for what it already has — in any of the funnel's
+// four phases (docs/35). Deps are injected, so this runs headless — the "app was
+// killed" tests abandon one pipeline mid-run and start a second one over the
+// same fake disk. Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
@@ -12,7 +13,8 @@ import {
   type InfoSnapshot,
   type InfoSourceRef,
 } from "../../src/info/briefing/pipeline";
-import type { InfoRunState } from "../../src/info/briefing/run-state";
+import type { CollectProgress, InfoRunState } from "../../src/info/briefing/run-state";
+import type { ScreenVerdict } from "../../src/info/briefing/screen";
 import type { Briefing, TriageResult } from "../../src/info/briefing/types";
 import type { InfoItem } from "../../src/info/sources/item";
 
@@ -26,6 +28,25 @@ function source(id: string): InfoSourceRef {
   return { id, name: id.toUpperCase() };
 }
 
+// The funnel counters a test does not care about, so an expectation can name
+// only the fields it is actually about.
+function progress(over: Partial<CollectProgress>): CollectProgress {
+  return {
+    total: 0,
+    done: 0,
+    failed: 0,
+    items: 0,
+    lastDone: null,
+    screened: 0,
+    kept: 0,
+    dropped: 0,
+    cappedOut: 0,
+    bodies: 0,
+    bodiesTotal: 0,
+    ...over,
+  };
+}
+
 const EMPTY_TRIAGE: TriageResult = {
   overview: "ov",
   mustRead: [],
@@ -33,6 +54,12 @@ const EMPTY_TRIAGE: TriageResult = {
   outOfLane: [],
   filtered: [],
 };
+
+// A screen that keeps everything, which is what most of these tests want: they
+// are about the state machine, not about the judging.
+function keepAll(items: InfoItem[]): ScreenVerdict[] {
+  return items.map((it) => ({ id: it.id, keep: true, why: "", confidence: 3 }));
+}
 
 // The per-day files the pipeline reads and writes, in memory. `until` lets a
 // test wait for a checkpoint to land without knowing how many writes it took.
@@ -61,30 +88,51 @@ class Disk {
 interface Fixture {
   disk: Disk;
   sources: InfoSourceRef[];
+  // Source ids discovery was asked for, in order — "who was discovered twice".
   fetched: string[];
+  // Item ids each phase was asked to pay for, so a resume can be checked to have
+  // skipped what the checkpoint already holds.
+  screened: string[];
+  bodies: string[];
   triaged: number;
+  // Item ids the triage call actually saw.
+  triagedItems: string[];
   awake: boolean[];
+  phases: { phase: string; data: Record<string, number> }[];
 }
 
 // A minimal set of injected deps over a fake disk; individual tests override
-// collect/triage. The default collect settles every requested source with one
-// item named after it, which is what makes "who was fetched twice" observable.
+// the phases they are about. The default discover settles every requested source
+// with one item named after it, the default screen keeps everything, and the
+// default body fetch hands each item back with a text body.
 function makeDeps(fx: Fixture, over: Partial<InfoDeps> = {}): InfoDeps {
   return {
     loadBriefing: async (date) => fx.disk.briefings.get(date) ?? null,
     loadProfile: async () => "",
     loadFeedback: async () => [],
     listSources: async () => fx.sources,
-    collect: async (refs, onSettled) => {
+    discover: async (refs, onSettled) => {
       for (const r of refs) {
         fx.fetched.push(r.id);
         await onSettled({ id: r.id, items: [item(`${r.id}1`)] });
       }
     },
-    triage: async () => {
+    screen: async ({ items }) => {
+      for (const it of items) fx.screened.push(it.id);
+      return keepAll(items);
+    },
+    fetchBodies: async (items, onSettled) => {
+      for (const it of items) {
+        fx.bodies.push(it.id);
+        await onSettled({ ...it, textContent: `body of ${it.id}`, summaryOnly: false });
+      }
+    },
+    triage: async (input) => {
       fx.triaged += 1;
+      for (const it of input.items) fx.triagedItems.push(it.id);
       return EMPTY_TRIAGE;
     },
+    logPhase: (phase, data) => void fx.phases.push({ phase, data }),
     saveBriefing: async (b) => void fx.disk.briefings.set(b.date, b),
     saveArticles: async () => {},
     saveItems: async (date, items) => void fx.disk.items.set(date, items),
@@ -105,15 +153,25 @@ function makeDeps(fx: Fixture, over: Partial<InfoDeps> = {}): InfoDeps {
 }
 
 function fixture(sources: InfoSourceRef[] = [source("a")], disk = new Disk()): Fixture {
-  return { disk, sources, fetched: [], triaged: 0, awake: [] };
+  return {
+    disk,
+    sources,
+    fetched: [],
+    screened: [],
+    bodies: [],
+    triaged: 0,
+    triagedItems: [],
+    awake: [],
+    phases: [],
+  };
 }
 
-test("collection progress accumulates into the snapshot: total, done, failed, items, lastDone", async () => {
+test("discovery progress accumulates into the snapshot: total, done, failed, items, lastDone", async () => {
   const snaps: InfoSnapshot[] = [];
   const fx = fixture([source("a"), source("b"), source("c")]);
   const p = new InfoPipeline(
     makeDeps(fx, {
-      collect: async (refs, onSettled) => {
+      discover: async (refs, onSettled) => {
         await onSettled({ id: "a", items: [item("1"), item("2"), item("3")] });
         await onSettled({ id: "b", items: [], error: "boom" });
         await onSettled({ id: "c", items: [item("4"), item("5")] });
@@ -124,13 +182,119 @@ test("collection progress accumulates into the snapshot: total, done, failed, it
   p.subscribe(() => snaps.push(p.snapshot()));
   await p.generate();
 
-  const fetching = snaps.filter((s) => s.phase === "fetching" && s.collect);
-  const last = fetching[fetching.length - 1];
-  expect(last.collect).toEqual({ total: 3, done: 3, failed: 1, items: 5, lastDone: "C" });
+  const discovering = snaps.filter((s) => s.phase === "discovering" && s.collect);
+  const last = discovering[discovering.length - 1];
+  expect(last.collect).toEqual(progress({ total: 3, done: 3, failed: 1, items: 5, lastDone: "C" }));
 
   // A mid-run snapshot (after the first source, before the rest) proves it is live.
-  const afterFirstDone = fetching.find((s) => s.collect!.done === 1);
-  expect(afterFirstDone!.collect).toEqual({ total: 3, done: 1, failed: 0, items: 3, lastDone: "A" });
+  const afterFirstDone = discovering.find((s) => s.collect!.done === 1);
+  expect(afterFirstDone!.collect).toEqual(
+    progress({ total: 3, done: 1, failed: 0, items: 3, lastDone: "A" }),
+  );
+});
+
+test("the four phases run in funnel order, each logged with its own timing", async () => {
+  const snaps: InfoSnapshot[] = [];
+  const fx = fixture([source("a")]);
+  const p = new InfoPipeline(makeDeps(fx));
+  p.subscribe(() => snaps.push(p.snapshot()));
+  await p.generate();
+
+  const seen: string[] = [];
+  for (const s of snaps) if (s.phase !== seen[seen.length - 1]) seen.push(s.phase);
+  expect(seen).toEqual(["discovering", "screening", "fetching", "triaging", "idle"]);
+  expect(fx.phases.map((e) => e.phase)).toEqual(["discovering", "screening", "fetching"]);
+  for (const e of fx.phases) expect(typeof e.data.ms).toBe("number");
+  expect(fx.phases[0].data).toMatchObject({ sources: 1, items: 1 });
+  expect(fx.phases[1].data).toMatchObject({ items: 1, batches: 1, kept: 1, dropped: 0, cappedOut: 0 });
+  expect(fx.phases[2].data).toMatchObject({ items: 1, fetched: 1 });
+});
+
+test("only the items screening kept get bodies fetched and reach triage", async () => {
+  const fx = fixture([source("a")]);
+  const p = new InfoPipeline(
+    makeDeps(fx, {
+      discover: async (_refs, onSettled) => {
+        await onSettled({ id: "a", items: [item("keep"), item("drop"), item("keep2")] });
+      },
+      screen: async ({ items }) => {
+        for (const it of items) fx.screened.push(it.id);
+        return items.map((it) => ({
+          id: it.id,
+          keep: it.id.startsWith("keep"),
+          why: "",
+          confidence: 2,
+        }));
+      },
+    }),
+  );
+  await p.generate();
+
+  expect(fx.screened).toEqual(["keep", "drop", "keep2"]);
+  expect(fx.bodies).toEqual(["keep", "keep2"]);
+  expect(fx.triagedItems).toEqual(["keep", "keep2"]);
+  // The day's snapshot is what triage saw, so a later re-triage sees the same.
+  expect(fx.disk.items.get(TODAY)!.map((i) => i.id)).toEqual(["keep", "keep2"]);
+  // The screened-out item survives as a count and an id, not as a title.
+  expect(p.snapshot().briefing!.screen).toEqual({
+    discovered: 3,
+    kept: 2,
+    dropped: 1,
+    cappedOut: 0,
+    droppedIds: ["drop"],
+  });
+  expect(p.snapshot().briefing!.items.drop).toBeUndefined();
+});
+
+test("the screen is batched, and every item is judged exactly once", async () => {
+  const fx = fixture([source("a")]);
+  const sizes: number[] = [];
+  const many = Array.from({ length: 120 }, (_, i) => item(`i${i}`));
+  const p = new InfoPipeline(
+    makeDeps(fx, {
+      discover: async (_refs, onSettled) => void (await onSettled({ id: "a", items: many })),
+      screen: async ({ items }) => {
+        sizes.push(items.length);
+        for (const it of items) fx.screened.push(it.id);
+        return keepAll(items);
+      },
+    }),
+  );
+  await p.generate();
+
+  // 120 items at the 50-item batch size: two full batches and a remainder.
+  expect(sizes.slice().sort((a, b) => b - a)).toEqual([50, 50, 20]);
+  expect(fx.screened.length).toBe(120);
+  expect(new Set(fx.screened).size).toBe(120);
+});
+
+test("more keeps than the cap allows: the lowest-confidence ones are cut, and the count is reported", async () => {
+  const fx = fixture([source("a")]);
+  // 130 items, all kept, with the last 20 the least certain.
+  const many = Array.from({ length: 130 }, (_, i) => item(`i${i}`));
+  const snaps: InfoSnapshot[] = [];
+  const p = new InfoPipeline(
+    makeDeps(fx, {
+      discover: async (_refs, onSettled) => void (await onSettled({ id: "a", items: many })),
+      screen: async ({ items }) =>
+        items.map((it) => ({
+          id: it.id,
+          keep: true,
+          why: "",
+          confidence: Number(it.id.slice(1)) >= 110 ? 0 : 3,
+        })),
+    }),
+  );
+  p.subscribe(() => snaps.push(p.snapshot()));
+  await p.generate();
+
+  expect(fx.bodies.length).toBe(120);
+  // The 20 least certain went; the cut is never silent.
+  expect(fx.bodies).not.toContain("i129");
+  const screen = p.snapshot().briefing!.screen!;
+  expect(screen).toMatchObject({ discovered: 130, kept: 120, dropped: 10, cappedOut: 10 });
+  expect(fx.phases.find((e) => e.phase === "screening")!.data.cappedOut).toBe(10);
+  expect(snaps.some((s) => s.collect?.cappedOut === 10)).toBe(true);
 });
 
 test("triage activity surfaces streaming char counts, then clears when finished", async () => {
@@ -168,7 +332,7 @@ test("triage activity surfaces streaming char counts, then clears when finished"
 test("a collect that yields no items fails the run and leaves an error", async () => {
   const fx = fixture();
   const p = new InfoPipeline(
-    makeDeps(fx, { collect: async (_refs, onSettled) => void (await onSettled({ id: "a", items: [] })) }),
+    makeDeps(fx, { discover: async (_refs, onSettled) => void (await onSettled({ id: "a", items: [] })) }),
   );
   await p.generate();
   const s = p.snapshot();
@@ -200,7 +364,7 @@ test("a run killed mid-collection resumes: only the source it never got is fetch
   // killed there, so its generate() never returns and is abandoned.
   const killed = new InfoPipeline(
     makeDeps(fx, {
-      collect: async (refs, onSettled) => {
+      discover: async (refs, onSettled) => {
         for (const r of refs) fx.fetched.push(r.id);
         await onSettled({ id: "a", items: [item("a1")] });
         await new Promise<void>(() => {});
@@ -224,11 +388,13 @@ test("a run killed mid-collection resumes: only the source it never got is fetch
 test("a resumed run's progress bar carries on from the checkpoint instead of restarting", async () => {
   const fx = fixture([source("a"), source("b"), source("c")]);
   fx.disk.runs.set(TODAY, {
-    version: 1,
+    version: 2,
+    verdicts: {},
+    material: [],
     date: TODAY,
     startedAt: 1,
     updatedAt: 1,
-    phase: "collecting",
+    phase: "discovering",
     sources: [
       { id: "a", name: "A", status: "done", items: 1 },
       { id: "b", name: "B", status: "pending", items: 0 },
@@ -242,20 +408,23 @@ test("a resumed run's progress bar carries on from the checkpoint instead of res
   p.subscribe(() => snaps.push(p.snapshot()));
   await p.init();
 
-  const first = snaps.find((s) => s.phase === "fetching" && s.collect);
-  expect(first!.collect).toEqual({ total: 3, done: 1, failed: 0, items: 1, lastDone: "A" });
+  const first = snaps.find((s) => s.phase === "discovering" && s.collect);
+  expect(first!.collect).toEqual(progress({ total: 3, done: 1, failed: 0, items: 1, lastDone: "A" }));
 });
 
 test("a run killed while triaging resumes straight into triage, collecting nothing", async () => {
   const fx = fixture([source("a")]);
   fx.disk.runs.set(TODAY, {
-    version: 1,
+    version: 2,
+    verdicts: {},
+    material: [],
     date: TODAY,
     startedAt: 1,
     updatedAt: 1,
     phase: "triaging",
     sources: [{ id: "a", name: "A", status: "done", items: 2 }],
     items: [item("a1"), item("a2")],
+    selection: { ids: ["a1", "a2"], cappedOut: 0 },
   });
   const p = new InfoPipeline(makeDeps(fx));
   await p.init();
@@ -269,11 +438,13 @@ test("a run killed while triaging resumes straight into triage, collecting nothi
 test("an overnight leftover is not resumed, and the next generate collects the day afresh", async () => {
   const fx = fixture([source("a")]);
   fx.disk.runs.set("2026-07-21", {
-    version: 1,
+    version: 2,
+    verdicts: {},
+    material: [],
     date: "2026-07-21",
     startedAt: 1,
     updatedAt: 1,
-    phase: "collecting",
+    phase: "discovering",
     sources: [{ id: "a", name: "A", status: "done", items: 1 }],
     items: [item("old1")],
   });
@@ -299,11 +470,13 @@ test("an overnight leftover is not resumed, and the next generate collects the d
 test("a stopped run is left parked, and a hand-driven generate continues it", async () => {
   const fx = fixture([source("a"), source("b")]);
   fx.disk.runs.set(TODAY, {
-    version: 1,
+    version: 2,
+    verdicts: {},
+    material: [],
     date: TODAY,
     startedAt: 1,
     updatedAt: 1,
-    phase: "collecting",
+    phase: "discovering",
     sources: [
       { id: "a", name: "A", status: "done", items: 1 },
       { id: "b", name: "B", status: "pending", items: 0 },
@@ -325,7 +498,7 @@ test("a failed run is not resumed on its own; generate retries the sources that 
   const fx = fixture([source("a"), source("b")]);
   const p = new InfoPipeline(
     makeDeps(fx, {
-      collect: async (refs, onSettled) => {
+      discover: async (refs, onSettled) => {
         for (const r of refs) {
           fx.fetched.push(r.id);
           await onSettled(
@@ -363,11 +536,13 @@ test("a failed run is not resumed on its own; generate retries the sources that 
 test("a source subscribed to after the run started joins it; one removed is dropped", async () => {
   const fx = fixture([source("a"), source("c")]);
   fx.disk.runs.set(TODAY, {
-    version: 1,
+    version: 2,
+    verdicts: {},
+    material: [],
     date: TODAY,
     startedAt: 1,
     updatedAt: 1,
-    phase: "collecting",
+    phase: "discovering",
     sources: [
       { id: "a", name: "A", status: "done", items: 1 },
       { id: "b", name: "B", status: "pending", items: 0 },
@@ -390,7 +565,7 @@ test("flush writes a checkpoint a failed write left behind", async () => {
         }
         fx.disk.saveRun(state);
       },
-      collect: async (refs, onSettled) => {
+      discover: async (refs, onSettled) => {
         for (const r of refs) fx.fetched.push(r.id);
         await onSettled({ id: "a", items: [item("a1")] });
         // The app goes to the background here, then never comes back.
@@ -463,7 +638,7 @@ test("generate prunes past days before collecting; retriage never prunes", async
       order.push("prune");
       pruned.push(today);
     },
-    collect: async (refs, onSettled) => {
+    discover: async (refs, onSettled) => {
       order.push("collect");
       for (const r of refs) await onSettled({ id: r.id, items: [item("1")] });
     },
@@ -526,4 +701,259 @@ test("a failing reader-context dep degrades to empty and still triages", async (
   await p.generate();
   expect(seen).toBe("");
   expect(p.snapshot().briefing?.overview).toBe("ok");
+});
+
+// --- Stop during collection ------------------------------------------------
+
+test("Stop during collection aborts the fetching, keeps what settled, and parks the run", async () => {
+  const fx = fixture([source("a"), source("b")]);
+  const snaps: InfoSnapshot[] = [];
+  let sawAbort = false;
+  const p = new InfoPipeline(
+    makeDeps(fx, {
+      discover: async (refs, onSettled, signal) => {
+        // The first source lands, then the user presses Stop while the second
+        // is still fetching — noticing the signal is the engine's job.
+        await onSettled({ id: refs[0].id, items: [item("a1")] });
+        p.stop();
+        await new Promise<void>((r) => setTimeout(r, 0));
+        sawAbort = signal.aborted;
+      },
+    }),
+  );
+  p.subscribe(() => snaps.push(p.snapshot()));
+  await p.generate();
+
+  expect(sawAbort).toBe(true);
+  // Pressing Stop is answered before the run unwinds.
+  expect(snaps.some((s) => s.running && s.stopping)).toBe(true);
+  // And it is over by the time the pipeline goes idle.
+  expect(p.snapshot().stopping).toBe(false);
+  expect(p.snapshot().error).toBeNull();
+  expect(fx.triaged).toBe(0);
+
+  // The source that settled is in the checkpoint; the other is still owed.
+  const parked = fx.disk.runs.get(TODAY)!;
+  expect(parked.halt).toEqual({ kind: "stopped" });
+  expect(parked.items.map((i) => i.id)).toEqual(["a1"]);
+  expect(parked.sources.map((s) => s.status)).toEqual(["done", "pending"]);
+});
+
+test("a second Stop while already stopping changes nothing", async () => {
+  const fx = fixture([source("a")]);
+  let aborts = 0;
+  const p = new InfoPipeline(
+    makeDeps(fx, {
+      discover: async (_refs, _onSettled, signal) => {
+        signal.addEventListener("abort", () => aborts++);
+        p.stop();
+        p.stop();
+      },
+    }),
+  );
+  await p.generate();
+  expect(aborts).toBe(1);
+});
+
+test("Stop during a re-triage flips stopping too", async () => {
+  const fx = fixture([source("a")]);
+  fx.disk.items.set(TODAY, [item("a1")]);
+  const snaps: InfoSnapshot[] = [];
+  const p = new InfoPipeline(
+    makeDeps(fx, {
+      triage: async () => {
+        p.stop();
+        throw new Error("cancelled by the user");
+      },
+    }),
+  );
+  p.subscribe(() => snaps.push(p.snapshot()));
+  await p.retriage();
+  expect(snaps.some((s) => s.running && s.stopping)).toBe(true);
+  expect(p.snapshot().stopping).toBe(false);
+});
+
+// --- Stop and resume in the two new phases (docs/35) ------------------------
+
+// A run whose one source yields the named items, so a test can drive a specific
+// phase without arranging discovery each time.
+function withItems(fx: Fixture, ids: string[], over: Partial<InfoDeps> = {}): InfoDeps {
+  return makeDeps(fx, {
+    discover: async (_refs, onSettled) => {
+      fx.fetched.push("a");
+      await onSettled({ id: "a", items: ids.map(item) });
+    },
+    ...over,
+  });
+}
+
+test("Stop while screening parks the run with the verdicts it already bought", async () => {
+  const fx = fixture([source("a")]);
+  const many = Array.from({ length: 120 }, (_, i) => `i${i}`);
+  let batches = 0;
+  const p = new InfoPipeline(
+    withItems(fx, many, {
+      screen: async ({ items }) => {
+        // The first batch lands; the user presses Stop while the rest are out.
+        if (++batches === 1) {
+          for (const it of items) fx.screened.push(it.id);
+          return keepAll(items);
+        }
+        p.stop();
+        throw new Error("should not be reached");
+      },
+    }),
+  );
+  await p.generate();
+
+  expect(p.snapshot().error).toBeNull();
+  expect(fx.bodies).toEqual([]);
+  expect(fx.triaged).toBe(0);
+  const parked = fx.disk.runs.get(TODAY)!;
+  expect(parked.halt).toEqual({ kind: "stopped" });
+  expect(parked.phase).toBe("screening");
+  // The batch that landed is on the checkpoint; the rest are still owed.
+  expect(Object.keys(parked.verdicts).length).toBe(50);
+  expect(parked.selection).toBeUndefined();
+});
+
+test("a resumed screen rejudges nothing and rediscovers nothing", async () => {
+  const fx = fixture([source("a")]);
+  fx.disk.runs.set(TODAY, {
+    version: 2,
+    date: TODAY,
+    startedAt: 1,
+    updatedAt: 1,
+    phase: "screening",
+    sources: [{ id: "a", name: "A", status: "done", items: 3 }],
+    items: [item("x1"), item("x2"), item("x3")],
+    verdicts: {
+      x1: { id: "x1", keep: true, why: "", confidence: 3 },
+      x2: { id: "x2", keep: false, why: "", confidence: 3 },
+    },
+    material: [],
+    halt: { kind: "stopped" },
+  });
+  const p = new InfoPipeline(makeDeps(fx));
+  await p.generate();
+
+  expect(fx.fetched).toEqual([]);
+  expect(fx.screened).toEqual(["x3"]);
+  expect(fx.bodies).toEqual(["x1", "x3"]);
+  expect(fx.triagedItems).toEqual(["x1", "x3"]);
+});
+
+test("a resumed body fetch pays only for the bodies it does not have", async () => {
+  const fx = fixture([source("a")]);
+  fx.disk.runs.set(TODAY, {
+    version: 2,
+    date: TODAY,
+    startedAt: 1,
+    updatedAt: 1,
+    phase: "fetching",
+    sources: [{ id: "a", name: "A", status: "done", items: 3 }],
+    items: [
+      { ...item("x1"), textContent: "already fetched" },
+      item("x2"),
+      item("x3"),
+    ],
+    verdicts: {},
+    selection: { ids: ["x1", "x2", "x3"], cappedOut: 0 },
+    material: ["x1"],
+    halt: { kind: "stopped" },
+  });
+  const p = new InfoPipeline(makeDeps(fx));
+  await p.generate();
+
+  expect(fx.fetched).toEqual([]);
+  expect(fx.screened).toEqual([]);
+  expect(fx.bodies).toEqual(["x2", "x3"]);
+  // The body already on the checkpoint reaches triage untouched.
+  expect(fx.disk.items.get(TODAY)!.find((i) => i.id === "x1")!.textContent).toBe("already fetched");
+});
+
+test("Stop while fetching bodies keeps the ones that landed and parks the rest", async () => {
+  const fx = fixture([source("a")]);
+  const p = new InfoPipeline(
+    withItems(fx, ["x1", "x2", "x3"], {
+      fetchBodies: async (items, onSettled, signal) => {
+        await onSettled({ ...items[0], textContent: "body 1" });
+        p.stop();
+        await new Promise<void>((r) => setTimeout(r, 0));
+        expect(signal.aborted).toBe(true);
+      },
+    }),
+  );
+  await p.generate();
+
+  expect(fx.triaged).toBe(0);
+  const parked = fx.disk.runs.get(TODAY)!;
+  expect(parked.halt).toEqual({ kind: "stopped" });
+  expect(parked.phase).toBe("fetching");
+  expect(parked.material).toEqual(["x1"]);
+  expect(parked.items.find((i) => i.id === "x1")!.textContent).toBe("body 1");
+});
+
+test("a source subscribed to mid-run is screened with the rest, and nothing already paid for is repeated", async () => {
+  const fx = fixture([source("a"), source("b")]);
+  fx.disk.runs.set(TODAY, {
+    version: 2,
+    date: TODAY,
+    startedAt: 1,
+    updatedAt: 1,
+    phase: "fetching",
+    sources: [{ id: "a", name: "A", status: "done", items: 1 }],
+    items: [{ ...item("a1"), textContent: "already fetched" }],
+    verdicts: { a1: { id: "a1", keep: true, why: "", confidence: 3 } },
+    selection: { ids: ["a1"], cappedOut: 0 },
+    material: ["a1"],
+    halt: { kind: "stopped" },
+  });
+  await new InfoPipeline(makeDeps(fx)).generate();
+
+  // Only the new source is discovered, only its item is judged, only its body
+  // is fetched — and both items land in the same briefing.
+  expect(fx.fetched).toEqual(["b"]);
+  expect(fx.screened).toEqual(["b1"]);
+  expect(fx.bodies).toEqual(["b1"]);
+  expect(fx.triagedItems).toEqual(["a1", "b1"]);
+});
+
+test("a screening batch that will not parse fails the run, keeping the batches that landed", async () => {
+  const fx = fixture([source("a")]);
+  const many = Array.from({ length: 60 }, (_, i) => `i${i}`);
+  const p = new InfoPipeline(
+    withItems(fx, many, {
+      screen: async ({ items }) => {
+        if (items.length === 50) return keepAll(items);
+        throw new Error("screening produced invalid JSON");
+      },
+    }),
+    { retryDelayMs: 0 },
+  );
+  await p.generate();
+
+  expect(p.snapshot().error).toContain("invalid JSON");
+  const parked = fx.disk.runs.get(TODAY)!;
+  expect(parked.halt!.kind).toBe("failed");
+  expect(Object.keys(parked.verdicts).length).toBe(50);
+  expect(fx.bodies).toEqual([]);
+});
+
+test("a day where nothing clears the screen still produces a briefing", async () => {
+  const fx = fixture([source("a")]);
+  const p = new InfoPipeline(
+    withItems(fx, ["x1", "x2"], {
+      screen: async ({ items }) =>
+        items.map((it) => ({ id: it.id, keep: false, why: "noise", confidence: 3 })),
+    }),
+  );
+  await p.generate();
+
+  expect(fx.bodies).toEqual([]);
+  expect(fx.triaged).toBe(1);
+  expect(fx.triagedItems).toEqual([]);
+  const b = p.snapshot().briefing!;
+  expect(b.overview).toBe("ov");
+  expect(b.screen).toMatchObject({ discovered: 2, kept: 0, dropped: 2 });
 });

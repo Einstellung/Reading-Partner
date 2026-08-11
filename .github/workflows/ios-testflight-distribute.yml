@@ -1,0 +1,84 @@
+# Put an already-uploaded TestFlight build in front of the testers.
+#
+# Uploading an ipa (xcrun altool --upload-app) only ingests it. App Store
+# Connect processes the build and then stops: until the build is linked to a
+# beta group nobody can install it, which is how a green build workflow leaves
+# every tester on the previous version. scripts/testflight-distribute.py does
+# the linking: internal groups first, then the external half — eligibility
+# check, What's New text, beta review submission, group link, in that order and
+# for the reasons in docs/pitfall/107. The two halves are independent, so a
+# failed external step still leaves the internal testers served; the script
+# prints a summary of both and exits non-zero if anything needs a human.
+#
+# Two ways in, one script:
+#   - workflow_call: ios-testflight.yml runs this right after its upload step.
+#   - workflow_dispatch: rescue a build that was uploaded without distribution,
+#     or re-run after fixing something in App Store Connect. The script is
+#     idempotent, so re-running costs nothing.
+#
+# The build number is required both ways. altool returns when the ipa's bytes
+# are transferred, not when App Store Connect has ingested them, so for the
+# first minutes after an upload the newest build the API can see is the
+# previous one — "distribute the newest build" would then quietly ship the
+# build that was just replaced. Named a number, the script waits for that build
+# to appear (20 minutes) before it waits for it to finish processing (40).
+# Distributing whatever is newest is still possible on purpose, by running
+# scripts/testflight-distribute.py --newest by hand.
+#
+# No macOS runner needed; this is only HTTP against Apple's API.
+#
+# Secrets (the same three ios-testflight.yml already uses):
+#   APPLE_API_ISSUER, APPLE_API_KEY_ID, APPLE_API_KEY_P8_BASE64
+
+name: iOS TestFlight Distribute
+
+on:
+  workflow_dispatch:
+    inputs:
+      build:
+        description: "CFBundleVersion to distribute — the run number of the iOS TestFlight build that produced it. Required: the newest build cannot be guessed while an upload is still being ingested."
+        type: string
+        required: true
+  workflow_call:
+    inputs:
+      build:
+        type: string
+        required: true
+
+jobs:
+  distribute:
+    runs-on: ubuntu-latest
+    # Three waits, worst case: the build appearing in App Store Connect at all
+    # (up to 20 minutes), Apple's processing (40), the build's external testing
+    # state (15). A fresh upload usually clears all three within a few minutes.
+    timeout-minutes: 95
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # cryptography signs the ES256 JWT Apple's API authenticates with. The
+      # rest of the script is standard library.
+      - name: Install cryptography
+        run: python3 -m pip install --quiet cryptography
+
+      # Cheap guard: catches an import or logic error in the script before it
+      # starts making calls against App Store Connect.
+      - name: Test the distribution logic
+        run: python3 -m unittest discover -s scripts -t scripts
+
+      - name: Add the build to every beta group
+        env:
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+          BUILD: ${{ inputs.build }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BUILD:-}" ]; then
+            echo "::error::No build number. Re-run this workflow with the run number of the iOS TestFlight build; the script does not guess which build to distribute."
+            exit 1
+          fi
+          python3 scripts/testflight-distribute.py --build "$BUILD"

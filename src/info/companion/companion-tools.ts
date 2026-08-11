@@ -8,7 +8,7 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../ai/agent";
-import { PROFILE_SKELETON_GUIDANCE } from "../../memory/profile";
+import { PROFILE_SKELETON_GUIDANCE } from "../../observation/profile";
 import type { ProfileUpdateCardData } from "../briefing/cards";
 import { buildSourceTools, sourceToolStatusLabel, type SourceToolDeps } from "../sources/source-tools";
 import type { FetchFn } from "../extract/http";

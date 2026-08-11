@@ -1,7 +1,13 @@
 // Unit tests for the slides plan parser (src/reading/slides/plan.ts). Run: bun test.
 
 import { expect, test } from "bun:test";
-import { parseSlidePlan, planUserMessage, slidesPlanSystemPrompt } from "../../../src/reading/slides/plan";
+import {
+  parseSlidePlan,
+  planUserMessage,
+  slidesPlanSystemPrompt,
+  validateDeckPlan,
+  type PlanBook,
+} from "../../../src/reading/slides/plan";
 import { languageInstruction } from "../../../src/platform/app/settings";
 
 // Against languageInstruction rather than a retyped copy of its wording: a
@@ -87,21 +93,100 @@ test("parseSlidePlan throws on an empty deck", () => {
   expect(() => parseSlidePlan("not json")).toThrow();
 });
 
-test("planUserMessage includes each book's material, figures, and the instruction", () => {
-  const msg = planUserMessage(
-    [
-      { bookId: "b1", title: "Book One", material: "the overview", figures: [{ id: "1", caption: "Fig 1: a plot" }] },
-    ],
-    "a talk for engineers",
-  );
+// --- the plan message and its validation ------------------------------------
+
+const BOOK: PlanBook = {
+  bookId: "b1",
+  title: "Book One",
+  overview: "the overview",
+  chapters: [
+    { index: 1, title: "Beginnings", startPage: 1, endPage: 20, hasNote: true, digest: "opens with" },
+    { index: 2, title: "The middle", startPage: 21, endPage: 40, hasNote: true },
+    { index: 3, title: "Unread", startPage: 41, endPage: 60, hasNote: false },
+  ],
+  figures: [{ id: "1", caption: "Fig 1: a plot" }],
+};
+
+test("planUserMessage gives the planner the chapter list, not just the overview", () => {
+  const msg = planUserMessage([BOOK], "a talk for engineers");
   expect(msg).toContain("Book One");
   expect(msg).toContain("bookId: b1");
   expect(msg).toContain("the overview");
+  expect(msg).toContain("1. Beginnings (pp.1-20) [note]");
+  expect(msg).toContain("3. Unread (pp.41-60) [no note]");
   expect(msg).toContain("1: Fig 1: a plot");
   expect(msg).toContain("a talk for engineers");
 });
 
-test("planUserMessage handles an empty instruction", () => {
-  const msg = planUserMessage([{ bookId: "b", title: "B", material: "m", figures: [] }], "");
+test("planUserMessage works for a book with no overview yet", () => {
+  const msg = planUserMessage([{ ...BOOK, overview: "" }], "");
+  expect(msg).toContain("1. Beginnings");
   expect(msg).toContain("No specific talk instruction");
 });
+
+test("validateDeckPlan keeps citations that exist and reports the ones that do not", () => {
+  const out = validateDeckPlan(
+    {
+      title: "T",
+      slides: [
+        { title: "Good", kind: "content", bookId: "b1", sourceChapters: [1, 2] },
+        { title: "Half", kind: "content", bookId: "b1", sourceChapters: [2, 9] },
+      ],
+    },
+    [BOOK],
+  );
+  expect(out.slides[0].sourceChapters).toEqual([1, 2]);
+  expect(out.slides[0].planNotice).toBeUndefined();
+  expect(out.slides[1].sourceChapters).toEqual([2]);
+  expect(out.slides[1].planNotice).toContain("Chapter 9 does not exist");
+});
+
+test("validateDeckPlan drops a chapter with no note and says the slide fell back", () => {
+  const out = validateDeckPlan(
+    { title: "T", slides: [{ title: "S", kind: "content", bookId: "b1", sourceChapters: [3] }] },
+    [BOOK],
+  );
+  expect(out.slides[0].sourceChapters).toBeUndefined();
+  expect(out.slides[0].planNotice).toContain("Chapter 3 has no note");
+  expect(out.slides[0].planNotice).toContain("book overview");
+});
+
+test("validateDeckPlan drops an invented figure id at plan time", () => {
+  const out = validateDeckPlan(
+    {
+      title: "T",
+      slides: [{ title: "S", kind: "content", bookId: "b1", figure: { bookId: "b1", figId: "7" } }],
+    },
+    [BOOK],
+  );
+  expect(out.slides[0].figure).toBeUndefined();
+  expect(out.slides[0].planNotice).toContain('Figure "7" is not in "Book One"');
+});
+
+test("validateDeckPlan drops an unknown book id", () => {
+  const out = validateDeckPlan(
+    { title: "T", slides: [{ title: "S", kind: "content", bookId: "nope", sourceChapters: [1] }] },
+    [BOOK],
+  );
+  expect(out.slides[0].bookId).toBeUndefined();
+  expect(out.slides[0].sourceChapters).toBeUndefined();
+  expect(out.slides[0].planNotice).toContain("Unknown book id");
+});
+
+test("validateDeckPlan leaves a multi-book deck alone", () => {
+  const other: PlanBook = { ...BOOK, bookId: "b2", title: "Book Two" };
+  const out = validateDeckPlan(
+    {
+      title: "T",
+      slides: [
+        { title: "One", kind: "content", bookId: "b1", sourceChapters: [1] },
+        { title: "Two", kind: "content", bookId: "b2", sourceChapters: [2] },
+        { title: "Both", kind: "content" },
+      ],
+    },
+    [BOOK, other],
+  );
+  expect(out.slides.map((s) => s.planNotice)).toEqual([undefined, undefined, undefined]);
+  expect(out.slides[1].sourceChapters).toEqual([2]);
+});
+

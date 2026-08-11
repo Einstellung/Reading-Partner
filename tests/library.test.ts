@@ -3,7 +3,13 @@
 // app. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { addEntry, contentHash, libraryPdfPath, type LibraryStore } from "../src/platform/app/library";
+import {
+  addEntry,
+  contentHash,
+  healLibrary,
+  libraryPdfPath,
+  type LibraryStore,
+} from "../src/platform/app/library";
 
 test("contentHash is the sha256 hex truncated to 16 bytes", async () => {
   // sha256("abc") = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
@@ -55,4 +61,46 @@ test("addEntry does not mutate the input store", () => {
   const store: LibraryStore = { books: {} };
   addEntry(store, { hash: "h2", title: "t", originalFilename: "t", addedAt: 1 });
   expect(store.books).toEqual({});
+});
+
+// --- repairing names an iOS import left percent-encoded ---------------------
+
+test("healLibrary decodes a title taken from a file URL", () => {
+  const store: LibraryStore = {
+    books: {
+      h1: {
+        hash: "h1",
+        title: "%E4%B8%AD%E6%96%87%20(z-library.sk).pdf",
+        originalFilename: "%E4%B8%AD%E6%96%87%20(z-library.sk).pdf",
+        addedAt: 1,
+      },
+    },
+  };
+  const healed = healLibrary(store).books.h1;
+  expect(healed.title).toBe("中文 (z-library.sk).pdf");
+  expect(healed.originalFilename).toBe("中文 (z-library.sk).pdf");
+  expect(healed.addedAt).toBe(1);
+});
+
+// The repair runs at every launch and the file is one sync unit, so a clean
+// library has to come back as the very same object: that identity is what tells
+// the caller not to write, and not writing is what keeps a launch from producing
+// a revision the other device then has to pull.
+test("healLibrary returns a clean store unchanged, by identity", () => {
+  const store: LibraryStore = {
+    books: {
+      h1: { hash: "h1", title: "Paper.pdf", originalFilename: "Paper.pdf", addedAt: 1 },
+      h2: { hash: "h2", title: "50%.pdf", originalFilename: "50%.pdf", addedAt: 2 },
+      h3: { hash: "h3", title: "中文 书.pdf", originalFilename: "中文 书.pdf", addedAt: 3 },
+    },
+  };
+  expect(healLibrary(store)).toBe(store);
+
+  const dirty: LibraryStore = {
+    books: {
+      h1: { hash: "h1", title: "%E4%B8%AD.pdf", originalFilename: "%E4%B8%AD.pdf", addedAt: 1 },
+    },
+  };
+  const once = healLibrary(dirty);
+  expect(healLibrary(once)).toBe(once);
 });

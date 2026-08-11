@@ -115,9 +115,38 @@ test("the briefing thread names each item's source and lists every filtered clip
   const prompt = briefingChatSystemPrompt(BRIEFING, CTX);
   // must-read item carries its source name
   expect(prompt).toContain("Model X ships — 量子位 — you track releases");
-  // filtered items appear in full: title, source, category (not just a count)
-  expect(prompt).toContain("Filtered as noise (1)");
+  // filtered items appear in full: title, source, category (not just a count),
+  // and the heading says which of the two filters they came from (docs/35).
+  expect(prompt).toContain("Filtered as noise after reading the full text (1)");
   expect(prompt).toContain("Vendor Y announces — 量子位 — vendor PR");
+  // No screen ran on this briefing, so nothing claims one did.
+  expect(prompt).not.toContain("Screened out before fetching");
+});
+
+test("the screening tally reaches the companion as a count, never as a list of titles", () => {
+  const prompt = briefingChatSystemPrompt(
+    {
+      ...BRIEFING,
+      screen: { discovered: 412, kept: 9, dropped: 403, cappedOut: 0, droppedIds: ["d1", "d2"] },
+    },
+    CTX,
+  );
+  expect(prompt).toContain("Screened out before fetching: 403 of 412");
+  // The ids are on record in the briefing file, not in the prompt.
+  expect(prompt).not.toContain("d1");
+  // And the companion is told the list it can see is not the whole day.
+  expect(prompt).toContain("not the whole day");
+});
+
+test("a briefing trimmed by the fetch ceiling says so in the companion's context", () => {
+  const prompt = briefingChatSystemPrompt(
+    {
+      ...BRIEFING,
+      screen: { discovered: 500, kept: 120, dropped: 380, cappedOut: 22, droppedIds: [] },
+    },
+    CTX,
+  );
+  expect(prompt).toContain("22 more cleared the screen but were cut by the daily fetch ceiling");
 });
 
 test("formatSources marks disabled sources and handles an empty roster", () => {

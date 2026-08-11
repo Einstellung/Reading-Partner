@@ -25,16 +25,11 @@ export function hashPath(path: string): string {
   return h.toString(16);
 }
 
-export function basename(path: string): string {
-  const parts = path.split(/[/\\]/);
-  return parts[parts.length - 1] || path;
-}
-
 interface Store {
   states: Record<string, ViewState>;
 }
 
-// Base used only when persisting the classroom flag on a book with no saved
+// Base used only when persisting the sticky mode flags on a book with no saved
 // reading position yet; the reader overwrites the position fields as soon as it
 // emits one.
 const DEFAULT_VIEW_STATE: ViewState = {
@@ -43,10 +38,12 @@ const DEFAULT_VIEW_STATE: ViewState = {
   scrollMode: 0,
 };
 
-// Pure: merge the sticky classroom flag into a view state (or a default base
-// when the book has none yet). Kept pure so the persistence logic is testable.
-export function withClassroom(state: ViewState | null, on: boolean): ViewState {
-  return { ...(state ?? DEFAULT_VIEW_STATE), classroom: on };
+// Pure: merge the sticky mode flags into a view state (or a default base when
+// the book has none yet). Kept pure so the persistence logic is testable. The
+// parameter is structural rather than a domain type because platform/app imports
+// nothing.
+export function withModes(state: ViewState | null, modes: { classroom: boolean }): ViewState {
+  return { ...(state ?? DEFAULT_VIEW_STATE), classroom: modes.classroom };
 }
 
 async function load(): Promise<Store> {

@@ -10,8 +10,12 @@ import {
   embedRectToZotero,
   embedToZotero,
   makeSortIndex,
+  markupColorOf,
+  markupColorPatch,
   zoteroRectToEmbed,
   zoteroToEmbed,
+  MARKUP_OPACITY,
+  MARKUP_TOOL_OVERRIDES,
   type ZoteroAnnotation,
 } from "../../../src/reading/engine/convert";
 
@@ -99,8 +103,12 @@ test("aiThreadId survives a color/comment update round-trip (spike item 7)", () 
   };
   const embed = zoteroToEmbed(zot, PAGE_H)!;
   // Simulate a host-side edit: change contents, keep custom untouched (the
-  // adapter patches contents/color only).
-  const patched = { ...embed, contents: "edited", color: "#2ea8e5" } as PdfHighlightAnnoObject;
+  // adapter patches contents/colour only).
+  const patched = {
+    ...embed,
+    contents: "edited",
+    ...markupColorPatch("#2ea8e5"),
+  } as PdfHighlightAnnoObject;
   const back = embedToZotero(patched, PAGE_H)!;
   expect(back.aiThreadId).toBe("keep-me");
   expect(back.comment).toBe("edited");
@@ -156,6 +164,66 @@ test("embedToZotero synthesizes a sortIndex from top-left geometry", () => {
   const back = embedToZotero(embed, PAGE_H)!;
   // page 4, top edge 130 from top, x=100.
   expect(back.sortIndex).toBe(makeSortIndex(4, 130, 100));
+});
+
+// --- what a markup is drawn with (pitfall 105) ----------------------------
+// A markup has to look the same the instant it is drawn and after the book is
+// reopened. The engine draws it from `strokeColor` and `opacity`; the shell's
+// JSON stores neither, so both have to come from the same place on both paths.
+
+test("an imported markup carries the colour in strokeColor, not only the deprecated alias", () => {
+  for (const type of ["highlight", "underline"]) {
+    const embed = zoteroToEmbed(
+      { id: "m1", type, color: "#5fb236", position: { pageIndex: 0, rects: [[72, 700, 500, 712]] } },
+      PAGE_H,
+    ) as PdfHighlightAnnoObject;
+    // `color` alone leaves the renderer on its own fallback yellow.
+    expect(embed.strokeColor).toBe("#5fb236");
+    expect(embed.color).toBe("#5fb236");
+  }
+});
+
+test("markupColorPatch moves both colour fields together", () => {
+  expect(markupColorPatch("#2ea8e5")).toEqual({ color: "#2ea8e5", strokeColor: "#2ea8e5" });
+});
+
+test("markupColorOf prefers strokeColor and still reads legacy objects", () => {
+  expect(markupColorOf({ strokeColor: "#5fb236", color: "#ffd400" }, "#000000")).toBe("#5fb236");
+  expect(markupColorOf({ color: "#ffd400" }, "#000000")).toBe("#ffd400");
+  expect(markupColorOf({}, "#000000")).toBe("#000000");
+});
+
+test("a freshly drawn markup and a re-imported one share one opacity", () => {
+  const embed = zoteroToEmbed(
+    { id: "m2", type: "highlight", color: "#ffd400", position: { pageIndex: 0, rects: [[72, 700, 500, 712]] } },
+    PAGE_H,
+  ) as PdfHighlightAnnoObject;
+  // The tool defaults handed to the annotation plugin are what a new markup is
+  // created with; the import path is this object. Same number or the colour
+  // changes under the reader on the first reopen.
+  for (const tool of MARKUP_TOOL_OVERRIDES) {
+    expect(tool.defaults.opacity).toBe(MARKUP_OPACITY);
+  }
+  expect(embed.opacity).toBe(MARKUP_OPACITY);
+  expect(MARKUP_TOOL_OVERRIDES.map((t) => t.id).sort()).toEqual(["highlight", "underline"]);
+});
+
+test("a colour survives create -> save -> reopen unchanged", () => {
+  // What the engine builds when the reader draws with the tool colour set.
+  const created = {
+    id: "m3",
+    type: PdfAnnotationSubtype.HIGHLIGHT,
+    pageIndex: 0,
+    rect: { origin: { x: 72, y: 80 }, size: { width: 428, height: 12 } },
+    segmentRects: [{ origin: { x: 72, y: 80 }, size: { width: 428, height: 12 } }],
+    opacity: MARKUP_OPACITY,
+    ...markupColorPatch("#e56eee"),
+  } as unknown as PdfHighlightAnnoObject;
+  const saved = embedToZotero(created, PAGE_H)!;
+  expect(saved.color).toBe("#e56eee");
+  const reopened = zoteroToEmbed(saved, PAGE_H) as PdfHighlightAnnoObject;
+  expect(reopened.strokeColor).toBe(created.strokeColor);
+  expect(reopened.opacity).toBe(created.opacity);
 });
 
 // --- non-supported shapes -------------------------------------------------

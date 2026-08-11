@@ -11,7 +11,9 @@
 // own `card` part. Keep it that way: do not lift inline refs into parts, and do
 // not fold a card into text.
 
+import type { FC } from "react";
 import type { InfoCard } from "../../../info/briefing/cards";
+import type { ReadingCard } from "../../../reading/rehearsal/cards";
 import type {
   PersistedCardPayload,
   PersistedPart,
@@ -20,10 +22,24 @@ import type {
 import type { ThreadMessage, ToolStatus } from "../common/types";
 
 // The domain payload a card renders. Payload types stay in the domain layer
-// (info/cards.ts); this protocol only references the union, so the dependency
-// direction stays components -> info and never the reverse.
-export type CardPayload = InfoCard;
+// (info/briefing/cards.ts, reading/rehearsal/cards.ts); this protocol only
+// references the union, so the dependency direction stays components -> domain
+// and never the reverse. Each domain contributes its own union member, and the
+// registry (chat/cardRegistry.ts) is where the components are gathered.
+export type CardPayload = InfoCard | ReadingCard;
 export type CardKind = CardPayload["kind"];
+
+// The component table the render layer looks a card up in, by kind. The mapped
+// type narrows each component's payload to its own kind, so a mismatched pairing
+// or a kind with no component is a compile error.
+export type CardRegistry = {
+  [K in CardKind]: FC<CardComponentProps<Extract<CardPayload, { kind: K }>>>;
+};
+
+// One domain's share of the registry.
+export type CardRegistryFor<Kinds extends CardKind> = {
+  [K in Kinds]: FC<CardComponentProps<Extract<CardPayload, { kind: K }>>>;
+};
 
 // Which chat surface a card renders in. Cards are available to every chat (the
 // reading-side bubble too, though no reading-side card exists yet); a card may
@@ -180,11 +196,17 @@ export function patchCardPayload(
 
 // --- persistence policy ----------------------------------------------------
 // Persist strategy per part type: text persists; the tool trace never does (it
-// is recomputed live); a card persists by kind — the confirm card and the ready
-// card are durable outcomes, the progress card is not (a reopened session is
-// long past it) and a failure is in-session only (retry needs the live pipeline).
+// is recomputed live); a card persists by kind — the confirm card, the ready
+// card and a recorded rehearsal decision are durable outcomes, the progress card
+// is not (a reopened session is long past it) and a failure is in-session only
+// (retry needs the live pipeline).
 export function isPersistableCardKind(kind: CardKind): boolean {
-  return kind === "probe-confirm" || kind === "briefing-ready" || kind === "profile-update";
+  return (
+    kind === "probe-confirm" ||
+    kind === "briefing-ready" ||
+    kind === "profile-update" ||
+    kind === "rehearsal-decision"
+  );
 }
 
 export function isPersistablePart(part: ChatPart): boolean {

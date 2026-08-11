@@ -2,9 +2,9 @@
 // injected into the engine so the reconcile loop runs headless in tests.
 //
 // Sync range (docs/13): the user's own data — reading position, marks, AI
-// threads, topics, per-topic memory, lesson-prep plans and notes, book notes
-// (docs/14), the cross-scenario user profile and info feedback log (docs/16), and app
-// settings. Book PDFs travel the separate books channel
+// threads, topics, per-topic AI observations, lesson-prep plans and notes, book notes
+// (docs/14), talks and what their rehearsal settled (docs/31), the cross-scenario user profile and
+// info feedback log (docs/16), and app settings. Book PDFs travel the separate books channel
 // (content-addressed blobs), never the data channel. Excluded: derived caches
 // (fulltext-*, figures-*, prep-*/pdf and its caches), generated slide decks
 // (slides/**, docs/14 — a build output, rebuildable from notes), the local
@@ -79,9 +79,22 @@ export function inSyncRange(path: string): boolean {
   const top = parts[0];
   if (parts.length === 1) {
     if (ROOT_FILES.has(top)) return true;
-    return /^annotations-.+\.json$/.test(top) || /^threads-.+\.json$/.test(top);
+    return (
+      /^annotations-.+\.json$/.test(top) ||
+      // A talk's conversation is threads-talk-<talkId>.json, so it is already
+      // covered by the line above.
+      /^threads-.+\.json$/.test(top) ||
+      // Talks (docs/31): the materials, the outline the rehearsal settled and the
+      // order the reader put it in. Nothing can rebuild it from the books, so it
+      // travels like marks and threads rather than like a cache. The deck it
+      // produces (slides/**) stays out: that is a build output.
+      /^talk-.+\.json$/.test(top)
+    );
   }
-  // Per-topic memory: every file under memory-<topicId>/ (entries, index, meta).
+  // Per-topic AI observations: every file under memory-<topicId>/ (entries,
+  // index, meta). "memory-" is the historical directory name and is deliberately
+  // unchanged: the feature was renamed on 2026-08-06, the directories on disk and
+  // in the user's Drive were not, and this matcher goes by file name.
   if (top.startsWith("memory-")) return true;
   // Lesson prep: the plan state and the per-paper notes, but not the downloaded
   // PDFs (prep-*/pdf/**) or any other nested cache.
@@ -112,6 +125,7 @@ async function walk(dir: string, out: ScannedFile[]): Promise<void> {
     const rel = dir ? `${dir}/${e.name}` : e.name;
     if (e.isDirectory) {
       // Only descend into directories that can hold in-range files.
+      // "memory-" is the observation directories' historical name; see above.
       if (rel.startsWith("memory-") || rel.startsWith("prep-") || rel.startsWith("notes-")) {
         await walk(rel, out);
       }

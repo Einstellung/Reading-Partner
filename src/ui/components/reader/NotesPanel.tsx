@@ -9,7 +9,6 @@ import { useEffect, useMemo, useState } from "react";
 import type { NotesActivity, NotesSnapshot } from "../../../reading/notes";
 import type { ChapterStatus, NoteChapter } from "../../../reading/notes";
 import { Markdown } from "../common/Markdown";
-import SlidesDialog from "./SlidesDialog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 
@@ -175,7 +174,6 @@ export default function NotesPanel({
 
   const [overview, setOverview] = useState<string | null>(null);
   const [bodies, setBodies] = useState<Map<number, string | null>>(new Map());
-  const [showSlides, setShowSlides] = useState(false);
 
   // A signature of what is on disk, so a regenerate (status flips through
   // running back to done) reloads the affected note and the overview.
@@ -232,18 +230,12 @@ export default function NotesPanel({
 
   return (
     <div className="flex h-full flex-col">
-      {showSlides && (
-        <SlidesDialog currentBookId={state.bookId} onClose={() => setShowSlides(false)} />
-      )}
       <div className="border-b border-[#eee] px-3 py-2">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
+            {/* No Slides button: a deck is a talk's product now and is generated
+                from inside the talk (docs/31, ui/components/talk/DeckDialog). */}
             <div className="text-[13px] text-[#1b1b1b]">Notes</div>
-            {doneCount > 0 && (
-              <Button type="button" variant="secondary" size="xs" onClick={() => setShowSlides(true)}>
-                Slides
-              </Button>
-            )}
           </div>
           {running ? (
             <Button

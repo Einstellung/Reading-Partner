@@ -17,6 +17,9 @@ export default function BookCard(props: {
   file: FileRef;
   meta: BookMeta | undefined;
   onOpen: () => void;
+  // Start a talk about this book (docs/31). Absent for a file that has never
+  // been opened: it has no book id yet, so there is nothing on disk to rehearse.
+  onRehearse?: () => void;
   onRemove: () => void;
 }) {
   const { file, meta } = props;
@@ -52,7 +55,12 @@ export default function BookCard(props: {
       <div className="absolute right-0 bottom-0">
         <CardMenu
           label={`Actions for ${title}`}
-          items={[{ label: "Remove", onSelect: props.onRemove, destructive: true }]}
+          items={[
+            ...(props.onRehearse
+              ? [{ label: "Rehearse a talk…", onSelect: props.onRehearse }]
+              : []),
+            { label: "Remove", onSelect: props.onRemove, destructive: true },
+          ]}
         />
       </div>
     </li>

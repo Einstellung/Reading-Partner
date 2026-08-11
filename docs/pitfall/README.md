@@ -7,10 +7,12 @@
 | 你要动的 | 扫这几组 |
 |---|---|
 | 阅读引擎、页面渲染、滚动定位 | EmbedPDF 引擎 |
+| 标注的颜色、不透明度、创建与导入 | EmbedPDF 引擎 |
 | iPad 触摸、笔、缩放、翻页 | 触摸与手势 + EmbedPDF 引擎 |
 | 手机上的手势、页面导航 | 触摸与手势 |
 | 发请求、外链资源、CSP | 网络与 CSP |
 | 读写 AppData | 存储与数据目录 |
+| 导入外部文件、拿文件选择器给的路径 | 存储与数据目录 |
 | 同步引擎、Drive 后端 | 存储与数据目录 + 网络与 CSP + WebKit / webview |
 | 全文/图片提取、裁图 | 提取（壳侧 pdf.js） |
 | 出 iOS 包、签名、图标、深链接 | iOS 构建与签名 |
@@ -50,6 +52,7 @@
 - [100-the-viewport-gap-is-charged-twice](./100-the-viewport-gap-is-charged-twice.md) — `viewportGap` 同时是页面四周的 padding、每个 fit 的减数（`clientWidth - 2*gap`）和每个 `scrollToPage` 的加数，改留白就是改整套几何；传 0 能生效只因为 reducer 初值也是 0（`if (config.viewportGap)` 根本不 dispatch）
 - [101-page-coordinates-are-a-scroll-offset-on-both-axes](./101-page-coordinates-are-a-scroll-offset-on-both-axes.md) — `scrollToPage` 的 `pageCoordinates.x` 会原样加进水平滚动位置，`alignX` 不传就没人减回去；跳到标注时页面被拉走"标注离页左边缘多远"那么多（实测 60px），左边距的标注偏一点、右半页的标注偏半屏。跳到页内某点一律显式补 `alignX`：页面放得下就居中页面（`x` 传 0），放大到超出视口就居中标注（`x` 传标注 x、`alignX` 传 50）
 - [102-render-quality-option-is-read-under-another-name](./102-render-quality-option-is-read-under-another-name.md) — `renderPage` 的 `imageQuality` 调 0.01 和 1.0 出来一样大：编码器读的是 `options.quality`（类型里没有这个字段），质量永远落在 canvas 默认；两个名字都传
+- [105-markup-is-drawn-from-strokecolor-and-tool-opacity](./105-markup-is-drawn-from-strokecolor-and-tool-opacity.md) — 高亮/下划线渲染读的是 `strokeColor`（`color` 是 deprecated 别名），只写 `color` 就画成兜底黄；不透明度又分两处（导入写死 0.4、创建取工具默认值 1），于是刚划的那一下深、重开变浅，两次都不是选的那个颜色。颜色两个字段一起写，不透明度收成一个数、注册期用 `tools` 覆盖工具默认值
 
 ## 触摸与手势
 
@@ -84,6 +87,7 @@
 - [51-sync-stopped-looks-healthy](./51-sync-stopped-looks-healthy.md) — 凭据文件不在，引擎从不启动，`autoSync:true` + `lastError:null` 读起来完全健康，四天没人发现；启动的三选一和「该说什么」都收进 `platform/sync/health.ts`
 - [52-all-or-nothing-pass-never-completes](./52-all-or-nothing-pass-never-completes.md) — 一趟同步一个文件失败就整趟中止，丢包链路上 51 个请求的一趟几乎不可能跑完，`Last sync: Never`；改逐项 + 缓存 id 遇 404 自愈 + 重试超时
 - [53-identical-rewrite-wins-whole-file](./53-identical-rewrite-wins-whole-file.md) — app 用相同内容重写文件，按 mtime 判就是本地有改动，整文件 LWW 让"只是重存了一次"的设备静默覆盖掉另一台的批注；改内容 hash 判变更 + 三方合并
+- [106-ios-hands-over-a-percent-encoded-file-url](./106-ios-hands-over-a-percent-encoded-file-url.md) — iOS 文件选择器返回 percent-encoded 的 `file://` URL，`basename` 切出来的书名是 `%E5%85%A8...`；归一化收在 `addFileToTopic` 一道门，脏数据按"不变就不写"的纯函数读取时自愈
 
 ## 提取（壳侧 pdf.js）
 
@@ -98,6 +102,7 @@
 - [35-ios-unsigned-linkedit-vmsize](./35-ios-unsigned-linkedit-vmsize.md) — 完全无签名 Mach-O 过第三方重签名器时 __LINKEDIT vmsize 不更新，真机秒崩；产线预 ad-hoc 签名规避
 - [47-asc-key-role-cloud-signing](./47-asc-key-role-cloud-signing.md) — CI 云签名要 Admin 权限的 App Store Connect API key，App Manager 在 export 阶段被拒；试探权限不能用坏 payload
 - [48-tauri-ios-signing-log-noise](./48-tauri-ios-signing-log-noise.md) — "找不到证书"警告和 `Apple Distribution: Tauri (unset)` 证书都是 Tauri 自己的噪音，签名成没成看 export 阶段
+- [107-testflight-upload-is-not-distribution](./107-testflight-upload-is-not-distribution.md) — altool 上传成功只是 ingest，build 不 link 到 beta 组就谁也装不到（内测组没开自动分发要逐个加，外测组还要 What's New 和 beta 审核）；上传后必须跑分发脚本。外测加组 404 说 build 不存在：端点要用 builds 那一侧、审核提交要排在加组前面、先查 `buildAudienceType` 和 `externalBuildState`。`fields[builds]` 漏列 relationship 会把 `include` 的数据一起吞掉。上传返回时 build 资源还没建出来，要等它出现和等它 VALID 两段轮询，且不许猜「最新那个」
 
 ## Android 构建与签名
 

@@ -4,6 +4,7 @@
 // the native fetch is used so bun/dev at least runs. Both feeds gate on a
 // browser User-Agent (see user-agent.ts), so it is forced on the plugin path.
 
+import { isAbortError, throwIfAborted } from "../../platform/app/abort";
 import { cleanTauriFetch } from "../../platform/app/tauri-fetch";
 import { INFO_USER_AGENT } from "./user-agent";
 
@@ -25,6 +26,14 @@ export const infoFetch: FetchFn = (url, init) => {
   return fetch(url, init);
 };
 
+export interface FetchTextOptions {
+  // Attempts after the first. Default 2.
+  retries?: number;
+  // Cancels the request in flight and ends the retry loop. A stopped run must
+  // not spend a retry on a request the user already gave up on.
+  signal?: AbortSignal;
+}
+
 // Fetch text with a small retry on network/5xx. Non-OK (404/403) throws so the
 // caller can degrade that one item without failing the whole run. `init` carries
 // per-source request headers (a private API key, a UA override) from the engine.
@@ -32,12 +41,16 @@ export async function fetchText(
   url: string,
   fetchFn: FetchFn = infoFetch,
   init?: RequestInit,
-  retries = 2,
+  opts: FetchTextOptions = {},
 ): Promise<string> {
+  const retries = opts.retries ?? 2;
+  const signal = opts.signal;
+  const request: RequestInit | undefined = signal ? { ...init, signal } : init;
   let lastErr: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
+    throwIfAborted(signal);
     try {
-      const res = await fetchFn(url, init);
+      const res = await fetchFn(url, request);
       if (res.ok) return await res.text();
       if (res.status >= 500 && attempt < retries) {
         lastErr = new Error(`HTTP ${res.status} from ${url}`);
@@ -46,6 +59,7 @@ export async function fetchText(
       throw new Error(`HTTP ${res.status} from ${url}`);
     } catch (e) {
       lastErr = e;
+      if (isAbortError(e) || signal?.aborted) break;
       if (attempt >= retries) break;
     }
   }

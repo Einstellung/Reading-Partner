@@ -14,7 +14,7 @@
 >
 > 五：四个 `<select>` 换 Select，四个原生复选框换 Checkbox，紫底 chip 换 Badge，过渡期的常量清干净。Tabs / Tooltip 没引，理由见「没引的」。
 >
-> `src/ui/components/ui/` 最终一共 15 个文件：alert-dialog、badge、button、checkbox、collapsible、dialog、dropdown-menu、input、label、overlay、select、separator、switch、textarea、toast。
+> `src/ui/components/ui/` 五版之后一共 15 个文件：alert-dialog、badge、button、checkbox、collapsible、dialog、dropdown-menu、input、label、overlay、select、separator、switch、textarea、toast。之后设置页重组时加了 tabs，共 16 个（见「设置页的三块」）。
 
 ---
 
@@ -405,7 +405,7 @@ trigger 的宽度要自己占住：原生 `<select>` 按最宽的 option 定宽�
 - 笔工具的颜色点和痕迹行的类型图标：颜色由标注本身决定，走 inline style。
 - 麦克风键的录音三态背景（`bg-red-50` / `bg-neutral-200`）：红是「正在录」，灰是「松手取消」，是状态不是级别。静息态的悬停灰换了。
 - 滑动删除那条红条的宽度：`SWIPE_ACTION_WIDTH` 走 inline style，手势逻辑按它算。只换了颜色。
-- 状态 chip 的色阶（`PrepPanel` / `NotesPanel` / `MemoryPanel` / `SlidesDialog` 的 amber/green/sky/violet/red/neutral）：这是一组互相区分的分类色，不是控件级别。
+- 状态 chip 的色阶（`PrepPanel` / `NotesPanel` / `ObservationPanel` / `SlidesDialog` 的 amber/green/sky/violet/red/neutral）：这是一组互相区分的分类色，不是控件级别。
 - 停止键的深灰（`bg-neutral-800`）、暂存图片的黑色 ✕：token 里没有对应角色。
 - 中性灰文字（`text-neutral-400/500/600/700/800`）和卡片描边（`border-black/10`）：整套表面色阶，换名会动到几十个节点的实际色值，和这一版的目的无关。
 - 聊天输入区（textarea、发送、停止）、`ReadingPipCard`、`FigureCard` 的卡片本体、各处列表行：仍是手写 `<button>`，理由见「最终还剩的手写控件」。只换了颜色。
@@ -439,7 +439,7 @@ shadcn 生成的组件是照 React 19 写的（那里 `ref` 是普通 prop），
 
 ## 没引的
 
-**Tabs**。唯一像样的场景是阅读区侧栏顶上那五个标签（`reader/Sidebar.tsx`）。没换：它们已经是 `h-11` 的 44px 按钮，换过去买到的是方向键漫游和 `role="tablist"` 语义，代价是把抽屉的高度链（`min-h-0 flex-1` 那条）拆开重接。这条是真未决，哪天侧栏因为别的原因动的时候顺手做。
+**Tabs** 后来引了，见「设置页的三块」。侧栏那五个标签（`reader/Sidebar.tsx`）仍未换：它们已经是 `h-11` 的 44px 按钮，换过去买到的是方向键漫游和 `role="tablist"` 语义，代价是把抽屉的高度链（`min-h-0 flex-1` 那条）拆开重接。这条是真未决，哪天侧栏因为别的原因动的时候顺手做。
 
 **Tooltip**。全项目 32 个 `title=`，都是图标按钮的悬停提示。触摸上不触发，所以每个需要说明的控件本来就有 `aria-label`，激活态还会把文字显出来（侧栏标签、MoreMenu 的行）。加一层 Radix Tooltip 只对鼠标有用，且要处理它自己的 Portal 和安全区。
 
@@ -504,6 +504,24 @@ iPad 上驱动一轮之后回来改的两处。
 | 新版 在对话框里按 Delete | 正好 1 次 |
 
 834px 宽、`coarse` + `isMobile` 下再量一次对话框：触发按钮 54.5×44，Cancel 和 Delete 各 69.6×44 和 68.6×44，content 带 `overlay-safe`，`max-height` 被夹到 1080px 且 `overflow-y: auto`，`body` 拿到 `overflow: hidden` 和 `pointer-events: none`。
+
+## 设置页的三块
+
+设置从一个弹窗里竖着堆九组改成三个标签，Tabs 是这时候引的。
+
+- 账号：三张供应商卡、默认对话的供应商与模型、两个思考档位（chat / prep）、Google 同步。登录完当场要选模型，不跨块跳。
+- 功能：通用（AI 输出语言）、阅读（自动笔记、笔手输入）。简报现在没有开关，不占位，等后台采集开关进来再加一段。
+- 可选：Semantic Scholar key、语音输入、插图生成。页首一句说明只覆盖语音和插图那两把 key——它们在 `credentials.json`、不同步、每台设备各配一次；Semantic Scholar 是普通设置，跟着 `settings.json` 同步。
+
+`SettingsView.tsx` 只剩壳：标题行、标签条、底部一行版本与许可证。三个面板是 `settings/AccountPanel.tsx`、`FeaturesPanel.tsx`、`OptionalPanel.tsx`，小标题走 `settings/SectionHeading.tsx`。设置项的语义、默认值和存储字段一个没动。
+
+高度链：页面盒仍是 `fixed inset-0`，里面那列改成 `h-full` 的 flex 列，标题行和版本行 `shrink-0`，`Tabs` 是 `min-h-0 flex-1`，只有 `TabsContent` 带 `overflow-y-auto`。标签条因此不跟着滚。链上任何一处丢掉 `min-h-0`，flex 项就不肯缩到内容以下，滚动退回外层，标签条随面板一起滚走。
+
+布局按断点，不分叉组件：`sm` 以上标签条竖排在左（`sm:w-40 sm:flex-col sm:self-start`），以下横排在顶。Radix 的 `orientation` 是 prop 不是媒体查询，固定 `vertical`——它决定的是哪一组方向键走标签，而有键盘的是宽的那一形。
+
+生成的 `tabs.tsx` 改了四处：触发器补 `coarse:min-h-[44px]`（生成的是 `h-9` 列里的 `h-[calc(100%-1px)]`，36px 且长不了）、hover 挪到 `can-hover:` 后面、删掉全部 `dark:` 和 `line` 变体连同 `group-data-[orientation=*]` 那套、四个组件都改成 `forwardRef`。这次 `add` 没有覆盖任何已有文件，`git status` 只多一个 `tabs.tsx`（坑 81 仍然要每次看）。护栏加在 `primitive-contract`（44px、`can-hover:`、无 `dark:`、无 `data-[orientation=`）和 `forward-ref-contract` 的表里。
+
+版本号从 `platform/app/version.ts` 来：`getVersion()` 读的是安装的那个包的 `tauri.conf.json` 版本，非 Tauri 下（浏览器 dev、单测）没有 IPC，退回 `dev`。许可证名写在同一处。
 
 ## 验证方法
 

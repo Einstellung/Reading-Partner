@@ -1,6 +1,6 @@
 // The prose strategy: every .md the user writes or reads — chapter notes, prep
-// digests, the info profile, memory. A three-way merge per line, so two devices
-// that wrote in different places both keep what they wrote.
+// digests, the info profile, AI observations. A three-way merge per line, so two
+// devices that wrote in different places both keep what they wrote.
 //
 // Where they wrote over each other, one version goes into the file and the
 // other side's whole file is written out beside it. No <<<<<<< markers: these

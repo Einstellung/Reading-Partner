@@ -1,12 +1,12 @@
 # Android 落地调研
 
-调研日期 2026-07-28,2026-08-05 按落地后的状态改写。前提是 docs/22 定的手机形态:手机只做 info,不加载 EmbedPDF / PDFium WASM。
+调研日期 2026-07-28,2026-08-05、2026-08-06 按落地后的状态改写。前提是 docs/22 定的手机形态:手机只做 info,不加载 EmbedPDF / PDFium WASM。
 
 ## 结论
 
 构建这一环已经通了,而且接进了发布线。两条 workflow 在当前代码上跑绿:签名 release APK 出货,PDFium 引擎冒烟在 Android 模拟器上 `ok:true`。打 tag 发版时 `release.yml` 把同一个 APK 挂到 draft release 上,和三个桌面平台并列。签名密钥的四个 secret 已经在仓库里。
 
-要拿主意的是 Google 登录。spike 那条"照抄 iOS,建一个 Android OAuth client 走反向 client id 自定义 scheme"的路线,Google 2023-10-02 起对新建的 Android client 默认关掉了,但没有硬封 —— 在 Cloud Console 该 client 的 Advanced Settings 里可以手动打开。所以代码照 spike 写能通,代价是踩在一个 Google 明说不推荐、随时可能收紧的开关上。loopback 对 Android client 类型是真封死了(Desktop client 类型不受影响)。
+Google 登录 2026-08-06 也接上了,走 Android 类型 client + 自定义 URI scheme + PKCE,和 iOS 同形态。代码在主线上,真机一步没验,见下面「Google 登录」。
 
 ## android-spike 三个 commit
 
@@ -20,17 +20,7 @@
 
 ### 83574a0 Android Google OAuth flow
 
-`authFlow.ts` / `googleConfig.ts` / `auth.ts` 三个文件从重构以来只搬过位置(`src/sync/` → `src/platform/sync/`),内容一行没动,patch 基本能原样打。改动本身也干净:`AuthFlowKind` 多一路 `android-scheme`,`iosRedirectUri` 泛化成 `schemeRedirectUri`,`signIn()` 的分支从"是 ios 就走 scheme"翻成"是 desktop 就走 loopback"。这部分骨架无论最后选哪条协议路线都用得上。
-
-要重新确认的是它选的路线。Google 的现行规定:
-
-- 新建的 Android 类型 OAuth client 默认不允许用 custom URI scheme 收回调,2023-10-02 生效。但原文同时写了后路:"If you are creating a new app and the recommended alternative doesn't work for your needs, you can enable the Custom URI scheme method for your app in the 'Advanced Settings' section of the client configuration page"([Google Developers Blog](https://developers.googleblog.com/en/improving-user-safety-in-oauth-flows-through-new-oauth-custom-uri-scheme-restrictions/))。也就是 spike 那条路要多一步手工开关,不是不能走。
-- loopback 重定向对 Android / iOS / Chrome 三种 client 类型已经封停,最后一批 2022-10-21;Desktop 类型继续支持([Loopback IP Address flow Migration Guide](https://developers.google.com/identity/protocols/oauth2/resources/loopback-migration))。
-- Google 给 Android 的官方替代是 Google Identity Services Android SDK,原生库,要 Play 服务。
-- `client_secret` 对 Android / iOS / Chrome 类型的 client 不适用;iOS 的自定义 scheme 没有被这次限制波及,现在的 iOS 登录路线不受影响。
-- 授权页必须开在系统浏览器,不能开在 app 自己的 WebView —— Google 对 `android.webkit.WebView` 直接返回 `disallowed_useragent`,2023-07-24 起强制。`auth.ts` 现在走的就是 `openUrl`,这条已经满足,改的时候别改坏。
-
-还有一条 Android 独有的实现风险:wry 的 `RustWebViewClient.onReceivedError` 里有一段专门的 workaround,注释写着"外部 URL 重定向到自定义协议时会收到 `net::ERR_CONNECTION_REFUSED`,因为重定向不走 `shouldInterceptRequest`"。OAuth 回跳正是这个形状,需要在真机上确认这段 workaround 覆盖到了我们的 scheme。
+骨架被采纳,按重构后的 `src/platform/sync/` 重做了一遍,见下面「Google 登录」。
 
 ### 9001b34 两条 workflow(已落到主线)
 
@@ -74,7 +64,7 @@
 - `minSdkVersion 24`(Android 7.0),`targetSdkVersion 36`,compileSdk 36。minSdk 可以在 `tauri.conf.json` 的 `bundle.android.minSdkVersion` 改。
 - 权限两条:`android.permission.INTERNET`(Tauri 模板自带)和 `com.xinyuan.readingpartner.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`(androidx core 为 targetSdk 34+ 的 receiver 自动生成的自有权限,不对外)。
 - `debuggable` 没设,`usesCleartextTraffic="false"`。模板在 `defaultConfig` 里设 false、在 debug build type 里设 true(`tauri android dev` 要连明文的 Vite dev server),release 包不需要明文流量:Android 上 Tauri 把页面挂在 `http://tauri.localhost`,由 `shouldInterceptRequest` 拦下来直接喂内嵌资源,不进网络栈,不受明文策略管。`app.windows[].useHttpsScheme` 能换成 https,但换了 IndexedDB / localStorage / cookie 的落点就变了,老数据读不到,别动。
-- `tauri.conf.json` 里那条 deep-link scheme(`com.googleusercontent.apps.379091688229-...`,iOS client 的反向 id)已经生成进 AndroidManifest 的 intent-filter,和 iOS 的 Info.plist 是同一份配置源(坑 31 对 Android 同样成立)。也就是说 Android 包现在带着 iOS client 的 scheme。
+- `tauri.conf.json` 里那条 deep-link scheme(`com.googleusercontent.apps.379091688229-...`,iOS client 的反向 id)已经生成进 AndroidManifest 的 intent-filter,和 iOS 的 Info.plist 是同一份配置源(坑 31 对 Android 同样成立)。那时数组里只有 iOS client 的 scheme;Android client 那条是 0.8.21 之后加的,还没拆包看过。
 - 只有一个 ABI:`lib/arm64-v8a/libreading_partner_lib.so`,未压缩存放,zip 里的数据偏移按 16 KB 对齐,ELF 的 LOAD 段对齐 `0x4000`。NDK r28c 的默认对齐确实生效了。
 - 签名证书 `CN=Reading Partner, O=Reading Partner, C=CN`,RSA 4096 / SHA384withRSA,有效期到 2066-07-18,SHA-1 `CB:1B:AD:0E:0C:DE:DE:6A:F1:50:1E:5D:EF:9D:AB:F5:19:AF:90:83`,SHA-256 `6E:19:68:AC:CC:77:46:3D:00:61:5D:4E:35:03:A4:5E:F2:58:64:14:15:F6:DA:4E:CE:76:57:5F:3E:6A:16:2B`。v2 + v3 两个方案验过。**这和 2026-07-28 那版文档里记的 SHA-1 不是同一张证书** —— repo secrets 里那四个是 2026-07-28 重建的,旧的那张(`86:88:...`,到 2053 年)已经不在用。建 Android OAuth client 要填的是上面这个 SHA-1。
 
@@ -98,7 +88,7 @@ NDK 从 spike 的 `26.3.11579264` 换成 `28.2.13676358`(r28c)。理由是 16 KB
 
 还有一条形状上的取舍:`needs: app` 意味着 desktop 三个平台里任何一个红了,APK 这一步就不跑。draft release 仍然在(先跑完的那条腿建的),但里面没有 APK。
 
-Android 的构建不注入任何 `VITE_GOOGLE_*`。`selectAuthFlow()` 没有 android 分支,把 desktop client 烤进去等于让 Android 走一条没人跑过的 loopback;不注入就是 Settings > Sync 显示"Google client not configured",按钮禁用。等 OAuth 路线拍板再说。
+Android 的构建只注入 `VITE_GOOGLE_ANDROID_CLIENT_ID`,值明文写在 workflow 的 job env 里,由 `beforeBuildCommand`(`bun run build`)烤进前端。桌面那两个不注入,见下面「Google 登录」。
 
 `tauri-apps/tauri-action` 从 2026-06-29 的 `action-v1.0.0` 起有个实验性的 `mobile: android` 入参,但它只是把 `tauri build` 换成 `tauri android build`,工具链还得自己装,签名也不管。现有这条手写的线做的事更多,没有换过去的理由。官方文档的 GitHub pipelines 页至今没有 Android 内容。
 
@@ -157,11 +147,47 @@ WebView 侧按 Google 自己的[文档](https://developer.android.com/develop/ui
 
 **返回键。** 已经接上了,`src/platform/app/back-button.ts`:手机外壳有地方可退时绑 `onBackButtonPress`,退到栈底就解绑,把按键还给系统。注意那里写的所有权语义 —— 绑着的时候按键再也退不出 app,而 tauri 2.11.5 的 `exit` 命令没有 ACL 权限,JS 侧叫不动。这条 iOS 上不存在,是 Android 独有的,而且没在真机上按过。
 
+## Google 登录
+
+Android 类型 OAuth client + 反向 client id 自定义 URI scheme + PKCE,和 iOS 同形态。协议上没得选:loopback 重定向对 Android / iOS / Chrome 三种 client 类型 2022-10-21 起封停,只有 Desktop 类型还留着([Loopback IP Address flow Migration Guide](https://developers.google.com/identity/protocols/oauth2/resources/loopback-migration))。
+
+client id `379091688229-8mb45l09bamhv2ln623knt4kob14folb.apps.googleusercontent.com`,公开值——mobile client 没有 `client_secret`,PKCE 是全部保护。绑包名 `com.xinyuan.readingpartner` 和签名证书 SHA-1 `CB:1B:AD:0E:0C:DE:DE:6A:F1:50:1E:5D:EF:9D:AB:F5:19:AF:90:83`(CI 那把 keystore,从 0.8.19 的构建日志核实)。换 keystore 就要同步改 Console 里的 SHA-1,否则这个 client 作废。
+
+Cloud Console 该 client 的 Advanced settings 里 Enable Custom URI Scheme 已打开。Google 2023-10-02 起对新建的 Android client 默认关掉它,但留了这个手工开关([Google Developers Blog](https://developers.googleblog.com/en/improving-user-safety-in-oauth-flows-through-new-oauth-custom-uri-scheme-restrictions/))。关掉就收不到回调,别动。
+
+代码三处。`selectAuthFlow()` 的 `android` 分支返回 `android-scheme`,没配 client id 时返回 null 而不是掉回桌面 loopback。`tauri.conf.json` 的 `plugins.deep-link.mobile[0].scheme` 数组里那条反向 id,和 iOS 那条并列——同一个数组同时生成 iOS 的 `CFBundleURLTypes` 和 Android 的 intent-filter(坑 31)。`android-apk.yml` 注入 `VITE_GOOGLE_ANDROID_CLIENT_ID`。
+
+桌面的 `VITE_GOOGLE_CLIENT_ID` / `VITE_GOOGLE_CLIENT_SECRET` 不进 APK:那是 Desktop client 的凭据,它的 loopback 重定向 Android client 用不了,secret 进出货包也没有任何好处。`tests/platform/sync/deepLinkScheme.test.ts` 盯着 workflow 里的 id 和 scheme 数组对得上,并断言 `android-apk.yml` 里没有这两个变量——这两个文件之间没有编译器管着,漂了的表现是"授权成功,app 再也回不来"。
+
+### 授权页怎么出去
+
+Google 对 `android.webkit.WebView` 一律返回 `disallowed_useragent`(2023-07-24 起强制),整个 app 就是一个 WebView,所以授权页必须离开本进程。`auth.ts` 调的是单参 `openUrl(url)`:`tauri-plugin-opener` 的 Android 侧在 `with` 为空时走 `Intent(ACTION_VIEW, url)` + `FLAG_ACTIVITY_NEW_TASK` + `startActivity`,系统浏览器作为另一个 activity 打开,我们的 webview 不导航。传 `with: "inAppBrowser"` 会改走 Custom Tab,也在进程外,但不是现在这条。capability 里 `opener:allow-open-url` 的 `https://*` 已经覆盖授权 URL,没有要加的。
+
+Android 11+ 的 package visibility 不卡这条:被过滤的是 `queryIntentActivities` / `resolveActivity`,`startActivity` 发隐式 intent 不受限,不需要 `<queries>`。
+
+### 回跳怎么回来
+
+浏览器把 `com.googleusercontent.apps.<id>:/oauth2redirect?code=...&state=...` 按 intent-filter 解析。那条 intent-filter 是 deep-link 插件的 `build.rs` 用 `update_android_manifest` 写进 MainActivity 的 `<activity>` 块的。MainActivity 的 `launchMode` 是 `singleTask`(Tauri CLI 的 Android 模板),所以 app 还活着时这个 intent 走 `onNewIntent` 复用现有实例,webview 不重建,JS 侧 hold 着的 pending state 和 PKCE verifier 不丢。往下 `TauriActivity.onNewIntent` → `PluginManager.onNewIntent` → `DeepLinkPlugin.onNewIntent`,插件的 `isDeepLink()` 只比 scheme(我们的配置没有 host / path 约束,path 任意通过),命中后经 Channel 回 Rust,Rust `emit("deep-link://new-url")`,JS 的 `onOpenUrl` 收到,比对 state,换 token。
+
+wry 的 `RustWebViewClient.onReceivedError` 里那段 workaround("外部 URL 重定向到自定义协议时会收到 `net::ERR_CONNECTION_REFUSED`,因为重定向不走 `shouldInterceptRequest`")在这条路上不成立:重定向发生在系统浏览器里,wry 不在链路上。
+
+上面两条链路是读 `tauri-plugin-opener` 2.5.4、`tauri-plugin-deep-link` 2.4.9、`tauri` 2.11.5 的源码推出来的,没有真机也没有模拟器验证。
+
+冷启动缺口和 iOS 是同一个([18](./18-iOS-Google登录.md)):授权途中进程被系统回收,再经 deep link 冷启动带回 URL 时,JS 侧的 state 和 verifier 已经丢了,`getCurrent()` 拿到 code 也换不成 token。Android 上 singleTask 复用实例,只有进程真被杀才会走到。
+
+### 等设备到手照着跑一遍
+
+1. 下一份 CI 出的 APK,`aapt2 dump xmltree <apk> --file AndroidManifest.xml`,确认 intent-filter 里 iOS 和 Android 两条 scheme 都在,不是只剩一条。
+2. 同一份输出里确认 MainActivity 的 `android:launchMode` 是 `singleTask`。
+3. 真机点登录,看系统浏览器起没起来、授权 URL 有没有当场被 `redirect_uri_mismatch` / `invalid_request` 顶回来 —— 这一条能验证 Enable Custom URI Scheme 那个开关真的放行,授权页出得来就说明放行了。
+4. 授权完成后回到 app,确认 Google 接受不带 `client_secret` 的 code 交换,且 `:/oauth2redirect` 这个路径段 Console 认。
+5. 记下系统浏览器交回 app 时会不会先弹一次"用 App 打开?"确认页 —— iOS 上是固有体验,Android 上未知。
+
 ## Google Drive 同步
 
 `driveBackend.ts` 全程走 `cleanTauriFetch` → `tauri-plugin-http`,请求在 Rust 侧发,平台无关,Android 上不需要任何改动。token 存 `AppData/sync-auth.json`,刻意不在同步范围内(`syncFs.ts`),Android 上就是 app 私有目录里的一个文件,和 iOS 同构。
 
-所以同步能不能跑,只卡在一件事:Android 拿不拿得到那个 refresh token。见上面的 OAuth。
+所以同步能不能跑,只卡在一件事:Android 拿不拿得到那个 refresh token。见上面的「Google 登录」。
 
 ## 不加载 PDFium 省掉了什么
 
@@ -175,7 +201,7 @@ WebView 侧按 Google 自己的[文档](https://developer.android.com/develop/ui
 
 **第 0 步,CI,已完成(2026-08-05)。** 两条 workflow 在当前代码上跑绿,APK 接进了 release 线。没碰产品代码。
 
-**第 1 步,改代码。** OAuth 路线拍板之后动 `authFlow` / `googleConfig` / `auth` / `platform.ts`。骨架照 83574a0,协议照拍板结果。单测在 `authFlow.test.ts` 里,CI 能验。
+**第 1 步,改代码,已完成(2026-08-06)。** `authFlow` / `googleConfig` / `auth` 加 android 分支,`tauri.conf.json` 加 scheme,`android-apk.yml` 注入 client id。单测在 `authFlow.test.ts` 和 `deepLinkScheme.test.ts` 里。`platform.ts` 没动 —— `isAndroid()` / `isMobileOS()` 是 14ef68b 那条 AI 供应商登录布局的事,和 Google 同步无关,还没做。
 
 **第 2 步,模拟器,CI 可无人值守。** 装非 smoke 的真 app,截图看手机外壳的排版和安全区。emulator-runner 已经能 `adb exec-out screencap`,现成的。注意模拟器镜像的 WebView 版本决定了 `env(safe-area-inset-*)` 有没有值,所以这一步只能给出"这个 WebView 版本上是什么样",给不出普遍结论。
 
@@ -184,9 +210,4 @@ WebView 侧按 Google 自己的[文档](https://developer.android.com/develop/ui
 ## 要拍板的
 
 1. **有没有 Android 真机?** 型号和系统版本?没有的话第 3 步整个做不了,只能停在模拟器,登录和同步就永远是纸面结论。
-2. **keystore 本地有没有备份?** GitHub secrets 导不出来。丢了就再也升级不了已经装上的那份,只能卸载重装、数据从 Drive 拉回来。
-3. **OAuth 走哪条?**
-   - 照 spike:新建 Android client,在 Advanced Settings 里手工打开 custom URI scheme。改动就是 83574a0 那份 patch,是三条里最省力的,代价是踩在 Google 明说不推荐的开关上。要注意 Android client 绑定签名证书的 SHA-1,换 keystore 就要同步改。
-   - 复用 iOS client id,让 Android 走现有的 ios-scheme 分支。改动最小(scheme 已经在 manifest 里了),但不合规、没实测,Google 随时可能拦。
-   - Desktop client 配 loopback。Desktop 类型不在废弃名单里,协议上站得住。`oauth_callback.rs` 就是 std 的 `TcpListener::bind((127.0.0.1, port))`,Android 上绑回环不要任何权限,系统浏览器访问同机回环也不受限,原理上应该通。没实测,而且 app 退到后台等浏览器授权时进程会不会被回收要一起验。
-   - 写一个 Kotlin 的 Tauri 插件接 Google Identity Services。唯一的合规路线,工作量最大,还引入 Play 服务依赖。
+2. **keystore 本地有没有备份?** GitHub secrets 导不出来。丢了就再也升级不了已经装上的那份,只能卸载重装、数据从 Drive 拉回来。而且 Android OAuth client 绑的是这张证书的 SHA-1,重建 keystore 等于把 Google 登录也一起换掉。

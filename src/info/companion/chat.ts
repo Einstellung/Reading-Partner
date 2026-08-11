@@ -6,7 +6,8 @@
 // agent loop, and the tools surface confirm cards.
 
 import { languageInstruction, type AiLanguage } from "../../platform/app/settings";
-import { PROFILE_SKELETON_GUIDANCE } from "../../memory/profile";
+import { profileForPrompt } from "../../observation/guess";
+import { PROFILE_SKELETON_GUIDANCE } from "../../observation/profile";
 import { DESCRIPTOR_GUIDE, type SourceDescriptor } from "../sources/descriptor";
 import type { Briefing } from "../briefing/types";
 
@@ -77,21 +78,52 @@ export function formatSources(sources: SourceDescriptor[]): string {
   return ["Subscribed sources:", ...lines].join("\n");
 }
 
-// The reading profile block, verbatim, so the companion can explain what triage
-// is optimizing for and draft precise edits.
+// The reading profile block, so the companion can explain what triage is
+// optimizing for and draft precise edits. The declared half only: update_profile
+// drafts a complete replacement of what it is shown, so showing it the AI's own
+// guess section (observation/guess.ts) would let a draft promote a guess into
+// the user's own words, where no later pass could revise or drop it.
 export function formatProfile(profile: string): string {
-  return ["Reading profile (what triage keeps or filters for):", profile.trim() || "(no profile set)"].join("\n");
+  return [
+    "Reading profile (what triage keeps or filters for):",
+    profileForPrompt(profile).declared || "(no profile set)",
+  ].join("\n");
 }
 
-// The full filtered list, not just a count: every dropped item with its source
-// and the category triage assigned, so the companion can defend or revisit a call.
+// The full triage-level filtered list: every dropped item with its source and
+// the category triage assigned, so the companion can defend or revisit a call.
+// This is only the second of two filters (docs/35) — the header says so, because
+// a companion that read it as the day's whole discard pile would tell the user
+// "nine things were dropped today" on a day that discarded four hundred.
 function formatFiltered(b: Briefing): string[] {
   if (!b.filtered.length) return [];
   const src = (id: string) => b.items[id]?.sourceName || b.items[id]?.source || "?";
   return [
     "",
-    `Filtered as noise (${b.filtered.length}):`,
+    `Filtered as noise after reading the full text (${b.filtered.length}):`,
     ...b.filtered.map((f) => `- ${b.items[f.itemId]?.title ?? f.itemId} — ${src(f.itemId)} — ${f.category}`),
+  ];
+}
+
+// The screening stage's tally (docs/35). Counts only: the headlines it dropped
+// are on record by id, and putting hundreds of them in this prompt would undo
+// the very thing the screen is for. Being told the number, and told that the
+// titles are not here, is what keeps the companion honest about the day's size.
+function formatScreened(b: Briefing): string[] {
+  const s = b.screen;
+  if (!s || s.dropped === 0) return [];
+  const capped = s.cappedOut
+    ? ` ${s.cappedOut} more cleared the screen but were cut by the daily fetch ceiling.`
+    : "";
+  return [
+    "",
+    `Screened out before fetching: ${s.dropped} of ${s.discovered} items the sources published ` +
+      `today were judged, on headline and blurb alone, not worth fetching the full text for.` +
+      capped,
+    "Their titles are NOT in this context — only their count. The list above covers what was",
+    "fetched and triaged, not the whole day. If the user asks what else was published, say",
+    "plainly that you only see the day's survivors, and offer to widen the profile instead of",
+    "guessing at what was dropped.",
   ];
 }
 
@@ -134,7 +166,8 @@ export function articleChatSystemPrompt(
 
 // The briefing-level thread: the whole document as context (overview + every
 // tier's titles, sources, and the reasons/lines triage wrote), plus the full
-// filtered clip list so the companion sees what was dropped and why.
+// triage-level filtered clip list so the companion sees what was dropped and
+// why, and the screening tally so it knows that list is not the whole day.
 export function briefingChatSystemPrompt(b: Briefing, ctx: CompanionContext): string {
   const title = (id: string) => b.items[id]?.title ?? id;
   const src = (id: string) => b.items[id]?.sourceName || b.items[id]?.source || "?";
@@ -156,6 +189,6 @@ export function briefingChatSystemPrompt(b: Briefing, ctx: CompanionContext): st
       ...b.outOfLane.map((r) => `- ${title(r.itemId)} — ${src(r.itemId)} — ${r.reason}`),
     );
   }
-  parts.push(...formatFiltered(b));
+  parts.push(...formatFiltered(b), ...formatScreened(b));
   return parts.join("\n");
 }

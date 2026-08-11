@@ -11,7 +11,7 @@
 //              never reach up into a domain, because that is how ai/ ended up
 //              in a cycle with four of them (reading-turn assembly used to live
 //              there).
-//   domain     one product area each (info/, memory/, reading/ and the units
+//   domain     one product area each (info/, observation/, reading/ and the units
 //              inside it), free to use platform, capability and each other, as
 //              long as the graph stays acyclic.
 //   ui         React components (ui/components).
@@ -34,7 +34,7 @@ import { fileURLToPath } from "node:url";
 type Layer = "platform" | "capability" | "domain" | "ui" | "shell" | "entry";
 
 // Every entry under src/ and the layer it belongs to. A key is either a
-// top-level entry ("memory", "App.tsx") or, when a top-level directory groups
+// top-level entry ("observation", "App.tsx") or, when a top-level directory groups
 // several units, one of those units ("platform/app"); a grouping directory
 // keeps a key of its own for the files sitting directly in it. A new directory
 // or root file must be added here or the first test fails: deciding where it
@@ -55,15 +55,17 @@ const LAYER: Record<string, Layer> = {
   "info/companion": "domain",
   "info/extract": "domain",
   "info/sources": "domain",
-  memory: "domain",
+  observation: "domain",
   reading: "domain",
   "reading/engine": "domain",
   "reading/figures": "domain",
   "reading/notes": "domain",
   "reading/papers": "domain",
   "reading/prep": "domain",
+  "reading/rehearsal": "domain",
   "reading/slides": "domain",
   "reading/sources": "domain",
+  "reading/talks": "domain",
 
   ui: "ui",
   "ui/components": "ui",
@@ -146,8 +148,8 @@ function entryOf(rel: string): string {
 // A specifier resolved to the entry under src/ it lands in, or null when it
 // leaves src/ or points at a non-source asset.
 //
-// The trap: a barrel import like "../memory" resolves to the directory
-// src/memory, not to a root-level file. Both look like a single path segment,
+// The trap: a barrel import like "../observation" resolves to the directory
+// src/observation, not to a root-level file. Both look like a single path segment,
 // so the directory check has to be a real stat, not a count of slashes. Two
 // segments inside a grouping directory are ambiguous the same way —
 // "reading/prep" is a unit, "reading/turn" is a file of the group itself — and

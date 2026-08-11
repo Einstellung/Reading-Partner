@@ -6,11 +6,27 @@
 // client_secret alongside PKCE (Desktop client requirement; the secret is not
 // confidential, PKCE protects the exchange).
 //
-// iOS: reverse-DNS custom-scheme redirect captured by tauri-plugin-deep-link. No
-// client_secret (public iOS client, PKCE-only). The consent screen is opened in
-// the system browser via openUrl — never an embedded webview, which Google blocks
-// (disallowed_useragent). The redirect scheme is registered in tauri.conf.json
-// (deep-link plugin generates the Info.plist CFBundleURLTypes at iOS build time).
+// iOS and Android: reverse-DNS custom-scheme redirect captured by
+// tauri-plugin-deep-link. No client_secret (public mobile client, PKCE-only).
+//
+// The consent screen must leave our process: Google answers any request from an
+// android.webkit.WebView with disallowed_useragent, and this whole app is one such
+// WebView. openUrl (one argument, never `with: "inAppBrowser"`) is what keeps it
+// out — the opener plugin's Android side turns it into an ACTION_VIEW intent with
+// FLAG_ACTIVITY_NEW_TASK and hands it to startActivity, so the system browser
+// opens it as a separate activity and our webview never navigates. Passing
+// "inAppBrowser" would route it through a Custom Tab instead, which is also
+// out-of-process and acceptable to Google, but it is not what we do.
+//
+// Coming back: the browser resolves the custom-scheme redirect against the
+// intent-filter the deep-link plugin writes into MainActivity, whose launchMode is
+// singleTask, so the running instance gets onNewIntent rather than a fresh one and
+// the pending state/verifier held here survive. The scheme itself is registered in
+// tauri.conf.json; the plugin generates the Info.plist CFBundleURLTypes at iOS
+// build time and the intent-filter at Android build time from that one array.
+//
+// The capture code is shared: the two platforms differ only in which client id
+// (and so which scheme) they were built with.
 //
 // Tokens live in AppData/sync-auth.json, deliberately NOT in the sync range
 // (local device credential; see syncFs.ts). The access token is short-lived and
@@ -43,7 +59,7 @@ const AUTH_FILE = "sync-auth.json";
 // Refresh this long before the real expiry so an in-flight request never races
 // the boundary.
 const EXPIRY_SKEW_MS = 5 * 60 * 1000;
-// How long to wait for the iOS deep-link redirect before giving up.
+// How long to wait for the mobile deep-link redirect before giving up.
 const DEEP_LINK_TIMEOUT_MS = 5 * 60 * 1000;
 
 export class GoogleAuthError extends Error {}
@@ -151,7 +167,7 @@ async function captureLoopbackCode(flow: AuthFlow, challenge: string, state: str
   }
 }
 
-// --- login: iOS custom scheme ----------------------------------------------
+// --- login: mobile custom scheme (iOS + Android) ----------------------------
 
 // Resolve the authorization code from a deep-link redirect URL, validating that
 // it is our scheme and that the returned state matches. Pure branch is in
@@ -214,10 +230,12 @@ export async function signIn(): Promise<void> {
   const { verifier, challenge } = await generatePKCE();
   const state = base64Url(crypto.getRandomValues(new Uint8Array(16)));
 
+  // Keyed on the loopback flow rather than on each scheme flow, so a future
+  // scheme platform cannot silently inherit the listener it has no use for.
   const code =
-    flow.kind === "ios-scheme"
-      ? await captureSchemeCode(flow, challenge, state)
-      : await captureLoopbackCode(flow, challenge, state);
+    flow.kind === "desktop-loopback"
+      ? await captureLoopbackCode(flow, challenge, state)
+      : await captureSchemeCode(flow, challenge, state);
 
   const token = await tokenRequest(authCodeBody(flow, code, verifier));
   if (!token.refresh_token) {

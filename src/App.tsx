@@ -9,8 +9,13 @@ import {
   type ViewStats,
 } from "./platform/app/reader-contract";
 import { onCorruptFile } from "./platform/app/atomic-fs";
-import { getViewState, hashPath, saveViewState } from "./platform/app/storage";
-import { importBook, libraryHas, readLibraryBook } from "./platform/app/library";
+import { getViewState, hashPath, saveViewState, withModes } from "./platform/app/storage";
+import {
+  importBook,
+  libraryHas,
+  readLibraryBook,
+  repairLibraryNames,
+} from "./platform/app/library";
 import { migrateBookLive } from "./platform/app/migrate";
 import { ensureFulltext, onFulltextError, type Fulltext } from "./fulltext";
 import Sidebar, { type SidebarTab } from "./ui/components/reader/Sidebar";
@@ -28,6 +33,7 @@ import {
   listTopics,
   markOpened,
   mostRecentlyOpened,
+  repairTopicPaths,
   setFileHash,
   type FileRef,
   type Topic,
@@ -66,12 +72,11 @@ import { useNotes } from "./reading/notes/use-notes";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import {
   distillThread,
-  getLastDistillation,
-  getMemoryAdapter,
-  onMemoryChange,
+  startDistillSweeps,
+  sweepDistillation,
+  toDistillAnnotations,
   type DistillAnnotation,
-  type MemoryEntry,
-} from "./memory";
+} from "./observation";
 import { logEvent } from "./platform/app/events";
 import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
 import EmbedReaderPane from "./reading/engine/EmbedReaderPane";
@@ -87,7 +92,6 @@ import {
 } from "./reading/figures";
 import PrepPanel from "./ui/components/reader/PrepPanel";
 import NotesPanel from "./ui/components/reader/NotesPanel";
-import MemoryPanel from "./ui/components/reader/MemoryPanel";
 import ReaderTopBar from "./ui/components/reader/ReaderTopBar";
 import AnnotationPopup from "./ui/components/reader/AnnotationPopup";
 import CallBubble from "./ui/components/chat/CallBubble";
@@ -108,6 +112,7 @@ import Toast, { useToasts } from "./ui/components/common/Toast";
 import SettingsButton from "./ui/components/common/SettingsButton";
 import { useSyncHealth } from "./ui/components/common/useSyncHealth";
 import type { Annotation as PopupAnnotation, PendingImage, ToolStatus, ToolType } from "./ui/components/common/types";
+import { rehydrateParts, type ChatPart } from "./ui/components/chat/chatParts";
 
 // The AI pen maps to the engine's underline tool in a fixed purple (the palette's
 // Purple). Owning this one color for the AI pen is a v1 implementation
@@ -142,6 +147,10 @@ type CallMessage = {
   images?: { data: string; mediaType: string }[];
   streaming?: boolean;
   failed?: boolean;
+  // The durable parts of the row (chatParts.ts). Present on rows that carry a
+  // card — a recorded rehearsal decision — and absent on plain prose, which
+  // renders from `text`.
+  parts?: ChatPart[];
   // Transient tool-call trace for a streaming AI turn (M6); never persisted.
   tools?: ToolStatus[];
   // What the turn left out to fit the context window (src/budget). Display-only,
@@ -150,9 +159,16 @@ type CallMessage = {
 };
 
 // Persisted thread messages -> display messages. Image bytes are loaded
-// separately (hydrateThreadImages), so images start absent here.
+// separately (hydrateThreadImages), so images start absent here. Stored parts
+// come back as render parts, so a rehearsal decision card is still there when
+// the conversation is reopened days later.
 function toDisplayMessages(msgs: ThreadMessage[]): CallMessage[] {
-  return msgs.map((m) => ({ role: m.role, text: m.text, ts: m.ts }));
+  return msgs.map((m) => ({
+    role: m.role,
+    text: m.text,
+    ts: m.ts,
+    ...(m.parts && m.parts.length ? { parts: rehydrateParts(m.parts) } : {}),
+  }));
 }
 
 // A live AI "call" — one thread anchored on one AI-pen underline (docs/03).
@@ -316,6 +332,12 @@ export default function App() {
     prewarmPdfiumEngine();
   }, []);
 
+  // Pay down whatever the observations still owe, on a timer and whenever the
+  // app comes back (src/observation/arrears.ts). Silent throughout: a sweep that
+  // finds nothing owed does nothing, and one that runs a pass shows no UI. The
+  // predicate keeps it off a thread whose reply is still being written.
+  useEffect(() => startDistillSweeps((threadId) => liveTurnsRef.current.has(threadId)), []);
+
   // Install the Tauri fetch bridge + load settings once. A data file that can't
   // be read is set aside rather than silently replaced by defaults, and the user
   // is told — otherwise a reset shelf or a lost provider config looks like the
@@ -380,7 +402,7 @@ export default function App() {
     classroomRef,
     pipelineRef,
     setSelectedSlug: setSelectedPrepSlug,
-    toggleClassroom,
+    setClassroom,
     reset: resetPrep,
     resume: resumePrep,
   } = usePrep({
@@ -388,9 +410,23 @@ export default function App() {
     bookIdRef,
     ctxRef,
     currentFulltextRef,
-    lastStateRef: lastState,
     pushToast,
   });
+
+  // One press of the classroom toggle. Persisted immediately rather than on the
+  // debounced position save, so the mode survives a book that is closed without
+  // the reader scrolling again.
+  const toggleClassroom = useCallback(() => {
+    const on = !classroomRef.current;
+    setClassroom(on);
+    const bookId = bookIdRef.current;
+    if (!bookId) return;
+    const merged = withModes(lastState.current, { classroom: on });
+    lastState.current = merged;
+    saveViewState(bookId, merged).catch((e) => {
+      console.error("failed to persist the reading mode", e);
+    });
+  }, [classroomRef, setClassroom]);
 
   // Page-navigation events, with the dwell time on the page being left. The
   // ref makes this idempotent under StrictMode's double effect runs.
@@ -464,7 +500,15 @@ export default function App() {
     if (migrationRan.current) return;
     migrationRan.current = true;
     void (async () => {
-      let changed = false;
+      // Names an iOS import left percent-encoded (docs/pitfall/106). Runs first
+      // so the backfill below reads the repaired paths, and writes nothing when
+      // there is nothing encoded, so it costs no sync revision.
+      let changed = await Promise.all([repairTopicPaths(), repairLibraryNames()])
+        .then((wrote) => wrote.some(Boolean))
+        .catch((e) => {
+          console.warn("name repair skipped", e);
+          return false;
+        });
       const all = await listTopics().catch((): Topic[] => []);
       for (const t of all) {
         for (const f of t.files) {
@@ -550,7 +594,7 @@ export default function App() {
     if (!bookId) return;
     // Carry the sticky classroom flag (docs/09) alongside the reader-owned
     // position fields, which never carry it.
-    const merged = { ...state, classroom: classroomRef.current };
+    const merged = withModes(state, { classroom: classroomRef.current });
     lastState.current = merged;
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
@@ -648,42 +692,10 @@ export default function App() {
     setCall((cur) => (cur && cur.view === "chat-main" ? { ...cur, view: "chat-pip" } : cur));
   }, [jumpToQuote]);
 
-  // Memory panel data (M8): loaded when the tab shows, refreshed when a
-  // background write (distillation or an in-chat memory_update) lands.
-  const [memEntries, setMemEntries] = useState<MemoryEntry[] | null>(null);
-  const [memLastDistill, setMemLastDistill] = useState<number | null>(null);
-  const refreshMemory = useCallback(() => {
-    const topicId = activeTopicId;
-    if (!topicId) return;
-    void (async () => {
-      try {
-        const entries = await getMemoryAdapter(topicId).listObservations();
-        const last = await getLastDistillation(topicId);
-        setMemEntries(entries);
-        setMemLastDistill(last);
-      } catch (e) {
-        console.warn("failed to load memory", e);
-        setMemEntries([]);
-      }
-    })();
-  }, [activeTopicId]);
-
-  useEffect(() => {
-    setMemEntries(null);
-    setMemLastDistill(null);
-  }, [activeTopicId]);
-
-  useEffect(() => {
-    if (title && sidebarOpen && sidebarTab === "memory") refreshMemory();
-  }, [title, sidebarOpen, sidebarTab, refreshMemory]);
-
-  useEffect(
-    () =>
-      onMemoryChange((topicId) => {
-        if (topicId === activeTopicId) refreshMemory();
-      }),
-    [activeTopicId, refreshMemory],
-  );
+  // AI observations are a topic-level thing and show in the topic's sidebar
+  // (ui/components/library/topic/ObservationSection.tsx, docs/31); the reader has
+  // no copy of them. What is left here is the panel's old refresh signal, which
+  // the topic panel subscribes to itself.
 
   // The book-notes feature (docs/14): the panel's state and every callback that
   // serves it. It reads the open book through the shell's refs, so what it
@@ -710,16 +722,7 @@ export default function App() {
   // id, page, selected text, note, and creation time (from the engine's ISO
   // dateCreated) so the "since last distillation" filter can work.
   const distillAnnotations = useCallback((): DistillAnnotation[] => {
-    return [...annsRef.current.values()].map((a) => {
-      const created = typeof a.dateCreated === "string" ? Date.parse(a.dateCreated) : NaN;
-      return {
-        id: a.id,
-        page: annotationPage(a as { position?: { pageIndex?: number } }),
-        text: typeof a.text === "string" ? a.text : "",
-        comment: typeof a.comment === "string" ? a.comment : undefined,
-        createdAt: Number.isFinite(created) ? created : Date.now(),
-      };
-    });
+    return toDistillAnnotations([...annsRef.current.values()]);
   }, []);
 
   // Thread history the way an opening view shows it: what the file holds, plus
@@ -1014,10 +1017,10 @@ export default function App() {
   }, []);
 
   // Hangup bookkeeping (docs/02, docs/03): log the end of the conversation and
-  // kick the silent memory distillation over its persisted transcript. Reads
+  // kick the silent observation distillation over its persisted transcript. Reads
   // refs so it is stable; no-ops when nothing is open. Distillation runs in the
-  // background with no UI — the memory panel shows when it last ran. Declared up
-  // here because every way out of a call is below and all of them go through it.
+  // background with no UI — the observations panel shows when it last ran. Declared
+  // up here because every way out of a call is below and all go through it.
   //
   // Hanging up mid-answer waits: the reply is still being written and the
   // transcript would be a half sentence, so the distillation is handed to the
@@ -1037,8 +1040,10 @@ export default function App() {
       void distillThread({
         topicId,
         topicName,
+        bookId,
         bookName: fileName,
         threadId: c.threadId,
+        trigger: "hangup",
         annotationId: c.annotationId,
         // The book-level thread has no mark: pin its position to the current page.
         page: c.isBook
@@ -1077,6 +1082,9 @@ export default function App() {
       // the reader. First thing in, while the refs the hangup reads still point
       // at the book being left.
       captureHangup();
+      // And a look at what the book being left still owes: a stretch of reading
+      // with nothing said in it never reaches the hangup path at all.
+      void sweepDistillation("book-switch");
       setCall(null);
       // The images staged in this book's conversations go with it, same as
       // closing the reader: they are in memory only, and every thread they
@@ -1108,16 +1116,16 @@ export default function App() {
       setViewReady(false);
       bookIdRef.current = bookId;
       bookNameRef.current = name;
-      // Seed the persist base with the loaded state so an early classroom toggle
+      // Seed the persist base with the loaded state so an early mode press
       // (before the reader emits a position) merges onto the right book.
       lastState.current = state;
       // Dwell tracking restarts per book (never a cross-book page-nav event).
       pageDwellRef.current = null;
-      // Classroom mode is per book and sticky (docs/09): restore its saved flag,
-      // detaching the previous book's prep panel first (the pipeline itself keeps
-      // running in the background as a module singleton). A restored "on" attaches
-      // the pipeline below once the fulltext is ready, degrading exactly like a
-      // manual toggle-on when the book has no readable text.
+      // A restored classroom "on" attaches the pipeline below once the fulltext
+      // is ready, degrading exactly like a manual toggle-on when the book has no
+      // readable text. The flag is per book and sticky (docs/09); detach the
+      // previous book's prep panel first (the pipeline itself keeps running in
+      // the background as a module singleton).
       const restoreClassroom = !!state?.classroom;
       resetPrep(restoreClassroom);
       // Notes are per book too; detach the previous book's panel.
@@ -1507,7 +1515,7 @@ export default function App() {
   // its trace-list entry disappear); the book-level thread has no mark, so only
   // the thread goes. Both removals are in-file rewrites, so per-file LWW sync
   // carries them to other devices. Unlike a hangup this does not distill — the
-  // talk is being thrown away — and any memory already distilled from it stays.
+  // talk is being thrown away — and anything already distilled from it stays.
   const deleteCallThread = useCallback(() => {
     const c = callRef.current;
     const bookId = bookIdRef.current;
@@ -1534,7 +1542,7 @@ export default function App() {
   // is the same pairing deleteCallThread already makes from the other end. The
   // mark goes through removeAnnotation like every other deletion, so the
   // annotations file, the in-memory map and sync stay in agreement; the thread
-  // goes through deleteThread, an in-file rewrite its own cache owns. Memory
+  // goes through deleteThread, an in-file rewrite its own cache owns. What was
   // distilled from the talk stays, and the event log is appended to, not
   // rewritten.
   const deleteTraceAnnotation = useCallback(
@@ -1622,6 +1630,7 @@ export default function App() {
     if (bookId) for (const live of liveTurnsRef.current.stopBook(bookId)) keepPartial(live);
     // Closing the book with a call open ends that conversation too.
     captureHangup();
+    void sweepDistillation("book-switch");
     // The last chapter can't be reached by a "next chapter" highlight, so on
     // close evaluate the notes frontier once with the inclusive rule (docs/14).
     // Fire before the refs are torn down below.
@@ -1810,7 +1819,6 @@ export default function App() {
             tab={sidebarTab}
             onClose={() => setSidebarOpen(false)}
             onSelectTab={(t) => {
-              if (t === "memory" && activeTopic) logEvent(activeTopic.id, "memory-tab-open");
               if (t === "notes" && activeTopic) logEvent(activeTopic.id, "notes-tab-open");
               setSidebarTab(t);
             }}
@@ -1830,7 +1838,6 @@ export default function App() {
             onOpenThread={openThreadForAnnotation}
             prepPanel={<PrepPanel {...prepPanelProps} />}
             notesPanel={<NotesPanel {...notesPanelProps} />}
-            memoryPanel={<MemoryPanel entries={memEntries} lastDistilledAt={memLastDistill} />}
           />
         )}
 

@@ -12,7 +12,7 @@ import type { PrepPaper, PrepState } from "../../src/reading/prep/types";
 import type { SubagentTurnFn } from "../../src/ai/subagent";
 
 // Headless: no AppData, so every optional read misses (the overview note, the
-// memory index). The turn treats all of them as "not there yet".
+// observation index). The turn treats all of them as "not there yet".
 mock.module("@tauri-apps/plugin-fs", () => ({
   BaseDirectory: { AppData: 1 },
   exists: async () => false,
@@ -135,15 +135,15 @@ test("a book with no text layer gets no read_pages tool", async () => {
   expect(names(turn!.tools)).toEqual(["find_paper", "research_literature"]);
 });
 
-test("a topic id mounts the memory tools", async () => {
+test("a topic id mounts the observation tools", async () => {
   const turn = await buildReadingTurn(
     input({ context: { ...input().context, topicId: "topic-1" } }),
   );
   expect(names(turn!.tools)).toEqual([
     "find_paper",
-    "memory_read",
-    "memory_search",
-    "memory_update",
+    "observation_read",
+    "observation_search",
+    "observation_update",
     "read_pages",
     "research_literature",
     "search_topic",

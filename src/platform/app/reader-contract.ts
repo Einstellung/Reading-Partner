@@ -22,9 +22,12 @@ export interface ViewState {
   // instead of a mirrored offset.
   pageX?: number;
   pageY?: number;
-  // Classroom mode (docs/09) is per book and sticky: persisted here so reopening
-  // the same book restores it. Absent means off. Not a reader-engine field — the
-  // shell merges it in when persisting (see storage.withClassroom).
+  // The book-level chat's classroom mode (docs/09) is per book and sticky:
+  // persisted here so reopening the same book restores it. Absent means off. Not
+  // a reader-engine field — the shell merges it in when persisting (see
+  // storage.withModes). A file written by the build that briefly had a
+  // `rehearsal` flag beside it keeps that key and nothing reads it: a rehearsal
+  // is a talk now (docs/31), not a mode of a book.
   classroom?: boolean;
   // Reading layout, per book: "vertical" continuous scroll (default) or "paged"
   // horizontal fit-page flip (touch devices). Absent restores to vertical.

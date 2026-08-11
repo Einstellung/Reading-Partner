@@ -19,6 +19,7 @@ import type { ProbeConfirmCardData } from "../../src/info/sources/source-cards";
 const IDLE: InfoSnapshot = {
   briefing: null,
   running: false,
+  stopping: false,
   phase: "idle",
   collect: null,
   activity: null,
@@ -61,9 +62,10 @@ test("the card a job starts with takes its phase from the job, not a snapshot", 
   // Nothing has been collected or triaged yet, so both readouts are empty.
   expect(briefingProgressCard("first", null)).toEqual({
     kind: "briefing-progress",
-    phase: "fetching",
+    phase: "discovering",
     collect: null,
     triage: null,
+    stopping: false,
     title: undefined,
   });
   // A re-triage never fetches: it opens straight in the triaging phase.
@@ -72,18 +74,31 @@ test("the card a job starts with takes its phase from the job, not a snapshot", 
     title: "Re-running today's triage",
   });
   expect(briefingProgressCard("full", null)).toMatchObject({
-    phase: "fetching",
+    phase: "discovering",
     title: "Regenerating today's briefing",
   });
 });
 
 test("the progress card mirrors the snapshot's phase and collection counts", () => {
-  const collect = { total: 4, done: 2, failed: 1, items: 17, lastDone: "Robot Report" };
-  expect(briefingProgressCard("first", snapshot({ running: true, phase: "fetching", collect }))).toEqual({
+  const collect = {
+    total: 4,
+    done: 2,
+    failed: 1,
+    items: 17,
+    lastDone: "Robot Report",
+    screened: 0,
+    kept: 0,
+    dropped: 0,
+    cappedOut: 0,
+    bodies: 0,
+    bodiesTotal: 0,
+  };
+  expect(briefingProgressCard("first", snapshot({ running: true, phase: "discovering", collect }))).toEqual({
     kind: "briefing-progress",
-    phase: "fetching",
+    phase: "discovering",
     collect,
     triage: null,
+    stopping: false,
     title: undefined,
   });
 });
@@ -92,7 +107,19 @@ test("the progress card carries triage liveness once the AI call starts", () => 
   const s = snapshot({
     running: true,
     phase: "triaging",
-    collect: { total: 4, done: 4, failed: 0, items: 17, lastDone: "Robot Report" },
+    collect: {
+      total: 4,
+      done: 4,
+      failed: 0,
+      items: 17,
+      lastDone: "Robot Report",
+      screened: 17,
+      kept: 5,
+      dropped: 12,
+      cappedOut: 0,
+      bodies: 5,
+      bodiesTotal: 5,
+    },
     activity: { startedAt: 1000, chars: 240, attempt: 2, attempts: 3 },
   });
   const card = briefingProgressCard("full", s);

@@ -8,7 +8,7 @@ import {
   readTextFile,
 } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "./atomic-fs";
-import { basename } from "./storage";
+import { basename, decodeLegacyName, normalizeFilePath } from "./path";
 
 const TOPICS_FILE = "topics.json";
 
@@ -34,9 +34,57 @@ interface Store {
   topics: Topic[];
 }
 
+// Pure: repair references stored before paths were normalized on the way in —
+// an iOS import wrote the percent-encoded file URL as the path and its last
+// segment as the name (path.ts, docs/pitfall/106). Two references that normalize
+// to the same path are one file and collapse into the first, keeping whichever
+// book id and open time either of them carries. Returns the same array — same
+// object — when there is nothing to repair, which is what lets the repair below
+// skip the write, and with it the sync revision.
+export function healTopicFiles(files: FileRef[]): FileRef[] {
+  let changed = false;
+  const out: FileRef[] = [];
+  const byPath = new Map<string, FileRef>();
+  for (const file of files) {
+    const path = normalizeFilePath(file.path);
+    // A path that was already clean keeps its name (which may predate this
+    // repair); a decoded one takes its name from the decoded path.
+    const name = path === file.path ? decodeLegacyName(file.name) : basename(path);
+    const healed = path === file.path && name === file.name ? file : { ...file, path, name };
+    if (healed !== file) changed = true;
+    const seen = byPath.get(path);
+    if (!seen) {
+      byPath.set(path, healed);
+      out.push(healed);
+      continue;
+    }
+    const merged: FileRef = { ...seen };
+    if (!merged.hash && healed.hash) merged.hash = healed.hash;
+    if (healed.lastOpenedAt !== undefined && healed.lastOpenedAt > (merged.lastOpenedAt ?? 0)) {
+      merged.lastOpenedAt = healed.lastOpenedAt;
+    }
+    if (healed.addedAt < merged.addedAt) merged.addedAt = healed.addedAt;
+    out[out.indexOf(seen)] = merged;
+    byPath.set(path, merged);
+    changed = true;
+  }
+  return changed ? out : files;
+}
+
+export function healTopics(topics: Topic[]): Topic[] {
+  let changed = false;
+  const healed = topics.map((topic) => {
+    const files = healTopicFiles(topic.files);
+    if (files === topic.files) return topic;
+    changed = true;
+    return { ...topic, files };
+  });
+  return changed ? healed : topics;
+}
+
 // Missing/corrupt file reads as an empty library; genuine write failures
 // propagate so the caller can warn (never silently lose a topic).
-async function load(): Promise<Store> {
+async function read(): Promise<Store> {
   try {
     if (!(await exists(TOPICS_FILE, { baseDir: BaseDirectory.AppData }))) {
       return { topics: [] };
@@ -48,6 +96,24 @@ async function load(): Promise<Store> {
   } catch {
     return { topics: [] };
   }
+}
+
+// Every read hands out repaired references, whether or not the file on disk has
+// been rewritten yet.
+async function load(): Promise<Store> {
+  const store = await read();
+  return { topics: healTopics(store.topics) };
+}
+
+// Rewrite the file once with the repaired paths and names. A clean file writes
+// nothing, so this can run at every launch without producing a sync revision.
+// Returns whether it wrote.
+export async function repairTopicPaths(): Promise<boolean> {
+  const store = await read();
+  const healed = healTopics(store.topics);
+  if (healed === store.topics) return false;
+  await save({ topics: healed });
+  return true;
 }
 
 async function save(store: Store): Promise<void> {
@@ -109,7 +175,12 @@ export async function deleteTopic(id: string): Promise<void> {
   await save(store);
 }
 
-export async function addFileToTopic(id: string, path: string): Promise<void> {
+// The one door a host path comes through: the file picker hands back a plain
+// path on desktop and a percent-encoded file URL on iOS, and everything stored
+// downstream (the library title, the notes state's book name) is derived from
+// what lands here. Normalize once, at the door.
+export async function addFileToTopic(id: string, rawPath: string): Promise<void> {
+  const path = normalizeFilePath(rawPath);
   const store = await load();
   const topic = store.topics.find((t) => t.id === id);
   if (!topic || topic.files.some((f) => f.path === path)) return;
