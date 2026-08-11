@@ -24,11 +24,12 @@ function read(name: string): string {
 const select = read("select.tsx");
 const checkbox = read("checkbox.tsx");
 const badge = read("badge.tsx");
+const tabs = read("tabs.tsx");
 
 test("nothing here imports lucide-react", () => {
   // The generated files draw their chevrons and ticks with it; this project
   // does not install it, so the import would break the build.
-  for (const source of [select, checkbox, badge]) {
+  for (const source of [select, checkbox, badge, tabs]) {
     expect(source).not.toContain("lucide-react");
   }
 });
@@ -69,6 +70,23 @@ test("the checkbox carries its touch target as HIT_44", () => {
   // box stays 16px and the target is a centred pseudo-element.
   expect(checkbox).toContain("HIT_44");
   expect(checkbox).toContain("relative size-4");
+});
+
+test("a tab trigger is a 44px touch target and hovers only where hover exists", () => {
+  // The generated trigger is `h-[calc(100%-1px)]` inside an `h-9` list, which
+  // is 36px and cannot grow. Hover behind can-hover: keeps a tap from leaving
+  // one lit (docs/30).
+  expect(tabs).toContain("coarse:min-h-[44px]");
+  // Every hover: in the file has to be the tail of a can-hover: chain, so the
+  // chains are struck out first and what is left is the bare ones.
+  expect(tabs.split("can-hover:hover:").join("")).not.toContain("hover:");
+});
+
+test("the tabs carry no dark-theme rules and no orientation styling", () => {
+  // This app has no dark theme, and the visual orientation of the strip is a
+  // breakpoint at the call site, not Radix's data-orientation (docs/30).
+  expect(tabs).not.toContain("dark:");
+  expect(tabs).not.toContain("data-[orientation=");
 });
 
 test("the badge is an inline box with this app's two pills", () => {
