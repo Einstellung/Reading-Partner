@@ -75,8 +75,14 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
   //
   // The feed is the discovery layer and the lead paragraph it carries in
   // <description> is what screening reads: measured 206 characters for markets,
-  // 200 for industries, 214 for technology, 250 for politics. Bodies never come
-  // from plain HTTP here — the article page answers 403 to it.
+  // 200 for industries, 214 for technology, 250 for politics.
+  //
+  // Bodies never come from plain HTTP here — the article page answers 403 to it
+  // — so every section's fulltext is `webview`: the hidden browser window loads
+  // the site's own front door first and then the article
+  // (src-tauri/src/webview_fetch). Anonymous that yields the metered preview,
+  // ~500 characters; signed in it yields the whole story. Where no webview
+  // exists (iOS) these fall back to headlines on their own.
   {
     id: "bloomberg-markets",
     name: "Bloomberg Markets",
@@ -86,7 +92,10 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     limit: 20,
     pollMinutes: 180,
     discovery: { kind: "feed", url: "https://www.bloomberg.com/feeds/markets/news.rss", format: "rss" },
-    fulltext: { mode: "none" },
+    fulltext: {
+      mode: "webview",
+      signInUrl: "https://www.bloomberg.com/account/signin",
+    },
   },
   {
     id: "bloomberg-economics",
@@ -97,7 +106,10 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     limit: 20,
     pollMinutes: 180,
     discovery: { kind: "feed", url: "https://www.bloomberg.com/feeds/economics/news.rss", format: "rss" },
-    fulltext: { mode: "none" },
+    fulltext: {
+      mode: "webview",
+      signInUrl: "https://www.bloomberg.com/account/signin",
+    },
   },
   {
     id: "bloomberg-industries",
@@ -108,7 +120,10 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     limit: 20,
     pollMinutes: 180,
     discovery: { kind: "feed", url: "https://www.bloomberg.com/feeds/industries/news.rss", format: "rss" },
-    fulltext: { mode: "none" },
+    fulltext: {
+      mode: "webview",
+      signInUrl: "https://www.bloomberg.com/account/signin",
+    },
   },
   {
     id: "bloomberg-technology",
@@ -119,7 +134,10 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     limit: 20,
     pollMinutes: 180,
     discovery: { kind: "feed", url: "https://www.bloomberg.com/feeds/technology/news.rss", format: "rss" },
-    fulltext: { mode: "none" },
+    fulltext: {
+      mode: "webview",
+      signInUrl: "https://www.bloomberg.com/account/signin",
+    },
   },
   {
     id: "bloomberg-politics",
@@ -130,7 +148,10 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     limit: 20,
     pollMinutes: 180,
     discovery: { kind: "feed", url: "https://www.bloomberg.com/feeds/politics/news.rss", format: "rss" },
-    fulltext: { mode: "none" },
+    fulltext: {
+      mode: "webview",
+      signInUrl: "https://www.bloomberg.com/account/signin",
+    },
   },
   {
     id: "bloomberg-crypto",
@@ -142,7 +163,10 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     pollMinutes: 180,
     // Thin: 2 items in the research round, same shape as the others.
     discovery: { kind: "feed", url: "https://www.bloomberg.com/feeds/crypto/news.rss", format: "rss" },
-    fulltext: { mode: "none" },
+    fulltext: {
+      mode: "webview",
+      signInUrl: "https://www.bloomberg.com/account/signin",
+    },
   },
   {
     id: "bloomberg-opinion",
@@ -154,7 +178,10 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     pollMinutes: 180,
     // The opinion section's feed slug is "bview"; /feeds/opinion/news.rss 404s.
     discovery: { kind: "feed", url: "https://www.bloomberg.com/feeds/bview/news.rss", format: "rss" },
-    fulltext: { mode: "none" },
+    fulltext: {
+      mode: "webview",
+      signInUrl: "https://www.bloomberg.com/account/signin",
+    },
   },
 
   // --- Nature --------------------------------------------------------------
@@ -400,10 +427,12 @@ const BUILTIN_CAVEATS: Record<string, string> = {
     "Undocumented internal JSON API; the official RSS is now paywalled. The URL/UA may need to stay configurable, with the WeChat mirror as a fallback.",
   ...everySection(
     "bloomberg",
-    "Discovery-only. The article page answers 403 with a PerimeterX bot check, so items stay summary-only: headline plus the lead paragraph the feed carries, measured 206 characters for markets, 200 for industries, 214 for technology, 250 for politics. " +
+    "The feed is the discovery layer: headline plus the lead paragraph it carries, measured 206 characters for markets, 200 for industries, 214 for technology, 250 for politics. " +
+      "Bodies come from the hidden webview, because the article page answers 403 with a PerimeterX bot check to a plain fetch: the window loads bloomberg.com first for its cookies, then the article. " +
+      "Anonymous that is the metered preview (~500 characters); signed in through the sources page it is the whole story (measured 584→1959, 528→1624). No webview, no body — on iOS these sections are headlines. " +
       "Each section feed holds exactly 20 items covering only 6-22 hours, so a once-a-day poll misses most of a day; polling every 2-4 hours is what it takes to see a section whole. " +
       "Recorded facts, not a verdict: Bloomberg's terms of service forbid using any \"scraper, robot, bot, spider, data mining\" tool to access the service and forbid recirculating or redistributing its material; robots.txt disallows Google-Extended but restricts neither /feeds/ nor the article paths. " +
-      "Bodies would only ever come from the full-text newsletters (Money Stuff, Points of Return) over the planned mail pipe.",
+      "The full-text newsletters (Money Stuff, Points of Return) remain the other way in, over the planned mail pipe.",
   ),
   nature:
     "Discovery-only. Research papers are paywalled and most news needs a subscription; reading a body would take the logged-in webview pipe, which does not exist yet, so items are summary-only. " +

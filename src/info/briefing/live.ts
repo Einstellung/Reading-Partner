@@ -12,6 +12,8 @@ import { newTally, reportParse } from "../../platform/app/structured-output";
 import { observeAppLifecycle } from "../../platform/app/lifecycle";
 import { browserWakeLockTarget, createScreenWakeLock } from "../../platform/app/wake-lock";
 import { collectAll, fetchBodies as fetchArticleBodies } from "../sources/engine";
+import { fetchArticleViaWebview } from "../extract/webview-article";
+import { hasWebviewFetch } from "../../platform/app/platform";
 import { extractReadable } from "../extract/readable";
 import { loadSources, loadSourceHealth, saveSourceHealth } from "../sources/source-store";
 import { loadFeedback } from "../../observation/feedback";
@@ -287,7 +289,20 @@ async function fetchBodies(
   signal: AbortSignal,
 ): Promise<void> {
   const sources = await loadSources();
-  await fetchArticleBodies(items, sources, { extract: extractReadable, signal }, onSettled);
+  await fetchArticleBodies(
+    items,
+    sources,
+    {
+      extract: extractReadable,
+      // Only where there is one. A `webview` source on a platform without a
+      // fetcher gets no body and no error either — it stays at the headline and
+      // summary the feed already gave, which is what the funnel does with every
+      // body it cannot get.
+      fetchViaWebview: hasWebviewFetch() ? fetchArticleViaWebview : undefined,
+      signal,
+    },
+    onSettled,
+  );
 }
 
 // The per-phase timing lines (events-info.jsonl), alongside the per-source ones

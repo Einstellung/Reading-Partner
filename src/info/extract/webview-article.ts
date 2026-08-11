@@ -38,6 +38,13 @@ export interface WebviewArticle {
 	/** `application/ld+json` blocks from the page, unparsed. */
 	ldJson: string[];
 	chars: number;
+	/** Inline "Read More:" promo lines dropped from the body. */
+	promosDropped: number;
+	/**
+	 * Whether the page still showed a way to sign in — i.e. whether this came
+	 * back as an anonymous reader or as the signed-in one.
+	 */
+	seesSignIn: boolean;
 	/** Whether this call paid for a homepage warm-up (tens of seconds). */
 	warmed: boolean;
 	elapsedMs: number;
@@ -56,10 +63,63 @@ function unsupported(url: string, detail: string): WebviewArticle {
 		selector: null,
 		ldJson: [],
 		chars: 0,
+		promosDropped: 0,
+		seesSignIn: false,
 		warmed: false,
 		elapsedMs: 0,
 		detail,
 	};
+}
+
+/**
+ * What a fetch means for the item that asked for it.
+ *
+ * `retry` is the distinction that matters: a bot wall, a timeout and a dead
+ * network are all "no body this time", and none of them is evidence that the
+ * article has no body. Nothing in the pipeline records a permanent "this one is
+ * bodiless" — the run marks an item as paid for so it is not fetched twice in
+ * the same run, and the article cache only ever stores bodies that exist — so
+ * the next run asks again, which is what a blocked or timed-out fetch deserves.
+ */
+export type WebviewBody =
+  | { kind: "body"; title: string | null; html: string | null; text: string; preview: boolean }
+  | { kind: "retry"; reason: string }
+  | { kind: "absent"; reason: string };
+
+/**
+ * Read a fetch result as a body, a reason to try again, or a body that is not
+ * there. Pure.
+ *
+ * `preview` says the body came back without a session on a source whose bodies
+ * depend on one — Bloomberg anonymous is ~500 characters of a story that runs to
+ * ~2000 signed in. It is a real body and worth keeping, but it is not the whole
+ * article, so the item stays flagged the way a paywall-truncated feed body is.
+ * The caller passes whether this source has a sign-in at all: on a site that
+ * gives an anonymous reader everything, a sign-in link in the header means
+ * nothing.
+ */
+export function webviewBody(article: WebviewArticle, opts: { hasSignIn?: boolean } = {}): WebviewBody {
+  switch (article.status) {
+    case "ok": {
+      const text = article.text ?? "";
+      if (!text.trim()) return { kind: "absent", reason: "the page held no article text" };
+      return {
+        kind: "body",
+        title: article.title,
+        html: article.html,
+        text,
+        preview: !!opts.hasSignIn && article.seesSignIn,
+      };
+    }
+    case "blocked":
+    case "timeout":
+    case "network":
+      return { kind: "retry", reason: article.detail || article.status };
+    case "empty":
+      return { kind: "absent", reason: article.detail || "no article body on the page" };
+    case "unsupported":
+      return { kind: "absent", reason: article.detail || "no webview fetcher here" };
+  }
 }
 
 /**

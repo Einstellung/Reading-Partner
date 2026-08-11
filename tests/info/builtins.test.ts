@@ -29,7 +29,7 @@ const BLOOMBERG_SECTIONS = [
   ["bloomberg-opinion", "bview"],
 ] as const;
 
-test("every Bloomberg section that carries articles is present", () => {
+test("every Bloomberg section that carries articles is present, with the webview pipe", () => {
   for (const [id, slug] of BLOOMBERG_SECTIONS) {
     const d = builtinById(id);
     expect(d?.discovery).toEqual({
@@ -38,6 +38,14 @@ test("every Bloomberg section that carries articles is present", () => {
       format: "rss",
     });
     expect(d?.limit).toBe(20);
+    // The article page answers 403 to a plain fetch and serves a real browser
+    // engine, so bodies come through the hidden webview — and the sign-in page
+    // rides along, because anonymous gets the preview and a session gets the
+    // article.
+    expect(d?.fulltext).toEqual({
+      mode: "webview",
+      signInUrl: "https://www.bloomberg.com/account/signin",
+    });
   }
 });
 

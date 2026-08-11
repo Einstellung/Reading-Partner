@@ -99,8 +99,26 @@ export interface FulltextDetailEndpoint {
   headers?: Record<string, string>;
 }
 
-// Discovery-layer only: title + summary, no body (arXiv, HN, Bloomberg RSS).
-// Triage handles these at summary level; the user opens the origin externally.
+// Render the article in a hidden webview and read the body out of the rendered
+// DOM (src-tauri/src/webview_fetch, docs/17). For sites whose article page a
+// plain HTTP fetch cannot get: Bloomberg answers 403 to one and serves the
+// article to a real engine that has been through the site's own front door.
+//
+// It costs a browser window and tens of seconds per article, so it never runs
+// during discovery — only in the material step, for the few items screening
+// kept. Where no webview fetcher exists (iOS, and any desktop whose bridge is
+// not written) the source degrades to headlines, exactly like `none`.
+export interface FulltextWebview {
+  mode: "webview";
+  // Where to send the user to sign in, when the site gives an anonymous reader
+  // less than a subscriber. Drives the sign-in row on the sources page; the
+  // fetch itself never navigates here.
+  signInUrl?: string;
+}
+
+// Discovery-layer only: title + summary, no body (Nature, the Economist's
+// sections). Triage handles these at summary level; the user opens the origin
+// externally.
 export interface FulltextNone {
   mode: "none";
 }
@@ -109,6 +127,7 @@ export type Fulltext =
   | FulltextFeedField
   | FulltextFetchPage
   | FulltextDetailEndpoint
+  | FulltextWebview
   | FulltextNone;
 
 // --- the descriptor --------------------------------------------------------
@@ -236,6 +255,13 @@ function validateFulltext(f: unknown): string | null {
     case "fetch-page":
     case "none":
       return null;
+    case "webview":
+      // signInUrl is optional, but a non-string one is an authoring slip worth
+      // reporting rather than ignoring: it is what the sign-in row navigates to.
+      if (o.signInUrl !== undefined && !isStr(o.signInUrl)) {
+        return "webview fulltext's signInUrl must be a url";
+      }
+      return null;
     case "detail-endpoint":
       if (!isStr(o.urlTemplate)) return "detail-endpoint needs a urlTemplate";
       return fieldOk(o.contentPath) ? null : "detail-endpoint needs a contentPath";
@@ -300,6 +326,10 @@ export const DESCRIPTOR_GUIDE = [
   '- fetch-page: { mode:"fetch-page" } — fetch each article page and extract the readable body.',
   '- detail-endpoint: { mode:"detail-endpoint", urlTemplate, contentPath, titlePath? } — fetch a',
   "  per-item JSON endpoint ({id} filled from the row) and read the body from a dot-path.",
+  '- webview: { mode:"webview", signInUrl? } — render each article in a hidden browser window',
+  "  and read the rendered DOM. Only where a plain fetch cannot work (403/406 to HTTP, served",
+  "  to a real engine): it costs a window and tens of seconds per article, and falls back to",
+  "  headlines where there is no webview (iOS). signInUrl is where the user signs in.",
   '- none: { mode:"none" } — headlines only; the user opens the origin externally.',
   "Example (an SSR section page with no feed):",
   '{ "id":"example-biz", "name":"Example Business", "line":"business", "enabled":true, "limit":10,',
