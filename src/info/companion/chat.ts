@@ -164,6 +164,28 @@ export function articleChatSystemPrompt(
   ].join("\n");
 }
 
+// The briefing thread before there is a briefing (docs/35). Today's is generated
+// when the app opens, so this is the state where that has not happened yet or
+// where it failed — and since there is no Generate button any more, the chat is
+// where the user gets one. The companion is told the situation and told it may
+// act on a request for one, not that it should offer.
+export function noBriefingChatSystemPrompt(
+  ctx: CompanionContext,
+  opts: { error?: string } = {},
+): string {
+  return [
+    ...preamble(ctx),
+    "",
+    "There is no briefing for today yet.",
+    opts.error ? `The last attempt to build one failed: ${opts.error}` : "",
+    "Today's briefing is collected automatically when the app opens; there is no button for it.",
+    "If the user asks for one now, call generate_briefing with scope 'full'. Do not offer",
+    "unprompted, and do not guess at what today's news holds — you have not seen any of it.",
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
+}
+
 // The briefing-level thread: the whole document as context (overview + every
 // tier's titles, sources, and the reasons/lines triage wrote), plus the full
 // triage-level filtered clip list so the companion sees what was dropped and

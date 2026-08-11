@@ -15,7 +15,7 @@ export function Vestibule({
   hasSources,
   onContinue,
   onOpenLibrary,
-  onGenerate,
+  onAsk,
   onStop,
   onOpenBriefing,
   onOpenSettings,
@@ -27,7 +27,7 @@ export function Vestibule({
   hasSources: boolean | null;
   onContinue: () => void;
   onOpenLibrary: () => void;
-  onGenerate: () => void;
+  onAsk: () => void;
   onStop: () => void;
   onOpenBriefing: () => void;
   onOpenSettings: () => void;
@@ -67,7 +67,7 @@ export function Vestibule({
             snap={snap}
             configured={configured}
             hasSources={hasSources}
-            onGenerate={onGenerate}
+            onAsk={onAsk}
             onStop={onStop}
             onOpen={onOpenBriefing}
             onOpenSettings={onOpenSettings}

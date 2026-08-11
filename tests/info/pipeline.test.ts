@@ -99,6 +99,9 @@ interface Fixture {
   triagedItems: string[];
   awake: boolean[];
   phases: { phase: string; data: Record<string, number> }[];
+  // The `force` each discovery pass was asked for: whether the run was
+  // hand-driven, which is what decides if a source on schedule is polled anyway.
+  forced: boolean[];
 }
 
 // A minimal set of injected deps over a fake disk; individual tests override
@@ -111,7 +114,8 @@ function makeDeps(fx: Fixture, over: Partial<InfoDeps> = {}): InfoDeps {
     loadProfile: async () => "",
     loadFeedback: async () => [],
     listSources: async () => fx.sources,
-    discover: async (refs, onSettled) => {
+    discover: async (refs, onSettled, _signal, opts) => {
+      fx.forced.push(opts.force);
       for (const r of refs) {
         fx.fetched.push(r.id);
         await onSettled({ id: r.id, items: [item(`${r.id}1`)] });
@@ -163,6 +167,7 @@ function fixture(sources: InfoSourceRef[] = [source("a")], disk = new Disk()): F
     triagedItems: [],
     awake: [],
     phases: [],
+    forced: [],
   };
 }
 
@@ -956,4 +961,157 @@ test("a day where nothing clears the screen still produces a briefing", async ()
   const b = p.snapshot().briefing!;
   expect(b.overview).toBe("ov");
   expect(b.screen).toMatchObject({ discovered: 2, kept: 0, dropped: 2 });
+});
+
+// --- opening the app is the trigger (docs/35) --------------------------------
+
+test("the day's first open collects the briefing: there is no button behind it", async () => {
+  const fx = fixture([source("a")]);
+  const p = new InfoPipeline(makeDeps(fx, { canAutoGenerate: async () => true }));
+  await p.init();
+
+  expect(fx.fetched).toEqual(["a"]);
+  expect(fx.triaged).toBe(1);
+  expect(p.snapshot().briefing?.overview).toBe("ov");
+  // The run polls only what the collector says is due; a regenerate goes and
+  // looks. This is the only thing the distinction decides.
+  expect(fx.forced).toEqual([false]);
+});
+
+test("nothing is spent unasked without a provider and a source", async () => {
+  const fx = fixture([source("a")]);
+  await new InfoPipeline(makeDeps(fx, { canAutoGenerate: async () => false })).init();
+  expect(fx.fetched).toEqual([]);
+  // A dep that throws is the same answer: the guess is never the one that spends.
+  await new InfoPipeline(
+    makeDeps(fx, {
+      canAutoGenerate: async () => {
+        throw new Error("settings unreadable");
+      },
+    }),
+  ).init();
+  expect(fx.fetched).toEqual([]);
+});
+
+test("today's briefing already on disk answers the open by itself", async () => {
+  const fx = fixture([source("a")]);
+  const p = new InfoPipeline(makeDeps(fx, { canAutoGenerate: async () => true }));
+  await p.generate();
+  expect(fx.triaged).toBe(1);
+
+  // Every return to the foreground calls init again; it must stay cheap.
+  const second = fixture(fx.sources, fx.disk);
+  await new InfoPipeline(makeDeps(second, { canAutoGenerate: async () => true })).init();
+  await new InfoPipeline(makeDeps(second, { canAutoGenerate: async () => true })).init();
+  expect(second.fetched).toEqual([]);
+  expect(second.triaged).toBe(0);
+});
+
+test("a run the user stopped is not restarted by opening the app, however auto-collection is set", async () => {
+  const fx = fixture([source("a")]);
+  fx.disk.runs.set(TODAY, {
+    version: 2,
+    verdicts: {},
+    material: [],
+    date: TODAY,
+    startedAt: 1,
+    updatedAt: 1,
+    phase: "discovering",
+    sources: [{ id: "a", name: "A", status: "pending", items: 0 }],
+    items: [],
+    halt: { kind: "stopped" },
+  });
+  await new InfoPipeline(makeDeps(fx, { canAutoGenerate: async () => true })).init();
+  expect(fx.fetched).toEqual([]);
+  expect(fx.triaged).toBe(0);
+});
+
+test("a hand-driven generate polls every source, whatever the collector's schedule says", async () => {
+  const fx = fixture([source("a")]);
+  await new InfoPipeline(makeDeps(fx)).generate();
+  expect(fx.forced).toEqual([true]);
+});
+
+// --- the pool (docs/35) ------------------------------------------------------
+
+test("the pool's items join the run's own, and what it already judged is not judged again", async () => {
+  const fx = fixture([source("a")]);
+  const p = new InfoPipeline(
+    makeDeps(fx, {
+      poolDraw: async () => ({
+        items: [item("overnight"), item("judged")],
+        verdicts: { judged: { id: "judged", keep: true, why: "carried", confidence: 3 } },
+        bodies: { judged: { textContent: "fetched hours ago" } },
+        settled: [],
+      }),
+    }),
+  );
+  await p.generate();
+
+  // Only the two nobody had judged reached the screen; only the one with no body
+  // was fetched. The pooled count says what the pool contributed.
+  expect(fx.screened.sort()).toEqual(["a1", "overnight"]);
+  expect(fx.bodies).toEqual(["a1", "overnight"]);
+  expect(fx.triagedItems.sort()).toEqual(["a1", "judged", "overnight"]);
+  expect(fx.phases[0].data).toMatchObject({ items: 3, pooled: 2 });
+});
+
+test("what an earlier day settled is dropped even though the source offered it again", async () => {
+  const fx = fixture([source("a")]);
+  const p = new InfoPipeline(
+    makeDeps(fx, {
+      discover: async (_refs, onSettled) => {
+        fx.fetched.push("a");
+        await onSettled({ id: "a", items: [item("yesterday"), item("new")] });
+      },
+      poolDraw: async () => ({ items: [], verdicts: {}, bodies: {}, settled: ["yesterday"] }),
+    }),
+  );
+  await p.generate();
+
+  expect(fx.screened).toEqual(["new"]);
+  expect(fx.triagedItems).toEqual(["new"]);
+});
+
+test("the run hands the pool its verdicts at the end of screening and its deliveries at the end", async () => {
+  const fx = fixture([source("a")]);
+  const records: { verdicts?: string[]; bodies?: string[]; briefed?: string[] }[] = [];
+  const p = new InfoPipeline(
+    makeDeps(fx, {
+      poolRecord: async (_date, record) => {
+        records.push({
+          verdicts: record.verdicts && Object.keys(record.verdicts),
+          bodies: record.bodies,
+          briefed: record.briefed,
+        });
+      },
+    }),
+  );
+  await p.generate();
+
+  // Twice: once so a crash before triage does not cost the verdicts, once when
+  // the briefing lands so tomorrow leaves what it carried alone.
+  expect(records).toEqual([
+    { verdicts: ["a1"], bodies: undefined, briefed: undefined },
+    { verdicts: ["a1"], bodies: ["a1"], briefed: ["a1"] },
+  ]);
+});
+
+test("a pool that will not load or save costs requests, never the briefing", async () => {
+  const fx = fixture([source("a")]);
+  const p = new InfoPipeline(
+    makeDeps(fx, {
+      poolDraw: async () => {
+        throw new Error("pool unreadable");
+      },
+      poolRecord: async () => {
+        throw new Error("disk full");
+      },
+    }),
+  );
+  await p.generate();
+
+  expect(p.snapshot().error).toBeNull();
+  expect(p.snapshot().briefing?.overview).toBe("ov");
+  expect(fx.triagedItems).toEqual(["a1"]);
 });

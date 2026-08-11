@@ -113,6 +113,7 @@ import SettingsButton from "./ui/components/common/SettingsButton";
 import { useSyncHealth } from "./ui/components/common/useSyncHealth";
 import type { Annotation as PopupAnnotation, PendingImage, ToolStatus, ToolType } from "./ui/components/common/types";
 import { rehydrateParts, type ChatPart } from "./ui/components/chat/chatParts";
+import { refreshInfoCollector } from "./info/briefing/live";
 
 // The AI pen maps to the engine's underline tool in a fixed purple (the palette's
 // Purple). Owning this one color for the AI pen is a v1 implementation
@@ -457,6 +458,9 @@ export default function App() {
   const applySettings = useCallback((next: Settings) => {
     setSettings(next);
     saveSettings(next);
+    // Background collection starts or stops now rather than at whatever the
+    // collector's next wake would have been (docs/35).
+    refreshInfoCollector();
   }, []);
 
   const activeTopic = useMemo(

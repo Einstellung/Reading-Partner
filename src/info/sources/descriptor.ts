@@ -128,9 +128,36 @@ export interface SourceDescriptor {
   userAgent?: string;
   // Max items pulled per run (each fetch-page/detail item is a request).
   limit?: number;
+  // Minutes between background polls of this source's discovery layer (docs/35).
+  // Per source because feeds differ by an order of magnitude in how much of the
+  // day they hold: a Bloomberg section feed keeps 20 items covering 6 to 22
+  // hours, so a daily poll silently loses most of the day, while The Economist
+  // returns 300 items covering three weeks and a daily poll misses nothing.
+  // Omitted — every descriptor written before this existed — means
+  // DEFAULT_POLL_MINUTES.
+  pollMinutes?: number;
   enabled: boolean;
   // True for factory presets; user-added sources omit it.
   builtin?: boolean;
+}
+
+// The interval a source with no `pollMinutes` is polled at. A conservative
+// middle: often enough that a 20-item feed covering six hours is not missed,
+// rare enough that a feed covering three weeks is not hammered for nothing.
+export const DEFAULT_POLL_MINUTES = 120;
+// The band a stated interval is held to. The floor is politeness (one discovery
+// request per source per quarter hour is already more than any feed changes);
+// the ceiling is a day, past which the pool is not a pool.
+export const MIN_POLL_MINUTES = 15;
+export const MAX_POLL_MINUTES = 24 * 60;
+
+// How often this source's discovery layer is polled, in ms. Tolerant of a
+// missing or absurd value: a source whose interval cannot be read is polled at
+// the default rather than dropped from the pool.
+export function pollIntervalMs(desc: Pick<SourceDescriptor, "pollMinutes">): number {
+  const raw = desc.pollMinutes;
+  const minutes = typeof raw === "number" && Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_POLL_MINUTES;
+  return Math.min(MAX_POLL_MINUTES, Math.max(MIN_POLL_MINUTES, minutes)) * 60_000;
 }
 
 // --- path helpers (shared with the engine) ---------------------------------
@@ -226,6 +253,12 @@ export function validateDescriptor(raw: unknown): ValidateOutcome {
   if (!isStr(o.name)) return { ok: false, error: "name is required" };
   if (typeof o.line !== "string") return { ok: false, error: "line is required" };
   if (typeof o.enabled !== "boolean") return { ok: false, error: "enabled must be a boolean" };
+  // Rejected rather than clamped when it is present and not a number, so an
+  // authoring slip ("2h") is reported at add time instead of silently becoming
+  // the default. Absent is always fine — every descriptor predates the field.
+  if (o.pollMinutes !== undefined && (typeof o.pollMinutes !== "number" || !(o.pollMinutes > 0))) {
+    return { ok: false, error: "pollMinutes must be a positive number of minutes" };
+  }
   const dErr = validateDiscovery(o.discovery);
   if (dErr) return { ok: false, error: dErr };
   const fErr = validateFulltext(o.fulltext);
@@ -248,7 +281,12 @@ export function validateDescriptor(raw: unknown): ValidateOutcome {
 // runtime backstop, and trial_source really fetches to prove it works.
 export const DESCRIPTOR_GUIDE = [
   "Source descriptor grammar (declarative JSON the engine runs):",
-  "Top level: { id, name, line, discovery, fulltext, enabled, limit?, noFetchPage?, userAgent? }.",
+  "Top level: { id, name, line, discovery, fulltext, enabled, limit?, pollMinutes?, noFetchPage?,",
+  "  userAgent? }.",
+  `pollMinutes is how often background collection polls this source (default ${DEFAULT_POLL_MINUTES},`,
+  `  held to ${MIN_POLL_MINUTES}-${MAX_POLL_MINUTES}). Set it from how much of the day one response holds: a feed that`,
+  "  keeps only ~20 items and covers a few hours needs 30-60; a feed that returns hundreds of items",
+  "  covering weeks is fine at 720-1440. Omit it when you do not know.",
   "discovery is one of:",
   '- feed: { kind:"feed", url, format?:"rss"|"atom"|"rdf" } — a native RSS/Atom/RDF feed.',
   '- listpage: { kind:"listpage", url, linkPattern, base? } — fetch a list page, pull article',

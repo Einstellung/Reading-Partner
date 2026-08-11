@@ -51,6 +51,7 @@ import SavedArticleView from "./ui/components/library/SavedArticleView";
 import SettingsView from "./ui/components/SettingsView";
 import Toast, { useToasts } from "./ui/components/common/Toast";
 import { useSyncHealth } from "./ui/components/common/useSyncHealth";
+import { refreshInfoCollector } from "./info/briefing/live";
 
 // InfoHome's screen for a stack entry, or null on the ones it does not draw.
 // Null keeps it mounted with its pipeline and its opened article intact, the
@@ -263,6 +264,7 @@ export default function PhoneApp() {
             onSettingsChange={(next) => {
               setSettings(next);
               saveSettings(next);
+              refreshInfoCollector();
             }}
             onClose={goBack}
           />

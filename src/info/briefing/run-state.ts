@@ -193,6 +193,101 @@ export function applySourceResult(
   };
 }
 
+// --- seeding from the pool --------------------------------------------------
+
+// What the pool hands a run: the day's candidates, the verdicts already paid
+// for, and the ids whose bodies are already on disk with the text to prove it.
+// Shaped here rather than imported from item-pool so run-state stays the pure
+// state machine it is; the caller does the resolving.
+export interface RunSeed {
+  items: InfoItem[];
+  verdicts: Record<string, ScreenVerdict>;
+  bodies: Record<string, { contentHtml?: string; textContent?: string }>;
+  // Ids an earlier day already settled (item-pool.ts). The run drops these from
+  // what it discovered itself.
+  settled: string[];
+}
+
+// Fold the pool's draw into a run that has just finished discovering (docs/35).
+//
+// The run keeps what it discovered itself first — those are the freshest
+// headlines and the ones its per-source counters are about — and the pool adds
+// everything else the day is owed: items polled hours ago that no briefing has
+// seen, and, on a refresh, the items today's briefing already carries.
+//
+// Nothing already paid for is paid for again. A carried verdict means the screen
+// never sees that item; a carried body means the fetch step never asks for it.
+// The run's own verdicts win over the pool's, because a verdict it produced this
+// run is the more recent judgement of the two.
+export function seedRun(state: InfoRunState, seed: RunSeed, now: number): InfoRunState {
+  // What the pool settled on an earlier day goes, even when a source just
+  // offered it again: a feed is a window days or weeks wide, so rediscovering
+  // yesterday's article is the normal case, and judging it a second time is how
+  // it gets delivered a second time. A verdict this run already produced wins —
+  // dropping the item under it would leave the screen's count talking about
+  // something that is no longer there.
+  const settled = new Set(seed.settled);
+  const kept = settled.size
+    ? state.items.filter((it) => !settled.has(it.id) || state.verdicts[it.id] !== undefined)
+    : state.items;
+  const known = new Set(kept.map((it) => it.id));
+  const items = [...kept];
+  for (const it of seed.items) {
+    if (known.has(it.id)) continue;
+    known.add(it.id);
+    items.push(it);
+  }
+  const verdicts = { ...state.verdicts };
+  for (const [id, v] of Object.entries(seed.verdicts)) {
+    if (!verdicts[id] && known.has(id)) verdicts[id] = v;
+  }
+  const material = state.material.filter((id) => known.has(id));
+  const fetched = new Set(material);
+  const withBodies = items.map((it) => {
+    const body = seed.bodies[it.id];
+    if (!body) return it;
+    if (!fetched.has(it.id)) {
+      fetched.add(it.id);
+      material.push(it.id);
+    }
+    // An item that already carries its own text (a feed that ships its body)
+    // keeps it: the cached copy is the same text through one more hop.
+    if (it.textContent) return it;
+    return {
+      ...it,
+      ...(body.contentHtml ? { contentHtml: body.contentHtml } : {}),
+      ...(body.textContent ? { textContent: body.textContent, summaryOnly: false } : {}),
+    };
+  });
+  return { ...state, updatedAt: now, items: withBodies, verdicts, material };
+}
+
+// --- what to do when the app opens -------------------------------------------
+
+// The briefing is a daily ritual with no button any more (docs/35), so opening
+// the app is what triggers it. Three answers, and the interesting ones are the
+// refusals:
+//
+//   resume   — a run was cut off mid-flight and never got to say why. The user
+//              asked for it and never got an answer; finishing it is owed.
+//   generate — today has no briefing and no run behind it. Collect one.
+//   none     — today's briefing is already here, or a run for today is parked
+//              because the user stopped it or it failed. A parked run has spent
+//              the reader's money once; the next spend is theirs to ask for,
+//              which they do through the companion.
+export type StartupAction = "resume" | "generate" | "none";
+
+export function startupAction(input: {
+  briefing: { date: string } | null;
+  run: InfoRunState | null;
+  today: string;
+}): StartupAction {
+  if (isResumable(input.run, input.today)) return "resume";
+  if (input.run && input.run.date === input.today && input.run.halt) return "none";
+  if (input.briefing && input.briefing.date === input.today) return "none";
+  return "generate";
+}
+
 // --- screening --------------------------------------------------------------
 
 // The items the screen has not judged yet, in discovery order.

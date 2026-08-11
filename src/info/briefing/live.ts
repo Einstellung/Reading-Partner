@@ -5,6 +5,7 @@
 // watchdog); the pure logic (adapters, triage prompt/validation) stays testable.
 
 import { callModel, resolveModel, type ResolvedModel } from "../../ai/model-call";
+import { loadSettings } from "../../platform/app/settings";
 import type { AiCallOptions } from "../../ai/watchdog";
 import { INFO_EVENT_TOPIC, logEvent } from "../../platform/app/events";
 import { newTally, reportParse } from "../../platform/app/structured-output";
@@ -27,6 +28,7 @@ import {
 import type { InfoRunPhase } from "./run-state";
 import {
   clearRun,
+  loadArticles,
   loadBriefing,
   loadItems,
   loadRun,
@@ -35,7 +37,17 @@ import {
   saveBriefing,
   saveItems,
   saveRun,
+  todayLocal,
 } from "./store";
+import { InfoCollector } from "./collector";
+import {
+  loadPool,
+  removePoolDays,
+  savePoolDay,
+  savePoolMarks,
+  savePoolPolled,
+} from "./pool-store";
+import type { SourceDescriptor } from "../sources/descriptor";
 import {
   parseTriageResult,
   triageSystemPrompt,
@@ -196,23 +208,33 @@ async function screen(
 // isolation lives in collectAll: one source failing degrades to no items rather
 // than failing the run (the pipeline fails only if the whole set comes back
 // empty). Each source is handed to the pipeline as it settles so the run's
-// checkpoint advances one source at a time. Health is recorded for the
-// source-list UI.
+// checkpoint advances one source at a time, and into the pool at the same time,
+// so a run's own requests stock it exactly as a background poll does. Health is
+// recorded for the source-list UI.
+//
+// A source the background collector polled recently is not polled again here: it
+// settles with nothing new, and the pool supplies its items. `force` — the user
+// asking for a regenerate — overrides that.
 async function discover(
   refs: InfoSourceRef[],
   onSettled: (result: SourceResult) => Promise<void>,
   signal: AbortSignal,
+  opts: { force: boolean },
 ): Promise<void> {
   const wanted = new Set(refs.map((r) => r.id));
-  const sources = (await loadSources()).filter((d) => wanted.has(d.id));
+  const chosen = (await loadSources()).filter((d) => wanted.has(d.id));
+  const collector = getInfoCollector();
+  const { poll, skip } = await collector.toPoll(chosen, opts);
+  for (const d of skip) await onSettled({ id: d.id, items: [] });
+  if (poll.length === 0) return;
   const prior = await loadSourceHealth();
   const { health } = await collectAll(
-    sources,
+    poll,
     {
       extract: extractReadable,
       discoveryOnly: true,
       signal,
-      onSourceSettled: (r) => {
+      onSourceSettled: async (r) => {
         // Where a run's minutes go: per source, so a slow one is nameable.
         logEvent(INFO_EVENT_TOPIC, "info-collect", {
           source: r.source,
@@ -220,12 +242,39 @@ async function discover(
           items: r.items.length,
           ok: !r.error,
         });
-        return onSettled({ id: r.source, items: r.items, error: r.error });
+        await collector.ingest(r.items);
+        await onSettled({ id: r.source, items: r.items, error: r.error });
       },
     },
     prior,
   );
+  await collector.notePolled(poll.map((d) => d.id));
   saveSourceHealth(health).catch(() => {});
+}
+
+// A background poll: the same discovery pass, without a run around it. Health is
+// recorded here too — a source that has been failing all day should say so on
+// the source list, not only after a generation.
+async function pollSources(
+  sources: SourceDescriptor[],
+  signal: AbortSignal,
+): Promise<InfoItem[]> {
+  const prior = await loadSourceHealth();
+  const { items, health } = await collectAll(
+    sources,
+    { extract: extractReadable, discoveryOnly: true, signal },
+    prior,
+  );
+  saveSourceHealth(health).catch(() => {});
+  return items;
+}
+
+// Whether a briefing may generate itself when the app opens (docs/35): a
+// provider to call and at least one source to read.
+async function canAutoGenerate(): Promise<boolean> {
+  const [settings, sources] = await Promise.all([loadSettings(), loadSources()]);
+  if (!settings.defaultProviderId || !settings.defaultModelId) return false;
+  return sources.some((d) => d.enabled);
 }
 
 // Material (docs/35): the article bodies of the items screening kept. The
@@ -257,9 +306,43 @@ function logPhase(phase: InfoRunPhase, data: Record<string, number>): void {
 }
 
 let pipeline: InfoPipeline | null = null;
+let collector: InfoCollector | null = null;
 
 // One screen wake lock for the app, held while a briefing generates (docs/22).
 const wakeLock = createScreenWakeLock(browserWakeLockTarget());
+
+// The background collector (docs/35), which also owns the one in-memory copy of
+// the pool — the pipeline draws from the same pool the polling fills.
+export function getInfoCollector(): InfoCollector {
+  if (!collector) {
+    collector = new InfoCollector({
+      loadPool,
+      savePoolDay,
+      savePoolMarks,
+      savePoolPolled,
+      removePoolDays,
+      listSources: loadSources,
+      poll: pollSources,
+      loadBodies: loadArticles,
+      backgroundOn: async () => (await loadSettings()).backgroundCollect,
+      busy: () => getInfoPipeline().snapshot().running,
+      now: () => Date.now(),
+      today: () => todayLocal(),
+      setTimer: (ms, cb) => {
+        const id = setTimeout(cb, ms);
+        return () => clearTimeout(id);
+      },
+      log: (data) => logEvent(INFO_EVENT_TOPIC, "info-poll", data),
+    });
+  }
+  return collector;
+}
+
+// The background-collection setting changed: start or stop the polling now
+// rather than at whatever the next wake would have been.
+export function refreshInfoCollector(): void {
+  void getInfoCollector().refresh();
+}
 
 export function getInfoPipeline(): InfoPipeline {
   if (!pipeline) {
@@ -283,6 +366,9 @@ export function getInfoPipeline(): InfoPipeline {
       loadRun,
       saveRun,
       clearRun,
+      poolDraw: (date) => getInfoCollector().draw(date),
+      poolRecord: (date, record) => getInfoCollector().record(date, record),
+      canAutoGenerate,
       pruneStaleDays: pruneStaleDailyFiles,
       keepAwake: (on) => wakeLock.set(on),
       now: () => Date.now(),
@@ -294,15 +380,27 @@ export function getInfoPipeline(): InfoPipeline {
     });
     // Leaving the app is where a run dies (docs/22): iOS may suspend or kill a
     // backgrounded webview within seconds. Flushing writes the checkpoint and
-    // nothing else — no fetch, no AI call — so it fits in that window. Nothing
-    // to do on the way back in: the run either survived and is still going, or
-    // it did not and the next start resumes it. The wake lock re-acquires
-    // itself (platform/app/wake-lock).
+    // nothing else — no fetch, no AI call — so it fits in that window. The wake
+    // lock re-acquires itself (platform/app/wake-lock).
+    //
+    // Coming back is where the pool and the trigger get their chance. A
+    // suspended webview runs no timers, so the collector cannot be trusted to
+    // have kept polling; it recomputes what is due from the clock instead.
+    // init() is the day's briefing trigger and is cheap when there is nothing to
+    // do, which is also how a day that turned over while the app sat open is
+    // noticed.
     const p = pipeline;
     observeAppLifecycle(window, {
-      onForeground: () => {},
-      onBackground: () => void p.flush(),
+      onForeground: () => {
+        getInfoCollector().foreground();
+        void p.init();
+      },
+      onBackground: () => {
+        getInfoCollector().background();
+        void p.flush();
+      },
     });
+    void getInfoCollector().refresh();
   }
   return pipeline;
 }

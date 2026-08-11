@@ -43,7 +43,7 @@ export function BriefingCardBody({
   snap,
   configured,
   hasSources,
-  onGenerate,
+  onAsk,
   onStop,
   onOpen,
   onOpenSettings,
@@ -53,7 +53,10 @@ export function BriefingCardBody({
   configured: boolean;
   // Whether the user has any source configured; null while loading.
   hasSources: boolean | null;
-  onGenerate: () => void;
+  // Open the companion on the state of today's briefing. There is no Generate
+  // button any more (docs/35): the day's briefing collects itself when the app
+  // opens, and asking for another one is something the user says, not clicks.
+  onAsk: () => void;
   onStop: () => void;
   onOpen: () => void;
   onOpenSettings: () => void;
@@ -162,16 +165,20 @@ export function BriefingCardBody({
     );
   }
 
-  // Sources configured but no briefing yet.
+  // Sources configured but no briefing yet. Nothing to press: today's is
+  // collected when the app opens. The way in is the companion — which is also
+  // the way back from a run that failed, since it holds generate_briefing.
   return (
     <div className="flex flex-1 flex-col justify-between">
       <p className="m-0 text-[14px] leading-relaxed text-[#777]">
-        Your sources, read in full and triaged against your profile. One briefing for today.
+        {snap?.error
+          ? "Today's briefing could not be built."
+          : "Your sources, read in full and triaged against your profile. Today's is on its way."}
       </p>
       {snap?.error && <p className="mt-2 text-[13px] text-[#c0392b]">{snap.error}</p>}
       {configured ? (
-        <Button variant="cta" size="lg" className="mt-4 w-fit" onClick={onGenerate}>
-          Generate briefing
+        <Button variant="subtle" size="lg" className="mt-4 w-fit" onClick={onAsk}>
+          Ask the companion
         </Button>
       ) : (
         <Button variant="subtle" size="lg" className="mt-4 w-fit" onClick={onOpenSettings}>
