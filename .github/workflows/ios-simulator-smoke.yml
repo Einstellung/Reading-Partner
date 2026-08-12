@@ -108,12 +108,25 @@ jobs:
           fi
           echo "app: $APP"
 
+          # The runtime must be at least the app's deployment target, or
+          # `simctl install` refuses the .app. Read the floor out of
+          # tauri.conf.json instead of repeating it here, and skip any runtime
+          # below it: the macOS 26 image only carries iOS 26.x runtimes today,
+          # but "first iPad in the list" would silently pick an older one the
+          # day an image adds it back.
+          MIN_IOS_MAJOR=$(jq -r '.bundle.iOS.minimumSystemVersion | split(".")[0]' src-tauri/tauri.conf.json)
           UDID=$(xcrun simctl list devices available -j \
-            | jq -r '.devices | to_entries[] | .value[] | select(.name|test("iPad")) | .udid' | head -1)
+            | jq -r --argjson min "$MIN_IOS_MAJOR" '
+                .devices | to_entries[]
+                | select(.key | test("SimRuntime\\.iOS-"))
+                | select((.key | capture("iOS-(?<major>[0-9]+)") | .major | tonumber) >= $min)
+                | .value[] | select(.name|test("iPad")) | .udid' | head -1)
           if [ -z "$UDID" ]; then
-            echo "::error::no available iPad simulator"; xcrun simctl list devices; exit 1
+            echo "::error::no available iPad simulator on iOS $MIN_IOS_MAJOR or newer"
+            xcrun simctl list devices
+            exit 1
           fi
-          echo "iPad udid: $UDID"
+          echo "iPad udid: $UDID (runtime iOS $MIN_IOS_MAJOR+)"
 
           # Boots if needed and blocks until fully booted (headless is fine).
           xcrun simctl bootstatus "$UDID" -b
