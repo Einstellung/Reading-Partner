@@ -8,6 +8,9 @@ import {
   parseSiteSessions,
   resolveSignInSite,
   sessionLabel,
+  sessionRowLine,
+  sessionWorkFor,
+  sessionWorkLabel,
   signInSiteLine,
   signInSites,
 } from "../../src/info/sources/site-session";
@@ -127,4 +130,45 @@ test("the stored file is parsed defensively", () => {
     "a.test": { signedIn: true, checkedAt: 5 },
     "c.test": { signedIn: false, checkedAt: 6, unknown: "timeout" },
   });
+});
+
+test("a busy row says which of the two waits the reader is in", () => {
+  const site = signInSites(BLOOMBERG)[0];
+  const state = { signedIn: false, checkedAt: 1 };
+
+  // Window open: the row names the thing that ends the flow.
+  expect(sessionRowLine(site, state, "signing-in")).toBe(
+    "Finish in the sign-in window, then close it",
+  );
+  // Window closed: the wait that follows is a different wait, and says so
+  // rather than repeating "working".
+  expect(sessionRowLine(site, state, "confirming")).toBe("Confirming your sign-in…");
+  expect(sessionRowLine(site, state, "checking")).toBe("Checking the site…");
+  expect(sessionRowLine(site, state, "signing-out")).toBe("Signing out…");
+  // No two of them read alike, or the split bought nothing.
+  const lines = (["signing-in", "confirming", "checking", "signing-out"] as const).map(
+    sessionWorkLabel,
+  );
+  expect(new Set(lines).size).toBe(lines.length);
+});
+
+test("an idle row still says where the site stands and what reads through it", () => {
+  const site = signInSites(BLOOMBERG)[0];
+  expect(sessionRowLine(site, { signedIn: true, checkedAt: 1 }, null)).toBe(
+    `Signed in · ${BLOOMBERG.length} sources`,
+  );
+  expect(sessionRowLine(site, undefined, null)).toBe(`Not checked · ${BLOOMBERG.length} sources`);
+  // One source is named; several are counted.
+  const single = signInSites([BLOOMBERG[0]])[0];
+  expect(sessionRowLine(single, { signedIn: false, checkedAt: 1 }, null)).toBe(
+    `Not signed in · ${BLOOMBERG[0].name}`,
+  );
+});
+
+test("only the site being worked on is busy", () => {
+  const busy = { host: "www.bloomberg.com", work: "confirming" } as const;
+  expect(sessionWorkFor(busy, "www.bloomberg.com")).toBe("confirming");
+  expect(sessionWorkFor(busy, "x.test")).toBeNull();
+  expect(sessionWorkFor(null, "www.bloomberg.com")).toBeNull();
+  expect(sessionWorkFor(undefined, "www.bloomberg.com")).toBeNull();
 });
