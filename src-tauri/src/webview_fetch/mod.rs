@@ -46,7 +46,7 @@ use tauri::{AppHandle, Manager, Runtime, Url, WebviewUrl, WebviewWindow, Webview
 pub mod policy;
 pub mod session;
 
-use policy::{Readout, Status};
+use policy::{Phase, Readout, Status};
 
 /// Label prefix for the hidden windows. Every live one is also registered in
 /// `WebviewFetchState::live`; navigation.rs checks that registry, not this
@@ -294,15 +294,6 @@ fn fetch_blocking<R: Runtime>(app: &AppHandle<R>, target: Url) -> FetchResult {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Phase {
-    /// Load a site's homepage to fill the cookie jar. Nothing is extracted from
-    /// it except the check that it is not itself a wall.
-    Warmup,
-    /// Load an article and read its body.
-    Article,
-}
-
 pub(crate) struct PageOutcome {
     pub(crate) status: Status,
     readout: Option<Readout>,
@@ -367,8 +358,22 @@ fn run_page<R: Runtime>(
         Phase::Warmup => policy::WARMUP_LOAD_TIMEOUT,
         Phase::Article => policy::LOAD_TIMEOUT,
     };
+    let navigated = Instant::now();
     let outcome = match wait_for_load(&rx, load_timeout, started) {
-        Ok(()) => settle_and_extract(&window, &rx, phase, started),
+        Ok(()) => {
+            if trace_config().is_some() {
+                println!(
+                    "RP-LOAD {}",
+                    serde_json::json!({
+                        "phase": if phase == Phase::Warmup { "warmup" } else { "article" },
+                        "url": target.to_string(),
+                        "loadMs": navigated.elapsed().as_millis() as u64,
+                        "at": unix_millis(),
+                    })
+                );
+            }
+            settle_and_extract(&window, &rx, phase, started)
+        }
         Err(outcome) => outcome,
     };
 
@@ -568,22 +573,86 @@ pub(crate) fn wait_for_load(
     }
 }
 
-/// After `finished` the document keeps filling in, so both phases wait the
-/// proven 15s before believing what they read (policy::SETTLE_MIN /
-/// WARMUP_SETTLE). The article path polls throughout: to notice a bot wall
-/// early, and to keep waiting past 15s while the text is still growing, up to
-/// SETTLE_MAX.
+/// Dev-only measurement mode: `RP_WEBVIEW_FETCH_TRACE=<seconds>[:<poll_ms>]`.
+///
+/// With it set, the settle loop stops deciding anything — it ignores the
+/// stability test and `SETTLE_MAX`, polls the document for `<seconds>` after
+/// `finished` and prints one `RP-TRACE` line per poll. Those lines are the
+/// document's fill curve, and every candidate settle rule can be replayed off
+/// one recording of it instead of costing one page load per rule. This is how
+/// the `SETTLE_*` numbers in policy.rs were measured; re-run it when a site
+/// changes its markup or its rendering, rather than guessing a new constant.
+///
+/// A bot wall still ends the trace: it is a final answer, and reloading walls to
+/// watch them not change only warms the site's rate limiter.
+fn trace_config() -> Option<(Duration, Duration)> {
+    let raw = std::env::var("RP_WEBVIEW_FETCH_TRACE").ok()?;
+    let (secs, poll_ms) = match raw.split_once(':') {
+        Some((secs, poll)) => (secs, poll.parse().ok()?),
+        None => (raw.as_str(), policy::SETTLE_POLL.as_millis() as u64),
+    };
+    Some((
+        Duration::from_secs_f64(secs.trim().parse().ok()?),
+        Duration::from_millis(poll_ms),
+    ))
+}
+
+/// Wall clock, so a trace can be lined up against something measured outside the
+/// process (the cookie jar on disk, a packet capture).
+fn unix_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// One line of the fill curve: when the poll ran (ms after `finished`), how long
+/// the extractor took, and what it found.
+fn print_trace(phase: Phase, opened: Instant, poll_started: Instant, readout: &Readout, len: usize) {
+    let paragraphs = readout.text.split("\n\n").filter(|p| !p.trim().is_empty()).count();
+    println!(
+        "RP-TRACE {}",
+        serde_json::json!({
+            "phase": if phase == Phase::Warmup { "warmup" } else { "article" },
+            "at": unix_millis(),
+            "ms": opened.elapsed().as_millis() as u64,
+            "extractMs": poll_started.elapsed().as_millis() as u64,
+            "chars": len,
+            "paragraphs": paragraphs,
+            "containerChars": readout.container_chars,
+            "selector": readout.selector,
+            "promosDropped": readout.promos_dropped,
+            "seesSignIn": readout.sees_sign_in,
+            "blocked": policy::looks_blocked(readout),
+            "title": readout.title,
+            "url": readout.url,
+            "ldJson": readout.ld_json.len(),
+        })
+    );
+}
+
+/// Read the document until it says it is finished, and take what it holds then.
+///
+/// "Finished" is a property of the document, never an elapsed time: the body has
+/// reported the same length for `SETTLE_STABLE_POLLS` polls in a row, and — for
+/// an article — what it holds classifies as an article rather than as nothing.
+/// A page whose body never arrives is the one case that runs to `SETTLE_MAX`,
+/// because a page that has been empty for a second is indistinguishable from one
+/// that is about to fill; a page that already has its article is not.
+///
+/// The warm-up runs the same loop for the same reason. All it needs from the
+/// homepage is that it stopped moving and is not itself a wall, so it stops at
+/// "settled" without asking for a body — a homepage has no article, and waiting
+/// for one would spend `SETTLE_MAX` on every cold origin.
 fn settle_and_extract<R: Runtime>(
     window: &WebviewWindow<R>,
     rx: &Receiver<LoadEvent>,
     phase: Phase,
     started: Instant,
 ) -> PageOutcome {
-    if phase == Phase::Warmup {
-        std::thread::sleep(policy::WARMUP_SETTLE);
-    }
-
-    let mut floor = Instant::now() + policy::SETTLE_MIN;
+    let trace = trace_config();
+    let poll = trace.map_or(policy::SETTLE_POLL, |(_, poll)| poll);
+    let mut opened = Instant::now();
     let mut deadline = Instant::now() + policy::SETTLE_MAX;
     let mut last_len: Option<usize> = None;
     let mut stable = 0u32;
@@ -596,7 +665,7 @@ fn settle_and_extract<R: Runtime>(
         while let Ok(event) = rx.try_recv() {
             match event {
                 LoadEvent::Finished => {
-                    floor = Instant::now() + policy::SETTLE_MIN;
+                    opened = Instant::now();
                     deadline = Instant::now() + policy::SETTLE_MAX;
                     last_len = None;
                     stable = 0;
@@ -609,9 +678,13 @@ fn settle_and_extract<R: Runtime>(
             }
         }
 
+        let poll_started = Instant::now();
         match extract(window) {
             Ok(readout) => {
                 let len = readout.text.chars().count();
+                if trace.is_some() {
+                    print_trace(phase, opened, poll_started, &readout, len);
+                }
                 // A wall is final: nothing is going to grow into an article.
                 if policy::looks_blocked(&readout) {
                     return PageOutcome {
@@ -620,20 +693,15 @@ fn settle_and_extract<R: Runtime>(
                         readout: Some(readout),
                     };
                 }
-                if Some(len) == last_len && len > 0 {
+                if Some(len) == last_len {
                     stable += 1;
                 } else {
                     stable = 0;
                 }
                 last_len = Some(len);
+                let done = policy::settle_is_done(phase, stable, &readout);
                 latest = Some(readout);
-                // Past the floor, a page that has stopped changing is done.
-                // Before it, "stopped changing" means nothing — Bloomberg
-                // pauses mid-fill for longer than the stability window.
-                if phase == Phase::Article
-                    && Instant::now() >= floor
-                    && stable >= policy::SETTLE_STABLE_POLLS
-                {
+                if trace.is_none() && done {
                     break;
                 }
             }
@@ -644,13 +712,17 @@ fn settle_and_extract<R: Runtime>(
             }
         }
 
-        if phase == Phase::Warmup || Instant::now() >= deadline {
+        if let Some((window_len, _)) = trace {
+            if opened.elapsed() >= window_len {
+                break;
+            }
+        } else if Instant::now() >= deadline {
             break;
         }
         if started.elapsed() > policy::OVERALL_TIMEOUT {
             break;
         }
-        std::thread::sleep(policy::SETTLE_POLL);
+        std::thread::sleep(poll);
     }
 
     match latest {
@@ -771,6 +843,9 @@ mod tests {
 ///     xvfb-run -a ./target/debug/reading-partner
 ///
 /// Absent the variable this returns immediately and the app starts normally.
+///
+/// Add `RP_WEBVIEW_FETCH_TRACE` (see `trace_config`) to make each fetch print
+/// its fill curve as well, which is how the settle constants are re-measured.
 pub fn run_probe_from_env(app: &AppHandle) {
     let Ok(raw) = std::env::var("RP_WEBVIEW_FETCH_PROBE") else {
         return;
