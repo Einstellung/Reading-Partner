@@ -381,6 +381,7 @@ export default function InfoHome(props: {
         profile,
         sources,
         aiLanguage: settings.aiLanguage,
+        canSignIn: hasWebviewFetch(),
       }),
       position: { title: "Today's briefing", line: b.overview },
     });
@@ -406,7 +407,7 @@ export default function InfoHome(props: {
       emptyTitle: "Today's briefing",
       placeholder: "Ask about today's briefing…",
       systemPrompt: noBriefingChatSystemPrompt(
-        { profile, sources, aiLanguage: settings.aiLanguage },
+        { profile, sources, aiLanguage: settings.aiLanguage, canSignIn: hasWebviewFetch() },
         { error: snap?.error ?? undefined },
       ),
       position: {
@@ -441,6 +442,7 @@ export default function InfoHome(props: {
         profile,
         sources,
         aiLanguage: settings.aiLanguage,
+        canSignIn: hasWebviewFetch(),
       }),
       position: { title: meta?.title ?? "Article", sourceName: meta?.sourceName, line },
     });

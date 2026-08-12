@@ -429,7 +429,7 @@ const BUILTIN_CAVEATS: Record<string, string> = {
     "bloomberg",
     "The feed is the discovery layer: headline plus the lead paragraph it carries, measured 206 characters for markets, 200 for industries, 214 for technology, 250 for politics. " +
       "Bodies come from the hidden webview, because the article page answers 403 with a PerimeterX bot check to a plain fetch: the window loads bloomberg.com first for its cookies, then the article. " +
-      "Anonymous that is the metered preview (~500 characters); signed in through the sources page it is the whole story (measured 584→1959, 528→1624). No webview, no body — on iOS these sections are headlines. " +
+      "Anonymous that is the metered preview (~500 characters); signed in it is the whole story (measured 584→1959, 528→1624). The reader signs in from the sources page or by asking for it in the chat; either way it is the site's own login page in a window they type into. No webview, no body — on iOS these sections are headlines. " +
       "Each section feed holds exactly 20 items covering only 6-22 hours, so a once-a-day poll misses most of a day; polling every 2-4 hours is what it takes to see a section whole. " +
       "Recorded facts, not a verdict: Bloomberg's terms of service forbid using any \"scraper, robot, bot, spider, data mining\" tool to access the service and forbid recirculating or redistributing its material; robots.txt disallows Google-Extended but restricts neither /feeds/ nor the article paths. " +
       "The full-text newsletters (Money Stuff, Points of Return) remain the other way in, over the planned mail pipe.",

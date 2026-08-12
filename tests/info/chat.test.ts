@@ -8,6 +8,7 @@ import {
   articleChatSystemPrompt,
   briefingChatSystemPrompt,
   formatProfile,
+  formatSignInSites,
   formatSources,
   noBriefingChatSystemPrompt,
   type CompanionContext,
@@ -186,4 +187,39 @@ test("formatSources marks disabled sources and handles an empty roster", () => {
 
 test("formatProfile falls back when empty", () => {
   expect(formatProfile("  ")).toContain("(no profile set)");
+});
+
+// --- the sign-in window ------------------------------------------------------
+
+const BLOOMBERG: SourceDescriptor = {
+  id: "bloomberg-technology", name: "Bloomberg Technology", line: "tech business", enabled: true,
+  discovery: { kind: "feed", url: "https://b/feed" },
+  fulltext: { mode: "webview", signInUrl: "https://www.bloomberg.com/account/signin" },
+};
+
+test("a host that can open a sign-in window gets the tool, the rules, and the site list", () => {
+  const prompt = briefingChatSystemPrompt(BRIEFING, {
+    ...CTX,
+    sources: [...SOURCES, BLOOMBERG],
+    canSignIn: true,
+  });
+  expect(prompt).toContain("open_site_sign_in(site)");
+  // The site is picked from the user's own list, and the window is opened on
+  // their word — the two rules that must survive any later edit of this prompt.
+  expect(prompt).toContain("`site` is an identifier, never a");
+  expect(prompt).toContain("Never open one on your own initiative");
+  expect(prompt).toContain("- bloomberg.com — Bloomberg Technology");
+});
+
+test("a host with no webview is told nothing about a window it cannot open", () => {
+  const prompt = briefingChatSystemPrompt(BRIEFING, { ...CTX, sources: [...SOURCES, BLOOMBERG] });
+  expect(prompt).not.toContain("open_site_sign_in");
+  expect(prompt).not.toContain("bloomberg.com — ");
+  // The tools it does have are untouched.
+  expect(prompt).toContain("generate_briefing");
+});
+
+test("formatSignInSites says plainly when no source has a sign-in", () => {
+  expect(formatSignInSites(SOURCES)).toContain("nothing to sign in to");
+  expect(formatSignInSites([BLOOMBERG])).toContain("on the user's request only");
 });
