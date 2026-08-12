@@ -1,7 +1,7 @@
 // Article-HTML sanitizer (src/info/extract/sanitize.ts). Run: bun test.
 
 import { expect, test } from "bun:test";
-import { htmlToText, sanitizeArticleHtml } from "../../src/info/extract/sanitize";
+import { htmlToText, sanitizeArticleHtml, stripDataImages } from "../../src/info/extract/sanitize";
 
 test("drops scripts, styles, iframes, and event handlers", () => {
   const out = sanitizeArticleHtml(
@@ -128,4 +128,35 @@ test("neutralizes javascript: anchors, keeps http links with rel/noreferrer", ()
 test("htmlToText turns blocks into breaks and decodes entities", () => {
   const t = htmlToText(`<h1>Title</h1><p>a &amp; b</p><p>c</p>`);
   expect(t).toBe("Title\n\na & b\n\nc");
+});
+
+// --- stripDataImages --------------------------------------------------------
+// Run on both bodies that travel: the published briefing bodies and a kept
+// article. An inlined image outweighs the article it illustrates; an external
+// one is a URL, and the reading end renders it through the img: proxy.
+
+test("stripDataImages drops inlined base64 images, tag and all", () => {
+  const html =
+    '<p>one</p><img src="data:image/jpeg;base64,AAAA" referrerpolicy="no-referrer" loading="lazy"><p>two</p>';
+  expect(stripDataImages(html)).toBe("<p>one</p><p>two</p>");
+});
+
+test("stripDataImages leaves an external image alone", () => {
+  const html = '<img src="https://cdn.example.com/x.jpg" loading="lazy">';
+  expect(stripDataImages(html)).toBe(html);
+  expect(stripDataImages("text")).toBe("text");
+});
+
+test("stripDataImages drops every inlined image, not just the first", () => {
+  const html = '<img src="data:image/png;base64,A"><p>x</p><img src="data:image/png;base64,B">';
+  expect(stripDataImages(html)).toBe("<p>x</p>");
+});
+
+// What sanitizeArticleHtml hands over is the shape this has to match: rebuilt
+// tags, src first, single quotes gone.
+test("stripDataImages matches what the sanitizer emits", () => {
+  const sanitized = sanitizeArticleHtml(
+    '<img src="data:image/png;base64,AAAA"><p>x</p><img src="https://cdn.x/a.jpg" width="600">',
+  );
+  expect(stripDataImages(sanitized)).toBe('<p>x</p><img src="https://cdn.x/a.jpg" loading="lazy">');
 });

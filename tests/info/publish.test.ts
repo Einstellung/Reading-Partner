@@ -7,7 +7,6 @@ import { expect, test } from "bun:test";
 import {
   bodiesMatch,
   buildPublishedBodies,
-  stripImages,
   tieredItemIds,
 } from "../../src/info/briefing/publish";
 import type { CachedArticle } from "../../src/info/briefing/store";
@@ -51,32 +50,37 @@ function item(id: string, over: Partial<InfoItem> = {}): InfoItem {
   } as InfoItem;
 }
 
-test("an inlined image and a remote one both go", () => {
-  const html =
-    '<p>one</p><img src="data:image/png;base64,AAAA"><p>two</p>' +
-    '<img class="lead" src="https://cdn.example.test/a.jpg" alt="x"/><p>three</p>';
-  expect(stripImages(html)).toBe("<p>one</p><p>two</p><p>three</p>");
-});
-
-// Not the src attribute: an <img> with nothing to load is a broken-image icon
-// sitting in the middle of the prose.
-test("the tag goes, not just its source", () => {
-  expect(stripImages('<img src="data:image/png;base64,AA">')).toBe("");
-  expect(stripImages("text")).toBe("text");
-});
-
 test("only the three tiers are published", () => {
   expect(tieredItemIds(briefing())).toEqual(["a", "b", "c"]);
 });
 
-test("a published body is the text and the image-free html", () => {
+test("a published body is the text and the html", () => {
   const articles: Record<string, CachedArticle> = {
-    a: { textContent: "the text", contentHtml: '<p>hi</p><img src="https://x.test/a.png">' },
+    a: { textContent: "the text", contentHtml: "<p>hi</p>" },
   };
   const out = buildPublishedBodies(briefing(), articles, [item("a")]);
   expect(out.date).toBe("2026-08-12");
   expect(out.generatedAt).toBe(1_000);
   expect(out.bodies.a).toEqual({ text: "the text", html: "<p>hi</p>", summaryOnly: false });
+});
+
+// The inlined images are the weight (a base64 body outweighs its article by two
+// orders of magnitude); a remote image is a URL. Keeping the remote ones is what
+// makes a phone and a desktop show the same article, and what a reader keeps
+// from either device the same snapshot.
+test("a published body drops the inlined images and keeps the remote ones", () => {
+  const articles: Record<string, CachedArticle> = {
+    a: {
+      textContent: "the text",
+      contentHtml:
+        '<p>one</p><img src="data:image/png;base64,AAAA"><p>two</p>' +
+        '<img src="https://cdn.example.test/a.jpg" loading="lazy"><p>three</p>',
+    },
+  };
+  const out = buildPublishedBodies(briefing(), articles, [item("a")]);
+  expect(out.bodies.a.html).toBe(
+    '<p>one</p><p>two</p><img src="https://cdn.example.test/a.jpg" loading="lazy"><p>three</p>',
+  );
 });
 
 // A source with no full text at all still gets an entry: the reader has to be
