@@ -5,9 +5,12 @@
 // plain data in and out, so it is unit-tested here instead of being observed by
 // hand through a webview.
 //
-// Every number in here comes from the WebKitGTK spike of 2026-08-11 (same
-// engine as Tauri's Linux webview, WebKitGTK 2.52.3 / webkit2gtk-4.1) against
-// bloomberg.com. The measurements are quoted at each constant; anything not
+// Every number in here was measured against bloomberg.com in WebKitGTK 2.52.3 /
+// webkit2gtk-4.1, the same engine Tauri uses on Linux. Most of them come from
+// the 2026-08-11 spike; the settle numbers were re-measured on 2026-08-12 in
+// this fetcher's own hidden window, because the two harnesses do not read the
+// same page the same way and a number from one is not a baseline for the other
+// (docs/pitfall/113). The measurements are quoted at each constant; anything not
 // measured says so.
 
 use std::collections::HashMap;
@@ -51,34 +54,70 @@ pub const LOAD_TIMEOUT: Duration = Duration::from_secs(45);
 /// Same, for the warm-up load of a site's homepage, which is the heavier page.
 pub const WARMUP_LOAD_TIMEOUT: Duration = Duration::from_secs(60);
 
-/// How long to keep reading the document after `finished` before taking what it
-/// has. The DOM keeps growing well past that event: the spike read every article
-/// 15s later and got a complete `<article>` each time.
-///
-/// This is a floor, not a deadline, and the floor is the point. The first
-/// version of this module stopped as soon as the text stopped growing for 1.5s
-/// and came back with 735 characters of the same Bloomberg article the spike had
-/// measured at 1345 — the page pauses mid-fill for longer than any "it stopped
-/// changing" test can tell from "it is finished".
-pub const SETTLE_MIN: Duration = Duration::from_secs(15);
-/// Where the settle gives up on a page that is still growing at `SETTLE_MIN`.
+// What ends the wait after `finished` is a property of the document — it stopped
+// changing, and what it holds is an article — not an amount of time.
+//
+// Measured 2026-08-12 in this fetcher's own hidden window (not in a spike
+// harness) with `RP_WEBVIEW_FETCH_TRACE`, see mod.rs: it records the fill curve
+// poll by poll, so every candidate rule is replayed off one page load instead of
+// costing one load per rule. Bloomberg, logged out, warm jar, `finished` as t=0:
+//
+// | page                        | body whole at | changed again within |
+// |-----------------------------|---------------|----------------------|
+// | aluminum-hits-seven-week-…  | 55ms, 493 ch  | no, watched to 45.2s |
+// | gautam-adani-wins-dismissal | 2ms, 441 ch   | no, watched to 45.1s |
+// | www.bloomberg.com (warm-up) | 6ms, 575 ch   | no, watched to 45.4s |
+// | www.bloomberg.com, again    | 11ms, 575 ch  | no, watched to 25.7s |
+//
+// Nothing arrived after the first poll. A 15-second floor used to sit under both
+// phases; replayed against these recordings it returns the same body as a
+// 1.5-second one and charges 15 seconds a phase for it.
+//
+// Live end to end, warm-up included, the two builds run back to back against
+// en.wikipedia.org/wiki/Portable_Document_Format — a site that answers reliably,
+// so the stopwatch is not measuring bloomberg.com's mood: 35.9s before, 9.1s
+// after, and both return the same 35168 characters of body, string for string.
+// A Bloomberg article under the new rule came back `ok` with 581 characters in
+// 28.8s including a cold warm-up. The matching run on the old build could not be
+// taken: bloomberg.com had by then stopped completing loads for this client
+// often enough that a stopwatch reading would have been noise, and retrying
+// until it cooperated was not worth the block.
+//
+// The floor's evidence was two harnesses' readings of one page set against each
+// other rather than two moments of one harness — docs/pitfall/113 has that
+// story, and it is worth reading before anyone reaches for a fixed wait again.
+//
+// Measured logged out, which is the only state the app can be in today. On
+// Bloomberg that means the body under test is the metered preview: two
+// paragraphs, already in the server-rendered HTML. A signed-in article is
+// several times longer, and whether its tail is mounted lazily — the one thing
+// that would make an early stop lose text — is not verified. Re-run the trace
+// when there is a session to run it under.
+
+/// Where the settle gives up on a document that never satisfies `settle_is_done`.
 /// Nothing measured a page that needed this; it exists so a document that
 /// rewrites itself forever cannot hold the fetch open.
+///
+/// With the floor gone this is the only way a fetch still spends 30 seconds, and
+/// it takes a page that never produces a body (a hard paywall, a section page)
+/// or one that never stops rewriting the body it has. A page that hands over its
+/// article stops at `SETTLE_STABLE_POLLS` and never comes near this.
 pub const SETTLE_MAX: Duration = Duration::from_secs(30);
 /// Gap between two extraction polls while waiting for the DOM to settle. Also
-/// how quickly a bot wall is noticed, which ends the wait early.
+/// how quickly a bot wall is noticed, which ends the wait early. Measured: one
+/// extraction over Bloomberg's ~800KB article DOM costs 1-4ms, 65ms at its
+/// worst, so the interval is chosen for how long "no change" has to last, not
+/// for what the polling costs.
 pub const SETTLE_POLL: Duration = Duration::from_millis(750);
-/// How many consecutive polls must return the same text length before a page
-/// that is past `SETTLE_MIN` counts as settled. Two identical polls = 1.5s of no
-/// change.
+/// How many consecutive polls must return the same body length before the page
+/// counts as settled. Two identical polls = 1.5s of no change.
+///
+/// The measured requirement is zero — see the table above, nothing ever changed
+/// after `finished`. So this window is margin, not a measurement, and 1.5s is
+/// margin against a site that fills its body in a burst after the load event
+/// rather than before it. Raising it buys nothing on Bloomberg and costs the
+/// same delay on every fetch.
 pub const SETTLE_STABLE_POLLS: u32 = 2;
-
-/// The warm-up waits this long after `finished` and reads the page once, to see
-/// whether the homepage was itself a wall. Same 15s, same reason as
-/// `SETTLE_MIN`, and here there is nothing to poll for anyway: the
-/// bot-detection cookies are httpOnly, so no injected script can tell whether
-/// they have arrived.
-pub const WARMUP_SETTLE: Duration = Duration::from_secs(15);
 
 /// How long a warmed origin stays warm. Nothing measured this: the spike only
 /// showed that a jar warmed once keeps working across process restarts within
@@ -218,6 +257,33 @@ pub fn validate_target(raw: &str) -> Result<Url, String> {
 /// the jar, and the same three articles then return 200 with a complete
 /// `<article>`. Warming is a precondition, not a nicety.
 ///
+/// The warm-up used to sleep 15 seconds after `finished` on the theory that the
+/// cookies it is there to collect are httpOnly and so unobservable. They are
+/// unobservable *to injected JS*; they are not unobservable. WebKitGTK writes
+/// the jar to `<profile>/cookies` as it goes, in Netscape format, httpOnly
+/// entries included, and watching that file during a cold warm-up (2026-08-12,
+/// 200ms sampling) puts PerimeterX's `_px3`, `_px2`, `_pxvid` and `_pxde` in the
+/// jar 6.5 seconds into the homepage load — while it was still loading, and in
+/// that run `finished` never came at all within the 60s timeout. So there was
+/// never anything for a post-`finished` sleep to wait for, and the warm-up now
+/// ends the same way an article does: when the document stops changing (measured
+/// at 6ms) and is not a wall.
+///
+/// That the jar can be read from disk is also the answer to a bigger problem
+/// than this one. `finished` on the homepage is not an event to build on: it is
+/// the heaviest page on the site, and across one session on 2026-08-12 it
+/// arrived on four warm-up attempts out of twelve (43.1s and 23.5s among them)
+/// and did not arrive inside the 60s timeout on the other eight. Each of those
+/// eight failed a whole fetch for want of an event whose cookies had already
+/// landed: the two runs with a jar watcher on them ended with 47 and 48 cookies
+/// on disk, `_px3` among them both times. The warm-up had everything it exists
+/// to collect and reported failure anyway. (The site was stalling article loads
+/// in the same stretch, so how much of this is the page's weight and how much is
+/// bloomberg.com tiring of a client that had loaded twenty pages in an hour is
+/// not established — but the jar does not care either way.) Ending the warm-up
+/// on the jar instead of on `finished` is the obvious next move; nothing has
+/// measured that yet, so it is not done here.
+///
 /// `None` when the target already is the root, so a homepage fetch does not warm
 /// itself.
 pub fn warmup_target(url: &Url) -> Option<Url> {
@@ -289,6 +355,39 @@ pub fn looks_blocked(readout: &Readout) -> bool {
             .to_lowercase()
     );
     BLOCK_MARKERS.iter().any(|m| haystack.contains(m))
+}
+
+/// Which page a fetch is on. The two ask different things of the same wait: the
+/// warm-up wants the site's cookies and any document at all will do, the article
+/// wants a body.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Phase {
+    /// Load a site's homepage to fill the cookie jar. Nothing is extracted from
+    /// it except the check that it is not itself a wall.
+    Warmup,
+    /// Load an article and read its body.
+    Article,
+}
+
+/// Whether the settle loop can stop reading, given how many consecutive polls
+/// have now returned the same body length.
+///
+/// Two conditions, and neither of them is a clock. The document has to have
+/// stopped changing — anything read before that is a page caught mid-fill. And
+/// on the article phase it has to hold something worth stopping for: a settled
+/// document with no body in it is as likely to be one that has not started
+/// filling as one that never will, so that case keeps reading until `SETTLE_MAX`
+/// ends it. The warm-up asks only for the first condition, because a homepage
+/// has no article and waiting for one would spend `SETTLE_MAX` on every cold
+/// origin.
+pub fn settle_is_done(phase: Phase, stable: u32, readout: &Readout) -> bool {
+    if stable < SETTLE_STABLE_POLLS {
+        return false;
+    }
+    match phase {
+        Phase::Warmup => true,
+        Phase::Article => classify(readout) == Status::Ok,
+    }
 }
 
 /// What a settled document amounts to.
@@ -498,6 +597,49 @@ mod tests {
             .into();
         assert!(!looks_blocked(&article));
         assert_eq!(classify(&article), Status::Ok);
+    }
+
+    #[test]
+    fn nothing_is_settled_while_the_body_is_still_changing() {
+        // The only thing that ever ends the wait early is the wall check; a
+        // document that is still moving is never done, whatever the clock says.
+        let article = warmed_article();
+        for stable in 0..SETTLE_STABLE_POLLS {
+            assert!(!settle_is_done(Phase::Article, stable, &article), "{stable}");
+            assert!(!settle_is_done(Phase::Warmup, stable, &article), "{stable}");
+        }
+    }
+
+    #[test]
+    fn a_settled_article_is_done_and_a_settled_blank_page_is_not() {
+        let article = warmed_article();
+        assert!(settle_is_done(Phase::Article, SETTLE_STABLE_POLLS, &article));
+
+        // What the 15s floor was really covering, covered by the readout
+        // instead: a page that has been quiet for two polls with nothing in it
+        // is still read, right up to SETTLE_MAX, because "quiet and empty" and
+        // "has not started filling" look the same.
+        let blank = Readout {
+            title: "Aluminum Extends Rally - Bloomberg".into(),
+            ..Default::default()
+        };
+        assert_eq!(classify(&blank), Status::Empty);
+        assert!(!settle_is_done(Phase::Article, SETTLE_STABLE_POLLS, &blank));
+        assert!(!settle_is_done(Phase::Article, 99, &blank));
+    }
+
+    #[test]
+    fn a_warm_up_is_done_with_a_settled_page_that_holds_no_article() {
+        // A homepage is `Empty` by the article's standard, and that is the
+        // normal case: the warm-up is there for the cookie jar, not for a body.
+        let homepage = Readout {
+            title: "Bloomberg - Business News, Stock Markets, Finance".into(),
+            text: "Sign in".into(),
+            ..Default::default()
+        };
+        assert_eq!(classify(&homepage), Status::Empty);
+        assert!(settle_is_done(Phase::Warmup, SETTLE_STABLE_POLLS, &homepage));
+        assert!(!settle_is_done(Phase::Warmup, SETTLE_STABLE_POLLS - 1, &homepage));
     }
 
     #[test]

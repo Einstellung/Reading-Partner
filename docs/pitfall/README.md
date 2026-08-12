@@ -124,6 +124,8 @@
 - [110-guessing-cookie-domains-misses-the-session](./110-guessing-cookie-domains-misses-the-session.md) — `delete_cookies_for_domain` 只匹配传进去那一个域名不含子域，按主机名拼出来的四种写法漏掉了 `login.<站点>` 上的会话 cookie；要读 `<profile>/cookies` 把该站实际存在的域名全捞出来再删，方向只往子域走不往父域走
 - [111-webkit-writes-the-cookie-jar-on-its-own-schedule](./111-webkit-writes-the-cookie-jar-on-its-own-schedule.md) — 删完 cookie 内存干净了，盘上的 jar 还留着 13 行，下次启动读回来用户又是登录态（删除是 void 调用、落盘时机不归调用方管）；拿一次异步 cookie 读当 barrier 确认删除已处理，再自己重写 jar 文件，实测 48 行 → 0 行
 - [112-wry-builds-its-own-window-for-a-popup](./112-wry-builds-its-own-window-for-a-popup.md) — `on_new_window` 设 `Allow` 之后，弹窗是 wry 自己建的 GTK 窗口：不是 Tauri 窗口、导航拦截看不到、拿不到句柄，而弹窗 `close()` 只销毁 webview 不销毁窗口（这半读源码得出，未验）；用 toplevel 快照差集在登录结束时清扫
+- [113-two-harnesses-readings-are-not-a-before-and-after](./113-two-harnesses-readings-are-not-a-before-and-after.md) — 取正文硬等 15 秒的依据是「fetcher 拿到 735、spike 量到 1345」，可两个数出自两个 harness 且都等了 15 秒，说明不了读早了；实测正文在 `finished` 后第一次 poll（2ms / 55ms）就是全的、45 秒不变，下限值 0 个字符。判据要同 harness 前后对比，用 `RP_WEBVIEW_FETCH_TRACE` 录填充曲线一次回放所有候选规则
+- [114-httponly-bot-cookies-land-before-load-finished](./114-httponly-bot-cookies-land-before-load-finished.md) — 预热睡 15 秒的理由是「PX 的 cookie 是 httpOnly 没东西可 poll」，但看不见的只是注入的 JS：WebKitGTK 边跑边把 jar 写到 `<profile>/cookies`，实测 `_px3` 在 +6.5s 就落盘，而那次 `finished` 60 秒没来。预热改成和取正文同一条判据（不再变化且不是拦截页，1.5 秒）
 
 ## 界面与布局
 

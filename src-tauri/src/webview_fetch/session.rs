@@ -38,9 +38,11 @@ const SIGN_IN_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 
 /// How long a session check waits past `finished` before reading the page.
 ///
-/// Much shorter than an article's settle, and for a reason rather than out of
-/// impatience: what is being read is the header's sign-in control, which is part
-/// of the first render, not body text that streams in paragraph by paragraph.
+/// A flat sleep rather than the article path's "poll until it stops changing",
+/// because what is being read is the header's sign-in control: it is there in
+/// the first render or not at all, so there is no growth curve to watch. The 3s
+/// was never measured — unlike the article settle (see policy.rs) — it is just
+/// short enough not to be felt in a flow the user is already sitting through.
 const SESSION_SETTLE: Duration = Duration::from_secs(3);
 
 /// What the sign-in window did.
