@@ -124,6 +124,7 @@
 - [110-guessing-cookie-domains-misses-the-session](./110-guessing-cookie-domains-misses-the-session.md) — `delete_cookies_for_domain` 只匹配传进去那一个域名不含子域，按主机名拼出来的四种写法漏掉了 `login.<站点>` 上的会话 cookie；要读 `<profile>/cookies` 把该站实际存在的域名全捞出来再删，方向只往子域走不往父域走
 - [111-webkit-writes-the-cookie-jar-on-its-own-schedule](./111-webkit-writes-the-cookie-jar-on-its-own-schedule.md) — 删完 cookie 内存干净了，盘上的 jar 还留着 13 行，下次启动读回来用户又是登录态（删除是 void 调用、落盘时机不归调用方管）；拿一次异步 cookie 读当 barrier 确认删除已处理，再自己重写 jar 文件，实测 48 行 → 0 行
 - [112-wry-builds-its-own-window-for-a-popup](./112-wry-builds-its-own-window-for-a-popup.md) — `on_new_window` 设 `Allow` 之后，弹窗是 wry 自己建的 GTK 窗口：不是 Tauri 窗口、导航拦截看不到、拿不到句柄，而弹窗 `close()` 只销毁 webview 不销毁窗口（这半读源码得出，未验）；用 toplevel 快照差集在登录结束时清扫
+- [115-the-cookie-count-does-not-say-the-warm-up-worked](./115-the-cookie-count-does-not-say-the-warm-up-worked.md) — 预热改看 jar 之后，"该站 cookie 条数不再增长"两头都不成立：停在服务端那几条上的加载会被判成功（`_px3` 根本没来），热 profile 上重写 13 行而条数不变的加载会被判成什么都没发生；判据要看与顺序无关的行内容指纹变了几次，安静 6 秒（实测一次加载内部最宽间隔 3.25s，写完之后下一件事在 30 秒开外）
 
 ## 界面与布局
 
