@@ -6,7 +6,7 @@
 
 import { callModel, resolveModel, type ResolvedModel } from "../../ai/model-call";
 import { loadSettings } from "../../platform/app/settings";
-import { loadDeviceSettings } from "../../platform/app/device";
+import { currentDeviceId, loadDeviceSettings } from "../../platform/app/device";
 import type { AiCallOptions } from "../../ai/watchdog";
 import { INFO_EVENT_TOPIC, logEvent } from "../../platform/app/events";
 import { newTally, reportParse } from "../../platform/app/structured-output";
@@ -17,7 +17,13 @@ import { fetchArticleViaWebview } from "../extract/webview-article";
 import { hasWebviewFetch } from "../../platform/app/platform";
 import { setTrayStatus } from "../../platform/app/tray";
 import { extractReadable } from "../extract/readable";
-import { loadSources, loadSourceHealth, saveSourceHealth } from "../sources/source-store";
+import {
+  loadSiteSessions,
+  loadSources,
+  loadSourceHealth,
+  saveSourceHealth,
+  SOURCES_FILE,
+} from "../sources/source-store";
 import { loadFeedback } from "../../observation/feedback";
 import { loadProfile } from "../../observation/profile";
 import { assembleReadingContext } from "../../observation/assemble";
@@ -45,6 +51,23 @@ import {
 } from "./store";
 import { collectorStatusLine, InfoCollector } from "./collector";
 import { publishBriefing } from "./publish";
+import {
+  chooseAsk,
+  HEARTBEAT_MS,
+  isElectedCollector,
+  mayClaim,
+  readAsks,
+  readCollectorClaims,
+  readOwnClaim,
+  writeAsk,
+  writeCollectorClaim,
+  type AskRecord,
+  type AskScope,
+  type CollectorClaim,
+} from "./handoff";
+import { onSyncPulled, subscribeSyncStatus } from "../../platform/sync";
+import { hostname, platform } from "@tauri-apps/plugin-os";
+import { signInSites } from "../sources/site-session";
 import {
   loadPool,
   removePoolDays,
@@ -298,11 +321,14 @@ async function saveAndPublishBriefing(briefing: Briefing): Promise<void> {
 }
 
 // Whether a briefing may generate itself when the app opens (docs/35): a
-// provider to call and at least one source to read.
+// provider to call, at least one source to read, and — since two collectors
+// would pay for the day twice and publish two different briefings — the claim
+// (docs/36).
 async function canAutoGenerate(): Promise<boolean> {
   const [settings, sources] = await Promise.all([loadSettings(), loadSources()]);
   if (!settings.defaultProviderId || !settings.defaultModelId) return false;
-  return sources.some((d) => d.enabled);
+  if (!sources.some((d) => d.enabled)) return false;
+  return await amICollecting();
 }
 
 // Material (docs/35): the article bodies of the items screening kept. The
@@ -365,7 +391,10 @@ export function getInfoCollector(): InfoCollector {
       listSources: loadSources,
       poll: pollSources,
       loadBodies: loadArticles,
-      backgroundOn: async () => (await loadDeviceSettings()).backgroundCollect,
+      // Two answers, both needed: this machine was told to collect, and this
+      // machine is the one holding the claim (docs/36).
+      backgroundOn: async () =>
+        (await loadDeviceSettings()).backgroundCollect && (await amICollecting()),
       busy: () => getInfoPipeline().snapshot().running,
       now: () => Date.now(),
       today: () => todayLocal(),
@@ -458,4 +487,233 @@ export function getInfoPipeline(): InfoPipeline {
     void getInfoCollector().refresh();
   }
   return pipeline;
+}
+
+// --- the claim, the heartbeat, and the readers' asks (docs/36) --------------
+//
+// Only a collector runs any of this. A reader never calls startCollecting, so it
+// writes no claim, takes part in no election, and constructs neither singleton.
+
+// A pulled path that is some reader's request. Matches this device's own file
+// too, which costs one read of a request it has already run.
+const ASK_PATH = /^info-ask-.+\.json$/;
+
+let claim: CollectorClaim | null = null;
+let collecting = false;
+let sessionStartedAt = 0;
+let heartbeat: ReturnType<typeof setInterval> | null = null;
+let unsubSync: (() => void) | null = null;
+let unsubPulled: (() => void) | null = null;
+let syncing = false;
+let lastSyncAt: number | null = null;
+// The election result, held briefly. Every poll cycle asks, and the answer
+// changes on the scale of hours; re-reading every claim file for each of them
+// would be a directory listing per minute to learn the same thing.
+const ELECTION_TTL_MS = 60_000;
+let electionAt = 0;
+let electionValue = false;
+
+// This machine's name, for a sentence a reader can act on. Asked once — it does
+// not change while the app runs — and the platform stands in where the host will
+// not say (an unsupported plugin call, a permission that is not granted).
+let deviceName: string | null = null;
+async function machineName(): Promise<string> {
+  if (deviceName !== null) return deviceName;
+  try {
+    deviceName = (await hostname()) || platformName();
+  } catch {
+    deviceName = platformName();
+  }
+  return deviceName;
+}
+
+function platformName(): string {
+  try {
+    return platform();
+  } catch {
+    return "unknown";
+  }
+}
+
+// Which sites this machine currently has a session with. The yes-or-no travels;
+// the cookie does not leave the webview it was set in (docs/36).
+async function siteStates(): Promise<Record<string, boolean>> {
+  try {
+    const [sources, sessions] = await Promise.all([loadSources(), loadSiteSessions()]);
+    const out: Record<string, boolean> = {};
+    for (const site of signInSites(sources)) {
+      const state = sessions[site.host];
+      out[site.host] = !!state && !state.unknown && state.signedIn;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+// Write this machine's claim: a heartbeat every time, and the claim itself only
+// while this machine is both willing (the setting) and allowed (its first pull
+// has landed, or it has waited long enough to stop waiting).
+//
+// claimedAt is kept once taken, so a machine's standing is its uptime and not
+// the time of its last write. Losing eligibility clears it, and taking it up
+// again puts the machine at the back of the queue rather than back at its old
+// place — which is the point: whoever picked the work up keeps it.
+async function publishClaim(): Promise<void> {
+  if (!claim) return;
+  const now = Date.now();
+  let willing = false;
+  try {
+    willing = (await loadDeviceSettings()).backgroundCollect;
+  } catch {
+    // Unreadable device settings: do not claim work on a guess.
+  }
+  const allowed =
+    willing &&
+    mayClaim({
+      syncing,
+      pulledAt: lastSyncAt !== null && lastSyncAt >= sessionStartedAt ? lastSyncAt : null,
+      startedAt: sessionStartedAt,
+      now,
+    });
+  claim = {
+    ...claim,
+    claimedAt: allowed ? (claim.claimedAt ?? now) : null,
+    heartbeatAt: now,
+    sources: await loadSourceHealth().catch(() => ({})),
+    sites: await siteStates(),
+  };
+  try {
+    await writeCollectorClaim(claim);
+  } catch (e) {
+    console.warn("failed to write the collector claim", e);
+  }
+  // The file that decides the election just changed; do not answer from a copy
+  // taken before it.
+  electionAt = 0;
+}
+
+// Whether this machine is the one collecting. False for anything that is not a
+// running collector, so every caller can ask without knowing the role.
+export async function amICollecting(): Promise<boolean> {
+  if (!collecting) return false;
+  const now = Date.now();
+  if (now - electionAt < ELECTION_TTL_MS) return electionValue;
+  const claims = await readCollectorClaims().catch(() => [] as CollectorClaim[]);
+  electionValue = isElectedCollector(claims, currentDeviceId(), now);
+  electionAt = now;
+  return electionValue;
+}
+
+// A reader asked for a briefing. Run at most one, whatever arrived: the newest
+// request at the widest scope anyone asked for, and never one already run.
+//
+// Called on every pull that carried an ask, and once at startup — a request
+// uploaded during the last session was pulled during the last session, so its
+// file is already on disk and no event will ever mention it again.
+async function runPendingAsk(): Promise<void> {
+  if (!claim || !(await amICollecting())) return;
+  const asks = await readAsks().catch(() => [] as AskRecord[]);
+  const chosen = chooseAsk(asks, claim.lastAskAt, Date.now());
+  if (!chosen) return;
+  // Recorded before the run, not after: a run that dies halfway is not a reason
+  // to run the same request again on the next pull.
+  claim = { ...claim, lastAskAt: chosen.askedAt };
+  await writeCollectorClaim(claim).catch(() => {});
+  const p = getInfoPipeline();
+  if (chosen.scope === "retriage") void p.retriage();
+  else void p.generate();
+}
+
+// Report how the run that just ended went, so a reader can say what happened on
+// a machine nobody is sitting at. `error` is the halt reason the pipeline parked
+// the run with; null means it finished.
+function watchRuns(p: InfoPipeline): void {
+  let wasRunning = p.snapshot().running;
+  p.subscribe(() => {
+    const snap = p.snapshot();
+    const ended = wasRunning && !snap.running;
+    wasRunning = snap.running;
+    if (!ended || !claim) return;
+    claim = {
+      ...claim,
+      lastRunAt: Date.now(),
+      lastBriefingDate: snap.briefing?.date ?? null,
+      halt: snap.error,
+    };
+    void publishClaim();
+  });
+}
+
+// Become the collector: claim, say so every hour, and act on what the readers
+// asked for. Idempotent, so a settings change can call it without checking.
+export async function startCollecting(): Promise<void> {
+  if (collecting) return;
+  collecting = true;
+  sessionStartedAt = Date.now();
+  unsubSync ??= subscribeSyncStatus((s) => {
+    syncing = s.engineStarted;
+    lastSyncAt = s.lastSyncAt;
+  });
+  const prior = await readOwnClaim(currentDeviceId());
+  claim = {
+    deviceId: currentDeviceId(),
+    deviceName: await machineName(),
+    platform: platformName(),
+    hasWebviewFetch: hasWebviewFetch(),
+    // Deliberately not restored from the file: the claim is this process's
+    // uptime, so a restart goes to the back of the queue.
+    claimedAt: null,
+    heartbeatAt: Date.now(),
+    lastRunAt: prior?.lastRunAt ?? null,
+    lastBriefingDate: prior?.lastBriefingDate ?? null,
+    halt: prior?.halt ?? null,
+    sources: {},
+    sites: {},
+    // This does survive: a request this machine already ran must not run again
+    // because the app was restarted.
+    lastAskAt: prior?.lastAskAt ?? null,
+  };
+  await publishClaim();
+  // The heartbeat hangs off the way out of the page and nothing else: a desktop
+  // whose window is minimised or unfocused while its owner reads on a phone is
+  // exactly the machine that has to go on saying it is alive (docs/36).
+  heartbeat ??= setInterval(() => void publishClaim(), HEARTBEAT_MS);
+  observeAppExit(window, () => {
+    if (heartbeat !== null) clearInterval(heartbeat);
+    heartbeat = null;
+  });
+  watchRuns(getInfoPipeline());
+  unsubPulled ??= onSyncPulled((paths) => {
+    // A source the reader subscribed to or turned on elsewhere: collect on it
+    // now rather than at the next wake, which can be half an hour away.
+    if (paths.includes(SOURCES_FILE)) getInfoCollector().foreground();
+    if (paths.some((p) => ASK_PATH.test(p))) void runPendingAsk();
+  });
+  void runPendingAsk();
+}
+
+// Stop being the collector: give the claim up now rather than letting it expire,
+// so whoever is next takes over in seconds instead of a day.
+export async function stopCollecting(): Promise<void> {
+  if (!collecting) return;
+  collecting = false;
+  if (heartbeat !== null) clearInterval(heartbeat);
+  heartbeat = null;
+  unsubPulled?.();
+  unsubPulled = null;
+  if (claim) {
+    claim = { ...claim, claimedAt: null, heartbeatAt: Date.now() };
+    await writeCollectorClaim(claim).catch(() => {});
+  }
+  electionAt = 0;
+  electionValue = false;
+  void getInfoCollector().refresh();
+}
+
+// A reader asking the collector for a briefing it cannot build itself. One file
+// per device, overwritten whole: a newer request replaces an older one, and the
+// collector reads it on its next pull.
+export function askCollector(scope: AskScope, note?: string): Promise<void> {
+  return writeAsk({ deviceId: currentDeviceId(), askedAt: Date.now(), scope, note });
 }

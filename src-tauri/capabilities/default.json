@@ -79,6 +79,7 @@
     },
     "clipboard-manager:allow-read-image",
     "deep-link:default",
-    "os:allow-platform"
+    "os:allow-platform",
+    "os:allow-hostname"
   ]
 }
