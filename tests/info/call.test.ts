@@ -9,7 +9,9 @@ import {
   briefingProgressCard,
   infoBookId,
   profileAppliedNote,
+  runnableJob,
   sourceAddedNote,
+  trackedJob,
 } from "../../src/info/companion/call";
 import type { InfoSnapshot } from "../../src/info/briefing/pipeline";
 import type { Briefing } from "../../src/info/briefing/types";
@@ -204,6 +206,42 @@ test("the failure note names the job, and both card and note survive a null erro
   const blank = briefingJobUpdate("first", snapshot({ error: null }));
   expect(blank.card).toEqual({ kind: "briefing-failed", message: "The briefing could not be generated." });
   expect(blank.status === "failed" && blank.note).toBe("The briefing regeneration failed: unknown error.");
+});
+
+// --- a start that found a run already going ---------------------------------
+//
+// The pipeline runs one at a time. A refused start used to be silent, so the
+// card was drawn for a run that never began and nothing ever updated it. It now
+// tracks the run that IS going, and the copy has to say that rather than claim
+// the job that was asked for.
+
+test("a refused start tracks the run already going, not the job it asked for", () => {
+  expect(trackedJob("full", "busy")).toBe("joined");
+  expect(trackedJob("retriage", "busy")).toBe("joined");
+  expect(trackedJob("full", "started")).toBe("full");
+  expect(trackedJob("first", "started")).toBe("first");
+});
+
+test("a joined card opens on the running run's real phase, not on a first frame", () => {
+  const s = snapshot({ running: true, phase: "fetching", collect: null });
+  const card = briefingProgressCard(trackedJob("full", "busy"), s);
+  expect(card.phase).toBe("fetching");
+  expect(card.title).toBe("A briefing run is already going");
+});
+
+test("a joined run settles with copy that does not claim the asked-for job ran", () => {
+  const update = briefingJobUpdate("joined", snapshot({ briefing: briefing() }));
+  expect(update.card).toMatchObject({ title: "Briefing updated", note: "The run that was already going has finished." });
+  expect(update.status === "ready" && update.note).toContain("has been updated");
+  const failed = briefingJobUpdate("joined", snapshot({ error: "boom" }));
+  expect(failed.status === "failed" && failed.note).toBe("The briefing run failed: boom.");
+});
+
+test("retrying a joined run starts one of our own; every other job retries as itself", () => {
+  expect(runnableJob("joined")).toBe("full");
+  expect(runnableJob("retriage")).toBe("retriage");
+  expect(runnableJob("full")).toBe("full");
+  expect(runnableJob("first")).toBe("first");
 });
 
 // --- the synthetic turns a card gesture injects ----------------------------

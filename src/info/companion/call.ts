@@ -12,7 +12,7 @@ import type {
   ProfileUpdateCardData,
 } from "../briefing/cards";
 import type { ProbeConfirmCardData } from "../sources/source-cards";
-import type { InfoSnapshot } from "../briefing/pipeline";
+import type { InfoSnapshot, RunStart } from "../briefing/pipeline";
 import type { Briefing } from "../briefing/types";
 
 // Info threads hang off a per-day pseudo-book, so a day's briefing, article and
@@ -29,15 +29,18 @@ export const OPENING_KICKOFF = "(The user just opened onboarding — greet them 
 // or failed card, all address this id through upsertCardRow.
 export const BRIEFING_CARD_ID = "briefing";
 
-// The three briefing jobs the one card tracks: "first" is the onboarding first
+// The briefing jobs the one card tracks: "first" is the onboarding first
 // briefing; the two the AI can also ask for are "full" (re-collect + triage) and
-// "retriage" (re-sort today's cached items with the current profile).
-export type BriefingJob = BriefingScope | "first";
+// "retriage" (re-sort today's cached items with the current profile). "joined"
+// is none of them — it is what a start that found a run already going tracks
+// instead, so the card says what it is actually showing (see trackedJob).
+export type BriefingJob = BriefingScope | "first" | "joined";
 
 // Progress-card heading per job; "first" keeps the onboarding default copy.
 function progressTitle(job: BriefingJob): string | undefined {
   if (job === "retriage") return "Re-running today's triage";
   if (job === "full") return "Regenerating today's briefing";
+  if (job === "joined") return "A briefing run is already going";
   return undefined;
 }
 
@@ -45,14 +48,32 @@ function progressTitle(job: BriefingJob): string | undefined {
 function readyCopy(job: BriefingJob): { title?: string; note?: string } {
   if (job === "retriage") return { title: "Briefing updated", note: "Re-triaged today's items with your updated profile." };
   if (job === "full") return { title: "Briefing regenerated", note: "Re-collected every source and re-triaged." };
+  if (job === "joined") return { title: "Briefing updated", note: "The run that was already going has finished." };
   return {};
+}
+
+// The job a start attempt ends up tracking. A refused start must not keep the
+// label of the job it asked for: what it is watching now is somebody else's run,
+// possibly a different job entirely, and calling its result "regenerated" would
+// tell the reader their request ran when it never started.
+export function trackedJob(job: BriefingJob, start: RunStart): BriefingJob {
+  return start === "busy" ? "joined" : job;
+}
+
+// The job a start can actually ask the pipeline for. Only "joined" is not one:
+// nothing can re-run somebody else's run, so a Retry on a joined card starts one
+// of our own, and a full collection is the only honest reading of "the run that
+// was going failed — do it again".
+export function runnableJob(job: BriefingJob): BriefingJob {
+  return job === "joined" ? "full" : job;
 }
 
 // The note injected into the thread when a job settles, so the AI's next turn
 // answers from the new briefing rather than the one it still has in context.
 function completionNote(job: BriefingJob, b: Briefing): string {
   const worth = b.mustRead.length + b.outOfLane.length;
-  const verb = job === "retriage" ? "re-sorted" : job === "full" ? "regenerated" : "generated";
+  const verb =
+    job === "retriage" ? "re-sorted" : job === "full" ? "regenerated" : job === "joined" ? "updated" : "generated";
   // The screened-out count belongs in the note for the same reason it belongs in
   // the chat prompt (docs/35): "filtered: 3" over a day of four hundred headlines
   // would otherwise read as a quiet day.
@@ -67,7 +88,7 @@ function completionNote(job: BriefingJob, b: Briefing): string {
 }
 
 function failureNote(job: BriefingJob, error: string | null): string {
-  const verb = job === "retriage" ? "re-triage" : "regeneration";
+  const verb = job === "retriage" ? "re-triage" : job === "joined" ? "run" : "regeneration";
   return `The briefing ${verb} failed: ${error || "unknown error"}.`;
 }
 
