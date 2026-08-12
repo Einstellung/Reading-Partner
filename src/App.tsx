@@ -471,13 +471,20 @@ export default function App() {
     saveSettings(next);
   }, []);
 
-  // A device setting changed. Collection reads its switch from here, so it
-  // starts or stops now rather than at whatever the next wake would have been.
   const applyDevice = useCallback((next: DeviceSettings) => {
     setDevice(next);
     saveDeviceSettings(next).catch((e) => console.warn("failed to persist device settings", e));
-    refreshInfoCollector();
   }, []);
+
+  // What this machine does about collecting, whenever the answer changes — and
+  // once when device.json first lands, which is how a collector starts at all
+  // (docs/36). A reader falls straight through to giving up its claim.
+  const deviceRole = device?.role ?? null;
+  const backgroundCollect = device?.backgroundCollect ?? null;
+  useEffect(() => {
+    if (deviceRole === null) return;
+    refreshInfoCollector();
+  }, [deviceRole, backgroundCollect]);
 
   const activeTopic = useMemo(
     () => topics.find((t) => t.id === activeTopicId) ?? null,
@@ -1894,6 +1901,7 @@ export default function App() {
         <InfoHome
           screen={inReader ? null : homeScreen}
           onNavigate={setHomeScreen}
+          role={deviceRole}
           continueBook={(() => {
             const recent = mostRecentlyOpened(topics);
             return recent ? { title: recent.file.name, topicName: recent.topic.name } : null;

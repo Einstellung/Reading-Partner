@@ -26,6 +26,8 @@ import { companionToolStatusLabel } from "../../../info/companion/companion-tool
 import {
   BRIEFING_CARD_ID,
   OPENING_KICKOFF,
+  ASK_FAILED_NOTE,
+  askSentNote,
   briefingJobUpdate,
   briefingProgressCard,
   infoBookId,
@@ -38,7 +40,7 @@ import {
 import { addSource, hasSources } from "../../../info/sources/source-store";
 import { loadProfile, saveProfile } from "../../../observation/profile";
 import { replaceDeclared } from "../../../observation/guess";
-import { getInfoPipeline } from "../../../info/briefing/live";
+import { askCollector, getInfoPipeline } from "../../../info/briefing/live";
 import { Badge } from "../ui/badge";
 import CallView from "../chat/CallView";
 import ChatPipCard from "../chat/ChatPipCard";
@@ -58,7 +60,7 @@ import {
 } from "../chat/chatParts";
 import type { ComposerVoice } from "../chat/chat";
 import type { ChatMessage } from "../../../ai/providers";
-import type { InfoPipeline, RunStart } from "../../../info/briefing/pipeline";
+import type { BriefingView, RequestOutcome } from "../../../info/briefing/reader";
 import type { ProfileUpdateCardData } from "../../../info/briefing/cards";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { ThreadMessage as UiMessage } from "../common/types";
@@ -84,6 +86,8 @@ export interface InfoCallAnchor {
 export function InfoCall({
   anchor,
   dateKey,
+  view,
+  collecting,
   onHangUp,
   voice,
   onSourcesChanged,
@@ -92,6 +96,14 @@ export function InfoCall({
 }: {
   anchor: InfoCallAnchor;
   dateKey: string;
+  // The briefing this chat talks about, and what can be done to it. On a
+  // collector it is the running pipeline; on a reader it is the published files
+  // and nothing is running (docs/36).
+  view: BriefingView;
+  // Whether this device is the one that collects. It decides which tools the
+  // companion gets and what a request for a new briefing actually does: run one
+  // here, or leave a note for the machine that can.
+  collecting: boolean;
   onHangUp: () => void;
   voice?: ComposerVoice | false;
   // Called after the source list changes (add), so the host refreshes hasSources.
@@ -106,7 +118,7 @@ export function InfoCall({
   // Whether the reader has tapped the call out of the way. With no corner cards
   // there is no way to set it and no layout to set it to (call-layout.ts).
   const [swapped, setSwapped] = useState(false);
-  const view = callLayout(pipCards, swapped);
+  const layout = callLayout(pipCards, swapped);
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -117,10 +129,11 @@ export function InfoCall({
   const messagesRef = useRef<UiMessage[]>(messages);
   messagesRef.current = messages;
 
-  // First-briefing tracking (add-source mode): the singleton pipeline and whether
-  // we are waiting on a generation we kicked. The progress -> ready/failed card
-  // rides a single stable card id, so no per-run ts bookkeeping is needed.
-  const pipelineRef = useRef<InfoPipeline | null>(null);
+  // First-briefing tracking (add-source mode): whether we are waiting on a
+  // generation we kicked. The progress -> ready/failed card rides a single
+  // stable card id, so no per-run ts bookkeeping is needed. Only a collector
+  // ever waits — a reader's request goes to another machine and comes back as a
+  // briefing, not as a run to watch.
   const awaitingBriefing = useRef(false);
   // Which briefing job the progress/ready/failed card is tracking, so the ready
   // copy and the failed-card retry both address the right run.
@@ -187,11 +200,9 @@ export function InfoCall({
   // across its whole progress -> ready/failed lifecycle; what that card shows,
   // and the note the outcome injects, is decided in info/companion/call.
   useEffect(() => {
-    const p = getInfoPipeline();
-    pipelineRef.current = p;
-    const unsub = p.subscribe(() => {
+    const unsub = view.subscribe(() => {
       if (!awaitingBriefing.current) return;
-      const update = briefingJobUpdate(lastJobRef.current, p.snapshot());
+      const update = briefingJobUpdate(lastJobRef.current, view.snapshot());
       setMessages((prev) => upsertCardRow(prev, BRIEFING_CARD_ID, update.card));
       if (update.status === "running") return;
       awaitingBriefing.current = false;
@@ -213,7 +224,8 @@ export function InfoCall({
       noteTurn(update.note, { persist: durable });
     });
     return unsub;
-  }, [bookId, anchor.threadId, noteTurn]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookId, anchor.threadId, noteTurn, view]);
 
   // Start (or retry) a briefing job through the one BRIEFING_CARD_ID card: "first"
   // collects + triages (onboarding); "full" does the same on the user's explicit
@@ -227,10 +239,25 @@ export function InfoCall({
   // collided with went on without it. It joins the run already going instead:
   // that run's progress is what the user asked to see, and the card opens on its
   // real phase and settles with it.
-  function runBriefingJob(job: BriefingJob): RunStart {
-    const p = pipelineRef.current ?? getInfoPipeline();
-    pipelineRef.current = p;
+  //
+  // On a reader there is no run to start and none to join (docs/36), and a third
+  // answer: the request is written for the collecting machine to pick up on its
+  // next sync. No card either — there is nothing on this device to show progress
+  // for, and no honest estimate of when the other machine will have any.
+  function runBriefingJob(job: BriefingJob): RequestOutcome {
     const asked = runnableJob(job);
+    if (!collecting) {
+      lastJobRef.current = asked;
+      // The note waits for the file to really be on disk, which is the one thing
+      // the tool's own reply cannot wait for: a request the user was told had
+      // been passed on, and that never left the device, is worse than none.
+      void askCollector(asked === "retriage" ? "retriage" : "full").then(
+        () => noteTurn(askSentNote(asked), { role: "ai", persist: false }),
+        () => noteTurn(ASK_FAILED_NOTE, { role: "ai", persist: false }),
+      );
+      return "asked";
+    }
+    const p = getInfoPipeline();
     const { start } = asked === "retriage" ? p.retriage() : p.generate();
     const tracked = trackedJob(asked, start);
     lastJobRef.current = tracked;
@@ -325,7 +352,10 @@ export function InfoCall({
       } catch {
         return;
       }
-      const canRetriage = !!getInfoPipeline().snapshot().briefing;
+      // A re-triage runs over the day's item snapshot — 683 KB that stays on the
+      // collector — so the offer only appears where it can be taken up
+      // (docs/36). On a reader the way to a new sort is asking for one.
+      const canRetriage = collecting && !!view.snapshot().briefing;
       const applied: ProfileUpdateCardData = { ...card, phase: "applied", canRetriage };
       setMessages((prev) => patchCardPayload(prev, cardId, { phase: "applied", canRetriage }));
       patchThreadMessage(bookId, anchor.threadId, found.ts, {
@@ -391,11 +421,15 @@ export function InfoCall({
     setStreaming(true);
     let full = "";
     // The briefing controller for generate_briefing: a background job through the
-    // one card's lifecycle, answering with whether it started a run or found one
-    // already going, so the companion reports which of the two happened.
-    const tools = buildLiveCompanionTools(insertProbeCard, insertProfileCard, {
-      start: (scope) => runBriefingJob(scope),
-    });
+    // one card's lifecycle, answering with which of the three things happened —
+    // a run started here, a run was already going here, or the request was left
+    // for the machine that collects — so the companion reports the right one.
+    const tools = buildLiveCompanionTools(
+      insertProbeCard,
+      insertProfileCard,
+      { start: (scope) => runBriefingJob(scope) },
+      { collecting },
+    );
 
     void runAgentTurn({
       providerId: settings.defaultProviderId as "anthropic" | "openai" | "deepseek",
@@ -459,7 +493,7 @@ export function InfoCall({
   const { position } = anchor;
   const lastMessage = messages.length ? messages[messages.length - 1].text : null;
 
-  if (view === "chat-pip") {
+  if (layout === "chat-pip") {
     return (
       <div className="absolute right-3 top-3 z-50">
         <ChatPipCard lastMessage={lastMessage} onClick={() => setSwapped(false)} onHangUp={onHangUp} />

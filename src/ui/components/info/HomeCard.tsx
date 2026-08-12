@@ -43,6 +43,8 @@ export function BriefingCardBody({
   snap,
   configured,
   hasSources,
+  collecting,
+  notices,
   onAsk,
   onStop,
   onOpen,
@@ -53,6 +55,14 @@ export function BriefingCardBody({
   configured: boolean;
   // Whether the user has any source configured; null while loading.
   hasSources: boolean | null;
+  // Whether this device is the one collecting (docs/36). A reader's briefing is
+  // built somewhere else, so the card neither offers to start one nor promises
+  // that today's is on its way.
+  collecting: boolean;
+  // What to say about the machine that collects, when it is not this one: when
+  // it was last seen, why its last run stopped, which site needs signing in
+  // again. Nobody is looking at that machine's screen.
+  notices: string[];
   // Open the companion on the state of today's briefing. There is no Generate
   // button any more (docs/35): the day's briefing collects itself when the app
   // opens, and asking for another one is something the user says, not clicks.
@@ -129,18 +139,24 @@ export function BriefingCardBody({
   if (briefing) {
     const worth = briefing.mustRead.length + briefing.outOfLane.length;
     const counts = [
+      // When it was built, not when it was received: on a reader the two can be
+      // hours apart, and the first is the one that answers "how old is this".
+      builtAt(briefing.generatedAt),
       `${worth} worth reading`,
       `${briefing.oneLiners.length} one-liner${briefing.oneLiners.length === 1 ? "" : "s"}`,
       `${briefing.filtered.length} filtered`,
     ].join(" · ");
     return (
-      <button className="flex flex-1 flex-col justify-between text-left" onClick={onOpen}>
-        <p className="m-0 text-[15px] leading-relaxed text-[#2a2a2a]">{briefing.overview}</p>
-        <div className="mt-4 flex items-center justify-between">
-          <span className="text-[13px] text-[#888]">{counts}</span>
-          <span className="text-[13px] font-medium text-primary">Open →</span>
-        </div>
-      </button>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <button className="flex flex-1 flex-col justify-between text-left" onClick={onOpen}>
+          <p className="m-0 text-[15px] leading-relaxed text-[#2a2a2a]">{briefing.overview}</p>
+          <div className="mt-4 flex items-center justify-between">
+            <span className="text-[13px] text-[#888]">{counts}</span>
+            <span className="text-[13px] font-medium text-primary">Open →</span>
+          </div>
+        </button>
+        <Notices lines={notices} />
+      </div>
     );
   }
 
@@ -150,17 +166,23 @@ export function BriefingCardBody({
     return <div className="flex-1" />;
   }
 
-  // No sources yet (and provider configured): the onboarding entry point.
+  // No sources yet (and provider configured): the onboarding entry point — on
+  // the machine that can actually trial one. A reader gets the sentence and no
+  // button, because the button would lead to a flow that cannot finish here
+  // (docs/36).
   if (configured && hasSources === false) {
     return (
       <div className="flex flex-1 flex-col justify-between">
         <p className="m-0 text-[14px] leading-relaxed text-[#777]">
-          Subscribe to what you follow — AI sources, robotics, anything with a feed — and get a
-          triaged briefing each day.
+          {collecting
+            ? "Subscribe to what you follow — AI sources, robotics, anything with a feed — and get a triaged briefing each day."
+            : "No sources yet. Subscriptions are set up on the computer that collects them, and the briefing arrives here."}
         </p>
-        <Button variant="cta" size="lg" className="mt-4 w-fit" onClick={onStartSubscribing}>
-          Start subscribing
-        </Button>
+        {collecting && (
+          <Button variant="cta" size="lg" className="mt-4 w-fit" onClick={onStartSubscribing}>
+            Start subscribing
+          </Button>
+        )}
       </div>
     );
   }
@@ -168,14 +190,21 @@ export function BriefingCardBody({
   // Sources configured but no briefing yet. Nothing to press: today's is
   // collected when the app opens. The way in is the companion — which is also
   // the way back from a run that failed, since it holds generate_briefing.
+  //
+  // "On its way" is a promise only the collector can make. A reader says what it
+  // knows about the machine that would have made it instead.
+  const waiting = collecting
+    ? "Your sources, read in full and triaged against your profile. Today's is on its way."
+    : "Today's briefing is built on the computer that collects your sources.";
   return (
     <div className="flex flex-1 flex-col justify-between">
-      <p className="m-0 text-[14px] leading-relaxed text-[#777]">
-        {snap?.error
-          ? "Today's briefing could not be built."
-          : "Your sources, read in full and triaged against your profile. Today's is on its way."}
-      </p>
-      {snap?.error && <p className="mt-2 text-[13px] text-[#c0392b]">{snap.error}</p>}
+      <div>
+        <p className="m-0 text-[14px] leading-relaxed text-[#777]">
+          {snap?.error ? "Today's briefing could not be built." : waiting}
+        </p>
+        {snap?.error && <p className="mt-2 text-[13px] text-[#c0392b]">{snap.error}</p>}
+        <Notices lines={notices} />
+      </div>
       {configured ? (
         <Button variant="subtle" size="lg" className="mt-4 w-fit" onClick={onAsk}>
           Ask the companion
@@ -185,6 +214,33 @@ export function BriefingCardBody({
           Configure a provider to begin
         </Button>
       )}
+    </div>
+  );
+}
+
+// When the briefing was built, in local time. A reader can be looking at one
+// made hours ago on another machine, or — after midnight, or in another timezone
+// — at yesterday's, which is the right thing to show as long as it says so.
+function builtAt(generatedAt: number): string {
+  const at = new Date(generatedAt);
+  const time = at.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  const today = new Date();
+  const sameDay =
+    at.getFullYear() === today.getFullYear() &&
+    at.getMonth() === today.getMonth() &&
+    at.getDate() === today.getDate();
+  return sameDay ? time : `${at.toLocaleDateString()} ${time}`;
+}
+
+function Notices({ lines }: { lines: string[] }) {
+  if (lines.length === 0) return null;
+  return (
+    <div className="mt-3 flex flex-col gap-1">
+      {lines.map((line) => (
+        <p key={line} className="m-0 text-[12px] leading-relaxed text-[#8a6d3b]">
+          {line}
+        </p>
+      ))}
     </div>
   );
 }

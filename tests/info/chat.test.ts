@@ -172,6 +172,32 @@ test("the no-briefing thread passes on why the last attempt failed, and says not
   expect(noBriefingChatSystemPrompt(CTX)).not.toContain("The last attempt");
 });
 
+// On a reader the old sentence is simply false: nothing is collected when this
+// app opens, because it happens on another machine (docs/36).
+test("a device that does not collect is not told the briefing arrives when it opens", () => {
+  const prompt = noBriefingChatSystemPrompt(
+    { ...CTX, collecting: false },
+    { collecting: false, notices: ["kestrel last checked in 5 hours ago."] },
+  );
+  expect(prompt).not.toContain("there is no button for it");
+  expect(prompt).toContain("This device does not collect");
+  expect(prompt).toContain("leaves the request");
+  // And it can say what it knows about the machine that would have built it.
+  expect(prompt).toContain("kestrel last checked in 5 hours ago.");
+});
+
+// A companion told about add_source on a device that does not have it will
+// promise a subscription it cannot make.
+test("a device that does not collect describes no add-source tools", () => {
+  const prompt = noBriefingChatSystemPrompt({ ...CTX, collecting: false });
+  expect(prompt).not.toContain("probe_source");
+  expect(prompt).not.toContain("trial_source");
+  expect(prompt).toContain("cannot add sources on this device");
+  // read_page and the profile tool stay, and so does what they need.
+  expect(prompt).toContain("read_page");
+  expect(prompt).toContain("update_profile");
+});
+
 test("the no-briefing thread pins output only when a language is set", () => {
   const unset = noBriefingChatSystemPrompt(CTX);
   expect(noBriefingChatSystemPrompt({ ...CTX, aiLanguage: "zh-CN" })).toContain(

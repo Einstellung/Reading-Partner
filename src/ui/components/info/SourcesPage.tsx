@@ -161,11 +161,19 @@ export interface SourcesPageProps {
   onSignOut?: (site: SignInSite) => void;
   onToggle: (id: string, enabled: boolean) => void;
   onRemove: (id: string) => void;
-  // Probe + trial in one shot. `onSlowTrial` fires when the trial is about to
-  // fetch a body through a browser window, which is tens of seconds of nothing
-  // to look at otherwise.
-  onProbeAdd: (url: string, onSlowTrial?: () => void) => Promise<ProbeAddOutcome>;
-  onConfirmAdd: (descriptor: SourceDescriptor) => Promise<void>;
+  // Probe + trial in one shot, on a device that can do it. `onSlowTrial` fires
+  // when the trial is about to fetch a body through a browser window, which is
+  // tens of seconds of nothing to look at otherwise.
+  //
+  // Absent on a reader (docs/36): a trial has to really fetch three articles to
+  // prove the source works, and a reader has no webview to fetch them with — the
+  // same Bloomberg source trials to a full story on the collector and to a
+  // standfirst here.
+  onProbeAdd?: (url: string, onSlowTrial?: () => void) => Promise<ProbeAddOutcome>;
+  onConfirmAdd?: (descriptor: SourceDescriptor) => Promise<void>;
+  // What the collecting machine's sessions look like, for a device that cannot
+  // sign in itself. Absent on the collector, which draws the real rows above.
+  collectorSites?: { deviceName: string; sites: Record<string, boolean> } | null;
   onBack: () => void;
 }
 
@@ -179,7 +187,7 @@ export function SourcesPage(props: SourcesPageProps) {
 
   async function probe() {
     const input = url.trim();
-    if (!input || probing) return;
+    if (!input || probing || !props.onProbeAdd) return;
     setProbing(true);
     setSlow(false);
     setError(null);
@@ -197,7 +205,7 @@ export function SourcesPage(props: SourcesPageProps) {
   }
 
   async function confirmAdd() {
-    if (!pending) return;
+    if (!pending || !props.onConfirmAdd) return;
     await props.onConfirmAdd(pending.descriptor);
     setPending((p) => (p ? { ...p, added: true } : p));
     setUrl("");
@@ -213,7 +221,13 @@ export function SourcesPage(props: SourcesPageProps) {
         <span className="text-[15px] font-medium text-[#1b1b1b]">Sources</span>
       </div>
 
-      {/* Add by URL. */}
+      {/* Add by URL, where a URL can be proved to work. */}
+      {!props.onProbeAdd ? (
+        <p className="mb-6 mt-0 text-[13px] leading-relaxed text-[#999]">
+          Sources are added on the computer that collects them — proving one works means fetching
+          three articles from it, which only that machine can do.
+        </p>
+      ) : (
       <div className="mb-6">
         <div className="flex items-center gap-2">
           <input
@@ -250,6 +264,44 @@ export function SourcesPage(props: SourcesPageProps) {
           </div>
         )}
       </div>
+      )}
+
+      {/* What the collecting machine's sessions look like, on a device that has
+          no webview to sign in with (docs/36). Read-only on purpose: the cookie
+          is on that machine, so that machine is the only place to repair it. */}
+      {sites.length > 0 && !props.onSignIn && props.collectorSites && (
+        <div className="mb-6">
+          <div className="mb-2 text-[12px] font-medium uppercase tracking-wide text-[#999]">
+            Signed-in sites
+          </div>
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+            {sites.map((site) => {
+              const signedIn = props.collectorSites?.sites[site.host] === true;
+              return (
+                <li
+                  key={site.host}
+                  className="flex items-center gap-3 rounded-xl border border-[#e6e6e6] bg-white px-4 py-3"
+                >
+                  <span
+                    aria-hidden
+                    className={`h-2.5 w-2.5 flex-none rounded-full ${signedIn ? "bg-[#3fb950]" : "bg-[#d0d0d0]"}`}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[14px] font-medium text-[#1b1b1b]">
+                      {site.label}
+                    </div>
+                    <div className="truncate text-[12px] text-[#999]">
+                      {signedIn
+                        ? `Signed in on ${props.collectorSites?.deviceName}`
+                        : `Needs signing in on ${props.collectorSites?.deviceName} for the full text`}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       {/* Sites with a sign-in. Nothing to draw when no source has one, or when
           the platform has no webview to sign in with. */}
@@ -280,7 +332,11 @@ export function SourcesPage(props: SourcesPageProps) {
 
       {/* The list. */}
       {props.sources.length === 0 ? (
-        <p className="my-3.5 text-[14px] text-[#999]">No sources yet. Paste a URL above to add one.</p>
+        <p className="my-3.5 text-[14px] text-[#999]">
+          {props.onProbeAdd
+            ? "No sources yet. Paste a URL above to add one."
+            : "No sources yet."}
+        </p>
       ) : (
         <ul className="m-0 flex list-none flex-col gap-2 p-0">
           {props.sources.map((s) => (

@@ -19,8 +19,7 @@ import {
   upsertSavedArticle,
   type SavedArticleInput,
 } from "../../src/reading/saved-articles";
-import { resolveSummaryOnly } from "../../src/ui/components/info/saveArticle";
-import type { InfoItem } from "../../src/info/sources/item";
+import { toSavedArticleInput } from "../../src/ui/components/info/saveArticle";
 
 function input(over: Partial<SavedArticleInput> = {}): SavedArticleInput {
   return {
@@ -206,30 +205,33 @@ test("formatPublishedAt shows an unparseable date verbatim and nothing for none"
   );
 });
 
-// --- resolveSummaryOnly (ui/components/info/saveArticle.ts) -----------------
+// --- toSavedArticleInput (ui/components/info/saveArticle.ts) ----------------
 
-function item(over: Partial<InfoItem> = {}): InfoItem {
-  return {
-    id: "i1",
+// summaryOnly is no longer worked out here. The briefing view answers with the
+// body and with whether the article itself was ever read (docs/36) — off the
+// day's item snapshot on a collector, off the published bodies on a reader —
+// and this mapping carries that answer through unchanged.
+test("what the view answered with is what gets kept", () => {
+  const kept = toSavedArticleInput({
+    topicId: "brief",
+    meta: {
+      title: "A title",
+      url: "https://example.com/a",
+      source: "src",
+      sourceName: "Source",
+      publishedAt: "2026-07-20T08:00:00Z",
+    },
+    body: { html: "<p>body</p>", text: "body", summaryOnly: true },
+  });
+  expect(kept).toEqual({
+    topicId: "brief",
+    url: "https://example.com/a",
+    title: "A title",
     source: "src",
     sourceName: "Source",
-    title: "T",
-    url: "https://example.com/a",
-    publishedAt: "",
-    ...over,
-  };
-}
-
-test("resolveSummaryOnly reads the day's item snapshot", () => {
-  expect(resolveSummaryOnly([item({ id: "i1", summaryOnly: true })], "i1")).toBe(true);
-  expect(resolveSummaryOnly([item({ id: "i1", summaryOnly: false })], "i1")).toBe(false);
-  // An item that never carried the flag had its full text fetched.
-  expect(resolveSummaryOnly([item({ id: "i1" })], "i1")).toBe(false);
-});
-
-// The conservative direction: with the day's snapshot gone (regenerated, pruned),
-// the article is marked evidence-incomplete rather than quotable as full text.
-test("resolveSummaryOnly is true when the item is not in the snapshot", () => {
-  expect(resolveSummaryOnly([], "i1")).toBe(true);
-  expect(resolveSummaryOnly([item({ id: "other", summaryOnly: false })], "i1")).toBe(true);
+    publishedAt: "2026-07-20T08:00:00Z",
+    summaryOnly: true,
+    text: "body",
+    html: "<p>body</p>",
+  });
 });

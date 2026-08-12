@@ -226,6 +226,7 @@ export default function PhoneApp() {
           <InfoHome
             screen={infoScreenFor(base)}
             onNavigate={onNavigate}
+            role={device?.role ?? null}
             configured={configured}
             onOpenSettings={openSettings}
             onTopicsChanged={refreshSavedArticles}

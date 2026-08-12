@@ -20,13 +20,15 @@ import type { ProbeConfirmCardData } from "../sources/source-cards";
 import type { ProfileUpdateCardData } from "../briefing/cards";
 import { buildCompanionTools, type BriefingScope, type SiteSignInDeps } from "./companion-tools";
 import type { AgentTool } from "../../ai/agent";
-import type { RunStart } from "../briefing/pipeline";
+import type { RequestOutcome } from "../briefing/reader";
 
 // The briefing controller the host hands in so generate_briefing can kick a
-// background job through the host's card lifecycle and hear whether it started.
-// Kept as a small interface so the pure tool set stays host-agnostic.
+// background job through the host's card lifecycle and hear what happened to it
+// — a run started, a run was already going, or, on a device that does not
+// collect, the request was left for the machine that does (docs/36). Kept as a
+// small interface so the pure tool set stays host-agnostic.
 export interface BriefingControl {
-  start(scope: BriefingScope): RunStart;
+  start(scope: BriefingScope): RequestOutcome;
 }
 
 // The sign-in half, bound to the real windows. The site list is read from the
@@ -59,6 +61,7 @@ export function buildLiveCompanionTools(
   onProbeCard: (card: ProbeConfirmCardData) => void,
   onProfileCard: (card: ProfileUpdateCardData) => void,
   briefing: BriefingControl,
+  opts: { collecting?: boolean } = {},
 ): AgentTool[] {
   return buildCompanionTools({
     fetchFn: infoFetch,
@@ -70,6 +73,16 @@ export function buildLiveCompanionTools(
     onProbeCard,
     onProfileCard,
     startBriefing: briefing.start,
-    siteSignIn: hasWebviewFetch() ? liveSiteSignIn() : undefined,
+    // Both halves of the sign-in gate. The webview is the first: without one
+    // there is no window to open. Collecting is the second — a machine that does
+    // not fetch article bodies has nowhere to spend a session, so signing in on
+    // it would leave a cookie in a jar nobody reads. Not an error, just an
+    // operation with no point, and a pointless tool in the list is one the model
+    // will eventually reach for.
+    siteSignIn: hasWebviewFetch() && opts.collecting !== false ? liveSiteSignIn() : undefined,
+    // A reader does not get the add-source tools either (docs/36).
+    // generate_briefing stays: on a reader the host turns it into a request for
+    // the collector, and says so.
+    collecting: opts.collecting,
   });
 }

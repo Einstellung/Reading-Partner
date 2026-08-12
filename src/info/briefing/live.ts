@@ -6,7 +6,18 @@
 
 import { callModel, resolveModel, type ResolvedModel } from "../../ai/model-call";
 import { loadSettings } from "../../platform/app/settings";
-import { currentDeviceId, loadDeviceSettings } from "../../platform/app/device";
+import {
+  currentDeviceId,
+  currentDeviceRole,
+  loadDeviceSettings,
+  type DeviceRole,
+} from "../../platform/app/device";
+import { sanitizeArticleHtml } from "../extract/sanitize";
+import {
+  InfoReader,
+  type ArticleState,
+  type BriefingView,
+} from "./reader";
 import type { AiCallOptions } from "../../ai/watchdog";
 import { INFO_EVENT_TOPIC, logEvent } from "../../platform/app/events";
 import { newTally, reportParse } from "../../platform/app/structured-output";
@@ -38,6 +49,7 @@ import {
 import type { InfoRunPhase } from "./run-state";
 import {
   clearRun,
+  loadArticle,
   loadArticles,
   loadBriefing,
   loadItems,
@@ -50,7 +62,7 @@ import {
   todayLocal,
 } from "./store";
 import { collectorStatusLine, InfoCollector } from "./collector";
-import { publishBriefing } from "./publish";
+import { loadPublishedBriefing, publishBriefing } from "./publish";
 import {
   chooseAsk,
   HEARTBEAT_MS,
@@ -303,6 +315,18 @@ async function pollSources(
   return items;
 }
 
+// Today's briefing for a machine that is a collector but did not win the
+// election (docs/36). It generates nothing, so it has no briefing-<date>.json of
+// its own; without this its screen would be blank while a briefing for today
+// sits in the folder it just pulled. The date is still checked, so a stale
+// published file cannot pass as today's and talk startupAction out of a run.
+async function loadBriefingForToday(date: string): Promise<Briefing | null> {
+  const own = await loadBriefing(date);
+  if (own) return own;
+  const published = await loadPublishedBriefing().catch(() => null);
+  return published && published.date === date ? published : null;
+}
+
 // A briefing landed on disk: publish it for the readers (docs/36). Wrapped
 // around the pipeline's saveBriefing dep rather than called from inside the
 // pipeline, so both paths that write a briefing — a run and a re-triage —
@@ -413,16 +437,30 @@ export function getInfoCollector(): InfoCollector {
   return collector;
 }
 
-// The background-collection setting changed: start or stop the polling now
-// rather than at whatever the next wake would have been.
+// A device setting changed: apply it now rather than at whatever the next wake
+// would have been. Three things can have changed and they are one call, because
+// they interlock — a machine that is no longer a collector must not go on
+// claiming, and a machine that stopped collecting must give the claim up so
+// another one can take over in seconds rather than in a day (docs/36).
+//
+// Called on every change and once when device.json first lands, so it is also
+// how a collector starts.
 export function refreshInfoCollector(): void {
-  void getInfoCollector().refresh();
+  void (async () => {
+    if (currentDeviceRole() !== "collector") {
+      await stopCollecting();
+      return;
+    }
+    if (collecting) await publishClaim();
+    else await startCollecting();
+    await getInfoCollector().refresh();
+  })().catch((e) => console.warn("failed to apply the collection settings", e));
 }
 
 export function getInfoPipeline(): InfoPipeline {
   if (!pipeline) {
     pipeline = new InfoPipeline({
-      loadBriefing,
+      loadBriefing: loadBriefingForToday,
       loadProfile,
       loadFeedback,
       // Reading-side signal for triage: assembled from per-topic observations, guarded
@@ -487,6 +525,75 @@ export function getInfoPipeline(): InfoPipeline {
     void getInfoCollector().refresh();
   }
   return pipeline;
+}
+
+// --- what the screens read (docs/36) ---------------------------------------
+
+let reader: InfoReader | null = null;
+
+export function getInfoReader(): InfoReader {
+  if (!reader) reader = new InfoReader();
+  return reader;
+}
+
+// The collector's own view: the pipeline for everything live, and the day's
+// files for an article's body. Both this and InfoReader answer to BriefingView,
+// so a screen never asks which one it has.
+//
+// The one difference worth naming is where the body comes from. A collector
+// reads the article cache it wrote itself, which still has its images; a reader
+// reads the published bodies, which do not (publish.ts). Keeping an article on
+// the desktop therefore keeps the version with pictures, and keeping the same
+// article on a phone keeps the text — which is what docs/21 says a kept article
+// is: the reader's own snapshot of what they were looking at.
+function collectorView(): BriefingView {
+  const p = getInfoPipeline();
+  return {
+    snapshot: () => p.snapshot(),
+    subscribe: (fn) => p.subscribe(fn),
+    init: () => p.init(),
+    stop: () => p.stop(),
+    // This machine is the one collecting; whatever went wrong is already in the
+    // snapshot's error, on the screen of the person who can act on it, and the
+    // sign-in rows on its source list are the real ones.
+    notices: () => [],
+    collectorSites: () => null,
+    async article(itemId: string): Promise<ArticleState> {
+      const briefing = p.snapshot().briefing;
+      if (!briefing || !briefing.items[itemId]) return { kind: "unknown" };
+      const dropped = briefing.filtered.find((f) => f.itemId === itemId);
+      if (dropped) return { kind: "filtered", category: dropped.category };
+      const [cached, items] = await Promise.all([
+        loadArticle(briefing.date, itemId).catch(() => null),
+        loadItems(briefing.date).catch(() => [] as InfoItem[]),
+      ]);
+      const html = cached?.contentHtml ?? "";
+      const text = cached?.textContent ?? "";
+      if (!html && !text) return { kind: "summaryOnly" };
+      const item = items.find((it) => it.id === itemId);
+      return {
+        kind: "body",
+        body: {
+          html: html ? sanitizeArticleHtml(html) : "",
+          text,
+          summaryOnly: item ? (item.summaryOnly ?? !text) : true,
+        },
+      };
+    },
+  };
+}
+
+// The view for this device's role, one per role for the app's lifetime — a
+// screen subscribes to it, so handing out a new object per call would leak a
+// listener on every render.
+//
+// A reader never touches getInfoPipeline or getInfoCollector through here, so
+// neither singleton is ever constructed on a machine that is not collecting: no
+// item pool, no schedule, no auto-generate.
+const views: Partial<Record<DeviceRole, BriefingView>> = {};
+
+export function getInfoView(role: DeviceRole): BriefingView {
+  return (views[role] ??= role === "collector" ? collectorView() : getInfoReader());
 }
 
 // --- the claim, the heartbeat, and the readers' asks (docs/36) --------------

@@ -62,6 +62,22 @@ test("buildCompanionTools mounts the source tools plus read_page, update_profile
   expect(names).toContain("generate_briefing");
 });
 
+// A reader has no webview to fetch an article with, so trial_source cannot
+// prove what it exists to prove: the same Bloomberg source trials to a standfirst
+// there and to a full story on the collector (docs/36). read_page stays — that is
+// one link the user pasted, not a subscription fetching itself on a schedule.
+test("a device that does not collect gets no add-source tools", () => {
+  const names = buildCompanionTools({ ...deps([]), collecting: false }).map((t) => t.name);
+  expect(names).not.toContain("probe_source");
+  expect(names).not.toContain("trial_source");
+  expect(names).not.toContain("add_source");
+  expect(names).toContain("read_page");
+  expect(names).toContain("update_profile");
+  // Still mounted: on a reader the host turns it into a request for the
+  // collector rather than a run.
+  expect(names).toContain("generate_briefing");
+});
+
 test("read_page fetches a page and reports its title, text, and links", async () => {
   const html = `<html><head><title>News Hub</title></head>
     <body><nav><a href="/lists/65.html">时政</a></nav><p>Front page.</p></body></html>`;

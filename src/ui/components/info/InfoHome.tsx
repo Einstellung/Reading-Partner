@@ -6,10 +6,18 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { loadSettings } from "../../../platform/app/settings";
+import type { DeviceRole } from "../../../platform/app/device";
 import { buildGlossary } from "../../../ai/voice";
-import { getInfoPipeline } from "../../../info/briefing/live";
-import type { InfoPipeline, InfoSnapshot } from "../../../info/briefing/pipeline";
-import { loadArticle, loadItems, todayLocal } from "../../../info/briefing/store";
+import { getInfoView } from "../../../info/briefing/live";
+import type { InfoSnapshot } from "../../../info/briefing/pipeline";
+import {
+  clearCollectorLeftovers,
+  isReaderFile,
+  type ArticleState,
+  type BriefingView,
+} from "../../../info/briefing/reader";
+import { onSyncPulled } from "../../../platform/sync";
+import { todayLocal } from "../../../info/briefing/store";
 import type { BriefingItemMeta } from "../../../info/briefing/types";
 import { ensureBriefTopic } from "../../../platform/app/topics";
 import {
@@ -20,7 +28,6 @@ import {
 import { toSavedArticleInput } from "./saveArticle";
 import { appendFeedback } from "../../../observation/feedback";
 import { loadProfile } from "../../../observation/profile";
-import { sanitizeArticleHtml } from "../../../info/extract/sanitize";
 import {
   articleChatSystemPrompt,
   briefingChatSystemPrompt,
@@ -74,6 +81,11 @@ export interface LaunchProps {
   snap: InfoSnapshot | null;
   configured: boolean;
   hasSources: boolean | null;
+  // Whether this device is the one collecting (docs/36). A reader has no button
+  // that starts a briefing and nothing to say about a run it is not doing.
+  collecting: boolean;
+  // What to say about the machine that collects, when it is not this one.
+  notices: string[];
   onAsk: () => void;
   onStop: () => void;
   onOpenBriefing: () => void;
@@ -95,6 +107,12 @@ export default function InfoHome(props: {
   onContinue?: () => void;
   // Whether an AI provider is connected (the vestibule guides to Settings).
   configured: boolean;
+  // What this device is for (docs/36), null until device.json has been read.
+  // It decides which briefing view is built, and with it whether this screen
+  // can collect, add a source, or start a run at all. Nothing info-related is
+  // constructed until it lands: building a collector's singletons on a machine
+  // that turns out to be a reader is the mistake that costs money.
+  role: DeviceRole | null;
   onOpenSettings: () => void;
   // Keeping an article can create the Brief topic, so the shelf needs a reload.
   onTopicsChanged: () => Promise<void> | void;
@@ -128,9 +146,11 @@ export default function InfoHome(props: {
   // only mean anything where there is a webview to sign in with.
   const [siteSessions, setSiteSessions] = useState<SiteSessions>({});
   const [sessionBusy, setSessionBusy] = useState<SessionBusy | null>(null);
-  const infoRef = useRef<InfoPipeline | null>(null);
+  const viewRef = useRef<BriefingView | null>(null);
   const [openArticleId, setOpenArticleId] = useState<string | null>(null);
-  const [articleHtml, setArticleHtml] = useState<string | null>(null);
+  // What can be shown for the open article: its body, or why there is none
+  // (docs/36). Null while it is being read.
+  const [articleState, setArticleState] = useState<ArticleState | null>(null);
   const [openedItemIds, setOpenedItemIds] = useState<Set<string>>(new Set());
   const [dismissedItemIds, setDismissedItemIds] = useState<Set<string>>(new Set());
   const [infoCall, setInfoCall] = useState<InfoCallAnchor | null>(null);
@@ -139,20 +159,57 @@ export default function InfoHome(props: {
   // which is per-day.
   const [keptIds, setKeptIds] = useState<Set<string>>(new Set());
 
-  // Attach the info-briefing pipeline (docs/16): mirror its snapshot for the
-  // vestibule and load today's briefing if one exists.
+  // Attach the briefing view (docs/16, docs/36): on a collector that is the
+  // pipeline, on a reader the published files. Same two calls either way —
+  // mirror the snapshot, and bring it up to date.
+  const { role } = props;
   useEffect(() => {
-    const p = getInfoPipeline();
-    infoRef.current = p;
-    setInfoSnap(p.snapshot());
-    const unsub = p.subscribe(() => setInfoSnap(p.snapshot()));
-    p.init().catch(() => {});
+    if (!role) return;
+    const view = getInfoView(role);
+    viewRef.current = view;
+    setInfoSnap(view.snapshot());
+    const unsub = view.subscribe(() => setInfoSnap(view.snapshot()));
+    view.init().catch(() => {});
+    return unsub;
+  }, [role]);
+
+  useEffect(() => {
     hasSources().then(setHasSourcesState).catch(() => {});
     loadSavedArticles()
       .then((list) => setKeptIds(new Set(list.map((a) => a.id))))
       .catch(() => {});
-    return unsub;
   }, []);
+
+  // A reader's briefing arrives over sync, so a pull is its "something changed"
+  // (docs/36). A collector's comes out of its own pipeline and needs no such
+  // listener — its own writes are what published these files.
+  useEffect(() => {
+    if (role !== "reader") return;
+    return onSyncPulled((paths) => {
+      if (paths.some(isReaderFile)) void viewRef.current?.init();
+    });
+  }, [role]);
+
+  // A device that ran an older build collected here, and those files are dead
+  // weight now: one day's article cache measured 4.4 MB. Nothing on a reader
+  // prunes them any more, because nothing on a reader constructs the pipeline
+  // or the collector that used to (docs/36).
+  useEffect(() => {
+    if (role !== "reader") return;
+    void clearCollectorLeftovers();
+  }, [role]);
+
+  const collecting = role === "collector";
+  // Signing in needs both: a webview to open the window with, and a reason —
+  // this machine fetching article bodies. On a machine that does not collect,
+  // the cookie would go into a jar nothing reads (docs/36), so the buttons, the
+  // tool and the sentence about them all go together.
+  const canSignIn = hasWebviewFetch() && collecting;
+  // Recomputed with the snapshot: all of it comes from the same read.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const notices = useMemo(() => viewRef.current?.notices() ?? [], [infoSnap]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const collectorSites = useMemo(() => viewRef.current?.collectorSites() ?? null, [infoSnap]);
 
   // Report the open call upward, and take the report back on unmount. Nothing
   // else changes with it: the call is still owned and closed here.
@@ -171,7 +228,7 @@ export default function InfoHome(props: {
   );
 
   const stopBriefing = useCallback(() => {
-    infoRef.current?.stop();
+    viewRef.current?.stop();
   }, []);
 
   // Reload the source list + health (source-list page) and the hasSources flag.
@@ -298,10 +355,9 @@ export default function InfoHome(props: {
 
   const openArticle = useCallback(
     async (itemId: string) => {
-      const briefing = infoRef.current?.snapshot().briefing ?? null;
-      const date = briefing?.date ?? todayLocal();
+      const briefing = viewRef.current?.snapshot().briefing ?? null;
       setOpenArticleId(itemId);
-      setArticleHtml(null);
+      setArticleState(null);
       onNavigate("article");
       const meta = briefing?.items[itemId];
       // Opening an article logs "opened" once per session; it also drives the
@@ -310,54 +366,45 @@ export default function InfoHome(props: {
         setOpenedItemIds((s) => new Set(s).add(itemId));
         appendFeedback({ itemId, title: meta.title, action: "opened" }).catch(() => {});
       }
-      // The sanitized HTML keeps its external image URLs; ArticleView points
+      // The view answers with the body or with why there is none (docs/36). Its
+      // HTML is sanitized and keeps its external image URLs; ArticleView points
       // them at the img: proxy on its way into the DOM (docs/pitfall/30).
       try {
-        const cached = await loadArticle(date, itemId);
-        setArticleHtml(cached?.contentHtml ? sanitizeArticleHtml(cached.contentHtml) : null);
+        setArticleState((await viewRef.current?.article(itemId)) ?? { kind: "unknown" });
       } catch {
-        setArticleHtml(null);
+        setArticleState({ kind: "unknown" });
       }
     },
     [openedItemIds, onNavigate],
   );
 
   // Keep the open article: file it under the Brief topic with its body snapshot
-  // (docs/21, store-and-display slice). The HTML kept is what the host holds,
-  // whose images are still plain https URLs (the img: proxy is applied in the
-  // view), and the plain text comes from the day's cache, which the AI reads.
-  // The on-screen HTML has been through sanitizeArticleHtml; the day cache holds
-  // what the site served, so the fallback has to be sanitized here. A saved
-  // article is rendered with dangerouslySetInnerHTML, and it is rendered again
-  // on every later open — storing raw remote HTML would persist the hole.
+  // (docs/21, store-and-display slice). The body is whatever the view answered
+  // with — the day's cache on a collector, the published bodies on a reader —
+  // already sanitized, and with its external image URLs intact (the img: proxy
+  // is applied in the view). A saved article is rendered with
+  // dangerouslySetInnerHTML and rendered again on every later open, so raw
+  // remote HTML must never reach the store.
+  //
+  // Only an item with a body can be kept (docs/36). Keeping one without would
+  // write an empty snapshot over the full-text record the collector saved under
+  // the same id.
   const keepArticle = useCallback(
     async (itemId: string) => {
-      const briefing = infoRef.current?.snapshot().briefing ?? null;
+      const briefing = viewRef.current?.snapshot().briefing ?? null;
       const meta = briefing?.items[itemId];
       if (!meta) return;
-      const date = briefing?.date ?? todayLocal();
-      const [topic, cached, items] = await Promise.all([
-        ensureBriefTopic(),
-        loadArticle(date, itemId).catch(() => null),
-        loadItems(date).catch(() => []),
-      ]);
+      const state = articleState ?? (await viewRef.current?.article(itemId));
+      if (!state || state.kind !== "body") return;
+      const topic = await ensureBriefTopic();
       const saved = await saveArticle(
-        toSavedArticleInput({
-          topicId: topic.id,
-          meta,
-          itemId,
-          items,
-          html:
-            articleHtml ??
-            (cached?.contentHtml ? sanitizeArticleHtml(cached.contentHtml) : null),
-          text: cached?.textContent ?? null,
-        }),
+        toSavedArticleInput({ topicId: topic.id, meta, body: state.body }),
       );
       if (!saved) return;
       setKeptIds((s) => new Set(s).add(saved.id));
       await props.onTopicsChanged();
     },
-    [articleHtml, props.onTopicsChanged],
+    [articleState, props.onTopicsChanged],
   );
 
   const dismissItem = useCallback((itemId: string, meta: BriefingItemMeta, category?: string) => {
@@ -374,7 +421,7 @@ export default function InfoHome(props: {
   );
 
   const askBriefing = useCallback(async () => {
-    const b = infoRef.current?.snapshot().briefing;
+    const b = viewRef.current?.snapshot().briefing;
     if (!b) return;
     const [profile, sources, settings] = await Promise.all([loadProfile(), loadSources(), loadSettings()]);
     setInfoCall({
@@ -385,18 +432,19 @@ export default function InfoHome(props: {
         profile,
         sources,
         aiLanguage: settings.aiLanguage,
-        canSignIn: hasWebviewFetch(),
+        canSignIn,
+        collecting,
       }),
       position: { title: "Today's briefing", line: b.overview },
     });
-  }, []);
+  }, [collecting, canSignIn]);
 
   // The launch card's way into the companion. With a briefing it is the same
   // thread the briefing page's Ask opens; without one — the day's collection has
   // not landed, or it failed — it is the same thread told so, which is where a
   // regenerate is asked for now that no button offers one (docs/35).
   const askLaunch = useCallback(async () => {
-    const snap = infoRef.current?.snapshot();
+    const snap = viewRef.current?.snapshot();
     if (snap?.briefing) {
       await askBriefing();
       return;
@@ -411,26 +459,35 @@ export default function InfoHome(props: {
       emptyTitle: "Today's briefing",
       placeholder: "Ask about today's briefing…",
       systemPrompt: noBriefingChatSystemPrompt(
-        { profile, sources, aiLanguage: settings.aiLanguage, canSignIn: hasWebviewFetch() },
-        { error: snap?.error ?? undefined },
+        {
+          profile,
+          sources,
+          aiLanguage: settings.aiLanguage,
+          canSignIn,
+          collecting,
+        },
+        { error: snap?.error ?? undefined, collecting, notices },
       ),
       position: {
         title: "Today's briefing",
-        line: snap?.error ?? "Not collected yet",
+        line: snap?.error ?? notices[0] ?? "Not collected yet",
       },
     });
-  }, [askBriefing]);
+  }, [askBriefing, collecting, canSignIn, notices]);
 
+  // The article chat only exists where there is an article to talk about
+  // (docs/36): with no body the prompt would carry a title and nothing else.
   const askArticle = useCallback(async (itemId: string) => {
-    const b = infoRef.current?.snapshot().briefing;
+    const b = viewRef.current?.snapshot().briefing;
     if (!b) return;
     const meta = b.items[itemId];
-    const [cached, profile, sources, settings] = await Promise.all([
-      loadArticle(b.date, itemId),
+    const [state, profile, sources, settings] = await Promise.all([
+      viewRef.current!.article(itemId),
       loadProfile(),
       loadSources(),
       loadSettings(),
     ]);
+    if (state.kind !== "body") return;
     // The item's one-line reason/overview from the briefing tiers, shown on the
     // position card so the chat window can recall what the article was about.
     const line =
@@ -442,15 +499,16 @@ export default function InfoHome(props: {
       threadId: itemId,
       emptyTitle: meta?.title ?? "Article",
       placeholder: "Ask about this article…",
-      systemPrompt: articleChatSystemPrompt(b.overview, meta?.title ?? "", cached?.textContent ?? "", {
+      systemPrompt: articleChatSystemPrompt(b.overview, meta?.title ?? "", state.body.text, {
         profile,
         sources,
         aiLanguage: settings.aiLanguage,
-        canSignIn: hasWebviewFetch(),
+        canSignIn,
+        collecting,
       }),
       position: { title: meta?.title ?? "Article", sourceName: meta?.sourceName, line },
     });
-  }, []);
+  }, [collecting, canSignIn]);
 
   if (screen === null) return null;
 
@@ -463,6 +521,8 @@ export default function InfoHome(props: {
               snap: infoSnap,
               configured: props.configured,
               hasSources: hasSourcesState,
+              collecting,
+              notices,
               onAsk: () => void askLaunch(),
               onStop: stopBriefing,
               onOpenBriefing: () => onNavigate("briefing"),
@@ -475,6 +535,8 @@ export default function InfoHome(props: {
               snap={infoSnap}
               configured={props.configured}
               hasSources={hasSourcesState}
+              collecting={collecting}
+              notices={notices}
               onContinue={props.onContinue ?? (() => {})}
               onOpenLibrary={() => onNavigate("library")}
               onAsk={() => void askLaunch()}
@@ -520,17 +582,21 @@ export default function InfoHome(props: {
             health={sourceHealth}
             sessions={siteSessions}
             sessionBusy={sessionBusy}
-            {...(hasWebviewFetch()
+            {...(canSignIn
               ? {
                   onSignIn: (site: SignInSite) => void signInToSite(site),
                   onCheckSession: (site: SignInSite) => void checkSession(site),
                   onSignOut: (site: SignInSite) => void signOutOfSite(site),
                 }
               : {})}
+            // Adding a source is the collector's (docs/36): a trial has to prove
+            // the full text can be had, and this machine cannot fetch one.
+            {...(collecting
+              ? { onProbeAdd: liveProbeAndTrial, onConfirmAdd: confirmAddSource }
+              : {})}
+            collectorSites={collectorSites}
             onToggle={toggleSource}
             onRemove={removeSourceById}
-            onProbeAdd={liveProbeAndTrial}
-            onConfirmAdd={confirmAddSource}
             onBack={() => onNavigate("briefing")}
           />
         </div>
@@ -548,7 +614,7 @@ export default function InfoHome(props: {
         const view = (
           <ArticleView
             meta={meta}
-            contentHtml={articleHtml}
+            state={articleState}
             saved={keptIds.has(savedArticleId(meta.url, meta.title))}
             onBack={() => onNavigate("briefing")}
             onAsk={() => askArticle(openArticleId)}
@@ -567,10 +633,12 @@ export default function InfoHome(props: {
         );
       })()}
 
-      {infoCall && (
+      {infoCall && viewRef.current && (
         <InfoCall
           anchor={infoCall}
           dateKey={infoSnap?.briefing?.date ?? todayLocal()}
+          view={viewRef.current}
+          collecting={collecting}
           onHangUp={() => setInfoCall(null)}
           voice={infoVoice}
           onSourcesChanged={refreshSources}
