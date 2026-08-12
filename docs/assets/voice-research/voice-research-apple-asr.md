@@ -364,12 +364,14 @@ var userData: ...
 
 值。具体代价：
 
-- 仓库现在 `src-tauri/tauri.conf.json` 写的是 `"minimumSystemVersion": "16.0"`。抬到 26 会砍掉 iOS 16–25 的设备。
+- 调研时 `src-tauri/tauri.conf.json` 写的是 `"minimumSystemVersion": "16.0"`，现已抬到 `"26.0"`。抬到 26 会砍掉 iOS 16–25 的设备。
 - 但硬件门槛已经比系统版本更严：**iPhone 12 以下（8 核 NE）即使升到 iOS 26 也用不了 `SpeechTranscriber`**。所以真正的下限是 iPhone 12 / A14。
 - iOS 26 是 2025-09 发布的，到现在（2026-08）快一年，iOS 27 下个月发。这是个成熟版本，不是刚出来的。
 - 本项目是单用户自用工具（项目发起人自己 + TestFlight），不是要覆盖长尾装机量的商业 app。这个代价基本为零。
 
 **做法建议**：不要全局抬 `minimumSystemVersion`，而是让语音这一个功能按运行时能力开关。iOS 26 以下 / `isAvailable == false` / 模拟器 → 隐藏实时语音入口，保留现有的按住说话（走云端 SenseVoice）。这和 docs/15 里已有的 `hasNativeRecorder` 按宿主能力决定显不显示是同一个套路。全局抬版本反而把不需要语音的功能也一起砍了。
+
+这条建议后来被 docs/33 推翻：`minimumSystemVersion` 已全局抬到 26.0，不做运行时能力开关。
 
 ### 如果新 API 不支持中文（假设不成立，但记一下）
 
