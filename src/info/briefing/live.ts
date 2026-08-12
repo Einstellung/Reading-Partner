@@ -6,6 +6,7 @@
 
 import { callModel, resolveModel, type ResolvedModel } from "../../ai/model-call";
 import { loadSettings } from "../../platform/app/settings";
+import { loadDeviceSettings } from "../../platform/app/device";
 import type { AiCallOptions } from "../../ai/watchdog";
 import { INFO_EVENT_TOPIC, logEvent } from "../../platform/app/events";
 import { newTally, reportParse } from "../../platform/app/structured-output";
@@ -346,7 +347,7 @@ export function getInfoCollector(): InfoCollector {
       listSources: loadSources,
       poll: pollSources,
       loadBodies: loadArticles,
-      backgroundOn: async () => (await loadSettings()).backgroundCollect,
+      backgroundOn: async () => (await loadDeviceSettings()).backgroundCollect,
       busy: () => getInfoPipeline().snapshot().running,
       now: () => Date.now(),
       today: () => todayLocal(),

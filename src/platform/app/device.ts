@@ -9,40 +9,162 @@
 //
 // device.json is out of the sync range by omission (platform/sync/syncFs.ts):
 // the range is a whitelist, and nothing here is on it. There is a test.
-//
-// docs/36 also moves backgroundCollect and fingerDraw here. That migration is
-// not done; this file starts with the one setting that never had a home in
-// settings.json to begin with.
 
 import { readGuardedJson, writeTextAtomic } from "./atomic-fs";
+import { isMobilePlatform } from "./platform";
+import { loadSettings } from "./settings";
 
 const DEVICE_FILE = "device.json";
 
+// What this machine is for (docs/36). A collector runs the four phases against
+// the subscribed sites all day and publishes the briefing; a reader consumes
+// what a collector published and sends no request to a subscribed site.
+export type DeviceRole = "collector" | "reader";
+
 export interface DeviceSettings {
+  // This machine's identity, generated once on first run. It names the files a
+  // device writes for the others to read (info-collector-<id>.json,
+  // info-ask-<id>.json), which is why it has to survive restarts and why two
+  // machines must never end up sharing one.
+  deviceId: string;
+  role: DeviceRole;
   // Start the app when the machine starts. Off unless the user says otherwise:
   // a program that installs itself into the login sequence uninvited is a
   // program people uninstall.
   autostart: boolean;
+  // Whether this collector is collecting at all: docs/35 for what collection is,
+  // docs/36 for why the switch belongs to the machine. A reader never reads it.
+  backgroundCollect: boolean;
+  // Whether a finger may mark the page in the reader. Off means the stylus
+  // writes and the finger only ever moves the page, which is what a device with
+  // a stylus wants; a device without one turns this on to reach annotation at
+  // all. The navigation lock still outranks it: while that is on, nothing draws.
+  fingerDraw: boolean;
 }
 
 export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
+  deviceId: "",
+  role: "collector",
   autostart: false,
+  backgroundCollect: true,
+  fingerDraw: false,
 };
+
+// The role this device actually has, whatever the file says. iOS and Android are
+// readers and nothing else: collecting one article body takes tens of seconds of
+// live webview and a backgrounded phone gets seconds of runtime (docs/36). The
+// stored value is consulted only where there is a choice, and the settings
+// screen offers the choice only there.
+export function deviceRoleFor(stored: DeviceRole | undefined, mobile: boolean): DeviceRole {
+  if (mobile) return "reader";
+  return stored === "reader" ? "reader" : "collector";
+}
+
+// Whether this platform lets the user pick a role at all.
+export function roleIsChoosable(): boolean {
+  return !isMobilePlatform();
+}
+
+// What a first run on a new build has to fill in: an identity, and the two
+// settings that used to live in settings.json. The old keys are copied once as
+// the initial value and never read again — a device already on the new build has
+// its own answer, and the account-level copy is one machine's opinion carried
+// onto another's (docs/36). They are not deleted from settings.json: a device
+// still on the old build reads its own copy from there, and a fields merge that
+// saw one side drop a key would carry the deletion across.
+//
+// Pure, so the migration is testable; the id source is injected.
+export function initialDeviceSettings(
+  stored: Partial<DeviceSettings>,
+  legacy: { backgroundCollect?: boolean; fingerDraw?: boolean },
+  newId: () => string,
+): { settings: DeviceSettings; changed: boolean } {
+  const settings: DeviceSettings = {
+    ...DEFAULT_DEVICE_SETTINGS,
+    ...stored,
+    deviceId: stored.deviceId || newId(),
+    backgroundCollect:
+      stored.backgroundCollect ??
+      legacy.backgroundCollect ??
+      DEFAULT_DEVICE_SETTINGS.backgroundCollect,
+    fingerDraw: stored.fingerDraw ?? legacy.fingerDraw ?? DEFAULT_DEVICE_SETTINGS.fingerDraw,
+  };
+  const changed =
+    settings.deviceId !== stored.deviceId ||
+    settings.backgroundCollect !== stored.backgroundCollect ||
+    settings.fingerDraw !== stored.fingerDraw;
+  return { settings, changed };
+}
+
+// The one in-memory copy, so the role can be answered without a read on every
+// call. Filled by initDeviceSettings and kept in step by saveDeviceSettings.
+let cached: DeviceSettings | null = null;
+
+function withRole(settings: DeviceSettings): DeviceSettings {
+  return { ...settings, role: deviceRoleFor(settings.role, isMobilePlatform()) };
+}
+
+function parseStored(raw: unknown): Partial<DeviceSettings> | null {
+  return raw && typeof raw === "object" ? (raw as Partial<DeviceSettings>) : null;
+}
 
 // Missing is the normal first-run case and means the defaults. Unreadable is
 // treated the same way here, and deliberately: a device file holds preferences a
 // user can set again in a second, not data the app cannot rebuild, so the read
 // guard's quarantine is enough and nothing has to be blocked from writing.
 export async function loadDeviceSettings(): Promise<DeviceSettings> {
-  const read = await readGuardedJson<Partial<DeviceSettings>>(DEVICE_FILE, (raw) =>
-    raw && typeof raw === "object" ? (raw as Partial<DeviceSettings>) : null,
-  );
-  if (read.status === "ok") return { ...DEFAULT_DEVICE_SETTINGS, ...read.value };
-  return { ...DEFAULT_DEVICE_SETTINGS };
+  const read = await readGuardedJson<Partial<DeviceSettings>>(DEVICE_FILE, parseStored);
+  const stored = read.status === "ok" ? read.value : {};
+  const settings = withRole({ ...DEFAULT_DEVICE_SETTINGS, ...stored });
+  cached = settings;
+  return settings;
+}
+
+// The first read of the session: give a machine that has never had one an
+// identity, and take over the two settings that used to be the account's. Called
+// once at startup, before anything asks for the role.
+export async function initDeviceSettings(): Promise<DeviceSettings> {
+  const read = await readGuardedJson<Partial<DeviceSettings>>(DEVICE_FILE, parseStored);
+  const stored = read.status === "ok" ? read.value : {};
+  let legacy: { backgroundCollect?: boolean; fingerDraw?: boolean } = {};
+  if (stored.backgroundCollect === undefined || stored.fingerDraw === undefined) {
+    try {
+      // The two keys are gone from the Settings type and still on disk, which is
+      // exactly the shape a one-time migration reads.
+      const old = (await loadSettings()) as unknown as {
+        backgroundCollect?: unknown;
+        fingerDraw?: unknown;
+      };
+      legacy = {
+        backgroundCollect:
+          typeof old.backgroundCollect === "boolean" ? old.backgroundCollect : undefined,
+        fingerDraw: typeof old.fingerDraw === "boolean" ? old.fingerDraw : undefined,
+      };
+    } catch {
+      // Nothing to inherit; the defaults stand.
+    }
+  }
+  const { settings, changed } = initialDeviceSettings(stored, legacy, () => crypto.randomUUID());
+  cached = withRole(settings);
+  if (changed) await saveDeviceSettings(settings).catch(() => {});
+  return cached;
+}
+
+// The role, for callers that cannot wait for a read: the shells resolve it once
+// at startup and everything after reads this. "reader" until it is known, so a
+// collector's singletons are never constructed by accident on a device that
+// turns out to be a reader — that is the expensive mistake, not its reverse.
+export function currentDeviceRole(): DeviceRole {
+  return cached ? cached.role : "reader";
+}
+
+export function currentDeviceId(): string {
+  return cached?.deviceId ?? "";
 }
 
 // Written straight through, not debounced: these change when a user flips a
 // switch, which is rare enough that a write per flip costs nothing.
 export function saveDeviceSettings(settings: DeviceSettings): Promise<void> {
+  cached = withRole(settings);
   return writeTextAtomic(DEVICE_FILE, JSON.stringify(settings, null, 2));
 }

@@ -56,6 +56,7 @@ import { initSync, onSyncPulled } from "./platform/sync";
 import { compressImage, compressImageData, type CompressedImage } from "./ai/image-utils";
 import { isTauri, readClipboardImage } from "./platform/app/clipboard";
 import { DEFAULT_SETTINGS, loadSettings, onSettingsSaveError, saveSettings, toReasoning, type Settings } from "./platform/app/settings";
+import { initDeviceSettings, saveDeviceSettings, type DeviceSettings } from "./platform/app/device";
 import { buildGlossary } from "./ai/voice";
 import {
   enforceKnownModel,
@@ -296,6 +297,11 @@ export default function App() {
   const [figures, setFigures] = useState<Figure[]>([]);
   const [call, setCall] = useState<CallState | null>(null);
   const [settings, setSettings] = useState<Settings>({ ...DEFAULT_SETTINGS });
+  // This machine's own settings (docs/36), null until device.json has been read.
+  // Separate state from `settings` because it is a separate file with separate
+  // rules: it never syncs, and it is what says whether this machine collects.
+  const [device, setDevice] = useState<DeviceSettings | null>(null);
+  const fingerDraw = !!device?.fingerDraw;
   const [showSettings, setShowSettings] = useState(false);
   const [providersInfo, setProvidersInfo] = useState<ProviderInfo[]>([]);
   // Failure messages (save/load/network errors) live here, not in `status` —
@@ -370,6 +376,11 @@ export default function App() {
       console.error("failed to persist settings", e);
       pushToast("warn", "Settings could not be saved");
     });
+    // This machine's own file (docs/36). Read once here: it decides the role,
+    // and everything the role decides waits on it.
+    initDeviceSettings()
+      .then(setDevice)
+      .catch((e) => console.warn("failed to read device settings", e));
   }, []);
 
   // Refresh provider connection state on mount and whenever Settings closes.
@@ -458,8 +469,13 @@ export default function App() {
   const applySettings = useCallback((next: Settings) => {
     setSettings(next);
     saveSettings(next);
-    // Background collection starts or stops now rather than at whatever the
-    // collector's next wake would have been (docs/35).
+  }, []);
+
+  // A device setting changed. Collection reads its switch from here, so it
+  // starts or stops now rather than at whatever the next wake would have been.
+  const applyDevice = useCallback((next: DeviceSettings) => {
+    setDevice(next);
+    saveDeviceSettings(next).catch((e) => console.warn("failed to persist device settings", e));
     refreshInfoCollector();
   }, []);
 
@@ -588,8 +604,8 @@ export default function App() {
   // copy of it.
   useEffect(() => {
     if (!viewReady) return;
-    viewRef.current?.setFingerDraw(settings.fingerDraw);
-  }, [settings.fingerDraw, viewReady]);
+    viewRef.current?.setFingerDraw(fingerDraw);
+  }, [fingerDraw, viewReady]);
 
   // Debounced persist of the reading position. A save failure must be visible;
   // silently losing positions looks fine until the app is reopened (pitfall 09).
@@ -2037,6 +2053,8 @@ export default function App() {
         <SettingsView
           settings={settings}
           onSettingsChange={applySettings}
+          device={device}
+          onDeviceChange={applyDevice}
           onClose={() => setShowSettings(false)}
         />
       )}

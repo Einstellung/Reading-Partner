@@ -45,6 +45,24 @@ export function hasWebviewFetch(): boolean {
 	}
 }
 
+// Whether this is a phone or tablet OS rather than a desktop one. It decides the
+// device's role (docs/36): collection needs tens of seconds of live webview per
+// article, and a backgrounded mobile app gets seconds of runtime in total, so
+// mobile is a reader and the choice is not offered there. Deliberately by
+// platform and not by screen size — an iPad runs the desktop shell and is still
+// a reader.
+const MOBILE_PLATFORMS = new Set(["ios", "android"]);
+
+export function isMobilePlatform(): boolean {
+	try {
+		return MOBILE_PLATFORMS.has(platform());
+	} catch {
+		// Not running under Tauri (unit tests, plain-browser dev): treat the dev
+		// machine as the desktop it is.
+		return false;
+	}
+}
+
 export function isIOS(): boolean {
 	try {
 		return platform() === "ios";

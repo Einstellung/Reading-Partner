@@ -9,7 +9,7 @@
 // also what repairs a registration a system upgrade or a cleaner removed.
 
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
-import { loadDeviceSettings, saveDeviceSettings } from "./device";
+import { loadDeviceSettings } from "./device";
 import { platform } from "@tauri-apps/plugin-os";
 
 // Where there is a login sequence to join. Mobile has none — an iOS app does not
@@ -47,11 +47,10 @@ export async function applyStoredAutostart(): Promise<void> {
   }
 }
 
-// The switch. Records the intent first, so a failure to register leaves the
-// stored answer as the user set it and the next startup tries again.
+// The OS half of the switch. The stored intent is the caller's — it holds
+// device.json already — and it records it first, so a failure to register leaves
+// the stored answer as the user set it and the next startup tries again.
 export async function setAutostart(on: boolean): Promise<void> {
-  const settings = await loadDeviceSettings();
-  await saveDeviceSettings({ ...settings, autostart: on });
   if (!hasAutostart()) return;
   if (on) await enable();
   else await disable();

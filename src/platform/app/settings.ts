@@ -101,18 +101,14 @@ export interface Settings {
   // Language the AI writes its user-facing output in. "auto" mirrors the user's
   // own language; every other value pins output to that language.
   aiLanguage: AiLanguage;
-  // Keep the item pool stocked in the background (docs/35). On, sources are
-  // polled on their own intervals while the app is open, so the day's briefing
-  // is assembled from what has already come in — which is the only way a feed
-  // that holds six hours of headlines does not lose the other eighteen. Off,
-  // nothing is collected until a briefing is generated, and that briefing sees
-  // only whatever the feeds happen to be showing at that moment.
-  backgroundCollect: boolean;
-  // Whether a finger may mark the page in the reader. Off means the stylus
-  // writes and the finger only ever moves the page, which is what a device with
-  // a stylus wants; a device without one turns this on to reach annotation at
-  // all. The navigation lock still outranks it: while that is on, nothing draws.
-  fingerDraw: boolean;
+  // backgroundCollect and fingerDraw used to be here and moved to device.json
+  // (docs/36): one is "does this machine collect", the other "does this machine
+  // have a stylus", and neither is an answer the account can give for every
+  // device. The keys are deliberately not deleted from the file — a device still
+  // on the old build reads its own copy, and a fields merge that saw one side
+  // drop a key would carry the deletion to it. They ride through load/save as
+  // unknown keys; nothing here reads them after the one-time migration in
+  // device.ts.
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -127,8 +123,6 @@ export const DEFAULT_SETTINGS: Settings = {
   sttModel: null,
   autoNotes: true,
   aiLanguage: "auto",
-  backgroundCollect: true,
-  fingerDraw: false,
 };
 
 const DEFAULTS = DEFAULT_SETTINGS;
