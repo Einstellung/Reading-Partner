@@ -689,6 +689,7 @@ async function publishClaim(): Promise<void> {
       startedAt: sessionStartedAt,
       now,
     });
+  const wasClaiming = claim.claimedAt !== null;
   claim = {
     ...claim,
     claimedAt: allowed ? (claim.claimedAt ?? now) : null,
@@ -696,6 +697,7 @@ async function publishClaim(): Promise<void> {
     sources: await loadSourceHealth().catch(() => ({})),
     sites: await siteStates(),
   };
+  const took = !wasClaiming && claim.claimedAt !== null;
   try {
     await writeCollectorClaim(claim);
   } catch (e) {
@@ -704,6 +706,15 @@ async function publishClaim(): Promise<void> {
   // The file that decides the election just changed; do not answer from a copy
   // taken before it.
   electionAt = 0;
+  // A machine that has just started claiming was, until a moment ago, one that
+  // declined to poll and declined to generate. Both asked the claim and both got
+  // no for an answer, and neither will ask again on its own — polling waits for
+  // its next wake, which it never scheduled, and the pipeline waits for the next
+  // return to the foreground. So the claim tells them.
+  if (took) {
+    await getInfoCollector().refresh();
+    void getInfoPipeline().init();
+  }
 }
 
 // Whether this machine is the one collecting. False for anything that is not a
@@ -766,7 +777,12 @@ export async function startCollecting(): Promise<void> {
   sessionStartedAt = Date.now();
   unsubSync ??= subscribeSyncStatus((s) => {
     syncing = s.engineStarted;
+    const advanced = s.lastSyncAt !== null && s.lastSyncAt !== lastSyncAt;
     lastSyncAt = s.lastSyncAt;
+    // A pass landing is the thing a held-back claim was waiting for. Without
+    // this it would wait for the next hourly heartbeat instead — an hour of a
+    // machine that is willing, allowed, and doing nothing.
+    if (advanced && claim && claim.claimedAt === null) void publishClaim();
   });
   const prior = await readOwnClaim(currentDeviceId());
   claim = {
