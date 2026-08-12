@@ -185,7 +185,7 @@ test("discovery progress accumulates into the snapshot: total, done, failed, ite
     }),
   );
   p.subscribe(() => snaps.push(p.snapshot()));
-  await p.generate();
+  await p.generate().done;
 
   const discovering = snaps.filter((s) => s.phase === "discovering" && s.collect);
   const last = discovering[discovering.length - 1];
@@ -203,7 +203,7 @@ test("the four phases run in funnel order, each logged with its own timing", asy
   const fx = fixture([source("a")]);
   const p = new InfoPipeline(makeDeps(fx));
   p.subscribe(() => snaps.push(p.snapshot()));
-  await p.generate();
+  await p.generate().done;
 
   const seen: string[] = [];
   for (const s of snaps) if (s.phase !== seen[seen.length - 1]) seen.push(s.phase);
@@ -233,7 +233,7 @@ test("only the items screening kept get bodies fetched and reach triage", async 
       },
     }),
   );
-  await p.generate();
+  await p.generate().done;
 
   expect(fx.screened).toEqual(["keep", "drop", "keep2"]);
   expect(fx.bodies).toEqual(["keep", "keep2"]);
@@ -265,7 +265,7 @@ test("the screen is batched, and every item is judged exactly once", async () =>
       },
     }),
   );
-  await p.generate();
+  await p.generate().done;
 
   // 120 items at the 50-item batch size: two full batches and a remainder.
   expect(sizes.slice().sort((a, b) => b - a)).toEqual([50, 50, 20]);
@@ -291,7 +291,7 @@ test("more keeps than the cap allows: the lowest-confidence ones are cut, and th
     }),
   );
   p.subscribe(() => snaps.push(p.snapshot()));
-  await p.generate();
+  await p.generate().done;
 
   expect(fx.bodies.length).toBe(120);
   // The 20 least certain went; the cut is never silent.
@@ -318,7 +318,7 @@ test("triage activity surfaces streaming char counts, then clears when finished"
     }),
   );
   p.subscribe(() => snaps.push(p.snapshot()));
-  await p.generate();
+  await p.generate().done;
 
   const triaging = snaps.filter((s) => s.phase === "triaging" && s.activity);
   expect(triaging.length).toBeGreaterThan(0);
@@ -339,7 +339,7 @@ test("a collect that yields no items fails the run and leaves an error", async (
   const p = new InfoPipeline(
     makeDeps(fx, { discover: async (_refs, onSettled) => void (await onSettled({ id: "a", items: [] })) }),
   );
-  await p.generate();
+  await p.generate().done;
   const s = p.snapshot();
   expect(s.running).toBe(false);
   expect(s.briefing).toBeNull();
@@ -348,17 +348,66 @@ test("a collect that yields no items fails the run and leaves an error", async (
 
 test("generate saves the day's item snapshot for a later re-triage", async () => {
   const fx = fixture([source("a"), source("b")]);
-  await new InfoPipeline(makeDeps(fx)).generate();
+  await new InfoPipeline(makeDeps(fx)).generate().done;
   expect(fx.disk.items.get(TODAY)!.map((i) => i.id)).toEqual(["a1", "b1"]);
 });
 
 test("a finished run leaves no checkpoint, so the next generate collects everything again", async () => {
   const fx = fixture([source("a"), source("b")]);
   const p = new InfoPipeline(makeDeps(fx));
-  await p.generate();
+  await p.generate().done;
   expect(fx.disk.runs.get(TODAY)).toBeUndefined();
-  await p.generate();
+  await p.generate().done;
   expect(fx.fetched).toEqual(["a", "b", "a", "b"]);
+});
+
+// --- one run at a time, said out loud ---------------------------------------
+//
+// The refusal used to be a bare `return`, indistinguishable from a start: the
+// chat drew a progress card for a run that never began, nothing was ever going
+// to update it, and the companion announced a regeneration that never ran.
+
+test("a start while a run is going is refused, and says so instead of starting a second run", async () => {
+  const fx = fixture([source("a")]);
+  let release = () => {};
+  let reached = () => {};
+  const inDiscovery = new Promise<void>((r) => (reached = r));
+  const p = new InfoPipeline(
+    makeDeps(fx, {
+      discover: async (refs, onSettled) => {
+        for (const r of refs) fx.fetched.push(r.id);
+        reached();
+        await new Promise<void>((r) => (release = r));
+        await onSettled({ id: "a", items: [item("a1")] });
+      },
+    }),
+  );
+  const first = p.generate();
+  expect(first.start).toBe("started");
+  await inDiscovery;
+
+  expect(p.generate().start).toBe("busy");
+  expect(p.retriage().start).toBe("busy");
+  // Refused, not queued: nothing was discovered twice and no second briefing ran.
+  expect(fx.fetched).toEqual(["a"]);
+
+  // The handle a refused caller gets is the run it lost the race to, so waiting
+  // on it waits for the answer the user is actually going to see.
+  const joined = p.generate().done;
+  release();
+  await Promise.all([first.done, joined]);
+  expect(p.snapshot().running).toBe(false);
+  expect(p.snapshot().briefing?.overview).toBe("ov");
+  expect(fx.fetched).toEqual(["a"]);
+});
+
+test("the pipeline takes a start again once the run it refused for has ended", async () => {
+  const fx = fixture([source("a")]);
+  const p = new InfoPipeline(makeDeps(fx));
+  await p.generate().done;
+  const again = p.generate();
+  expect(again.start).toBe("started");
+  await again.done;
 });
 
 // --- resuming an interrupted run -------------------------------------------
@@ -376,7 +425,7 @@ test("a run killed mid-collection resumes: only the source it never got is fetch
       },
     }),
   );
-  void killed.generate();
+  void killed.generate().done;
   await fx.disk.until((s) => s.sources.some((x) => x.id === "a" && x.status === "done"));
   expect(fx.fetched).toEqual(["a", "b"]);
 
@@ -466,7 +515,7 @@ test("an overnight leftover is not resumed, and the next generate collects the d
   expect(fx.fetched).toEqual([]);
   expect(fx.triaged).toBe(0);
 
-  await p.generate();
+  await p.generate().done;
   expect(fx.fetched).toEqual(["a"]);
   expect(fx.disk.items.get(TODAY)!.map((i) => i.id)).toEqual(["a1"]);
   expect(fx.disk.runs.get("2026-07-21")).toBeUndefined();
@@ -494,7 +543,7 @@ test("a stopped run is left parked, and a hand-driven generate continues it", as
   expect(fx.fetched).toEqual([]);
   expect(fx.triaged).toBe(0);
 
-  await new InfoPipeline(makeDeps(fx)).generate();
+  await new InfoPipeline(makeDeps(fx)).generate().done;
   expect(fx.fetched).toEqual(["b"]);
   expect(fx.disk.items.get(TODAY)!.map((i) => i.id)).toEqual(["a1", "b1"]);
 });
@@ -522,7 +571,7 @@ test("a failed run is not resumed on its own; generate retries the sources that 
     // failure leaves on disk, not about the retrying.
     { retryDelayMs: 0 },
   );
-  await p.generate();
+  await p.generate().done;
   expect(p.snapshot().error).toContain("no API key");
   expect(fx.disk.runs.get(TODAY)!.halt).toEqual({ kind: "failed", error: "no API key" });
 
@@ -533,7 +582,7 @@ test("a failed run is not resumed on its own; generate retries the sources that 
 
   // Pressing Generate does: the source that failed gets another go, the one that
   // succeeded is not fetched again.
-  await new InfoPipeline(makeDeps(restarted)).generate();
+  await new InfoPipeline(makeDeps(restarted)).generate().done;
   expect(restarted.fetched).toEqual(["b"]);
   expect(restarted.disk.items.get(TODAY)!.map((i) => i.id)).toEqual(["a1", "b1"]);
 });
@@ -554,7 +603,7 @@ test("a source subscribed to after the run started joins it; one removed is drop
     ],
     items: [item("a1")],
   });
-  await new InfoPipeline(makeDeps(fx)).generate();
+  await new InfoPipeline(makeDeps(fx)).generate().done;
   expect(fx.fetched).toEqual(["c"]);
 });
 
@@ -579,14 +628,14 @@ test("flush writes a checkpoint a failed write left behind", async () => {
       },
     }),
   );
-  void p.generate();
+  void p.generate().done;
   await fx.disk.until((s) => s.sources.some((x) => x.id === "a" && x.status === "done"));
   expect(fx.disk.runs.get(TODAY)!.items.map((i) => i.id)).toEqual(["a1"]);
 });
 
 test("the screen wake lock is held for the run and released however it ends", async () => {
   const fx = fixture();
-  await new InfoPipeline(makeDeps(fx)).generate();
+  await new InfoPipeline(makeDeps(fx)).generate().done;
   expect(fx.awake).toEqual([true, false]);
 
   const failed = fixture();
@@ -597,7 +646,7 @@ test("the screen wake lock is held for the run and released however it ends", as
       },
     }),
     { retryDelayMs: 0 },
-  ).generate();
+  ).generate().done;
   expect(failed.awake).toEqual([true, false]);
 });
 
@@ -613,7 +662,7 @@ test("retriage re-triages the cached snapshot without collecting, skipping the f
     }),
   );
   p.subscribe(() => snaps.push(p.snapshot()));
-  await p.retriage();
+  await p.retriage().done;
 
   expect(fx.fetched).toEqual([]);
   expect(snaps.some((s) => s.phase === "fetching")).toBe(false);
@@ -626,7 +675,7 @@ test("retriage re-triages the cached snapshot without collecting, skipping the f
 test("retriage with no cached items errors instead of producing a briefing", async () => {
   const fx = fixture();
   const p = new InfoPipeline(makeDeps(fx));
-  await p.retriage();
+  await p.retriage().done;
   const s = p.snapshot();
   expect(s.running).toBe(false);
   expect(s.briefing).toBeNull();
@@ -649,11 +698,11 @@ test("generate prunes past days before collecting; retriage never prunes", async
     },
   });
 
-  await new InfoPipeline(deps).generate();
+  await new InfoPipeline(deps).generate().done;
   expect(order).toEqual(["prune", "collect"]);
   expect(pruned).toEqual([TODAY]);
 
-  await new InfoPipeline(deps).retriage();
+  await new InfoPipeline(deps).retriage().done;
   expect(pruned).toEqual([TODAY]);
 });
 
@@ -667,7 +716,7 @@ test("a failing prune does not stop the briefing", async () => {
       triage: async () => ({ ...EMPTY_TRIAGE, overview: "ok" }),
     }),
   );
-  await p.generate();
+  await p.generate().done;
   const s = p.snapshot();
   expect(s.error).toBeNull();
   expect(s.briefing?.overview).toBe("ok");
@@ -685,7 +734,7 @@ test("the reading-side context is loaded and passed into triage", async () => {
       },
     }),
   );
-  await p.generate();
+  await p.generate().done;
   expect(seen).toBe("Reading recently:\n- T: on ch.4");
 });
 
@@ -703,7 +752,7 @@ test("a failing reader-context dep degrades to empty and still triages", async (
       },
     }),
   );
-  await p.generate();
+  await p.generate().done;
   expect(seen).toBe("");
   expect(p.snapshot().briefing?.overview).toBe("ok");
 });
@@ -727,7 +776,7 @@ test("Stop during collection aborts the fetching, keeps what settled, and parks 
     }),
   );
   p.subscribe(() => snaps.push(p.snapshot()));
-  await p.generate();
+  await p.generate().done;
 
   expect(sawAbort).toBe(true);
   // Pressing Stop is answered before the run unwinds.
@@ -756,7 +805,7 @@ test("a second Stop while already stopping changes nothing", async () => {
       },
     }),
   );
-  await p.generate();
+  await p.generate().done;
   expect(aborts).toBe(1);
 });
 
@@ -773,7 +822,7 @@ test("Stop during a re-triage flips stopping too", async () => {
     }),
   );
   p.subscribe(() => snaps.push(p.snapshot()));
-  await p.retriage();
+  await p.retriage().done;
   expect(snaps.some((s) => s.running && s.stopping)).toBe(true);
   expect(p.snapshot().stopping).toBe(false);
 });
@@ -809,7 +858,7 @@ test("Stop while screening parks the run with the verdicts it already bought", a
       },
     }),
   );
-  await p.generate();
+  await p.generate().done;
 
   expect(p.snapshot().error).toBeNull();
   expect(fx.bodies).toEqual([]);
@@ -840,7 +889,7 @@ test("a resumed screen rejudges nothing and rediscovers nothing", async () => {
     halt: { kind: "stopped" },
   });
   const p = new InfoPipeline(makeDeps(fx));
-  await p.generate();
+  await p.generate().done;
 
   expect(fx.fetched).toEqual([]);
   expect(fx.screened).toEqual(["x3"]);
@@ -868,7 +917,7 @@ test("a resumed body fetch pays only for the bodies it does not have", async () 
     halt: { kind: "stopped" },
   });
   const p = new InfoPipeline(makeDeps(fx));
-  await p.generate();
+  await p.generate().done;
 
   expect(fx.fetched).toEqual([]);
   expect(fx.screened).toEqual([]);
@@ -889,7 +938,7 @@ test("Stop while fetching bodies keeps the ones that landed and parks the rest",
       },
     }),
   );
-  await p.generate();
+  await p.generate().done;
 
   expect(fx.triaged).toBe(0);
   const parked = fx.disk.runs.get(TODAY)!;
@@ -914,7 +963,7 @@ test("a source subscribed to mid-run is screened with the rest, and nothing alre
     material: ["a1"],
     halt: { kind: "stopped" },
   });
-  await new InfoPipeline(makeDeps(fx)).generate();
+  await new InfoPipeline(makeDeps(fx)).generate().done;
 
   // Only the new source is discovered, only its item is judged, only its body
   // is fetched — and both items land in the same briefing.
@@ -936,7 +985,7 @@ test("a screening batch that will not parse fails the run, keeping the batches t
     }),
     { retryDelayMs: 0 },
   );
-  await p.generate();
+  await p.generate().done;
 
   expect(p.snapshot().error).toContain("invalid JSON");
   const parked = fx.disk.runs.get(TODAY)!;
@@ -953,7 +1002,7 @@ test("a day where nothing clears the screen still produces a briefing", async ()
         items.map((it) => ({ id: it.id, keep: false, why: "noise", confidence: 3 })),
     }),
   );
-  await p.generate();
+  await p.generate().done;
 
   expect(fx.bodies).toEqual([]);
   expect(fx.triaged).toBe(1);
@@ -996,7 +1045,7 @@ test("nothing is spent unasked without a provider and a source", async () => {
 test("today's briefing already on disk answers the open by itself", async () => {
   const fx = fixture([source("a")]);
   const p = new InfoPipeline(makeDeps(fx, { canAutoGenerate: async () => true }));
-  await p.generate();
+  await p.generate().done;
   expect(fx.triaged).toBe(1);
 
   // Every return to the foreground calls init again; it must stay cheap.
@@ -1028,7 +1077,7 @@ test("a run the user stopped is not restarted by opening the app, however auto-c
 
 test("a hand-driven generate polls every source, whatever the collector's schedule says", async () => {
   const fx = fixture([source("a")]);
-  await new InfoPipeline(makeDeps(fx)).generate();
+  await new InfoPipeline(makeDeps(fx)).generate().done;
   expect(fx.forced).toEqual([true]);
 });
 
@@ -1046,7 +1095,7 @@ test("the pool's items join the run's own, and what it already judged is not jud
       }),
     }),
   );
-  await p.generate();
+  await p.generate().done;
 
   // Only the two nobody had judged reached the screen; only the one with no body
   // was fetched. The pooled count says what the pool contributed.
@@ -1067,7 +1116,7 @@ test("what an earlier day settled is dropped even though the source offered it a
       poolDraw: async () => ({ items: [], verdicts: {}, bodies: {}, settled: ["yesterday"] }),
     }),
   );
-  await p.generate();
+  await p.generate().done;
 
   expect(fx.screened).toEqual(["new"]);
   expect(fx.triagedItems).toEqual(["new"]);
@@ -1087,7 +1136,7 @@ test("the run hands the pool its verdicts at the end of screening and its delive
       },
     }),
   );
-  await p.generate();
+  await p.generate().done;
 
   // Twice: once so a crash before triage does not cost the verdicts, once when
   // the briefing lands so tomorrow leaves what it carried alone.
@@ -1109,7 +1158,7 @@ test("a pool that will not load or save costs requests, never the briefing", asy
       },
     }),
   );
-  await p.generate();
+  await p.generate().done;
 
   expect(p.snapshot().error).toBeNull();
   expect(p.snapshot().briefing?.overview).toBe("ov");

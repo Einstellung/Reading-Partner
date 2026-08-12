@@ -30,7 +30,9 @@ import {
   briefingProgressCard,
   infoBookId,
   profileAppliedNote,
+  runnableJob,
   sourceAddedNote,
+  trackedJob,
   type BriefingJob,
 } from "../../../info/companion/call";
 import { addSource, hasSources } from "../../../info/sources/source-store";
@@ -56,7 +58,7 @@ import {
 } from "../chat/chatParts";
 import type { ComposerVoice } from "../chat/chat";
 import type { ChatMessage } from "../../../ai/providers";
-import type { InfoPipeline } from "../../../info/briefing/pipeline";
+import type { InfoPipeline, RunStart } from "../../../info/briefing/pipeline";
 import type { ProfileUpdateCardData } from "../../../info/briefing/cards";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { ThreadMessage as UiMessage } from "../common/types";
@@ -218,14 +220,23 @@ export function InfoCall({
   // regenerate request; "retriage" re-triages today's cached items with the current
   // profile (no collection). Retry reuses the same card row so progress/error
   // updates in place rather than appending a new row.
-  function runBriefingJob(job: BriefingJob) {
+  //
+  // The pipeline runs one run at a time and says which of the two happened. A
+  // refused start does not get a card of its own — nothing would ever update it,
+  // which is how a regenerate came to sit on its first frame while the run it
+  // collided with went on without it. It joins the run already going instead:
+  // that run's progress is what the user asked to see, and the card opens on its
+  // real phase and settles with it.
+  function runBriefingJob(job: BriefingJob): RunStart {
     const p = pipelineRef.current ?? getInfoPipeline();
     pipelineRef.current = p;
-    lastJobRef.current = job;
+    const asked = runnableJob(job);
+    const { start } = asked === "retriage" ? p.retriage() : p.generate();
+    const tracked = trackedJob(asked, start);
+    lastJobRef.current = tracked;
     awaitingBriefing.current = true;
-    setMessages((prev) => upsertCardRow(prev, BRIEFING_CARD_ID, briefingProgressCard(job, null)));
-    if (job === "retriage") void p.retriage();
-    else void p.generate();
+    setMessages((prev) => upsertCardRow(prev, BRIEFING_CARD_ID, briefingProgressCard(tracked, p.snapshot())));
+    return start;
   }
 
   // Insert a trial's confirm card as its own row just before the streaming reply,
@@ -379,10 +390,10 @@ export function InfoCall({
     abortRef.current = controller;
     setStreaming(true);
     let full = "";
-    // The briefing controller for generate_briefing: honest running state from the
-    // singleton pipeline, and a background job through the one card's lifecycle.
+    // The briefing controller for generate_briefing: a background job through the
+    // one card's lifecycle, answering with whether it started a run or found one
+    // already going, so the companion reports which of the two happened.
     const tools = buildLiveCompanionTools(insertProbeCard, insertProfileCard, {
-      running: () => getInfoPipeline().snapshot().running,
       start: (scope) => runBriefingJob(scope),
     });
 

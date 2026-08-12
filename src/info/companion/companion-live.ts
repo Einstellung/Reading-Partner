@@ -20,13 +20,13 @@ import type { ProbeConfirmCardData } from "../sources/source-cards";
 import type { ProfileUpdateCardData } from "../briefing/cards";
 import { buildCompanionTools, type BriefingScope, type SiteSignInDeps } from "./companion-tools";
 import type { AgentTool } from "../../ai/agent";
+import type { RunStart } from "../briefing/pipeline";
 
-// The briefing controller the host hands in so generate_briefing can honestly
-// report a run in flight and kick a background job through the host's card
-// lifecycle. Kept as a small interface so the pure tool set stays host-agnostic.
+// The briefing controller the host hands in so generate_briefing can kick a
+// background job through the host's card lifecycle and hear whether it started.
+// Kept as a small interface so the pure tool set stays host-agnostic.
 export interface BriefingControl {
-  running(): boolean;
-  start(scope: BriefingScope): void;
+  start(scope: BriefingScope): RunStart;
 }
 
 // The sign-in half, bound to the real windows. The site list is read from the
@@ -69,7 +69,6 @@ export function buildLiveCompanionTools(
     addSource: (d) => addSource(d).then(() => {}),
     onProbeCard,
     onProfileCard,
-    briefingRunning: briefing.running,
     startBriefing: briefing.start,
     siteSignIn: hasWebviewFetch() ? liveSiteSignIn() : undefined,
   });

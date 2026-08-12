@@ -13,6 +13,7 @@ import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../ai/agent";
 import { PROFILE_SKELETON_GUIDANCE } from "../../observation/profile";
 import type { ProfileUpdateCardData } from "../briefing/cards";
+import type { RunStart } from "../briefing/pipeline";
 import { buildSourceTools, sourceToolStatusLabel, type SourceToolDeps } from "../sources/source-tools";
 import {
   resolveSignInSite,
@@ -50,14 +51,16 @@ export interface CompanionToolDeps extends SourceToolDeps {
   // Surface the profile-update confirm card in the chat. The host owns the Apply
   // write; the tool never persists.
   onProfileCard(card: ProfileUpdateCardData): void;
-  // Whether a briefing run is already in progress (the pipeline running guard).
-  // generate_briefing checks this and refuses to start a second run.
-  briefingRunning(): boolean;
   // Kick a background briefing job and return at once: "retriage" re-sorts today's
   // cached items with the current profile (no fetch); "full" re-collects every
   // source and re-triages, overwriting today's briefing. The host owns progress,
   // the ready/failed card, and the completion note; the tool only starts it.
-  startBriefing(scope: BriefingScope): void;
+  //
+  // It answers with what actually happened. Only one run goes at a time, so a
+  // request that arrives during one is refused ("busy") — the host attaches its
+  // progress card to the run already going, and the tool has to tell the user
+  // that instead of reporting a start that never happened.
+  startBriefing(scope: BriefingScope): RunStart;
   // Present only where a sign-in window can really be opened; omitted elsewhere,
   // and then open_site_sign_in is not among the tools.
   siteSignIn?: SiteSignInDeps;
@@ -105,7 +108,7 @@ export function buildUpdateProfileTool(deps: Pick<CompanionToolDeps, "onProfileC
 // It writes nothing itself and never runs on its own initiative (the red line
 // lives here and in the system prompt); it refuses when a run is already going.
 export function buildGenerateBriefingTool(
-  deps: Pick<CompanionToolDeps, "briefingRunning" | "startBriefing">,
+  deps: Pick<CompanionToolDeps, "startBriefing">,
 ): AgentTool {
   return {
     name: "generate_briefing",
@@ -118,7 +121,9 @@ export function buildGenerateBriefingTool(
       "'full' re-collects every source (including any just added) and re-triages, replacing " +
       "today's briefing. It starts a background job and returns at once: tell the user it's " +
       "running and a progress card will show it — do NOT claim the briefing is already " +
-      "regenerated. If a run is already in progress, it will say so instead of starting another.",
+      "regenerated. Only one run goes at a time: if one was already under way this starts " +
+      "NOTHING and says so, and the progress card follows that run instead. Read what it " +
+      "returns and tell the user which of the two happened.",
     parameters: Type.Object({
       scope: Type.String({
         description:
@@ -130,13 +135,14 @@ export function buildGenerateBriefingTool(
       const raw = String(args.scope ?? "").trim();
       const scope: BriefingScope | null = raw === "full" ? "full" : raw === "retriage" ? "retriage" : null;
       if (!scope) throw new Error("generate_briefing needs scope: 'retriage' or 'full'.");
-      if (deps.briefingRunning()) {
+      if (deps.startBriefing(scope) === "busy") {
         return (
-          "A briefing run is already in progress — I will not start another. Its progress card " +
-          "is showing; tell the user it is already running and will update when it settles."
+          "A briefing run was ALREADY under way, so this started nothing — the requested " +
+          `${scope} did not run. The progress card is now following the run already going. ` +
+          "Tell the user a run is already in progress and its result will land when it " +
+          "settles; do not say their request started."
         );
       }
-      deps.startBriefing(scope);
       const what =
         scope === "full"
           ? "Started a full regeneration (re-collecting every source, then re-triaging)"

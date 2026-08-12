@@ -214,6 +214,22 @@ export interface InfoSnapshot {
   error: string | null;
 }
 
+// What a start attempt did. "busy" used to be a silent early return, which is a
+// promise that resolves like a start and changes nothing: the caller drew a
+// progress card for a run that never began, and nothing was ever going to
+// update it. Callers have to read this.
+export type RunStart = "started" | "busy";
+
+// A start attempt: what it did, and when the run it concerns is over — the one
+// this call started, or, when it was refused, the one that was already going.
+// Not a promise of the outcome, because the two answers are needed at different
+// times: "did this start a run" has to be answered now, before anything is
+// drawn, while "is the run finished" cannot be answered for minutes.
+export interface RunHandle {
+  start: RunStart;
+  done: Promise<void>;
+}
+
 function itemsMeta(items: InfoItem[]): Record<string, BriefingItemMeta> {
   const out: Record<string, BriefingItemMeta> = {};
   for (const it of items) {
@@ -262,6 +278,10 @@ export class InfoPipeline {
   // The run in flight and whether it has changes not yet on disk. Null between
   // runs: the checkpoint file, not this field, is what a resume reads.
   private run: InfoRunState | null = null;
+  // The run in flight, as something to await. The UI subscribes instead; this is
+  // for init and for the tests, and it is what a refused start hands back so the
+  // caller can still wait on the run it lost the race to.
+  private current: Promise<void> = Promise.resolve();
   private dirty = false;
   private writing: Promise<void> = Promise.resolve();
   // Whether the run in flight was asked for by hand. It decides one thing: a
@@ -397,7 +417,20 @@ export class InfoPipeline {
     // it and never got an answer. A first briefing of the day is only started
     // when there is something to make it out of and something to make it with.
     if (action === "generate" && !(await this.canAutoGenerate())) return;
-    await this.runRun({ retryFailed: false });
+    // Through launch, not runRun: the guard at the top of this method was read
+    // several awaits ago, and a generate the user asked for in the meantime must
+    // not end up with two runs writing the same checkpoint.
+    await this.launch(() => this.runRun({ retryFailed: false })).done;
+  }
+
+  // One run at a time, and the caller is told which of the two it got. Not async
+  // on purpose: whoever starts a run has to draw something now, and "one was
+  // already going" is not an answer a promise that resolves when the run ends
+  // can give in time.
+  private launch(run: () => Promise<void>): RunHandle {
+    if (this.running) return { start: "busy", done: this.current };
+    this.current = run();
+    return { start: "started", done: this.current };
   }
 
   private async canAutoGenerate(): Promise<boolean> {
@@ -431,24 +464,32 @@ export class InfoPipeline {
   // It is also the resume the user asks for by hand: an unfinished run for today
   // is continued, not restarted, so asking again after a failed triage (a bad
   // key, no network) costs one AI call and no refetching.
-  async generate(): Promise<void> {
-    if (this.running) return;
-    await this.runRun({ retryFailed: true });
+  //
+  // A second call while one is going is refused, and the refusal is the return
+  // value: it used to be a bare `return`, which reads to the caller exactly like
+  // a start — the chat drew a progress card for a run that never began and
+  // nothing was ever going to update it.
+  generate(): RunHandle {
+    return this.launch(() => this.runRun({ retryFailed: true }));
   }
 
   private async runRun(opts: { retryFailed: boolean }): Promise<void> {
     this.running = true;
-    this.byHand = opts.retryFailed;
-    this.stopping = false;
-    this.error = null;
-    this.phase = "discovering";
-    this.collect = null;
-    this.activity = null;
-    this.stopController = new AbortController();
-    this.deps.keepAwake?.(true);
-    this.notify();
-    const date = this.today();
+    // Everything after the flag is inside the try: a throw between setting it
+    // and the try — a listener of notify(), a keepAwake that is not there —
+    // would otherwise leave `running` true for the life of the app, and every
+    // start after it refused.
     try {
+      this.byHand = opts.retryFailed;
+      this.stopping = false;
+      this.error = null;
+      this.phase = "discovering";
+      this.collect = null;
+      this.activity = null;
+      this.stopController = new AbortController();
+      this.deps.keepAwake?.(true);
+      this.notify();
+      const date = this.today();
       await this.prune();
       await this.startOrContinue(date, opts.retryFailed);
       await this.discoverPhase();
@@ -742,20 +783,24 @@ export class InfoPipeline {
   // Used after the user applies a profile change (docs/16): one triage call over
   // the saved item snapshot, reusing the same running/phase/activity machinery so
   // the briefing page and the chat progress card stay in step. A second call
-  // while running is a no-op. It does not touch the run checkpoint: the snapshot
-  // it reads is only ever written by a run that finished.
-  async retriage(): Promise<void> {
-    if (this.running) return;
+  // while running is refused the same way generate is, and says so. It does not
+  // touch the run checkpoint: the snapshot it reads is only ever written by a
+  // run that finished.
+  retriage(): RunHandle {
+    return this.launch(() => this.runRetriage());
+  }
+
+  private async runRetriage(): Promise<void> {
     this.running = true;
-    this.stopping = false;
-    this.error = null;
-    this.phase = "triaging";
-    this.activity = null;
-    this.collect = null;
-    this.stopController = new AbortController();
-    this.deps.keepAwake?.(true);
-    this.notify();
     try {
+      this.stopping = false;
+      this.error = null;
+      this.phase = "triaging";
+      this.activity = null;
+      this.collect = null;
+      this.stopController = new AbortController();
+      this.deps.keepAwake?.(true);
+      this.notify();
       const date = this.today();
       const items = await this.deps.loadItems(date);
       if (items.length === 0) {

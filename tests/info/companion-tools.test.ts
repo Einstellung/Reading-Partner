@@ -19,6 +19,7 @@ import type { ProfileUpdateCardData } from "../../src/info/briefing/cards";
 import type { SourceDescriptor } from "../../src/info/sources/descriptor";
 import type { ExtractReadable } from "../../src/info/extract/readable-select";
 import type { SessionStatus, SignInOutcome } from "../../src/info/extract/webview-session";
+import type { RunStart } from "../../src/info/briefing/pipeline";
 
 const extract: ExtractReadable = () => ({ title: "t", contentHtml: "<p>b</p>", textContent: "b" });
 
@@ -29,8 +30,7 @@ function deps(cards: ProfileUpdateCardData[]) {
     addSource: async () => {},
     onProbeCard: () => {},
     onProfileCard: (c: ProfileUpdateCardData) => cards.push(c),
-    briefingRunning: () => false,
-    startBriefing: () => {},
+    startBriefing: () => "started" as const,
   };
 }
 
@@ -120,7 +120,15 @@ function briefingDeps() {
     setRunning: (v: boolean) => {
       running = v;
     },
-    deps: { briefingRunning: () => running, startBriefing: (s: BriefingScope) => started.push(s) },
+    // The host's own answer: a request that arrives while a run is going joins
+    // that run rather than starting one, and reports "busy" so the tool can say so.
+    deps: {
+      startBriefing: (s: BriefingScope): RunStart => {
+        if (running) return "busy";
+        started.push(s);
+        return "started";
+      },
+    },
   };
 }
 
@@ -140,12 +148,17 @@ test("generate_briefing scope 'retriage' re-sorts without re-collecting", async 
   expect(out).toMatch(/re-triage of today's items/i);
 });
 
-test("generate_briefing refuses to start a second run while one is in progress", async () => {
+// The bug this guards: the refusal used to be invisible to the host, so the chat
+// drew a progress card for a run that never began and the companion reported a
+// start that never happened. The tool has to read the answer and say so.
+test("generate_briefing reports a refusal instead of claiming its request started", async () => {
   const h = briefingDeps();
   h.setRunning(true);
   const out = String(await buildGenerateBriefingTool(h.deps).execute({ scope: "full" }));
   expect(h.started).toEqual([]);
-  expect(out).toMatch(/already in progress/i);
+  expect(out).toMatch(/already under way/i);
+  expect(out).toMatch(/started nothing/i);
+  expect(out).not.toMatch(/Started a full regeneration/i);
 });
 
 test("generate_briefing rejects an unknown scope", async () => {
