@@ -797,7 +797,13 @@ export async function startCollecting(): Promise<void> {
     if (paths.includes(SOURCES_FILE)) getInfoCollector().foreground();
     if (paths.some((p) => ASK_PATH.test(p))) void runPendingAsk();
   });
-  void runPendingAsk();
+  await runPendingAsk();
+  // Only now can the pipeline decide anything: its startup action asks whether
+  // this machine holds the claim, and until this function returned it did not.
+  // The screens call init() too, on mount, and that call arrives before this one
+  // — it finds no claim, declines to generate, and this is the second chance.
+  // Cheap when there is nothing to do, and a no-op if the ask above started one.
+  void getInfoPipeline().init();
 }
 
 // Stop being the collector: give the claim up now rather than letting it expire,
