@@ -67,6 +67,10 @@ const RECORD_FILES = new Set([
   "info-sources.json",
   "info-feedback.jsonl",
   "saved-articles.json",
+  // What the collector has already put in a briefing (docs/35). Not derived —
+  // losing it means pushing the same item twice — and it travels so that a
+  // machine taking over collection knows what its predecessor already sent.
+  "info-pool-marks.json",
 ]);
 
 export function strategyFor(path: string): MergeStrategy {
