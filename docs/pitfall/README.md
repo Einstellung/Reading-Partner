@@ -126,6 +126,7 @@
 - [112-wry-builds-its-own-window-for-a-popup](./112-wry-builds-its-own-window-for-a-popup.md) — `on_new_window` 设 `Allow` 之后，弹窗是 wry 自己建的 GTK 窗口：不是 Tauri 窗口、导航拦截看不到、拿不到句柄，而弹窗 `close()` 只销毁 webview 不销毁窗口（这半读源码得出，未验）；用 toplevel 快照差集在登录结束时清扫
 - [113-two-harnesses-readings-are-not-a-before-and-after](./113-two-harnesses-readings-are-not-a-before-and-after.md) — 取正文硬等 15 秒的依据是「fetcher 拿到 735、spike 量到 1345」，可两个数出自两个 harness 且都等了 15 秒，说明不了读早了；实测正文在 `finished` 后第一次 poll（2ms / 55ms）就是全的、45 秒不变，下限值 0 个字符。判据要同 harness 前后对比，用 `RP_WEBVIEW_FETCH_TRACE` 录填充曲线一次回放所有候选规则
 - [114-httponly-bot-cookies-land-before-load-finished](./114-httponly-bot-cookies-land-before-load-finished.md) — 预热睡 15 秒的理由是「PX 的 cookie 是 httpOnly 没东西可 poll」，但看不见的只是注入的 JS：WebKitGTK 边跑边把 jar 写到 `<profile>/cookies`，实测 `_px3` 在 +6.5s 就落盘，而那次 `finished` 60 秒没来。预热改成和取正文同一条判据（不再变化且不是拦截页，1.5 秒）
+- [115-the-cookie-count-does-not-say-the-warm-up-worked](./115-the-cookie-count-does-not-say-the-warm-up-worked.md) — 预热改看 jar 之后，"该站 cookie 条数不再增长"两头都不成立：停在服务端那几条上的加载会被判成功（`_px3` 根本没来），热 profile 上重写 13 行而条数不变的加载会被判成什么都没发生；判据要看与顺序无关的行内容指纹变了几次，安静 6 秒（实测一次加载内部最宽间隔 3.25s，写完之后下一件事在 30 秒开外）
 
 ## 界面与布局
 

@@ -25,6 +25,7 @@ use std::time::{Duration, Instant};
 
 use tauri::{AppHandle, Manager, Runtime, WindowEvent};
 
+use super::jar;
 use super::policy::{self, Status};
 use super::{
     build_window, connect_engine_signals, extract, profile_dir, wait_for_load, Chrome, LiveGuard,
@@ -315,7 +316,7 @@ pub async fn clear_site_cookies(app: AppHandle, host: String) -> Result<Vec<Stri
 /// `<profile>/cookies` in the Netscape text format (see the module note in
 /// mod.rs), so this is a file, not a database.
 fn read_jar(profile: &PathBuf) -> String {
-    std::fs::read_to_string(profile.join("cookies")).unwrap_or_default()
+    jar::read(profile)
 }
 
 /// Every domain in the jar that belongs to `host`'s site: the host itself, its
@@ -326,27 +327,15 @@ fn read_jar(profile: &PathBuf) -> String {
 /// Deliberately not the other direction: a cookie on a shorter domain than the
 /// one named is some other site's business.
 pub fn jar_domains(jar: &str, host: &str) -> Vec<String> {
-    let host = host.trim().trim_end_matches('.').to_ascii_lowercase();
-    let bare = host.strip_prefix("www.").unwrap_or(&host).to_string();
-    let suffix = format!(".{bare}");
+    // The row parse is jar.rs's: the httpOnly marker makes those rows look like
+    // comments, and the warm-up reads the same file for a different reason.
+    let bare = jar::site_of(host);
     let mut out: Vec<String> = Vec::new();
     for line in jar.lines() {
-        let Some(raw) = line.split('\t').next() else {
+        let Some(plain) = jar::row_domain(line) else {
             continue;
         };
-        let raw = raw.trim();
-        if raw.is_empty() {
-            continue;
-        }
-        // The jar marks httpOnly rows with a comment-looking prefix; the rest of
-        // a line starting with # is a real comment.
-        let domain = match raw.strip_prefix("#HttpOnly_") {
-            Some(rest) => rest,
-            None if raw.starts_with('#') => continue,
-            None => raw,
-        };
-        let plain = domain.trim_start_matches('.').to_ascii_lowercase();
-        if plain != bare && !plain.ends_with(&suffix) {
+        if !jar::belongs_to(&plain, &bare) {
             continue;
         }
         for spelling in [plain.clone(), format!(".{plain}")] {

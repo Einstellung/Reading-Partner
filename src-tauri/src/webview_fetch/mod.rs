@@ -43,6 +43,7 @@ use std::time::{Duration, Instant};
 use tauri::webview::PageLoadEvent;
 use tauri::{AppHandle, Manager, Runtime, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
+pub mod jar;
 pub mod policy;
 pub mod session;
 
@@ -220,7 +221,9 @@ fn fetch_blocking<R: Runtime>(app: &AppHandle<R>, target: Url) -> FetchResult {
     let mut warmed = false;
 
     // Warm-up. The homepage load is what puts the bot-detection cookies in the
-    // jar; without it the article is a captcha page, every time.
+    // jar; without it the article is a captcha page, every time. When it is
+    // done is decided by the jar and not by the homepage's load event, which on
+    // the site this exists for arrives about a third of the time (jar.rs).
     if let Some(home) = policy::warmup_target(&target) {
         let needs = state
             .ledger
@@ -354,31 +357,87 @@ fn run_page<R: Runtime>(
         return PageOutcome::failed(Status::Network, format!("navigate failed: {err}"));
     }
 
-    let load_timeout = match phase {
-        Phase::Warmup => policy::WARMUP_LOAD_TIMEOUT,
-        Phase::Article => policy::LOAD_TIMEOUT,
-    };
+    // The two phases wait for different things. An article is wanted for its
+    // DOM, so it waits for the page. A warm-up is wanted for its cookies, and
+    // those land in the jar long before the homepage reports itself loaded —
+    // often when it never reports at all (jar.rs).
+    //
+    // RP-LOAD is only printed where a load event actually arrived. A warm-up
+    // that ended on the jar never got one, and jar.rs traces that path itself.
     let navigated = Instant::now();
-    let outcome = match wait_for_load(&rx, load_timeout, started) {
-        Ok(()) => {
-            if trace_config().is_some() {
-                println!(
-                    "RP-LOAD {}",
-                    serde_json::json!({
-                        "phase": if phase == Phase::Warmup { "warmup" } else { "article" },
-                        "url": target.to_string(),
-                        "loadMs": navigated.elapsed().as_millis() as u64,
-                        "at": unix_millis(),
-                    })
-                );
+    let outcome = match phase {
+        Phase::Warmup => match jar::wait_for_warm_jar(&rx, profile, target, started) {
+            Ok(jar::Warm::Loaded) => {
+                trace_load(phase, target, navigated);
+                settle_and_extract(&window, &rx, phase, started)
             }
-            settle_and_extract(&window, &rx, phase, started)
-        }
-        Err(outcome) => outcome,
+            Ok(jar::Warm::Jar(report)) => warmed_by_jar(&window, target, report),
+            Err(outcome) => outcome,
+        },
+        Phase::Article => match wait_for_load(&rx, policy::LOAD_TIMEOUT, started) {
+            Ok(()) => {
+                trace_load(phase, target, navigated);
+                settle_and_extract(&window, &rx, phase, started)
+            }
+            Err(outcome) => outcome,
+        },
     };
 
     drop(guard);
     outcome
+}
+
+/// End a warm-up that the cookie jar answered for.
+///
+/// There is nothing to settle: the page may still be loading, and a homepage
+/// has no article to wait for anyway. The one thing still worth asking is
+/// whether the homepage is itself a bot wall, which is a better answer than the
+/// article's would be — so the document is read once, and only when the jar
+/// settled while the page was alive. After a load timeout the page has spent a
+/// minute not answering and asking it for a DOM only buys another `EVAL_TIMEOUT`
+/// of the same silence. A page too broken to read is not a failure here either:
+/// a warm jar is a warm jar.
+/// Dev-only: record how long the navigation took to report itself loaded.
+/// Only called where a load event really arrived (docs/pitfall/114).
+fn trace_load(phase: Phase, target: &Url, navigated: Instant) {
+    if trace_config().is_none() {
+        return;
+    }
+    println!(
+        "RP-LOAD {}",
+        serde_json::json!({
+            "phase": if phase == Phase::Warmup { "warmup" } else { "article" },
+            "url": target.to_string(),
+            "loadMs": navigated.elapsed().as_millis() as u64,
+            "at": unix_millis(),
+        })
+    );
+}
+
+fn warmed_by_jar<R: Runtime>(
+    window: &WebviewWindow<R>,
+    target: &Url,
+    report: jar::Report,
+) -> PageOutcome {
+    eprintln!("webview-fetch: {target} warmed without a load event — {report}");
+    if report.settled {
+        if let Ok(readout) = extract(window) {
+            if policy::looks_blocked(&readout) {
+                return PageOutcome {
+                    status: Status::Blocked,
+                    detail: Some(format!("bot wall: {}", readout.title)),
+                    readout: Some(readout),
+                };
+            }
+        }
+    }
+    // `Empty` and not `Ok`: nothing was extracted, and a warm-up is allowed to
+    // come back empty — that is what a homepage does.
+    PageOutcome {
+        status: Status::Empty,
+        readout: None,
+        detail: Some(report.to_string()),
+    }
 }
 
 /// Removes the label from the live set and destroys the window, whichever way
