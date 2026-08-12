@@ -14,6 +14,10 @@
 // Both edges are therefore a state, not an event: awake means visible *and*
 // focused, and only a change of that state is reported. Minimising fires blur
 // and visibilitychange together; the caller hears about it once.
+//
+// Counting blur as leaving is right for a reader and wrong for a collector, so
+// the way out has a second, much narrower subscription: observeAppExit, at the
+// bottom of this file.
 
 export interface AppLifecycleHandlers {
   // Visible and focused again, after being one or the other.
@@ -60,5 +64,27 @@ export function observeAppLifecycle(
     win.removeEventListener("focus", focused);
     win.removeEventListener("blur", away);
     win.removeEventListener("pagehide", away);
+  };
+}
+
+// The way out, and only that. `pagehide` is the one event that means the page
+// itself is going: a desktop window that is unfocused, covered or minimised
+// keeps running its timers, and work that must not stop while the machine is
+// left alone — background collection above all (docs/36) — has to hang off this
+// rather than off the foreground state. On iOS the same event is the way out of
+// the app, where the webview really is about to be suspended, so this doubles as
+// the mobile suspend hook and the behaviour there is unchanged.
+//
+// Deliberately not deduplicated and deliberately without a matching "back"
+// edge: pagehide can fire more than once, everything hung off it is idempotent,
+// and anything that must be paired with a return to the front belongs on
+// observeAppLifecycle instead.
+export function observeAppExit(
+  win: Pick<LifecycleTarget, "addEventListener" | "removeEventListener">,
+  onExit: () => void,
+): () => void {
+  win.addEventListener("pagehide", onExit);
+  return () => {
+    win.removeEventListener("pagehide", onExit);
   };
 }

@@ -9,7 +9,7 @@ import { loadSettings } from "../../platform/app/settings";
 import type { AiCallOptions } from "../../ai/watchdog";
 import { INFO_EVENT_TOPIC, logEvent } from "../../platform/app/events";
 import { newTally, reportParse } from "../../platform/app/structured-output";
-import { observeAppLifecycle } from "../../platform/app/lifecycle";
+import { observeAppExit, observeAppLifecycle } from "../../platform/app/lifecycle";
 import { browserWakeLockTarget, createScreenWakeLock } from "../../platform/app/wake-lock";
 import { collectAll, fetchBodies as fetchArticleBodies } from "../sources/engine";
 import { fetchArticleViaWebview } from "../extract/webview-article";
@@ -410,6 +410,13 @@ export function getInfoPipeline(): InfoPipeline {
     // init() is the day's briefing trigger and is cheap when there is nothing to
     // do, which is also how a day that turned over while the app sat open is
     // noticed.
+    //
+    // The collector's schedule is not on this edge. Leaving the foreground means
+    // blur as well as hide (docs/pitfall/69), and a desktop machine whose window
+    // is unfocused or minimised while its owner reads on a phone is exactly the
+    // state background collection exists for (docs/36). Its timer therefore hangs
+    // off the way out of the page and nothing else; only foreground() stays here,
+    // to catch up a webview that really was suspended.
     const p = pipeline;
     observeAppLifecycle(window, {
       onForeground: () => {
@@ -417,9 +424,11 @@ export function getInfoPipeline(): InfoPipeline {
         void p.init();
       },
       onBackground: () => {
-        getInfoCollector().background();
         void p.flush();
       },
+    });
+    observeAppExit(window, () => {
+      getInfoCollector().suspend();
     });
     void getInfoCollector().refresh();
   }

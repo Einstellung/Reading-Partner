@@ -6,7 +6,12 @@
 // polling is its own activity now, on each source's own interval, and generating
 // a briefing draws from what the polling has already brought in.
 //
-// It has to survive a phone. A backgrounded webview stops running JavaScript,
+// It has to survive being left alone. On the desktop that is the normal state
+// of a collector (docs/36): the window is minimised or behind something else
+// while its owner reads on a phone, and the polling has to go on through it.
+// Only the page going away stops the schedule — see suspend().
+//
+// It has to survive a phone too. A backgrounded webview stops running JavaScript,
 // and iOS may suspend or kill it outright, so a timer is a hint and nothing
 // more: whether a source is due is answered from the clock and the last-polled
 // timestamps on disk, and coming back to the foreground always runs a cycle. A
@@ -241,9 +246,18 @@ export class InfoCollector {
     void this.cycle();
   }
 
-  // Going away. The timer would not fire anyway on a suspended webview; letting
-  // it stand would only mean a stale wake on the way back.
-  background(): void {
+  // The page is going away: the app is quitting, or iOS is about to suspend the
+  // webview. Both things here are about that and only that — a timer that will
+  // not fire is dropped, and a request that would hang unanswered in a suspended
+  // process is aborted.
+  //
+  // Not the same edge as leaving the foreground (docs/36). A desktop window that
+  // lost focus, or sits minimised while its owner reads on a phone, is the state
+  // background collection exists for: its timers keep running and its in-flight
+  // poll is a request already paid for, which an abort would throw away without
+  // even marking the source polled. Whoever wires this up wires it to
+  // observeAppExit, never to onBackground.
+  suspend(): void {
     this.cancelTimer?.();
     this.cancelTimer = null;
     this.controller?.abort();

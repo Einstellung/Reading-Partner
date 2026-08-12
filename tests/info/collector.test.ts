@@ -148,8 +148,8 @@ test("a suspended webview catches up on the way back in, without a timer having 
   await settle();
   expect(h.polls.length).toBe(1);
 
-  // The app goes away; iOS suspends it. No timer runs for six hours.
-  c.background();
+  // The page goes away; iOS suspends it. No timer runs for six hours.
+  c.suspend();
   expect(h.timer).toBeNull();
   h.now += 6 * 60 * MIN;
 
@@ -232,8 +232,10 @@ test("a cycle the app interrupted does not count as polled, and comes back a min
   await settle();
   expect(h.polls).toEqual([["fast", "slow"]]);
 
-  // The app goes away — on iOS a blur is enough — with the request in flight.
-  c.background();
+  // The page goes away — on iOS that is a backgrounded app — with the request
+  // still in flight. Losing the desktop window's focus is not this edge and
+  // leaves the request alone (docs/36).
+  c.suspend();
   await h.release();
 
   // The headlines that did settle are kept: they cost a request already.

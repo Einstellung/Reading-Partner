@@ -27,3 +27,5 @@ iOS WKWebView 没实测——本机没有 macOS 也没有模拟器。
 把"在前台"当成一个状态而不是一个事件：可见且有焦点，由 `visibilitychange` / `focus` / `blur` / `pagehide` 四个事件共同维护，只在状态翻转时通知一次（`src/platform/app/lifecycle.ts`）。最小化同时发 blur 和 visibilitychange，调用方只听到一次。
 
 因为焦点会回弹，两侧的代价都要算：离开那一侧必须便宜（同步引擎先看本地有没有改动，没有就一个请求都不发），回来那一侧必须有下限（30 秒内不重复跑 pass）。
+
+把 blur 算成离开对同步是对的，对后台采集是错的：桌面机窗口最小化摆一边正是它该采集的时候。同一个文件里另出一个只听 `pagehide` 的 `observeAppExit`，采集的定时器挂那上面（docs/36）。
