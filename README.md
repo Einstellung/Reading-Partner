@@ -49,10 +49,6 @@ Each source is a small declarative JSON descriptor — how to discover its items
 
 The Sources page is the account of what you subscribe to: one row per source with its lane and pipe type, an on/off toggle, a health dot (green when the last run succeeded, amber when it failed — click for the last-success time and the error), and a delete. A box at the top takes a pasted site or RSS URL and probes, trials, and adds it in place, without going through the chat. There is no ordering or grouping — ranking is triage's job.
 
-![First run: the AI opens a conversation to set up your sources](docs/assets/subscribe-talking.png)
-
-![The Sources page: health dots, toggles, and the paste-a-URL box](docs/assets/sources-list.png)
-
 ## Sources you sign in to
 
 Some sites give an anonymous reader five hundred characters of a story that runs to two thousand for a subscriber. A source can declare that its body text comes from a real browser engine and name the site's own login page; you sign in there yourself, in a window the app opens onto that page. The cookie stays in that window's jar. The app stores no password, fetches on nobody's behalf, and the text it gets goes to your own devices and nowhere else. The Sources page carries a row per site with whether the session still holds, and a check that reloads the front page to find out.
