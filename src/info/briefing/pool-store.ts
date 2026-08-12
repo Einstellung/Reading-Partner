@@ -80,6 +80,31 @@ export async function savePoolPolled(pool: Pool): Promise<void> {
   await writeTextAtomic(POLLED_FILE, JSON.stringify({ version: POOL_VERSION, lastPolled: pool.lastPolled }));
 }
 
+// Everything the pool leaves on disk except the marks: the day files and the
+// poll schedule. For a device that has stopped collecting (docs/36) — a phone
+// that ran an older build has a pool nobody will ever draw from, and nobody left
+// to evict it either.
+//
+// The marks are deliberately kept: they are in the sync range, and they are the
+// collector's record of what it has already put in a briefing.
+export async function removeCollectedPoolFiles(): Promise<void> {
+  let names: string[] = [];
+  try {
+    const entries = await readDir("", { baseDir: BaseDirectory.AppData });
+    names = entries.filter((e) => e.isFile).map((e) => e.name);
+  } catch {
+    return;
+  }
+  const doomed = names.filter((n) => DAY_FILE.test(n) || n === POLLED_FILE);
+  for (const name of doomed) {
+    try {
+      await remove(name, { baseDir: BaseDirectory.AppData });
+    } catch {
+      // Locked or already gone; keep going through the rest.
+    }
+  }
+}
+
 // Best effort: a day file that will not go away costs disk, not correctness —
 // the pool in memory has already dropped it, so nothing reads it again.
 export async function removePoolDays(dates: string[]): Promise<void> {

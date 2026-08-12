@@ -43,6 +43,10 @@ export function recordShape(path: string): RecordShape | null {
   if (name === "topics.json") return { kind: "array", container: "topics", idField: "id" };
   if (name === "library.json") return { kind: "map", container: "books", idField: null };
   if (name === "reading-state.json") return { kind: "map", container: "states", idField: null };
+  // Keyed by item id (info/extract/id.ts), which is a hash of source:key and so
+  // is the same on every device. `version` sits beside `marks` as a wrapper key
+  // and readCollection keeps it.
+  if (name === "info-pool-marks.json") return { kind: "map", container: "marks", idField: null };
   if (/^annotations-.+\.json$/.test(name)) return { kind: "array", container: null, idField: "id" };
   if (/^threads-.+\.json$/.test(name)) return { kind: "map", container: "threads", idField: null };
   return null;

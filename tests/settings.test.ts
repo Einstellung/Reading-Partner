@@ -30,10 +30,20 @@ test("thinking defaults are low (chat) and medium (prep)", () => {
   expect(DEFAULT_SETTINGS.prepThinking).toBe("medium");
 });
 
-// The reader routes a finger by this one boolean. It has to default to off, or
-// a drawing tool takes the finger away from moving the page.
-test("the finger only ever moves the page until the setting says otherwise", () => {
-  expect(DEFAULT_SETTINGS.fingerDraw).toBe(false);
+// fingerDraw and backgroundCollect moved to device.json (docs/36). The keys stay
+// on disk for a device still on the old build, so they have to survive a
+// load/save round trip here — but nothing in the account's shape declares them
+// any more, and no default here can answer for another machine.
+test("the two per-device settings are gone from the account's shape", () => {
+  expect("fingerDraw" in DEFAULT_SETTINGS).toBe(false);
+  expect("backgroundCollect" in DEFAULT_SETTINGS).toBe(false);
+});
+
+test("an old file's per-device keys are carried through untouched", async () => {
+  fileContent = JSON.stringify({ defaultProviderId: "openai", fingerDraw: true, backgroundCollect: false });
+  const s = (await loadSettings()) as unknown as Record<string, unknown>;
+  expect(s.fingerDraw).toBe(true);
+  expect(s.backgroundCollect).toBe(false);
 });
 
 test("toReasoning maps off -> undefined and passes the levels through", () => {
@@ -62,8 +72,6 @@ test("loadSettings round-trips a fully persisted object", async () => {
     sttModel: "sense",
     autoNotes: false,
     aiLanguage: "zh-CN",
-    backgroundCollect: false,
-    fingerDraw: true,
   };
   fileContent = JSON.stringify(saved);
   const s = await loadSettings();

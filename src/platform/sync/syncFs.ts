@@ -71,6 +71,17 @@ const ROOT_FILES = new Set([
   // along inside the records for now — stripped of inlined images, so a record
   // is text, not re-encoded JPEGs.
   "saved-articles.json",
+  // What the collector publishes for the readers (docs/36): the briefing itself,
+  // and the bodies of the items it put in the three tiers, with every <img>
+  // taken out. Fixed names, replaced whole — the day's briefing-<date>.json and
+  // its article cache stay derived and stay local, so nothing here grows by the
+  // day and nothing has to be deleted remotely.
+  "info-briefing.json",
+  "info-bodies.json",
+  // Which items have already been briefed (docs/35). Not derived: losing it
+  // means the same item is pushed a second time, and a machine that takes over
+  // collection has to know what its predecessor already sent.
+  "info-pool-marks.json",
 ]);
 
 // Whether an AppData-relative path (forward-slash separators) is synced.
@@ -88,7 +99,13 @@ export function inSyncRange(path: string): boolean {
       // order the reader put it in. Nothing can rebuild it from the books, so it
       // travels like marks and threads rather than like a cache. The deck it
       // produces (slides/**) stays out: that is a build output.
-      /^talk-.+\.json$/.test(top)
+      /^talk-.+\.json$/.test(top) ||
+      // The two files devices leave for each other (docs/36). One per device and
+      // written by that device alone, so there is never a merge to do: a
+      // collector says who it is and when it was last alive, and a reader asks
+      // for a briefing it cannot build itself.
+      /^info-collector-.+\.json$/.test(top) ||
+      /^info-ask-.+\.json$/.test(top)
     );
   }
   // Per-topic AI observations: every file under memory-<topicId>/ (entries,

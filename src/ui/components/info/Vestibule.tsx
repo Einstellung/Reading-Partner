@@ -13,6 +13,8 @@ export function Vestibule({
   snap,
   configured,
   hasSources,
+  collecting,
+  notices,
   onContinue,
   onOpenLibrary,
   onAsk,
@@ -25,6 +27,8 @@ export function Vestibule({
   snap: InfoSnapshot | null;
   configured: boolean;
   hasSources: boolean | null;
+  collecting: boolean;
+  notices: string[];
   onContinue: () => void;
   onOpenLibrary: () => void;
   onAsk: () => void;
@@ -67,6 +71,8 @@ export function Vestibule({
             snap={snap}
             configured={configured}
             hasSources={hasSources}
+            collecting={collecting}
+            notices={notices}
             onAsk={onAsk}
             onStop={onStop}
             onOpen={onOpenBriefing}

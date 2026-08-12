@@ -36,6 +36,14 @@ test("core user-data files are in range", () => {
     // Articles kept out of a briefing (docs/21): the reader's own picks, so they
     // travel — unlike the daily briefing/article caches they came from.
     "saved-articles.json",
+    // What a collector publishes for the readers (docs/36), and the two files
+    // devices leave for each other: who is collecting, and a reader asking for a
+    // briefing it cannot build itself.
+    "info-briefing.json",
+    "info-bodies.json",
+    "info-pool-marks.json",
+    "info-collector-4d9f1b0a.json",
+    "info-ask-4d9f1b0a.json",
   ]) {
     expect(inSyncRange(p)).toBe(true);
   }
@@ -71,8 +79,18 @@ test("caches, logs, sync internals, and book blobs are out of range", () => {
     "library/abc123.pdf",
     "images/threads/t1/photo.png",
     // Info triage: the daily briefing and article cache are derived, not synced.
+    // What the readers get is the collector's published pair above, which does
+    // not grow by the day (docs/36).
     "briefing-2026-07-21.json",
     "info-articles-2026-07-21.json",
+    "info-items-2026-07-21.json",
+    "info-run-2026-07-21.json",
+    "info-pool-2026-07-21.json",
+    "info-pool-polled.json",
+    // Cookies never leave the machine that signed in, and a source's last
+    // success is that machine's own record (docs/36).
+    "info-site-sessions.json",
+    "info-source-health.json",
     // Per-device settings (docs/36). One machine starting with the computer says
     // nothing about another, and there is no merge that could resolve the two.
     "device.json",

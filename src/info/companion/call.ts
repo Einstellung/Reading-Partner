@@ -92,6 +92,26 @@ function failureNote(job: BriefingJob, error: string | null): string {
   return `The briefing ${verb} failed: ${error || "unknown error"}.`;
 }
 
+// What the thread says when the request went to another machine (docs/36). No
+// progress card and no estimate: the round trip is an upload, then whenever the
+// collector next syncs, then the collecting itself, and a countdown over three
+// unknowns is a number that would be wrong.
+export function askSentNote(job: BriefingJob, status?: string): string {
+  const what = job === "retriage" ? "re-sort today's items" : "collect a fresh briefing";
+  return (
+    `I have asked the computer that collects your sources to ${what}. It will pick the request ` +
+    `up the next time it syncs, and the new briefing will appear here when it is done. Nothing ` +
+    `is running on this device.` +
+    // Whatever is known about that machine, so the sentence is not a promise
+    // made on its behalf. A request it never picks up expires in six hours.
+    (status ? ` ${status}` : "")
+  );
+}
+
+export const ASK_FAILED_NOTE =
+  "I could not leave the request for the collecting computer — the file could not be written. " +
+  "Nothing has been asked for.";
+
 // The progress card for a job. Before the pipeline has reported anything (the
 // card appears the moment the job starts) the phase comes from the job itself —
 // a re-triage never fetches; afterwards it comes from the snapshot.

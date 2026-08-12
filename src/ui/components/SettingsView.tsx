@@ -31,6 +31,7 @@ import { useEffect, useState } from "react";
 
 import { LICENSE_NAME, readAppVersion, UNPACKAGED_VERSION } from "../../platform/app/version";
 import { type Settings } from "../../platform/app/settings";
+import { type DeviceSettings } from "../../platform/app/device";
 import { cn } from "./lib/utils";
 import AccountPanel from "./settings/AccountPanel";
 import FeaturesPanel from "./settings/FeaturesPanel";
@@ -43,6 +44,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 interface SettingsViewProps {
   settings: Settings;
   onSettingsChange: (next: Settings) => void;
+  // This machine's own settings (docs/36), null until device.json has been read.
+  // A second file with second rules, so it travels as its own pair rather than
+  // being folded into Settings.
+  device: DeviceSettings | null;
+  onDeviceChange: (next: DeviceSettings) => void;
   onClose: () => void;
 }
 
@@ -71,7 +77,13 @@ const TAB_LIST =
 const TAB_TRIGGER =
   "sm:grow-0 sm:justify-start sm:px-3 sm:data-[state=active]:bg-muted sm:data-[state=active]:shadow-none";
 
-export default function SettingsView({ settings, onSettingsChange, onClose }: SettingsViewProps) {
+export default function SettingsView({
+  settings,
+  onSettingsChange,
+  device,
+  onDeviceChange,
+  onClose,
+}: SettingsViewProps) {
   return (
     <Dialog
       open
@@ -125,7 +137,12 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
               <AccountPanel settings={settings} onSettingsChange={onSettingsChange} />
             </TabsContent>
             <TabsContent value="features" className={TAB_PANEL}>
-              <FeaturesPanel settings={settings} onSettingsChange={onSettingsChange} />
+              <FeaturesPanel
+                settings={settings}
+                onSettingsChange={onSettingsChange}
+                device={device}
+                onDeviceChange={onDeviceChange}
+              />
             </TabsContent>
             <TabsContent value="optional" className={TAB_PANEL}>
               <OptionalPanel settings={settings} onSettingsChange={onSettingsChange} />

@@ -23,6 +23,7 @@ import {
   saveSettings,
   type Settings,
 } from "./platform/app/settings";
+import { initDeviceSettings, saveDeviceSettings, type DeviceSettings } from "./platform/app/device";
 import { enforceKnownModel, listProviders, type ProviderInfo } from "./ai/aiClient";
 import {
   loadSavedArticles,
@@ -51,7 +52,6 @@ import SavedArticleView from "./ui/components/library/SavedArticleView";
 import SettingsView from "./ui/components/SettingsView";
 import Toast, { useToasts } from "./ui/components/common/Toast";
 import { useSyncHealth } from "./ui/components/common/useSyncHealth";
-import { refreshInfoCollector } from "./info/briefing/live";
 
 // InfoHome's screen for a stack entry, or null on the ones it does not draw.
 // Null keeps it mounted with its pipeline and its opened article intact, the
@@ -77,6 +77,10 @@ export default function PhoneApp() {
   // other place to file one from. The one being read is a stack entry.
   const [savedArticles, setSavedArticles] = useState<SavedArticle[]>([]);
   const [settings, setSettings] = useState<Settings>({ ...DEFAULT_SETTINGS });
+  // This phone's own settings (docs/36), null until device.json has been read.
+  // A phone is always a reader, so nothing here changes what it collects — it is
+  // held for the Settings panel and for the identity the ask files are named by.
+  const [device, setDevice] = useState<DeviceSettings | null>(null);
   const [providersInfo, setProvidersInfo] = useState<ProviderInfo[]>([]);
   const { toasts, push: pushToast, dismiss: dismissToast } = useToasts();
 
@@ -140,6 +144,9 @@ export default function PhoneApp() {
         }
       })
       .catch(() => {});
+    initDeviceSettings()
+      .then(setDevice)
+      .catch((e) => console.warn("failed to read device settings", e));
     onSettingsSaveError((e) => {
       console.error("failed to persist settings", e);
       pushToast("warn", "Settings could not be saved");
@@ -219,6 +226,7 @@ export default function PhoneApp() {
           <InfoHome
             screen={infoScreenFor(base)}
             onNavigate={onNavigate}
+            role={device?.role ?? null}
             configured={configured}
             onOpenSettings={openSettings}
             onTopicsChanged={refreshSavedArticles}
@@ -264,7 +272,13 @@ export default function PhoneApp() {
             onSettingsChange={(next) => {
               setSettings(next);
               saveSettings(next);
-              refreshInfoCollector();
+            }}
+            device={device}
+            onDeviceChange={(next) => {
+              setDevice(next);
+              saveDeviceSettings(next).catch((e) =>
+                console.warn("failed to persist device settings", e),
+              );
             }}
             onClose={goBack}
           />

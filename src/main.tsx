@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { installFetchBridge } from "./ai/fetch-bridge";
 import { applyStoredAutostart } from "./platform/app/autostart";
+import { initDeviceSettings } from "./platform/app/device";
 import { detectShell } from "./platform/app/shell";
 import "./styles.css";
 
@@ -41,10 +42,13 @@ if (import.meta.env.VITE_SMOKE === "1") {
   // load. Hence the dynamic import.
   installFetchBridge();
 
-  // Make the login sequence agree with what this device asked for (docs/36).
-  // Here rather than in a shell, because both shells run on a desktop and the
+  // This machine's own file (docs/36), read before anything asks what the
+  // machine is for. Then make the login sequence agree with what it asked for —
+  // here rather than in a shell, because both shells run on a desktop and the
   // registration is the machine's, not the window's. A no-op on mobile.
-  void applyStoredAutostart();
+  void initDeviceSettings()
+    .catch(() => {})
+    .then(() => applyStoredAutostart());
 
   // Which shell (docs/22), decided once here: the phone one carries no reader,
   // so the choice also decides whether PDFium is ever loaded. Both are dynamic

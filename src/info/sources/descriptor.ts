@@ -148,6 +148,10 @@ export interface SourceDescriptor {
   // Max items pulled per run (each fetch-page/detail item is a request).
   limit?: number;
   // Minutes between background polls of this source's discovery layer (docs/35).
+  // How often the collector polls this source's discovery layer (docs/36: one
+  // machine does the polling, and every other device reads what it published,
+  // so this is read on exactly one device).
+  //
   // Per source because feeds differ by an order of magnitude in how much of the
   // day they hold: a Bloomberg section feed keeps 20 items covering 6 to 22
   // hours, so a daily poll silently loses most of the day, while The Economist
@@ -309,7 +313,7 @@ export const DESCRIPTOR_GUIDE = [
   "Source descriptor grammar (declarative JSON the engine runs):",
   "Top level: { id, name, line, discovery, fulltext, enabled, limit?, pollMinutes?, noFetchPage?,",
   "  userAgent? }.",
-  `pollMinutes is how often background collection polls this source (default ${DEFAULT_POLL_MINUTES},`,
+  `pollMinutes is how often the collecting computer polls this source (default ${DEFAULT_POLL_MINUTES},`,
   `  held to ${MIN_POLL_MINUTES}-${MAX_POLL_MINUTES}). Set it from how much of the day one response holds: a feed that`,
   "  keeps only ~20 items and covers a few hours needs 30-60; a feed that returns hundreds of items",
   "  covering weeks is fine at 720-1440. Omit it when you do not know.",

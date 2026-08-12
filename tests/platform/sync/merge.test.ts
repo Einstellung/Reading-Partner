@@ -48,7 +48,14 @@ test("the files the app writes are classified by what they hold", () => {
   expect(strategyFor("info-sources.json")).toBe("records");
   expect(strategyFor("info-feedback.jsonl")).toBe("records");
   expect(strategyFor("saved-articles.json")).toBe("records");
+  expect(strategyFor("info-pool-marks.json")).toBe("records");
   expect(strategyFor("settings.json")).toBe("fields");
+  // One device writes each of these and nobody else touches it, so there is
+  // nothing to merge; a crossing pair leaves a conflict copy nobody reads.
+  expect(strategyFor("info-collector-abc.json")).toBe("opaque");
+  expect(strategyFor("info-ask-abc.json")).toBe("opaque");
+  expect(strategyFor("info-briefing.json")).toBe("opaque");
+  expect(strategyFor("info-bodies.json")).toBe("opaque");
   expect(strategyFor("notes-abc/state.json")).toBe("fields");
   expect(strategyFor("prep-abc/state.json")).toBe("fields");
   expect(strategyFor("notes-abc/chapter-01.md")).toBe("prose");
@@ -117,6 +124,23 @@ test("two devices each keeping an article keep both", () => {
   const out = merge("saved-articles.json", base, local, remote);
   const ids = (JSON.parse(text(out.merged)) as { id: string }[]).map((r) => r.id);
   expect(ids.sort()).toEqual(["https://a", "https://desk", "https://ipad"]);
+  expect(out.dropped).toEqual([]);
+  expect(out.copies).toEqual([]);
+});
+
+// The pool marks travel so a machine taking over collection knows what its
+// predecessor already put in a briefing (docs/36). Keyed by item id, which is a
+// hash of source:key and therefore the same on both devices; `version` sits
+// beside the map as a wrapper key and has to survive the merge.
+test("pool marks merge per item and keep the wrapper", () => {
+  const mark = (day: string) => ({ keep: true, confidence: 0.9, screenedOn: day, briefedOn: day });
+  const base = json({ version: 1, marks: { a: mark("2026-08-10") } });
+  const local = json({ version: 1, marks: { a: mark("2026-08-10"), b: mark("2026-08-11") } });
+  const remote = json({ version: 1, marks: { a: mark("2026-08-10"), c: mark("2026-08-11") } });
+  const out = merge("info-pool-marks.json", base, local, remote);
+  const parsed = JSON.parse(text(out.merged)) as { version: number; marks: Record<string, unknown> };
+  expect(parsed.version).toBe(1);
+  expect(Object.keys(parsed.marks).sort()).toEqual(["a", "b", "c"]);
   expect(out.dropped).toEqual([]);
   expect(out.copies).toEqual([]);
 });

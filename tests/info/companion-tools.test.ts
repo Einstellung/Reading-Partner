@@ -62,6 +62,22 @@ test("buildCompanionTools mounts the source tools plus read_page, update_profile
   expect(names).toContain("generate_briefing");
 });
 
+// A reader has no webview to fetch an article with, so trial_source cannot
+// prove what it exists to prove: the same Bloomberg source trials to a standfirst
+// there and to a full story on the collector (docs/36). read_page stays — that is
+// one link the user pasted, not a subscription fetching itself on a schedule.
+test("a device that does not collect gets no add-source tools", () => {
+  const names = buildCompanionTools({ ...deps([]), collecting: false }).map((t) => t.name);
+  expect(names).not.toContain("probe_source");
+  expect(names).not.toContain("trial_source");
+  expect(names).not.toContain("add_source");
+  expect(names).toContain("read_page");
+  expect(names).toContain("update_profile");
+  // Still mounted: on a reader the host turns it into a request for the
+  // collector rather than a run.
+  expect(names).toContain("generate_briefing");
+});
+
 test("read_page fetches a page and reports its title, text, and links", async () => {
   const html = `<html><head><title>News Hub</title></head>
     <body><nav><a href="/lists/65.html">时政</a></nav><p>Front page.</p></body></html>`;
@@ -159,6 +175,21 @@ test("generate_briefing reports a refusal instead of claiming its request starte
   expect(out).toMatch(/already under way/i);
   expect(out).toMatch(/started nothing/i);
   expect(out).not.toMatch(/Started a full regeneration/i);
+});
+
+// The third answer (docs/36). On a device that does not collect the same call
+// starts nothing at all — it leaves a request for the machine that does — and
+// the companion must not turn that into "a briefing is being built".
+test("generate_briefing on a reader says the request was passed on, not started", async () => {
+  const out = String(
+    await buildGenerateBriefingTool({ startBriefing: () => "asked" }).execute({ scope: "full" }),
+  );
+  expect(out).toMatch(/does not collect/i);
+  expect(out).toMatch(/passed the request on/i);
+  expect(out).not.toMatch(/Started a full regeneration/i);
+  // No timing promise: the round trip is an upload, then that machine's next
+  // sync, then the collecting itself.
+  expect(out).toMatch(/give no estimate/i);
 });
 
 test("generate_briefing rejects an unknown scope", async () => {

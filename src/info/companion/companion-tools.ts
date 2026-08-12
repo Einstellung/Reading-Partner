@@ -13,7 +13,7 @@ import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../ai/agent";
 import { PROFILE_SKELETON_GUIDANCE } from "../../observation/profile";
 import type { ProfileUpdateCardData } from "../briefing/cards";
-import type { RunStart } from "../briefing/pipeline";
+import type { RequestOutcome } from "../briefing/reader";
 import { buildSourceTools, sourceToolStatusLabel, type SourceToolDeps } from "../sources/source-tools";
 import {
   resolveSignInSite,
@@ -48,6 +48,13 @@ export interface SiteSignInDeps {
 }
 
 export interface CompanionToolDeps extends SourceToolDeps {
+  // Whether this device is the one that collects (docs/36). A reader does not
+  // get the three add-source tools: trial_source has to really fetch three
+  // articles to prove a source works, and the ability it proves is not the one
+  // the collector has — hasWebviewFetch() is false here, so the same Bloomberg
+  // source trials to a standfirst on a phone and to a full story on the desktop.
+  // Defaults to true, the shape the app had before there were two roles.
+  collecting?: boolean;
   // Surface the profile-update confirm card in the chat. The host owns the Apply
   // write; the tool never persists.
   onProfileCard(card: ProfileUpdateCardData): void;
@@ -59,8 +66,11 @@ export interface CompanionToolDeps extends SourceToolDeps {
   // It answers with what actually happened. Only one run goes at a time, so a
   // request that arrives during one is refused ("busy") — the host attaches its
   // progress card to the run already going, and the tool has to tell the user
-  // that instead of reporting a start that never happened.
-  startBriefing(scope: BriefingScope): RunStart;
+  // that instead of reporting a start that never happened. And on a device that
+  // does not collect there is no run to start at all ("asked", docs/36): the
+  // request becomes a file for the machine that does, which may pick it up in
+  // fifteen minutes or not at all.
+  startBriefing(scope: BriefingScope): RequestOutcome;
   // Present only where a sign-in window can really be opened; omitted elsewhere,
   // and then open_site_sign_in is not among the tools.
   siteSignIn?: SiteSignInDeps;
@@ -135,12 +145,23 @@ export function buildGenerateBriefingTool(
       const raw = String(args.scope ?? "").trim();
       const scope: BriefingScope | null = raw === "full" ? "full" : raw === "retriage" ? "retriage" : null;
       if (!scope) throw new Error("generate_briefing needs scope: 'retriage' or 'full'.");
-      if (deps.startBriefing(scope) === "busy") {
+      const outcome = deps.startBriefing(scope);
+      if (outcome === "busy") {
         return (
           "A briefing run was ALREADY under way, so this started nothing — the requested " +
           `${scope} did not run. The progress card is now following the run already going. ` +
           "Tell the user a run is already in progress and its result will land when it " +
           "settles; do not say their request started."
+        );
+      }
+      if (outcome === "asked") {
+        return (
+          "This device does not collect, so NOTHING is running here. The request has been " +
+          `left for the computer that collects the user's sources; it will pick the ${scope} ` +
+          "up the next time it syncs, which can be a quarter of an hour, and the new briefing " +
+          "will arrive here when it is done. Tell the user you have passed the request on — " +
+          "not that a briefing is being built or is nearly ready — and give no estimate. If " +
+          "that computer never picks it up, the request expires after six hours."
         );
       }
       const what =
@@ -344,9 +365,13 @@ export function buildSignInTool(deps: SiteSignInDeps): AgentTool {
 
 // The full companion tool set: source tools + read_page + update_profile +
 // generate_briefing, plus open_site_sign_in where the host can really open one.
+//
+// read_page stays on a reader (docs/36). It is not a subscription fetching
+// itself on a schedule — it is one link the user pasted, read once because they
+// asked, which is the same thing a browser does when they tap it.
 export function buildCompanionTools(deps: CompanionToolDeps): AgentTool[] {
   return [
-    ...buildSourceTools(deps),
+    ...(deps.collecting === false ? [] : buildSourceTools(deps)),
     buildReadPageTool(deps),
     buildUpdateProfileTool(deps),
     buildGenerateBriefingTool(deps),

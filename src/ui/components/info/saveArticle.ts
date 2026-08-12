@@ -5,36 +5,22 @@
 //
 // Store + display only. Nothing here feeds a prompt, packs a fulltext, or
 // proposes a topic — those are later slices.
+//
+// What is kept is whatever the briefing view answered with (docs/36): the day's
+// article cache on the machine that collected it, images and all, or the
+// published body on a device that only reads, which has none. Both are already
+// sanitized, and both know whether the article itself was ever read — so there
+// is no guessing left to do here.
 
+import type { ArticleBody } from "../../../info/briefing/reader";
 import type { BriefingItemMeta } from "../../../info/briefing/types";
-import type { InfoItem } from "../../../info/sources/item";
 import type { SavedArticleInput } from "../../../reading/saved-articles";
 
-// What the host has in hand at the moment the reader hits Save.
-export interface SaveArticleContext {
+export function toSavedArticleInput(ctx: {
   topicId: string;
   meta: BriefingItemMeta;
-  // The article body as the view is showing it (may already have data: images
-  // inlined — the store strips them) and its plain text from the day's cache.
-  html: string | null;
-  text: string | null;
-  // The day's items snapshot, the only place summaryOnly is recorded;
-  // BriefingItemMeta does not carry it.
-  items: InfoItem[];
-  itemId: string;
-}
-
-// Whether only a summary was ever obtained. Read off the day's item snapshot by
-// item id, falling back to the paranoid answer: an unknown provenance is treated
-// as evidence-incomplete, so nothing later quotes a summary as if it were the
-// article (docs/21).
-export function resolveSummaryOnly(items: InfoItem[], itemId: string): boolean {
-  const item = items.find((i) => i.id === itemId);
-  if (!item) return true;
-  return item.summaryOnly ?? false;
-}
-
-export function toSavedArticleInput(ctx: SaveArticleContext): SavedArticleInput {
+  body: ArticleBody;
+}): SavedArticleInput {
   return {
     topicId: ctx.topicId,
     url: ctx.meta.url,
@@ -42,8 +28,8 @@ export function toSavedArticleInput(ctx: SaveArticleContext): SavedArticleInput 
     source: ctx.meta.source,
     sourceName: ctx.meta.sourceName,
     publishedAt: ctx.meta.publishedAt,
-    summaryOnly: resolveSummaryOnly(ctx.items, ctx.itemId),
-    text: ctx.text ?? "",
-    html: ctx.html ?? "",
+    summaryOnly: ctx.body.summaryOnly,
+    text: ctx.body.text,
+    html: ctx.body.html,
   };
 }
