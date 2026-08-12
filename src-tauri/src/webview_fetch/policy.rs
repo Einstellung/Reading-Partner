@@ -71,7 +71,7 @@ pub const WARMUP_LOAD_TIMEOUT: Duration = Duration::from_secs(60);
 //
 // Nothing arrived after the first poll. A 15-second floor used to sit under both
 // phases; replayed against these recordings it returns the same body as a
-// 1.5-second one and charges 15 seconds a phase for it.
+// 3-second one and charges 15 seconds a phase for it.
 //
 // Live end to end, warm-up included, the two builds run back to back against
 // en.wikipedia.org/wiki/Portable_Document_Format — a site that answers reliably,
@@ -81,7 +81,9 @@ pub const WARMUP_LOAD_TIMEOUT: Duration = Duration::from_secs(60);
 // 28.8s including a cold warm-up. The matching run on the old build could not be
 // taken: bloomberg.com had by then stopped completing loads for this client
 // often enough that a stopwatch reading would have been noise, and retrying
-// until it cooperated was not worth the block.
+// until it cooperated was not worth the block. Both of those runs of the new
+// build used a two-poll stability window; the four-poll one shipped here adds
+// 1.5s a phase on top of them.
 //
 // The floor's evidence was two harnesses' readings of one page set against each
 // other rather than two moments of one harness — docs/pitfall/113 has that
@@ -110,14 +112,25 @@ pub const SETTLE_MAX: Duration = Duration::from_secs(30);
 /// for what the polling costs.
 pub const SETTLE_POLL: Duration = Duration::from_millis(750);
 /// How many consecutive polls must return the same body length before the page
-/// counts as settled. Two identical polls = 1.5s of no change.
+/// counts as settled. Four identical polls = 3s of no change.
 ///
-/// The measured requirement is zero — see the table above, nothing ever changed
-/// after `finished`. So this window is margin, not a measurement, and 1.5s is
-/// margin against a site that fills its body in a burst after the load event
-/// rather than before it. Raising it buys nothing on Bloomberg and costs the
-/// same delay on every fetch.
-pub const SETTLE_STABLE_POLLS: u32 = 2;
+/// Read out of the recordings above rather than picked. The body was whole at
+/// the first poll on every page, but the document went on being edited after
+/// that: on the aluminum article the container grew 696 -> 722 -> 732
+/// characters, its last change at 2310ms. A two-poll window exits that page at
+/// 1558ms, while it is still changing — the change that came after happened not
+/// to touch the body. Four polls exit at 3011-3088ms across the four
+/// recordings, past every article-side change they hold, and return the same
+/// body text as two. (A homepage never does stop changing: its container
+/// flickers by six characters for as long as it is watched. That is why the
+/// rule reads the body, which does hold still, and not the container.)
+///
+/// The margin is worth 1.5s a phase (3s on a fetch that warms up, against the
+/// 27s the floor's removal saves) because reading a page mid-edit fails
+/// quietly. `classify` calls anything past `MIN_ARTICLE_CHARS` an article, and
+/// nothing downstream weighs a body against the length it should have had, so
+/// stopping early returns a shorter `Ok` rather than an error.
+pub const SETTLE_STABLE_POLLS: u32 = 4;
 
 /// How long a warmed origin stays warm. Nothing measured this: the spike only
 /// showed that a jar warmed once keeps working across process restarts within
@@ -128,6 +141,11 @@ pub const WARMUP_TTL: Duration = Duration::from_secs(30 * 60);
 
 /// Ceiling on one `fetch_article_via_webview` call, warm-up included, so a
 /// wedged page cannot hold the queue forever.
+///
+/// The worst case under it is 165s: `WARMUP_LOAD_TIMEOUT` + `SETTLE_MAX` on the
+/// homepage, then `LOAD_TIMEOUT` + `SETTLE_MAX` on the article. It was 150s
+/// while the warm-up settled by sleeping a fixed 15s; now that the warm-up runs
+/// the article's loop it can spend `SETTLE_MAX` the same way.
 pub const OVERALL_TIMEOUT: Duration = Duration::from_secs(180);
 /// Ceiling on a single injected-JS round trip.
 pub const EVAL_TIMEOUT: Duration = Duration::from_secs(10);
@@ -380,6 +398,15 @@ pub enum Phase {
 /// ends it. The warm-up asks only for the first condition, because a homepage
 /// has no article and waiting for one would spend `SETTLE_MAX` on every cold
 /// origin.
+///
+/// That one condition also passes on a document with nothing rendered in it: a
+/// body that holds at zero length settles the warm-up. What supports that is
+/// that the cookies land before the page is done — one cold profile on
+/// bloomberg.com, 2026-08-12, `_px3` in the jar at 6.5s while `finished` never
+/// arrived inside 60s (docs/pitfall/114). One origin, one run. It should hold
+/// wherever the challenge script runs before the load event; a site that runs
+/// one after it is the case the deleted 15s floor happened to cover, and
+/// nothing here has measured one.
 pub fn settle_is_done(phase: Phase, stable: u32, readout: &Readout) -> bool {
     if stable < SETTLE_STABLE_POLLS {
         return false;
