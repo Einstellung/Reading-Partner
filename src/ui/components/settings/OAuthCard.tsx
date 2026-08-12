@@ -144,9 +144,14 @@ export default function OAuthCard({
         {provider?.configured && <span className="text-xs text-[#5fb236]">Connected</span>}
       </div>
       {provider?.configured ? (
+        // Not a full-width button, and not the filled one either: signing out is
+        // the quiet way back out of a card that is already doing its job, and a
+        // row-wide button there reads as the card's main action — the same
+        // weight the sign-in button next door carries.
         <Button
           type="button"
-          variant="outline"
+          variant="subtle"
+          className="self-start"
           onClick={async () => {
             await logout();
             onChanged();

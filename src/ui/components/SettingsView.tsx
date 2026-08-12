@@ -19,6 +19,13 @@
 // same three triggers. Radix's `orientation` is a prop and cannot follow a media
 // query, so it stays vertical — that decides which arrow keys walk the strip,
 // and the wide shape is the one with a keyboard on it.
+//
+// From `sm` up the strip is a full-height rail rather than a box in the top-left
+// corner: it takes the row's stretch (no `self-start`) and its triggers give up
+// the `flex-1` they wear in the narrow row, which in a column would divide the
+// rail's height between the three of them. The column the whole page sits in is
+// wide enough for that rail plus a panel, and centred, so the weight of the page
+// does not sit in one corner of the window.
 
 import { useEffect, useState } from "react";
 
@@ -39,7 +46,30 @@ interface SettingsViewProps {
   onClose: () => void;
 }
 
-const TAB_PANEL = "min-h-0 min-w-0 flex-1 overflow-y-auto";
+// The scrolling half of the page. `pr-3` from `sm` up is the gutter the
+// scrollbar lives in, so it does not sit against the edge of a card.
+const TAB_PANEL = "min-h-0 min-w-0 flex-1 overflow-y-auto sm:pr-3";
+
+const TABS = [
+  { value: "account", label: "Account" },
+  { value: "features", label: "Features" },
+  { value: "optional", label: "Optional" },
+];
+
+// Narrow: the segmented pill the primitive draws. Wide: a rail down the left of
+// the page, so the strip is a side of the page rather than a box in its corner.
+// The pill's own fill and padding come off for that, and the rule stands in for
+// them — `self-start` is gone with them, which is what makes the rail as tall as
+// the panel beside it.
+const TAB_LIST =
+  "shrink-0 sm:w-44 sm:flex-col sm:items-stretch sm:justify-start sm:rounded-none sm:border-r sm:border-border sm:bg-transparent sm:p-0 sm:pr-2";
+
+// A trigger in the wide shape is a row of the rail, not a segment of a pill: it
+// gives up the `flex-1` that would divide the rail's height between the three of
+// them, reads left to right, and takes the fill the narrow shape puts on the
+// page behind it.
+const TAB_TRIGGER =
+  "sm:grow-0 sm:justify-start sm:px-3 sm:data-[state=active]:bg-muted sm:data-[state=active]:shadow-none";
 
 export default function SettingsView({ settings, onSettingsChange, onClose }: SettingsViewProps) {
   return (
@@ -58,10 +88,13 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
         <div
           className={cn(
             OVERLAY_SAFE.fullscreen,
-            "mx-auto flex h-full w-[min(680px,100%)] flex-col",
+            "mx-auto flex h-full w-[min(860px,100%)] flex-col",
           )}
         >
-          <div className="mb-6 flex shrink-0 items-center justify-between">
+          {/* A title bar rather than a title and a stray button: the rule under
+              it is what makes Done belong to the heading it sits a page-width
+              away from. */}
+          <div className="mb-6 flex shrink-0 items-center justify-between border-b border-border pb-4">
             {/* The classes belong on DialogTitle, not on the <h1>: asChild
                 merges the two className strings by concatenating them, so a
                 class written on the child does not displace the default it
@@ -78,12 +111,14 @@ export default function SettingsView({ settings, onSettingsChange, onClose }: Se
           <Tabs
             defaultValue="account"
             orientation="vertical"
-            className="min-h-0 flex-1 flex-col sm:flex-row sm:gap-5"
+            className="min-h-0 flex-1 flex-col sm:flex-row sm:gap-6"
           >
-            <TabsList className="shrink-0 sm:w-40 sm:flex-col sm:items-stretch sm:self-start">
-              <TabsTrigger value="account">Account</TabsTrigger>
-              <TabsTrigger value="features">Features</TabsTrigger>
-              <TabsTrigger value="optional">Optional</TabsTrigger>
+            <TabsList className={TAB_LIST}>
+              {TABS.map((t) => (
+                <TabsTrigger key={t.value} value={t.value} className={TAB_TRIGGER}>
+                  {t.label}
+                </TabsTrigger>
+              ))}
             </TabsList>
 
             <TabsContent value="account" className={TAB_PANEL}>
