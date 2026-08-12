@@ -5,16 +5,46 @@
 // only when the user clicks Apply. Pure: the card sink is injected, so the tool
 // tests without a real save. Composition over the source tools keeps the consent
 // rules in one place.
+//
+// open_site_sign_in joins them where the host has a webview to open one with. It
+// takes a site identifier and never a URL — the reason is at buildSignInTool.
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../ai/agent";
 import { PROFILE_SKELETON_GUIDANCE } from "../../observation/profile";
 import type { ProfileUpdateCardData } from "../briefing/cards";
 import { buildSourceTools, sourceToolStatusLabel, type SourceToolDeps } from "../sources/source-tools";
+import {
+  resolveSignInSite,
+  signInSiteLine,
+  type SignInSite,
+} from "../sources/site-session";
 import type { FetchFn } from "../extract/http";
+import type { SessionStatus, SignInOutcome } from "../extract/webview-session";
 import { readPage, READ_PAGE_MAX_LINKS, type PageReadout } from "../extract/read-page";
 
 export type BriefingScope = "retriage" | "full";
+
+// What open_site_sign_in needs from the host. Only the platforms that really
+// have a webview pass this (the Rust commands behind it are desktop-only), and
+// where it is absent the tool is not mounted at all rather than mounted to fail.
+//
+// Every call takes a resolved SignInSite, never a URL string: the addresses live
+// in the user's own source list and the tool's job is to pick one, so there is
+// no parameter anywhere on this path that a model could fill with a URL of its
+// own. See resolveSignInSite for why that is the point.
+export interface SiteSignInDeps {
+  // The sites the user's sources can be signed in to, read at call time so a
+  // source added earlier in this same conversation counts.
+  signInSites(): Promise<SignInSite[]>;
+  // Show the site's own sign-in page in a window the user types into. Resolves
+  // when they close it, which is the only completion signal there is.
+  openSignIn(site: SignInSite): Promise<SignInOutcome>;
+  // Load the site's front page in the hidden window and report whether it still
+  // offers a sign-in. The host also records the answer where the sources page
+  // reads it.
+  checkSession(site: SignInSite): Promise<SessionStatus>;
+}
 
 export interface CompanionToolDeps extends SourceToolDeps {
   // Surface the profile-update confirm card in the chat. The host owns the Apply
@@ -28,6 +58,9 @@ export interface CompanionToolDeps extends SourceToolDeps {
   // source and re-triages, overwriting today's briefing. The host owns progress,
   // the ready/failed card, and the completion note; the tool only starts it.
   startBriefing(scope: BriefingScope): void;
+  // Present only where a sign-in window can really be opened; omitted elsewhere,
+  // and then open_site_sign_in is not among the tools.
+  siteSignIn?: SiteSignInDeps;
 }
 
 // The update_profile tool: draft a complete revised profile and show it for
@@ -179,14 +212,139 @@ export function buildReadPageTool(deps: Pick<CompanionToolDeps, "fetchFn">): Age
   };
 }
 
+// How long the window may stay open before the Rust side stops watching it
+// (src-tauri/src/webview_fetch/session.rs). Only for the sentence the tool
+// writes when that happens.
+const SIGN_IN_WAIT_MINUTES = 20;
+
+// What the session check found, phrased for the model. `ok`/`empty` are the only
+// statuses that make signedIn mean anything — a bot wall or a timeout says
+// nothing about whether the reader has an account, and saying "not signed in"
+// there would be inventing an answer (applySessionCheck draws the same line).
+function sessionVerdict(site: SignInSite, s: SessionStatus): string {
+  if (s.status !== "ok" && s.status !== "empty") {
+    return (
+      `but the check afterwards could not tell (${s.detail || s.status}). Say plainly that you ` +
+      `cannot confirm it either way, rather than claiming success or failure.`
+    );
+  }
+  if (s.signedIn) {
+    return (
+      `and ${site.label} no longer offers a sign-in, so the session is real — they are signed ` +
+      `in, and full text from ${site.sourceNames.join(", ")} will come back as the whole story ` +
+      `from the next collection on. Tell them it worked.`
+    );
+  }
+  return (
+    `but ${site.label} still offers a sign-in, so nothing was signed in — the flow was abandoned ` +
+    `or it did not take. Say so plainly and ask whether they want another go; do not reopen the ` +
+    `window unless they ask.`
+  );
+}
+
+// The open_site_sign_in tool: put the site's own login page on screen for the
+// user, wait for them to close it, then check what it left behind.
+//
+// The parameter is a site IDENTIFIER, never a URL, and that is a security
+// boundary rather than a convenience: the model reads article bodies and web
+// pages, so a free URL parameter would let text inside one of them steer a
+// window that looks exactly like the app's own onto a phishing login page. The
+// address always comes from the user's own subscribed sources, and an
+// identifier that matches none of them is refused with no fallback guess.
+//
+// It opens a window and waits — nothing else. It cannot type, it never sees a
+// credential (the cookies land in the fetcher's own profile, on the Rust side),
+// and it does not close the window: the user closing it is the completion
+// signal, because what "signed in" looks like differs per site and per identity
+// provider. Consent is the user's explicit request, the third of the three
+// gates (docs "AI harness"): drafting is free, a visible window is not.
+export function buildSignInTool(deps: SiteSignInDeps): AgentTool {
+  return {
+    name: "open_site_sign_in",
+    description:
+      "Open a site's own sign-in page in a window the user can type into, for one of the sites " +
+      "their sources read through. Call it ONLY when the user asks to sign in ('log me into " +
+      "Bloomberg', '登录吧') — never on your own initiative, not even when you notice a site is " +
+      "signed out; say it is signed out and let them decide. `site` names a site from the " +
+      "sign-in list in your context (its id or name as a source works too); it is NOT a URL and " +
+      "cannot be one — the address is looked up in the user's own source list, and an " +
+      "unrecognised name is refused. If a collection is running the window can take a moment to " +
+      "appear — the fetcher finishes the article it is on before handing the browser over. The " +
+      "call then waits while the window is open (background full-text fetching queues behind it, " +
+      "so this is not the moment to start a briefing), " +
+      "returns when the user closes it, and then checks the session and tells you the result — " +
+      "report that instead of asking them whether it worked. It only opens the page: it never " +
+      "types for them, never sees their credentials, and never closes the window itself.",
+    parameters: Type.Object({
+      site: Type.String({
+        description:
+          "Which site to sign in to, as the sign-in list in your context spells it (e.g. " +
+          "'bloomberg.com'). The id or name of a source that reads through it also works. Not a URL.",
+      }),
+    }),
+    execute: async (args) => {
+      const identifier = String(args.site ?? "").trim();
+      if (!identifier) throw new Error("open_site_sign_in needs a site, e.g. 'bloomberg.com'.");
+      const sites = await deps.signInSites();
+      if (!sites.length) {
+        return (
+          "None of the user's sources has a sign-in page, so there is no window to open. Tell " +
+          "them that — do not offer to open one anyway."
+        );
+      }
+      // A refusal, not a thrown error: the user did nothing wrong, and the model
+      // needs to see the real list to ask them which one they meant.
+      const site = resolveSignInSite(sites, identifier);
+      if (!site) {
+        return (
+          `"${identifier}" is not a site in the user's source list, so nothing was opened. The ` +
+          `sites that can be signed in to:\n${sites.map((s) => `- ${signInSiteLine(s)}`).join("\n")}\n` +
+          `Ask the user which one they mean. There is no way to pass an address instead — this ` +
+          `tool only opens sign-in pages that their own sources named.`
+        );
+      }
+      let outcome: SignInOutcome;
+      try {
+        outcome = await deps.openSignIn(site);
+      } catch (e) {
+        return (
+          `The sign-in window for ${site.label} could not be opened: ` +
+          `${e instanceof Error ? e.message : String(e)}. Tell the user; they can also sign in ` +
+          `from the sources page.`
+        );
+      }
+      if (!outcome.closed) {
+        return (
+          `The sign-in window for ${site.label} is still open after ${SIGN_IN_WAIT_MINUTES} ` +
+          `minutes, so I stopped waiting on it. Nothing is confirmed either way. Ask the user to ` +
+          `finish and close the window; you can check where they stand after that.`
+        );
+      }
+      const seconds = Math.max(1, Math.round(outcome.elapsedMs / 1000));
+      const opened = `The user closed the ${site.label} sign-in window after ${seconds}s`;
+      let status: SessionStatus;
+      try {
+        status = await deps.checkSession(site);
+      } catch (e) {
+        return (
+          `${opened}, but the session check that follows failed: ` +
+          `${e instanceof Error ? e.message : String(e)}. Say you cannot confirm the session.`
+        );
+      }
+      return `${opened}, ${sessionVerdict(site, status)}`;
+    },
+  };
+}
+
 // The full companion tool set: source tools + read_page + update_profile +
-// generate_briefing.
+// generate_briefing, plus open_site_sign_in where the host can really open one.
 export function buildCompanionTools(deps: CompanionToolDeps): AgentTool[] {
   return [
     ...buildSourceTools(deps),
     buildReadPageTool(deps),
     buildUpdateProfileTool(deps),
     buildGenerateBriefingTool(deps),
+    ...(deps.siteSignIn ? [buildSignInTool(deps.siteSignIn)] : []),
   ];
 }
 
@@ -197,5 +355,8 @@ export function companionToolStatusLabel(name: string, args: Record<string, unkn
   if (name === "generate_briefing") {
     return args.scope === "retriage" ? "Re-sorting today's briefing" : "Regenerating the briefing";
   }
+  // The label stands for as long as the window is open, so it says what is being
+  // waited on rather than what was clicked.
+  if (name === "open_site_sign_in") return `Waiting for the ${String(args.site ?? "site")} sign-in`;
   return sourceToolStatusLabel(name, args);
 }

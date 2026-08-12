@@ -6,7 +6,9 @@ import {
   applySessionCheck,
   forgetSession,
   parseSiteSessions,
+  resolveSignInSite,
   sessionLabel,
+  signInSiteLine,
   signInSites,
 } from "../../src/info/sources/site-session";
 import { BUILTIN_SOURCES } from "../../src/info/sources/builtins";
@@ -24,6 +26,34 @@ test("seven Bloomberg sections are one site with one sign-in", () => {
   // session that already exists.
   expect(sites[0].checkUrl).toBe("https://www.bloomberg.com/");
   expect(sites[0].sourceNames.length).toBe(BLOOMBERG.length);
+  expect(sites[0].sourceIds.length).toBe(BLOOMBERG.length);
+});
+
+test("a site is resolved by its own name, its host, or one of its sources", () => {
+  const sites = signInSites(BLOOMBERG);
+  const want = sites[0];
+  expect(resolveSignInSite(sites, "bloomberg.com")).toBe(want);
+  expect(resolveSignInSite(sites, "www.bloomberg.com")).toBe(want);
+  expect(resolveSignInSite(sites, "  Bloomberg.COM ")).toBe(want);
+  expect(resolveSignInSite(sites, BLOOMBERG[0].id)).toBe(want);
+  expect(resolveSignInSite(sites, BLOOMBERG[0].name)).toBe(want);
+  expect(signInSiteLine(want)).toContain("bloomberg.com — ");
+});
+
+test("an identifier that is not in the list resolves to nothing, and an address never resolves", () => {
+  const sites = signInSites(BLOOMBERG);
+  // No fallback to the only site there is: a request the reader's own sources
+  // cannot account for is refused, not approximated.
+  expect(resolveSignInSite(sites, "")).toBeNull();
+  expect(resolveSignInSite(sites, "  ")).toBeNull();
+  expect(resolveSignInSite(sites, "bloomberg")).toBeNull();
+  expect(resolveSignInSite(sites, "example.com")).toBeNull();
+  // The shapes an injected instruction would reach for. None of them is a name
+  // in the list, so none of them opens anything.
+  expect(resolveSignInSite(sites, "https://bloomberg.com.evil.test/signin")).toBeNull();
+  expect(resolveSignInSite(sites, "https://www.bloomberg.com/account/signin")).toBeNull();
+  expect(resolveSignInSite(sites, "bloomberg.com.evil.test")).toBeNull();
+  expect(resolveSignInSite([], "bloomberg.com")).toBeNull();
 });
 
 test("a disabled source still has a session worth showing", () => {

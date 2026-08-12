@@ -25,6 +25,8 @@ export interface SignInSite {
 	checkUrl: string;
 	/** Names of the subscribed sources that read through this session. */
 	sourceNames: string[];
+	/** Ids of those same sources, so a caller may name either. */
+	sourceIds: string[];
 }
 
 /** Last known answer for one site. Cached, never authoritative — the site is. */
@@ -65,6 +67,7 @@ export function signInSites(sources: SourceDescriptor[]): SignInSite[] {
 		const existing = byHost.get(host);
 		if (existing) {
 			if (!existing.sourceNames.includes(source.name)) existing.sourceNames.push(source.name);
+			if (!existing.sourceIds.includes(source.id)) existing.sourceIds.push(source.id);
 			continue;
 		}
 		byHost.set(host, {
@@ -78,9 +81,41 @@ export function signInSites(sources: SourceDescriptor[]): SignInSite[] {
 			// a slow and paywalled way to ask a simple question.
 			checkUrl: new URL("/", signInUrl).toString(),
 			sourceNames: [source.name],
+			sourceIds: [source.id],
 		});
 	}
 	return [...byHost.values()];
+}
+
+/** How a site is offered to a caller that has to pick one: name, then sources. */
+export function signInSiteLine(site: SignInSite): string {
+	return `${site.label} — ${site.sourceNames.join(", ")}`;
+}
+
+function siteKey(text: string): string {
+	return text.trim().toLowerCase().replace(/^www\./, "");
+}
+
+/**
+ * The site an identifier names, or null.
+ *
+ * A caller picks a site out of this list; it never describes one. That is the
+ * whole design of the lookup, and it is what makes it safe to hand to the AI
+ * companion: a sign-in window can only ever open a URL that came from the
+ * reader's own subscribed sources, so a URL sitting in an article body or a page
+ * the model read has no path to becoming a login page. An identifier that
+ * matches nothing is refused rather than resolved to the nearest site — a
+ * "close enough" match is the same hole with an extra step.
+ */
+export function resolveSignInSite(sites: SignInSite[], identifier: string): SignInSite | null {
+	const want = siteKey(identifier);
+	if (!want) return null;
+	for (const site of sites) {
+		if (siteKey(site.host) === want || siteKey(site.label) === want) return site;
+		if (site.sourceIds.some((id) => siteKey(id) === want)) return site;
+		if (site.sourceNames.some((name) => siteKey(name) === want)) return site;
+	}
+	return null;
 }
 
 /** What the sources page prints for a site. */

@@ -8,12 +8,17 @@ import {
   buildCompanionTools,
   buildGenerateBriefingTool,
   buildReadPageTool,
+  buildSignInTool,
   buildUpdateProfileTool,
   companionToolStatusLabel,
   type BriefingScope,
+  type SiteSignInDeps,
 } from "../../src/info/companion/companion-tools";
+import { signInSites } from "../../src/info/sources/site-session";
 import type { ProfileUpdateCardData } from "../../src/info/briefing/cards";
+import type { SourceDescriptor } from "../../src/info/sources/descriptor";
 import type { ExtractReadable } from "../../src/info/extract/readable-select";
+import type { SessionStatus, SignInOutcome } from "../../src/info/extract/webview-session";
 
 const extract: ExtractReadable = () => ({ title: "t", contentHtml: "<p>b</p>", textContent: "b" });
 
@@ -102,6 +107,9 @@ test("companionToolStatusLabel labels the companion tools and defers to source l
   expect(companionToolStatusLabel("generate_briefing", { scope: "full" })).toMatch(/Regenerating the briefing/);
   expect(companionToolStatusLabel("generate_briefing", { scope: "retriage" })).toMatch(/Re-sorting today's briefing/);
   expect(companionToolStatusLabel("add_source", {})).toMatch(/Adding the source/);
+  expect(companionToolStatusLabel("open_site_sign_in", { site: "bloomberg.com" })).toMatch(
+    /Waiting for the bloomberg\.com sign-in/,
+  );
 });
 
 function briefingDeps() {
@@ -144,4 +152,136 @@ test("generate_briefing rejects an unknown scope", async () => {
   const h = briefingDeps();
   await expect(buildGenerateBriefingTool(h.deps).execute({ scope: "partial" })).rejects.toThrow(/retriage.*full|scope/i);
   expect(h.started).toEqual([]);
+});
+
+// --- open_site_sign_in ------------------------------------------------------
+//
+// The property under test: the tool picks a site out of the user's own source
+// list and takes the URL from that record, so no string the model passes can
+// decide where a login window points. Only the pure half is covered here — the
+// window itself is Rust and a real screen.
+
+const BLOOMBERG_SOURCE: SourceDescriptor = {
+  id: "bloomberg-technology",
+  name: "Bloomberg Technology",
+  line: "tech business",
+  enabled: true,
+  discovery: { kind: "feed", url: "https://feeds.bloomberg.com/technology/news.rss" },
+  fulltext: { mode: "webview", signInUrl: "https://www.bloomberg.com/account/signin" },
+};
+
+const SIGNED_IN: SessionStatus = {
+  status: "ok",
+  signedIn: true,
+  checkedUrl: "https://www.bloomberg.com/",
+  finalUrl: "https://www.bloomberg.com/",
+  title: "Bloomberg",
+  elapsedMs: 4000,
+  detail: null,
+};
+
+// A fake host: records what it was asked to open and check, answers with what
+// the window and the check found.
+function signInDeps(
+  opts: {
+    sources?: SourceDescriptor[];
+    outcome?: SignInOutcome | Error;
+    status?: SessionStatus | Error;
+  } = {},
+) {
+  const opened: string[] = [];
+  const checked: string[] = [];
+  const d: SiteSignInDeps = {
+    signInSites: async () => signInSites(opts.sources ?? [BLOOMBERG_SOURCE]),
+    openSignIn: async (site) => {
+      opened.push(site.signInUrl);
+      if (opts.outcome instanceof Error) throw opts.outcome;
+      return opts.outcome ?? { closed: true, elapsedMs: 42_000 };
+    },
+    checkSession: async (site) => {
+      checked.push(site.checkUrl);
+      if (opts.status instanceof Error) throw opts.status;
+      return opts.status ?? SIGNED_IN;
+    },
+  };
+  return { d, opened, checked };
+}
+
+test("open_site_sign_in is mounted only where the host can really open a window", () => {
+  expect(buildCompanionTools(deps([])).map((t) => t.name)).not.toContain("open_site_sign_in");
+  const withWindow = buildCompanionTools({ ...deps([]), siteSignIn: signInDeps().d });
+  expect(withWindow.map((t) => t.name)).toContain("open_site_sign_in");
+});
+
+test("open_site_sign_in opens the URL its own source list holds, then reports the check", async () => {
+  const h = signInDeps();
+  const out = String(await buildSignInTool(h.d).execute({ site: "bloomberg.com" }));
+  expect(h.opened).toEqual(["https://www.bloomberg.com/account/signin"]);
+  expect(h.checked).toEqual(["https://www.bloomberg.com/"]);
+  expect(out).toMatch(/closed the bloomberg\.com sign-in window after 42s/);
+  expect(out).toMatch(/they are signed in/);
+  expect(out).toMatch(/Bloomberg Technology/);
+});
+
+test("open_site_sign_in refuses an address and opens nothing", async () => {
+  // The injection case: an article body telling the model to sign in somewhere.
+  // There is no parameter that carries a URL, and none of these is the name of a
+  // site the user subscribes to, so nothing opens.
+  const h = signInDeps();
+  const tool = buildSignInTool(h.d);
+  for (const arg of [
+    "https://bloomberg.com.evil.test/signin",
+    "https://www.bloomberg.com/account/signin",
+    "evil.test",
+  ]) {
+    const out = String(await tool.execute({ site: arg }));
+    expect(out).toMatch(/not a site in the user's source list/);
+    // The refusal shows the real list so the model can ask rather than guess.
+    expect(out).toMatch(/bloomberg\.com — Bloomberg Technology/);
+  }
+  expect(h.opened).toEqual([]);
+});
+
+test("open_site_sign_in says there is nothing to open when no source has a sign-in", async () => {
+  const h = signInDeps({ sources: [{ ...BLOOMBERG_SOURCE, fulltext: { mode: "fetch-page" } }] });
+  const out = String(await buildSignInTool(h.d).execute({ site: "bloomberg.com" }));
+  expect(out).toMatch(/None of the user's sources has a sign-in page/);
+  expect(h.opened).toEqual([]);
+  await expect(buildSignInTool(h.d).execute({ site: " " })).rejects.toThrow(/needs a site/i);
+});
+
+test("open_site_sign_in reports a signed-out check as a failed sign-in, not a success", async () => {
+  const h = signInDeps({ status: { ...SIGNED_IN, signedIn: false } });
+  const out = String(await buildSignInTool(h.d).execute({ site: "bloomberg-technology" }));
+  expect(out).toMatch(/still offers a sign-in/);
+  expect(out).toMatch(/do not reopen the window unless they ask/);
+});
+
+test("a check that could not tell is reported as neither signed in nor out", async () => {
+  const h = signInDeps({
+    status: { ...SIGNED_IN, status: "blocked", signedIn: false, detail: "bot wall: Are you a robot?" },
+  });
+  const out = String(await buildSignInTool(h.d).execute({ site: "bloomberg.com" }));
+  expect(out).toMatch(/could not tell \(bot wall/);
+  expect(out).toMatch(/cannot confirm/);
+});
+
+test("a window still open after the wait is not checked and claims nothing", async () => {
+  const h = signInDeps({ outcome: { closed: false, elapsedMs: 1_200_000 } });
+  const out = String(await buildSignInTool(h.d).execute({ site: "bloomberg.com" }));
+  expect(out).toMatch(/still open after 20 minutes/);
+  expect(out).toMatch(/Nothing is confirmed/);
+  expect(h.checked).toEqual([]);
+});
+
+test("a window that could not open, and a check that failed, are both reported honestly", async () => {
+  const failed = signInDeps({ outcome: new Error("webview fetch state is not registered") });
+  const out = String(await buildSignInTool(failed.d).execute({ site: "bloomberg.com" }));
+  expect(out).toMatch(/could not be opened: webview fetch state is not registered/);
+  expect(failed.checked).toEqual([]);
+
+  const noCheck = signInDeps({ status: new Error("load timed out") });
+  const out2 = String(await buildSignInTool(noCheck.d).execute({ site: "bloomberg.com" }));
+  expect(out2).toMatch(/closed the bloomberg\.com sign-in window/);
+  expect(out2).toMatch(/session check that follows failed: load timed out/);
 });
