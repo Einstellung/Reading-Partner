@@ -479,7 +479,7 @@ pub(crate) fn build_window<R: Runtime>(
 /// would look exactly like a slow one. It does not cover everything: a hostname
 /// that does not resolve produces no event at all in WebKitGTK 2.52 (measured:
 /// `load-changed started` and then nothing for 25s), so DNS failures surface as
-/// timeouts. See docs/pitfall/101.
+/// timeouts. See docs/pitfall/109.
 ///
 /// Then the lid. A GTK webview is wired to the desktop by default: `alert()`,
 /// `confirm()` and `prompt()` open a modal dialog, `window.print()` opens the
