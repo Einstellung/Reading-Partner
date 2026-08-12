@@ -44,6 +44,7 @@ import {
   todayLocal,
 } from "./store";
 import { collectorStatusLine, InfoCollector } from "./collector";
+import { publishBriefing } from "./publish";
 import {
   loadPool,
   removePoolDays,
@@ -59,7 +60,7 @@ import {
   type ParseOutcome,
 } from "./triage";
 import type { FeedbackEvent } from "../../observation/feedback";
-import type { TriageResult } from "./types";
+import type { Briefing, TriageResult } from "./types";
 import type { InfoItem } from "../sources/item";
 
 // One tool-less streaming call. `extra` lets the parse-retry append a corrective
@@ -279,6 +280,23 @@ async function pollSources(
   return items;
 }
 
+// A briefing landed on disk: publish it for the readers (docs/36). Wrapped
+// around the pipeline's saveBriefing dep rather than called from inside the
+// pipeline, so both paths that write a briefing — a run and a re-triage —
+// publish without either of them knowing there are other devices.
+//
+// A publish that fails is logged and swallowed. The briefing is on disk and this
+// machine can show it; the readers get the next one, and the alternative is a
+// briefing that counts as failed because another device could not be told.
+async function saveAndPublishBriefing(briefing: Briefing): Promise<void> {
+  await saveBriefing(briefing);
+  try {
+    await publishBriefing(briefing);
+  } catch (e) {
+    console.warn("failed to publish the briefing", e);
+  }
+}
+
 // Whether a briefing may generate itself when the app opens (docs/35): a
 // provider to call and at least one source to read.
 async function canAutoGenerate(): Promise<boolean> {
@@ -387,7 +405,7 @@ export function getInfoPipeline(): InfoPipeline {
       fetchBodies,
       triage,
       logPhase,
-      saveBriefing,
+      saveBriefing: saveAndPublishBriefing,
       saveArticles,
       saveItems,
       loadItems,
