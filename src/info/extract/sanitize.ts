@@ -130,6 +130,20 @@ export function sanitizeArticleHtml(html: string): string {
   return out.trim();
 }
 
+// Drop every <img> whose src is a data: URL, tag and all. The tag, not just the
+// attribute: an <img> with nothing to load is a broken-image icon in the middle
+// of the prose. Every path that writes an article body to a file that syncs runs
+// this — one inlined image can outweigh the article it illustrates. Two sources
+// of those remain: a page that shipped its images inline, and a day cache
+// written before the img: proxy (docs/pitfall/30) replaced the base64 inliner.
+// External <img> tags are kept: they cost a URL each and render through that
+// proxy.
+export function stripDataImages(html: string): string {
+  return html.replace(/<img\b[^>]*>/gi, (tag) =>
+    /\ssrc\s*=\s*(?:"\s*data:|'\s*data:|data:)/i.test(tag) ? "" : tag,
+  );
+}
+
 // Plain text of an HTML fragment, block tags becoming line breaks. Used for an
 // item's textContent (triage input, chat context) when a feed hands us HTML.
 export function htmlToText(html: string): string {

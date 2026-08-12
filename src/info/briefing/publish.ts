@@ -12,17 +12,28 @@
 // carry the same date and generatedAt; when they disagree the reader says the
 // text is still on its way rather than showing the wrong one.
 //
-// Every <img> comes out here, not only the inlined ones. Measured 2026-07-23:
-// the three tiers' plain text was 96 KB and the same items with contentHtml were
-// 2.9 MB, nearly all of it base64 images (one IEEE Spectrum article: 1,570,403
-// characters of HTML around 19,676 characters of article). External <img> tags
-// go too, so opening a published article puts no request on a publisher's CDN
-// from a phone that never subscribed to anything (docs/36, the 5.2.2 line).
-// reading/saved-articles.ts keeps its own stripDataImages: a kept article is the
-// reader's own snapshot and its remote images are the reader's own request.
+// Inlined images come out of the bodies; external <img> tags stay. Only base64
+// was ever the weight — measured 2026-07-23, the three tiers' plain text was
+// 96 KB and the same items with contentHtml were 2.9 MB, nearly all of it
+// inlined images (one IEEE Spectrum article: 1,570,403 characters of HTML around
+// 19,676 characters of article). A remote image costs a URL: measured again on
+// a live day, 2026-08-12, 11 bodies carried 81 external images and no inlined
+// ones (the img: proxy replaced the base64 inliner), and keeping them took the
+// bodies file from 226,926 bytes to 272,006.
+//
+// What keeping them costs is the App Store 5.2.2 line (docs/36): image_proxy.rs
+// is registered on iOS too, so an external <img> that ArticleView points at it
+// becomes a real request to the publisher's CDN carrying the article's URL as
+// Referer, and `accesses` still covers that. Stripping them cost more: the same
+// article would have pictures on a desktop and none on a phone, and keeping it
+// on the phone would file that picture-less copy for good, so which version of
+// an article the reader owns would depend on the device at hand. To answer 5.2.2
+// by not making that request, strip every <img> in buildPublishedBodies instead
+// of only the data: ones — that call is the whole switch.
 
 import { BaseDirectory, exists, readTextFile } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
+import { stripDataImages } from "../extract/sanitize";
 import { loadArticles, loadItems, type CachedArticle } from "./store";
 import type { Briefing } from "./types";
 import type { InfoItem } from "../sources/item";
@@ -33,7 +44,8 @@ export const PUBLISHED_BODIES_FILE = "info-bodies.json";
 export interface PublishedBody {
   // Plain text, for the AI. "" when the body was never obtained.
   text: string;
-  // Sanitized HTML with every image taken out, for reading. "" likewise.
+  // Sanitized HTML with the inlined images taken out and the external ones kept,
+  // for reading. "" likewise.
   html: string;
   // Whether only a summary was ever obtained (paywall, JS-only page, a source
   // with no full text at all). A first-class state: whoever quotes this has to
@@ -50,12 +62,6 @@ export interface PublishedBodies {
 }
 
 // --- pure ------------------------------------------------------------------
-
-// Every image tag, gone. Not the src attribute — the tag: an <img> with no
-// source is a broken-image icon in the middle of the prose.
-export function stripImages(html: string): string {
-  return html.replace(/<img\b[^>]*>/gi, "");
-}
 
 // The items a reader can open: the three tiers, in the order the briefing puts
 // them. The filtered list is deliberately not here — it was screened out or
@@ -83,7 +89,7 @@ export function buildPublishedBodies(
   for (const id of tieredItemIds(b)) {
     if (bodies[id]) continue;
     const cached = articles[id];
-    const html = cached?.contentHtml ? stripImages(cached.contentHtml) : "";
+    const html = cached?.contentHtml ? stripDataImages(cached.contentHtml) : "";
     const text = cached?.textContent ?? "";
     // Unknown provenance is treated as evidence-incomplete, the same way
     // resolveSummaryOnly does: nothing later may quote a summary as the article.

@@ -10,7 +10,9 @@
 // The body is kept twice: `text` for the future AI path, `html` for reading it
 // today. The html keeps its external image URLs — they render through the img:
 // proxy (docs/pitfall/30) — but any data: image is stripped, since a base64
-// body would dominate a record that syncs.
+// body would dominate a record that syncs. Same rule and same function as the
+// bodies the collector publishes (info/briefing/publish.ts), so an article read
+// from the briefing and the copy kept from it hold the same markup.
 
 import {
   BaseDirectory,
@@ -18,6 +20,7 @@ import {
   readTextFile,
 } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../platform/app/atomic-fs";
+import { stripDataImages } from "../info/extract/sanitize";
 
 export const SAVED_ARTICLES_FILE = "saved-articles.json";
 
@@ -91,18 +94,6 @@ export function savedArticleId(url: string, title: string): string {
   if (normalized !== "") return normalized;
   const t = title.trim();
   return t === "" ? "" : `title:${t}`;
-}
-
-// Drop every <img> whose src is a data: URL, tag and all. A saved article
-// travels through sync, so it carries text, not base64 JPEGs — one inlined
-// image can outweigh the whole record. Two sources of those remain: a page that
-// shipped its images inline, and a day cache written before the img: proxy
-// (docs/pitfall/30) replaced the base64 inliner. External <img> tags are kept:
-// they cost a URL each and render through the proxy.
-export function stripDataImages(html: string): string {
-  return html.replace(/<img\b[^>]*>/gi, (tag) =>
-    /\ssrc\s*=\s*(?:"\s*data:|'\s*data:|data:)/i.test(tag) ? "" : tag,
-  );
 }
 
 // A record from what the caller collected. Strips inlined images from both

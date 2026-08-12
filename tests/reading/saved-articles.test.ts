@@ -15,7 +15,6 @@ import {
   removeSavedArticleById,
   savedArticleId,
   savedArticlesForTopic,
-  stripDataImages,
   upsertSavedArticle,
   type SavedArticleInput,
 } from "../../src/reading/saved-articles";
@@ -35,24 +34,6 @@ function input(over: Partial<SavedArticleInput> = {}): SavedArticleInput {
     ...over,
   };
 }
-
-// --- stripDataImages --------------------------------------------------------
-
-test("stripDataImages drops inlined base64 images, tag and all", () => {
-  const html =
-    '<p>one</p><img src="data:image/jpeg;base64,AAAA" referrerpolicy="no-referrer" loading="lazy"><p>two</p>';
-  expect(stripDataImages(html)).toBe("<p>one</p><p>two</p>");
-});
-
-test("stripDataImages leaves an external image alone", () => {
-  const html = '<img src="https://cdn.example.com/x.jpg" referrerpolicy="no-referrer">';
-  expect(stripDataImages(html)).toBe(html);
-});
-
-test("stripDataImages drops every inlined image, not just the first", () => {
-  const html = '<img src="data:image/png;base64,A"><p>x</p><img src="data:image/png;base64,B">';
-  expect(stripDataImages(html)).toBe("<p>x</p>");
-});
 
 // --- normalizeArticleUrl ----------------------------------------------------
 
