@@ -73,6 +73,21 @@ pub struct SessionStatus {
 /// Open the site's own sign-in page in a window the user can see and type into,
 /// and return when they close it.
 ///
+/// Popups are allowed in this window and only in this window (the `Chrome` flag
+/// in mod.rs), because "continue with Google" is a popup. What wry does with
+/// that is worth knowing: it builds a bare `gtk::ApplicationWindow` of its own,
+/// shows it, and puts a fresh webview inside it. That window is not a Tauri
+/// window — the navigation guard never sees it, and no handle to it reaches this
+/// code. And when the popup finishes and calls `window.close()`, wry destroys
+/// the webview but not the window it built, so an empty untitled window can be
+/// left standing on the user's screen with nothing to explain it (read out of
+/// wry 0.55's webkitgtk backend; the popup path itself has never been run
+/// against a real identity provider here, since that needs an account). See
+/// docs/pitfall/112.
+///
+/// `sweep_orphan_windows` below is the answer: any toplevel that appeared after
+/// this window did, and is not a window Tauri owns, goes when the sign-in ends.
+///
 /// No warm-up, deliberately. The fetch path loads a site's homepage first to
 /// collect the cookies that get an article past the bot check, and doing that
 /// here is worse than useless: measured on a fresh profile, /account/signin
@@ -130,6 +145,10 @@ pub async fn open_site_sign_in(app: AppHandle, url: String) -> Result<SignInOutc
             }
         });
 
+        // Everything that is on screen now, the sign-in window included. Anything
+        // that appears after this and is nobody's is a popup wry built and left.
+        let before = toplevel_addresses(&app);
+
         window
             .navigate(target)
             .map_err(|e| format!("could not open the sign-in page: {e}"))?;
@@ -143,6 +162,7 @@ pub async fn open_site_sign_in(app: AppHandle, url: String) -> Result<SignInOutc
             Err(RecvTimeoutError::Disconnected) => true,
             Err(RecvTimeoutError::Timeout) => false,
         };
+        sweep_orphan_windows(&app, before);
         Ok(SignInOutcome {
             closed,
             elapsed_ms: started.elapsed().as_millis() as u64,
@@ -254,7 +274,7 @@ pub async fn clear_site_cookies(app: AppHandle, host: String) -> Result<Vec<Stri
         // login.bloomberg.com, which no amount of guessing at www. would have
         // found (measured — the first version of this left exactly that one
         // behind). WebKit's delete-by-domain matches one domain exactly, so the
-        // jar on disk is read for the rest.
+        // jar on disk is read for the rest. docs/pitfall/110.
         for extra in jar_domains(&read_jar(&profile), &host) {
             if !domains.contains(&extra) {
                 domains.push(extra);
@@ -278,10 +298,10 @@ pub async fn clear_site_cookies(app: AppHandle, host: String) -> Result<Vec<Stri
         // WebKit's own persistence is on its own schedule, and a sign-out that
         // only holds in memory is not a sign-out: the next launch reads the file
         // and the reader is signed in again. Measured — after the deletes had
-        // gone through, the jar on disk still had 13 of the site's rows. The
-        // deletes above leave the network process with nothing for this site, so
-        // rewriting the file here can only agree with it, whenever it next
-        // writes.
+        // gone through, the jar on disk still had 13 of the site's rows
+        // (docs/pitfall/111). The deletes above leave the network process with
+        // nothing for this site, so rewriting the file here can only agree with
+        // it, whenever it next writes.
         prune_jar(&profile, &host)?;
         Ok(domains)
     })
@@ -453,6 +473,83 @@ fn delete_cookies<R: Runtime>(
     Err("no cookie bridge on this platform".to_string())
 }
 
+/// The addresses of every GTK toplevel right now, taken on the main thread
+/// because that is the only place GTK may be touched. Addresses rather than the
+/// widgets themselves: a `gtk::Widget` is not `Send` and this runs on a blocking
+/// thread. Reused addresses can only make the sweep skip a window, never destroy
+/// one it should not.
+#[cfg(target_os = "linux")]
+fn toplevel_addresses(app: &AppHandle) -> Vec<usize> {
+    let (tx, rx) = mpsc::channel();
+    if app
+        .run_on_main_thread(move || {
+            let _ = tx.send(list_toplevel_addresses());
+        })
+        .is_err()
+    {
+        return Vec::new();
+    }
+    rx.recv_timeout(Duration::from_secs(5)).unwrap_or_default()
+}
+
+#[cfg(target_os = "linux")]
+fn list_toplevel_addresses() -> Vec<usize> {
+    use gtk::glib::translate::ToGlibPtr;
+    gtk::Window::list_toplevels()
+        .iter()
+        .map(|w| {
+            let ptr: *mut gtk::ffi::GtkWidget = w.to_glib_none().0;
+            ptr as usize
+        })
+        .collect()
+}
+
+/// Destroy the windows the sign-in left behind: anything on screen that was not
+/// there when the sign-in window opened and that Tauri does not own.
+///
+/// The only thing that can produce one is wry answering a `window.open()` — it
+/// builds the window, and when the page inside calls `close()` it destroys the
+/// webview and leaves the window. An empty untitled window the user cannot place
+/// is not something to ship, and there is no handle to it anywhere else.
+///
+/// Nothing else is at risk: the app's own windows are excluded by asking Tauri
+/// for them, and a window that was already there when the sign-in started is
+/// excluded by the snapshot.
+#[cfg(target_os = "linux")]
+fn sweep_orphan_windows(app: &AppHandle, before: Vec<usize>) {
+    use gtk::glib::translate::ToGlibPtr;
+    use gtk::prelude::{Cast, WidgetExtManual};
+    let app_handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        let mut keep = before;
+        for (_, window) in app_handle.webview_windows() {
+            if let Ok(gtk_window) = window.gtk_window() {
+                let widget: gtk::Widget = gtk_window.upcast();
+                let ptr: *mut gtk::ffi::GtkWidget = widget.to_glib_none().0;
+                keep.push(ptr as usize);
+            }
+        }
+        for widget in gtk::Window::list_toplevels() {
+            let ptr: *mut gtk::ffi::GtkWidget = widget.to_glib_none().0;
+            if keep.contains(&(ptr as usize)) {
+                continue;
+            }
+            eprintln!("webview-fetch: destroying a window the sign-in popup left behind");
+            // Safety: the widget is not touched again, here or anywhere — this
+            // code is the only thing that knows it exists.
+            unsafe { widget.destroy() };
+        }
+    });
+}
+
+#[cfg(not(target_os = "linux"))]
+fn toplevel_addresses(_app: &AppHandle) -> Vec<usize> {
+    Vec::new()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn sweep_orphan_windows(_app: &AppHandle, _before: Vec<usize>) {}
+
 /// Dev-only end-to-end check for the three commands above, in the same shape as
 /// the article probe (mod.rs). `RP_WEBVIEW_SESSION_PROBE` takes a comma-separated
 /// list of `verb:argument` steps and prints one `RP-SESSION` line per step:
@@ -521,10 +618,21 @@ fn render<T: serde::Serialize>(result: Result<T, String>) -> String {
 }
 
 /// Stand in for the user closing the sign-in window, so the probe can exercise
-/// the path that waits for it.
+/// the path that waits for it — and, with RP_SIGN_IN_POPUP set to a URL, for the
+/// popup an identity provider would have opened, so the orphan sweep can be
+/// checked without an account anywhere.
 fn close_sign_in_window_later(app: &AppHandle) {
     let app = app.clone();
+    let popup = std::env::var("RP_SIGN_IN_POPUP").ok();
     std::thread::spawn(move || {
+        if let Some(url) = popup {
+            std::thread::sleep(SIGN_IN_PROBE_CLOSE / 3);
+            for (label, window) in app.webview_windows() {
+                if super::is_fetch_label(&label) {
+                    let _ = window.eval(format!("window.open({});", serde_json::json!(url)));
+                }
+            }
+        }
         std::thread::sleep(SIGN_IN_PROBE_CLOSE);
         for (label, window) in app.webview_windows() {
             if super::is_fetch_label(&label) {

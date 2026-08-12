@@ -3329,6 +3329,7 @@ name = "reading-partner"
 version = "0.8.23"
 dependencies = [
  "cpal",
+ "gtk",
  "hound",
  "javascriptcore-rs",
  "percent-encoding",

@@ -65,6 +65,11 @@ hound = "3.5"
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = "=2.0.2"
 javascriptcore-rs = "=1.1.2"
+# Only for the orphan-window sweep after a sign-in (src/webview_fetch/session.rs):
+# wry answers a popup request by building a bare GTK window of its own, which is
+# not a Tauri window and cannot be reached any other way. Same version tao and
+# wry link against.
+gtk = "0.18"
 
 # Full dev rebuilds peak at many GB of linker memory, which has triggered
 # systemd-oomd to kill the whole desktop session (docs/pitfall/14).
