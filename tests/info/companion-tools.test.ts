@@ -177,6 +177,21 @@ test("generate_briefing reports a refusal instead of claiming its request starte
   expect(out).not.toMatch(/Started a full regeneration/i);
 });
 
+// The third answer (docs/36). On a device that does not collect the same call
+// starts nothing at all — it leaves a request for the machine that does — and
+// the companion must not turn that into "a briefing is being built".
+test("generate_briefing on a reader says the request was passed on, not started", async () => {
+  const out = String(
+    await buildGenerateBriefingTool({ startBriefing: () => "asked" }).execute({ scope: "full" }),
+  );
+  expect(out).toMatch(/does not collect/i);
+  expect(out).toMatch(/passed the request on/i);
+  expect(out).not.toMatch(/Started a full regeneration/i);
+  // No timing promise: the round trip is an upload, then that machine's next
+  // sync, then the collecting itself.
+  expect(out).toMatch(/give no estimate/i);
+});
+
 test("generate_briefing rejects an unknown scope", async () => {
   const h = briefingDeps();
   await expect(buildGenerateBriefingTool(h.deps).execute({ scope: "partial" })).rejects.toThrow(/retriage.*full|scope/i);
