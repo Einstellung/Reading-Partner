@@ -40,7 +40,6 @@ import {
 import { addSource, hasSources } from "../../../info/sources/source-store";
 import { loadProfile, saveProfile } from "../../../observation/profile";
 import { replaceDeclared } from "../../../observation/guess";
-import { askCollector, getInfoPipeline } from "../../../info/briefing/live";
 import { Badge } from "../ui/badge";
 import CallView from "../chat/CallView";
 import ChatPipCard from "../chat/ChatPipCard";
@@ -233,37 +232,41 @@ export function InfoCall({
   // profile (no collection). Retry reuses the same card row so progress/error
   // updates in place rather than appending a new row.
   //
-  // The pipeline runs one run at a time and says which of the two happened. A
-  // refused start does not get a card of its own — nothing would ever update it,
-  // which is how a regenerate came to sit on its first frame while the run it
-  // collided with went on without it. It joins the run already going instead:
-  // that run's progress is what the user asked to see, and the card opens on its
-  // real phase and settles with it.
+  // The view answers with which of three things happened, and the three are
+  // drawn differently.
   //
-  // On a reader there is no run to start and none to join (docs/36), and a third
-  // answer: the request is written for the collecting machine to pick up on its
-  // next sync. No card either — there is nothing on this device to show progress
-  // for, and no honest estimate of when the other machine will have any.
+  // A run started here gets the card. A start refused because one was already
+  // going does not get a card of its own — nothing would ever update it, which
+  // is how a regenerate came to sit on its first frame while the run it collided
+  // with went on without it; it joins that run instead, since that run's
+  // progress is what the user asked to see, and the card opens on its real phase
+  // and settles with it.
+  //
+  // And on a reader nothing runs here at all (docs/36): the request is written
+  // for the collecting machine to pick up on its next sync. No card there
+  // either — there is no run on this device to show the progress of, and no
+  // honest estimate of when the other machine will have one.
   function runBriefingJob(job: BriefingJob): RequestOutcome {
     const asked = runnableJob(job);
-    if (!collecting) {
+    const { outcome, done } = view.request(asked === "retriage" ? "retriage" : "full");
+    if (outcome === "asked") {
       lastJobRef.current = asked;
       // The note waits for the file to really be on disk, which is the one thing
       // the tool's own reply cannot wait for: a request the user was told had
       // been passed on, and that never left the device, is worse than none.
-      void askCollector(asked === "retriage" ? "retriage" : "full").then(
+      void done.then(
         () => noteTurn(askSentNote(asked), { role: "ai", persist: false }),
         () => noteTurn(ASK_FAILED_NOTE, { role: "ai", persist: false }),
       );
-      return "asked";
+      return outcome;
     }
-    const p = getInfoPipeline();
-    const { start } = asked === "retriage" ? p.retriage() : p.generate();
-    const tracked = trackedJob(asked, start);
+    const tracked = trackedJob(asked, outcome);
     lastJobRef.current = tracked;
     awaitingBriefing.current = true;
-    setMessages((prev) => upsertCardRow(prev, BRIEFING_CARD_ID, briefingProgressCard(tracked, p.snapshot())));
-    return start;
+    setMessages((prev) =>
+      upsertCardRow(prev, BRIEFING_CARD_ID, briefingProgressCard(tracked, view.snapshot())),
+    );
+    return outcome;
   }
 
   // Insert a trial's confirm card as its own row just before the streaming reply,

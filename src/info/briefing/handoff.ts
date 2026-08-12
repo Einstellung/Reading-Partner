@@ -104,9 +104,13 @@ export interface AskRecord {
   deviceId: string;
   askedAt: number;
   scope: AskScope;
-  // What the reader said, when they said something a collector's operator would
-  // want to see — "I want to subscribe to X" (docs/36: adding a source happens
-  // on the collector, so the request has to travel as words).
+  // Something the user said that should travel with the request. Nothing writes
+  // it yet. docs/36 has the companion put "I want to subscribe to X" here, but
+  // an ask always costs a collection run and a subscription request should not
+  // buy one — and the conversation itself already travels (threads-info-<date>
+  // is in the sync range), so the sentence is waiting on the collector's screen
+  // in the thread the user typed it into. Kept in the shape because a request
+  // that does want words attached will want this field and not a second file.
   note?: string;
 }
 

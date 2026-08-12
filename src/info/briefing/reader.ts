@@ -28,9 +28,12 @@ import { pruneStaleDailyFiles, todayLocal } from "./store";
 import {
   collectorReport,
   readCollectorClaims,
+  writeAsk,
+  type AskScope,
   type CollectorClaim,
   type CollectorReport,
 } from "./handoff";
+import { currentDeviceId } from "../../platform/app/device";
 import type { InfoSnapshot, RunStart } from "./pipeline";
 import type { Briefing } from "./types";
 
@@ -92,6 +95,16 @@ export interface BriefingView {
   stop(): void;
   // One item's body, or why there is none.
   article(itemId: string): Promise<ArticleState>;
+  // Ask for a new briefing at this scope. A collector starts a run, or reports
+  // that one was already going; a reader writes the request for the collector to
+  // pick up on its next sync.
+  //
+  // Not async, and not a bare promise of the eventual briefing: what has to be
+  // answered now, before anything is drawn, is which of the three happened. The
+  // three are drawn differently, and getting it wrong is what left a progress
+  // card sitting on its first frame while the run it collided with went on
+  // without it.
+  request(scope: AskScope): RequestHandle;
   // What to say about the machine that collects. Empty on the machine that is
   // it — its own trouble is already in the snapshot's error.
   notices(now?: number): string[];
@@ -246,6 +259,20 @@ export class InfoReader implements BriefingView {
   // Nothing is running, so nothing can be stopped. Present so a screen can hand
   // the same object to a Stop button it also shows a collector.
   stop(): void {}
+
+  // Nothing runs here, so the answer is always "asked". The request goes in a
+  // file named after this device, overwritten whole: a newer ask replaces an
+  // older one, and there is nothing to merge because nobody else writes it.
+  //
+  // `done` is where the failure shows. A request the user was told had been
+  // passed on, and that never left the device, is worse than no request at all,
+  // so the write is handed over to be waited on rather than swallowed here.
+  request(scope: AskScope): RequestHandle {
+    return {
+      outcome: "asked",
+      done: writeAsk({ deviceId: currentDeviceId(), askedAt: Date.now(), scope }),
+    };
+  }
 
   async article(itemId: string): Promise<ArticleState> {
     await this.ready();

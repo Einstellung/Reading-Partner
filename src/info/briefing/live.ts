@@ -71,10 +71,8 @@ import {
   readAsks,
   readCollectorClaims,
   readOwnClaim,
-  writeAsk,
   writeCollectorClaim,
   type AskRecord,
-  type AskScope,
   type CollectorClaim,
 } from "./handoff";
 import { onSyncPulled, subscribeSyncStatus } from "../../platform/sync";
@@ -553,6 +551,14 @@ function collectorView(): BriefingView {
     subscribe: (fn) => p.subscribe(fn),
     init: () => p.init(),
     stop: () => p.stop(),
+    // The pipeline's own answer, passed through: it runs one run at a time and
+    // says whether this call started one or found one already going. Losing
+    // that distinction here is exactly what the caller must not be made to
+    // guess at — a refused start drawn as a start is a card nothing updates.
+    request(scope) {
+      const handle = scope === "retriage" ? p.retriage() : p.generate();
+      return { outcome: handle.start, done: handle.done };
+    },
     // This machine is the one collecting; whatever went wrong is already in the
     // snapshot's error, on the screen of the person who can act on it, and the
     // sign-in rows on its source list are the real ones.
@@ -822,11 +828,4 @@ export async function stopCollecting(): Promise<void> {
   electionAt = 0;
   electionValue = false;
   void getInfoCollector().refresh();
-}
-
-// A reader asking the collector for a briefing it cannot build itself. One file
-// per device, overwritten whole: a newer request replaces an older one, and the
-// collector reads it on its next pull.
-export function askCollector(scope: AskScope, note?: string): Promise<void> {
-  return writeAsk({ deviceId: currentDeviceId(), askedAt: Date.now(), scope, note });
 }
