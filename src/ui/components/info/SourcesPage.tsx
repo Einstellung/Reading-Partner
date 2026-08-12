@@ -161,7 +161,10 @@ export interface SourcesPageProps {
   onSignOut?: (site: SignInSite) => void;
   onToggle: (id: string, enabled: boolean) => void;
   onRemove: (id: string) => void;
-  onProbeAdd: (url: string) => Promise<ProbeAddOutcome>;
+  // Probe + trial in one shot. `onSlowTrial` fires when the trial is about to
+  // fetch a body through a browser window, which is tens of seconds of nothing
+  // to look at otherwise.
+  onProbeAdd: (url: string, onSlowTrial?: () => void) => Promise<ProbeAddOutcome>;
   onConfirmAdd: (descriptor: SourceDescriptor) => Promise<void>;
   onBack: () => void;
 }
@@ -169,6 +172,7 @@ export interface SourcesPageProps {
 export function SourcesPage(props: SourcesPageProps) {
   const [url, setUrl] = useState("");
   const [probing, setProbing] = useState(false);
+  const [slow, setSlow] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<ProbeConfirmCardData | null>(null);
   const sites = signInSites(props.sources);
@@ -177,16 +181,18 @@ export function SourcesPage(props: SourcesPageProps) {
     const input = url.trim();
     if (!input || probing) return;
     setProbing(true);
+    setSlow(false);
     setError(null);
     setPending(null);
     try {
-      const r = await props.onProbeAdd(input);
+      const r = await props.onProbeAdd(input, () => setSlow(true));
       if (r.ok) setPending(r.card);
       else setError(r.error);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setProbing(false);
+      setSlow(false);
     }
   }
 
@@ -226,6 +232,11 @@ export function SourcesPage(props: SourcesPageProps) {
             {probing ? "Checking…" : "Add"}
           </Button>
         </div>
+        {slow && (
+          <div className="mt-2 text-[13px] text-[#666]">
+            This site is read through a background browser window — fetching one article to test it takes up to a minute.
+          </div>
+        )}
         {error && <div className="mt-2 text-[13px] text-[#c0392b]">{error}</div>}
         {pending && (
           <div className="mt-3">

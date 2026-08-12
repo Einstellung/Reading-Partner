@@ -8,6 +8,7 @@ import { buildSourceTools, sourceToolStatusLabel, trialSource } from "../../src/
 import type { ProbeConfirmCardData } from "../../src/info/sources/source-cards";
 import type { ExtractReadable } from "../../src/info/extract/readable-select";
 import type { SourceDescriptor } from "../../src/info/sources/descriptor";
+import type { WebviewArticle } from "../../src/info/extract/webview-article";
 
 const extract: ExtractReadable = (_html, url) => ({
   title: `Title of ${url}`,
@@ -140,4 +141,114 @@ test("sourceToolStatusLabel gives a human phrase per tool", () => {
   expect(sourceToolStatusLabel("probe_source", { input: "x.com" })).toMatch(/Probing x.com/);
   expect(sourceToolStatusLabel("trial_source", {})).toMatch(/Fetching 3 articles/);
   expect(sourceToolStatusLabel("add_source", {})).toMatch(/Adding the source/);
+});
+
+// --- webview sources: the trial has to open the window too -------------------
+// Without the fetcher a `webview` source trials to its feed summaries, and the
+// add gate then answers "summary only" for a source that works. These pin the
+// fetcher being wired, the single-article limit, and the notes that explain both.
+
+const WEBVIEW_DESC: SourceDescriptor = {
+  id: "bb", name: "Bloomberg-ish", line: "business", enabled: true,
+  discovery: { kind: "feed", url: "https://ex/feed" },
+  fulltext: { mode: "webview", signInUrl: "https://ex/signin" },
+};
+
+function webviewArticle(url: string, text: string | null, seesSignIn = false): WebviewArticle {
+  return {
+    status: "ok",
+    requestedUrl: url,
+    finalUrl: url,
+    title: `Article ${url}`,
+    text,
+    html: text ? `<p>${text}</p>` : null,
+    selector: "article",
+    ldJson: [],
+    chars: text?.length ?? 0,
+    promosDropped: 0,
+    seesSignIn,
+    warmed: false,
+    elapsedMs: 25_000,
+    detail: null,
+  };
+}
+
+const feedFetch = async (url: string) => res(url.endsWith("/feed") ? FEED_XML : "<html></html>");
+
+test("trialSource fetches a webview source's body through the injected window", async () => {
+  const asked: string[] = [];
+  const r = await trialSource(WEBVIEW_DESC, {
+    fetchFn: feedFetch,
+    extract,
+    fetchViaWebview: async (url) => {
+      asked.push(url);
+      return webviewArticle(url, "story ".repeat(400));
+    },
+  });
+  expect(r.ok).toBe(true);
+  // One window, one article: the sample count drops with the cost.
+  expect(asked).toEqual(["https://ex/1"]);
+  expect(r.samples.length).toBe(1);
+  expect(r.samples[0].fullText).toBe(true);
+  expect(r.samples[0].chars).toBeGreaterThan(1000);
+  expect(r.note).toMatch(/1 article was fetched/i);
+});
+
+test("trialSource without a webview fetcher trials a webview source summary-only and says why", async () => {
+  const r = await trialSource(WEBVIEW_DESC, { fetchFn: feedFetch, extract });
+  expect(r.ok).toBe(true);
+  // Unchanged behaviour on a host with no window: three feed samples.
+  expect(r.samples.length).toBe(3);
+  expect(r.samples.every((s) => !s.fullText)).toBe(true);
+  expect(r.note).toMatch(/this host has none/i);
+});
+
+test("a signed-out webview body is reported as a preview with the sign-in url", async () => {
+  const r = await trialSource(WEBVIEW_DESC, {
+    fetchFn: feedFetch,
+    extract,
+    fetchViaWebview: async (url) => webviewArticle(url, "teaser ".repeat(60), true),
+  });
+  expect(r.samples.length).toBe(1);
+  // A metered preview is a real body and not the whole story.
+  expect(r.samples[0].fullText).toBe(false);
+  expect(r.samples[0].chars).toBeGreaterThan(200);
+  expect(r.note).toMatch(/https:\/\/ex\/signin/);
+});
+
+test("a webview window that comes back empty is not a verdict on the source", async () => {
+  const r = await trialSource(WEBVIEW_DESC, {
+    fetchFn: feedFetch,
+    extract,
+    fetchViaWebview: async (url) => ({ ...webviewArticle(url, null), status: "blocked" as const }),
+  });
+  expect(r.samples.length).toBe(1);
+  expect(r.samples[0].fullText).toBe(false);
+  expect(r.note).toMatch(/worth one more try/i);
+});
+
+test("trial_source hands the webview fetcher to the trial", async () => {
+  const cards: ProbeConfirmCardData[] = [];
+  const tools = buildSourceTools({
+    fetchFn: feedFetch,
+    extract,
+    fetchViaWebview: async (url) => webviewArticle(url, "story ".repeat(400)),
+    addSource: async () => {},
+    onProbeCard: (c) => cards.push(c),
+  });
+  const trial = tools.find((t) => t.name === "trial_source")!;
+  const out = String(await trial.execute({ descriptorJson: JSON.stringify(WEBVIEW_DESC) }));
+  expect(cards.length).toBe(1);
+  expect(cards[0].samples.length).toBe(1);
+  expect(cards[0].samples[0].fullText).toBe(true);
+  expect(out).toMatch(/full text/i);
+  expect(out).toMatch(/1 article was fetched/i);
+});
+
+test("the trial status line warns about the browser window before the wait", () => {
+  const label = sourceToolStatusLabel("trial_source", { descriptorJson: JSON.stringify(WEBVIEW_DESC) });
+  expect(label).toMatch(/browser window/i);
+  expect(label).toMatch(/1 article/);
+  // A descriptor that does not parse yet falls back to the plain wording.
+  expect(sourceToolStatusLabel("trial_source", { descriptorJson: "{ half" })).toMatch(/3 articles/);
 });

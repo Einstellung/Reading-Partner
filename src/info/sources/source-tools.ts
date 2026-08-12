@@ -1,11 +1,16 @@
 // The AI add-source tools (docs/17), wired into the info chat's agent loop:
-// probe_source (find a feed / judge the site), trial_source (really fetch 3
+// probe_source (find a feed / judge the site), trial_source (really fetch a few
 // articles and surface a confirm card), add_source (write it to the store). The
 // hard rule lives in the system prompt AND is echoed by the trial result: the
-// model may only call add_source after the user explicitly agrees. Network and
-// extraction are injected, so the tools test without a real fetch/DOM. The pure
-// probe logic is in probe.ts; trialSource here is the one bit of orchestration
-// that runs the generic engine over a candidate descriptor.
+// model may only call add_source after the user explicitly agrees. Network,
+// extraction and the webview fetcher are injected, so the tools test without a
+// real fetch/DOM/window. The pure probe logic is in probe.ts; trialSource here
+// is the one bit of orchestration that runs the generic engine over a candidate
+// descriptor.
+//
+// trialSource is not a plain network call: for a `webview` source it opens a
+// hidden browser window per article, one at a time, tens of seconds each. Any
+// caller has to expect a slow call and tell the user before it starts.
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../ai/agent";
@@ -13,7 +18,8 @@ import type { FetchFn } from "../extract/http";
 import type { ExtractReadable } from "../extract/readable-select";
 import type { SourceDescriptor } from "./descriptor";
 import { validateDescriptor } from "./descriptor";
-import { collectSource } from "./engine";
+import { collectSource, fetchBodies, type WebviewFetch } from "./engine";
+import type { InfoItem } from "./item";
 import { probeSource, pipeLabel } from "./probe";
 import type { ProbeConfirmCardData, TrialSample } from "./source-cards";
 
@@ -21,26 +27,77 @@ import type { ProbeConfirmCardData, TrialSample } from "./source-cards";
 // trial sample (below it the fetch got a headline/teaser only).
 const FULLTEXT_SAMPLE_MIN = 200;
 
+// How many articles a trial fetches to prove a source.
+export const TRIAL_LIMIT = 3;
+// …and how many when the bodies come through the hidden webview: one. Each of
+// those costs a browser window and 20-30 seconds, the fetcher runs one at a
+// time, and the user is sitting in front of the trial waiting for its answer.
+// One body answers the question the trial exists to answer — does a body come
+// back at all — and the AI can trial again if one is not convincing.
+export const WEBVIEW_TRIAL_LIMIT = 1;
+
+export interface TrialDeps {
+  fetchFn: FetchFn;
+  extract?: ExtractReadable;
+  // The hidden-webview article fetcher, where the host has one. Without it a
+  // `webview` source can only be trialed down to what its feed carried, which
+  // is a headline and a blurb — true on that host, and the note says so.
+  fetchViaWebview?: WebviewFetch;
+}
+
 export interface TrialResult {
   ok: boolean;
   samples: TrialSample[];
+  // What the samples alone do not say: why there is one of them, or why the
+  // bodies could not be tested on this host. For the caller to relay.
+  note?: string;
   error?: string;
 }
 
-// Really collect 3 articles through the generic engine and report each one's
-// title, character count, and whether the full body came back. Network + extract
-// injected. A discovery-layer failure (feed/list unreachable) is caught and
-// returned as !ok so the caller can tell the user honestly.
+// Whether trialing this descriptor will go through the hidden webview — which
+// is what makes a trial slow and what decides how many articles it takes.
+export function trialUsesWebview(
+  descriptor: SourceDescriptor,
+  deps: { fetchViaWebview?: WebviewFetch },
+): boolean {
+  return descriptor.fulltext.mode === "webview" && !!deps.fetchViaWebview;
+}
+
+// Really collect a few articles through the generic engine and report each
+// one's title, character count, and whether the full body came back. Network,
+// extract and the webview fetcher are injected. A discovery-layer failure
+// (feed/list unreachable) is caught and returned as !ok so the caller can tell
+// the user honestly.
+//
+// Slow for a `webview` source: it opens a hidden browser window for the body,
+// tens of seconds, and only one of those runs at a time app-wide (a background
+// collection holds the same gate). Callers must warn the user first.
 export async function trialSource(
   descriptor: SourceDescriptor,
-  deps: { fetchFn: FetchFn; extract?: ExtractReadable },
+  deps: TrialDeps,
 ): Promise<TrialResult> {
+  const viaWebview = trialUsesWebview(descriptor, deps);
+  const limit = viaWebview ? WEBVIEW_TRIAL_LIMIT : TRIAL_LIMIT;
   try {
-    const items = await collectSource(
-      { ...descriptor, limit: 3 },
-      { fetchFn: deps.fetchFn, extract: deps.extract },
-    );
-    const samples: TrialSample[] = items.slice(0, 3).map((it) => {
+    let items = (
+      await collectSource(
+        { ...descriptor, limit },
+        { fetchFn: deps.fetchFn, extract: deps.extract },
+      )
+    ).slice(0, limit);
+    if (viaWebview) {
+      // A discovery pass never opens a webview — a window per item over a whole
+      // feed is exactly what the funnel refuses (engine.ts) — so the body is the
+      // material step's job, and the trial runs that step itself for the one
+      // article it is proving. Without this the gate that decides whether a
+      // source is worth adding answers "summary only" for every webview source.
+      items = await fetchBodies(items, [descriptor], {
+        fetchFn: deps.fetchFn,
+        extract: deps.extract,
+        fetchViaWebview: deps.fetchViaWebview,
+      });
+    }
+    const samples: TrialSample[] = items.map((it) => {
       const text = it.textContent || it.summary || "";
       return {
         title: it.title,
@@ -48,28 +105,85 @@ export async function trialSource(
         fullText: !it.summaryOnly && !!it.textContent && it.textContent.length >= FULLTEXT_SAMPLE_MIN,
       };
     });
-    return { ok: samples.length > 0, samples, error: samples.length ? undefined : "No articles could be fetched." };
+    return {
+      ok: samples.length > 0,
+      samples,
+      note: trialNote(descriptor, deps, items),
+      error: samples.length ? undefined : "No articles could be fetched.",
+    };
   } catch (e) {
     return { ok: false, samples: [], error: e instanceof Error ? e.message : String(e) };
   }
 }
 
+// The line a webview trial needs next to its samples, because a list of titles
+// and character counts cannot say why there is only one of them, why this host
+// could not test the bodies at all, or which of the two "summary only" answers
+// this is: a body that came back signed-out (sign in and trial again) or no body
+// at all (a wall, a timeout, a page with no article — worth another try, not a
+// verdict on the source).
+function trialNote(
+  descriptor: SourceDescriptor,
+  deps: TrialDeps,
+  items: InfoItem[],
+): string | undefined {
+  if (descriptor.fulltext.mode !== "webview") return undefined;
+  if (!deps.fetchViaWebview) {
+    return (
+      "This source's bodies come from a hidden browser window, and this host has none, " +
+      "so the samples are the feed's own summaries — not evidence that the source is summary-only."
+    );
+  }
+  const head = `Only ${WEBVIEW_TRIAL_LIMIT} article was fetched (not ${TRIAL_LIMIT}): each body costs a hidden browser window and tens of seconds.`;
+  const first = items[0];
+  if (!first) return head;
+  const signInUrl = descriptor.fulltext.signInUrl;
+  if (first.textContent && first.summaryOnly && signInUrl) {
+    return `${head} The body came back as the signed-out preview, not the whole story — sign in at ${signInUrl} and trial again to see the full text.`;
+  }
+  if (!first.textContent) {
+    return `${head} The window came back without a body (a wall, a timeout, or a page with no article), which is worth one more try rather than a verdict on the source.`;
+  }
+  return head;
+}
+
 export interface SourceToolDeps {
   fetchFn: FetchFn;
   extract: ExtractReadable;
+  // The hidden-webview article fetcher where the host has one. Optional: absent
+  // it, trial_source reports a `webview` source's feed summaries and says why.
+  fetchViaWebview?: WebviewFetch;
   // Write a descriptor to the source store.
   addSource(descriptor: SourceDescriptor): Promise<void>;
   // Surface a confirm card in the chat after a successful trial.
   onProbeCard(card: ProbeConfirmCardData): void;
 }
 
+// The fulltext mode of the descriptor an argument bag carries, or "" when it
+// carries nothing readable. The status label is drawn while the call runs, so a
+// descriptorJson that does not parse simply falls back to the generic wording.
+function argsFulltextMode(args: Record<string, unknown>): string {
+  try {
+    const raw = JSON.parse(String(args.descriptorJson ?? "")) as { fulltext?: { mode?: unknown } };
+    const mode = raw?.fulltext?.mode;
+    return typeof mode === "string" ? mode : "";
+  } catch {
+    return "";
+  }
+}
+
 // A running/failed status line for a source tool call, shown in the chat trace.
+// The webview line is what stands between the user and a silent minute; it reads
+// off the descriptor, not the host, so on a host with no webview fetcher (iOS)
+// it flashes for the instant the summary-only trial takes.
 export function sourceToolStatusLabel(name: string, args: Record<string, unknown>): string {
   switch (name) {
     case "probe_source":
       return `Probing ${String(args.input ?? "the site")}`;
     case "trial_source":
-      return "Fetching 3 articles to test";
+      return argsFulltextMode(args) === "webview"
+        ? `Fetching ${WEBVIEW_TRIAL_LIMIT} article through a background browser window — tens of seconds`
+        : `Fetching ${TRIAL_LIMIT} articles to test`;
     case "add_source":
       return "Adding the source";
     default:
@@ -140,12 +254,18 @@ export function buildSourceTools(deps: SourceToolDeps): AgentTool[] {
         "before adding it. Pass a descriptorJson — from probe_source, or one you drafted or " +
         "adapted yourself (a new URL, a tweaked linkPattern, a same-site verified shape " +
         "cloned). This is the check: a wrong draft fails here, so just tell the user honestly " +
-        "if it does. Shows a confirmation card with the 3 titles and character counts. Always " +
-        "trial before add_source.",
+        "if it does. Shows a confirmation card with the titles and character counts. Always " +
+        "trial before add_source. A `webview` source is proved with 1 article instead of 3, " +
+        "because each body opens a hidden browser window for tens of seconds — say that it " +
+        "will take up to a minute BEFORE you make the call, not after.",
       parameters: Type.Object(DESCRIPTOR_ARGS),
       execute: async (args) => {
         const descriptor = resolveDescriptor(args);
-        const trial = await trialSource(descriptor, { fetchFn: deps.fetchFn, extract: deps.extract });
+        const trial = await trialSource(descriptor, {
+          fetchFn: deps.fetchFn,
+          extract: deps.extract,
+          fetchViaWebview: deps.fetchViaWebview,
+        });
         if (!trial.ok) {
           throw new Error(trial.error || "The trial fetch returned nothing.");
         }
@@ -154,8 +274,9 @@ export function buildSourceTools(deps: SourceToolDeps): AgentTool[] {
         const lines = trial.samples
           .map((s, i) => `${i + 1}. ${s.title} — ${s.chars} chars${s.fullText ? " (full text)" : " (summary only)"}`)
           .join("\n");
+        const note = trial.note ? `\n\n${trial.note}` : "";
         return (
-          `Trial of "${descriptor.name}" (${label}) succeeded:\n${lines}\n\n` +
+          `Trial of "${descriptor.name}" (${label}) succeeded:\n${lines}${note}\n\n` +
           `A confirmation card is now shown to the user. Only call add_source after they explicitly say yes.`
         );
       },
