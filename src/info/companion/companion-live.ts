@@ -15,6 +15,7 @@ import {
   saveSiteSessions,
 } from "../sources/source-store";
 import { applySessionCheck, signInSites } from "../sources/site-session";
+import { liveWebviewFetch } from "../sources/source-live";
 import type { ProbeConfirmCardData } from "../sources/source-cards";
 import type { ProfileUpdateCardData } from "../briefing/cards";
 import { buildCompanionTools, type BriefingScope, type SiteSignInDeps } from "./companion-tools";
@@ -62,6 +63,9 @@ export function buildLiveCompanionTools(
   return buildCompanionTools({
     fetchFn: infoFetch,
     extract: extractReadable,
+    // trial_source proves a `webview` source only if it can open the window the
+    // bodies come through; without this the trial reports feed summaries.
+    fetchViaWebview: liveWebviewFetch(),
     addSource: (d) => addSource(d).then(() => {}),
     onProbeCard,
     onProfileCard,

@@ -7,11 +7,23 @@
 
 import { infoFetch } from "../extract/http";
 import { extractReadable } from "../extract/readable";
+import { fetchArticleViaWebview } from "../extract/webview-article";
+import { hasWebviewFetch } from "../../platform/app/platform";
+import type { WebviewFetch } from "./engine";
 import { probeSource } from "./probe";
-import { buildSourceTools, trialSource } from "./source-tools";
+import { buildSourceTools, trialSource, trialUsesWebview } from "./source-tools";
 import { addSource } from "./source-store";
 import type { ProbeConfirmCardData } from "./source-cards";
 import type { AgentTool } from "../../ai/agent";
+
+// The hidden-webview article fetcher where the host has one, wired exactly as
+// the collection path wires it (briefing/live.ts). A trial without it answers
+// "summary only" for every `webview` source — which is the wrong answer to the
+// question the trial is asked, since that is the gate a source has to pass to be
+// added at all.
+export function liveWebviewFetch(): WebviewFetch | undefined {
+  return hasWebviewFetch() ? fetchArticleViaWebview : undefined;
+}
 
 // The three add-source tools bound to the live fetch/extract/store. `onProbeCard`
 // lets the chat surface the confirm card when trial_source succeeds.
@@ -19,6 +31,7 @@ export function buildLiveSourceTools(onProbeCard: (card: ProbeConfirmCardData) =
   return buildSourceTools({
     fetchFn: infoFetch,
     extract: extractReadable,
+    fetchViaWebview: liveWebviewFetch(),
     addSource: (d) => addSource(d).then(() => {}),
     onProbeCard,
   });
@@ -30,12 +43,25 @@ export type ProbeAddOutcome =
 
 // The source-list page's "paste an RSS URL" path: probe, then trial in one shot,
 // returning a confirm card or an honest error — no chat, no AI.
-export async function liveProbeAndTrial(input: string): Promise<ProbeAddOutcome> {
+//
+// `onSlowTrial` fires once, after the probe, when the trial about to run will
+// open a browser window for the body: that call takes tens of seconds and the
+// page has only a spinner to show, so the caller is told in time to say so.
+export async function liveProbeAndTrial(
+  input: string,
+  onSlowTrial?: () => void,
+): Promise<ProbeAddOutcome> {
   const probe = await probeSource(input, { fetchFn: infoFetch });
   if (!probe.ok || !probe.descriptor) {
     return { ok: false, error: probe.reason ?? "Could not connect this source." };
   }
-  const trial = await trialSource(probe.descriptor, { fetchFn: infoFetch, extract: extractReadable });
+  const fetchViaWebview = liveWebviewFetch();
+  if (trialUsesWebview(probe.descriptor, { fetchViaWebview })) onSlowTrial?.();
+  const trial = await trialSource(probe.descriptor, {
+    fetchFn: infoFetch,
+    extract: extractReadable,
+    fetchViaWebview,
+  });
   if (!trial.ok) {
     return { ok: false, error: trial.error ?? "The trial fetch returned nothing." };
   }
