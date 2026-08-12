@@ -7,9 +7,13 @@
 // takes the trigger as its labeled control and forwards a synthetic click to it
 // for every click that lands in the label but outside the button; on touch that
 // is the same event Radix's Select opens on, and the pairing is a reported
-// defect upstream (radix-ui/primitives#3679). The row is the row it was: the
-// flex box moved off the <label> onto a <div> around it. aria-label stays on the
-// trigger, which is role="combobox" rather than a form control.
+// defect upstream (radix-ui/primitives#3679). aria-label stays on the trigger,
+// which is role="combobox" rather than a form control.
+//
+// The field owns no box of its own: it emits the label and the trigger as two
+// cells, and FieldGrid around it is the row. That is what makes two fields in
+// one card line up — a per-field flex row would start each trigger after its own
+// label, and "Provider" and "Model" are not the same width.
 
 import { useId } from "react";
 
@@ -19,6 +23,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 export interface Choice {
   value: string;
   label: string;
+}
+
+// The rows one or more ChoiceFields stand in: a label column as wide as the
+// widest label, and a control column as wide as the widest control. `w-fit`
+// keeps the pair at its content width so a two-option dropdown is not stretched
+// across the card; `max-w-full` is what stops a long model name from pushing the
+// grid past the card it sits in.
+export function FieldGrid({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="grid w-fit max-w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-3">
+      {children}
+    </div>
+  );
 }
 
 export function ChoiceField({
@@ -41,7 +58,7 @@ export function ChoiceField({
   const triggerId = useId();
 
   return (
-    <div className="flex items-center gap-2">
+    <>
       <Label layout="detached" htmlFor={triggerId}>
         {label}
       </Label>
@@ -76,6 +93,6 @@ export function ChoiceField({
           ))}
         </SelectContent>
       </Select>
-    </div>
+    </>
   );
 }

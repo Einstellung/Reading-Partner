@@ -8,8 +8,8 @@ import { Checkbox } from "../ui/checkbox";
 import { Label } from "../ui/label";
 import AutostartCard from "./AutostartCard";
 import { CARD } from "./cardStyles";
-import { ChoiceField } from "./ChoiceField";
-import { SectionHeading } from "./SectionHeading";
+import { ChoiceField, FieldGrid } from "./ChoiceField";
+import { SETTINGS_PANEL, SettingsSection } from "./SettingsSection";
 
 export default function FeaturesPanel({
   settings,
@@ -19,23 +19,25 @@ export default function FeaturesPanel({
   onSettingsChange: (next: Settings) => void;
 }) {
   return (
-    <>
-      <SectionHeading first>General</SectionHeading>
-      <div className={CARD}>
-        <ChoiceField
-          label="AI output language"
-          value={settings.aiLanguage}
-          choices={AI_LANGUAGE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-          onChange={(v) => onSettingsChange({ ...settings, aiLanguage: v as AiLanguage })}
-        />
-        <p className="m-0 text-xs text-[#777]">
-          The language the AI writes chat replies, notes, slides, and the news briefing in. Auto
-          follows the language you write in. Voice transcription always follows what you speak.
-        </p>
-      </div>
+    <div className={SETTINGS_PANEL}>
+      <SettingsSection title="General">
+        <div className={CARD}>
+          <FieldGrid>
+            <ChoiceField
+              label="AI output language"
+              value={settings.aiLanguage}
+              choices={AI_LANGUAGE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+              onChange={(v) => onSettingsChange({ ...settings, aiLanguage: v as AiLanguage })}
+            />
+          </FieldGrid>
+          <p className="m-0 text-xs text-[#777]">
+            The language the AI writes chat replies, notes, slides, and the news briefing in. Auto
+            follows the language you write in. Voice transcription always follows what you speak.
+          </p>
+        </div>
+      </SettingsSection>
 
-      <SectionHeading>Reading</SectionHeading>
-      <div className="flex flex-col gap-3">
+      <SettingsSection title="Reading">
         <div className={CARD}>
           <Label>
             <Checkbox
@@ -65,34 +67,34 @@ export default function FeaturesPanel({
             highlight and draw. The navigation lock in the reader still overrides both.
           </p>
         </div>
-      </div>
+      </SettingsSection>
 
-      <SectionHeading>Briefing</SectionHeading>
-      <div className={CARD}>
-        <Label>
-          <Checkbox
-            checked={settings.backgroundCollect}
-            onCheckedChange={(v) =>
-              onSettingsChange({ ...settings, backgroundCollect: v === true })
-            }
-          />
-          Collect from your sources in the background
-        </Label>
-        <p className="m-0 text-xs text-[#777]">
-          While the app is open, each source is checked on its own schedule and what it published
-          is kept until the day's briefing is built. Off, nothing is collected until the briefing
-          runs, and it sees only what the feeds happen to be showing at that moment — a feed that
-          holds six hours of headlines loses the other eighteen.
-        </p>
-      </div>
+      <SettingsSection title="Briefing">
+        <div className={CARD}>
+          <Label>
+            <Checkbox
+              checked={settings.backgroundCollect}
+              onCheckedChange={(v) =>
+                onSettingsChange({ ...settings, backgroundCollect: v === true })
+              }
+            />
+            Collect from your sources in the background
+          </Label>
+          <p className="m-0 text-xs text-[#777]">
+            While the app is open, each source is checked on its own schedule and what it published
+            is kept until the day's briefing is built. Off, nothing is collected until the briefing
+            runs, and it sees only what the feeds happen to be showing at that moment — a feed that
+            holds six hours of headlines loses the other eighteen.
+          </p>
+        </div>
+      </SettingsSection>
 
       {/* Nothing here syncs, and there is no such thing on a phone. */}
       {hasAutostart() && (
-        <>
-          <SectionHeading>This computer</SectionHeading>
+        <SettingsSection title="This computer">
           <AutostartCard />
-        </>
+        </SettingsSection>
       )}
-    </>
+    </div>
   );
 }

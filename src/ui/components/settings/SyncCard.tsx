@@ -111,7 +111,9 @@ export default function SyncCard() {
         >
           {status.running ? "Syncing…" : "Sync now"}
         </Button>
-        <Button type="button" variant="outline" disabled={busy} onClick={() => run(signOutOfGoogle)}>
+        {/* Quieter than Sync now beside it, the way sign-out is quieter than
+            sign-in on a provider card. */}
+        <Button type="button" variant="subtle" disabled={busy} onClick={() => run(signOutOfGoogle)}>
           Sign out
         </Button>
         <span className="text-xs text-[#777]">Last sync: {formatSyncTime(status.lastSyncAt)}</span>

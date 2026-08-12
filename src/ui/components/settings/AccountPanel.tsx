@@ -28,10 +28,10 @@ import {
 } from "../../../ai/aiClient";
 import { type Settings, type ThinkingSetting } from "../../../platform/app/settings";
 import { CARD } from "./cardStyles";
-import { ChoiceField } from "./ChoiceField";
+import { ChoiceField, FieldGrid } from "./ChoiceField";
 import KeyCard from "./KeyCard";
 import OAuthCard from "./OAuthCard";
-import { SectionHeading } from "./SectionHeading";
+import { SETTINGS_PANEL, SettingsSection } from "./SettingsSection";
 import SyncCard from "./SyncCard";
 
 const THINKING_OPTIONS: { value: ThinkingSetting; label: string }[] = [
@@ -75,9 +75,8 @@ export default function AccountPanel({
   const connectedProviders = providers.filter((p) => p.configured);
 
   return (
-    <>
-      <SectionHeading first>Providers</SectionHeading>
-      <div className="flex flex-col gap-3">
+    <div className={SETTINGS_PANEL}>
+      <SettingsSection title="Providers">
         <OAuthCard
           name="Anthropic (Claude)"
           signInLabel="Sign in with Claude"
@@ -110,62 +109,67 @@ export default function AccountPanel({
           providers={providers}
           onActivated={() => activate("deepseek")}
         />
-      </div>
+      </SettingsSection>
 
-      <SectionHeading>Default conversation</SectionHeading>
-      <div className={CARD}>
-        {connectedProviders.length === 0 ? (
-          <p className="m-0 text-sm text-[#777]">Connect a provider above to choose a default.</p>
-        ) : (
-          <div className="flex flex-wrap items-center gap-3">
-            <ChoiceField
-              label="Provider"
-              placeholder="Select…"
-              value={settings.defaultProviderId ?? undefined}
-              choices={connectedProviders.map((p) => ({ value: p.id, label: p.name }))}
-              onChange={(defaultProviderId) =>
-                onSettingsChange({ ...settings, defaultProviderId, defaultModelId: null })
-              }
-            />
-            <ChoiceField
-              label="Model"
-              placeholder="Select…"
-              value={settings.defaultModelId ?? undefined}
-              disabled={!settings.defaultProviderId || models.length === 0}
-              choices={models.map((m) => ({ value: m.id, label: modelChoiceLabel(m) }))}
-              onChange={(defaultModelId) => onSettingsChange({ ...settings, defaultModelId })}
-            />
-            <p className="m-0 basis-full text-xs text-[#777]">
-              The number beside each model is its context window. This app reads a whole book into
-              it; on a smaller window a reply drops material to fit and says what it dropped.
-            </p>
-          </div>
-        )}
-      </div>
-
-      <SectionHeading>Thinking</SectionHeading>
-      <div className={CARD}>
-        <div className="flex flex-wrap items-center gap-3">
-          <ThinkingField
-            label="Chat"
-            value={settings.chatThinking}
-            onChange={(chatThinking) => onSettingsChange({ ...settings, chatThinking })}
-          />
-          <ThinkingField
-            label="Lesson prep"
-            value={settings.prepThinking}
-            onChange={(prepThinking) => onSettingsChange({ ...settings, prepThinking })}
-          />
+      <SettingsSection title="Default conversation">
+        <div className={CARD}>
+          {connectedProviders.length === 0 ? (
+            <p className="m-0 text-sm text-[#777]">Connect a provider above to choose a default.</p>
+          ) : (
+            <>
+              <FieldGrid>
+                <ChoiceField
+                  label="Provider"
+                  placeholder="Select…"
+                  value={settings.defaultProviderId ?? undefined}
+                  choices={connectedProviders.map((p) => ({ value: p.id, label: p.name }))}
+                  onChange={(defaultProviderId) =>
+                    onSettingsChange({ ...settings, defaultProviderId, defaultModelId: null })
+                  }
+                />
+                <ChoiceField
+                  label="Model"
+                  placeholder="Select…"
+                  value={settings.defaultModelId ?? undefined}
+                  disabled={!settings.defaultProviderId || models.length === 0}
+                  choices={models.map((m) => ({ value: m.id, label: modelChoiceLabel(m) }))}
+                  onChange={(defaultModelId) => onSettingsChange({ ...settings, defaultModelId })}
+                />
+              </FieldGrid>
+              <p className="m-0 text-xs text-[#777]">
+                The number beside each model is its context window. This app reads a whole book into
+                it; on a smaller window a reply drops material to fit and says what it dropped.
+              </p>
+            </>
+          )}
         </div>
-        <p className="m-0 text-xs text-[#777]">
-          Adaptive models decide per question how much to actually think; higher = deeper but
-          slower.
-        </p>
-      </div>
+      </SettingsSection>
 
-      <SectionHeading>Sync</SectionHeading>
-      <SyncCard />
-    </>
+      <SettingsSection title="Thinking">
+        <div className={CARD}>
+          <FieldGrid>
+            <ThinkingField
+              label="Chat"
+              value={settings.chatThinking}
+              onChange={(chatThinking) => onSettingsChange({ ...settings, chatThinking })}
+            />
+            <ThinkingField
+              label="Lesson prep"
+              value={settings.prepThinking}
+              onChange={(prepThinking) => onSettingsChange({ ...settings, prepThinking })}
+            />
+          </FieldGrid>
+          <p className="m-0 text-xs text-[#777]">
+            Adaptive models decide per question how much to actually think; higher = deeper but
+            slower.
+          </p>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection title="Sync">
+        <SyncCard />
+      </SettingsSection>
+    </div>
   );
 }
 
