@@ -3,7 +3,11 @@
 // measured, not assumed — see docs/pitfall/69. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { observeAppLifecycle, type LifecycleTarget } from "../src/platform/app/lifecycle";
+import {
+  observeAppExit,
+  observeAppLifecycle,
+  type LifecycleTarget,
+} from "../src/platform/app/lifecycle";
 
 // Just enough window: listeners by type, a settable document.hidden, and the
 // ability to fire an event the way the platform would.
@@ -114,5 +118,55 @@ test("the undo unbinds every listener", () => {
   w.reveal();
 
   expect(calls).toEqual([]);
+  expect(w.bound()).toBe(0);
+});
+
+// The exit edge (observeAppExit). Background collection hangs off this one and
+// not off onBackground, so what must not reach it is as much of the contract as
+// what must (docs/36).
+
+test("leaving the foreground is not leaving the page", () => {
+  const w = fakeWindow();
+  let exits = 0;
+  observeAppExit(w.win, () => {
+    exits += 1;
+  });
+
+  // Every way of stepping away from a desktop window without closing it: focus
+  // to another app, and minimising. A collector goes on collecting through both.
+  w.fire("blur");
+  w.hide();
+  w.reveal();
+
+  expect(exits).toBe(0);
+});
+
+test("pagehide is the exit, every time it fires", () => {
+  const w = fakeWindow();
+  let exits = 0;
+  observeAppExit(w.win, () => {
+    exits += 1;
+  });
+
+  // On iOS this is the app being backgrounded, and the webview may be suspended
+  // and restored more than once in a session. Every one of them is an exit; the
+  // handlers are idempotent, so none of them is swallowed.
+  w.fire("pagehide");
+  w.fire("pagehide");
+
+  expect(exits).toBe(2);
+});
+
+test("the exit undo unbinds", () => {
+  const w = fakeWindow();
+  let exits = 0;
+  const stop = observeAppExit(w.win, () => {
+    exits += 1;
+  });
+
+  stop();
+  w.fire("pagehide");
+
+  expect(exits).toBe(0);
   expect(w.bound()).toBe(0);
 });

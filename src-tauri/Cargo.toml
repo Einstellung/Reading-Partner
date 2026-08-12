@@ -22,7 +22,11 @@ tauri-build = { version = "2", features = [] }
 inspectable = ["tauri/devtools"]
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# tray-icon: the collector end has to survive its window being closed (docs/36),
+# and the tray is what it is reachable by afterwards. Enabling it everywhere is
+# safe — tauri declares the underlying crate only for the desktop targets, so an
+# iOS build never sees it, and src/tray.rs is `#[cfg(desktop)]` besides.
+tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 # unsafe-headers: lets the fetch bridge send an empty Origin, which the plugin
@@ -55,6 +59,12 @@ serde_json = "1"
 # encodes a 16 kHz mono WAV for the STT request (docs/15).
 cpal = "0.15"
 hound = "3.5"
+
+# Start with the machine, if the user asks for it (docs/36). The crate exists
+# only for the three desktop platforms, so it is scoped to them rather than
+# guarded at the use site; on mobile it is not a dependency at all.
+[target.'cfg(any(target_os = "linux", target_os = "macos", windows))'.dependencies]
+tauri-plugin-autostart = "2"
 
 # Read the rendered DOM back out of the hidden article-fetch webview
 # (src/webview_fetch). Tauri's `eval` is fire-and-forget, so the result comes

@@ -2,9 +2,11 @@
 // connected. Grouped by where the switch is felt — everywhere, in the reader,
 // in the briefing — with plain headings rather than another layer of folds.
 
+import { hasAutostart } from "../../../platform/app/autostart";
 import { AI_LANGUAGE_OPTIONS, type AiLanguage, type Settings } from "../../../platform/app/settings";
 import { Checkbox } from "../ui/checkbox";
 import { Label } from "../ui/label";
+import AutostartCard from "./AutostartCard";
 import { CARD } from "./cardStyles";
 import { ChoiceField } from "./ChoiceField";
 import { SectionHeading } from "./SectionHeading";
@@ -83,6 +85,14 @@ export default function FeaturesPanel({
           holds six hours of headlines loses the other eighteen.
         </p>
       </div>
+
+      {/* Nothing here syncs, and there is no such thing on a phone. */}
+      {hasAutostart() && (
+        <>
+          <SectionHeading>This computer</SectionHeading>
+          <AutostartCard />
+        </>
+      )}
     </>
   );
 }

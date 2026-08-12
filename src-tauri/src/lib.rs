@@ -15,6 +15,10 @@ mod voice;
 // depends on is not known to survive. See the module note.
 #[cfg(desktop)]
 mod webview_fetch;
+// The tray icon and close-to-tray (docs/36). Desktop only: there is no tray on a
+// phone, and the collector this keeps alive does not run there either.
+#[cfg(desktop)]
+mod tray;
 
 // Plugins: dialog + fs (M1 file open / reading state), http (AI provider requests
 // routed through Rust to bypass CORS), opener (open the system browser for OAuth),
@@ -49,6 +53,13 @@ pub fn run() {
     // note above); everything else is registered on both.
     #[cfg(desktop)]
     let builder = builder
+        // Start with the machine when the user has asked for it (docs/36). Off
+        // by default and registered here only; the choice itself is a per-device
+        // one and lives in device.json, not in the synced settings.
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .manage(voice::VoiceState::default())
         // The fetcher's state is also what the navigation guard reads to tell a
         // hidden fetcher window from the app's own, so it is managed before any
@@ -64,7 +75,8 @@ pub fn run() {
             webview_fetch::fetch_article_via_webview,
             webview_fetch::session::open_site_sign_in,
             webview_fetch::session::check_site_session,
-            webview_fetch::session::clear_site_cookies
+            webview_fetch::session::clear_site_cookies,
+            tray::set_tray_status
         ]);
     #[cfg(mobile)]
     let builder = builder.invoke_handler(tauri::generate_handler![
@@ -102,6 +114,12 @@ pub fn run() {
             {
                 webview_fetch::run_probe_from_env(app.handle());
                 webview_fetch::session::run_probe_from_env(app.handle());
+                // The tray is what lets the app go on collecting with its window
+                // closed (docs/36), so the close button only stops being a quit
+                // button once there is an icon to reach the app by.
+                if tray::init(app.handle()) {
+                    tray::hide_on_close(app.handle());
+                }
             }
             Ok(())
         })

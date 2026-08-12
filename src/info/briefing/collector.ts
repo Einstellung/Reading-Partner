@@ -6,7 +6,12 @@
 // polling is its own activity now, on each source's own interval, and generating
 // a briefing draws from what the polling has already brought in.
 //
-// It has to survive a phone. A backgrounded webview stops running JavaScript,
+// It has to survive being left alone. On the desktop that is the normal state
+// of a collector (docs/36): the window is minimised or behind something else
+// while its owner reads on a phone, and the polling has to go on through it.
+// Only the page going away stops the schedule — see suspend().
+//
+// It has to survive a phone too. A backgrounded webview stops running JavaScript,
 // and iOS may suspend or kill it outright, so a timer is a hint and nothing
 // more: whether a source is due is answered from the clock and the last-polled
 // timestamps on disk, and coming back to the foreground always runs a cycle. A
@@ -23,6 +28,7 @@ import {
   emptyPool,
   dueSources,
   evict,
+  lastPolledAt,
   markPolled,
   nextPollDelay,
   poolSize,
@@ -41,6 +47,38 @@ import type { InfoItem } from "../sources/item";
 // get on a desktop that stays open for days, where nothing else re-checks it.
 export const MIN_WAKE_MS = 60_000;
 export const MAX_WAKE_MS = 30 * 60_000;
+
+// What the collector is doing, for whoever has to say so outside the app's own
+// windows — the tray, today (docs/36).
+export interface CollectorStatus {
+  // Polling is on and a wake is scheduled.
+  collecting: boolean;
+  // When any source was last polled (ms), or null if none ever has been. Read
+  // off the pool, so it survives a restart.
+  lastPollAt: number | null;
+}
+
+function pad(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+// One sentence, for a tray tooltip and the menu line beside it. Local time,
+// because the person reading it is sitting at the machine; the date comes along
+// only when it is not today's, which is the case that would otherwise read as a
+// collection that just happened.
+export function collectorStatusLine(status: CollectorStatus, now: number): string {
+  if (!status.collecting) return "Collection is off";
+  if (status.lastPollAt === null) return "Nothing collected yet";
+  const at = new Date(status.lastPollAt);
+  const time = `${pad(at.getHours())}:${pad(at.getMinutes())}`;
+  const today = new Date(now);
+  const sameDay =
+    at.getFullYear() === today.getFullYear() &&
+    at.getMonth() === today.getMonth() &&
+    at.getDate() === today.getDate();
+  if (sameDay) return `Last collected ${time}`;
+  return `Last collected ${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())} ${time}`;
+}
 
 export interface CollectorDeps {
   loadPool(): Promise<Pool>;
@@ -70,6 +108,10 @@ export interface CollectorDeps {
   // One line per cycle, for events-info.jsonl. Optional: instrumentation never
   // decides whether a poll happens.
   log?(data: Record<string, number>): void;
+  // Called whenever the schedule starts, stops, or completes a cycle, so a
+  // surface outside the window can say what the collector is up to. Optional,
+  // and for display only.
+  onStatus?(status: CollectorStatus): void;
 }
 
 export class InfoCollector {
@@ -220,6 +262,7 @@ export class InfoCollector {
   start(): void {
     if (this.started) return;
     this.started = true;
+    this.report();
     void this.cycle();
   }
 
@@ -229,6 +272,17 @@ export class InfoCollector {
     this.cancelTimer = null;
     this.controller?.abort();
     this.controller = null;
+    this.report();
+  }
+
+  // Say where the schedule stands. Read off what is already in hand: the pool
+  // may not be loaded yet on the very first call, and waiting for it to answer a
+  // question about a tooltip would be the wrong way round.
+  private report(): void {
+    this.deps.onStatus?.({
+      collecting: this.started,
+      lastPollAt: this.pool ? lastPolledAt(this.pool) : null,
+    });
   }
 
   // Back in front of the user. Whatever the timers did or did not do while the
@@ -241,9 +295,18 @@ export class InfoCollector {
     void this.cycle();
   }
 
-  // Going away. The timer would not fire anyway on a suspended webview; letting
-  // it stand would only mean a stale wake on the way back.
-  background(): void {
+  // The page is going away: the app is quitting, or iOS is about to suspend the
+  // webview. Both things here are about that and only that — a timer that will
+  // not fire is dropped, and a request that would hang unanswered in a suspended
+  // process is aborted.
+  //
+  // Not the same edge as leaving the foreground (docs/36). A desktop window that
+  // lost focus, or sits minimised while its owner reads on a phone, is the state
+  // background collection exists for: its timers keep running and its in-flight
+  // poll is a request already paid for, which an abort would throw away without
+  // even marking the source polled. Whoever wires this up wires it to
+  // observeAppExit, never to onBackground.
+  suspend(): void {
     this.cancelTimer?.();
     this.cancelTimer = null;
     this.controller?.abort();
@@ -309,6 +372,7 @@ export class InfoCollector {
         });
       }
       await this.schedule();
+      this.report();
     }
   }
 

@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { installFetchBridge } from "./ai/fetch-bridge";
+import { applyStoredAutostart } from "./platform/app/autostart";
 import { detectShell } from "./platform/app/shell";
 import "./styles.css";
 
@@ -39,6 +40,11 @@ if (import.meta.env.VITE_SMOKE === "1") {
   // case the underlying SDK captures a reference to the global fetch at module
   // load. Hence the dynamic import.
   installFetchBridge();
+
+  // Make the login sequence agree with what this device asked for (docs/36).
+  // Here rather than in a shell, because both shells run on a desktop and the
+  // registration is the machine's, not the window's. A no-op on mobile.
+  void applyStoredAutostart();
 
   // Which shell (docs/22), decided once here: the phone one carries no reader,
   // so the choice also decides whether PDFium is ever loaded. Both are dynamic

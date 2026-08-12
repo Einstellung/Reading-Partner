@@ -110,9 +110,15 @@ Prebuilt binaries for Linux, macOS and Windows are on the [releases page](https:
 
 First run: open Settings and connect one provider — Sign in with ChatGPT or Sign in with Claude uses your subscription through an OAuth flow in the browser (no API key), or paste a DeepSeek API key. Only one provider is active at a time; connecting one signs the others out. Optionally add a Semantic Scholar API key for lesson prep and a SiliconFlow key for voice input. The AI's output language is set here too and governs chat, notes, slides, and the briefing — nine languages, or auto to follow the language you write in. With no sources yet, the AI starts a guided conversation to help you subscribe to your first few.
 
+On the desktop the app collects from your sources for as long as it is running, whether or not its window is in front. Closing the window puts it in the system tray rather than ending it; the tray menu shows when it last collected, brings the window back, and has the one Quit that actually stops it.
+
+Settings has a switch to start the app when the computer starts, off by default. It belongs to that computer and is not carried to your other devices.
+
 ## Build
 
 Prerequisites: Bun, Rust stable, and the [Tauri 2 prerequisites](https://tauri.app/start/prerequisites/).
+
+The tray icon needs nothing extra to build — the appindicator library is loaded at runtime, not linked. To see the icon on Linux you need `libayatana-appindicator3` (Debian/Ubuntu: `libayatana-appindicator3-1`; Fedora: `libayatana-appindicator-gtk3`) and a desktop that shows StatusNotifier items — GNOME needs the AppIndicator extension, KDE and most others show them out of the box. Without a host the icon is registered and simply not drawn; the app then still runs windowless after you close the window, and the only way to quit it is to kill the process.
 
 ```sh
 git clone git@github.com:Einstellung/Reading-Partner.git

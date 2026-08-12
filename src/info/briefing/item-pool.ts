@@ -169,6 +169,17 @@ export function unstockedSources(
   return descriptors.filter((d) => !stocked.has(d.id));
 }
 
+// When any source was last polled, or null when none ever was. The pool is the
+// only durable record of that, so this is also what a fresh process knows about
+// what the previous one collected.
+export function lastPolledAt(pool: Pool): number | null {
+  let latest: number | null = null;
+  for (const at of Object.values(pool.lastPolled)) {
+    if (latest === null || at > latest) latest = at;
+  }
+  return latest;
+}
+
 export function markPolled(pool: Pool, sourceIds: string[], now: number): Pool {
   if (sourceIds.length === 0) return pool;
   const lastPolled = { ...pool.lastPolled };
