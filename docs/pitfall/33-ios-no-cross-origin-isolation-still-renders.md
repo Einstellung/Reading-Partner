@@ -10,6 +10,6 @@
 - 不必为 iOS 折腾让 COOP/COEP 生效，渲染不需要。但 COEP=require-corp 仍会拦跨源子资源，坑 30 的外链图 http 路由内联在 iOS 同样需要（本冒烟未覆盖，iPad 适配时验证）。
 - 闸门可以在模拟器上无签名验证，不需要第一个 TestFlight 包——推翻 docs/11 的旧结论。链路见 `.github/workflows/ios-simulator-smoke.yml` 和 `src/smoke/`。
 
-遗留风险：若将来升级 `@embedpdf` 且新版直连引擎硬依赖 SAB，iOS 会退回坑 18 的静默挂起；冒烟的 `failLayer` 会标 `document-open` 或 `no-cross-origin-isolation`，据此定位。`minimumSystemVersion` 已是 26.0，WebKit 的 SAB 版本门槛（16.4）不再构成限制；将来若要多线程 SAB，只剩自定义协议下的跨源隔离要解决。
+遗留风险：若将来升级 `@embedpdf` 且新版直连引擎硬依赖 SAB，iOS 会退回坑 18 的静默挂起；冒烟的 `failLayer` 会标 `document-open` 或 `no-cross-origin-isolation`，据此定位。`minimumSystemVersion` 现为 16.0，WebKit 的 SAB 要 16.4，但既然 iOS 根本没启用隔离、渲染也不靠它，此处不阻塞；将来若要多线程 SAB，得同时解决自定义协议隔离 + 抬到 16.4。
 
 验证手法（simctl 链路，供复现）：`tauri ios build --target aarch64-sim --no-sign` 出 `.app`（非 ipa、跳签名，需 Apple Silicon runner）→ `simctl list devices available -j` 选现成 iPad → `bootstatus -b` → install/launch → 结果 JSON 写在 app 数据容器。`BaseDirectory.AppData` 在 iOS 的具体落点不确定，CI 按唯一文件名 `find` 而不是硬编码路径。

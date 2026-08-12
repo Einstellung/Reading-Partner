@@ -15,7 +15,7 @@
 
 ## 现状（本仓库）
 
-- 最低 iOS 26.0（`src-tauri/tauri.conf.json` → `bundle.iOS.minimumSystemVersion`）。
+- 最低 iOS 16.0（`src-tauri/tauri.conf.json` → `bundle.iOS.minimumSystemVersion`）。
 - 没有声明任何 `UIBackgroundModes`。
 - `NSMicrophoneUsageDescription` 在 `src-tauri/Info.plist`（注释说是给 macOS 的，实际 iOS 也吃到，见下）。`Info.ios.plist` 只有 `ITSAppUsesNonExemptEncryption` 和 `CFBundleIconName`。
 - `src-tauri/gen/apple` 不入库，CI 里 `tauri ios init --ci` 现生成（`.github/workflows/ios-testflight.yml`）。所以 Info.plist 的改动只能走 `src-tauri/Info.plist` / `Info.ios.plist`，手改 gen/apple 会被覆盖（坑 31 已记）。
