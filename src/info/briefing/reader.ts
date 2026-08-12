@@ -203,10 +203,13 @@ export function collectorNotices(report: CollectorReport, now: number): string[]
     out.push(`${c.deviceName} last checked in ${sinceLabel(now - c.heartbeatAt)}.`);
   }
   if (c.halt) out.push(`Its last run stopped: ${c.halt}`);
+  // Said as a standing fact rather than as a claim about today's items: whether
+  // any of them came from that site is not something this device can know, and
+  // the thing to do about it is the same either way.
   const signedOut = Object.keys(c.sites).filter((host) => !c.sites[host]);
   if (signedOut.length > 0) {
     out.push(
-      `Some of today's items only have a summary: ${signedOut.join(", ")} needs signing in again on ${c.deviceName}.`,
+      `Full text from ${signedOut.join(", ")} needs a sign-in on ${c.deviceName}; without it those items only have a summary.`,
     );
   }
   return out;
