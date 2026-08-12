@@ -6,7 +6,12 @@
 // phone it will not have. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { InfoCollector, type CollectorDeps } from "../../src/info/briefing/collector";
+import {
+  collectorStatusLine,
+  InfoCollector,
+  type CollectorDeps,
+  type CollectorStatus,
+} from "../../src/info/briefing/collector";
 import { emptyPool, type Pool } from "../../src/info/briefing/item-pool";
 import type { CachedArticle } from "../../src/info/briefing/store";
 import type { SourceDescriptor } from "../../src/info/sources/descriptor";
@@ -50,6 +55,7 @@ class Harness {
   fails = new Set<string>();
   timer: { at: number; cb: () => void } | null = null;
   logs: Record<string, number>[] = [];
+  statuses: CollectorStatus[] = [];
   // With this set, a poll parks instead of returning, so a test can act while a
   // request is in flight — which is where an abort actually lands. It resolves
   // when released, never throws: collectAll answers an abort by handing back
@@ -88,6 +94,7 @@ class Harness {
         };
       },
       log: (data) => void this.logs.push(data),
+      onStatus: (status) => void this.statuses.push(status),
     };
   }
 
@@ -379,4 +386,50 @@ test("a source the pool is holding nothing for is polled even when its schedule 
   const { poll, skip } = await c.toPoll(h.sources, { force: false });
   expect(poll.map((d) => d.id)).toEqual(["empty"]);
   expect(skip.map((d) => d.id)).toEqual(["fast"]);
+});
+
+// --- what the tray is told ---------------------------------------------------
+
+test("the schedule reports where it stands, and the last poll comes off the pool", async () => {
+  const h = new Harness();
+  h.sources = [source("fast", 30)];
+  const c = new InfoCollector(h.deps());
+
+  c.start();
+  await settle();
+  // Turning on is said at once, before a cycle has run — the pool is not even
+  // loaded yet, so nothing has been collected as far as anyone can tell.
+  expect(h.statuses[0]).toEqual({ collecting: true, lastPollAt: null });
+  // And once the cycle lands, the time the poll went out.
+  expect(h.statuses[h.statuses.length - 1]).toEqual({ collecting: true, lastPollAt: h.now });
+
+  h.on = false;
+  await c.refresh();
+  expect(h.statuses[h.statuses.length - 1].collecting).toBe(false);
+});
+
+test("the status line names the time of day, and the date only when it is not today", () => {
+  const now = new Date(2026, 7, 12, 21, 30).getTime();
+
+  expect(collectorStatusLine({ collecting: false, lastPollAt: now }, now)).toBe(
+    "Collection is off",
+  );
+  expect(collectorStatusLine({ collecting: true, lastPollAt: null }, now)).toBe(
+    "Nothing collected yet",
+  );
+  expect(
+    collectorStatusLine(
+      { collecting: true, lastPollAt: new Date(2026, 7, 12, 9, 5).getTime() },
+      now,
+    ),
+  ).toBe("Last collected 09:05");
+  // A machine left running with collection just switched back on can be hours or
+  // days past its last poll, and "Last collected 09:05" would read as this
+  // morning's.
+  expect(
+    collectorStatusLine(
+      { collecting: true, lastPollAt: new Date(2026, 7, 9, 9, 5).getTime() },
+      now,
+    ),
+  ).toBe("Last collected 2026-08-09 09:05");
 });

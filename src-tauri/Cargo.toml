@@ -22,7 +22,11 @@ tauri-build = { version = "2", features = [] }
 inspectable = ["tauri/devtools"]
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# tray-icon: the collector end has to survive its window being closed (docs/36),
+# and the tray is what it is reachable by afterwards. Enabling it everywhere is
+# safe — tauri declares the underlying crate only for the desktop targets, so an
+# iOS build never sees it, and src/tray.rs is `#[cfg(desktop)]` besides.
+tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 # unsafe-headers: lets the fetch bridge send an empty Origin, which the plugin

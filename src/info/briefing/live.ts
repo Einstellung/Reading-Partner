@@ -14,6 +14,7 @@ import { browserWakeLockTarget, createScreenWakeLock } from "../../platform/app/
 import { collectAll, fetchBodies as fetchArticleBodies } from "../sources/engine";
 import { fetchArticleViaWebview } from "../extract/webview-article";
 import { hasWebviewFetch } from "../../platform/app/platform";
+import { setTrayStatus } from "../../platform/app/tray";
 import { extractReadable } from "../extract/readable";
 import { loadSources, loadSourceHealth, saveSourceHealth } from "../sources/source-store";
 import { loadFeedback } from "../../observation/feedback";
@@ -41,7 +42,7 @@ import {
   saveRun,
   todayLocal,
 } from "./store";
-import { InfoCollector } from "./collector";
+import { collectorStatusLine, InfoCollector } from "./collector";
 import {
   loadPool,
   removePoolDays,
@@ -354,6 +355,11 @@ export function getInfoCollector(): InfoCollector {
         return () => clearTimeout(id);
       },
       log: (data) => logEvent(INFO_EVENT_TOPIC, "info-poll", data),
+      // The tray is where a machine with its window closed says what it has
+      // been doing (docs/36). Display only, and it goes nowhere on a phone.
+      onStatus: (status) => {
+        void setTrayStatus(collectorStatusLine(status, Date.now()));
+      },
     });
   }
   return collector;

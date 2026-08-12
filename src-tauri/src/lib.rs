@@ -15,6 +15,10 @@ mod voice;
 // depends on is not known to survive. See the module note.
 #[cfg(desktop)]
 mod webview_fetch;
+// The tray icon and close-to-tray (docs/36). Desktop only: there is no tray on a
+// phone, and the collector this keeps alive does not run there either.
+#[cfg(desktop)]
+mod tray;
 
 // Plugins: dialog + fs (M1 file open / reading state), http (AI provider requests
 // routed through Rust to bypass CORS), opener (open the system browser for OAuth),
@@ -64,7 +68,8 @@ pub fn run() {
             webview_fetch::fetch_article_via_webview,
             webview_fetch::session::open_site_sign_in,
             webview_fetch::session::check_site_session,
-            webview_fetch::session::clear_site_cookies
+            webview_fetch::session::clear_site_cookies,
+            tray::set_tray_status
         ]);
     #[cfg(mobile)]
     let builder = builder.invoke_handler(tauri::generate_handler![
@@ -102,6 +107,12 @@ pub fn run() {
             {
                 webview_fetch::run_probe_from_env(app.handle());
                 webview_fetch::session::run_probe_from_env(app.handle());
+                // The tray is what lets the app go on collecting with its window
+                // closed (docs/36), so the close button only stops being a quit
+                // button once there is an icon to reach the app by.
+                if tray::init(app.handle()) {
+                    tray::hide_on_close(app.handle());
+                }
             }
             Ok(())
         })
