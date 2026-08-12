@@ -60,6 +60,12 @@ serde_json = "1"
 cpal = "0.15"
 hound = "3.5"
 
+# Start with the machine, if the user asks for it (docs/36). The crate exists
+# only for the three desktop platforms, so it is scoped to them rather than
+# guarded at the use site; on mobile it is not a dependency at all.
+[target.'cfg(any(target_os = "linux", target_os = "macos", windows))'.dependencies]
+tauri-plugin-autostart = "2"
+
 # Read the rendered DOM back out of the hidden article-fetch webview
 # (src/webview_fetch). Tauri's `eval` is fire-and-forget, so the result comes
 # through WebKitGTK's own run_javascript callback; `with_webview` hands us

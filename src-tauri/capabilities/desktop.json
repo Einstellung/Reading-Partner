@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "desktop",
+  "description": "What only a desktop build has. Autostart is a machine's own choice (docs/36) and its plugin is a desktop-only dependency, so the permissions cannot live in the shared capability — an iOS build would fail to resolve them.",
+  "platforms": ["linux", "macOS", "windows"],
+  "windows": ["main"],
+  "permissions": [
+    "autostart:allow-enable",
+    "autostart:allow-disable",
+    "autostart:allow-is-enabled"
+  ]
+}

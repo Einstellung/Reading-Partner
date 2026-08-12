@@ -112,6 +112,8 @@ First run: open Settings and connect one provider — Sign in with ChatGPT or Si
 
 On the desktop the app collects from your sources for as long as it is running, whether or not its window is in front. Closing the window puts it in the system tray rather than ending it; the tray menu shows when it last collected, brings the window back, and has the one Quit that actually stops it.
 
+Settings has a switch to start the app when the computer starts, off by default. It belongs to that computer and is not carried to your other devices.
+
 ## Build
 
 Prerequisites: Bun, Rust stable, and the [Tauri 2 prerequisites](https://tauri.app/start/prerequisites/).

@@ -73,6 +73,9 @@ test("caches, logs, sync internals, and book blobs are out of range", () => {
     // Info triage: the daily briefing and article cache are derived, not synced.
     "briefing-2026-07-21.json",
     "info-articles-2026-07-21.json",
+    // Per-device settings (docs/36). One machine starting with the computer says
+    // nothing about another, and there is no merge that could resolve the two.
+    "device.json",
     "random.txt",
   ]) {
     expect(inSyncRange(p)).toBe(false);

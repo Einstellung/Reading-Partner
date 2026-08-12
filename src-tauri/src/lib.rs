@@ -53,6 +53,13 @@ pub fn run() {
     // note above); everything else is registered on both.
     #[cfg(desktop)]
     let builder = builder
+        // Start with the machine when the user has asked for it (docs/36). Off
+        // by default and registered here only; the choice itself is a per-device
+        // one and lives in device.json, not in the synced settings.
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .manage(voice::VoiceState::default())
         // The fetcher's state is also what the navigation guard reads to tell a
         // hidden fetcher window from the app's own, so it is managed before any
