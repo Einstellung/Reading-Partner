@@ -96,12 +96,15 @@ function failureNote(job: BriefingJob, error: string | null): string {
 // progress card and no estimate: the round trip is an upload, then whenever the
 // collector next syncs, then the collecting itself, and a countdown over three
 // unknowns is a number that would be wrong.
-export function askSentNote(job: BriefingJob): string {
+export function askSentNote(job: BriefingJob, status?: string): string {
   const what = job === "retriage" ? "re-sort today's items" : "collect a fresh briefing";
   return (
     `I have asked the computer that collects your sources to ${what}. It will pick the request ` +
     `up the next time it syncs, and the new briefing will appear here when it is done. Nothing ` +
-    `is running on this device.`
+    `is running on this device.` +
+    // Whatever is known about that machine, so the sentence is not a promise
+    // made on its behalf. A request it never picks up expires in six hours.
+    (status ? ` ${status}` : "")
   );
 }
 

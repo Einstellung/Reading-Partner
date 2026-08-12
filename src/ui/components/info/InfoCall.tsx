@@ -255,7 +255,7 @@ export function InfoCall({
       // the tool's own reply cannot wait for: a request the user was told had
       // been passed on, and that never left the device, is worse than none.
       void done.then(
-        () => noteTurn(askSentNote(asked), { role: "ai", persist: false }),
+        () => noteTurn(askSentNote(asked, view.notices()[0]), { role: "ai", persist: false }),
         () => noteTurn(ASK_FAILED_NOTE, { role: "ai", persist: false }),
       );
       return outcome;
