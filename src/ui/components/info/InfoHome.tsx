@@ -43,6 +43,8 @@ import type { SourceHealth } from "../../../info/sources/engine";
 import {
   applySessionCheck,
   forgetSession,
+  type SessionBusy,
+  type SessionWork,
   type SignInSite,
   type SiteSessions,
 } from "../../../info/sources/site-session";
@@ -125,7 +127,7 @@ export default function InfoHome(props: {
   // Last known sign-in state per site, and which site is being worked on. Both
   // only mean anything where there is a webview to sign in with.
   const [siteSessions, setSiteSessions] = useState<SiteSessions>({});
-  const [sessionBusy, setSessionBusy] = useState<string | null>(null);
+  const [sessionBusy, setSessionBusy] = useState<SessionBusy | null>(null);
   const infoRef = useRef<InfoPipeline | null>(null);
   const [openArticleId, setOpenArticleId] = useState<string | null>(null);
   const [articleHtml, setArticleHtml] = useState<string | null>(null);
@@ -186,11 +188,12 @@ export default function InfoHome(props: {
   }, []);
 
   // A site's session, checked by loading its front page in the hidden window and
-  // seeing whether it still offers a sign-in. Tens of seconds, so the row says
-  // it is working; the answer is cached because the check is not free and the
-  // reader wants to see where they stand on arrival, not after a wait.
-  const checkSession = useCallback(async (site: SignInSite) => {
-    setSessionBusy(site.host);
+  // seeing whether it still offers a sign-in. ~16s, so the row names the wait
+  // rather than only showing one; the answer is cached because the check is not
+  // free and the reader wants to see where they stand on arrival, not after a
+  // wait.
+  const checkSession = useCallback(async (site: SignInSite, work: SessionWork = "checking") => {
+    setSessionBusy({ host: site.host, work });
     try {
       const status = await checkSiteSession(site.checkUrl);
       const next = applySessionCheck(
@@ -213,7 +216,7 @@ export default function InfoHome(props: {
   // says the flow is over, not that it worked.
   const signInToSite = useCallback(
     async (site: SignInSite) => {
-      setSessionBusy(site.host);
+      setSessionBusy({ host: site.host, work: "signing-in" });
       try {
         await openSiteSignIn(site.signInUrl);
       } catch (e) {
@@ -221,8 +224,9 @@ export default function InfoHome(props: {
         setSessionBusy(null);
         return;
       }
-      setSessionBusy(null);
-      await checkSession(site);
+      // Straight from one wait to the other, with no idle frame between them:
+      // the window has closed and the ~16s confirmation starts here.
+      await checkSession(site, "confirming");
     },
     [checkSession],
   );
@@ -230,7 +234,7 @@ export default function InfoHome(props: {
   // Sign out: delete the site's cookies. Nothing else is held, so nothing else
   // has to be undone.
   const signOutOfSite = useCallback(async (site: SignInSite) => {
-    setSessionBusy(site.host);
+    setSessionBusy({ host: site.host, work: "signing-out" });
     try {
       await clearSiteCookies(site.host);
       const next = forgetSession(await loadSiteSessions(), site.host);

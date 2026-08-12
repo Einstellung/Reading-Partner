@@ -17,8 +17,10 @@ import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { ProbeAddOutcome } from "../../../info/sources/source-live";
 import { pipeLabel } from "../../../info/sources/probe";
 import {
-  sessionLabel,
+  sessionRowLine,
+  sessionWorkFor,
   signInSites,
+  type SessionBusy,
   type SiteSessions,
   type SignInSite,
 } from "../../../info/sources/site-session";
@@ -100,14 +102,15 @@ function HealthDot({ health }: { health: SourceHealth | undefined }) {
 function SignInRow(props: {
   site: SignInSite;
   sessions: SiteSessions;
-  busy: string | null;
+  busy: SessionBusy | null;
   onSignIn: (site: SignInSite) => void;
   onCheck: (site: SignInSite) => void;
   onSignOut: (site: SignInSite) => void;
 }) {
   const { site, sessions, busy } = props;
   const state = sessions[site.host];
-  const working = busy === site.host;
+  const work = sessionWorkFor(busy, site.host);
+  const working = work !== null;
   const signedIn = !!state && !state.unknown && state.signedIn;
   return (
     <li className="flex items-center gap-3 rounded-xl border border-[#e6e6e6] bg-white px-4 py-3">
@@ -118,11 +121,7 @@ function SignInRow(props: {
       <div className="min-w-0 flex-1">
         <div className="truncate text-[14px] font-medium text-[#1b1b1b]">{site.label}</div>
         <div className="truncate text-[12px] text-[#999]">
-          {working ? "Working…" : sessionLabel(state)}
-          {" · "}
-          {site.sourceNames.length === 1
-            ? site.sourceNames[0]
-            : `${site.sourceNames.length} sources`}
+          {sessionRowLine(site, state, work)}
         </div>
       </div>
       <Button
@@ -154,8 +153,9 @@ export interface SourcesPageProps {
   // about it. Absent on a platform with no webview — the section then draws
   // nothing, because there is nothing to sign in to.
   sessions?: SiteSessions;
-  // The host of the site currently being worked on, so its row can say so.
-  sessionBusy?: string | null;
+  // The site currently being worked on and what is being done to it, so its row
+  // can say which of the two waits the reader is in.
+  sessionBusy?: SessionBusy | null;
   onSignIn?: (site: SignInSite) => void;
   onCheckSession?: (site: SignInSite) => void;
   onSignOut?: (site: SignInSite) => void;

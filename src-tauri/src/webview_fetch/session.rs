@@ -10,7 +10,9 @@
 //
 // Three commands, all desktop-only like the fetcher itself:
 //
-//   open_site_sign_in    show the login page and wait for the user to close it
+//   open_site_sign_in    show the login page and wait for the user to close it,
+//                        with the window's own title saying what closing it is
+//                        for and when it can be closed (sign_in_title below)
 //   check_site_session   load a page in the hidden window and report whether the
 //                        site still offers a sign-in
 //   clear_site_cookies   forget one site's cookies — the sign-out
@@ -23,7 +25,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
-use tauri::{AppHandle, Manager, Runtime, WindowEvent};
+use tauri::{AppHandle, Manager, Runtime, Url, WindowEvent};
 
 use super::jar;
 use super::policy::{self, Status};
@@ -36,6 +38,32 @@ use super::{
 /// it. Not a deadline for the user — the window stays where it is and the
 /// cookies it collected stay in the jar — only for the call that is watching it.
 const SIGN_IN_TIMEOUT: Duration = Duration::from_secs(20 * 60);
+
+/// How often the page in the sign-in window is asked whether the site still
+/// offers a sign-in, so the title can say when it stops.
+///
+/// Slow on purpose. This is the page the user is typing into, the answer is
+/// wanted for a window title and nothing else, and the probe forces a layout
+/// (`innerText`). Three seconds costs the page nothing measurable and puts the
+/// title change within a few seconds of the sign-in landing.
+const SIGN_IN_POLL: Duration = Duration::from_secs(3);
+
+/// How many polls of a page that has stopped growing must find no sign-in
+/// control before the title says so. Two, 3s apart: a page whose length has
+/// settled is a page that has finished drawing, and two of them is 6s of it.
+const SIGN_IN_CONFIRM_POLLS: u32 = 2;
+
+/// Below this much rendered text there is no page of the site to read. A
+/// document caught between pages answers "no sign-in here" as truthfully as a
+/// signed-in homepage does and means nothing by it, and so does a form: measured
+/// 2026-08-12 on a cold profile, Bloomberg's login page is 535 characters and its
+/// homepage 17085.
+const SIGN_IN_MIN_CHARS: usize = 2_000;
+
+/// How long one poll may take before it is abandoned. Short, because the loop
+/// that runs it is also the one waiting for the window to close, and because a
+/// missed poll costs nothing — the next one is 3s away.
+const SIGN_IN_PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// How long a session check waits past `finished` before reading the page.
 ///
@@ -71,6 +99,140 @@ pub struct SessionStatus {
     pub title: Option<String>,
     pub elapsed_ms: u64,
     pub detail: Option<String>,
+}
+
+/// What the sign-in window is called while the user is in it.
+///
+/// Its title bar is the only surface this flow owns: the page inside belongs to
+/// the site, and the app's own window is behind it, unread — whatever it says,
+/// the user is not looking at it. So the instruction that ends the flow goes
+/// here. Without it the window is a browser with no address bar and no reason to
+/// go away: a user who has finished signing in ends up looking at the site's
+/// homepage with nothing anywhere telling them that closing the window is what
+/// finishes.
+pub fn sign_in_title(site: &str) -> String {
+    format!("Sign in to {site} — close this window when done")
+}
+
+/// What it is called once the site has stopped offering a sign-in: the same
+/// instruction, now that the flow is done rather than pending.
+pub fn signed_in_title(site: &str) -> String {
+    format!("Signed in to {site} — close this window to finish")
+}
+
+/// One look at the page in the sign-in window (sign-in.js). Reports only; every
+/// decision made from it is below.
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignInProbe {
+    /// Where the page is. A login flow can be three hosts deep in an identity
+    /// provider, and what those pages offer is not this site's business.
+    pub host: String,
+    /// Which page of it, so the login page can be left out of the judging.
+    pub path: String,
+    /// Whether the page still offers a way to sign in.
+    pub sees_sign_in: bool,
+    /// How much text is rendered: too little to be a page, or — held across two
+    /// polls — a page that has finished drawing.
+    pub chars: usize,
+}
+
+/// Watches the sign-in window for the one moment worth reporting: a page of the
+/// site that has finished drawing and offers no way to sign in, which is what a
+/// real session looks like (the same signal `check_site_session` reads, and the
+/// reason it is trusted).
+///
+/// Three things keep that from firing on a page that merely has no sign-in
+/// control, all of them measured against Bloomberg on a cold profile,
+/// 2026-08-12 (docs/pitfall/116):
+///
+/// - The login page is not judged. It is where the user is working, and it is a
+///   form: its buttons say "Continue", "Continue with Google", "Continue with
+///   Apple" — not one clickable label on it matches, and by this signal alone a
+///   login page reads as signed in.
+/// - Nor is anything under `SIGN_IN_MIN_CHARS`. That page is 535 characters
+///   against the homepage's 17085, so the size of the thing is itself the
+///   difference between a form and a page of the site.
+/// - Nor is a page whose length is still growing. The site's header — the part
+///   that carries the sign-in control — arrived at the second poll, ~6s after the
+///   first paint and ~12s before the page stopped growing. Judged on arrival,
+///   the signed-out homepage would have read as signed in.
+///
+/// What is left over is deliberately quiet: when none of it lines up the watch
+/// never fires, the title stays as it was, nothing is raised as an error, and the
+/// flow ends the way it always did — the user closes the window and the session
+/// is checked for real.
+pub struct SignInWatch {
+    /// The site the window was sent to, `www.` off: pages on it are the ones
+    /// this watch believes.
+    site: String,
+    /// The path of the sign-in page it was sent to, and anything under it.
+    sign_in_path: String,
+    /// The length of the last page worth judging, for the growth check.
+    last_chars: Option<usize>,
+    clear_polls: u32,
+}
+
+impl SignInWatch {
+    pub fn new(url: &Url) -> Self {
+        Self {
+            site: jar::site_of(url.host_str().unwrap_or_default()),
+            sign_in_path: url.path().to_string(),
+            last_chars: None,
+            clear_polls: 0,
+        }
+    }
+
+    /// Fold one poll in. Answers `true` exactly once, on the poll that settles
+    /// the question in favour of "the site has stopped asking who this is".
+    pub fn observe(&mut self, probe: &SignInProbe) -> bool {
+        // An identity provider's own pages ("continue with Google") both offer a
+        // sign-in and lose it, and neither says anything about the site the user
+        // is signing in to.
+        if !jar::belongs_to(&jar::site_of(&probe.host), &self.site) {
+            return self.nothing();
+        }
+        // The login page and whatever it steps through on the way (a password
+        // page, a code page) are the user's business, not an answer.
+        if probe.path.starts_with(&self.sign_in_path) {
+            return self.nothing();
+        }
+        if probe.chars < SIGN_IN_MIN_CHARS {
+            return self.nothing();
+        }
+        if probe.sees_sign_in {
+            return self.nothing();
+        }
+        // A page still filling in has not said anything yet: what is missing
+        // from it may simply not have arrived.
+        let settled = self.last_chars == Some(probe.chars);
+        self.last_chars = Some(probe.chars);
+        if !settled {
+            self.clear_polls = 0;
+            return false;
+        }
+        self.clear_polls += 1;
+        self.clear_polls == SIGN_IN_CONFIRM_POLLS
+    }
+
+    /// This poll said nothing, and takes the run of them with it.
+    fn nothing(&mut self) -> bool {
+        self.last_chars = None;
+        self.clear_polls = 0;
+        false
+    }
+}
+
+/// Ask the page in the sign-in window what it currently offers.
+#[cfg(target_os = "linux")]
+fn read_sign_in<R: Runtime>(window: &tauri::WebviewWindow<R>) -> Result<SignInProbe, String> {
+    let json = super::eval_string(window, include_str!("sign-in.js"), SIGN_IN_PROBE_TIMEOUT)?;
+    serde_json::from_str(&json).map_err(|e| format!("the probe returned unusable JSON: {e}"))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn read_sign_in<R: Runtime>(_window: &tauri::WebviewWindow<R>) -> Result<SignInProbe, String> {
+    Err("no DOM bridge on this platform".to_string())
 }
 
 /// Open the site's own sign-in page in a window the user can see and type into,
@@ -122,6 +284,13 @@ pub async fn open_site_sign_in(app: AppHandle, url: String) -> Result<SignInOutc
         // connect_engine_signals; nothing here waits on it, because what this
         // window is waiting for is the user.
         let (tx, _rx) = mpsc::channel();
+        // The window has a taskbar entry and a title bar, so it says which site
+        // it is for and what to do with it when the login is done. The site
+        // rather than the app: the user asked to sign in to one place and this
+        // window is it.
+        let site = jar::site_of(target.host_str().unwrap_or_default());
+        let title = sign_in_title(&site);
+        let mut watch = SignInWatch::new(&target);
         let window = build_window(
             &app,
             &label,
@@ -129,9 +298,7 @@ pub async fn open_site_sign_in(app: AppHandle, url: String) -> Result<SignInOutc
             tx.clone(),
             Chrome {
                 visible: true,
-                // The window has a taskbar entry and a title bar, so it says
-                // what it is rather than showing the app's name twice.
-                title: "Sign in",
+                title: &title,
             },
         )
         .map_err(|e| format!("could not open the sign-in window: {e}"))?;
@@ -156,14 +323,38 @@ pub async fn open_site_sign_in(app: AppHandle, url: String) -> Result<SignInOutc
             .navigate(target)
             .map_err(|e| format!("could not open the sign-in page: {e}"))?;
 
-        // The user closing the window is the completion signal. Waiting on the
-        // DOM instead would mean deciding what "signed in" looks like for every
-        // site and every identity provider it redirects through.
-        let closed = match closed_rx.recv_timeout(SIGN_IN_TIMEOUT) {
-            Ok(()) => true,
-            // The app is going away, which closes the window with it.
-            Err(RecvTimeoutError::Disconnected) => true,
-            Err(RecvTimeoutError::Timeout) => false,
+        // The user closing the window is the completion signal, and stays it:
+        // waiting on the DOM instead would mean deciding what "signed in" looks
+        // like for every site and every identity provider it redirects through.
+        // What the watch below does with the DOM is smaller and survives being
+        // wrong — it changes the title of the window, and when it sees nothing
+        // it changes nothing.
+        let mut watching = true;
+        let deadline = Instant::now() + SIGN_IN_TIMEOUT;
+        let closed = loop {
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                break false;
+            }
+            match closed_rx.recv_timeout(left.min(SIGN_IN_POLL)) {
+                Ok(()) => break true,
+                // The app is going away, which closes the window with it.
+                Err(RecvTimeoutError::Disconnected) => break true,
+                Err(RecvTimeoutError::Timeout) => {}
+            }
+            if !watching {
+                continue;
+            }
+            // A poll that fails says nothing — a document being replaced has no
+            // context to run it in — and the next one is a poll away.
+            if let Ok(probe) = read_sign_in(&window) {
+                if watch.observe(&probe) {
+                    let _ = window.set_title(&signed_in_title(&site));
+                    // Said once. There is nothing further to report from here,
+                    // so the page is left alone for the rest of the flow.
+                    watching = false;
+                }
+            }
         };
         sweep_orphan_windows(&app, before);
         Ok(SignInOutcome {
@@ -636,6 +827,117 @@ fn close_sign_in_window_later(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const SIGN_IN_URL: &str = "https://www.bloomberg.com/account/signin";
+
+    fn fresh_watch() -> SignInWatch {
+        SignInWatch::new(&Url::parse(SIGN_IN_URL).unwrap())
+    }
+
+    /// A page of the site that has finished drawing, offering a sign-in or not.
+    fn page(path: &str, sees_sign_in: bool, chars: usize) -> SignInProbe {
+        SignInProbe {
+            host: "www.bloomberg.com".into(),
+            path: path.into(),
+            sees_sign_in,
+            chars,
+        }
+    }
+
+    /// The homepage, drawn: no sign-in control and not growing any more.
+    fn signed_in_home() -> SignInProbe {
+        page("/", false, 17_085)
+    }
+
+    #[test]
+    fn the_window_says_which_site_it_is_for_and_what_ends_the_flow() {
+        let waiting = sign_in_title("bloomberg.com");
+        assert!(waiting.contains("bloomberg.com"), "{waiting}");
+        assert!(waiting.contains("close this window"), "{waiting}");
+        let done = signed_in_title("bloomberg.com");
+        assert!(done.contains("Signed in"), "{done}");
+        assert!(done.contains("close this window"), "{done}");
+        assert_ne!(waiting, done);
+    }
+
+    #[test]
+    fn the_title_changes_once_the_site_has_stopped_asking_who_this_is() {
+        let mut watch = fresh_watch();
+        // Landing on the homepage after the login: it is still filling in, so
+        // the first sight of it decides nothing.
+        assert!(!watch.observe(&page("/", false, 12_077)));
+        assert!(!watch.observe(&page("/", false, 13_468)));
+        // Drawn, and no sign-in control on it: two polls of the same page at
+        // the same length, and the third says so.
+        assert!(!watch.observe(&signed_in_home()));
+        assert!(!watch.observe(&signed_in_home()));
+        assert!(watch.observe(&signed_in_home()));
+        // And only the one: the title has been changed already.
+        assert!(!watch.observe(&signed_in_home()));
+    }
+
+    #[test]
+    fn the_login_page_is_not_an_answer() {
+        // Measured: not one clickable label on Bloomberg's login page matches —
+        // the buttons say "Continue", "Continue with Google" — so by this signal
+        // alone the page the user is typing into reads as signed in. It is
+        // excluded by where it is, and again by how little of it there is.
+        let mut watch = fresh_watch();
+        for _ in 0..10 {
+            assert!(!watch.observe(&page("/account/signin", false, 535)));
+            assert!(!watch.observe(&page("/account/signin", false, 40_000)));
+            assert!(!watch.observe(&page("/account/signin/password", false, 40_000)));
+        }
+    }
+
+    #[test]
+    fn a_page_that_still_offers_a_sign_in_is_a_page_nobody_is_signed_in_to() {
+        let mut watch = fresh_watch();
+        for _ in 0..10 {
+            assert!(!watch.observe(&page("/", true, 17_085)));
+        }
+        // The signed-out homepage draws its header — and with it the sign-in
+        // control — ~6s in and ~12s before it stops growing. Read on arrival it
+        // would have looked exactly like a signed-in one, which is why a run of
+        // clear polls has to be an unbroken one.
+        let mut watch = fresh_watch();
+        assert!(!watch.observe(&page("/", false, 12_077)));
+        assert!(!watch.observe(&page("/", true, 13_468)));
+        assert!(!watch.observe(&page("/", true, 17_085)));
+        assert!(!watch.observe(&page("/", true, 17_085)));
+    }
+
+    #[test]
+    fn only_the_site_the_window_was_sent_to_is_read() {
+        let mut watch = fresh_watch();
+        let google = SignInProbe {
+            host: "accounts.google.com".into(),
+            path: "/signin/v2".into(),
+            sees_sign_in: false,
+            chars: 9_000,
+        };
+        for _ in 0..10 {
+            assert!(!watch.observe(&google));
+        }
+        // Back on the site, the run starts from nothing.
+        assert!(!watch.observe(&signed_in_home()));
+        assert!(!watch.observe(&signed_in_home()));
+        assert!(watch.observe(&signed_in_home()));
+    }
+
+    #[test]
+    fn a_document_caught_between_pages_is_not_a_signed_in_one() {
+        let mut watch = fresh_watch();
+        assert!(!watch.observe(&signed_in_home()));
+        // A page being torn down and replaced offers no sign-in because it
+        // offers nothing at all.
+        assert!(!watch.observe(&page("/technology", false, 0)));
+        assert!(!watch.observe(&page("/technology", false, 300)));
+        // Neither of them counted towards the confirmation.
+        assert!(!watch.observe(&signed_in_home()));
+        assert!(!watch.observe(&signed_in_home()));
+        assert!(watch.observe(&signed_in_home()));
+    }
 
     #[test]
     fn a_sign_out_covers_every_spelling_of_the_site() {

@@ -118,11 +118,72 @@ export function resolveSignInSite(sites: SignInSite[], identifier: string): Sign
 	return null;
 }
 
-/** What the sources page prints for a site. */
+/** What the sources page prints for a site that nothing is happening to. */
 export function sessionLabel(state: SiteSessionState | undefined): string {
 	if (!state) return "Not checked";
 	if (state.unknown) return "Could not tell";
 	return state.signedIn ? "Signed in" : "Not signed in";
+}
+
+/**
+ * What the app is doing about one site right now.
+ *
+ * Signing in is two waits, not one, and they are nothing alike: first the reader
+ * types into a window of the site's own, which ends when they close it, and then
+ * the app loads the site's front page to see whether it worked, which takes
+ * ~16s. One "Working…" spanning both says something is happening and nothing
+ * about what, to a reader who has just closed the window and has no idea what
+ * the app is now waiting for.
+ */
+export type SessionWork = "signing-in" | "confirming" | "checking" | "signing-out";
+
+/** Which site is being worked on, and at what. */
+export interface SessionBusy {
+	host: string;
+	work: SessionWork;
+}
+
+/** What a site's row prints while `work` is running. */
+export function sessionWorkLabel(work: SessionWork): string {
+	switch (work) {
+		// The window is open and the reader is in it. This line says what ends the
+		// flow, for the moment they look back at this screen; the window's own
+		// title says the same thing where they are actually looking
+		// (webview_fetch/session.rs).
+		case "signing-in":
+			return "Finish in the sign-in window, then close it";
+		case "confirming":
+			return "Confirming your sign-in…";
+		case "checking":
+			return "Checking the site…";
+		case "signing-out":
+			return "Signing out…";
+	}
+}
+
+/**
+ * The second line of a site's row: what is being done to it right now, or —
+ * when nothing is — the last thing known about it and what reads through it.
+ * The sources drop out while work is running; the line is one truncating row,
+ * and what the reader has to do next is worth more than the count.
+ */
+export function sessionRowLine(
+	site: SignInSite,
+	state: SiteSessionState | undefined,
+	work: SessionWork | null,
+): string {
+	if (work) return sessionWorkLabel(work);
+	const sources =
+		site.sourceNames.length === 1 ? site.sourceNames[0] : `${site.sourceNames.length} sources`;
+	return `${sessionLabel(state)} · ${sources}`;
+}
+
+/** The work under way on `host`, or null when that site is idle. */
+export function sessionWorkFor(
+	busy: SessionBusy | null | undefined,
+	host: string,
+): SessionWork | null {
+	return busy && busy.host === host ? busy.work : null;
 }
 
 /**
