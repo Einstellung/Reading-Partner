@@ -1,27 +1,29 @@
 // Source list persistence (docs/17): the user's subscribed sources, one JSON
 // array under AppData, in sync range (info-sources.json travels between devices
-// like info-profile.md). A new user starts empty (onboarding fills it); an
-// existing user — detected by prior info data — is migrated to the two original
-// builtins. Per-source health is a derived sidecar (not synced). The pure parts
-// (parse/validate, migration decision) are unit-tested; the fs wrappers mirror
-// profile.ts.
+// like info-profile.md). Everyone starts empty and onboarding fills it — no
+// file means no sources, and the home card offers "Start subscribing" instead of
+// a briefing. Per-source health is a derived sidecar (not synced). The pure part
+// (parse/validate) is unit-tested; the fs wrappers mirror profile.ts.
+//
+// There was a migration here that wrote two builtins into the list for anyone
+// with older info data. It served users who do not exist — this app has never
+// shipped a version without source lists — and it could only ever fire on a
+// device with no info-sources.json at all, which is not what an existing user's
+// device looks like.
 
-import {
-  BaseDirectory,
-  exists,
-  readDir,
-  readTextFile,
-} from "@tauri-apps/plugin-fs";
+import { BaseDirectory, exists, readTextFile } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { validateDescriptor, type SourceDescriptor } from "./descriptor";
-import { builtinById } from "./builtins";
+import { parseSiteSessions, type SiteSessions } from "./site-session";
 import type { SourceHealth } from "./engine";
 
 export const SOURCES_FILE = "info-sources.json";
 const HEALTH_FILE = "info-source-health.json";
-// The signals that a device has been using the info feature before source lists
-// existed: the seeded profile, or any generated briefing.
-const PROFILE_FILE = "info-profile.md";
+const SESSIONS_FILE = "info-site-sessions.json";
+// Last known sign-in state per site. Like the health sidecar it is derived and
+// out of sync range — and here that is not an optimisation: the session it
+// describes is a cookie in this device's webview profile, and copying the
+// belief to another device would describe a session that device does not have.
 
 // --- pure helpers (unit-tested) --------------------------------------------
 
@@ -43,44 +45,14 @@ export function parseSources(text: string): SourceDescriptor[] {
   return out;
 }
 
-// The descriptors an existing user is migrated to: the two original builtins,
-// enabled. A new user (no prior info data) gets an empty list — onboarding fills
-// it. Pure so the migration policy is tested without the filesystem.
-export function migratedSources(hasPriorInfoData: boolean): SourceDescriptor[] {
-  if (!hasPriorInfoData) return [];
-  const out: SourceDescriptor[] = [];
-  for (const id of ["jiqizhixin", "qbitai"]) {
-    const d = builtinById(id);
-    if (d) out.push({ ...d, enabled: true });
-  }
-  return out;
-}
-
 // --- filesystem ------------------------------------------------------------
-
-// True when this device shows signs of prior info use (a seeded profile or any
-// past briefing), so the source list should be migrated rather than left empty.
-async function hasPriorInfoData(): Promise<boolean> {
-  try {
-    if (await exists(PROFILE_FILE, { baseDir: BaseDirectory.AppData })) return true;
-  } catch {
-    // Fall through to the briefing scan.
-  }
-  try {
-    const entries = await readDir("", { baseDir: BaseDirectory.AppData });
-    return entries.some((e) => e.isFile && /^briefing-\d{4}-\d{2}-\d{2}\.json$/.test(e.name));
-  } catch {
-    return false;
-  }
-}
 
 export async function saveSources(sources: SourceDescriptor[]): Promise<void> {
   await writeTextAtomic(SOURCES_FILE, JSON.stringify(sources, null, 2));
 }
 
-// Load the source list. On first run (no file), migrate: an existing user gets
-// the two original builtins written out; a new user gets an empty list and no
-// file is written (onboarding owns first-source creation).
+// Load the source list. No file is an empty list and stays one: onboarding owns
+// first-source creation, so nothing here writes on a reader's behalf.
 export async function loadSources(): Promise<SourceDescriptor[]> {
   try {
     if (await exists(SOURCES_FILE, { baseDir: BaseDirectory.AppData })) {
@@ -89,9 +61,7 @@ export async function loadSources(): Promise<SourceDescriptor[]> {
   } catch {
     return [];
   }
-  const migrated = migratedSources(await hasPriorInfoData());
-  if (migrated.length) await saveSources(migrated);
-  return migrated;
+  return [];
 }
 
 // Whether the user has any source configured. Drives the onboarding trigger
@@ -141,4 +111,19 @@ export async function loadSourceHealth(): Promise<Record<string, SourceHealth>> 
 
 export async function saveSourceHealth(health: Record<string, SourceHealth>): Promise<void> {
   await writeTextAtomic(HEALTH_FILE, JSON.stringify(health));
+}
+
+// --- site sessions (derived sidecar, not synced) ---------------------------
+
+export async function loadSiteSessions(): Promise<SiteSessions> {
+  try {
+    if (!(await exists(SESSIONS_FILE, { baseDir: BaseDirectory.AppData }))) return {};
+    return parseSiteSessions(await readTextFile(SESSIONS_FILE, { baseDir: BaseDirectory.AppData }));
+  } catch {
+    return {};
+  }
+}
+
+export async function saveSiteSessions(sessions: SiteSessions): Promise<void> {
+  await writeTextAtomic(SESSIONS_FILE, JSON.stringify(sessions));
 }

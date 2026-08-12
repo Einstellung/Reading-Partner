@@ -1,9 +1,16 @@
 // Factory-preset source descriptors (docs/17). These are inert templates: a new
 // user starts with zero sources and adds from here via onboarding; an existing
-// user is migrated to jiqizhixin + qbitai (source-store.ts). Every URL, endpoint,
-// field, and header below is from the five rounds of ingestion research recorded
-// in the info-source-ingestion memory — none is invented. `enabled` is false on every
+// user is migrated to jiqizhixin (source-store.ts). Every URL, endpoint, field,
+// and header below is from the rounds of ingestion research recorded in the
+// info-source-ingestion memory — none is invented. `enabled` is false on every
 // template; whoever adds a source flips it on.
+//
+// The list is short on purpose. It was twice this length and the other half was
+// the AI/robotics newsletter tier (qbitai, Simon Willison, Interconnects, The
+// Robot Report, IEEE Spectrum, arXiv cs.RO, TechCrunch Robotics, BAIR, MIT
+// Technology Review, Hacker News, xinzhiyuan), which nobody kept subscribed.
+// Their research is not lost — it is in the ingestion memory — but a preset
+// nobody enables is a preset that has to be maintained for nothing.
 
 import type { SourceDescriptor } from "./descriptor";
 
@@ -38,71 +45,6 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     },
   },
   {
-    id: "qbitai",
-    name: "量子位",
-    line: "AI",
-    builtin: true,
-    enabled: false,
-    limit: 10,
-    discovery: { kind: "feed", url: "https://www.qbitai.com/feed", format: "rss" },
-    fulltext: { mode: "fetch-page" },
-  },
-  {
-    id: "simonwillison",
-    name: "Simon Willison",
-    line: "AI",
-    builtin: true,
-    enabled: false,
-    // Atom full-text; the body is in <summary>, not <content>.
-    discovery: { kind: "feed", url: "https://simonwillison.net/atom/everything/", format: "atom" },
-    fulltext: { mode: "feed-field", field: "summary" },
-  },
-  {
-    id: "interconnects",
-    name: "Interconnects",
-    line: "AI",
-    builtin: true,
-    enabled: false,
-    // Substack: content:encoded is the full body; paid posts arrive truncated.
-    discovery: { kind: "feed", url: "https://interconnects.ai/feed", format: "rss" },
-    fulltext: { mode: "feed-field", field: "content:encoded", truncationMarker: "Read more" },
-  },
-  {
-    id: "therobotreport",
-    name: "The Robot Report",
-    line: "robotics",
-    builtin: true,
-    enabled: false,
-    limit: 15,
-    discovery: { kind: "feed", url: "https://www.therobotreport.com/feed/", format: "rss" },
-    fulltext: { mode: "feed-field", field: "content:encoded" },
-  },
-  {
-    id: "ieee-spectrum-robotics",
-    name: "IEEE Spectrum Robotics",
-    line: "robotics",
-    builtin: true,
-    enabled: false,
-    // Full text is in the <description> CDATA; the article page is a metered
-    // paywall, so never fetch it.
-    noFetchPage: true,
-    discovery: { kind: "feed", url: "https://spectrum.ieee.org/feeds/topic/robotics.rss", format: "rss" },
-    fulltext: { mode: "feed-field", field: "description" },
-  },
-  {
-    id: "arxiv-cs-ro",
-    name: "arXiv cs.RO",
-    line: "robotics",
-    builtin: true,
-    enabled: false,
-    pollMinutes: 1440,
-    // Discovery-only: title + abstract; full text is PDF-only. Polled once a day
-    // because that is arXiv's own rhythm — and because the API 429s under
-    // anything faster (the RSS path is the one that survives).
-    discovery: { kind: "feed", url: "https://rss.arxiv.org/rss/cs.RO", format: "rss" },
-    fulltext: { mode: "none" },
-  },
-  {
     id: "jiemian",
     name: "界面新闻",
     line: "China tech",
@@ -118,80 +60,6 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     },
     fulltext: { mode: "fetch-page" },
   },
-  {
-    id: "hacker-news",
-    name: "Hacker News",
-    line: "AI",
-    builtin: true,
-    enabled: false,
-    // Algolia front-page JSON: discovery-only (headline + external link + score);
-    // the body lives at the external url. Ask-HN rows have a null url, so fall
-    // back to the HN item page.
-    discovery: {
-      kind: "json-api",
-      listUrl: "https://hn.algolia.com/api/v1/search?tags=front_page",
-      itemsPath: "hits",
-      urlTemplate: "https://news.ycombinator.com/item?id={id}",
-      fields: { id: "objectID", title: "title", url: "url", publishedAt: "created_at" },
-    },
-    fulltext: { mode: "none" },
-  },
-  {
-    id: "techcrunch-robotics",
-    name: "TechCrunch Robotics",
-    line: "robotics",
-    builtin: true,
-    enabled: false,
-    limit: 10,
-    discovery: { kind: "feed", url: "https://techcrunch.com/category/robotics/feed/", format: "rss" },
-    fulltext: { mode: "fetch-page" },
-  },
-  {
-    id: "bair-blog",
-    name: "BAIR Blog",
-    line: "robotics",
-    builtin: true,
-    enabled: false,
-    // Berkeley AI Research; full text in the feed body (RSS description / Atom
-    // content — the field selector falls back across both).
-    discovery: { kind: "feed", url: "https://bair.berkeley.edu/blog/feed.xml" },
-    fulltext: { mode: "feed-field", field: "description" },
-  },
-  {
-    id: "mit-tech-review",
-    name: "MIT Technology Review",
-    line: "AI",
-    builtin: true,
-    enabled: false,
-    // content:encoded carries the body; the article page is a metered paywall.
-    // The feed body was verified in research; this is the canonical WordPress feed path.
-    noFetchPage: true,
-    discovery: { kind: "feed", url: "https://www.technologyreview.com/feed/", format: "rss" },
-    fulltext: { mode: "feed-field", field: "content:encoded" },
-  },
-  {
-    id: "xinzhiyuan",
-    name: "新智元",
-    line: "AI",
-    builtin: true,
-    enabled: false,
-    // wp-json posts carry the full body inline (content.rendered) — no second
-    // request per article.
-    discovery: {
-      kind: "json-api",
-      listUrl: "https://aiera.com.cn/wp-json/wp/v2/posts?per_page=20",
-      urlTemplate: "https://aiera.com.cn/?p={id}",
-      fields: {
-        id: "id",
-        title: "title.rendered",
-        url: "link",
-        publishedAt: "date",
-        summary: "excerpt.rendered",
-        content: "content.rendered",
-      },
-    },
-    fulltext: { mode: "feed-field" },
-  },
 
   // --- Bloomberg -----------------------------------------------------------
   // pollMinutes 180 on every section: 20 items covering 6-22 hours means a feed
@@ -199,11 +67,22 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
   // window measured, which is the margin the pool needs to see a section whole.
   // Official RSS, one feed per section: feeds.bloomberg.com/<section>/news.rss
   // now 301s to www.bloomberg.com/feeds/<section>/news.rss, so the descriptors
-  // name the www path. Every section below returned items in the research round;
-  // sections that 404 or come back empty (wealth, green, ai, climate, ...) are
-  // not listed. The article page is a hard PerimeterX wall (docs/17 red line), so
-  // every section is discovery-only: headline + the lead paragraph the feed
-  // carries in <description>.
+  // name the www path. Sections that 404 or come back empty (wealth, green, ai,
+  // climate, ...) are not listed, and neither is `business` any more: a real
+  // fetch of it returned 20 rows and zero articles — 14-15 podcast episodes and
+  // 4-5 web copies of a newsletter, with "Source: Bloomberg, 6:21" (a duration)
+  // and "Get caught up." for descriptions. Nothing in the funnel can eat that.
+  //
+  // The feed is the discovery layer and the lead paragraph it carries in
+  // <description> is what screening reads: measured 206 characters for markets,
+  // 200 for industries, 214 for technology, 250 for politics.
+  //
+  // Bodies never come from plain HTTP here — the article page answers 403 to it
+  // — so every section's fulltext is `webview`: the hidden browser window loads
+  // the site's own front door first and then the article
+  // (src-tauri/src/webview_fetch). Anonymous that yields the metered preview,
+  // ~500 characters; signed in it yields the whole story. Where no webview
+  // exists (iOS) these fall back to headlines on their own.
   {
     id: "bloomberg-markets",
     name: "Bloomberg Markets",
@@ -213,7 +92,10 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     limit: 20,
     pollMinutes: 180,
     discovery: { kind: "feed", url: "https://www.bloomberg.com/feeds/markets/news.rss", format: "rss" },
-    fulltext: { mode: "none" },
+    fulltext: {
+      mode: "webview",
+      signInUrl: "https://www.bloomberg.com/account/signin",
+    },
   },
   {
     id: "bloomberg-economics",
@@ -224,18 +106,10 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     limit: 20,
     pollMinutes: 180,
     discovery: { kind: "feed", url: "https://www.bloomberg.com/feeds/economics/news.rss", format: "rss" },
-    fulltext: { mode: "none" },
-  },
-  {
-    id: "bloomberg-business",
-    name: "Bloomberg Business",
-    line: "business",
-    builtin: true,
-    enabled: false,
-    limit: 20,
-    pollMinutes: 180,
-    discovery: { kind: "feed", url: "https://www.bloomberg.com/feeds/business/news.rss", format: "rss" },
-    fulltext: { mode: "none" },
+    fulltext: {
+      mode: "webview",
+      signInUrl: "https://www.bloomberg.com/account/signin",
+    },
   },
   {
     id: "bloomberg-industries",
@@ -246,7 +120,10 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     limit: 20,
     pollMinutes: 180,
     discovery: { kind: "feed", url: "https://www.bloomberg.com/feeds/industries/news.rss", format: "rss" },
-    fulltext: { mode: "none" },
+    fulltext: {
+      mode: "webview",
+      signInUrl: "https://www.bloomberg.com/account/signin",
+    },
   },
   {
     id: "bloomberg-technology",
@@ -257,7 +134,10 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     limit: 20,
     pollMinutes: 180,
     discovery: { kind: "feed", url: "https://www.bloomberg.com/feeds/technology/news.rss", format: "rss" },
-    fulltext: { mode: "none" },
+    fulltext: {
+      mode: "webview",
+      signInUrl: "https://www.bloomberg.com/account/signin",
+    },
   },
   {
     id: "bloomberg-politics",
@@ -268,7 +148,10 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     limit: 20,
     pollMinutes: 180,
     discovery: { kind: "feed", url: "https://www.bloomberg.com/feeds/politics/news.rss", format: "rss" },
-    fulltext: { mode: "none" },
+    fulltext: {
+      mode: "webview",
+      signInUrl: "https://www.bloomberg.com/account/signin",
+    },
   },
   {
     id: "bloomberg-crypto",
@@ -280,7 +163,10 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     pollMinutes: 180,
     // Thin: 2 items in the research round, same shape as the others.
     discovery: { kind: "feed", url: "https://www.bloomberg.com/feeds/crypto/news.rss", format: "rss" },
-    fulltext: { mode: "none" },
+    fulltext: {
+      mode: "webview",
+      signInUrl: "https://www.bloomberg.com/account/signin",
+    },
   },
   {
     id: "bloomberg-opinion",
@@ -292,7 +178,10 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     pollMinutes: 180,
     // The opinion section's feed slug is "bview"; /feeds/opinion/news.rss 404s.
     discovery: { kind: "feed", url: "https://www.bloomberg.com/feeds/bview/news.rss", format: "rss" },
-    fulltext: { mode: "none" },
+    fulltext: {
+      mode: "webview",
+      signInUrl: "https://www.bloomberg.com/account/signin",
+    },
   },
 
   // --- Nature --------------------------------------------------------------
@@ -536,19 +425,14 @@ function everySection(prefix: string, caveat: string): Record<string, string> {
 const BUILTIN_CAVEATS: Record<string, string> = {
   jiqizhixin:
     "Undocumented internal JSON API; the official RSS is now paywalled. The URL/UA may need to stay configurable, with the WeChat mirror as a fallback.",
-  qbitai: "The feed carries only the last ~10 items and needs a browser UA (403 otherwise).",
-  interconnects: "Paid Substack posts arrive truncated with a 'Read more' CTA; the descriptor flags them via the truncation marker.",
-  "arxiv-cs-ro":
-    "Discovery-only (title + abstract; full text is PDF-only). The API endpoint 429s under frequent polling; the rss.arxiv.org feed is the daily path.",
-  "mit-tech-review":
-    "The article page is a metered paywall (the descriptor never fetches it); long features may be excerpted in the feed.",
-  xinzhiyuan: "The /feed/ path is broken (500); the descriptor uses the wp-json REST endpoint, which carries the full body inline.",
   ...everySection(
     "bloomberg",
-    "Discovery-only. The article page answers 403 with a PerimeterX bot check, so items stay summary-only: headline plus the lead paragraph (~200 chars) the feed carries. " +
+    "The feed is the discovery layer: headline plus the lead paragraph it carries, measured 206 characters for markets, 200 for industries, 214 for technology, 250 for politics. " +
+      "Bodies come from the hidden webview, because the article page answers 403 with a PerimeterX bot check to a plain fetch: the window loads bloomberg.com first for its cookies, then the article. " +
+      "Anonymous that is the metered preview (~500 characters); signed in through the sources page it is the whole story (measured 584→1959, 528→1624). No webview, no body — on iOS these sections are headlines. " +
       "Each section feed holds exactly 20 items covering only 6-22 hours, so a once-a-day poll misses most of a day; polling every 2-4 hours is what it takes to see a section whole. " +
       "Recorded facts, not a verdict: Bloomberg's terms of service forbid using any \"scraper, robot, bot, spider, data mining\" tool to access the service and forbid recirculating or redistributing its material; robots.txt disallows Google-Extended but restricts neither /feeds/ nor the article paths. " +
-      "Bodies would only ever come from the full-text newsletters (Money Stuff, Points of Return) over the planned mail pipe.",
+      "The full-text newsletters (Money Stuff, Points of Return) remain the other way in, over the planned mail pipe.",
   ),
   nature:
     "Discovery-only. Research papers are paywalled and most news needs a subscription; reading a body would take the logged-in webview pipe, which does not exist yet, so items are summary-only. " +

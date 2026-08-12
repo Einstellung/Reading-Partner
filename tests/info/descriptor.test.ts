@@ -79,7 +79,8 @@ test("validateDescriptor accepts the reserved stream kind (format-level only)", 
 
 test("DESCRIPTOR_GUIDE lists every discovery kind and fulltext mode, with a valid example", () => {
   for (const kind of ["feed", "listpage", "json-api", "stream"]) expect(DESCRIPTOR_GUIDE).toContain(kind);
-  for (const mode of ["feed-field", "fetch-page", "detail-endpoint", "none"]) expect(DESCRIPTOR_GUIDE).toContain(mode);
+  for (const mode of ["feed-field", "fetch-page", "detail-endpoint", "webview", "none"])
+    expect(DESCRIPTOR_GUIDE).toContain(mode);
   // The embedded example parses and validates through the real validator.
   const example = DESCRIPTOR_GUIDE.slice(DESCRIPTOR_GUIDE.indexOf("{ \"id\""));
   expect(validateDescriptor(JSON.parse(example)).ok).toBe(true);

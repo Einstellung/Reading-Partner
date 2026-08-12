@@ -285,6 +285,7 @@ export function pipeLabel(desc: SourceDescriptor): string {
   // feed discovery
   if (f.mode === "feed-field") return f.truncationMarker ? "Full text in feed (some paywalled)" : "Full text in feed";
   if (f.mode === "fetch-page") return "Feed headlines, fetches each page";
+  if (f.mode === "webview") return "Feed headlines, opens each article in a browser window";
   return "Headlines only, opens in browser";
 }
 

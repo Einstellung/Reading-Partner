@@ -9,6 +9,12 @@ mod oauth_callback;
 // in an iOS build, so the module and its commands compile out on mobile.
 #[cfg(desktop)]
 mod voice;
+// On-demand article fetching through a hidden webview (docs/17). Desktop only:
+// the DOM comes back through WebKitGTK's own JS bridge, and iOS's WKWebView has
+// both a different bridge and a cookie policy (ITP) that the warm-up this
+// depends on is not known to survive. See the module note.
+#[cfg(desktop)]
+mod webview_fetch;
 
 // Plugins: dialog + fs (M1 file open / reading state), http (AI provider requests
 // routed through Rust to bypass CORS), opener (open the system browser for OAuth),
@@ -44,13 +50,21 @@ pub fn run() {
     #[cfg(desktop)]
     let builder = builder
         .manage(voice::VoiceState::default())
+        // The fetcher's state is also what the navigation guard reads to tell a
+        // hidden fetcher window from the app's own, so it is managed before any
+        // window exists.
+        .manage(webview_fetch::WebviewFetchState::default())
         .invoke_handler(tauri::generate_handler![
             atomic_fs::write_text_file_atomic,
             atomic_fs::quarantine_file,
             oauth_callback::start_oauth_callback_listener,
             voice::start_voice_recording,
             voice::stop_voice_recording,
-            voice::cancel_voice_recording
+            voice::cancel_voice_recording,
+            webview_fetch::fetch_article_via_webview,
+            webview_fetch::session::open_site_sign_in,
+            webview_fetch::session::check_site_session,
+            webview_fetch::session::clear_site_cookies
         ]);
     #[cfg(mobile)]
     let builder = builder.invoke_handler(tauri::generate_handler![
@@ -81,6 +95,14 @@ pub fn run() {
             }
             // Pick up data written under the pre-0.3 bundle identifier.
             migrate::migrate_legacy_dirs(app.handle());
+            // Dev-only: with RP_WEBVIEW_FETCH_PROBE set, fetch those URLs
+            // through the hidden webview, print the results and exit. No-op
+            // without the variable.
+            #[cfg(desktop)]
+            {
+                webview_fetch::run_probe_from_env(app.handle());
+                webview_fetch::session::run_probe_from_env(app.handle());
+            }
             Ok(())
         })
         .run(tauri::generate_context!())

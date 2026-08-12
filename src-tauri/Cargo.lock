@@ -3329,7 +3329,9 @@ name = "reading-partner"
 version = "0.8.23"
 dependencies = [
  "cpal",
+ "gtk",
  "hound",
+ "javascriptcore-rs",
  "percent-encoding",
  "serde",
  "serde_json",
@@ -3342,6 +3344,7 @@ dependencies = [
  "tauri-plugin-http",
  "tauri-plugin-opener",
  "tauri-plugin-os",
+ "webkit2gtk",
 ]
 
 [[package]]

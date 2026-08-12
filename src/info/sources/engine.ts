@@ -22,6 +22,7 @@ import { fetchText, infoFetch, type FetchFn } from "../extract/http";
 import { itemId } from "../extract/id";
 import { htmlToText } from "../extract/sanitize";
 import type { ExtractReadable } from "../extract/readable-select";
+import { webviewBody, type WebviewArticle } from "../extract/webview-article";
 import { parseFeed, feedFieldBody, type FeedEntry } from "./feed";
 import { Gate, mapSettled } from "./pool";
 import {
@@ -33,8 +34,18 @@ import {
 } from "./descriptor";
 import type { InfoItem } from "./item";
 
+// Render one article in a hidden webview and hand back what its DOM held
+// (src/info/extract/webview-article.ts). Injected like every other capability
+// the engine uses, so the engine stays runnable in bun — and so a platform
+// without one simply does not pass it.
+export type WebviewFetch = (url: string) => Promise<WebviewArticle>;
+
 export interface CollectDeps {
   fetchFn?: FetchFn;
+  // The webview fetcher, for `webview` fulltext sources. Absent on a platform
+  // that has none (iOS, and any desktop whose DOM bridge is not written), which
+  // leaves those sources at headlines instead of failing them.
+  fetchViaWebview?: WebviewFetch;
   // Readable extraction for fetch-page/listpage sources. Optional so a purely
   // feed-field/json-api run needs no DOM; a fetch-page source without it yields
   // headline-only items.
@@ -87,6 +98,7 @@ export const GLOBAL_CONCURRENCY = 12;
 // What the per-kind collectors need, with the optional bits resolved.
 interface Filled {
   fetchFn: FetchFn;
+  fetchViaWebview?: WebviewFetch;
   textMaxChars: number;
   extract?: ExtractReadable;
   signal?: AbortSignal;
@@ -97,6 +109,7 @@ interface Filled {
 function fill(deps: CollectDeps): Filled {
   return {
     fetchFn: deps.fetchFn ?? infoFetch,
+    fetchViaWebview: deps.fetchViaWebview,
     textMaxChars: deps.textMaxChars ?? 20_000,
     extract: deps.extract,
     signal: deps.signal,
@@ -190,7 +203,10 @@ async function feedItem(desc: SourceDescriptor, e: FeedEntry, deps: Filled): Pro
     const fetched = await fetchAndExtract(e.link, deps);
     if (fetched) applyPage(base, fetched, deps.textMaxChars);
   }
-  // fulltext "none": summary-only by construction.
+  // fulltext "none" and "webview": summary-only here by construction. A webview
+  // body costs a browser window and tens of seconds and the fetcher runs one at
+  // a time, so a discovery pass over a 20-item feed must never start them — the
+  // funnel fetches the few that survive screening (fetchBodies).
   return base;
 }
 
@@ -485,6 +501,8 @@ async function fetchBody(
   switch (desc.fulltext.mode) {
     case "none":
       return next;
+    case "webview":
+      return fetchViaWebview(desc, next, deps);
     case "detail-endpoint":
       return fetchDetail(desc, next, deps);
     case "feed-field":
@@ -500,6 +518,46 @@ async function fetchBody(
   const fetched = await fetchAndExtract(next.url, deps);
   if (fetched) applyPage(next, fetched, deps.textMaxChars);
   return next;
+}
+
+// One item's body through the hidden webview. Never throws for a body that would
+// not come: a wall, a timeout or a dead host leaves the item as it was, summary
+// only, and nothing anywhere records that this article has no body — so the next
+// run asks again.
+//
+// The fetch is not cancellable once it has started (the Rust command takes no
+// signal), so a Stop is honoured between items and the one in flight is left to
+// finish and be discarded.
+async function fetchViaWebview(
+  desc: SourceDescriptor,
+  item: InfoItem,
+  deps: Filled,
+): Promise<InfoItem> {
+  if (desc.fulltext.mode !== "webview") return item;
+  if (!deps.fetchViaWebview || !item.url) return item;
+  throwIfAborted(deps.signal);
+  let article;
+  try {
+    article = await deps.fetchViaWebview(item.url);
+  } catch (e) {
+    if (isAbortError(e)) throw e;
+    console.warn(`webview fetch failed for ${item.url}`, e);
+    return item;
+  }
+  const body = webviewBody(article, { hasSignIn: !!desc.fulltext.signInUrl });
+  if (body.kind !== "body") {
+    // Worth a line either way: `retry` is a wall or a timeout the user may want
+    // to know about, `absent` is a page that really had no article on it.
+    console.warn(`no webview body for ${item.url}: ${body.kind} — ${body.reason}`);
+    return item;
+  }
+  if (body.html) item.contentHtml = body.html;
+  item.textContent = body.text.slice(0, deps.textMaxChars);
+  if (body.title) item.title = body.title;
+  // A preview is a real body, and it is not the whole article: flagged exactly
+  // like a paywall-truncated feed body so triage does not read it as full text.
+  item.summaryOnly = body.preview;
+  return item;
 }
 
 // Per-source health, surfaced to the source-list UI later. Derived (not synced).

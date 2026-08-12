@@ -14,6 +14,7 @@ import {
 } from "../../src/info/sources/engine";
 import type { ExtractReadable } from "../../src/info/extract/readable-select";
 import type { SourceDescriptor } from "../../src/info/sources/descriptor";
+import type { WebviewArticle } from "../../src/info/extract/webview-article";
 
 const extract: ExtractReadable = (_html, url) => ({
   title: "Extracted title",
@@ -156,6 +157,121 @@ test("feed + fetch-page keeps a summary-only item when the page fetch fails", as
   expect(items[0].contentHtml).toBeUndefined();
   expect(items[0].title).toBe("大模型又出新活");
   expect(items[0].summaryOnly).toBe(true);
+});
+
+// --- feed + webview (Bloomberg shape) --------------------------------------
+
+const BB_RSS = `<rss version="2.0"><channel>
+  <item><title>Copper delayed</title><link>https://www.bloomberg.com/news/articles/2026-08-11/x</link><description>Lead paragraph.</description></item>
+</channel></rss>`;
+
+const BLOOMBERG: SourceDescriptor = {
+  id: "bloomberg-markets",
+  name: "Bloomberg Markets",
+  line: "business",
+  enabled: true,
+  discovery: { kind: "feed", url: "https://www.bloomberg.com/feeds/markets/news.rss" },
+  fulltext: { mode: "webview", signInUrl: "https://www.bloomberg.com/account/signin" },
+};
+
+function article(patch: Partial<WebviewArticle> = {}): WebviewArticle {
+  return {
+    status: "ok",
+    requestedUrl: "https://www.bloomberg.com/news/articles/2026-08-11/x",
+    finalUrl: "https://www.bloomberg.com/news/articles/2026-08-11/x",
+    title: "Copper Delayed - Bloomberg",
+    text: "Copper shipments from Indonesia are suffering delays.",
+    html: "<p>Copper shipments from Indonesia are suffering delays.</p>",
+    selector: '[data-component="paragraph"]',
+    ldJson: [],
+    chars: 52,
+    promosDropped: 0,
+    seesSignIn: false,
+    warmed: true,
+    elapsedMs: 27000,
+    detail: null,
+    ...patch,
+  };
+}
+
+test("a webview source discovers headlines without opening a single window", async () => {
+  // One window per article for twenty feed items, one at a time, is minutes of
+  // work for material nobody has asked for yet. Discovery never starts them —
+  // not even when the caller did not ask for discoveryOnly.
+  let windows = 0;
+  const fetchViaWebview = async () => {
+    windows += 1;
+    return article();
+  };
+  const items = await collectSource(BLOOMBERG, {
+    fetchFn: async () => res(BB_RSS),
+    fetchViaWebview,
+  });
+  expect(windows).toBe(0);
+  expect(items[0].summaryOnly).toBe(true);
+  expect(items[0].summary).toContain("Lead paragraph");
+});
+
+test("fetchBodies renders a webview source's article and folds the body in", async () => {
+  const asked: string[] = [];
+  const items = await collectSource(BLOOMBERG, { fetchFn: async () => res(BB_RSS) });
+  const out = await fetchBodies(items, [BLOOMBERG], {
+    fetchViaWebview: async (url) => {
+      asked.push(url);
+      return article();
+    },
+  });
+  expect(asked).toEqual(["https://www.bloomberg.com/news/articles/2026-08-11/x"]);
+  expect(out[0].textContent).toContain("Copper shipments");
+  expect(out[0].contentHtml).toContain("<p>");
+  expect(out[0].title).toBe("Copper Delayed - Bloomberg");
+  expect(out[0].summaryOnly).toBe(false);
+});
+
+test("an anonymous body on a source with a sign-in stays flagged as partial", async () => {
+  const items = await collectSource(BLOOMBERG, { fetchFn: async () => res(BB_RSS) });
+  const out = await fetchBodies(items, [BLOOMBERG], {
+    fetchViaWebview: async () => article({ seesSignIn: true }),
+  });
+  // The text is kept — a metered preview is real material — but triage must not
+  // read it as the whole article.
+  expect(out[0].textContent).toContain("Copper shipments");
+  expect(out[0].summaryOnly).toBe(true);
+});
+
+test("a wall or a timeout leaves the item alone, with nothing recorded against it", async () => {
+  const items = await collectSource(BLOOMBERG, { fetchFn: async () => res(BB_RSS) });
+  for (const status of ["blocked", "timeout", "network"] as const) {
+    const out = await fetchBodies(items, [BLOOMBERG], {
+      fetchViaWebview: async () => article({ status, text: null, html: null, chars: 0 }),
+    });
+    expect(out[0].textContent).toBeUndefined();
+    expect(out[0].contentHtml).toBeUndefined();
+    expect(out[0].summaryOnly).toBe(true);
+    // The headline and the feed's summary survive: the item is exactly what
+    // discovery made it, so the next run asks again.
+    expect(out[0].title).toBe("Copper delayed");
+  }
+});
+
+test("no webview on this platform is a headline, not a failure", async () => {
+  const items = await collectSource(BLOOMBERG, { fetchFn: async () => res(BB_RSS) });
+  // iOS, and any desktop whose bridge is not written: the dependency is simply
+  // absent, and nothing throws or hangs.
+  const out = await fetchBodies(items, [BLOOMBERG], {});
+  expect(out[0].summaryOnly).toBe(true);
+  expect(out[0].textContent).toBeUndefined();
+});
+
+test("a webview fetch that throws costs the body and nothing else", async () => {
+  const items = await collectSource(BLOOMBERG, { fetchFn: async () => res(BB_RSS) });
+  const out = await fetchBodies(items, [BLOOMBERG], {
+    fetchViaWebview: async () => {
+      throw new Error("command not found");
+    },
+  });
+  expect(out.length).toBe(1);
+  expect(out[0].summaryOnly).toBe(true);
 });
 
 // --- feed-field, none, truncation ------------------------------------------

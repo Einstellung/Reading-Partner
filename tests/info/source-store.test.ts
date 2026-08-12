@@ -1,21 +1,10 @@
-// Source list parse + migration policy (src/info/sources/source-store.ts, pure parts).
-// The fs read/write paths need the Tauri plugin; only the pure helpers run here.
+// Source list parsing (src/info/sources/source-store.ts, pure parts). The fs
+// read/write paths need the Tauri plugin; only the pure helpers run here.
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { migratedSources, parseSources } from "../../src/info/sources/source-store";
+import { parseSources } from "../../src/info/sources/source-store";
 import { BUILTIN_SOURCES } from "../../src/info/sources/builtins";
-
-test("migratedSources: existing user gets the two original builtins, enabled", () => {
-  const list = migratedSources(true);
-  expect(list.map((s) => s.id).sort()).toEqual(["jiqizhixin", "qbitai"]);
-  expect(list.every((s) => s.enabled)).toBe(true);
-  expect(list.every((s) => s.builtin)).toBe(true);
-});
-
-test("migratedSources: new user starts with zero sources", () => {
-  expect(migratedSources(false)).toEqual([]);
-});
 
 test("parseSources validates each entry and drops malformed ones", () => {
   const text = JSON.stringify([
@@ -25,7 +14,7 @@ test("parseSources validates each entry and drops malformed ones", () => {
   ]);
   const list = parseSources(text);
   expect(list.length).toBe(2);
-  expect(list.map((s) => s.id)).toEqual(["jiqizhixin", "qbitai"]);
+  expect(list.map((s) => s.id)).toEqual([BUILTIN_SOURCES[0].id, BUILTIN_SOURCES[1].id]);
 });
 
 test("parseSources tolerates garbage", () => {
