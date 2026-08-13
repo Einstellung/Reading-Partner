@@ -134,7 +134,7 @@ const DEFAULTS = DEFAULT_SETTINGS;
 // out of the app. Passed in rather than imported, so a test can run the real
 // store against an in-memory file on a fake clock. The alternative — swapping
 // atomic-fs out with mock.module — rewrites the module registry for every other
-// test file that shares the worker, and bun never unwinds it (pitfall 117).
+// test file that shares the worker, and bun never unwinds it (pitfall 119).
 export interface SettingsIo {
   // The guarded read, so the quarantine policy stays in atomic-fs. "corrupt"
   // with no quarantine copy is the case that blocks writing.

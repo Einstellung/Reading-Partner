@@ -59,7 +59,7 @@ export function isConfigured(settings: Settings, providersInfo: ProviderInfo[]):
 
 // The store, as the two functions below use it. Both take it as an argument so
 // their tests can hand them a fake instead of rewriting the module registry
-// (pitfall 117).
+// (pitfall 119).
 export interface SettingsAccess {
   load: () => Promise<Settings>;
   save: (settings: Settings) => void;
