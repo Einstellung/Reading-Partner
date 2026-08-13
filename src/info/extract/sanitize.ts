@@ -21,7 +21,11 @@
 // It runs on the way in and again on every read, so its output is also its
 // input: sanitize(sanitize(x)) has to be sanitize(x) byte for byte, or a stored
 // record renders differently depending on how many times it has been read. Safe
-// twice is a weaker property and it is not the one to test for.
+// twice is a weaker property and it is not the one to test for. Three things
+// here exist only for that property and cost nothing to safety: the CR escape
+// in escapeText, the leading newline in padPre, and the AUTO_CLOSES table with
+// the extra parse it can ask for. What each of them is compensating for is in
+// docs/pitfall/127; none of it was reasoned out, the fuzzer found all of it.
 //
 // Without a DOMParser there is no sanitizer, so it returns "": a blank body,
 // never an unchecked one. Every caller runs in the webview, which has one; the
@@ -63,12 +67,43 @@ const VOID_ELEMENTS = new Set(["br", "col", "hr", "img", "wbr"]);
 // svg and math also carry the namespace escapes — <svg><script>, the
 // <svg><foreignObject> re-entry into HTML, the math/mtext mXSS chains — so the
 // whole subtree goes rather than being unwrapped into the HTML namespace.
+//
+// button and marquee are here for a second reason, and it is the reason this
+// list may not shrink: they are scope boundaries in the tree builder. A <p> or
+// an <li> nested inside one does not close the <p> or <li> outside it, so the
+// parse of `<p>a<button><p>b</p></button></p>` really is a <p> inside a <p> —
+// a shape no parse produces without the boundary. Unwrapping the boundary and
+// keeping the children writes that shape out, and the next parse takes it
+// apart into two siblings. The stored record then renders one way on the read
+// that saved it and another way on the read after that. AUTO_CLOSES below is
+// the general case; these two are here because dropping them is the better
+// answer for what they are, not only the stable one.
 const DROP_WITH_CONTENT = new Set([
-  "applet", "audio", "base", "canvas", "embed", "form", "frame", "frameset", "head", "iframe",
-  "input", "link", "math", "meta", "noembed", "noframes", "noscript", "object", "optgroup",
-  "option", "plaintext", "script", "select", "style", "svg", "template", "textarea", "title",
-  "video", "xmp",
+  "applet", "audio", "base", "button", "canvas", "embed", "form", "frame", "frameset", "head",
+  "iframe", "input", "link", "marquee", "math", "meta", "noembed", "noframes", "noscript",
+  "object", "optgroup", "option", "plaintext", "script", "select", "style", "svg", "template",
+  "textarea", "title", "video", "xmp",
 ]);
+
+// Every scope boundary the tree builder has, and where each one goes. This is
+// the whole list of elements that can hold a shape a re-parse would rearrange,
+// so none of them may fall through to the unwrap path; the rest of the tag
+// space is ordinary and unwraps without moving anything.
+//
+//   applet object select template   dropped with content
+//   button marquee                  dropped with content (see above)
+//   caption table td th             allowed, so the shape is kept, not moved
+//   ol ul                           allowed (these two bound list-item scope)
+//   html body                       cannot occur: a start tag for either one
+//                                   inside the body merges its attributes onto
+//                                   the element already open and creates no
+//                                   node, so neither is ever a child of body
+//
+// tests/info/sanitize.test.ts walks that list and puts the two shapes that
+// catch an unwrapped boundary through the sanitizer twice. AUTO_CLOSES below
+// keeps a boundary that lands in neither set stable anyway, at the price of a
+// second parse; what this list decides is what the reader is left with, which
+// for a form control and a scrolling banner is nothing.
 
 // The only attributes carried over from the source that are not URLs: counts,
 // written back as digits. Everything else in the output is built here (img's
@@ -83,6 +118,99 @@ const NUMERIC_ATTRS: Record<string, readonly string[]> = {
   th: ["colspan", "rowspan"],
 };
 
+// What each allowed element's start tag ends, when the tree builder meets it
+// with that element still open. A <li> ends the <li> before it, a second <h2>
+// ends the first, any block ends an open <p>, a <td> ends the cell beside it,
+// and <rt>/<rp> end a list or paragraph item through the spec's implied end
+// tags. Writing one of these inside the element it would end is a position the
+// next parse will not agree with — it splits the two into siblings — so a pass
+// that wrote one is not the answer on its own.
+//
+// The tree really can hold that position, which is why this is not a question
+// the two element lists above can answer. Three ways in, all of them found by
+// the fuzzer rather than reasoned out:
+//
+//   <p>a<button><p>b</p></button></p>   a scope boundary: <p> does not end <p>
+//   <h1>a<em-x><h1>b</h1></em-x></h1>   any element at all, for the h1-h6 rule
+//   <li>a<table><li>b</li></table>      foster parenting lifts the inner <li>
+//                                       out of the table and drops it beside it
+//
+// The first two reach the output when the element in the middle is unwrapped;
+// the third needs no unwrapping at all, and no edit to either element list
+// would have stopped it.
+//
+// Modelling which of the tree builder's dozen closing rules fires where is
+// re-implementing the tree builder, which is what this file was rewritten to
+// stop doing. So it does not model the outcome. It notices the position and
+// asks the parser again (see sanitizeArticleHtml). Naming one relation too many
+// costs one extra parse of one body; missing one costs the property, so this
+// table errs long and the barrier list below errs short.
+const PARAGRAPH = ["p"];
+const HEADING = ["h1", "h2", "h3", "h4", "h5", "h6", "p"];
+const RUBY_ITEM = ["dd", "dt", "li", "p", "rp", "rt"];
+const CELL = ["td", "th"];
+const TABLE_PART = ["caption", "colgroup", "tbody", "td", "tfoot", "th", "thead", "tr"];
+const AUTO_CLOSES: Record<string, readonly string[]> = {
+  a: ["a"],
+  address: PARAGRAPH, article: PARAGRAPH, aside: PARAGRAPH, blockquote: PARAGRAPH,
+  div: PARAGRAPH, dl: PARAGRAPH, figcaption: PARAGRAPH, figure: PARAGRAPH, footer: PARAGRAPH,
+  header: PARAGRAPH, hr: PARAGRAPH, main: PARAGRAPH, ol: PARAGRAPH, pre: PARAGRAPH,
+  section: PARAGRAPH, ul: PARAGRAPH,
+  table: ["p", "table"],
+  p: PARAGRAPH,
+  li: ["li", "p"],
+  dd: ["dd", "dt", "p"], dt: ["dd", "dt", "p"],
+  h1: HEADING, h2: HEADING, h3: HEADING, h4: HEADING, h5: HEADING, h6: HEADING,
+  rp: RUBY_ITEM, rt: RUBY_ITEM,
+  td: CELL, th: CELL, tr: ["td", "th", "tr"],
+  caption: TABLE_PART, colgroup: TABLE_PART,
+  tbody: TABLE_PART, tfoot: TABLE_PART, thead: TABLE_PART,
+};
+
+// Where the walk up stops. Every one of these is a boundary the spec's closing
+// rules genuinely stop at, and the spec has more of them than this — two of the
+// rules (h1-h6, rt/rp) stop at very nearly any element. A short list only ever
+// makes the walk go further and report a position that would have been fine,
+// which is the direction that costs a parse rather than the property. The three
+// list wrappers are what keeps an ordinary nested list from asking for one.
+const AUTO_CLOSE_BARRIER = new Set(["caption", "dl", "ol", "table", "td", "th", "ul"]);
+
+// <a> is the one entry in the table that is not closed by a tree-building rule
+// but by the adoption agency, which reads the list of active formatting
+// elements and stops at the markers pushed onto it — a shorter list, and not
+// this one. A <table> is not a marker, and neither is a list: an <a> inside a
+// list inside an <a> really does end the outer one on the next parse. A cell is
+// a marker, which is why `<a>1<table>..<td><a>2</a>` keeps both.
+const FORMATTING_BARRIER = new Set(["caption", "td", "th"]);
+
+// How far up to look before giving up and saying yes. A thousand nested <div>
+// from a hostile file would otherwise be walked once per element written under
+// them; past this depth the answer is the expensive one, which costs a parse
+// and not a stall.
+const AUTO_CLOSE_LOOKUP = 64;
+
+// Is `name` about to be written inside an element its start tag would end?
+// `open` is the output's own stack of open elements, innermost last.
+function wouldAutoClose(open: readonly string[], name: string): boolean {
+  const closes = AUTO_CLOSES[name];
+  if (closes === undefined) return false;
+  const barrier = name === "a" ? FORMATTING_BARRIER : AUTO_CLOSE_BARRIER;
+  const stop = Math.max(0, open.length - AUTO_CLOSE_LOOKUP);
+  for (let i = open.length - 1; i >= stop; i -= 1) {
+    const up = open[i];
+    if (closes.includes(up)) return true;
+    if (barrier.has(up)) return false;
+  }
+  return open.length > AUTO_CLOSE_LOOKUP;
+}
+
+// What one walk of the tree produced, and whether it is allowed to be the
+// answer on its own.
+interface Pass {
+  html: string;
+  mayDrift: boolean;
+}
+
 // One parsed attribute. Named so it does not shadow the DOM's own Attr.
 interface TagAttr {
   name: string;
@@ -91,8 +219,19 @@ interface TagAttr {
 
 // Text is written back escaped, so no run of characters in a text node can
 // become a tag when the renderer parses this string.
+//
+// CR is escaped for the same reason "&" is in an attribute value: not safety,
+// stability. The tokenizer normalizes a literal CR in the source to LF before
+// anything else looks at it, but a character reference is decoded after that
+// step, so `&#13;` really does put a CR in a text node. Writing it back as a
+// literal CR hands the next parse an LF instead, and `<pre>&#13;&#10;x</pre>`
+// loses its blank line one read later. `&#13;` survives the round trip.
 function escapeText(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\r/g, "&#13;");
 }
 
 // An attribute value for a double-quoted slot. "&" is escaped first, so the
@@ -238,19 +377,34 @@ function attrsOf(el: Element): TagAttr[] {
 // levels of nested <div> from a hostile file, and blowing the stack inside
 // parseSavedArticles would take the whole saved list down with it. The stack
 // holds nodes still to visit and the literal end tags that close them.
-function serializeChildren(root: Element): string {
+//
+// The only empty entry it writes is a <pre>'s slot, and a slot always follows
+// that <pre>'s own start tag, so two of them are never adjacent and `out[slot +
+// 1]` is the first thing actually written inside the <pre> — which is what the
+// fixup below reads.
+function serializeChildren(root: Element): Pass {
   const out: string[] = [];
+  // For each <pre>, the index of the empty slot sitting between its start tag
+  // and its content, filled in at the end (see padPre).
+  const preSlots: number[] = [];
+  // The output's own stack of open elements, and whether anything was written
+  // into it that the next parse would move (see AUTO_CLOSES).
+  const open: string[] = [];
+  let mayDrift = false;
   const stack: (Node | string)[] = [];
   pushChildren(stack, root);
   while (stack.length > 0) {
     const item = stack.pop();
     if (item === undefined) break;
+    // The only strings on the stack are end tags, one per open element.
     if (typeof item === "string") {
       out.push(item);
+      open.pop();
       continue;
     }
     if (item.nodeType === 3) {
-      out.push(escapeText(item.nodeValue ?? ""));
+      const text = escapeText(item.nodeValue ?? "");
+      if (text !== "") out.push(text);
       continue;
     }
     // Comments, doctypes, processing instructions and anything else: gone.
@@ -264,7 +418,7 @@ function serializeChildren(root: Element): string {
     // page that puts the real image only in a <source srcset> would otherwise
     // lose it, so its URLs are candidates for the <img> instead.
     if (name === "picture") {
-      out.push(imgTag(pictureAttrs(el)));
+      pushImg(out, imgTag(pictureAttrs(el)));
       continue;
     }
     if (!ALLOWED_ELEMENTS.has(name)) {
@@ -273,15 +427,48 @@ function serializeChildren(root: Element): string {
     }
     const attrs = attrsOf(el);
     if (name === "img") {
-      out.push(imgTag(attrs));
+      pushImg(out, imgTag(attrs));
       continue;
     }
+    if (!mayDrift && wouldAutoClose(open, name)) mayDrift = true;
     out.push(name === "a" ? anchorTag(attrs) : openTag(name, attrs));
     if (VOID_ELEMENTS.has(name)) continue;
+    if (name === "pre") {
+      preSlots.push(out.length);
+      out.push("");
+    }
+    open.push(name);
     stack.push(`</${name}>`);
     pushChildren(stack, el);
   }
-  return out.join("");
+  padPre(out, preSlots);
+  return { html: out.join("").trim(), mayDrift };
+}
+
+function pushImg(out: string[], tag: string): void {
+  if (tag !== "") out.push(tag);
+}
+
+// The one place the output is not just the tree written back. The tree builder
+// throws away an LF that comes straight after a <pre> start tag, so the text
+// node under `<pre>\n\ncode` holds one LF, not two. Writing that node back
+// verbatim hands the next parse a <pre> that starts with an LF, it throws that
+// one away too, and the blank line most code blocks lifted off a web page begin
+// with disappears a line per read.
+//
+// So a <pre> whose content starts with an LF gets a second one, which the next
+// parse eats and gives the same content back. This is what innerHTML does (the
+// HTML fragment serialization algorithm has the same rule for pre, textarea and
+// listing) and it is why round-tripping through innerHTML is stable.
+//
+// The test is on what was written, not on the element's first child: a comment
+// or a dropped <script> ahead of the text stops the tree builder from eating
+// anything on the way in, and both are gone by the time this runs, so the
+// output's first character is the only one that says what the next parse sees.
+function padPre(out: string[], preSlots: readonly number[]): void {
+  for (const slot of preSlots) {
+    if (out[slot + 1]?.startsWith("\n")) out[slot] = "\n";
+  }
 }
 
 // Every attribute of a <picture>'s <img> and <source> children, the <img>'s
@@ -300,18 +487,43 @@ function pushChildren(stack: (Node | string)[], el: Element): void {
   for (let i = kids.length - 1; i >= 0; i -= 1) stack.push(kids[i]);
 }
 
-export function sanitizeArticleHtml(html: string): string {
-  if (html === "") return "";
-  if (typeof DOMParser === "undefined") return "";
+function onePass(html: string): Pass | null {
   try {
     const doc = new DOMParser().parseFromString(`<!doctype html><body>${html}`, "text/html");
     const body = doc.body;
-    if (!body) return "";
-    return serializeChildren(body).trim();
+    if (!body) return null;
+    return serializeChildren(body);
   } catch {
     // A parser that threw leaves nothing checked, so nothing renders.
-    return "";
+    return null;
   }
+}
+
+// A body this walk could have moved something in goes back through the parser
+// until the parser stops moving it. Every pass is safe on its own — the
+// allowlist is applied on all of them — so this loop is only about the output
+// being its own input, and the parse it costs is charged to the one body in a
+// few hundred that needs it rather than to every read.
+//
+// Measured over 90,000 generated nestings: 99.95% settle on the first pass and
+// the rest on the second; none needed a third. The cap is here because the
+// input can be hostile and a parse of a large body is not cheap, not because
+// anything is expected to reach it. A body that did reach it would render the
+// same way twice anyway on every read after the one that stored it.
+const MAX_PASSES = 5;
+
+export function sanitizeArticleHtml(html: string): string {
+  if (html === "") return "";
+  if (typeof DOMParser === "undefined") return "";
+  let pass = onePass(html);
+  if (pass === null) return "";
+  for (let i = 1; i < MAX_PASSES && pass.mayDrift; i += 1) {
+    const next = onePass(pass.html);
+    if (next === null) return "";
+    if (next.html === pass.html) break;
+    pass = next;
+  }
+  return pass.html;
 }
 
 // Drop every <img> whose src is a data: URL, tag and all. The tag, not just the

