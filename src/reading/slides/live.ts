@@ -236,8 +236,10 @@ function imageDeps(signal: AbortSignal): ImageGenDeps {
       const res = await cleanTauriFetch(url, { signal });
       return new Uint8Array(await res.arrayBuffer());
     },
-    sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
-    now: () => Date.now(),
+    // The same real clock the pipelines run on; the image client needs two of
+    // its three members.
+    sleep: realTimers.sleep,
+    now: realTimers.now,
     signal,
   };
 }

@@ -434,12 +434,9 @@ export function getInfoCollector(): InfoCollector {
       backgroundOn: async () =>
         (await loadDeviceSettings()).backgroundCollect && (await amICollecting()),
       busy: () => getInfoPipeline().snapshot().running,
-      now: () => Date.now(),
+      now: realTimers.now,
       today: () => todayLocal(),
-      setTimer: (ms, cb) => {
-        const id = setTimeout(cb, ms);
-        return () => clearTimeout(id);
-      },
+      setTimer: realTimers.setTimer,
       log: (data) => logEvent(INFO_EVENT_TOPIC, "info-poll", data),
       // The tray is where a machine with its window closed says what it has
       // been doing (docs/36). Display only, and it goes nowhere on a phone.
