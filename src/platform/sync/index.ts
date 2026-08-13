@@ -14,7 +14,7 @@
 import { observeAppLifecycle } from "../app/lifecycle";
 import type { Shell } from "../app/shell";
 import { DriveBackend } from "./driveBackend";
-import { SyncEngine } from "./engine";
+import { SyncEngine, type EngineDeps } from "./engine";
 import { dispatchPull } from "./pull-routes";
 import { tauriSyncFs } from "./syncFs";
 import { tauriBookFs } from "./books";
@@ -104,13 +104,22 @@ function notify(): void {
   for (const l of statusListeners) l(s);
 }
 
-function makeEngine(): SyncEngine {
+// Everything the engine is handed, as a value the test can hold: the pass is
+// headless, so every way it reaches the rest of the app is one of these fields.
+// `onPulled` is the one the whole pull-route table hangs off — a pass that stops
+// announcing what it wrote leaves every route unfired and nothing anywhere
+// throws, which is the silence tests/platform/sync/pull-coverage.test.ts exists
+// to prevent, and it could not see this line.
+//
+// The shell is a parameter rather than the module's own, so the books decision
+// can be asked both ways without mounting anything.
+export function engineDeps(forShell: Shell): EngineDeps {
   const backend = new DriveBackend({
     getToken: getAccessToken,
     ids: state.drive,
     persistIds: () => saveState(state),
   });
-  return new SyncEngine({
+  return {
     backend,
     fs: tauriSyncFs,
     books: tauriBookFs,
@@ -118,7 +127,7 @@ function makeEngine(): SyncEngine {
     // rather than in the engine: the pass stays headless, and the one thing it
     // would need — which shell is running — is something the caller already
     // knows.
-    booksPolicy: shell === "phone" ? "off" : "mirror",
+    booksPolicy: forShell === "phone" ? "off" : "mirror",
     base: tauriBaseStore,
     trash: tauriTrashJournal,
     snapshot: state.snapshot,
@@ -130,7 +139,11 @@ function makeEngine(): SyncEngine {
       notify();
     },
     onSignedOut: () => void handleSignedOut(),
-  });
+  };
+}
+
+function makeEngine(): SyncEngine {
+  return new SyncEngine(engineDeps(shell));
 }
 
 function ensureEngine(): SyncEngine {

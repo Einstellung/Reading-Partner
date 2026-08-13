@@ -39,6 +39,15 @@ export function registerPullRoute(route: PullRoute): () => void {
   };
 }
 
+/**
+ * Whether a route is subscribed right now. For the routes registered at import
+ * time, which have nothing else to show that they ran: a registration that is
+ * deleted or made inert takes its files' refresh with it and nothing throws.
+ */
+export function isPullRouteRegistered(route: PullRoute): boolean {
+  return routes.has(route);
+}
+
 /** What a finished pull calls (platform/sync/index.ts). */
 export function dispatchPull(paths: readonly string[]): void {
   for (const route of [...routes]) {
@@ -50,24 +59,38 @@ export function dispatchPull(paths: readonly string[]): void {
 const THREADS_FILE = /^threads-(.+)\.json$/;
 const ANNOTATIONS_FILE = /^annotations-(.+)\.json$/;
 
+// What the route drops, taken as an argument: the two stores are module
+// singletons over Tauri, and swapping a module out for a test poisons every
+// other test file sharing the worker (pitfall 119).
+export interface BookCacheDrops {
+  threads: (bookId: string) => void;
+  annotations: (bookId: string) => void;
+}
+
 // The per-book caches, which no shell has anything to decide about: both stores
 // write themselves back in full, so a cache the pull did not invalidate erases
 // whatever the other device added on the next mark. Registered here rather than
 // by a shell — App registered it and PhoneApp did not, which left the phone's
 // info threads masked by a stale cache after every pull.
-export const BOOK_CACHE_PULL_ROUTE: PullMatcher = {
-  id: "book-caches",
-  matches: (path) => THREADS_FILE.test(path) || ANNOTATIONS_FILE.test(path),
-};
+export function bookCachePullRoute(drop: BookCacheDrops): PullRoute {
+  return {
+    id: "book-caches",
+    matches: (path) => THREADS_FILE.test(path) || ANNOTATIONS_FILE.test(path),
+    onPulled: (paths) => {
+      for (const path of paths) {
+        const threads = THREADS_FILE.exec(path);
+        if (threads) drop.threads(threads[1]);
+        const annotations = ANNOTATIONS_FILE.exec(path);
+        if (annotations) drop.annotations(annotations[1]);
+      }
+    },
+  };
+}
 
-registerPullRoute({
-  ...BOOK_CACHE_PULL_ROUTE,
-  onPulled: (paths) => {
-    for (const path of paths) {
-      const threads = THREADS_FILE.exec(path);
-      if (threads) dropThreadCache(threads[1]);
-      const annotations = ANNOTATIONS_FILE.exec(path);
-      if (annotations) dropAnnotationCache(annotations[1]);
-    }
-  },
+// The one the app runs on, registered for the life of the process.
+export const BOOK_CACHE_PULL_ROUTE: PullRoute = bookCachePullRoute({
+  threads: dropThreadCache,
+  annotations: dropAnnotationCache,
 });
+
+registerPullRoute(BOOK_CACHE_PULL_ROUTE);
