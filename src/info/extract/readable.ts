@@ -2,8 +2,10 @@
 // the page HTML with the webview's native DOMParser (no jsdom) and run
 // Readability over it, falling back to defuddle when Readability under-extracts
 // (empty or a suspiciously short body). Kept in its own module so the engine and
-// its bun tests never import Readability/defuddle (which need a DOM); live.ts
-// injects this. The pick-between logic is pure and tested in readable-select.ts.
+// its bun tests never import Readability/defuddle (which need a DOM). Nothing
+// imports this module statically — readable-lazy.ts is the only door in, so the
+// two libraries stay in their own chunk and off both shells' boot path. The
+// pick-between logic is pure and tested in readable-select.ts.
 
 import { Readability } from "@mozilla/readability";
 import Defuddle from "defuddle";
