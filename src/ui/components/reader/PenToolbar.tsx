@@ -7,7 +7,8 @@ import { IconColorSwatch, IconHighlight, IconPointer, IconSparkle, IconUnderline
 import { placePanel } from '../common/panel-position';
 import { useViewportSize } from '../common/useViewportSize';
 import { Button } from '../ui/button';
-import { OVERLAY_Z } from '../ui/overlay';
+import { cn } from '../lib/utils';
+import { OVERLAY_Z, useOverlaySafePadding } from '../ui/overlay';
 import type { ColorEntry, Tool, ToolType } from '../common/types';
 
 interface PenToolbarProps {
@@ -34,8 +35,6 @@ type PenType = 'highlight' | 'underline';
 const CARD = 'rounded-xl border border-black/10 bg-white shadow-lg';
 // Distance from the swatch to the palette that opens off it.
 const GAP = 8;
-// Smallest distance from the palette to a viewport edge.
-const MARGIN = 8;
 
 export default function PenToolbar({ tool, colors, onToolChange, orientation = 'vertical' }: PenToolbarProps) {
 	const [paletteOpen, setPaletteOpen] = useState(false);
@@ -48,6 +47,10 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 	const popoverRef = useRef<HTMLDivElement>(null);
 	const swatchRef = useRef<HTMLButtonElement>(null);
 	const viewport = useViewportSize();
+	// Smallest distance from the palette to a viewport edge, per edge: the palette
+	// is `fixed`, so the shell's safe-area padding misses it (docs/pitfall/74).
+	// Without an inset this is the plain 8px gutter, as it was.
+	const margin = useOverlaySafePadding();
 	const horizontal = orientation === 'horizontal';
 	// Only the painting tools carry a color; the navigation lock, the AI pen and
 	// the all-unselected state do not.
@@ -73,10 +76,10 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 				viewport,
 				placement: horizontal ? 'below' : 'right',
 				gap: GAP,
-				margin: MARGIN,
+				margin,
 			}),
 		);
-	}, [paletteOpen, horizontal, viewport]);
+	}, [paletteOpen, horizontal, viewport, margin]);
 
 	// A press outside shuts the palette. pointerdown, not mousedown, and capture:
 	// docs/pitfall/67-webkit-tap-does-not-focus-a-button.md.
@@ -204,12 +207,16 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 								? { left: palettePos.left, top: palettePos.top, visibility: 'visible' }
 								: { left: 0, top: 0, visibility: 'hidden' }
 						}
-						className={
+						className={cn(
+							// CARD first: it carries shadow-lg, and cn() lets the later class of
+							// a kind win, so the popover's deeper shadow-xl has to come after it.
+							CARD,
 							// Fixed column tracks: the popover shrinks to its content, so 1fr
 							// tracks would collapse. A track has to hold a whole swatch button,
 							// which is finger-sized on a touch device.
-							`fixed ${OVERLAY_Z.floating} grid grid-cols-[repeat(4,1.75rem)] coarse:grid-cols-[repeat(4,2.75rem)] gap-0.5 p-1.5 shadow-xl ${CARD}`
-						}
+							'fixed grid grid-cols-[repeat(4,1.75rem)] coarse:grid-cols-[repeat(4,2.75rem)] gap-0.5 p-1.5 shadow-xl',
+							OVERLAY_Z.floating,
+						)}
 						role="listbox"
 						aria-label="Colors"
 					>

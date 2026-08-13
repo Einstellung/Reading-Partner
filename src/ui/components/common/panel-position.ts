@@ -9,6 +9,8 @@
 // returns. The viewport passed in is the usable one — on a device with a soft
 // keyboard that is the visual viewport, which is shorter (useViewportSize).
 
+import type { SafeAreaInsets } from "./safe-area";
+
 // An anchor is anything with the four edges of a DOMRect, so a measured element
 // goes in unchanged. A caret or a mark's corner is a zero-size rect: pointAnchor.
 export interface AnchorRect {
@@ -40,8 +42,22 @@ export interface PlacePanelOptions {
 	placement?: Placement;
 	// Distance from the anchor to the panel.
 	gap?: number;
-	// Smallest distance from the panel to a viewport edge.
-	margin?: number;
+	// Smallest distance from the panel to a viewport edge. One number is the same
+	// distance on all four; per-edge insets are what a device with a notch or a
+	// home indicator needs, and are what useOverlaySafePadding hands over
+	// (docs/pitfall/74). Where there is no inset that hook already reports the
+	// 8px gutter, so a per-edge margin degrades to the uniform one.
+	margin?: number | PanelMargin;
+}
+
+// The four edges a margin can differ on. Same shape as SafeAreaInsets, which is
+// what the call sites pass.
+export type PanelMargin = SafeAreaInsets;
+
+function edges(margin: number | PanelMargin): PanelMargin {
+	return typeof margin === "number"
+		? { top: margin, right: margin, bottom: margin, left: margin }
+		: margin;
 }
 
 export function pointAnchor(x: number, y: number): AnchorRect {
@@ -63,32 +79,38 @@ export function placePanel({
 	gap = 0,
 	margin = 0,
 }: PlacePanelOptions): { left: number; top: number } {
-	const maxLeft = viewport.width - panel.width - margin;
-	const maxTop = viewport.height - panel.height - margin;
+	const m = edges(margin);
+	const maxLeft = viewport.width - panel.width - m.right;
+	const maxTop = viewport.height - panel.height - m.bottom;
 
 	if (placement === "below") {
 		const centre = (anchor.left + anchor.right) / 2;
-		const left = clamp(centre - panel.width / 2, margin, maxLeft);
+		const left = clamp(centre - panel.width / 2, m.left, maxLeft);
 		let top = anchor.bottom + gap;
 		if (top > maxTop) {
 			// No room below. Above the anchor if the panel fits there whole,
 			// otherwise as low as the viewport allows.
 			const above = anchor.top - gap - panel.height;
-			top = above >= margin ? above : maxTop;
+			top = above >= m.top ? above : maxTop;
 		}
-		return { left, top: clamp(top, margin, maxTop) };
+		return { left, top: clamp(top, m.top, maxTop) };
 	}
 
 	let left = anchor.right + gap;
 	if (left > maxLeft) {
 		const before = anchor.left - gap - panel.width;
-		left = before >= margin ? before : maxLeft;
+		left = before >= m.left ? before : maxLeft;
 	}
-	return { left: clamp(left, margin, maxLeft), top: clamp(anchor.top, margin, maxTop) };
+	return { left: clamp(left, m.left, maxLeft), top: clamp(anchor.top, m.top, maxTop) };
 }
 
 // A fixed-width panel shrunk to fit a viewport narrower than it (a phone). Never
 // negative, so a degenerate viewport reading cannot produce an invalid width.
-export function fitPanelWidth(preferred: number, viewportWidth: number, margin = 0): number {
-	return Math.max(0, Math.min(preferred, viewportWidth - 2 * margin));
+export function fitPanelWidth(
+	preferred: number,
+	viewportWidth: number,
+	margin: number | PanelMargin = 0,
+): number {
+	const m = edges(margin);
+	return Math.max(0, Math.min(preferred, viewportWidth - m.left - m.right));
 }
