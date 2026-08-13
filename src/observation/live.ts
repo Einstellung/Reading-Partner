@@ -156,8 +156,8 @@ export interface DistillThreadOptions {
   // Cancels the pass. No trigger passes one, and the reason is the same for all
   // of them: a pass has to outlive the thing that started it.
   //
-  // Hangup (App.tsx captureHangup) fires the pass and then aborts the chat turn's
-  // controller — that controller is the only signal in scope and handing it over
+  // Hangup (reading/session/use-call.ts) fires the pass and then aborts the chat
+  // turn's controller — that controller is the only signal in scope and handing it over
   // would kill every pass the moment it started. The trim fallback
   // (buildReadingTurn) runs inside a turn that does own a signal, but that signal
   // is aborted by Stop and by hangup, and hangup is exactly when this pass matters
