@@ -20,12 +20,45 @@
 // bind installs neither the endpoints nor the client, and says so once instead
 // of leaving the loop looking broken. `IOS_SIM_BRIDGE_ALLOW_REMOTE=1` in front
 // of a single run is the way to take that trade knowingly.
+//
+// A loopback bind keeps other machines out. It does not keep out the browser
+// already running on this one: any page the developer visits can post a form to
+// http://localhost:1420, and `enctype="text/plain"` is one of the three form
+// encodings that skip the CORS preflight, so the browser sends it cross-origin
+// without asking. The response is unreadable to that page, but /eval does not
+// need to answer to do the damage — the code is already running next to the
+// library, the notes and the signed-in sessions. Nothing about the port is
+// secret either: it is strictPort 1420.
+//
+// So the endpoints are split into two lanes with different callers, and each
+// lane is held to what its caller can do (guardRequest):
+//
+//   the page's lane   /poll /result /log, called by the injected client. Same
+//                     origin or nothing: a request carrying Sec-Fetch-Site or
+//                     Origin from anywhere else is refused, and a browser will
+//                     not let a page lie about either.
+//   the driver's lane /eval /logs, called by curl from scripts/ios-sim.sh.
+//                     Three fences, because this is the lane that runs code:
+//                     a per-run token the plugin writes to a file only a local
+//                     process can read, a content type no form can produce, and
+//                     a refusal of any request wearing the headers a browser
+//                     attaches to its own requests. The last one is what makes
+//                     a forged Origin useless — a page that claimed to be
+//                     same-origin would still be a page.
+//
+// The consequence worth knowing: /eval cannot be driven from the browser
+// console on the dev page either. That is the same rule doing its job, and curl
+// with the token is the way in.
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { Plugin } from "vite";
 
-// Just enough of node's IncomingMessage to read a body, written structurally so
-// this file needs no node type package of its own.
+// Just enough of node's IncomingMessage to read a body and place its caller,
+// written structurally so the request type needs no import.
 type BodyStream = {
   url?: string;
+  method?: string;
+  headers?: Record<string, string | string[] | undefined>;
   on(event: "data", cb: (chunk: unknown) => void): void;
   on(event: "end", cb: () => void): void;
   on(event: "error", cb: (err: unknown) => void): void;
@@ -120,6 +153,142 @@ function readBody(req: BodyStream): Promise<string> {
   });
 }
 
+// The two lanes. Everything else under /__sim is a 404 the handler writes.
+const PAGE_PATHS = new Set(["/poll", "/result", "/log"]);
+const DRIVER_PATHS = new Set(["/eval", "/logs"]);
+
+// Headers a browser attaches to requests its own page made, and that no script
+// in that page is allowed to set or remove. Seeing any of them on the driver's
+// lane means the caller is a web page whatever else it claims, which is the
+// whole answer to a forged Origin.
+const BROWSER_MARKS = ["origin", "referer", "sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest"] as const;
+
+// A form can send exactly three content types (urlencoded, multipart, plain
+// text) and fetch cannot send anything else cross-origin without a preflight
+// this server never answers. So requiring this one is a fence a page cannot
+// climb even before the token is checked.
+const EVAL_CONTENT_TYPE = "application/x-sim-bridge-eval";
+const TOKEN_HEADER = "x-sim-bridge-token";
+
+// Where the per-run secret goes. node_modules is per-checkout, already ignored
+// by git, and certain to exist while vite is running, so two worktrees running
+// dev servers get two tokens and neither can land in a commit.
+const TOKEN_IN_ROOT = "node_modules/.sim-bridge/token";
+
+// scripts/ios-sim.sh reads the same env var, so a run on a spare port can be
+// pointed somewhere else without touching either side.
+function tokenPath(root: string): string {
+  return process.env.IOS_SIM_BRIDGE_TOKEN_FILE || join(root, TOKEN_IN_ROOT);
+}
+
+function newToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// Removed and rewritten rather than truncated, so the mode is the one asked for
+// even if something left a world-readable file behind.
+function writeToken(file: string, token: string): void {
+  mkdirSync(dirname(file), { recursive: true });
+  try {
+    rmSync(file);
+  } catch {
+    /* not there */
+  }
+  writeFileSync(file, token + "\n", { mode: 0o600 });
+}
+
+function secretsMatch(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+type Verdict = { ok: true } | { ok: false; status: number; error: string };
+
+type GuardedRequest = {
+  path: string;
+  method: string;
+  headers: Record<string, string | string[] | undefined>;
+};
+
+// Whether this request may reach the endpoint it asked for. Driven through the
+// middleware by tests/sim-bridge-csrf.test.ts, which posts the attack at it.
+function guardRequest(req: GuardedRequest, token: string): Verdict {
+  const head = (name: string): string | undefined => {
+    const value = req.headers[name];
+    return Array.isArray(value) ? value[0] : value;
+  };
+  const method = (req.method || "GET").toUpperCase();
+  const deny = (status: number, error: string): Verdict => ({ ok: false, status, error });
+
+  if (DRIVER_PATHS.has(req.path)) {
+    for (const mark of BROWSER_MARKS) {
+      if (head(mark) !== undefined) {
+        return deny(403, `${req.path} is not reachable from a browser page (${mark} was set)`);
+      }
+    }
+    const offered = head(TOKEN_HEADER);
+    if (!token || offered === undefined || !secretsMatch(offered, token)) {
+      return deny(403, `${req.path} needs the token this dev server wrote at start`);
+    }
+    if (req.path === "/eval") {
+      if (method !== "POST") return deny(405, "/eval takes POST");
+      // `content-type: application/x-sim-bridge-eval; charset=utf-8` is the
+      // same declaration; only the type itself has to match.
+      const type = (head("content-type") ?? "").split(";")[0].trim().toLowerCase();
+      if (type !== EVAL_CONTENT_TYPE) return deny(415, `/eval takes ${EVAL_CONTENT_TYPE}`);
+    } else if (method !== "GET") {
+      return deny(405, "/logs takes GET");
+    }
+    return { ok: true };
+  }
+
+  if (PAGE_PATHS.has(req.path)) {
+    const site = head("sec-fetch-site");
+    if (site !== undefined && site !== "same-origin") {
+      return deny(403, `${req.path} is for this page only (Sec-Fetch-Site: ${site})`);
+    }
+    const origin = head("origin");
+    if (origin !== undefined && !originIsHost(origin, head("host"))) {
+      return deny(403, `${req.path} is for this page only (Origin: ${origin})`);
+    }
+    if (method !== (req.path === "/poll" ? "GET" : "POST")) {
+      return deny(405, `${req.path} was called with ${method}`);
+    }
+    return { ok: true };
+  }
+
+  return { ok: true };
+}
+
+// An Origin the browser wrote is a serialized origin, so its authority is the
+// only part worth comparing with the Host this request was addressed to.
+// `null` (a sandboxed or opaque origin) matches nothing.
+function originIsHost(origin: string, host: string | undefined): boolean {
+  if (!host) return false;
+  try {
+    return new URL(origin).host.toLowerCase() === host.trim().toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
+// A body that is not an object is a body from something that is not the client,
+// and an unguarded JSON.parse here takes the dev server down with it — killing
+// the developer's session and whatever ios-sim loop was running.
+function parseJsonObject(text: string): Record<string, unknown> | null {
+  try {
+    const value: unknown = JSON.parse(text || "{}");
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    return value as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 export function simBridge(): Plugin {
   const queue: Array<{ id: number; code: string }> = [];
   const waiting = new Map<number, (r: unknown) => void>();
@@ -163,6 +332,19 @@ export function simBridge(): Plugin {
     },
     configureServer(server) {
       if (!enabled) return;
+      // Fresh at every start: a token left behind by a dead server opens
+      // nothing, because the server that would honour it is gone.
+      const token = newToken();
+      const file = tokenPath(server.config.root);
+      writeToken(file, token);
+      server.httpServer?.on("close", () => {
+        try {
+          rmSync(file);
+        } catch {
+          /* already gone */
+        }
+      });
+
       server.middlewares.use("/__sim", async (req, res) => {
         const path = (req.url ?? "/").split("?")[0];
         const json = (code: number, value: unknown) => {
@@ -170,6 +352,12 @@ export function simBridge(): Plugin {
           res.setHeader("content-type", "application/json");
           res.end(JSON.stringify(value));
         };
+
+        const verdict = guardRequest({ path, method: req.method ?? "GET", headers: req.headers ?? {} }, token);
+        if (!verdict.ok) {
+          json(verdict.status, { error: verdict.error });
+          return;
+        }
 
         // The page asks for work. Held open so an idle page is nearly silent.
         if (path === "/poll") {
@@ -199,10 +387,15 @@ export function simBridge(): Plugin {
 
         // The page answers.
         if (path === "/result") {
-          const body = JSON.parse((await readBody(req)) || "{}");
-          const resolve = waiting.get(body.id);
+          const body = parseJsonObject(await readBody(req));
+          if (!body) {
+            json(400, { error: "body is not a JSON object" });
+            return;
+          }
+          const id = typeof body.id === "number" ? body.id : NaN;
+          const resolve = waiting.get(id);
           if (resolve) {
-            waiting.delete(body.id);
+            waiting.delete(id);
             resolve(body);
           }
           json(200, { accepted: !!resolve });
@@ -232,7 +425,11 @@ export function simBridge(): Plugin {
         }
 
         if (path === "/log") {
-          const body = JSON.parse((await readBody(req)) || "{}");
+          const body = parseJsonObject(await readBody(req));
+          if (!body) {
+            json(400, { error: "body is not a JSON object" });
+            return;
+          }
           logs.push({ t: Date.now(), ...body });
           if (logs.length > LOG_CAP) logs.splice(0, logs.length - LOG_CAP);
           json(200, { ok: true });

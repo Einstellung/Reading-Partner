@@ -13,7 +13,11 @@
 #     JavaScript inside that webview and returns the value, which is how a
 #     gesture becomes a measurement instead of a screenshot to squint at. It
 #     installs itself only while the dev server is on loopback, which is where
-#     the simulator wants it anyway.
+#     the simulator wants it anyway, and it answers `eval` only for a caller
+#     that is not a browser: the token below, which the dev server writes to a
+#     file at start, plus a content type no HTML form can send. That is what
+#     keeps a page the developer happens to be visiting from posting a form to
+#     localhost and running its own JavaScript in the app.
 #
 # What these scenarios measure on a known-good tree is written down in
 # scripts/ios-sim/baseline.md — diff a run against that, not against a memory
@@ -52,6 +56,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 JS="$ROOT/scripts/ios-sim"
 DEV_LOG="$OUT/dev.log"
 BASE="http://localhost:$PORT"
+# Written by the sim bridge when the dev server starts, and removed when it
+# stops. Per checkout, so a worktree's dev server has its own.
+BRIDGE_TOKEN_FILE="${IOS_SIM_BRIDGE_TOKEN_FILE:-$ROOT/node_modules/.sim-bridge/token}"
 
 export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$HOME/.bun/bin:$PATH"
 # The free Personal Team. A simulator build is signed ad-hoc and does not need
@@ -64,14 +71,26 @@ die() { echo "ios-sim: $*" >&2; exit 1; }
 
 # --- the bridge ------------------------------------------------------------
 
+# The running dev server's secret. Missing means no dev server has started in
+# this checkout, so say that rather than let curl get a 403 back.
+bridge_token() {
+  [ -r "$BRIDGE_TOKEN_FILE" ] || die "no bridge token at $BRIDGE_TOKEN_FILE — the dev server writes it at start, so either it is not running or it is running from another checkout"
+  tr -d '\r\n' <"$BRIDGE_TOKEN_FILE"
+}
+
 # Send JavaScript to the webview and print whatever the page returned. The
 # response is {id, ok, value} or {id, ok:false, error}; a non-zero exit means
 # the page threw, so a scenario stops at the first broken step.
 sim_eval() {
   local body
   body=$(cat)
+  local token
+  token=$(bridge_token)
   local res
-  res=$(curl -s --max-time 40 -X POST --data-binary @- "$BASE/__sim/eval" <<<"$body") || die "the dev server is not answering on $PORT (is \`up\` running?)"
+  res=$(curl -s --max-time 40 -X POST \
+    -H "content-type: application/x-sim-bridge-eval" \
+    -H "x-sim-bridge-token: $token" \
+    --data-binary @- "$BASE/__sim/eval" <<<"$body") || die "the dev server is not answering on $PORT (is \`up\` running?)"
   [ -n "$res" ] || die "empty answer from the bridge"
   if ! printf '%s' "$res" | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get("ok") else 1)'; then
     printf '%s\n' "$res" | python3 -c 'import json,sys; print("page threw:", json.load(sys.stdin).get("error"), file=sys.stderr)'
@@ -81,7 +100,12 @@ sim_eval() {
 }
 
 # Uncaught errors and rejections the page reported since the last read.
-sim_logs() { curl -s --max-time 10 "$BASE/__sim/logs"; echo; }
+sim_logs() {
+  local token
+  token=$(bridge_token)
+  curl -s --max-time 10 -H "x-sim-bridge-token: $token" "$BASE/__sim/logs"
+  echo
+}
 
 # --- lifecycle -------------------------------------------------------------
 
