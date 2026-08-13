@@ -18,9 +18,6 @@ import {
 } from "../ui/dropdown-menu";
 import type { OutlineRow } from "../../../reading/talks";
 
-const MENU_ROW =
-  "w-full rounded-md px-2.5 py-0 text-left text-[13px] min-h-[36px] coarse:min-h-[44px] cursor-pointer";
-
 export interface OutlinePaneProps {
   rows: OutlineRow[];
   onMove(index: number, delta: number): void;
@@ -127,13 +124,12 @@ export default function OutlinePane({
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
-                          className={MENU_ROW}
                           onSelect={() => onSetIncluded(row.bookId, row.chapter, !row.include)}
                         >
                           {row.include ? "Cut from the talk" : "Put back in the talk"}
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          className={`${MENU_ROW} text-destructive focus:text-destructive`}
+                          className="text-destructive focus:text-destructive"
                           onSelect={() => onRemove(row.bookId, row.chapter)}
                         >
                           Remove the entry

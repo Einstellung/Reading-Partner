@@ -25,12 +25,6 @@ export interface CardMenuItem {
   destructive?: boolean;
 }
 
-// The row's geometry, the same one the reader's overflow menu uses: 13px, 36px
-// tall and 44px under a finger, with no padding of its own so the minimum is
-// what decides the height.
-const ROW =
-  "w-full rounded-md px-2.5 py-0 text-left text-[13px] min-h-[36px] coarse:min-h-[44px] cursor-pointer";
-
 export default function CardMenu({ label, items }: { label: string; items: CardMenuItem[] }) {
   const [open, setOpen] = useState(false);
   // Whether the menu was up when the press started. Radix opens on pointerdown,
@@ -66,7 +60,7 @@ export default function CardMenu({ label, items }: { label: string; items: CardM
         {items.map((item) => (
           <DropdownMenuItem
             key={item.label}
-            className={item.destructive ? `${ROW} text-destructive focus:text-destructive` : ROW}
+            className={item.destructive ? "text-destructive focus:text-destructive" : undefined}
             onSelect={item.onSelect}
           >
             {item.label}
