@@ -939,16 +939,24 @@ test("resetGestures drops a live drag: capture released, engine resumed", () => 
 // The two engine handles the paged executor reads: the page a turn is counted
 // from, sampled once when the drag is captured, and where a turn is asked to
 // land. `turns` is every page turnToPage was asked for, in order.
+//
+// The reported page is a variable, not the constant it reads like: the engine's
+// current page is the most visible one, recomputed from the container's scroll
+// event, so a follow-drag that slides the content past the half-page mark moves
+// it while the finger is still down. `setPage` is that move, and it is what
+// separates the page the executor sampled at the capture from a live read at
+// the release.
 function pagedMount(
   page: number,
   total: number,
   over: Partial<PagedGestureCtx> = {},
-): { h: Harness; turns: number[] } {
+): { h: Harness; turns: number[]; setPage: (n: number) => void } {
   const turns: number[] = [];
+  let current = page;
   const h = mount({
     paged: true,
     scroll: {
-      getCurrentPage: () => page,
+      getCurrentPage: () => current,
       getTotalPages: () => total,
     } as unknown as PagedGestureCtx["scroll"],
     turnToPage: (n: number) => void turns.push(n),
@@ -960,7 +968,13 @@ function pagedMount(
   // width, so the commit distance below is 0.22 * 800 = 176px.
   h.el.scrollWidth = 800 * total;
   h.el.scrollLeft = 800 * (page - 1);
-  return { h, turns };
+  return {
+    h,
+    turns,
+    setPage: (n: number) => {
+      current = n;
+    },
+  };
 }
 
 // The px the paged band is holding the page area at, and a check that what was
@@ -1030,6 +1044,32 @@ test("a paged swipe the other way lands on the previous page", () => {
 
   h.el.fire("pointerup", ev(1, 440, 500, 48, t));
   expect(turns).toEqual([5]);
+
+  h.detach();
+});
+
+// The turn is counted from the page the capture sampled, not from the one the
+// engine reports at the release. The follow-drag scrolls the content itself, so
+// by the release the engine's counter can already be on the page being pulled
+// in — counting from that would turn two pages on one swipe.
+test("a paged turn counts from the page the capture sampled, not the one at the release", () => {
+  const { h, turns, setPage } = pagedMount(6, 12);
+  const t = h.target;
+
+  h.el.fire("pointerdown", ev(1, 600, 500, 0, t));
+  h.el.fire("pointermove", ev(1, 560, 500, 16, t));
+  expect(h.el.captured).toEqual([1]);
+
+  // The engine's counter catches up with the content the drag has pulled
+  // across, while the finger is still down and nothing has turned yet.
+  setPage(7);
+  h.el.fire("pointermove", ev(1, 400, 500, 32, t));
+  expect(h.el.scrollLeft).toBe(4200);
+
+  h.el.fire("pointerup", ev(1, 400, 500, 48, t));
+  // 6 + 1. A live read here would ask for 8, and the machine would not stop it:
+  // its own canTurn gate is recomputed from that same live counter.
+  expect(turns).toEqual([7]);
 
   h.detach();
 });
