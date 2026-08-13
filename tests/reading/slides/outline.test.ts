@@ -15,12 +15,12 @@ import {
 } from "../../../src/reading/slides/outline";
 import { planUserMessage, validateDeckPlan, type PlanBook } from "../../../src/reading/slides/plan";
 import type { DeckPlan } from "../../../src/reading/slides/plan";
-import { createTalk } from "../../../src/reading/talks/types";
+import { newTalk } from "../../../src/reading/talks/types";
 import type { Talk, TalkDecision } from "../../../src/reading/talks/types";
 import { languageInstruction } from "../../../src/platform/app/settings";
 
 function talk(decisions: Partial<TalkDecision>[]): Talk {
-  const base = createTalk({
+  const base = newTalk({
     id: "t1",
     topicId: "topic",
     materials: [

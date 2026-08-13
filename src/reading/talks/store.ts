@@ -12,7 +12,7 @@
 import { BaseDirectory, exists, readDir, readTextFile, remove } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import {
-  createTalk,
+  newTalk,
   newTalkId,
   normalizeTalk,
   type Talk,
@@ -80,7 +80,7 @@ export async function listTalksForTopic(topicId: string): Promise<Talk[]> {
   return (await listAllTalks()).filter((t) => t.topicId === topicId);
 }
 
-export interface NewTalkInput {
+export interface StartTalkInput {
   topicId: string;
   materials: TalkMaterial[];
   name?: string;
@@ -91,10 +91,10 @@ export interface NewTalkInput {
 // that id (two presses inside one millisecond, or a clock that went backwards)
 // the next free millisecond is taken, because the id is also the deck's
 // directory name and two talks cannot share one.
-export async function startTalk(input: NewTalkInput): Promise<Talk> {
+export async function startTalk(input: StartTalkInput): Promise<Talk> {
   let now = input.now ?? Date.now();
   while (await exists(talkFile(newTalkId(now)), { baseDir: BaseDirectory.AppData })) now += 1;
-  const talk = createTalk({
+  const talk = newTalk({
     id: newTalkId(now),
     topicId: input.topicId,
     materials: input.materials,

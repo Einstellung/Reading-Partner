@@ -43,12 +43,10 @@ export {
   loadTalk,
   recordTalkDecision,
   saveTalk,
-  startTalk,
   talkFile,
   talkIdOf,
   talkThreadKey,
   updateTalk,
-  type NewTalkInput,
 } from "./store";
 export {
   buildTalkTurn,
@@ -59,13 +57,14 @@ export {
   type TalkTurnMessage,
 } from "./turn";
 export {
-  createTalk,
   defaultTalkName,
+  newTalk,
   newTalkId,
   normalizeTalk,
   TALK_VERSION,
-  type CreateTalkInput,
+  type NewTalkFields,
   type Talk,
   type TalkDecision,
   type TalkMaterial,
 } from "./types";
+export { createTalk, talkCandidates } from "./candidates";
