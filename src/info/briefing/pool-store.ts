@@ -18,8 +18,8 @@
 //                          cycle, which is exactly why it is not in with the
 //                          marks.
 
-import { BaseDirectory, exists, readDir, readTextFile, remove } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../../platform/app/atomic-fs";
+import { BaseDirectory, exists, readDir, remove } from "@tauri-apps/plugin-fs";
+import { readJson, writeTextAtomic } from "../../platform/app/atomic-fs";
 import { emptyPool, POOL_VERSION, type Pool, type PoolMark } from "./item-pool";
 import type { InfoItem } from "../sources/item";
 
@@ -32,15 +32,6 @@ const DAY_FILE = /^info-pool-(\d{4}-\d{2}-\d{2})\.json$/;
 
 export function poolDayFile(date: string): string {
   return `info-pool-${date}.json`;
-}
-
-async function readJson<T>(file: string): Promise<T | null> {
-  try {
-    if (!(await exists(file, { baseDir: BaseDirectory.AppData }))) return null;
-    return JSON.parse(await readTextFile(file, { baseDir: BaseDirectory.AppData })) as T;
-  } catch {
-    return null;
-  }
 }
 
 // Read the whole pool. A missing or unreadable part reads as empty rather than

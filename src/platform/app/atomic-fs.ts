@@ -15,6 +15,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { BaseDirectory, exists, readTextFile } from "@tauri-apps/plugin-fs";
 
+/**
+ * The base every data file in the app is addressed from. Passed to the fs
+ * plugin as-is, spread when a call needs more (`{ ...APPDATA, recursive: true }`).
+ */
+export const APPDATA = { baseDir: BaseDirectory.AppData } as const;
+
 /** Replace an AppData-relative text file atomically. Parent dirs are created. */
 export function writeTextAtomic(path: string, contents: string): Promise<void> {
   return invoke("write_text_file_atomic", { path, contents });
@@ -64,8 +70,8 @@ export async function readGuardedJson<T>(
 ): Promise<GuardedRead<T>> {
   let text: string;
   try {
-    if (!(await exists(file, { baseDir: BaseDirectory.AppData }))) return { status: "missing" };
-    text = await readTextFile(file, { baseDir: BaseDirectory.AppData });
+    if (!(await exists(file, APPDATA))) return { status: "missing" };
+    text = await readTextFile(file, APPDATA);
   } catch (e) {
     console.error(`failed to read ${file}`, e);
     onCorrupt({ file, savedAs: null });
@@ -85,4 +91,45 @@ export async function readGuardedJson<T>(
   }
   onCorrupt({ file, savedAs });
   return { status: "corrupt", savedAs };
+}
+
+/**
+ * Read a JSON file the app can rebuild or do without — a cache, a pool, what a
+ * collector published. A file that is not there yet reads as null and says
+ * nothing: that is the first-run case. Everything else — an IO error, bytes
+ * that will not parse, a shape `validate` turns down — also reads as null, but
+ * warns, so a caller carrying on with nothing is not the only trace left.
+ *
+ * `validate` returns null for content that parses into the wrong shape. Without
+ * it the parsed value is handed back as T unchecked, which is what a caller
+ * that re-derives the file anyway wants.
+ *
+ * For data nothing can rebuild — the shelf, settings, credentials — use
+ * readGuardedJson: it moves the bad file aside first, so the fallback the
+ * caller saves next cannot become the only copy left.
+ */
+export async function readJson<T>(
+  file: string,
+  validate?: (raw: unknown) => T | null,
+): Promise<T | null> {
+  try {
+    if (!(await exists(file, APPDATA))) return null;
+    const raw = JSON.parse(await readTextFile(file, APPDATA)) as unknown;
+    if (!validate) return raw as T;
+    const value = validate(raw);
+    if (value === null) console.warn(`unexpected shape in ${file}`);
+    return value;
+  } catch (e) {
+    console.warn(`failed to read ${file}`, e);
+    return null;
+  }
+}
+
+/** readJson for a store whose empty state is a shape rather than a null. */
+export async function readJsonOr<T>(
+  file: string,
+  fallback: T,
+  validate?: (raw: unknown) => T | null,
+): Promise<T> {
+  return (await readJson<T>(file, validate)) ?? fallback;
 }

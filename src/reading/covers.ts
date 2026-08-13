@@ -17,7 +17,6 @@
 // long as the document does.
 
 import {
-  BaseDirectory,
   exists,
   mkdir,
   readFile,
@@ -25,7 +24,7 @@ import {
   writeFile,
 } from "@tauri-apps/plugin-fs";
 import type { PdfDocumentObject, PdfEngine, PdfRenderPageOptions } from "@embedpdf/models";
-import { writeTextAtomic } from "../platform/app/atomic-fs";
+import { APPDATA, writeTextAtomic } from "../platform/app/atomic-fs";
 import { contentHash } from "../platform/app/content-hash";
 import { libraryHas, readLibraryBook } from "../platform/app/library";
 import type { FileRef } from "../platform/app/topics";
@@ -46,7 +45,6 @@ import { getPdfiumEngine } from "./engine/engine-singleton";
 
 const COVERS_DIR = "covers";
 const MIME = "image/jpeg";
-const APPDATA = { baseDir: BaseDirectory.AppData } as const;
 
 // The direct engine has hung on a document before (pitfall 21); a hang here
 // would leave a card waiting forever. A timeout is treated as transient: it is
