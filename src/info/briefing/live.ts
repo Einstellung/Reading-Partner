@@ -28,7 +28,7 @@ import { collectAll, fetchBodies as fetchArticleBodies } from "../sources/engine
 import { fetchArticleViaWebview } from "../extract/webview-article";
 import { hasWebviewFetch } from "../../platform/app/platform";
 import { setTrayStatus } from "../../platform/app/tray";
-import { extractReadable } from "../extract/readable";
+import { loadExtractReadable } from "../extract/readable-lazy";
 import {
   loadSiteSessions,
   loadSources,
@@ -267,7 +267,7 @@ async function discover(
   const { health } = await collectAll(
     poll,
     {
-      extract: extractReadable,
+      extract: await loadExtractReadable(),
       discoveryOnly: true,
       signal,
       onSourceSettled: async (r) => {
@@ -304,7 +304,7 @@ async function pollSources(
   const prior = await loadSourceHealth();
   const { items, health } = await collectAll(
     sources,
-    { extract: extractReadable, discoveryOnly: true, signal },
+    { extract: await loadExtractReadable(), discoveryOnly: true, signal },
     prior,
   );
   saveSourceHealth(health).catch(() => {});
@@ -365,7 +365,7 @@ async function fetchBodies(
     items,
     sources,
     {
-      extract: extractReadable,
+      extract: await loadExtractReadable(),
       // Only where there is one. A `webview` source on a platform without a
       // fetcher gets no body and no error either — it stays at the headline and
       // summary the feed already gave, which is what the funnel does with every

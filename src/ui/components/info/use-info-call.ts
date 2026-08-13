@@ -329,20 +329,24 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       patchLast({ text: "No AI provider configured (Settings).", failed: true, streaming: false });
       return;
     }
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setStreaming(true);
-    let full = "";
     // The briefing controller for generate_briefing: a background job through the
     // one card's lifecycle, answering with which of the three things happened —
     // a run started here, a run was already going here, or the request was left
     // for the machine that collects — so the companion reports the right one.
-    const tools = buildLiveCompanionTools(
+    //
+    // Built before the turn is marked streaming: it awaits the readable
+    // extractor's chunk, and a failure there has to land where a failed
+    // loadSettings() lands rather than leaving the chat stuck mid-send.
+    const tools = await buildLiveCompanionTools(
       (payload) => insertCard("probe", payload),
       (payload) => insertCard("profile", payload),
       { start: (scope) => runBriefingJob(scope) },
       { collecting },
     );
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setStreaming(true);
+    let full = "";
 
     void runAgentTurn({
       providerId: settings.defaultProviderId as "anthropic" | "openai" | "deepseek",
