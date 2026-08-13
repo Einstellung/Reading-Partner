@@ -735,6 +735,7 @@ test("the listeners land on the scroll container with the flags the router needs
 
 test("teardown removes every listener and puts the element back the way it was", () => {
   const h = mount({ paged: true });
+  const t = h.target;
   // Paged locks the container's touch-action; the settle may have been holding
   // the page area back (pitfall 63) and nothing else would clear it.
   expect(h.el.style.touchAction).toBe("none");
@@ -743,15 +744,43 @@ test("teardown removes every listener and puts the element back the way it was",
   expect(h.ctx.current.setTouchLock).not.toBeNull();
   expect(h.ctx.current.resetGestures).not.toBeNull();
 
+  // Leave a rubber band standing on the page area: the only page there is, so
+  // the drag bands instead of turning. Teardown has to take it off — this is
+  // the paged band, painted on the scroll content, and nothing else clears it.
+  // Asserting an empty transform without first putting one there asserts the
+  // harness's own initial value.
+  h.el.fire("pointerdown", ev(1, 400, 500, 0, t));
+  h.el.fire("pointermove", ev(1, 340, 500, 16, t));
+  h.el.fire("pointermove", ev(1, 300, 500, 32, t));
+  expect(h.el.firstElementChild.style.transform).not.toBe("");
+
   h.detach();
 
   expect(h.el.listeners).toEqual([]);
   expect(h.el.style.visibility).toBe("");
   expect(h.el.style.touchAction).toBe("");
-  expect(h.el.style.transform).toBe("");
+  expect(h.el.firstElementChild.style.transform).toBe("");
   expect(h.ctx.current.viewport).toBeNull();
   expect(h.ctx.current.setTouchLock).toBeNull();
   expect(h.ctx.current.resetGestures).toBeNull();
+});
+
+// The other band. Vertical cannot translate the scroll content (pitfall 45), so
+// its overscroll rides on the container itself — a different element from the
+// paged band's, and the one a stale transform would offset the engine's zoom
+// anchor against.
+test("teardown takes a vertical overscroll band off the container", () => {
+  const h = mount();
+  const t = h.target;
+  // Pulling down at the top of the document: nowhere to scroll, so it bands.
+  h.el.fire("pointerdown", ev(1, 100, 300, 0, t));
+  h.el.fire("pointermove", ev(1, 100, 340, 16, t));
+  h.el.fire("pointermove", ev(1, 100, 400, 32, t));
+  expect(h.el.scrollTop).toBe(0);
+  expect(h.el.style.transform).not.toBe("");
+
+  h.detach();
+  expect(h.el.style.transform).toBe("");
 });
 
 test("teardown cancels a fling in flight", () => {
@@ -769,12 +798,33 @@ test("teardown cancels a fling in flight", () => {
   expect(h.el.scrollTop).toBe(stopped);
 });
 
+// The paged band rides on the scroll content, and a band left standing there
+// offsets the anchor the engine resolves its zoom against. The layout switch
+// that calls resetGestures is exactly when that happens.
+test("resetGestures takes the paged band off the page area", () => {
+  const h = mount({ paged: true });
+  const t = h.target;
+  h.el.fire("pointerdown", ev(1, 400, 500, 0, t));
+  h.el.fire("pointermove", ev(1, 340, 500, 16, t));
+  h.el.fire("pointermove", ev(1, 300, 500, 32, t));
+  expect(h.el.firstElementChild.style.transform).not.toBe("");
+
+  h.ctx.current.resetGestures?.();
+  expect(h.el.firstElementChild.style.transform).toBe("");
+
+  h.detach();
+});
+
 test("resetGestures drops a live drag: capture released, engine resumed", () => {
   const h = mount();
   const t = h.target;
-  h.el.fire("pointerdown", ev(1, 100, 500, 0, t));
-  h.el.fire("pointermove", ev(1, 100, 440, 16, t));
+  // Dragged into overscroll, so there is a band standing when the reset lands
+  // and the transform below is a value the reset had to clear.
+  h.el.fire("pointerdown", ev(1, 100, 300, 0, t));
+  h.el.fire("pointermove", ev(1, 100, 340, 16, t));
+  h.el.fire("pointermove", ev(1, 100, 400, 32, t));
   expect(h.pauses).toBe(1);
+  expect(h.el.style.transform).not.toBe("");
 
   h.ctx.current.resetGestures?.();
   expect(h.resumes).toBe(1);
