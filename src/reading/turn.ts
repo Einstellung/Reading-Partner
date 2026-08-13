@@ -166,8 +166,14 @@ export interface ReadingTurn {
 export type TurnFailure = "refusal" | "error";
 
 export interface TurnFailureView {
-  // What the failed reply row says, in full.
+  // What the row says, in full.
   text: string;
+  // Where that sentence goes on the row. "reply" stands in for the answer that
+  // never came: it takes the row's text and is drawn as a failure. "notice" is
+  // the app talking about a turn that reached the model and came back without
+  // one; it sits beside the row's text rather than in it, and so is never
+  // replayed as the assistant's own words next turn (turn-rows.ts).
+  as: "reply" | "notice";
   // The toast to raise, or null for none. A refusal raises none: it is already
   // sitting where the reply would be, and a red banner over it would say the
   // opposite of what it says.
@@ -181,9 +187,10 @@ export interface TurnFailureView {
 // refusal paths (declined before sending, declined mid-loop) cannot drift apart
 // or drift into the error path's wording.
 export function turnFailureView(kind: TurnFailure, message: string): TurnFailureView {
-  if (kind === "refusal") return { text: message, toast: null, retry: false };
+  if (kind === "refusal") return { text: message, as: "notice", toast: null, retry: false };
   return {
     text: `⚠️ Couldn't reach the model. ${message}`,
+    as: "reply",
     toast: "AI reply failed",
     retry: true,
   };

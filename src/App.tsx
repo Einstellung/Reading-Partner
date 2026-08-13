@@ -106,6 +106,7 @@ import SettingsButton from "./ui/components/common/SettingsButton";
 import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
 import type { Annotation as PopupAnnotation, PendingImage, ToolStatus, ToolType } from "./ui/components/common/types";
 import { rehydrateMessage, type ChatPart } from "./ui/components/chat/chatParts";
+import { holdsNoAnswer, refusalRow } from "./ui/components/chat/turn-rows";
 import { refreshInfoCollector } from "./info/briefing/live";
 
 // The AI pen maps to the engine's underline tool in a fixed purple (the palette's
@@ -765,7 +766,14 @@ export default function App() {
       const view = turnFailureView(kind, message);
       if (callRef.current?.threadId === threadId) {
         if (view.toast) pushToast("error", view.toast);
-        patch(() => ({ role: "ai", text: view.text, ts, failed: true }), ts, view.retry);
+        patch(
+          (m) =>
+            view.as === "notice"
+              ? { ...m, ...refusalRow(m, view.text) }
+              : { role: "ai", text: view.text, ts, failed: true },
+          ts,
+          view.retry,
+        );
       } else {
         const marked = annsRef.current.get(annotationId)?.text;
         pushToast("error", backgroundFailureToast(kind, typeof marked === "string" ? marked : ""));
@@ -779,7 +787,7 @@ export default function App() {
     liveTurns.start({ threadId, bookId, controller, message: streamingRow });
     setCall((c) => {
       if (!c || c.threadId !== threadId) return c;
-      const kept = c.messages.filter((m) => !(m.role === "ai" && (m.failed || m.streaming)));
+      const kept = c.messages.filter((m) => !holdsNoAnswer(m));
       return { ...c, error: false, messages: [...kept, streamingRow] };
     });
 

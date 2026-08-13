@@ -38,10 +38,46 @@ test("nothing is said while the reply is still streaming", () => {
   expect(html).not.toContain(NOTICE);
 });
 
-test("a refusal is a failed turn, in the failure style", () => {
+test("a turn that could not reach the model keeps the failure style", () => {
   const html = renderToStaticMarkup(
-    <MessageList messages={[{ role: "ai", text: "This material is too large", ts: 1, failed: true }]} />,
+    <MessageList
+      messages={[{ role: "ai", text: "⚠️ Couldn't reach the model. fetch failed", ts: 1, failed: true }]}
+    />,
   );
-  expect(html).toContain("This material is too large");
+  expect(html).toContain("Couldn&#x27;t reach the model");
   expect(html).toContain("text-destructive");
+});
+
+// A refusal stops the turn before anything is written, so the notice is the
+// whole row (turn-rows.ts). It still is not a failure: same muted line, no error
+// color, and no Copy — there are no model words to take.
+test("a row that is only a notice renders the notice, not an error", () => {
+  const stopped = "Ask about a shorter passage.";
+  const html = renderToStaticMarkup(
+    <MessageList messages={[{ role: "ai", text: "", ts: 1, notice: stopped }]} />,
+  );
+  expect(html).toContain(stopped);
+  expect(html).toContain("text-neutral-400");
+  expect(html).not.toContain("text-destructive");
+  expect(html).not.toContain("Copy");
+});
+
+// The trace explaining the stop stays above it: the tool calls that errored, and
+// none of the ones that ran fine.
+test("a notice-only row keeps the failed tool calls above it", () => {
+  const html = renderToStaticMarkup(
+    <MessageList
+      messages={[
+        {
+          role: "ai",
+          text: "",
+          ts: 1,
+          notice: "Ask about a shorter passage.",
+          tools: [{ name: "probe", label: "probing example.com", state: "error" }],
+        },
+      ]}
+    />,
+  );
+  expect(html).toContain("probing example.com");
+  expect(html.indexOf("probing example.com")).toBeLessThan(html.indexOf("Ask about a shorter"));
 });

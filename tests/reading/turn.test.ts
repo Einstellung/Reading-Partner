@@ -420,9 +420,12 @@ test("a figure the conversation has already cited keeps its catalog", async () =
 // back — and used to be shown alike, which told a reader whose network is fine
 // to go and check their network. These pin the difference.
 
-test("a refusal stands as the reply: no toast, no Retry", () => {
+test("a refusal is the app talking about the turn: a notice, no toast, no Retry", () => {
   const view = turnFailureView("refusal", REFUSE_MIDTURN);
   expect(view.text).toBe(REFUSE_MIDTURN);
+  // Not the row's text: the sentence is never the model's, and text is what
+  // every surface replays as the assistant's own words next turn.
+  expect(view.as).toBe("notice");
   expect(view.toast).toBeNull();
   expect(view.retry).toBe(false);
 });
@@ -444,6 +447,8 @@ test("an error keeps its toast, its Retry and its cause", () => {
   const view = turnFailureView("error", "fetch failed");
   expect(view.text).toContain("Couldn't reach the model");
   expect(view.text).toContain("fetch failed");
+  // It stands in for the reply that never came, so it takes the row.
+  expect(view.as).toBe("reply");
   expect(view.toast).toBe("AI reply failed");
   expect(view.retry).toBe(true);
 });
@@ -484,6 +489,7 @@ test("a pre-send refusal and a mid-turn refusal are presented identically", asyn
   const before = turnFailureView("refusal", turn!.refusal);
   const during = turnFailureView("refusal", REFUSE_MIDTURN);
   expect(before.text).toBe(turn!.refusal);
+  expect(before.as).toBe(during.as);
   expect(before.toast).toBe(during.toast);
   expect(before.retry).toBe(during.retry);
 });

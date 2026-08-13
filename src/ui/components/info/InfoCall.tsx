@@ -44,7 +44,7 @@ import { Badge } from "../ui/badge";
 import CallView from "../chat/CallView";
 import ChatPipCard from "../chat/ChatPipCard";
 import { callLayout, navigateAway } from "../chat/call-layout";
-import { refusalRow } from "../chat/turn-rows";
+import { refusalRow, replayableHistory } from "../chat/turn-rows";
 import { appendRunningTool, resolveToolStatus } from "../common/toolTrace";
 import ReadingPipCard from "../chat/ReadingPipCard";
 import {
@@ -490,9 +490,7 @@ export function InfoCall({
     if (!text.trim() || streaming) return;
     const now = Date.now();
     const userMsg: UiMessage = { role: "user", text, ts: now };
-    const history: ChatMessage[] = [...messages, userMsg]
-      .filter((m) => m.text.trim())
-      .map((m) => ({ role: m.role, text: m.text }));
+    const history: ChatMessage[] = replayableHistory([...messages, userMsg]);
     setMessages((prev) => [...prev, userMsg, { role: "ai", text: "", ts: now + 1, streaming: true }]);
     appendMessage(bookId, anchor.threadId, { role: "user", text, ts: now });
     await runAgent(history);

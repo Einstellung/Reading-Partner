@@ -271,8 +271,10 @@ const MessageBubble = memo(function MessageBubble({
 		);
 	}
 
-	// AI: failed turns are a muted notice, not prose.
-	if (failed) {
+	// AI: a turn that failed to reach the model is the app's words standing in for
+	// the reply, drawn as a failure. A row carrying a notice is not that, even
+	// with nothing written — it falls through to the notice-only row below.
+	if (failed && !notice) {
 		return (
 			<div className={'text-destructive ' + (lg ? 'text-[15px] leading-7' : 'text-[13px] leading-relaxed')}>
 				{message.text}
@@ -284,7 +286,18 @@ const MessageBubble = memo(function MessageBubble({
 	if (streaming && !textPart) {
 		return trace ?? <TypingDots />;
 	}
-	if (!textPart) return trace;
+	// A turn that stopped before writing anything (turn-rows.ts): the notice is
+	// the whole row. Not red and with no Copy — nothing failed and there are no
+	// model words to take.
+	if (!textPart) {
+		if (!notice) return trace;
+		return (
+			<div className="flex flex-col gap-2">
+				{trace}
+				<BudgetNotice text={notice} size={size} />
+			</div>
+		);
+	}
 	return (
 		<div ref={rowRef} className="group flex flex-col gap-2">
 			{trace}

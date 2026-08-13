@@ -43,6 +43,7 @@ import {
   rehydrateMessage,
   toPersistedCardPart,
 } from "../chat/chatParts";
+import { holdsNoAnswer, refusalRow } from "../chat/turn-rows";
 
 // A talk has exactly one conversation, so the thread id is the talk id. Nothing
 // has to be looked up, and a thread file with a second thread in it could only
@@ -222,7 +223,7 @@ export function useTalk(talkId: string, topicName: string): TalkController {
     setError(null);
     setStreaming(true);
     setMessages((rows) => [
-      ...rows.filter((m) => !(m.role === "ai" && (m.failed || m.streaming))),
+      ...rows.filter((m) => !holdsNoAnswer(m)),
       { role: "ai", text: "", ts, streaming: true },
     ]);
 
@@ -238,6 +239,15 @@ export function useTalk(talkId: string, topicName: string): TalkController {
       // The turn is over, however it ended. A distillation waiting on it takes
       // the conversation as it stands: the reader's half is on disk either way,
       // and a failed reply is no reason to lose what they said.
+      settleExit();
+    };
+
+    // The loop declined rather than failed to reach the model, so the sentence is
+    // the app talking about the turn, not a reply (turn-rows.ts). Same ending
+    // otherwise: nothing to retry, and the exit still settles.
+    const decline = (message: string) => {
+      finish();
+      patchRow(ts, (m) => ({ ...m, ...refusalRow(m, message) }));
       settleExit();
     };
 
@@ -283,7 +293,7 @@ export function useTalk(talkId: string, topicName: string): TalkController {
       // Declined before sending: the same inputs assemble the same call, so
       // there is nothing a second press would change (docs/pitfall/65).
       if (turn.refusal) {
-        fail(turn.refusal);
+        decline(turn.refusal);
         return;
       }
       void runAgentTurn({
@@ -326,7 +336,7 @@ export function useTalk(talkId: string, topicName: string): TalkController {
           settleExit();
         },
         onError: (message) => fail(`⚠️ Couldn't reach the model. ${message}`),
-        onRefusal: (message) => fail(message),
+        onRefusal: (message) => decline(message),
       });
     })();
   }, [talkId, key, threadId, topicName, patchRow, settleExit]);
