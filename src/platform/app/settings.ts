@@ -4,8 +4,11 @@
 
 import type { ThinkingLevel } from "@earendil-works/pi-ai";
 import { readGuardedJson, writeTextAtomic } from "./atomic-fs";
+import { observeAppExit } from "./lifecycle";
 
-const SETTINGS_FILE = "settings.json";
+// Exported so a shell can recognise its own file among the paths a sync pull
+// wrote (settingsAfterPull below).
+export const SETTINGS_FILE = "settings.json";
 const SAVE_DEBOUNCE = 500;
 
 // The thinking levels we expose in the UI. pi-ai supports more ("minimal",
@@ -128,6 +131,9 @@ export const DEFAULT_SETTINGS: Settings = {
 const DEFAULTS = DEFAULT_SETTINGS;
 
 let timer: number | null = null;
+// The settings a debounce is holding, kept so the exit flush has something to
+// write and so a flush that already ran writes nothing a second time.
+let pending: Settings | null = null;
 let onError: (e: unknown) => void = () => {};
 export function onSettingsSaveError(handler: (e: unknown) => void): void {
   onError = handler;
@@ -153,13 +159,55 @@ export async function loadSettings(): Promise<Settings> {
 
 // Debounced write; a failure is reported (never silently lost, pitfall 09).
 export function saveSettings(settings: Settings): void {
+  pending = settings;
+  bindExitFlush();
   if (timer) window.clearTimeout(timer);
   timer = window.setTimeout(() => {
-    (async () => {
-      if (blockWrites) {
-        throw new Error(`${SETTINGS_FILE} could not be read; refusing to overwrite it`);
-      }
-      await writeTextAtomic(SETTINGS_FILE, JSON.stringify(settings, null, 2));
-    })().catch((e) => onError(e));
+    timer = null;
+    writeNow();
   }, SAVE_DEBOUNCE);
+}
+
+// Write whatever the debounce is holding, and nothing when it holds nothing.
+// Taking `pending` first is what makes a second call a no-op: pagehide can fire
+// more than once (lifecycle.ts), and observeAppExit does not deduplicate.
+function writeNow(): void {
+  const next = pending;
+  pending = null;
+  if (timer) {
+    window.clearTimeout(timer);
+    timer = null;
+  }
+  if (next === null) return;
+  (async () => {
+    if (blockWrites) {
+      throw new Error(`${SETTINGS_FILE} could not be read; refusing to overwrite it`);
+    }
+    await writeTextAtomic(SETTINGS_FILE, JSON.stringify(next, null, 2));
+  })().catch((e) => onError(e));
+}
+
+// The last 500ms of a session are settings the user changed and then quit: on
+// iOS the webview is suspended without the timer ever firing. Bound on the
+// first save rather than at import time, so a headless caller that only reads
+// settings never touches the DOM.
+let exitBound = false;
+function bindExitFlush(): void {
+  if (exitBound || typeof window === "undefined") return;
+  exitBound = true;
+  observeAppExit(window, writeNow);
+}
+
+// The settings to adopt after a sync pull, or null when there is nothing to
+// adopt. A shell keeps settings.json whole in memory and every save serialises
+// that whole copy, so a field another device changed — merged into the file
+// key by key (sync/merge/fields.ts) — is undone by the shell's next save unless
+// the copy is read back. Null while the settings panel is open: re-reading
+// under the user's hands would overwrite the value being edited right now.
+export async function settingsAfterPull(
+  paths: readonly string[],
+  panelOpen: boolean,
+): Promise<Settings | null> {
+  if (panelOpen || !paths.includes(SETTINGS_FILE)) return null;
+  return await loadSettings();
 }

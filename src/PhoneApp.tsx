@@ -21,6 +21,8 @@ import {
   loadSettings,
   onSettingsSaveError,
   saveSettings,
+  settingsAfterPull,
+  SETTINGS_FILE,
   type Settings,
 } from "./platform/app/settings";
 import { initDeviceSettings, saveDeviceSettings, type DeviceSettings } from "./platform/app/device";
@@ -97,6 +99,10 @@ export default function PhoneApp() {
 
   const base = baseScreen(stack);
   const showSettings = top(stack).kind === "settings";
+  // Read by the sync-pull handler, which is bound once: a pull must not read
+  // settings.json back over the panel the user has open.
+  const settingsOpenRef = useRef(showSettings);
+  settingsOpenRef.current = showSettings;
 
   // The one back. The three things that trigger it — a top bar button, the
   // left-edge swipe, the Android button — all arrive here. Both inputs come
@@ -161,12 +167,22 @@ export default function PhoneApp() {
 
   // Account sync (docs/13). The kept articles are what this shell mostly shows
   // and they arrive over sync, so a pulled saved-articles.json reloads the list.
+  // settings.json is read back for the reason App gives: this shell holds it
+  // whole in memory and saves it whole, so a field merged in from another device
+  // is undone by the next save unless the copy is refreshed.
   useEffect(() => {
     // "phone": the books channel stays off here, since nothing on this shell
     // can open a PDF (docs/22).
     void initSync("phone").catch((e) => console.warn("sync init failed", e));
     return onSyncPulled((paths) => {
       if (paths.includes(SAVED_ARTICLES_FILE)) void refreshSavedArticles();
+      if (paths.includes(SETTINGS_FILE)) {
+        void settingsAfterPull(paths, settingsOpenRef.current)
+          .then((pulled) => {
+            if (pulled) setSettings(pulled);
+          })
+          .catch(() => {});
+      }
     });
   }, [refreshSavedArticles]);
 
