@@ -1,7 +1,7 @@
-// Naming a topic, for both the times it happens: creating one and renaming one.
-// A dialog rather than a field on the shelf — a topic is created once and named
-// once more at most, and a permanent text box was the loudest thing on a screen
-// that is supposed to be about the books.
+// Naming something, for both the times it happens: creating it and renaming it.
+// A topic and a talk both use it. A dialog rather than a field on the shelf — a
+// name is given once and changed once more at most, and a permanent text box was
+// the loudest thing on a screen that is supposed to be about the books.
 //
 // No DialogTrigger: the caller mounts this only while it is open, which is also
 // what resets the field between two uses.
@@ -18,7 +18,7 @@ import {
 } from "../ui/dialog";
 import { Input } from "../ui/input";
 
-export default function TopicNameDialog(props: {
+export default function NameDialog(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;

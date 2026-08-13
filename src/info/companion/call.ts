@@ -13,6 +13,7 @@ import type {
 } from "../briefing/cards";
 import type { ProbeConfirmCardData } from "../sources/source-cards";
 import type { InfoSnapshot, RunStart } from "../briefing/pipeline";
+import type { RequestOutcome } from "../briefing/reader";
 import type { Briefing } from "../briefing/types";
 
 // Info threads hang off a per-day pseudo-book, so a day's briefing, article and
@@ -66,6 +67,48 @@ export function trackedJob(job: BriefingJob, start: RunStart): BriefingJob {
 // was going failed — do it again".
 export function runnableJob(job: BriefingJob): BriefingJob {
   return job === "joined" ? "full" : job;
+}
+
+// The scope the pipeline is asked for. Only a re-triage is its own scope; every
+// other job is a full collect + triage, including the "first" of onboarding.
+export function askScope(job: BriefingJob): BriefingScope {
+  return runnableJob(job) === "retriage" ? "retriage" : "full";
+}
+
+// What a start attempt does to the one briefing card, decided from the outcome
+// the view answered with before anything is drawn.
+//
+// A run started here gets the card. A start refused because one was already
+// going does NOT get a card of its own — nothing would ever update it, which is
+// how a regenerate came to sit on its first frame while the run it collided with
+// went on without it. It takes over the same card id instead, since that run's
+// progress is what the user asked to see, and the card opens on its real phase
+// and settles with it.
+//
+// And on a reader nothing runs here at all (docs/36): the request is written for
+// the collecting machine to pick up on its next sync, and there is no card —
+// there is no run on this device to show the progress of, and no honest estimate
+// of when the other machine will have one.
+export type BriefingJobPlan =
+  // Left for the collecting machine. `job` is what to say happened.
+  | { kind: "asked"; job: BriefingJob }
+  // A run to watch, on the one card id, whether we started it or joined it.
+  | { kind: "started"; job: BriefingJob; cardId: string; card: BriefingProgressCardData };
+
+export function briefingJobPlan(
+  job: BriefingJob,
+  outcome: RequestOutcome,
+  s: InfoSnapshot | null,
+): BriefingJobPlan {
+  const asked = runnableJob(job);
+  if (outcome === "asked") return { kind: "asked", job: asked };
+  const tracked = trackedJob(asked, outcome);
+  return {
+    kind: "started",
+    job: tracked,
+    cardId: BRIEFING_CARD_ID,
+    card: briefingProgressCard(tracked, s),
+  };
 }
 
 // The note injected into the thread when a job settles, so the AI's next turn
@@ -137,10 +180,15 @@ export function briefingProgressCard(job: BriefingJob, s: InfoSnapshot | null): 
 
 // What the one briefing card should show for a snapshot, plus — once the job
 // settles — the note the thread carries about the outcome.
+// `persist` is what the thread does with the settled card and its note. Ready is
+// a durable outcome: written to disk so a reopen shows the briefing exists (the
+// progress card it replaced was never persisted). A failure stays in-session —
+// retry needs the live pipeline — and so does its note, so a reopen does not
+// replay a failure that is over.
 export type BriefingJobUpdate =
   | { status: "running"; card: BriefingProgressCardData }
-  | { status: "ready"; card: BriefingReadyCardData; note: string }
-  | { status: "failed"; card: BriefingFailedCardData; note: string };
+  | { status: "ready"; card: BriefingReadyCardData; note: string; persist: boolean }
+  | { status: "failed"; card: BriefingFailedCardData; note: string; persist: boolean };
 
 export function briefingJobUpdate(job: BriefingJob, s: InfoSnapshot): BriefingJobUpdate {
   if (s.running) return { status: "running", card: briefingProgressCard(job, s) };
@@ -160,12 +208,14 @@ export function briefingJobUpdate(job: BriefingJob, s: InfoSnapshot): BriefingJo
         ...readyCopy(job),
       },
       note: completionNote(job, b),
+      persist: true,
     };
   }
   return {
     status: "failed",
     card: { kind: "briefing-failed", message: s.error || "The briefing could not be generated." },
     note: failureNote(job, s.error),
+    persist: false,
   };
 }
 

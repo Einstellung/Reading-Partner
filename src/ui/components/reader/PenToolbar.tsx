@@ -3,13 +3,13 @@
 // changes. Styled with Tailwind utilities.
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { IconColorSwatch, IconHighlight, IconPointer, IconSparkle, IconUnderline } from '../common/icons';
+import { IconColorSwatch, IconHighlight, IconPointer, IconSparkle, IconUnderline } from '../base/icons';
 import { placePanel } from '../common/panel-position';
 import { useViewportSize } from '../common/useViewportSize';
 import { Button } from '../ui/button';
 import { cn } from '../lib/utils';
 import { OVERLAY_Z, useOverlaySafePadding } from '../ui/overlay';
-import type { ColorEntry, Tool, ToolType } from '../common/types';
+import type { ColorEntry, Tool, ToolType } from './types';
 
 interface PenToolbarProps {
 	tool: Tool;

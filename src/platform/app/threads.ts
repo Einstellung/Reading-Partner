@@ -2,7 +2,9 @@
 // keyed by the book's content hash (library.ts).
 // This is the seed of the "conversation stream" tier (docs/01 §3, first layer);
 // the format is intentionally small but the field names are the durable ones.
-// Writes are debounced and flushed on pagehide; failures are surfaced (pitfall 09).
+// Writes go through the shared debounced writer (debounced-writer.ts): they
+// coalesce, they are flushed on the way out of the app, and failures are
+// surfaced (pitfall 09).
 
 import {
   BaseDirectory,
@@ -13,6 +15,8 @@ import {
   writeFile,
 } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "./atomic-fs";
+import { createDebouncedWriter } from "./debounced-writer";
+import { reportStoreError } from "./store-errors";
 
 // A durable message part (the persisted projection of the UI's ChatPart, in
 // src/ui/components/chatParts.ts). Only durable parts reach disk: text, and a card
@@ -61,13 +65,6 @@ type ThreadMap = Record<string, Thread>;
 const SAVE_DEBOUNCE = 500;
 
 const cache = new Map<string, ThreadMap>();
-const timers = new Map<string, number>();
-const dirty = new Set<string>();
-
-let onError: (e: unknown) => void = () => {};
-export function onThreadSaveError(handler: (e: unknown) => void): void {
-  onError = handler;
-}
 
 // Thread images live one directory per thread. Mirrors annotations.ts's base64
 // <-> bytes helpers; here `data` is bare base64 (no data: prefix), matching the
@@ -93,7 +90,9 @@ function extFor(mediaType: string): string {
   return mediaType === "image/png" ? "png" : "jpg";
 }
 
-function mediaTypeFor(name: string): string {
+// Narrow, so a loaded image is the same shape the compressor produces
+// (ai/image-utils's CompressedImage) and can be handed straight to a bubble.
+function mediaTypeFor(name: string): "image/png" | "image/jpeg" {
   return name.endsWith(".png") ? "image/png" : "image/jpeg";
 }
 
@@ -123,8 +122,8 @@ export async function saveThreadImages(
 export async function readThreadImages(
   threadId: string,
   names: string[],
-): Promise<{ data: string; mediaType: string }[]> {
-  const out: { data: string; mediaType: string }[] = [];
+): Promise<{ data: string; mediaType: "image/png" | "image/jpeg" }[]> {
+  const out: { data: string; mediaType: "image/png" | "image/jpeg" }[] = [];
   for (const name of names) {
     const path = `${threadImageDir(threadId)}/${name}`;
     if (!(await exists(path, { baseDir: BaseDirectory.AppData }))) continue;
@@ -134,42 +133,16 @@ export async function readThreadImages(
   return out;
 }
 
-async function writeNow(key: string): Promise<void> {
-  dirty.delete(key);
-  const threads = cache.get(key) ?? {};
-  await writeTextAtomic(`threads-${key}.json`, JSON.stringify({ threads }, null, 2));
-}
+// Headless (tests) the writer's default timer never fires: the cache is the
+// source of truth there, and a real run always has a window.
+const writer = createDebouncedWriter<string>({
+  write: (key) =>
+    writeTextAtomic(`threads-${key}.json`, JSON.stringify({ threads: cache.get(key) ?? {} }, null, 2)),
+  debounceMs: SAVE_DEBOUNCE,
+  onError: (e) => reportStoreError("threads", e),
+});
 
-let pagehideBound = false;
-function bindPagehide(): void {
-  if (pagehideBound || typeof window === "undefined") return;
-  pagehideBound = true;
-  window.addEventListener("pagehide", () => {
-    for (const key of [...dirty]) {
-      const t = timers.get(key);
-      if (t) clearTimeout(t);
-      timers.delete(key);
-      void writeNow(key).catch((e) => onError(e));
-    }
-  });
-}
-
-function schedule(key: string): void {
-  dirty.add(key);
-  bindPagehide();
-  // Headless (tests): no window timer to debounce on; the cache is the source of
-  // truth and a real run always has a window.
-  if (typeof window === "undefined") return;
-  const existing = timers.get(key);
-  if (existing) clearTimeout(existing);
-  timers.set(
-    key,
-    window.setTimeout(() => {
-      timers.delete(key);
-      void writeNow(key).catch((e) => onError(e));
-    }, SAVE_DEBOUNCE),
-  );
-}
+const schedule = (key: string): void => writer.schedule(key);
 
 // Load a document's threads. Missing file is normal ({}); read/parse errors
 // rethrow so the caller can warn.
@@ -214,7 +187,7 @@ export function getThread(bookId: string, threadId: string): Thread | undefined 
 // unflushed edits is left alone — flushing them would clobber the pull, and the
 // open view keeps its own copy anyway (v1: pulled threads take effect on reopen).
 export function dropThreadCache(bookId: string): void {
-  if (dirty.has(bookId)) return;
+  if (writer.isPending(bookId)) return;
   cache.delete(bookId);
 }
 

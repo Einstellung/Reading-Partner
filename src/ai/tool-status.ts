@@ -1,9 +1,20 @@
-// The transient tool-call trace on a streaming AI reply (M6). Both the reading
-// companion and the info companion keep the same list: a status goes on when a
-// tool starts and comes off when it succeeds, and a failure stays visible.
-// Never persisted.
+// A tool call an agent turn makes, and the transient trace of them a streaming
+// reply carries (M6). Both the reading companion and the info companion keep the
+// same list: a status goes on when a tool starts and comes off when it succeeds,
+// and a failure stays visible. Never persisted.
+//
+// This describes what the agent did, not how a row is drawn, which is why it
+// sits in the capability every caller already depends on rather than in a
+// components directory the chat rows would have to import back.
 
-import type { ToolStatus } from "./types";
+// A tool call surfaced in the chat flow while the AI turn runs (M6). 'running'
+// shows a subdued status line; 'error' reuses the soft-error style. Successful
+// tools are dropped from the list once their result is folded into the answer.
+export interface ToolStatus {
+  name: string;
+  label: string;
+  state: "running" | "error";
+}
 
 // A tool started: append its running status.
 export function appendRunningTool(

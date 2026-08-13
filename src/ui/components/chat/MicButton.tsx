@@ -12,7 +12,7 @@
 // what is left here is pointer binding, the elapsed timer and JSX.
 
 import { useEffect, useRef, useState } from 'react';
-import { IconMic } from '../common/icons';
+import { IconMic } from '../base/icons';
 import {
 	INITIAL_PRESS_STATE,
 	beginPress,

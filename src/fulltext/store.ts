@@ -1,8 +1,8 @@
 // Full-text cache persistence: one fulltext-<key>.json per document under
 // AppData, keyed by the book id (content hash) for real books and by a synthetic
 // prep key for downloaded papers. Extraction is skipped when a same-version
-// cache exists. Persistence failures are surfaced (console.warn + an error
-// hook), never silently swallowed (pitfall 09).
+// cache exists. Persistence failures are reported to the one store-error
+// channel, which logs them, never silently swallowed (pitfall 09).
 
 import {
   BaseDirectory,
@@ -10,16 +10,12 @@ import {
   readTextFile,
 } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../platform/app/atomic-fs";
+import { reportStoreError } from "../platform/app/store-errors";
 import { extractFulltext } from "./extract";
 import { FULLTEXT_VERSION, type Fulltext } from "./types";
 
 function fileFor(hash: string): string {
   return `fulltext-${hash}.json`;
-}
-
-let onError: (e: unknown) => void = () => {};
-export function onFulltextError(handler: (e: unknown) => void): void {
-  onError = handler;
 }
 
 // Load a document's cached full text by path hash. Missing or stale-version
@@ -68,8 +64,8 @@ export async function ensureFulltext(key: string, buffer: ArrayBuffer): Promise<
     try {
       await writeTextAtomic(fileFor(hash), JSON.stringify(ft));
     } catch (e) {
-      console.warn("failed to persist fulltext cache", e);
-      onError(e);
+      // The line is written by the channel, not here (store-errors.ts).
+      reportStoreError("fulltext", e);
     }
     return ft;
   })();

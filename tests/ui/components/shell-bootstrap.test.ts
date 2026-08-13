@@ -16,8 +16,8 @@ import type { SyncHealthReport } from "../../../src/platform/sync/health";
 import type { ProviderInfo } from "../../../src/ai/providers";
 import { DEFAULT_SETTINGS, type Settings } from "../../../src/platform/app/settings";
 import { defaultModelFor } from "../../../src/ai/providers";
+import { corruptFileMessage } from "../../../src/platform/app/store-errors";
 import {
-  corruptFileMessage,
   healthToastMessage,
   isConfigured,
   loadShellSettings,

@@ -1,18 +1,14 @@
-// What the `failed` mark decides once a turn has stopped
-// (src/ui/components/chat/turn-rows.ts). Two readers hang off it — what goes
-// back to the model next turn, and which row a fresh attempt replaces — and a
-// refusal is not a failure, so refusalRow clears the mark rather than leaving
-// whatever was there. These tests are about that consequence, not the drawing;
-// the rendering is in budget-notice.test.tsx. Run: bun test.
+// What the `failed` mark decides once a turn has stopped (src/ai/turn-rows.ts).
+// Two readers hang off it — what goes back to the model next turn, and which row
+// a fresh attempt replaces — and a refusal is not a failure, so refusalRow clears
+// the mark rather than leaving whatever was there. These tests are about that
+// consequence, not the drawing; the rendering is in budget-notice.test.tsx.
+// Run: bun test.
 
 import { expect, test } from "bun:test";
-import { REFUSE_MIDTURN, REFUSE_ROUNDS } from "../../../src/ai/agent";
-import {
-  holdsNoAnswer,
-  refusalRow,
-  replayableHistory,
-} from "../../../src/ui/components/chat/turn-rows";
-import type { ThreadMessage } from "../../../src/ui/components/common/types";
+import { REFUSE_MIDTURN, REFUSE_ROUNDS } from "../../src/ai/agent";
+import { holdsNoAnswer, refusalRow, replayableHistory } from "../../src/ai/turn-rows";
+import type { ThreadMessage } from "../../src/ui/components/chat/types";
 
 const WORDS = "The passage argues that the retina is not a camera";
 

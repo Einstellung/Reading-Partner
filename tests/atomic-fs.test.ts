@@ -53,9 +53,10 @@ mock.module("@tauri-apps/api/core", () => ({
   },
 }));
 
-const { onCorruptFile, readGuardedJson, readJson, readJsonOr } = await import(
+const { readGuardedJson, readJson, readJsonOr } = await import(
   "../src/platform/app/atomic-fs"
 );
+const { onStoreError } = await import("../src/platform/app/store-errors");
 
 interface Marks {
   version: number;
@@ -78,8 +79,15 @@ const normalize = (raw: unknown): Marks | null => {
   return { version: m.version, marks: m.marks ?? {} };
 };
 
+// The quarantine report arrives as a store error now, with the sentence the
+// shells show already chosen (platform/app/store-errors.ts).
 const reports: { file: string; savedAs: string | null }[] = [];
-onCorruptFile((r) => reports.push(r));
+const messages: (string | null)[] = [];
+onStoreError((e) => {
+  if (e.scope !== "corrupt-file") return;
+  reports.push(e.error as { file: string; savedAs: string | null });
+  messages.push(e.message);
+});
 
 const warnings: unknown[][] = [];
 const realWarn = console.warn;
@@ -87,6 +95,7 @@ const realWarn = console.warn;
 beforeEach(() => {
   files.clear();
   reports.length = 0;
+  messages.length = 0;
   warnings.length = 0;
   readFails = false;
   quarantineFails = false;

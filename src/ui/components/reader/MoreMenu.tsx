@@ -4,7 +4,7 @@
 // mechanics — outside press, Escape, focus, arrow keys and typeahead.
 
 import { useRef, useState } from "react";
-import { IconChevronDown } from "../common/icons";
+import { IconChevronDown } from "../base/icons";
 import {
 	DropdownMenu,
 	DropdownMenuCheckboxItem,

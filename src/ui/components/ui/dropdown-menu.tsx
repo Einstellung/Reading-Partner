@@ -10,7 +10,7 @@
 //   (docs/pitfall/103).
 // - Sub, RadioGroup, RadioItem and Shortcut are dropped, and CheckboxItem's
 //   indicator with them. They were the only users of lucide-react, which this
-//   project does not carry (icons come from common/icons.tsx). Add them back
+//   project does not carry (icons come from base/icons.tsx). Add them back
 //   from the registry, with project icons, the day something needs them.
 // - CheckboxItem is left with the same box as Item. Without the indicator there
 //   is nothing to reserve room for on the left, and a caller that wants a lit

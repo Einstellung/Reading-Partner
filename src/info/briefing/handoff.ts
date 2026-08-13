@@ -23,6 +23,7 @@
 
 import { BaseDirectory, exists, readDir, readTextFile } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
+import type { PullMatcher } from "../../platform/sync/pull-routes";
 import type { SourceHealth } from "../sources/engine";
 
 // A heartbeat older than this means the collector is not running. Said to the
@@ -63,6 +64,13 @@ export function collectorFile(deviceId: string): string {
 export function askFile(deviceId: string): string {
   return `${ASK_PREFIX}${deviceId}${JSON_SUFFIX}`;
 }
+
+// A reader asking for a briefing. The collector runs it when the file lands,
+// not at its next wake — the reader is waiting for it.
+export const ASK_PULL_ROUTE: PullMatcher = {
+  id: "ask",
+  matches: (path) => path.startsWith(ASK_PREFIX) && path.endsWith(JSON_SUFFIX),
+};
 
 // What a collector says about itself. Everything here is display or election
 // input; nothing a reader needs to act on lives only here.

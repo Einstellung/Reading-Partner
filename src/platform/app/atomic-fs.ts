@@ -14,6 +14,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { BaseDirectory, exists, readTextFile } from "@tauri-apps/plugin-fs";
+import { reportStoreError } from "./store-errors";
 
 /**
  * The base every data file in the app is addressed from. Passed to the fs
@@ -34,19 +35,9 @@ export function quarantineFile(path: string): Promise<string | null> {
   return invoke<string | null>("quarantine_file", { path });
 }
 
-export interface CorruptFileReport {
-  /** The AppData-relative file that could not be read. */
-  file: string;
-  /** Where the bad copy was moved, or null when it could not be moved aside. */
-  savedAs: string | null;
-}
-
-let onCorrupt: (report: CorruptFileReport) => void = () => {};
-
-/** Install the handler that surfaces a quarantined file to the user (App.tsx). */
-export function onCorruptFile(handler: (report: CorruptFileReport) => void): void {
-  onCorrupt = handler;
-}
+// Declared in store-errors.ts, beside the sentence the user is shown, and
+// re-exported here because this is where a caller of readGuardedJson meets it.
+export type { CorruptFileReport } from "./store-errors";
 
 export type GuardedRead<T> =
   // No file yet: the normal first-run case.
@@ -74,7 +65,7 @@ export async function readGuardedJson<T>(
     text = await readTextFile(file, APPDATA);
   } catch (e) {
     console.error(`failed to read ${file}`, e);
-    onCorrupt({ file, savedAs: null });
+    reportStoreError("corrupt-file", { file, savedAs: null });
     return { status: "corrupt", savedAs: null };
   }
   try {
@@ -89,7 +80,7 @@ export async function readGuardedJson<T>(
   } catch (e) {
     console.error(`failed to quarantine ${file}`, e);
   }
-  onCorrupt({ file, savedAs });
+  reportStoreError("corrupt-file", { file, savedAs });
   return { status: "corrupt", savedAs };
 }
 

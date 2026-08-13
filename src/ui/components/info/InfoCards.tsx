@@ -225,7 +225,8 @@ export function BriefingFailedCard({ payload, dispatch }: CardComponentProps<Bri
 }
 
 // The info domain's share of the card registry, merged with the other domains'
-// in chat/cardRegistry.ts — which is where the render layer looks a card up.
+// in ui/components/cardRegistry.ts — which is where the render layer looks a card
+// up.
 export const INFO_CARD_REGISTRY: CardRegistryFor<InfoCard["kind"]> = {
   "probe-confirm": ProbeConfirmCard,
   "briefing-progress": BriefingProgressCard,

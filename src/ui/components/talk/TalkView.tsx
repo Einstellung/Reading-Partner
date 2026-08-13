@@ -13,13 +13,13 @@
 // leave them alone.
 
 import { useMemo, useState } from "react";
-import { CitationContext } from "../common/Markdown";
-import { IconClose, IconOutline } from "../common/icons";
+import { CitationContext } from "../markdown/Markdown";
+import { IconClose, IconOutline } from "../base/icons";
 import { Composer, MessageList } from "../chat/chat";
-import TopicNameDialog from "../library/TopicNameDialog";
+import NameDialog from "../common/NameDialog";
 import { Button } from "../ui/button";
 import { outlineRows, type Talk } from "../../../reading/talks";
-import { defaultNavOpen, readNavEnv } from "../library/topic/topic-nav";
+import { defaultNavOpen, readNavEnv } from "../base/topic-nav";
 import DeckDialog from "./DeckDialog";
 import OutlinePane from "./OutlinePane";
 import { useTalk } from "./useTalk";
@@ -153,7 +153,7 @@ export default function TalkView(props: {
         )}
 
         {renaming && talk.talk && (
-          <TopicNameDialog
+          <NameDialog
             open
             onOpenChange={setRenaming}
             title="Rename this talk"

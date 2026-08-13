@@ -7,7 +7,7 @@
 // (ui/toast.tsx). Both call sites (App, PhoneApp) render one of these.
 
 import { useCallback, useState } from 'react';
-import { IconClose } from './icons';
+import { IconClose } from '../base/icons';
 import { addToast, DISMISS_MS, removeToast, type ToastItem, type ToastKind } from './toast-list';
 import { Toast as ToastBox, ToastClose, ToastDescription, ToastProvider, ToastViewport } from '../ui/toast';
 

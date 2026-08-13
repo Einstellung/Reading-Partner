@@ -1,5 +1,5 @@
 // Unit tests for the topic sidebar's non-React half
-// (src/ui/components/library/topic/topic-nav.ts): which devices start it
+// (src/ui/components/base/topic-nav.ts): which devices start it
 // expanded, and how the remembered choice is read back. Run: bun test.
 
 import { expect, test } from "bun:test";
@@ -12,7 +12,7 @@ import {
   writeNavOpen,
   TOPIC_SECTIONS,
   type NavStore,
-} from "../../../src/ui/components/library/topic/topic-nav";
+} from "../../../src/ui/components/base/topic-nav";
 
 test("the sidebar has exactly the three sections, Materials first", () => {
   expect(TOPIC_SECTIONS.map((s) => s.id)).toEqual(["materials", "talks", "observations"]);

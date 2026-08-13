@@ -7,7 +7,7 @@
 // text chip that still jumps.
 
 import { useEffect, useRef, useState } from "react";
-import type { FigureHost, RenderedCard } from "../common/Markdown";
+import type { FigureHost, RenderedCard } from "./Markdown";
 import { cardDisplayWidth } from "../../../reading/figures/render";
 import type { Figure } from "../../../reading/figures/types";
 

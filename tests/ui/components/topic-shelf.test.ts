@@ -1,4 +1,4 @@
-// The library shelf's arithmetic (src/ui/components/library/topic-shelf.ts):
+// The library shelf's arithmetic (src/ui/components/shelf/topic-shelf.ts):
 // the column count at each form factor, which covers a card shows and how wide
 // they are, and the two labels a card carries. All of it decides what the
 // screen looks like and none of it is visible to a type checker, so the numbers
@@ -19,7 +19,7 @@ import {
   TOPIC_GRID_COLUMNS_CLASS,
   TOPIC_GRID_STEPS,
   topicGridColumns,
-} from "../../../src/ui/components/library/topic-shelf";
+} from "../../../src/ui/components/shelf/topic-shelf";
 
 function file(name: string, addedAt: number, lastOpenedAt?: number): FileRef {
   return {

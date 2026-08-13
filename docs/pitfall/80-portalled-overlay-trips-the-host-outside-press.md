@@ -22,7 +22,7 @@
 不用 DOM 归属判，用一个全局计数：有浮层开着的时候，任何一按都属于那一层。
 
 ```ts
-// common/overlay-layer.ts
+// base/overlay-layer.ts
 let openLayers = 0;
 export function pushOverlayLayer(): () => void { ... }   // 返回自己的 release
 export function overlayLayerOpen(): boolean { return openLayers > 0; }

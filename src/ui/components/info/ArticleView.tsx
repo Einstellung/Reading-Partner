@@ -6,8 +6,8 @@
 // reach, so a scoped <style> establishes the prose look (proseCss).
 
 import { useMemo } from "react";
-import { IconCheck, IconFileInto, IconSparkle } from "../common/icons";
-import { ARTICLE_PROSE_CLASS, ARTICLE_PROSE_CSS, hideBrokenImage } from "../common/proseCss";
+import { IconCheck, IconFileInto, IconSparkle } from "../base/icons";
+import { ARTICLE_PROSE_CLASS, ARTICLE_PROSE_CSS, hideBrokenImage } from "../markdown/proseCss";
 import { articleHtmlForWebview } from "../../../platform/app/image-proxy";
 import { handleDelegatedLinkClick, openExternal } from "../../../platform/app/external-link";
 import type { ArticleState } from "../../../info/briefing/reader";
