@@ -10,16 +10,12 @@ import {
   readTextFile,
 } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../platform/app/atomic-fs";
+import { reportStoreError } from "../platform/app/store-errors";
 import { extractFulltext } from "./extract";
 import { FULLTEXT_VERSION, type Fulltext } from "./types";
 
 function fileFor(hash: string): string {
   return `fulltext-${hash}.json`;
-}
-
-let onError: (e: unknown) => void = () => {};
-export function onFulltextError(handler: (e: unknown) => void): void {
-  onError = handler;
 }
 
 // Load a document's cached full text by path hash. Missing or stale-version
@@ -69,7 +65,7 @@ export async function ensureFulltext(key: string, buffer: ArrayBuffer): Promise<
       await writeTextAtomic(fileFor(hash), JSON.stringify(ft));
     } catch (e) {
       console.warn("failed to persist fulltext cache", e);
-      onError(e);
+      reportStoreError("fulltext", e);
     }
     return ft;
   })();

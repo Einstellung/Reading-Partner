@@ -11,6 +11,7 @@ import {
   readTextFile,
 } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "./atomic-fs";
+import { reportStoreError } from "./store-errors";
 import type { Annotation } from "./reader-contract";
 
 // The annotation color palette. The UI components use the same list; this
@@ -38,11 +39,6 @@ const cache = new Map<string, Annotation[]>();
 const timers = new Map<string, number>();
 const dirty = new Set<string>();
 
-let onError: (e: unknown) => void = () => {};
-export function onSaveError(handler: (e: unknown) => void): void {
-  onError = handler;
-}
-
 async function writeNow(key: string): Promise<void> {
   dirty.delete(key);
   const anns = cache.get(key) ?? [];
@@ -58,7 +54,7 @@ function bindPagehide(): void {
       const t = timers.get(key);
       if (t) clearTimeout(t);
       timers.delete(key);
-      void writeNow(key).catch((e) => onError(e));
+      void writeNow(key).catch((e) => reportStoreError("annotations", e));
     }
   });
 }
@@ -72,7 +68,7 @@ function schedule(key: string): void {
     key,
     window.setTimeout(() => {
       timers.delete(key);
-      void writeNow(key).catch((e) => onError(e));
+      void writeNow(key).catch((e) => reportStoreError("annotations", e));
     }, SAVE_DEBOUNCE),
   );
 }

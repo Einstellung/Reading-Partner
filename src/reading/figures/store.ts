@@ -10,17 +10,13 @@ import {
   readTextFile,
 } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
+import { reportStoreError } from "../../platform/app/store-errors";
 import { extractFiguresFromDocument, FIGURES_VERSION } from "./extract";
 import { loadPdfjs } from "../../fulltext/extract";
 import type { FiguresIndex } from "./types";
 
 function fileFor(hash: string): string {
   return `figures-${hash}.json`;
-}
-
-let onError: (e: unknown) => void = () => {};
-export function onFiguresError(handler: (e: unknown) => void): void {
-  onError = handler;
 }
 
 // Validate a parsed cache against the current version. Pure so cache versioning
@@ -80,14 +76,14 @@ export async function ensureFigures(key: string, buffer: ArrayBuffer): Promise<F
       }
     } catch (e) {
       console.warn("failed to extract figures", e);
-      onError(e);
+      reportStoreError("figures", e);
       index = EMPTY;
     }
     try {
       await writeTextAtomic(fileFor(hash), JSON.stringify(index));
     } catch (e) {
       console.warn("failed to persist figures cache", e);
-      onError(e);
+      reportStoreError("figures", e);
     }
     return index;
   })();

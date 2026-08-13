@@ -13,6 +13,7 @@ import {
   writeFile,
 } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "./atomic-fs";
+import { reportStoreError } from "./store-errors";
 
 // A durable message part (the persisted projection of the UI's ChatPart, in
 // src/ui/components/chatParts.ts). Only durable parts reach disk: text, and a card
@@ -63,11 +64,6 @@ const SAVE_DEBOUNCE = 500;
 const cache = new Map<string, ThreadMap>();
 const timers = new Map<string, number>();
 const dirty = new Set<string>();
-
-let onError: (e: unknown) => void = () => {};
-export function onThreadSaveError(handler: (e: unknown) => void): void {
-  onError = handler;
-}
 
 // Thread images live one directory per thread. Mirrors annotations.ts's base64
 // <-> bytes helpers; here `data` is bare base64 (no data: prefix), matching the
@@ -151,7 +147,7 @@ function bindPagehide(): void {
       const t = timers.get(key);
       if (t) clearTimeout(t);
       timers.delete(key);
-      void writeNow(key).catch((e) => onError(e));
+      void writeNow(key).catch((e) => reportStoreError("threads", e));
     }
   });
 }
@@ -168,7 +164,7 @@ function schedule(key: string): void {
     key,
     window.setTimeout(() => {
       timers.delete(key);
-      void writeNow(key).catch((e) => onError(e));
+      void writeNow(key).catch((e) => reportStoreError("threads", e));
     }, SAVE_DEBOUNCE),
   );
 }

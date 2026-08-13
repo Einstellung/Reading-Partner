@@ -1,7 +1,7 @@
 // What both shells (App, PhoneApp) do on the way up, and nothing about what
 // either of them draws: the account settings, this machine's own settings,
-// which providers can actually be called, the sync-health verdict, and the six
-// store error hooks that are silent until someone registers them.
+// which providers can actually be called, the sync-health verdict, and the one
+// store-error channel that is silent until someone subscribes to it.
 //
 // A .ts file, like useSyncHealth beside it: no JSX here, so the phone rewrite of
 // the .tsx layer leaves it alone. The four pure/async pieces are exported on
@@ -12,8 +12,7 @@
 // articles there) and everything the values are drawn with.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { onSaveError } from "../../../platform/app/annotations";
-import { onCorruptFile, type CorruptFileReport } from "../../../platform/app/atomic-fs";
+import { onStoreError } from "../../../platform/app/store-errors";
 import {
   initDeviceSettings,
   saveDeviceSettings,
@@ -23,28 +22,14 @@ import {
   DEFAULT_SETTINGS,
   flushSettings,
   loadSettings,
-  onSettingsSaveError,
   saveSettings,
   settingsPullAction,
   type Settings,
 } from "../../../platform/app/settings";
-import { onThreadSaveError } from "../../../platform/app/threads";
 import { enforceKnownModel, listProviders, type ProviderInfo } from "../../../ai/aiClient";
-import { onFulltextError } from "../../../fulltext";
-import { onFiguresError } from "../../../reading/figures";
 import type { SyncHealthReport } from "../../../platform/sync";
 import type { ToastKind } from "./toast-list";
 import { useSyncHealth } from "./useSyncHealth";
-
-// A data file that could not be read, said out loud: a reset shelf or a lost
-// provider config must never look like the app forgot on its own. The two
-// branches are different promises — one file was moved aside, the other is
-// still where it was and will not be written over.
-export function corruptFileMessage({ file, savedAs }: CorruptFileReport): string {
-  return savedAs
-    ? `${file} was unreadable and has been set aside as ${savedAs}`
-    : `${file} could not be read; it is left untouched and won't be overwritten`;
-}
 
 // Whether the default provider/model actually resolves to something callable.
 // A provider id that is no longer in the catalog is as unusable as no provider
@@ -148,25 +133,13 @@ export function useShellBootstrap({
   settingsOpenRef.current = settingsOpen;
 
   useEffect(() => {
-    // The failure paths that must not be silent (pitfall 09). Each store keeps
-    // one handler, so this is the only place a shell registers them.
-    onCorruptFile((report) => pushToast("warn", corruptFileMessage(report)));
-    onSettingsSaveError((e) => {
-      console.error("failed to persist settings", e);
-      pushToast("warn", "Settings could not be saved");
+    // The failure paths that must not be silent (pitfall 09). One subscription
+    // for all of them: every store reports through store-errors.ts, which has
+    // already decided what each failure costs the user — a sentence for a lost
+    // write, nothing but a log line for a derived cache that will be rebuilt.
+    const unsubErrors = onStoreError(({ message }) => {
+      if (message) pushToast("warn", message);
     });
-    onSaveError((e) => {
-      console.error("failed to persist annotations", e);
-      pushToast("warn", "Annotations could not be saved");
-    });
-    onThreadSaveError((e) => {
-      console.error("failed to persist thread", e);
-      pushToast("warn", "AI conversation could not be saved");
-    });
-    // The two derived caches only warn: both are re-extracted from the document
-    // when they are missing, so a persistence failure costs work, not data.
-    onFulltextError((e) => console.warn("failed to persist fulltext cache", e));
-    onFiguresError((e) => console.warn("failed to persist figure index", e));
 
     loadShellSettings()
       .then(({ settings: next, notice }) => {
@@ -179,6 +152,7 @@ export function useShellBootstrap({
     initDeviceSettings()
       .then(setDevice)
       .catch((e) => console.warn("failed to read device settings", e));
+    return unsubErrors;
   }, [pushToast]);
 
   // Refresh provider connection state on mount and whenever Settings closes.

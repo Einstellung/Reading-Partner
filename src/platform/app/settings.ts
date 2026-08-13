@@ -5,6 +5,7 @@
 import type { ThinkingLevel } from "@earendil-works/pi-ai";
 import { readGuardedJson, writeTextAtomic, type GuardedRead } from "./atomic-fs";
 import { observeAppExit } from "./lifecycle";
+import { reportStoreError } from "./store-errors";
 
 // Exported so a shell can recognise its own file among the paths a sync pull
 // wrote (settingsAfterPull below).
@@ -147,6 +148,10 @@ export interface SettingsIo {
   // timer ever firing. Not bound at import time, so a headless caller that only
   // reads settings never touches the DOM.
   bindExit: (flush: () => void) => void;
+  // Where a failed write goes. Passed in like everything else here rather than
+  // registered afterwards, so there is no window in which the store has a
+  // failure to report and nowhere to report it (store-errors.ts).
+  onError: (e: unknown) => void;
 }
 
 export interface SettingsStore {
@@ -157,7 +162,6 @@ export interface SettingsStore {
   // it was before the last 500ms of edits (see pulledSettings in the shell
   // bootstrap).
   flush: () => Promise<void>;
-  onSaveError: (handler: (e: unknown) => void) => void;
 }
 
 export function createSettingsStore(io: SettingsIo): SettingsStore {
@@ -165,7 +169,6 @@ export function createSettingsStore(io: SettingsIo): SettingsStore {
   // The settings a debounce is holding, kept so the exit flush has something to
   // write and so a flush that already ran writes nothing a second time.
   let pending: Settings | null = null;
-  let onError: (e: unknown) => void = () => {};
   // Set when the file exists but could not be read, so the app is running on
   // defaults that would erase real configuration (provider, keys) if written
   // back. Reset on a successful load, which is the only thing that can happen
@@ -220,7 +223,7 @@ export function createSettingsStore(io: SettingsIo): SettingsStore {
         }
         await io.write(JSON.stringify(next, null, 2));
       })
-      .catch((e) => onError(e));
+      .catch((e) => io.onError(e));
   }
 
   async function flush(): Promise<void> {
@@ -228,14 +231,7 @@ export function createSettingsStore(io: SettingsIo): SettingsStore {
     await inFlight;
   }
 
-  return {
-    load,
-    save,
-    flush,
-    onSaveError: (handler) => {
-      onError = handler;
-    },
-  };
+  return { load, save, flush };
 }
 
 const store = createSettingsStore({
@@ -250,13 +246,12 @@ const store = createSettingsStore({
     if (typeof window === "undefined") return;
     observeAppExit(window, flush);
   },
+  onError: (e) => reportStoreError("settings", e),
 });
 
 export const loadSettings = (): Promise<Settings> => store.load();
 export const saveSettings = (settings: Settings): void => store.save(settings);
 export const flushSettings = (): Promise<void> => store.flush();
-export const onSettingsSaveError = (handler: (e: unknown) => void): void =>
-  store.onSaveError(handler);
 
 // What a sync pull does to the settings a shell is holding. A shell keeps
 // settings.json whole in memory and every save serialises that whole copy, so a

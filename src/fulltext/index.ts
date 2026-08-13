@@ -8,7 +8,7 @@ export type {
   SearchHit,
 } from "./types";
 export { FULLTEXT_VERSION } from "./types";
-export { ensureFulltext, getFulltext, onFulltextError } from "./store";
+export { ensureFulltext, getFulltext } from "./store";
 export { textAround, chapterAt, readPages, searchTopic } from "./query";
 export {
   formatPages,
