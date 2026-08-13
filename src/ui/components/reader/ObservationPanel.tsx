@@ -5,7 +5,7 @@
 
 import { useState } from "react";
 import type { Observation, ObservationType } from "../../../observation";
-import { CitationContext, Markdown } from "../common/Markdown";
+import { CitationContext, Markdown } from "../markdown/Markdown";
 
 const TYPE_STYLE: Record<ObservationType, string> = {
   "reading-position": "bg-sky-100 text-sky-700",

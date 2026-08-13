@@ -13,7 +13,7 @@
 // leave them alone.
 
 import { useMemo, useState } from "react";
-import { CitationContext } from "../common/Markdown";
+import { CitationContext } from "../markdown/Markdown";
 import { IconClose, IconOutline } from "../base/icons";
 import { Composer, MessageList } from "../chat/chat";
 import TopicNameDialog from "../library/TopicNameDialog";

@@ -1,9 +1,9 @@
-// The figure card's text label (src/ui/components/reader/FigureCard.figureChipLabel).
+// The figure card's text label (src/ui/components/markdown/FigureCard.figureChipLabel).
 // Pure; the card's DOM behavior (lazy raster, click-to-jump) is device-verified.
 // Run: bun test.
 
 import { test, expect } from "bun:test";
-import { figureChipLabel } from "../../../src/ui/components/reader/FigureCard";
+import { figureChipLabel } from "../../../src/ui/components/markdown/FigureCard";
 import { cardDisplayWidth } from "../../../src/reading/figures/render";
 import type { Figure } from "../../../src/reading/figures/types";
 

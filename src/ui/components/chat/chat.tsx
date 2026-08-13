@@ -4,7 +4,7 @@ import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { HIT_44 } from '../base/buttons';
 import { Button } from '../ui/button';
 import { IconCheck, IconCopy, IconSend, IconStop } from '../base/icons';
-import { Markdown } from '../common/Markdown';
+import { Markdown } from '../markdown/Markdown';
 import { MicButton } from './MicButton';
 import { useFlickerProbe } from '../common/useFlickerProbe';
 import type { ChatImage, PendingImage, ThreadMessage, ToolStatus } from '../common/types';

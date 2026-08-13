@@ -75,7 +75,7 @@ import { logEvent } from "./platform/app/events";
 import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
 import EmbedReaderPane from "./reading/engine/EmbedReaderPane";
 import { openFailureText } from "./reading/engine/open-failure";
-import { CitationContext, FigureContext, type FigureHost } from "./ui/components/common/Markdown";
+import { CitationContext, FigureContext, type FigureHost } from "./ui/components/markdown/Markdown";
 import {
   clearFigureCache,
   ensureFigures,
