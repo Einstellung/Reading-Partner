@@ -3,14 +3,14 @@
 // utilities. The parent supplies the anchor in viewport coordinates.
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { IconClose, IconColorSwatch, IconTrash } from '../common/icons';
-import { overlayLayerOpen } from '../common/overlay-layer';
+import { IconClose, IconColorSwatch, IconTrash } from '../base/icons';
+import { overlayLayerOpen } from '../base/overlay-layer';
 import { placePanel, pointAnchor } from '../common/panel-position';
 import { useViewportSize } from '../common/useViewportSize';
 import { Button } from '../ui/button';
 import { cn } from '../lib/utils';
 import { OVERLAY_Z, useOverlaySafePadding } from '../ui/overlay';
-import type { Annotation, ColorEntry } from '../common/types';
+import type { Annotation, ColorEntry } from './types';
 
 interface AnnotationPopupProps {
 	annotation: Annotation;
@@ -69,7 +69,7 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 	// A press outside closes the popup. pointerdown, not mousedown, and capture:
 	// docs/pitfall/67-webkit-tap-does-not-focus-a-button.md. A press while an
 	// overlay layer is up belongs to that layer, which is portalled under <body>
-	// and so is never inside this ref (common/overlay-layer).
+	// and so is never inside this ref (base/overlay-layer).
 	useEffect(() => {
 		function onDown(e: PointerEvent) {
 			if (overlayLayerOpen()) return;

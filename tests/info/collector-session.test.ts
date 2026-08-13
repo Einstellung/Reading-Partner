@@ -13,13 +13,13 @@ import {
   type SessionSyncStatus,
 } from "../../src/info/briefing/presence";
 import {
+  ASK_PULL_ROUTE,
   CLAIM_SYNC_GRACE_MS,
   HEARTBEAT_MS,
   type AskRecord,
   type CollectorClaim,
 } from "../../src/info/briefing/handoff";
-
-const SOURCES_FILE = "info-sources.json";
+import { SOURCES_FILE, SOURCES_PULL_ROUTE } from "../../src/info/sources/source-store";
 const MIN = 60_000;
 
 // One turn of the event loop, which is the least a real call out of this module
@@ -49,7 +49,8 @@ class Harness {
   nextTimerId = 1;
   clearedTimers: number[] = [];
   exitHandlers: (() => void)[] = [];
-  pulledSubs: ((paths: string[]) => void)[] = [];
+  sourcesSubs: (() => void)[] = [];
+  askSubs: (() => void)[] = [];
   pulledUnsubs = 0;
   syncSubs: ((s: SessionSyncStatus) => void)[] = [];
   refreshes = 0;
@@ -93,7 +94,6 @@ class Harness {
       loadDeviceSettings: async () => ({ backgroundCollect: this.backgroundCollect }),
       loadSourceHealth: async () => this.health,
       siteStates: async () => this.sites,
-      sourcesFile: SOURCES_FILE,
       now: () => this.now,
       setInterval: (fn, ms) => {
         const id = this.nextTimerId++;
@@ -108,8 +108,14 @@ class Harness {
         this.syncSubs.push(cb);
         return () => {};
       },
-      subscribePulled: (cb) => {
-        this.pulledSubs.push(cb);
+      subscribeSourcesPulled: (cb) => {
+        this.sourcesSubs.push(cb);
+        return () => {
+          this.pulledUnsubs += 1;
+        };
+      },
+      subscribeAskPulled: (cb) => {
+        this.askSubs.push(cb);
         return () => {
           this.pulledUnsubs += 1;
         };
@@ -187,8 +193,16 @@ class Harness {
     return claim;
   }
 
+  // Stands in for dispatchPull (platform/sync/pull-routes): the routes' own
+  // matchers decide who hears, so a handler wired to the wrong one of them shows
+  // up here rather than only in production.
   pull(paths: string[]): void {
-    for (const cb of this.pulledSubs) cb(paths);
+    if (paths.some((path) => SOURCES_PULL_ROUTE.matches(path))) {
+      for (const cb of this.sourcesSubs) cb();
+    }
+    if (paths.some((path) => ASK_PULL_ROUTE.matches(path))) {
+      for (const cb of this.askSubs) cb();
+    }
   }
 
   syncStatus(s: SessionSyncStatus): void {
@@ -549,7 +563,7 @@ test("stopping gives the claim up now rather than letting it expire", async () =
   expect(h.last().claimedAt).toBe(null);
   expect(h.last().heartbeatAt).toBe(h.now);
   expect(h.timers.size).toBe(0);
-  expect(h.pulledUnsubs).toBe(1);
+  expect(h.pulledUnsubs).toBe(2);
   expect(s.isCollecting()).toBe(false);
 
   // Nothing to elect: a stopped session is not the collector whatever the files

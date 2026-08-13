@@ -21,8 +21,8 @@ import {
   type TalkRow,
 } from "../../../../reading/talks";
 import { Button } from "../../ui/button";
-import CardMenu from "../CardMenu";
-import { displayFileTitle } from "../file-title";
+import CardMenu from "../../shelf/CardMenu";
+import { displayFileTitle } from "../../shelf/file-title";
 import DeleteTalkButton from "./DeleteTalkButton";
 import NewTalkDialog from "./NewTalkDialog";
 

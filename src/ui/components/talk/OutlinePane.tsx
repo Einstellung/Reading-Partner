@@ -7,7 +7,7 @@
 // pointer contract that touch, Pencil and the dropdown layer all agree on, and
 // an outline is a dozen rows.
 
-import { IconClose } from "../common/icons";
+import { IconClose } from "../base/icons";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import {

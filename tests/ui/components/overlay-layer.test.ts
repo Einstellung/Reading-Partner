@@ -8,7 +8,7 @@ import {
   overlayLayerOpen,
   pushOverlayLayer,
   resetOverlayLayers,
-} from "../../../src/ui/components/common/overlay-layer";
+} from "../../../src/ui/components/base/overlay-layer";
 
 beforeEach(resetOverlayLayers);
 

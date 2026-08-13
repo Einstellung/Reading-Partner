@@ -49,6 +49,7 @@ let clock = 0;
 let nextTimerId = 1;
 let tasks: Task[] = [];
 let exitFlush: (() => void) | null = null;
+let errors: unknown[] = [];
 
 // The store's whole outside world. `read` returns what atomic-fs's guarded read
 // returns, including the two failure modes loadSettings tells apart: a missing
@@ -79,6 +80,9 @@ const io: SettingsIo = {
   },
   bindExit: (flush: () => void) => {
     exitFlush = flush;
+  },
+  onError: (e: unknown) => {
+    errors.push(e);
   },
 };
 
@@ -115,6 +119,7 @@ beforeEach(() => {
   readFails = false;
   heldWrite = null;
   exitFlush = null;
+  errors = [];
   store = createSettingsStore(io);
 });
 
@@ -241,8 +246,6 @@ test("an unreadable file is not overwritten, and the failure is reported", async
   file = "{}";
   readFails = true;
   await store.load();
-  const errors: unknown[] = [];
-  store.onSaveError((e) => errors.push(e));
 
   store.save({ ...DEFAULT_SETTINGS, aiLanguage: "ja" });
   await advance(500);

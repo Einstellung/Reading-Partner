@@ -1,6 +1,6 @@
 // shadcn/ui Select, trimmed to what this app uses (docs/30). Group,
 // Label and Separator are gone with their call sites; the check and the chevrons
-// come from common/icons because lucide-react is not a dependency here.
+// come from base/icons because lucide-react is not a dependency here.
 //
 // `position="popper"` rather than the generated default: only popper publishes
 // --radix-popper-available-*, which is what OVERLAY_SAFE.anchored clamps
@@ -23,7 +23,7 @@
 import { Select as SelectPrimitive } from "radix-ui";
 import * as React from "react";
 
-import { IconCheck, IconChevronDown, IconChevronUp } from "@/ui/components/common/icons";
+import { IconCheck, IconChevronDown, IconChevronUp } from "@/ui/components/base/icons";
 import { cn } from "@/ui/components/lib/utils";
 import {
   OVERLAY_SAFE,

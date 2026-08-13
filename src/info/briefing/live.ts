@@ -34,7 +34,7 @@ import {
   loadSources,
   loadSourceHealth,
   saveSourceHealth,
-  SOURCES_FILE,
+  SOURCES_PULL_ROUTE,
 } from "../sources/source-store";
 import { loadFeedback } from "../../observation/feedback";
 import { loadProfile } from "../../observation/profile";
@@ -66,12 +66,14 @@ import { collectorStatusLine, InfoCollector } from "./collector";
 import { createCollectorSession } from "./presence";
 import { backfillPublish, loadPublishedBriefing, publishBriefing } from "./publish";
 import {
+  ASK_PULL_ROUTE,
   readAsks,
   readCollectorClaims,
   readOwnClaim,
   writeCollectorClaim,
 } from "./handoff";
-import { onSyncPulled, subscribeSyncStatus } from "../../platform/sync";
+import { subscribeSyncStatus } from "../../platform/sync";
+import { registerPullRoute } from "../../platform/sync/pull-routes";
 import { hostname, platform } from "@tauri-apps/plugin-os";
 import { signInSites } from "../sources/site-session";
 import {
@@ -651,13 +653,16 @@ const session = createCollectorSession({
   loadDeviceSettings,
   loadSourceHealth,
   siteStates,
-  sourcesFile: SOURCES_FILE,
   now: Date.now,
   setInterval: (fn, ms) => setInterval(fn, ms),
   clearInterval: (handle: ReturnType<typeof setInterval>) => clearInterval(handle),
   subscribeSyncStatus: (cb) =>
     subscribeSyncStatus((s) => cb({ engineStarted: s.engineStarted, lastSyncAt: s.lastSyncAt })),
-  subscribePulled: onSyncPulled,
+  // A source the reader subscribed to or turned on elsewhere, and a reader
+  // asking for a briefing. Two routes rather than one subscription with two
+  // arms: they answer to different files and neither cares about the other's.
+  subscribeSourcesPulled: (cb) => registerPullRoute({ ...SOURCES_PULL_ROUTE, onPulled: cb }),
+  subscribeAskPulled: (cb) => registerPullRoute({ ...ASK_PULL_ROUTE, onPulled: cb }),
   onExit: (cb) => observeAppExit(window, cb),
   backfillPublish,
   pipeline: getInfoPipeline,

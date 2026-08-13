@@ -1,7 +1,7 @@
 // What both shells (App, PhoneApp) do on the way up, and nothing about what
 // either of them draws: the account settings, this machine's own settings,
-// which providers can actually be called, the sync-health verdict, and the six
-// store error hooks that are silent until someone registers them.
+// which providers can actually be called, the sync-health verdict, and the one
+// store-error channel that is silent until someone subscribes to it.
 //
 // A .ts file, like useSyncHealth beside it: no JSX here, so the phone rewrite of
 // the .tsx layer leaves it alone. The four pure/async pieces are exported on
@@ -12,8 +12,11 @@
 // articles there) and everything the values are drawn with.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { onSaveError } from "../../../platform/app/annotations";
-import { onCorruptFile, type CorruptFileReport } from "../../../platform/app/atomic-fs";
+import { onStoreError } from "../../../platform/app/store-errors";
+import {
+  registerPullRoute,
+  type PullMatcher,
+} from "../../../platform/sync/pull-routes";
 import {
   initDeviceSettings,
   saveDeviceSettings,
@@ -23,28 +26,15 @@ import {
   DEFAULT_SETTINGS,
   flushSettings,
   loadSettings,
-  onSettingsSaveError,
   saveSettings,
+  SETTINGS_FILE,
   settingsPullAction,
   type Settings,
 } from "../../../platform/app/settings";
-import { onThreadSaveError } from "../../../platform/app/threads";
 import { enforceKnownModel, listProviders, type ProviderInfo } from "../../../ai/aiClient";
-import { onFulltextError } from "../../../fulltext";
-import { onFiguresError } from "../../../reading/figures";
 import type { SyncHealthReport } from "../../../platform/sync";
 import type { ToastKind } from "./toast-list";
 import { useSyncHealth } from "./useSyncHealth";
-
-// A data file that could not be read, said out loud: a reset shelf or a lost
-// provider config must never look like the app forgot on its own. The two
-// branches are different promises — one file was moved aside, the other is
-// still where it was and will not be written over.
-export function corruptFileMessage({ file, savedAs }: CorruptFileReport): string {
-  return savedAs
-    ? `${file} was unreadable and has been set aside as ${savedAs}`
-    : `${file} could not be read; it is left untouched and won't be overwritten`;
-}
 
 // Whether the default provider/model actually resolves to something callable.
 // A provider id that is no longer in the catalog is as unusable as no provider
@@ -109,14 +99,36 @@ export function healthToastMessage(report: SyncHealthReport, alreadyToasted: boo
   return report.message;
 }
 
+// The failure paths that must not be silent (pitfall 09), turned into toasts.
+// One subscription for all of them: every store reports through store-errors.ts,
+// which has already decided what each failure costs the user — a sentence for a
+// lost write, nothing but a log line for a derived cache that will be rebuilt,
+// so a scope with no sentence is heard and says nothing.
+//
+// Exported rather than written inline in the effect: this is the whole of what
+// the shells do with the channel, and an effect body is not something a test can
+// reach.
+export function subscribeStoreErrors(
+  pushToast: (kind: ToastKind, message: string) => void,
+): () => void {
+  return onStoreError(({ message }) => {
+    if (message) pushToast("warn", message);
+  });
+}
+
+// Both shells hold settings.json whole in memory and save it whole, so a field
+// another device changed has to be read back or the next save undoes it. The
+// route is registered by the hook rather than by each shell: it is the hook that
+// knows whether the panel is open, which is the only thing the read waits for.
+export const SETTINGS_PULL_ROUTE: PullMatcher = {
+  id: "settings",
+  matches: (path) => path === SETTINGS_FILE,
+};
+
 export interface ShellBootstrap {
   settings: Settings;
   // A settings change the user made: set and persist.
   applySettings: (settings: Settings) => void;
-  // The paths a sync pull just wrote. Where settings.json is among them the
-  // copy this shell holds is read back, now or once the settings panel closes
-  // (settingsPullAction). Everything else a pull refreshes is the shell's own.
-  settingsPulled: (paths: readonly string[]) => void;
   device: DeviceSettings | null;
   applyDevice: (device: DeviceSettings) => void;
   configured: boolean;
@@ -148,25 +160,7 @@ export function useShellBootstrap({
   settingsOpenRef.current = settingsOpen;
 
   useEffect(() => {
-    // The failure paths that must not be silent (pitfall 09). Each store keeps
-    // one handler, so this is the only place a shell registers them.
-    onCorruptFile((report) => pushToast("warn", corruptFileMessage(report)));
-    onSettingsSaveError((e) => {
-      console.error("failed to persist settings", e);
-      pushToast("warn", "Settings could not be saved");
-    });
-    onSaveError((e) => {
-      console.error("failed to persist annotations", e);
-      pushToast("warn", "Annotations could not be saved");
-    });
-    onThreadSaveError((e) => {
-      console.error("failed to persist thread", e);
-      pushToast("warn", "AI conversation could not be saved");
-    });
-    // The two derived caches only warn: both are re-extracted from the document
-    // when they are missing, so a persistence failure costs work, not data.
-    onFulltextError((e) => console.warn("failed to persist fulltext cache", e));
-    onFiguresError((e) => console.warn("failed to persist figure index", e));
+    const unsubErrors = subscribeStoreErrors(pushToast);
 
     loadShellSettings()
       .then(({ settings: next, notice }) => {
@@ -179,6 +173,7 @@ export function useShellBootstrap({
     initDeviceSettings()
       .then(setDevice)
       .catch((e) => console.warn("failed to read device settings", e));
+    return unsubErrors;
   }, [pushToast]);
 
   // Refresh provider connection state on mount and whenever Settings closes.
@@ -192,12 +187,16 @@ export function useShellBootstrap({
       .catch(() => {});
   }, []);
 
-  const settingsPulled = useCallback(
-    (paths: readonly string[]) => {
-      const action = settingsPullAction(paths, settingsOpenRef.current);
-      if (action === "adopt") adoptPulledSettings();
-      else if (action === "defer") pendingPullRef.current = true;
-    },
+  useEffect(
+    () =>
+      registerPullRoute({
+        ...SETTINGS_PULL_ROUTE,
+        onPulled: (paths) => {
+          const action = settingsPullAction(paths, settingsOpenRef.current);
+          if (action === "adopt") adoptPulledSettings();
+          else if (action === "defer") pendingPullRef.current = true;
+        },
+      }),
     [adoptPulledSettings],
   );
 
@@ -233,7 +232,6 @@ export function useShellBootstrap({
   return {
     settings,
     applySettings,
-    settingsPulled,
     device,
     applyDevice,
     configured: isConfigured(settings, providersInfo),

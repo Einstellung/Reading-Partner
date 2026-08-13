@@ -50,7 +50,7 @@ test("deleting a topic goes through an AlertDialog", () => {
 });
 
 test("the citation chip carries a 44px target without moving the line", () => {
-  const source = readFileSync(join(ROOT, "ui/components/common/MarkdownRenderer.tsx"), "utf8");
+  const source = readFileSync(join(ROOT, "ui/components/markdown/MarkdownRenderer.tsx"), "utf8");
   const start = source.indexOf("const CITATION_CHIP");
   const chip = source.slice(start, source.indexOf("].join(' ');", start));
   expect(chip).toContain("HIT_44");

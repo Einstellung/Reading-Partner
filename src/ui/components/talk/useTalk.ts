@@ -34,8 +34,8 @@ import {
   type Talk,
 } from "../../../reading/talks";
 import { distillRehearsal } from "../../../observation";
-import { appendRunningTool, resolveToolStatus } from "../common/toolTrace";
-import type { ThreadMessage } from "../common/types";
+import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
+import type { ThreadMessage } from "../chat/types";
 import {
   cardRow,
   insertBeforeLast,
@@ -43,7 +43,7 @@ import {
   rehydrateMessage,
   toPersistedCardPart,
 } from "../chat/chatParts";
-import { holdsNoAnswer, refusalRow } from "../chat/turn-rows";
+import { holdsNoAnswer, refusalRow } from "../../../ai/turn-rows";
 
 // A talk has exactly one conversation, so the thread id is the talk id. Nothing
 // has to be looked up, and a thread file with a second thread in it could only

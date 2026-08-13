@@ -8,7 +8,7 @@
 // materials and get back a talk.
 //
 // The display title is passed in rather than imported: what a file is called on
-// screen is the library's naming rule (ui/components/library/file-title.ts), and
+// screen is the library's naming rule (ui/components/shelf/file-title.ts), and
 // a domain module does not reach up into ui.
 //
 // The store's startTalk is module-internal on purpose and is not on the talks

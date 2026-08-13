@@ -10,7 +10,7 @@
 // `can-hover:` gating), because a touch screen has no hover to reveal it.
 
 import { useRef, useState } from "react";
-import { IconChevronDown } from "../common/icons";
+import { IconChevronDown } from "../base/icons";
 import { Button } from "../ui/button";
 import {
   DropdownMenu,

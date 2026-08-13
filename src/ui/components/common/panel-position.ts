@@ -9,7 +9,7 @@
 // returns. The viewport passed in is the usable one — on a device with a soft
 // keyboard that is the visual viewport, which is shorter (useViewportSize).
 
-import type { SafeAreaInsets } from "./safe-area";
+import type { SafeAreaInsets } from "../base/safe-area";
 
 // An anchor is anything with the four edges of a DOMRect, so a measured element
 // goes in unchanged. A caret or a mark's corner is a zero-size rect: pointAnchor.
