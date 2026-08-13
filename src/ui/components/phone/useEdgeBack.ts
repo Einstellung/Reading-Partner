@@ -1,22 +1,19 @@
 // Wires the left-edge back swipe (edge-back-gesture.ts) to a DOM element: the
 // pointer listeners, the pointer capture, the transform, and the rAF that
 // finishes the movement the finger started. The decisions all live in the pure
-// machine; this file only owns the element and the clock.
+// machine; this file only owns the element and the clock. The listener set, the
+// raw touch claim and the rAF itself are shared with the pull-to-ask gesture and
+// live in gesture-dom.ts, including the two-channel and every-move rules the
+// claim encodes (docs/pitfall/38, 70).
 //
 // Two rules borrowed from the reader's rubber band (docs/pitfall/41): the offset
 // is written straight to `transform` and animated on rAF, never with a CSS
 // transition, and at rest the property is cleared to "" rather than set to an
 // identity transform — a live transform makes the element a containing block for
 // every fixed descendant, and Settings is one.
-//
-// Two channels, the same split the reader lives with (docs/pitfall/38): the
-// gesture itself runs on pointer events, and the raw touch channel is what
-// takes the gesture away from the browser. A pointer listener cannot do that —
-// preventDefault on a pointer event has no say in whether the browser scrolls,
-// and the moment it decides to, it cancels the pointer and the swipe is over
-// (docs/pitfall/70).
 
 import { useCallback, useEffect, useRef, type MutableRefObject } from "react";
+import { bindGesture, createAnimator, type Animator } from "./gesture-dom";
 import {
   EDGE_ZONE,
   inEdgeZone,
@@ -40,10 +37,6 @@ const ENTER_OFFSET_MAX = 90;
 // Cast along the leading edge while the screen is off its rest position, so the
 // page reads as lifted off the backdrop behind it.
 const EDGE_SHADOW = "-10px 0 26px rgba(0, 0, 0, 0.16)";
-
-function easeOut(p: number): number {
-  return 1 - Math.pow(1 - p, 3);
-}
 
 function paint(el: HTMLElement | null, dx: number): void {
   if (!el) return;
@@ -75,47 +68,14 @@ export function useEdgeBack(options: EdgeBackOptions): MutableRefObject<HTMLDivE
   const widthRef = useRef(0);
   const leftRef = useRef(0);
   const offsetRef = useRef(0);
-  // Set while rAF owns the offset. A pointer that lands mid-animation is
-  // ignored: taking over would mean starting a drag from wherever the surface
-  // happens to be, and the animations are short enough that nobody waits.
-  const animatingRef = useRef(false);
-  const stopAnimRef = useRef<() => void>(() => {});
-  // The raw touch channel's own bookkeeping, kept apart from the gesture state:
-  // the two channels are independent, and this one only answers "has this touch
-  // earned the right to stop the browser scrolling".
-  const touchRef = useRef<{ id: number; x: number; y: number; claimed: boolean } | null>(null);
 
   const draw = useCallback((dx: number) => {
     offsetRef.current = dx;
     paint(elRef.current, dx);
   }, []);
 
-  const animate = useCallback(
-    (from: number, to: number, ms: number, done?: () => void) => {
-      stopAnimRef.current();
-      animatingRef.current = true;
-      const t0 = performance.now();
-      let raf = 0;
-      const frame = (now: number) => {
-        const p = ms > 0 ? Math.min(1, (now - t0) / ms) : 1;
-        draw(from + (to - from) * easeOut(p));
-        if (p < 1) {
-          raf = requestAnimationFrame(frame);
-          return;
-        }
-        animatingRef.current = false;
-        stopAnimRef.current = () => {};
-        done?.();
-      };
-      raf = requestAnimationFrame(frame);
-      stopAnimRef.current = () => {
-        cancelAnimationFrame(raf);
-        animatingRef.current = false;
-        stopAnimRef.current = () => {};
-      };
-    },
-    [draw],
-  );
+  const animatorRef = useRef<Animator | null>(null);
+  const animator: Animator = (animatorRef.current ??= createAnimator(draw));
 
   // The finger is gone: either finish leaving and pop, or settle back.
   const settle = useCallback(
@@ -123,10 +83,10 @@ export function useEdgeBack(options: EdgeBackOptions): MutableRefObject<HTMLDivE
       const width = widthRef.current || elRef.current?.offsetWidth || 0;
       const from = offsetRef.current;
       if (!goBack) {
-        animate(from, 0, CANCEL_MS);
+        animator.run(from, 0, CANCEL_MS);
         return;
       }
-      animate(from, width, EXIT_MS, () => {
+      animator.run(from, width, EXIT_MS, () => {
         optionsRef.current.onBack();
         // The pop is a React state update made from a rAF callback, so it is
         // flushed in the microtask before the next frame: by then the screen
@@ -134,11 +94,11 @@ export function useEdgeBack(options: EdgeBackOptions): MutableRefObject<HTMLDivE
         requestAnimationFrame(() => {
           const offset = -Math.min(width * ENTER_OFFSET_FRACTION, ENTER_OFFSET_MAX);
           draw(offset);
-          animate(offset, 0, ENTER_MS);
+          animator.run(offset, 0, ENTER_MS);
         });
       });
     },
-    [animate, draw],
+    [animator, draw],
   );
 
   const run = useCallback(
@@ -179,106 +139,57 @@ export function useEdgeBack(options: EdgeBackOptions): MutableRefObject<HTMLDivE
     const el = elRef.current;
     if (!el) return;
 
-    const down = (e: PointerEvent) => {
-      if (!e.isPrimary || animatingRef.current || !optionsRef.current.enabled) return;
-      const rect = el.getBoundingClientRect();
-      widthRef.current = rect.width;
-      leftRef.current = rect.left;
-      feed(
-        {
-          type: "pointerdown",
-          id: e.pointerId,
-          x: e.clientX - rect.left,
-          y: e.clientY - rect.top,
-          t: e.timeStamp,
-        },
-        e,
-      );
-    };
-    // y is only ever used as a difference, so the viewport coordinate is fine;
-    // x has to be relative to the surface, whose left edge is where the band is.
-    const move = (e: PointerEvent) => {
-      feed(
-        {
-          type: "pointermove",
-          id: e.pointerId,
-          x: e.clientX - leftRef.current,
-          y: e.clientY,
-          t: e.timeStamp,
-        },
-        e,
-      );
-    };
-    const up = (e: PointerEvent) => {
-      feed(
-        {
-          type: "pointerup",
-          id: e.pointerId,
-          x: e.clientX - leftRef.current,
-          y: e.clientY,
-          t: e.timeStamp,
-        },
-        e,
-      );
-    };
-    const cancel = (e: PointerEvent) => feed({ type: "pointercancel", id: e.pointerId }, e);
+    const unbind = bindGesture(el, {
+      pointerTarget: el,
+      enabled: () => optionsRef.current.enabled && !animator.animating,
+      claim: {
+        // A touch that starts outside the band is left alone and scrolls the
+        // page, the same test the pointer channel starts from.
+        starts: (_e, t) => inEdgeZone(t.clientX - el.getBoundingClientRect().left, EDGE_ZONE),
+        reached: shouldClaimTouch,
+      },
+      // y is only ever used as a difference, so the viewport coordinate is fine;
+      // x has to be relative to the surface, whose left edge is where the band
+      // is.
+      onPointer: (phase, e) => {
+        if (phase === "pointercancel") {
+          feed({ type: phase, id: e.pointerId }, e);
+          return;
+        }
+        if (phase === "pointerdown") {
+          const rect = el.getBoundingClientRect();
+          widthRef.current = rect.width;
+          leftRef.current = rect.left;
+          feed(
+            {
+              type: phase,
+              id: e.pointerId,
+              x: e.clientX - rect.left,
+              y: e.clientY - rect.top,
+              t: e.timeStamp,
+            },
+            e,
+          );
+          return;
+        }
+        feed(
+          {
+            type: phase,
+            id: e.pointerId,
+            x: e.clientX - leftRef.current,
+            y: e.clientY,
+            t: e.timeStamp,
+          },
+          e,
+        );
+      },
+    });
 
-    // The raw touch channel. It decides nothing about the gesture; it only
-    // takes the touch off the browser once the finger is clearly going right,
-    // and keeps taking it for the rest of the sequence — a single cancelled
-    // move does not hold it. A touch that starts outside the band, or that
-    // never resolves sideways, is left alone and scrolls the page.
-    const touchStart = (e: TouchEvent) => {
-      const t = e.touches[0];
-      if (!t || e.touches.length !== 1 || !optionsRef.current.enabled || animatingRef.current) {
-        touchRef.current = null;
-        return;
-      }
-      const x = t.clientX - el.getBoundingClientRect().left;
-      touchRef.current = inEdgeZone(x, EDGE_ZONE)
-        ? { id: t.identifier, x: t.clientX, y: t.clientY, claimed: false }
-        : null;
-    };
-    const touchMove = (e: TouchEvent) => {
-      const s = touchRef.current;
-      if (!s) return;
-      const t = Array.prototype.find.call(e.touches, (c: Touch) => c.identifier === s.id) as
-        | Touch
-        | undefined;
-      if (!t) return;
-      if (!s.claimed && !shouldClaimTouch(t.clientX - s.x, t.clientY - s.y)) return;
-      s.claimed = true;
-      e.preventDefault();
-    };
-    const touchEnd = () => {
-      touchRef.current = null;
-    };
-
-    // Capture phase, the way the reader routes touches (docs/pitfall/37): a
-    // child that stops propagation must not be able to hide the edge from us.
-    const opts = { capture: true } as const;
-    // Non-passive, or preventDefault is ignored and the browser scrolls anyway.
-    const active = { capture: true, passive: false } as const;
-    el.addEventListener("pointerdown", down, opts);
-    el.addEventListener("pointermove", move, opts);
-    el.addEventListener("pointerup", up, opts);
-    el.addEventListener("pointercancel", cancel, opts);
-    el.addEventListener("touchstart", touchStart, active);
-    el.addEventListener("touchmove", touchMove, active);
-    el.addEventListener("touchend", touchEnd, opts);
-    el.addEventListener("touchcancel", touchEnd, opts);
     return () => {
-      el.removeEventListener("pointerdown", down, opts);
-      el.removeEventListener("pointermove", move, opts);
-      el.removeEventListener("pointerup", up, opts);
-      el.removeEventListener("pointercancel", cancel, opts);
-      el.removeEventListener("touchstart", touchStart, active);
-      el.removeEventListener("touchmove", touchMove, active);
-      el.removeEventListener("touchend", touchEnd, opts);
-      el.removeEventListener("touchcancel", touchEnd, opts);
-      stopAnimRef.current();
+      unbind();
+      animator.stop();
     };
-  }, [feed]);
+  }, [animator, feed]);
 
   return elRef;
 }
