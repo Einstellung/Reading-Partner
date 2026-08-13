@@ -274,6 +274,10 @@ const MessageBubble = memo(function MessageBubble({
 	// AI: a turn that failed to reach the model is the app's words standing in for
 	// the reply, drawn as a failure. A row carrying a notice is not that, even
 	// with nothing written — it falls through to the notice-only row below.
+	// refusalRow clears `failed`, so no refusal arrives here with both set; the
+	// `!notice` half stays for any other path that ever marks a row and then adds
+	// a sentence about the turn, and because a row is cheap to hand-build and
+	// render, this is checked by a test rather than argued about.
 	if (failed && !notice) {
 		return (
 			<div className={'text-destructive ' + (lg ? 'text-[15px] leading-7' : 'text-[13px] leading-relaxed')}>

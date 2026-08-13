@@ -100,7 +100,8 @@ test("a refusal under a written answer is a quiet notice, not a failure", () => 
   const next = { ...row, ...refusalRow(row, REFUSE_ROUNDS) };
 
   expect(next.notice).toBe(REFUSE_ROUNDS);
-  expect(next.failed).toBeUndefined();
+  // Said, not merely left unsaid: refusalRow names the mark and clears it.
+  expect(next.failed).toBe(false);
   // The model's own words are left exactly as they were written.
   expect(next.text).toBe("Here is what I found so far.");
   expect(next.streaming).toBe(false);
@@ -117,7 +118,7 @@ test("a refusal with nothing written is a notice on an empty row, not an error",
   expect(row.notice).toBe(REFUSE_ROUNDS);
   expect(row.text).toBe("");
   // Not red, and no Retry anywhere reads it as one.
-  expect(row.failed).toBeUndefined();
+  expect(row.failed).toBe(false);
   expect(row.notice).not.toContain("The reply failed.");
   expect(row.streaming).toBe(false);
 });

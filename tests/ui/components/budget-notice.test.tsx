@@ -62,16 +62,30 @@ test("a row that is only a notice renders the notice, not an error", () => {
   expect(html).not.toContain("Copy");
 });
 
-// `failed` and a notice can sit on the same row: refusalRow patches over the row
-// as it stands and never clears the mark. When both are there the notice decides
-// how the row reads — the app talking about the turn, not a failure — so the
-// failure style must not win. This is the assertion the notice-only case above
-// cannot make: without a mark set, the error branch is out of reach anyway.
+// `failed` and a notice on the same row. refusalRow can no longer make one
+// (turn-rows.ts clears the mark), so the row is built here by hand — which is
+// the point: the guard in chat.tsx is `failed && !notice`, and it stays for any
+// path that ever marks a row and then puts a sentence about the turn on it. When
+// both are there the notice decides how the row reads — the app talking about
+// the turn, not a failure — so the failure style must not win. Drop the
+// `&& !notice` and this goes red.
 test("a notice keeps its muted line even on a row marked failed", () => {
+  const stopped = "Ask about a shorter passage.";
+  const row: ThreadMessage = { role: "ai", text: "", ts: 1, failed: true, notice: stopped };
+  const html = renderToStaticMarkup(<MessageList messages={[row]} />);
+  expect(html).toContain(stopped);
+  expect(html).toContain("text-neutral-400");
+  expect(html).not.toContain("text-destructive");
+});
+
+// The other half of what the old fixture was reaching for: a row that arrives
+// marked failed and is then ended by refusalRow comes back unmarked, so it can
+// never reach the error branch at all. Renders as the notice, not as red.
+test("a refusal over a row already marked failed clears the mark", () => {
   const stopped = "Ask about a shorter passage.";
   const failedRow: ThreadMessage = { role: "ai", text: "", ts: 1, failed: true };
   const row: ThreadMessage = { ...failedRow, ...refusalRow(failedRow, stopped) };
-  expect(row.failed).toBe(true);
+  expect(row.failed).toBe(false);
   const html = renderToStaticMarkup(<MessageList messages={[row]} />);
   expect(html).toContain(stopped);
   expect(html).toContain("text-neutral-400");
