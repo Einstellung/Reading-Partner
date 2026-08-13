@@ -21,16 +21,34 @@ interface Call {
   args: unknown[];
 }
 
+// The shell methods that really are asynchronous: ReaderShell declares both
+// Promise<void>, and each lands an await boundary after it was called, recording
+// its landing. A fake that returned undefined would let the awaits in open-book
+// be deleted with this file still green, and the order they are there to keep
+// would be pinned by nothing.
+const lands =
+  (log: Call[], name: string) =>
+  async (): Promise<void> => {
+    await Promise.resolve();
+    log.push({ name: `${name}:landed`, args: [] });
+  };
+
 // Every shell method records itself, so the test can read the sequence rather
-// than guess at it. Overrides run after recording.
+// than guess at it. Overrides run after recording, and replace the async
+// defaults above.
 function fakeShell(log: Call[], over: Partial<Record<keyof ReaderShell, (...a: any[]) => unknown>> = {}) {
+  const async: Partial<Record<keyof ReaderShell, (...a: any[]) => unknown>> = {
+    resumePrep: lands(log, "resumePrep"),
+    resumeNotes: lands(log, "resumeNotes"),
+  };
   return new Proxy(
     {},
     {
       get(_t, name: string) {
         return (...args: unknown[]) => {
           log.push({ name, args });
-          return over[name as keyof ReaderShell]?.(...args);
+          const key = name as keyof ReaderShell;
+          return (over[key] ?? async[key])?.(...args);
         };
       },
     },
@@ -182,6 +200,22 @@ test("a book opened without the flag starts its prep detached", async () => {
   expect(argsOf(log, "resetPrep")).toEqual([false]);
   expect(argsOf(log, "resumePrep")).toEqual(["book-1", "A Book.pdf", FULLTEXT, false]);
   expect(argsOf(log, "resumeNotes")).toEqual(["book-1", "A Book.pdf", FULLTEXT]);
+});
+
+// The two panels are resumed one after the other, not both at once: prep runs
+// the chapter pass the notes panel then reads. `resumePrep:landed` between the
+// two calls is the whole of it — without it, both would be in flight together.
+test("the notes panel is resumed only after the prep panel has finished", async () => {
+  const log: Call[] = [];
+  await openBook(fakeShell(log, { currentBookId: () => "book-1" }), book, fakeIo(log));
+  await settle();
+
+  expect(names(log).filter((n) => n.startsWith("resume"))).toEqual([
+    "resumePrep",
+    "resumePrep:landed",
+    "resumeNotes",
+    "resumeNotes:landed",
+  ]);
 });
 
 test("the full text and the figures land on the panels once they are extracted", async () => {

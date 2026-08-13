@@ -8,6 +8,7 @@ import {
   callReducer,
   type CallRow,
   type CallState,
+  type RowChange,
 } from "../../src/reading/call-state";
 
 // A surface's row: CallRow plus something only the render layer knows about, so
@@ -343,16 +344,45 @@ test("a turn stopped before it wrote anything leaves no row behind", () => {
   expect(reduce(open, { type: "row-dropped", threadId: "other", ts: 1 })).toBe(open);
 });
 
+// Every kind of change rebuilds the row it lands on, and each rebuild is a place
+// the surface's own fields can be dropped. One of them going untested is how a
+// stored card would come back from a reopened thread and then vanish the moment
+// the turn ended.
 test("what only the surface knows about the row survives every change", () => {
-  const open = call({ messages: [ai(1, "recorded", { parts: ["card"] })] });
-  const next = reduce(open, {
-    type: "row-changed",
-    threadId: "t1",
-    ts: 1,
-    change: { kind: "delta", chunk: "!" },
+  const changes: RowChange[] = [
+    { kind: "delta", chunk: "!" },
+    { kind: "tool-start", name: "s", label: "S" },
+    { kind: "tool-label", name: "s", label: "still S" },
+    { kind: "tool-end", name: "s", isError: false },
+    { kind: "answer", text: "answered" },
+    { kind: "error", text: "could not be reached" },
+    { kind: "refusal", text: "declined" },
+    { kind: "stopped", text: "half a sen" },
+  ];
+  // A running tool, so the two changes that hand the row back when nothing
+  // matches take their rebuilding path instead.
+  const running = { name: "s", label: "S", state: "running" as const };
+
+  const survived = changes.map((change) => {
+    const open = call({ messages: [ai(1, "recorded", { parts: ["card"], tools: [running] })] });
+    const next = reduce(open, { type: "row-changed", threadId: "t1", ts: 1, change });
+    return [change.kind, next?.messages[0].parts];
   });
 
-  expect(next?.messages[0].parts).toEqual(["card"]);
+  expect(survived).toEqual(changes.map((c) => [c.kind, ["card"]]));
+  // Directly too: the registry's copy is patched by this function alone.
+  expect(applyRowChange(ai(1, "recorded", { parts: ["card"] }), { kind: "answer", text: "a" }).parts).toEqual([
+    "card",
+  ]);
+});
+
+test("what only the surface knows about the row survives its images arriving", () => {
+  const open = call({ messages: [user(1, "look"), ai(2, "recorded", { parts: ["card"] })] });
+  const images = new Map([[2, [{ data: "AAA", mediaType: "image/png" as const }]]]);
+  const next = reduce(open, { type: "images-loaded", threadId: "t1", images });
+
+  expect(next?.messages[1].parts).toEqual(["card"]);
+  expect(next?.messages[1].images).toEqual([{ data: "AAA", mediaType: "image/png" }]);
 });
 
 // The registry's copy of the row and the one on screen are patched separately;
