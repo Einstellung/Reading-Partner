@@ -69,6 +69,7 @@ const LAYER: Record<string, Layer> = {
 
   ui: "ui",
   "ui/components": "ui",
+  "ui/components/base": "ui",
   "ui/components/chat": "ui",
   "ui/components/common": "ui",
   "ui/components/info": "ui",
@@ -104,8 +105,6 @@ const MAY_IMPORT: Record<Layer, Layer[]> = {
 // test as loudly as a new one appears. Delete the line with the fix, and the
 // whole mechanism with the last one.
 const KNOWN_CYCLES: [string, string][] = [
-  // B1.1: the four dependency-free files move to ui/components/base.
-  ["ui/components/common", "ui/components/ui"],
   // B1.2: Markdown and its only non-test consumer move to ui/components/markdown.
   ["ui/components/common", "ui/components/reader"],
   // B1.3: common/types.ts splits into ai/tool-status, reader/types, chat/types.

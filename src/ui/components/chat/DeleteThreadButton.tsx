@@ -23,7 +23,7 @@ import {
 	AlertDialogTrigger,
 } from '../ui/alert-dialog';
 import { Button } from '../ui/button';
-import { IconTrash } from '../common/icons';
+import { IconTrash } from '../base/icons';
 
 interface DeleteThreadButtonProps {
 	onDelete(): void;

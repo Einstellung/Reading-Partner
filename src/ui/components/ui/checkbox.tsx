@@ -1,4 +1,4 @@
-// shadcn/ui Checkbox (docs/30). The tick comes from common/icons
+// shadcn/ui Checkbox (docs/30). The tick comes from base/icons
 // because lucide-react is not a dependency here.
 //
 // The box stays 16px and HIT_44 carries the touch target as a centred
@@ -11,8 +11,8 @@
 import { Checkbox as CheckboxPrimitive } from "radix-ui";
 import * as React from "react";
 
-import { IconCheck } from "@/ui/components/common/icons";
-import { HIT_44 } from "@/ui/components/common/buttons";
+import { IconCheck } from "@/ui/components/base/icons";
+import { HIT_44 } from "@/ui/components/base/buttons";
 import { cn } from "@/ui/components/lib/utils";
 
 const Checkbox = React.forwardRef<

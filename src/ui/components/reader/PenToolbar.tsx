@@ -3,7 +3,7 @@
 // changes. Styled with Tailwind utilities.
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { IconColorSwatch, IconHighlight, IconPointer, IconSparkle, IconUnderline } from '../common/icons';
+import { IconColorSwatch, IconHighlight, IconPointer, IconSparkle, IconUnderline } from '../base/icons';
 import { placePanel } from '../common/panel-position';
 import { useViewportSize } from '../common/useViewportSize';
 import { Button } from '../ui/button';

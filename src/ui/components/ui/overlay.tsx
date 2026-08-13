@@ -14,7 +14,7 @@
 //
 // Layer registration. The app's own dismiss-on-outside-press overlays cannot see
 // a portalled subtree as "inside" them, so a layer announces itself instead
-// (common/overlay-layer).
+// (base/overlay-layer).
 //
 // A content component in this directory takes all three:
 //
@@ -33,14 +33,14 @@
 
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 
-import { pushOverlayLayer } from "@/ui/components/common/overlay-layer";
+import { pushOverlayLayer } from "@/ui/components/base/overlay-layer";
 import {
   measureSafeAreaInsets,
   NO_SAFE_AREA,
   safeCollisionPadding,
   sameInsets,
   type SafeAreaInsets,
-} from "@/ui/components/common/safe-area";
+} from "@/ui/components/base/safe-area";
 
 // The app's layers, low to high. A call site takes its layer from here rather
 // than writing a number: a number invented next to this scale is how the next

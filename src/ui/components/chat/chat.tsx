@@ -1,9 +1,9 @@
 // Shared chat pieces for the call UI (CallBubble, CallView). Tailwind-only.
 
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { HIT_44 } from '../common/buttons';
+import { HIT_44 } from '../base/buttons';
 import { Button } from '../ui/button';
-import { IconCheck, IconCopy, IconSend, IconStop } from '../common/icons';
+import { IconCheck, IconCopy, IconSend, IconStop } from '../base/icons';
 import { Markdown } from '../common/Markdown';
 import { MicButton } from './MicButton';
 import { useFlickerProbe } from '../common/useFlickerProbe';

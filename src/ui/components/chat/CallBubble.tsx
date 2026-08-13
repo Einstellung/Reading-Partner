@@ -4,13 +4,13 @@
 // included: the turn goes on writing into the thread. Tailwind-only.
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { IconExpand } from '../common/icons';
+import { IconExpand } from '../base/icons';
 import { Composer, MessageList, type ComposerVoice } from './chat';
 import { Button } from '../ui/button';
 import { cn } from '../lib/utils';
 import { OVERLAY_Z, useOverlaySafePadding } from '../ui/overlay';
 import DeleteThreadButton from './DeleteThreadButton';
-import { overlayLayerOpen } from '../common/overlay-layer';
+import { overlayLayerOpen } from '../base/overlay-layer';
 import { fitPanelWidth, placePanel, pointAnchor } from '../common/panel-position';
 import { useViewportSize } from '../common/useViewportSize';
 import type { PendingImage, ThreadMessage } from '../common/types';
@@ -84,7 +84,7 @@ export default function CallBubble({
 	// While an overlay layer is up, every press belongs to it. The bubble's own
 	// delete confirmation is one of those layers, and it renders under <body>, so
 	// containment would read the press on its Delete button as a press outside
-	// and close the bubble out from under it (common/overlay-layer).
+	// and close the bubble out from under it (base/overlay-layer).
 	useEffect(() => {
 		function onDown(e: PointerEvent) {
 			if (overlayLayerOpen()) return;

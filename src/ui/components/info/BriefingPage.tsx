@@ -9,7 +9,7 @@ import type { Briefing, BriefingItemMeta } from "../../../info/briefing/types";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
-import { IconSparkle } from "../common/icons";
+import { IconSparkle } from "../base/icons";
 
 function SourceTag({ name }: { name: string }) {
   if (!name) return null;

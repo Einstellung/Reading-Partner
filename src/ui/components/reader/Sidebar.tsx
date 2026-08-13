@@ -13,7 +13,7 @@
 // reserving an in-flow column, so opening it costs the reader nothing.
 
 import type { ReactNode } from "react";
-import { IconHighlight, IconNotes, IconOutline, IconSparkle } from "../common/icons";
+import { IconHighlight, IconNotes, IconOutline, IconSparkle } from "../base/icons";
 import { Button } from "../ui/button";
 import OutlineView from "./OutlineView";
 import TraceList from "./TraceList";

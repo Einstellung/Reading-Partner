@@ -10,7 +10,7 @@
 // Pure and controlled: which section is showing and whether it is open belong to
 // the host (LibraryScreen), which is also where they are remembered.
 
-import { IconBooks, IconObservations, IconSidebar, IconTalk } from "../../common/icons";
+import { IconBooks, IconObservations, IconSidebar, IconTalk } from "../../base/icons";
 import { Button } from "../../ui/button";
 import { TOPIC_SECTIONS, type TopicSection } from "./topic-nav";
 

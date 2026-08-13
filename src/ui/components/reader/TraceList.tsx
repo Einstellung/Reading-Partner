@@ -12,7 +12,7 @@
 // is the swipe: uncover it, then press it.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { IconArea, IconHighlight, IconSparkle, IconTrash, IconUnderline } from '../common/icons';
+import { IconArea, IconHighlight, IconSparkle, IconTrash, IconUnderline } from '../base/icons';
 import { Button } from '../ui/button';
 import type { Annotation } from '../common/types';
 import {

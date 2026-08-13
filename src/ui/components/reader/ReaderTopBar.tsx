@@ -17,7 +17,7 @@ import {
   IconTouchProbe,
   IconZoomIn,
   IconZoomOut,
-} from "../common/icons";
+} from "../base/icons";
 import MoreMenu, { type MoreItem } from "./MoreMenu";
 import PenToolbar from "./PenToolbar";
 import { Button } from "../ui/button";

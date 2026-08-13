@@ -14,7 +14,7 @@
 
 import { useMemo, useState } from "react";
 import { CitationContext } from "../common/Markdown";
-import { IconClose, IconOutline } from "../common/icons";
+import { IconClose, IconOutline } from "../base/icons";
 import { Composer, MessageList } from "../chat/chat";
 import TopicNameDialog from "../library/TopicNameDialog";
 import { Button } from "../ui/button";

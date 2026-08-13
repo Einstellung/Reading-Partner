@@ -23,7 +23,7 @@ import { linkifyCitations, parseCitationHref } from '../../../reading/prep/ancho
 import { linkActionFor, openExternal } from '../../../platform/app/external-link';
 import { CitationContext, FigureContext, type CitationHandler } from './Markdown';
 import FigureCard from '../reader/FigureCard';
-import { HIT_44 } from './buttons';
+import { HIT_44 } from '../base/buttons';
 
 // Module-level constants so the plugin arrays aren't recreated each render.
 const remarkPlugins = [remarkGfm, remarkMath];
