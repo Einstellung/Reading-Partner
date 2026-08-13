@@ -26,7 +26,8 @@ import type { ToolStatus } from "../../../ai/tool-status";
 // (info/briefing/cards.ts, reading/rehearsal/cards.ts); this protocol only
 // references the union, so the dependency direction stays components -> domain
 // and never the reverse. Each domain contributes its own union member, and the
-// registry (chat/cardRegistry.ts) is where the components are gathered.
+// registry (ui/components/cardRegistry.ts, one level above chat/) is where the
+// components are gathered.
 export type CardPayload = InfoCard | ReadingCard;
 export type CardKind = CardPayload["kind"];
 
