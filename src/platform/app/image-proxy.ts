@@ -43,6 +43,20 @@ export function proxyImageUrl(url: string, pageUrl?: string | null): string | nu
   return convertFileSrc(imageProxyPayload(url, pageUrl), IMAGE_PROXY_SCHEME);
 }
 
+// The source text of an attribute value is not the value: sanitize.ts writes
+// "&", '"', "<" and ">" out as entities, and a regex reads back what it wrote
+// rather than what the renderer will decode. Undo exactly those four, "&amp;"
+// last so `&amp;lt;` comes back as the text "&lt;" and not as "<". Anything else
+// an entity could spell cannot be in there — the sanitizer rebuilt this tag from
+// a parsed URL — so this is the inverse of that escape and not a decoder.
+function decodeAttrValue(value: string): string {
+  return value
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
 // Point every external <img> in sanitized article HTML at `toProxy(src)`, only
 // touching the value of src. No attribute is ever introduced — sanitizeArticleHtml
 // stays the security boundary and this runs after it. `toProxy` is injected so
@@ -50,7 +64,8 @@ export function proxyImageUrl(url: string, pageUrl?: string | null): string | nu
 export function rewriteImageSrcs(html: string, toProxy: (url: string) => string | null): string {
   return html.replace(
     /(<img\b[^>]*?\ssrc\s*=\s*")([^"]*)(")/gi,
-    (full, pre: string, src: string, post: string) => {
+    (full, pre: string, raw: string, post: string) => {
+      const src = decodeAttrValue(raw);
       const proxied = toProxy(src);
       // convertFileSrc percent-encodes the whole payload, so the result carries
       // no quote or ampersand; escaping both anyway keeps that an assumption

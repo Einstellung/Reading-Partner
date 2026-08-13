@@ -22,7 +22,7 @@ import {
   type SavedArticleInput,
 } from "../../src/reading/saved-articles";
 import { toSavedArticleInput } from "../../src/ui/components/info/saveArticle";
-import { articleHtmlForWebview } from "../../src/platform/app/image-proxy";
+import { articleHtmlForWebview, rewriteImageSrcs } from "../../src/platform/app/image-proxy";
 
 function input(over: Partial<SavedArticleInput> = {}): SavedArticleInput {
   return {
@@ -240,6 +240,39 @@ test("parseSavedArticles leaves an ordinary saved body alone", () => {
   const [article] = parseSavedArticles(hostileFile(html));
   expect(article.html).toBe(html);
 });
+
+// The read guard runs on every read, so a record that sanitizes to something
+// else the second time renders differently the second time. The proxy step is
+// in here because it is the one thing downstream that reads the stored src back
+// out of the source text.
+test("a stored body renders the same on its tenth read as on its first", () => {
+  const stored =
+    `<p>A &amp; B</p>` +
+    `<img src="https://cdn.example/a.jpg?w=640&amp;h=480">` +
+    `<img src="https://&amp;#101;vil.example/b.jpg">` +
+    `<a href="https://x.example/?q=1&amp;r=2">link</a>`;
+  const first = parseSavedArticles(hostileFile(stored))[0].html;
+  let body = first;
+  for (let i = 0; i < 9; i += 1) body = parseSavedArticles(hostileFile(body))[0].html;
+  expect(body).toBe(first);
+  expect(first).toContain('src="https://&amp;#101;vil.example/b.jpg"');
+
+  // And the image the proxy is asked to fetch is the URL that was stored, one
+  // "&" per separator, not the escaped text.
+  const asked: string[] = [];
+  rewriteProbe(first, asked);
+  expect(asked).toContain("https://cdn.example/a.jpg?w=640&h=480");
+  expect(asked).toContain("https://&#101;vil.example/b.jpg");
+});
+
+// Collects what rewriteImageSrcs hands the proxy mapper, which outside Tauri is
+// never called for real.
+function rewriteProbe(html: string, into: string[]): void {
+  rewriteImageSrcs(html, (url) => {
+    into.push(url);
+    return null;
+  });
+}
 
 test("parseSavedArticles survives a record whose html is not a string", () => {
   const text = JSON.stringify([{ id: "x", html: 42 }, { id: "y" }]);

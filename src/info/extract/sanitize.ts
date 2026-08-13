@@ -18,6 +18,11 @@
 // and removing an attribute by replacing it with "" fused its neighbours into a
 // handler that was not in the input (`<p on class="x"click=alert(1)>`).
 //
+// It runs on the way in and again on every read, so its output is also its
+// input: sanitize(sanitize(x)) has to be sanitize(x) byte for byte, or a stored
+// record renders differently depending on how many times it has been read. Safe
+// twice is a weaker property and it is not the one to test for.
+//
 // Without a DOMParser there is no sanitizer, so it returns "": a blank body,
 // never an unchecked one. Every caller runs in the webview, which has one; the
 // tests hand bun a DOMParser (tests/dom.ts) so they exercise this code rather
@@ -90,13 +95,23 @@ function escapeText(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-// An attribute value for a double-quoted slot. "&" is deliberately left alone:
-// the value has already passed the scheme test in the form the DOM decoded it,
-// a bare "&" can neither end the value nor reach the scheme (which contains
-// none), and image-proxy.ts reads this src back out of the source text with a
-// regex, so an &amp; here would reach the img: proxy as four literal characters.
+// An attribute value for a double-quoted slot. "&" is escaped first, so the
+// value the renderer decodes back out is the value that was checked here.
+// Leaving it bare kept the string safe but not stable: this runs on every read
+// of a stored body, and `https://&#101;vil.example/a.jpg` written out unescaped
+// is `https://evil.example/a.jpg` to the next pass. Same record, different host,
+// no attacker needed beyond the one who wrote the entity. The scheme test is not
+// what this protects — "&" cannot spell http(s) — the rest of the URL is.
+//
+// image-proxy.ts reads src back out of this text with a regex and now decodes
+// these four entities before proxying, so a query string's "&" still reaches the
+// img: handler as one character.
 function escapeAttr(s: string): string {
-  return s.replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 // Strip what a browser strips from a URL before it looks at the scheme: C0

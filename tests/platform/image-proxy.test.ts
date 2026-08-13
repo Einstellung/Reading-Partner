@@ -41,6 +41,24 @@ test("a query string and non-ASCII survive the round trip", () => {
   expect(out).not.toContain("&h=480");
 });
 
+// What the sanitizer actually emits: the src is escaped, so the regex reads
+// "&amp;" where the URL has "&". Handing that to the proxy verbatim would send
+// the img: handler four characters instead of a separator, and the image would
+// 404 on a URL nothing ever served.
+test("the src is decoded before it is proxied, not read as source text", () => {
+  const out = rewriteImageSrcs('<img src="https://cdn/a.jpg?w=1&amp;h=2" loading="lazy">', toProxy);
+  const encoded = /src="img:\/\/localhost\/([^"]*)"/.exec(out)?.[1] ?? "";
+  expect(decodeURIComponent(encoded)).toBe("https://cdn/a.jpg?w=1&h=2");
+});
+
+// Only the four escapes sanitize.ts writes are undone, and "&amp;" last, so a
+// URL that really does carry the characters "&lt;" keeps them.
+test("a doubly-escaped value decodes exactly one level", () => {
+  const out = rewriteImageSrcs('<img src="https://cdn/a.jpg?q=&amp;lt;">', toProxy);
+  const encoded = /src="img:\/\/localhost\/([^"]*)"/.exec(out)?.[1] ?? "";
+  expect(decodeURIComponent(encoded)).toBe("https://cdn/a.jpg?q=&lt;");
+});
+
 test("the Windows/Android shape is rewritten the same way", () => {
   const winProxy = (url: string) => `http://img.localhost/${encodeURIComponent(url)}`;
   expect(rewriteImageSrcs('<img src="https://cdn/a.jpg">', winProxy)).toBe(
