@@ -8,7 +8,7 @@
 
 副作用：pinch 的 `initializeGestureState` 读 `container.getBoundingClientRect()`，橡皮筋期间这个 rect 带着偏移，缩放锚点会偏。和坑 41 同一个缓解手段——第二根手指落下时 `suspendFingerGesture` 先把橡皮筋清零，所以 pinch 开始时偏移量已经是 0。
 
-物理量（阻尼、最大拉出距离、回弹刚度、惯性撞边界的吸收率）都是 `src/reading/engine/vertical-gesture.ts` 顶部的具名常量，元素和 rAF 在 `src/reading/engine/attach-touch.ts`。
+物理量（阻尼、最大拉出距离、回弹刚度、惯性撞边界的吸收率）都是 `src/reading/engine/gesture/vertical-gesture.ts` 顶部的具名常量，元素和 rAF 在 `src/reading/engine/gesture/attach-touch.ts`。
 
 注：这条是从规范和坑 41 观察到的「橡皮筋期间 scrollWidth/scrollHeight 会变」推出来的。iPad 模拟器上验过了（跑法见坑 118）：平移容器这条两侧都弹，到顶 `translate3d(0, 90px, 0)`、到底 `translate3d(0, -90px, 0)`，全程 `scrollTop` 钉在 14086、`scrollHeight` 钉在 15244，底边露出来的那条灰缝就是回弹本身。
 

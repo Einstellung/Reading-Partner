@@ -10,11 +10,11 @@
 // with pdf.js, no reader and no PDFium).
 
 import { loadAnnotations } from "../../platform/app/annotations";
-import { annotationPage, type Annotation } from "../../platform/app/reader-contract";
+import type { Annotation } from "../../platform/app/reader-contract";
 import { getLibraryEntry, readLibraryBook } from "../../platform/app/library";
 import { getFulltext } from "../../fulltext/store";
 import type { Fulltext } from "../../fulltext/types";
-import type { AnnotationLite } from "../../fulltext/format";
+import { toAnnotationLite, type AnnotationLite } from "../../fulltext/format";
 import { buildSkeleton, type Skeleton } from "../rehearsal";
 import { getFigures } from "../figures/store";
 import type { Figure } from "../figures/types";
@@ -30,16 +30,6 @@ export interface LoadedMaterial {
   annotations: AnnotationLite[];
   skeleton: Skeleton;
   figures: Figure[];
-}
-
-// An annotation flattened for the prompt and the read_annotations tool. Skips
-// annotations with neither text nor comment (legacy image regions), which are
-// evidence of nothing.
-export function toAnnotationLite(ann: Annotation): AnnotationLite | null {
-  const text = typeof ann.text === "string" ? ann.text.trim() : "";
-  const comment = typeof ann.comment === "string" ? ann.comment.trim() : "";
-  if (!text && !comment) return null;
-  return { page: annotationPage(ann as { position?: { pageIndex?: number } }), text, comment };
 }
 
 // Everything a talk needs about one book, read from disk. Every read is

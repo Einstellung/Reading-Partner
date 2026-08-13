@@ -18,7 +18,13 @@ import {
 } from "../src/fulltext/extract";
 import { FULLTEXT_VERSION, type Fulltext } from "../src/fulltext/types";
 import { chapterAt, readPages, searchTopic, textAround } from "../src/fulltext/query";
-import { formatPages, formatSearch, MAX_PAGE_CHARS, type TopicMaterial } from "../src/fulltext/format";
+import {
+  formatPages,
+  formatSearch,
+  toAnnotationLite,
+  MAX_PAGE_CHARS,
+  type TopicMaterial,
+} from "../src/fulltext/format";
 import { tokenize } from "../src/fulltext/bm25";
 
 function fixture(rel: string): string {
@@ -235,4 +241,35 @@ test("formatSearch ranks across materials with a text layer, cites book + page",
   );
   // No match -> named notice.
   expect(formatSearch("zzzznomatch", materials)).toContain("No matches");
+});
+
+// --- annotations flattened for the prompt (toAnnotationLite) ---
+
+// Both callers of this — a reading turn and a talk's materials — hand the model
+// the reader's marks as evidence, so a mark that is neither a quote nor a note
+// is evidence of nothing and must not arrive as an empty line.
+test("a mark with neither text nor comment flattens to null", () => {
+  expect(toAnnotationLite({ id: "x" } as never)).toBeNull();
+  expect(toAnnotationLite({ id: "x", text: "   ", comment: "  " } as never)).toBeNull();
+});
+
+test("a mark keeps its 1-based page, its quote and its note", () => {
+  expect(
+    toAnnotationLite({
+      id: "a",
+      text: "  inline caches  ",
+      comment: " does this follow? ",
+      position: { pageIndex: 4 },
+    } as never),
+  ).toEqual({ page: 5, text: "inline caches", comment: "does this follow?" });
+});
+
+// A mark with no page still carries its text: an annotation the engine never
+// gave a position to is worth less, not nothing.
+test("a mark with no page comes through with a null page", () => {
+  expect(toAnnotationLite({ id: "a", text: "a claim" } as never)).toEqual({
+    page: null,
+    text: "a claim",
+    comment: "",
+  });
 });

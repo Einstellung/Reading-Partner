@@ -1,5 +1,5 @@
 // Headless coverage of the vertical-mode touch gesture state machine
-// (src/reading/engine/vertical-gesture.ts): follow-finger scrolling and the
+// (src/reading/engine/gesture/vertical-gesture.ts): follow-finger scrolling and the
 // inertia fling. Pure functions, no DOM, no engine — run with `bun test`.
 //
 // The cases here are the ones real devices have broken before: a horizontal pan
@@ -27,8 +27,8 @@ import {
   type VerticalCommand,
   type VerticalInput,
   type VerticalState,
-} from "../../../src/reading/engine/vertical-gesture";
-import { pinchHandsOff, planPointer } from "../../../src/reading/engine/touch-routing";
+} from "../../../../src/reading/engine/gesture/vertical-gesture";
+import { pinchHandsOff, planPointer } from "../../../../src/reading/engine/gesture/touch-routing";
 
 // The four plans that can reach (or be refused by) the machine.
 const FINGER = planPointer("none", "touch", false); // no tool: finger scrolls
@@ -144,6 +144,15 @@ function lastBand(cmds: VerticalCommand[]): { x: number; y: number } | null {
     if (c.type === "band") return { x: unsigned(c.x), y: unsigned(c.y) };
   }
   return null;
+}
+
+// Band offsets come out of a division, so the last bit or two of a literal
+// pixel count is float noise (-40.00000000000001 for -40). Ten decimal places
+// is far tighter than any change to the curve or the limit could hide in, and
+// it keeps the expectations readable as the pixels they are.
+function expectBand(got: { x: number; y: number }, want: { x: number; y: number }): void {
+  expect(got.x).toBeCloseTo(want.x, 10);
+  expect(got.y).toBeCloseTo(want.y, 10);
 }
 
 // --- helpers ---------------------------------------------------------------
@@ -545,28 +554,54 @@ test("splitOvershoot: the raw overshoot is capped, so the spring is never long",
   expect(splitOvershoot(9000, 500).over).toBe(VERTICAL_BAND_OVERSHOOT_CAP);
 });
 
-test("bandOffsetFor: opposite the overshoot, damped, and bounded by the limit", () => {
+// The band limit is a number the reader sees: it is how far the page is allowed
+// to leave the edge of the screen. So the cases below are literal pixels, not
+// expressions built out of VERTICAL_BAND_LIMIT — feeding the constant in as the
+// argument and then asserting the answer is bounded by the same constant would
+// hold for any value of it, and for a curve with no damping in it at all.
+test("bandOffsetFor: the pixels a pull past the end of the document is worth", () => {
   const rest = bandOffsetFor({ x: 0, y: 0 }, VERTICAL_BAND_LIMIT);
   expect({ x: unsigned(rest.x), y: unsigned(rest.y) }).toEqual({ x: 0, y: 0 });
-  // Pushing the scroll past the bottom moves the content up.
-  expect(bandOffsetFor({ x: 0, y: 60 }, VERTICAL_BAND_LIMIT).y).toBeLessThan(0);
-  expect(bandOffsetFor({ x: 0, y: -60 }, VERTICAL_BAND_LIMIT).y).toBeGreaterThan(0);
-  // Damped: 60px of pull is worth less than 60px of movement.
-  expect(Math.abs(bandOffsetFor({ x: 0, y: 60 }, VERTICAL_BAND_LIMIT).y)).toBeLessThan(60);
-  // And no pull at all reaches past the limit.
-  expect(Math.abs(bandOffsetFor({ x: 0, y: 1e6 }, VERTICAL_BAND_LIMIT).y)).toBeLessThan(
-    VERTICAL_BAND_LIMIT,
-  );
+  // At the production limit of 120: half a limit of pull gives a third of it,
+  // a whole limit gives half, and the sign is opposite the overshoot (pushing
+  // the scroll past the bottom moves the content up).
+  expectBand(bandOffsetFor({ x: 0, y: 60 }, 120), { x: 0, y: -40 });
+  expectBand(bandOffsetFor({ x: 0, y: -60 }, 120), { x: 0, y: 40 });
+  expectBand(bandOffsetFor({ x: 0, y: 120 }, 120), { x: 0, y: -60 });
+  // Both axes, and each on its own overshoot: a magnified page bands sideways.
+  expectBand(bandOffsetFor({ x: 60, y: -120 }, 120), { x: -40, y: 60 });
+  // The deepest band the reader can ever produce. The overshoot is capped at
+  // 360 (VERTICAL_BAND_OVERSHOOT_CAP) before it gets here, so 90px is the whole
+  // travel — the same 90 the iPad simulator measured at both ends of a
+  // document, docs/pitfall/45.
+  expectBand(bandOffsetFor({ x: 0, y: VERTICAL_BAND_OVERSHOOT_CAP }, 120), { x: 0, y: -90 });
+  // Asymptotic, not clamped: an absurd pull creeps towards 120 without reaching
+  // it. A `Math.min(d, limit)` would answer exactly -120 here.
+  expect(bandOffsetFor({ x: 0, y: 1e6 }, 120).y).toBeCloseTo(-119.98560, 4);
+});
+
+// The same curve on a limit the module does not define, so nothing here can be
+// satisfied by an implementation that reads VERTICAL_BAND_LIMIT instead of its
+// own argument (that one answers -35.294… for the first line, not -25).
+test("bandOffsetFor: the limit is the argument, not the production constant", () => {
+  expectBand(bandOffsetFor({ x: 0, y: 50 }, 50), { x: 0, y: -25 }); // one limit = half of it
+  expect(bandOffsetFor({ x: 0, y: 25 }, 50).y).toBeCloseTo(-16.66667, 5);
+  expectBand(bandOffsetFor({ x: 0, y: 150 }, 50), { x: 0, y: -37.5 });
+  expect(bandOffsetFor({ x: 0, y: 1e6 }, 50).y).toBeCloseTo(-49.99750, 5);
+  // A limit of zero is no band at all rather than a division by zero. The
+  // rest case is the one that needs the guard: 0/0 in the curve is NaN, and a
+  // NaN would reach the element as translate3d(NaNpx, …).
+  expectBand(bandOffsetFor({ x: 0, y: 500 }, 0), { x: 0, y: 0 });
+  expectBand(bandOffsetFor({ x: 0, y: 0 }, 0), { x: 0, y: 0 });
 });
 
 test("pulling past the top pins the scroll at 0 and bands the content instead", () => {
   const vp = viewport({ top: 0 });
   const r = run([down(100, 100), move(100, 200, 16), move(100, 300, 32)], vp);
   expect(vp.top).toBe(0);
-  const b = lastBand(r.commands);
-  expect(b).not.toBeNull();
-  expect(b!.y).toBeGreaterThan(0); // content follows the finger down
-  expect(b!.y).toBeLessThan(VERTICAL_BAND_LIMIT);
+  // 200px of finger against the top of the document: the content follows it
+  // down by 75, which is 200 damped against the 120px limit.
+  expectBand(lastBand(r.commands)!, { x: 0, y: 75 });
   expect(r.state.over.y).toBe(-200);
 });
 

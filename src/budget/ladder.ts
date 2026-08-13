@@ -2,80 +2,43 @@
 // what order. Pure planning: the ladder is handed the size of each thing that
 // could go and returns the list to drop; the caller owns the actual assembly.
 //
-// The rule the order encodes: touch evidence and you say so, drop redundancy and
-// you keep quiet, and when neither is enough you refuse rather than quietly
-// answer a different question from a sample of the material.
+// The mechanism is here; the rungs are not. What a reading turn can give up is
+// not what a rehearsal can, and both lists are written in the reader's own
+// words, so each domain declares its own ladder (src/reading/ladder.ts,
+// src/reading/talks/ladder.ts) and hands it in. This file knows nothing about
+// books, notes or talks.
 //
-//   tier 0  never dropped, so it is not on the ladder at all: the role and
-//           instructions, the current user message, the marked passage and the
-//           user's note on it, the current position, the tool schemas already
-//           offered this turn, and the last two rounds of conversation.
-//   tier 1  redundancy. Nothing the model could not derive or fetch, so it goes
-//           silently.
-//   tier 2  still silent, because a tool can fetch it back — the stub says so.
-//   tier 3  evidence. Dropped only as a last resort, and the reply carries a
-//           line saying what was left out.
+// The rule an order is expected to encode: touch evidence and you say so, drop
+// redundancy and you keep quiet, and when neither is enough you refuse rather
+// than quietly answer a different question from a sample of the material. A rung
+// with a `notice` is one the reader is told about; a rung without one goes
+// silently, and that absence is the whole of what makes it silent.
 
 import { OUTPUT_FLOOR, outputAllowance, type BudgetPurpose } from "./estimate";
 import type { Message, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 
-export type ReductionId =
-  | "figure-catalog"
-  | "reader-profile"
-  | "notes-overview"
-  | "booklist-thin"
-  | "observation-trim"
-  | "rehearsal-notes"
-  | "tool-result-stubs"
-  | "classroom-inline"
-  | "rehearsal-marks"
-  | "history-trim";
+// How a rung's saving is measured when fitToBudget prices the ladder (fit.ts).
+// Data rather than a callback so a ladder stays a table.
+//
+//   "prompt"   recompose the system prompt without it. The default.
+//   "bulk"     the same, but the rung is held out of the baseline the "prompt"
+//              rungs are priced against, and measured as what the full prompt
+//              loses by dropping only it. For material an order of magnitude
+//              bigger than the rest, so the small rungs are not measured against
+//              a prompt that carries it.
+//   "messages" recompose the replayed messages without it.
+//   "none"     never priced at assembly time — the rung is applied somewhere
+//              else (tool results are stubbed inside the agent loop). It stays
+//              on the ladder because its position is what says when it happens.
+export type RungPrice = "prompt" | "bulk" | "messages" | "none";
 
-interface Rung {
-  id: ReductionId;
+export interface Rung<Id extends string> {
+  id: Id;
   // The clause this rung contributes to the note at the end of the reply. Absent
-  // for the rungs that go silently, which is what makes them silent.
+  // for the rungs that go silently.
   notice?: string;
+  price?: RungPrice;
 }
-
-// The order things are given up in. First to go is the cheapest to lose.
-export const LADDER: readonly Rung[] = [
-  // tier 1: redundancy.
-  { id: "figure-catalog" },
-  { id: "reader-profile" },
-  { id: "notes-overview" },
-  { id: "booklist-thin" },
-  { id: "observation-trim" },
-  // tier 2: gone from the prompt, still reachable by a tool, and the stub says so.
-  // The rehearsal's inlined chapter note goes before the tool results: the model
-  // asked for those and is working from them, while the note was put in front of
-  // it unasked and read_chapter_note fetches it straight back.
-  { id: "rehearsal-notes" },
-  { id: "tool-result-stubs" },
-  // tier 3: evidence.
-  {
-    id: "classroom-inline",
-    notice: "the book didn't fit in context, so I read the pages I needed instead of having all of it in view",
-  },
-  // The reader's own marks, in the one mode where they are the material rather
-  // than a hint (docs/31). Trimmed, not dropped: a rehearsal with no marks in
-  // front of it stops being a rehearsal of *their* reading, so what goes is the
-  // long tail of each chapter and the length of each quote. It never co-occurs
-  // with classroom-inline — the two modes are mutually exclusive — so their
-  // order relative to each other is not a judgement about the two.
-  {
-    id: "rehearsal-marks",
-    notice: "your highlights are shortened here to fit; ask me to pull a chapter's marks up in full and I'll read them again",
-  },
-  // Last, below even the inlined book, because of what it costs: the fallback
-  // distillation meant to capture an older stretch of a thread before it falls
-  // out of context is fired and forgotten (src/reading/turn.ts), so nothing
-  // guarantees it has landed by the time the trim happens. Cutting history is a
-  // straight loss of the conversation, not a compaction of it.
-  { id: "history-trim", notice: "earlier turns of this conversation were left out to make room" },
-];
-
-const BY_ID = new Map(LADDER.map((r) => [r.id, r]));
 
 // Said when even the material that cannot be dropped does not leave the model
 // room to answer. There is nothing to retry: the same call would be assembled
@@ -88,7 +51,9 @@ export const REFUSE_FLOOR_OVER =
 export const REFUSE_EXHAUSTED =
   "Even after setting aside everything optional, this doesn't fit the model's context window. Ask about a narrower part of it and I can.";
 
-export interface LadderInput {
+export interface LadderInput<Id extends string> {
+  // The rungs, in the order they are given up.
+  rungs: readonly Rung<Id>[];
   contextWindow: number;
   purpose: BudgetPurpose;
   // Tokens the call occupies as assembled.
@@ -97,12 +62,12 @@ export interface LadderInput {
   floorTokens: number;
   // Tokens each rung would free. Missing, zero or negative means the rung has
   // nothing to give on this call and is skipped.
-  savings: Partial<Record<ReductionId, number>>;
+  savings: Partial<Record<Id, number>>;
 }
 
-export interface LadderPlan {
+export interface LadderPlan<Id extends string> {
   // The rungs to apply, in order.
-  apply: ReductionId[];
+  apply: Id[];
   freed: number;
   // The output allowance the plan leaves.
   allowedOutput: number;
@@ -118,22 +83,26 @@ export interface LadderPlan {
 // Compose the end-of-reply note for the rungs that owe the user one. Exported
 // so a caller applying a rung outside the planner (the agent loop stubs tool
 // results mid-turn) can produce the same wording.
-export function budgetNotice(applied: readonly ReductionId[]): string {
-  const clauses = applied.map((id) => BY_ID.get(id)?.notice).filter((n): n is string => !!n);
+export function budgetNotice<Id extends string>(
+  rungs: readonly Rung<Id>[],
+  applied: readonly Id[],
+): string {
+  const byId = new Map(rungs.map((r) => [r.id, r]));
+  const clauses = applied.map((id) => byId.get(id)?.notice).filter((n): n is string => !!n);
   return clauses.length === 0 ? "" : `Note: ${clauses.join("; ")}.`;
 }
 
 // Walk the ladder until the call fits, or run out of rungs and refuse.
-export function planReductions(input: LadderInput): LadderPlan {
+export function planReductions<Id extends string>(input: LadderInput<Id>): LadderPlan<Id> {
   const floor = OUTPUT_FLOOR[input.purpose];
   const fits = (used: number) => outputAllowance(input.contextWindow, used) >= floor;
 
-  const apply: ReductionId[] = [];
+  const apply: Id[] = [];
   let used = input.used;
   let freed = 0;
 
   if (!fits(used)) {
-    for (const rung of LADDER) {
+    for (const rung of input.rungs) {
       const saving = input.savings[rung.id] ?? 0;
       if (saving <= 0) continue;
       apply.push(rung.id);
@@ -145,7 +114,14 @@ export function planReductions(input: LadderInput): LadderPlan {
 
   const allowedOutput = outputAllowance(input.contextWindow, used);
   if (allowedOutput >= floor) {
-    return { apply, freed, allowedOutput, outcome: "ok", notice: budgetNotice(apply), refusal: "" };
+    return {
+      apply,
+      freed,
+      allowedOutput,
+      outcome: "ok",
+      notice: budgetNotice(input.rungs, apply),
+      refusal: "",
+    };
   }
   // Nothing more to give. Which of the two refusals applies is about cause, not
   // remedy: both mean this call cannot be made as asked.
@@ -159,7 +135,7 @@ export function planReductions(input: LadderInput): LadderPlan {
   };
 }
 
-// --- tier 2: tool results turned into stubs ---
+// --- tool results turned into stubs ---
 
 // How many of the most recent tool results stay whole; everything older becomes
 // a stub. Enough to keep what the model just fetched and is working from.

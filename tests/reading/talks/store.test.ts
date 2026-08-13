@@ -77,7 +77,7 @@ const {
   talkThreadKey,
   updateTalk,
 } = await import("../../../src/reading/talks/store");
-const { loadMaterial, loadMaterials, readMaterialBytes, toAnnotationLite } = await import(
+const { loadMaterial, loadMaterials, readMaterialBytes } = await import(
   "../../../src/reading/talks/material"
 );
 
@@ -299,10 +299,6 @@ test("marks arrive flattened, and the ones that point at nothing are dropped", a
     { page: 1, text: "the claim", comment: "" },
     { page: 3, text: "", comment: "does this follow?" },
   ]);
-});
-
-test("a mark with neither text nor comment flattens to null", () => {
-  expect(toAnnotationLite({ id: "x" } as never)).toBeNull();
 });
 
 test("the figure index comes off disk too, with no engine", async () => {

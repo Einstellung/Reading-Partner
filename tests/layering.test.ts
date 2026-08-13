@@ -58,6 +58,7 @@ const LAYER: Record<string, Layer> = {
   observation: "domain",
   reading: "domain",
   "reading/engine": "domain",
+  "reading/engine/gesture": "domain",
   "reading/figures": "domain",
   "reading/notes": "domain",
   "reading/papers": "domain",
@@ -394,6 +395,35 @@ test("ui/components and App.tsx are imported only by the shell and the entry poi
         describe(bad) +
         "\nLogic a component needs belongs in a .ts module the component imports, not the" +
         " other way round.",
+    );
+  }
+  expect(bad).toEqual([]);
+});
+
+// The PDFium engine's own API, as opposed to the layer table's relative
+// imports. reading/covers.ts used to drive the engine itself, which is how two
+// of the three quirks this project has paid for (pitfalls 21 and 102) came to
+// be recorded in two directories at once. src/reading/engine owns the vocabulary;
+// everyone else asks it for a page. smoke/ is exempt: it boots the engine
+// directly to check the wasm is there.
+const ENGINE_ONLY_PACKAGE = "@embedpdf/";
+const ENGINE_PACKAGE_OWNERS = ["reading/engine", "smoke"];
+
+test("only src/reading/engine imports @embedpdf", () => {
+  const bad = sourceFiles(SRC)
+    .map((file) => relative(SRC, file))
+    .filter((rel) => !ENGINE_PACKAGE_OWNERS.some((dir) => rel.startsWith(`${dir}/`)))
+    .filter((rel) =>
+      [...readFileSync(join(SRC, rel), "utf8").matchAll(IMPORT_RE)].some((m) =>
+        m[1].startsWith(ENGINE_ONLY_PACKAGE),
+      ),
+    );
+  if (bad.length > 0) {
+    reject(
+      `Only ${ENGINE_PACKAGE_OWNERS.map((d) => `src/${d}`).join(" and ")} may import @embedpdf:\n` +
+        bad.map((rel) => `  src/${rel}`).join("\n") +
+        "\nThe engine's quirks are recorded in one directory; ask src/reading/engine for what" +
+        " you need instead of opening a document yourself.",
     );
   }
   expect(bad).toEqual([]);

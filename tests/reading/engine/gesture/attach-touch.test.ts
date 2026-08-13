@@ -1,4 +1,4 @@
-// The touch router's WIRING (src/reading/engine/attach-touch.ts): which element
+// The touch router's WIRING (src/reading/engine/gesture/attach-touch.ts): which element
 // the listeners go on, with which passive flags, what the gesture machines'
 // commands do to that element, and what the teardown puts back. The physics
 // itself is tested next door (vertical-gesture / paged-gesture / rubber-band /
@@ -23,8 +23,8 @@
 // Run: bun test.
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { attachTouchRouter } from "../../../src/reading/engine/attach-touch";
-import type { PagedGestureCtx } from "../../../src/reading/engine/types";
+import { attachTouchRouter } from "../../../../src/reading/engine/gesture/attach-touch";
+import type { PagedGestureCtx } from "../../../../src/reading/engine/gesture/context";
 
 // --- the fake glass ---------------------------------------------------------
 
@@ -112,14 +112,19 @@ class FakeElement {
   }
   // Deliver to the capture-phase listeners, which is where the gestures run.
   // A real event from a page div reaches these on its way down the tree.
-  fire(type: string, e: FakeEvent): void {
+  // `unknown` rather than FakeEvent because not everything the router listens
+  // for is a pointer event: the scroll event it paints the indicator from
+  // carries nothing it reads, and a stand-in with pointer fields on it would
+  // say otherwise.
+  fire(type: string, e: unknown): void {
     this.deliver(type, e, true);
   }
-  // The way back out, where the router contains its own synthetic pointerup.
-  fireBubble(type: string, e: FakeEvent): void {
+  // The way back out, where the router contains its own synthetic pointerup —
+  // and where a non-capture listener like the scroll one lives.
+  fireBubble(type: string, e: unknown): void {
     this.deliver(type, e, false);
   }
-  private deliver(type: string, e: FakeEvent, capturePhase: boolean): void {
+  private deliver(type: string, e: unknown, capturePhase: boolean): void {
     for (const l of [...this.listeners]) {
       if (l.type !== type) continue;
       const capture = typeof l.opts === "object" && l.opts !== null && "capture" in l.opts;
@@ -206,6 +211,23 @@ function runFrames(n: number, dt = 16): void {
   }
 }
 
+// window.setTimeout stands in too, for the same reason the frames do: the paged
+// long press (450ms) and the indicator's fade (700ms) are decisions the router
+// takes on a timer, and a test that had to wait out the real thing could only
+// ever assert what happens before it. Firing them by hand is the only way to
+// reach the other side.
+let timers: { id: number; fn: () => void; ms: number }[] = [];
+let nextTimerId = 1;
+
+// Fire everything currently due, once. Returns what was fired, so a test can
+// say "the timer was cancelled" by asserting nothing was.
+function fireTimers(): { ms: number }[] {
+  const due = timers;
+  timers = [];
+  for (const t of due) t.fn();
+  return due.map((t) => ({ ms: t.ms }));
+}
+
 const saved: Record<string, unknown> = {};
 const g = globalThis as unknown as Record<string, unknown>;
 
@@ -225,7 +247,19 @@ beforeEach(() => {
   g.cancelAnimationFrame = (id: number) => {
     frames = frames.filter((f) => f.id !== id);
   };
-  g.window = { setTimeout, clearTimeout, innerWidth: 800 };
+  timers = [];
+  nextTimerId = 1;
+  g.window = {
+    setTimeout: (fn: () => void, ms: number) => {
+      const id = nextTimerId++;
+      timers.push({ id, fn, ms });
+      return id;
+    },
+    clearTimeout: (id: number) => {
+      timers = timers.filter((t) => t.id !== id);
+    },
+    innerWidth: 800,
+  };
   // Enough of a PointerEvent for the router's synthetic up to travel the real
   // path: propagation control included, because the container stops it on the
   // way back out and a stand-in without stopPropagation would hide that.
@@ -887,5 +921,414 @@ test("resetGestures drops a live drag: capture released, engine resumed", () => 
   expect(h.el.released).toContain(1);
   expect(h.el.style.transform).toBe("");
 
+  h.detach();
+});
+
+// --- paged (horizontal flip) ------------------------------------------------
+//
+// Everything above drives the continuous layout, which means the paged command
+// executor — `apply` in attach-touch.ts — was never entered: the whole of the
+// page-turn wiring could be deleted a line at a time without a test going red.
+// The section below drives it. What it can prove and what it cannot is set by
+// the harness: these are synthesized pointer events, so the arithmetic, the
+// element writes, the engine calls and their order are all real, while anything
+// that depends on WebKit deciding the gesture first (whether the browser hands
+// the sequence over at all, whether a `pointercancel` arrives instead) is not
+// reachable here and is measured in the simulator instead (docs/pitfall/118).
+
+// The two engine handles the paged executor reads: the page a turn is counted
+// from, sampled once when the drag is captured, and where a turn is asked to
+// land. `turns` is every page turnToPage was asked for, in order.
+function pagedMount(
+  page: number,
+  total: number,
+  over: Partial<PagedGestureCtx> = {},
+): { h: Harness; turns: number[] } {
+  const turns: number[] = [];
+  const h = mount({
+    paged: true,
+    scroll: {
+      getCurrentPage: () => page,
+      getTotalPages: () => total,
+    } as unknown as PagedGestureCtx["scroll"],
+    turnToPage: (n: number) => void turns.push(n),
+    ...over,
+  });
+  // `total` pages of 800px side by side, parked on `page`: a scrollLeft the
+  // follow-drag has to have written rather than left at the value it started
+  // with. clientWidth is the harness's 800, which is also the machine's turn
+  // width, so the commit distance below is 0.22 * 800 = 176px.
+  h.el.scrollWidth = 800 * total;
+  h.el.scrollLeft = 800 * (page - 1);
+  return { h, turns };
+}
+
+// The px the paged band is holding the page area at, and a check that what was
+// written is a band transform at all rather than some other string.
+function bandX(transform: string): number {
+  const m = /^translate3d\((-?[\d.]+)px, (-?[\d.]+)px, 0\)$/.exec(transform);
+  if (!m) throw new Error(`not a band transform: ${JSON.stringify(transform)}`);
+  return Number(m[1]);
+}
+
+test("a paged swipe follows the finger and lands the turn on the next page", () => {
+  const { h, turns } = pagedMount(6, 12);
+  const t = h.target;
+
+  h.el.fire("pointerdown", ev(1, 600, 500, 0, t));
+  expect(h.el.scrollLeft).toBe(4000);
+  expect(h.pauses).toBe(0);
+
+  // Past the 10px slop, horizontal: the drag commits. The capture arrives in
+  // the same batch as the first dragMove, and it is the capture that samples
+  // the scrollLeft everything after is measured from — 4000 - (-40) = 4040.
+  const m1 = ev(1, 560, 500, 16, t);
+  h.el.fire("pointermove", m1);
+  expect(h.el.captured).toEqual([1]);
+  expect(h.pauses).toBe(1);
+  expect(h.el.scrollLeft).toBe(4040);
+  expect(m1.prevented).toBe(1);
+
+  // Still measured from the press, not from the previous sample: 600 - 400 is
+  // 200px of finger, so 4000 + 200.
+  const m2 = ev(1, 400, 500, 32, t);
+  h.el.fire("pointermove", m2);
+  expect(h.el.scrollLeft).toBe(4200);
+  expect(m2.prevented).toBe(1);
+  // The page area is not banded — there is a page on that side, so the gesture
+  // is a turn and the content rides on scrollLeft alone.
+  expect(h.el.firstElementChild.style.transform).toBe("");
+
+  // 200px is past the 176px commit distance, so the release turns the page.
+  // The target is counted from the page the capture sampled, not from the page
+  // the engine happens to report at the release.
+  const lift = ev(1, 400, 500, 48, t);
+  h.el.fire("pointerup", lift);
+  expect(turns).toEqual([7]);
+  // The drag is over the moment the turn is issued, so the lift itself is not
+  // claimed. Only the moves the router was actually following are (pitfall 70).
+  expect(lift.prevented).toBe(0);
+  // And the gesture is handed back whole: the engine resumed, the pointer
+  // released, nothing left asking for frames.
+  expect(h.resumes).toBe(1);
+  expect(h.el.released).toEqual([1]);
+  expect(frames.length).toBe(0);
+
+  h.detach();
+});
+
+test("a paged swipe the other way lands on the previous page", () => {
+  const { h, turns } = pagedMount(6, 12);
+  const t = h.target;
+
+  h.el.fire("pointerdown", ev(1, 200, 500, 0, t));
+  h.el.fire("pointermove", ev(1, 240, 500, 16, t));
+  // Dragging right pulls the previous page in, so scrollLeft goes down.
+  expect(h.el.scrollLeft).toBe(3960);
+  h.el.fire("pointermove", ev(1, 440, 500, 32, t));
+  expect(h.el.scrollLeft).toBe(3760);
+
+  h.el.fire("pointerup", ev(1, 440, 500, 48, t));
+  expect(turns).toEqual([5]);
+
+  h.detach();
+});
+
+// pitfall 38, on the paged path this time: the router's takeover cuts the
+// engine off from the pointer for good (capture retargets every later event,
+// and the pause drops them anyway), so the engine has to be handed the
+// pointerup it is owed first — while it is still listening.
+test("the paged capture hands the engine its pointerup, before the pause and the capture", () => {
+  const { h } = pagedMount(6, 12);
+  const t = h.target;
+
+  h.el.fire("pointerdown", ev(1, 600, 500, 0, t));
+  expect(t.dispatched).toEqual([]);
+
+  h.el.fire("pointermove", ev(1, 560, 500, 16, t));
+  // Dispatched at all: a pause that ran first would have made it pointless, and
+  // the router knows it and skips it, so this assertion is the ordering.
+  expect(t.dispatched).toEqual([{ type: "pointerup", pointerId: 1 }]);
+  // It reached the way back out, where the engine's per-page handler sits, and
+  // stopped at the scroll container: nothing above may see a lift while the
+  // finger is still down.
+  expect(t.bubbled).toEqual([{ type: "pointerup", pointerId: 1 }]);
+  expect(t.escaped).toEqual([]);
+  expect(h.el.captured).toEqual([1]);
+  expect(h.pauses).toBe(1);
+
+  // That synthetic up ran this router's own capture-phase pointerup listener on
+  // the way past. The drag has to have survived it: a router that took it for a
+  // real lift would have turned the page here and stopped following.
+  h.el.fire("pointermove", ev(1, 400, 500, 32, t));
+  expect(h.el.scrollLeft).toBe(4200);
+  expect(t.dispatched.length).toBe(1);
+
+  h.detach();
+});
+
+// pitfall 41: the band is written straight onto the page area's transform, with
+// no CSS transition, and it comes off as an empty string rather than an
+// identity transform — the engine's pinch preview writes the same property, and
+// a transform of any kind there changes what it composes against.
+test("a paged swipe with no page on that side bands the page area and springs back", () => {
+  const { h, turns } = pagedMount(1, 12);
+  const t = h.target;
+
+  h.el.fire("pointerdown", ev(1, 300, 500, 0, t));
+  // Dragging right on the first page: nothing to turn to, so it bands. 48px of
+  // finger against a 48px limit gives half of it.
+  h.el.fire("pointermove", ev(1, 348, 500, 16, t));
+  expect(h.el.firstElementChild.style.transform).toBe("translate3d(24px, 0px, 0)");
+  // The band is on the page area, not on the scroll container: the container is
+  // the vertical band's element (pitfall 45), and the two must not swap.
+  expect(h.el.style.transform).toBe("");
+  // And nothing scrolled — this is the whole point of the band.
+  expect(h.el.scrollLeft).toBe(0);
+
+  // Damped: three times the pull buys one and a half times the offset.
+  h.el.fire("pointermove", ev(1, 444, 500, 32, t));
+  expect(h.el.firstElementChild.style.transform).toBe("translate3d(36px, 0px, 0)");
+
+  // The release springs it home on rAF rather than turning anything.
+  h.el.fire("pointerup", ev(1, 444, 500, 48, t));
+  expect(turns).toEqual([]);
+  expect(frames.length).toBe(1);
+  runFrames(1);
+  const afterOne = bandX(h.el.firstElementChild.style.transform);
+  expect(afterOne).toBeLessThan(36);
+  expect(afterOne).toBeGreaterThan(0);
+
+  runFrames(60);
+  expect(h.el.firstElementChild.style.transform).toBe("");
+  expect(frames.length).toBe(0);
+
+  h.detach();
+});
+
+// A spring in flight belongs to the gesture that started it. A second swipe
+// landing on top of it takes the band over from where the finger puts it, and
+// the old spring must not go on decaying the new offset behind it.
+test("a second band cancels the spring the last one left in flight", () => {
+  const { h } = pagedMount(1, 12);
+  const t = h.target;
+
+  h.el.fire("pointerdown", ev(1, 300, 500, 0, t));
+  h.el.fire("pointermove", ev(1, 348, 500, 16, t));
+  h.el.fire("pointerup", ev(1, 348, 500, 32, t));
+  expect(frames.length).toBe(1); // springing home
+
+  // Straight back down and pulled further, before the spring has run a frame.
+  h.el.fire("pointerdown", ev(2, 300, 500, 48, t));
+  h.el.fire("pointermove", ev(2, 444, 500, 64, t));
+  expect(h.el.firstElementChild.style.transform).toBe("translate3d(36px, 0px, 0)");
+  expect(frames.length).toBe(0);
+
+  // Nothing is left to run it back down under the finger.
+  runFrames(3);
+  expect(h.el.firstElementChild.style.transform).toBe("translate3d(36px, 0px, 0)");
+
+  h.detach();
+});
+
+test("a magnified paged page pans on both axes instead of turning", () => {
+  const { h, turns } = pagedMount(6, 12, { zoomedIn: true });
+  const t = h.target;
+  // Magnified: room on both axes, parked away from every edge.
+  h.el.scrollWidth = 1600;
+  h.el.scrollHeight = 2000;
+  h.el.scrollLeft = 400;
+  h.el.scrollTop = 300;
+
+  h.el.fire("pointerdown", ev(1, 400, 500, 0, t));
+  // Past the slop on either axis: a pan, not a turn, and it starts from the
+  // press so the first step is the whole of the movement so far.
+  h.el.fire("pointermove", ev(1, 370, 480, 16, t));
+  expect(h.el.captured).toEqual([1]);
+  expect(h.pauses).toBe(1);
+  expect(h.el.scrollLeft).toBe(430);
+  expect(h.el.scrollTop).toBe(320);
+
+  // Every step after is measured from the previous sample, not from the press.
+  h.el.fire("pointermove", ev(1, 350, 460, 32, t));
+  expect(h.el.scrollLeft).toBe(450);
+  expect(h.el.scrollTop).toBe(340);
+
+  h.el.fire("pointerup", ev(1, 350, 460, 48, t));
+  expect(turns).toEqual([]);
+  expect(h.resumes).toBe(1);
+  expect(h.el.released).toEqual([1]);
+
+  h.detach();
+});
+
+// A magnified page turns by being pushed past its own edge: 60px of pull with
+// nowhere left to pan. This is the second way into dragEnd, and the only one
+// that reaches it from a move rather than from a release.
+test("pushing a magnified page past its edge turns it and drops the gesture", () => {
+  const { h, turns } = pagedMount(3, 12, { zoomedIn: true });
+  const t = h.target;
+  // Magnified but with no horizontal room at all: every leftward step is
+  // against the stop.
+  h.el.scrollWidth = 800;
+  h.el.scrollLeft = 0;
+
+  h.el.fire("pointerdown", ev(1, 400, 500, 0, t));
+  h.el.fire("pointermove", ev(1, 380, 500, 16, t)); // pan starts
+  h.el.fire("pointermove", ev(1, 360, 500, 32, t)); // 20px of pull
+  h.el.fire("pointermove", ev(1, 340, 500, 48, t)); // 40px
+  expect(turns).toEqual([]);
+  expect(h.el.scrollLeft).toBe(60);
+
+  h.el.fire("pointermove", ev(1, 320, 500, 64, t)); // 60px: the turn
+  expect(turns).toEqual([3 + 1]);
+  // The turn replaces that step's pan, so the scroll position stands still.
+  expect(h.el.scrollLeft).toBe(60);
+  // And the gesture is over while the finger is still down: engine back,
+  // pointer released.
+  expect(h.resumes).toBe(1);
+  expect(h.el.released).toEqual([1]);
+
+  // The rest of the finger's travel does nothing, and the lift turns nothing.
+  h.el.fire("pointermove", ev(1, 200, 500, 80, t));
+  h.el.fire("pointerup", ev(1, 200, 500, 96, t));
+  expect(turns).toEqual([4]);
+  expect(h.el.scrollLeft).toBe(60);
+
+  h.detach();
+});
+
+// The long press is the router's own timer, not the machine's: it hands a
+// finger that dwells in place to native text selection, so a later drag of a
+// selection handle is not stolen as a page turn.
+test("a finger that dwells in paged mode is given up to native text selection", () => {
+  const { h, turns } = pagedMount(6, 12);
+  const t = h.target;
+
+  h.el.fire("pointerdown", ev(1, 400, 500, 0, t));
+  expect(fireTimers()).toEqual([{ ms: 450 }]);
+
+  // From here the machine is off: the same swipe that turned the page above
+  // does nothing at all.
+  const m = ev(1, 200, 500, 500, t);
+  h.el.fire("pointermove", m);
+  expect(h.el.captured).toEqual([]);
+  expect(h.pauses).toBe(0);
+  expect(h.el.scrollLeft).toBe(4000);
+  expect(m.prevented).toBe(0);
+
+  h.el.fire("pointerup", ev(1, 200, 500, 520, t));
+  expect(turns).toEqual([]);
+
+  h.detach();
+});
+
+test("a drag that commits cancels the long press, so a slow swipe still turns", () => {
+  const { h, turns } = pagedMount(6, 12);
+  const t = h.target;
+
+  h.el.fire("pointerdown", ev(1, 600, 500, 0, t));
+  h.el.fire("pointermove", ev(1, 400, 500, 16, t));
+  // Committed, and the timer that would have handed this pointer away is gone.
+  expect(h.el.captured).toEqual([1]);
+  expect(fireTimers()).toEqual([]);
+
+  h.el.fire("pointerup", ev(1, 400, 500, 600, t));
+  expect(turns).toEqual([7]);
+
+  h.detach();
+});
+
+// pitfall 37's second rule, on the paged path: an annotation tool's engine
+// pipeline is shut off at pointerdown, before the stroke's lead-in can leave
+// ink. The finger still turns the page — with "draw with your finger" off, an
+// annotation tool means the stylus marks and the finger moves the book.
+test("an annotation tool shuts the engine off at the paged pointerdown", () => {
+  const { h, turns } = pagedMount(6, 12, { tool: "ink" });
+  const t = h.target;
+
+  h.el.fire("pointerdown", ev(1, 400, 500, 0, t));
+  expect(h.pauses).toBe(1);
+  // No long press either: with a tool active there is nothing to hand the
+  // pointer to, the engine is already off.
+  expect(fireTimers()).toEqual([]);
+
+  h.el.fire("pointermove", ev(1, 200, 500, 16, t));
+  expect(h.el.captured).toEqual([1]);
+  expect(h.el.scrollLeft).toBe(4200);
+  // And the engine is handed nothing on the way: it never saw the down, so it
+  // is owed no up (pitfall 38's second rule).
+  expect(t.dispatched).toEqual([]);
+
+  h.el.fire("pointerup", ev(1, 200, 500, 32, t));
+  expect(turns).toEqual([7]);
+  expect(h.resumes).toBe(1);
+
+  h.detach();
+});
+
+// With "draw with your finger" on, the finger marks the page, so a turn has to
+// announce itself: it must start inside a 32px band at the screen edge. A swipe
+// from the middle is a stroke and is left to the annotation layer untouched.
+test("with the finger set to draw, only a swipe from the screen edge turns the page", () => {
+  const { h, turns } = pagedMount(6, 12, { tool: "ink", fingerDraw: true });
+  const t = h.target;
+
+  h.el.fire("pointerdown", ev(1, 400, 500, 0, t));
+  const m = ev(1, 200, 500, 16, t);
+  h.el.fire("pointermove", m);
+  expect(h.el.captured).toEqual([]);
+  expect(h.el.scrollLeft).toBe(4000);
+  // Nothing claimed: the browser and the engine keep the whole sequence.
+  expect(m.prevented).toBe(0);
+  h.el.fire("pointerup", ev(1, 200, 500, 32, t));
+  expect(turns).toEqual([]);
+
+  // The same swipe, started inside the left edge band.
+  h.el.fire("pointerdown", ev(2, 20, 500, 48, t));
+  h.el.fire("pointermove", ev(2, 100, 500, 64, t));
+  expect(h.el.captured).toEqual([2]);
+  expect(h.el.scrollLeft).toBe(3920);
+  h.el.fire("pointerup", ev(2, 300, 500, 80, t));
+  expect(turns).toEqual([5]);
+
+  h.detach();
+});
+
+// --- the scroll indicator ---------------------------------------------------
+//
+// The strip is painted from the container's own scroll event, so it follows the
+// engine's programmatic scrolls as well as a finger. Its geometry is
+// scroll-indicator.ts's; what is checked here is that the router hands that
+// function the live element and writes the answer back in px.
+test("the indicator is painted from the container's geometry and fades out", () => {
+  const bar = { style: {} as Record<string, string> };
+  const h = mount({ indicator: bar as unknown as HTMLElement });
+  // 1000px of viewport, 10000px of document: a 992px track and a tenth of the
+  // book on screen, so a 99.2px thumb 4px from the top.
+  h.el.fireBubble("scroll", {});
+  expect(bar.style.height).toBe("99.2px");
+  expect(bar.style.transform).toBe("translateY(4px)");
+  expect(bar.style.opacity).toBe("1");
+
+  // Half way down: 4 + (992 - 99.2) / 2 = 450.4.
+  h.el.scrollTop = 4500;
+  h.el.fireBubble("scroll", {});
+  expect(bar.style.transform).toBe("translateY(450.4px)");
+
+  // And it is furniture only while the scroll is moving.
+  expect(fireTimers()).toEqual([{ ms: 700 }]);
+  expect(bar.style.opacity).toBe("0");
+
+  h.detach();
+});
+
+test("a document that fits the screen shows no indicator at all", () => {
+  const bar = { style: { opacity: "1" } as Record<string, string> };
+  const h = mount({ indicator: bar as unknown as HTMLElement });
+  h.el.scrollHeight = h.el.clientHeight;
+  h.el.fireBubble("scroll", {});
+  expect(bar.style.opacity).toBe("0");
+  expect(bar.style.height).toBeUndefined();
   h.detach();
 });

@@ -5,6 +5,7 @@
 // prep digest — so they live in the full-text layer rather than in any one of
 // them. Pure: no Tauri, no cache, 1-based pages.
 
+import { annotationPage, type Annotation } from "../platform/app/reader-contract";
 import { readPages, searchTopic } from "./query";
 import type { Fulltext, SearchDoc } from "./types";
 
@@ -15,6 +16,17 @@ export interface AnnotationLite {
   page: number | null;
   text: string;
   comment: string;
+}
+
+// One stored annotation flattened into the shape above. Skips annotations with
+// neither text nor comment (legacy image regions), which are evidence of
+// nothing. Here rather than in either caller because a reading turn and a talk's
+// materials both need it and both need the same answer.
+export function toAnnotationLite(ann: Annotation): AnnotationLite | null {
+  const text = typeof ann.text === "string" ? ann.text.trim() : "";
+  const comment = typeof ann.comment === "string" ? ann.comment.trim() : "";
+  if (!text && !comment) return null;
+  return { page: annotationPage(ann as { position?: { pageIndex?: number } }), text, comment };
 }
 
 // A topic material as the tools see it: its label (file name), its cached full

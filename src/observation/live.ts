@@ -39,11 +39,11 @@ import { FileObservationAdapter, type ObservationAdapter } from "./adapter";
 import {
   SWEEP_INTERVAL_MS,
   MIN_NEW_MARKS,
-  selectDistillJob,
   threadArrears,
   toDistillAnnotations,
   countNewMarks,
   type BookArrears,
+  type DistillJob,
   type ThreadArrears,
   type TopicArrears,
 } from "./arrears";
@@ -58,6 +58,11 @@ import {
   type DistillMessage,
 } from "./distill";
 import { runRehearsalDistillPass } from "./rehearsal";
+import {
+  createDistillGate,
+  createSweeps,
+  type DistillTrigger,
+} from "./sweeps";
 
 const tauriFs: ObservationFs = {
   async read(path) {
@@ -127,17 +132,7 @@ export function notifyObservationChange(topicId: string): void {
 
 // --- distillation triggers ---
 
-// What set a pass going. Recorded on the event so a log can be read back — a
-// topic whose observations only ever come from "hangup" is a topic the sweep is
-// not reaching.
-export type DistillTrigger =
-  | "hangup"
-  | "trim"
-  | "timer"
-  | "startup"
-  | "foreground"
-  | "book-switch"
-  | "talk-exit";
+export type { DistillTrigger };
 
 export interface DistillThreadOptions {
   topicId: string;
@@ -172,8 +167,8 @@ export interface DistillThreadOptions {
 
 // One pass at a time per subject: a thread id for a transcript pass, "marks:<bookId>"
 // for a silent-marking pass. Covers every trigger, so the sweep cannot start a
-// second pass over what a hangup is already distilling.
-const inFlight = new Set<string>();
+// second pass over what a hangup is already distilling (sweeps.ts).
+const gate = createDistillGate();
 
 // One silent distillation pass for a finished (or long-running) thread.
 //
@@ -189,88 +184,85 @@ const inFlight = new Set<string>();
 // a long conversation. How much of the thread is already folded in lives in the
 // topic's meta.json (runDistillPass), not in memory: the sweep comes back to the
 // same thread across restarts.
-export async function distillThread(
+export function distillThread(
   opts: DistillThreadOptions,
   minNewMessages = 1,
 ): Promise<void> {
   const { threadId, messages } = opts;
-  if (inFlight.has(threadId)) return;
-
-  inFlight.add(threadId);
-  try {
-    // Distillation runs on the chat model config, not the pipelines' — it is a
-    // silent turn of the same conversation, so the sub-agent's own default
-    // (the background-pipeline thinking setting) is overridden here.
-    const model = await resolveModel("chat");
-    const result = await runDistillPass(
-      {
-        topicName: opts.topicName,
-        bookId: opts.bookId,
-        bookName: opts.bookName,
-        threadId,
-        annotationId: opts.annotationId,
-        page: opts.page,
-        markedText: opts.markedText,
-        messages,
-        annotations: opts.annotations,
-        minNewMessages,
-      },
-      {
-        store: getStore(opts.topicId),
-        adapter: getObservationAdapter(opts.topicId),
-        run: runSubagentTurnLive,
-        model: {
-          providerId: model.providerId,
-          modelId: model.modelId,
-          reasoning: model.reasoning,
+  return gate.run(threadId, async () => {
+    try {
+      // Distillation runs on the chat model config, not the pipelines' — it is a
+      // silent turn of the same conversation, so the sub-agent's own default
+      // (the background-pipeline thinking setting) is overridden here.
+      const model = await resolveModel("chat");
+      const result = await runDistillPass(
+        {
+          topicName: opts.topicName,
+          bookId: opts.bookId,
+          bookName: opts.bookName,
+          threadId,
+          annotationId: opts.annotationId,
+          page: opts.page,
+          markedText: opts.markedText,
+          messages,
+          annotations: opts.annotations,
+          minNewMessages,
         },
-        signal: opts.signal,
-      },
-    );
-    // Nothing new since the last pass over this thread. The ordinary case once a
-    // sweep looks every half hour, and not worth a log line.
-    if (!result.ran) return;
-    if (!result.ok) {
-      // The pass did not finish, so no cursor moved (runDistillPass) and the next
-      // trigger will redo this transcript. Whatever writes it managed are already
-      // on disk, so the panel is still told about those.
-      console.warn("observation distillation did not finish:", result.failure);
-      logEvent(opts.topicId, "distill-failed", {
+        {
+          store: getStore(opts.topicId),
+          adapter: getObservationAdapter(opts.topicId),
+          run: runSubagentTurnLive,
+          model: {
+            providerId: model.providerId,
+            modelId: model.modelId,
+            reasoning: model.reasoning,
+          },
+          signal: opts.signal,
+        },
+      );
+      // Nothing new since the last pass over this thread. The ordinary case once a
+      // sweep looks every half hour, and not worth a log line.
+      if (!result.ran) return;
+      if (!result.ok) {
+        // The pass did not finish, so no cursor moved (runDistillPass) and the next
+        // trigger will redo this transcript. Whatever writes it managed are already
+        // on disk, so the panel is still told about those.
+        console.warn("observation distillation did not finish:", result.failure);
+        logEvent(opts.topicId, "distill-failed", {
+          threadId,
+          trigger: opts.trigger,
+          outcome: result.outcome,
+          created: result.created,
+          updated: result.updated,
+          deleted: result.deleted,
+        });
+        if (result.created + result.updated + result.deleted > 0) {
+          notifyObservationChange(opts.topicId);
+        }
+        return;
+      }
+      logEvent(opts.topicId, "distill-run", {
         threadId,
         trigger: opts.trigger,
-        outcome: result.outcome,
         created: result.created,
         updated: result.updated,
         deleted: result.deleted,
       });
-      if (result.created + result.updated + result.deleted > 0) {
-        notifyObservationChange(opts.topicId);
-      }
-      return;
+      notifyObservationChange(opts.topicId);
+    } catch (e) {
+      // Cancellation is not a failure and is not logged as one: whoever raised the
+      // signal already knows, and the stamps stay put so the next trigger redoes it.
+      if (e instanceof StoppedError) return;
+      // The pass never got as far as the sub-agent — no provider configured, or a
+      // store read that threw. Same discipline as a pass that failed inside the run.
+      console.warn("observation distillation could not start", e);
+      logEvent(opts.topicId, "distill-failed", {
+        threadId,
+        trigger: opts.trigger,
+        outcome: "failed",
+      });
     }
-    logEvent(opts.topicId, "distill-run", {
-      threadId,
-      trigger: opts.trigger,
-      created: result.created,
-      updated: result.updated,
-      deleted: result.deleted,
-    });
-    notifyObservationChange(opts.topicId);
-  } catch (e) {
-    // Cancellation is not a failure and is not logged as one: whoever raised the
-    // signal already knows, and the stamps stay put so the next trigger redoes it.
-    if (e instanceof StoppedError) return;
-    // The pass never got as far as the sub-agent — no provider configured, or a
-    // store read that threw. Same discipline as a pass that failed inside the run.
-    console.warn("observation distillation could not start", e);
-    logEvent(opts.topicId, "distill-failed", {
-      threadId,
-      trigger: opts.trigger,
-      outcome: "failed",
-    });
-  } finally {
-    inFlight.delete(threadId);
-  }
+  });
 }
 
 export interface DistillMarksOptions {
@@ -287,80 +279,75 @@ export interface DistillMarksOptions {
 // One silent pass over a book the reader has only marked up. Same posture as
 // distillThread: never throws, never surfaces UI, a failed pass leaves the
 // book's mark cursor where it was.
-export async function distillMarks(opts: DistillMarksOptions): Promise<void> {
+export function distillMarks(opts: DistillMarksOptions): Promise<void> {
   const key = `marks:${opts.bookId}`;
-  if (inFlight.has(key)) return;
-  inFlight.add(key);
-  try {
-    const model = await resolveModel("chat");
-    const result = await runMarksDistillPass(
-      {
-        topicName: opts.topicName,
-        bookId: opts.bookId,
-        bookName: opts.bookName,
-        annotations: opts.annotations,
-        minNewMarks: opts.minNewMarks,
-      },
-      {
-        store: getStore(opts.topicId),
-        adapter: getObservationAdapter(opts.topicId),
-        run: runSubagentTurnLive,
-        model: {
-          providerId: model.providerId,
-          modelId: model.modelId,
-          reasoning: model.reasoning,
+  return gate.run(key, async () => {
+    try {
+      const model = await resolveModel("chat");
+      const result = await runMarksDistillPass(
+        {
+          topicName: opts.topicName,
+          bookId: opts.bookId,
+          bookName: opts.bookName,
+          annotations: opts.annotations,
+          minNewMarks: opts.minNewMarks,
         },
-      },
-    );
-    if (!result.ran) return;
-    if (!result.ok) {
-      console.warn("mark distillation did not finish:", result.failure);
-      logEvent(opts.topicId, "distill-failed", {
+        {
+          store: getStore(opts.topicId),
+          adapter: getObservationAdapter(opts.topicId),
+          run: runSubagentTurnLive,
+          model: {
+            providerId: model.providerId,
+            modelId: model.modelId,
+            reasoning: model.reasoning,
+          },
+        },
+      );
+      if (!result.ran) return;
+      if (!result.ok) {
+        console.warn("mark distillation did not finish:", result.failure);
+        logEvent(opts.topicId, "distill-failed", {
+          bookId: opts.bookId,
+          trigger: opts.trigger,
+          outcome: result.outcome,
+          created: result.created,
+          updated: result.updated,
+          deleted: result.deleted,
+        });
+        if (result.created + result.updated + result.deleted > 0) {
+          notifyObservationChange(opts.topicId);
+        }
+        return;
+      }
+      logEvent(opts.topicId, "distill-run", {
         bookId: opts.bookId,
         trigger: opts.trigger,
-        outcome: result.outcome,
         created: result.created,
         updated: result.updated,
         deleted: result.deleted,
       });
-      if (result.created + result.updated + result.deleted > 0) {
-        notifyObservationChange(opts.topicId);
-      }
-      return;
+      notifyObservationChange(opts.topicId);
+    } catch (e) {
+      if (e instanceof StoppedError) return;
+      console.warn("mark distillation could not start", e);
+      logEvent(opts.topicId, "distill-failed", {
+        bookId: opts.bookId,
+        trigger: opts.trigger,
+        outcome: "failed",
+      });
     }
-    logEvent(opts.topicId, "distill-run", {
-      bookId: opts.bookId,
-      trigger: opts.trigger,
-      created: result.created,
-      updated: result.updated,
-      deleted: result.deleted,
-    });
-    notifyObservationChange(opts.topicId);
-  } catch (e) {
-    if (e instanceof StoppedError) return;
-    console.warn("mark distillation could not start", e);
-    logEvent(opts.topicId, "distill-failed", {
-      bookId: opts.bookId,
-      trigger: opts.trigger,
-      outcome: "failed",
-    });
-  } finally {
-    inFlight.delete(key);
-  }
+  });
 }
 
 // --- the arrears sweep ---
 
-// Threads with a reply still being written. A pass over half a sentence is a
-// pass over the wrong transcript, so the sweep leaves those alone and picks them
-// up next time. Set by the shell, which is the only place that knows.
-let threadBusy: (threadId: string) => boolean = () => false;
-
-let sweeping = false;
-
 // What every topic still owes, read off disk. Books the topic lists but has
-// never opened have no id yet and so have nothing on disk to owe.
-async function collectArrears(): Promise<TopicArrears[]> {
+// never opened have no id yet and so have nothing on disk to owe. A thread with
+// a reply still being written is left out: a pass over half a sentence is a pass
+// over the wrong transcript, and the next sweep picks it up.
+async function collectArrears(
+  threadBusy: (threadId: string) => boolean,
+): Promise<TopicArrears[]> {
   const topics = await listTopics();
   const out: TopicArrears[] = [];
   for (const topic of topics) {
@@ -411,56 +398,35 @@ async function collectArrears(): Promise<TopicArrears[]> {
   return out;
 }
 
-// Look once, and pay at most one debt. Called on a timer, at startup, when the
-// app comes back to the front, and when a book is closed or swapped — every one
-// of them only a look, so a reader who has done nothing since the last pass
-// costs nothing but a few file reads.
-export async function sweepDistillation(trigger: DistillTrigger): Promise<void> {
-  // A pass already running is this tick's one pass, whoever started it. Two at
-  // once on the same topic would each write back the meta they read before the
-  // other one wrote, and one of the two cursors would be lost.
-  if (sweeping || inFlight.size > 0) return;
-  sweeping = true;
-  try {
-    const job = selectDistillJob(await collectArrears(), Date.now());
-    if (!job) return;
-    if (job.kind === "thread") {
-      await distillThread({
-        topicId: job.topicId,
-        topicName: job.topicName,
-        bookId: job.book.bookId,
-        bookName: job.book.bookName,
-        threadId: job.thread.threadId,
-        annotationId: job.thread.annotationId,
-        page: job.thread.page,
-        markedText: job.thread.markedText,
-        messages: job.thread.messages,
-        annotations: job.book.marks,
-        trigger,
-      });
-      return;
-    }
-    await distillMarks({
+// The one job the sweep picked, run as the pass it is.
+function runDistillJob(job: DistillJob, trigger: DistillTrigger): Promise<void> {
+  if (job.kind === "thread") {
+    return distillThread({
       topicId: job.topicId,
       topicName: job.topicName,
       bookId: job.book.bookId,
       bookName: job.book.bookName,
+      threadId: job.thread.threadId,
+      annotationId: job.thread.annotationId,
+      page: job.thread.page,
+      markedText: job.thread.markedText,
+      messages: job.thread.messages,
       annotations: job.book.marks,
-      minNewMarks: MIN_NEW_MARKS,
       trigger,
     });
-  } catch (e) {
-    // Reading the arrears is file I/O over data the reader owns; a sweep that
-    // cannot read them says so once and waits for the next one.
-    console.warn("observation sweep failed", e);
-  } finally {
-    sweeping = false;
   }
+  return distillMarks({
+    topicId: job.topicId,
+    topicName: job.topicName,
+    bookId: job.book.bookId,
+    bookName: job.book.bookName,
+    annotations: job.book.marks,
+    minNewMarks: MIN_NEW_MARKS,
+    trigger,
+  });
 }
 
 // --- the profile-guess pass (guess.ts) ---
-
-let guessing = false;
 
 // Every topic's observation index, plus the newest distillation stamp across all
 // of them — which is the "has the memory actually moved" half of the gate.
@@ -480,19 +446,14 @@ async function collectGuessEvidence(): Promise<{
   return { topics, newestMemoryAt: newest };
 }
 
-// One look at whether the AI's guesses about the reader are worth redoing, and
-// at most one pass. Rides the arrears sweep's tick but gates itself on its own
-// far slower clock (isGuessDue): identity does not move at the speed of a
-// highlighter, and this pass reads every topic at once rather than one book.
+// One look at whether the AI's guesses about the reader are worth redoing.
+// Rides the arrears sweep's tick but gates itself on its own far slower clock
+// (isGuessDue): identity does not move at the speed of a highlighter, and this
+// pass reads every topic at once rather than one book.
 //
 // Same posture as distillation: never throws, never surfaces UI, and a pass that
 // did not finish leaves the stamp where it was so the next one redoes the work.
-export async function sweepProfileGuess(trigger: DistillTrigger): Promise<void> {
-  // A distillation pass in flight is this tick's one background run, and its
-  // writes are exactly the evidence this pass reads — going second, next tick,
-  // is strictly better.
-  if (guessing || inFlight.size > 0) return;
-  guessing = true;
+async function runGuessPass(trigger: DistillTrigger): Promise<void> {
   try {
     const state = await loadGuessState();
     const { topics, newestMemoryAt } = await collectGuessEvidence();
@@ -538,34 +499,49 @@ export async function sweepProfileGuess(trigger: DistillTrigger): Promise<void> 
     if (e instanceof StoppedError) return;
     console.warn("profile guess pass could not start", e);
     logEvent(AI_EVENT_TOPIC, "guess-failed", { trigger, outcome: "failed" });
-  } finally {
-    guessing = false;
   }
 }
 
-// Bind the sweep for the life of the app: once now, every half hour after that,
-// and again whenever the app comes back to the front (a laptop shut for a week
-// wakes with a timer that has not fired). Returns the undo.
+// The sweeps, bound to the real clock, the real passes and the app's own timer:
+// every half hour, and again whenever the app comes back to the front (a laptop
+// shut for a week wakes with a timer that has not fired). The rules about when
+// they may run are in sweeps.ts.
+const sweeps = createSweeps({
+  gate,
+  collectArrears,
+  distill: runDistillJob,
+  guess: runGuessPass,
+  now: Date.now,
+  schedule: (tick) => {
+    const timer = setInterval(() => tick("timer"), SWEEP_INTERVAL_MS);
+    const unobserve = observeAppLifecycle(window, {
+      onForeground: () => tick("foreground"),
+      onBackground: () => {},
+    });
+    return () => {
+      clearInterval(timer);
+      unobserve();
+    };
+  },
+  warn: (message, e) => console.warn(message, e),
+});
+
+export function sweepDistillation(trigger: DistillTrigger): Promise<void> {
+  return sweeps.sweepDistillation(trigger);
+}
+
+export function sweepProfileGuess(trigger: DistillTrigger): Promise<void> {
+  return sweeps.sweepProfileGuess(trigger);
+}
+
+// Bind the sweep for the life of the app: once now, and on every tick after
+// that. Returns the undo.
 //
 // The guess pass rides the same tick, always after distillation: it reads what
 // distillation writes, and running the two at once would put two background
 // model runs on the reader's connection for no reason.
 export function startDistillSweeps(isThreadBusy: (threadId: string) => boolean): () => void {
-  threadBusy = isThreadBusy;
-  const tick = (trigger: DistillTrigger): void => {
-    void sweepDistillation(trigger).then(() => sweepProfileGuess(trigger));
-  };
-  tick("startup");
-  const timer = setInterval(() => tick("timer"), SWEEP_INTERVAL_MS);
-  const unobserve = observeAppLifecycle(window, {
-    onForeground: () => tick("foreground"),
-    onBackground: () => {},
-  });
-  return () => {
-    clearInterval(timer);
-    unobserve();
-    threadBusy = () => false;
-  };
+  return sweeps.start(isThreadBusy);
 }
 
 export interface DistillRehearsalOptions {
@@ -589,72 +565,70 @@ export interface DistillRehearsalOptions {
 //
 // Unlike the reading trigger there is only one caller and one route into it —
 // the talk view unmounting — because every way out of a talk goes through that.
-export async function distillRehearsal(opts: DistillRehearsalOptions): Promise<void> {
+export function distillRehearsal(opts: DistillRehearsalOptions): Promise<void> {
   const { threadId, topicId } = opts;
-  if (inFlight.has(threadId)) return;
-  inFlight.add(threadId);
-  try {
-    // The chat model config, like the reading pass: this is a silent turn of the
-    // reader's own conversation, not a background pipeline.
-    const model = await resolveModel("chat");
-    const result = await runRehearsalDistillPass(
-      {
-        topicName: opts.topicName,
-        talkName: opts.talkName,
-        materials: opts.materials,
-        threadId,
-        messages: opts.messages,
-      },
-      {
-        store: getStore(topicId),
-        adapter: getObservationAdapter(topicId),
-        run: runSubagentTurnLive,
-        model: {
-          providerId: model.providerId,
-          modelId: model.modelId,
-          reasoning: model.reasoning,
+  return gate.run(threadId, async () => {
+    try {
+      // The chat model config, like the reading pass: this is a silent turn of the
+      // reader's own conversation, not a background pipeline.
+      const model = await resolveModel("chat");
+      const result = await runRehearsalDistillPass(
+        {
+          topicName: opts.topicName,
+          talkName: opts.talkName,
+          materials: opts.materials,
+          threadId,
+          messages: opts.messages,
         },
-        signal: opts.signal,
-      },
-    );
-    // Leaving a talk twice with nothing said in between is the ordinary case,
-    // not something to log: the reader steps out to check the outline and comes
-    // back. Nothing ran, so nothing changed.
-    if (!result.ran) return;
-    if (!result.ok) {
-      console.warn("rehearsal distillation did not finish:", result.failure);
-      logEvent(topicId, "distill-failed", {
+        {
+          store: getStore(topicId),
+          adapter: getObservationAdapter(topicId),
+          run: runSubagentTurnLive,
+          model: {
+            providerId: model.providerId,
+            modelId: model.modelId,
+            reasoning: model.reasoning,
+          },
+          signal: opts.signal,
+        },
+      );
+      // Leaving a talk twice with nothing said in between is the ordinary case,
+      // not something to log: the reader steps out to check the outline and comes
+      // back. Nothing ran, so nothing changed.
+      if (!result.ran) return;
+      if (!result.ok) {
+        console.warn("rehearsal distillation did not finish:", result.failure);
+        logEvent(topicId, "distill-failed", {
+          threadId,
+          talkId: opts.talkId,
+          trigger: "talk-exit",
+          outcome: result.outcome,
+          created: result.created,
+          updated: result.updated,
+          deleted: result.deleted,
+        });
+        if (result.created + result.updated + result.deleted > 0) notifyObservationChange(topicId);
+        return;
+      }
+      logEvent(topicId, "distill-run", {
         threadId,
         talkId: opts.talkId,
         trigger: "talk-exit",
-        outcome: result.outcome,
+        messages: result.distilled,
         created: result.created,
         updated: result.updated,
         deleted: result.deleted,
       });
-      if (result.created + result.updated + result.deleted > 0) notifyObservationChange(topicId);
-      return;
+      notifyObservationChange(topicId);
+    } catch (e) {
+      if (e instanceof StoppedError) return;
+      console.warn("rehearsal distillation could not start", e);
+      logEvent(topicId, "distill-failed", {
+        threadId,
+        talkId: opts.talkId,
+        trigger: "talk-exit",
+        outcome: "failed",
+      });
     }
-    logEvent(topicId, "distill-run", {
-      threadId,
-      talkId: opts.talkId,
-      trigger: "talk-exit",
-      messages: result.distilled,
-      created: result.created,
-      updated: result.updated,
-      deleted: result.deleted,
-    });
-    notifyObservationChange(topicId);
-  } catch (e) {
-    if (e instanceof StoppedError) return;
-    console.warn("rehearsal distillation could not start", e);
-    logEvent(topicId, "distill-failed", {
-      threadId,
-      talkId: opts.talkId,
-      trigger: "talk-exit",
-      outcome: "failed",
-    });
-  } finally {
-    inFlight.delete(threadId);
-  }
+  });
 }

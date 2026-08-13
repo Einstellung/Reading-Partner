@@ -24,7 +24,7 @@
 // geometry the layout asked for, and it confirms the page arrived.
 
 import { LAYOUT_SETTINGS, type ReadingLayout, type ScrollAxis, type ZoomLock } from "./layout-modes";
-import { pageCenterAlign } from "./paged-gesture";
+import { pageCenterAlign } from "./gesture/paged-gesture";
 
 // Sub-pixel slack. Scaled page geometry is fractional and the browser rounds
 // scroll offsets to device pixels, so nothing here is ever compared for

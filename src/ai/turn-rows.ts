@@ -30,11 +30,18 @@ function keptTools(previous: { tools?: ToolStatus[] }): ToolStatus[] {
 // tool starts — so the notice is usually the whole row, and chat.tsx draws it
 // alone. Where the model did get words out first, they stay the model's and the
 // notice sits under them.
+//
+// `failed` is cleared rather than left alone. Every call site spreads this over
+// the row as it stands, so anything the function does not name survives; a row
+// that arrived already marked would come back both failed and carrying a notice,
+// which is two endings at once and not a state this function should be able to
+// produce. Clearing it here is what makes that unrepresentable, and it is what
+// lets the readers of the mark below take it at face value.
 export function refusalRow(
   previous: { tools?: ToolStatus[] },
   message: string,
-): { streaming: false; notice: string; tools: ToolStatus[] } {
-  return { streaming: false, notice: message, tools: keptTools(previous) };
+): { streaming: false; failed: false; notice: string; tools: ToolStatus[] } {
+  return { streaming: false, failed: false, notice: message, tools: keptTools(previous) };
 }
 
 // What of a conversation goes back to the model on the next turn. Only the rows
@@ -43,6 +50,11 @@ export function refusalRow(
 //   - a row the app ended carries the app's sentence, not the assistant's. A
 //     refusal keeps it in `notice`, which is not read here at all; an error
 //     keeps it in `text`, so `failed` is what excludes it.
+//   - which means a refusal row is judged on its `text` alone, and its `text` is
+//     only ever what the model itself wrote before the loop stopped. Those words
+//     go back next turn, the same as any other reply: the reader saw them on
+//     screen as the assistant's, and the model's view has to match. Nothing the
+//     app said about the turn travels with them — that sentence is in `notice`.
 //   - a card row is persisted with no text of its own (chatParts), and an empty
 //     message is one some providers reject outright.
 export function replayableHistory(
@@ -55,6 +67,11 @@ export function replayableHistory(
 // no answer. The turn still streaming, the one that failed, and the one that
 // stopped with nothing but a notice on it — a card row, which also has no text,
 // is not one of these and stays.
+//
+// A refusal reaches this through the notice clause, never through `failed`
+// (refusalRow clears it): the empty one is replaced, and the one the model got
+// words onto is an answer, however short, so it stays and the next attempt sits
+// under it.
 export function holdsNoAnswer(m: {
   role: "user" | "ai";
   text: string;

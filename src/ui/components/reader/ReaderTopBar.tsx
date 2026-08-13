@@ -6,7 +6,7 @@
 import { useState, type RefObject } from "react";
 import type { ViewInstance, ViewStats } from "../../../platform/app/reader-contract";
 import { ANNOTATION_COLORS } from "../../../platform/app/annotations";
-import { setTouchDebugEnabled } from "../../../reading/engine/touch-debug";
+import { setTouchDebugEnabled } from "../../../reading/engine/gesture/touch-debug";
 import type { ToolType } from "./types";
 import {
   IconFitWidth,

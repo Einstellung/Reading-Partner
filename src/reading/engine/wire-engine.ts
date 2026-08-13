@@ -29,7 +29,7 @@ import {
   type ZoteroAnnotation,
 } from "./convert";
 import { selectionChanged } from "./annotation-selection";
-import { pageCenterAlign } from "./paged-gesture";
+import { pageCenterAlign } from "./gesture/paged-gesture";
 import { LAYOUT_SETTINGS, readingPosition, type VisiblePage, type ZoomLock } from "./layout-modes";
 import {
   centeredScrollX,
@@ -40,16 +40,16 @@ import {
   settleGap,
   type LayoutGeometry,
 } from "./layout-settle";
-import { planFinger, toolKindOf } from "./touch-routing";
+import { planFinger, toolKindOf } from "./gesture/touch-routing";
 import type {
   EmbedLayout,
   EmbedPdfHandle,
   EmbedPdfViewProps,
   EmbedViewState,
   EmbedViewStats,
-  PagedGestureCtx,
   QuoteHighlight,
 } from "./types";
+import type { PagedGestureCtx } from "./gesture/context";
 
 // The one document this adapter ever has open: a viewer instance is mounted per
 // book and torn down with it.
