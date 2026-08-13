@@ -18,7 +18,7 @@
 
 ## 入口
 
-只有用户的主动行为能让 info 材料进入 reading。两个入口：文章页上的 Keep 按钮（`src/ui/components/info/ArticleView.tsx`，接线在 `InfoHome.tsx`），以及在聊天里说"这篇存一下"。AI 只能执行，不能自己决定存什么。
+只有用户的主动行为能让 info 材料进入 reading。两个入口：文章页上的 Keep 按钮（`src/ui/components/info/ArticleView.tsx`，接线在 `use-info-home.ts`），以及在聊天里说"这篇存一下"。AI 只能执行，不能自己决定存什么。
 
 Keep 的语义是"这条要进我的阅读上下文"，不是喜欢、不是稍后读。图标和文案不能长得像收藏夹。
 
@@ -30,7 +30,7 @@ briefing 卡片今天只有三个手势：打开、×（dismiss）、滤掉区�
 
 AI 提议的不只是 topic，还有这条材料对这个 topic 加了什么、跟已读的是印证还是冲突。这段判断和 topic 提议一起进确认卡，用户点头才落。
 
-确认卡的机制现成，`update_profile` 走的就是这条路：工具只起草并推一张卡，UI 的 Apply 才写盘（`src/info/companion/companion-tools.ts` → `src/info/briefing/cards.ts` → `InfoCards.tsx` → `InfoCall.tsx` 的 `handleApplyProfile`）。收藏沿用同一形状。
+确认卡的机制现成，`update_profile` 走的就是这条路：工具只起草并推一张卡，UI 的 Apply 才写盘（`src/info/companion/companion-tools.ts` → `src/info/briefing/cards.ts` → `InfoCards.tsx` → `use-info-call.ts` 的 `handleApplyProfile`）。收藏沿用同一形状。
 
 ## 归属与默认 topic
 
@@ -82,7 +82,7 @@ AI 这次用了哪几条外部材料，用户要看得见。可见性是闸的�
 
 - reading 的根聊天。现在没有。所有阅读对话都在 `threads-<bookId>.json` 里，只能从打开的书里进（划线气泡、标记列表、顶栏 AI 按钮的书级 thread）；`LibraryScreen` 一个聊天入口都没有。要新加一个不属于任何书的 thread key 和一个进得去的屏，新收下的材料在那儿浮现。
 
-- info 的根聊天跨天。现在按天分文件：`infoBookId(date)` 返回 `info-<date>`，落成 `threads-info-<date>.json`，thread id 只有 `briefing` / `onboarding` / itemId 三种（`src/info/companion/call.ts`、`InfoCall.tsx`）。"info 有一个根聊天"要一个跨天不变的 key，否则每天换一个根。
+- info 的根聊天跨天。现在按天分文件：`infoBookId(date)` 返回 `info-<date>`，落成 `threads-info-<date>.json`，thread id 只有 `briefing` / `onboarding` / itemId 三种（`src/info/companion/call.ts`、`use-info-call.ts`）。"info 有一个根聊天"要一个跨天不变的 key，否则每天换一个根。
 
 - 共用的记忆作用域。AI observations 只有按 topic 一种形态：`ObservationFileStore` 的构造参数就是 topicId，目录是 `memory-<topicId>/`（历史名）。info 侧一条观察也不写，只读画像和反馈日志。跨场景共用的今天只有 `user-profile.md` 一份文件。两个根共用记忆要一个不属于任何 topic 的记忆作用域，且从第一天就是它——先按 topic 建再合并就是那次要避免的迁移。
 
