@@ -269,13 +269,17 @@ interface Harness {
   pauses: number;
   resumes: number;
   clears: number;
+  // What the engine's selection plugin would report. Writing to it is how a
+  // test says "the engine dragged a selection out from under this finger";
+  // clear() empties it, so a router that never clears leaves it standing.
+  rects: unknown[];
   target: FakeTarget;
 }
 
 function mount(over: Partial<PagedGestureCtx> = {}): Harness {
   const el = new FakeElement();
   const target = makeTarget(el);
-  const h = { pauses: 0, resumes: 0, clears: 0 } as Harness;
+  const h = { pauses: 0, resumes: 0, clears: 0, rects: [] as unknown[] } as Harness;
   const ctx = {
     current: {
       paged: false,
@@ -288,8 +292,11 @@ function mount(over: Partial<PagedGestureCtx> = {}): Harness {
         resume: () => void h.resumes++,
       },
       selection: {
-        getBoundingRects: () => [],
-        clear: () => void h.clears++,
+        getBoundingRects: () => h.rects,
+        clear: () => {
+          h.clears++;
+          h.rects = [];
+        },
       },
       setTouchLock: null,
       viewport: null,
@@ -461,6 +468,45 @@ test("a pointer the engine never heard gets no synthetic up", () => {
   h.detach();
 });
 
+// --- selection hygiene ------------------------------------------------------
+
+// The engine is still live through the slop, so it can start a text drag in the
+// few px before the gesture commits. That selection is this gesture's doing and
+// goes; one that was already on screen is the reader's and stays. Which of the
+// two it is, is decided at pointerdown and can only be decided there.
+test("a selection the gesture caused in the slop is dropped when it commits", () => {
+  const h = mount();
+  const t = h.target;
+
+  h.el.fire("pointerdown", ev(1, 100, 500, 0, t));
+  // Between the down and the commit the engine drags a word out.
+  h.rects = [{ x: 0, y: 0 }];
+
+  h.el.fire("pointermove", ev(1, 100, 480, 16, t));
+  expect(h.el.scrollTop).toBe(20);
+  expect(h.clears).toBe(1);
+  expect(h.rects).toEqual([]);
+
+  h.detach();
+});
+
+test("a selection that predates the gesture survives it", () => {
+  const h = mount();
+  const t = h.target;
+  h.rects = [{ x: 0, y: 0 }];
+
+  h.el.fire("pointerdown", ev(1, 100, 500, 0, t));
+  h.el.fire("pointermove", ev(1, 100, 480, 16, t));
+  h.el.fire("pointermove", ev(1, 100, 440, 32, t));
+  h.el.fire("pointerup", ev(1, 100, 440, 48, t));
+
+  expect(h.el.scrollTop).toBe(60);
+  expect(h.clears).toBe(0);
+  expect(h.rects).toEqual([{ x: 0, y: 0 }]);
+
+  h.detach();
+});
+
 // --- two fingers ------------------------------------------------------------
 
 // The pinch: two fingers, both eaten per pointer, the content following the
@@ -537,8 +583,17 @@ test("the survivor of a pinch inherits the pan and can still throw it", () => {
   // One finger lifts. The survivor is at (300,480) and the content is at 60.
   h.el.fire("pointerup", ev(1, 100, 440, 64, t));
 
-  // From here it is a one-finger follow measured from that position, with no
-  // slop to clear: 60px up the glass is 60px further down the document.
+  // From here it is a one-finger follow measured from that position, and the
+  // inherited gesture is already past its slop: a 4px move — well under the 6px
+  // a fresh press has to clear before it commits — moves the page 4px. That is
+  // the only place the handover's `takeover` shows up as a number; every move
+  // after it is large enough to have committed a fresh gesture too.
+  h.el.fire("pointermove", ev(2, 300, 476, 72, t));
+  expect(h.el.scrollTop).toBe(64);
+
+  // And it keeps following from the position it was handed, not from where the
+  // slop would have re-anchored it: 60px up the glass is 60px further down the
+  // document.
   h.el.fire("pointermove", ev(2, 300, 420, 80, t));
   expect(h.el.scrollTop).toBe(120);
   h.el.fire("pointermove", ev(2, 300, 380, 96, t));
@@ -547,14 +602,92 @@ test("the survivor of a pinch inherits the pan and can still throw it", () => {
   expect(h.el.scrollTop).toBe(200);
 
   // And releasing it throws the page, because what it inherited is a real
-  // gesture and not a frozen one.
-  h.el.fire("pointerup", ev(2, 300, 300, 128, t));
+  // gesture and not a frozen one. The lift itself is swallowed: the engine
+  // never saw this pointer's down (the pinch ate it), so a bare pointerup would
+  // reach a text handler holding no anchor for it (docs/pitfall/38).
+  const up2 = ev(2, 300, 300, 128, t);
+  h.el.fire("pointerup", up2);
+  expect(up2.stopped).toBe(1);
   expect(frames.length).toBe(1);
   const atRelease = h.el.scrollTop;
   runFrames(1);
   expect(h.el.scrollTop).toBeGreaterThan(atRelease);
   runFrames(200);
   expect(frames.length).toBe(0);
+
+  h.detach();
+});
+
+// The same handover on the other layout. A magnified paged view pans instead of
+// scrolling, and the survivor of a pinch there has to keep panning from where it
+// stands — the paged machine reads `takeover` only when the page is magnified,
+// so this is the only shape in which that half of the handover is a number.
+test("the survivor of a pinch on a magnified page keeps panning without re-clearing the slop", () => {
+  const h = mount({ paged: true, zoomedIn: true });
+  const t = h.target;
+  // Magnified: room to pan on both axes, and parked away from either edge so
+  // neither direction is blocked.
+  h.el.scrollWidth = 1600;
+  h.el.scrollLeft = 400;
+  h.el.scrollTop = 300;
+
+  h.el.fire("pointerdown", ev(1, 100, 500, 0, t));
+  h.el.fire("pointermove", ev(1, 100, 460, 16, t));
+  expect(h.el.scrollTop).toBe(340);
+
+  // Second finger: the pan is dropped and the pair takes over by the centroid.
+  h.el.fire("pointerdown", ev(2, 300, 500, 32, t));
+  h.el.fire("pointermove", ev(2, 300, 480, 48, t));
+  expect(h.el.scrollTop).toBe(340);
+  h.el.fire("pointermove", ev(1, 100, 440, 64, t));
+  expect(h.el.scrollTop).toBe(350);
+
+  // One finger lifts. The survivor is at (300,480).
+  h.el.fire("pointerup", ev(1, 100, 440, 80, t));
+
+  // 4px, under the 6px a fresh press has to clear: it pans anyway, because the
+  // gesture it inherited was already committed.
+  h.el.fire("pointermove", ev(2, 300, 476, 96, t));
+  expect(h.el.scrollTop).toBe(354);
+
+  // And it goes on panning from there rather than from a re-anchored origin.
+  h.el.fire("pointermove", ev(2, 260, 436, 112, t));
+  expect(h.el.scrollTop).toBe(394);
+  expect(h.el.scrollLeft).toBe(440);
+
+  // Its lift is swallowed for the same reason as on the vertical layout: the
+  // pinch ate this pointer's down, so the engine is owed no up.
+  const up2 = ev(2, 260, 436, 128, t);
+  h.el.fire("pointerup", up2);
+  expect(up2.stopped).toBe(1);
+
+  h.detach();
+});
+
+// The handover re-decides whose selection is on screen. The pinch dropped
+// whatever its fingers selected on the way in, so anything standing at the
+// moment the survivor takes over predates this gesture and is the reader's.
+test("the survivor of a pinch does not clear a selection that outlived the pinch", () => {
+  const h = mount();
+  const t = h.target;
+
+  h.el.fire("pointerdown", ev(1, 100, 500, 0, t));
+  h.el.fire("pointermove", ev(1, 100, 440, 16, t));
+  h.el.fire("pointerdown", ev(2, 300, 500, 32, t));
+  h.el.fire("pointermove", ev(2, 300, 480, 48, t));
+  expect(h.clears).toBe(0);
+
+  // What is on screen when the pinch comes down to one finger.
+  h.rects = [{ x: 0, y: 0 }];
+
+  h.el.fire("pointerup", ev(1, 100, 440, 64, t));
+  h.el.fire("pointermove", ev(2, 300, 420, 80, t));
+  expect(h.el.scrollTop).toBe(120);
+
+  // The survivor inherits a committed gesture, which drops selections — but
+  // this one is not its own doing.
+  expect(h.clears).toBe(0);
+  expect(h.rects).toEqual([{ x: 0, y: 0 }]);
 
   h.detach();
 });

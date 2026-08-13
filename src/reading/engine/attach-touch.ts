@@ -617,6 +617,9 @@ export function attachTouchRouter(
   };
 
   const onDown = (e: PointerEvent) => {
+    // Unreachable today: handEngineTheUp only ever synthesizes a pointerup, so
+    // nothing this router dispatches can arrive here. Kept as insurance for the
+    // day it synthesizes more, which is why no test covers this line.
     if (synthesizing) return;
     const kind = pointerKindOf(e.pointerType);
     const tool = toolKindOf(ctx.current.tool);
@@ -685,6 +688,8 @@ export function attachTouchRouter(
   };
 
   const onMove = (e: PointerEvent) => {
+    // Unreachable today, for the same reason as the one in onDown: the only
+    // event this router synthesizes is a pointerup.
     if (synthesizing) return;
     const f = fingers.get(e.pointerId);
     // Not a contact this router drives: a mouse, a stylus outside the
