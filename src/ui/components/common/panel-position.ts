@@ -43,18 +43,14 @@ export interface PlacePanelOptions {
 	// Distance from the anchor to the panel.
 	gap?: number;
 	// Smallest distance from the panel to a viewport edge. One number is the same
-	// distance on all four; per-edge insets are what a device with a notch or a
-	// home indicator needs, and are what useOverlaySafePadding hands over
-	// (docs/pitfall/74). Where there is no inset that hook already reports the
-	// 8px gutter, so a per-edge margin degrades to the uniform one.
-	margin?: number | PanelMargin;
+	// distance on all four; SafeAreaInsets is the per-edge form a device with a
+	// notch or a home indicator needs, and is what useOverlaySafePadding hands
+	// over (docs/pitfall/74). Where there is no inset that hook already reports
+	// the 8px gutter, so a per-edge margin degrades to the uniform one.
+	margin?: number | SafeAreaInsets;
 }
 
-// The four edges a margin can differ on. Same shape as SafeAreaInsets, which is
-// what the call sites pass.
-export type PanelMargin = SafeAreaInsets;
-
-function edges(margin: number | PanelMargin): PanelMargin {
+function edges(margin: number | SafeAreaInsets): SafeAreaInsets {
 	return typeof margin === "number"
 		? { top: margin, right: margin, bottom: margin, left: margin }
 		: margin;
@@ -109,7 +105,7 @@ export function placePanel({
 export function fitPanelWidth(
 	preferred: number,
 	viewportWidth: number,
-	margin: number | PanelMargin = 0,
+	margin: number | SafeAreaInsets = 0,
 ): number {
 	const m = edges(margin);
 	return Math.max(0, Math.min(preferred, viewportWidth - m.left - m.right));
