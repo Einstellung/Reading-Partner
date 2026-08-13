@@ -79,8 +79,8 @@ const LAYER: Record<string, Layer> = {
   "ui/components/markdown": "ui",
   "ui/components/phone": "ui",
   "ui/components/reader": "ui",
-  "ui/components/shelf": "ui",
   "ui/components/settings": "ui",
+  "ui/components/shelf": "ui",
   "ui/components/talk": "ui",
   "ui/components/ui": "ui",
   "App.tsx": "shell",
@@ -100,16 +100,6 @@ const MAY_IMPORT: Record<Layer, Layer[]> = {
   shell: ["platform", "capability", "domain", "ui"],
   entry: ["platform", "capability", "domain", "ui", "shell", "entry"],
 };
-
-// The cycles that were already there when this test learned to see inside
-// ui/components, each with the plan item that removes it. Temporary by
-// construction: the list is exact, so a pair that stops being a cycle fails the
-// test as loudly as a new one appears. Delete the line with the fix, and the
-// whole mechanism with the last one.
-const KNOWN_CYCLES: [string, string][] = [
-  // B1.6: PullToAsk is passed in as a render prop instead of imported.
-  ["ui/components/info", "ui/components/phone"],
-];
 
 // platform/app is the floor: it imports no other entry at all.
 const LEAF = "platform/app";
@@ -274,32 +264,6 @@ function edgesFor(from: string, to: string): Edge[] {
   return EDGES.filter((e) => e.from === from && e.to === to);
 }
 
-const ADJ = new Map<string, Set<string>>();
-for (const e of EDGES) {
-  if (!ADJ.has(e.from)) ADJ.set(e.from, new Set());
-  ADJ.get(e.from)!.add(e.to);
-}
-
-// A pair is named the same way whichever end is met first.
-function pairKey(a: string, b: string): string {
-  return a < b ? `${a} <-> ${b}` : `${b} <-> ${a}`;
-}
-
-// The two-directory cycles: a imports b and b imports a. Every cycle in the graph
-// today runs through at least one edge of one of these pairs, so they are checked
-// by name against KNOWN_CYCLES and their edges dropped before the search for the
-// rest. A longer cycle whose edges are each on no pair here is not this test's to
-// find; that is what the acyclic test is for.
-function mutualPairs(): Map<string, [string, string]> {
-  const found = new Map<string, [string, string]>();
-  for (const [from, tos] of ADJ) {
-    for (const to of tos) {
-      if (ADJ.get(to)?.has(from)) found.set(pairKey(from, to), from < to ? [from, to] : [to, from]);
-    }
-  }
-  return found;
-}
-
 // These messages name every offending file and specifier, so they are thrown
 // rather than handed to expect(): a diff escapes the newlines and the message
 // arrives as one unreadable line.
@@ -319,56 +283,11 @@ test("every entry under src/ has a declared layer", () => {
   expect(undeclared).toEqual([]);
 });
 
-test("the directories that import each other are exactly the known ones", () => {
-  const found = mutualPairs();
-  const known = new Map(KNOWN_CYCLES.map(([a, b]) => [pairKey(a, b), [a, b] as [string, string]]));
-
-  const fixed = [...known.keys()].filter((k) => !found.has(k));
-  if (fixed.length > 0) {
-    reject(
-      `No longer a cycle, so it must not stay on the KNOWN_CYCLES allowlist in ` +
-        `tests/layering.test.ts:\n${fixed.map((k) => `  ${k}`).join("\n")}\n` +
-        "Delete the line. The list is exact on purpose: a stale entry would let the cycle " +
-        "come back unnoticed.",
-    );
-  }
-
-  const surprises = [...found.entries()].filter(([k]) => !known.has(k));
-  if (surprises.length > 0) {
-    reject(
-      `${surprises.length} pair(s) of directories import each other:\n\n` +
-        surprises
-          .map(([k, [a, b]]) =>
-            [
-              k,
-              `  ${a} -> ${b}`,
-              describe(edgesFor(a, b)),
-              `  ${b} -> ${a}`,
-              describe(edgesFor(b, a)),
-            ].join("\n"),
-          )
-          .join("\n\n") +
-        "\n\nNeither side can be read, tested or moved on its own. Split by what does not need " +
-        "to know what, and lift the shared half to a directory both sides already depend on.",
-    );
-  }
-  expect(surprises.map(([k]) => k)).toEqual([]);
-});
-
 test("the directory dependency graph is acyclic", () => {
-  // The allowlisted pairs are removed edge by edge, so the test above stays the
-  // one that reports them and a path merely running through a pair is not
-  // reported here as well. Removing the two directed edges rather than merging
-  // the pair into one node is what keeps the rest of the graph at full
-  // resolution: merging is transitive, so the pairs would collapse into a couple
-  // of blobs, every edge inside a blob would be discarded, and a cycle of three
-  // or more directories that stays inside one would be invisible to this test
-  // and to the pair test above.
-  const dropped = new Set(KNOWN_CYCLES.flatMap(([a, b]) => [`${a}|${b}`, `${b}|${a}`]));
-
+  // Every edge counts, including the two of a pair that import each other: a
+  // mutual pair is a cycle of length two and gets reported as one.
   const out = new Map<string, Set<string>>();
   for (const e of EDGES) {
-    if (dropped.has(`${e.from}|${e.to}`)) continue;
     if (!out.has(e.from)) out.set(e.from, new Set());
     out.get(e.from)!.add(e.to);
   }

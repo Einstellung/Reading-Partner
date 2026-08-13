@@ -66,13 +66,20 @@ import { BriefingPage } from "./BriefingPage";
 import { SourcesPage } from "./SourcesPage";
 import { ArticleView } from "./ArticleView";
 import { InfoCall, type InfoCallAnchor } from "./InfoCall";
-// The phone shell's gesture, mounted from here because the call it opens is
-// owned here (see the pullToAsk prop).
-import { PullToAsk } from "../phone/PullToAsk";
 
 // The launch layer in front of the library. "library" belongs to App, which
 // renders the shelf; it is in the union so the two navigate through one setter.
 export type HomeScreen = "vestibule" | "library" | "briefing" | "article" | "sources";
+
+// What a shell needs to know to put its own affordance around a screen that has
+// something to talk about: the chat the screen's Ask button opens, in the
+// reader's words and as a callback. The phone shell wraps these two screens in
+// its pull-down gesture (docs/22); the desktop shell wraps neither.
+export interface AskableScreen {
+  // "Ask about this article", for the affordance to show before it fires.
+  label: string;
+  onAsk: () => void;
+}
 
 // Everything a launch screen needs from the briefing pipeline. The state lives
 // here, so a shell that draws its own launch screen (the phone's, docs/22) is
@@ -123,11 +130,14 @@ export default function InfoHome(props: {
   // reader on a screen they never chose. Omitted by the desktop shell, where
   // back is the call's own Hang up.
   onOverlayChange?: (dismiss: (() => void) | null) => void;
-  // Phone shell only (docs/22): a pull from the top of the briefing or of an
-  // article opens the same chat their Ask buttons open. One more trigger for a
-  // call this component already owns, on the same footing as onOverlayChange —
-  // omitted by the desktop shell, which renders exactly what it did before.
-  pullToAsk?: boolean;
+  // A shell's own wrapper around the two screens that have something to talk
+  // about, the briefing and an article. The phone (docs/22) returns them inside
+  // its pull-down-to-ask host, so a pull from the top opens the same chat the
+  // Ask button opens; the desktop shell omits this and gets exactly what it drew
+  // before. A render prop rather than a flag, so the gesture stays in the shell
+  // that has it and this screen keeps importing nothing from either shell —
+  // the same hole renderLaunch is (docs/22).
+  wrapScreen?: (screen: AskableScreen, children: React.ReactNode) => React.ReactNode;
   // Whether the call keeps its corner cards (docs/03). Default, and the desktop
   // shell: it does. The phone shell turns them off — there the chat is a screen
   // of the navigation stack with gestures in and out of it, and a card that
@@ -566,13 +576,9 @@ export default function InfoHome(props: {
             />
           </div>
         );
-        return props.pullToAsk ? (
-          <PullToAsk label="Ask about today's briefing" onAsk={() => void askBriefing()}>
-            {page}
-          </PullToAsk>
-        ) : (
-          page
-        );
+        return props.wrapScreen
+          ? props.wrapScreen({ label: "Ask about today's briefing", onAsk: () => void askBriefing() }, page)
+          : page;
       })()}
 
       {screen === "sources" && (
@@ -622,15 +628,11 @@ export default function InfoHome(props: {
           />
         );
         // The article view's own root is the scroll container, so it is the
-        // child the pull host wraps directly; the plain wrapper is what the
-        // desktop shell has always drawn around it.
-        return props.pullToAsk ? (
-          <PullToAsk label="Ask about this article" onAsk={() => void askArticle(openArticleId)}>
-            {view}
-          </PullToAsk>
-        ) : (
-          <div className="absolute inset-0">{view}</div>
-        );
+        // child a wrapper receives directly; the plain box is what the desktop
+        // shell has always drawn around it.
+        return props.wrapScreen
+          ? props.wrapScreen({ label: "Ask about this article", onAsk: () => void askArticle(openArticleId) }, view)
+          : <div className="absolute inset-0">{view}</div>;
       })()}
 
       {infoCall && viewRef.current && (
