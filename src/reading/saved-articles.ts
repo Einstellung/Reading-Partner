@@ -182,9 +182,19 @@ export function parseSavedArticles(text: string): SavedArticle[] {
 // sanitizer keeps an inline data: image when nothing else in the tag is a usable
 // URL; this drops it for size, and it is the one that keeps a synced file from
 // growing 4MB of base64.
+//
+// Cutting a tag out of the sanitizer's output can leave text in a position the
+// sanitizer would have written differently — an <img> at the head of a <pre>
+// was standing between the start tag and a newline the next parse eats — so
+// when it cuts anything, the result goes back through. This runs on every read
+// of the file, and the whole point of it is that a record reads back the same
+// every time; the second parse is charged only to the read that drops the
+// image, because what it writes has none left to drop.
 export function sanitizeStoredHtml(html: unknown): string {
   if (typeof html !== "string" || html === "") return "";
-  return stripDataImages(sanitizeArticleHtml(html));
+  const clean = sanitizeArticleHtml(html);
+  const stripped = stripDataImages(clean);
+  return stripped === clean ? clean : sanitizeArticleHtml(stripped);
 }
 
 // --- filesystem ------------------------------------------------------------

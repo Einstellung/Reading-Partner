@@ -265,6 +265,27 @@ test("a stored body renders the same on its tenth read as on its first", () => {
   expect(asked).toContain("https://&#101;vil.example/b.jpg");
 });
 
+// Cutting the inlined image out is the one step here that is not the
+// sanitizer's own, and it can leave text where the sanitizer would have written
+// it differently: the <img> was standing between the <pre> start tag and a
+// newline the next parse eats, so the code block lost its blank first line on
+// the second read and not the first.
+test("dropping an inlined image does not leave the body to settle on a later read", () => {
+  const stored = `<pre><img src="data:image/png;base64,AAAA">\n  git log\n</pre>`;
+  const first = parseSavedArticles(hostileFile(stored))[0].html;
+  let body = first;
+  for (let i = 0; i < 9; i += 1) body = parseSavedArticles(hostileFile(body))[0].html;
+  expect(body).toBe(first);
+  // The newline was the one the tree builder eats after a <pre> start tag; with
+  // the image gone it is the first thing in the block, so it goes.
+  expect(first).toBe(`<pre>  git log\n</pre>`);
+  // A blank line the reader can see is kept, on the first read and the tenth.
+  const blank = `<pre><img src="data:image/png;base64,AAAA">\n\n  git log\n</pre>`;
+  const kept = parseSavedArticles(hostileFile(blank))[0].html;
+  expect(kept).toBe(`<pre>\n\n  git log\n</pre>`);
+  expect(parseSavedArticles(hostileFile(kept))[0].html).toBe(kept);
+});
+
 // Collects what rewriteImageSrcs hands the proxy mapper, which outside Tauri is
 // never called for real.
 function rewriteProbe(html: string, into: string[]): void {
