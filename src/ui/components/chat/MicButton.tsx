@@ -7,29 +7,31 @@
 // the button first, releasing cancels (a slide-off "never mind"); Escape cancels
 // too. No pointer capture — a window pointerup catches releases outside the
 // button, which keeps the leave/enter cancel gesture working.
+//
+// The gesture's states and its four races live in ai/voice/press-machine.ts;
+// what is left here is pointer binding, the elapsed timer and JSX.
 
 import { useEffect, useRef, useState } from 'react';
 import { IconMic } from '../common/icons';
 import {
+	INITIAL_PRESS_STATE,
+	beginPress,
 	cancelRecording,
 	chatCleanupRunner,
 	cleanupTranscript,
+	errMsg,
 	loadSttConfig,
+	pressReducer,
 	sttFetch,
 	startRecording,
 	stopRecording,
 	transcribe,
 	type CleanupModel,
+	type PressEffect,
+	type PressEvent,
+	type PressState,
 	type SttConfig,
 } from '../../../ai/voice';
-
-type Status = 'idle' | 'recording' | 'transcribing';
-
-const NEEDS_KEY_HINT = 'Add a voice input STT key in Settings to use the mic.';
-
-function errMsg(e: unknown): string {
-	return e instanceof Error ? e.message : String(e);
-}
 
 export function MicButton({
 	onInsert,
@@ -47,45 +49,77 @@ export function MicButton({
 	size?: 'sm' | 'lg';
 	disabled?: boolean;
 }) {
-	const [status, setStatus] = useState<Status>('idle');
+	const [state, setState] = useState<PressState>(INITIAL_PRESS_STATE);
 	const [elapsed, setElapsed] = useState(0);
-	const [cancelArmed, setCancelArmed] = useState(false);
 
-	const busyRef = useRef(false); // a press/pipeline is in flight
-	const releasedRef = useRef(false); // pointer released (maybe mid-arming)
-	const startedRef = useRef(false); // recording actually running
-	const cancelArmedRef = useRef(false);
+	// The machine's state as the async steps see it, and a dispatch the window
+	// listeners and the unmount cleanup can reach with today's callbacks.
+	const stateRef = useRef(state);
+	const dispatchRef = useRef<(event: PressEvent) => void>(() => {});
 	const configRef = useRef<SttConfig | null>(null);
-	const timerRef = useRef<number | null>(null);
-	const startAtRef = useRef(0);
 
-	const stopTimer = () => {
-		if (timerRef.current !== null) {
-			window.clearInterval(timerRef.current);
-			timerRef.current = null;
-		}
+	const dispatch = (event: PressEvent) => {
+		const { effects, ...next } = pressReducer(stateRef.current, event);
+		stateRef.current = next;
+		setState(next);
+		for (const effect of effects) runEffect(effect);
 	};
+	dispatchRef.current = dispatch;
+
+	function runEffect(effect: PressEffect) {
+		switch (effect.type) {
+			case 'hint':
+				onHint(effect.message);
+				return;
+			case 'insert':
+				onInsert(effect.text);
+				return;
+			case 'cancel':
+				void cancelRecording().catch(() => {});
+				return;
+			case 'begin':
+				void arm();
+				return;
+			case 'transcribe':
+				void collect();
+				return;
+		}
+	}
+
+	async function arm() {
+		const outcome = await beginPress<SttConfig>({
+			loadConfig: loadSttConfig,
+			aborted: () => stateRef.current.status === 'aborting',
+			startRecording,
+		});
+		if (outcome.type === 'failed') {
+			dispatch(outcome);
+			return;
+		}
+		configRef.current = outcome.config;
+		dispatch({ type: 'started' });
+	}
+
+	async function collect() {
+		try {
+			const wav = await stopRecording();
+			const raw = await transcribe(configRef.current!, wav, sttFetch);
+			const polished = await cleanupTranscript(raw, glossary, cleanupModel, chatCleanupRunner);
+			dispatch({ type: 'transcribed', text: polished });
+		} catch (e) {
+			dispatch({ type: 'failed', message: errMsg(e) });
+		}
+	}
 
 	// Cancel a live recording if the component unmounts mid-press.
-	useEffect(() => {
-		return () => {
-			stopTimer();
-			if (startedRef.current) void cancelRecording().catch(() => {});
-		};
-	}, []);
+	useEffect(() => () => dispatchRef.current({ type: 'unmount' }), []);
 
 	// While recording, a release anywhere or Escape ends the gesture.
 	useEffect(() => {
-		if (status !== 'recording') return;
-		const onUp = () => {
-			releasedRef.current = true;
-			if (startedRef.current) void finish(cancelArmedRef.current);
-		};
+		if (state.status !== 'recording') return;
+		const onUp = () => dispatchRef.current({ type: 'up' });
 		const onKey = (e: KeyboardEvent) => {
-			if (e.key === 'Escape') {
-				releasedRef.current = true;
-				if (startedRef.current) void finish(true);
-			}
+			if (e.key === 'Escape') dispatchRef.current({ type: 'escape' });
 		};
 		window.addEventListener('pointerup', onUp);
 		window.addEventListener('keydown', onKey);
@@ -93,103 +127,24 @@ export function MicButton({
 			window.removeEventListener('pointerup', onUp);
 			window.removeEventListener('keydown', onKey);
 		};
-		// finish is stable enough for this gesture; deps intentionally minimal.
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [status, glossary, cleanupModel]);
+	}, [state.status]);
 
-	async function begin() {
-		const cfg = await loadSttConfig();
-		// No key: point to Settings even on a quick tap (checked before the
-		// released-early bail).
-		if (!cfg) {
-			busyRef.current = false;
-			onHint(NEEDS_KEY_HINT);
-			return;
-		}
-		if (releasedRef.current) {
-			busyRef.current = false;
-			return;
-		}
-		configRef.current = cfg;
-		try {
-			await startRecording();
-		} catch (e) {
-			busyRef.current = false;
-			onHint(errMsg(e));
-			return;
-		}
-		if (releasedRef.current) {
-			// Released before recording got going: drop it.
-			await cancelRecording().catch(() => {});
-			busyRef.current = false;
-			return;
-		}
-		startedRef.current = true;
-		startAtRef.current = Date.now();
+	// Elapsed seconds, restarted by each recording.
+	useEffect(() => {
+		if (state.status !== 'recording') return;
+		const startedAt = Date.now();
 		setElapsed(0);
-		setStatus('recording');
-		timerRef.current = window.setInterval(() => setElapsed(Date.now() - startAtRef.current), 200);
-	}
-
-	async function finish(cancel: boolean) {
-		if (!startedRef.current) return;
-		startedRef.current = false;
-		stopTimer();
-		setCancelArmed(false);
-		cancelArmedRef.current = false;
-		if (cancel) {
-			setStatus('idle');
-			busyRef.current = false;
-			await cancelRecording().catch(() => {});
-			return;
-		}
-		setStatus('transcribing');
-		try {
-			const wav = await stopRecording();
-			const raw = await transcribe(configRef.current!, wav, sttFetch);
-			const polished = await cleanupTranscript(raw, glossary, cleanupModel, chatCleanupRunner);
-			const text = polished.trim();
-			if (text) onInsert(text);
-			else onHint('No speech detected.');
-			setStatus('idle');
-		} catch (e) {
-			onHint(errMsg(e));
-			setStatus('idle');
-		} finally {
-			busyRef.current = false;
-		}
-	}
+		const timer = window.setInterval(() => setElapsed(Date.now() - startedAt), 200);
+		return () => window.clearInterval(timer);
+	}, [state.status]);
 
 	function onPointerDown(e: React.PointerEvent) {
-		if (disabled || busyRef.current) return;
+		if (disabled || stateRef.current.status !== 'idle') return;
 		e.preventDefault(); // keep composer focus; don't start a text selection
-		busyRef.current = true;
-		releasedRef.current = false;
-		startedRef.current = false;
-		cancelArmedRef.current = false;
-		setCancelArmed(false);
-		onHint(null);
-		void begin();
+		dispatch({ type: 'down' });
 	}
 
-	// During arming (before the window listener is live), a release here records
-	// the intent so begin() can bail. Also arms cancel on leave / re-arms on enter.
-	const onPointerUp = () => {
-		releasedRef.current = true;
-	};
-	const onPointerLeave = () => {
-		if (startedRef.current) {
-			cancelArmedRef.current = true;
-			setCancelArmed(true);
-		}
-	};
-	const onPointerEnter = () => {
-		if (startedRef.current) {
-			cancelArmedRef.current = false;
-			setCancelArmed(false);
-		}
-	};
-
+	const { status, cancelArmed } = state;
 	const dim = (size === 'lg' ? 'h-9 w-9' : 'h-7 w-7') + ' coarse:h-11 coarse:w-11';
 	const seconds = Math.floor(elapsed / 1000);
 
@@ -224,9 +179,9 @@ export function MicButton({
 				title="Hold to talk"
 				disabled={disabled || status === 'transcribing'}
 				onPointerDown={onPointerDown}
-				onPointerUp={onPointerUp}
-				onPointerLeave={onPointerLeave}
-				onPointerEnter={onPointerEnter}
+				onPointerUp={() => dispatch({ type: 'up' })}
+				onPointerLeave={() => dispatch({ type: 'leave' })}
+				onPointerEnter={() => dispatch({ type: 'enter' })}
 				onContextMenu={(e) => e.preventDefault()}
 				className={btnClass}
 			>

@@ -21,6 +21,20 @@ export {
 export { transcribe } from "./stt";
 export { buildGlossary, cleanupTranscript, type CleanupModel, type GlossarySource } from "./cleanup";
 export { startRecording, stopRecording, cancelRecording } from "./recorder";
+export {
+  INITIAL_PRESS_STATE,
+  NEEDS_KEY_HINT,
+  NO_SPEECH_HINT,
+  beginPress,
+  errMsg,
+  pressReducer,
+  type BeginOutcome,
+  type PressEffect,
+  type PressEvent,
+  type PressResult,
+  type PressState,
+  type PressStatus,
+} from "./press-machine";
 
 // STT transport over the app's Tauri fetch so the request bypasses the webview's
 // CORS and CSP (connect-src blocks direct cross-origin fetches; the plugin path
