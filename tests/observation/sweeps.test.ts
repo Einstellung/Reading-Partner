@@ -62,6 +62,8 @@ class Harness {
   arrearsCalls = 0;
   // A pass parks here instead of returning, so a test can act mid-sweep.
   pending: { promise: Promise<void>; resolve: () => void } | null = null;
+  // The same, for the distillation itself rather than the read before it.
+  pendingDistill: { promise: Promise<void>; resolve: () => void } | null = null;
   arrearsError: Error | null = null;
   jobs: { job: DistillJob; trigger: DistillTrigger }[] = [];
   guesses: DistillTrigger[] = [];
@@ -80,11 +82,17 @@ class Harness {
         if (this.arrearsError) throw this.arrearsError;
         return this.arrears;
       },
+      // Both passes are a model call and a write, so neither can land anything a
+      // caller that started it without waiting could see. Recording before the
+      // first await would make `void` and `await` indistinguishable here.
       distill: async (job, trigger) => {
+        if (this.pendingDistill) await this.pendingDistill.promise;
+        await Promise.resolve();
         this.order.push("distill");
         this.jobs.push({ job, trigger });
       },
       guess: async (trigger) => {
+        await Promise.resolve();
         this.order.push("guess");
         this.guesses.push(trigger);
       },
@@ -188,6 +196,32 @@ test("a sweep already running is this tick's one sweep", async () => {
   h.pending = null;
   await first;
   expect(h.jobs.length).toBe(1);
+});
+
+test("a sweep whose own pass is still running is this tick's one sweep", async () => {
+  const h = new Harness();
+  const s = h.sweeps();
+  h.pendingDistill = deferred();
+
+  const first = s.sweepDistillation("timer");
+  await settle();
+  expect(h.arrearsCalls).toBe(1);
+  expect(h.jobs.length).toBe(0);
+
+  // The timer coming round again while the pass this sweep started is still
+  // running. Two passes over the same topic each write back the meta they read
+  // before the other one wrote, and one of the two cursors is lost.
+  await s.sweepDistillation("foreground");
+  expect(h.arrearsCalls).toBe(1);
+
+  h.pendingDistill.resolve();
+  h.pendingDistill = null;
+  await first;
+  expect(h.jobs.length).toBe(1);
+
+  // And the sweep is available again once the pass it was waiting for is over.
+  await s.sweepDistillation("timer");
+  expect(h.arrearsCalls).toBe(2);
 });
 
 test("a distillation pass in flight holds the sweep and the guess off", async () => {

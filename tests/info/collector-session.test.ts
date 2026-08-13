@@ -22,6 +22,14 @@ import {
 const SOURCES_FILE = "info-sources.json";
 const MIN = 60_000;
 
+// One turn of the event loop, which is the least a real call out of this module
+// costs: every one of them ends in disk or network. Used by the fakes below so
+// that nothing they do can be observed by a caller that started them without
+// waiting.
+function aRoundTrip(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 // Everything the session talks to, in memory. The claim files are a map keyed by
 // device id, because that is what the folder is: one file per device, written
 // whole by its owner.
@@ -50,6 +58,13 @@ class Harness {
   generates = 0;
   retriages = 0;
   backfills = 0;
+  // The three round-trips the took branch makes, in the order their effects
+  // landed. The order is the thing being protected: the backfill has to settle
+  // before the poll it would otherwise race for the same two file names.
+  order: string[] = [];
+  // Non-null while the backfill is being held open, so a test can look at what
+  // the took branch did next while the briefing is still going up.
+  heldBackfill: Promise<void> | null = null;
   pipelineSubs: (() => void)[] = [];
   snapshot = {
     running: false,
@@ -102,12 +117,22 @@ class Harness {
       onExit: (cb) => {
         this.exitHandlers.push(cb);
       },
+      // The three fakes below land their effect only after an await boundary,
+      // the way the real calls do: backfillPublish is three file reads and an
+      // upload, refresh is a poll, init is the pipeline's startup read. A fake
+      // that counted before its first await would let `void` stand in for
+      // `await` at any of the three call sites and keep every assertion green.
       backfillPublish: async () => {
+        await aRoundTrip();
+        if (this.heldBackfill) await this.heldBackfill;
         this.backfills += 1;
+        this.order.push("backfill");
       },
       pipeline: () => ({
         init: async () => {
+          await aRoundTrip();
           this.inits += 1;
+          this.order.push("init");
         },
         generate: () => {
           this.generates += 1;
@@ -123,7 +148,9 @@ class Harness {
       }),
       collector: () => ({
         refresh: async () => {
+          await aRoundTrip();
           this.refreshes += 1;
+          this.order.push("refresh");
         },
         foreground: () => {
           this.foregrounds += 1;
@@ -167,6 +194,18 @@ class Harness {
   syncStatus(s: SessionSyncStatus): void {
     for (const cb of this.syncSubs) cb(s);
   }
+
+  // Park the backfill until the returned function is called.
+  holdTheBackfill(): () => void {
+    let release = (): void => {};
+    this.heldBackfill = new Promise<void>((resolve) => {
+      release = () => {
+        this.heldBackfill = null;
+        resolve();
+      };
+    });
+    return () => release();
+  }
 }
 
 // Everything the session does off a pull or a timer is fire-and-forget, so a test
@@ -175,10 +214,18 @@ function settle(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+// Long enough that anything the session started and did not wait for has had
+// its turn — so "has not happened" means "was never started", not "is one turn
+// behind the assertion".
+async function everythingStartedHasLanded(): Promise<void> {
+  for (let i = 0; i < 5; i += 1) await settle();
+}
+
 test("a willing machine takes the claim and tells the collector and the pipeline", async () => {
   const h = new Harness();
   const s = h.session();
   await s.start();
+  await settle();
 
   expect(h.last().claimedAt).toBe(h.now);
   expect(h.last().deviceName).toBe("kestrel");
@@ -187,8 +234,38 @@ test("a willing machine takes the claim and tells the collector and the pipeline
   // chance — a machine that just started claiming asked all three and got no.
   expect(h.backfills).toBe(1);
   expect(h.refreshes).toBe(1);
-  expect(h.inits).toBeGreaterThan(0);
+  // Two calls, from the two places that make them: the took branch above and
+  // the end of start(). Counted rather than merely present, because either one
+  // alone satisfies "at least one" and neither would then be pinned. The next
+  // test holds start()'s own call still at one; the transition test below holds
+  // the took branch's.
+  expect(h.inits).toBe(2);
+  // And the backfill settles before the poll: run the other way round, the two
+  // of them race for the same two briefing file names.
+  expect(h.order).toEqual(["backfill", "refresh", "init", "init"]);
   expect(await s.amICollecting()).toBe(true);
+});
+
+test("the briefing already on disk goes up before the poll that would race it", async () => {
+  const h = new Harness();
+  h.backgroundCollect = false;
+  const s = h.session();
+  await s.start();
+  await settle();
+
+  const release = h.holdTheBackfill();
+  h.backgroundCollect = true;
+  h.now += MIN;
+  const taking = s.publishClaim();
+  await everythingStartedHasLanded();
+  // The briefing is still going up, so nothing else the took branch does may
+  // have started: the run the poll wakes publishes under the same two names.
+  expect(h.backfills).toBe(0);
+  expect(h.refreshes).toBe(0);
+
+  release();
+  await taking;
+  expect(h.order).toEqual(["init", "backfill", "refresh"]);
 });
 
 test("an unwilling machine writes a heartbeat and no claim", async () => {
@@ -196,12 +273,57 @@ test("an unwilling machine writes a heartbeat and no claim", async () => {
   h.backgroundCollect = false;
   const s = h.session();
   await s.start();
+  await settle();
 
   expect(h.last().claimedAt).toBe(null);
   expect(h.last().heartbeatAt).toBe(h.now);
   expect(h.backfills).toBe(0);
   expect(h.refreshes).toBe(0);
+  // start() gives the pipeline its second chance whether or not the claim was
+  // taken, so this is that call site on its own.
+  expect(h.inits).toBe(1);
+  expect(h.order).toEqual(["init"]);
   expect(await s.amICollecting()).toBe(false);
+});
+
+test("taking the claim is a transition, and the next heartbeat is not one", async () => {
+  const h = new Harness();
+  h.backgroundCollect = false;
+  const s = h.session();
+  await s.start();
+  await settle();
+  expect(h.last().claimedAt).toBe(null);
+  // start()'s own call, and nothing from the took branch.
+  expect(h.inits).toBe(1);
+
+  // Collection turned on: this is the moment the machine goes from declining to
+  // poll and declining to generate to doing both, and the only moment the three
+  // one-shot calls belong to.
+  h.backgroundCollect = true;
+  h.now += MIN;
+  const tookAt = h.now;
+  await s.publishClaim();
+  // Read before settling: publishClaim() has returned, so anything it started
+  // without waiting for has not landed yet, and these two would still be zero.
+  expect(h.backfills).toBe(1);
+  expect(h.refreshes).toBe(1);
+  await settle();
+  expect(h.last().claimedAt).toBe(tookAt);
+  expect(h.inits).toBe(2);
+
+  // An hour on, the same machine is still the collector and writes its hourly
+  // heartbeat. It did not take anything: re-entering here would republish a
+  // briefing, restart the poll and re-run the pipeline's startup on a machine
+  // that never stopped collecting, once an hour, forever.
+  h.now += 60 * MIN;
+  await s.publishClaim();
+  await settle();
+  expect(h.last().claimedAt).toBe(tookAt);
+  expect(h.last().heartbeatAt).toBe(h.now);
+  expect(h.backfills).toBe(1);
+  expect(h.refreshes).toBe(1);
+  expect(h.inits).toBe(2);
+  expect(h.order).toEqual(["init", "backfill", "refresh", "init"]);
 });
 
 test("the claim is kept once taken and goes to the back of the queue when retaken", async () => {
