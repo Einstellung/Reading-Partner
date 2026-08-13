@@ -69,6 +69,7 @@
 - [71-first-touchmove-is-already-past-the-slop](./71-first-touchmove-is-already-past-the-slop.md) — 抢触摸的阈值在 1–16px 之间毫无区别：浏览器越过自己的 slop 才派发第一个 `touchmove`，那一下的位移已经是 16（手指更快就更大）；这个数只需小到任何第一个 move 都能满足，不是调参
 - [83-radix-menu-opens-on-pointerdown-and-the-lift-picks-a-row](./83-radix-menu-opens-on-pointerdown-and-the-lift-picks-a-row.md) — Radix 的菜单 trigger 在 pointerdown 上开，`MenuItem` 又会在没见过 pointerdown 的 pointerup 上自己 click，同一次点按能既开菜单又选中手指下方那一行；trigger 改成在 click 上开，并记住按下时的开合状态（关闭走的是 document 上的 dismiss，排在 React 之后）
 - [92-radix-select-already-opens-on-click-for-a-finger](./92-radix-select-already-opens-on-click-for-a-finger.md) — `SelectTrigger` 按指针类型分路（鼠标 pointerdown、手指和笔 click），坑 83 那套绕法照抄过去会双开；实测一按抬手时列表还不在 DOM 里
+- [117-webkit-takes-the-scroll-later-and-only-on-a-scrollable-axis](./117-webkit-takes-the-scroll-later-and-only-on-a-scrollable-axis.md) — 坑 70、71 的四个数在 iOS WKWebView 上一个都不成立：`touchmove` 从第一个像素就发、约 16px 才判滚动（其间每个 move 都 cancelable）、只 prevent 第一个 move 就够、而且只抢它真能滚的那个轴；3px 和「每个 move 都 prevent」是两个引擎的交集，不用改
 
 ## 网络与 CSP
 
@@ -163,6 +164,7 @@
 
 - [14-dev-build-oomd-session-kill](./14-dev-build-oomd-session-kill.md) — 全量 Rust 编译触发 systemd-oomd 杀整个桌面会话；日常用 `bun run dev:capped`
 - [55-worktree-dev-server-serves-stale-modules](./55-worktree-dev-server-serves-stale-modules.md) — worktree 在 `.claude/` 下，正好被 Vite 的 watch ignore 命中，dev server 看不见自己的改动；每次改完要重启
+- [118-the-simulator-is-the-same-webkit-with-a-different-finger](./118-the-simulator-is-the-same-webkit-with-a-different-finger.md) — iPad 模拟器跑的是真 WKWebView + 真 PDFium + 经 HID 注入的真触摸，橡皮筋、笔手路由、双指缩放都能量出数；但没有笔（`pointerType` 恒为 touch）、没有接触面积（恒 40×40）、idb 一次只有一根手指（双指只能走 XCUITest 的 pinch，三指以上无解）。跑法在 `scripts/ios-sim.sh`
 
 ## 历史（zotero/reader 引擎时代）
 
