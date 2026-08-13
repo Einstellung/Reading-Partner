@@ -9,7 +9,7 @@ import { useViewportSize } from '../common/useViewportSize';
 import { Button } from '../ui/button';
 import { cn } from '../lib/utils';
 import { OVERLAY_Z, useOverlaySafePadding } from '../ui/overlay';
-import type { ColorEntry, Tool, ToolType } from '../common/types';
+import type { ColorEntry, Tool, ToolType } from './types';
 
 interface PenToolbarProps {
 	tool: Tool;

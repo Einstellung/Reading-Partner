@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { IconArea, IconHighlight, IconSparkle, IconTrash, IconUnderline } from '../base/icons';
 import { Button } from '../ui/button';
-import type { Annotation } from '../common/types';
+import type { Annotation } from './types';
 import {
 	SWIPE_ACTION_WIDTH,
 	actionVisible,

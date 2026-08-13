@@ -34,8 +34,8 @@ import {
   type Talk,
 } from "../../../reading/talks";
 import { distillRehearsal } from "../../../observation";
-import { appendRunningTool, resolveToolStatus } from "../common/toolTrace";
-import type { ThreadMessage } from "../common/types";
+import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
+import type { ThreadMessage } from "../chat/types";
 import {
   cardRow,
   insertBeforeLast,

@@ -45,7 +45,7 @@ import CallView from "../chat/CallView";
 import ChatPipCard from "../chat/ChatPipCard";
 import { callLayout, navigateAway } from "../chat/call-layout";
 import { refusalRow, replayableHistory } from "../chat/turn-rows";
-import { appendRunningTool, resolveToolStatus } from "../common/toolTrace";
+import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
 import ReadingPipCard from "../chat/ReadingPipCard";
 import {
   cardRow,
@@ -63,7 +63,7 @@ import type { ChatMessage } from "../../../ai/providers";
 import type { BriefingView, RequestOutcome } from "../../../info/briefing/reader";
 import type { ProfileUpdateCardData } from "../../../info/briefing/cards";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
-import type { ThreadMessage as UiMessage } from "../common/types";
+import type { ThreadMessage as UiMessage } from "../chat/types";
 
 export interface InfoCallAnchor {
   // "briefing" for the briefing-level thread, or the item id for an article, or

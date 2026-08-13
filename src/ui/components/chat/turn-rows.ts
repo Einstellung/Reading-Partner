@@ -8,14 +8,14 @@
 //             spent its round cap on tools without answering (agent.ts).
 //             Nothing failed and nothing is worth retrying — the same inputs are
 //             declined the same way. The sentence is the app talking about the
-//             turn, so it goes in `notice` (common/types) and never in `text`:
+//             turn, so it goes in `notice` (chat/types) and never in `text`:
 //             `text` is the model's words, and every surface replays it as the
 //             assistant's own on the next turn.
 //
 // Kept here rather than in a .tsx so every chat surface can end a turn the same
 // way (App and useTalk both do this in their own words already).
 
-import type { ThreadMessage } from "../common/types";
+import type { ThreadMessage } from "./types";
 
 // The tool trace a stopped turn keeps: the calls that failed, which explain the
 // stop, and none of the ones that ran fine.

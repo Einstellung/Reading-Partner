@@ -24,7 +24,7 @@ import {
   refusalRow,
   replayableHistory,
 } from "../../../src/ui/components/chat/turn-rows";
-import type { ThreadMessage } from "../../../src/ui/components/common/types";
+import type { ThreadMessage } from "../../../src/ui/components/chat/types";
 
 const MODEL = {} as Model<Api>;
 

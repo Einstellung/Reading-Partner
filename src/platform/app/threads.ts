@@ -93,7 +93,9 @@ function extFor(mediaType: string): string {
   return mediaType === "image/png" ? "png" : "jpg";
 }
 
-function mediaTypeFor(name: string): string {
+// Narrow, so a loaded image is the same shape the compressor produces
+// (ai/image-utils's CompressedImage) and can be handed straight to a bubble.
+function mediaTypeFor(name: string): "image/png" | "image/jpeg" {
   return name.endsWith(".png") ? "image/png" : "image/jpeg";
 }
 
@@ -123,8 +125,8 @@ export async function saveThreadImages(
 export async function readThreadImages(
   threadId: string,
   names: string[],
-): Promise<{ data: string; mediaType: string }[]> {
-  const out: { data: string; mediaType: string }[] = [];
+): Promise<{ data: string; mediaType: "image/png" | "image/jpeg" }[]> {
+  const out: { data: string; mediaType: "image/png" | "image/jpeg" }[] = [];
   for (const name of names) {
     const path = `${threadImageDir(threadId)}/${name}`;
     if (!(await exists(path, { baseDir: BaseDirectory.AppData }))) continue;

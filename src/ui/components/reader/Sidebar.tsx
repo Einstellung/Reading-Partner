@@ -17,7 +17,7 @@ import { IconHighlight, IconNotes, IconOutline, IconSparkle } from "../base/icon
 import { Button } from "../ui/button";
 import OutlineView from "./OutlineView";
 import TraceList from "./TraceList";
-import type { Annotation } from "../common/types";
+import type { Annotation } from "./types";
 import type { Fulltext } from "../../../fulltext/types";
 
 export type SidebarTab = "outline" | "traces" | "prep" | "notes";

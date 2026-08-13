@@ -106,8 +106,6 @@ const MAY_IMPORT: Record<Layer, Layer[]> = {
 // test as loudly as a new one appears. Delete the line with the fix, and the
 // whole mechanism with the last one.
 const KNOWN_CYCLES: [string, string][] = [
-  // B1.3: common/types.ts splits into ai/tool-status, reader/types, chat/types.
-  ["ui/components/chat", "ui/components/common"],
   // B1.4: the card files move to ui/components/shelf. Deleting these two lines
   // is not enough on its own: ui/components/talk imports ui/components/library/topic
   // directly, an edge on no pair here, and library -> talk -> library/topic ->

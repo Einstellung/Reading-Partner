@@ -7,7 +7,9 @@ import { IconCheck, IconCopy, IconSend, IconStop } from '../base/icons';
 import { Markdown } from '../markdown/Markdown';
 import { MicButton } from './MicButton';
 import { useFlickerProbe } from '../common/useFlickerProbe';
-import type { ChatImage, PendingImage, ThreadMessage, ToolStatus } from '../common/types';
+import type { PendingImage, ThreadMessage } from './types';
+import type { CompressedImage } from '../../../ai/image-utils';
+import type { ToolStatus } from '../../../ai/tool-status';
 import { messageToParts, type CardActionHandler, type CardSurface } from './chatParts';
 import { CARD_REGISTRY } from './cardRegistry';
 import type { CleanupModel } from '../../../ai/voice';
@@ -122,7 +124,7 @@ function CopyButton({ text }: { text: string }) {
 // Attached images, right-aligned above a user message. Constrained height so a
 // tall screenshot doesn't blow out the column; no lightbox in v1 (docs:
 // original-size, bounded).
-function MessageImages({ images }: { images: ChatImage[] }) {
+function MessageImages({ images }: { images: CompressedImage[] }) {
 	return (
 		<div className="flex flex-wrap justify-end gap-1.5">
 			{images.map((img, i) => (

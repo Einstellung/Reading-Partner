@@ -8,7 +8,7 @@ import { IconClose } from '../base/icons';
 import { Composer, MessageList, type ComposerVoice } from './chat';
 import DeleteThreadButton from './DeleteThreadButton';
 import { useKeyboardInset } from '../common/useKeyboardInset';
-import type { PendingImage, ThreadMessage } from '../common/types';
+import type { PendingImage, ThreadMessage } from './types';
 import type { CardActionHandler } from './chatParts';
 import { Button } from '../ui/button';
 

@@ -13,7 +13,7 @@ import DeleteThreadButton from './DeleteThreadButton';
 import { overlayLayerOpen } from '../base/overlay-layer';
 import { fitPanelWidth, placePanel, pointAnchor } from '../common/panel-position';
 import { useViewportSize } from '../common/useViewportSize';
-import type { PendingImage, ThreadMessage } from '../common/types';
+import type { PendingImage, ThreadMessage } from './types';
 
 interface CallBubbleProps {
 	anchor: { x: number; y: number };

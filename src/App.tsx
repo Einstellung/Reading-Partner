@@ -100,12 +100,14 @@ import { researchStatusLabel, RESEARCH_TOOL_NAME } from "./reading/papers/resear
 import type { SubagentProgress } from "./ai/subagent";
 import { Button } from "./ui/components/ui/button";
 import { OVERLAY_Z } from "./ui/components/ui/overlay";
-import { appendRunningTool, relabelRunningTool, resolveToolStatus } from "./ui/components/common/toolTrace";
+import { appendRunningTool, relabelRunningTool, resolveToolStatus } from "./ai/tool-status";
 import LibraryScreen from "./ui/components/library/LibraryScreen";
 import Toast, { useToasts } from "./ui/components/common/Toast";
 import SettingsButton from "./ui/components/common/SettingsButton";
 import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
-import type { Annotation as PopupAnnotation, PendingImage, ToolStatus, ToolType } from "./ui/components/common/types";
+import type { Annotation as PopupAnnotation, ToolType } from "./ui/components/reader/types";
+import type { PendingImage } from "./ui/components/chat/types";
+import type { ToolStatus } from "./ai/tool-status";
 import { rehydrateMessage, type ChatPart } from "./ui/components/chat/chatParts";
 import { holdsNoAnswer, refusalRow } from "./ui/components/chat/turn-rows";
 import { refreshInfoCollector } from "./info/briefing/live";
@@ -140,7 +142,7 @@ type CallMessage = {
   role: "user" | "ai";
   text: string;
   ts: number;
-  images?: { data: string; mediaType: string }[];
+  images?: CompressedImage[];
   streaming?: boolean;
   failed?: boolean;
   // The durable parts of the row (chatParts.ts). Present on rows that carry a
@@ -579,7 +581,7 @@ export default function App() {
     const withImages = msgs.filter((m) => m.images && m.images.length > 0);
     if (withImages.length === 0) return;
     void (async () => {
-      const loaded = new Map<number, { data: string; mediaType: string }[]>();
+      const loaded = new Map<number, CompressedImage[]>();
       for (const m of withImages) {
         loaded.set(m.ts, await readThreadImages(threadId, m.images as string[]));
       }

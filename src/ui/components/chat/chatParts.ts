@@ -19,7 +19,8 @@ import type {
   PersistedPart,
   ThreadMessage as StoredMessage,
 } from "../../../platform/app/threads";
-import type { ThreadMessage, ToolStatus } from "../common/types";
+import type { ThreadMessage } from "./types";
+import type { ToolStatus } from "../../../ai/tool-status";
 
 // The domain payload a card renders. Payload types stay in the domain layer
 // (info/briefing/cards.ts, reading/rehearsal/cards.ts); this protocol only
