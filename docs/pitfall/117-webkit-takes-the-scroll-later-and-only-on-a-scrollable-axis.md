@@ -6,6 +6,8 @@
 
 同一个 `overflow-y:auto` 容器，同一段下滑，非 passive `touchmove` 里按位移决定抢不抢：
 
+下面两张表是一次运行的实测值，当区间读，不要拿来做逐值 diff。在录这些数的那个 commit（8a5ced7）上重跑，接管边界会飘最多 8px：1px 步长量到 -18/-19（表里是 -15/-16），8px 步长量到 -24/-32（表里是 -16/-24），第一个抢不住的阈值从 10 与 20 之间挪到 20 与 24 之间。可复现的记录在 `scripts/ios-sim/baseline.md`。
+
 | 每步位移 | 第一个 touchmove 的 dy | 最后一个还 cancelable 的 move | 第一个 cancelable=false 的 move |
 |---|---|---|---|
 | 1px | -1 | -15 | -16 |
@@ -23,6 +25,8 @@
 | 只抢第一个 move | `pointerdown → pointerup`，容器没滚 |
 
 手指快到每步 20px 时，20px 的阈值也抢得住（第一个 move 的位移就是 20），30px 抢不住；每步 50px 时 30px 抢得住，60px 抢不住。
+
+稳的是量级和方向，不是具体像素：小阈值（3px、10px）永远抢得住，容器一像素不滚；大阈值（30px、4px 步长）永远抢不住，容器滚 670-771px；只抢第一个 move 永远够。窗口宽度在 15-32px 之间随步长变。`scripts/ios-sim/baseline.md` 列的就是这批稳定项，回归 diff 该对着它，不该对着上面两张表。
 
 ## 原因
 
@@ -49,3 +53,5 @@
 ## 范围
 
 iPad Pro 11-inch (M5) 模拟器、iOS 26.5、Tauri 的 WKWebView，触摸经 CoreSimulator 的 HID 通道注入（`scripts/ios-sim.sh gesture webkit-claim`）。真机的手指来自真的数字化仪，第一个 move 的位移和采样间隔都由硬件决定，16px 这个数在真机上要复核——但结论不依赖它，见坑 118。
+
+`webkit-claim` 这个场景量的是 WebKit，不是阅读器。它自己往 `document.body` 上盖一个 `position:fixed;inset:0` 的滚动容器，把自己的监听装在上面，阅读器的笔手路由全程没跑。所以它是这套模拟器夹具的自检，不是手势覆盖：B3 把触摸路由搬进 `reading/engine/gesture/` 之后跑绿了，也不代表那次搬家没引入回归——它压根不经过被搬的代码。阅读器手势的实测基线在 `scripts/ios-sim/baseline.md` 的前五个场景。
