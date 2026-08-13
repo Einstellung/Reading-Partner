@@ -8,21 +8,15 @@ import {
   type ViewState,
   type ViewStats,
 } from "./platform/app/reader-contract";
-import { getViewState, hashPath } from "./platform/app/storage";
-import {
-  importBook,
-  libraryHas,
-  readLibraryBook,
-  repairLibraryNames,
-} from "./platform/app/library";
+import { hashPath } from "./platform/app/storage";
+import { importBook, repairLibraryNames } from "./platform/app/library";
 import { migrateBookLive } from "./platform/app/migrate";
-import { ensureFulltext, type Fulltext } from "./fulltext";
+import type { Fulltext } from "./fulltext";
 import Sidebar, { type SidebarTab } from "./ui/components/reader/Sidebar";
 import { annotationPage, toolStatusLabel } from "./reading/context";
 import {
   ANNOTATION_COLORS,
   deleteAnnotations,
-  loadAnnotations,
   saveAnnotations,
 } from "./platform/app/annotations";
 import {
@@ -42,7 +36,6 @@ import {
   deleteThread,
   getBookThread,
   getThread,
-  loadThreads,
   readThreadImages,
   saveThreadImages,
   type ThreadMessage,
@@ -66,7 +59,6 @@ import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import {
   distillThread,
   startDistillSweeps,
-  sweepDistillation,
   toDistillAnnotations,
   type DistillAnnotation,
 } from "./observation";
@@ -76,8 +68,6 @@ import EmbedReaderPane from "./reading/engine/EmbedReaderPane";
 import { openFailureText } from "./reading/engine/open-failure";
 import { CitationContext, FigureContext, type FigureHost } from "./ui/components/markdown/Markdown";
 import {
-  clearFigureCache,
-  ensureFigures,
   findFigureById,
   renderFigure,
   type Figure,
@@ -102,12 +92,12 @@ import {
   type RowChange,
 } from "./reading/call-state";
 import { createPendingImages } from "./reading/pending-images";
+import { closeBook } from "./reading/session/close-book";
+import { openBook } from "./reading/session/open-book";
+import { resolveBookSource } from "./reading/session/open-file";
+import type { ReaderShell } from "./reading/session/shell";
 import { SHELF_PULL_ROUTE } from "./reading/pull-routes";
-import {
-  keepReadingPosition,
-  seedReadingPosition,
-  setReadingModes,
-} from "./reading/reading-position";
+import { keepReadingPosition, setReadingModes } from "./reading/reading-position";
 import { researchStatusLabel, RESEARCH_TOOL_NAME } from "./reading/papers/research-agent";
 import type { SubagentProgress } from "./ai/subagent";
 import { Button } from "./ui/components/ui/button";
@@ -134,12 +124,6 @@ const MAX_PENDING_IMAGES = 3;
 // What the composer renders with no call open. A constant, so hanging up twice
 // does not hand React a second empty array.
 const NO_PENDING_IMAGES: PendingImage[] = [];
-
-// Reading layout for a book that has never chosen one: vertical continuous
-// scroll on every surface (the correct PDF-reading default; a finger swipe
-// scrolls, like Notability / PDF Expert). Paged horizontal flip stays available
-// as an opt-in in the reader's More menu, off by default.
-const DEFAULT_LAYOUT = "vertical" as const;
 
 interface PopupState {
   annotation: Annotation;
@@ -932,6 +916,18 @@ export default function App() {
     if (!liveTurnsRef.current.whenSettled(c.threadId, distill)) distill();
   }, [distillAnnotations]);
 
+  // Keep what a cut-short turn wrote: the abort silences the agent (no
+  // onDone/onError follows), so persisting the partial here is the only way it
+  // survives. Nothing generated yet → nothing to keep. Returns the kept text.
+  const keepPartial = useCallback((live: LiveTurn<CallMessage>) => {
+    const partial = live.message.text.trim();
+    if (partial) {
+      appendMessage(live.bookId, live.threadId, { role: "ai", text: partial, ts: live.message.ts });
+    }
+    live.onSettled?.();
+    return partial;
+  }, []);
+
   // Touching the book dismisses the bubble / chat corner card (docs/03).
   // chat-main is not dismissable this way (CallView covers the reader). AI-pen
   // draws and mark clicks fire this on pointerdown, then re-open on save/select.
@@ -948,120 +944,79 @@ export default function App() {
     }
   }, [captureHangup]);
 
-  const openInReader = useCallback(
-    async (bookId: string, name: string, bytes: Uint8Array) => {
-      setStatus("Rendering…");
-      setPopup(null);
-      // Leaving a book with a call open ends that conversation, same as closing
-      // the reader. First thing in, while the refs the hangup reads still point
-      // at the book being left.
-      captureHangup();
-      // And a look at what the book being left still owes: a stretch of reading
-      // with nothing said in it never reaches the hangup path at all.
-      void sweepDistillation("book-switch");
-      dispatchCall({ type: "closed" });
-      // The images staged in this book's conversations go with it, same as
-      // closing the reader: they are in memory only, and every thread they
-      // belong to is about to be out of reach.
-      pendingRef.current.clearAll();
-      setSelectedAnnId(null);
-      // Every book opens with nothing selected. The tool state lives on App and
-      // would otherwise carry the previous book's annotation tool into the next
-      // open — a finger then marks the page the moment it lands. The navigation
-      // lock is not carried over either; it is a per-session reading posture.
-      setToolType("none");
-      const state = await getViewState(bookId);
-      let saved: Annotation[] = [];
-      try {
-        saved = await loadAnnotations(bookId);
-      } catch (e) {
-        console.error("failed to load annotations", e);
-        pushToast("warn", "Saved annotations could not be loaded");
-      }
-      try {
-        await loadThreads(bookId);
-      } catch (e) {
-        console.error("failed to load threads", e);
-        pushToast("warn", "Saved AI conversations could not be loaded");
-      }
-      annsRef.current = new Map(saved.map((a) => [a.id, a]));
-      setTraceAnns(saved);
-
-      setViewReady(false);
-      bookIdRef.current = bookId;
-      bookNameRef.current = name;
-      // Seed the persist base with the loaded state so an early mode press
-      // (before the reader emits a position) merges onto the right book.
-      seedReadingPosition(bookId, state);
-      // Dwell tracking restarts per book (never a cross-book page-nav event).
-      pageDwellRef.current = null;
-      // A restored classroom "on" attaches the pipeline below once the fulltext
-      // is ready, degrading exactly like a manual toggle-on when the book has no
-      // readable text. The flag is per book and sticky (docs/09); detach the
-      // previous book's prep panel first (the pipeline itself keeps running in
-      // the background as a module singleton).
-      const restoreClassroom = !!state?.classroom;
-      resetPrep(restoreClassroom);
-      // Notes are per book too; detach the previous book's panel.
-      resetNotes();
-      // Extract the full text in the background so the AI can see the book
-      // (M6). Fire-and-forget: never blocks rendering.
-      setFulltextPending(true);
-      setFulltext(null);
-      // Reset the figure index + cached crops for the new book (M9).
-      setFigures([]);
-      figuresRef.current = [];
-      clearFigureCache();
-      // One copy of the book, shared by everything that reads it. pdf.js does
-      // detach the buffer it is handed, but every consumer here already slices
-      // its own before handing it over (fulltext/extract.ts, figures/store.ts,
-      // figures/render.ts, EmbedPdfView's wireEngine), so a copy per consumer
-      // was five 26 MB allocations at book-open where one does.
-      const buffer = bytes.slice().buffer as ArrayBuffer;
-      bufferRef.current = buffer;
-      currentFiguresRef.current = ensureFigures(bookId, buffer).catch((e) => {
-        console.warn("failed to extract figures", e);
-        return null;
-      });
-      currentFiguresRef.current.then((idx) => {
-        if (bookIdRef.current !== bookId) return; // stale: the user switched books
-        const list = idx?.figures ?? [];
+  // What the two sequences below do to the screen and to the shell's refs.
+  // Which of them happen, in what order and what is skipped when, is
+  // reading/session's (open-book.ts, close-book.ts) — this is only the wiring.
+  const readerShell = useMemo<ReaderShell>(
+    () => ({
+      showStatus: setStatus,
+      pushToast,
+      closeAnnotationPopup: () => setPopup(null),
+      captureHangup,
+      closeCall: () => dispatchCall({ type: "closed" }),
+      discardStagedImages: () => pendingRef.current.clearAll(),
+      endBookTurns: (bookId) => {
+        for (const live of liveTurnsRef.current.stopBook(bookId)) keepPartial(live);
+      },
+      clearSelectedMark: () => setSelectedAnnId(null),
+      resetTool: () => setToolType("none"),
+      showMarks: (marks) => {
+        annsRef.current = new Map(marks.map((a) => [a.id, a]));
+        setTraceAnns(marks);
+      },
+      readerNotReady: () => setViewReady(false),
+      takeBook: (bookId, name, buffer) => {
+        bookIdRef.current = bookId;
+        bookNameRef.current = name;
+        bufferRef.current = buffer;
+      },
+      currentBookId: () => bookIdRef.current,
+      restartDwell: () => {
+        pageDwellRef.current = null;
+      },
+      releaseBook: () => {
+        bookIdRef.current = null;
+        viewRef.current = null;
+        pageDwellRef.current = null;
+      },
+      resetPrep,
+      resumePrep,
+      resetNotes,
+      resumeNotes,
+      finalPassNotes,
+      trackFulltext: (extraction) => {
+        currentFulltextRef.current = extraction;
+      },
+      trackFigures: (extraction) => {
+        currentFiguresRef.current = extraction;
+      },
+      showFulltext: (ft, pending) => {
+        setFulltext(ft);
+        setFulltextPending(pending);
+      },
+      showFigures: (list) => {
         figuresRef.current = list;
         setFigures(list);
-      });
-      currentFulltextRef.current = ensureFulltext(bookId, buffer).catch((e) => {
-        console.warn("failed to extract fulltext", e);
-        return null;
-      });
-      currentFulltextRef.current.then(async (ft) => {
-        if (bookIdRef.current !== bookId) return; // stale: the user switched books
-        setFulltext(ft);
-        setFulltextPending(false);
-        if (ft && ft.status === "ok") {
-          // Resume lesson prep from its persisted state (docs/09).
-          await resumePrep(bookId, name, ft, restoreClassroom);
-          // Resume book notes from persisted state (docs/14).
-          await resumeNotes(bookId, name, ft);
-        }
-      });
+      },
+      mountReader: setEmbedDoc,
+      unmountReader: () => setEmbedDoc(null),
+      showTitle: setTitle,
+    }),
+    [
+      captureHangup,
+      finalPassNotes,
+      keepPartial,
+      pushToast,
+      resetNotes,
+      resetPrep,
+      resumeNotes,
+      resumePrep,
+    ],
+  );
 
-      // Mount EmbedReaderPane with the bytes. It calls back onView (sets
-      // viewRef) and onInitialized once ready. It slices its own copy for
-      // PDFium and never detaches this one, so it reads the shared buffer.
-      setEmbedDoc({
-        bookId,
-        name,
-        buffer,
-        annotations: saved,
-        // Seed the layout for a book that has never chosen one, so the reader
-        // opens in the right mode on the first paint.
-        viewState: state
-          ? { ...state, layout: state.layout ?? DEFAULT_LAYOUT }
-          : ({ pageIndex: 0, scale: "auto", scrollMode: 0, layout: DEFAULT_LAYOUT } as ViewState),
-      });
-      setTitle(name);
-    },
-    [pushToast, resetPrep, resumePrep, resetNotes, resumeNotes, captureHangup],
+  const openInReader = useCallback(
+    (bookId: string, name: string, bytes: Uint8Array) => openBook(readerShell, { bookId, name, bytes }),
+    [readerShell],
   );
 
   // Open a topic file. If its book id is known and the library holds the
@@ -1075,18 +1030,7 @@ export default function App() {
       const tid = topicId ?? activeTopicId;
       if (!tid) return;
       try {
-        let bytes: Uint8Array;
-        let bookId: string;
-        if (file.hash && (await libraryHas(file.hash))) {
-          bytes = await readLibraryBook(file.hash);
-          bookId = file.hash;
-        } else {
-          bytes = await readFile(file.path);
-          const entry = await importBook(bytes, file.path);
-          bookId = entry.hash;
-          await migrateBookLive(hashPath(file.path), bookId);
-          if (file.hash !== bookId) await setFileHash(tid, file.path, bookId);
-        }
+        const { bookId, bytes } = await resolveBookSource(file, tid);
         await openInReader(bookId, file.name, bytes);
         await markOpened(tid, file.path);
         await refreshTopics();
@@ -1333,18 +1277,6 @@ export default function App() {
     if (c) runTurn(c.threadId, c.annotationId);
   }, [runTurn]);
 
-  // Keep what a cut-short turn wrote: the abort silences the agent (no
-  // onDone/onError follows), so persisting the partial here is the only way it
-  // survives. Nothing generated yet → nothing to keep. Returns the kept text.
-  const keepPartial = useCallback((live: LiveTurn<CallMessage>) => {
-    const partial = live.message.text.trim();
-    if (partial) {
-      appendMessage(live.bookId, live.threadId, { role: "ai", text: partial, ts: live.message.ts });
-    }
-    live.onSettled?.();
-    return partial;
-  }, []);
-
   // The stop button: end the open thread's turn, keeping the half sentence.
   const stopTurn = useCallback(() => {
     const c = callRef.current;
@@ -1500,34 +1432,8 @@ export default function App() {
   }, []);
 
   const closeReader = useCallback(() => {
-    // Leaving the book ends every turn it has running, each keeping what it
-    // wrote. A background reply is tied to the book being read, not to the app;
-    // this is where it stops. Turns on other books are left alone. Before the
-    // hangup, so the distillation reads the partials too.
-    const bookId = bookIdRef.current;
-    if (bookId) for (const live of liveTurnsRef.current.stopBook(bookId)) keepPartial(live);
-    // Closing the book with a call open ends that conversation too.
-    captureHangup();
-    void sweepDistillation("book-switch");
-    // The last chapter can't be reached by a "next chapter" highlight, so on
-    // close evaluate the notes frontier once with the inclusive rule (docs/14).
-    // Fire before the refs are torn down below.
-    finalPassNotes();
-    dispatchCall({ type: "closed" });
-    // Staged images only ever lived in memory, so they were never going to
-    // outlast the book anyway; they go with it.
-    pendingRef.current.clearAll();
-    setTitle(null);
-    setPopup(null);
-    setFulltext(null);
-    setFulltextPending(false);
-    setEmbedDoc(null);
-    // Detach the prep UI; the pipeline keeps prepping in the background.
-    resetPrep(false);
-    bookIdRef.current = null;
-    viewRef.current = null;
-    pageDwellRef.current = null;
-  }, [captureHangup, finalPassNotes, resetPrep, keepPartial]);
+    closeBook(readerShell, bookIdRef.current);
+  }, [readerShell]);
 
   // Stable handlers for the EmbedPDF pane so its React.memo actually holds: any
   // new prop identity here would re-render the whole engine subtree on every
