@@ -6,7 +6,7 @@
 // Fake clock + fake window, so the exit listener is a function the test calls.
 // Run: bun test.
 
-import { beforeEach, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, expect, mock, test } from "bun:test";
 
 const files = new Map<string, string>();
 const writes: string[] = [];
@@ -58,7 +58,19 @@ const fakeWindow = {
     if (type === "pagehide") exitListeners.delete(fn);
   },
 };
-(globalThis as { window?: unknown }).window = fakeWindow;
+
+// Installed per test and taken away again. globalThis is shared with every other
+// test file in the worker, so a fake window left standing decides for unrelated
+// code whether it thinks it is in a browser.
+const hadWindow = "window" in globalThis;
+const realWindow = (globalThis as { window?: unknown }).window;
+function useFakeWindow(): void {
+  (globalThis as { window?: unknown }).window = fakeWindow;
+}
+function restoreWindow(): void {
+  if (hadWindow) (globalThis as { window?: unknown }).window = realWindow;
+  else delete (globalThis as { window?: unknown }).window;
+}
 
 // Let the store's own promises settle (the write is async under the timer).
 function settle(): Promise<void> {
@@ -84,7 +96,7 @@ const {
   onSettingsSaveError,
   saveSettings,
   SETTINGS_FILE,
-  settingsAfterPull,
+  settingsPullAction,
 } = await import("../../src/platform/app/settings");
 const { mergeFile } = await import("../../src/platform/sync/merge");
 
@@ -98,7 +110,10 @@ beforeEach(() => {
   writes.length = 0;
   tasks = [];
   readFails = false;
+  useFakeWindow();
 });
+
+afterEach(restoreWindow);
 
 test("repeated edits collapse into one write", async () => {
   saveSettings({ ...DEFAULT_SETTINGS, aiLanguage: "en" });
@@ -110,31 +125,10 @@ test("repeated edits collapse into one write", async () => {
   expect(onDisk().aiLanguage).toBe("ja");
 });
 
-// The clobber this store's pull backfill exists for. Field-level merge lands
-// another device's aiLanguage in the file; the shell still holds the copy it
-// loaded before the pull, and saveSettings writes that copy whole.
-test("a shell that keeps its pre-pull copy overwrites what the merge landed", async () => {
-  files.set(SETTINGS_FILE, JSON.stringify(DEFAULT_SETTINGS, null, 2));
-  const inMemory = await loadSettings();
-
-  const base = enc(files.get(SETTINGS_FILE) as string);
-  const merged = mergeFile({
-    path: SETTINGS_FILE,
-    base,
-    local: base,
-    remote: enc(JSON.stringify({ ...DEFAULT_SETTINGS, aiLanguage: "ja" }, null, 2)),
-  });
-  files.set(SETTINGS_FILE, dec(merged.merged));
-  expect(onDisk().aiLanguage).toBe("ja");
-
-  saveSettings({ ...inMemory, autoNotes: false });
-  await advance(500);
-  expect(onDisk().autoNotes).toBe(false);
-  expect(onDisk().aiLanguage).toBe("auto");
-});
-
-// The other half of the same clobber: read the file back after a pull and the
-// merged field is still there when the shell next saves.
+// The clobber this store's pull backfill exists for, and the fix. Field-level
+// merge lands another device's aiLanguage in the file; the shell is still
+// holding the copy it loaded before the pull, and saveSettings writes that copy
+// whole — so unless the file is read back first, the next save undoes the merge.
 test("a pull that is read back keeps the merged field through the next save", async () => {
   files.set(SETTINGS_FILE, JSON.stringify(DEFAULT_SETTINGS, null, 2));
   await loadSettings();
@@ -148,21 +142,25 @@ test("a pull that is read back keeps the merged field through the next save", as
   });
   files.set(SETTINGS_FILE, dec(merged.merged));
 
-  const backfilled = await settingsAfterPull([SETTINGS_FILE], false);
-  expect(backfilled?.aiLanguage).toBe("ja");
+  expect(settingsPullAction([SETTINGS_FILE], false)).toBe("adopt");
+  const backfilled = await loadSettings();
+  expect(backfilled.aiLanguage).toBe("ja");
 
-  saveSettings({ ...(backfilled as NonNullable<typeof backfilled>), autoNotes: false });
+  saveSettings({ ...backfilled, autoNotes: false });
   await advance(500);
   expect(onDisk().aiLanguage).toBe("ja");
   expect(onDisk().autoNotes).toBe(false);
 });
 
-test("nothing is read back for an unrelated pull, or while the panel is open", async () => {
-  files.set(SETTINGS_FILE, JSON.stringify(DEFAULT_SETTINGS, null, 2));
-  expect(await settingsAfterPull(["library.json"], false)).toBeNull();
-  // The panel holds the values the user is editing right now; a pull must not
-  // type over them.
-  expect(await settingsAfterPull([SETTINGS_FILE], true)).toBeNull();
+test("a pull with the panel open is deferred, not dropped", () => {
+  // Nothing to do: this pull did not touch settings.json.
+  expect(settingsPullAction(["library.json"], false)).toBe("ignore");
+  expect(settingsPullAction(["library.json"], true)).toBe("ignore");
+  // The panel holds the values the user is editing right now, so the read waits
+  // for it to close. "defer" and not "ignore" is the whole point: a dropped read
+  // leaves the shell on its pre-pull copy, which is the clobber above.
+  expect(settingsPullAction([SETTINGS_FILE], true)).toBe("defer");
+  expect(settingsPullAction([SETTINGS_FILE], false)).toBe("adopt");
 });
 
 // Without this the last 500ms of settings changes are lost on the way out.

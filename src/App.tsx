@@ -52,7 +52,7 @@ import {
 import { initSync, onSyncPulled } from "./platform/sync";
 import { compressImage, compressImageData, type CompressedImage } from "./ai/image-utils";
 import { isTauri, readClipboardImage } from "./platform/app/clipboard";
-import { DEFAULT_SETTINGS, settingsAfterPull, SETTINGS_FILE, toReasoning, type Settings } from "./platform/app/settings";
+import { DEFAULT_SETTINGS, toReasoning, type Settings } from "./platform/app/settings";
 import { buildGlossary } from "./ai/voice";
 import {
   modelSupportsImages,
@@ -284,10 +284,6 @@ export default function App() {
   const [figures, setFigures] = useState<Figure[]>([]);
   const [call, setCall] = useState<CallState | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  // Read by the sync-pull handler, which is bound once: a pull must not read
-  // settings.json back over the panel the user has open.
-  const settingsOpenRef = useRef(showSettings);
-  settingsOpenRef.current = showSettings;
   // Failure messages (save/load/network errors) live here, not in `status` —
   // `status` is reserved for transient reader progress ("Rendering…").
   const { toasts, push: pushToast, dismiss: dismissToast } = useToasts();
@@ -295,11 +291,11 @@ export default function App() {
   // provider list, the sync-health verdict, and the store error hooks.
   const {
     settings,
-    setSettings,
     applySettings,
     device,
     applyDevice,
     configured,
+    settingsPulled,
     syncReport,
   } = useShellBootstrap({ settingsOpen: showSettings, pushToast });
   const fingerDraw = !!device?.fingerDraw;
@@ -492,8 +488,8 @@ export default function App() {
   // topics.json or saved-articles.json refreshes the shelf; pulled
   // threads-<id>.json and annotations-<id>.json files have their in-memory cache
   // dropped so a reopen reads the newer data instead of the stale cache
-  // overwriting it. settings.json is the same problem in one object: this shell
-  // holds it whole and saves it whole, so it is read back (settingsAfterPull).
+  // overwriting it. settings.json is the same problem in one object, and the
+  // shared bootstrap handles it (settingsPulled).
   useEffect(() => {
     void initSync("desktop").catch((e) => console.warn("sync init failed", e));
     return onSyncPulled((paths) => {
@@ -508,13 +504,7 @@ export default function App() {
         if (anns) dropAnnotationCache(anns[1]);
       }
       if (refreshShelf) refreshTopics().catch(() => {});
-      if (paths.includes(SETTINGS_FILE)) {
-        void settingsAfterPull(paths, settingsOpenRef.current)
-          .then((pulled) => {
-            if (pulled) setSettings(pulled);
-          })
-          .catch(() => {});
-      }
+      settingsPulled(paths);
     });
   }, [refreshTopics]);
 

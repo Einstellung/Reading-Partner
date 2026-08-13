@@ -198,16 +198,21 @@ function bindExitFlush(): void {
   observeAppExit(window, writeNow);
 }
 
-// The settings to adopt after a sync pull, or null when there is nothing to
-// adopt. A shell keeps settings.json whole in memory and every save serialises
-// that whole copy, so a field another device changed — merged into the file
-// key by key (sync/merge/fields.ts) — is undone by the shell's next save unless
-// the copy is read back. Null while the settings panel is open: re-reading
-// under the user's hands would overwrite the value being edited right now.
-export async function settingsAfterPull(
-  paths: readonly string[],
-  panelOpen: boolean,
-): Promise<Settings | null> {
-  if (panelOpen || !paths.includes(SETTINGS_FILE)) return null;
-  return await loadSettings();
+// What a sync pull does to the settings a shell is holding. A shell keeps
+// settings.json whole in memory and every save serialises that whole copy, so a
+// field another device changed — merged into the file key by key
+// (sync/merge/fields.ts) — is undone by the shell's next save unless the copy is
+// read back.
+//
+//   "ignore" — the pull did not touch settings.json.
+//   "adopt"  — read it back now.
+//   "defer"  — the settings panel is open, so reading back now would type over
+//              the value under the user's hands. The read waits for the panel to
+//              close. It cannot simply be dropped: that leaves the shell holding
+//              the pre-pull copy, which is the clobber this exists to prevent.
+export type SettingsPull = "ignore" | "adopt" | "defer";
+
+export function settingsPullAction(paths: readonly string[], panelOpen: boolean): SettingsPull {
+  if (!paths.includes(SETTINGS_FILE)) return "ignore";
+  return panelOpen ? "defer" : "adopt";
 }

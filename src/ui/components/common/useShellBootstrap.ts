@@ -24,6 +24,7 @@ import {
   loadSettings,
   onSettingsSaveError,
   saveSettings,
+  settingsPullAction,
   type Settings,
 } from "../../../platform/app/settings";
 import { onThreadSaveError } from "../../../platform/app/threads";
@@ -75,15 +76,14 @@ export function healthToastMessage(report: SyncHealthReport, alreadyToasted: boo
 
 export interface ShellBootstrap {
   settings: Settings;
-  // The account settings as they now are on disk — a sync pull that was read
-  // back. Sets without saving: writing what was just read would only cost
-  // another sync revision.
-  setSettings: (settings: Settings) => void;
   // A settings change the user made: set and persist.
   applySettings: (settings: Settings) => void;
+  // The paths a sync pull just wrote. Where settings.json is among them the
+  // copy this shell holds is read back, now or once the settings panel closes
+  // (settingsPullAction). Everything else a pull refreshes is the shell's own.
+  settingsPulled: (paths: readonly string[]) => void;
   device: DeviceSettings | null;
   applyDevice: (device: DeviceSettings) => void;
-  providersInfo: ProviderInfo[];
   configured: boolean;
   syncReport: SyncHealthReport;
 }
@@ -103,6 +103,14 @@ export function useShellBootstrap({
   // rules: it never syncs, and it is what says whether this machine collects.
   const [device, setDevice] = useState<DeviceSettings | null>(null);
   const [providersInfo, setProvidersInfo] = useState<ProviderInfo[]>([]);
+  // A pull that arrived with the settings panel open. Held rather than dropped:
+  // dropping it leaves this shell holding the pre-pull copy, whose next save
+  // undoes the merge — the same clobber, narrowed to "the panel was open".
+  const pendingPullRef = useRef(false);
+  // Read inside the pull callback, which the shells register once and must not
+  // have to re-register every time the panel opens.
+  const settingsOpenRef = useRef(settingsOpen);
+  settingsOpenRef.current = settingsOpen;
 
   useEffect(() => {
     // The failure paths that must not be silent (pitfall 09). Each store keeps
@@ -143,6 +151,28 @@ export function useShellBootstrap({
     if (!settingsOpen) listProviders().then(setProvidersInfo).catch(() => {});
   }, [settingsOpen]);
 
+  const adoptPulledSettings = useCallback(() => {
+    loadSettings()
+      .then(setSettings)
+      .catch(() => {});
+  }, []);
+
+  const settingsPulled = useCallback(
+    (paths: readonly string[]) => {
+      const action = settingsPullAction(paths, settingsOpenRef.current);
+      if (action === "adopt") adoptPulledSettings();
+      else if (action === "defer") pendingPullRef.current = true;
+    },
+    [adoptPulledSettings],
+  );
+
+  // The deferred read, taken the moment the panel is out of the way.
+  useEffect(() => {
+    if (settingsOpen || !pendingPullRef.current) return;
+    pendingPullRef.current = false;
+    adoptPulledSettings();
+  }, [settingsOpen, adoptPulledSettings]);
+
   const syncReport = useSyncHealth();
   const syncToastedRef = useRef(false);
   useEffect(() => {
@@ -167,11 +197,10 @@ export function useShellBootstrap({
 
   return {
     settings,
-    setSettings,
     applySettings,
+    settingsPulled,
     device,
     applyDevice,
-    providersInfo,
     configured: isConfigured(settings, providersInfo),
     syncReport,
   };

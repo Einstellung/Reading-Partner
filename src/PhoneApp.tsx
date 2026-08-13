@@ -15,7 +15,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bindSystemBack } from "./platform/app/back-button";
 import { BRIEF_TOPIC_ID } from "./platform/app/topics";
 import { initSync, onSyncPulled } from "./platform/sync";
-import { settingsAfterPull, SETTINGS_FILE } from "./platform/app/settings";
 import {
   loadSavedArticles,
   savedArticlesForTopic,
@@ -82,21 +81,17 @@ export default function PhoneApp() {
 
   const base = baseScreen(stack);
   const showSettings = top(stack).kind === "settings";
-  // Read by the sync-pull handler, which is bound once: a pull must not read
-  // settings.json back over the panel the user has open.
-  const settingsOpenRef = useRef(showSettings);
-  settingsOpenRef.current = showSettings;
   // The same start-up as App: both settings files, the provider list, the
   // sync-health verdict, and the store error hooks. This phone is always a
   // reader, so nothing device.json says here changes what it collects — it is
   // held for the Settings panel and for the identity the ask files are named by.
   const {
     settings,
-    setSettings,
     applySettings,
     device,
     applyDevice,
     configured,
+    settingsPulled,
     syncReport,
   } = useShellBootstrap({ settingsOpen: showSettings, pushToast });
 
@@ -134,20 +129,15 @@ export default function PhoneApp() {
   // and they arrive over sync, so a pulled saved-articles.json reloads the list.
   // settings.json is read back for the reason App gives: this shell holds it
   // whole in memory and saves it whole, so a field merged in from another device
-  // is undone by the next save unless the copy is refreshed.
+  // is undone by the next save unless the copy is refreshed — which the shared
+  // bootstrap does (settingsPulled).
   useEffect(() => {
     // "phone": the books channel stays off here, since nothing on this shell
     // can open a PDF (docs/22).
     void initSync("phone").catch((e) => console.warn("sync init failed", e));
     return onSyncPulled((paths) => {
       if (paths.includes(SAVED_ARTICLES_FILE)) void refreshSavedArticles();
-      if (paths.includes(SETTINGS_FILE)) {
-        void settingsAfterPull(paths, settingsOpenRef.current)
-          .then((pulled) => {
-            if (pulled) setSettings(pulled);
-          })
-          .catch(() => {});
-      }
+      settingsPulled(paths);
     });
   }, [refreshSavedArticles]);
 
