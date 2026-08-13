@@ -1074,6 +1074,73 @@ test("a paged turn counts from the page the capture sampled, not the one at the 
   h.detach();
 });
 
+// The other half of that same disagreement, and the reason the executor clamps
+// the target it computes. The page a turn is counted from is the one sampled at
+// the capture; the machine's canTurn gate is recomputed from the live counter on
+// every event. Once the drag has moved the live counter, the gate is answering
+// about a page the sum is not being counted from, so it lets through a turn that
+// walks off the end of the document.
+//
+// Both directions are one gesture the reader makes all the time: pull the
+// neighbour page halfway in, change your mind, flick back. The flick is what
+// resolves the swipe — past the commit velocity the direction of the flick wins
+// outright, whatever the drag added up to.
+test("a flick back off the first page cannot ask for page 0", () => {
+  const { h, turns, setPage } = pagedMount(1, 12);
+  const t = h.target;
+
+  // Page 1 has a next page, so dragging left commits as a turn, and the capture
+  // samples page 1 as the page to count from.
+  h.el.fire("pointerdown", ev(1, 600, 500, 0, t));
+  h.el.fire("pointermove", ev(1, 536, 500, 32, t));
+  expect(h.el.captured).toEqual([1]);
+  h.el.fire("pointermove", ev(1, 472, 500, 64, t));
+  h.el.fire("pointermove", ev(1, 408, 500, 96, t));
+  h.el.fire("pointermove", ev(1, 344, 500, 128, t));
+  // 256px of an 800px page pulled across: page 2 is now the most visible one, so
+  // the engine's counter is on 2 while the finger is still down and nothing has
+  // turned.
+  expect(h.el.scrollLeft).toBe(256);
+  setPage(2);
+
+  // The flick back. It beats the commit velocity, so the release resolves to
+  // "previous page" even though the drag as a whole went the other way — and the
+  // gate that would have stopped it asks the counter, which now says 2, so it
+  // does not stop it.
+  h.el.fire("pointermove", ev(1, 408, 500, 144, t));
+  h.el.fire("pointerup", ev(1, 472, 500, 160, t));
+
+  // 1 + (-1) is 0. Clamped to the first page, which is where a cancelled swipe
+  // belongs: turnToPage re-centres it and re-locks fit-page.
+  expect(turns).toEqual([1]);
+
+  h.detach();
+});
+
+test("a flick back off the last page cannot ask for one page past the end", () => {
+  const { h, turns, setPage } = pagedMount(12, 12);
+  const t = h.target;
+
+  // Mirror image: on the last page only the previous page exists, so dragging
+  // right commits, and the capture samples 12.
+  h.el.fire("pointerdown", ev(1, 200, 500, 0, t));
+  h.el.fire("pointermove", ev(1, 264, 500, 32, t));
+  expect(h.el.captured).toEqual([1]);
+  h.el.fire("pointermove", ev(1, 328, 500, 64, t));
+  h.el.fire("pointermove", ev(1, 392, 500, 96, t));
+  h.el.fire("pointermove", ev(1, 456, 500, 128, t));
+  expect(h.el.scrollLeft).toBe(8544);
+  setPage(11);
+
+  h.el.fire("pointermove", ev(1, 392, 500, 144, t));
+  h.el.fire("pointerup", ev(1, 328, 500, 160, t));
+
+  // 12 + 1 is 13.
+  expect(turns).toEqual([12]);
+
+  h.detach();
+});
+
 // pitfall 38, on the paged path this time: the router's takeover cuts the
 // engine off from the pointer for good (capture retargets every later event,
 // and the pause drops them anyway), so the engine has to be handed the
