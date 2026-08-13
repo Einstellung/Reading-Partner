@@ -9,6 +9,12 @@
 // to the whole cleaned body. Block tags become paragraph breaks; the rest is
 // stripped to text, entity-decoded, and whitespace-collapsed.
 
+// decodeEntities and the plain-text tail come from info/extract/sanitize: the
+// same entity table and the same whitespace rules, written once. The extractor
+// itself stays here — this one returns capped plain text plus a title, while
+// extractReadable returns HTML and needs a DOMParser.
+import { decodeEntities, stripTagsToText } from "../../info/extract/sanitize";
+
 // Cap on the extracted text so a huge page can't blow up the digest prompt or
 // the fulltext cache. Longer content is cut with a visible marker.
 export const ARTICLE_MAX_CHARS = 200_000;
@@ -20,18 +26,6 @@ export interface ExtractedArticle {
   // The plain-text article body, paragraph breaks preserved.
   text: string;
   truncated: boolean;
-}
-
-function decodeEntities(s: string): string {
-  return s
-    .replace(/&nbsp;/g, " ")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => String.fromCodePoint(parseInt(h, 16)))
-    .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
-    .replace(/&amp;/g, "&");
 }
 
 // Remove elements whose text is never article content, plus comments.
@@ -50,13 +44,7 @@ function htmlToText(fragment: string): string {
     .replace(/<\/(p|div|section|article|header|figure|figcaption|li|ul|ol|tr|table|blockquote)>/gi, "\n\n")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/(h[1-6])>/gi, "\n\n");
-  const text = decodeEntities(withBreaks.replace(/<[^>]+>/g, " "));
-  return text
-    .split("\n")
-    .map((l) => l.replace(/[ \t\f\v ]+/g, " ").trim())
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  return stripTagsToText(withBreaks);
 }
 
 // The first match of a region tag, or "" when the page has none. Non-greedy, so

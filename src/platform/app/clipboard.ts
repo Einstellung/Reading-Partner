@@ -3,10 +3,6 @@
 // reads the clipboard through Rust instead. The plugin import is dynamic so the
 // browser/test build (and any non-Tauri host) never pulls it in.
 
-export function isTauri(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
-
 // Returns raw RGBA pixels (row-major) + dimensions, or null when the clipboard
 // holds no image (or the plugin is unavailable). Callers decide how to surface
 // a null — this stays quiet so an empty/text clipboard doesn't throw.

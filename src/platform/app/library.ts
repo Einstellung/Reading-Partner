@@ -13,20 +13,8 @@ import {
   writeFile,
 } from "@tauri-apps/plugin-fs";
 import { readGuardedJson, writeTextAtomic } from "./atomic-fs";
+import { contentHash } from "./content-hash";
 import { basename, decodeLegacyName } from "./path";
-
-// sha256 of the full file bytes, hex, truncated to the first 16 bytes (32 hex
-// chars). The full digest is 32 bytes; 16 keeps the filename friendly while
-// collision odds stay negligible for a personal library (birthday bound ~2^64).
-// Books can be hundreds of MB, but the bytes are already in memory at open time
-// (the reader is handed a buffer), so hashing in the webview needs no extra read
-// and no Rust round-trip.
-export async function contentHash(bytes: Uint8Array | ArrayBuffer): Promise<string> {
-  const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  const digest = await crypto.subtle.digest("SHA-256", view as BufferSource);
-  const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
-  return hex.slice(0, 32);
-}
 
 const LIBRARY_DIR = "library";
 const LIBRARY_FILE = "library.json";

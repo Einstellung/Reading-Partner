@@ -19,14 +19,13 @@
 // readThreadImages already tolerates.
 
 import {
-  BaseDirectory,
   mkdir,
   readDir,
   readFile,
   stat,
   writeFile,
 } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../app/atomic-fs";
+import { APPDATA, writeTextAtomic } from "../app/atomic-fs";
 
 // What a scan of the sync range sees: one stat per file, nothing read.
 export interface ScannedFile {
@@ -129,12 +128,10 @@ export function inSyncRange(path: string): boolean {
 
 // --- Tauri implementation --------------------------------------------------
 
-const opts = { baseDir: BaseDirectory.AppData } as const;
-
 async function walk(dir: string, out: ScannedFile[]): Promise<void> {
   let entries;
   try {
-    entries = await readDir(dir || ".", opts);
+    entries = await readDir(dir || ".", APPDATA);
   } catch {
     return;
   }
@@ -150,7 +147,7 @@ async function walk(dir: string, out: ScannedFile[]): Promise<void> {
     }
     if (!e.isFile || !inSyncRange(rel)) continue;
     try {
-      const info = await stat(rel, opts);
+      const info = await stat(rel, APPDATA);
       out.push({ path: rel, mtime: info.mtime ? info.mtime.getTime() : 0, size: info.size });
     } catch {
       // A file that vanished between readDir and stat is simply skipped.
@@ -165,7 +162,7 @@ export const tauriSyncFs: SyncFs = {
     return out;
   },
   read(path) {
-    return readFile(path, opts);
+    return readFile(path, APPDATA);
   },
   async write(path, bytes) {
     // Every in-range file is UTF-8 text this app wrote, so a pull lands through
@@ -185,12 +182,12 @@ export const tauriSyncFs: SyncFs = {
       return;
     }
     const slash = path.lastIndexOf("/");
-    if (slash > 0) await mkdir(path.slice(0, slash), { ...opts, recursive: true });
-    await writeFile(path, bytes, opts);
+    if (slash > 0) await mkdir(path.slice(0, slash), { ...APPDATA, recursive: true });
+    await writeFile(path, bytes, APPDATA);
   },
   async stat(path) {
     try {
-      const info = await stat(path, opts);
+      const info = await stat(path, APPDATA);
       return { mtime: info.mtime ? info.mtime.getTime() : 0, size: info.size };
     } catch {
       return null;

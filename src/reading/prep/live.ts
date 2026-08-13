@@ -5,6 +5,7 @@
 // classroom toggles.
 
 import { callModel, resolveModel } from "../../ai/model-call";
+import { realTimers } from "../../ai/observable-run";
 import { ensureFulltext, saveFulltext } from "../../fulltext/store";
 import { FULLTEXT_VERSION, type Fulltext } from "../../fulltext/types";
 import { buildFigureCatalog, ensureFigures } from "../figures";
@@ -256,14 +257,7 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
       };
     },
 
-    now: () => Date.now(),
-
-    sleep: (ms) => new Promise<void>((r) => setTimeout(r, ms)),
-
-    setTimer: (ms, cb) => {
-      const id = setTimeout(cb, ms);
-      return () => clearTimeout(id);
-    },
+    ...realTimers,
   };
 }
 

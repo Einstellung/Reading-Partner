@@ -5,14 +5,11 @@
 // browser User-Agent (see user-agent.ts), so it is forced on the plugin path.
 
 import { isAbortError, throwIfAborted } from "../../platform/app/abort";
+import { isTauri, type FetchFn } from "../../platform/app/host";
 import { cleanTauriFetch } from "../../platform/app/tauri-fetch";
 import { INFO_USER_AGENT } from "./user-agent";
 
-export type FetchFn = (url: string, init?: RequestInit) => Promise<Response>;
-
-function isTauri(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
+export type { FetchFn };
 
 export const infoFetch: FetchFn = (url, init) => {
   if (isTauri()) {

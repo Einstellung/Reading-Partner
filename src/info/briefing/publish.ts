@@ -31,8 +31,7 @@
 // by not making that request, strip every <img> in buildPublishedBodies instead
 // of only the data: ones — that call is the whole switch.
 
-import { BaseDirectory, exists, readTextFile } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../../platform/app/atomic-fs";
+import { readJson, writeTextAtomic } from "../../platform/app/atomic-fs";
 import { stripDataImages } from "../extract/sanitize";
 import { loadArticles, loadItems, loadLatestBriefing, type CachedArticle } from "./store";
 import type { Briefing } from "./types";
@@ -178,15 +177,6 @@ export function bodiesIntact(b: Briefing, items: InfoItem[], bodies: PublishedBo
 }
 
 // --- files -----------------------------------------------------------------
-
-async function readJson<T>(file: string): Promise<T | null> {
-  try {
-    if (!(await exists(file, { baseDir: BaseDirectory.AppData }))) return null;
-    return JSON.parse(await readTextFile(file, { baseDir: BaseDirectory.AppData })) as T;
-  } catch {
-    return null;
-  }
-}
 
 // Publish a briefing that has just landed on disk. Called after every
 // saveBriefing — a run's and a re-triage's alike, since a re-triage moves items
