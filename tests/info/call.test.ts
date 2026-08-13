@@ -5,6 +5,9 @@
 
 import { expect, test } from "bun:test";
 import {
+  BRIEFING_CARD_ID,
+  askScope,
+  briefingJobPlan,
   briefingJobUpdate,
   briefingProgressCard,
   infoBookId,
@@ -12,6 +15,7 @@ import {
   runnableJob,
   sourceAddedNote,
   trackedJob,
+  type BriefingJobPlan,
 } from "../../src/info/companion/call";
 import type { InfoSnapshot } from "../../src/info/briefing/pipeline";
 import type { Briefing } from "../../src/info/briefing/types";
@@ -242,6 +246,70 @@ test("retrying a joined run starts one of our own; every other job retries as it
   expect(runnableJob("retriage")).toBe("retriage");
   expect(runnableJob("full")).toBe("full");
   expect(runnableJob("first")).toBe("first");
+});
+
+// --- what a start attempt does about the one card ---------------------------
+
+test("only a re-triage asks for its own scope; every other job is a full run", () => {
+  expect(askScope("retriage")).toBe("retriage");
+  expect(askScope("full")).toBe("full");
+  expect(askScope("first")).toBe("full");
+  // A retry of a joined card runs one of our own, and a full collect is the only
+  // honest reading of "the run that was going failed — do it again".
+  expect(askScope("joined")).toBe("full");
+});
+
+// Narrow the plan for the assertions below; a plan that is not "started" fails
+// here rather than silently skipping the card checks.
+function startedPlan(plan: BriefingJobPlan): Extract<BriefingJobPlan, { kind: "started" }> {
+  expect(plan.kind).toBe("started");
+  if (plan.kind !== "started") throw new Error("not a started plan");
+  return plan;
+}
+
+test("a run started here opens the one card on the job it started", () => {
+  const plan = startedPlan(
+    briefingJobPlan("retriage", "started", snapshot({ running: true, phase: "triaging" })),
+  );
+  expect(plan.job).toBe("retriage");
+  expect(plan.cardId).toBe(BRIEFING_CARD_ID);
+  expect(plan.card.title).toBe("Re-running today's triage");
+});
+
+// The bug this decision exists for: a start refused because a run was already
+// going used to get no card, so nothing on screen ever moved. It has to take
+// over the same card the running job would have drawn — a second row would be a
+// row nothing updates.
+test("a request landing on a running job joins that job's card rather than opening a new row", () => {
+  const s = snapshot({ running: true, phase: "fetching" });
+  const joined = startedPlan(briefingJobPlan("full", "busy", s));
+  const own = startedPlan(briefingJobPlan("full", "started", s));
+  expect(joined.cardId).toBe(own.cardId);
+  expect(joined.job).toBe("joined");
+  // And it opens on the phase the run it joined is really in.
+  expect(joined.card.phase).toBe("fetching");
+});
+
+// On a reader nothing runs here (docs/36): the request is written for the
+// collecting machine, and a progress card would be showing the progress of
+// nothing.
+test("a request left for the collecting machine draws no card at all", () => {
+  const plan = briefingJobPlan("retriage", "asked", snapshot({}));
+  expect(plan.kind).toBe("asked");
+  expect(plan.job).toBe("retriage");
+  expect(Object.keys(plan).sort()).toEqual(["job", "kind"]);
+});
+
+// --- what survives a reopen -------------------------------------------------
+
+// Ready is durable: a reopened thread should still show that the briefing exists.
+// A failure is not — retry needs the live pipeline, and replaying "the run
+// failed" on every reopen would report a failure that is long over.
+test("a ready job's card and note are persisted; a failed job's are not", () => {
+  const ready = briefingJobUpdate("full", snapshot({ briefing: briefing() }));
+  expect(ready.status === "ready" && ready.persist).toBe(true);
+  const failed = briefingJobUpdate("full", snapshot({ error: "no provider configured" }));
+  expect(failed.status === "failed" && failed.persist).toBe(false);
 });
 
 // --- the synthetic turns a card gesture injects ----------------------------
