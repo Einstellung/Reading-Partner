@@ -34,4 +34,4 @@
 
 ## 范围
 
-Chromium（headless，`Emulation.setTouchEmulationEnabled` + `Input.dispatchTouchEvent`）实测。iOS WKWebView 和 Android WebView 上没验过；两边的滚动接管都会发 `pointercancel`，非 passive touchmove 的 `preventDefault` 也都拦得住原生滚动，所以结论应当同样成立，但 3px 这个数在真机上要复核。
+Chromium（headless，`Emulation.setTouchEmulationEnabled` + `Input.dispatchTouchEvent`）实测。iOS WKWebView 后来在 iPad 模拟器上量过了（坑 117）：接管照样发 `pointercancel`、非 passive `preventDefault` 照样拦得住，但这里的四个数没有一个和 Chromium 一样，其中"判滚动不看方向可行性"在 WebKit 上是反的。3px 仍然是对的数，理由变了。Android WebView 没验过。
