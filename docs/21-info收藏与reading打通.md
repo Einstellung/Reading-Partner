@@ -86,7 +86,7 @@ AI 这次用了哪几条外部材料，用户要看得见。可见性是闸的�
 
 - 共用的记忆作用域。AI observations 只有按 topic 一种形态：`ObservationFileStore` 的构造参数就是 topicId，目录是 `memory-<topicId>/`（历史名）。info 侧一条观察也不写，只读画像和反馈日志。跨场景共用的今天只有 `user-profile.md` 一份文件。两个根共用记忆要一个不属于任何 topic 的记忆作用域，且从第一天就是它——先按 topic 建再合并就是那次要避免的迁移。
 
-- 引用时的三件事。时效（`publishedAt` 已存，要进引用路径）、证据不全（`summaryOnly` 已存，要跟着材料进 reading 的 prompt）、用了哪几条材料的可见性。第三条现在没有落点：工具痕迹是瞬时的，成功即从行里消失，从不落盘（`src/ui/components/common/toolTrace.ts`）。可见性既然是闸的一部分，就不能靠一个成功就消失的东西。
+- 引用时的三件事。时效（`publishedAt` 已存，要进引用路径）、证据不全（`summaryOnly` 已存，要跟着材料进 reading 的 prompt）、用了哪几条材料的可见性。第三条现在没有落点：工具痕迹是瞬时的，成功即从行里消失，从不落盘（`src/ai/tool-status.ts`）。可见性既然是闸的一部分，就不能靠一个成功就消失的东西。
 
 反向的边已经有一条：`assembleReadingContext()` 把各 topic 的 observation 索引拼成一段 READER'S CURRENT CONTEXT 喂给 triage（`src/observation/assemble.ts` → `src/info/briefing/live.ts`）。reading→info 通了，info→reading 一条都没有。
 
