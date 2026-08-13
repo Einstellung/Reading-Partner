@@ -24,6 +24,14 @@ export default defineConfig({
     port: 1420,
     strictPort: true,
     headers: isolationHeaders,
+    // Transform the entry graph while the Rust side is still compiling, instead
+    // of on the first page load. Dev serves ~410 separate modules and Vite
+    // transforms each one on demand, so a cold server spends that work under a
+    // blank window: measured in the Tauri webview, first contentful paint drops
+    // from 1306ms to 408ms with these three warmed. `beforeDevCommand` starts
+    // Vite a full cargo build before the window opens, so the warm-up is free.
+    // Both shells are listed because main.tsx picks between them at runtime.
+    warmup: { clientFiles: ["./src/main.tsx", "./src/App.tsx", "./src/PhoneApp.tsx"] },
     watch: {
       // src-tauri is the Rust side; .claude holds agent worktrees whose file
       // churn must not trigger reloads in the user's dev session.
