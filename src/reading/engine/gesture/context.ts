@@ -16,7 +16,7 @@ import type { SelectionCapability } from "@embedpdf/plugin-selection";
 export type EmbedTool = "pointer" | "navlock" | "highlight" | "underline" | "ink";
 
 // Live gesture context, shared by a ref between the imperative engine wiring
-// (which fills in the engine handles) and the PagedGestures touch component
+// (which fills in the engine handles) and the TouchInputRouter touch component
 // (which reads the current mode each event). A ref so mode changes never
 // re-render the memoized engine subtree.
 export interface PagedGestureCtx {

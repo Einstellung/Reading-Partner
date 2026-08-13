@@ -13,7 +13,12 @@
 #     JavaScript inside that webview and returns the value, which is how a
 #     gesture becomes a measurement instead of a screenshot to squint at. It
 #     installs itself only while the dev server is on loopback, which is where
-#     the simulator wants it anyway.
+#     the simulator wants it anyway, and it answers `eval` only for a caller
+#     that is not a browser: the token below, which the dev server writes at
+#     start to a file outside the checkout (so the server cannot serve its own
+#     secret), plus a content type no HTML form can send. That is what keeps a
+#     page the developer happens to be visiting from posting a form to
+#     localhost and running its own JavaScript in the app.
 #
 # What these scenarios measure on a known-good tree is written down in
 # scripts/ios-sim/baseline.md — diff a run against that, not against a memory
@@ -53,6 +58,31 @@ JS="$ROOT/scripts/ios-sim"
 DEV_LOG="$OUT/dev.log"
 BASE="http://localhost:$PORT"
 
+# Where the sim bridge writes the running dev server's secret: outside the
+# checkout, because vite serves the checkout — it used to sit in
+# node_modules/.sim-bridge/token and `GET /node_modules/.sim-bridge/token`
+# returned it. One directory per checkout, keyed by a hash of the root path, so
+# a worktree's dev server has its own. Kept in step with defaultTokenPath() in
+# scripts/sim-bridge.ts; both read IOS_SIM_BRIDGE_TOKEN_FILE first.
+bridge_token_file() {
+  if [ -n "${IOS_SIM_BRIDGE_TOKEN_FILE:-}" ]; then
+    printf '%s' "$IOS_SIM_BRIDGE_TOKEN_FILE"
+    return
+  fi
+  local key base
+  if command -v shasum >/dev/null 2>&1; then
+    key=$(printf '%s' "$ROOT" | shasum -a 256 | cut -c1-16)
+  else
+    key=$(printf '%s' "$ROOT" | sha256sum | cut -c1-16)
+  fi
+  case "$(uname -s)" in
+    Darwin) base="$HOME/Library/Caches" ;;
+    *) base="${XDG_CACHE_HOME:-$HOME/.cache}" ;;
+  esac
+  printf '%s/sim-bridge/%s/token' "$base" "$key"
+}
+BRIDGE_TOKEN_FILE="$(bridge_token_file)"
+
 export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$HOME/.bun/bin:$PATH"
 # The free Personal Team. A simulator build is signed ad-hoc and does not need
 # it, but tauri reads it for the device target and complains when it is unset.
@@ -64,14 +94,26 @@ die() { echo "ios-sim: $*" >&2; exit 1; }
 
 # --- the bridge ------------------------------------------------------------
 
+# The running dev server's secret. Missing means no dev server has started in
+# this checkout, so say that rather than let curl get a 403 back.
+bridge_token() {
+  [ -r "$BRIDGE_TOKEN_FILE" ] || die "no bridge token at $BRIDGE_TOKEN_FILE — the dev server writes it at start, so either it is not running or it is running from another checkout"
+  tr -d '\r\n' <"$BRIDGE_TOKEN_FILE"
+}
+
 # Send JavaScript to the webview and print whatever the page returned. The
 # response is {id, ok, value} or {id, ok:false, error}; a non-zero exit means
 # the page threw, so a scenario stops at the first broken step.
 sim_eval() {
   local body
   body=$(cat)
+  local token
+  token=$(bridge_token)
   local res
-  res=$(curl -s --max-time 40 -X POST --data-binary @- "$BASE/__sim/eval" <<<"$body") || die "the dev server is not answering on $PORT (is \`up\` running?)"
+  res=$(curl -s --max-time 40 -X POST \
+    -H "content-type: application/x-sim-bridge-eval" \
+    -H "x-sim-bridge-token: $token" \
+    --data-binary @- "$BASE/__sim/eval" <<<"$body") || die "the dev server is not answering on $PORT (is \`up\` running?)"
   [ -n "$res" ] || die "empty answer from the bridge"
   if ! printf '%s' "$res" | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get("ok") else 1)'; then
     printf '%s\n' "$res" | python3 -c 'import json,sys; print("page threw:", json.load(sys.stdin).get("error"), file=sys.stderr)'
@@ -81,7 +123,12 @@ sim_eval() {
 }
 
 # Uncaught errors and rejections the page reported since the last read.
-sim_logs() { curl -s --max-time 10 "$BASE/__sim/logs"; echo; }
+sim_logs() {
+  local token
+  token=$(bridge_token)
+  curl -s --max-time 10 -H "x-sim-bridge-token: $token" "$BASE/__sim/logs"
+  echo
+}
 
 # --- lifecycle -------------------------------------------------------------
 
@@ -97,6 +144,10 @@ cmd_up() {
   # outright rather than pick another port.
   lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null | xargs -r kill -9 || true
   pkill -f "tauri ios dev" 2>/dev/null || true
+  # -9 skips the bridge's own cleanup, so the dead server's token file would
+  # otherwise outlive it and make `no token` mean `not running` unreliably. The
+  # next server writes a fresh one either way.
+  rm -f "$BRIDGE_TOKEN_FILE"
   sleep 1
 
   echo "starting tauri ios dev -> $DEV_LOG"
@@ -126,6 +177,7 @@ cmd_up() {
 cmd_down() {
   pkill -f "tauri ios dev" 2>/dev/null || true
   lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null | xargs -r kill -9 || true
+  rm -f "$BRIDGE_TOKEN_FILE"
   xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
   echo "stopped (the simulator is left booted; \`xcrun simctl shutdown $UDID\` to close it)"
 }
