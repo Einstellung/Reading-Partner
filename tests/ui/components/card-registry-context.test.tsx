@@ -3,18 +3,27 @@
 // the shell, so chat/ never imports info/ or reader/ — the two directories that
 // import chat/ for the card protocol. Run: bun test.
 
-import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { afterEach, expect, spyOn, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { CardRegistryContext } from "../../../src/ui/components/chat/cardRegistryContext";
-import { CardRegistryProvider } from "../../../src/ui/components/CardRegistryProvider";
-import { CARD_REGISTRY } from "../../../src/ui/components/cardRegistry";
-import { MessageList } from "../../../src/ui/components/chat/chat";
 import type { CardRegistry } from "../../../src/ui/components/chat/chatParts";
 import type { ThreadMessage } from "../../../src/ui/components/chat/types";
 import type { RehearsalDecisionCardData } from "../../../src/reading/rehearsal/cards";
+import { useDom } from "../../support/dom";
+import { hushShell } from "../../support/shell";
+
+// The last two tests mount a shell around a real chat, so this file needs a
+// document. Everything React renders into one has to be evaluated after the
+// window is up, which is why the imports below are dynamic (tests/support/
+// dom.ts) — a static import of anything that reaches react-dom would decide,
+// once and for the whole run, that there is no browser.
+const { act, cleanup, render } = await useDom();
+afterEach(cleanup);
+
+const { CardRegistryContext } = await import("../../../src/ui/components/chat/cardRegistryContext");
+const { CardRegistryProvider } = await import("../../../src/ui/components/CardRegistryProvider");
+const { CARD_REGISTRY } = await import("../../../src/ui/components/cardRegistry");
+const { MessageList } = await import("../../../src/ui/components/chat/chat");
+const InfoHomeModule = await import("../../../src/ui/components/info/InfoHome");
 
 const DECISION: RehearsalDecisionCardData = {
   kind: "rehearsal-decision",
@@ -76,17 +85,44 @@ test("the provider the shells mount renders the real card", () => {
   expect(html).toContain("Endings");
 });
 
-const SRC = fileURLToPath(new URL("../../../src", import.meta.url));
+// The shells themselves. Each mounts InfoHome where its screens go, and every
+// chat either of them shows is under that point in the tree — so a chat is put
+// there and asked to render a card. Under the provider the card comes out;
+// orphaned, the same chat renders nothing at all and says nothing about it,
+// which is what the test above ("a chat mounted with no provider renders no
+// card") is the control for.
+//
+// This replaces a read of the shells' source for "<CardRegistryProvider>" and
+// "</CardRegistryProvider>" appearing somewhere in the file, which is true of a
+// shell whose closing tag sits against its opening one with every chat outside
+// both.
+//
+// InfoHome is swapped for the chat rather than driven into opening its own: the
+// info call arrives through the briefing pipeline and an agent turn, neither of
+// which belongs in this test. The swap is spyOn on the module's default export
+// (docs/pitfall/122), so the shells are mounted exactly as they are written.
+function ChatProbe() {
+  return <MessageList messages={rowWithCard()} />;
+}
 
-// The shells themselves. Read as source and not rendered: App.tsx is 1400 lines
-// of hooks over Tauri and a chat is nowhere near the top of either tree, so
-// mounting one in a test is not on. What can be checked is that the wrapper is
-// there at all, which is the whole failure — a shell that drops it renders every
-// card as nothing, with no error and no failing type, and only this test says so.
-test("both shells wrap their chat in the provider", () => {
-  for (const shell of ["App.tsx", "PhoneApp.tsx"]) {
-    const source = readFileSync(join(SRC, shell), "utf8");
-    expect(`${shell}: ${source.includes("<CardRegistryProvider>")}`).toBe(`${shell}: true`);
-    expect(`${shell}: ${source.includes("</CardRegistryProvider>")}`).toBe(`${shell}: true`);
-  }
-});
+for (const [shell, load] of [
+  ["App", () => import("../../../src/App")],
+  ["PhoneApp", () => import("../../../src/PhoneApp")],
+] as const) {
+  test(`a chat where ${shell} mounts its screens renders its card`, async () => {
+    const restore = hushShell();
+    const spy = spyOn(InfoHomeModule, "default").mockImplementation(ChatProbe);
+    try {
+      const Shell = (await load()).default;
+      const { container } = render(<Shell />);
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(container.textContent).toContain("Endings");
+      expect(container.textContent).toContain("the 1962 data does the work");
+    } finally {
+      spy.mockRestore();
+      restore();
+    }
+  });
+}
