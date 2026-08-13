@@ -41,6 +41,11 @@ interface Seen {
 
 interface FakeTarget {
   dispatched: Seen[];
+  // What actually travelled the way back out, i.e. what the ancestors between
+  // the page and the scroll container would have seen. An event that does not
+  // bubble never gets here, and that is a different thing from one the router
+  // contained: both leave `escaped` empty.
+  bubbled: Seen[];
   // What got past the scroll container on the way back out, i.e. what a
   // listener above the viewport would have seen.
   escaped: Seen[];
@@ -57,15 +62,18 @@ interface FakeTarget {
 // the second half of docs/pitfall/38.
 function makeTarget(el: FakeElement): FakeTarget {
   const dispatched: Seen[] = [];
+  const bubbled: Seen[] = [];
   const escaped: Seen[] = [];
   const t: FakeTarget = {
     dispatched,
+    bubbled,
     escaped,
     dispatchEvent(e) {
       dispatched.push({ type: e.type, pointerId: e.pointerId });
       e.target = t;
       el.fire(e.type, e);
       if (e.stopped > 0 || !e.bubbles) return true;
+      bubbled.push({ type: e.type, pointerId: e.pointerId });
       el.fireBubble(e.type, e);
       if (e.stopped > 0) return true;
       escaped.push({ type: e.type, pointerId: e.pointerId });
@@ -471,8 +479,12 @@ test("the pointer the engine saw is closed out once, and the synthetic up does n
   expect(h.el.scrollTop).toBe(20);
   expect(frames.length).toBe(0);
 
-  // And it was contained on the way back out. Nothing above the viewport may
-  // see a pointerup while the finger is still on the glass (docs/pitfall/38).
+  // It did travel the way back out — that path is where the engine's own
+  // per-page handler sits, and an up that stops at the page div it was
+  // dispatched on never reaches it — and the scroll container stopped it there.
+  // Nothing above the viewport may see a pointerup while the finger is still on
+  // the glass (docs/pitfall/38).
+  expect(t.bubbled).toEqual([{ type: "pointerup", pointerId: 1 }]);
   expect(t.escaped).toEqual([]);
 
   // Later moves must not hand it a second one, and the gesture must still be
@@ -484,6 +496,7 @@ test("the pointer the engine saw is closed out once, and the synthetic up does n
 
   h.el.fire("pointerup", ev(1, 100, 440, 64, t));
   expect(t.dispatched.length).toBe(1);
+  expect(t.bubbled.length).toBe(1);
   expect(t.escaped).toEqual([]);
 
   h.detach();
