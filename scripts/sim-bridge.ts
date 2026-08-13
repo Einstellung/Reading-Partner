@@ -10,6 +10,16 @@
 //
 // `apply: "serve"` keeps all of it out of `vite build` — no production bundle
 // ever sees the client, and the endpoints exist only while `bun run dev` runs.
+//
+// The other half of that fence is the address the dev server is bound to. On
+// loopback the simulator can reach the channel because it shares this machine's
+// localhost, and nothing off this machine can. `tauri ios dev` against a
+// physical device needs `--host`, and the moment the server answers on a LAN
+// address anyone on that network could POST JavaScript into the page holding
+// the developer's own library, notes and signed-in sessions. So a non-loopback
+// bind installs neither the endpoints nor the client, and says so once instead
+// of leaving the loop looking broken. `IOS_SIM_BRIDGE_ALLOW_REMOTE=1` in front
+// of a single run is the way to take that trade knowingly.
 import type { Plugin } from "vite";
 
 // Just enough of node's IncomingMessage to read a body, written structurally so
@@ -70,6 +80,35 @@ const CLIENT = `
 })();
 `;
 
+// Whether vite will bind somewhere only this machine can reach, decided from
+// the host as vite resolved it: `undefined` and `false` are vite's own default
+// (localhost), `true` is a bare `--host` and means every interface, a string is
+// taken literally. Anything unrecognised counts as remote — being wrong the
+// other way costs a debugging session, being wrong this way costs the data in
+// the page. Exported for tests/sim-bridge.test.ts.
+export function isLoopbackHost(host: string | boolean | undefined): boolean {
+  if (host === undefined || host === false) return true;
+  if (host === true) return false;
+  // A bracketed or zone-suffixed IPv6 literal is the same address as the bare
+  // one: [::1] and ::1%lo0 are both the loopback.
+  const name = host.trim().toLowerCase().replace(/^\[|\]$/g, "").replace(/%.*$/, "");
+  return (
+    name === "localhost" ||
+    // The whole 127.0.0.0/8, not just 127.0.0.1 — all of it routes to lo.
+    /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(name) ||
+    /^(?:0{1,4}:){7}0{0,3}1$/.test(name) ||
+    name === "::1"
+  );
+}
+
+// What to call the bind address in the message, since the two interesting
+// cases are the ones with no address in them.
+function describeHost(host: string | boolean | undefined): string {
+  if (host === undefined || host === false) return "localhost";
+  if (host === true) return "every interface";
+  return host;
+}
+
 function readBody(req: BodyStream): Promise<string> {
   return new Promise((resolve, reject) => {
     let body = "";
@@ -91,11 +130,39 @@ export function simBridge(): Plugin {
   const polls = new Set<() => void>();
   let seq = 0;
   const logs: unknown[] = [];
+  // Set in configResolved, read by both hooks below. False means this plugin
+  // registers nothing at all.
+  let enabled = false;
 
   return {
     name: "sim-bridge",
     apply: "serve",
+    // The resolved config is the one answer for --host, the config file and the
+    // env at once; process.argv would only see one of the three.
+    configResolved(config) {
+      const host = config.server.host;
+      if (isLoopbackHost(host)) {
+        enabled = true;
+        return;
+      }
+      const where = describeHost(host);
+      if (process.env.IOS_SIM_BRIDGE_ALLOW_REMOTE === "1") {
+        enabled = true;
+        console.warn(
+          `sim-bridge: EXPOSED on ${where} by IOS_SIM_BRIDGE_ALLOW_REMOTE=1 —` +
+            ` anyone who can reach this port can run JavaScript in your app page.`,
+        );
+        return;
+      }
+      enabled = false;
+      console.warn(
+        `sim-bridge: off — the dev server is on ${where}, not loopback, so the` +
+          ` ios-sim eval channel is not installed. Prefix one run with` +
+          ` IOS_SIM_BRIDGE_ALLOW_REMOTE=1 to expose it anyway.`,
+      );
+    },
     configureServer(server) {
+      if (!enabled) return;
       server.middlewares.use("/__sim", async (req, res) => {
         const path = (req.url ?? "/").split("?")[0];
         const json = (code: number, value: unknown) => {
@@ -186,6 +253,7 @@ export function simBridge(): Plugin {
     transformIndexHtml: {
       order: "pre",
       handler() {
+        if (!enabled) return;
         return [{ tag: "script", injectTo: "head-prepend", children: CLIENT }];
       },
     },

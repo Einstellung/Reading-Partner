@@ -11,7 +11,9 @@
 #     real. Synthetic DOM events would skip exactly the part worth testing.
 #   - The sim bridge (scripts/sim-bridge.ts, a dev-only vite plugin) evaluates
 #     JavaScript inside that webview and returns the value, which is how a
-#     gesture becomes a measurement instead of a screenshot to squint at.
+#     gesture becomes a measurement instead of a screenshot to squint at. It
+#     installs itself only while the dev server is on loopback, which is where
+#     the simulator wants it anyway.
 #
 # Setup this expects (see docs/pitfall/117):
 #   brew trust facebook/fb && brew install idb-companion
@@ -110,6 +112,9 @@ cmd_up() {
     sleep 5
   done
   echo
+  # The bridge says why it turned itself off, at the top of a log that a cargo
+  # build has long since pushed out of reach of `tail`.
+  grep -m1 '^sim-bridge:' "$DEV_LOG" >&2 || true
   tail -20 "$DEV_LOG" >&2
   die "the app never answered; see $DEV_LOG"
 }

@@ -14,8 +14,10 @@ const isolationHeaders = {
 
 // Tauri expects a fixed port and no clearing of the terminal.
 export default defineConfig({
-  // simBridge is dev-only (apply: "serve"): it injects the eval channel the
-  // iOS simulator loop drives the webview through (scripts/ios-sim.sh).
+  // simBridge is dev-only (apply: "serve") and loopback-only: it injects the
+  // eval channel the iOS simulator loop drives the webview through
+  // (scripts/ios-sim.sh), and installs nothing once `server.host` puts this
+  // server on an address other machines can reach.
   plugins: [react(), tailwindcss(), simBridge()],
   clearScreen: false,
   // Matches the `paths` entry in tsconfig.json; the shadcn CLI writes `@/`
