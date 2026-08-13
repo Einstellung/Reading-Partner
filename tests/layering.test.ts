@@ -494,6 +494,35 @@ test("ui/components and App.tsx are imported only by the shell and the entry poi
   expect(bad).toEqual([]);
 });
 
+// The PDFium engine's own API, as opposed to the layer table's relative
+// imports. reading/covers.ts used to drive the engine itself, which is how two
+// of the three quirks this project has paid for (pitfalls 21 and 102) came to
+// be recorded in two directories at once. src/reading/engine owns the vocabulary;
+// everyone else asks it for a page. smoke/ is exempt: it boots the engine
+// directly to check the wasm is there.
+const ENGINE_ONLY_PACKAGE = "@embedpdf/";
+const ENGINE_PACKAGE_OWNERS = ["reading/engine", "smoke"];
+
+test("only src/reading/engine imports @embedpdf", () => {
+  const bad = sourceFiles(SRC)
+    .map((file) => relative(SRC, file))
+    .filter((rel) => !ENGINE_PACKAGE_OWNERS.some((dir) => rel.startsWith(`${dir}/`)))
+    .filter((rel) =>
+      [...readFileSync(join(SRC, rel), "utf8").matchAll(IMPORT_RE)].some((m) =>
+        m[1].startsWith(ENGINE_ONLY_PACKAGE),
+      ),
+    );
+  if (bad.length > 0) {
+    reject(
+      `Only ${ENGINE_PACKAGE_OWNERS.map((d) => `src/${d}`).join(" and ")} may import @embedpdf:\n` +
+        bad.map((rel) => `  src/${rel}`).join("\n") +
+        "\nThe engine's quirks are recorded in one directory; ask src/reading/engine for what" +
+        " you need instead of opening a document yourself.",
+    );
+  }
+  expect(bad).toEqual([]);
+});
+
 test("every cross-directory import is allowed by the layer table", () => {
   const bad = DECLARED.filter((e) => !MAY_IMPORT[LAYER[e.from]].includes(LAYER[e.to]));
   if (bad.length > 0) {

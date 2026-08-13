@@ -2,9 +2,10 @@
 // AppData/covers so the shelf — the first screen after launch — does not
 // re-render every PDF on every cold start.
 //
-// Rendering reuses the app's one PDFium engine (engine/engine-singleton): a
-// cover opens a document on it, renders page one and closes it again. No reader
-// instance and no second wasm compile.
+// Rendering goes through engine/raster, which opens a document on the app's one
+// PDFium engine, renders page one and closes it again. No reader instance and no
+// second wasm compile. What is kept, and what a failure costs the next launch,
+// is decided here.
 //
 // Covers are content-addressed under the book id (see cover-cache.ts), so a
 // file replaced at the same path renders a new cover instead of showing the old
@@ -23,7 +24,6 @@ import {
   readTextFile,
   writeFile,
 } from "@tauri-apps/plugin-fs";
-import type { PdfDocumentObject, PdfEngine, PdfRenderPageOptions } from "@embedpdf/models";
 import { APPDATA, writeTextAtomic } from "../platform/app/atomic-fs";
 import { contentHash } from "../platform/app/content-hash";
 import { libraryHas, readLibraryBook } from "../platform/app/library";
@@ -41,16 +41,10 @@ import {
   type CoverFailure,
   type CoverFailureReason,
 } from "./cover-cache";
-import { getPdfiumEngine } from "./engine/engine-singleton";
+import { renderFirstPageJpeg } from "./engine/raster";
 
 const COVERS_DIR = "covers";
 const MIME = "image/jpeg";
-
-// The direct engine has hung on a document before (pitfall 21); a hang here
-// would leave a card waiting forever. A timeout is treated as transient: it is
-// logged and gives up for this session, but writes no failure marker.
-const OPEN_TIMEOUT_MS = 20_000;
-const RENDER_TIMEOUT_MS = 20_000;
 
 const flight = createSingleFlight<string | null>();
 
@@ -108,86 +102,35 @@ async function renderCover(
   bookId: string,
   file: FileRef,
 ): Promise<Uint8Array | null> {
-  let engine: PdfEngine<Blob>;
-  try {
-    engine = await getPdfiumEngine();
-  } catch (e) {
-    // The whole reader is down, not this book: no marker, so covers come back
-    // with the engine on the next launch.
-    console.warn("no PDFium engine for covers", e);
-    return null;
-  }
-
-  // A fresh copy: the engine takes ownership of the buffer it is handed.
-  const content = bytes.slice().buffer as ArrayBuffer;
-  const opening = engine.openDocumentBuffer({ id: `cover:${bookId}`, content }).toPromise();
-  let doc: PdfDocumentObject;
-  try {
-    doc = await withTimeout(opening, OPEN_TIMEOUT_MS, "openDocumentBuffer");
-  } catch (e) {
-    if (e instanceof CoverTimeout) {
-      // The open may still land after the deadline; close it when it does,
-      // rather than leaving a document behind on the engine the reader shares.
-      void opening.then((late) => engine.closeDocument(late).toPromise()).catch(() => {});
-      return transient(file, e);
-    }
-    await recordFailure(bookId, file, "open", e);
-    return null;
-  }
-
-  try {
-    const page = doc.pages[0];
-    if (!page) {
-      // A document that failed to parse can still open (pitfall 58), and what
-      // it opens as is a document with nothing in it.
-      await recordFailure(bookId, file, "no-pages", new Error("document opened with no pages"));
-      return null;
-    }
-    const blob = await withTimeout(
-      engine.renderPage(doc, page, renderOptions(page.size.width)).toPromise(),
-      RENDER_TIMEOUT_MS,
-      "renderPage",
-    );
-    return new Uint8Array(await blob.arrayBuffer());
-  } catch (e) {
-    if (e instanceof CoverTimeout) return transient(file, e);
-    await recordFailure(bookId, file, "render", e);
-    return null;
-  } finally {
-    engine
-      .closeDocument(doc)
-      .toPromise()
-      .catch(() => {});
-  }
-}
-
-// The quality is passed under both names on purpose: the encoder reads
-// `quality` while the documented option is `imageQuality`, so the documented
-// one alone leaves the cover at the canvas default and half again as large
-// (pitfall 102). Both survive that being fixed upstream.
-function renderOptions(pageWidthPt: number): PdfRenderPageOptions {
-  return {
-    scaleFactor: coverScaleFactor(pageWidthPt),
-    dpr: 1,
-    imageType: MIME,
-    imageQuality: COVER_JPEG_QUALITY,
+  const result = await renderFirstPageJpeg(bytes, {
+    id: `cover:${bookId}`,
+    scaleFactor: coverScaleFactor,
     quality: COVER_JPEG_QUALITY,
-  } as PdfRenderPageOptions;
-}
-
-class CoverTimeout extends Error {}
-
-function withTimeout<T>(task: Promise<T>, ms: number, what: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout>;
-  const alarm = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new CoverTimeout(`${what} timed out after ${ms}ms`)), ms);
   });
-  return Promise.race([task, alarm]).finally(() => clearTimeout(timer));
-}
-
-function transient(file: FileRef, e: CoverTimeout): null {
-  console.warn(`cover render gave up on ${file.name}`, file.path, e.message);
-  return null;
+  switch (result.kind) {
+    case "ok":
+      return result.jpeg;
+    case "no-engine":
+      // The whole reader is down, not this book: no marker, so covers come back
+      // with the engine on the next launch.
+      console.warn("no PDFium engine for covers", result.cause);
+      return null;
+    case "timeout":
+      // Transient: said out loud and given up on for this session, but not
+      // written down, so a slow engine does not cost the book its cover for a
+      // day.
+      console.warn(`cover render gave up on ${file.name}`, file.path, result.message);
+      return null;
+    case "open-failed":
+      await recordFailure(bookId, file, "open", result.cause);
+      return null;
+    case "no-pages":
+      await recordFailure(bookId, file, "no-pages", result.cause);
+      return null;
+    case "render-failed":
+      await recordFailure(bookId, file, "render", result.cause);
+      return null;
+  }
 }
 
 // --- cache ------------------------------------------------------------------
