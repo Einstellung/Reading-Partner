@@ -7,10 +7,10 @@
 // the UA. The <style> element is unlayered, so it outranks preflight's `base`
 // layer without any !important.
 //
-// The tag list follows sanitize.ts: it drops script/style/iframe/object/embed/
-// video/audio/canvas/svg/form and the interactive controls, and passes
-// everything else through, so anything a news page can put in running text can
-// arrive here.
+// The tag list is sanitize.ts's ALLOWED_ELEMENTS: that allowlist decides what
+// can arrive here, so a tag added there wants a rule here or it renders with no
+// style at all. An element it does not name loses its tag and keeps its text,
+// which lands in the surrounding block.
 
 export const ARTICLE_PROSE_CLASS = "info-article-body";
 

