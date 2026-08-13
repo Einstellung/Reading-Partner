@@ -1,134 +1,99 @@
 // The rules of the shared shell start-up (src/ui/components/common/
 // useShellBootstrap.ts), which both shells now mount: a stored default model the
-// catalog dropped is corrected and written back once, a provider id the catalog
-// no longer carries counts as unconfigured, and the sync-health toast is said
-// once and then never again. The hook itself is four lines of wiring around
-// these; they are what can be wrong. Run: bun test.
+// catalog dropped is corrected and written back once, the deferred read of a
+// sync pull waits for the pending save, a provider id the catalog no longer
+// carries counts as unconfigured, and the sync-health toast is said once and
+// then never again. The hook itself is four lines of wiring around these; they
+// are what can be wrong.
+//
+// The two functions that touch the settings store take it as an argument, so the
+// store here is a plain object. mock.module is deliberately not used: it swaps a
+// module out for every other test file sharing the worker and is never put back
+// (pitfall 117). Run: bun test.
 
-import { beforeEach, expect, mock, test } from "bun:test";
+import { expect, test } from "bun:test";
 import type { SyncHealthReport } from "../../../src/platform/sync/health";
 import type { ProviderInfo } from "../../../src/ai/providers";
-import type { Settings } from "../../../src/platform/app/settings";
-
-const files = new Map<string, string>();
-const writes: string[] = [];
-
-// The settings store's only seam (see tests/platform/settings-flush.test.ts):
-// an in-memory file, so the real store runs and its debounced write is counted.
-mock.module("../../../src/platform/app/atomic-fs", () => ({
-  writeTextAtomic: async (path: string, contents: string) => {
-    writes.push(path);
-    files.set(path, contents);
-  },
-  quarantineFile: async () => null,
-  onCorruptFile: () => {},
-  readGuardedJson: async (file: string, validate: (raw: unknown) => unknown) => {
-    const text = files.get(file);
-    if (text === undefined) return { status: "missing" };
-    const value = validate(JSON.parse(text) as unknown);
-    return value === null ? { status: "corrupt", savedAs: null } : { status: "ok", value };
-  },
-}));
-
-// The debounced write schedules through window; nothing else here needs a DOM.
-interface Task {
-  id: number;
-  at: number;
-  fn: () => void;
-}
-let clock = 0;
-let nextTimerId = 1;
-let tasks: Task[] = [];
-const fakeWindow = {
-  setTimeout(fn: () => void, ms: number): number {
-    const id = nextTimerId++;
-    tasks.push({ id, at: clock + ms, fn });
-    return id;
-  },
-  clearTimeout(id: number): void {
-    tasks = tasks.filter((t) => t.id !== id);
-  },
-  addEventListener(): void {},
-  removeEventListener(): void {},
-};
-
-// Only the two tests that make the store write need it, and it goes away again
-// afterwards: globalThis is shared with every other test file in the worker, and
-// a fake window left standing decides for unrelated code whether it thinks it is
-// running in a browser.
-async function withFakeWindow(run: () => Promise<void>): Promise<void> {
-  const had = "window" in globalThis;
-  const real = (globalThis as { window?: unknown }).window;
-  (globalThis as { window?: unknown }).window = fakeWindow;
-  try {
-    await run();
-  } finally {
-    if (had) (globalThis as { window?: unknown }).window = real;
-    else delete (globalThis as { window?: unknown }).window;
-  }
-}
-
-async function advance(ms: number): Promise<void> {
-  clock += ms;
-  const due = tasks.filter((t) => t.at <= clock);
-  tasks = tasks.filter((t) => t.at > clock);
-  for (const t of due) t.fn();
-  await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
-}
-
-const { corruptFileMessage, healthToastMessage, isConfigured, loadShellSettings } = await import(
-  "../../../src/ui/components/common/useShellBootstrap"
-);
-const { DEFAULT_SETTINGS } = await import("../../../src/platform/app/settings");
-const { defaultModelFor } = await import("../../../src/ai/providers");
+import { DEFAULT_SETTINGS, type Settings } from "../../../src/platform/app/settings";
+import { defaultModelFor } from "../../../src/ai/providers";
+import {
+  corruptFileMessage,
+  healthToastMessage,
+  isConfigured,
+  loadShellSettings,
+  pulledSettings,
+  type SettingsAccess,
+} from "../../../src/ui/components/common/useShellBootstrap";
 
 const RETIRED = "claude-from-a-previous-build";
 
-beforeEach(() => {
-  files.clear();
-  writes.length = 0;
-  tasks = [];
-});
+// A settings store that records what was written to it and hands back whatever
+// is "on disk" at the time it is read.
+function fakeStore(stored: Settings): SettingsAccess & { saved: Settings[]; flushes: number } {
+  const saved: Settings[] = [];
+  const store = {
+    saved,
+    flushes: 0,
+    load: async () => ({ ...stored }),
+    save: (settings: Settings) => {
+      saved.push(settings);
+    },
+    flush: async () => {
+      store.flushes++;
+    },
+  };
+  return store;
+}
 
 test("a stored model the catalog dropped is corrected, told, and written back once", async () => {
-  await withFakeWindow(async () => {
-    files.set(
-      "settings.json",
-      JSON.stringify({
-        ...DEFAULT_SETTINGS,
-        defaultProviderId: "anthropic",
-        defaultModelId: RETIRED,
-      }),
-    );
-
-    const { settings, notice } = await loadShellSettings();
-    expect(settings.defaultModelId).toBe(defaultModelFor("anthropic"));
-    expect(notice).toContain(RETIRED);
-
-    await advance(500);
-    expect(writes).toEqual(["settings.json"]);
-    expect((JSON.parse(files.get("settings.json") as string) as Settings).defaultModelId).toBe(
-      defaultModelFor("anthropic"),
-    );
+  const store = fakeStore({
+    ...DEFAULT_SETTINGS,
+    defaultProviderId: "anthropic",
+    defaultModelId: RETIRED,
   });
+
+  const { settings, notice } = await loadShellSettings(store);
+  expect(settings.defaultModelId).toBe(defaultModelFor("anthropic"));
+  expect(notice).toContain(RETIRED);
+  expect(store.saved).toEqual([settings]);
 });
 
 test("settings the catalog still agrees with are not written back at all", async () => {
-  await withFakeWindow(async () => {
-    files.set(
-      "settings.json",
-      JSON.stringify({
-        ...DEFAULT_SETTINGS,
-        defaultProviderId: "anthropic",
-        defaultModelId: defaultModelFor("anthropic"),
-      }),
-    );
-
-    const { notice } = await loadShellSettings();
-    expect(notice).toBeNull();
-    await advance(500);
-    expect(writes).toEqual([]);
+  const store = fakeStore({
+    ...DEFAULT_SETTINGS,
+    defaultProviderId: "anthropic",
+    defaultModelId: defaultModelFor("anthropic"),
   });
+
+  const { notice } = await loadShellSettings(store);
+  expect(notice).toBeNull();
+  expect(store.saved).toEqual([]);
+});
+
+// The deferred read races the save debounce: the settings panel can be closed
+// inside the 500ms saveSettings holds a change for, and the read would then
+// return the file as it was before the edit — this shell would sit on a copy
+// without it and its next save would take it back off disk. Without the flush
+// the value below is the pre-edit one.
+test("the deferred read flushes the pending save before it reads", async () => {
+  const order: string[] = [];
+  let onDisk: Settings = { ...DEFAULT_SETTINGS, aiLanguage: "ja" };
+  const edited: Settings = { ...DEFAULT_SETTINGS, aiLanguage: "ko" };
+
+  const adopted = await pulledSettings({
+    flush: async () => {
+      order.push("flush");
+      onDisk = edited;
+    },
+    load: async () => {
+      order.push("load");
+      return onDisk;
+    },
+    save: () => {},
+  });
+
+  expect(order).toEqual(["flush", "load"]);
+  expect(adopted.aiLanguage).toBe("ko");
 });
 
 const provider = (id: string, configured: boolean): ProviderInfo =>

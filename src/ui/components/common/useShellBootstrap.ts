@@ -21,6 +21,7 @@ import {
 } from "../../../platform/app/device";
 import {
   DEFAULT_SETTINGS,
+  flushSettings,
   loadSettings,
   onSettingsSaveError,
   saveSettings,
@@ -56,14 +57,48 @@ export function isConfigured(settings: Settings, providersInfo: ProviderInfo[]):
   );
 }
 
+// The store, as the two functions below use it. Both take it as an argument so
+// their tests can hand them a fake instead of rewriting the module registry
+// (pitfall 117).
+export interface SettingsAccess {
+  load: () => Promise<Settings>;
+  save: (settings: Settings) => void;
+  flush: () => Promise<void>;
+}
+
+const SETTINGS_STORE: SettingsAccess = {
+  load: loadSettings,
+  save: saveSettings,
+  flush: flushSettings,
+};
+
 // The settings a shell starts on. A stored default model the provider's catalog
 // no longer carries is corrected here and written back once, with a sentence for
 // the user: the app keeps working on a model that resolves, and the swap is
 // never silent.
-export async function loadShellSettings(): Promise<{ settings: Settings; notice: string | null }> {
-  const { settings, notice } = enforceKnownModel(await loadSettings());
-  if (notice) saveSettings(settings);
+export async function loadShellSettings(
+  store: SettingsAccess = SETTINGS_STORE,
+): Promise<{ settings: Settings; notice: string | null }> {
+  const { settings, notice } = enforceKnownModel(await store.load());
+  if (notice) store.save(settings);
   return { settings, notice };
+}
+
+// The read a pull asks for, taken when the settings panel is out of the way.
+// The flush first is the whole of it: saveSettings holds a change for 500ms, so
+// a user who edits a field and closes the panel inside that window would
+// otherwise be handed the file as it was before the edit — this shell would sit
+// on a copy without it, and its next save would take the edit off disk again.
+// That is the clobber settingsPullAction exists to close, reached by closing the
+// panel quickly instead of by dropping the read.
+//
+// What the flush cannot recover: this shell's pending copy was read before the
+// pull, so writing it out does undo the field the pull merged in. The user's own
+// edit wins over the remote one, which is the right way round, and shell and
+// disk agree afterwards either way.
+export async function pulledSettings(store: SettingsAccess = SETTINGS_STORE): Promise<Settings> {
+  await store.flush();
+  return store.load();
 }
 
 // The sync-health message to show, or null. Once per app start and then never
@@ -152,7 +187,7 @@ export function useShellBootstrap({
   }, [settingsOpen]);
 
   const adoptPulledSettings = useCallback(() => {
-    loadSettings()
+    pulledSettings()
       .then(setSettings)
       .catch(() => {});
   }, []);

@@ -24,6 +24,7 @@
 | 调模型、改 provider 层、组装提示词、加长上下文 | AI 调用与上下文窗口 |
 | 顶栏、工具条、下拉浮层的定位 | 界面与布局 |
 | 全局样式、Tailwind layer、字体与行高 | 界面与布局 + EmbedPDF 引擎 |
+| 加测试文件、给 store 写单测 | 开发环境 |
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
@@ -163,6 +164,7 @@
 
 - [14-dev-build-oomd-session-kill](./14-dev-build-oomd-session-kill.md) — 全量 Rust 编译触发 systemd-oomd 杀整个桌面会话；日常用 `bun run dev:capped`
 - [55-worktree-dev-server-serves-stale-modules](./55-worktree-dev-server-serves-stale-modules.md) — worktree 在 `.claude/` 下，正好被 Vite 的 watch ignore 命中，dev server 看不见自己的改动；每次改完要重启
+- [117-mock-module-rewrites-the-registry-for-the-whole-worker](./117-mock-module-rewrites-the-registry-for-the-whole-worker.md) — `mock.module` 改的是整个 worker 的模块表且不回滚，两个测试文件分到同一 worker 就互相污染（只跑了 33 个用例里的 7 个）；被测模块把依赖当参数收，别换模块表
 
 ## 历史（zotero/reader 引擎时代）
 

@@ -3,7 +3,7 @@
 // Persisted to AppData/settings.json, debounced, with failures surfaced.
 
 import type { ThinkingLevel } from "@earendil-works/pi-ai";
-import { readGuardedJson, writeTextAtomic } from "./atomic-fs";
+import { readGuardedJson, writeTextAtomic, type GuardedRead } from "./atomic-fs";
 import { observeAppExit } from "./lifecycle";
 
 // Exported so a shell can recognise its own file among the paths a sync pull
@@ -130,73 +130,133 @@ export const DEFAULT_SETTINGS: Settings = {
 
 const DEFAULTS = DEFAULT_SETTINGS;
 
-let timer: number | null = null;
-// The settings a debounce is holding, kept so the exit flush has something to
-// write and so a flush that already ran writes nothing a second time.
-let pending: Settings | null = null;
-let onError: (e: unknown) => void = () => {};
-export function onSettingsSaveError(handler: (e: unknown) => void): void {
-  onError = handler;
+// Everything the store reaches outside itself: the file, the clock, and the way
+// out of the app. Passed in rather than imported, so a test can run the real
+// store against an in-memory file on a fake clock. The alternative — swapping
+// atomic-fs out with mock.module — rewrites the module registry for every other
+// test file that shares the worker, and bun never unwinds it (pitfall 117).
+export interface SettingsIo {
+  // The guarded read, so the quarantine policy stays in atomic-fs. "corrupt"
+  // with no quarantine copy is the case that blocks writing.
+  read: () => Promise<GuardedRead<Partial<Settings>>>;
+  write: (contents: string) => Promise<void>;
+  schedule: (fn: () => void, ms: number) => number;
+  cancel: (id: number) => void;
+  // Bound once, on the first save: the last 500ms of a session are settings the
+  // user changed and then quit, and on iOS the webview is suspended without the
+  // timer ever firing. Not bound at import time, so a headless caller that only
+  // reads settings never touches the DOM.
+  bindExit: (flush: () => void) => void;
 }
 
-// Set when the file exists but could not be read, so the app is running on
-// defaults that would erase real configuration (provider, keys) if written back.
-// Reset on a successful load, which is the only thing that can happen first.
-let blockWrites = false;
-
-// Falling back to the defaults is fine for a missing file and unavoidable for an
-// unreadable one, but it must not become the new truth: unparseable content is
-// quarantined first, and an unreadable file blocks saving until a later load
-// succeeds.
-export async function loadSettings(): Promise<Settings> {
-  const read = await readGuardedJson<Partial<Settings>>(SETTINGS_FILE, (raw) =>
-    raw && typeof raw === "object" ? (raw as Partial<Settings>) : null,
-  );
-  blockWrites = read.status === "corrupt" && read.savedAs === null;
-  if (read.status === "ok") return { ...DEFAULTS, ...read.value };
-  return { ...DEFAULTS };
+export interface SettingsStore {
+  load: () => Promise<Settings>;
+  save: (settings: Settings) => void;
+  // Write whatever the debounce is holding and wait for it to land. Anyone about
+  // to read settings.json back has to call this first, or they read the file as
+  // it was before the last 500ms of edits (see pulledSettings in the shell
+  // bootstrap).
+  flush: () => Promise<void>;
+  onSaveError: (handler: (e: unknown) => void) => void;
 }
 
-// Debounced write; a failure is reported (never silently lost, pitfall 09).
-export function saveSettings(settings: Settings): void {
-  pending = settings;
-  bindExitFlush();
-  if (timer) window.clearTimeout(timer);
-  timer = window.setTimeout(() => {
-    timer = null;
-    writeNow();
-  }, SAVE_DEBOUNCE);
-}
+export function createSettingsStore(io: SettingsIo): SettingsStore {
+  let timer: number | null = null;
+  // The settings a debounce is holding, kept so the exit flush has something to
+  // write and so a flush that already ran writes nothing a second time.
+  let pending: Settings | null = null;
+  let onError: (e: unknown) => void = () => {};
+  // Set when the file exists but could not be read, so the app is running on
+  // defaults that would erase real configuration (provider, keys) if written
+  // back. Reset on a successful load, which is the only thing that can happen
+  // first.
+  let blockWrites = false;
+  // The writes already in the air. Chained rather than raced: two atomic
+  // replacements of the same file in flight at once have no defined winner, and
+  // flush has to be able to wait for the one before it.
+  let inFlight: Promise<void> = Promise.resolve();
+  let exitBound = false;
 
-// Write whatever the debounce is holding, and nothing when it holds nothing.
-// Taking `pending` first is what makes a second call a no-op: pagehide can fire
-// more than once (lifecycle.ts), and observeAppExit does not deduplicate.
-function writeNow(): void {
-  const next = pending;
-  pending = null;
-  if (timer) {
-    window.clearTimeout(timer);
-    timer = null;
+  // Falling back to the defaults is fine for a missing file and unavoidable for
+  // an unreadable one, but it must not become the new truth: unparseable content
+  // is quarantined first (in atomic-fs), and an unreadable file blocks saving
+  // until a later load succeeds.
+  async function load(): Promise<Settings> {
+    const read = await io.read();
+    blockWrites = read.status === "corrupt" && read.savedAs === null;
+    if (read.status === "ok") return { ...DEFAULTS, ...read.value };
+    return { ...DEFAULTS };
   }
-  if (next === null) return;
-  (async () => {
-    if (blockWrites) {
-      throw new Error(`${SETTINGS_FILE} could not be read; refusing to overwrite it`);
+
+  // Debounced write; a failure is reported (never silently lost, pitfall 09).
+  function save(settings: Settings): void {
+    pending = settings;
+    if (!exitBound) {
+      exitBound = true;
+      io.bindExit(writeNow);
     }
-    await writeTextAtomic(SETTINGS_FILE, JSON.stringify(next, null, 2));
-  })().catch((e) => onError(e));
+    if (timer !== null) io.cancel(timer);
+    timer = io.schedule(() => {
+      timer = null;
+      writeNow();
+    }, SAVE_DEBOUNCE);
+  }
+
+  // Write whatever the debounce is holding, and nothing when it holds nothing.
+  // Taking `pending` first is what makes a second call a no-op: pagehide can
+  // fire more than once (lifecycle.ts), and observeAppExit does not deduplicate.
+  function writeNow(): void {
+    const next = pending;
+    pending = null;
+    if (timer !== null) {
+      io.cancel(timer);
+      timer = null;
+    }
+    if (next === null) return;
+    inFlight = inFlight
+      .then(async () => {
+        if (blockWrites) {
+          throw new Error(`${SETTINGS_FILE} could not be read; refusing to overwrite it`);
+        }
+        await io.write(JSON.stringify(next, null, 2));
+      })
+      .catch((e) => onError(e));
+  }
+
+  async function flush(): Promise<void> {
+    writeNow();
+    await inFlight;
+  }
+
+  return {
+    load,
+    save,
+    flush,
+    onSaveError: (handler) => {
+      onError = handler;
+    },
+  };
 }
 
-// The last 500ms of a session are settings the user changed and then quit: on
-// iOS the webview is suspended without the timer ever firing. Bound on the
-// first save rather than at import time, so a headless caller that only reads
-// settings never touches the DOM.
-let exitBound = false;
-function bindExitFlush(): void {
-  if (exitBound || typeof window === "undefined") return;
-  exitBound = true;
-  observeAppExit(window, writeNow);
-}
+const store = createSettingsStore({
+  read: () =>
+    readGuardedJson<Partial<Settings>>(SETTINGS_FILE, (raw) =>
+      raw && typeof raw === "object" ? (raw as Partial<Settings>) : null,
+    ),
+  write: (contents) => writeTextAtomic(SETTINGS_FILE, contents),
+  schedule: (fn, ms) => window.setTimeout(fn, ms),
+  cancel: (id) => window.clearTimeout(id),
+  bindExit: (flush) => {
+    if (typeof window === "undefined") return;
+    observeAppExit(window, flush);
+  },
+});
+
+export const loadSettings = (): Promise<Settings> => store.load();
+export const saveSettings = (settings: Settings): void => store.save(settings);
+export const flushSettings = (): Promise<void> => store.flush();
+export const onSettingsSaveError = (handler: (e: unknown) => void): void =>
+  store.onSaveError(handler);
 
 // What a sync pull does to the settings a shell is holding. A shell keeps
 // settings.json whole in memory and every save serialises that whole copy, so a
