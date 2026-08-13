@@ -73,7 +73,7 @@ export function defaultTalkName(materials: readonly TalkMaterial[]): string {
   return `${materials[0].title} +${materials.length - 1}`;
 }
 
-export interface CreateTalkInput {
+export interface NewTalkFields {
   id: string;
   topicId: string;
   materials: TalkMaterial[];
@@ -81,7 +81,10 @@ export interface CreateTalkInput {
   now: number;
 }
 
-export function createTalk(input: CreateTalkInput): Talk {
+// The talk file a start produces, before anything is on disk. Pure, so the
+// shape a talk begins life in is testable without a filesystem; the write and
+// the id collision handling are the store's (store.ts).
+export function newTalk(input: NewTalkFields): Talk {
   return {
     version: TALK_VERSION,
     id: input.id,

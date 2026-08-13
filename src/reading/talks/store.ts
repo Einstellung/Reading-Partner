@@ -12,7 +12,7 @@
 import { BaseDirectory, exists, readDir, readTextFile, remove } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import {
-  createTalk,
+  newTalk,
   newTalkId,
   normalizeTalk,
   type Talk,
@@ -94,7 +94,7 @@ export interface NewTalkInput {
 export async function startTalk(input: NewTalkInput): Promise<Talk> {
   let now = input.now ?? Date.now();
   while (await exists(talkFile(newTalkId(now)), { baseDir: BaseDirectory.AppData })) now += 1;
-  const talk = createTalk({
+  const talk = newTalk({
     id: newTalkId(now),
     topicId: input.topicId,
     materials: input.materials,

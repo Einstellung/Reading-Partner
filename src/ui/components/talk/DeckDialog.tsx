@@ -20,14 +20,13 @@
 // Escape, and a press outside the box.
 
 import { useEffect, useState } from "react";
-import { openPath } from "@tauri-apps/plugin-opener";
-import { appDataDir, join } from "@tauri-apps/api/path";
 import {
   getCurrentDeck,
   hasUnrunSlides,
   listDecks,
   listDeckTalks,
   openDeck,
+  openDeckFile,
   startDeck,
   type SlideRun,
   type SlidesActivity,
@@ -317,11 +316,8 @@ export default function DeckDialog({
 
   const open = async (file: string) => {
     setOpenError(null);
-    try {
-      await openPath(await join(await appDataDir(), file));
-    } catch (e) {
-      setOpenError(e instanceof Error ? e.message : "Could not open the deck");
-    }
+    const failure = await openDeckFile(file);
+    if (failure) setOpenError(failure);
   };
 
   return (
