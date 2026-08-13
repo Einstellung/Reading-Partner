@@ -19,8 +19,23 @@ import {
   type StoreError,
   type StoreScope,
 } from "../../src/platform/app/store-errors";
-import { subscribeStoreErrors } from "../../src/ui/components/common/useShellBootstrap";
+import {
+  subscribeStoreErrors,
+  useShellBootstrap,
+} from "../../src/ui/components/common/useShellBootstrap";
 import type { ToastKind } from "../../src/ui/components/common/toast-list";
+import { createElement } from "react";
+import { useDom } from "../support/dom";
+import { hushShell } from "../support/shell";
+
+// The last two tests mount things: the hook that subscribes, and the two shells
+// that mount the hook. Both ends of the channel are then driven, so the line
+// that subscribes cannot be deleted without a red test. The shells are imported
+// where they are used rather than at the top, because everything React renders
+// into a document has to be evaluated after the window is up (tests/support/
+// dom.ts).
+const { act, cleanup, render, renderHook } = await useDom();
+afterEach(cleanup);
 
 const SRC = fileURLToPath(new URL("../../src", import.meta.url));
 
@@ -229,12 +244,55 @@ test("the shells' subscriber turns a lost write into a toast and a lost cache in
   expect(toasts.length).toBe(2);
 });
 
-// That both shells mount the hook that subscribes is the one half no test can
-// drive: App.tsx is 1400 lines of hooks over Tauri and useShellBootstrap is
-// called at the top of it.
-test("both shells mount the bootstrap that subscribes", () => {
-  for (const shell of ["App.tsx", "PhoneApp.tsx"]) {
-    const source = readFileSync(join(SRC, shell), "utf8");
-    expect(`${shell}: ${source.includes("useShellBootstrap({")}`).toBe(`${shell}: true`);
-  }
+// The wiring itself: the subscription lives in useShellBootstrap's effect, and
+// what it is worth is that it goes up when a shell mounts and comes down when
+// one unmounts. Driven through the hook rather than through
+// subscribeStoreErrors, which is green either way — deleting the call from the
+// effect is the mutation this catches.
+//
+// settingsOpen starts true so the mount does not also go and re-read the
+// provider list; nothing here is about that.
+test("the bootstrap's effect subscribes while it is mounted, and not after", () => {
+  const toasts: string[] = [];
+  const said = (message: string) => toasts.filter((t) => t === message).length;
+  const view = renderHook(() =>
+    useShellBootstrap({ settingsOpen: true, pushToast: (_kind, message) => void toasts.push(message) }),
+  );
+
+  act(() => reportStoreError("threads", new Error("EIO")));
+  expect(said("AI conversation could not be saved")).toBe(1);
+
+  // The effect's cleanup. Same scope again, so a second toast would have to come
+  // from the subscription still being there.
+  act(() => view.unmount());
+  act(() => reportStoreError("threads", new Error("EIO")));
+  expect(said("AI conversation could not be saved")).toBe(1);
 });
+
+// The whole path, per shell: a store fails, and the sentence is on the screen
+// the user is looking at. This is what the source read it replaces stood for —
+// that read was `App.tsx contains "useShellBootstrap({"`, which survives the
+// hook doing nothing with the channel at all.
+for (const [shell, load] of [
+  ["App", () => import("../../src/App")],
+  ["PhoneApp", () => import("../../src/PhoneApp")],
+] as const) {
+  test(`${shell} puts a lost write on screen`, async () => {
+    const restore = hushShell();
+    try {
+      const Shell = (await load()).default;
+      const { container } = render(createElement(Shell));
+      // Mounting starts the settings and device reads; let them fail before the
+      // report, so what is on screen afterwards is only what the report put there.
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(container.textContent).not.toContain("Annotations could not be saved");
+
+      act(() => reportStoreError("annotations", new Error("EIO")));
+      expect(container.textContent).toContain("Annotations could not be saved");
+    } finally {
+      restore();
+    }
+  });
+}
