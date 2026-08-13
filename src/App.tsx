@@ -86,8 +86,7 @@ import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
 import type { Annotation as PopupAnnotation, ToolType } from "./ui/components/reader/types";
 import type { PendingImage } from "./ui/components/chat/types";
 import { rehydrateMessage, type ChatPart } from "./ui/components/chat/chatParts";
-import { CardRegistryContext } from "./ui/components/chat/cardRegistryContext";
-import { CARD_REGISTRY } from "./ui/components/cardRegistry";
+import { CardRegistryProvider } from "./ui/components/CardRegistryProvider";
 import { refreshInfoCollector } from "./info/briefing/live";
 
 // The AI pen maps to the engine's underline tool in a fixed purple (the palette's
@@ -1070,7 +1069,7 @@ export default function App() {
   }, [figures, onCitation]);
 
   return (
-    <CardRegistryContext.Provider value={CARD_REGISTRY}>
+    <CardRegistryProvider>
     <CitationContext.Provider value={onCitation}>
     <FigureContext.Provider value={figureHost}>
     {/* p-safe: the insets (iPad, viewport-fit=cover). box-sizing:border-box
@@ -1365,7 +1364,7 @@ export default function App() {
     </div>
     </FigureContext.Provider>
     </CitationContext.Provider>
-    </CardRegistryContext.Provider>
+    </CardRegistryProvider>
   );
 }
 

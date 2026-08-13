@@ -4,8 +4,12 @@
 // import chat/ for the card protocol. Run: bun test.
 
 import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { CardRegistryContext } from "../../../src/ui/components/chat/cardRegistryContext";
+import { CardRegistryProvider } from "../../../src/ui/components/CardRegistryProvider";
 import { CARD_REGISTRY } from "../../../src/ui/components/cardRegistry";
 import { MessageList } from "../../../src/ui/components/chat/chat";
 import type { CardRegistry } from "../../../src/ui/components/chat/chatParts";
@@ -60,11 +64,29 @@ test("a chat mounted with no provider renders no card", () => {
   expect(html).not.toContain(STUB_TEXT);
 });
 
-test("the shells' table still covers every kind the union declares", () => {
+// What the shells mount, rendered: the component both of them wrap their chat
+// in has to hand down the assembled table, and the table has to carry every kind
+// the union declares.
+test("the provider the shells mount renders the real card", () => {
   const html = renderToStaticMarkup(
-    <CardRegistryContext.Provider value={CARD_REGISTRY}>
+    <CardRegistryProvider>
       <MessageList messages={rowWithCard()} />
-    </CardRegistryContext.Provider>,
+    </CardRegistryProvider>,
   );
   expect(html).toContain("Endings");
+});
+
+const SRC = fileURLToPath(new URL("../../../src", import.meta.url));
+
+// The shells themselves. Read as source and not rendered: App.tsx is 1400 lines
+// of hooks over Tauri and a chat is nowhere near the top of either tree, so
+// mounting one in a test is not on. What can be checked is that the wrapper is
+// there at all, which is the whole failure — a shell that drops it renders every
+// card as nothing, with no error and no failing type, and only this test says so.
+test("both shells wrap their chat in the provider", () => {
+  for (const shell of ["App.tsx", "PhoneApp.tsx"]) {
+    const source = readFileSync(join(SRC, shell), "utf8");
+    expect(`${shell}: ${source.includes("<CardRegistryProvider>")}`).toBe(`${shell}: true`);
+    expect(`${shell}: ${source.includes("</CardRegistryProvider>")}`).toBe(`${shell}: true`);
+  }
 });

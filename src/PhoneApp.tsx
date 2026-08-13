@@ -22,8 +22,7 @@ import {
   savedArticlesForTopic,
   type SavedArticle,
 } from "./reading/saved-articles";
-import { CardRegistryContext } from "./ui/components/chat/cardRegistryContext";
-import { CARD_REGISTRY } from "./ui/components/cardRegistry";
+import { CardRegistryProvider } from "./ui/components/CardRegistryProvider";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import PhoneHome from "./ui/components/phone/PhoneHome";
 import { PullToAsk } from "./ui/components/phone/PullToAsk";
@@ -184,7 +183,7 @@ export default function PhoneApp() {
           {/* The chat card table (docs/17's probe cards, the briefing card).
               The two shells are the only files that name it: chat/ reads it
               from this context, so it never imports the domains that fill it. */}
-          <CardRegistryContext.Provider value={CARD_REGISTRY}>
+          <CardRegistryProvider>
           <InfoHome
             screen={infoScreenFor(base)}
             onNavigate={onNavigate}
@@ -225,7 +224,7 @@ export default function PhoneApp() {
           {base.kind === "savedArticle" && (
             <SavedArticleView article={base.article} backLabel="Saved" onBack={goBack} />
           )}
-          </CardRegistryContext.Provider>
+          </CardRegistryProvider>
         </main>
 
         <Toast toasts={toasts} onDismiss={dismissToast} />
