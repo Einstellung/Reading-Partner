@@ -18,7 +18,7 @@ import { getPdfiumEngine } from "./engine-singleton";
 import { DocumentManagerPluginPackage } from "@embedpdf/plugin-document-manager/react";
 import { ViewportPluginPackage, Viewport, useViewportElement } from "@embedpdf/plugin-viewport/react";
 import { ScrollPluginPackage, Scroller } from "@embedpdf/plugin-scroll/react";
-import type { ScrollCapability, ScrollScope } from "@embedpdf/plugin-scroll";
+import type { ScrollCapability } from "@embedpdf/plugin-scroll";
 import { ScrollStrategy } from "@embedpdf/plugin-scroll";
 import { RenderPluginPackage, RenderLayer } from "@embedpdf/plugin-render/react";
 import { TilingPluginPackage, TilingLayer } from "@embedpdf/plugin-tiling/react";
@@ -99,6 +99,16 @@ import {
   publishTouchDebug,
   type TouchDebugContact,
 } from "./touch-debug";
+import type {
+  AnnotationAnchor,
+  EmbedLayout,
+  EmbedPdfHandle,
+  EmbedPdfViewProps,
+  EmbedViewState,
+  EmbedViewStats,
+  PagedGestureCtx,
+  QuoteHighlight,
+} from "./types";
 
 const DOC_ID = "main";
 
@@ -127,116 +137,6 @@ function useSharedEngine(): { engine: PdfEngine | null; isLoading: boolean; erro
     };
   }, []);
   return { engine, isLoading: !engine && !error, error };
-}
-
-// "pointer" is the tool group's all-unselected state (no annotation tool);
-// "navlock" is the palm toggle, which activates no annotation tool either but
-// puts the touch router in charge of every pointer.
-export type EmbedTool = "pointer" | "navlock" | "highlight" | "underline" | "ink";
-// Reading layout: "vertical" = the classic continuous vertical scroll; "paged" =
-// one fit-page screen at a time, flipped horizontally by touch swipe (iPad).
-export type EmbedLayout = "vertical" | "paged";
-
-// A transient, non-persistent overlay marking an AI-cited quote on a page. Two
-// tiers: `rects` draws a violet highlight over the located text (Tier A);
-// `banner` shows the quote text as a chip near the page top when the text could
-// not be located geometrically (Tier B). Never becomes a saved annotation.
-export type QuoteHighlight =
-  | { pageIndex: number; kind: "rects"; rects: Rect[] }
-  | { pageIndex: number; kind: "banner"; quote: string };
-
-// What highlightQuote takes: `searchText` is fed to the engine's text search
-// (ideally the exact on-page substring), `displayText` is the model's quote
-// shown in the Tier-B banner fallback.
-export interface QuoteRequest {
-  searchText: string;
-  displayText: string;
-}
-
-export interface EmbedViewState {
-  pageIndex: number;
-  zoom: number;
-  // Top-left of the visible region within the current page, in unscaled page
-  // coordinates (top-left origin) — enables exact in-page position restore.
-  pageX?: number;
-  pageY?: number;
-  // Reading layout (per book). Absent restores to vertical.
-  layout?: EmbedLayout;
-}
-
-// Viewport-space rect of an annotation, reported when it gets selected — the
-// precise anchor for the shell's popup/bubble.
-export interface AnnotationAnchor {
-  left: number;
-  top: number;
-  right: number;
-  bottom: number;
-}
-
-export interface EmbedViewStats {
-  pageIndex: number;
-  pagesCount: number;
-  zoom: number;
-  canZoomIn: boolean;
-  canZoomOut: boolean;
-  layout: EmbedLayout;
-}
-
-export interface EmbedPdfHandle {
-  setTool(tool: EmbedTool): void;
-  // The "draw with your finger" setting. Off (the default) means a finger only
-  // ever moves the page and the stylus does the marking.
-  setFingerDraw(on: boolean): void;
-  setColor(color: string): void;
-  zoomIn(): void;
-  zoomOut(): void;
-  fitWidth(): void;
-  fitPage(): void;
-  // Switch between vertical continuous scroll and paged horizontal flip.
-  setLayout(mode: EmbedLayout): void;
-  navigateToPage(pageIndex: number): void;
-  navigateToAnnotation(id: string): void;
-  // Scroll to the page and show a transient violet overlay on the cited quote.
-  // Resolves true when the quote was located and highlighted (Tier A), false
-  // when it fell back to the quote banner (Tier B).
-  highlightQuote(pageIndex: number, req: QuoteRequest): Promise<boolean>;
-  clearQuoteHighlight(): void;
-  updateAnnotation(id: string, patch: { color?: string; comment?: string; starred?: boolean }): void;
-  // Host-driven upsert of full zotero annotations (reflect host edits / import
-  // new). Does not re-emit onSaveAnnotations (host is the source of truth).
-  upsertAnnotations(anns: ZoteroAnnotation[]): void;
-  deleteAnnotation(id: string): void;
-  selectAnnotation(id: string): void;
-  getState(): EmbedViewState;
-  // Spike/introspection surface: closes items 3 (coords) and 7 (custom) live.
-  _debug: {
-    dumpEmbed(): PdfAnnotationObject[];
-    pageHeight(pageIndex: number): number;
-    doc(): PdfDocumentObject | null;
-  };
-}
-
-export interface EmbedPdfViewProps {
-  buffer: ArrayBuffer;
-  annotations?: ZoteroAnnotation[];
-  authorName?: string;
-  initialViewState?: EmbedViewState | null;
-  onReady?: (handle: EmbedPdfHandle) => void;
-  onError?: (e: Error) => void;
-  onSaveAnnotations?: (anns: ZoteroAnnotation[]) => void;
-  onDeleteAnnotations?: (ids: string[]) => void;
-  onSelectAnnotation?: (id: string | null) => void;
-  // Fired (after onSelectAnnotation) with the selected annotation's measured
-  // viewport rect, via the AnnotationLayer selectionMenu slot. Once per
-  // selection — re-renders while selected do not re-fire.
-  onAnnotationAnchor?: (id: string, rect: AnnotationAnchor) => void;
-  onViewState?: (s: EmbedViewState) => void;
-  onViewStats?: (s: EmbedViewStats) => void;
-  // Fired when the transient AI-quote overlay appears (true) or is dismissed
-  // (false), so the shell can route Escape to dismiss it.
-  onQuoteHighlight?: (active: boolean) => void;
-  className?: string;
-  style?: React.CSSProperties;
 }
 
 // Non-interactive overlay for the transient AI-cited-quote highlight. Rendered
@@ -335,45 +235,6 @@ function AnchorProbe(props: { id: string; onAnchor: (id: string, rect: Annotatio
 // Long press (ms) before a stationary finger in paged mode is handed to native
 // text selection instead of being watched for a page swipe.
 const PAGED_LONG_PRESS_MS = 450;
-
-// Live gesture context, shared by a ref between the imperative engine wiring
-// (which fills in the engine handles) and the PagedGestures touch component
-// (which reads the current mode each event). A ref so mode changes never
-// re-render the memoized engine subtree.
-interface PagedGestureCtx {
-  paged: boolean;
-  tool: EmbedTool;
-  zoomedIn: boolean;
-  // The "draw with your finger" setting, mirrored here so the touch router can
-  // read it synchronously on every event. Off by default: the finger only moves
-  // the page and the stylus marks it.
-  fingerDraw: boolean;
-  scroll: ScrollScope | null;
-  interaction: InteractionManagerCapability | null;
-  // Used by the touch router to drop a text selection its own gesture caused.
-  selection: SelectionCapability | null;
-  // Set by the touch router so setLayout can toggle the viewport's touch-action
-  // (paged locks native pan/zoom; vertical restores it).
-  setTouchLock: ((locked: boolean) => void) | null;
-  // The scroll container itself, shared out by the touch router that grabbed
-  // it. A layout switch has to read the element's own scrollWidth/scrollHeight:
-  // the viewport plugin's cached metrics come from a ResizeObserver on the
-  // container, which never fires when only the content inside it changes size,
-  // so they say nothing about whether the re-layout has reached the DOM.
-  viewport: HTMLElement | null;
-  // The scroll indicator's thumb, which lives outside the scroll container so
-  // the rubber band does not carry it off the edge. Painted by the router on
-  // every scroll — including the engine's own programmatic ones.
-  indicator: HTMLElement | null;
-  // Set by the touch router so setLayout can drop everything the old layout had
-  // in flight (drag, rubber band, inertia, captured pointer, paused engine)
-  // before the new layout's geometry lands.
-  resetGestures: (() => void) | null;
-  // Paged mode's only way to change page: centres the target page and re-locks
-  // fit-page, so a turn always lands on one whole page (the geometry needs the
-  // zoom scope, which lives in the imperative wiring).
-  turnToPage: ((pageNumber: number) => void) | null;
-}
 
 // Touch input router: a zero-size child inside the Viewport that grabs the
 // scroll container (via the viewport-element context) and routes pointer events

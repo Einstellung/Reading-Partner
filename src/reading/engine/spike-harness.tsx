@@ -12,13 +12,14 @@ import { createRoot } from "react-dom/client";
 // paged strip (pitfall 76). A layout measured here has to be the app's layout.
 import "../../styles.css";
 import { flushSync } from "react-dom";
-import EmbedPdfView, {
-  type AnnotationAnchor,
-  type EmbedPdfHandle,
-  type EmbedPdfViewProps,
-  type EmbedViewState,
-  type EmbedViewStats,
-} from "./EmbedPdfView";
+import EmbedPdfView from "./EmbedPdfView";
+import type {
+  AnnotationAnchor,
+  EmbedPdfHandle,
+  EmbedPdfViewProps,
+  EmbedViewState,
+  EmbedViewStats,
+} from "./types";
 import { embedToZotero, type ZoteroAnnotation } from "./convert";
 
 // Render counter to measure re-render isolation (perf item #3). A parent churn
