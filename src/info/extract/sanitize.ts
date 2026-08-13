@@ -16,15 +16,31 @@ const DROP_WITH_CONTENT = ["script", "style", "noscript", "iframe", "object", "e
 // Stray tags removed on sight (self-closing or unbalanced).
 const DROP_TAGS = ["link", "meta", "base", "title", "input", "button", "textarea", "select"];
 
+// What can sit between the tag name (or the previous attribute) and this one.
+// A bare "/" counts: the HTML tokenizer treats a solidus inside a tag as an
+// ignored self-closing marker, so `<p/onclick=alert(1)>` parses as a <p> with an
+// onclick, and a pattern anchored on whitespace alone would walk past it.
+const ATTR_SEP = "[\\s/]";
+// The three ways an attribute value can be written. The unquoted form is the
+// one that matters: an unquoted value ends at whitespace or ">", which is why
+// `[^\\s>]*` models it exactly — and why matching only the quoted forms left
+// `<p onmouseover=alert(1)>` intact.
+const ATTR_VALUE = `(?:"[^"]*"|'[^']*'|[^\\s>]*)`;
+
 function stripHandlersAndJs(tag: string): string {
-  // on*="..." / on*='...' inline handlers.
-  let out = tag.replace(/\son[a-z]+\s*=\s*"[^"]*"/gi, "").replace(/\son[a-z]+\s*=\s*'[^']*'/gi, "");
+  // on* inline handlers, quoted or not.
+  let out = tag.replace(new RegExp(`${ATTR_SEP}on[a-z]+\\s*=\\s*${ATTR_VALUE}`, "gi"), "");
   // Any attribute whose value is a javascript: URL (href/src/formaction/...).
-  out = out.replace(/\s[a-z-]+\s*=\s*"\s*javascript:[^"]*"/gi, "").replace(/\s[a-z-]+\s*=\s*'\s*javascript:[^']*'/gi, "");
+  out = out.replace(
+    new RegExp(`${ATTR_SEP}[a-z-]+\\s*=\\s*(?:"\\s*javascript:[^"]*"|'\\s*javascript:[^']*'|javascript:[^\\s>]*)`, "gi"),
+    "",
+  );
   // Presentational/identity attributes: drop so the page renders in our prose
   // styles rather than the source site's (and no style-based exfiltration).
-  out = out.replace(/\s(?:class|style|id|width|height|align|bgcolor|data-[a-z-]+)\s*=\s*"[^"]*"/gi, "");
-  out = out.replace(/\s(?:class|style|id|width|height|align|bgcolor|data-[a-z-]+)\s*=\s*'[^']*'/gi, "");
+  out = out.replace(
+    new RegExp(`${ATTR_SEP}(?:class|style|id|width|height|align|bgcolor|data-[a-z-]+)\\s*=\\s*${ATTR_VALUE}`, "gi"),
+    "",
+  );
   return out;
 }
 

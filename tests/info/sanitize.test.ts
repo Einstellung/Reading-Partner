@@ -125,6 +125,38 @@ test("neutralizes javascript: anchors, keeps http links with rel/noreferrer", ()
   expect(ok).not.toContain("onclick");
 });
 
+// An unquoted attribute value is legal HTML and ends at whitespace or ">", so a
+// handler written without quotes used to walk straight through the scrubber:
+// `<p onmouseover=alert(1)>` came out unchanged and the article view renders the
+// result with dangerouslySetInnerHTML. A hostile page the collector fetched, or
+// a body edited into the synced folder, is the realistic way that arrives.
+test("strips inline handlers written without quotes", () => {
+  expect(sanitizeArticleHtml(`<p onmouseover=alert(1)>hi</p>`)).toBe("<p>hi</p>");
+  expect(sanitizeArticleHtml(`<p ONCLICK=alert(1)>x</p>`)).toBe("<p>x</p>");
+  expect(sanitizeArticleHtml("<p onclick=`alert(1)`>x</p>")).toBe("<p>x</p>");
+  expect(sanitizeArticleHtml(`<body onload=alert(1)>`)).toBe("<body>");
+});
+
+// A solidus inside a tag is an ignored self-closing marker to the tokenizer, so
+// `<p/onclick=…>` is a <p> with a handler. Matching only on whitespace before
+// the attribute name missed it.
+test("strips a handler separated from the tag name by a solidus", () => {
+  expect(sanitizeArticleHtml(`<p/onclick=alert(1)>x</p>`)).toBe("<p>x</p>");
+});
+
+test("strips an unquoted javascript: URL on any attribute", () => {
+  expect(sanitizeArticleHtml(`<blockquote cite=javascript:alert(1)>x</blockquote>`)).toBe(
+    "<blockquote>x</blockquote>",
+  );
+});
+
+test("unquoted presentational attributes go too, and prose is left alone", () => {
+  expect(sanitizeArticleHtml(`<p class=big style=color:red>x</p>`)).toBe("<p>x</p>");
+  expect(sanitizeArticleHtml(`<p>hi <b>there</b></p><h2>T</h2><ul><li>x</li></ul>`)).toBe(
+    "<p>hi <b>there</b></p><h2>T</h2><ul><li>x</li></ul>",
+  );
+});
+
 test("htmlToText turns blocks into breaks and decodes entities", () => {
   const t = htmlToText(`<h1>Title</h1><p>a &amp; b</p><p>c</p>`);
   expect(t).toBe("Title\n\na & b\n\nc");
