@@ -10,7 +10,7 @@
 
 三，`interaction.pause()` 是**全局**开关（`createPointerProvider.handleEvent` 一律早退），拦不住"只拦这一根手指"。笔在写字时手掌落下若走 pause，笔画会一起断；annotation 的 handler 同样不看 pointerId，任何指针的 pointerup 都会结束当前笔画。
 
-解法：多指、手掌、笔占用期间不再用 pause，改在 viewport 容器 capture 阶段对单个指针 `stopPropagation()`——页 div 在下游，吞了就到不了引擎，而 touch 通道不受影响，缩放照常。手指数语义收敛成规则表（`src/reading/engine/touch-routing.ts`，含单测）：1 指走原有路由；2 指 = 缩放 + 质心平移，全程禁选禁画，latch 到所有手指抬起（2→3→2 属同一次手势，不重启）；≥3 指全吞。笔一落下就取消进行中的手指滚动和惯性，并把已在屏上的手指标死到全部抬起。单指路径继续用 pause（标注工具 pointerdown 即 pause 那条不能动，见坑 37）。
+解法：多指、手掌、笔占用期间不再用 pause，改在 viewport 容器 capture 阶段对单个指针 `stopPropagation()`——页 div 在下游，吞了就到不了引擎，而 touch 通道不受影响，缩放照常。手指数语义收敛成规则表（`src/reading/engine/gesture/touch-routing.ts`，含单测）：1 指走原有路由；2 指 = 缩放 + 质心平移，全程禁选禁画，latch 到所有手指抬起（2→3→2 属同一次手势，不重启）；≥3 指全吞。笔一落下就取消进行中的手指滚动和惯性，并把已在屏上的手指标死到全部抬起。单指路径继续用 pause（标注工具 pointerdown 即 pause 那条不能动，见坑 37）。
 
 两个必须守的不变量：引擎见过 pointerdown 的那根手指必须收到 pointerup，否则选择 handler 留悬空 anchor；唯一例外是笔正在写字时，宁可留悬空 anchor 也不能把手掌的 pointerup 漏给引擎断掉笔画。
 
