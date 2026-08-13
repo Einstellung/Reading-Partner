@@ -946,6 +946,15 @@ test("resetGestures drops a live drag: capture released, engine resumed", () => 
 // it while the finger is still down. `setPage` is that move, and it is what
 // separates the page the executor sampled at the capture from a live read at
 // the release.
+//
+// It is a stub, so it can be told a page the engine could not be on, and a
+// fixture that does that proves nothing. The engine scores each visible page by
+// the fraction of its own area on screen and takes the highest, ties going to
+// the lower page number (calculatePageVisibility / determineCurrentPage in
+// @embedpdf/plugin-scroll). At the 800px pitch below that means the counter
+// reads page k for scrollLeft anywhere in [800(k-1) - 399, 800(k-1) + 400]:
+// half a page forward is still k, one px more is k+1. Keep every `setPage` on
+// the right side of that.
 function pagedMount(
   page: number,
   total: number,
@@ -1085,6 +1094,11 @@ test("a paged turn counts from the page the capture sampled, not the one at the 
 // neighbour page halfway in, change your mind, flick back. The flick is what
 // resolves the swipe — past the commit velocity the direction of the flick wins
 // outright, whatever the drag added up to.
+//
+// The offsets below are the ones that move the counter for real. Every drag
+// step is 100px, so the two tests walk right up to the crossover and then
+// across it, and the flick back is short enough to stay on the far side — the
+// page the fixture reports is the page the engine would report at every event.
 test("a flick back off the first page cannot ask for page 0", () => {
   const { h, turns, setPage } = pagedMount(1, 12);
   const t = h.target;
@@ -1092,23 +1106,28 @@ test("a flick back off the first page cannot ask for page 0", () => {
   // Page 1 has a next page, so dragging left commits as a turn, and the capture
   // samples page 1 as the page to count from.
   h.el.fire("pointerdown", ev(1, 600, 500, 0, t));
-  h.el.fire("pointermove", ev(1, 536, 500, 32, t));
+  h.el.fire("pointermove", ev(1, 500, 500, 32, t));
   expect(h.el.captured).toEqual([1]);
-  h.el.fire("pointermove", ev(1, 472, 500, 64, t));
-  h.el.fire("pointermove", ev(1, 408, 500, 96, t));
-  h.el.fire("pointermove", ev(1, 344, 500, 128, t));
-  // 256px of an 800px page pulled across: page 2 is now the most visible one, so
-  // the engine's counter is on 2 while the finger is still down and nothing has
-  // turned.
-  expect(h.el.scrollLeft).toBe(256);
+  h.el.fire("pointermove", ev(1, 400, 500, 64, t));
+  h.el.fire("pointermove", ev(1, 300, 500, 96, t));
+  // Half the page across and no further: 50% each, the tie goes to the lower
+  // number, and the counter is still on 1.
+  h.el.fire("pointermove", ev(1, 200, 500, 128, t));
+  expect(h.el.scrollLeft).toBe(400);
+  // Past it. Page 2 is 62.5% visible, so the engine's counter is on 2 while the
+  // finger is still down and nothing has turned.
+  h.el.fire("pointermove", ev(1, 100, 500, 160, t));
+  expect(h.el.scrollLeft).toBe(500);
   setPage(2);
 
   // The flick back. It beats the commit velocity, so the release resolves to
   // "previous page" even though the drag as a whole went the other way — and the
   // gate that would have stopped it asks the counter, which now says 2, so it
-  // does not stop it.
-  h.el.fire("pointermove", ev(1, 408, 500, 144, t));
-  h.el.fire("pointerup", ev(1, 472, 500, 160, t));
+  // does not stop it. The flick gives back 48 of the 500, which leaves the
+  // content past the crossover: 2 is still what the engine reports at the lift.
+  h.el.fire("pointermove", ev(1, 148, 500, 176, t));
+  expect(h.el.scrollLeft).toBe(452);
+  h.el.fire("pointerup", ev(1, 196, 500, 192, t));
 
   // 1 + (-1) is 0. Clamped to the first page, which is where a cancelled swipe
   // belongs: turnToPage re-centres it and re-locks fit-page.
@@ -1124,16 +1143,21 @@ test("a flick back off the last page cannot ask for one page past the end", () =
   // Mirror image: on the last page only the previous page exists, so dragging
   // right commits, and the capture samples 12.
   h.el.fire("pointerdown", ev(1, 200, 500, 0, t));
-  h.el.fire("pointermove", ev(1, 264, 500, 32, t));
+  h.el.fire("pointermove", ev(1, 300, 500, 32, t));
   expect(h.el.captured).toEqual([1]);
-  h.el.fire("pointermove", ev(1, 328, 500, 64, t));
-  h.el.fire("pointermove", ev(1, 392, 500, 96, t));
-  h.el.fire("pointermove", ev(1, 456, 500, 128, t));
-  expect(h.el.scrollLeft).toBe(8544);
+  h.el.fire("pointermove", ev(1, 400, 500, 64, t));
+  h.el.fire("pointermove", ev(1, 500, 500, 96, t));
+  // The same 50/50 — but the lower number here is 11, the page being pulled in,
+  // so the tie hands it the counter and this is already the crossover.
+  h.el.fire("pointermove", ev(1, 600, 500, 128, t));
+  expect(h.el.scrollLeft).toBe(8400);
   setPage(11);
+  h.el.fire("pointermove", ev(1, 700, 500, 160, t));
+  expect(h.el.scrollLeft).toBe(8300);
 
-  h.el.fire("pointermove", ev(1, 392, 500, 144, t));
-  h.el.fire("pointerup", ev(1, 328, 500, 160, t));
+  h.el.fire("pointermove", ev(1, 652, 500, 176, t));
+  expect(h.el.scrollLeft).toBe(8348);
+  h.el.fire("pointerup", ev(1, 604, 500, 192, t));
 
   // 12 + 1 is 13.
   expect(turns).toEqual([12]);
