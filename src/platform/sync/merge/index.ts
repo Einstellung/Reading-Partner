@@ -26,11 +26,11 @@ import {
   decode,
   detectFormat,
   encode,
-  hashBytes,
   isPlainObject,
   parseJson,
   sameBytes,
   serialize,
+  textDigest,
   type Json,
 } from "./text";
 
@@ -39,7 +39,7 @@ export function conflictCopyPath(path: string, bytes: Uint8Array): string {
   const slash = path.lastIndexOf("/");
   const ext = dot > slash ? path.slice(dot) : "";
   const stem = dot > slash ? path.slice(0, dot) : path;
-  return `${stem}.conflict-${hashBytes(bytes)}${ext}`;
+  return `${stem}.conflict-${textDigest(bytes)}${ext}`;
 }
 
 function unchanged(bytes: Uint8Array): MergeOutput {

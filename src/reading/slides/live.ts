@@ -11,6 +11,7 @@
 
 import { getImageGenKey } from "../../ai/credentials";
 import { callModel, resolveModel } from "../../ai/model-call";
+import { realTimers } from "../../ai/observable-run";
 import { getFigures } from "../figures/store";
 import { renderFigure } from "../figures/render";
 import { getLibraryEntry, readLibraryBook } from "../../platform/app/library";
@@ -367,12 +368,7 @@ function makeDeps(talkId: string, bookIds: string[], instruction: string): Slide
       return file;
     },
 
-    now: () => Date.now(),
-    sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
-    setTimer: (ms, cb) => {
-      const id = setTimeout(cb, ms);
-      return () => clearTimeout(id);
-    },
+    ...realTimers,
   };
 }
 

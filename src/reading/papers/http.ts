@@ -7,13 +7,10 @@
 // (plain vite dev) the native fetch is used and CORS failures surface as
 // fetch errors — the pipeline degrades those papers, it doesn't crash.
 
+import { isTauri, type FetchFn } from "../../platform/app/host";
 import { cleanTauriFetch } from "../../platform/app/tauri-fetch";
 
-export type FetchFn = (url: string, init?: RequestInit) => Promise<Response>;
-
-function isTauri(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
+export type { FetchFn };
 
 // Polite identification for arXiv/Semantic Scholar (their usage policies ask
 // for a contactable UA). Only settable on the plugin path; the browser path

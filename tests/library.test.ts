@@ -3,9 +3,9 @@
 // app. Run: bun test.
 
 import { expect, test } from "bun:test";
+import { contentHash } from "../src/platform/app/content-hash";
 import {
   addEntry,
-  contentHash,
   healLibrary,
   libraryPdfPath,
   type LibraryStore,

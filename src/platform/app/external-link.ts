@@ -15,6 +15,7 @@
 // URL — the capability scope is the reason a link can be swallowed silently.
 
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { isTauri } from "./host";
 
 // What a click on an anchor should do.
 export type LinkAction =
@@ -71,7 +72,7 @@ export function linkActionFor(href: string | null | undefined): LinkAction {
 export function openExternal(url: string): void {
   const host = typeof window === "undefined" ? undefined : window;
   if (!host) return;
-  if ("__TAURI_INTERNALS__" in host) {
+  if (isTauri()) {
     void openUrl(url).catch((err) => {
       console.error("failed to open link in the system browser", url, err);
     });

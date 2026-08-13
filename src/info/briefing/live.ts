@@ -5,6 +5,7 @@
 // watchdog); the pure logic (adapters, triage prompt/validation) stays testable.
 
 import { callModel, resolveModel, type ResolvedModel } from "../../ai/model-call";
+import { realTimers } from "../../ai/observable-run";
 import { loadSettings } from "../../platform/app/settings";
 import {
   currentDeviceId,
@@ -497,12 +498,7 @@ export function getInfoPipeline(): InfoPipeline {
       canAutoGenerate,
       pruneStaleDays: pruneStaleDailyFiles,
       keepAwake: (on) => wakeLock.set(on),
-      now: () => Date.now(),
-      sleep: (ms) => new Promise<void>((r) => setTimeout(r, ms)),
-      setTimer: (ms, cb) => {
-        const id = setTimeout(cb, ms);
-        return () => clearTimeout(id);
-      },
+      ...realTimers,
     });
     // Leaving the app is where a run dies (docs/22): iOS may suspend or kill a
     // backgrounded webview within seconds. Flushing writes the checkpoint and

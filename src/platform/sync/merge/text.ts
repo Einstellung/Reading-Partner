@@ -45,7 +45,11 @@ export function hashText(text: string): string {
   return h.toString(16).padStart(8, "0");
 }
 
-export function hashBytes(bytes: Uint8Array): string {
+// The same FNV-1a over raw bytes. Named apart from platform/sync/content's
+// hashBytes on purpose: that one is a sha256 identity for a whole data file,
+// this one only has to spread bytes over 8 hex chars for an ordering and a
+// conflict-copy suffix.
+export function textDigest(bytes: Uint8Array): string {
   let h = 0x811c9dc5;
   for (let i = 0; i < bytes.length; i++) {
     h ^= bytes[i];
@@ -65,8 +69,8 @@ export function compareContent(a: string, b: string): number {
 }
 
 export function compareBytes(a: Uint8Array, b: Uint8Array): number {
-  const ha = hashBytes(a);
-  const hb = hashBytes(b);
+  const ha = textDigest(a);
+  const hb = textDigest(b);
   if (ha !== hb) return ha < hb ? -1 : 1;
   const n = Math.min(a.length, b.length);
   for (let i = 0; i < n; i++) if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1;
