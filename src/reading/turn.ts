@@ -5,7 +5,7 @@
 // trimming) is testable on its own. Pure assembly plus reads — it never touches React state
 // and never starts the stream; the caller owns runAgentTurn.
 
-import type { Api, Context as PiContext, Model } from "@earendil-works/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../ai/agent";
 import {
   annotationPage,
@@ -13,17 +13,11 @@ import {
   notesOverviewSection,
   surroundingText,
 } from "./context";
-import type { AnnotationLite, TopicMaterial } from "../fulltext/format";
+import { toAnnotationLite, type AnnotationLite, type TopicMaterial } from "../fulltext/format";
 import { modelSupportsImages, type ProviderId } from "../ai/aiClient";
 import { providers, toPiMessages } from "../ai/providers";
-import {
-  contextBudget,
-  estimateContextTokens,
-  estimateTextTokens,
-  fitsBudget,
-  planReductions,
-  type ReductionId,
-} from "../budget";
+import { fitToBudget } from "../budget";
+import { READING_LADDER, type ReadingReductionId } from "./ladder";
 import type { Annotation } from "../platform/app/reader-contract";
 import { buildSystemPrompt, readerProfileSection, type BooklistItem } from "../platform/app/context";
 import { languageInstruction, type Settings } from "../platform/app/settings";
@@ -209,23 +203,12 @@ export function backgroundFailureToast(kind: TurnFailure, markedText: string): s
 // The configured model's metadata (its context window is all we want). A
 // synchronous catalog lookup — no credentials, no network. Null when settings
 // name a provider or model pi doesn't know, in which case the turn is assembled
-// without a budget rather than blocked on one.
-function configuredModel(s: Settings): Model<Api> | null {
+// without a budget rather than blocked on one. Shared with the rehearsal turn
+// (talks/turn.ts): the lookup is the same one either way.
+export function configuredModel(s: Settings): Model<Api> | null {
   const provider = providers[s.defaultProviderId as ProviderId];
   if (!provider) return null;
   return provider.getModels().find((m) => m.id === s.defaultModelId) ?? null;
-}
-
-function piContext(
-  systemPrompt: string,
-  messages: ReadingTurnMessage[],
-  tools: AgentTool[],
-): PiContext {
-  return {
-    systemPrompt,
-    messages: toPiMessages(messages),
-    tools: tools.map(({ name, description, parameters }) => ({ name, description, parameters })),
-  };
 }
 
 // Assemble the live reading context, tools and replayed history for one turn.
@@ -431,11 +414,11 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   const booklistThin = booklist.filter((m) => m.fulltextAvailable || m.annotationCount > 0);
 
   // The prompt as a function of what this turn had to give up (src/budget). The
-  // pieces named by a ReductionId are the optional ones; everything else — the
+  // pieces named by a ReadingReductionId are the optional ones; everything else — the
   // role, the instructions, the marked passage and its note, the position, this
   // chapter's prep notes — is assembled the same way no matter how tight the
   // window is.
-  function composePrompt(dropped: ReadonlySet<ReductionId>): string {
+  function composePrompt(dropped: ReadonlySet<ReadingReductionId>): string {
     const catalog = dropped.has("figure-catalog") ? "" : figureCatalog;
     let prompt: string;
     if (isClassroom) {
@@ -515,91 +498,54 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     );
   }
 
-  function composeMessages(dropped: ReadonlySet<ReductionId>): ReadingTurnMessage[] {
+  function composeMessages(dropped: ReadonlySet<ReadingReductionId>): ReadingTurnMessage[] {
     const keep = dropped.has("history-trim") ? HISTORY_KEEP_TIGHT : HISTORY_KEEP;
     const tail = prior.length > keep ? prior.slice(prior.length - keep) : prior;
     return [{ role: "user" as const, text: EXPLAIN_KICKOFF }, ...tail];
   }
-
-  const none: ReadonlySet<ReductionId> = new Set();
-  let systemPrompt = composePrompt(none);
-  let messages = composeMessages(none);
-  let notice = "";
-  let refusal = "";
 
   // Fit the call to the model's context window before it is sent. Left
   // unchecked, an over-full request comes back one token long with a normal
   // `done` and no error — a one-word reply, or a "malformed" answer wherever one
   // gets parsed (src/budget/estimate.ts).
   const model = configuredModel(s);
-  if (model) {
-    const budget = contextBudget(model, piContext(systemPrompt, messages, tools));
-    if (!fitsBudget(budget, "chat")) {
-      // Price each rung by composing without it. One rung carries material an
-      // order of magnitude bigger than the rest — the inlined survey — so it is
-      // held out of the base and priced as the difference: the small rungs are
-      // then measured against a prompt that does not carry it.
-      const bulk: ReductionId[] = ["classroom-inline"];
-      const withoutBulk: ReadonlySet<ReductionId> = new Set<ReductionId>(bulk);
-      const baseTokens = estimateTextTokens(composePrompt(withoutBulk));
-      const priceOf = (id: ReductionId): number =>
-        Math.max(0, baseTokens - estimateTextTokens(composePrompt(new Set([...withoutBulk, id]))));
-      // The bulk rung's own contribution: what the full prompt loses by dropping
-      // just it.
-      const priceBulk = (id: ReductionId): number =>
-        Math.max(0, estimateTextTokens(systemPrompt) - estimateTextTokens(composePrompt(new Set([id]))));
-      const tightMessages = composeMessages(new Set<ReductionId>(["history-trim"]));
-      // The catalog is only redundant while nothing is leaning on it: once the
-      // conversation has cited a [fig:N], dropping the list of figures makes the
-      // reference dangle.
-      const figuresInPlay = messages.some((m) => m.text.includes("[fig:"));
-      const savings: Partial<Record<ReductionId, number>> = {
-        "figure-catalog": figuresInPlay ? 0 : priceOf("figure-catalog"),
-        "reader-profile": priceOf("reader-profile"),
-        "notes-overview": priceOf("notes-overview"),
-        "booklist-thin": priceOf("booklist-thin"),
-        "observation-trim": priceOf("observation-trim"),
-        // Only priced when classroom is on: composing the inlined survey for a
-        // turn that does not carry it would cost a full re-render for nothing.
-        ...(isClassroom ? { "classroom-inline": priceBulk("classroom-inline") } : {}),
-        "history-trim": Math.max(
-          0,
-          estimateContextTokens({ messages: toPiMessages(messages) }) -
-            estimateContextTokens({ messages: toPiMessages(tightMessages) }),
-        ),
-      };
-      // Tool results are stubbed inside the agent loop, not here; this assembly
-      // has no results yet, so that rung has nothing to offer.
-      const total = Object.values(savings).reduce((n, v) => n + (v ?? 0), 0);
-      const plan = planReductions({
-        contextWindow: budget.contextWindow,
-        purpose: "chat",
-        used: budget.used,
-        floorTokens: budget.used - total,
-        savings,
-      });
-      if (plan.apply.length > 0) {
-        const dropped = new Set(plan.apply);
-        systemPrompt = composePrompt(dropped);
-        messages = composeMessages(dropped);
-      }
-      notice = plan.notice;
-      refusal = plan.refusal;
-    }
+  if (!model) {
+    return {
+      systemPrompt: composePrompt(new Set()),
+      tools,
+      messages: composeMessages(new Set()),
+      notice: "",
+      refusal: "",
+    };
   }
+  // The catalog is only redundant while nothing is leaning on it: once the
+  // conversation has cited a [fig:N], dropping the list of figures makes the
+  // reference dangle. And the inlined survey is only worth pricing when this
+  // turn carries one — composing it otherwise costs a full re-render for
+  // nothing.
+  const skip = new Set<ReadingReductionId>();
+  if (composeMessages(new Set()).some((m) => m.text.includes("[fig:"))) skip.add("figure-catalog");
+  if (!isClassroom) skip.add("classroom-inline");
 
-  return { systemPrompt, tools, messages, notice, refusal };
+  const fitted = fitToBudget<ReadingReductionId, ReadingTurnMessage>({
+    model,
+    tools,
+    composePrompt,
+    composeMessages,
+    toPi: toPiMessages,
+    rungs: READING_LADDER,
+    purpose: "chat",
+    skip,
+  });
+  return {
+    systemPrompt: fitted.systemPrompt,
+    tools,
+    messages: fitted.messages,
+    notice: fitted.notice,
+    refusal: fitted.refusal,
+  };
 }
 
-// An annotation flattened for the read_annotations tool: 1-based page + selected
-// text + comment. Skips annotations with neither text nor comment (e.g. legacy
-// image regions).
-function toAnnotationLite(ann: Annotation): AnnotationLite | null {
-  const text = typeof ann.text === "string" ? ann.text.trim() : "";
-  const comment = typeof ann.comment === "string" ? ann.comment.trim() : "";
-  if (!text && !comment) return null;
-  return { page: annotationPage(ann as { position?: { pageIndex?: number } }), text, comment };
-}
 
 // Assemble the topic's materials for a call (M6): each file's cached full text
 // and its annotations, scoped to the active topic. The current book uses the

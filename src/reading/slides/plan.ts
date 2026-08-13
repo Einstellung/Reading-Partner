@@ -14,16 +14,14 @@
 // content time.
 
 import { languageInstruction, type AiLanguage } from "../../platform/app/settings";
+import type { BookChapter } from "../notes/types";
 import type { ParseTally } from "../../platform/app/structured-output";
 import type { SlideKind, SlideOutline } from "./types";
 
-// One chapter as the planner sees it: where it is in the book, whether a note
-// exists to distil from, and the note's opening words as a hint of its content.
-export interface PlanChapter {
-  index: number; // 1-based reading order
-  title: string;
-  startPage: number;
-  endPage: number;
+// One chapter as the planner sees it: the book's own division (notes/types.ts
+// BookChapter), whether a note exists to distil from, and the note's opening
+// words as a hint of its content.
+export interface PlanChapter extends BookChapter {
   hasNote: boolean;
   digest?: string;
 }

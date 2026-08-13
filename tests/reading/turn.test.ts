@@ -394,6 +394,34 @@ test("the narrowest window gives up the book and says so, rather than overflowin
   expect(names(turn!.tools)).toContain("read_pages");
 });
 
+// The order the ladder gives things up in, seen from the path that uses it
+// rather than from the table. The figure catalog is redundancy and goes first,
+// silently; the inlined book is evidence and is said out loud; the conversation
+// is last, because the fallback distillation that is meant to preserve an older
+// stretch of it is fired and forgotten, so trimming early is a straight loss.
+test("the reading ladder drops the catalog, then the book, and leaves the conversation whole", async () => {
+  createThread(BOOK, "ann-1", "thread-1");
+  for (let i = 0; i < HISTORY_KEEP + 10; i++) {
+    appendMessage(BOOK, "thread-1", { role: i % 2 === 0 ? "user" : "ai", text: `m${i}`, ts: i });
+  }
+  const figures: Figure[] = [{ id: "1", page: 2, caption: "内联缓存布局", bbox: null }];
+  const turn = await buildReadingTurn(
+    input({ classroom: true, fulltext: cjkSurvey(300), figures, settings: small }),
+  );
+  expect(turn!.refusal).toBe("");
+  // Silent rung: gone from the prompt, absent from the notice.
+  expect(turn!.systemPrompt).not.toContain("[fig:1]");
+  // Evidence rung: gone, and the notice says exactly this and nothing else.
+  expect(turn!.systemPrompt).not.toContain("=== Page 2 ===");
+  expect(turn!.notice).toBe(
+    "Note: the book didn't fit in context, so I read the pages I needed instead of having all of it in view.",
+  );
+  // Below the book on the ladder, so it was never reached: the full replay tail
+  // is still here, ending on the most recent turn.
+  expect(turn!.messages.length).toBe(HISTORY_KEEP + 1);
+  expect(turn!.messages[turn!.messages.length - 1].text).toBe(`m${HISTORY_KEEP + 9}`);
+});
+
 test("a model the catalog doesn't know skips the budget rather than blocking the turn", async () => {
   const turn = await buildReadingTurn(
     input({ classroom: true, fulltext: cjkSurvey(300), settings: { ...settings, defaultModelId: "no-such-model" } }),

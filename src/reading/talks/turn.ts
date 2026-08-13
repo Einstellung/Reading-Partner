@@ -10,18 +10,12 @@
 // Pure assembly plus reads. It never touches React state and never starts the
 // stream; the caller owns runAgentTurn.
 
-import type { Api, Context as PiContext, Model } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../ai/agent";
 import { modelSupportsImages, type ProviderId } from "../../ai/aiClient";
-import { providers, toPiMessages } from "../../ai/providers";
-import {
-  contextBudget,
-  estimateContextTokens,
-  estimateTextTokens,
-  fitsBudget,
-  planReductions,
-  type ReductionId,
-} from "../../budget";
+import { toPiMessages } from "../../ai/providers";
+import { fitToBudget } from "../../budget";
+import { configuredModel, HISTORY_KEEP, HISTORY_KEEP_TIGHT } from "../turn";
+import { TALK_LADDER, type TalkReductionId } from "./ladder";
 import { languageInstruction, type Settings } from "../../platform/app/settings";
 import type { TopicMaterial } from "../../fulltext/format";
 import {
@@ -61,10 +55,9 @@ import {
 } from "./outline";
 import type { Talk, TalkDecision } from "./types";
 
-// Replayed history, and the tight form the budget ladder falls back to. Same
-// numbers as the reading turn: a rehearsal is the same kind of conversation.
-export const HISTORY_KEEP = 40;
-export const HISTORY_KEEP_TIGHT = 6;
+// The replay cap and its tight form come from the reading turn, not a second
+// pair of constants: a rehearsal is the same kind of conversation, and two
+// copies of a cap are two things to keep in step.
 const OBSERVATION_KEEP_TIGHT = 3;
 // Which observations survive that cut here. The rehearsal sources a chapter's
 // first question from where this reader got stuck and pitches its language at
@@ -127,24 +120,6 @@ export interface TalkTurn {
   // Set when the turn cannot be made small enough to leave the model room to
   // answer. Show this instead of sending; retrying changes nothing.
   refusal: string;
-}
-
-function configuredModel(s: Settings): Model<Api> | null {
-  const provider = providers[s.defaultProviderId as ProviderId];
-  if (!provider) return null;
-  return provider.getModels().find((m) => m.id === s.defaultModelId) ?? null;
-}
-
-function piContext(
-  systemPrompt: string,
-  messages: TalkTurnMessage[],
-  tools: AgentTool[],
-): PiContext {
-  return {
-    systemPrompt,
-    messages: toPiMessages(messages),
-    tools: tools.map(({ name, description, parameters }) => ({ name, description, parameters })),
-  };
 }
 
 // The talk's materials named in one phrase, for the line the prompt opens with.
@@ -299,7 +274,7 @@ export async function buildTalkTurn(input: TalkTurnInput): Promise<TalkTurn> {
     }),
   ];
 
-  function composePrompt(dropped: ReadonlySet<ReductionId>): string {
+  function composePrompt(dropped: ReadonlySet<TalkReductionId>): string {
     let prompt = buildRehearsalSystemPrompt({
       topicName,
       bookName: materialsLabel(materials),
@@ -321,72 +296,49 @@ export async function buildTalkTurn(input: TalkTurnInput): Promise<TalkTurn> {
     return prompt;
   }
 
-  function composeMessages(dropped: ReadonlySet<ReductionId>): TalkTurnMessage[] {
+  function composeMessages(dropped: ReadonlySet<TalkReductionId>): TalkTurnMessage[] {
     const keep = dropped.has("history-trim") ? HISTORY_KEEP_TIGHT : HISTORY_KEEP;
     const tail = history.length > keep ? history.slice(history.length - keep) : history;
     return [{ role: "user" as const, text: REHEARSAL_KICKOFF }, ...tail];
   }
-
-  const none: ReadonlySet<ReductionId> = new Set();
-  let systemPrompt = composePrompt(none);
-  let messages = composeMessages(none);
-  let notice = "";
-  let refusal = "";
 
   // Fit the call to the model's window before it is sent. A whole book's
   // highlights is exactly the payload the ladder exists for: left unchecked, an
   // over-full request comes back one token long with a normal `done` and no
   // error (docs/pitfall/65).
   const model = configuredModel(s);
-  if (model) {
-    const budget = contextBudget(model, piContext(systemPrompt, messages, tools));
-    if (!fitsBudget(budget, "chat")) {
-      // The two bulk rungs are held out of the base and priced as the difference,
-      // so the small rungs are measured against a prompt carrying neither.
-      const bulk: ReductionId[] = ["rehearsal-marks", "rehearsal-notes"];
-      const withoutBulk: ReadonlySet<ReductionId> = new Set<ReductionId>(bulk);
-      const baseTokens = estimateTextTokens(composePrompt(withoutBulk));
-      const priceOf = (id: ReductionId): number =>
-        Math.max(0, baseTokens - estimateTextTokens(composePrompt(new Set([...withoutBulk, id]))));
-      const priceBulk = (id: ReductionId): number =>
-        Math.max(
-          0,
-          estimateTextTokens(systemPrompt) - estimateTextTokens(composePrompt(new Set([id]))),
-        );
-      const tightMessages = composeMessages(new Set<ReductionId>(["history-trim"]));
-      // Dropping the catalog while a [fig:N] is in play would leave the reference
-      // dangling.
-      const figuresInPlay = messages.some((m) => m.text.includes("[fig:"));
-      const savings: Partial<Record<ReductionId, number>> = {
-        "figure-catalog": figuresInPlay ? 0 : priceOf("figure-catalog"),
-        "observation-trim": priceOf("observation-trim"),
-        "rehearsal-notes": priceBulk("rehearsal-notes"),
-        "rehearsal-marks": priceBulk("rehearsal-marks"),
-        "history-trim": Math.max(
-          0,
-          estimateContextTokens({ messages: toPiMessages(messages) }) -
-            estimateContextTokens({ messages: toPiMessages(tightMessages) }),
-        ),
-      };
-      const total = Object.values(savings).reduce((n, v) => n + (v ?? 0), 0);
-      const reductions = planReductions({
-        contextWindow: budget.contextWindow,
-        purpose: "chat",
-        used: budget.used,
-        floorTokens: budget.used - total,
-        savings,
-      });
-      if (reductions.apply.length > 0) {
-        const dropped = new Set(reductions.apply);
-        systemPrompt = composePrompt(dropped);
-        messages = composeMessages(dropped);
-      }
-      notice = reductions.notice;
-      refusal = reductions.refusal;
-    }
+  if (!model) {
+    return {
+      systemPrompt: composePrompt(new Set()),
+      tools,
+      messages: composeMessages(new Set()),
+      notice: "",
+      refusal: "",
+    };
   }
+  // Dropping the catalog while a [fig:N] is in play would leave the reference
+  // dangling.
+  const skip = new Set<TalkReductionId>();
+  if (composeMessages(new Set()).some((m) => m.text.includes("[fig:"))) skip.add("figure-catalog");
 
-  return { systemPrompt, tools, messages, notice, refusal };
+  const fitted = fitToBudget<TalkReductionId, TalkTurnMessage>({
+    model,
+    tools,
+    composePrompt,
+    composeMessages,
+    toPi: toPiMessages,
+    rungs: TALK_LADDER,
+    purpose: "chat",
+    skip,
+  });
+  return {
+    systemPrompt: fitted.systemPrompt,
+    tools,
+    messages: fitted.messages,
+    notice: fitted.notice,
+    refusal: fitted.refusal,
+  };
 }
+
 
 export type { TalkSlot };
