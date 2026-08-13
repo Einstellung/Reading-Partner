@@ -4,6 +4,7 @@
 
 import type { ThinkingLevel } from "@earendil-works/pi-ai";
 import { readGuardedJson, writeTextAtomic, type GuardedRead } from "./atomic-fs";
+import { createDebouncedWriter } from "./debounced-writer";
 import { observeAppExit } from "./lifecycle";
 import { reportStoreError } from "./store-errors";
 
@@ -165,20 +166,30 @@ export interface SettingsStore {
 }
 
 export function createSettingsStore(io: SettingsIo): SettingsStore {
-  let timer: number | null = null;
-  // The settings a debounce is holding, kept so the exit flush has something to
-  // write and so a flush that already ran writes nothing a second time.
+  // The settings a debounce is holding, so the write — which runs later, off the
+  // writer's chain — has something to serialise.
   let pending: Settings | null = null;
   // Set when the file exists but could not be read, so the app is running on
   // defaults that would erase real configuration (provider, keys) if written
   // back. Reset on a successful load, which is the only thing that can happen
   // first.
   let blockWrites = false;
-  // The writes already in the air. Chained rather than raced: two atomic
-  // replacements of the same file in flight at once have no defined winner, and
-  // flush has to be able to wait for the one before it.
-  let inFlight: Promise<void> = Promise.resolve();
-  let exitBound = false;
+
+  // One file, so one key. The debounce, the single flush on the way out and the
+  // chaining of writes in flight are all the shared writer's
+  // (debounced-writer.ts); what is left here is what to write and when not to.
+  const writer = createDebouncedWriter<string>({
+    write: async () => {
+      if (blockWrites) {
+        throw new Error(`${SETTINGS_FILE} could not be read; refusing to overwrite it`);
+      }
+      if (pending !== null) await io.write(JSON.stringify(pending, null, 2));
+    },
+    debounceMs: SAVE_DEBOUNCE,
+    onError: io.onError,
+    timer: { schedule: io.schedule, cancel: io.cancel },
+    exit: io.bindExit,
+  });
 
   // Falling back to the defaults is fine for a missing file and unavoidable for
   // an unreadable one, but it must not become the new truth: unparseable content
@@ -194,44 +205,10 @@ export function createSettingsStore(io: SettingsIo): SettingsStore {
   // Debounced write; a failure is reported (never silently lost, pitfall 09).
   function save(settings: Settings): void {
     pending = settings;
-    if (!exitBound) {
-      exitBound = true;
-      io.bindExit(writeNow);
-    }
-    if (timer !== null) io.cancel(timer);
-    timer = io.schedule(() => {
-      timer = null;
-      writeNow();
-    }, SAVE_DEBOUNCE);
+    writer.schedule(SETTINGS_FILE);
   }
 
-  // Write whatever the debounce is holding, and nothing when it holds nothing.
-  // Taking `pending` first is what makes a second call a no-op: pagehide can
-  // fire more than once (lifecycle.ts), and observeAppExit does not deduplicate.
-  function writeNow(): void {
-    const next = pending;
-    pending = null;
-    if (timer !== null) {
-      io.cancel(timer);
-      timer = null;
-    }
-    if (next === null) return;
-    inFlight = inFlight
-      .then(async () => {
-        if (blockWrites) {
-          throw new Error(`${SETTINGS_FILE} could not be read; refusing to overwrite it`);
-        }
-        await io.write(JSON.stringify(next, null, 2));
-      })
-      .catch((e) => io.onError(e));
-  }
-
-  async function flush(): Promise<void> {
-    writeNow();
-    await inFlight;
-  }
-
-  return { load, save, flush };
+  return { load, save, flush: writer.flush };
 }
 
 const store = createSettingsStore({

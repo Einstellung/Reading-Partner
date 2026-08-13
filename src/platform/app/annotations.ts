@@ -1,9 +1,14 @@
 // Per-document annotation persistence: one annotations-<bookId>.json under
 // AppData, keyed by the book's content hash (library.ts), written in full (the
 // reader hands us the complete object each save).
-// Writes are debounced and flushed on pagehide, mirroring the reading-position
-// persistence in App.tsx. Save failures are surfaced, never swallowed — a lost
-// annotation is invisible until the file is reopened.
+// Writes go through the shared debounced writer (debounced-writer.ts), so they
+// coalesce and are flushed on the way out of the app. Save failures are
+// surfaced, never swallowed — a lost annotation is invisible until the file is
+// reopened.
+//
+// Everything the store reaches outside itself is passed in, so a test can run
+// the real store against an in-memory file on a fake clock instead of rewriting
+// the module registry for every other test sharing the worker (pitfall 119).
 
 import {
   BaseDirectory,
@@ -11,8 +16,13 @@ import {
   readTextFile,
 } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "./atomic-fs";
-import { reportStoreError } from "./store-errors";
+import {
+  createDebouncedWriter,
+  type DebouncedWriter,
+  type WriterTimer,
+} from "./debounced-writer";
 import type { Annotation } from "./reader-contract";
+import { reportStoreError } from "./store-errors";
 
 // The annotation color palette. The UI components use the same list; this
 // export is the single source.
@@ -33,110 +43,114 @@ function fileFor(bookId: string): string {
   return `annotations-${bookId}.json`;
 }
 
-// Last known full set per file hash, so a delete can recompute without the
-// caller re-supplying everything and both paths share one debounced writer.
-const cache = new Map<string, Annotation[]>();
-const timers = new Map<string, number>();
-const dirty = new Set<string>();
-
-async function writeNow(key: string): Promise<void> {
-  dirty.delete(key);
-  const anns = cache.get(key) ?? [];
-  await writeTextAtomic(fileFor(key), JSON.stringify(anns, null, 2));
+export interface AnnotationIo {
+  // The file's text, or null when there is none. A read that fails for any
+  // other reason throws, so loadAnnotations can tell the caller.
+  read: (file: string) => Promise<string | null>;
+  write: (file: string, contents: string) => Promise<void>;
+  onError?: (e: unknown) => void;
+  timer?: WriterTimer;
+  exit?: (onExit: () => void) => void;
 }
 
-let pagehideBound = false;
-function bindPagehide(): void {
-  if (pagehideBound || typeof window === "undefined") return;
-  pagehideBound = true;
-  window.addEventListener("pagehide", () => {
-    for (const key of [...dirty]) {
-      const t = timers.get(key);
-      if (t) clearTimeout(t);
-      timers.delete(key);
-      void writeNow(key).catch((e) => reportStoreError("annotations", e));
-    }
+export interface AnnotationStore {
+  load: (bookId: string) => Promise<Annotation[]>;
+  peek: (bookId: string) => Promise<Annotation[]>;
+  drop: (bookId: string) => void;
+  save: (bookId: string, annotations: Annotation[]) => void;
+  remove: (bookId: string, ids: string[]) => void;
+  flush: () => Promise<void>;
+}
+
+export function createAnnotationStore(io: AnnotationIo): AnnotationStore {
+  // Last known full set per file hash, so a delete can recompute without the
+  // caller re-supplying everything and both paths share one debounced writer.
+  const cache = new Map<string, Annotation[]>();
+
+  const writer: DebouncedWriter<string> = createDebouncedWriter<string>({
+    write: (key) => io.write(fileFor(key), JSON.stringify(cache.get(key) ?? [], null, 2)),
+    debounceMs: SAVE_DEBOUNCE,
+    onError: io.onError,
+    timer: io.timer,
+    exit: io.exit,
   });
-}
 
-function schedule(key: string): void {
-  dirty.add(key);
-  bindPagehide();
-  const existing = timers.get(key);
-  if (existing) clearTimeout(existing);
-  timers.set(
-    key,
-    window.setTimeout(() => {
-      timers.delete(key);
-      void writeNow(key).catch((e) => reportStoreError("annotations", e));
-    }, SAVE_DEBOUNCE),
-  );
-}
-
-// Load a document's saved annotations. A missing file is normal (returns []);
-// a genuine read/parse error is rethrown so the caller can warn. Legacy image
-// annotations load as-is (region-select is retired) — the engine still renders
-// them; they just can't be created anymore.
-export async function loadAnnotations(bookId: string): Promise<Annotation[]> {
-  const key = bookId;
-  const name = fileFor(bookId);
-  if (!(await exists(name, { baseDir: BaseDirectory.AppData }))) {
-    cache.set(key, []);
-    return [];
+  // A missing file is normal (returns []); a genuine read/parse error is
+  // rethrown so the caller can warn. Legacy image annotations load as-is
+  // (region-select is retired) — the engine still renders them; they just can't
+  // be created anymore.
+  async function load(bookId: string): Promise<Annotation[]> {
+    const text = await io.read(fileFor(bookId));
+    if (text === null) {
+      cache.set(bookId, []);
+      return [];
+    }
+    const parsed = JSON.parse(text) as Annotation[];
+    const list = Array.isArray(parsed) ? parsed : [];
+    cache.set(bookId, list.map((a) => ({ ...a })));
+    return list;
   }
-  const parsed = JSON.parse(
-    await readTextFile(name, { baseDir: BaseDirectory.AppData }),
-  ) as Annotation[];
-  const list = Array.isArray(parsed) ? parsed : [];
-  cache.set(key, list.map((a) => ({ ...a })));
-  return list;
-}
 
-// The on-disk marks of a book that is not being read, without touching the
-// cache. The observation sweep (src/observation/arrears.ts) walks every book of
-// every topic every half hour and must not go through loadAnnotations: that
-// seeds the cache from disk, and doing it while the open book has a debounced
-// write pending would flush the stale copy over the mark just made. Missing or
-// unreadable file reads as no marks — a sweep has nothing to warn anyone about.
-export async function peekAnnotations(bookId: string): Promise<Annotation[]> {
-  try {
-    const name = fileFor(bookId);
-    if (!(await exists(name, { baseDir: BaseDirectory.AppData }))) return [];
-    const parsed = JSON.parse(
-      await readTextFile(name, { baseDir: BaseDirectory.AppData }),
-    ) as Annotation[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
+  // The on-disk marks of a book that is not being read, without touching the
+  // cache. The observation sweep (src/observation/arrears.ts) walks every book
+  // of every topic every half hour and must not go through load: that seeds the
+  // cache from disk, and doing it while the open book has a debounced write
+  // pending would flush the stale copy over the mark just made. Missing or
+  // unreadable file reads as no marks — a sweep has nothing to warn anyone about.
+  async function peek(bookId: string): Promise<Annotation[]> {
+    try {
+      const text = await io.read(fileFor(bookId));
+      if (text === null) return [];
+      const parsed = JSON.parse(text) as Annotation[];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
   }
+
+  return {
+    load,
+    peek,
+    // Drop a book's cached annotations so the next load re-reads from disk. Used
+    // after sync pulls a newer annotations-<bookId>.json (src/sync): the cache is
+    // written back in full on the next mark, so a stale one would erase whatever
+    // the other device added.
+    //
+    // A book with edits still waiting on the debounce is left alone — dropping it
+    // would throw away the mark the user just made, and the pull is picked up on
+    // reopen instead. Same rule as dropThreadCache. Note this only settles the
+    // on-disk copy: a book that is open keeps the reader's own annotation set,
+    // which still overwrites the pull on the next save, so pulled marks appear on
+    // reopen.
+    drop: (bookId) => {
+      if (writer.isPending(bookId)) return;
+      cache.delete(bookId);
+    },
+    save: (bookId, annotations) => {
+      cache.set(bookId, annotations.map((a) => ({ ...a })));
+      writer.schedule(bookId);
+    },
+    remove: (bookId, ids) => {
+      cache.set(bookId, (cache.get(bookId) ?? []).filter((a) => !ids.includes(a.id)));
+      writer.schedule(bookId);
+    },
+    flush: writer.flush,
+  };
 }
 
-// Drop a book's cached annotations so the next loadAnnotations re-reads from
-// disk. Used after sync pulls a newer annotations-<bookId>.json (src/sync): the
-// cache is written back in full on the next mark, so a stale one would erase
-// whatever the other device added.
-//
-// A book with edits still waiting on the debounce is left alone — dropping it
-// would throw away the mark the user just made, and the pull is picked up on
-// reopen instead. Same rule as dropThreadCache. Note this only settles the
-// on-disk copy: a book that is open keeps the reader's own annotation set, which
-// still overwrites the pull on the next save, so pulled marks appear on reopen.
-export function dropAnnotationCache(bookId: string): void {
-  if (dirty.has(bookId)) return;
-  cache.delete(bookId);
-}
+const store = createAnnotationStore({
+  read: async (file) =>
+    (await exists(file, { baseDir: BaseDirectory.AppData }))
+      ? readTextFile(file, { baseDir: BaseDirectory.AppData })
+      : null,
+  write: writeTextAtomic,
+  onError: (e) => reportStoreError("annotations", e),
+});
 
-// Replace the full set for a document and schedule a debounced write.
-export function saveAnnotations(bookId: string, annotations: Annotation[]): void {
-  const key = bookId;
-  cache.set(key, annotations.map((a) => ({ ...a })));
-  schedule(key);
-}
-
-// Remove annotations by id and schedule a debounced write.
-export function deleteAnnotations(bookId: string, ids: string[]): void {
-  const key = bookId;
-  const remaining = (cache.get(key) ?? []).filter((a) => !ids.includes(a.id));
-  cache.set(key, remaining);
-  schedule(key);
-}
+export const loadAnnotations = (bookId: string): Promise<Annotation[]> => store.load(bookId);
+export const peekAnnotations = (bookId: string): Promise<Annotation[]> => store.peek(bookId);
+export const dropAnnotationCache = (bookId: string): void => store.drop(bookId);
+export const saveAnnotations = (bookId: string, annotations: Annotation[]): void =>
+  store.save(bookId, annotations);
+export const deleteAnnotations = (bookId: string, ids: string[]): void =>
+  store.remove(bookId, ids);

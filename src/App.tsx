@@ -8,7 +8,7 @@ import {
   type ViewState,
   type ViewStats,
 } from "./platform/app/reader-contract";
-import { getViewState, hashPath, saveViewState, withModes } from "./platform/app/storage";
+import { getViewState, hashPath } from "./platform/app/storage";
 import {
   importBook,
   libraryHas,
@@ -96,6 +96,11 @@ import SettingsView from "./ui/components/SettingsView";
 import { backgroundFailureToast, buildReadingTurn, turnFailureView, type TurnFailure } from "./reading/turn";
 import { createLiveTurns, type LiveTurn } from "./reading/live-turns";
 import { createPendingImages } from "./reading/pending-images";
+import {
+  keepReadingPosition,
+  seedReadingPosition,
+  setReadingModes,
+} from "./reading/reading-position";
 import { researchStatusLabel, RESEARCH_TOOL_NAME } from "./reading/papers/research-agent";
 import type { SubagentProgress } from "./ai/subagent";
 import { Button } from "./ui/components/ui/button";
@@ -197,8 +202,6 @@ export default function App() {
   // Its file name, for the handlers that have to name it in a sentence and must
   // stay stable across renders (the reader pane is memoized on prop identity).
   const bookNameRef = useRef("");
-  const saveTimer = useRef<number | null>(null);
-  const lastState = useRef<ViewState | null>(null);
 
   // Annotations for the open document, keyed by id for merge-on-save.
   const annsRef = useRef<Map<string, Annotation>>(new Map());
@@ -388,11 +391,7 @@ export default function App() {
     setClassroom(on);
     const bookId = bookIdRef.current;
     if (!bookId) return;
-    const merged = withModes(lastState.current, { classroom: on });
-    lastState.current = merged;
-    saveViewState(bookId, merged).catch((e) => {
-      console.error("failed to persist the reading mode", e);
-    });
+    setReadingModes(bookId, { classroom: on });
   }, [classroomRef, setClassroom]);
 
   // Page-navigation events, with the dwell time on the page being left. The
@@ -539,34 +538,15 @@ export default function App() {
     viewRef.current?.setFingerDraw(fingerDraw);
   }, [fingerDraw, viewReady]);
 
-  // Debounced persist of the reading position. A save failure must be visible;
-  // silently losing positions looks fine until the app is reopened (pitfall 09).
+  // The reader moved. The debounce, the flush on the way out and the failure
+  // that must not be silent (pitfall 09) are all reading-position.ts's; the
+  // sticky classroom flag (docs/09) rides along with the position, which the
+  // reader itself never carries.
   const persist = useCallback((state: ViewState) => {
     const bookId = bookIdRef.current;
     if (!bookId) return;
-    // Carry the sticky classroom flag (docs/09) alongside the reader-owned
-    // position fields, which never carry it.
-    const merged = withModes(state, { classroom: classroomRef.current });
-    lastState.current = merged;
-    if (saveTimer.current) window.clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(() => {
-      saveViewState(bookId, merged).catch((e) => {
-        console.error("failed to persist reading position", e);
-        pushToast("warn", "Reading position could not be saved");
-      });
-    }, 500);
-  }, [pushToast]);
-
-  useEffect(() => {
-    const flush = () => {
-      const bookId = bookIdRef.current;
-      if (!bookId || !lastState.current) return;
-      if (saveTimer.current) window.clearTimeout(saveTimer.current);
-      void saveViewState(bookId, lastState.current).catch(() => {});
-    };
-    window.addEventListener("pagehide", flush);
-    return () => window.removeEventListener("pagehide", flush);
-  }, []);
+    keepReadingPosition(bookId, state, { classroom: classroomRef.current });
+  }, [classroomRef]);
 
   const syncTraceList = useCallback(() => {
     setTraceAnns([...annsRef.current.values()]);
@@ -1077,7 +1057,7 @@ export default function App() {
       bookNameRef.current = name;
       // Seed the persist base with the loaded state so an early mode press
       // (before the reader emits a position) merges onto the right book.
-      lastState.current = state;
+      seedReadingPosition(bookId, state);
       // Dwell tracking restarts per book (never a cross-book page-nav event).
       pageDwellRef.current = null;
       // A restored classroom "on" attaches the pipeline below once the fulltext
