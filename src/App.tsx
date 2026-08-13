@@ -94,6 +94,7 @@ import ChatPipCard from "./ui/components/chat/ChatPipCard";
 import SettingsView from "./ui/components/SettingsView";
 import { backgroundFailureToast, buildReadingTurn, turnFailureView, type TurnFailure } from "./reading/turn";
 import { createLiveTurns, type LiveTurn } from "./reading/live-turns";
+import type { CallRow, CallState } from "./reading/call-state";
 import { createPendingImages } from "./reading/pending-images";
 import { SHELF_PULL_ROUTE } from "./reading/pull-routes";
 import {
@@ -112,7 +113,6 @@ import SettingsButton from "./ui/components/common/SettingsButton";
 import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
 import type { Annotation as PopupAnnotation, ToolType } from "./ui/components/reader/types";
 import type { PendingImage } from "./ui/components/chat/types";
-import type { ToolStatus } from "./ai/tool-status";
 import { rehydrateMessage, type ChatPart } from "./ui/components/chat/chatParts";
 import { CardRegistryContext } from "./ui/components/chat/cardRegistryContext";
 import { CARD_REGISTRY } from "./ui/components/cardRegistry";
@@ -145,23 +145,14 @@ interface PopupState {
 // Display message. Unlike the persisted ThreadMessage (which stores images as
 // on-disk filenames), the display form carries the image bytes as base64 so a
 // bubble can render them directly; App loads them from disk on thread open.
-type CallMessage = {
-  role: "user" | "ai";
-  text: string;
-  ts: number;
-  images?: CompressedImage[];
-  streaming?: boolean;
-  failed?: boolean;
+// Everything the session itself reads or writes is in CallRow; what is left here
+// is the render layer's own (chatParts.ts), which the domain never touches.
+interface CallMessage extends CallRow {
   // The durable parts of the row (chatParts.ts). Present on rows that carry a
   // card — a recorded rehearsal decision — and absent on plain prose, which
   // renders from `text`.
   parts?: ChatPart[];
-  // Transient tool-call trace for a streaming AI turn (M6); never persisted.
-  tools?: ToolStatus[];
-  // What the turn left out to fit the context window (src/budget). Display-only,
-  // like the trace: it is the app's remark about the turn, not model output.
-  notice?: string;
-};
+}
 
 // Persisted thread messages -> display messages. Image bytes are loaded
 // separately (hydrateThreadImages), so images start absent here. Stored parts
@@ -172,20 +163,7 @@ function toDisplayMessages(msgs: ThreadMessage[]): CallMessage[] {
 }
 
 // A live AI "call" — one thread anchored on one AI-pen underline (docs/03).
-interface CallState {
-  threadId: string;
-  // The AI-pen mark hosting this call. Empty string for the book-level thread
-  // (docs/03: top-bar AI button), flagged by `isBook`.
-  annotationId: string;
-  isBook?: boolean;
-  // Picture-in-picture call states (docs/03): the bubble, chat taking the whole
-  // window (reading shrunk to a corner card), and reading with chat shrunk to a
-  // corner card. `null` call = no active call.
-  view: "bubble" | "chat-main" | "chat-pip";
-  anchor: { x: number; y: number };
-  messages: CallMessage[];
-  error?: boolean; // last turn failed (offer retry)
-}
+type Call = CallState<CallMessage>;
 
 export default function App() {
   // The reader pane's DOM container: anchor fallbacks measure against it, and
@@ -291,7 +269,7 @@ export default function App() {
   // Resolved figure list for the current book (M9), feeding the inline [fig:N]
   // card host and empty until extraction finishes.
   const [figures, setFigures] = useState<Figure[]>([]);
-  const [call, setCall] = useState<CallState | null>(null);
+  const [call, setCall] = useState<Call | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   // Failure messages (save/load/network errors) live here, not in `status` —
   // `status` is reserved for transient reader progress ("Rendering…").
@@ -321,7 +299,7 @@ export default function App() {
   const [imageHint, setImageHint] = useState("");
 
   // Mirror the call (view for the pdf listener, whole thing for send handlers).
-  const callRef = useRef<CallState | null>(null);
+  const callRef = useRef<Call | null>(null);
   useEffect(() => {
     callViewRef.current = call?.view ?? "none";
     callRef.current = call;
