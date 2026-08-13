@@ -60,8 +60,9 @@ function liveSiteSignIn(): SiteSignInDeps {
 // so the companion has nothing to promise and says the honest thing by default.
 // Async only because the extractor's chunk is fetched here, before the tools
 // that inject it exist; the tools themselves still get a plain synchronous
-// extractor. The caller already awaits (it loads settings first), so the chat
-// turn starts no later than it did.
+// extractor. The first call of a session waits for that fetch, and rejects with
+// it when the chunk does not arrive, so a caller needs somewhere to put the
+// failure: use-info-call ends the turn in the reply row.
 export async function buildLiveCompanionTools(
   onProbeCard: (card: ProbeConfirmCardData) => void,
   onProfileCard: (card: ProfileUpdateCardData) => void,

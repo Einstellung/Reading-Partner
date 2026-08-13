@@ -33,6 +33,7 @@ import { addSourceFromCard, applyProfileUpdate } from "../../../info/companion/c
 import type { InfoCallAnchor } from "../../../info/companion/anchors";
 import { addSource, hasSources } from "../../../info/sources/source-store";
 import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
+import type { AgentTool } from "../../../ai/agent";
 import { navigateAway } from "../chat/call-layout";
 import { refusalRow, replayableHistory } from "../../../ai/turn-rows";
 import {
@@ -334,15 +335,28 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     // a run started here, a run was already going here, or the request was left
     // for the machine that collects — so the companion reports the right one.
     //
-    // Built before the turn is marked streaming: it awaits the readable
-    // extractor's chunk, and a failure there has to land where a failed
-    // loadSettings() lands rather than leaving the chat stuck mid-send.
-    const tools = await buildLiveCompanionTools(
-      (payload) => insertCard("probe", payload),
-      (payload) => insertCard("profile", payload),
-      { start: (scope) => runBriefingJob(scope) },
-      { collecting },
-    );
+    // Built before the turn is marked streaming, and caught: it awaits the
+    // article extractor's chunk (info/extract/readable-lazy), which is a fetch,
+    // and a fetch can fail — a chunk 404ing after a redeploy, a dropped
+    // connection, a CSP that turns it down. Nothing upstream would catch it.
+    // `send` is handed to the composer as a void-returning prop and the
+    // onboarding opener kicks this with `void`, so an escaping rejection is an
+    // unhandled one and the reply row spins for good. The turn stops here
+    // instead, in the row the reader is already looking at; the next send tries
+    // the chunk again, since cacheUntilFailure drops a rejected load.
+    let tools: AgentTool[];
+    try {
+      tools = await buildLiveCompanionTools(
+        (payload) => insertCard("probe", payload),
+        (payload) => insertCard("profile", payload),
+        { start: (scope) => runBriefingJob(scope) },
+        { collecting },
+      );
+    } catch (e) {
+      console.error("failed to load the article extractor", e);
+      patchLast({ text: "The article extractor could not be loaded. Try again.", failed: true, streaming: false });
+      return;
+    }
     const controller = new AbortController();
     abortRef.current = controller;
     setStreaming(true);
