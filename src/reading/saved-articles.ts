@@ -179,8 +179,9 @@ export function parseSavedArticles(text: string): SavedArticle[] {
 // One stored body, made safe to render. Not a string at all when the file was
 // hand-edited or corrupted, hence the type check before the sanitizer (which
 // takes a string). stripDataImages runs after sanitizeArticleHtml because the
-// sanitizer keeps an inline data: image when nothing else in the tag is a
-// usable URL, and a data:image/svg+xml body is markup we did not sanitize.
+// sanitizer keeps an inline data: image when nothing else in the tag is a usable
+// URL; this drops it for size, and it is the one that keeps a synced file from
+// growing 4MB of base64.
 export function sanitizeStoredHtml(html: unknown): string {
   if (typeof html !== "string" || html === "") return "";
   return stripDataImages(sanitizeArticleHtml(html));

