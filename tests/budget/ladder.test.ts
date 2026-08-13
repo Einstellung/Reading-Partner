@@ -47,6 +47,33 @@ function plan(over: Partial<LadderInput> = {}) {
   });
 }
 
+// The ladder is a contract twice over: the order decides what a reader loses
+// first, and the wording is what they are shown for it. Both are pinned here
+// byte for byte. Getting either wrong is silent — an over-budget call comes back
+// one token long with a normal `done` and no error (docs/pitfall/65) — so the
+// only thing standing between a mis-ordered ladder and a reader who never learns
+// what was left out is this table.
+test("the ladder's order and its wording are pinned", () => {
+  expect(LADDER.map((r) => [r.id, r.notice ?? ""])).toEqual([
+    ["figure-catalog", ""],
+    ["reader-profile", ""],
+    ["notes-overview", ""],
+    ["booklist-thin", ""],
+    ["observation-trim", ""],
+    ["rehearsal-notes", ""],
+    ["tool-result-stubs", ""],
+    [
+      "classroom-inline",
+      "the book didn't fit in context, so I read the pages I needed instead of having all of it in view",
+    ],
+    [
+      "rehearsal-marks",
+      "your highlights are shortened here to fit; ask me to pull a chapter's marks up in full and I'll read them again",
+    ],
+    ["history-trim", "earlier turns of this conversation were left out to make room"],
+  ]);
+});
+
 test("a call that fits gives up nothing and says nothing", () => {
   const p = plan({ used: 50_000 });
   expect(p.apply).toEqual([]);

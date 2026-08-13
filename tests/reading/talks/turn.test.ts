@@ -360,6 +360,35 @@ test("marks too large for the window are shortened, and the reader is told", asy
   expect(names(turn.tools)).toContain("read_annotations");
 });
 
+// The order the ladder gives things up in, seen from this path rather than from
+// the table. The figure catalog is redundancy and goes silently; the reader's
+// own marks are the material of a rehearsal, so shortening them is said out
+// loud; the conversation is below both.
+test("the talk ladder drops the catalog, then shortens the marks, and leaves the conversation whole", async () => {
+  const annotations = Array.from({ length: 1_200 }, (_, i) => ({
+    page: (i % 4) + 1,
+    text: "编译器内联缓存".repeat(200),
+    comment: "",
+  }));
+  const history = Array.from({ length: HISTORY_KEEP + 5 }, (_, i) => ({
+    role: (i % 2 === 0 ? "user" : "ai") as "user" | "ai",
+    text: `m${i}`,
+  }));
+  const figures: Figure[] = [{ id: "1", page: 1, caption: "内联缓存布局", bbox: null } as Figure];
+  const turn = await buildTalkTurn(
+    input({ materials: [material({ annotations, figures })], history, settings: small }),
+  );
+  expect(turn.refusal).toBe("");
+  expect(turn.systemPrompt).not.toContain("[fig:1]");
+  expect(turn.systemPrompt).toContain("shortened to fit");
+  expect(turn.notice).toBe(
+    "Note: your highlights are shortened here to fit; ask me to pull a chapter's marks up in full and I'll read them again.",
+  );
+  // Below the marks on the ladder, so untouched: the whole replay tail is here.
+  expect(turn.messages.length).toBe(HISTORY_KEEP + 1);
+  expect(turn.messages[turn.messages.length - 1].text).toBe(`m${HISTORY_KEEP + 4}`);
+});
+
 // The combined numbering is what the model is given, so a note it asks for has
 // to be fetched from the right book.
 test("read_chapter_note answers in combined chapter numbers", async () => {
