@@ -39,7 +39,7 @@ interface Task {
 let clock = 0;
 let nextTimerId = 1;
 let tasks: Task[] = [];
-(globalThis as { window?: unknown }).window = {
+const fakeWindow = {
   setTimeout(fn: () => void, ms: number): number {
     const id = nextTimerId++;
     tasks.push({ id, at: clock + ms, fn });
@@ -51,6 +51,22 @@ let tasks: Task[] = [];
   addEventListener(): void {},
   removeEventListener(): void {},
 };
+
+// Only the two tests that make the store write need it, and it goes away again
+// afterwards: globalThis is shared with every other test file in the worker, and
+// a fake window left standing decides for unrelated code whether it thinks it is
+// running in a browser.
+async function withFakeWindow(run: () => Promise<void>): Promise<void> {
+  const had = "window" in globalThis;
+  const real = (globalThis as { window?: unknown }).window;
+  (globalThis as { window?: unknown }).window = fakeWindow;
+  try {
+    await run();
+  } finally {
+    if (had) (globalThis as { window?: unknown }).window = real;
+    else delete (globalThis as { window?: unknown }).window;
+  }
+}
 
 async function advance(ms: number): Promise<void> {
   clock += ms;
@@ -75,36 +91,44 @@ beforeEach(() => {
 });
 
 test("a stored model the catalog dropped is corrected, told, and written back once", async () => {
-  files.set(
-    "settings.json",
-    JSON.stringify({ ...DEFAULT_SETTINGS, defaultProviderId: "anthropic", defaultModelId: RETIRED }),
-  );
+  await withFakeWindow(async () => {
+    files.set(
+      "settings.json",
+      JSON.stringify({
+        ...DEFAULT_SETTINGS,
+        defaultProviderId: "anthropic",
+        defaultModelId: RETIRED,
+      }),
+    );
 
-  const { settings, notice } = await loadShellSettings();
-  expect(settings.defaultModelId).toBe(defaultModelFor("anthropic"));
-  expect(notice).toContain(RETIRED);
+    const { settings, notice } = await loadShellSettings();
+    expect(settings.defaultModelId).toBe(defaultModelFor("anthropic"));
+    expect(notice).toContain(RETIRED);
 
-  await advance(500);
-  expect(writes).toEqual(["settings.json"]);
-  expect((JSON.parse(files.get("settings.json") as string) as Settings).defaultModelId).toBe(
-    defaultModelFor("anthropic"),
-  );
+    await advance(500);
+    expect(writes).toEqual(["settings.json"]);
+    expect((JSON.parse(files.get("settings.json") as string) as Settings).defaultModelId).toBe(
+      defaultModelFor("anthropic"),
+    );
+  });
 });
 
 test("settings the catalog still agrees with are not written back at all", async () => {
-  files.set(
-    "settings.json",
-    JSON.stringify({
-      ...DEFAULT_SETTINGS,
-      defaultProviderId: "anthropic",
-      defaultModelId: defaultModelFor("anthropic"),
-    }),
-  );
+  await withFakeWindow(async () => {
+    files.set(
+      "settings.json",
+      JSON.stringify({
+        ...DEFAULT_SETTINGS,
+        defaultProviderId: "anthropic",
+        defaultModelId: defaultModelFor("anthropic"),
+      }),
+    );
 
-  const { notice } = await loadShellSettings();
-  expect(notice).toBeNull();
-  await advance(500);
-  expect(writes).toEqual([]);
+    const { notice } = await loadShellSettings();
+    expect(notice).toBeNull();
+    await advance(500);
+    expect(writes).toEqual([]);
+  });
 });
 
 const provider = (id: string, configured: boolean): ProviderInfo =>
