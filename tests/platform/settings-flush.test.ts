@@ -8,7 +8,7 @@
 // The real store runs here, against an in-memory file and a fake clock handed to
 // createSettingsStore. Nothing global is touched: mock.module would swap
 // atomic-fs out for every other test file sharing the worker and never put it
-// back (pitfall 117), and a fake `window` on globalThis decides for unrelated
+// back (pitfall 119), and a fake `window` on globalThis decides for unrelated
 // code whether it thinks it is in a browser. Run: bun test.
 
 import { beforeEach, expect, test } from "bun:test";
@@ -59,7 +59,12 @@ const io: SettingsIo = {
     if (file === null) return { status: "missing" };
     return { status: "ok", value: JSON.parse(file) as Partial<Settings> };
   },
+  // A real write is writeTextAtomic -> invoke("write_text_file_atomic"), an IPC
+  // round-trip: the file cannot change before the first await. Landing it
+  // synchronously would let a flush that starts the write without waiting for it
+  // pass the read-back tests below.
   write: async (contents: string) => {
+    await Promise.resolve();
     if (heldWrite) await heldWrite;
     writes.push(SETTINGS_FILE);
     file = contents;

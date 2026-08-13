@@ -9,7 +9,7 @@
 // The two functions that touch the settings store take it as an argument, so the
 // store here is a plain object. mock.module is deliberately not used: it swaps a
 // module out for every other test file sharing the worker and is never put back
-// (pitfall 117). Run: bun test.
+// (pitfall 119). Run: bun test.
 
 import { expect, test } from "bun:test";
 import type { SyncHealthReport } from "../../../src/platform/sync/health";
@@ -39,6 +39,7 @@ function fakeStore(stored: Settings): SettingsAccess & { saved: Settings[]; flus
       saved.push(settings);
     },
     flush: async () => {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
       store.flushes++;
     },
   };
@@ -75,6 +76,12 @@ test("settings the catalog still agrees with are not written back at all", async
 // return the file as it was before the edit — this shell would sit on a copy
 // without it and its next save would take it back off disk. Without the flush
 // the value below is the pre-edit one.
+//
+// The fake write lands a turn late on purpose. A real flush ends in
+// writeTextAtomic -> invoke("write_text_file_atomic"), an IPC round-trip, so the
+// file cannot possibly change before the flush promise resolves; a fake that
+// assigns before its first await would let `void store.flush()` pass this test,
+// which is the one line the whole fix consists of.
 test("the deferred read flushes the pending save before it reads", async () => {
   const order: string[] = [];
   let onDisk: Settings = { ...DEFAULT_SETTINGS, aiLanguage: "ja" };
@@ -82,8 +89,10 @@ test("the deferred read flushes the pending save before it reads", async () => {
 
   const adopted = await pulledSettings({
     flush: async () => {
-      order.push("flush");
+      order.push("flush called");
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
       onDisk = edited;
+      order.push("bytes down");
     },
     load: async () => {
       order.push("load");
@@ -92,7 +101,8 @@ test("the deferred read flushes the pending save before it reads", async () => {
     save: () => {},
   });
 
-  expect(order).toEqual(["flush", "load"]);
+  // The read is taken after the bytes are down, not after the flush was started.
+  expect(order).toEqual(["flush called", "bytes down", "load"]);
   expect(adopted.aiLanguage).toBe("ko");
 });
 
