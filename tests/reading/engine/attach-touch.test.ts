@@ -405,6 +405,9 @@ test("a horizontal drag commits as a scroll instead of leaking to the page", () 
   expect(h.pauses).toBe(1);
   expect(h.el.captured).toEqual([1]);
   expect(m1.prevented).toBe(1);
+  // Nowhere to go, so the clamp holds it at 0. This container was set up with no
+  // horizontal range, so a zero here is also the harness's starting value — the
+  // test below is the one that reads the horizontal axis as a number.
   expect(h.el.scrollLeft).toBe(0);
 
   // And it stays committed: a horizontal gesture that later turns vertical
@@ -413,6 +416,37 @@ test("a horizontal drag commits as a scroll instead of leaking to the page", () 
   h.el.fire("pointermove", m2);
   expect(m2.prevented).toBe(1);
   expect(h.el.scrollTop).toBe(40);
+
+  h.detach();
+});
+
+// A magnified continuous layout scrolls on both axes, and the one-finger follow
+// carries both. Nothing above proves it: the horizontal case there is a
+// container with no horizontal range, where a scrollLeft of 0 is the value the
+// element was mounted with. This one gives it range, so the number has to have
+// been written.
+test("one finger drags scrollLeft too when the continuous layout has range", () => {
+  const h = mount();
+  const t = h.target;
+  // Magnified: 800px of horizontal range, parked in the middle of it so neither
+  // direction is against a stop.
+  h.el.scrollWidth = 1600;
+  h.el.scrollLeft = 400;
+
+  h.el.fire("pointerdown", ev(1, 400, 500, 0, t));
+  // Past the slop on the horizontal axis: the content follows the finger left.
+  h.el.fire("pointermove", ev(1, 360, 500, 16, t));
+  expect(h.el.scrollLeft).toBe(440);
+  expect(h.el.scrollTop).toBe(0);
+
+  // Both axes at once, each measured from where the finger was pressed.
+  h.el.fire("pointermove", ev(1, 340, 470, 32, t));
+  expect(h.el.scrollLeft).toBe(460);
+  expect(h.el.scrollTop).toBe(30);
+
+  // And the far edge clamps instead of running past it: 1600 - 800 = 800.
+  h.el.fire("pointermove", ev(1, -600, 470, 48, t));
+  expect(h.el.scrollLeft).toBe(800);
 
   h.detach();
 });
@@ -553,11 +587,20 @@ test("a second finger stops the scroll and the pair pans by the centroid", () =>
   expect(h.el.scrollTop).toBe(110);
   expect(h.el.scrollLeft).toBe(40);
 
-  // Both fingers lift with the pair standing still. A pinch that ends at rest
-  // hands nothing to the inertia — the survivor's velocity is re-seeded at the
-  // handover, so it cannot inherit the speed the pair had two moves ago.
-  h.el.fire("pointerup", ev(1, 60, 400, 96, t));
-  h.el.fire("pointerup", ev(2, 260, 420, 112, t));
+  // Both fingers lift with the pair standing still. Neither lift reaches the
+  // engine: finger 1 already got its synthetic up when the one-finger gesture
+  // committed, and a second one would re-arm the anchor pitfall 38 is about;
+  // finger 2 was eaten at its own pointerdown, so the engine has no down to
+  // match. A pinch that ends at rest also hands nothing to the inertia — the
+  // survivor's velocity is re-seeded at the handover, so it cannot inherit the
+  // speed the pair had two moves ago.
+  const up1 = ev(1, 60, 400, 96, t);
+  h.el.fire("pointerup", up1);
+  expect(up1.stopped).toBe(1);
+  const up2 = ev(2, 260, 420, 112, t);
+  h.el.fire("pointerup", up2);
+  expect(up2.stopped).toBe(1);
+  expect(t.dispatched.length).toBe(1);
   expect(h.el.scrollTop).toBe(110);
   expect(frames.length).toBe(0);
   runFrames(5);

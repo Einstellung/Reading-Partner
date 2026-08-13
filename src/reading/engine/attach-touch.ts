@@ -778,6 +778,11 @@ export function attachTouchRouter(
     if (leaving && !leaving.plan.engineMayDrag) dropGestureSelection();
     multiTouch = multiTouchLatch(multiTouch, fingers.size);
     penLock = fingerLockAfterPen(penLock, false, fingers.size);
+    // Dead today: every pointer that reaches engineSaw is in `fingers`, and every
+    // one of those passes the engineSaw.delete above on its way out, so the map
+    // is already empty when the last finger leaves. Kept because a future path
+    // that drops a contact without ending it would leak an entry, and a stale
+    // engineSaw entry hands the engine an up it never asked for.
     if (fingers.size === 0) engineSaw.clear();
     publishDebug();
   };
@@ -806,6 +811,10 @@ export function attachTouchRouter(
     el.removeEventListener("scroll", paintIndicator);
     clearBand();
     releaseCapture();
+    // The container transform comes off three times over: the machine's reset
+    // emits a zero band, then this, then the bare write below. Only the first is
+    // reachable today — the other two catch a host/machine desync that nothing
+    // currently produces, which is why no test can distinguish them.
     feedVertical({ type: "reset" });
     clearViewportBand();
     ctx.current.setTouchLock = null;
