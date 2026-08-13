@@ -33,10 +33,11 @@ import { fileURLToPath } from "node:url";
 
 type Layer = "platform" | "capability" | "domain" | "ui" | "shell" | "entry";
 
-// Every directory under src/ that holds source files, at any depth, plus every
-// root-level source file, and the layer each belongs to. A new directory or root
-// file must be added here or the first test fails: deciding where it sits is the
-// point.
+// Every directory under src/ that holds source files anywhere below it, at any
+// depth, plus every root-level source file, and the layer each belongs to. A
+// grouping directory whose own source sits only in subdirectories is registered
+// too. A new directory or root file must be added here or the first test fails:
+// deciding where it sits is the point.
 const LAYER: Record<string, Layer> = {
   platform: "platform",
   "platform/app": "platform",
@@ -109,7 +110,12 @@ const KNOWN_CYCLES: [string, string][] = [
   ["ui/components/common", "ui/components/reader"],
   // B1.3: common/types.ts splits into ai/tool-status, reader/types, chat/types.
   ["ui/components/chat", "ui/components/common"],
-  // B1.4: the card files move to ui/components/shelf.
+  // B1.4: the card files move to ui/components/shelf. Deleting these two lines
+  // is not enough on its own: ui/components/talk imports ui/components/library/topic
+  // directly, an edge on no pair here, and library -> talk -> library/topic ->
+  // library is a real cycle that stays out of the report only because two of its
+  // three edges are on this list. That import has to go with them, or the
+  // acyclic test goes red on a cycle nobody listed.
   ["ui/components/library", "ui/components/library/topic"],
   ["ui/components/library", "ui/components/talk"],
   // B1.5: cardRegistry moves up to ui/components and arrives through a context.
@@ -293,9 +299,11 @@ function pairKey(a: string, b: string): string {
   return a < b ? `${a} <-> ${b}` : `${b} <-> ${a}`;
 }
 
-// The two-directory cycles: a imports b and b imports a. Every longer cycle in
-// this codebase is made of these, so they are checked by name against
-// KNOWN_CYCLES and folded away before the search for the rest.
+// The two-directory cycles: a imports b and b imports a. Every cycle in the graph
+// today runs through at least one edge of one of these pairs, so they are checked
+// by name against KNOWN_CYCLES and their edges dropped before the search for the
+// rest. A longer cycle whose edges are each on no pair here is not this test's to
+// find; that is what the acyclic test is for.
 function mutualPairs(): Map<string, [string, string]> {
   const found = new Map<string, [string, string]>();
   for (const [from, tos] of ADJ) {
@@ -304,24 +312,6 @@ function mutualPairs(): Map<string, [string, string]> {
     }
   }
   return found;
-}
-
-// Union-find over the allowlisted pairs, so each pair is one node for the cycle
-// search. Returns the representative of a node.
-function fold(pairs: [string, string][]): (node: string) => string {
-  const parent = new Map<string, string>();
-  const find = (x: string): string => {
-    const p = parent.get(x);
-    if (p === undefined || p === x) return x;
-    const root = find(p);
-    parent.set(x, root);
-    return root;
-  };
-  for (const [a, b] of pairs) {
-    const [lo, hi] = [find(a), find(b)].sort();
-    if (lo !== hi) parent.set(hi, lo);
-  }
-  return find;
 }
 
 // These messages name every offending file and specifier, so they are thrown
@@ -380,24 +370,21 @@ test("the directories that import each other are exactly the known ones", () => 
 });
 
 test("the directory dependency graph is acyclic", () => {
-  // Each allowlisted pair counts as one node here: the test above reports it by
-  // name, and folding it keeps every longer path that merely runs through it out
-  // of this report. A cycle that leaves the pair still shows up.
-  const find = fold(KNOWN_CYCLES);
-  const members = new Map<string, string[]>();
-  for (const node of new Set(EDGES.flatMap((e) => [e.from, e.to]))) {
-    members.set(find(node), [...(members.get(find(node)) ?? []), node].sort());
-  }
-  const label = (node: string): string => (members.get(node) ?? [node]).join(" + ");
-  const edgesBetween = (from: string, to: string): Edge[] =>
-    EDGES.filter((e) => find(e.from) === from && find(e.to) === to);
+  // The allowlisted pairs are removed edge by edge, so the test above stays the
+  // one that reports them and a path merely running through a pair is not
+  // reported here as well. Removing the two directed edges rather than merging
+  // the pair into one node is what keeps the rest of the graph at full
+  // resolution: merging is transitive, so the pairs would collapse into a couple
+  // of blobs, every edge inside a blob would be discarded, and a cycle of three
+  // or more directories that stays inside one would be invisible to this test
+  // and to the pair test above.
+  const dropped = new Set(KNOWN_CYCLES.flatMap(([a, b]) => [`${a}|${b}`, `${b}|${a}`]));
 
   const out = new Map<string, Set<string>>();
   for (const e of EDGES) {
-    const [from, to] = [find(e.from), find(e.to)];
-    if (from === to) continue;
-    if (!out.has(from)) out.set(from, new Set());
-    out.get(from)!.add(to);
+    if (dropped.has(`${e.from}|${e.to}`)) continue;
+    if (!out.has(e.from)) out.set(e.from, new Set());
+    out.get(e.from)!.add(e.to);
   }
 
   // DFS with a gray stack. Every back-edge yields one concrete cycle; that is
@@ -408,16 +395,16 @@ test("the directory dependency graph is acyclic", () => {
   const reports = new Map<string, string>();
 
   function report(cycle: string[]): void {
-    // Rotate to the smallest member so the same cycle is reported once.
+    // Rotate to the smallest node so the same cycle is reported once.
     const lo = cycle.indexOf([...cycle].sort()[0]);
     const path = [...cycle.slice(lo), ...cycle.slice(0, lo)];
-    const key = path.map(label).join(" -> ");
+    const key = path.join(" -> ");
     if (reports.has(key)) return;
-    const lines = [`Directory dependency cycle: ${key} -> ${label(path[0])}`];
+    const lines = [`Directory dependency cycle: ${key} -> ${path[0]}`];
     for (let i = 0; i < path.length; i++) {
       const from = path[i];
       const to = path[(i + 1) % path.length];
-      lines.push(`  ${label(from)} -> ${label(to)}`, describe(edgesBetween(from, to)));
+      lines.push(`  ${from} -> ${to}`, describe(edgesFor(from, to)));
     }
     reports.set(key, lines.join("\n"));
   }
