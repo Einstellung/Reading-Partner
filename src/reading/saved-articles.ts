@@ -20,7 +20,7 @@ import {
   readTextFile,
 } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../platform/app/atomic-fs";
-import { stripDataImages } from "../info/extract/sanitize";
+import { sanitizeArticleHtml, stripDataImages } from "../info/extract/sanitize";
 
 export const SAVED_ARTICLES_FILE = "saved-articles.json";
 
@@ -150,6 +150,16 @@ export function formatPublishedAt(publishedAt: string): string {
 // Parse a saved-articles.json body, dropping anything that is not a record with
 // an id — one malformed entry must not blank the list, and a record without an
 // identity would make the whole file fall back to opaque merging.
+//
+// The body is sanitized here, on the way out of the file, and not only in
+// buildSavedArticle on the way in. This file lives in the synced folder and
+// merges record by record (platform/sync/merge/records.ts), so a record can
+// arrive without ever having passed through this device's write path: a folder
+// the reader shared, a second device, the Drive account. What SavedArticleView
+// does with `html` is dangerouslySetInnerHTML, so the guard belongs at the read,
+// same as the published briefing bodies (info/briefing/reader.ts). Doing it on
+// write as well is not wasted — it keeps the stored file clean — but write-side
+// alone guards nothing, because the attacker writes the file.
 export function parseSavedArticles(text: string): SavedArticle[] {
   let data: unknown;
   try {
@@ -158,10 +168,22 @@ export function parseSavedArticles(text: string): SavedArticle[] {
     return [];
   }
   if (!Array.isArray(data)) return [];
-  return data.filter(
-    (a): a is SavedArticle =>
-      !!a && typeof a === "object" && typeof (a as SavedArticle).id === "string" && (a as SavedArticle).id !== "",
-  );
+  return data
+    .filter(
+      (a): a is SavedArticle =>
+        !!a && typeof a === "object" && typeof (a as SavedArticle).id === "string" && (a as SavedArticle).id !== "",
+    )
+    .map((a) => ({ ...a, html: sanitizeStoredHtml(a.html) }));
+}
+
+// One stored body, made safe to render. Not a string at all when the file was
+// hand-edited or corrupted, hence the type check before the sanitizer (which
+// takes a string). stripDataImages runs after sanitizeArticleHtml because the
+// sanitizer keeps an inline data: image when nothing else in the tag is a
+// usable URL, and a data:image/svg+xml body is markup we did not sanitize.
+export function sanitizeStoredHtml(html: unknown): string {
+  if (typeof html !== "string" || html === "") return "";
+  return stripDataImages(sanitizeArticleHtml(html));
 }
 
 // --- filesystem ------------------------------------------------------------

