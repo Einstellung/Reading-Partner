@@ -168,9 +168,10 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     removeMark,
     settingsRef,
   } = host;
-  // The shapes the shell owns. Held in a ref so every callback below stays
-  // stable across renders: they are lambdas, and a new one each render would
-  // re-render the reader pane on every keystroke.
+  // The shapes the shell owns. It writes them as lambdas in the call, so they are
+  // new objects on every render; the callbacks below read them through this ref
+  // rather than depending on them, because a callback whose identity changed
+  // every render would re-render the memoized reader pane on every keystroke.
   const shapes = useRef(host);
   shapes.current = host;
 
