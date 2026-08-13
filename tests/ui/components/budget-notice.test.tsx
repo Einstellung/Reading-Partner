@@ -7,6 +7,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MessageList } from "../../../src/ui/components/chat/chat";
+import { refusalRow } from "../../../src/ui/components/chat/turn-rows";
 import type { ThreadMessage } from "../../../src/ui/components/common/types";
 
 const NOTICE = "Note: earlier turns of this conversation were left out to make room.";
@@ -49,8 +50,8 @@ test("a turn that could not reach the model keeps the failure style", () => {
 });
 
 // A refusal stops the turn before anything is written, so the notice is the
-// whole row (turn-rows.ts). It still is not a failure: same muted line, no error
-// color, and no Copy — there are no model words to take.
+// whole row (turn-rows.ts): the muted line, and no Copy — there are no model
+// words to take.
 test("a row that is only a notice renders the notice, not an error", () => {
   const stopped = "Ask about a shorter passage.";
   const html = renderToStaticMarkup(
@@ -58,8 +59,39 @@ test("a row that is only a notice renders the notice, not an error", () => {
   );
   expect(html).toContain(stopped);
   expect(html).toContain("text-neutral-400");
-  expect(html).not.toContain("text-destructive");
   expect(html).not.toContain("Copy");
+});
+
+// `failed` and a notice can sit on the same row: refusalRow patches over the row
+// as it stands and never clears the mark. When both are there the notice decides
+// how the row reads — the app talking about the turn, not a failure — so the
+// failure style must not win. This is the assertion the notice-only case above
+// cannot make: without a mark set, the error branch is out of reach anyway.
+test("a notice keeps its muted line even on a row marked failed", () => {
+  const stopped = "Ask about a shorter passage.";
+  const failedRow: ThreadMessage = { role: "ai", text: "", ts: 1, failed: true };
+  const row: ThreadMessage = { ...failedRow, ...refusalRow(failedRow, stopped) };
+  expect(row.failed).toBe(true);
+  const html = renderToStaticMarkup(<MessageList messages={[row]} />);
+  expect(html).toContain(stopped);
+  expect(html).toContain("text-neutral-400");
+  expect(html).not.toContain("text-destructive");
+});
+
+// The same row with the model's words already on it: they stay, drawn as a reply
+// rather than as an error, with the notice under them.
+test("words written before the stop are not repainted as a failure", () => {
+  const row: ThreadMessage = {
+    role: "ai",
+    text: "The passage argues that…",
+    ts: 1,
+    failed: true,
+    notice: NOTICE,
+  };
+  const html = renderToStaticMarkup(<MessageList messages={[row]} />);
+  expect(html).toContain("The passage argues that");
+  expect(html).toContain(NOTICE);
+  expect(html).not.toContain("text-destructive");
 });
 
 // The trace explaining the stop stays above it: the tool calls that errored, and
