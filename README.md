@@ -159,7 +159,7 @@ bun run tauri dev
 
 Drive sync needs your own Google OAuth Desktop client: copy `.env.example` to `.env` and fill in `VITE_GOOGLE_CLIENT_ID` / `VITE_GOOGLE_CLIENT_SECRET`. Without it the app runs fine, with sync disabled.
 
-`bun test` runs the suite (no network, no AI tokens). Most of it is headless; a test that needs a real document awaits `useDom()` from `tests/support/dom.ts`, which stands a window up for that one file, hands back `@testing-library/react`, and takes the window down again (`docs/pitfall/120` and `121`). The workflows in `.github/workflows/` build the four products of a tag — Linux, macOS, Windows, Android — plus the iOS TestFlight and sideload pipelines.
+`bun test` runs the suite (no network, no AI tokens). Most of it is headless; a test that needs a real document awaits `useDom()` from `tests/support/dom.ts`, which stands a window up for that one file, hands back `@testing-library/react`, and takes the window down again (`docs/pitfall/120` and `121`; `122` for swapping a module export out under a test). The workflows in `.github/workflows/` build the four products of a tag — Linux, macOS, Windows, Android — plus the iOS TestFlight and sideload pipelines.
 
 ## Architecture
 
