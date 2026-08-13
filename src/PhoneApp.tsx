@@ -21,6 +21,8 @@ import {
   SAVED_ARTICLES_FILE,
   type SavedArticle,
 } from "./reading/saved-articles";
+import { CardRegistryContext } from "./ui/components/chat/cardRegistryContext";
+import { CARD_REGISTRY } from "./ui/components/cardRegistry";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import PhoneHome from "./ui/components/phone/PhoneHome";
 import SavedList from "./ui/components/phone/SavedList";
@@ -178,6 +180,10 @@ export default function PhoneApp() {
             one above them would cost a phone a line of reading height for
             nothing. */}
         <main className="relative min-h-0 flex-1">
+          {/* The chat card table (docs/17's probe cards, the briefing card).
+              The two shells are the only files that name it: chat/ reads it
+              from this context, so it never imports the domains that fill it. */}
+          <CardRegistryContext.Provider value={CARD_REGISTRY}>
           <InfoHome
             screen={infoScreenFor(base)}
             onNavigate={onNavigate}
@@ -217,6 +223,7 @@ export default function PhoneApp() {
           {base.kind === "savedArticle" && (
             <SavedArticleView article={base.article} backLabel="Saved" onBack={goBack} />
           )}
+          </CardRegistryContext.Provider>
         </main>
 
         <Toast toasts={toasts} onDismiss={dismissToast} />

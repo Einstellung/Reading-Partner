@@ -107,9 +107,6 @@ const MAY_IMPORT: Record<Layer, Layer[]> = {
 // test as loudly as a new one appears. Delete the line with the fix, and the
 // whole mechanism with the last one.
 const KNOWN_CYCLES: [string, string][] = [
-  // B1.5: cardRegistry moves up to ui/components and arrives through a context.
-  ["ui/components/chat", "ui/components/info"],
-  ["ui/components/chat", "ui/components/reader"],
   // B1.6: PullToAsk is passed in as a render prop instead of imported.
   ["ui/components/info", "ui/components/phone"],
 ];

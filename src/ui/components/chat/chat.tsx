@@ -11,7 +11,7 @@ import type { PendingImage, ThreadMessage } from './types';
 import type { CompressedImage } from '../../../ai/image-utils';
 import type { ToolStatus } from '../../../ai/tool-status';
 import { messageToParts, type CardActionHandler, type CardSurface } from './chatParts';
-import { CARD_REGISTRY } from './cardRegistry';
+import { useCardRegistry } from './cardRegistryContext';
 import type { CleanupModel } from '../../../ai/voice';
 import type { ProviderId } from '../../../ai/providers';
 import { loadSettings, toReasoning } from '../../../platform/app/settings';
@@ -184,10 +184,11 @@ function BudgetNotice({ text, size }: { text: string; size: 'sm' | 'lg' }) {
 	);
 }
 
-// Render a single card part through the registry, dispatching its actions to the
-// host's onCardAction with the card's stable id. The registry lookup is by kind,
-// so the payload cast is safe (a card kind's component always accepts its own
-// payload); the union widening is what the cast erases.
+// Render a single card part through the registry the host provided
+// (cardRegistryContext), dispatching its actions to the host's onCardAction with
+// the card's stable id. The registry lookup is by kind, so the payload cast is
+// safe (a card kind's component always accepts its own payload); the union
+// widening is what the cast erases.
 function CardPartView({
 	part,
 	surface,
@@ -197,12 +198,17 @@ function CardPartView({
 	surface: CardSurface;
 	onCardAction?: CardActionHandler;
 }) {
-	const Comp = CARD_REGISTRY[part.card.kind] as React.FC<{
-		payload: typeof part.card;
-		state?: Record<string, unknown>;
-		surface: CardSurface;
-		dispatch: (action: Parameters<CardActionHandler>[1]) => void;
-	}>;
+	const registry = useCardRegistry();
+	const Comp = registry?.[part.card.kind] as
+		| React.FC<{
+				payload: typeof part.card;
+				state?: Record<string, unknown>;
+				surface: CardSurface;
+				dispatch: (action: Parameters<CardActionHandler>[1]) => void;
+		  }>
+		| undefined;
+	// No provider above this chat means no cards were wired into it at all.
+	if (!Comp) return null;
 	return (
 		<Comp
 			payload={part.card}

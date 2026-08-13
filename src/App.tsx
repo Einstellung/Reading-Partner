@@ -109,6 +109,8 @@ import type { Annotation as PopupAnnotation, ToolType } from "./ui/components/re
 import type { PendingImage } from "./ui/components/chat/types";
 import type { ToolStatus } from "./ai/tool-status";
 import { rehydrateMessage, type ChatPart } from "./ui/components/chat/chatParts";
+import { CardRegistryContext } from "./ui/components/chat/cardRegistryContext";
+import { CARD_REGISTRY } from "./ui/components/cardRegistry";
 import { holdsNoAnswer, refusalRow } from "./ui/components/chat/turn-rows";
 import { refreshInfoCollector } from "./info/briefing/live";
 
@@ -1700,6 +1702,7 @@ export default function App() {
   }, [figures, onCitation]);
 
   return (
+    <CardRegistryContext.Provider value={CARD_REGISTRY}>
     <CitationContext.Provider value={onCitation}>
     <FigureContext.Provider value={figureHost}>
     {/* p-safe: the insets (iPad, viewport-fit=cover). box-sizing:border-box
@@ -1994,6 +1997,7 @@ export default function App() {
     </div>
     </FigureContext.Provider>
     </CitationContext.Provider>
+    </CardRegistryContext.Provider>
   );
 }
 
