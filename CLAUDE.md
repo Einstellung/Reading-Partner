@@ -23,7 +23,7 @@ AI 陪读软件。设计共识在 `docs/`。阅读引擎用 EmbedPDF（PDFium WA
 
 - src 下任何文件夹超过约 15 个文件就该切子域。搬家 commit 纯移动（`git mv` 保历史）加改 import，零逻辑改动。
 - 分层：platform（`platform/app`/`platform/sync`，`platform/app` 不 import 任何别的目录）→ capability（`ai`/`ai/voice`/`budget`/`fulltext`，headless，只被领域调用，绝不反向 import 领域；`budget` 不 import `ai`，因为发送路径要能 import 它）→ 领域（`reading` 及其子目录 `engine`/`prep`/`papers`/`notes`/`figures`/`slides`/`sources`、`info` 及其子目录 `briefing`/`companion`/`extract`/`sources`、`observation`，互相可用但目录级依赖图必须无环）→ `ui/components` → `App.tsx` → 入口（`main.tsx`/`smoke`）。领域的编排代码放自己的领域目录，不要塞进 capability。规则由 `tests/layering.test.ts` 强制，新增目录（顶层的，或分组目录下的）必须在那里的 LAYER 表里登记。两个目录互相 import 就是环，不许往更深一层藏——按"谁不认识谁"重新切，把被依赖的那半提到同级并登记。
-- `.tsx` 只放渲染和事件绑定。不依赖 React 的逻辑放 `.ts` 并配单测。手机形态将来换掉的是 `.tsx` 那一层，`.ts` 不动。
+- `.tsx` 只放渲染和事件绑定。不依赖 React 的逻辑放 `.ts` 并配单测——`.ts` 能测，`.tsx` 基本测不了。形态可移植是附带收益，不是理由。
 - 适配触摸和小屏用 utility 变体（`coarse:` / `can-hover:` / 断点），不按操作系统分叉组件。需要分形态时分的是外壳（phone / tablet+desktop），判据是宽度和指针类型，叶子组件共用一套。
 
 ## 坑
