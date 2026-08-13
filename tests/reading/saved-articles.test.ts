@@ -9,7 +9,7 @@
 import { expect, test } from "bun:test";
 // parseSavedArticles sanitizes on read, and the sanitizer parses with a
 // DOMParser that bun does not have.
-import "../dom";
+import "../support/dom-parser";
 import {
   buildSavedArticle,
   formatPublishedAt,

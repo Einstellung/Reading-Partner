@@ -25,8 +25,8 @@
 //
 // Without a DOMParser there is no sanitizer, so it returns "": a blank body,
 // never an unchecked one. Every caller runs in the webview, which has one; the
-// tests hand bun a DOMParser (tests/dom.ts) so they exercise this code rather
-// than a second implementation of it.
+// tests hand bun a DOMParser (tests/support/dom-parser.ts) so they exercise
+// this code rather than a second implementation of it.
 //
 // The text helpers below (htmlToText, stripTagsToText, decodeEntities,
 // stripDataImages) stay string-based and DOM-free: they feed prompts, length
