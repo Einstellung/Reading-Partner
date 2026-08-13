@@ -8,7 +8,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { simBridge } from "../scripts/sim-bridge";
+import { defaultTokenPath, simBridge } from "../scripts/sim-bridge";
 import { fakeReq, fakeRes, fakeServer } from "./sim-bridge-harness";
 
 const dir = mkdtempSync(join(tmpdir(), "sim-bridge-"));
@@ -25,7 +25,7 @@ afterAll(() => {
 function mount() {
   const plugin = simBridge();
   const configResolved = plugin.configResolved as (config: unknown) => void;
-  configResolved({ server: { host: undefined } });
+  configResolved({ server: { host: undefined, port: 1420 } });
   const fake = fakeServer(dir);
   const configureServer = plugin.configureServer as (server: unknown) => void;
   configureServer(fake.server);
@@ -248,5 +248,211 @@ test("a malformed body is answered, not fatal", async () => {
     );
     await res.ended;
     expect(res.statusCode).toBe(400);
+  }
+});
+
+// --- the two holes the review found in the fix above ----------------------
+
+test("the secret is not written anywhere the dev server serves", () => {
+  const root = "/home/someone/checkout";
+  const file = defaultTokenPath(root);
+  // vite serves the project root, so a token inside it is a token the server
+  // hands out: `GET /node_modules/.sim-bridge/token` returned 200 with the
+  // secret in the body, sourcemap comment and all.
+  expect(file.startsWith(root + "/")).toBe(false);
+  expect(file.includes("node_modules")).toBe(false);
+  // One directory per checkout, so two worktrees running dev servers do not
+  // overwrite each other's token.
+  expect(defaultTokenPath("/home/someone/other-checkout")).not.toBe(file);
+});
+
+// A page served from a hostname that resolves to 127.0.0.1 reaches this server
+// with its own name in Host and Origin, and Sec-Fetch-Site: same-origin,
+// because as far as the browser is concerned it *is* the same origin.
+function rebound(path: string, opts: { method?: string; body?: string } = {}) {
+  return fakeReq(path, {
+    method: opts.method ?? "GET",
+    headers: {
+      host: "evil.example:1420",
+      origin: "http://evil.example:1420",
+      "sec-fetch-site": "same-origin",
+      "sec-fetch-mode": "cors",
+      "sec-fetch-dest": "empty",
+      "content-type": "application/json",
+    },
+    body: opts.body,
+  });
+}
+
+test("a rebound page cannot take the command queued for the real page", async () => {
+  const fake = mount();
+
+  const stolen = fakeRes();
+  void fake.call(rebound("/poll"), stolen);
+  await stolen.ended;
+  expect(stolen.statusCode).toBe(403);
+
+  // The real page's poll is still the one holding the queue, and still gets it.
+  const poll = fakeRes();
+  const polling = fake.call(fakeReq("/poll", { headers: { "sec-fetch-site": "same-origin" } }), poll);
+  const good = fakeRes();
+  void fake.call(driverEval("document.cookie"), good);
+  await polling;
+  expect(JSON.parse(poll.body).code).toBe("document.cookie");
+});
+
+test("a rebound page cannot push results or logs either", async () => {
+  const fake = mount();
+  for (const [path, body] of [
+    ["/result", JSON.stringify({ id: 1, ok: true, value: "forged" })],
+    ["/log", JSON.stringify({ kind: "error", msg: "forged" })],
+  ]) {
+    const res = fakeRes();
+    void fake.call(rebound(path, { method: "POST", body }), res);
+    await res.ended;
+    expect(res.statusCode).toBe(403);
+  }
+});
+
+test("the driver's lane is addressed to this server too", async () => {
+  const fake = mount();
+  const res = fakeRes();
+  void fake.call(
+    fakeReq("/eval", {
+      method: "POST",
+      headers: {
+        host: "evil.example:1420",
+        "content-type": "application/x-sim-bridge-eval",
+        "x-sim-bridge-token": token(),
+      },
+      body: "1",
+    }),
+    res,
+  );
+  await res.ended;
+  expect(res.statusCode).toBe(403);
+});
+
+test("Host is checked against the port this server is on, not the one the caller names", async () => {
+  const fake = mount();
+  // http://localhost:9999 is a different origin: another local process, or a
+  // page the developer has open from some other dev server.
+  for (const host of ["localhost:9999", "localhost", "127.0.0.1:9999"]) {
+    const res = fakeRes();
+    void fake.call(fakeReq("/log", { method: "POST", headers: { host }, body: "{}" }), res);
+    await res.ended;
+    expect(res.statusCode).toBe(403);
+  }
+});
+
+test("the loopback names for this server's own port all still work", async () => {
+  const fake = mount();
+  for (const host of ["localhost:1420", "127.0.0.1:1420", "[::1]:1420", "127.0.0.2:1420"]) {
+    const res = fakeRes();
+    void fake.call(
+      fakeReq("/log", {
+        method: "POST",
+        headers: { host, origin: `http://${host}`, "sec-fetch-site": "same-origin", "content-type": "application/json" },
+        body: JSON.stringify({ kind: "note", msg: "hi" }),
+      }),
+      res,
+    );
+    await res.ended;
+    expect(res.statusCode).toBe(200);
+  }
+});
+
+test("nothing gets in by dressing up the Host header", async () => {
+  const fake = mount();
+  for (const host of [
+    "evil.example:1420",
+    // Resolves to the loopback, and is not the loopback's name.
+    "localhost.evil.example:1420",
+    // A name that ends at the DNS root is still not one of ours.
+    "localhost.:1420",
+    // userinfo, so the authority a naive split reads is not the one node used.
+    "evil.example@localhost:1420",
+    "localhost:1420@evil.example",
+    // Not an authority at all.
+    "localhost:1420/../evil.example",
+    "",
+    " ",
+  ]) {
+    const res = fakeRes();
+    void fake.call(
+      fakeReq("/log", { method: "POST", headers: { host }, body: JSON.stringify({ kind: "note" }) }),
+      res,
+    );
+    await res.ended;
+    expect({ host, status: res.statusCode }).toEqual({ host, status: 403 });
+  }
+
+  // And with no Host at all (HTTP/1.0, or a raw socket).
+  const headless = fakeRes();
+  void fake.call(
+    fakeReq("/log", { method: "POST", headers: { host: undefined }, body: "{}" }),
+    headless,
+  );
+  await headless.ended;
+  expect(headless.statusCode).toBe(403);
+});
+
+test("an Origin is checked against this server, not against the Host beside it", async () => {
+  const fake = mount();
+  // Host right, Origin wrong: the old code compared the two and would have
+  // caught this one; the new code has to as well.
+  for (const origin of ["http://evil.example:1420", "http://localhost:9999", "null", "file://", "http://localhost"]) {
+    const res = fakeRes();
+    void fake.call(
+      fakeReq("/log", {
+        method: "POST",
+        headers: { host: "localhost:1420", origin, "content-type": "application/json" },
+        body: JSON.stringify({ kind: "note" }),
+      }),
+      res,
+    );
+    await res.ended;
+    expect({ origin, status: res.statusCode }).toEqual({ origin, status: 403 });
+  }
+});
+
+test("IOS_SIM_BRIDGE_ALLOW_REMOTE still reaches the page it exposed", async () => {
+  // A bare --host serves the page under whatever name the LAN reaches it by,
+  // and this side never learns that name — so the host check cannot apply, and
+  // the startup warning is what stands in for it.
+  process.env.IOS_SIM_BRIDGE_ALLOW_REMOTE = "1";
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const plugin = simBridge();
+    (plugin.configResolved as (c: unknown) => void)({ server: { host: true, port: 1420 } });
+    const fake = fakeServer(dir);
+    (plugin.configureServer as (s: unknown) => void)(fake.server);
+
+    const res = fakeRes();
+    void fake.call(
+      fakeReq("/log", {
+        method: "POST",
+        headers: {
+          host: "mac.local:1420",
+          origin: "http://mac.local:1420",
+          "sec-fetch-site": "same-origin",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ kind: "note" }),
+      }),
+      res,
+    );
+    await res.ended;
+    expect(res.statusCode).toBe(200);
+
+    // The port is still the server's own, even there.
+    const elsewhere = fakeRes();
+    void fake.call(fakeReq("/log", { method: "POST", headers: { host: "mac.local:9999" }, body: "{}" }), elsewhere);
+    await elsewhere.ended;
+    expect(elsewhere.statusCode).toBe(403);
+  } finally {
+    console.warn = warn;
+    delete process.env.IOS_SIM_BRIDGE_ALLOW_REMOTE;
   }
 });

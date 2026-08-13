@@ -167,6 +167,7 @@
 - [55-worktree-dev-server-serves-stale-modules](./55-worktree-dev-server-serves-stale-modules.md) — worktree 在 `.claude/` 下，正好被 Vite 的 watch ignore 命中，dev server 看不见自己的改动；每次改完要重启
 - [118-the-simulator-is-the-same-webkit-with-a-different-finger](./118-the-simulator-is-the-same-webkit-with-a-different-finger.md) — iPad 模拟器跑的是真 WKWebView + 真 PDFium + 经 HID 注入的真触摸，橡皮筋、笔手路由、双指缩放都能量出数；但没有笔（`pointerType` 恒为 touch）、没有接触面积（恒 40×40）、idb 一次只有一根手指（双指只能走 XCUITest 的 pinch，三指以上无解）。跑法在 `scripts/ios-sim.sh`
 - [119-mock-module-rewrites-the-registry-for-the-whole-worker](./119-mock-module-rewrites-the-registry-for-the-whole-worker.md) — `mock.module` 改的是整个 worker 的模块表且不回滚，两个测试文件分到同一 worker 就互相污染（只跑了 33 个用例里的 7 个）；被测模块把依赖当参数收，别换模块表
+- [120-vite-serves-node-modules-over-http](./120-vite-serves-node-modules-over-http.md) — `node_modules` 在 `server.fs.allow` 默认的根下面，dev server 照样按 HTTP 发出去（还给套一层明文 sourcemap）；秘密要写在服务的树之外，`.gitignore` 和 0600 都拦不住
 
 ## 历史（zotero/reader 引擎时代）
 

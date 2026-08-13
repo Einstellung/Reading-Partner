@@ -66,13 +66,15 @@ export function fakeRes(): FakeRes {
 }
 
 // Everything the plugin reads off vite's dev server, plus a hole to catch the
-// middleware it registers.
-export function fakeServer(root: string) {
+// middleware it registers. The port is the one the socket is listening on, the
+// way node reports it — the guard holds a request's Host against that, not
+// against what the request itself claims.
+export function fakeServer(root: string, port = 1420) {
   let handler: ((req: unknown, res: unknown) => unknown) | undefined;
   return {
     server: {
-      config: { root },
-      httpServer: { on() {} },
+      config: { root, server: { port } },
+      httpServer: { on() {}, address: () => ({ address: "127.0.0.1", family: "IPv4", port }) },
       middlewares: {
         use(_prefix: string, fn: (req: unknown, res: unknown) => unknown) {
           handler = fn;

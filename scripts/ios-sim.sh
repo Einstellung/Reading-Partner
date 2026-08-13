@@ -14,9 +14,10 @@
 #     gesture becomes a measurement instead of a screenshot to squint at. It
 #     installs itself only while the dev server is on loopback, which is where
 #     the simulator wants it anyway, and it answers `eval` only for a caller
-#     that is not a browser: the token below, which the dev server writes to a
-#     file at start, plus a content type no HTML form can send. That is what
-#     keeps a page the developer happens to be visiting from posting a form to
+#     that is not a browser: the token below, which the dev server writes at
+#     start to a file outside the checkout (so the server cannot serve its own
+#     secret), plus a content type no HTML form can send. That is what keeps a
+#     page the developer happens to be visiting from posting a form to
 #     localhost and running its own JavaScript in the app.
 #
 # What these scenarios measure on a known-good tree is written down in
@@ -56,9 +57,31 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 JS="$ROOT/scripts/ios-sim"
 DEV_LOG="$OUT/dev.log"
 BASE="http://localhost:$PORT"
-# Written by the sim bridge when the dev server starts, and removed when it
-# stops. Per checkout, so a worktree's dev server has its own.
-BRIDGE_TOKEN_FILE="${IOS_SIM_BRIDGE_TOKEN_FILE:-$ROOT/node_modules/.sim-bridge/token}"
+
+# Where the sim bridge writes the running dev server's secret: outside the
+# checkout, because vite serves the checkout — it used to sit in
+# node_modules/.sim-bridge/token and `GET /node_modules/.sim-bridge/token`
+# returned it. One directory per checkout, keyed by a hash of the root path, so
+# a worktree's dev server has its own. Kept in step with defaultTokenPath() in
+# scripts/sim-bridge.ts; both read IOS_SIM_BRIDGE_TOKEN_FILE first.
+bridge_token_file() {
+  if [ -n "${IOS_SIM_BRIDGE_TOKEN_FILE:-}" ]; then
+    printf '%s' "$IOS_SIM_BRIDGE_TOKEN_FILE"
+    return
+  fi
+  local key base
+  if command -v shasum >/dev/null 2>&1; then
+    key=$(printf '%s' "$ROOT" | shasum -a 256 | cut -c1-16)
+  else
+    key=$(printf '%s' "$ROOT" | sha256sum | cut -c1-16)
+  fi
+  case "$(uname -s)" in
+    Darwin) base="$HOME/Library/Caches" ;;
+    *) base="${XDG_CACHE_HOME:-$HOME/.cache}" ;;
+  esac
+  printf '%s/sim-bridge/%s/token' "$base" "$key"
+}
+BRIDGE_TOKEN_FILE="$(bridge_token_file)"
 
 export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$HOME/.bun/bin:$PATH"
 # The free Personal Team. A simulator build is signed ad-hoc and does not need
@@ -121,6 +144,10 @@ cmd_up() {
   # outright rather than pick another port.
   lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null | xargs -r kill -9 || true
   pkill -f "tauri ios dev" 2>/dev/null || true
+  # -9 skips the bridge's own cleanup, so the dead server's token file would
+  # otherwise outlive it and make `no token` mean `not running` unreliably. The
+  # next server writes a fresh one either way.
+  rm -f "$BRIDGE_TOKEN_FILE"
   sleep 1
 
   echo "starting tauri ios dev -> $DEV_LOG"
@@ -150,6 +177,7 @@ cmd_up() {
 cmd_down() {
   pkill -f "tauri ios dev" 2>/dev/null || true
   lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null | xargs -r kill -9 || true
+  rm -f "$BRIDGE_TOKEN_FILE"
   xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
   echo "stopped (the simulator is left booted; \`xcrun simctl shutdown $UDID\` to close it)"
 }

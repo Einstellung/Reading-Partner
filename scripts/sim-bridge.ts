@@ -36,7 +36,10 @@
 //   the page's lane   /poll /result /log, called by the injected client. Same
 //                     origin or nothing: a request carrying Sec-Fetch-Site or
 //                     Origin from anywhere else is refused, and a browser will
-//                     not let a page lie about either.
+//                     not let a page lie about either. "Same origin" is
+//                     measured against the address this server is actually
+//                     listening on, never against the Host the caller wrote —
+//                     see SelfAddress below.
 //   the driver's lane /eval /logs, called by curl from scripts/ios-sim.sh.
 //                     Three fences, because this is the lane that runs code:
 //                     a per-run token the plugin writes to a file only a local
@@ -46,11 +49,23 @@
 //                     a forged Origin useless — a page that claimed to be
 //                     same-origin would still be a page.
 //
+// Both lanes first have to be addressed to this server. "Same origin" used to
+// mean "the Origin matches the Host header", which is a comparison of two
+// things the caller wrote: a page on a domain whose DNS points at 127.0.0.1
+// arrives with Host: evil.example:1420, Origin: http://evil.example:1420 and
+// Sec-Fetch-Site: same-origin, all of them true from the browser's side, and it
+// passed. It could then hold /poll open and take the command meant for the real
+// page, and post results and logs back. So the Host is checked against what the
+// server knows it is — loopback, on the port it is listening on — before either
+// lane is consulted.
+//
 // The consequence worth knowing: /eval cannot be driven from the browser
 // console on the dev page either. That is the same rule doing its job, and curl
 // with the token is the way in.
+import { createHash } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { homedir } from "node:os";
+import { dirname, join, resolve as resolvePath } from "node:path";
 import type { Plugin } from "vite";
 
 // Just enough of node's IncomingMessage to read a body and place its caller,
@@ -170,15 +185,31 @@ const BROWSER_MARKS = ["origin", "referer", "sec-fetch-site", "sec-fetch-mode", 
 const EVAL_CONTENT_TYPE = "application/x-sim-bridge-eval";
 const TOKEN_HEADER = "x-sim-bridge-token";
 
-// Where the per-run secret goes. node_modules is per-checkout, already ignored
-// by git, and certain to exist while vite is running, so two worktrees running
-// dev servers get two tokens and neither can land in a commit.
-const TOKEN_IN_ROOT = "node_modules/.sim-bridge/token";
+// Where the per-run secret goes. It used to be node_modules/.sim-bridge/token,
+// which is per-checkout and git-ignored but also inside the tree vite serves:
+// `GET /node_modules/.sim-bridge/token` came back 200 with the token in the
+// body, labelled text/javascript with a sourcemap of itself appended. A secret
+// the server hands to anyone who asks defends nothing. So it lives outside the
+// project root entirely, in the per-user cache directory, one directory per
+// checkout keyed by the root path — two worktrees running dev servers still get
+// two tokens, and no request path reaches either.
+function cacheHome(): string {
+  if (process.platform === "darwin") return join(homedir(), "Library", "Caches");
+  return process.env.XDG_CACHE_HOME || join(homedir(), ".cache");
+}
 
-// scripts/ios-sim.sh reads the same env var, so a run on a spare port can be
-// pointed somewhere else without touching either side.
+// Exported for tests/sim-bridge-csrf.test.ts, which checks it lands outside the
+// root, and mirrored by bridge_token_file() in scripts/ios-sim.sh.
+export function defaultTokenPath(root: string): string {
+  const key = createHash("sha256").update(resolvePath(root)).digest("hex").slice(0, 16);
+  return join(cacheHome(), "sim-bridge", key, "token");
+}
+
+// scripts/ios-sim.sh derives the same path (bridge_token_file) and reads the
+// same env var, so a run on a spare port can be pointed somewhere else without
+// touching either side.
 function tokenPath(root: string): string {
-  return process.env.IOS_SIM_BRIDGE_TOKEN_FILE || join(root, TOKEN_IN_ROOT);
+  return process.env.IOS_SIM_BRIDGE_TOKEN_FILE || defaultTokenPath(root);
 }
 
 function newToken(): string {
@@ -190,7 +221,7 @@ function newToken(): string {
 // Removed and rewritten rather than truncated, so the mode is the one asked for
 // even if something left a world-readable file behind.
 function writeToken(file: string, token: string): void {
-  mkdirSync(dirname(file), { recursive: true });
+  mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
   try {
     rmSync(file);
   } catch {
@@ -214,15 +245,66 @@ type GuardedRequest = {
   headers: Record<string, string | string[] | undefined>;
 };
 
+// What the server knows about where it answers: the host vite resolved (the
+// same value isLoopbackHost is asked about) and the port it is actually
+// listening on. Both come from this side of the socket, which is the point —
+// the Host header does not. `exposed` is IOS_SIM_BRIDGE_ALLOW_REMOTE: the
+// server is on an address it was warned about, reached under a name only the
+// LAN's DNS knows, so there is no name to check it against and the warning
+// printed at startup is the whole protection.
+type SelfAddress = { host: string | boolean | undefined; port: number | undefined; exposed: boolean };
+
+// Split an authority ("localhost:1420", "[::1]:1420", "evil.example") into its
+// parts, or nothing if it is not one. Parsed as a URL so the bracket form and
+// the port are handled the way a browser writes them; anything carrying a path,
+// userinfo or query is not an authority at all.
+function splitAuthority(authority: string): { host: string; port: number } | null {
+  const text = authority.trim().toLowerCase();
+  if (!text || /[/\\?#@]/.test(text)) return null;
+  try {
+    const url = new URL(`http://${text}`);
+    if (url.username || url.password || url.pathname !== "/") return null;
+    return { host: url.hostname, port: url.port ? Number(url.port) : 80 };
+  } catch {
+    return null;
+  }
+}
+
+// Whether an authority names this very server. A hostname that merely resolves
+// here does not: that is the DNS rebinding case, where evil.example points at
+// 127.0.0.1 so the browser calls its page and this server the same origin. Only
+// the loopback names count, plus the literal address vite was told to bind when
+// IOS_SIM_BRIDGE_ALLOW_REMOTE put it on one. The port has to match too, because
+// http://localhost:9999 is another origin — another local process, or another
+// dev server the developer has a page open from.
+function authorityIsSelf(authority: string | undefined, self: SelfAddress): boolean {
+  if (authority === undefined) return false;
+  const parsed = splitAuthority(authority);
+  if (!parsed) return false;
+  if (self.port !== undefined && parsed.port !== self.port) return false;
+  if (self.exposed) return true;
+  if (isLoopbackHost(parsed.host)) return true;
+  return typeof self.host === "string" && self.host.trim().toLowerCase() === parsed.host;
+}
+
 // Whether this request may reach the endpoint it asked for. Driven through the
 // middleware by tests/sim-bridge-csrf.test.ts, which posts the attack at it.
-function guardRequest(req: GuardedRequest, token: string): Verdict {
+function guardRequest(req: GuardedRequest, token: string, self: SelfAddress): Verdict {
   const head = (name: string): string | undefined => {
     const value = req.headers[name];
     return Array.isArray(value) ? value[0] : value;
   };
   const method = (req.method || "GET").toUpperCase();
   const deny = (status: number, error: string): Verdict => ({ ok: false, status, error });
+
+  // Before either lane: the request has to be addressed to this server, by a
+  // name this server has. HTTP/2 puts it in :authority instead.
+  if (DRIVER_PATHS.has(req.path) || PAGE_PATHS.has(req.path)) {
+    const authority = head("host") ?? head(":authority");
+    if (!authorityIsSelf(authority, self)) {
+      return deny(403, `${req.path} is not addressed to this dev server (Host: ${authority ?? "absent"})`);
+    }
+  }
 
   if (DRIVER_PATHS.has(req.path)) {
     for (const mark of BROWSER_MARKS) {
@@ -252,7 +334,7 @@ function guardRequest(req: GuardedRequest, token: string): Verdict {
       return deny(403, `${req.path} is for this page only (Sec-Fetch-Site: ${site})`);
     }
     const origin = head("origin");
-    if (origin !== undefined && !originIsHost(origin, head("host"))) {
+    if (origin !== undefined && !originIsSelf(origin, self)) {
       return deny(403, `${req.path} is for this page only (Origin: ${origin})`);
     }
     if (method !== (req.path === "/poll" ? "GET" : "POST")) {
@@ -265,12 +347,14 @@ function guardRequest(req: GuardedRequest, token: string): Verdict {
 }
 
 // An Origin the browser wrote is a serialized origin, so its authority is the
-// only part worth comparing with the Host this request was addressed to.
-// `null` (a sandboxed or opaque origin) matches nothing.
-function originIsHost(origin: string, host: string | undefined): boolean {
-  if (!host) return false;
+// part worth comparing — with this server's own address, not with the Host the
+// same caller wrote a line above it. `null` (a sandboxed or opaque origin) is
+// not a URL and so matches nothing.
+function originIsSelf(origin: string, self: SelfAddress): boolean {
   try {
-    return new URL(origin).host.toLowerCase() === host.trim().toLowerCase();
+    const url = new URL(origin);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+    return authorityIsSelf(url.host, self);
   } catch {
     return false;
   }
@@ -302,14 +386,28 @@ export function simBridge(): Plugin {
   // Set in configResolved, read by both hooks below. False means this plugin
   // registers nothing at all.
   let enabled = false;
+  // The host as vite resolved it, kept so a request's Host header can be held
+  // against the address this server actually answers on. `exposedRemote` is the
+  // knowing trade: a bare --host serves the page under whatever name the LAN
+  // reaches it by, and this side never learns that name.
+  let boundHost: string | boolean | undefined;
+  let exposedRemote = false;
 
   return {
     name: "sim-bridge",
     apply: "serve",
+    // Neither token file is under the tree vite serves any more — the old one
+    // in node_modules is deleted at startup, the new one lives outside the root
+    // — but fs.deny is what holds if a checkout's `server.fs.allow` is ever
+    // widened to reach the cache directory, and it covers both names.
+    config() {
+      return { server: { fs: { deny: ["**/.sim-bridge/**", "**/sim-bridge/*/token"] } } };
+    },
     // The resolved config is the one answer for --host, the config file and the
     // env at once; process.argv would only see one of the three.
     configResolved(config) {
       const host = config.server.host;
+      boundHost = host;
       if (isLoopbackHost(host)) {
         enabled = true;
         return;
@@ -317,6 +415,7 @@ export function simBridge(): Plugin {
       const where = describeHost(host);
       if (process.env.IOS_SIM_BRIDGE_ALLOW_REMOTE === "1") {
         enabled = true;
+        exposedRemote = true;
         console.warn(
           `sim-bridge: EXPOSED on ${where} by IOS_SIM_BRIDGE_ALLOW_REMOTE=1 —` +
             ` anyone who can reach this port can run JavaScript in your app page.`,
@@ -333,10 +432,16 @@ export function simBridge(): Plugin {
     configureServer(server) {
       if (!enabled) return;
       // Fresh at every start: a token left behind by a dead server opens
-      // nothing, because the server that would honour it is gone.
+      // nothing, because the server that would honour it is gone. Which is also
+      // the answer to `kill -9` (what ios-sim.sh's `up` does to the previous
+      // server) skipping the close hook below — startup is the guarantee,
+      // shutdown is the tidying.
       const token = newToken();
       const file = tokenPath(server.config.root);
       writeToken(file, token);
+      // And take the one an older version of this plugin left inside
+      // node_modules with it, since that one is inside the tree vite serves.
+      rmSync(join(server.config.root, "node_modules", ".sim-bridge"), { recursive: true, force: true });
       server.httpServer?.on("close", () => {
         try {
           rmSync(file);
@@ -344,6 +449,18 @@ export function simBridge(): Plugin {
           /* already gone */
         }
       });
+
+      // The port the socket is on, which is not always the one in the config:
+      // strictPort is off by default, so vite may have moved. Read per request
+      // because the server is not listening yet when this hook runs. `undefined`
+      // (middleware mode, or before the first listen) drops the port half of the
+      // comparison and leaves the hostname half, which is the rebinding fence.
+      const selfPort = (): number | undefined => {
+        const address = server.httpServer?.address?.();
+        if (address && typeof address === "object" && typeof address.port === "number") return address.port;
+        const configured = server.config.server.port;
+        return typeof configured === "number" ? configured : undefined;
+      };
 
       server.middlewares.use("/__sim", async (req, res) => {
         const path = (req.url ?? "/").split("?")[0];
@@ -353,7 +470,11 @@ export function simBridge(): Plugin {
           res.end(JSON.stringify(value));
         };
 
-        const verdict = guardRequest({ path, method: req.method ?? "GET", headers: req.headers ?? {} }, token);
+        const verdict = guardRequest(
+          { path, method: req.method ?? "GET", headers: req.headers ?? {} },
+          token,
+          { host: boundHost, port: selfPort(), exposed: exposedRemote },
+        );
         if (!verdict.ok) {
           json(verdict.status, { error: verdict.error });
           return;
