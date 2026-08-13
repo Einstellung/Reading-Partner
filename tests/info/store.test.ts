@@ -6,6 +6,7 @@ import { expect, test } from "bun:test";
 import {
   leanItems,
   localDateString,
+  newestBriefingDate,
   staleDailyFiles,
   todayLocal,
 } from "../../src/info/briefing/store";
@@ -92,4 +93,33 @@ test("staleDailyFiles ignores names whose date suffix is malformed", () => {
 
 test("staleDailyFiles on an empty listing is empty", () => {
   expect(staleDailyFiles([], "2026-07-25")).toEqual([]);
+});
+
+// What the startup backfill publishes is the latest briefing this machine has,
+// which on a machine that has not collected today is yesterday's.
+test("newestBriefingDate takes the latest day, whatever order the listing is in", () => {
+  const names = [
+    "briefing-2026-07-22.json",
+    "info-articles-2026-07-25.json",
+    "briefing-2026-07-25.json",
+    "briefing-2026-06-30.json",
+  ];
+  expect(newestBriefingDate(names)).toBe("2026-07-25");
+});
+
+test("newestBriefingDate ignores the other daily files and the malformed names", () => {
+  const names = [
+    "info-articles-2026-07-25.json",
+    "info-items-2026-07-25.json",
+    "info-run-2026-07-25.json",
+    "info-briefing.json",
+    "briefing-2026-7-22.json",
+    "briefing-2026-07-22.json.tmp",
+    "briefing-.json",
+  ];
+  expect(newestBriefingDate(names)).toBeNull();
+});
+
+test("newestBriefingDate on a machine that has never collected is null", () => {
+  expect(newestBriefingDate([])).toBeNull();
 });
