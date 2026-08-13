@@ -12,21 +12,10 @@
 // button on every screen, the left-edge swipe, and the Android system button.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { onCorruptFile } from "./platform/app/atomic-fs";
 import { bindSystemBack } from "./platform/app/back-button";
 import { BRIEF_TOPIC_ID } from "./platform/app/topics";
 import { initSync, onSyncPulled } from "./platform/sync";
-import {
-  DEFAULT_SETTINGS,
-  loadSettings,
-  onSettingsSaveError,
-  saveSettings,
-  settingsAfterPull,
-  SETTINGS_FILE,
-  type Settings,
-} from "./platform/app/settings";
-import { initDeviceSettings, saveDeviceSettings, type DeviceSettings } from "./platform/app/device";
-import { enforceKnownModel, listProviders, type ProviderInfo } from "./ai/aiClient";
+import { settingsAfterPull, SETTINGS_FILE } from "./platform/app/settings";
 import {
   loadSavedArticles,
   savedArticlesForTopic,
@@ -53,7 +42,7 @@ import { useEdgeBack } from "./ui/components/phone/useEdgeBack";
 import SavedArticleView from "./ui/components/library/SavedArticleView";
 import SettingsView from "./ui/components/SettingsView";
 import Toast, { useToasts } from "./ui/components/common/Toast";
-import { useSyncHealth } from "./ui/components/common/useSyncHealth";
+import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
 
 // InfoHome's screen for a stack entry, or null on the ones it does not draw.
 // Null keeps it mounted with its pipeline and its opened article intact, the
@@ -78,12 +67,6 @@ export default function PhoneApp() {
   // The kept articles (docs/21). Fixed to the Brief topic: the phone has no
   // other place to file one from. The one being read is a stack entry.
   const [savedArticles, setSavedArticles] = useState<SavedArticle[]>([]);
-  const [settings, setSettings] = useState<Settings>({ ...DEFAULT_SETTINGS });
-  // This phone's own settings (docs/36), null until device.json has been read.
-  // A phone is always a reader, so nothing here changes what it collects — it is
-  // held for the Settings panel and for the identity the ask files are named by.
-  const [device, setDevice] = useState<DeviceSettings | null>(null);
-  const [providersInfo, setProvidersInfo] = useState<ProviderInfo[]>([]);
   const { toasts, push: pushToast, dismiss: dismissToast } = useToasts();
 
   // The info call InfoHome draws over its screens. It is not a stack entry, so
@@ -103,6 +86,19 @@ export default function PhoneApp() {
   // settings.json back over the panel the user has open.
   const settingsOpenRef = useRef(showSettings);
   settingsOpenRef.current = showSettings;
+  // The same start-up as App: both settings files, the provider list, the
+  // sync-health verdict, and the store error hooks. This phone is always a
+  // reader, so nothing device.json says here changes what it collects — it is
+  // held for the Settings panel and for the identity the ask files are named by.
+  const {
+    settings,
+    setSettings,
+    applySettings,
+    device,
+    applyDevice,
+    configured,
+    syncReport,
+  } = useShellBootstrap({ settingsOpen: showSettings, pushToast });
 
   // The one back. The three things that trigger it — a top bar button, the
   // left-edge swipe, the Android button — all arrive here. Both inputs come
@@ -128,42 +124,11 @@ export default function PhoneApp() {
     setSavedArticles(savedArticlesForTopic(all, BRIEF_TOPIC_ID));
   }, []);
 
-  // Settings, and the failure paths that must not be silent: a data file that
-  // cannot be read is set aside and said out loud, and a stored default model
-  // the catalog no longer carries is corrected and said out loud too (see App).
+  // The kept list is this shell's own: it is most of what the phone shows, and
+  // nothing in the shared bootstrap knows about it.
   useEffect(() => {
-    onCorruptFile(({ file, savedAs }) => {
-      pushToast(
-        "warn",
-        savedAs
-          ? `${file} was unreadable and has been set aside as ${savedAs}`
-          : `${file} could not be read; it is left untouched and won't be overwritten`,
-      );
-    });
-    loadSettings()
-      .then((loaded) => {
-        const { settings: next, notice } = enforceKnownModel(loaded);
-        setSettings(next);
-        if (notice) {
-          saveSettings(next);
-          pushToast("warn", notice);
-        }
-      })
-      .catch(() => {});
-    initDeviceSettings()
-      .then(setDevice)
-      .catch((e) => console.warn("failed to read device settings", e));
-    onSettingsSaveError((e) => {
-      console.error("failed to persist settings", e);
-      pushToast("warn", "Settings could not be saved");
-    });
     void refreshSavedArticles();
-  }, [refreshSavedArticles, pushToast]);
-
-  // Refresh provider connection state on mount and whenever Settings closes.
-  useEffect(() => {
-    if (!showSettings) listProviders().then(setProvidersInfo).catch(() => {});
-  }, [showSettings]);
+  }, [refreshSavedArticles]);
 
   // Account sync (docs/13). The kept articles are what this shell mostly shows
   // and they arrive over sync, so a pulled saved-articles.json reloads the list.
@@ -186,16 +151,6 @@ export default function PhoneApp() {
     });
   }, [refreshSavedArticles]);
 
-  // A sync that is not running says so once, then keeps a dot on the Settings
-  // affordance (see App: one toast, never repeated).
-  const syncReport = useSyncHealth();
-  const [syncToasted, setSyncToasted] = useState(false);
-  useEffect(() => {
-    if (syncReport.alert !== "alert" || !syncReport.message || syncToasted) return;
-    setSyncToasted(true);
-    pushToast("warn", syncReport.message);
-  }, [syncReport, syncToasted, pushToast]);
-
   // The Android button, bound only while back has somewhere to go: with nothing
   // to close and nothing to pop it belongs to the system, which leaves the app
   // (see platform/app/back-button.ts).
@@ -209,12 +164,6 @@ export default function PhoneApp() {
   // finger is down.
   const surfaceRef = useEdgeBack(
     useMemo(() => ({ enabled: backable, onBack: goBack }), [backable, goBack]),
-  );
-
-  const configured = !!(
-    settings.defaultProviderId &&
-    settings.defaultModelId &&
-    providersInfo.find((p) => p.id === settings.defaultProviderId)?.configured
   );
 
   // InfoHome navigates by naming a destination, and uses the same call for its
@@ -285,17 +234,9 @@ export default function PhoneApp() {
         {showSettings && (
           <SettingsView
             settings={settings}
-            onSettingsChange={(next) => {
-              setSettings(next);
-              saveSettings(next);
-            }}
+            onSettingsChange={applySettings}
             device={device}
-            onDeviceChange={(next) => {
-              setDevice(next);
-              saveDeviceSettings(next).catch((e) =>
-                console.warn("failed to persist device settings", e),
-              );
-            }}
+            onDeviceChange={applyDevice}
             onClose={goBack}
           />
         )}

@@ -8,7 +8,6 @@ import {
   type ViewState,
   type ViewStats,
 } from "./platform/app/reader-contract";
-import { onCorruptFile } from "./platform/app/atomic-fs";
 import { getViewState, hashPath, saveViewState, withModes } from "./platform/app/storage";
 import {
   importBook,
@@ -17,7 +16,7 @@ import {
   repairLibraryNames,
 } from "./platform/app/library";
 import { migrateBookLive } from "./platform/app/migrate";
-import { ensureFulltext, onFulltextError, type Fulltext } from "./fulltext";
+import { ensureFulltext, type Fulltext } from "./fulltext";
 import Sidebar, { type SidebarTab } from "./ui/components/reader/Sidebar";
 import { annotationPage, toolStatusLabel } from "./reading/context";
 import {
@@ -25,7 +24,6 @@ import {
   deleteAnnotations,
   dropAnnotationCache,
   loadAnnotations,
-  onSaveError,
   saveAnnotations,
 } from "./platform/app/annotations";
 import {
@@ -47,7 +45,6 @@ import {
   getBookThread,
   getThread,
   loadThreads,
-  onThreadSaveError,
   readThreadImages,
   saveThreadImages,
   type ThreadMessage,
@@ -55,17 +52,12 @@ import {
 import { initSync, onSyncPulled } from "./platform/sync";
 import { compressImage, compressImageData, type CompressedImage } from "./ai/image-utils";
 import { isTauri, readClipboardImage } from "./platform/app/clipboard";
-import { DEFAULT_SETTINGS, loadSettings, onSettingsSaveError, saveSettings, settingsAfterPull, SETTINGS_FILE, toReasoning, type Settings } from "./platform/app/settings";
-import { initDeviceSettings, saveDeviceSettings, type DeviceSettings } from "./platform/app/device";
+import { DEFAULT_SETTINGS, settingsAfterPull, SETTINGS_FILE, toReasoning, type Settings } from "./platform/app/settings";
 import { buildGlossary } from "./ai/voice";
 import {
-  enforceKnownModel,
-  installFetchBridge,
-  listProviders,
   modelSupportsImages,
   runAgentTurn,
   type ProviderId,
-  type ProviderInfo,
 } from "./ai/aiClient";
 import { locateQuote, type Citation } from "./reading/prep";
 import { usePrep } from "./reading/prep/use-prep";
@@ -111,7 +103,7 @@ import { appendRunningTool, relabelRunningTool, resolveToolStatus } from "./ui/c
 import LibraryScreen from "./ui/components/library/LibraryScreen";
 import Toast, { useToasts } from "./ui/components/common/Toast";
 import SettingsButton from "./ui/components/common/SettingsButton";
-import { useSyncHealth } from "./ui/components/common/useSyncHealth";
+import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
 import type { Annotation as PopupAnnotation, PendingImage, ToolStatus, ToolType } from "./ui/components/common/types";
 import { rehydrateParts, type ChatPart } from "./ui/components/chat/chatParts";
 import { refreshInfoCollector } from "./info/briefing/live";
@@ -296,21 +288,26 @@ export default function App() {
   // card host and empty until extraction finishes.
   const [figures, setFigures] = useState<Figure[]>([]);
   const [call, setCall] = useState<CallState | null>(null);
-  const [settings, setSettings] = useState<Settings>({ ...DEFAULT_SETTINGS });
-  // This machine's own settings (docs/36), null until device.json has been read.
-  // Separate state from `settings` because it is a separate file with separate
-  // rules: it never syncs, and it is what says whether this machine collects.
-  const [device, setDevice] = useState<DeviceSettings | null>(null);
-  const fingerDraw = !!device?.fingerDraw;
   const [showSettings, setShowSettings] = useState(false);
   // Read by the sync-pull handler, which is bound once: a pull must not read
   // settings.json back over the panel the user has open.
   const settingsOpenRef = useRef(showSettings);
   settingsOpenRef.current = showSettings;
-  const [providersInfo, setProvidersInfo] = useState<ProviderInfo[]>([]);
   // Failure messages (save/load/network errors) live here, not in `status` —
   // `status` is reserved for transient reader progress ("Rendering…").
   const { toasts, push: pushToast, dismiss: dismissToast } = useToasts();
+  // Everything both shells start up the same way: the two settings files, the
+  // provider list, the sync-health verdict, and the store error hooks.
+  const {
+    settings,
+    setSettings,
+    applySettings,
+    device,
+    applyDevice,
+    configured,
+    syncReport,
+  } = useShellBootstrap({ settingsOpen: showSettings, pushToast });
+  const fingerDraw = !!device?.fingerDraw;
 
   // Images pasted into the composer, awaiting send: a placeholder appears while
   // the async compression runs, then resolves to a ready preview. A single
@@ -348,49 +345,6 @@ export default function App() {
   // finds nothing owed does nothing, and one that runs a pass shows no UI. The
   // predicate keeps it off a thread whose reply is still being written.
   useEffect(() => startDistillSweeps((threadId) => liveTurnsRef.current.has(threadId)), []);
-
-  // Install the Tauri fetch bridge + load settings once. A data file that can't
-  // be read is set aside rather than silently replaced by defaults, and the user
-  // is told — otherwise a reset shelf or a lost provider config looks like the
-  // app forgot on its own.
-  useEffect(() => {
-    installFetchBridge();
-    onCorruptFile(({ file, savedAs }) => {
-      pushToast(
-        "warn",
-        savedAs
-          ? `${file} was unreadable and has been set aside as ${savedAs}`
-          : `${file} could not be read; it is left untouched and won't be overwritten`,
-      );
-    });
-    loadSettings()
-      .then((loaded) => {
-        // A stored default model the provider's catalog no longer carries is
-        // corrected here and written back, with a toast: the app keeps working
-        // on a model that resolves, and the swap is never silent.
-        const { settings: next, notice } = enforceKnownModel(loaded);
-        setSettings(next);
-        if (notice) {
-          saveSettings(next);
-          pushToast("warn", notice);
-        }
-      })
-      .catch(() => {});
-    onSettingsSaveError((e) => {
-      console.error("failed to persist settings", e);
-      pushToast("warn", "Settings could not be saved");
-    });
-    // This machine's own file (docs/36). Read once here: it decides the role,
-    // and everything the role decides waits on it.
-    initDeviceSettings()
-      .then(setDevice)
-      .catch((e) => console.warn("failed to read device settings", e));
-  }, []);
-
-  // Refresh provider connection state on mount and whenever Settings closes.
-  useEffect(() => {
-    if (!showSettings) listProviders().then(setProvidersInfo).catch(() => {});
-  }, [showSettings]);
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -470,16 +424,6 @@ export default function App() {
     lastCallThreadRef.current = id;
   }, [call?.threadId, call?.isBook]);
 
-  const applySettings = useCallback((next: Settings) => {
-    setSettings(next);
-    saveSettings(next);
-  }, []);
-
-  const applyDevice = useCallback((next: DeviceSettings) => {
-    setDevice(next);
-    saveDeviceSettings(next).catch((e) => console.warn("failed to persist device settings", e));
-  }, []);
-
   // What this machine does about collecting, whenever the answer changes — and
   // once when device.json first lands, which is how a collector starts at all
   // (docs/36). A reader falls straight through to giving up its claim.
@@ -509,17 +453,6 @@ export default function App() {
 
   useEffect(() => {
     refreshTopics().catch(() => {});
-    onSaveError((e) => {
-      console.error("failed to persist annotations", e);
-      pushToast("warn", "Annotations could not be saved");
-    });
-    onThreadSaveError((e) => {
-      console.error("failed to persist thread", e);
-      pushToast("warn", "AI conversation could not be saved");
-    });
-    // Full-text extraction is best-effort background context; a persistence
-    // failure only warns (the AI falls back to the marked passage), no UI needed.
-    onFulltextError((e) => console.warn("failed to persist fulltext cache", e));
   }, [refreshTopics]);
 
   // One-time content-hash backfill for existing topic files (docs/13, M-sync-1):
@@ -589,17 +522,6 @@ export default function App() {
       }
     });
   }, [refreshTopics]);
-
-  // A sync that is not running says so once per app start and then keeps a dot
-  // on the Settings affordance. One toast, never repeated: the whole point is a
-  // user who believes sync is on finding out, not being nagged about it.
-  const syncReport = useSyncHealth();
-  const syncToastedRef = useRef(false);
-  useEffect(() => {
-    if (syncReport.alert !== "alert" || !syncReport.message || syncToastedRef.current) return;
-    syncToastedRef.current = true;
-    pushToast("warn", syncReport.message);
-  }, [syncReport, pushToast]);
 
   // Apply the tool once the view is initialized (setTool before the pdf viewer
   // is ready throws — PDFViewerApplication null, pitfall 11). The AI pen is the
@@ -1750,11 +1672,6 @@ export default function App() {
   const sidebarBusy = !!(prepSnap?.running || notesSnap?.running);
 
   const inReader = !!title;
-  const configured = !!(
-    settings.defaultProviderId &&
-    settings.defaultModelId &&
-    providersInfo.find((p) => p.id === settings.defaultProviderId)?.configured
-  );
   const showGuidance = call?.view === "bubble" && call.messages.length === 0 && !configured;
   const lastCallMsg = call?.messages[call.messages.length - 1];
   const streaming = !!(lastCallMsg?.role === "ai" && lastCallMsg.streaming);
