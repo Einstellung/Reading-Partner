@@ -4,7 +4,9 @@
 
 import type { ThinkingLevel } from "@earendil-works/pi-ai";
 import { readGuardedJson, writeTextAtomic, type GuardedRead } from "./atomic-fs";
+import { createDebouncedWriter } from "./debounced-writer";
 import { observeAppExit } from "./lifecycle";
+import { reportStoreError } from "./store-errors";
 
 // Exported so a shell can recognise its own file among the paths a sync pull
 // wrote (settingsAfterPull below).
@@ -147,6 +149,10 @@ export interface SettingsIo {
   // timer ever firing. Not bound at import time, so a headless caller that only
   // reads settings never touches the DOM.
   bindExit: (flush: () => void) => void;
+  // Where a failed write goes. Passed in like everything else here rather than
+  // registered afterwards, so there is no window in which the store has a
+  // failure to report and nowhere to report it (store-errors.ts).
+  onError: (e: unknown) => void;
 }
 
 export interface SettingsStore {
@@ -157,25 +163,33 @@ export interface SettingsStore {
   // it was before the last 500ms of edits (see pulledSettings in the shell
   // bootstrap).
   flush: () => Promise<void>;
-  onSaveError: (handler: (e: unknown) => void) => void;
 }
 
 export function createSettingsStore(io: SettingsIo): SettingsStore {
-  let timer: number | null = null;
-  // The settings a debounce is holding, kept so the exit flush has something to
-  // write and so a flush that already ran writes nothing a second time.
+  // The settings a debounce is holding, so the write — which runs later, off the
+  // writer's chain — has something to serialise.
   let pending: Settings | null = null;
-  let onError: (e: unknown) => void = () => {};
   // Set when the file exists but could not be read, so the app is running on
   // defaults that would erase real configuration (provider, keys) if written
   // back. Reset on a successful load, which is the only thing that can happen
   // first.
   let blockWrites = false;
-  // The writes already in the air. Chained rather than raced: two atomic
-  // replacements of the same file in flight at once have no defined winner, and
-  // flush has to be able to wait for the one before it.
-  let inFlight: Promise<void> = Promise.resolve();
-  let exitBound = false;
+
+  // One file, so one key. The debounce, the single flush on the way out and the
+  // chaining of writes in flight are all the shared writer's
+  // (debounced-writer.ts); what is left here is what to write and when not to.
+  const writer = createDebouncedWriter<string>({
+    write: async () => {
+      if (blockWrites) {
+        throw new Error(`${SETTINGS_FILE} could not be read; refusing to overwrite it`);
+      }
+      if (pending !== null) await io.write(JSON.stringify(pending, null, 2));
+    },
+    debounceMs: SAVE_DEBOUNCE,
+    onError: io.onError,
+    timer: { schedule: io.schedule, cancel: io.cancel },
+    exit: io.bindExit,
+  });
 
   // Falling back to the defaults is fine for a missing file and unavoidable for
   // an unreadable one, but it must not become the new truth: unparseable content
@@ -191,51 +205,10 @@ export function createSettingsStore(io: SettingsIo): SettingsStore {
   // Debounced write; a failure is reported (never silently lost, pitfall 09).
   function save(settings: Settings): void {
     pending = settings;
-    if (!exitBound) {
-      exitBound = true;
-      io.bindExit(writeNow);
-    }
-    if (timer !== null) io.cancel(timer);
-    timer = io.schedule(() => {
-      timer = null;
-      writeNow();
-    }, SAVE_DEBOUNCE);
+    writer.schedule(SETTINGS_FILE);
   }
 
-  // Write whatever the debounce is holding, and nothing when it holds nothing.
-  // Taking `pending` first is what makes a second call a no-op: pagehide can
-  // fire more than once (lifecycle.ts), and observeAppExit does not deduplicate.
-  function writeNow(): void {
-    const next = pending;
-    pending = null;
-    if (timer !== null) {
-      io.cancel(timer);
-      timer = null;
-    }
-    if (next === null) return;
-    inFlight = inFlight
-      .then(async () => {
-        if (blockWrites) {
-          throw new Error(`${SETTINGS_FILE} could not be read; refusing to overwrite it`);
-        }
-        await io.write(JSON.stringify(next, null, 2));
-      })
-      .catch((e) => onError(e));
-  }
-
-  async function flush(): Promise<void> {
-    writeNow();
-    await inFlight;
-  }
-
-  return {
-    load,
-    save,
-    flush,
-    onSaveError: (handler) => {
-      onError = handler;
-    },
-  };
+  return { load, save, flush: writer.flush };
 }
 
 const store = createSettingsStore({
@@ -250,13 +223,12 @@ const store = createSettingsStore({
     if (typeof window === "undefined") return;
     observeAppExit(window, flush);
   },
+  onError: (e) => reportStoreError("settings", e),
 });
 
 export const loadSettings = (): Promise<Settings> => store.load();
 export const saveSettings = (settings: Settings): void => store.save(settings);
 export const flushSettings = (): Promise<void> => store.flush();
-export const onSettingsSaveError = (handler: (e: unknown) => void): void =>
-  store.onSaveError(handler);
 
 // What a sync pull does to the settings a shell is holding. A shell keeps
 // settings.json whole in memory and every save serialises that whole copy, so a

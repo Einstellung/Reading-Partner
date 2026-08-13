@@ -6,7 +6,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import TraceList from "../../../src/ui/components/reader/TraceList";
-import type { Annotation } from "../../../src/ui/components/common/types";
+import type { Annotation } from "../../../src/ui/components/reader/types";
 
 const MARKS: Annotation[] = [
   { id: "a", type: "highlight", color: "#ffd400", text: "first", sortIndex: "00001|000|00010", pageLabel: "1" },

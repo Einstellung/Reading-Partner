@@ -39,7 +39,7 @@ const insets = insetsFromPadding(getComputedStyle(probe));
 probe.remove();
 ```
 
-`src/ui/components/common/safe-area.ts`。一次调用一次强制布局，所以只在挂载和 `resize` / `orientationchange` 时量，量到的值相同就不 setState。
+`src/ui/components/base/safe-area.ts`。一次调用一次强制布局，所以只在挂载和 `resize` / `orientationchange` 时量，量到的值相同就不 setState。
 
 能在 CSS 里夹取的浮层不要走这条路：居中型的 `overlay-safe` 和贴边型的 `bottom-safe-*` 都是纯 CSS，旋转和键盘弹出自己重算，不需要监听。只有夹取逻辑在 JS 里的（Radix popper）才需要把 inset 送进去。
 

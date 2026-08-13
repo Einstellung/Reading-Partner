@@ -5,7 +5,7 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { CARD_REGISTRY } from "../../../src/ui/components/chat/cardRegistry";
+import { CARD_REGISTRY } from "../../../src/ui/components/cardRegistry";
 import { RehearsalDecisionCard } from "../../../src/ui/components/reader/RehearsalCard";
 import { Button } from "../../../src/ui/components/ui/button";
 import { isPersistableCardKind } from "../../../src/ui/components/chat/chatParts";

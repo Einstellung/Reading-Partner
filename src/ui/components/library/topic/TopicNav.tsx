@@ -10,9 +10,9 @@
 // Pure and controlled: which section is showing and whether it is open belong to
 // the host (LibraryScreen), which is also where they are remembered.
 
-import { IconBooks, IconObservations, IconSidebar, IconTalk } from "../../common/icons";
+import { IconBooks, IconObservations, IconSidebar, IconTalk } from "../../base/icons";
 import { Button } from "../../ui/button";
-import { TOPIC_SECTIONS, type TopicSection } from "./topic-nav";
+import { TOPIC_SECTIONS, type TopicSection } from "../../base/topic-nav";
 
 const ICONS: Record<TopicSection, (p: { size?: number }) => JSX.Element> = {
   materials: IconBooks,

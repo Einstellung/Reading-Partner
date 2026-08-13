@@ -1,8 +1,8 @@
-// hideBrokenImage (src/ui/components/common/proseCss.ts): the article views'
+// hideBrokenImage (src/ui/components/markdown/proseCss.ts): the article views'
 // answer to an image that failed to load. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { hideBrokenImage } from "../../../src/ui/components/common/proseCss";
+import { hideBrokenImage } from "../../../src/ui/components/markdown/proseCss";
 
 function el(tagName: string) {
   return { tagName, style: { display: "" } };

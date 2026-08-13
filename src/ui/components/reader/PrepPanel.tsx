@@ -6,7 +6,7 @@
 import { useEffect, useState } from "react";
 import type { PrepActivity, PrepSnapshot } from "../../../reading/prep/pipeline";
 import type { PaperStatus, PrepPaper } from "../../../reading/prep/types";
-import { CitationContext, Markdown } from "../common/Markdown";
+import { CitationContext, Markdown } from "../markdown/Markdown";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 

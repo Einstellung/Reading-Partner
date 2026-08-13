@@ -13,7 +13,7 @@
 // an offer rather than as something that already happened.
 
 import { useMemo } from "react";
-import { IconSparkle } from "../common/icons";
+import { IconSparkle } from "../base/icons";
 import { usePullToAsk } from "./usePullToAsk";
 
 export function PullToAsk({

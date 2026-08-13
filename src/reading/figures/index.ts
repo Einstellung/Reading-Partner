@@ -2,7 +2,7 @@
 
 export type { Figure, FigureBBox, FiguresIndex } from "./types";
 export { FIGURES_VERSION } from "./types";
-export { ensureFigures, getFigures, onFiguresError, parseFiguresCache } from "./store";
+export { ensureFigures, getFigures, parseFiguresCache } from "./store";
 export { buildFigureCatalog, selectCatalogFigures, type CatalogOptions } from "./catalog";
 export {
   renderFigure,

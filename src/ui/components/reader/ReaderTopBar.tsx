@@ -7,7 +7,7 @@ import { useState, type RefObject } from "react";
 import type { ViewInstance, ViewStats } from "../../../platform/app/reader-contract";
 import { ANNOTATION_COLORS } from "../../../platform/app/annotations";
 import { setTouchDebugEnabled } from "../../../reading/engine/gesture/touch-debug";
-import type { ToolType } from "../common/types";
+import type { ToolType } from "./types";
 import {
   IconFitWidth,
   IconGear,
@@ -17,7 +17,7 @@ import {
   IconTouchProbe,
   IconZoomIn,
   IconZoomOut,
-} from "../common/icons";
+} from "../base/icons";
 import MoreMenu, { type MoreItem } from "./MoreMenu";
 import PenToolbar from "./PenToolbar";
 import { Button } from "../ui/button";

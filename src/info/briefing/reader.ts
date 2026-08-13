@@ -14,6 +14,7 @@
 // wrong article under the right headline it says the text is still on its way,
 // and hides Keep and the article chat while it is.
 
+import type { PullMatcher } from "../../platform/sync/pull-routes";
 import { sanitizeArticleHtml } from "../extract/sanitize";
 import {
   bodiesMatch,
@@ -171,6 +172,8 @@ export function isReaderFile(path: string): boolean {
     /^info-collector-.+\.json$/.test(path)
   );
 }
+
+export const READER_PULL_ROUTE: PullMatcher = { id: "reader", matches: isReaderFile };
 
 // How long ago, in the shape a sentence wants ("3 hours ago"). Coarse on
 // purpose: the answer to "is my collector alive" is a shape, not a duration.

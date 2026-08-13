@@ -8,26 +8,31 @@
 //             spent its round cap on tools without answering (agent.ts).
 //             Nothing failed and nothing is worth retrying — the same inputs are
 //             declined the same way. The sentence is the app talking about the
-//             turn, so it goes in `notice` (common/types) and never in `text`:
+//             turn, so it goes in `notice` (chat/types) and never in `text`:
 //             `text` is the model's words, and every surface replays it as the
 //             assistant's own on the next turn.
 //
-// Kept here rather than in a .tsx so every chat surface can end a turn the same
-// way (App and useTalk both do this in their own words already).
+// Kept out of the render layer so every chat surface can end a turn the same way
+// (the reading session, useTalk and the info companion all do), and reachable
+// from a domain: this is what an agent turn's ending is, not how a row is drawn.
+// The rows are taken structurally, so each surface keeps its own row type.
 
-import type { ThreadMessage } from "../common/types";
+import type { ToolStatus } from "./tool-status";
 
 // The tool trace a stopped turn keeps: the calls that failed, which explain the
 // stop, and none of the ones that ran fine.
-function keptTools(previous: ThreadMessage): ThreadMessage["tools"] {
+function keptTools(previous: { tools?: ToolStatus[] }): ToolStatus[] {
   return (previous.tools ?? []).filter((t) => t.state === "error");
 }
 
-// `text` is deliberately left as it stands. In practice it is empty — both
-// refusal exits fire after a tool round, and every surface blanks the row when a
-// tool starts — so the notice is usually the whole row, and chat.tsx draws it
-// alone. Where the model did get words out first, they stay the model's and the
-// notice sits under them.
+// `text` is deliberately left as it stands, and as the app is wired today it is
+// always empty when this runs. REFUSE_MIDTURN fires at the top of a round,
+// before that round's stream; REFUSE_ROUNDS fires only after a round that called
+// tools (agent.ts). And a tool start blanks the row's text on all three surfaces
+// (App.tsx, useTalk.ts, InfoCall.tsx). So the notice is the whole row and
+// chat.tsx draws it alone. A refusal that still carries the model's words is
+// unreachable from the loop — the function leaves them alone if one is ever
+// built, but nothing downstream needs to be kept working for that case.
 //
 // `failed` is cleared rather than left alone. Every call site spreads this over
 // the row as it stands, so anything the function does not name survives; a row
@@ -35,7 +40,10 @@ function keptTools(previous: ThreadMessage): ThreadMessage["tools"] {
 // which is two endings at once and not a state this function should be able to
 // produce. Clearing it here is what makes that unrepresentable, and it is what
 // lets the readers of the mark below take it at face value.
-export function refusalRow(previous: ThreadMessage, message: string): Partial<ThreadMessage> {
+export function refusalRow(
+  previous: { tools?: ToolStatus[] },
+  message: string,
+): { streaming: false; failed: false; notice: string; tools: ToolStatus[] } {
   return { streaming: false, failed: false, notice: message, tools: keptTools(previous) };
 }
 
@@ -45,14 +53,18 @@ export function refusalRow(previous: ThreadMessage, message: string): Partial<Th
 //   - a row the app ended carries the app's sentence, not the assistant's. A
 //     refusal keeps it in `notice`, which is not read here at all; an error
 //     keeps it in `text`, so `failed` is what excludes it.
-//   - which means a refusal row is judged on its `text` alone, and its `text` is
-//     only ever what the model itself wrote before the loop stopped. Those words
-//     go back next turn, the same as any other reply: the reader saw them on
-//     screen as the assistant's, and the model's view has to match. Nothing the
-//     app said about the turn travels with them — that sentence is in `notice`.
+//   - which means a refusal row is judged on its `text` alone, and today that
+//     text is always empty (see refusalRow): a refusal drops out here on the
+//     empty-text clause, not on the mark. A refusal that did carry the model's
+//     own words would replay them like any other reply — the reader saw them on
+//     screen as the assistant's, and the model's view has to match — but the loop
+//     cannot produce one. Either way nothing the app said about the turn travels
+//     with them: that sentence is in `notice`.
 //   - a card row is persisted with no text of its own (chatParts), and an empty
 //     message is one some providers reject outright.
-export function replayableHistory(rows: ThreadMessage[]): { role: "user" | "ai"; text: string }[] {
+export function replayableHistory(
+  rows: { role: "user" | "ai"; text: string; ts?: number; failed?: boolean }[],
+): { role: "user" | "ai"; text: string }[] {
   return rows.filter((m) => !m.failed && m.text.trim() !== "").map(({ role, text }) => ({ role, text }));
 }
 
@@ -62,9 +74,11 @@ export function replayableHistory(rows: ThreadMessage[]): { role: "user" | "ai";
 // is not one of these and stays.
 //
 // A refusal reaches this through the notice clause, never through `failed`
-// (refusalRow clears it): the empty one is replaced, and the one the model got
-// words onto is an answer, however short, so it stays and the next attempt sits
-// under it.
+// (refusalRow clears it), and its `text` is always empty as the app is wired
+// today, so every refusal row is replaced. The other branch — a refusal the
+// model got words onto is an answer, however short, so it stays and the next
+// attempt sits under it — is unreachable from the loop; only the unit tests
+// build such a row.
 export function holdsNoAnswer(m: {
   role: "user" | "ai";
   text: string;

@@ -10,7 +10,7 @@
 import * as SwitchPrimitive from "@radix-ui/react-switch";
 import * as React from "react";
 
-import { HIT_44 } from "@/ui/components/common/buttons";
+import { HIT_44 } from "@/ui/components/base/buttons";
 import { cn } from "@/ui/components/lib/utils";
 
 const Switch = React.forwardRef<

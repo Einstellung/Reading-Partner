@@ -14,15 +14,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bindSystemBack } from "./platform/app/back-button";
 import { BRIEF_TOPIC_ID } from "./platform/app/topics";
-import { initSync, onSyncPulled } from "./platform/sync";
+import { initSync } from "./platform/sync";
+import { registerPullRoute } from "./platform/sync/pull-routes";
+import { KEPT_ARTICLES_PULL_ROUTE } from "./reading/pull-routes";
 import {
   loadSavedArticles,
   savedArticlesForTopic,
-  SAVED_ARTICLES_FILE,
   type SavedArticle,
 } from "./reading/saved-articles";
+import { CardRegistryProvider } from "./ui/components/CardRegistryProvider";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import PhoneHome from "./ui/components/phone/PhoneHome";
+import { PullToAsk } from "./ui/components/phone/PullToAsk";
 import SavedList from "./ui/components/phone/SavedList";
 import {
   back,
@@ -91,7 +94,6 @@ export default function PhoneApp() {
     device,
     applyDevice,
     configured,
-    settingsPulled,
     syncReport,
   } = useShellBootstrap({ settingsOpen: showSettings, pushToast });
 
@@ -127,17 +129,17 @@ export default function PhoneApp() {
 
   // Account sync (docs/13). The kept articles are what this shell mostly shows
   // and they arrive over sync, so a pulled saved-articles.json reloads the list.
-  // settings.json is read back for the reason App gives: this shell holds it
-  // whole in memory and saves it whole, so a field merged in from another device
-  // is undone by the next save unless the copy is refreshed — which the shared
-  // bootstrap does (settingsPulled).
+  // Every other file a pull writes has a route of its own (platform/sync/
+  // pull-routes.ts), settings.json included — this shell holds it whole in
+  // memory and saves it whole, so a field merged in from another device is
+  // undone by the next save unless the shared bootstrap reads the copy back.
   useEffect(() => {
     // "phone": the books channel stays off here, since nothing on this shell
     // can open a PDF (docs/22).
     void initSync("phone").catch((e) => console.warn("sync init failed", e));
-    return onSyncPulled((paths) => {
-      if (paths.includes(SAVED_ARTICLES_FILE)) void refreshSavedArticles();
-      settingsPulled(paths);
+    return registerPullRoute({
+      ...KEPT_ARTICLES_PULL_ROUTE,
+      onPulled: () => void refreshSavedArticles(),
     });
   }, [refreshSavedArticles]);
 
@@ -178,6 +180,10 @@ export default function PhoneApp() {
             one above them would cost a phone a line of reading height for
             nothing. */}
         <main className="relative min-h-0 flex-1">
+          {/* The chat card table (docs/17's probe cards, the briefing card).
+              chat/ reads it from a context, so it never imports the domains that
+              fill it, and a shell that leaves this out renders no card at all. */}
+          <CardRegistryProvider>
           <InfoHome
             screen={infoScreenFor(base)}
             onNavigate={onNavigate}
@@ -189,8 +195,9 @@ export default function PhoneApp() {
             // Pull down on the briefing or on an article to open the chat about
             // it. Only those two: home and the kept list have nothing to talk
             // about, and a kept article is still invisible to the AI (docs/21),
-            // so a chat over one would not know what it was reading.
-            pullToAsk
+            // so a chat over one would not know what it was reading. The gesture
+            // is this shell's, so it is this shell that wraps the screen in it.
+            wrapScreen={(screen, children) => <PullToAsk {...screen}>{children}</PullToAsk>}
             // No corner cards over the chat. The reader pulled it down or
             // pressed Ask and pops it with a back, so the chat is a screen like
             // any other; a card that shrank it away would be a second way out,
@@ -217,6 +224,7 @@ export default function PhoneApp() {
           {base.kind === "savedArticle" && (
             <SavedArticleView article={base.article} backLabel="Saved" onBack={goBack} />
           )}
+          </CardRegistryProvider>
         </main>
 
         <Toast toasts={toasts} onDismiss={dismissToast} />

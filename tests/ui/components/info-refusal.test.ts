@@ -2,7 +2,7 @@
 // exits (src/ai/agent.ts) and the companion used to wire only one, so a refusal
 // — the round cap, or a call that outgrew the window — arrived through onError
 // and was drawn as a failed reply. It goes through onRefusal now and lands in
-// the row's `notice` (src/ui/components/chat/turn-rows.ts), which keeps it out
+// the row's `notice` (src/ai/turn-rows.ts), which keeps it out
 // of `text` and so out of the next request. The loop is driven by a scripted
 // fake stream: no provider, no network. Run: bun test.
 
@@ -23,8 +23,8 @@ import {
   holdsNoAnswer,
   refusalRow,
   replayableHistory,
-} from "../../../src/ui/components/chat/turn-rows";
-import type { ThreadMessage } from "../../../src/ui/components/common/types";
+} from "../../../src/ai/turn-rows";
+import type { ThreadMessage } from "../../../src/ui/components/chat/types";
 
 const MODEL = {} as Model<Api>;
 
@@ -53,7 +53,7 @@ const alwaysCallsTool: StreamFn = (_model: Model<Api>, _context: Context) => {
   return stream;
 };
 
-// The companion's row, patched the way InfoCall patches it — including blanking
+// The companion's row, patched the way use-info-call patches it — including blanking
 // the row when a tool starts, which is why a refusal never has anything written
 // under it.
 async function rowAfterRefusal(start: ThreadMessage): Promise<ThreadMessage> {
@@ -174,7 +174,7 @@ test("a notice-only row is cleared by the next attempt; a card row is not", () =
 // nothing else in this file can tell whether the companion wires it.
 test("the companion's agent turn wires the refusal exit", () => {
   const source = readFileSync(
-    new URL("../../../src/ui/components/info/InfoCall.tsx", import.meta.url),
+    new URL("../../../src/ui/components/info/use-info-call.ts", import.meta.url),
     "utf8",
   );
   expect(source).toContain("onRefusal:");

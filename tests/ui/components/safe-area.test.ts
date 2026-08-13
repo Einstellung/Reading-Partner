@@ -14,7 +14,7 @@ import {
   OVERLAY_GUTTER,
   safeCollisionPadding,
   sameInsets,
-} from "../../../src/ui/components/common/safe-area";
+} from "../../../src/ui/components/base/safe-area";
 
 const padding = (top: string, right: string, bottom: string, left: string) => ({
   paddingTop: top,

@@ -173,7 +173,7 @@
 /* The insets as a readable length. JS gets `env(safe-area-inset-*)` back
    unresolved from getComputedStyle, so an overlay that clamps itself in JS
    (Radix's popper takes its margin as a number) measures this hidden element's
-   padding instead — common/safe-area.ts. It carries no size and never paints. */
+   padding instead — base/safe-area.ts. It carries no size and never paints. */
 @utility safe-probe {
   position: fixed;
   top: 0;

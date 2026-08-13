@@ -17,7 +17,8 @@ import { contentHash } from "./content-hash";
 import { basename, decodeLegacyName } from "./path";
 
 const LIBRARY_DIR = "library";
-const LIBRARY_FILE = "library.json";
+// Exported so the shelf's pull route can name it once (reading/pull-routes.ts).
+export const LIBRARY_FILE = "library.json";
 
 export function libraryPdfPath(bookId: string): string {
   return `${LIBRARY_DIR}/${bookId}.pdf`;

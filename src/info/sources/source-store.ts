@@ -13,11 +13,19 @@
 
 import { BaseDirectory, exists, readTextFile } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
+import type { PullMatcher } from "../../platform/sync/pull-routes";
 import { validateDescriptor, type SourceDescriptor } from "./descriptor";
 import { parseSiteSessions, type SiteSessions } from "./site-session";
 import type { SourceHealth } from "./engine";
 
 export const SOURCES_FILE = "info-sources.json";
+
+// A source subscribed or turned on from another device: the collector acts on it
+// now rather than at the next wake, which can be half an hour away.
+export const SOURCES_PULL_ROUTE: PullMatcher = {
+  id: "sources",
+  matches: (path) => path === SOURCES_FILE,
+};
 const HEALTH_FILE = "info-source-health.json";
 const SESSIONS_FILE = "info-site-sessions.json";
 // Last known sign-in state per site. Like the health sidecar it is derived and

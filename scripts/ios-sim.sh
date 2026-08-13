@@ -15,6 +15,10 @@
 #     installs itself only while the dev server is on loopback, which is where
 #     the simulator wants it anyway.
 #
+# What these scenarios measure on a known-good tree is written down in
+# scripts/ios-sim/baseline.md — diff a run against that, not against a memory
+# of what the reader is supposed to do.
+#
 # Setup this expects (see docs/pitfall/117):
 #   brew trust facebook/fb && brew install idb-companion
 #   python3 -m venv /tmp/idbvenv && /tmp/idbvenv/bin/pip install fb-idb
@@ -340,5 +344,5 @@ case "${1:-}" in
   pinch) shift; cmd_pinch "$@" ;;
   gesture) shift; cmd_gesture "$@" ;;
   scenarios) cmd_scenarios ;;
-  *) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) sed -n '2,41p' "$0" | sed 's/^# \{0,1\}//' ;;
 esac

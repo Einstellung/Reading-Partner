@@ -5,8 +5,8 @@
 // writes no claim, takes part in no election, and constructs neither singleton.
 //
 // Everything real is injected: the claim files, the device settings, the clock,
-// the interval, the sync subscriptions, and the two singletons this session
-// drives. live.ts binds them. Nothing here imports live.ts back — the seven
+// the interval, the sync subscriptions and pull routes, and the two singletons
+// this session drives. live.ts binds them. Nothing here imports live.ts back — the seven
 // places the upper half of that file needs are handed in as callbacks, because
 // an import in that direction would be a cycle between the two files.
 
@@ -18,10 +18,6 @@ import {
   type AskRecord,
   type CollectorClaim,
 } from "./handoff";
-
-// A pulled path that is some reader's request. Matches this device's own file
-// too, which costs one read of a request it has already run.
-const ASK_PATH = /^info-ask-.+\.json$/;
 
 // The election result, held briefly. Every poll cycle asks, and the answer
 // changes on the scale of hours; re-reading every claim file for each of them
@@ -72,13 +68,15 @@ export interface CollectorSessionDeps<Handle = unknown> {
   // Which sites this machine currently has a session with. The yes-or-no
   // travels; the cookie does not leave the webview it was set in (docs/36).
   siteStates(): Promise<Record<string, boolean>>;
-  // The synced source list, by name, so a pull carrying it can be recognised.
-  sourcesFile: string;
   now(): number;
   setInterval(fn: () => void, ms: number): Handle;
   clearInterval(handle: Handle): void;
   subscribeSyncStatus(cb: (status: SessionSyncStatus) => void): () => void;
-  subscribePulled(cb: (paths: string[]) => void): () => void;
+  // The two pulls this session acts on, each subscribed through the route table
+  // (platform/sync/pull-routes). Which paths they mean is declared once, beside
+  // the file each belongs to, so nothing here filters a path list again.
+  subscribeSourcesPulled(cb: () => void): () => void;
+  subscribeAskPulled(cb: () => void): () => void;
   onExit(cb: () => void): void;
   // Publish the briefing this machine already had and never published. What it
   // reports is the caller's business, not the session's.
@@ -98,8 +96,6 @@ export interface CollectorSession {
   // Whether this machine is the one collecting. False for anything that is not a
   // running collector, so every caller can ask without knowing the role.
   amICollecting(): Promise<boolean>;
-  // A sync pass landed carrying these paths.
-  onPulled(paths: string[]): void;
   // Whether this session is running at all — not the election, just the switch.
   isCollecting(): boolean;
 }
@@ -244,13 +240,6 @@ export function createCollectorSession<Handle>(
     });
   }
 
-  function onPulled(paths: string[]): void {
-    // A source the reader subscribed to or turned on elsewhere: collect on it
-    // now rather than at the next wake, which can be half an hour away.
-    if (paths.includes(deps.sourcesFile)) deps.collector().foreground();
-    if (paths.some((p) => ASK_PATH.test(p))) void runPendingAsk();
-  }
-
   async function start(): Promise<void> {
     if (collecting) return;
     collecting = true;
@@ -294,7 +283,18 @@ export function createCollectorSession<Handle>(
       heartbeat = null;
     });
     watchRuns(deps.pipeline());
-    unsubPulled ??= deps.subscribePulled(onPulled);
+    if (unsubPulled === null) {
+      // A source the reader subscribed to or turned on elsewhere: collect on it
+      // now rather than at the next wake, which can be half an hour away. And a
+      // reader asking for a briefing, which is run when its file lands.
+      const offs = [
+        deps.subscribeSourcesPulled(() => deps.collector().foreground()),
+        deps.subscribeAskPulled(() => void runPendingAsk()),
+      ];
+      unsubPulled = () => {
+        for (const off of offs) off();
+      };
+    }
     await runPendingAsk();
     // Only now can the pipeline decide anything: its startup action asks whether
     // this machine holds the claim, and until this function returned it did not.
@@ -325,7 +325,6 @@ export function createCollectorSession<Handle>(
     stop,
     publishClaim,
     amICollecting,
-    onPulled,
     isCollecting: () => collecting,
   };
 }

@@ -4,7 +4,7 @@
 // separate screen rather than a reuse. The prose look is shared (proseCss).
 
 import { useMemo } from "react";
-import { ARTICLE_PROSE_CLASS, ARTICLE_PROSE_CSS, hideBrokenImage } from "../common/proseCss";
+import { ARTICLE_PROSE_CLASS, ARTICLE_PROSE_CSS, hideBrokenImage } from "../markdown/proseCss";
 import { articleHtmlForWebview } from "../../../platform/app/image-proxy";
 import { handleDelegatedLinkClick } from "../../../platform/app/external-link";
 import { formatPublishedAt, type SavedArticle } from "../../../reading/saved-articles";

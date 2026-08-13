@@ -10,7 +10,8 @@ import {
 import { writeTextAtomic } from "./atomic-fs";
 import { basename, decodeLegacyName, normalizeFilePath } from "./path";
 
-const TOPICS_FILE = "topics.json";
+// Exported so the shelf's pull route can name it once (reading/pull-routes.ts).
+export const TOPICS_FILE = "topics.json";
 
 export interface FileRef {
   path: string;

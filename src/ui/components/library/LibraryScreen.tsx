@@ -37,15 +37,15 @@ import {
 import { createTalk } from "../../../reading/talks";
 import TalkView from "../talk/TalkView";
 import { Button } from "../ui/button";
-import BookCard from "./BookCard";
-import { ADD_CARD, ADD_CARD_BOX, CARD_LABEL, LIBRARY_GRID, LIBRARY_PAGE } from "./cardStyles";
+import BookCard from "../shelf/BookCard";
+import { ADD_CARD, ADD_CARD_BOX, CARD_LABEL, LIBRARY_GRID, LIBRARY_PAGE } from "../shelf/cardStyles";
 import DeleteTopicButton from "./DeleteTopicButton";
-import { displayFileTitle, type BookMeta } from "./file-title";
+import { displayFileTitle, type BookMeta } from "../shelf/file-title";
 import RemoveFileButton from "./RemoveFileButton";
 import SavedArticleView from "./SavedArticleView";
-import TopicCard from "./TopicCard";
-import TopicNameDialog from "./TopicNameDialog";
-import { shelfOrder, TOPIC_GRID_COLUMNS_CLASS } from "./topic-shelf";
+import TopicCard from "../shelf/TopicCard";
+import NameDialog from "../common/NameDialog";
+import { shelfOrder, TOPIC_GRID_COLUMNS_CLASS } from "../shelf/topic-shelf";
 import ObservationSection from "./topic/ObservationSection";
 import TalksSection from "./topic/TalksSection";
 import TopicNav from "./topic/TopicNav";
@@ -56,7 +56,7 @@ import {
   readNavOpen,
   writeNavOpen,
   type TopicSection,
-} from "./topic/topic-nav";
+} from "../base/topic-nav";
 
 const GRID = `${LIBRARY_GRID} ${TOPIC_GRID_COLUMNS_CLASS}`;
 const PAGE_TITLE = "mt-0 mb-6 mx-0 text-[22px] font-bold";
@@ -313,7 +313,7 @@ function TopicLibrary(props: {
       )}
 
       {creating && (
-        <TopicNameDialog
+        <NameDialog
           open
           onOpenChange={setCreating}
           title="New topic"
@@ -324,7 +324,7 @@ function TopicLibrary(props: {
         />
       )}
       {renaming && (
-        <TopicNameDialog
+        <NameDialog
           open
           onOpenChange={(open) => !open && setRenaming(null)}
           title="Rename topic"

@@ -24,7 +24,7 @@ import {
   type SiteSessions,
   type SignInSite,
 } from "../../../info/sources/site-session";
-import { HIT_44 } from "../common/buttons";
+import { HIT_44 } from "../base/buttons";
 import { Button } from "../ui/button";
 import { Switch } from "../ui/switch";
 import { ProbeConfirmCard } from "./InfoCards";

@@ -51,7 +51,10 @@ export interface SyncFs {
   stat(path: string): Promise<{ mtime: number; size: number } | null>;
 }
 
-const ROOT_FILES = new Set([
+// Exported for tests/platform/sync/pull-coverage.test.ts, which walks it: every
+// synced file has to be claimed by a pull route or written down as having no
+// in-memory copy for a pull to go stale against.
+export const ROOT_FILES = new Set([
   "library.json",
   "reading-state.json",
   "settings.json",

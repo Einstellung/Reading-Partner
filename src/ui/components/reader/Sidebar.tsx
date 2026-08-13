@@ -13,11 +13,11 @@
 // reserving an in-flow column, so opening it costs the reader nothing.
 
 import type { ReactNode } from "react";
-import { IconHighlight, IconNotes, IconOutline, IconSparkle } from "../common/icons";
+import { IconHighlight, IconNotes, IconOutline, IconSparkle } from "../base/icons";
 import { Button } from "../ui/button";
 import OutlineView from "./OutlineView";
 import TraceList from "./TraceList";
-import type { Annotation } from "../common/types";
+import type { Annotation } from "./types";
 import type { Fulltext } from "../../../fulltext/types";
 
 export type SidebarTab = "outline" | "traces" | "prep" | "notes";
