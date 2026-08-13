@@ -21,6 +21,7 @@ import { recordParse } from "../../platform/app/structured-output";
 import { contentSystemPrompt, contentUserMessage, sanitizeFragment } from "./content";
 import { generateImage, resolveImageGenConfig, type ImageGenDeps } from "./imageGen";
 import { cleanTauriFetch } from "../../platform/app/tauri-fetch";
+import { loadMaterial } from "../talks/material";
 import { listAllTalks, loadTalk } from "../talks/store";
 import {
   parseSlidePlan,
@@ -122,15 +123,21 @@ export async function listDeckTalks(): Promise<DeckTalk[]> {
 // when there is one, and the figures available to cite. The chapter list is not
 // optional — the overview contains no chapter numbers, so a plan built on it
 // alone can only guess at sourceChapters (docs/29).
-async function planMaterial(bookId: string): Promise<PlanBook> {
-  const entry = await getLibraryEntry(bookId);
-  const title = entry?.title ?? bookId;
-
+//
+// The chapters come from the same projection the rehearsal walked
+// (talks/material.ts, rehearsal/skeleton.ts): the notes plan when there is one,
+// the PDF's table of contents when there is not, and the whole book as one
+// chapter when there is neither. Reading the notes state directly instead is
+// what left the second book of a talk with an empty chapter table — a talk is
+// listed as deck-ready when *any* of its materials has notes, but every material
+// is planned, and an empty table becomes the citable set validateDeckPlan checks
+// the model's citations against.
+export async function planMaterial(bookId: string): Promise<PlanBook> {
+  const material = await loadMaterial({ bookId, title: "" });
   const overview = (await readOverviewNote(bookId))?.trim() ?? "";
-  const st = await loadNotesState(bookId);
   const chapters: PlanChapter[] = [];
-  for (const c of st?.chapters ?? []) {
-    const note = c.status === "done" ? await readChapterNote(bookId, c.index) : null;
+  for (const c of material.skeleton.chapters) {
+    const note = c.hasNote ? await readChapterNote(bookId, c.index) : null;
     chapters.push({
       index: c.index,
       title: c.title,
@@ -140,12 +147,8 @@ async function planMaterial(bookId: string): Promise<PlanBook> {
       digest: note ? first40Words(note) : undefined,
     });
   }
-
-  const figures = ((await getFigures(bookId))?.figures ?? []).map((f) => ({
-    id: f.id,
-    caption: f.caption,
-  }));
-  return { bookId, title, overview, chapters, figures };
+  const figures = material.figures.map((f) => ({ id: f.id, caption: f.caption }));
+  return { bookId, title: material.title, overview, chapters, figures };
 }
 
 // This talk's settled outline: the one place the deck pipeline reads it, and the

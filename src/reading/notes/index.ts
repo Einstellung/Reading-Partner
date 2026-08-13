@@ -2,6 +2,7 @@
 
 export type {
   ChapterStatus,
+  BookChapter,
   NoteChapter,
   NotesState,
   OverviewStatus,
