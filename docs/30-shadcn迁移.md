@@ -6,7 +6,7 @@
 >
 > 一：preflight、token 映射、Button / Input / Textarea / Label / Switch / Separator 六个原语，以及 `BTN` / `BTN_PRIMARY` / `BTN_SM` / `BTN_SM_DANGER` / `FIELD` / `INPUT` 全部调用点。
 >
-> 二：Toast 换 Radix Toast，`DeleteThreadButton` 换 AlertDialog，浮层安全区那层（`ui/overlay.tsx` + `overlay-safe`）和浮层层级登记（`common/overlay-layer.ts`）立起来。
+> 二：Toast 换 Radix Toast，`DeleteThreadButton` 换 AlertDialog，浮层安全区那层（`ui/overlay.tsx` + `overlay-safe`）和浮层层级登记（`base/overlay-layer.ts`）立起来。
 >
 > 三：`MoreMenu` 换 DropdownMenu，速读的 Filtered 折叠换 Collapsible，锚定型浮层的安全区补进 `ui/overlay.tsx`。Popover 没用上，没引。
 >
@@ -76,7 +76,7 @@ sanitize 仍是安全边界。速读正文是第三方 HTML，任何组件替换
 
 应用代码仍然用相对路径 import，`@/` 只留给 shadcn 生成的文件。
 
-依赖：`class-variance-authority`、`clsx`、`tailwind-merge`、`@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-separator`、`@radix-ui/react-switch`，第二版加 `radix-ui` 和 `tw-animate-css`。没装 `lucide-react`（图标用项目自己的 `common/icons.tsx`）：`shadcn add` 生成的 dialog / dropdown-menu / select / checkbox 都从它取图标，每次都要换成 `common/icons.tsx` 的，或者连那一段一起删掉。五版下来 npm 依赖一个没再加，Select / Checkbox / Badge 全在 `radix-ui` 伞包和 cva 里。整包体积（JS + CSS，未压缩）第四版 3451.6 KB → 第五版 3478.0 KB，涨的 26.4 KB 是 Select 那一套；CSS 66.0 → 66.6 KB。
+依赖：`class-variance-authority`、`clsx`、`tailwind-merge`、`@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-separator`、`@radix-ui/react-switch`，第二版加 `radix-ui` 和 `tw-animate-css`。没装 `lucide-react`（图标用项目自己的 `base/icons.tsx`）：`shadcn add` 生成的 dialog / dropdown-menu / select / checkbox 都从它取图标，每次都要换成 `base/icons.tsx` 的，或者连那一段一起删掉。五版下来 npm 依赖一个没再加，Select / Checkbox / Badge 全在 `radix-ui` 伞包和 cva 里。整包体积（JS + CSS，未压缩）第四版 3451.6 KB → 第五版 3478.0 KB，涨的 26.4 KB 是 Select 那一套；CSS 66.0 → 66.6 KB。
 
 `radix-ui` 是伞包，现在的 shadcn 生成的就是 `import { AlertDialog } from "radix-ui"`，不再是单包。它 `sideEffects: false`，rollup 只把用到的那个打进去：第二版整套 Toast + AlertDialog 只让产物 JS 涨 55 KB（未压缩），产物里 grep 不到 Accordion / NavigationMenu / Menubar。第一版的单包留着不动，`button.tsx` 仍从 `@radix-ui/react-slot` 进。
 
@@ -155,7 +155,7 @@ className={cn(OVERLAY_SAFE.centered, "fixed top-[50%] left-[50%] ...", className
 
 - `centered`（Dialog / AlertDialog）= `overlay-safe` 这个 `@utility`，在 `styles.css` 里定义，同时管 `max-width`、`max-height` 和 `overflow-y: auto`。居中的盒子只能缩不能挪，所以每根轴夹的是两侧 inset 里较大的那个，另有 4 个 spacing 单位的槽宽兜底。
 - `bottom`（toast viewport）= `bottom-safe-6`。贴边的浮层只需要它贴的那根轴，横向由自己的 `max-w` 管。
-- `anchored`（DropdownMenu，以后的 Popover / Select）分两半，两半都要。位置那半是 Radix 的：content 上传 `collisionPadding={useOverlaySafePadding()}`，每边取 max(inset, 8px)。JS 读不到 `env()`（坑 84），所以 inset 是从一个隐藏探针元素的计算 padding 量来的（`common/safe-area.ts` + `styles.css` 的 `safe-probe`），在挂载和 resize 时量。尺寸那半是 CSS 的：`max-w-(--radix-popper-available-width) max-h-(--radix-popper-available-height)`，这两个变量是 Radix 按同一份 collisionPadding 算出来的剩余空间，配 content 自带的 `overflow-y: auto`，把「比它能待的地方还大」变成盒子内部滚动。用 popper 级的变量而不是每个组件自己的别名，同一串对每个 popper 浮层都成立。
+- `anchored`（DropdownMenu，以后的 Popover / Select）分两半，两半都要。位置那半是 Radix 的：content 上传 `collisionPadding={useOverlaySafePadding()}`，每边取 max(inset, 8px)。JS 读不到 `env()`（坑 84），所以 inset 是从一个隐藏探针元素的计算 padding 量来的（`base/safe-area.ts` + `styles.css` 的 `safe-probe`），在挂载和 resize 时量。尺寸那半是 CSS 的：`max-w-(--radix-popper-available-width) max-h-(--radix-popper-available-height)`，这两个变量是 Radix 按同一份 collisionPadding 算出来的剩余空间，配 content 自带的 `overflow-y: auto`，把「比它能待的地方还大」变成盒子内部滚动。用 popper 级的变量而不是每个组件自己的别名，同一串对每个 popper 浮层都成立。
 
   锚定型不写 `overlay-safe`：那条夹的是居中盒，锚定盒是移动而不是收缩。也不写 `anchor-safe`：那个 `@utility` 是给自己算坐标的 `position: fixed` 浮层用的（`CallBubble`），Radix 的坐标写在 popper 包装节点的 transform 上，`left`/`top` 夹取碰不到它。
 
@@ -175,7 +175,7 @@ className={cn(OVERLAY_SAFE.centered, "fixed top-[50%] left-[50%] ...", className
 
 `asChild` 干脆不过 `cn()`，它把两串 className 拼起来（坑 87）。用 `asChild` 保住原来的标签时，样式写在包装组件上而不是子元素上。
 
-**层级登记**。content 组件的 children 里放一个 `<OverlayLayer />`，它不渲染 DOM，只在挂载期间给 `common/overlay-layer.ts` 的计数加一。放在 children 里而不是组件顶层：AlertDialogContent 一直在树上，真正随开关挂载卸载的是 Portal 里那棵。
+**层级登记**。content 组件的 children 里放一个 `<OverlayLayer />`，它不渲染 DOM，只在挂载期间给 `base/overlay-layer.ts` 的计数加一。放在 children 里而不是组件顶层：AlertDialogContent 一直在树上，真正随开关挂载卸载的是 Portal 里那棵。
 
 计数是给应用自己那批「点外面就关」的浮层看的（`CallBubble`、`AnnotationPopup`，第三版还有 `MoreMenu`、`SourcesPage` 的 HealthDot、`PenToolbar`）。它们用 `ref.contains(e.target)` 判断，而 Portal 出去的子树永远不在那个 ref 里，于是落在对话框按钮上的那一按被读成「按在外面」，气泡先关掉，按钮再也收不到 click。改成先问一句 `if (overlayLayerOpen()) return;`：有层开着的时候，任何一按都属于那一层。用计数不用 DOM 归属，是因为要挡住的不只是 content，还有背板和 popper 的包装节点。
 
@@ -321,7 +321,7 @@ trigger 的宽度要自己占住：原生 `<select>` 按最宽的 option 定宽�
 
 **顺手收掉的紫**。第一版说 `#6d5ae0` 全部改掉，其实还剩 7 处：速读正文的链接色（`proseCss.ts`）、`PhoneHome` 的 "Open →"、`InfoCards` 的活动圆点、`PullToAsk` armed 态的药丸边和底、以及 Badge 收进来的两处。现在 `src/` 里除 `styles.css` 的注释外不再出现这个值。
 
-**删掉的过渡期东西**：`ui/input.tsx` 的 `inputClassName` 改名 `fieldClassName`（它现在是两个原语共用的字段外衣，不再是"给还没有原语的 `<select>` 顶着"）、`InfoCards` 的 `PIPE_BADGE` 常量、`settings/cardStyles.ts` 和 `common/buttons.ts` 里已经过时的注释。`common/buttons.ts` 只剩 `HIT_44`；`cardStyles.ts` 只剩 `CARD`，六个设置卡片在用，留着。
+**删掉的过渡期东西**：`ui/input.tsx` 的 `inputClassName` 改名 `fieldClassName`（它现在是两个原语共用的字段外衣，不再是"给还没有原语的 `<select>` 顶着"）、`InfoCards` 的 `PIPE_BADGE` 常量、`settings/cardStyles.ts` 和 `base/buttons.ts` 里已经过时的注释。`base/buttons.ts` 只剩 `HIT_44`；`cardStyles.ts` 只剩 `CARD`，六个设置卡片在用，留着。
 
 **新增的护栏**：`tests/ui/components/primitive-contract.test.ts`，盯 select / checkbox / badge 里一次 `shadcn add` 就会消失的那些约定（`position="popper"`、`collisionPadding`、`<OverlayLayer />`、44px、`HIT_44`、不 import lucide、Badge 的两个变体）。`dialog-contract` 是它的第四版同类。
 
@@ -513,7 +513,7 @@ iPad 上驱动一轮之后回来改的两处。
 - 功能：通用（AI 输出语言）、阅读（自动笔记、笔手输入）。简报现在没有开关，不占位，等后台采集开关进来再加一段。
 - 可选：Semantic Scholar key、语音输入、插图生成。页首一句说明只覆盖语音和插图那两把 key——它们在 `credentials.json`、不同步、每台设备各配一次；Semantic Scholar 是普通设置，跟着 `settings.json` 同步。
 
-`SettingsView.tsx` 只剩壳：标题行、标签条、底部一行版本与许可证。三个面板是 `settings/AccountPanel.tsx`、`FeaturesPanel.tsx`、`OptionalPanel.tsx`，小标题走 `settings/SectionHeading.tsx`。设置项的语义、默认值和存储字段一个没动。
+`SettingsView.tsx` 只剩壳：标题行、标签条、底部一行版本与许可证。三个面板是 `settings/AccountPanel.tsx`、`FeaturesPanel.tsx`、`OptionalPanel.tsx`，小标题走 `settings/SettingsSection.tsx`。设置项的语义、默认值和存储字段一个没动。
 
 高度链：页面盒仍是 `fixed inset-0`，里面那列改成 `h-full` 的 flex 列，标题行和版本行 `shrink-0`，`Tabs` 是 `min-h-0 flex-1`，只有 `TabsContent` 带 `overflow-y-auto`。标签条因此不跟着滚。链上任何一处丢掉 `min-h-0`，flex 项就不肯缩到内容以下，滚动退回外层，标签条随面板一起滚走。
 
