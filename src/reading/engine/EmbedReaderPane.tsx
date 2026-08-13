@@ -3,12 +3,13 @@
 // plus the callbacks App wires for annotations, threads and storage.
 
 import { memo, useCallback, useEffect, useRef } from "react";
-import EmbedPdfView, {
-  type AnnotationAnchor,
-  type EmbedPdfHandle,
-  type EmbedViewState,
-  type EmbedViewStats,
-} from "./EmbedPdfView";
+import EmbedPdfView from "./EmbedPdfView";
+import type {
+  AnnotationAnchor,
+  EmbedPdfHandle,
+  EmbedViewState,
+  EmbedViewStats,
+} from "./types";
 import type { ZoteroAnnotation } from "./convert";
 import { popupEffect } from "./annotation-selection";
 import {

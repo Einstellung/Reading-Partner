@@ -35,4 +35,4 @@ body 变成一个每字节一个元素的 JS 数字数组，而且它是 `client
 - 每块单独重试（3 次），每块 60s 期限。整本书没有期限是因为 26 MB 在慢链路上本来就要几分钟；一块 1 MB 有了确定的大小，60s 相当于 17 KB/s 的地板，比这更慢这本书一趟里也传不完。
 - 小于 5 MB 的书还是走 multipart 一次发完，没改。它的峰值同样是 20x，5 MB 就是 100 MB——在阈值以下，暂时不值得复杂化。
 
-阅读路径顺带减了拷贝：`openInReader` 原本把同一本书 slice 五份（`bufferRef`、figures、fulltext、embedDoc，加上原始 bytes），但 `fulltext/extract.ts`、`figures/store.ts`、`figures/render.ts`、`EmbedPdfView` 的 `wireEngine` 每一个都自己 `buffer.slice(0)` 之后才交给 pdf.js / PDFium，谁都不会 detach 传进去的那份。改成共用一份，开一本 26 MB 的书从 5 份降到 2 份（原始 bytes + 共用 buffer），阅读期间常驻从 78 MB 降到 52 MB（共用 buffer + PDFium wasm 堆）。
+阅读路径顺带减了拷贝：`openInReader` 原本把同一本书 slice 五份（`bufferRef`、figures、fulltext、embedDoc，加上原始 bytes），但 `fulltext/extract.ts`、`figures/store.ts`、`figures/render.ts`、`wire-engine.ts` 的 `wireEngine` 每一个都自己 `buffer.slice(0)` 之后才交给 pdf.js / PDFium，谁都不会 detach 传进去的那份。改成共用一份，开一本 26 MB 的书从 5 份降到 2 份（原始 bytes + 共用 buffer），阅读期间常驻从 78 MB 降到 52 MB（共用 buffer + PDFium wasm 堆）。

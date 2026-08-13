@@ -31,6 +31,6 @@ Chromium 里量到的失败态：`scrollLeft=4904`，应该是 `5324`；可见�
 - `settleGap` 说缺的是哪一半，宿主只补那一半：缺 zoom 就重发 `requestZoom`，缺模型就走「先切到另一个 strategy 再切回来」，缺 DOM 就只能等。
 - `centeredScrollX` 按浏览器的方式夹一次目标值，`landedAt` 用 2px 容差比对 `el.scrollLeft`——不夹的话最后一页永远算「没到」。
 
-宿主侧（`EmbedPdfView.setLayout` / `turnToPage`）：几何合格才居中，居中后继续复核落点，没到就重发（最多 3 次），整个过程有 24 帧的上限，到点就按现有几何居中一次收工（等于旧行为）。更新的一次切布局或翻页会让旧的 settle 直接让位。
+宿主侧（`src/reading/engine/wire-engine.ts` 的 `setLayout` / `turnToPage`）：几何合格才居中，居中后继续复核落点，没到就重发（最多 3 次），整个过程有 24 帧的上限，到点就按现有几何居中一次收工（等于旧行为）。更新的一次切布局或翻页会让旧的 settle 直接让位。
 
 实测：834×1194 和 1024×1366（两个 fit 相等）、900×1000（两个 fit 不等）三种视口，正反切、连切、首页末页、退出临时放大后翻页全部落在整页上；人为吞掉一到两次横向 `scrollTo` 也能自愈，旧代码则永久停在半页。

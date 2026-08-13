@@ -5,7 +5,7 @@ export type {
   EmbedTool,
   EmbedViewState,
   EmbedViewStats,
-} from "./EmbedPdfView";
+} from "./types";
 export {
   embedToZotero,
   zoteroToEmbed,
