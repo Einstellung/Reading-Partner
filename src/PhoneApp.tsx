@@ -181,8 +181,8 @@ export default function PhoneApp() {
             nothing. */}
         <main className="relative min-h-0 flex-1">
           {/* The chat card table (docs/17's probe cards, the briefing card).
-              The two shells are the only files that name it: chat/ reads it
-              from this context, so it never imports the domains that fill it. */}
+              chat/ reads it from a context, so it never imports the domains that
+              fill it, and a shell that leaves this out renders no card at all. */}
           <CardRegistryProvider>
           <InfoHome
             screen={infoScreenFor(base)}

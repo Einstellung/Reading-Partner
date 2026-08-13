@@ -3,8 +3,8 @@
 // The table itself is assembled one level up (ui/components/cardRegistry.ts)
 // from the domains that contribute cards. If chat/ imported it, chat would
 // import info/ and reader/, which both import chat/ back for the card protocol —
-// so the table arrives through a provider instead, and the only files that name
-// it are the two shells that mount a chat.
+// so the table arrives through a provider instead, and the only file that names
+// both is CardRegistryProvider, which each shell mounts around its chat.
 //
 // Null rather than an empty table by default: a chat rendered outside a provider
 // has no cards at all, and a card part reaching it is a wiring bug rather than a

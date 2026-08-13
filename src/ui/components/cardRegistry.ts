@@ -8,8 +8,8 @@
 //
 // It sits above chat/, info/ and reader/ rather than inside chat/, because
 // gathering means importing all three and chat is what the other two import for
-// the card protocol. A shell mounting a chat hands it down through
-// chat/cardRegistryContext.
+// the card protocol. It reaches a chat through CardRegistryProvider, which is
+// what a shell mounts.
 
 import type { CardRegistry } from "./chat/chatParts";
 import { INFO_CARD_REGISTRY } from "./info/InfoCards";
