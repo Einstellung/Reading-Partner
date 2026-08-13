@@ -125,11 +125,18 @@ export async function readJson<T>(
   }
 }
 
-/** readJson for a store whose empty state is a shape rather than a null. */
+/**
+ * readJson for a store whose empty state is a shape rather than a null. The
+ * fallback is copied before it is returned, so a caller may hold its empty
+ * state in a module-level constant: what one read hands back and the caller
+ * then mutates is never what the next read hands back. The value is a JSON
+ * store's empty state, which structuredClone always handles.
+ */
 export async function readJsonOr<T>(
   file: string,
   fallback: T,
   validate?: (raw: unknown) => T | null,
 ): Promise<T> {
-  return (await readJson<T>(file, validate)) ?? fallback;
+  const value = await readJson<T>(file, validate);
+  return value ?? structuredClone(fallback);
 }

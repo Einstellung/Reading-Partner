@@ -70,6 +70,14 @@ const validate = (raw: unknown): Store | null => {
   return s && typeof s === "object" && s.books ? s : null;
 };
 
+// validate may normalize as well as accept, so what readJson returns is not
+// always the object it parsed: this one fills in an absent `marks`.
+const normalize = (raw: unknown): Marks | null => {
+  const m = raw as Partial<Marks> | null;
+  if (!m || typeof m !== "object" || typeof m.version !== "number") return null;
+  return { version: m.version, marks: m.marks ?? {} };
+};
+
 const reports: { file: string; savedAs: string | null }[] = [];
 onCorruptFile((r) => reports.push(r));
 
@@ -145,6 +153,12 @@ test("readJson returns the parsed value", async () => {
   expect(warnings).toEqual([]);
 });
 
+test("readJson hands back what validate returned, not what it was given", async () => {
+  files.set("info-pool-marks.json", JSON.stringify({ version: 3 }));
+  expect(await readJson("info-pool-marks.json", normalize)).toEqual({ version: 3, marks: {} });
+  expect(warnings).toEqual([]);
+});
+
 test("readJson reads a missing file as null without warning", async () => {
   expect(await readJson<Marks>("info-pool-marks.json")).toBeNull();
   expect(warnings).toEqual([]);
@@ -177,9 +191,17 @@ test("readJson warns when validate turns the shape down", async () => {
 
 test("readJsonOr falls back on every read that produces nothing", async () => {
   const empty: Marks = { version: 1, marks: {} };
-  expect(await readJsonOr("info-pool-marks.json", empty)).toBe(empty);
+  expect(await readJsonOr("info-pool-marks.json", empty)).toEqual(empty);
   files.set("info-pool-marks.json", "not json");
-  expect(await readJsonOr("info-pool-marks.json", empty)).toBe(empty);
+  expect(await readJsonOr("info-pool-marks.json", empty)).toEqual(empty);
   files.set("info-pool-marks.json", JSON.stringify({ version: 2, marks: { a: 1 } }));
   expect(await readJsonOr("info-pool-marks.json", empty)).toEqual({ version: 2, marks: { a: 1 } });
+});
+
+test("the fallback is copied, so one caller's edits cannot reach the next", async () => {
+  const empty: Marks = { version: 1, marks: {} };
+  const first = await readJsonOr("info-pool-marks.json", empty);
+  expect(first).not.toBe(empty);
+  first.marks.a = 1;
+  expect(await readJsonOr("info-pool-marks.json", empty)).toEqual({ version: 1, marks: {} });
 });
