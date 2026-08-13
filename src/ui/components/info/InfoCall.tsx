@@ -44,6 +44,7 @@ import { Badge } from "../ui/badge";
 import CallView from "../chat/CallView";
 import ChatPipCard from "../chat/ChatPipCard";
 import { callLayout, navigateAway } from "../chat/call-layout";
+import { refusalRow } from "../chat/turn-rows";
 import { appendRunningTool, resolveToolStatus } from "../common/toolTrace";
 import ReadingPipCard from "../chat/ReadingPipCard";
 import {
@@ -463,6 +464,14 @@ export function InfoCall({
         setStreaming(false);
         abortRef.current = null;
         if (finalText.trim()) appendMessage(bookId, anchor.threadId, { role: "ai", text: finalText, ts: Date.now() });
+      },
+      // The loop declined mid-turn rather than failing to reach the model. It is
+      // not an error and there is nothing to retry, so it is not dressed as one
+      // (turn-rows.ts; App and useTalk pass this too).
+      onRefusal: (m) => {
+        patchLast((prev) => refusalRow(prev, m));
+        setStreaming(false);
+        abortRef.current = null;
       },
       onError: (m) => {
         if (controller.signal.aborted) {

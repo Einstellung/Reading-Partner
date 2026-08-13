@@ -40,7 +40,7 @@ import {
   cardRow,
   insertBeforeLast,
   nextCardId,
-  rehydrateParts,
+  rehydrateMessage,
   toPersistedCardPart,
 } from "../chat/chatParts";
 
@@ -52,12 +52,7 @@ function threadIdOf(talkId: string): string {
 }
 
 function toDisplay(msgs: StoredMessage[]): ThreadMessage[] {
-  return msgs.map((m) => ({
-    role: m.role,
-    text: m.text,
-    ts: m.ts,
-    ...(m.parts && m.parts.length ? { parts: rehydrateParts(m.parts) } : {}),
-  }));
+  return msgs.map(rehydrateMessage);
 }
 
 export interface TalkController {

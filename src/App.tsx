@@ -105,7 +105,7 @@ import Toast, { useToasts } from "./ui/components/common/Toast";
 import SettingsButton from "./ui/components/common/SettingsButton";
 import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
 import type { Annotation as PopupAnnotation, PendingImage, ToolStatus, ToolType } from "./ui/components/common/types";
-import { rehydrateParts, type ChatPart } from "./ui/components/chat/chatParts";
+import { rehydrateMessage, type ChatPart } from "./ui/components/chat/chatParts";
 import { refreshInfoCollector } from "./info/briefing/live";
 
 // The AI pen maps to the engine's underline tool in a fixed purple (the palette's
@@ -154,15 +154,10 @@ type CallMessage = {
 
 // Persisted thread messages -> display messages. Image bytes are loaded
 // separately (hydrateThreadImages), so images start absent here. Stored parts
-// come back as render parts, so a rehearsal decision card is still there when
-// the conversation is reopened days later.
+// come back as render parts (rehydrateMessage), so a rehearsal decision card is
+// still there when the conversation is reopened days later.
 function toDisplayMessages(msgs: ThreadMessage[]): CallMessage[] {
-  return msgs.map((m) => ({
-    role: m.role,
-    text: m.text,
-    ts: m.ts,
-    ...(m.parts && m.parts.length ? { parts: rehydrateParts(m.parts) } : {}),
-  }));
+  return msgs.map(rehydrateMessage);
 }
 
 // A live AI "call" — one thread anchored on one AI-pen underline (docs/03).
