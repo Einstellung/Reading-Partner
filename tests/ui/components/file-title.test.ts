@@ -1,4 +1,4 @@
-// What a book is called on screen (src/ui/components/library/file-title.ts).
+// What a book is called on screen (src/ui/components/shelf/file-title.ts).
 // The name on disk is what a download left behind, and a pirate site's domains
 // were being read out on the card; the author in the same kind of brackets is
 // worth keeping, so this cannot be "drop every parenthesis". Run: bun test.
@@ -8,7 +8,7 @@ import {
   displayFileTitle,
   readingLabel,
   readingProgress,
-} from "../../../src/ui/components/library/file-title";
+} from "../../../src/ui/components/shelf/file-title";
 
 test("the source brackets go and the author's stay", () => {
   expect(displayFileTitle("智能简史 (麦克斯·班尼特) (z-library.sk, 1lib.sk, z-lib.sk).pdf")).toBe(

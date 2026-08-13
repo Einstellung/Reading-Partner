@@ -79,6 +79,7 @@ const LAYER: Record<string, Layer> = {
   "ui/components/markdown": "ui",
   "ui/components/phone": "ui",
   "ui/components/reader": "ui",
+  "ui/components/shelf": "ui",
   "ui/components/settings": "ui",
   "ui/components/talk": "ui",
   "ui/components/ui": "ui",
@@ -106,14 +107,6 @@ const MAY_IMPORT: Record<Layer, Layer[]> = {
 // test as loudly as a new one appears. Delete the line with the fix, and the
 // whole mechanism with the last one.
 const KNOWN_CYCLES: [string, string][] = [
-  // B1.4: the card files move to ui/components/shelf. Deleting these two lines
-  // is not enough on its own: ui/components/talk imports ui/components/library/topic
-  // directly, an edge on no pair here, and library -> talk -> library/topic ->
-  // library is a real cycle that stays out of the report only because two of its
-  // three edges are on this list. That import has to go with them, or the
-  // acyclic test goes red on a cycle nobody listed.
-  ["ui/components/library", "ui/components/library/topic"],
-  ["ui/components/library", "ui/components/talk"],
   // B1.5: cardRegistry moves up to ui/components and arrives through a context.
   ["ui/components/chat", "ui/components/info"],
   ["ui/components/chat", "ui/components/reader"],
