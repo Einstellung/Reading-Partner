@@ -1,5 +1,11 @@
-// The compression ladder: what gets given up, in what order, what the user is
-// told, and when the call is refused instead (src/budget/ladder.ts). Pure.
+// The compression ladder: how far a call is walked down before it is refused,
+// what the caller is told for it, and the tool-result stubs (src/budget/ladder.ts).
+// Pure.
+//
+// The mechanism is all that is here. Which rungs a real turn has and what each
+// one says is a domain's business, and is pinned where the ladder is declared:
+// tests/reading/ladder.test.ts and tests/reading/talks/ladder.test.ts. This file
+// walks a made-up ladder so the walking cannot be confused with the table.
 // Run: bun test.
 
 import { expect, test } from "bun:test";
@@ -10,34 +16,39 @@ import {
   planReductions,
   stubEarlyToolResults,
   toolResultStub,
-  LADDER,
   REFUSE_EXHAUSTED,
   REFUSE_FLOOR_OVER,
   type LadderInput,
-  type ReductionId,
+  type Rung,
 } from "../../src/budget/ladder";
 
 const WINDOW = 200_000;
 // Chat needs 4096 of output, so a call fits at or below this many tokens.
 const FITS_AT = WINDOW - PI_CONTEXT_SAFETY_TOKENS - 4096;
 
+// A ladder of four: two rungs that go without a word and two that owe the caller
+// a clause, in that order. Not a real one — the point is that the walk knows
+// nothing about what it is walking.
+type TestId = "quiet-first" | "quiet-second" | "spoken-first" | "spoken-second";
+const RUNGS: readonly Rung<TestId>[] = [
+  { id: "quiet-first" },
+  { id: "quiet-second" },
+  { id: "spoken-first", notice: "the first thing worth saying" },
+  { id: "spoken-second", notice: "the second thing worth saying" },
+];
+
 // Every rung available and worth 5,000 tokens, so the order is the only thing
 // that decides which ones get used.
-const EVEN: Record<ReductionId, number> = {
-  "figure-catalog": 5_000,
-  "reader-profile": 5_000,
-  "notes-overview": 5_000,
-  "booklist-thin": 5_000,
-  "observation-trim": 5_000,
-  "rehearsal-notes": 5_000,
-  "tool-result-stubs": 5_000,
-  "classroom-inline": 5_000,
-  "rehearsal-marks": 5_000,
-  "history-trim": 5_000,
+const EVEN: Record<TestId, number> = {
+  "quiet-first": 5_000,
+  "quiet-second": 5_000,
+  "spoken-first": 5_000,
+  "spoken-second": 5_000,
 };
 
-function plan(over: Partial<LadderInput> = {}) {
-  return planReductions({
+function plan(over: Partial<LadderInput<TestId>> = {}) {
+  return planReductions<TestId>({
+    rungs: RUNGS,
     contextWindow: WINDOW,
     purpose: "chat",
     used: FITS_AT,
@@ -46,33 +57,6 @@ function plan(over: Partial<LadderInput> = {}) {
     ...over,
   });
 }
-
-// The ladder is a contract twice over: the order decides what a reader loses
-// first, and the wording is what they are shown for it. Both are pinned here
-// byte for byte. Getting either wrong is silent — an over-budget call comes back
-// one token long with a normal `done` and no error (docs/pitfall/65) — so the
-// only thing standing between a mis-ordered ladder and a reader who never learns
-// what was left out is this table.
-test("the ladder's order and its wording are pinned", () => {
-  expect(LADDER.map((r) => [r.id, r.notice ?? ""])).toEqual([
-    ["figure-catalog", ""],
-    ["reader-profile", ""],
-    ["notes-overview", ""],
-    ["booklist-thin", ""],
-    ["observation-trim", ""],
-    ["rehearsal-notes", ""],
-    ["tool-result-stubs", ""],
-    [
-      "classroom-inline",
-      "the book didn't fit in context, so I read the pages I needed instead of having all of it in view",
-    ],
-    [
-      "rehearsal-marks",
-      "your highlights are shortened here to fit; ask me to pull a chapter's marks up in full and I'll read them again",
-    ],
-    ["history-trim", "earlier turns of this conversation were left out to make room"],
-  ]);
-});
 
 test("a call that fits gives up nothing and says nothing", () => {
   const p = plan({ used: 50_000 });
@@ -84,80 +68,36 @@ test("a call that fits gives up nothing and says nothing", () => {
 
 test("the ladder stops at the first rung that makes the call fit", () => {
   const p = plan({ used: FITS_AT + 1 });
-  expect(p.apply).toEqual(["figure-catalog"]);
+  expect(p.apply).toEqual(["quiet-first"]);
   expect(p.freed).toBe(5_000);
   expect(p.outcome).toBe("ok");
-  // Redundancy went, so there is nothing to tell the user.
+  // A silent rung went, so there is nothing to tell the caller.
   expect(p.notice).toBe("");
 });
 
 test("rungs are given up in the declared order, cheapest loss first", () => {
-  const p = plan({ used: FITS_AT + 22_000 });
-  expect(p.apply).toEqual([
-    "figure-catalog",
-    "reader-profile",
-    "notes-overview",
-    "booklist-thin",
-    "observation-trim",
-  ]);
+  const p = plan({ used: FITS_AT + 6_000 });
+  expect(p.apply).toEqual(["quiet-first", "quiet-second"]);
   expect(p.outcome).toBe("ok");
   expect(p.notice).toBe("");
 });
 
-test("tool-result stubs come after every silent drop and before any evidence", () => {
-  const p = plan({ used: FITS_AT + 31_000 });
-  expect(p.apply[p.apply.length - 1]).toBe("tool-result-stubs");
-  expect(p.apply).not.toContain("classroom-inline");
-  expect(p.notice).toBe("");
-});
-
-// The rehearsal's inlined chapter note is tier 2 like the tool results: read_chapter_note
-// fetches it straight back, so it goes without a word, and it goes before the
-// results the model asked for itself.
-test("the rehearsal's chapter note goes silently, ahead of the tool results", () => {
-  const p = plan({ used: FITS_AT + 26_000 });
-  expect(p.apply[p.apply.length - 1]).toBe("rehearsal-notes");
-  expect(p.apply).not.toContain("tool-result-stubs");
-  expect(p.notice).toBe("");
-});
-
-test("dropping the inlined book is told to the user", () => {
-  const p = plan({ used: FITS_AT + 36_000 });
-  expect(p.apply).toContain("classroom-inline");
-  expect(p.apply).not.toContain("history-trim");
+// A rung that owes a clause contributes it as soon as it is taken, and the
+// clauses arrive in the order the rungs did.
+test("a rung with something to say puts it in the notice, in ladder order", () => {
+  const p = plan({ used: FITS_AT + 16_000 });
+  expect(p.apply).toEqual(["quiet-first", "quiet-second", "spoken-first", "spoken-second"]);
   expect(p.notice).toBe(
-    "Note: the book didn't fit in context, so I read the pages I needed instead of having all of it in view.",
-  );
-});
-
-// The reader's own marks are evidence, so shortening them is said out loud — and
-// the line says how to get them back, because read_annotations really can.
-test("shortening the reader's marks is told to the user", () => {
-  const p = plan({ used: FITS_AT + 41_000 });
-  expect(p.apply[p.apply.length - 1]).toBe("rehearsal-marks");
-  expect(p.apply).not.toContain("history-trim");
-  expect(p.notice).toContain("your highlights are shortened here to fit");
-});
-
-// history-trim is last on purpose: the fallback distillation that is supposed to
-// preserve an older stretch of thread is fired and forgotten, so a trim before
-// it lands is a straight loss of the conversation.
-test("history is the last thing given up, and it is told to the user", () => {
-  const p = plan({ used: FITS_AT + 46_000 });
-  expect(p.apply[p.apply.length - 1]).toBe("history-trim");
-  expect(p.notice).toBe(
-    "Note: the book didn't fit in context, so I read the pages I needed instead of having all of it in view; " +
-      "your highlights are shortened here to fit; ask me to pull a chapter's marks up in full and I'll read them again; " +
-      "earlier turns of this conversation were left out to make room.",
+    "Note: the first thing worth saying; the second thing worth saying.",
   );
 });
 
 test("rungs with nothing to give are skipped, not counted", () => {
   const p = plan({
     used: FITS_AT + 6_000,
-    savings: { "figure-catalog": 0, "reader-profile": 5_000, "notes-overview": 5_000 },
+    savings: { "quiet-first": 0, "quiet-second": 5_000, "spoken-first": 5_000 },
   });
-  expect(p.apply).toEqual(["reader-profile", "notes-overview"]);
+  expect(p.apply).toEqual(["quiet-second", "spoken-first"]);
   expect(p.freed).toBe(10_000);
 });
 
@@ -170,7 +110,7 @@ test("a call whose untouchable part alone is over is refused, not shrunk", () =>
 
 test("a call still over after every rung is refused with the other reason", () => {
   const p = plan({ used: FITS_AT + 100_000, floorTokens: 10_000, savings: EVEN });
-  expect(p.apply.length).toBe(LADDER.length);
+  expect(p.apply.length).toBe(RUNGS.length);
   expect(p.outcome).toBe("refuse");
   expect(p.refusal).toBe(REFUSE_EXHAUSTED);
 });
@@ -178,13 +118,13 @@ test("a call still over after every rung is refused with the other reason", () =
 test("a bigger output floor moves the line", () => {
   // 5,000 tokens of room left: plenty for a chat reply, not enough for a plan.
   const used = WINDOW - PI_CONTEXT_SAFETY_TOKENS - 5_000;
-  const args = { contextWindow: WINDOW, used, floorTokens: 1_000, savings: {} };
-  expect(planReductions({ ...args, purpose: "chat" }).apply).toEqual([]);
-  expect(planReductions({ ...args, purpose: "plan" }).outcome).toBe("refuse");
+  const args = { rungs: RUNGS, contextWindow: WINDOW, used, floorTokens: 1_000, savings: {} };
+  expect(planReductions({ ...args, purpose: "chat" as const }).apply).toEqual([]);
+  expect(planReductions({ ...args, purpose: "plan" as const }).outcome).toBe("refuse");
   // With something to give, the same plan call reduces its way back over the line.
-  const reduced = planReductions({ ...args, purpose: "plan", savings: EVEN });
+  const reduced = planReductions({ ...args, purpose: "plan" as const, savings: EVEN });
   expect(reduced.outcome).toBe("ok");
-  expect(reduced.apply).toEqual(["figure-catalog", "reader-profile", "notes-overview"]);
+  expect(reduced.apply).toEqual(["quiet-first", "quiet-second", "spoken-first"]);
 });
 
 test("a model with no declared window never triggers the ladder", () => {
@@ -194,10 +134,10 @@ test("a model with no declared window never triggers the ladder", () => {
 });
 
 test("budgetNotice only speaks for the rungs that owe an explanation", () => {
-  expect(budgetNotice([])).toBe("");
-  expect(budgetNotice(["figure-catalog", "observation-trim", "tool-result-stubs"])).toBe("");
-  expect(budgetNotice(["history-trim"])).toBe(
-    "Note: earlier turns of this conversation were left out to make room.",
+  expect(budgetNotice(RUNGS, [])).toBe("");
+  expect(budgetNotice(RUNGS, ["quiet-first", "quiet-second"])).toBe("");
+  expect(budgetNotice(RUNGS, ["spoken-second"])).toBe(
+    "Note: the second thing worth saying.",
   );
 });
 

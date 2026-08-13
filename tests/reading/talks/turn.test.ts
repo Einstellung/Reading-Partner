@@ -16,9 +16,12 @@ import type { ObservationIndexEntry, ObservationType } from "../../../src/observ
 // with no Tauri host under it they all miss, which is exactly the case being
 // assembled for. Mocking the fs plugin here would swap it out for every other
 // test file in the run as well.
-const { buildTalkTurn, HISTORY_KEEP, OBSERVATION_ORDER_TIGHT } = await import(
+const { buildTalkTurn, OBSERVATION_ORDER_TIGHT } = await import(
   "../../../src/reading/talks/turn",
 );
+// The replay cap is the reading turn's; a rehearsal borrows it rather than
+// declaring a second one.
+const { HISTORY_KEEP } = await import("../../../src/reading/turn");
 const { combineChapters } = await import("../../../src/reading/talks/outline");
 import type { LoadedMaterial } from "../../../src/reading/talks/material";
 import type { Talk, TalkDecision } from "../../../src/reading/talks/types";

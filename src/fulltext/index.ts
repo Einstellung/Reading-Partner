@@ -13,6 +13,7 @@ export { textAround, chapterAt, readPages, searchTopic } from "./query";
 export {
   formatPages,
   formatSearch,
+  toAnnotationLite,
   type AnnotationLite,
   type TopicMaterial,
 } from "./format";

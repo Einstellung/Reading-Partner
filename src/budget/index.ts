@@ -25,12 +25,13 @@ export {
   planReductions,
   stubEarlyToolResults,
   toolResultStub,
-  LADDER,
   REFUSE_EXHAUSTED,
   REFUSE_FLOOR_OVER,
   TOOL_RESULTS_KEPT,
   type LadderInput,
   type LadderPlan,
-  type ReductionId,
+  type Rung,
+  type RungPrice,
   type StubbedMessages,
 } from "./ladder";
+export { fitToBudget, type FitInput, type FittedCall, type ToolShape } from "./fit";

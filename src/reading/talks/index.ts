@@ -33,7 +33,6 @@ export {
   loadMaterial,
   loadMaterials,
   readMaterialBytes,
-  toAnnotationLite,
   type LoadedMaterial,
 } from "./material";
 export {
@@ -50,8 +49,6 @@ export {
 } from "./store";
 export {
   buildTalkTurn,
-  HISTORY_KEEP,
-  HISTORY_KEEP_TIGHT,
   type TalkTurn,
   type TalkTurnInput,
   type TalkTurnMessage,
