@@ -1,9 +1,10 @@
 // What a hangup hands to distillation (src/reading/session/hangup): which page
-// the talk belongs to, what it was marked on, and what of the thread goes.
+// the talk belongs to, what it was marked on, what of the thread goes, and when
+// it is read.
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { hangupPass } from "../../../src/reading/session/hangup";
+import { deferHangup, hangupPass, type HangupPass } from "../../../src/reading/session/hangup";
 import type { Annotation } from "../../../src/platform/app/reader-contract";
 
 const context = {
@@ -151,4 +152,61 @@ test("the marks the book carries ride along for the silent-marks pass", () => {
   expect(pass.annotations).toBe(annotations);
   expect(pass.topicId).toBe("topic-1");
   expect(pass.bookName).toBe("A Book.pdf");
+});
+
+// When the pass is built, which is not when the ✕ was pressed. The bug this
+// pins: a pass built eagerly and only handed over deferred distils the
+// transcript as it stood mid-answer, and the exchange the reader just had is
+// missing from it.
+test("a hangup mid-answer distils the exchange the turn was still writing", () => {
+  const thread: { role: "user" | "ai"; text: string; ts: number }[] = [
+    { role: "user", text: "why?", ts: 1 },
+  ];
+  const inFlight: (() => void)[] = [];
+  const distilled: HangupPass[] = [];
+
+  deferHangup({
+    call: { threadId: "t1", annotationId: "mark-1" },
+    context,
+    annotation: mark,
+    annotations: [],
+    readStored: () => thread,
+    whenSettled: (threadId, run) => {
+      expect(threadId).toBe("t1");
+      inFlight.push(run);
+      return true;
+    },
+    distill: (pass) => void distilled.push(pass),
+  });
+
+  // The turn is still writing: nothing has been distilled yet.
+  expect(distilled).toEqual([]);
+
+  // It lands, writing its answer into the thread file, and only then does the
+  // pass get built.
+  thread.push({ role: "ai", text: "because the mark is on that page", ts: 2 });
+  inFlight[0]?.();
+
+  expect(distilled).toHaveLength(1);
+  expect(distilled[0]?.messages).toEqual([
+    { role: "user", text: "why?", ts: 1 },
+    { role: "ai", text: "because the mark is on that page", ts: 2 },
+  ]);
+  expect(distilled[0]?.page).toBe(5);
+});
+
+test("a hangup with nothing in flight distils the thread as it stands", () => {
+  const distilled: HangupPass[] = [];
+  deferHangup({
+    call: { threadId: "t1", annotationId: "mark-1" },
+    context,
+    annotation: mark,
+    annotations: [],
+    readStored: () => stored,
+    whenSettled: () => false,
+    distill: (pass) => void distilled.push(pass),
+  });
+
+  expect(distilled).toHaveLength(1);
+  expect(distilled[0]?.messages).toEqual(stored);
 });

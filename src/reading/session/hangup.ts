@@ -22,6 +22,15 @@ export interface HangupContext {
   pageIndex: number | null;
 }
 
+// A talk as the thread file holds it. Only the three fields a transcript is made
+// of go to distillation: a display row's trace, images and notices are not the
+// talk.
+export interface HangupMessage {
+  role: "user" | "ai";
+  text: string;
+  ts: number;
+}
+
 export interface HangupPass {
   topicId: string;
   topicName: string;
@@ -42,9 +51,8 @@ export function hangupPass(input: {
   // The mark this conversation hangs on, absent for the book-level thread and
   // for a mark deleted under it.
   annotation: Annotation | undefined;
-  // The thread as the file holds it. Only the three fields a transcript is made
-  // of go: a display row's trace, images and notices are not the talk.
-  stored: { role: "user" | "ai"; text: string; ts: number }[];
+  // The thread as the file holds it.
+  stored: HangupMessage[];
   annotations: DistillAnnotation[];
 }): HangupPass {
   const { call, context, annotation, stored, annotations } = input;
@@ -66,4 +74,41 @@ export function hangupPass(input: {
     messages: stored.map(({ role, text, ts }) => ({ role, text, ts })),
     annotations,
   };
+}
+
+// When a hangup's pass is built. Hanging up mid-answer waits for the turn: the
+// reply is still being written, so a transcript read now would end on a half
+// sentence and lose the exchange the reader just had. What the pass is built
+// from is split accordingly — the thread file is read late, through
+// `readStored`, once the turn has written its answer into it, while the book and
+// its marks are values read at hangup time, because a deferred pass can land
+// after the reader has moved to another book and by then they would be that
+// book's.
+export interface HangupIo {
+  call: HangupCall;
+  context: HangupContext;
+  // The mark this conversation hangs on, absent for the book-level thread and
+  // for a mark deleted under it.
+  annotation: Annotation | undefined;
+  annotations: DistillAnnotation[];
+  // The thread as the file holds it now — called when the pass is built.
+  readStored(): HangupMessage[];
+  // Hand the pass to the turn still writing on that thread; false when nothing
+  // is in flight and it can be built at once.
+  whenSettled(threadId: string, run: () => void): boolean;
+  distill(pass: HangupPass): void;
+}
+
+export function deferHangup(io: HangupIo): void {
+  const run = () =>
+    io.distill(
+      hangupPass({
+        call: io.call,
+        context: io.context,
+        annotation: io.annotation,
+        stored: io.readStored(),
+        annotations: io.annotations,
+      }),
+    );
+  if (!io.whenSettled(io.call.threadId, run)) run();
 }

@@ -42,7 +42,7 @@ import { toolStatusLabel } from "../context";
 import type { FiguresIndex } from "../figures";
 import { createLiveTurns, type LiveTurn } from "../live-turns";
 import { RESEARCH_TOOL_NAME, researchStatusLabel } from "../papers/research-agent";
-import { hangupPass } from "./hangup";
+import { deferHangup } from "./hangup";
 import { createPendingImages, type StagedImage } from "../pending-images";
 import type { PrepPipeline } from "../prep/pipeline";
 import {
@@ -544,25 +544,26 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   //
   // Hanging up mid-answer waits: the reply is still being written and the
   // transcript would be a half sentence, so the distillation is handed to the
-  // turn and runs when it lands. The event is logged now — it is the hangup that
-  // happened now. The marks are read now too: a deferred pass can land after the
-  // reader has moved to another book, and annsRef would by then hold that book's
-  // marks — the wrong input, and it would push the silent-marks cursor past them.
+  // turn and runs when it lands — and reads the thread file then (deferHangup).
+  // The event is logged now — it is the hangup that happened now. The marks are
+  // read now too: a deferred pass can land after the reader has moved to another
+  // book, and annsRef would by then hold that book's marks — the wrong input,
+  // and it would push the silent-marks cursor past them.
   const captureHangup = useCallback(() => {
     const c = callRef.current;
     const bookId = bookIdRef.current;
     const { topicId, topicName, fileName, pageIndex } = ctxRef.current;
     if (!c || !bookId || !topicId) return;
     logEvent(topicId, "call-end", { threadId: c.threadId, book: c.isBook ?? false });
-    const pass = hangupPass({
+    deferHangup({
       call: c,
       context: { topicId, topicName, bookId, bookName: fileName, pageIndex },
       annotation: annsRef.current.get(c.annotationId),
-      stored: getThread(bookId, c.threadId)?.messages ?? [],
       annotations: distillAnnotations(),
+      readStored: () => getThread(bookId, c.threadId)?.messages ?? [],
+      whenSettled: (threadId, run) => liveTurnsRef.current.whenSettled(threadId, run),
+      distill: (pass) => void distillThread(pass),
     });
-    const distill = () => void distillThread(pass);
-    if (!liveTurnsRef.current.whenSettled(c.threadId, distill)) distill();
   }, [annsRef, bookIdRef, ctxRef, distillAnnotations]);
 
   const close = useCallback(() => dispatch({ type: "closed" }), []);
