@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import {
@@ -94,7 +94,13 @@ import ChatPipCard from "./ui/components/chat/ChatPipCard";
 import SettingsView from "./ui/components/SettingsView";
 import { backgroundFailureToast, buildReadingTurn, turnFailureView, type TurnFailure } from "./reading/turn";
 import { createLiveTurns, type LiveTurn } from "./reading/live-turns";
-import type { CallRow, CallState } from "./reading/call-state";
+import {
+  applyRowChange,
+  callReducer,
+  type CallRow,
+  type CallState,
+  type RowChange,
+} from "./reading/call-state";
 import { createPendingImages } from "./reading/pending-images";
 import { SHELF_PULL_ROUTE } from "./reading/pull-routes";
 import {
@@ -106,7 +112,6 @@ import { researchStatusLabel, RESEARCH_TOOL_NAME } from "./reading/papers/resear
 import type { SubagentProgress } from "./ai/subagent";
 import { Button } from "./ui/components/ui/button";
 import { OVERLAY_Z } from "./ui/components/ui/overlay";
-import { appendRunningTool, relabelRunningTool, resolveToolStatus } from "./ai/tool-status";
 import LibraryScreen from "./ui/components/library/LibraryScreen";
 import Toast, { useToasts } from "./ui/components/common/Toast";
 import SettingsButton from "./ui/components/common/SettingsButton";
@@ -116,7 +121,6 @@ import type { PendingImage } from "./ui/components/chat/types";
 import { rehydrateMessage, type ChatPart } from "./ui/components/chat/chatParts";
 import { CardRegistryContext } from "./ui/components/chat/cardRegistryContext";
 import { CARD_REGISTRY } from "./ui/components/cardRegistry";
-import { holdsNoAnswer, refusalRow } from "./ai/turn-rows";
 import { refreshInfoCollector } from "./info/briefing/live";
 
 // The AI pen maps to the engine's underline tool in a fixed purple (the palette's
@@ -269,7 +273,10 @@ export default function App() {
   // Resolved figure list for the current book (M9), feeding the inline [fig:N]
   // card host and empty until extraction finishes.
   const [figures, setFigures] = useState<Figure[]>([]);
-  const [call, setCall] = useState<Call | null>(null);
+  // The open conversation. Which of the ways it can change are allowed, and what
+  // each one leaves behind, are the reducer's (reading/call-state.ts); this file
+  // only says what happened.
+  const [call, dispatchCall] = useReducer(callReducer<CallMessage>, null);
   const [showSettings, setShowSettings] = useState(false);
   // Failure messages (save/load/network errors) live here, not in `status` —
   // `status` is reserved for transient reader progress ("Rendering…").
@@ -534,14 +541,7 @@ export default function App() {
       for (const m of withImages) {
         loaded.set(m.ts, await readThreadImages(threadId, m.images as string[]));
       }
-      setCall((c) =>
-        c && c.threadId === threadId
-          ? {
-              ...c,
-              messages: c.messages.map((m) => (loaded.has(m.ts) ? { ...m, images: loaded.get(m.ts) } : m)),
-            }
-          : c,
-      );
+      dispatchCall({ type: "images-loaded", threadId, images: loaded });
     })();
   }, []);
 
@@ -588,7 +588,9 @@ export default function App() {
       setSidebarTab("prep");
       setSidebarOpen(true);
     }
-    setCall((cur) => (cur && cur.view === "chat-main" ? { ...cur, view: "chat-pip" } : cur));
+    // Chat covering the reader has to get out of the way of the page it just
+    // jumped to. A citation tapped in the bubble covers nothing, so it stays.
+    dispatchCall({ type: "reading-uncovered" });
   }, [jumpToQuote]);
 
   // AI observations are a topic-level thing and show in the topic's sidebar
@@ -655,53 +657,29 @@ export default function App() {
     const liveTurns = liveTurnsRef.current;
     const controller = new AbortController();
 
-    const patch = (
-      fn: (m: CallMessage) => CallMessage,
-      ts: number,
-      error?: boolean,
-    ) => {
-      liveTurns.patch(threadId, ts, fn);
-      setCall((c) =>
-        !c || c.threadId !== threadId
-          ? c
-          : {
-              ...c,
-              error: error ?? c.error,
-              messages: c.messages.map((m) => (m.ts === ts && m.role === "ai" ? fn(m) : m)),
-            },
-      );
+    // One change to the row, applied to both mirrors of it: the registry's copy,
+    // which goes on being written after the bubble is closed, and the one on
+    // screen, which is only there while the conversation is open.
+    const write = (change: RowChange, ts: number, error?: boolean) => {
+      liveTurns.patch(threadId, ts, (m) => applyRowChange(m, change));
+      dispatchCall({ type: "row-changed", threadId, ts, change, error });
     };
 
     // Push a running tool status onto the streaming reply; clearing any partial
     // text discards inter-round preamble so only the final answer shows (M6).
-    const onToolStart = (info: { name: string; args: Record<string, any> }, ts: number) => {
-      patch(
-        (m) => ({
-          ...m,
-          text: "",
-          tools: appendRunningTool(m.tools, info.name, toolStatusLabel(info.name, info.args)),
-        }),
-        ts,
-      );
-    };
+    const onToolStart = (info: { name: string; args: Record<string, any> }, ts: number) =>
+      write({ kind: "tool-start", name: info.name, label: toolStatusLabel(info.name, info.args) }, ts);
     const onToolEnd = (info: { name: string; isError: boolean }, ts: number) =>
-      patch((m) => {
-        const tools = resolveToolStatus(m.tools, info.name, info.isError);
-        return tools ? { ...m, tools } : m;
-      }, ts);
+      write({ kind: "tool-end", name: info.name, isError: info.isError }, ts);
 
     // A research sub-agent run, in the row the reader already has for the tool call
     // that started it (docs/25). One line, rewritten in place: not the sub-agent's
     // own tool calls, not its queries, not what it read.
     const onSubagentProgress = (progress: SubagentProgress, ts: number) =>
-      patch((m) => {
-        const tools = relabelRunningTool(
-          m.tools,
-          RESEARCH_TOOL_NAME,
-          researchStatusLabel(progress),
-        );
-        return tools ? { ...m, tools } : m;
-      }, ts);
+      write(
+        { kind: "tool-label", name: RESEARCH_TOOL_NAME, label: researchStatusLabel(progress) },
+        ts,
+      );
 
     // A turn that ends without a reply. The row it leaves behind, whether a
     // toast goes up and whether Retry is offered all follow from which kind it
@@ -718,11 +696,10 @@ export default function App() {
       const view = turnFailureView(kind, message);
       if (callRef.current?.threadId === threadId) {
         if (view.toast) pushToast("error", view.toast);
-        patch(
-          (m) =>
-            view.as === "notice"
-              ? { ...m, ...refusalRow(m, view.text) }
-              : { role: "ai", text: view.text, ts, failed: true },
+        write(
+          view.as === "notice"
+            ? { kind: "refusal", text: view.text }
+            : { kind: "error", text: view.text },
           ts,
           view.retry,
         );
@@ -737,11 +714,7 @@ export default function App() {
     const ts = Date.now();
     const streamingRow: CallMessage = { role: "ai", text: "", ts, streaming: true };
     liveTurns.start({ threadId, bookId, controller, message: streamingRow });
-    setCall((c) => {
-      if (!c || c.threadId !== threadId) return c;
-      const kept = c.messages.filter((m) => !holdsNoAnswer(m));
-      return { ...c, error: false, messages: [...kept, streamingRow] };
-    });
+    dispatchCall({ type: "turn-started", threadId, row: streamingRow });
 
     void (async () => {
       // Assemble the live reading context and topic-scoped tools (M6). The
@@ -788,9 +761,7 @@ export default function App() {
         tools: turn.tools,
         signal: controller.signal,
         reasoning: toReasoning(s.chatThinking),
-        onDelta: (chunk) => {
-          patch((m) => ({ ...m, text: m.text + chunk }), ts);
-        },
+        onDelta: (chunk) => write({ kind: "delta", chunk }, ts),
         onToolStart: (info) => onToolStart(info, ts),
         onToolEnd: (info) => onToolEnd(info, ts),
         onDone: (full) => {
@@ -799,16 +770,7 @@ export default function App() {
           // The notice rides the displayed row only. Persisting it would replay it
           // next turn as if the model had written it, and it would then describe a
           // turn whose assembly no longer applies.
-          patch(
-            (m) => ({
-              role: "ai",
-              text: full,
-              ts,
-              tools: (m.tools ?? []).filter((t) => t.state === "error"),
-              ...(turn.notice ? { notice: turn.notice } : {}),
-            }),
-            ts,
-          );
+          write({ kind: "answer", text: full, ...(turn.notice ? { notice: turn.notice } : {}) }, ts);
           appendMessage(bookId, threadId, { role: "ai", text: full, ts });
           // A hangup that happened mid-answer waited for this (see captureHangup):
           // distillation reads the thread file, which only now holds the reply.
@@ -864,12 +826,15 @@ export default function App() {
           ? { x: up.x, y: up.y }
           : { x: (rect?.left ?? 0) + (rect?.width ?? 480) / 2, y: (rect?.top ?? 0) + 240 };
         setPopup(null);
-        setCall({
-          threadId: aiCreated.threadId,
-          annotationId: aiCreated.annotation.id,
-          view: "bubble",
-          anchor,
-          messages: [],
+        dispatchCall({
+          type: "opened",
+          call: {
+            threadId: aiCreated.threadId,
+            annotationId: aiCreated.annotation.id,
+            view: "bubble",
+            anchor,
+            messages: [],
+          },
         });
         // The bubble starts explaining on its own (docs/03). If no provider is
         // configured, runTurn no-ops and the empty bubble shows the guidance.
@@ -906,7 +871,10 @@ export default function App() {
       const thread = bookId ? getThread(bookId, threadId) : undefined;
       setPopup(null);
       const msgs = thread?.messages ?? [];
-      setCall({ threadId, annotationId: ann.id, view: "bubble", anchor, messages: openMessages(threadId, msgs) });
+      dispatchCall({
+        type: "opened",
+        call: { threadId, annotationId: ann.id, view: "bubble", anchor, messages: openMessages(threadId, msgs) },
+      });
       hydrateThreadImages(threadId, msgs);
       // Empty thread (e.g. created before a provider was configured) → explain now.
       if (needsFirstTurn(threadId, msgs)) runTurn(threadId, ann.id);
@@ -976,7 +944,7 @@ export default function App() {
   const onPanePointerDown = useCallback(() => {
     if (callViewRef.current === "bubble" || callViewRef.current === "chat-pip") {
       captureHangup();
-      setCall(null);
+      dispatchCall({ type: "closed" });
     }
   }, [captureHangup]);
 
@@ -991,7 +959,7 @@ export default function App() {
       // And a look at what the book being left still owes: a stretch of reading
       // with nothing said in it never reaches the hangup path at all.
       void sweepDistillation("book-switch");
-      setCall(null);
+      dispatchCall({ type: "closed" });
       // The images staged in this book's conversations go with it, same as
       // closing the reader: they are in memory only, and every thread they
       // belong to is about to be out of reach.
@@ -1352,9 +1320,7 @@ export default function App() {
           ts,
           ...(images.length ? { images } : {}),
         };
-        setCall((cur) =>
-          cur && cur.threadId === c.threadId ? { ...cur, messages: [...cur.messages, displayMsg] } : cur,
-        );
+        dispatchCall({ type: "row-appended", threadId: c.threadId, row: displayMsg });
         runTurn(c.threadId, c.annotationId);
       })();
     },
@@ -1387,23 +1353,20 @@ export default function App() {
     if (!live) return;
     const { ts } = live.message;
     const partial = keepPartial(live);
-    setCall((cur) =>
-      !cur || cur.threadId !== c.threadId
-        ? cur
-        : {
-            ...cur,
-            messages: partial
-              ? cur.messages.map((m) => (m.ts === ts && m.role === "ai" ? { role: "ai", text: partial, ts } : m))
-              : cur.messages.filter((m) => !(m.ts === ts && m.role === "ai")),
-          },
+    // What it wrote stays as a finished row; a turn that wrote nothing leaves no
+    // row behind at all.
+    dispatchCall(
+      partial
+        ? { type: "row-changed", threadId: c.threadId, ts, change: { kind: "stopped", text: partial } }
+        : { type: "row-dropped", threadId: c.threadId, ts },
     );
   }, [keepPartial]);
 
   // Chat takes the whole window: from the bubble (reading shrinks to the corner
   // card) and back from the chat corner card.
-  const showChatMain = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-main" } : c)), []);
+  const showChatMain = useCallback(() => dispatchCall({ type: "chat-opened" }), []);
   // The other picture-in-picture swap: reading is back, chat shrinks.
-  const swapToReading = useCallback(() => setCall((c) => (c ? { ...c, view: "chat-pip" } : c)), []);
+  const swapToReading = useCallback(() => dispatchCall({ type: "reading-uncovered" }), []);
   // The ✕ is one of several ways out (touching the book, opening another book,
   // closing the reader, Esc): the view goes away, the thread stays on its mark
   // (docs/03). An answer still being written is not interrupted — it finishes
@@ -1412,7 +1375,7 @@ export default function App() {
   // a way out of the view, not a way to throw the conversation away.
   const endCall = useCallback(() => {
     captureHangup();
-    setCall(null);
+    dispatchCall({ type: "closed" });
   }, [captureHangup]);
 
   // Delete the open conversation. Destructive and confirmed at the button
@@ -1435,7 +1398,7 @@ export default function App() {
     if (topicId) logEvent(topicId, "thread-delete", { threadId: c.threadId, book: c.isBook ?? false });
     // Nothing is left to send them to.
     pendingRef.current.clear(c.threadId);
-    setCall(null);
+    dispatchCall({ type: "closed" });
   }, [removeAnnotation]);
 
   // Delete a mark from the trace list. This is the only way to get rid of an
@@ -1458,7 +1421,7 @@ export default function App() {
       // A conversation open on this mark goes with it. Deleting the mark under a
       // live bubble and leaving the bubble on screen reads as a bug even when it
       // is not.
-      if (callRef.current?.annotationId === id) setCall(null);
+      dispatchCall({ type: "closed-with-mark", annotationId: id });
       // The turn and the unsent images go with the thread wherever it was
       // started from.
       if (threadId) {
@@ -1485,7 +1448,16 @@ export default function App() {
       viewRef.current?.navigate({ annotationID: annotationId });
       setSelectedAnnId(annotationId);
       const msgs = thread?.messages ?? [];
-      setCall({ threadId, annotationId, view: "chat-main", anchor: { x: 0, y: 0 }, messages: openMessages(threadId, msgs) });
+      dispatchCall({
+        type: "opened",
+        call: {
+          threadId,
+          annotationId,
+          view: "chat-main",
+          anchor: { x: 0, y: 0 },
+          messages: openMessages(threadId, msgs),
+        },
+      });
       hydrateThreadImages(threadId, msgs);
       if (needsFirstTurn(threadId, msgs)) runTurn(threadId, annotationId);
     },
@@ -1503,13 +1475,16 @@ export default function App() {
     const thread = getBookThread(bookId) ?? createBookThread(bookId, crypto.randomUUID());
     setPopup(null);
     const msgs = thread.messages;
-    setCall({
-      threadId: thread.id,
-      annotationId: "",
-      isBook: true,
-      view: "chat-main",
-      anchor: { x: 0, y: 0 },
-      messages: openMessages(thread.id, msgs),
+    dispatchCall({
+      type: "opened",
+      call: {
+        threadId: thread.id,
+        annotationId: "",
+        isBook: true,
+        view: "chat-main",
+        anchor: { x: 0, y: 0 },
+        messages: openMessages(thread.id, msgs),
+      },
     });
     hydrateThreadImages(thread.id, msgs);
     if (needsFirstTurn(thread.id, msgs)) runTurn(thread.id, "");
@@ -1518,13 +1493,10 @@ export default function App() {
   // Jump the reading back to the thread's mark (from the reading corner card).
   // The book-level thread has no mark, so there is nothing to jump to.
   const onPositionClick = useCallback(() => {
-    setCall((c) => {
-      if (c && c.annotationId) {
-        viewRef.current?.selectAnnotations([c.annotationId]);
-        viewRef.current?.navigate({ annotationID: c.annotationId });
-      }
-      return c;
-    });
+    const c = callRef.current;
+    if (!c || !c.annotationId) return;
+    viewRef.current?.selectAnnotations([c.annotationId]);
+    viewRef.current?.navigate({ annotationID: c.annotationId });
   }, []);
 
   const closeReader = useCallback(() => {
@@ -1541,7 +1513,7 @@ export default function App() {
     // close evaluate the notes frontier once with the inclusive rule (docs/14).
     // Fire before the refs are torn down below.
     finalPassNotes();
-    setCall(null);
+    dispatchCall({ type: "closed" });
     // Staged images only ever lived in memory, so they were never going to
     // outlast the book anyway; they go with it.
     pendingRef.current.clearAll();
