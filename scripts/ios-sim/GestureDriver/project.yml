@@ -1,0 +1,27 @@
+name: GestureDriver
+options:
+  bundleIdPrefix: com.xinyuan.gesturedriver
+  deploymentTarget:
+    iOS: "17.0"
+targets:
+  GestureDriverUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: Tests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xinyuan.gesturedriver.uitests
+        CODE_SIGNING_ALLOWED: "NO"
+        CODE_SIGNING_REQUIRED: "NO"
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: "YES"
+        TARGETED_DEVICE_FAMILY: "1,2"
+schemes:
+  GestureDriverUITests:
+    build:
+      targets:
+        GestureDriverUITests: [test]
+    test:
+      targets:
+        - GestureDriverUITests
