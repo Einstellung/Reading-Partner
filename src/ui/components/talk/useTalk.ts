@@ -43,7 +43,7 @@ import {
   rehydrateMessage,
   toPersistedCardPart,
 } from "../chat/chatParts";
-import { holdsNoAnswer, refusalRow } from "../chat/turn-rows";
+import { holdsNoAnswer, refusalRow } from "../../../ai/turn-rows";
 
 // A talk has exactly one conversation, so the thread id is the talk id. Nothing
 // has to be looked up, and a thread file with a second thread in it could only

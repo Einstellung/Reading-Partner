@@ -34,7 +34,7 @@ import type { InfoCallAnchor } from "../../../info/companion/anchors";
 import { addSource, hasSources } from "../../../info/sources/source-store";
 import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
 import { navigateAway } from "../chat/call-layout";
-import { refusalRow, replayableHistory } from "../chat/turn-rows";
+import { refusalRow, replayableHistory } from "../../../ai/turn-rows";
 import {
   cardRow,
   findCardPart,

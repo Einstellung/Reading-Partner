@@ -12,14 +12,16 @@
 //             `text` is the model's words, and every surface replays it as the
 //             assistant's own on the next turn.
 //
-// Kept here rather than in a .tsx so every chat surface can end a turn the same
-// way (App and useTalk both do this in their own words already).
+// Kept out of the render layer so every chat surface can end a turn the same way
+// (the reading session, useTalk and the info companion all do), and reachable
+// from a domain: this is what an agent turn's ending is, not how a row is drawn.
+// The rows are taken structurally, so each surface keeps its own row type.
 
-import type { ThreadMessage } from "./types";
+import type { ToolStatus } from "./tool-status";
 
 // The tool trace a stopped turn keeps: the calls that failed, which explain the
 // stop, and none of the ones that ran fine.
-function keptTools(previous: ThreadMessage): ThreadMessage["tools"] {
+function keptTools(previous: { tools?: ToolStatus[] }): ToolStatus[] {
   return (previous.tools ?? []).filter((t) => t.state === "error");
 }
 
@@ -28,7 +30,10 @@ function keptTools(previous: ThreadMessage): ThreadMessage["tools"] {
 // tool starts — so the notice is usually the whole row, and chat.tsx draws it
 // alone. Where the model did get words out first, they stay the model's and the
 // notice sits under them.
-export function refusalRow(previous: ThreadMessage, message: string): Partial<ThreadMessage> {
+export function refusalRow(
+  previous: { tools?: ToolStatus[] },
+  message: string,
+): { streaming: false; notice: string; tools: ToolStatus[] } {
   return { streaming: false, notice: message, tools: keptTools(previous) };
 }
 
@@ -40,7 +45,9 @@ export function refusalRow(previous: ThreadMessage, message: string): Partial<Th
 //     keeps it in `text`, so `failed` is what excludes it.
 //   - a card row is persisted with no text of its own (chatParts), and an empty
 //     message is one some providers reject outright.
-export function replayableHistory(rows: ThreadMessage[]): { role: "user" | "ai"; text: string }[] {
+export function replayableHistory(
+  rows: { role: "user" | "ai"; text: string; ts?: number; failed?: boolean }[],
+): { role: "user" | "ai"; text: string }[] {
   return rows.filter((m) => !m.failed && m.text.trim() !== "").map(({ role, text }) => ({ role, text }));
 }
 

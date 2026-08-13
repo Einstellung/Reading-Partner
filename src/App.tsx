@@ -116,7 +116,7 @@ import type { ToolStatus } from "./ai/tool-status";
 import { rehydrateMessage, type ChatPart } from "./ui/components/chat/chatParts";
 import { CardRegistryContext } from "./ui/components/chat/cardRegistryContext";
 import { CARD_REGISTRY } from "./ui/components/cardRegistry";
-import { holdsNoAnswer, refusalRow } from "./ui/components/chat/turn-rows";
+import { holdsNoAnswer, refusalRow } from "./ai/turn-rows";
 import { refreshInfoCollector } from "./info/briefing/live";
 
 // The AI pen maps to the engine's underline tool in a fixed purple (the palette's

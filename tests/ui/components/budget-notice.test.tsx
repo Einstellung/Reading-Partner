@@ -7,7 +7,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MessageList } from "../../../src/ui/components/chat/chat";
-import { refusalRow } from "../../../src/ui/components/chat/turn-rows";
+import { refusalRow } from "../../../src/ai/turn-rows";
 import type { ThreadMessage } from "../../../src/ui/components/chat/types";
 
 const NOTICE = "Note: earlier turns of this conversation were left out to make room.";
