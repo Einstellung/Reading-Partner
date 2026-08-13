@@ -22,7 +22,6 @@ import { annotationPage, toolStatusLabel } from "./reading/context";
 import {
   ANNOTATION_COLORS,
   deleteAnnotations,
-  dropAnnotationCache,
   loadAnnotations,
   saveAnnotations,
 } from "./platform/app/annotations";
@@ -41,7 +40,6 @@ import {
   createBookThread,
   createThread,
   deleteThread,
-  dropThreadCache,
   getBookThread,
   getThread,
   loadThreads,
@@ -49,7 +47,8 @@ import {
   saveThreadImages,
   type ThreadMessage,
 } from "./platform/app/threads";
-import { initSync, onSyncPulled } from "./platform/sync";
+import { initSync } from "./platform/sync";
+import { registerPullRoute } from "./platform/sync/pull-routes";
 import { compressImage, compressImageData, type CompressedImage } from "./ai/image-utils";
 import { readClipboardImage } from "./platform/app/clipboard";
 import { isTauri } from "./platform/app/host";
@@ -96,6 +95,7 @@ import SettingsView from "./ui/components/SettingsView";
 import { backgroundFailureToast, buildReadingTurn, turnFailureView, type TurnFailure } from "./reading/turn";
 import { createLiveTurns, type LiveTurn } from "./reading/live-turns";
 import { createPendingImages } from "./reading/pending-images";
+import { SHELF_PULL_ROUTE } from "./reading/pull-routes";
 import {
   keepReadingPosition,
   seedReadingPosition,
@@ -304,7 +304,6 @@ export default function App() {
     device,
     applyDevice,
     configured,
-    settingsPulled,
     syncReport,
   } = useShellBootstrap({ settingsOpen: showSettings, pushToast });
   const fingerDraw = !!device?.fingerDraw;
@@ -489,27 +488,17 @@ export default function App() {
   }, [refreshTopics]);
 
   // Account sync (docs/13): start the engine if the user is signed in with
-  // auto-sync on, and react to files a pull writes. A pulled library.json,
-  // topics.json or saved-articles.json refreshes the shelf; pulled
-  // threads-<id>.json and annotations-<id>.json files have their in-memory cache
-  // dropped so a reopen reads the newer data instead of the stale cache
-  // overwriting it. settings.json is the same problem in one object, and the
-  // shared bootstrap handles it (settingsPulled).
+  // auto-sync on, and redraw the shelf when a pull rewrites what it is made of.
+  // Everything else a pull touches has a route of its own (platform/sync/
+  // pull-routes.ts): the per-book caches are platform's, settings.json is the
+  // shared bootstrap's, and the briefing is the info screen's.
   useEffect(() => {
     void initSync("desktop").catch((e) => console.warn("sync init failed", e));
-    return onSyncPulled((paths) => {
-      let refreshShelf = false;
-      for (const p of paths) {
-        if (p === "library.json" || p === "topics.json" || p === "saved-articles.json") {
-          refreshShelf = true;
-        }
-        const threads = /^threads-(.+)\.json$/.exec(p);
-        if (threads) dropThreadCache(threads[1]);
-        const anns = /^annotations-(.+)\.json$/.exec(p);
-        if (anns) dropAnnotationCache(anns[1]);
-      }
-      if (refreshShelf) refreshTopics().catch(() => {});
-      settingsPulled(paths);
+    return registerPullRoute({
+      ...SHELF_PULL_ROUTE,
+      onPulled: () => {
+        refreshTopics().catch(() => {});
+      },
     });
   }, [refreshTopics]);
 

@@ -19,11 +19,11 @@ import { getInfoView } from "../../../info/briefing/live";
 import type { InfoSnapshot } from "../../../info/briefing/pipeline";
 import {
   clearCollectorLeftovers,
-  isReaderFile,
+  READER_PULL_ROUTE,
   type ArticleState,
   type BriefingView,
 } from "../../../info/briefing/reader";
-import { onSyncPulled } from "../../../platform/sync";
+import { registerPullRoute } from "../../../platform/sync/pull-routes";
 import type { BriefingItemMeta } from "../../../info/briefing/types";
 import { ensureBriefTopic } from "../../../platform/app/topics";
 import {
@@ -217,8 +217,9 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
   // listener — its own writes are what published these files.
   useEffect(() => {
     if (role !== "reader") return;
-    return onSyncPulled((paths) => {
-      if (paths.some(isReaderFile)) void viewRef.current?.init();
+    return registerPullRoute({
+      ...READER_PULL_ROUTE,
+      onPulled: () => void viewRef.current?.init(),
     });
   }, [role]);
 

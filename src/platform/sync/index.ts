@@ -15,6 +15,7 @@ import { observeAppLifecycle } from "../app/lifecycle";
 import type { Shell } from "../app/shell";
 import { DriveBackend } from "./driveBackend";
 import { SyncEngine } from "./engine";
+import { dispatchPull } from "./pull-routes";
 import { tauriSyncFs } from "./syncFs";
 import { tauriBookFs } from "./books";
 import { tauriBaseStore, tauriTrashJournal } from "./localStore";
@@ -82,7 +83,6 @@ let shell: Shell = "desktop";
 let unobserveLifecycle: (() => void) | null = null;
 
 const statusListeners = new Set<(s: SyncStatus) => void>();
-const pulledListeners = new Set<(paths: string[]) => void>();
 
 function buildStatus(): SyncStatus {
   const s = engine?.status();
@@ -123,9 +123,7 @@ function makeEngine(): SyncEngine {
     trash: tauriTrashJournal,
     snapshot: state.snapshot,
     restoredLastSyncAt: state.lastSyncAt,
-    onPulled: (paths) => {
-      for (const l of pulledListeners) l(paths);
-    },
+    onPulled: (paths) => dispatchPull(paths),
     onStatus: (r) => {
       recordPassResult(state, r);
       void saveState(state);
@@ -202,13 +200,6 @@ export function subscribeSyncStatus(cb: (s: SyncStatus) => void): () => void {
   statusListeners.add(cb);
   cb(buildStatus());
   return () => statusListeners.delete(cb);
-}
-
-// Files written by a pull. The shell refreshes the shelf on topics/library
-// changes and drops stale per-book caches.
-export function onSyncPulled(cb: (paths: string[]) => void): () => void {
-  pulledListeners.add(cb);
-  return () => pulledListeners.delete(cb);
 }
 
 export async function signInToGoogle(): Promise<void> {

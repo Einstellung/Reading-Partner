@@ -14,11 +14,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bindSystemBack } from "./platform/app/back-button";
 import { BRIEF_TOPIC_ID } from "./platform/app/topics";
-import { initSync, onSyncPulled } from "./platform/sync";
+import { initSync } from "./platform/sync";
+import { registerPullRoute } from "./platform/sync/pull-routes";
+import { KEPT_ARTICLES_PULL_ROUTE } from "./reading/pull-routes";
 import {
   loadSavedArticles,
   savedArticlesForTopic,
-  SAVED_ARTICLES_FILE,
   type SavedArticle,
 } from "./reading/saved-articles";
 import { CardRegistryContext } from "./ui/components/chat/cardRegistryContext";
@@ -94,7 +95,6 @@ export default function PhoneApp() {
     device,
     applyDevice,
     configured,
-    settingsPulled,
     syncReport,
   } = useShellBootstrap({ settingsOpen: showSettings, pushToast });
 
@@ -130,17 +130,17 @@ export default function PhoneApp() {
 
   // Account sync (docs/13). The kept articles are what this shell mostly shows
   // and they arrive over sync, so a pulled saved-articles.json reloads the list.
-  // settings.json is read back for the reason App gives: this shell holds it
-  // whole in memory and saves it whole, so a field merged in from another device
-  // is undone by the next save unless the copy is refreshed — which the shared
-  // bootstrap does (settingsPulled).
+  // Every other file a pull writes has a route of its own (platform/sync/
+  // pull-routes.ts), settings.json included — this shell holds it whole in
+  // memory and saves it whole, so a field merged in from another device is
+  // undone by the next save unless the shared bootstrap reads the copy back.
   useEffect(() => {
     // "phone": the books channel stays off here, since nothing on this shell
     // can open a PDF (docs/22).
     void initSync("phone").catch((e) => console.warn("sync init failed", e));
-    return onSyncPulled((paths) => {
-      if (paths.includes(SAVED_ARTICLES_FILE)) void refreshSavedArticles();
-      settingsPulled(paths);
+    return registerPullRoute({
+      ...KEPT_ARTICLES_PULL_ROUTE,
+      onPulled: () => void refreshSavedArticles(),
     });
   }, [refreshSavedArticles]);
 

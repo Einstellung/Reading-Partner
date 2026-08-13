@@ -34,7 +34,7 @@ import {
   loadSources,
   loadSourceHealth,
   saveSourceHealth,
-  SOURCES_FILE,
+  SOURCES_PULL_ROUTE,
 } from "../sources/source-store";
 import { loadFeedback } from "../../observation/feedback";
 import { loadProfile } from "../../observation/profile";
@@ -65,6 +65,7 @@ import {
 import { collectorStatusLine, InfoCollector } from "./collector";
 import { backfillPublish, loadPublishedBriefing, publishBriefing } from "./publish";
 import {
+  ASK_PULL_ROUTE,
   chooseAsk,
   HEARTBEAT_MS,
   isElectedCollector,
@@ -76,7 +77,8 @@ import {
   type AskRecord,
   type CollectorClaim,
 } from "./handoff";
-import { onSyncPulled, subscribeSyncStatus } from "../../platform/sync";
+import { subscribeSyncStatus } from "../../platform/sync";
+import { registerPullRoute } from "../../platform/sync/pull-routes";
 import { hostname, platform } from "@tauri-apps/plugin-os";
 import { signInSites } from "../sources/site-session";
 import {
@@ -615,10 +617,6 @@ export function getInfoView(role: DeviceRole): BriefingView {
 // Only a collector runs any of this. A reader never calls startCollecting, so it
 // writes no claim, takes part in no election, and constructs neither singleton.
 
-// A pulled path that is some reader's request. Matches this device's own file
-// too, which costs one read of a request it has already run.
-const ASK_PATH = /^info-ask-.+\.json$/;
-
 let claim: CollectorClaim | null = null;
 let collecting = false;
 let sessionStartedAt = 0;
@@ -827,12 +825,21 @@ export async function startCollecting(): Promise<void> {
     heartbeat = null;
   });
   watchRuns(getInfoPipeline());
-  unsubPulled ??= onSyncPulled((paths) => {
-    // A source the reader subscribed to or turned on elsewhere: collect on it
-    // now rather than at the next wake, which can be half an hour away.
-    if (paths.includes(SOURCES_FILE)) getInfoCollector().foreground();
-    if (paths.some((p) => ASK_PATH.test(p))) void runPendingAsk();
-  });
+  if (unsubPulled === null) {
+    // A source the reader subscribed to or turned on elsewhere, and a reader
+    // asking for a briefing. Two routes rather than one condition with two
+    // arms: they answer to different files and neither cares about the other's.
+    const offs = [
+      registerPullRoute({
+        ...SOURCES_PULL_ROUTE,
+        onPulled: () => getInfoCollector().foreground(),
+      }),
+      registerPullRoute({ ...ASK_PULL_ROUTE, onPulled: () => void runPendingAsk() }),
+    ];
+    unsubPulled = () => {
+      for (const off of offs) off();
+    };
+  }
   await runPendingAsk();
   // Only now can the pipeline decide anything: its startup action asks whether
   // this machine holds the claim, and until this function returned it did not.

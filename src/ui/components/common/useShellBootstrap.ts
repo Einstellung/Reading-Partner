@@ -14,6 +14,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { onStoreError } from "../../../platform/app/store-errors";
 import {
+  registerPullRoute,
+  type PullMatcher,
+} from "../../../platform/sync/pull-routes";
+import {
   initDeviceSettings,
   saveDeviceSettings,
   type DeviceSettings,
@@ -23,6 +27,7 @@ import {
   flushSettings,
   loadSettings,
   saveSettings,
+  SETTINGS_FILE,
   settingsPullAction,
   type Settings,
 } from "../../../platform/app/settings";
@@ -94,14 +99,19 @@ export function healthToastMessage(report: SyncHealthReport, alreadyToasted: boo
   return report.message;
 }
 
+// Both shells hold settings.json whole in memory and save it whole, so a field
+// another device changed has to be read back or the next save undoes it. The
+// route is registered by the hook rather than by each shell: it is the hook that
+// knows whether the panel is open, which is the only thing the read waits for.
+export const SETTINGS_PULL_ROUTE: PullMatcher = {
+  id: "settings",
+  matches: (path) => path === SETTINGS_FILE,
+};
+
 export interface ShellBootstrap {
   settings: Settings;
   // A settings change the user made: set and persist.
   applySettings: (settings: Settings) => void;
-  // The paths a sync pull just wrote. Where settings.json is among them the
-  // copy this shell holds is read back, now or once the settings panel closes
-  // (settingsPullAction). Everything else a pull refreshes is the shell's own.
-  settingsPulled: (paths: readonly string[]) => void;
   device: DeviceSettings | null;
   applyDevice: (device: DeviceSettings) => void;
   configured: boolean;
@@ -166,12 +176,16 @@ export function useShellBootstrap({
       .catch(() => {});
   }, []);
 
-  const settingsPulled = useCallback(
-    (paths: readonly string[]) => {
-      const action = settingsPullAction(paths, settingsOpenRef.current);
-      if (action === "adopt") adoptPulledSettings();
-      else if (action === "defer") pendingPullRef.current = true;
-    },
+  useEffect(
+    () =>
+      registerPullRoute({
+        ...SETTINGS_PULL_ROUTE,
+        onPulled: (paths) => {
+          const action = settingsPullAction(paths, settingsOpenRef.current);
+          if (action === "adopt") adoptPulledSettings();
+          else if (action === "defer") pendingPullRef.current = true;
+        },
+      }),
     [adoptPulledSettings],
   );
 
@@ -207,7 +221,6 @@ export function useShellBootstrap({
   return {
     settings,
     applySettings,
-    settingsPulled,
     device,
     applyDevice,
     configured: isConfigured(settings, providersInfo),
