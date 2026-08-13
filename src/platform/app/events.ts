@@ -7,6 +7,7 @@
 // the whole log to add a line.
 
 import { BaseDirectory, writeTextFile } from "@tauri-apps/plugin-fs";
+import { isTauri } from "./host";
 
 export type EventType =
   | "classroom-toggle" // { on: boolean }
@@ -80,7 +81,7 @@ export function createEventLogger(append: AppendFn, now: () => number = Date.now
 // to append to. Dropping the line beats warning once per event, now that the
 // unattended pipelines log one on every structured parse.
 async function tauriAppend(topicId: string, line: string): Promise<void> {
-  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+  if (!isTauri()) return;
   await writeTextFile(`events-${topicId}.jsonl`, line, {
     baseDir: BaseDirectory.AppData,
     append: true,

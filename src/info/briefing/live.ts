@@ -5,6 +5,7 @@
 // watchdog); the pure logic (adapters, triage prompt/validation) stays testable.
 
 import { callModel, resolveModel, type ResolvedModel } from "../../ai/model-call";
+import { realTimers } from "../../ai/observable-run";
 import { loadSettings } from "../../platform/app/settings";
 import {
   currentDeviceId,
@@ -433,12 +434,9 @@ export function getInfoCollector(): InfoCollector {
       backgroundOn: async () =>
         (await loadDeviceSettings()).backgroundCollect && (await amICollecting()),
       busy: () => getInfoPipeline().snapshot().running,
-      now: () => Date.now(),
+      now: realTimers.now,
       today: () => todayLocal(),
-      setTimer: (ms, cb) => {
-        const id = setTimeout(cb, ms);
-        return () => clearTimeout(id);
-      },
+      setTimer: realTimers.setTimer,
       log: (data) => logEvent(INFO_EVENT_TOPIC, "info-poll", data),
       // The tray is where a machine with its window closed says what it has
       // been doing (docs/36). Display only, and it goes nowhere on a phone.
@@ -497,12 +495,7 @@ export function getInfoPipeline(): InfoPipeline {
       canAutoGenerate,
       pruneStaleDays: pruneStaleDailyFiles,
       keepAwake: (on) => wakeLock.set(on),
-      now: () => Date.now(),
-      sleep: (ms) => new Promise<void>((r) => setTimeout(r, ms)),
-      setTimer: (ms, cb) => {
-        const id = setTimeout(cb, ms);
-        return () => clearTimeout(id);
-      },
+      ...realTimers,
     });
     // Leaving the app is where a run dies (docs/22): iOS may suspend or kill a
     // backgrounded webview within seconds. Flushing writes the checkpoint and

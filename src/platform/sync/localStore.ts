@@ -22,7 +22,6 @@
 // pulled, and the merge contract handles that case.
 
 import {
-  BaseDirectory,
   exists,
   mkdir,
   readFile,
@@ -30,7 +29,7 @@ import {
   remove,
   writeFile,
 } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../app/atomic-fs";
+import { APPDATA, writeTextAtomic } from "../app/atomic-fs";
 
 export const BASE_DIR = "sync-base";
 export const TRASH_FILE = "sync-trash.jsonl";
@@ -48,8 +47,6 @@ export interface BaseStore {
   remove(path: string): Promise<void>;
 }
 
-const opts = { baseDir: BaseDirectory.AppData } as const;
-
 function basePath(path: string): string {
   return `${BASE_DIR}/${path}`;
 }
@@ -57,14 +54,14 @@ function basePath(path: string): string {
 export const tauriBaseStore: BaseStore = {
   async read(path) {
     try {
-      return await readFile(basePath(path), opts);
+      return await readFile(basePath(path), APPDATA);
     } catch {
       return null;
     }
   },
   async has(path) {
     try {
-      return await exists(basePath(path), opts);
+      return await exists(basePath(path), APPDATA);
     } catch {
       return false;
     }
@@ -72,12 +69,12 @@ export const tauriBaseStore: BaseStore = {
   async write(path, bytes) {
     const full = basePath(path);
     const slash = full.lastIndexOf("/");
-    await mkdir(full.slice(0, slash), { ...opts, recursive: true });
-    await writeFile(full, bytes, opts);
+    await mkdir(full.slice(0, slash), { ...APPDATA, recursive: true });
+    await writeFile(full, bytes, APPDATA);
   },
   async remove(path) {
     try {
-      await remove(basePath(path), opts);
+      await remove(basePath(path), APPDATA);
     } catch {
       // Already gone, which is the state this asks for.
     }
@@ -121,8 +118,8 @@ export function pruneTrashText(text: string, now: number): string | null {
 
 async function readTrash(): Promise<string> {
   try {
-    if (!(await exists(TRASH_FILE, opts))) return "";
-    return await readTextFile(TRASH_FILE, opts);
+    if (!(await exists(TRASH_FILE, APPDATA))) return "";
+    return await readTextFile(TRASH_FILE, APPDATA);
   } catch {
     return "";
   }

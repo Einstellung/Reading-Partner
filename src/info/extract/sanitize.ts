@@ -154,7 +154,16 @@ export function htmlToText(html: string): string {
   out = out
     .replace(/<\/(p|div|section|article|header|figure|figcaption|li|ul|ol|tr|table|blockquote|h[1-6])>/gi, "\n\n")
     .replace(/<br\s*\/?>/gi, "\n");
-  const text = decodeEntities(out.replace(/<[^>]+>/g, " "));
+  return stripTagsToText(out);
+}
+
+// The tail every fragment-to-text pass ends with: drop what is left of the
+// markup, decode entities, collapse each line's inner whitespace and any run of
+// blank lines. The caller turns block tags into newlines first, which is where
+// the two callers differ — reading/sources/article.ts breaks on <h1>-<h6>
+// separately so a heading lands on a line of its own.
+export function stripTagsToText(fragment: string): string {
+  const text = decodeEntities(fragment.replace(/<[^>]+>/g, " "));
   return text
     .split("\n")
     .map((l) => l.replace(/[ \t\f\v ]+/g, " ").trim())

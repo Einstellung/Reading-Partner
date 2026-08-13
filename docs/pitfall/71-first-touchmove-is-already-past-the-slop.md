@@ -31,4 +31,4 @@ Chromium 在触点越过它自己的 touch slop 之前不派发 `touchmove`。�
 
 ## 范围
 
-Chromium（headless，`Emulation.setTouchEmulationEnabled` + `Input.dispatchTouchEvent`）实测。WebKit 派发 `touchmove` 比 Chromium 早（没验），那边第一个 move 的位移更小，正是"取小数"这条结论在真机上兜底的地方。
+Chromium（headless，`Emulation.setTouchEmulationEnabled` + `Input.dispatchTouchEvent`）实测。WebKit 派发 `touchmove` 确实早得多——早到从第一个像素起就发，每步 1px 的手指第一个 move 的 dy 就是 1（坑 117）。"取小数"这条结论因此在 WebKit 上永远兜得住。

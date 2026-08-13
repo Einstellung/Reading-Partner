@@ -7,16 +7,14 @@
 // here looking for.
 
 import { useCallback, useEffect, useState } from "react";
-import { openPath } from "@tauri-apps/plugin-opener";
-import { appDataDir, join } from "@tauri-apps/api/path";
-import { loadAnnotations } from "../../../../platform/app/annotations";
 import { logEvent } from "../../../../platform/app/events";
-import { sortedFiles, type Topic } from "../../../../platform/app/topics";
-import { listDecks, type TalkEntry } from "../../../../reading/slides";
+import type { Topic } from "../../../../platform/app/topics";
+import { listDecks, revealDeckFile, type TalkEntry } from "../../../../reading/slides";
 import {
+  createTalk,
   deleteTalk,
   listTalksForTopic,
-  startTalk,
+  talkCandidates,
   talkRows,
   talkSummary,
   type MaterialCandidate,
@@ -29,19 +27,6 @@ import DeleteTalkButton from "./DeleteTalkButton";
 import NewTalkDialog from "./NewTalkDialog";
 
 const ROW = "flex items-center gap-2 rounded-lg border border-border py-1 pl-3 pr-1.5";
-
-// The topic's materials that a talk can be started from: everything with a book
-// id, with its mark count so the picker can tick the ones worth rehearsing.
-async function candidatesFor(topic: Topic): Promise<MaterialCandidate[]> {
-  const files = sortedFiles(topic).filter((f) => !!f.hash);
-  return Promise.all(
-    files.map(async (f) => ({
-      bookId: f.hash as string,
-      title: displayFileTitle(f.name),
-      marks: (await loadAnnotations(f.hash as string).catch(() => [])).length,
-    })),
-  );
-}
 
 export default function TalksSection(props: {
   topic: Topic;
@@ -73,7 +58,7 @@ export default function TalksSection(props: {
     void refresh().catch(() => {
       if (!cancelled) setRows([]);
     });
-    void candidatesFor(topic).then((c) => {
+    void talkCandidates(topic, displayFileTitle).then((c) => {
       if (!cancelled) setCandidates(c);
     });
     return () => {
@@ -81,15 +66,12 @@ export default function TalksSection(props: {
     };
   }, [topic, refresh]);
 
-  // Same path the reader's Slides dialog opens a deck by: a self-contained HTML
-  // file under AppData, handed to the system's default handler.
-  const openDeck = useCallback(async (file: string) => {
+  // Literally the same path the talk's own deck dialog opens a deck by, and the
+  // failure goes on screen where the button is.
+  const revealDeck = useCallback(async (file: string) => {
     setError(null);
-    try {
-      await openPath(await join(await appDataDir(), file));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not open the deck");
-    }
+    const failure = await revealDeckFile(file);
+    if (failure) setError(failure);
   }, []);
 
   const create = useCallback(
@@ -97,11 +79,10 @@ export default function TalksSection(props: {
       setError(null);
       try {
         const picked = candidates.filter((c) => bookIds.includes(c.bookId));
-        const talk = await startTalk({
-          topicId: topic.id,
-          materials: picked.map(({ bookId, title }) => ({ bookId, title })),
-        });
-        logEvent(topic.id, "talk-start", { talkId: talk.id, materials: picked.length });
+        const talk = await createTalk(
+          topic.id,
+          picked.map(({ bookId, title }) => ({ bookId, title })),
+        );
         onOpenTalk(talk.id);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Could not start the talk");
@@ -144,7 +125,7 @@ export default function TalksSection(props: {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => void openDeck(row.deckFile as string)}
+                    onClick={() => void revealDeck(row.deckFile as string)}
                   >
                     Open deck
                   </Button>

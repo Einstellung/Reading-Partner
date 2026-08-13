@@ -51,7 +51,8 @@ import {
 } from "./platform/app/threads";
 import { initSync, onSyncPulled } from "./platform/sync";
 import { compressImage, compressImageData, type CompressedImage } from "./ai/image-utils";
-import { isTauri, readClipboardImage } from "./platform/app/clipboard";
+import { readClipboardImage } from "./platform/app/clipboard";
+import { isTauri } from "./platform/app/host";
 import { DEFAULT_SETTINGS, toReasoning, type Settings } from "./platform/app/settings";
 import { buildGlossary } from "./ai/voice";
 import {

@@ -40,6 +40,18 @@ export interface RunTimers {
   setTimer(ms: number, cb: () => void): () => void;
 }
 
+// The production wiring, spread into every pipeline's deps. Injection exists for
+// the tests' virtual clock; outside them there is one answer, and it should not
+// be retyped per pipeline.
+export const realTimers: RunTimers = {
+  now: () => Date.now(),
+  sleep: (ms) => new Promise<void>((r) => setTimeout(r, ms)),
+  setTimer: (ms, cb) => {
+    const id = setTimeout(cb, ms);
+    return () => clearTimeout(id);
+  },
+};
+
 export abstract class ObservableRun<TState, TActivity extends RunActivity> {
   protected state: TState;
   protected running = false;

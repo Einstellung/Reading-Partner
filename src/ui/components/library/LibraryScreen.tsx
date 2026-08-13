@@ -24,7 +24,6 @@ import {
   type FileRef,
   type Topic,
 } from "../../../platform/app/topics";
-import { logEvent } from "../../../platform/app/events";
 import { getViewState } from "../../../platform/app/storage";
 import { getFulltext } from "../../../fulltext";
 import { loadAnnotations } from "../../../platform/app/annotations";
@@ -35,7 +34,7 @@ import {
   savedArticlesForTopic,
   type SavedArticle,
 } from "../../../reading/saved-articles";
-import { startTalk } from "../../../reading/talks";
+import { createTalk } from "../../../reading/talks";
 import TalkView from "../talk/TalkView";
 import { Button } from "../ui/button";
 import BookCard from "./BookCard";
@@ -111,11 +110,9 @@ export default function LibraryScreen(props: {
   const startTalkOn = useCallback(
     async (file: FileRef) => {
       if (!activeTopic || !file.hash) return;
-      const talk = await startTalk({
-        topicId: activeTopic.id,
-        materials: [{ bookId: file.hash, title: displayFileTitle(file.name) }],
-      });
-      logEvent(activeTopic.id, "talk-start", { talkId: talk.id, materials: 1 });
+      const talk = await createTalk(activeTopic.id, [
+        { bookId: file.hash, title: displayFileTitle(file.name) },
+      ]);
       setOpenTalkId(talk.id);
     },
     [activeTopic],

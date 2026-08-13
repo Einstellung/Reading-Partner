@@ -33,19 +33,17 @@ export type MoreItem =
 	  }
 	| { kind: "divider" };
 
-// The row keeps its own geometry rather than the menu default: 13px, a 36px
-// minimum that grows to 44px under a coarse pointer, and no vertical padding of
-// its own so the minimum is what decides the height. The highlight is left to
-// the menu's own `focus:bg-accent`, which is the same grey the hand-written
-// `hover:` used and, unlike it, never sticks to a finger.
+// What this menu's rows want on top of the primitive's row: its geometry —
+// 13px, a 36px minimum that grows to 44px under a coarse pointer — is
+// DropdownMenuItem's own now. The highlight is left to the menu's
+// `focus:bg-accent`, which is the same grey the hand-written `hover:` used and,
+// unlike it, never sticks to a finger.
 //
 // The two [&_svg] rules undo a default drawn for lucide icons, which carry no
 // size or colour; this project's do. Identical modifier chains or tailwind-merge
 // keeps both (docs/pitfall/78).
 const ROW =
-	"w-full gap-2.5 rounded-md px-2.5 py-0 text-left text-[13px] text-[#333] " +
-	"min-h-[36px] coarse:min-h-[44px] cursor-pointer " +
-	"data-[disabled]:cursor-default data-[disabled]:opacity-40 " +
+	"gap-2.5 text-[#333] data-[disabled]:cursor-default data-[disabled]:opacity-40 " +
 	"[&_svg:not([class*='size-'])]:size-auto [&_svg:not([class*='text-'])]:text-current";
 
 export default function MoreMenu({ items, alert }: { items: MoreItem[]; alert?: boolean }) {

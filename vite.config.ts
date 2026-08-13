@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath } from "node:url";
+import { simBridge } from "./scripts/sim-bridge";
 
 // The PDFium wasm is a pthread build: it needs SharedArrayBuffer, which the
 // browser grants only to a cross-origin-isolated page (pitfall 18). Production
@@ -13,7 +14,9 @@ const isolationHeaders = {
 
 // Tauri expects a fixed port and no clearing of the terminal.
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  // simBridge is dev-only (apply: "serve"): it injects the eval channel the
+  // iOS simulator loop drives the webview through (scripts/ios-sim.sh).
+  plugins: [react(), tailwindcss(), simBridge()],
   clearScreen: false,
   // Matches the `paths` entry in tsconfig.json; the shadcn CLI writes `@/`
   // imports into every component it generates.
