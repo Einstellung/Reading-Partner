@@ -1,0 +1,1768 @@
+{
+  "kind": "voice-probe-session",
+  "version": 1,
+  "exportedAt": "2026-08-13T02:50:37.075Z",
+  "host": {
+    "appVersion": "0.8.23",
+    "platform": "iPhone",
+    "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+  },
+  "status": {
+    "available": true,
+    "reason": null,
+    "supportedLocales": [
+      "fr-FR",
+      "fr-CH",
+      "fr-CA",
+      "fr-BE",
+      "ko-KR",
+      "pt-BR",
+      "pt-PT",
+      "de-AT",
+      "de-CH",
+      "de-DE",
+      "it-IT",
+      "it-CH",
+      "zh-CN",
+      "zh-TW",
+      "es-CL",
+      "es-ES",
+      "es-US",
+      "es-MX",
+      "en-ZA",
+      "en-CA",
+      "en-SG",
+      "en-IN",
+      "en-NZ",
+      "en-GB",
+      "en-AU",
+      "en-US",
+      "en-IE",
+      "yue-CN",
+      "zh-HK",
+      "ja-JP"
+    ],
+    "modelInstalled": true,
+    "micPermission": "granted"
+  },
+  "params": {
+    "locale": "zh-CN",
+    "volatileResults": true,
+    "fastResults": true,
+    "audioTimeRange": true,
+    "voiceProcessing": true,
+    "sampleRate": null,
+    "contextualStrings": [
+      "机器之心"
+    ]
+  },
+  "run": {
+    "id": 2,
+    "phase": "stopped",
+    "startedAt": "2026-08-13T02:48:18.132Z",
+    "stoppedAt": "2026-08-13T02:48:35.290Z",
+    "durationMs": 17158,
+    "actualFormat": {
+      "sampleRate": 16000,
+      "channels": 1
+    },
+    "error": null
+  },
+  "level": {
+    "count": 106,
+    "peak": 0.09612176567316057,
+    "peakDbfs": -20.343565203665808,
+    "peakSinceStartMs": 1636,
+    "mean": 0.014316863006278477,
+    "meanDbfs": -36.883042613061576,
+    "droppedSamples": 0
+  },
+  "transcript": {
+    "finals": [
+      {
+        "text": "ow everthing going机器之心。",
+        "isFinal": true,
+        "startMs": 0,
+        "endMs": 3960,
+        "confidence": 0.604
+      },
+      {
+        "text": " how severything going",
+        "isFinal": true,
+        "startMs": 6300,
+        "endMs": 9120,
+        "confidence": 0.797
+      },
+      {
+        "text": "机器之心。",
+        "isFinal": true,
+        "startMs": 11820,
+        "endMs": 14460,
+        "confidence": 0.411
+      }
+    ],
+    "text": "ow everthing going机器之心。 how severything going机器之心。",
+    "lastVolatile": null,
+    "legend": {
+      "timeRanges": "per-word ranges requested; a result with no word-level attribute falls back to its own range",
+      "confidence": "minimum across the runs in the result"
+    }
+  },
+  "events": [
+    {
+      "atMs": 1786589298132,
+      "sinceStartMs": 0,
+      "kind": "command",
+      "payload": {
+        "label": "start_probe",
+        "detail": "{\"locale\":\"zh-CN\",\"volatileResults\":true,\"fastResults\":true,\"audioTimeRange\":true,\"voiceProcessing\":true,\"sampleRate\":null,\"contextualStrings\":[\"机器之心\"]}"
+      }
+    },
+    {
+      "atMs": 1786589298159,
+      "sinceStartMs": 27,
+      "kind": "state",
+      "payload": {
+        "phase": "preparing",
+        "message": ""
+      }
+    },
+    {
+      "atMs": 1786589298159,
+      "sinceStartMs": 27,
+      "kind": "log",
+      "payload": {
+        "line": "params locale=zh-CN volatileResults=true fastResults=true audioTimeRange=true voiceProcessing=true sampleRate=auto contextualStrings=1"
+      }
+    },
+    {
+      "atMs": 1786589298160,
+      "sinceStartMs": 28,
+      "kind": "log",
+      "payload": {
+        "line": "locale zh-CN resolved to zh-CN"
+      }
+    },
+    {
+      "atMs": 1786589298160,
+      "sinceStartMs": 28,
+      "kind": "state",
+      "payload": {
+        "phase": "downloading",
+        "message": "0%"
+      }
+    },
+    {
+      "atMs": 1786589298160,
+      "sinceStartMs": 28,
+      "kind": "log",
+      "payload": {
+        "line": "downloading the speech model for zh-CN"
+      }
+    },
+    {
+      "atMs": 1786589298173,
+      "sinceStartMs": 41,
+      "kind": "log",
+      "payload": {
+        "line": "speech model installed"
+      }
+    },
+    {
+      "atMs": 1786589298173,
+      "sinceStartMs": 41,
+      "kind": "state",
+      "payload": {
+        "phase": "preparing",
+        "message": ""
+      }
+    },
+    {
+      "atMs": 1786589298173,
+      "sinceStartMs": 41,
+      "kind": "log",
+      "payload": {
+        "line": "asset inventory: reserved=[zh-CN] maximumReservedLocales=5 speechAuthorization=0"
+      }
+    },
+    {
+      "atMs": 1786589298228,
+      "sinceStartMs": 96,
+      "kind": "log",
+      "payload": {
+        "line": "session category=AVAudioSessionCategoryPlayAndRecord mode=AVAudioSessionModeVoiceChat sampleRate=48000.0 ioBufferDuration=0.023333333333333334"
+      }
+    },
+    {
+      "atMs": 1786589298304,
+      "sinceStartMs": 172,
+      "kind": "log",
+      "payload": {
+        "line": "route in=[iPhone Microphone/MicrophoneBuiltIn] out=[Speaker/Speaker]"
+      }
+    },
+    {
+      "atMs": 1786589298362,
+      "sinceStartMs": 230,
+      "kind": "log",
+      "payload": {
+        "line": "voice processing: input=true output=true"
+      }
+    },
+    {
+      "atMs": 1786589298363,
+      "sinceStartMs": 231,
+      "kind": "log",
+      "payload": {
+        "line": "bestAvailableAudioFormat 16000Hz 1ch interleaved fmt=3; compatible formats [16000Hz 1ch interleaved fmt=3 | 8000Hz 1ch interleaved fmt=3]"
+      }
+    },
+    {
+      "atMs": 1786589298363,
+      "sinceStartMs": 231,
+      "kind": "log",
+      "payload": {
+        "line": "analyzer format 16000Hz 1ch interleaved fmt=3"
+      }
+    },
+    {
+      "atMs": 1786589298363,
+      "sinceStartMs": 231,
+      "kind": "log",
+      "payload": {
+        "line": "microphone format 48000Hz 1ch deinterleaved fmt=1"
+      }
+    },
+    {
+      "atMs": 1786589298670,
+      "sinceStartMs": 538,
+      "kind": "command",
+      "payload": {
+        "label": "start_probe →",
+        "detail": "{\"started\":true,\"actualFormat\":{\"sampleRate\":16000,\"channels\":1},\"error\":null}"
+      }
+    },
+    {
+      "atMs": 1786589298666,
+      "sinceStartMs": 534,
+      "kind": "log",
+      "payload": {
+        "line": "route in=[iPhone Microphone/MicrophoneBuiltIn] out=[Speaker/Speaker]"
+      }
+    },
+    {
+      "atMs": 1786589298666,
+      "sinceStartMs": 534,
+      "kind": "state",
+      "payload": {
+        "phase": "running",
+        "message": ""
+      }
+    },
+    {
+      "atMs": 1786589298780,
+      "sinceStartMs": 648,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00009129954560194165,
+        "timestampMs": 640.4190063476562
+      }
+    },
+    {
+      "atMs": 1786589298986,
+      "sinceStartMs": 854,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00017369649140164256,
+        "timestampMs": 846.82297706604
+      }
+    },
+    {
+      "atMs": 1786589299170,
+      "sinceStartMs": 1038,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0001626562007004395,
+        "timestampMs": 1031.1529636383057
+      }
+    },
+    {
+      "atMs": 1786589299285,
+      "sinceStartMs": 1153,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0001727773924358189,
+        "timestampMs": 1145.8829641342163
+      }
+    },
+    {
+      "atMs": 1786589299469,
+      "sinceStartMs": 1337,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0926542803645134,
+        "timestampMs": 1329.7220468521118
+      }
+    },
+    {
+      "atMs": 1786589299584,
+      "sinceStartMs": 1452,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.08352362364530563,
+        "timestampMs": 1444.8330402374268
+      }
+    },
+    {
+      "atMs": 1786589299768,
+      "sinceStartMs": 1636,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.09612176567316057,
+        "timestampMs": 1628.6680698394775
+      }
+    },
+    {
+      "atMs": 1786589299884,
+      "sinceStartMs": 1752,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0757007896900177,
+        "timestampMs": 1745.993971824646
+      }
+    },
+    {
+      "atMs": 1786589300067,
+      "sinceStartMs": 1935,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.026621298864483833,
+        "timestampMs": 1927.6540279388428
+      }
+    },
+    {
+      "atMs": 1786589300184,
+      "sinceStartMs": 2052,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.04674029350280762,
+        "timestampMs": 2045.577049255371
+      }
+    },
+    {
+      "atMs": 1786589300365,
+      "sinceStartMs": 2233,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.061760399490594864,
+        "timestampMs": 2226.410984992981
+      }
+    },
+    {
+      "atMs": 1786589300483,
+      "sinceStartMs": 2351,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.045476146042346954,
+        "timestampMs": 2344.4210290908813
+      }
+    },
+    {
+      "atMs": 1786589300665,
+      "sinceStartMs": 2533,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.010302149690687656,
+        "timestampMs": 2525.4169702529907
+      }
+    },
+    {
+      "atMs": 1786589300780,
+      "sinceStartMs": 2648,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.014198155142366886,
+        "timestampMs": 2640.4579877853394
+      }
+    },
+    {
+      "atMs": 1786589300801,
+      "sinceStartMs": 2669,
+      "kind": "transcript",
+      "payload": {
+        "text": "o",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 2027.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589300811,
+      "sinceStartMs": 2679,
+      "kind": "transcript",
+      "payload": {
+        "text": "ow",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 2027.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589300817,
+      "sinceStartMs": 2685,
+      "kind": "transcript",
+      "payload": {
+        "text": "ow e",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 2027.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589300821,
+      "sinceStartMs": 2689,
+      "kind": "transcript",
+      "payload": {
+        "text": "ow ev",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 2027.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589300824,
+      "sinceStartMs": 2692,
+      "kind": "transcript",
+      "payload": {
+        "text": "ow eve",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 2027.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589300827,
+      "sinceStartMs": 2695,
+      "kind": "transcript",
+      "payload": {
+        "text": "ow ever",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 2027.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589300832,
+      "sinceStartMs": 2700,
+      "kind": "transcript",
+      "payload": {
+        "text": "ow evert",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 2027.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589300835,
+      "sinceStartMs": 2703,
+      "kind": "transcript",
+      "payload": {
+        "text": "ow everth",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 2027.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589300837,
+      "sinceStartMs": 2705,
+      "kind": "transcript",
+      "payload": {
+        "text": "ow everthi",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 2027.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589300840,
+      "sinceStartMs": 2708,
+      "kind": "transcript",
+      "payload": {
+        "text": "ow everthing",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 2027.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589300842,
+      "sinceStartMs": 2710,
+      "kind": "transcript",
+      "payload": {
+        "text": "ow everthing g",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 2027.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589300964,
+      "sinceStartMs": 2832,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.033487193286418915,
+        "timestampMs": 2824.494957923889
+      }
+    },
+    {
+      "atMs": 1786589301080,
+      "sinceStartMs": 2948,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0381280742585659,
+        "timestampMs": 2940.4979944229126
+      }
+    },
+    {
+      "atMs": 1786589301286,
+      "sinceStartMs": 3154,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.02449188008904457,
+        "timestampMs": 3146.8740701675415
+      }
+    },
+    {
+      "atMs": 1786589301469,
+      "sinceStartMs": 3337,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.03568447381258011,
+        "timestampMs": 3330.142021179199
+      }
+    },
+    {
+      "atMs": 1786589301584,
+      "sinceStartMs": 3452,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.06845096498727798,
+        "timestampMs": 3445.340991020202
+      }
+    },
+    {
+      "atMs": 1786589301700,
+      "sinceStartMs": 3568,
+      "kind": "transcript",
+      "payload": {
+        "text": "ow everthing goi",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 2952.875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589301707,
+      "sinceStartMs": 3575,
+      "kind": "transcript",
+      "payload": {
+        "text": "ow everthing going",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 2952.875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589301715,
+      "sinceStartMs": 3583,
+      "kind": "transcript",
+      "payload": {
+        "text": "ow everthing机",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 2952.875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589301719,
+      "sinceStartMs": 3587,
+      "kind": "transcript",
+      "payload": {
+        "text": "ow everthing机器",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 2952.875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589301725,
+      "sinceStartMs": 3593,
+      "kind": "transcript",
+      "payload": {
+        "text": "ow everthingoing机器之",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 2952.875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589301767,
+      "sinceStartMs": 3635,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0018516781274229288,
+        "timestampMs": 3628.929018974304
+      }
+    },
+    {
+      "atMs": 1786589301884,
+      "sinceStartMs": 3752,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00017411897715646774,
+        "timestampMs": 3744.417071342468
+      }
+    },
+    {
+      "atMs": 1786589302067,
+      "sinceStartMs": 3935,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0001537081552669406,
+        "timestampMs": 3928.2330274581914
+      }
+    },
+    {
+      "atMs": 1786589302184,
+      "sinceStartMs": 4052,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00014916608051862568,
+        "timestampMs": 4045.6470251083374
+      }
+    },
+    {
+      "atMs": 1786589302369,
+      "sinceStartMs": 4237,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00015349083696492016,
+        "timestampMs": 4228.962063789368
+      }
+    },
+    {
+      "atMs": 1786589302484,
+      "sinceStartMs": 4352,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00015946458734106272,
+        "timestampMs": 4345.296025276184
+      }
+    },
+    {
+      "atMs": 1786589302667,
+      "sinceStartMs": 4535,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00015481517766602335,
+        "timestampMs": 4527.644038200378
+      }
+    },
+    {
+      "atMs": 1786589302692,
+      "sinceStartMs": 4560,
+      "kind": "transcript",
+      "payload": {
+        "text": "ow everthingoing机器之心",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 3963.4375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589302782,
+      "sinceStartMs": 4650,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0001494092430220917,
+        "timestampMs": 4643.350958824158
+      }
+    },
+    {
+      "atMs": 1786589302966,
+      "sinceStartMs": 4834,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00015579276077914983,
+        "timestampMs": 4826.503038406372
+      }
+    },
+    {
+      "atMs": 1786589303080,
+      "sinceStartMs": 4948,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00015252811135724187,
+        "timestampMs": 4940.808057785034
+      }
+    },
+    {
+      "atMs": 1786589303266,
+      "sinceStartMs": 5134,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00018217631441075355,
+        "timestampMs": 5125.542998313904
+      }
+    },
+    {
+      "atMs": 1786589303380,
+      "sinceStartMs": 5248,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00017964612925425172,
+        "timestampMs": 5240.646004676819
+      }
+    },
+    {
+      "atMs": 1786589303586,
+      "sinceStartMs": 5454,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00017128727631643414,
+        "timestampMs": 5446.410059928894
+      }
+    },
+    {
+      "atMs": 1786589303611,
+      "sinceStartMs": 5479,
+      "kind": "transcript",
+      "payload": {
+        "text": "ow everthingoing机器之心。",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 4888.75,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589303771,
+      "sinceStartMs": 5639,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00016102286463137716,
+        "timestampMs": 5631.392002105713
+      }
+    },
+    {
+      "atMs": 1786589303884,
+      "sinceStartMs": 5752,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00016816526476759464,
+        "timestampMs": 5745.426058769226
+      }
+    },
+    {
+      "atMs": 1786589304069,
+      "sinceStartMs": 5937,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.000160232579219155,
+        "timestampMs": 5929.9280643463135
+      }
+    },
+    {
+      "atMs": 1786589304184,
+      "sinceStartMs": 6052,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.000168701313668862,
+        "timestampMs": 6044.651985168457
+      }
+    },
+    {
+      "atMs": 1786589304368,
+      "sinceStartMs": 6236,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0016831314424052837,
+        "timestampMs": 6228.772044181824
+      }
+    },
+    {
+      "atMs": 1786589304486,
+      "sinceStartMs": 6354,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00015228340635076165,
+        "timestampMs": 6347.449064254761
+      }
+    },
+    {
+      "atMs": 1786589304667,
+      "sinceStartMs": 6535,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00018192412971984595,
+        "timestampMs": 6527.359962463379
+      }
+    },
+    {
+      "atMs": 1786589304783,
+      "sinceStartMs": 6651,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00015161359624471515,
+        "timestampMs": 6645.756959915161
+      }
+    },
+    {
+      "atMs": 1786589304965,
+      "sinceStartMs": 6833,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0001474301825510338,
+        "timestampMs": 6826.290965080261
+      }
+    },
+    {
+      "atMs": 1786589305082,
+      "sinceStartMs": 6950,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0001618870737729594,
+        "timestampMs": 6943.631052970886
+      }
+    },
+    {
+      "atMs": 1786589305264,
+      "sinceStartMs": 7132,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00033940820139832795,
+        "timestampMs": 7125.251054763794
+      }
+    },
+    {
+      "atMs": 1786589305380,
+      "sinceStartMs": 7248,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0009442620212212205,
+        "timestampMs": 7240.967035293579
+      }
+    },
+    {
+      "atMs": 1786589305564,
+      "sinceStartMs": 7432,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.007431185338646173,
+        "timestampMs": 7425.253987312317
+      }
+    },
+    {
+      "atMs": 1786589305665,
+      "sinceStartMs": 7533,
+      "kind": "transcript",
+      "payload": {
+        "text": "ow everthing going机器之心。",
+        "isFinal": true,
+        "startMs": 0,
+        "endMs": 3960,
+        "confidence": 0.604
+      }
+    },
+    {
+      "atMs": 1786589305678,
+      "sinceStartMs": 7546,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.032134149223566055,
+        "timestampMs": 7540.840029716491
+      }
+    },
+    {
+      "atMs": 1786589305886,
+      "sinceStartMs": 7754,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.047594714909791946,
+        "timestampMs": 7747.222065925598
+      }
+    },
+    {
+      "atMs": 1786589306070,
+      "sinceStartMs": 7938,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.034408412873744965,
+        "timestampMs": 7930.60803413391
+      }
+    },
+    {
+      "atMs": 1786589306184,
+      "sinceStartMs": 8052,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.018983671441674232,
+        "timestampMs": 8045.84801197052
+      }
+    },
+    {
+      "atMs": 1786589306370,
+      "sinceStartMs": 8238,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.051359761506319046,
+        "timestampMs": 8230.31198978424
+      }
+    },
+    {
+      "atMs": 1786589306484,
+      "sinceStartMs": 8352,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.03897124156355858,
+        "timestampMs": 8345.26002407074
+      }
+    },
+    {
+      "atMs": 1786589306512,
+      "sinceStartMs": 8380,
+      "kind": "transcript",
+      "payload": {
+        "text": " h",
+        "isFinal": false,
+        "startMs": 6300,
+        "endMs": 7756.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589306514,
+      "sinceStartMs": 8382,
+      "kind": "transcript",
+      "payload": {
+        "text": " ho",
+        "isFinal": false,
+        "startMs": 6300,
+        "endMs": 7756.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589306517,
+      "sinceStartMs": 8385,
+      "kind": "transcript",
+      "payload": {
+        "text": " how",
+        "isFinal": false,
+        "startMs": 6300,
+        "endMs": 7756.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589306524,
+      "sinceStartMs": 8392,
+      "kind": "transcript",
+      "payload": {
+        "text": " how s",
+        "isFinal": false,
+        "startMs": 6300,
+        "endMs": 7756.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589306667,
+      "sinceStartMs": 8535,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.03449205681681633,
+        "timestampMs": 8528.27000617981
+      }
+    },
+    {
+      "atMs": 1786589306785,
+      "sinceStartMs": 8653,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.04648604243993759,
+        "timestampMs": 8646.48699760437
+      }
+    },
+    {
+      "atMs": 1786589306967,
+      "sinceStartMs": 8835,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.01904979534447193,
+        "timestampMs": 8827.062964439392
+      }
+    },
+    {
+      "atMs": 1786589307084,
+      "sinceStartMs": 8952,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.025419414043426514,
+        "timestampMs": 8945.024967193604
+      }
+    },
+    {
+      "atMs": 1786589307266,
+      "sinceStartMs": 9134,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.03558354452252388,
+        "timestampMs": 9127.081990242004
+      }
+    },
+    {
+      "atMs": 1786589307383,
+      "sinceStartMs": 9251,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.04653272777795792,
+        "timestampMs": 9244.058966636658
+      }
+    },
+    {
+      "atMs": 1786589307497,
+      "sinceStartMs": 9365,
+      "kind": "transcript",
+      "payload": {
+        "text": " how se",
+        "isFinal": false,
+        "startMs": 6300,
+        "endMs": 8767.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589307507,
+      "sinceStartMs": 9375,
+      "kind": "transcript",
+      "payload": {
+        "text": " how seve",
+        "isFinal": false,
+        "startMs": 6300,
+        "endMs": 8767.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589307512,
+      "sinceStartMs": 9380,
+      "kind": "transcript",
+      "payload": {
+        "text": " how sever",
+        "isFinal": false,
+        "startMs": 6300,
+        "endMs": 8767.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589307515,
+      "sinceStartMs": 9383,
+      "kind": "transcript",
+      "payload": {
+        "text": " how severy",
+        "isFinal": false,
+        "startMs": 6300,
+        "endMs": 8767.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589307518,
+      "sinceStartMs": 9386,
+      "kind": "transcript",
+      "payload": {
+        "text": " how severyt",
+        "isFinal": false,
+        "startMs": 6300,
+        "endMs": 8767.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589307522,
+      "sinceStartMs": 9390,
+      "kind": "transcript",
+      "payload": {
+        "text": " how severyth",
+        "isFinal": false,
+        "startMs": 6300,
+        "endMs": 8767.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589307525,
+      "sinceStartMs": 9393,
+      "kind": "transcript",
+      "payload": {
+        "text": " how severythi",
+        "isFinal": false,
+        "startMs": 6300,
+        "endMs": 8767.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589307529,
+      "sinceStartMs": 9397,
+      "kind": "transcript",
+      "payload": {
+        "text": " how severything",
+        "isFinal": false,
+        "startMs": 6300,
+        "endMs": 8767.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589307531,
+      "sinceStartMs": 9399,
+      "kind": "transcript",
+      "payload": {
+        "text": " how severything g",
+        "isFinal": false,
+        "startMs": 6300,
+        "endMs": 8767.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589307532,
+      "sinceStartMs": 9400,
+      "kind": "transcript",
+      "payload": {
+        "text": " how severything go",
+        "isFinal": false,
+        "startMs": 6300,
+        "endMs": 8767.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589307562,
+      "sinceStartMs": 9430,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.007255310658365488,
+        "timestampMs": 9425.188064575195
+      }
+    },
+    {
+      "atMs": 1786589307680,
+      "sinceStartMs": 9548,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00020230311201885345,
+        "timestampMs": 9541.054964065552
+      }
+    },
+    {
+      "atMs": 1786589307864,
+      "sinceStartMs": 9732,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00018323652329854667,
+        "timestampMs": 9724.212050437927
+      }
+    },
+    {
+      "atMs": 1786589307979,
+      "sinceStartMs": 9847,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00016149280418176204,
+        "timestampMs": 9839.928030967712
+      }
+    },
+    {
+      "atMs": 1786589308185,
+      "sinceStartMs": 10053,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00015748462465126067,
+        "timestampMs": 10046.332001686096
+      }
+    },
+    {
+      "atMs": 1786589308370,
+      "sinceStartMs": 10238,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00016117321501951665,
+        "timestampMs": 10230.9650182724
+      }
+    },
+    {
+      "atMs": 1786589308396,
+      "sinceStartMs": 10264,
+      "kind": "transcript",
+      "payload": {
+        "text": " how severything goi",
+        "isFinal": false,
+        "startMs": 6300,
+        "endMs": 9692.5,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589308399,
+      "sinceStartMs": 10267,
+      "kind": "transcript",
+      "payload": {
+        "text": " how severything goin",
+        "isFinal": false,
+        "startMs": 6300,
+        "endMs": 9692.5,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589308403,
+      "sinceStartMs": 10271,
+      "kind": "transcript",
+      "payload": {
+        "text": " how severything going",
+        "isFinal": false,
+        "startMs": 6300,
+        "endMs": 9692.5,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589308484,
+      "sinceStartMs": 10352,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00015438898117281497,
+        "timestampMs": 10345.38996219635
+      }
+    },
+    {
+      "atMs": 1786589308669,
+      "sinceStartMs": 10537,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00016484716616105288,
+        "timestampMs": 10530.007004737854
+      }
+    },
+    {
+      "atMs": 1786589308784,
+      "sinceStartMs": 10652,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00041479611536487937,
+        "timestampMs": 10644.92404460907
+      }
+    },
+    {
+      "atMs": 1786589308968,
+      "sinceStartMs": 10836,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0001687502663116902,
+        "timestampMs": 10829.370975494385
+      }
+    },
+    {
+      "atMs": 1786589309085,
+      "sinceStartMs": 10953,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0001875764864962548,
+        "timestampMs": 10946.130990982056
+      }
+    },
+    {
+      "atMs": 1786589309268,
+      "sinceStartMs": 11136,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00015268250717781484,
+        "timestampMs": 11128.262042999268
+      }
+    },
+    {
+      "atMs": 1786589309384,
+      "sinceStartMs": 11252,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00016150249575730413,
+        "timestampMs": 11245.514035224916
+      }
+    },
+    {
+      "atMs": 1786589309568,
+      "sinceStartMs": 11436,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0001707556948531419,
+        "timestampMs": 11426.372051239014
+      }
+    },
+    {
+      "atMs": 1786589309684,
+      "sinceStartMs": 11552,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0001665413728915155,
+        "timestampMs": 11544.945001602173
+      }
+    },
+    {
+      "atMs": 1786589309865,
+      "sinceStartMs": 11733,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00016303174197673798,
+        "timestampMs": 11725.600957870483
+      }
+    },
+    {
+      "atMs": 1786589309980,
+      "sinceStartMs": 11848,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00016549073916394264,
+        "timestampMs": 11841.228008270264
+      }
+    },
+    {
+      "atMs": 1786589310163,
+      "sinceStartMs": 12031,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00016427690570708364,
+        "timestampMs": 12023.916006088257
+      }
+    },
+    {
+      "atMs": 1786589310279,
+      "sinceStartMs": 12147,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00014744492364116013,
+        "timestampMs": 12139.672040939333
+      }
+    },
+    {
+      "atMs": 1786589310486,
+      "sinceStartMs": 12354,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.06500664353370667,
+        "timestampMs": 12346.680045127869
+      }
+    },
+    {
+      "atMs": 1786589310670,
+      "sinceStartMs": 12538,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.013884748332202436,
+        "timestampMs": 12531.275987625122
+      }
+    },
+    {
+      "atMs": 1786589310785,
+      "sinceStartMs": 12653,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.03985754773020744,
+        "timestampMs": 12646.028995513916
+      }
+    },
+    {
+      "atMs": 1786589310969,
+      "sinceStartMs": 12837,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.036649204790592194,
+        "timestampMs": 12829.445958137512
+      }
+    },
+    {
+      "atMs": 1786589311085,
+      "sinceStartMs": 12953,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.012819858267903328,
+        "timestampMs": 12944.988012313845
+      }
+    },
+    {
+      "atMs": 1786589311268,
+      "sinceStartMs": 13136,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.031010884791612625,
+        "timestampMs": 13129.191994667051
+      }
+    },
+    {
+      "atMs": 1786589311315,
+      "sinceStartMs": 13183,
+      "kind": "transcript",
+      "payload": {
+        "text": " how severything going",
+        "isFinal": true,
+        "startMs": 6300,
+        "endMs": 9120,
+        "confidence": 0.797
+      }
+    },
+    {
+      "atMs": 1786589311317,
+      "sinceStartMs": 13185,
+      "kind": "transcript",
+      "payload": {
+        "text": "机",
+        "isFinal": false,
+        "startMs": 11820,
+        "endMs": 12560.3125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589311384,
+      "sinceStartMs": 13252,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.02735530026257038,
+        "timestampMs": 13245.642066001892
+      }
+    },
+    {
+      "atMs": 1786589311568,
+      "sinceStartMs": 13436,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.03630513325333595,
+        "timestampMs": 13428.447961807253
+      }
+    },
+    {
+      "atMs": 1786589311683,
+      "sinceStartMs": 13551,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.03646693751215934,
+        "timestampMs": 13544.775009155272
+      }
+    },
+    {
+      "atMs": 1786589311866,
+      "sinceStartMs": 13734,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00017854112957138568,
+        "timestampMs": 13727.344989776611
+      }
+    },
+    {
+      "atMs": 1786589311982,
+      "sinceStartMs": 13850,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0001467198017053306,
+        "timestampMs": 13843.46604347229
+      }
+    },
+    {
+      "atMs": 1786589312165,
+      "sinceStartMs": 14033,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00015796764637343583,
+        "timestampMs": 14025.223970413208
+      }
+    },
+    {
+      "atMs": 1786589312280,
+      "sinceStartMs": 14148,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00014585851749870926,
+        "timestampMs": 14140.516042709352
+      }
+    },
+    {
+      "atMs": 1786589312299,
+      "sinceStartMs": 14167,
+      "kind": "transcript",
+      "payload": {
+        "text": "机器",
+        "isFinal": false,
+        "startMs": 11820,
+        "endMs": 13570.9375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589312304,
+      "sinceStartMs": 14172,
+      "kind": "transcript",
+      "payload": {
+        "text": "机器之",
+        "isFinal": false,
+        "startMs": 11820,
+        "endMs": 13570.9375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589312309,
+      "sinceStartMs": 14177,
+      "kind": "transcript",
+      "payload": {
+        "text": "机器之心",
+        "isFinal": false,
+        "startMs": 11820,
+        "endMs": 13570.9375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589312463,
+      "sinceStartMs": 14331,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00012462514860089868,
+        "timestampMs": 14324.11003112793
+      }
+    },
+    {
+      "atMs": 1786589312579,
+      "sinceStartMs": 14447,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00015136494766920805,
+        "timestampMs": 14440.422058105469
+      }
+    },
+    {
+      "atMs": 1786589312784,
+      "sinceStartMs": 14652,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00015136801812332124,
+        "timestampMs": 14645.441055297852
+      }
+    },
+    {
+      "atMs": 1786589312971,
+      "sinceStartMs": 14839,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0034407388884574175,
+        "timestampMs": 14831.467032432556
+      }
+    },
+    {
+      "atMs": 1786589313084,
+      "sinceStartMs": 14952,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0003354266518726945,
+        "timestampMs": 14945.312976837158
+      }
+    },
+    {
+      "atMs": 1786589313269,
+      "sinceStartMs": 15137,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00031979926279745996,
+        "timestampMs": 15129.29904460907
+      }
+    },
+    {
+      "atMs": 1786589313384,
+      "sinceStartMs": 15252,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.000166968849953264,
+        "timestampMs": 15245.416045188904
+      }
+    },
+    {
+      "atMs": 1786589313569,
+      "sinceStartMs": 15437,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0001803609629860148,
+        "timestampMs": 15429.50999736786
+      }
+    },
+    {
+      "atMs": 1786589313683,
+      "sinceStartMs": 15551,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00015721241652499884,
+        "timestampMs": 15545.292973518372
+      }
+    },
+    {
+      "atMs": 1786589313867,
+      "sinceStartMs": 15735,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00016931390564423054,
+        "timestampMs": 15728.30605506897
+      }
+    },
+    {
+      "atMs": 1786589313984,
+      "sinceStartMs": 15852,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00018473033560439944,
+        "timestampMs": 15845.023036003113
+      }
+    },
+    {
+      "atMs": 1786589314165,
+      "sinceStartMs": 16033,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00020353552827145904,
+        "timestampMs": 16026.06201171875
+      }
+    },
+    {
+      "atMs": 1786589314185,
+      "sinceStartMs": 16053,
+      "kind": "transcript",
+      "payload": {
+        "text": "机器之心。",
+        "isFinal": false,
+        "startMs": 11820,
+        "endMs": 15428.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786589314282,
+      "sinceStartMs": 16150,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00017161574214696884,
+        "timestampMs": 16143.13507080078
+      }
+    },
+    {
+      "atMs": 1786589314465,
+      "sinceStartMs": 16333,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00017617367848288268,
+        "timestampMs": 16325.0230550766
+      }
+    },
+    {
+      "atMs": 1786589314580,
+      "sinceStartMs": 16448,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00018798802921082824,
+        "timestampMs": 16441.051959991455
+      }
+    },
+    {
+      "atMs": 1786589314763,
+      "sinceStartMs": 16631,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0001773631083779037,
+        "timestampMs": 16624.30202960968
+      }
+    },
+    {
+      "atMs": 1786589314880,
+      "sinceStartMs": 16748,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0002044814609689638,
+        "timestampMs": 16740.391969680786
+      }
+    },
+    {
+      "atMs": 1786589315076,
+      "sinceStartMs": 16944,
+      "kind": "command",
+      "payload": {
+        "label": "stop_probe",
+        "detail": ""
+      }
+    },
+    {
+      "atMs": 1786589315156,
+      "sinceStartMs": 17024,
+      "kind": "transcript",
+      "payload": {
+        "text": "机器之心。",
+        "isFinal": true,
+        "startMs": 11820,
+        "endMs": 14460,
+        "confidence": 0.411
+      }
+    },
+    {
+      "atMs": 1786589315160,
+      "sinceStartMs": 17028,
+      "kind": "log",
+      "payload": {
+        "line": "the results stream ended"
+      }
+    },
+    {
+      "atMs": 1786589315290,
+      "sinceStartMs": 17158,
+      "kind": "command",
+      "payload": {
+        "label": "stop_probe →",
+        "detail": "{\"stopped\":true}"
+      }
+    },
+    {
+      "atMs": 1786589315288,
+      "sinceStartMs": 17156,
+      "kind": "state",
+      "payload": {
+        "phase": "stopped",
+        "message": "stopped by the app"
+      }
+    }
+  ]
+}
