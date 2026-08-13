@@ -53,7 +53,7 @@ const alwaysCallsTool: StreamFn = (_model: Model<Api>, _context: Context) => {
   return stream;
 };
 
-// The companion's row, patched the way InfoCall patches it — including blanking
+// The companion's row, patched the way use-info-call patches it — including blanking
 // the row when a tool starts, which is why a refusal never has anything written
 // under it.
 async function rowAfterRefusal(start: ThreadMessage): Promise<ThreadMessage> {
@@ -173,7 +173,7 @@ test("a notice-only row is cleared by the next attempt; a card row is not", () =
 // nothing else in this file can tell whether the companion wires it.
 test("the companion's agent turn wires the refusal exit", () => {
   const source = readFileSync(
-    new URL("../../../src/ui/components/info/InfoCall.tsx", import.meta.url),
+    new URL("../../../src/ui/components/info/use-info-call.ts", import.meta.url),
     "utf8",
   );
   expect(source).toContain("onRefusal:");
