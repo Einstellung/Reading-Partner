@@ -210,7 +210,7 @@ Radix 带进来三件行为上的变化：倒计时在指针停在浮层上时�
 
 **`MoreMenu`**。`MoreItem` 那个类型和 `ReaderTopBar` 的调用点一个字没动。trigger 是原来那个按钮加 `asChild`（`aria-haspopup` / `aria-expanded` 交给 Radix，开着的样子改用 `data-[state=open]:`），action 行是 `DropdownMenuItem`，toggle 行是 `DropdownMenuCheckboxItem` 加 `onSelect` 里 `preventDefault()` 再调 `onClick`——不 prevent 就会关掉菜单，而 toggle 要留着连续翻。
 
-行的几何自己写：13px、`min-h-[36px] coarse:min-h-[44px]`、`py-0`。菜单默认的 `[&_svg:not([class*='size-'])]:size-4` 和 `[&_svg:not([class*='text-'])]:text-muted-foreground` 是给 lucide 画的，会把本项目 18px 的自绘图标压成 16px 并改色，用一模一样的修饰符链覆盖成 `size-auto` / `text-current`（坑 78）。悬停底色不再自己写：Radix 在鼠标下会给行真正的焦点，`focus:bg-accent` 就是原来那个 `#f0f0f0`，而手指不会触发（Radix 的 `onPointerMove` 只认 mouse），比原来的 `hover:` 干净。
+行的几何在原语的 `ITEM_BASE` 里：13px、`min-h-[36px] coarse:min-h-[44px]`、`py-0`。菜单默认的 `[&_svg:not([class*='size-'])]:size-4` 和 `[&_svg:not([class*='text-'])]:text-muted-foreground` 是给 lucide 画的，会把本项目 18px 的自绘图标压成 16px 并改色，用一模一样的修饰符链覆盖成 `size-auto` / `text-current`（坑 78）。悬停底色不再自己写：Radix 在鼠标下会给行真正的焦点，`focus:bg-accent` 就是原来那个 `#f0f0f0`，而手指不会触发（Radix 的 `onPointerMove` 只认 mouse），比原来的 `hover:` 干净。
 
 原来那条 document 上的 `pointerdown` 和 Escape 监听整个删掉，Radix 自己有。换来的是键盘可达：ArrowDown / Enter 开、方向键走、首字母跳、Escape 关，原来一样都没有。
 
@@ -231,7 +231,7 @@ Radix 带进来三件行为上的变化：倒计时在指针停在浮层上时�
 
 **视觉变化**：两处，都是"亮起来的状态原来没亮"。lit 的 toggle 行的文字从 `#333` 变成 `#4a3a9e`，开着的 trigger 的箭头从 `#555` 变成 `#1b1b1b`。原来两处都是把两个 `text-*` 直接拼在一个 className 里，谁赢由 Tailwind 把它们排在哪决定，赢的都是不该赢的那个；现在一个走 `cn()`，一个走 `data-[state=open]:` 修饰符。除此之外菜单打开态逐行逐属性相同，面板相对触发器的位置 `[-192, 36, 224×220]` 两边一致。
 
-**依赖**：`dropdown-menu` 和 `collapsible` 的 registry 版本都不带新 npm 包（`radix-ui` 伞包已经在）。生成的 `dropdown-menu.tsx` 删掉了 Sub / RadioGroup / RadioItem / Shortcut 和 CheckboxItem 的对勾指示器——只有它们要 `lucide-react`，本项目不装。这次 `add` 没有覆盖 `button.tsx`（坑 81 仍然要每次 `git status`）。`collapsible.tsx` 生成时用了 `React.ComponentProps` 却没 import React，补上。产物：App chunk 637.6 → 682.4 KB（gzip 182.7 → 198.7），CSS 62.7 → 65.8 KB，涨的是 popper 那一套和 `tw-animate-css` 里菜单用到的进出场。
+**依赖**：`dropdown-menu` 和 `collapsible` 的 registry 版本都不带新 npm 包（`radix-ui` 伞包已经在）。生成的 `dropdown-menu.tsx` 删掉了 Sub / RadioGroup / RadioItem / Shortcut 和 CheckboxItem 的对勾指示器——只有它们要 `lucide-react`，本项目不装。行的几何也换掉了：生成的 `px-2 py-1.5 text-sm` 是 32px 的行，手指够不着，`ITEM_BASE` 换成上面那组值，`Item` 和 `CheckboxItem` 共用。触摸目标归原语管，和按钮、字段一处，`CardMenu` / `OutlinePane` / `MoreMenu` 不再各自写一遍（`tests/ui/components/primitive-contract.test.ts` 盯着）。这次 `add` 没有覆盖 `button.tsx`（坑 81 仍然要每次 `git status`）。`collapsible.tsx` 生成时用了 `React.ComponentProps` 却没 import React，补上。产物：App chunk 637.6 → 682.4 KB（gzip 182.7 → 198.7），CSS 62.7 → 65.8 KB，涨的是 popper 那一套和 `tw-animate-css` 里菜单用到的进出场。
 
 ## 第四版：两个对话框
 
