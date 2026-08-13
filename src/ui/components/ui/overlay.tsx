@@ -31,7 +31,7 @@
 // above: it is still fixed, so the shell's padding still misses it, and a press
 // on it still has to stop belonging to whatever is underneath.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 
 import { pushOverlayLayer } from "@/ui/components/common/overlay-layer";
 import {
@@ -103,14 +103,32 @@ export const OVERLAY_SAFE = {
     "max-w-(--radix-popper-available-width) max-h-(--radix-popper-available-height)",
 } as const;
 
+// useLayoutEffect where there is a document, useEffect where there is not.
+// Rendering to a string is how several tests read a portalled overlay's markup,
+// and React warns on every layout effect it meets there; the effect cannot run
+// on a server anyway, so the passive one is the same nothing without the noise.
+const useBeforePaint = typeof document === "undefined" ? useEffect : useLayoutEffect;
+
 // The viewport margin an anchored overlay keeps, as the number Radix's
-// collisionPadding wants. Remeasured on resize (a rotation changes which edge
-// carries the inset); the identity check keeps a resize from re-rendering an
-// open overlay for nothing.
+// collisionPadding wants.
+//
+// Measured before paint, not after. The state starts at NO_SAFE_AREA because the
+// insets cannot be read before there is a document, and the hand-placed floaters
+// position themselves in layout effects of their own (AnnotationPopup,
+// PenToolbar, CallBubble). A passive effect would hand the first painted frame
+// the bare 8px gutter and move the box on the frame after — a hop on exactly the
+// devices that report an inset. Measuring in the layout phase puts the update in
+// the same commit: React flushes it before the browser paints, the placement
+// effect re-runs with the real insets, and only the settled position is ever
+// painted. On a device with no inset sameInsets returns the same object, no
+// state changes, and nothing re-renders at all.
+//
+// Remeasured on resize (a rotation changes which edge carries the inset); the
+// identity check keeps a resize from re-rendering an open overlay for nothing.
 export function useOverlaySafePadding(): SafeAreaInsets {
   const [insets, setInsets] = useState<SafeAreaInsets>(NO_SAFE_AREA);
 
-  useEffect(() => {
+  useBeforePaint(() => {
     const read = () =>
       setInsets((current) => {
         const next = measureSafeAreaInsets();
