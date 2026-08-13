@@ -1,4 +1,4 @@
-// The touch router's WIRING (src/reading/engine/attach-touch.ts): which element
+// The touch router's WIRING (src/reading/engine/gesture/attach-touch.ts): which element
 // the listeners go on, with which passive flags, what the gesture machines'
 // commands do to that element, and what the teardown puts back. The physics
 // itself is tested next door (vertical-gesture / paged-gesture / rubber-band /
@@ -23,8 +23,8 @@
 // Run: bun test.
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { attachTouchRouter } from "../../../src/reading/engine/attach-touch";
-import type { PagedGestureCtx } from "../../../src/reading/engine/types";
+import { attachTouchRouter } from "../../../../src/reading/engine/gesture/attach-touch";
+import type { PagedGestureCtx } from "../../../../src/reading/engine/gesture/context";
 
 // --- the fake glass ---------------------------------------------------------
 

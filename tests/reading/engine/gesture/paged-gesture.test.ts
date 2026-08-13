@@ -1,6 +1,6 @@
 // Headless coverage of the paged-mode touch gesture state machine
-// (src/reading/engine/paged-gesture.ts) and the rubber band it hands the host
-// (src/reading/engine/rubber-band.ts). Pure functions, no DOM, no engine —
+// (src/reading/engine/gesture/paged-gesture.ts) and the rubber band it hands the host
+// (src/reading/engine/gesture/rubber-band.ts). Pure functions, no DOM, no engine —
 // run with `bun test`. Mirrors the style of the convert test next to it.
 
 import { test, expect } from "bun:test";
@@ -19,14 +19,14 @@ import {
   type GestureInput,
   type GestureState,
   type PagedGestureConfig,
-} from "../../../src/reading/engine/paged-gesture";
+} from "../../../../src/reading/engine/gesture/paged-gesture";
 import {
   BAND_SPRING_DECAY,
   BAND_SPRING_MIN_PX,
   bandAtRest,
   bandTransform,
   stepBandSpring,
-} from "../../../src/reading/engine/rubber-band";
+} from "../../../../src/reading/engine/gesture/rubber-band";
 
 const WIDTH = 800;
 const base = (over: Partial<PagedGestureConfig> = {}): PagedGestureConfig => ({

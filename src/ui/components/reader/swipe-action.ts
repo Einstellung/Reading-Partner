@@ -1,6 +1,6 @@
 // Swipe-to-reveal for a list row: the drag that slides a row aside and uncovers
 // the action hidden under it (the trace list's Delete). Pure and DOM-free, the
-// same shape as reading/engine/touch-routing.ts — the row component binds the
+// same shape as reading/engine/gesture/touch-routing.ts — the row component binds the
 // pointer events, hands the samples in, and executes the commands that come
 // back. Nothing here knows about React or the DOM.
 //

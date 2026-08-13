@@ -52,7 +52,7 @@ import {
 } from "./rubber-band";
 import { INDICATOR_FADE_AFTER_MS, thumbMetrics } from "./scroll-indicator";
 import { isTouchDebugEnabled, publishTouchDebug, type TouchDebugContact } from "./touch-debug";
-import type { PagedGestureCtx } from "./types";
+import type { PagedGestureCtx } from "./context";
 
 // Long press (ms) before a stationary finger in paged mode is handed to native
 // text selection instead of being watched for a page swipe.
