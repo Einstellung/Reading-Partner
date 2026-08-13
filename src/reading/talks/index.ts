@@ -43,12 +43,10 @@ export {
   loadTalk,
   recordTalkDecision,
   saveTalk,
-  startTalk,
   talkFile,
   talkIdOf,
   talkThreadKey,
   updateTalk,
-  type NewTalkInput,
 } from "./store";
 export {
   buildTalkTurn,

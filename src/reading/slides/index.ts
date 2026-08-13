@@ -78,4 +78,4 @@ export {
   startDeck,
   type DeckTalk,
 } from "./live";
-export { deckFile, loadTalks, openDeckFile, SLIDES_DIR } from "./store";
+export { deckFile, loadTalks, revealDeckFile, SLIDES_DIR } from "./store";

@@ -26,7 +26,7 @@ import {
   listDecks,
   listDeckTalks,
   openDeck,
-  openDeckFile,
+  revealDeckFile,
   startDeck,
   type SlideRun,
   type SlidesActivity,
@@ -314,9 +314,9 @@ export default function DeckDialog({
     });
   };
 
-  const open = async (file: string) => {
+  const reveal = async (file: string) => {
     setOpenError(null);
-    const failure = await openDeckFile(file);
+    const failure = await revealDeckFile(file);
     if (failure) setOpenError(failure);
   };
 
@@ -392,7 +392,7 @@ export default function DeckDialog({
                 <div className="truncate text-[13px] text-neutral-700">{deck.title}</div>
                 <div className="truncate text-[11px] text-neutral-400">{deck.file}</div>
               </div>
-              <Button type="button" variant="outline" onClick={() => open(deck.file)}>
+              <Button type="button" variant="outline" onClick={() => reveal(deck.file)}>
                 Open
               </Button>
             </div>

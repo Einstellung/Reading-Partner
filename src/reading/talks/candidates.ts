@@ -10,6 +10,11 @@
 // The display title is passed in rather than imported: what a file is called on
 // screen is the library's naming rule (ui/components/library/file-title.ts), and
 // a domain module does not reach up into ui.
+//
+// The store's startTalk is module-internal on purpose and is not on the talks
+// barrel: reaching it from a screen gets a talk on disk without the start event,
+// which is the drift createTalk exists to close. Callers outside this directory
+// start a talk through createTalk.
 
 import { loadAnnotations } from "../../platform/app/annotations";
 import { logEvent, type EventPayload, type EventType } from "../../platform/app/events";

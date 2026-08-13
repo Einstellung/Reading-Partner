@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { logEvent } from "../../../../platform/app/events";
 import type { Topic } from "../../../../platform/app/topics";
-import { listDecks, openDeckFile, type TalkEntry } from "../../../../reading/slides";
+import { listDecks, revealDeckFile, type TalkEntry } from "../../../../reading/slides";
 import {
   createTalk,
   deleteTalk,
@@ -68,9 +68,9 @@ export default function TalksSection(props: {
 
   // Literally the same path the talk's own deck dialog opens a deck by, and the
   // failure goes on screen where the button is.
-  const openDeck = useCallback(async (file: string) => {
+  const revealDeck = useCallback(async (file: string) => {
     setError(null);
-    const failure = await openDeckFile(file);
+    const failure = await revealDeckFile(file);
     if (failure) setError(failure);
   }, []);
 
@@ -125,7 +125,7 @@ export default function TalksSection(props: {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => void openDeck(row.deckFile as string)}
+                    onClick={() => void revealDeck(row.deckFile as string)}
                   >
                     Open deck
                   </Button>
