@@ -20,14 +20,15 @@
 // them would show the other device a "done" deck whose files are not there.
 
 import {
-  BaseDirectory,
   exists,
   mkdir,
   readDir,
   readTextFile,
   remove,
 } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../../platform/app/atomic-fs";
+import { appDataDir, join } from "@tauri-apps/api/path";
+import { openPath } from "@tauri-apps/plugin-opener";
+import { APPDATA, writeTextAtomic } from "../../platform/app/atomic-fs";
 import {
   SLIDES_VERSION,
   upsertTalk,
@@ -37,7 +38,6 @@ import {
 
 export const SLIDES_DIR = "slides";
 const TALKS_FILE = `${SLIDES_DIR}/talks.json`;
-const opts = { baseDir: BaseDirectory.AppData } as const;
 
 export function talkDir(talkId: string): string {
   return `${SLIDES_DIR}/${talkId}`;
@@ -60,13 +60,13 @@ export function deckFile(talkId: string, slug: string): string {
 }
 
 async function ensureDir(dir: string): Promise<void> {
-  await mkdir(dir, { ...opts, recursive: true });
+  await mkdir(dir, { ...APPDATA, recursive: true });
 }
 
 async function readIfExists(path: string): Promise<string | null> {
   try {
-    if (!(await exists(path, opts))) return null;
-    return await readTextFile(path, opts);
+    if (!(await exists(path, APPDATA))) return null;
+    return await readTextFile(path, APPDATA);
   } catch (e) {
     console.warn("failed to read", path, e);
     return null;
@@ -99,7 +99,7 @@ export async function saveSlidesState(state: SlidesState): Promise<void> {
 export async function listSlidesStates(): Promise<SlidesState[]> {
   let entries;
   try {
-    entries = await readDir(SLIDES_DIR, opts);
+    entries = await readDir(SLIDES_DIR, APPDATA);
   } catch {
     return []; // no slides directory yet
   }
@@ -132,7 +132,7 @@ export async function writeAsset(
   const path = assetFile(talkId, index);
   if (dataUrl === null) {
     try {
-      if (await exists(path, opts)) await remove(path, opts);
+      if (await exists(path, APPDATA)) await remove(path, APPDATA);
     } catch (e) {
       console.warn("failed to drop asset", path, e);
     }
@@ -173,4 +173,24 @@ export async function recordTalk(entry: TalkEntry): Promise<void> {
   await ensureDir(SLIDES_DIR);
   const talks = upsertTalk(await loadTalks(), entry);
   await writeTextAtomic(TALKS_FILE, JSON.stringify(talks, null, 2));
+}
+
+// Hand a built deck to the system's default handler. Not live.ts's openDeck,
+// which starts a deck run: this one spends nothing and only reveals a file that
+// is already built.
+//
+// The registry stores the deck as a path relative to AppData, and the opener
+// capability is scoped to $APPDATA/slides/*, so the absolute path has to be
+// rebuilt here — the one place that knows where a deck file lives.
+//
+// Returns null when it opened and the message to show when it did not: every
+// caller is a view that puts the failure on screen, and there is nothing for it
+// to retry.
+export async function revealDeckFile(file: string): Promise<string | null> {
+  try {
+    await openPath(await join(await appDataDir(), file));
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : "Could not open the deck";
+  }
 }

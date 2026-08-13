@@ -10,15 +10,12 @@
 // and keeps rendering if the scheme is ever renamed.
 
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { isTauri } from "./host";
 
 // The scheme registered in src-tauri/src/lib.rs. convertFileSrc turns it into
 // `img://localhost/<encoded>` on macOS/iOS/Linux and `http://img.localhost/
 // <encoded>` on Windows/Android — hence never hand-assembling the URL.
 export const IMAGE_PROXY_SCHEME = "img";
-
-function isTauri(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
 
 // What the handler receives: the image URL and the page it appears on, each
 // percent-encoded, joined by "/". convertFileSrc escapes the whole thing again

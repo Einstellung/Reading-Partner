@@ -11,6 +11,7 @@
 
 import { getImageGenKey } from "../../ai/credentials";
 import { callModel, resolveModel } from "../../ai/model-call";
+import { realTimers } from "../../ai/observable-run";
 import { getFigures } from "../figures/store";
 import { renderFigure } from "../figures/render";
 import { getLibraryEntry, readLibraryBook } from "../../platform/app/library";
@@ -235,8 +236,10 @@ function imageDeps(signal: AbortSignal): ImageGenDeps {
       const res = await cleanTauriFetch(url, { signal });
       return new Uint8Array(await res.arrayBuffer());
     },
-    sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
-    now: () => Date.now(),
+    // The same real clock the pipelines run on; the image client needs two of
+    // its three members.
+    sleep: realTimers.sleep,
+    now: realTimers.now,
     signal,
   };
 }
@@ -367,12 +370,7 @@ function makeDeps(talkId: string, bookIds: string[], instruction: string): Slide
       return file;
     },
 
-    now: () => Date.now(),
-    sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
-    setTimer: (ms, cb) => {
-      const id = setTimeout(cb, ms);
-      return () => clearTimeout(id);
-    },
+    ...realTimers,
   };
 }
 

@@ -5,6 +5,7 @@
 // native fetch: the plugin rejects origins outside its capability allowlist,
 // so bridging globally would break them. Only active inside Tauri.
 
+import { isTauri } from "../platform/app/host";
 import { cleanTauriFetch } from "../platform/app/tauri-fetch";
 
 // Must stay in sync with the http:default allowlist in
@@ -21,10 +22,6 @@ const BRIDGED_HOSTS = new Set([
 	"chatgpt.com",
 	"api.deepseek.com",
 ]);
-
-function isTauri(): boolean {
-	return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
 
 function requestUrl(input: RequestInfo | URL): string {
 	if (typeof input === "string") return input;

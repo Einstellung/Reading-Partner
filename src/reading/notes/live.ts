@@ -7,6 +7,7 @@
 
 import { modelSupportsImages } from "../../ai/providers";
 import { callModel, resolveModel } from "../../ai/model-call";
+import { realTimers } from "../../ai/observable-run";
 import { recordParse } from "../../platform/app/structured-output";
 import { buildFigureCatalog } from "../figures/catalog";
 import { renderFigure } from "../figures/render";
@@ -135,12 +136,7 @@ function makeDeps(bookId: string, bookName: string, inputs: NotesInputs): NotesD
 
     writeOverview: (body) => writeOverviewNote(bookId, body),
 
-    now: () => Date.now(),
-    sleep: (ms) => new Promise<void>((r) => setTimeout(r, ms)),
-    setTimer: (ms, cb) => {
-      const id = setTimeout(cb, ms);
-      return () => clearTimeout(id);
-    },
+    ...realTimers,
   };
 }
 

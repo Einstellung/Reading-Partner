@@ -10,4 +10,6 @@
 
 物理量（阻尼、最大拉出距离、回弹刚度、惯性撞边界的吸收率）都是 `src/reading/engine/vertical-gesture.ts` 顶部的具名常量，元素和 rAF 在 `src/reading/engine/attach-touch.ts`。
 
-注：这条是从规范和坑 41 观察到的「橡皮筋期间 scrollWidth/scrollHeight 会变」推出来的，真机上先按到底那一侧验证——如果到底能弹、到顶也能弹，就是对的。
+注：这条是从规范和坑 41 观察到的「橡皮筋期间 scrollWidth/scrollHeight 会变」推出来的。iPad 模拟器上验过了（跑法见坑 118）：平移容器这条两侧都弹，到顶 `translate3d(0, 90px, 0)`、到底 `translate3d(0, -90px, 0)`，全程 `scrollTop` 钉在 14086、`scrollHeight` 钉在 15244，底边露出来的那条灰缝就是回弹本身。
+
+但推导的那一半在 WKWebView 上不成立：贴在底部给内容写 `translate3d(0, -B, 0)`，B 取 90、300、900，内容都实实在在移动了 B 像素，`scrollHeight` 一动不动，`scrollTop` 也没被夹回去。WebKit 的可滚溢出区不会因为内容往上平移而缩小（往下平移会变大：到顶那一侧 `scrollHeight` 加了 90）。所以"任何写在滚动内容上的平移都不可能把内容推出滚动范围之外"只对 Chromium 成立，现象里"到底那一侧完全看不出动静"也是 Chromium 的。平移容器这条两个引擎都对，代码不用改。
