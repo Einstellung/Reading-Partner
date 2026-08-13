@@ -99,6 +99,23 @@ export function healthToastMessage(report: SyncHealthReport, alreadyToasted: boo
   return report.message;
 }
 
+// The failure paths that must not be silent (pitfall 09), turned into toasts.
+// One subscription for all of them: every store reports through store-errors.ts,
+// which has already decided what each failure costs the user — a sentence for a
+// lost write, nothing but a log line for a derived cache that will be rebuilt,
+// so a scope with no sentence is heard and says nothing.
+//
+// Exported rather than written inline in the effect: this is the whole of what
+// the shells do with the channel, and an effect body is not something a test can
+// reach.
+export function subscribeStoreErrors(
+  pushToast: (kind: ToastKind, message: string) => void,
+): () => void {
+  return onStoreError(({ message }) => {
+    if (message) pushToast("warn", message);
+  });
+}
+
 // Both shells hold settings.json whole in memory and save it whole, so a field
 // another device changed has to be read back or the next save undoes it. The
 // route is registered by the hook rather than by each shell: it is the hook that
@@ -143,13 +160,7 @@ export function useShellBootstrap({
   settingsOpenRef.current = settingsOpen;
 
   useEffect(() => {
-    // The failure paths that must not be silent (pitfall 09). One subscription
-    // for all of them: every store reports through store-errors.ts, which has
-    // already decided what each failure costs the user — a sentence for a lost
-    // write, nothing but a log line for a derived cache that will be rebuilt.
-    const unsubErrors = onStoreError(({ message }) => {
-      if (message) pushToast("warn", message);
-    });
+    const unsubErrors = subscribeStoreErrors(pushToast);
 
     loadShellSettings()
       .then(({ settings: next, notice }) => {

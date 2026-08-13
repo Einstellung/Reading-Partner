@@ -19,6 +19,8 @@ import {
   type StoreError,
   type StoreScope,
 } from "../../src/platform/app/store-errors";
+import { subscribeStoreErrors } from "../../src/ui/components/common/useShellBootstrap";
+import type { ToastKind } from "../../src/ui/components/common/toast-list";
 
 const SRC = fileURLToPath(new URL("../../src", import.meta.url));
 
@@ -152,12 +154,38 @@ test("no store keeps a single-slot error handler of its own any more", () => {
   expect(offenders).toEqual([]);
 });
 
-// A subscriber in one shell and not the other is how onThreadSaveError ended up
-// unregistered on the phone, where InfoCall writes threads on eight paths.
-test("both shells subscribe, through the one bootstrap that does it", () => {
-  const bootstrap = readFileSync(join(SRC, "ui/components/common/useShellBootstrap.ts"), "utf8");
-  expect(bootstrap).toContain("onStoreError(");
+// The other end of the channel: what the shells' one subscriber does with what
+// arrives. A subscriber in one shell and not the other is how onThreadSaveError
+// ended up unregistered on the phone, where InfoCall writes threads on eight
+// paths; a subscriber in both shells that drops what it hears would cost the
+// same silence, so the delivery is driven here rather than read as source.
+test("the shells' subscriber turns a lost write into a toast and a lost cache into nothing", () => {
+  const toasts: [ToastKind, string][] = [];
+  const off = subscribeStoreErrors((kind, message) => toasts.push([kind, message]));
+
+  reportStoreError("threads", new Error("EIO"));
+  expect(toasts).toEqual([["warn", "AI conversation could not be saved"]]);
+
+  // A scope whose failure costs work rather than data is heard and says nothing.
+  reportStoreError("fulltext", new Error("EIO"));
+  expect(toasts).toEqual([["warn", "AI conversation could not be saved"]]);
+
+  reportStoreError("corrupt-file", { file: "library.json", savedAs: null });
+  expect(toasts.length).toBe(2);
+  expect(toasts[1][1]).toContain("library.json");
+
+  // Unmounting a shell takes its subscription with it.
+  off();
+  reportStoreError("settings", new Error("EIO"));
+  expect(toasts.length).toBe(2);
+});
+
+// That both shells mount the hook that subscribes is the one half no test can
+// drive: App.tsx is 1400 lines of hooks over Tauri and useShellBootstrap is
+// called at the top of it.
+test("both shells mount the bootstrap that subscribes", () => {
   for (const shell of ["App.tsx", "PhoneApp.tsx"]) {
-    expect(readFileSync(join(SRC, shell), "utf8")).toContain("useShellBootstrap({");
+    const source = readFileSync(join(SRC, shell), "utf8");
+    expect(`${shell}: ${source.includes("useShellBootstrap({")}`).toBe(`${shell}: true`);
   }
 });
