@@ -24,6 +24,6 @@ Content-Type: text/javascript
 
 秘密写在 vite 服务的树之外：`~/Library/Caches/sim-bridge/<root 路径的 sha256 前 16 位>/token`（Linux 走 `XDG_CACHE_HOME`），一个 checkout 一个目录。`scripts/sim-bridge.ts` 的 `defaultTokenPath()` 和 `scripts/ios-sim.sh` 的 `bridge_token_file()` 各算一遍同一个路径。
 
-另外两道：启动时把老版本留在 `node_modules/.sim-bridge` 的文件删掉；`server.fs.deny` 加上 `**/.sim-bridge/**` 和 `**/sim-bridge/*/token`，这样就算谁把 `fs.allow` 放宽到家目录，`/@fs/...` 那条路也是 403。deny 的匹配是 `nocase: true`，macOS 的大小写不敏感文件系统绕不过去。
+另外两道：启动时把老版本留在 `node_modules/.sim-bridge` 的文件删掉；`server.fs.deny` 加上 `**/.sim-bridge/**` 和 `**/sim-bridge/*/token`（在 `configResolved` 里往已解析的数组 push，不能从 `config()` 返回，见坑 124），这样就算谁把 `fs.allow` 放宽到家目录，`/@fs/...` 那条路也是 403。deny 的匹配是 `nocase: true`，macOS 的大小写不敏感文件系统绕不过去。
 
 顺带一个事实：vite dev 对根下面不存在的路径回的是 index.html（SPA fallback，200），不是 404。所以"文件已经不在那里了"这件事看到的是一份 HTML，不是 404。

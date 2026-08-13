@@ -9,7 +9,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultTokenPath, simBridge } from "../scripts/sim-bridge";
-import { fakeReq, fakeRes, fakeServer } from "./sim-bridge-harness";
+import { fakeReq, fakeRes, fakeServer, resolvedConfig } from "./sim-bridge-harness";
 
 const dir = mkdtempSync(join(tmpdir(), "sim-bridge-"));
 
@@ -25,7 +25,7 @@ afterAll(() => {
 function mount() {
   const plugin = simBridge();
   const configResolved = plugin.configResolved as (config: unknown) => void;
-  configResolved({ server: { host: undefined, port: 1420 } });
+  configResolved(resolvedConfig(undefined));
   const fake = fakeServer(dir);
   const configureServer = plugin.configureServer as (server: unknown) => void;
   configureServer(fake.server);
@@ -425,7 +425,7 @@ test("IOS_SIM_BRIDGE_ALLOW_REMOTE still reaches the page it exposed", async () =
   console.warn = () => {};
   try {
     const plugin = simBridge();
-    (plugin.configResolved as (c: unknown) => void)({ server: { host: true, port: 1420 } });
+    (plugin.configResolved as (c: unknown) => void)(resolvedConfig(true));
     const fake = fakeServer(dir);
     (plugin.configureServer as (s: unknown) => void)(fake.server);
 

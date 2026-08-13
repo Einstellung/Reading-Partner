@@ -185,6 +185,12 @@ const BROWSER_MARKS = ["origin", "referer", "sec-fetch-site", "sec-fetch-mode", 
 const EVAL_CONTENT_TYPE = "application/x-sim-bridge-eval";
 const TOKEN_HEADER = "x-sim-bridge-token";
 
+// Neither token file is under the tree vite serves any more — the old one in
+// node_modules is deleted at startup, the new one lives outside the root — but
+// fs.deny is what holds if a checkout's `server.fs.allow` is ever widened to
+// reach the cache directory, and it covers both names.
+const DENY = ["**/.sim-bridge/**", "**/sim-bridge/*/token"];
+
 // Where the per-run secret goes. It used to be node_modules/.sim-bridge/token,
 // which is per-checkout and git-ignored but also inside the tree vite serves:
 // `GET /node_modules/.sim-bridge/token` came back 200 with the token in the
@@ -396,16 +402,16 @@ export function simBridge(): Plugin {
   return {
     name: "sim-bridge",
     apply: "serve",
-    // Neither token file is under the tree vite serves any more — the old one
-    // in node_modules is deleted at startup, the new one lives outside the root
-    // — but fs.deny is what holds if a checkout's `server.fs.allow` is ever
-    // widened to reach the cache directory, and it covers both names.
-    config() {
-      return { server: { fs: { deny: ["**/.sim-bridge/**", "**/sim-bridge/*/token"] } } };
-    },
     // The resolved config is the one answer for --host, the config file and the
     // env at once; process.argv would only see one of the three.
     configResolved(config) {
+      // Pushed here, not returned from `config()`. Vite resolves the field as
+      // `server.fs?.deny || ['.env', '.env.*', '*.{crt,pem}']`, so any list this
+      // plugin hands to `config()` becomes the whole list and drops those three
+      // — a dev server that serves `/.env` verbatim. By configResolved the
+      // array already holds whatever vite settled on, and appending adds to it.
+      // See docs/pitfall/124.
+      config.server.fs.deny.push(...DENY);
       const host = config.server.host;
       boundHost = host;
       if (isLoopbackHost(host)) {

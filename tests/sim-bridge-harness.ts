@@ -87,3 +87,14 @@ export function fakeServer(root: string, port = 1420) {
     },
   };
 }
+
+// What vite hands `configResolved`, in the shape that matters here. `deny`
+// starts out as the three patterns vite falls back to when no config supplied
+// one — resolveServerOptions does `server.fs?.deny || [".env", ".env.*",
+// "*.{crt,pem}"]` — so a test can see whether the plugin adds to that list or
+// replaces it.
+export const VITE_DEFAULT_DENY = [".env", ".env.*", "*.{crt,pem}"];
+
+export function resolvedConfig(host: string | boolean | undefined, port = 1420) {
+  return { server: { host, port, fs: { deny: [...VITE_DEFAULT_DENY] } } };
+}
