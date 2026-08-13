@@ -2,7 +2,7 @@
 
 ## 现象
 
-触摸和引擎的接线当时是 `EmbedPdfView.tsx` 里近一千七百行，没有一个测试 import 过它，因为验它似乎只有真机一条路（那一坨后来拆成了 `attach-touch.ts` 和 `wire-engine.ts`，接线本身有了单测；下面这张表说的仍然是模拟器能验什么，和拆不拆无关）。实测下来模拟器能验的比预想的多得多：真 WKWebView、真 PDFium、经 CoreSimulator HID 注入的真触摸，WebKit 自己的手势仲裁全程照跑，橡皮筋、笔手路由、双指缩放都能在里面量出数来（坑 117 的整张表就是这么量的）。
+触摸和引擎的接线现在是 `src/reading/engine/attach-touch.ts`（834 行）和 `src/reading/engine/wire-engine.ts`（1028 行），`EmbedPdfView.tsx` 只剩 443 行；`tests/reading/engine/attach-touch.test.ts` 直接 import 前者，接线本身在 node 里就能验。下面这张表说的是模拟器能验什么，和接线切在哪无关。实测下来模拟器能验的比预想的多得多：真 WKWebView、真 PDFium、经 CoreSimulator HID 注入的真触摸，WebKit 自己的手势仲裁全程照跑，橡皮筋、笔手路由、双指缩放都能在里面量出数来（坑 117 的整张表就是这么量的）。
 
 但有几样它永远不会产生，在里面测了等于没测。
 
