@@ -123,11 +123,60 @@ test("a lost write is logged loudly, a lost cache quietly, and a bad file only o
   heard("fulltext", new Error("EIO"));
   expect(logged).toEqual([{ level: "warn", line: "failed to persist fulltext cache" }]);
 
+  // The one scope reported from two places — an extraction that failed and a
+  // write that failed — so its line covers both. Said once, and by the channel:
+  // the store used to add a second, differently worded line of its own.
+  logged = [];
+  heard("figures", new Error("EIO"));
+  expect(logged).toEqual([
+    { level: "warn", line: "failed to build or persist the figure index" },
+  ]);
+
   // atomic-fs has already named the file and the parse error; a second line
   // saying the same thing is noise.
   logged = [];
   heard("corrupt-file", { file: "library.json", savedAs: null });
   expect(logged).toEqual([]);
+});
+
+// Who writes the console line for a failure, now that the channel writes one
+// for every scope that has one. Two stores used to console.warn their own copy
+// beside the report and the line came out twice, worded differently in each
+// place; atomic-fs is the other way round — its scope carries no line because
+// it has already named the file and the parse error itself.
+//
+// A lint, not a wiring test: what it guards is a shape that grew back once and
+// costs nothing to notice.
+test("no store writes the line its scope's report already writes", () => {
+  const channelLogs = new Set<StoreScope>(
+    STORE_SCOPES.filter((scope) => {
+      logged = [];
+      heard(scope, scope === "corrupt-file" ? { file: "x.json", savedAs: null } : new Error("EIO"));
+      return logged.length > 0;
+    }),
+  );
+  // The premise: some scopes are logged by the channel and some are not, so a
+  // green run is not the filter above having come back empty.
+  expect(channelLogs.size).toBeGreaterThan(0);
+  expect(channelLogs.has("corrupt-file")).toBe(false);
+
+  const offenders: string[] = [];
+  for (const file of sourceFiles(SRC)) {
+    const rel = relative(SRC, file);
+    if (rel === "platform/app/store-errors.ts") continue;
+    // Comments are stripped first: this one talks about console lines.
+    const flat = readFileSync(file, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .replace(/\/\/[^\n]*/g, " ")
+      .replace(/\s+/g, " ");
+    for (const m of flat.matchAll(/reportStoreError\(\s*"([a-z-]+)"/g)) {
+      const scope = m[1] as StoreScope;
+      if (!channelLogs.has(scope)) continue;
+      const around = flat.slice(Math.max(0, m.index - 200), m.index + 200);
+      if (/console\.(warn|error)\(/.test(around)) offenders.push(`src/${rel} (${scope})`);
+    }
+  }
+  expect(offenders).toEqual([]);
 });
 
 function sourceFiles(dir: string, out: string[] = []): string[] {

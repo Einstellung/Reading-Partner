@@ -75,14 +75,14 @@ export async function ensureFigures(key: string, buffer: ArrayBuffer): Promise<F
         await doc.destroy();
       }
     } catch (e) {
-      console.warn("failed to extract figures", e);
+      // Reported, not logged here: the line for this scope is the channel's
+      // (store-errors.ts), and it covers both halves of the index failing.
       reportStoreError("figures", e);
       index = EMPTY;
     }
     try {
       await writeTextAtomic(fileFor(hash), JSON.stringify(index));
     } catch (e) {
-      console.warn("failed to persist figures cache", e);
       reportStoreError("figures", e);
     }
     return index;

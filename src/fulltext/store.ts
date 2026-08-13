@@ -1,8 +1,8 @@
 // Full-text cache persistence: one fulltext-<key>.json per document under
 // AppData, keyed by the book id (content hash) for real books and by a synthetic
 // prep key for downloaded papers. Extraction is skipped when a same-version
-// cache exists. Persistence failures are surfaced (console.warn + an error
-// hook), never silently swallowed (pitfall 09).
+// cache exists. Persistence failures are reported to the one store-error
+// channel, which logs them, never silently swallowed (pitfall 09).
 
 import {
   BaseDirectory,
@@ -64,7 +64,7 @@ export async function ensureFulltext(key: string, buffer: ArrayBuffer): Promise<
     try {
       await writeTextAtomic(fileFor(hash), JSON.stringify(ft));
     } catch (e) {
-      console.warn("failed to persist fulltext cache", e);
+      // The line is written by the channel, not here (store-errors.ts).
       reportStoreError("fulltext", e);
     }
     return ft;

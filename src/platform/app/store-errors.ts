@@ -59,8 +59,10 @@ type AssertNever<T extends never> = T;
 export type AllScopesListed = AssertNever<Exclude<StoreScope, (typeof STORE_SCOPES)[number]>>;
 
 interface ScopeCopy {
-  // The console line, or null where the store has already logged the detail
-  // itself (atomic-fs names the file and the parse error before reporting).
+  // The console line, and the only one: a store that reports a failure does not
+  // also log it, or the same failure is said twice. Null where the store has
+  // already said more than this could (atomic-fs names the file and the parse
+  // error, per file, before reporting).
   log: string | null;
   // How loud that line is. A lost write is an error; a lost derived cache is a
   // warning, since it is re-extracted from the document on demand.
@@ -98,8 +100,10 @@ const COPY: Record<StoreScope, ScopeCopy> = {
     level: "warn",
     message: () => null,
   },
+  // Both halves of this one report here: an extraction that failed and a write
+  // that failed cost the same second attempt, so the line covers either.
   figures: {
-    log: "failed to persist figure index",
+    log: "failed to build or persist the figure index",
     level: "warn",
     message: () => null,
   },
