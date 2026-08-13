@@ -8,7 +8,8 @@ import { overlayLayerOpen } from '../common/overlay-layer';
 import { placePanel, pointAnchor } from '../common/panel-position';
 import { useViewportSize } from '../common/useViewportSize';
 import { Button } from '../ui/button';
-import { OVERLAY_Z } from '../ui/overlay';
+import { cn } from '../lib/utils';
+import { OVERLAY_Z, useOverlaySafePadding } from '../ui/overlay';
 import type { Annotation, ColorEntry } from '../common/types';
 
 interface AnnotationPopupProps {
@@ -21,7 +22,6 @@ interface AnnotationPopupProps {
 }
 
 const GAP = 10;
-const MARGIN = 8;
 const COMMENT_DEBOUNCE = 400;
 
 // The 9-colour palette is too dense for a full 44px per swatch; a 36px coarse
@@ -38,6 +38,10 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 	// height has to be the visual viewport's: the keyboard that opens when the box
 	// is tapped would otherwise cover the popup it was opened from.
 	const viewport = useViewportSize();
+	// The margin to the viewport edge, per edge: the popup is `fixed`, so the
+	// shell's safe-area padding misses it (docs/pitfall/74). No inset means the
+	// plain 8px gutter, so this is inert on desktop.
+	const margin = useOverlaySafePadding();
 
 	// Keep the draft in sync if a different annotation is shown in the same popup.
 	useEffect(() => {
@@ -57,10 +61,10 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 				panel: { width, height },
 				viewport,
 				gap: GAP,
-				margin: MARGIN,
+				margin,
 			}),
 		);
-	}, [anchor.x, anchor.y, annotation.id, viewport]);
+	}, [anchor.x, anchor.y, annotation.id, viewport, margin]);
 
 	// A press outside closes the popup. pointerdown, not mousedown, and capture:
 	// docs/pitfall/67-webkit-tap-does-not-focus-a-button.md. A press while an
@@ -94,7 +98,10 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 	return (
 		<div
 			ref={ref}
-			className={`fixed ${OVERLAY_Z.floating} flex w-60 coarse:w-72 flex-col gap-2 rounded-lg border border-black/10 bg-white p-2.5 text-neutral-800 shadow-xl select-none`}
+			className={cn(
+				'fixed flex w-60 coarse:w-72 flex-col gap-2 rounded-lg border border-black/10 bg-white p-2.5 text-neutral-800 shadow-xl select-none',
+				OVERLAY_Z.floating,
+			)}
 			style={pos ? { left: pos.left, top: pos.top, visibility: 'visible' } : { visibility: 'hidden' }}
 			role="dialog"
 			aria-label="Annotation"

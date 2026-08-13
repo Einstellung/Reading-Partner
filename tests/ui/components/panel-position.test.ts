@@ -96,3 +96,93 @@ test("a fixed-width panel shrinks only on a viewport too narrow for it", () => {
   expect(fitPanelWidth(360, 320, MARGIN)).toBe(320 - 2 * MARGIN);
   expect(fitPanelWidth(360, 10, MARGIN)).toBe(0);
 });
+
+// Per-edge margins: what useOverlaySafePadding hands over on a device with a
+// notch or a home indicator (docs/pitfall/74). Each edge clamps against its own
+// number, and the uniform case has to keep behaving exactly as it did.
+const INSETS = { top: 59, right: 0, bottom: 34, left: 0 };
+const UNIFORM = { top: MARGIN, right: MARGIN, bottom: MARGIN, left: MARGIN };
+
+test("a margin of four equal edges places every panel exactly where the number does", () => {
+  // Desktop reports no inset, so safeCollisionPadding gives back the gutter on
+  // all four edges. Asserted rather than assumed: this is the whole reason the
+  // change is safe to make.
+  const anchors: AnchorRect[] = [
+    { left: 400, top: 300, right: 440, bottom: 320 },
+    pointAnchor(0, 100),
+    pointAnchor(VIEWPORT.width, 100),
+    pointAnchor(500, 760),
+    pointAnchor(500, 40),
+    { left: 940, top: 200, right: 980, bottom: 240 },
+    { left: 100, top: 780, right: 140, bottom: 800 },
+  ];
+  for (const anchor of anchors) {
+    for (const placement of ["below", "right"] as const) {
+      const base = { anchor, panel: PANEL, viewport: VIEWPORT, placement, gap: GAP };
+      expect(placePanel({ ...base, margin: UNIFORM })).toEqual(
+        placePanel({ ...base, margin: MARGIN }),
+      );
+    }
+  }
+  expect(fitPanelWidth(360, 320, UNIFORM)).toBe(fitPanelWidth(360, 320, MARGIN));
+});
+
+test("the bottom inset keeps the panel off the home indicator", () => {
+  // Top-aligned beside a low anchor: the vertical clamp is the only thing
+  // holding the panel, and it has to stop 34px up rather than 8.
+  const anchor = { left: 100, top: 750, right: 140, bottom: 790 };
+  const { top } = placePanel({ anchor, panel: PANEL, viewport: VIEWPORT, placement: "right", gap: GAP, margin: INSETS });
+  expect(top).toBe(VIEWPORT.height - PANEL.height - INSETS.bottom);
+  expect(top).toBeLessThan(beside(anchor).top);
+});
+
+test("the top inset is what a flipped panel has to clear, not the bottom one", () => {
+  // No room below, and above the anchor there is 55px — under the 59px notch, so
+  // the flip is refused and the panel stays as low as the bottom inset allows.
+  const anchor = pointAnchor(500, 165);
+  const short = { width: 1000, height: 200 };
+  expect(placePanel({ anchor, panel: PANEL, viewport: short, gap: GAP, margin: INSETS }).top).toBe(
+    short.height - PANEL.height - INSETS.bottom,
+  );
+  // 10px further down the page there is room above: 175 - 10 - 100 = 65 > 59.
+  expect(placePanel({ anchor: pointAnchor(500, 175), panel: PANEL, viewport: short, gap: GAP, margin: INSETS }).top).toBe(65);
+});
+
+test("a landscape notch clamps the sides independently", () => {
+  // Rotated left: the notch is on the left edge, the home indicator on the
+  // bottom, and the right edge keeps only the gutter.
+  const landscape = { top: 0, right: 8, bottom: 21, left: 59 };
+  expect(below(pointAnchor(0, 100), VIEWPORT, PANEL)).toEqual({ left: MARGIN, top: 110 });
+  expect(
+    placePanel({ anchor: pointAnchor(0, 100), panel: PANEL, viewport: VIEWPORT, gap: GAP, margin: landscape }).left,
+  ).toBe(landscape.left);
+  expect(
+    placePanel({
+      anchor: pointAnchor(VIEWPORT.width, 100),
+      panel: PANEL,
+      viewport: VIEWPORT,
+      gap: GAP,
+      margin: landscape,
+    }).left,
+  ).toBe(VIEWPORT.width - PANEL.width - landscape.right);
+});
+
+test("beside the anchor the flip clears the left inset, not the right one", () => {
+  const landscape = { top: 0, right: 8, bottom: 21, left: 59 };
+  const narrow = { width: 400, height: 800 };
+  // Opening right would overflow; opening left needs 190 - 10 - 200 = -20, under
+  // the inset, so the panel pins to the right margin instead.
+  const anchor = { left: 190, top: 200, right: 230, bottom: 240 };
+  expect(placePanel({ anchor, panel: PANEL, viewport: narrow, placement: "right", gap: GAP, margin: landscape }).left).toBe(
+    narrow.width - PANEL.width - landscape.right,
+  );
+  // Far enough over and the flip fits: 280 - 10 - 200 = 70 > 59.
+  const further = { left: 280, top: 200, right: 320, bottom: 240 };
+  expect(placePanel({ anchor: further, panel: PANEL, viewport: narrow, placement: "right", gap: GAP, margin: landscape }).left).toBe(70);
+});
+
+test("a fixed-width panel takes both side insets off the viewport", () => {
+  const landscape = { top: 0, right: 8, bottom: 21, left: 59 };
+  expect(fitPanelWidth(360, 400, landscape)).toBe(400 - 59 - 8);
+  expect(fitPanelWidth(360, 1000, landscape)).toBe(360);
+});

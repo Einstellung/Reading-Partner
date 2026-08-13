@@ -25,11 +25,12 @@ const select = read("select.tsx");
 const checkbox = read("checkbox.tsx");
 const badge = read("badge.tsx");
 const tabs = read("tabs.tsx");
+const dropdown = read("dropdown-menu.tsx");
 
 test("nothing here imports lucide-react", () => {
   // The generated files draw their chevrons and ticks with it; this project
   // does not install it, so the import would break the build.
-  for (const source of [select, checkbox, badge, tabs]) {
+  for (const source of [select, checkbox, badge, tabs, dropdown]) {
     expect(source).not.toContain("lucide-react");
   }
 });
@@ -63,6 +64,23 @@ test("the select list registers an overlay layer, inside the content", () => {
 
 test("the select trigger and its rows keep the 44px minimum", () => {
   expect(select.match(/coarse:min-h-\[44px\]/g) ?? []).toHaveLength(2);
+});
+
+test("a menu row is a 44px touch target, in the primitive and nowhere else", () => {
+  // The generated item is `px-2 py-1.5 text-sm`, a 32px row. The three menus in
+  // this app each used to re-add the same geometry in their own file; it lives
+  // in ITEM_BASE now, which is what Item and CheckboxItem both take, so both
+  // shapes of row are covered by the one string.
+  expect(dropdown).toMatch(/const ITEM_BASE =\s*\n?\s*"[^"]*coarse:min-h-\[44px\][^"]*"/);
+  expect(dropdown).toContain("min-h-[36px]");
+  expect(dropdown).not.toContain("py-1.5 text-sm outline-hidden");
+
+  // And no call site carries it back. A row that re-declares the minimum is a
+  // row that will drift from the other two.
+  const COMPONENTS = join(dirname(fileURLToPath(import.meta.url)), "../../../src/ui/components");
+  for (const file of ["library/CardMenu.tsx", "talk/OutlinePane.tsx", "reader/MoreMenu.tsx"]) {
+    expect(readFileSync(join(COMPONENTS, file), "utf8")).not.toContain("coarse:min-h-[44px]");
+  }
 });
 
 test("the checkbox carries its touch target as HIT_44", () => {
