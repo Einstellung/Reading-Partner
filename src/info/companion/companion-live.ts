@@ -2,10 +2,11 @@
 // (infoFetch, browser UA), the readable extractor and the source store to the
 // pure companion tools, and takes the host's briefing controller so
 // generate_briefing can start a real run. Every info chat entry mounts this.
-// Imported only in the webview (extractReadable needs a DOM), never in bun tests.
+// The extractor is loaded on first use (readable-lazy) rather than imported
+// here, so Readability/defuddle stay off the boot path.
 
 import { infoFetch } from "../extract/http";
-import { extractReadable } from "../extract/readable";
+import { loadExtractReadable } from "../extract/readable-lazy";
 import { checkSiteSession, openSiteSignIn } from "../extract/webview-session";
 import { hasWebviewFetch } from "../../platform/app/platform";
 import {
@@ -57,15 +58,19 @@ function liveSiteSignIn(): SiteSignInDeps {
 // open_site_sign_in is mounted only where the webview commands exist (Linux
 // desktop today). Elsewhere the tool is absent rather than present-and-failing,
 // so the companion has nothing to promise and says the honest thing by default.
-export function buildLiveCompanionTools(
+// Async only because the extractor's chunk is fetched here, before the tools
+// that inject it exist; the tools themselves still get a plain synchronous
+// extractor. The caller already awaits (it loads settings first), so the chat
+// turn starts no later than it did.
+export async function buildLiveCompanionTools(
   onProbeCard: (card: ProbeConfirmCardData) => void,
   onProfileCard: (card: ProfileUpdateCardData) => void,
   briefing: BriefingControl,
   opts: { collecting?: boolean } = {},
-): AgentTool[] {
+): Promise<AgentTool[]> {
   return buildCompanionTools({
     fetchFn: infoFetch,
-    extract: extractReadable,
+    extract: await loadExtractReadable(),
     // trial_source proves a `webview` source only if it can open the window the
     // bodies come through; without this the trial reports feed summaries.
     fetchViaWebview: liveWebviewFetch(),

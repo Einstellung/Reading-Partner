@@ -2,11 +2,11 @@
 // browser UA) and the readable extractor to the pure probe/trial logic and the
 // source tools. The pure logic stays testable with injected deps; this module is
 // where the app grabs a ready-to-use tool set and a one-shot "paste a URL" path
-// for the source-list page. Imported only in the webview (extractReadable needs a
-// DOM), never in bun tests.
+// for the source-list page. The extractor is loaded on first use (readable-lazy)
+// rather than imported here, so Readability/defuddle stay off the boot path.
 
 import { infoFetch } from "../extract/http";
-import { extractReadable } from "../extract/readable";
+import { loadExtractReadable } from "../extract/readable-lazy";
 import { fetchArticleViaWebview } from "../extract/webview-article";
 import { hasWebviewFetch } from "../../platform/app/platform";
 import type { WebviewFetch } from "./engine";
@@ -26,11 +26,15 @@ export function liveWebviewFetch(): WebviewFetch | undefined {
 }
 
 // The three add-source tools bound to the live fetch/extract/store. `onProbeCard`
-// lets the chat surface the confirm card when trial_source succeeds.
-export function buildLiveSourceTools(onProbeCard: (card: ProbeConfirmCardData) => void): AgentTool[] {
+// lets the chat surface the confirm card when trial_source succeeds. Async only
+// because the extractor's chunk is fetched here, before the tools that inject it
+// exist — the tools themselves still get a plain synchronous extractor.
+export async function buildLiveSourceTools(
+  onProbeCard: (card: ProbeConfirmCardData) => void,
+): Promise<AgentTool[]> {
   return buildSourceTools({
     fetchFn: infoFetch,
-    extract: extractReadable,
+    extract: await loadExtractReadable(),
     fetchViaWebview: liveWebviewFetch(),
     addSource: (d) => addSource(d).then(() => {}),
     onProbeCard,
@@ -59,7 +63,7 @@ export async function liveProbeAndTrial(
   if (trialUsesWebview(probe.descriptor, { fetchViaWebview })) onSlowTrial?.();
   const trial = await trialSource(probe.descriptor, {
     fetchFn: infoFetch,
-    extract: extractReadable,
+    extract: await loadExtractReadable(),
     fetchViaWebview,
   });
   if (!trial.ok) {
