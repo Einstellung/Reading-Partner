@@ -1,12 +1,12 @@
 // Headless coverage of the scroll indicator's geometry
-// (src/reading/engine/scroll-indicator.ts). Pure, no DOM — run with `bun test`.
+// (src/reading/engine/gesture/scroll-indicator.ts). Pure, no DOM — run with `bun test`.
 
 import { test, expect } from "bun:test";
 import {
   INDICATOR_MIN_THUMB_PX,
   INDICATOR_TRACK_INSET_PX,
   thumbMetrics,
-} from "../../../src/reading/engine/scroll-indicator";
+} from "../../../../src/reading/engine/gesture/scroll-indicator";
 
 const inset = INDICATOR_TRACK_INSET_PX;
 

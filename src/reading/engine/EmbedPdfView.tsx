@@ -30,16 +30,16 @@ import { AnnotationPluginPackage, AnnotationLayer } from "@embedpdf/plugin-annot
 import { MARKUP_TOOL_OVERRIDES } from "./convert";
 import { SELECT_AFTER_CREATE } from "./annotation-selection";
 import { PAGE_FRAME } from "./page-frame";
-import { TouchDebugOverlay } from "./touch-debug";
-import { attachTouchRouter } from "./attach-touch";
+import { TouchDebugOverlay } from "./gesture/touch-debug";
+import { attachTouchRouter } from "./gesture/attach-touch";
 import { perfMark, wireEngine } from "./wire-engine";
 import type {
   AnnotationAnchor,
   EmbedLayout,
   EmbedPdfViewProps,
-  PagedGestureCtx,
   QuoteHighlight,
 } from "./types";
+import type { PagedGestureCtx } from "./gesture/context";
 
 // Resolve the app-level engine singleton (built once, reused across book opens)
 // instead of usePdfiumEngine, which re-created + destroyed the wasm engine per
