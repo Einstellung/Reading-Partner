@@ -34,7 +34,7 @@
 import { BaseDirectory, exists, readTextFile } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { stripDataImages } from "../extract/sanitize";
-import { loadArticles, loadItems, type CachedArticle } from "./store";
+import { loadArticles, loadItems, loadLatestBriefing, type CachedArticle } from "./store";
 import type { Briefing } from "./types";
 import type { InfoItem } from "../sources/item";
 
@@ -53,11 +53,12 @@ export interface PublishedBody {
   summaryOnly: boolean;
 }
 
-export interface PublishedBodies {
-  // The briefing these bodies belong to. The pair, not either half, is what a
-  // reader trusts.
-  date: string;
-  generatedAt: number;
+// Which briefing a published file belongs to: the day it is for, and which
+// generation of that day. The pair, not either half, is what a reader trusts,
+// and generatedAt alone is what says which of two briefings is the later one.
+export type BriefingStamp = Pick<Briefing, "date" | "generatedAt">;
+
+export interface PublishedBodies extends BriefingStamp {
   bodies: Record<string, PublishedBody>;
 }
 
@@ -103,12 +104,77 @@ export function buildPublishedBodies(
 // Whether a bodies file belongs to a briefing. Both halves are replaced whole
 // and reconciled per file, so a reader can hold a new briefing and the previous
 // bodies for one sync interval; that is the case this answers.
-export function bodiesMatch(
-  b: Briefing | null,
-  bodies: Pick<PublishedBodies, "date" | "generatedAt"> | null,
-): boolean {
+export function bodiesMatch(b: BriefingStamp | null, bodies: BriefingStamp | null): boolean {
   if (!b || !bodies) return false;
   return bodies.date === b.date && bodies.generatedAt === b.generatedAt;
+}
+
+// --- the backfill (docs/36) -------------------------------------------------
+//
+// Publishing hangs off saveBriefing, so a briefing that landed before this
+// machine could publish is never published at all: an upgrade from a version
+// with no publishing in it, or a publish that failed, leaves a briefing sitting
+// on the collector's disk while every reader shows nothing and explains nothing.
+// A collector therefore asks this once, when it takes the claim.
+
+export type BackfillVerdict = "nothing-local" | "published-newer" | "up-to-date" | "publish";
+
+// What a startup backfill should do, given the newest briefing this machine
+// holds and what is already at the two published names.
+//
+// generatedAt is the whole ordering, and the date is not part of it: the date is
+// the collector's label for the day, and a reader shows the latest briefing with
+// the day it is for on it rather than an empty screen (docs/36). So yesterday's
+// briefing is published when nothing newer exists — having one is better than
+// having none — and another collector's newer briefing is never overwritten by
+// this machine's older one, which is the one way a backfill could make things
+// worse than leaving them alone.
+//
+// The bodies are in the comparison so that a half-published pair repairs itself:
+// a briefing whose bodies never landed leaves a reader waiting for text that is
+// not coming, and the fingerprint is what says so.
+export function backfillVerdict(
+  local: BriefingStamp | null,
+  published: BriefingStamp | null,
+  publishedBodies: BriefingStamp | null,
+): BackfillVerdict {
+  if (!local) return "nothing-local";
+  if (!published) return "publish";
+  if (local.generatedAt < published.generatedAt) return "published-newer";
+  // The same briefing is already out, bodies and all. This has to be zero
+  // writes: every one of them is an upload and a revision on the remote, and a
+  // restart is not news.
+  if (
+    local.generatedAt === published.generatedAt &&
+    local.date === published.date &&
+    bodiesMatch(published, publishedBodies)
+  ) {
+    return "up-to-date";
+  }
+  return "publish";
+}
+
+// Whether the bodies just rebuilt for a briefing really are its text. The day's
+// files are pruned as a set once a run starts on a new day (store.ts), so a
+// briefing that outlived its own article cache rebuilds into a full set of empty
+// entries — which every reader renders as "this source only publishes
+// summaries", a claim about the source made out of a missing file. Publishing
+// neither half is the better answer: the readers keep whatever pair they have,
+// and the next run publishes a whole one.
+export function bodiesIntact(b: Briefing, items: InfoItem[], bodies: PublishedBodies): boolean {
+  const known = new Set(items.map((it) => it.id));
+  for (const id of tieredItemIds(b)) {
+    // The day's item snapshot is what tells "only ever a summary" apart from
+    // "the file is gone"; without it every entry takes the summary-only
+    // fallback and no reader could tell the difference.
+    if (!known.has(id)) return false;
+    const body = bodies.bodies[id];
+    if (!body) return false;
+    // The snapshot says the article itself was read, and yet there is no text:
+    // the article cache went and the item snapshot stayed.
+    if (!body.summaryOnly && !body.text && !body.html) return false;
+  }
+  return true;
 }
 
 // --- files -----------------------------------------------------------------
@@ -131,13 +197,54 @@ async function readJson<T>(file: string): Promise<T | null> {
 // "the text is on its way" — the harmless way round. The other order would show
 // a new briefing over stale text without knowing it.
 export async function publishBriefing(b: Briefing): Promise<void> {
+  const { bodies } = await rebuildBodies(b);
+  await writePublished(b, bodies);
+}
+
+// The bodies for a briefing, out of the day's files. The item snapshot comes
+// back too, because whoever is not publishing the briefing it just wrote has to
+// be able to ask whether those files were still there (bodiesIntact).
+async function rebuildBodies(
+  b: Briefing,
+): Promise<{ bodies: PublishedBodies; items: InfoItem[] }> {
   const [articles, items] = await Promise.all([
     loadArticles(b.date).catch(() => ({}) as Record<string, CachedArticle>),
     loadItems(b.date).catch(() => [] as InfoItem[]),
   ]);
-  const bodies = buildPublishedBodies(b, articles, items);
+  return { bodies: buildPublishedBodies(b, articles, items), items };
+}
+
+async function writePublished(b: Briefing, bodies: PublishedBodies): Promise<void> {
   await writeTextAtomic(PUBLISHED_BODIES_FILE, JSON.stringify(bodies));
   await writeTextAtomic(PUBLISHED_BRIEFING_FILE, JSON.stringify(b, null, 2));
+}
+
+// What a backfill did. "published" is the whole point of it; the rest are the
+// reasons it is a no-op, which is what a healthy restart looks like.
+export type BackfillOutcome = Exclude<BackfillVerdict, "publish"> | "no-bodies" | "published";
+
+// Publish the briefing this machine already has, if the readers never got it.
+// The day's heavy files are only opened once the stamps say something is going
+// out, so the ordinary restart costs a directory listing and three small reads
+// and writes nothing.
+//
+// The two questions this cannot answer are the caller's (live.ts): that this
+// device collects at all, and that it is the elected collector. A reader has no
+// local briefing and no business writing to the published names, and a desktop
+// that lost the election must not put its own older briefing over the winner's.
+export async function backfillPublish(): Promise<BackfillOutcome> {
+  const [local, published, publishedBodies] = await Promise.all([
+    loadLatestBriefing().catch(() => null),
+    loadPublishedBriefing(),
+    loadPublishedBodies(),
+  ]);
+  if (!local) return "nothing-local";
+  const verdict = backfillVerdict(local, published, publishedBodies);
+  if (verdict !== "publish") return verdict;
+  const { bodies, items } = await rebuildBodies(local);
+  if (!bodiesIntact(local, items, bodies)) return "no-bodies";
+  await writePublished(local, bodies);
+  return "published";
 }
 
 // The published briefing, or null when this device has never received one. No

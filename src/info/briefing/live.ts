@@ -62,7 +62,7 @@ import {
   todayLocal,
 } from "./store";
 import { collectorStatusLine, InfoCollector } from "./collector";
-import { loadPublishedBriefing, publishBriefing } from "./publish";
+import { backfillPublish, loadPublishedBriefing, publishBriefing } from "./publish";
 import {
   chooseAsk,
   HEARTBEAT_MS,
@@ -333,6 +333,21 @@ async function loadBriefingForToday(date: string): Promise<Briefing | null> {
 // A publish that fails is logged and swallowed. The briefing is on disk and this
 // machine can show it; the readers get the next one, and the alternative is a
 // briefing that counts as failed because another device could not be told.
+// The briefing this machine had before it could publish one (docs/36). Same
+// files, same order, decided by publish.ts; the only thing added here is the
+// election, which is what keeps a desktop that lost it from putting its own
+// older briefing over the winner's.
+//
+// Swallowed like the publish above: the readers get the next one.
+async function backfillPublishedBriefing(): Promise<void> {
+  if (!(await amICollecting())) return;
+  try {
+    await backfillPublish();
+  } catch (e) {
+    console.warn("failed to publish the briefing already on disk", e);
+  }
+}
+
 async function saveAndPublishBriefing(briefing: Briefing): Promise<void> {
   await saveBriefing(briefing);
   try {
@@ -711,7 +726,13 @@ async function publishClaim(): Promise<void> {
   // no for an answer, and neither will ask again on its own — polling waits for
   // its next wake, which it never scheduled, and the pipeline waits for the next
   // return to the foreground. So the claim tells them.
+  //
+  // It is also the moment to publish a briefing this machine already had and
+  // never published, and that goes first: it settles in three file reads, and
+  // running it after the run below had started would race the run's own publish
+  // for the same two names.
   if (took) {
+    await backfillPublishedBriefing();
     await getInfoCollector().refresh();
     void getInfoPipeline().init();
   }

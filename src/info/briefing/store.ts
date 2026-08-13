@@ -35,8 +35,14 @@ export function todayLocal(now: Date = new Date()): string {
   return localDateString(now);
 }
 
+const BRIEFING_PREFIX = "briefing-";
+
+// The tail of a dated daily file. Up here because two things parse a name this
+// same strict way: the newest-briefing lookup below and the pruning at the end.
+const DATED_JSON = /^\d{4}-\d{2}-\d{2}\.json$/;
+
 function briefingFile(date: string): string {
-  return `briefing-${date}.json`;
+  return `${BRIEFING_PREFIX}${date}.json`;
 }
 
 function articlesFile(date: string): string {
@@ -67,6 +73,36 @@ export async function loadBriefing(date: string = todayLocal()): Promise<Briefin
   } catch {
     return null;
   }
+}
+
+// The newest day a briefing file on disk is for, out of a directory listing.
+// Pure, unit-tested. Comparing the names as strings is comparing the dates —
+// they are zero-padded ISO days.
+export function newestBriefingDate(names: string[]): string | null {
+  let best: string | null = null;
+  for (const name of names) {
+    if (!name.startsWith(BRIEFING_PREFIX)) continue;
+    const tail = name.slice(BRIEFING_PREFIX.length);
+    if (!DATED_JSON.test(tail)) continue;
+    const date = tail.slice(0, -".json".length);
+    if (best === null || date > best) best = date;
+  }
+  return best;
+}
+
+// The latest briefing this machine holds, whatever day it is for: today's on a
+// machine that has already collected, yesterday's on one that has not yet, since
+// the day's files are pruned by a run and not by the clock.
+export async function loadLatestBriefing(): Promise<Briefing | null> {
+  let names: string[];
+  try {
+    const entries = await readDir("", { baseDir: BaseDirectory.AppData });
+    names = entries.filter((e) => e.isFile).map((e) => e.name);
+  } catch {
+    return null;
+  }
+  const date = newestBriefingDate(names);
+  return date === null ? null : await loadBriefing(date);
 }
 
 export async function saveArticles(
@@ -172,8 +208,7 @@ export async function clearRun(date: string): Promise<void> {
 // else: a name we cannot parse is left alone, because everything else under
 // AppData is either the user's own data or inside sync range, where a local
 // delete would just be re-downloaded.
-const DAILY_PREFIXES = ["briefing-", "info-articles-", "info-items-", "info-run-"];
-const DATED_JSON = /^\d{4}-\d{2}-\d{2}\.json$/;
+const DAILY_PREFIXES = [BRIEFING_PREFIX, "info-articles-", "info-items-", "info-run-"];
 
 // The names to delete, given a directory listing and today's local date. Pure,
 // unit-tested; the clock is the caller's business.
