@@ -596,6 +596,49 @@ test("selectSilentMarks caps at the oldest N and leaves the rest for the next pa
   expect(next.capped).toBe(false);
 });
 
+// Two marks made in the same millisecond, on the cap's boundary. A batch cut
+// between them puts the newer one behind a cursor equal to its own createdAt,
+// and `a.createdAt > since` never selects it again: 40 of 41 marks looked at,
+// the 41st written off. So the batch is taken through the whole tie instead —
+// what each pass actually sees, not what the store recorded.
+test("a tie on the cap boundary is taken whole, not cut through", () => {
+  const anns = [
+    ...Array.from({ length: 39 }, (_, i) => mark({ id: `m${i}`, createdAt: i, text: `t${i}` })),
+    mark({ id: "tieA", createdAt: 39, text: "tie a" }),
+    mark({ id: "tieB", createdAt: 39, text: "tie b" }),
+  ];
+  const first = selectSilentMarks(anns, null, 40);
+  const second = selectSilentMarks(anns, first.cursor, 40);
+
+  const seen = [...first.marks, ...second.marks].map((m) => m.id);
+  expect(seen).toContain("tieA");
+  expect(seen).toHaveLength(41);
+  expect(new Set(seen).size).toBe(41); // and none of them twice
+  // Nothing was left over, so the prompt must not tell the model more follows.
+  expect(first.capped).toBe(false);
+});
+
+// The same tie with a mark above it: the batch still ends between milliseconds,
+// and what did not fit is exactly what the next pass picks up, once.
+test("a boundary tie still leaves the marks above it for the next pass", () => {
+  const anns = [
+    ...Array.from({ length: 39 }, (_, i) => mark({ id: `m${i}`, createdAt: i, text: `t${i}` })),
+    mark({ id: "tieA", createdAt: 39, text: "tie a" }),
+    mark({ id: "tieB", createdAt: 39, text: "tie b" }),
+    mark({ id: "newest", createdAt: 40, text: "newest" }),
+  ];
+  const first = selectSilentMarks(anns, null, 40);
+  expect(first.capped).toBe(true);
+  expect(first.cursor).toBe(39);
+  expect(first.marks.map((m) => m.id)).toContain("tieA");
+  expect(first.marks.map((m) => m.id)).toContain("tieB");
+  expect(first.marks.map((m) => m.id)).not.toContain("newest");
+
+  const second = selectSilentMarks(anns, first.cursor, 40);
+  expect(second.marks.map((m) => m.id)).toEqual(["newest"]);
+  expect(selectSilentMarks(anns, second.cursor, 40).marks).toEqual([]);
+});
+
 test("an uncapped selection is every fresh mark, newest first, and the cursor is the newest", () => {
   const anns = Array.from({ length: 3 }, (_, i) => mark({ id: `m${i}`, createdAt: i, text: `t${i}` }));
   const { marks, capped, cursor } = selectSilentMarks(anns, null, 40);

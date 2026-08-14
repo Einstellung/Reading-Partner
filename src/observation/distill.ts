@@ -77,6 +77,11 @@ function clip(text: string, max = 160): string {
 // newest of them wrote off the other 260 in one go: the highlights stay on the
 // page, but the app has stopped noticing them. Draining from the oldest end
 // costs a pass per 40 and reaches all of them.
+//
+// `cap` is a target rather than a limit, because a cursor is one millisecond and
+// the batch therefore has to end between two of them: marks sharing a timestamp
+// go in the same batch or the ones above the cut sit behind a cursor equal to
+// their own createdAt, where `> since` never selects them again.
 export function selectSilentMarks(
   annotations: DistillAnnotation[],
   since: number | null,
@@ -86,11 +91,17 @@ export function selectSilentMarks(
     .filter((a) => (since === null ? true : a.createdAt > since))
     .filter((a) => a.text.trim() !== "" || (a.comment ?? "").trim() !== "")
     .sort((a, b) => b.createdAt - a.createdAt);
-  const capped = fresh.length > cap;
   // fresh is newest-first, so the tail is the oldest `cap` and marks[0] is the
   // newest mark this batch covers — the only safe place for the cursor.
-  const marks = capped ? fresh.slice(fresh.length - cap) : fresh;
-  return { marks, capped, cursor: marks.length > 0 ? marks[0].createdAt : null };
+  let start = Math.max(0, fresh.length - cap);
+  // Then down past anything sharing that mark's timestamp, so the cut lands
+  // between milliseconds. An overlong batch costs prompt; a cut through a tie
+  // costs the marks above it for good.
+  while (start > 0 && fresh[start - 1].createdAt === fresh[start].createdAt) start--;
+  const marks = fresh.slice(start);
+  // Capped means something was left over for a later pass, which after the walk
+  // is not the same question as `fresh.length > cap`.
+  return { marks, capped: start > 0, cursor: marks.length > 0 ? marks[0].createdAt : null };
 }
 
 // One bullet per mark: page, the passage, the reader's note. Shared by the two
