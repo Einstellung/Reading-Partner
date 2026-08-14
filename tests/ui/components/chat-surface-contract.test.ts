@@ -2,6 +2,12 @@
 // the whole effect is the difference between them: any one of the four drifting
 // back to a neutral grey or to plain white flattens it.
 //
+// The tint is also scoped. The user bubble and the code block are rendered by
+// components the corner bubble, TalkView and the reader panels also use, and
+// those stay white, so the two colours travel as variables the CallView root
+// sets and everything else defaults away from. Applying either as a plain class
+// is what this file exists to catch.
+//
 // Source text rather than a render: these are Tailwind classes and CSS custom
 // properties, neither of which jsdom resolves. Run: bun test.
 
@@ -33,11 +39,20 @@ test("the three surface tokens are declared and mapped to utilities", () => {
   expect(styles).toContain("--color-chat-code: var(--chat-code);");
 });
 
-test("the window, the user bubble and code blocks sit on the tokens", () => {
+test("the window takes the tint and hands the other two down", () => {
   expect(callView).toContain("flex-col bg-chat-surface");
   expect(callView).not.toContain("bg-white");
-  expect(chat).toContain("rounded-2xl bg-chat-bubble");
-  expect(markdown).toContain("[&_pre]:bg-chat-code");
+  expect(callView).toContain("[--chat-bubble-bg:var(--chat-bubble)]");
+  expect(callView).toContain("[--chat-code-bg:var(--chat-code)]");
+});
+
+test("the bubble and the code block read the variable, with the grey as default", () => {
+  expect(chat).toContain("bg-[var(--chat-bubble-bg,var(--color-neutral-100))]");
+  expect(markdown).toContain("[&_pre]:bg-[var(--chat-code-bg,var(--color-neutral-50))]");
+  // A bare token class here would repaint the corner bubble, TalkView and the
+  // reader panels along with the call window.
+  expect(chat).not.toContain("bg-chat-bubble ");
+  expect(markdown).not.toContain("bg-chat-code");
 });
 
 test("the composer stays white so it lifts off the window", () => {

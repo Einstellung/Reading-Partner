@@ -77,7 +77,13 @@
     /* The chat reading surface, three layers stepped down from white: the
        window, the user bubble on it, a code block inside either. Warm rather
        than neutral grey, which goes blue against this off-white. The composer
-       keeps --background, so it floats off the window as a card. */
+       keeps --background, so it floats off the window as a card.
+
+       Only the window is applied as a class. The bubble and the code block are
+       shared with the corner bubble, TalkView and the reader panels, all of
+       which stay on white, so those two reach their elements through
+       --chat-bubble-bg / --chat-code-bg, set on the CallView root and defaulted
+       back to the neutral greys everywhere else. */
     --chat-surface: #fcfcfb;
     --chat-bubble: #f2f0ec;
     --chat-code: #f7f5f1;
