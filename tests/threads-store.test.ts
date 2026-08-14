@@ -22,6 +22,7 @@ import {
 const files = new Map<string, string>();
 let reads = 0;
 let readFails = false;
+let writeFails = false;
 // When set, the next read answers with the file as it is now but only hands the
 // answer back when the test releases it — used to park one read mid-flight and,
 // because the answer is taken before the park, to model a read slower than a
@@ -55,6 +56,7 @@ beforeEach(() => {
   clock = 0;
   reads = 0;
   readFails = false;
+  writeFails = false;
   gate = null;
   writeGate = null;
   quarantined = [];
@@ -86,6 +88,7 @@ beforeEach(() => {
         writeGate = null;
         await held;
       }
+      if (writeFails) throw new Error("EIO");
       files.set(file, contents);
     },
     quarantine: async (file) => {
@@ -460,6 +463,112 @@ test("a load whose read is overtaken by a whole write cycle keeps what reached d
     "said in t1",
     "typed",
   ]);
+  store.append("book1", "t1", { role: "ai", text: "answered", ts: 3 });
+  await advance(500);
+  expect(messagesOf("t1")).toEqual(["said in t1", "typed", "answered"]);
+});
+
+// The window a single gen bump does not cover. The write bumps on its way in and
+// takes `writing`; a load issued after that, whose read answers after the whole
+// write is over, finds all three guards quiet — isPending false, writing false,
+// gen unchanged — and wipes the entry down to a file that is one write old.
+// Reached by the ordinary sync-pull path: dropThreadCache's re-read, issued while
+// a write is in the air.
+test("a load issued inside a write does not delete what that write put on disk", async () => {
+  writeFile([thread("t1")]);
+  await store.load("book1");
+  store.append("book1", "t1", { role: "user", text: "typed", ts: 2 });
+
+  // The debounce fires; the write's own read is already done and its bytes are
+  // in the air.
+  const releaseWrite = parkNextWrite();
+  fireTimers(500);
+  await settle();
+
+  // The load is issued here, and what its read will answer with is the file
+  // without the message.
+  const releaseRead = parkNextRead();
+  const reload = store.load("book1");
+  await settle();
+
+  releaseWrite();
+  await settle();
+  await settle();
+  expect(messagesOf("t1")).toEqual(["said in t1", "typed"]);
+
+  releaseRead();
+  await reload;
+
+  // Before: the entry's t1 was replaced by the copy from before the write, and
+  // the next write put that copy back over the file — deleting a message that
+  // had already reached disk.
+  store.append("book1", "t1", { role: "ai", text: "answered", ts: 3 });
+  await advance(500);
+  expect(messagesOf("t1")).toEqual(["said in t1", "typed", "answered"]);
+});
+
+// The same interleaving, on the thread the incident was about. Worse than a lost
+// message: the entry is wiped down to a file that predates the thread, so the
+// store stops holding a conversation the button is showing.
+test("a book thread created this session survives a pull re-read inside its write", async () => {
+  writeFile([thread("t1")]);
+  await store.load("book1");
+  const opened = store.createBook("book1", "bt-new");
+
+  const releaseWrite = parkNextWrite();
+  fireTimers(500);
+  await settle();
+
+  // Sync pulls the file and the route tells the store to re-read it, right here.
+  const releaseRead = parkNextRead();
+  store.drop("book1");
+  await settle();
+
+  releaseWrite();
+  await settle();
+  await settle();
+  expect(onDisk()).toEqual(["bt-new", "t1"]);
+
+  releaseRead();
+  await settle();
+
+  // Before: getBook answered undefined and append answered undefined, and every
+  // message typed into the open chat went nowhere — the incident's own failure
+  // mode, reached through the pull's re-read instead of through create.
+  expect(store.getBook("book1")?.id).toBe("bt-new");
+  expect(store.append("book1", "bt-new", { role: "user", text: "hello", ts: 3 })).toBe(opened);
+
+  await advance(500);
+  expect(messagesOf("bt-new")).toEqual(["hello"]);
+});
+
+// A write that fails leaves the entry holding the only copy of what it was
+// carrying, and the guards go quiet exactly the same way — so the file moving on
+// is not what the bump on the way out records. It is that this write is over.
+test("a write that fails does not let a load in flight erase what it was carrying", async () => {
+  writeFile([thread("t1")]);
+  await store.load("book1");
+  store.append("book1", "t1", { role: "user", text: "typed", ts: 2 });
+
+  const releaseWrite = parkNextWrite();
+  writeFails = true;
+  fireTimers(500);
+  await settle();
+
+  const releaseRead = parkNextRead();
+  const reload = store.load("book1");
+  await settle();
+
+  releaseWrite();
+  await settle();
+  await settle();
+  expect(errors).toHaveLength(1);
+  expect(messagesOf("t1")).toEqual(["said in t1"]);
+
+  releaseRead();
+  await reload;
+
+  writeFails = false;
   store.append("book1", "t1", { role: "ai", text: "answered", ts: 3 });
   await advance(500);
   expect(messagesOf("t1")).toEqual(["said in t1", "typed", "answered"]);

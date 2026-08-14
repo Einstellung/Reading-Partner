@@ -84,10 +84,13 @@ export function createAnnotationStore(io: AnnotationIo): AnnotationStore {
   // — so a read landing after a save would put the disk copy back over it.
   const cache = new Map<string, Annotation[]>();
 
-  // Bumped by every change to a key's cached set and by every write that starts.
-  // Same rule as threads.ts: an operation that reads the file takes this number
-  // before its first await and compares it after, because what came back is an
-  // account of this book's marks only if nothing happened to them in between.
+  // Bumped by every change to a key's cached set and twice by every write —
+  // once when it starts and once when it is over. Same rule as threads.ts:
+  // `load` takes this number before its first await and compares it after,
+  // because what came back is an account of this book's marks only if nothing
+  // happened to them in between, and a read can outlive a whole write.
+  // `remove`'s cache-less read is not guarded by it; what that path does
+  // instead is at the call site.
   const gens = new Map<string, number>();
   const genOf = (key: string): number => gens.get(key) ?? 0;
   const bump = (key: string): void => {
@@ -111,6 +114,12 @@ export function createAnnotationStore(io: AnnotationIo): AnnotationStore {
       try {
         await io.write(fileFor(key), JSON.stringify(held, null, 2));
       } finally {
+        // `writing` stops being true here, so this is the last moment anything
+        // can tell a read issued during this write that the file moved on.
+        // Bumped however the write ended — one that threw leaves the cache
+        // holding marks that never reached disk, and installing the file over
+        // them loses them just the same.
+        bump(key);
         writing.delete(key);
       }
     },
@@ -208,6 +217,14 @@ export function createAnnotationStore(io: AnnotationIo): AnnotationStore {
       // installed over it: a highlight drawn while the read was in flight is the
       // reader's whole set, and the deletion of an older mark has to be taken
       // out of that rather than out of the file as it was before it existed.
+      //
+      // No gen is taken here, unlike `load`. There is nothing to fall back to
+      // when the number has moved: a cache that exists by then is already the
+      // newer copy and already wins, and when there is none the file as this
+      // read found it is the only record there is. So a pull that lands inside
+      // this read is not noticed, and the delete is worked out against the copy
+      // from before it — one mark short of the file, not the empty file that
+      // filtering nothing used to write.
       void readSet(bookId)
         .then((fromDisk) => {
           const current = cache.get(bookId) ?? fromDisk;

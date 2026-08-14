@@ -127,10 +127,13 @@ interface Entry {
   // and by every write that merged the file in. Only a reconciled entry may be
   // written without reading first, which is what the way out of the app does.
   reconciled: boolean;
-  // Bumped by every change to this entry and by every write that starts. An
-  // operation that reads the file takes this number before its first await and
-  // compares it after: an unchanged number is the only proof that what came
-  // back still describes the entry it is about to be applied to.
+  // Bumped by every change to this entry and twice by every write — once when
+  // it starts and once when it is over, however it ended. An operation that
+  // reads the file takes this number before its first await and compares it
+  // after: an unchanged number is the only proof that what came back still
+  // describes the entry it is about to be applied to. One bump is not enough,
+  // because a read can outlive the whole write and land where `writing` and
+  // `isPending` have both gone quiet again.
   gen: number;
 }
 
@@ -240,6 +243,13 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
       addMissing(entry, onDisk);
       entry.reconciled = true;
     } finally {
+      // The other half of the bump at the top, and the reason a read cannot
+      // outlive this write unnoticed: `writing` stops being true here, so this
+      // is the last moment anything can say the file moved on. Bumped however
+      // the write ended — one that threw leaves the entry holding the only copy
+      // of what it was carrying, and adopting the file over that loses it just
+      // the same.
+      entry.gen++;
       writing.delete(key);
     }
   }

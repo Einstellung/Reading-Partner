@@ -31,6 +31,12 @@ let exitFlush: (() => void) | null = null;
 let errors: unknown[] = [];
 let writeFails = false;
 let reads = 0;
+// One-shot parks, the same pair threads-store.test.ts uses: `readGate` holds a
+// read between the answer being taken and it being handed back (which is what a
+// slow read is), `writeGate` holds the write's IPC between the bytes being
+// handed over and the file changing.
+let readGate: Promise<void> | null = null;
+let writeGate: Promise<void> | null = null;
 
 let store: AnnotationStore;
 
@@ -42,17 +48,32 @@ beforeEach(() => {
   errors = [];
   writeFails = false;
   reads = 0;
+  readGate = null;
+  writeGate = null;
   exitFlush = null;
   store = createAnnotationStore({
     read: async (file) => {
       reads++;
-      return files.get(file) ?? null;
+      // Taken before the park: a parked read comes back with the file as it was
+      // when it was issued.
+      const answer = files.get(file) ?? null;
+      if (readGate) {
+        const held = readGate;
+        readGate = null;
+        await held;
+      }
+      return answer;
     },
     // A real write is an IPC round-trip, so the file cannot change before the
     // first await; landing it synchronously would let a flush that only starts
     // the write pass for one that waited.
     write: async (file, contents) => {
       await Promise.resolve();
+      if (writeGate) {
+        const held = writeGate;
+        writeGate = null;
+        await held;
+      }
       if (writeFails) throw new Error("EIO");
       writes.push(file);
       files.set(file, contents);
@@ -85,6 +106,25 @@ async function advance(ms: number): Promise<void> {
   tasks = tasks.filter((t) => t.at > clock);
   for (const t of due) t.fn();
   await settle();
+}
+
+// Park the next read; returns the release.
+function parkNextRead(): () => void {
+  let release = (): void => {};
+  readGate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return release;
+}
+
+// Park the next write, between the bytes being handed over and the file
+// changing.
+function parkNextWrite(): () => void {
+  let release = (): void => {};
+  writeGate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return release;
 }
 
 const mark = (id: string): Annotation =>
@@ -259,4 +299,69 @@ test("a mark made while the file is being loaded is not replaced by it", async (
   await advance(500);
 
   expect(idsIn("annotations-book13.json")).toEqual(["a", "just-made"]);
+});
+
+
+// The window a single gen bump does not cover, the same one threads.ts has: the
+// write bumps on its way in and takes `writing`, and a load issued after that
+// whose read answers after the write is over finds all three guards quiet. The
+// set from before the save goes back over the cache, and because this store
+// writes the cache out whole, one delete then puts it over the file.
+test("a load issued inside a write does not put the pre-write set back", async () => {
+  files.set("annotations-book14.json", JSON.stringify([mark("a")]));
+  await store.load("book14");
+  store.save("book14", [mark("a"), mark("b")]);
+
+  // The debounce fires and the write parks with its bytes handed over.
+  const releaseWrite = parkNextWrite();
+  await advance(500);
+
+  // The load is issued here; what its read will answer with is the file without
+  // the mark just made.
+  const releaseRead = parkNextRead();
+  const reload = store.load("book14");
+  await settle();
+
+  releaseWrite();
+  await settle();
+  expect(idsIn("annotations-book14.json")).toEqual(["a", "b"]);
+
+  releaseRead();
+  await reload;
+
+  // Before: the cache was ["a"] again, and this delete wrote the book empty.
+  store.remove("book14", ["a"]);
+  await advance(500);
+  expect(idsIn("annotations-book14.json")).toEqual(["b"]);
+});
+
+
+// And a write that fails leaves the cache holding the only copy of the mark,
+// with the guards quiet the same way — so what the bump on the way out records
+// is that this write is over, not that the file changed.
+test("a write that fails does not let a load in flight put the file back", async () => {
+  files.set("annotations-book15.json", JSON.stringify([mark("a")]));
+  await store.load("book15");
+  store.save("book15", [mark("a"), mark("b")]);
+
+  const releaseWrite = parkNextWrite();
+  writeFails = true;
+  await advance(500);
+
+  const releaseRead = parkNextRead();
+  const reload = store.load("book15");
+  await settle();
+
+  releaseWrite();
+  await settle();
+  expect(errors).toHaveLength(1);
+  expect(idsIn("annotations-book15.json")).toEqual(["a"]);
+
+  releaseRead();
+  await reload;
+
+  writeFails = false;
+  store.remove("book15", ["a"]);
+  await advance(500);
+  expect(idsIn("annotations-book15.json")).toEqual(["b"]);
 });
