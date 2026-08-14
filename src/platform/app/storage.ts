@@ -88,8 +88,11 @@ async function load(): Promise<{ store: Store; writable: boolean }> {
 let cached: Store | null = null;
 
 // Anyone's write of the file, this module's own included; save() below puts the
-// map back straight after its own, since what it just wrote is what the file
-// now says.
+// map back straight after its own. That is right whenever ours is the last write
+// of the turn, and wrong when a foreign write lands between ours and save()'s
+// continuation: both listeners null the map, then save() puts our pre-merge copy
+// back. The window is one turn wide and the loss is the merged positions, the
+// same ones the ordinary lost update above already concedes.
 onFileWritten((path) => {
   if (path === STATE_FILE) cached = null;
 });
