@@ -31,7 +31,7 @@
 // by not making that request, strip every <img> in buildPublishedBodies instead
 // of only the data: ones — that call is the whole switch.
 
-import { readJson, writeTextAtomic } from "../../platform/app/atomic-fs";
+import { readGuardedJson, readJson, writeTextAtomic } from "../../platform/app/atomic-fs";
 import { stripDataImages } from "../extract/sanitize";
 import { loadArticles, loadItems, loadLatestBriefing, type CachedArticle } from "./store";
 import type { Briefing } from "./types";
@@ -121,6 +121,12 @@ export type BackfillVerdict = "nothing-local" | "published-newer" | "up-to-date"
 // What a startup backfill should do, given the newest briefing this machine
 // holds and what is already at the two published names.
 //
+// A null published stamp has to mean the file is not there. "Could not read it"
+// is a third answer and it belongs to the caller: read it as absent and this
+// machine publishes its own older briefing over a newer one it merely failed to
+// open, which is the one way a backfill makes things worse (backfillPublish
+// refuses to write in that case).
+//
 // generatedAt is the whole ordering, and the date is not part of it: the date is
 // the collector's label for the day, and a reader shows the latest briefing with
 // the day it is for on it rather than an empty screen (docs/36). So yesterday's
@@ -186,10 +192,20 @@ export function bodiesIntact(b: Briefing, items: InfoItem[], bodies: PublishedBo
 // the older briefing with newer bodies, which its fingerprint check reads as
 // "the text is on its way" — the harmless way round. The other order would show
 // a new briefing over stale text without knowing it.
-export async function publishBriefing(b: Briefing): Promise<void> {
-  const { bodies } = await rebuildBodies(b);
+//
+// The same intactness check the backfill runs, for the same reason: a re-triage
+// on a day whose article cache has already been pruned rebuilds a full set of
+// empty bodies, and publishing those tells every reader that each of those
+// sources only ever publishes summaries. Neither half goes out then — the
+// readers keep the pair they have, and the next run publishes a whole one.
+export async function publishBriefing(b: Briefing): Promise<PublishOutcome> {
+  const { bodies, items } = await rebuildBodies(b);
+  if (!bodiesIntact(b, items, bodies)) return "no-bodies";
   await writePublished(b, bodies);
+  return "published";
 }
+
+export type PublishOutcome = "published" | "no-bodies";
 
 // The bodies for a briefing, out of the day's files. The item snapshot comes
 // back too, because whoever is not publishing the briefing it just wrote has to
@@ -211,7 +227,34 @@ async function writePublished(b: Briefing, bodies: PublishedBodies): Promise<voi
 
 // What a backfill did. "published" is the whole point of it; the rest are the
 // reasons it is a no-op, which is what a healthy restart looks like.
-export type BackfillOutcome = Exclude<BackfillVerdict, "publish"> | "no-bodies" | "published";
+export type BackfillOutcome =
+  | Exclude<BackfillVerdict, "publish">
+  | "no-bodies"
+  | "unreadable-published"
+  | "published";
+
+// A published stamp, and whether this machine may write over that name. Same
+// shape as the shelf's reader (platform/app/library.ts): content that will not
+// parse is moved aside and the name is free again, but a file that could not be
+// read at all is left where it is and nothing is published over it. Without the
+// second case a briefing that was merely unopenable for one read reads as "the
+// readers never got one" and this machine republishes an older one over it.
+async function readPublishedStamp<T extends BriefingStamp>(
+  file: string,
+  validate: (raw: unknown) => T | null,
+): Promise<{ stamp: T | null; writable: boolean }> {
+  const read = await readGuardedJson<T>(file, validate);
+  if (read.status === "ok") return { stamp: read.value, writable: true };
+  if (read.status === "missing") return { stamp: null, writable: true };
+  return { stamp: null, writable: read.savedAs !== null };
+}
+
+function isStamp(raw: unknown): BriefingStamp | null {
+  const s = raw as Partial<BriefingStamp> | null;
+  if (!s || typeof s !== "object") return null;
+  if (typeof s.date !== "string" || typeof s.generatedAt !== "number") return null;
+  return { date: s.date, generatedAt: s.generatedAt };
+}
 
 // Publish the briefing this machine already has, if the readers never got it.
 // The day's heavy files are only opened once the stamps say something is going
@@ -225,11 +268,15 @@ export type BackfillOutcome = Exclude<BackfillVerdict, "publish"> | "no-bodies" 
 export async function backfillPublish(): Promise<BackfillOutcome> {
   const [local, published, publishedBodies] = await Promise.all([
     loadLatestBriefing().catch(() => null),
-    loadPublishedBriefing(),
-    loadPublishedBodies(),
+    readPublishedStamp(PUBLISHED_BRIEFING_FILE, isStamp),
+    readPublishedStamp(PUBLISHED_BODIES_FILE, isStamp),
   ]);
   if (!local) return "nothing-local";
-  const verdict = backfillVerdict(local, published, publishedBodies);
+  // One of the two names holds bytes this machine could not read. They are not
+  // known to be wrong, so they are not overwritten and not moved aside; the next
+  // launch reads them again.
+  if (!published.writable || !publishedBodies.writable) return "unreadable-published";
+  const verdict = backfillVerdict(local, published.stamp, publishedBodies.stamp);
   if (verdict !== "publish") return verdict;
   const { bodies, items } = await rebuildBodies(local);
   if (!bodiesIntact(local, items, bodies)) return "no-bodies";
