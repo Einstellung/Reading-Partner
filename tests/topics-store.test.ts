@@ -59,10 +59,12 @@ mock.module("@tauri-apps/api/core", () => ({
 }));
 
 const {
+  BRIEF_TOPIC_ID,
   TOPICS_FILE,
   addFileToTopic,
   createTopic,
   deleteTopic,
+  ensureBriefTopic,
   listTopics,
   markOpened,
   removeFileFromTopic,
@@ -134,6 +136,49 @@ test("renaming, adding and removing over an unreadable file are all refused", as
   await expect(addFileToTopic("t1", "/books/new.pdf")).rejects.toThrow(/could not be read/);
   await expect(removeFileFromTopic("t1", "/books/jit.pdf")).rejects.toThrow(/could not be read/);
   expect(files.get(TOPICS_FILE)).toBe(SHELF_JSON);
+});
+
+// Keeping an article out of the briefing is a shelf edit like any other, and it
+// is the one a reader reaches without ever going near the shelf: the Keep button
+// on a briefing card (use-info-home.ts) calls this to find somewhere to put it.
+// Over an unreadable file it would find no Brief topic, create one, and write a
+// shelf holding that alone.
+test("keeping a briefing article over an unreadable file is refused", async () => {
+  readFails = true;
+  await expect(ensureBriefTopic()).rejects.toThrow(/could not be read/);
+
+  expect(files.get(TOPICS_FILE)).toBe(SHELF_JSON);
+  expect(files.has(CORRUPT)).toBe(false);
+
+  readFails = false;
+  expect((await listTopics()).map((t) => t.id).sort()).toEqual(["t1", "t2"]);
+});
+
+// The same refusal on the second keep, when the topic is already there: the
+// lookup runs over the topics of a file that could not be read, which is none of
+// them, so a Brief that exists would be created a second time and the shelf
+// written as just that.
+test("a second keep over an unreadable file does not write a second Brief", async () => {
+  const brief = await ensureBriefTopic();
+  expect(brief.id).toBe(BRIEF_TOPIC_ID);
+
+  readFails = true;
+  await expect(ensureBriefTopic()).rejects.toThrow(/could not be read/);
+
+  readFails = false;
+  const ids = (await listTopics()).map((t) => t.id).sort();
+  expect(ids).toEqual(["brief", "t1", "t2"]);
+});
+
+test("the Brief topic is created once and found thereafter", async () => {
+  const first = await ensureBriefTopic();
+  const second = await ensureBriefTopic();
+
+  expect(second.id).toBe(first.id);
+  expect(second.createdAt).toBe(first.createdAt);
+  expect(onDisk().topics.filter((t) => t.id === BRIEF_TOPIC_ID).length).toBe(1);
+  // And it did not take the shelf with it on the way in.
+  expect(onDisk().topics.map((t) => t.id).sort()).toEqual(["brief", "t1", "t2"]);
 });
 
 // Both of these ride along with opening a book, inside the catch that tells the

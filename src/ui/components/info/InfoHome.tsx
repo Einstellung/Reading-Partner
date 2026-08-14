@@ -223,7 +223,13 @@ export default function InfoHome(props: {
             saved={info.keptIds.has(savedArticleId(meta.url, meta.title))}
             onBack={() => onNavigate("briefing")}
             onAsk={() => info.askArticle(openArticleId)}
-            onSave={() => void info.keepArticle(openArticleId)}
+            // A keep over an unreadable topics.json refuses rather than writing
+            // a shelf holding only the Brief topic, and the reader has already
+            // been told which file and where its bytes went (atomic-fs). What is
+            // left here is not to raise it a second time as a loose rejection.
+            onSave={() => {
+              info.keepArticle(openArticleId).catch(() => {});
+            }}
           />
         );
         // The article view's own root is the scroll container, so it is the
