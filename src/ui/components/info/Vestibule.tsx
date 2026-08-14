@@ -5,12 +5,13 @@
 // are shared with the phone shell's home screen (HomeCard).
 
 import type { InfoSnapshot } from "../../../info/briefing/pipeline";
-import { BriefingCardBody, Card, CardLabel } from "./HomeCard";
+import { BriefingCardBody, Card, CardBodyPlaceholder, CardLabel } from "./HomeCard";
 import { Button } from "../ui/button";
 
 export function Vestibule({
   continueBook,
   snap,
+  ready,
   configured,
   hasSources,
   collecting,
@@ -23,8 +24,12 @@ export function Vestibule({
   onOpenSettings,
   onStartSubscribing,
 }: {
-  continueBook: { title: string; topicName: string } | null;
+  // The book to resume, null when there is none, and undefined while the library
+  // has not been read — "Nothing open yet" is a claim about a shelf nobody has
+  // looked at.
+  continueBook: { title: string; topicName: string } | null | undefined;
   snap: InfoSnapshot | null;
+  ready: boolean;
   configured: boolean;
   hasSources: boolean | null;
   collecting: boolean;
@@ -45,7 +50,9 @@ export function Vestibule({
       <div className="flex flex-col gap-5 sm:flex-row">
         <Card>
           <CardLabel>Continue reading</CardLabel>
-          {continueBook ? (
+          {continueBook === undefined ? (
+            <CardBodyPlaceholder />
+          ) : continueBook ? (
             <button className="flex flex-1 flex-col justify-between text-left" onClick={onContinue}>
               <div>
                 <div className="text-[16px] font-medium leading-snug text-[#2a2a2a]">{continueBook.title}</div>
@@ -69,6 +76,7 @@ export function Vestibule({
           <CardLabel>Today's briefing</CardLabel>
           <BriefingCardBody
             snap={snap}
+            ready={ready}
             configured={configured}
             hasSources={hasSources}
             collecting={collecting}

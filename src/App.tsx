@@ -184,7 +184,10 @@ export default function App() {
   // doesn't start it twice.
   const migrationRan = useRef(false);
 
-  const [topics, setTopics] = useState<Topic[]>([]);
+  // Null until the library has been read. Not [] — an empty array is a shelf
+  // with nothing on it, which is what the vestibule would announce to a user who
+  // has twenty books, a moment before their most recent one appears in its place.
+  const [topics, setTopics] = useState<Topic[] | null>(null);
   const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
 
   // The launch layer in front of the library, only meaningful when not in the
@@ -233,6 +236,7 @@ export default function App() {
     device,
     applyDevice,
     configured,
+    ready: bootstrapped,
     syncReport,
   } = useShellBootstrap({ settingsOpen: showSettings, pushToast });
   const fingerDraw = !!device?.fingerDraw;
@@ -318,7 +322,7 @@ export default function App() {
   }, [deviceRole, backgroundCollect]);
 
   const activeTopic = useMemo(
-    () => topics.find((t) => t.id === activeTopicId) ?? null,
+    () => topics?.find((t) => t.id === activeTopicId) ?? null,
     [topics, activeTopicId],
   );
 
@@ -335,7 +339,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    refreshTopics().catch(() => {});
+    // A read that failed still settles the shelf: the vestibule holds a
+    // placeholder until this answers, and a placeholder waiting on a read that
+    // already gave up never goes away.
+    refreshTopics().catch(() => setTopics([]));
   }, [refreshTopics]);
 
   // One-time content-hash backfill for existing topic files (docs/13, M-sync-1):
@@ -797,7 +804,7 @@ export default function App() {
   }, [activeTopicId, refreshTopics]);
 
   const continueReading = useCallback(() => {
-    const recent = mostRecentlyOpened(topics);
+    const recent = mostRecentlyOpened(topics ?? []);
     if (!recent) {
       setHomeScreen("library");
       return;
@@ -1198,18 +1205,20 @@ export default function App() {
           onNavigate={setHomeScreen}
           role={deviceRole}
           continueBook={(() => {
+            if (topics === null) return undefined;
             const recent = mostRecentlyOpened(topics);
             return recent ? { title: recent.file.name, topicName: recent.topic.name } : null;
           })()}
           onContinue={continueReading}
           configured={configured}
+          launchReady={bootstrapped}
           onOpenSettings={() => setShowSettings(true)}
           onTopicsChanged={refreshTopics}
         />
 
         {!inReader && homeScreen === "library" && (
           <LibraryScreen
-            topics={topics}
+            topics={topics ?? []}
             activeTopic={activeTopic}
             onOpenTopic={(t) => setActiveTopicId(t.id)}
             onAddFile={addFile}

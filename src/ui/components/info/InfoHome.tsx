@@ -38,6 +38,10 @@ export interface AskableScreen {
 // handed these rather than subscribing a second time.
 export interface LaunchProps {
   snap: InfoSnapshot | null;
+  // Whether the reads a launch card branches on have answered. False is not "no"
+  // — it is "nobody has looked yet", and a card drawn from the defaults standing
+  // in for those answers says the wrong thing and then says a different one.
+  ready: boolean;
   configured: boolean;
   hasSources: boolean | null;
   // Whether this device is the one collecting (docs/36). A reader has no button
@@ -61,11 +65,18 @@ export default function InfoHome(props: {
   // shell, which wants the vestibule; the phone shell has no library and no
   // book to continue, so it draws its own.
   renderLaunch?: (launch: LaunchProps) => React.ReactNode;
-  // The most recently opened book, for the vestibule's Continue reading.
+  // The most recently opened book, for the vestibule's Continue reading. Null
+  // when there is none; undefined while the shell has not read the library yet,
+  // which the vestibule draws as a placeholder rather than as an empty shelf.
   continueBook?: { title: string; topicName: string } | null;
   onContinue?: () => void;
   // Whether an AI provider is connected (the vestibule guides to Settings).
   configured: boolean;
+  // Whether the shell's start-up reads have answered (useShellBootstrap). The
+  // launch screen holds a placeholder until they have: `configured` and `role`
+  // both have a value from the first render, and before this is true neither of
+  // them came from a file.
+  launchReady: boolean;
   // What this device is for (docs/36), null until device.json has been read.
   // It decides which briefing view is built, and with it whether this screen
   // can collect, add a source, or start a run at all. Nothing info-related is
@@ -114,6 +125,7 @@ export default function InfoHome(props: {
           {props.renderLaunch ? (
             props.renderLaunch({
               snap: info.snap,
+              ready: props.launchReady,
               configured: props.configured,
               hasSources: info.hasSources,
               collecting: info.collecting,
@@ -126,8 +138,9 @@ export default function InfoHome(props: {
             })
           ) : (
             <Vestibule
-              continueBook={props.continueBook ?? null}
+              continueBook={props.continueBook}
               snap={info.snap}
+              ready={props.launchReady}
               configured={props.configured}
               hasSources={info.hasSources}
               collecting={info.collecting}

@@ -47,6 +47,19 @@ export function isConfigured(settings: Settings, providersInfo: ProviderInfo[]):
   );
 }
 
+// The start-up reads the launch screen's cards branch on. Until all of them have
+// answered, `configured` is a default rather than a fact and the device role is
+// unknown, so a card drawn from them states something nobody has read yet — and
+// then restates it differently a moment later. A read that failed counts as an
+// answer too: a placeholder that waits for a file that will never arrive is
+// worse than the wrong sentence it replaced.
+export const STARTUP_READS = ["settings", "providers", "device"] as const;
+export type StartupRead = (typeof STARTUP_READS)[number];
+
+export function startupSettled(answered: ReadonlySet<StartupRead>): boolean {
+  return STARTUP_READS.every((read) => answered.has(read));
+}
+
 // The store, as the two functions below use it. Both take it as an argument so
 // their tests can hand them a fake instead of rewriting the module registry
 // (pitfall 119).
@@ -132,6 +145,11 @@ export interface ShellBootstrap {
   device: DeviceSettings | null;
   applyDevice: (device: DeviceSettings) => void;
   configured: boolean;
+  // Whether every start-up read has answered. False means `configured` and
+  // `device` are still their pre-read defaults, which is not the same as their
+  // being false and null — the launch screen holds a placeholder rather than
+  // draw a card from them (STARTUP_READS above).
+  ready: boolean;
   syncReport: SyncHealthReport;
 }
 
@@ -158,6 +176,13 @@ export function useShellBootstrap({
   // have to re-register every time the panel opens.
   const settingsOpenRef = useRef(settingsOpen);
   settingsOpenRef.current = settingsOpen;
+  // Which start-up reads have answered. Set rather than three flags so that the
+  // provider list, which is re-read every time the settings panel closes, can
+  // report again without meaning anything new.
+  const [answered, setAnswered] = useState<ReadonlySet<StartupRead>>(() => new Set());
+  const markAnswered = useCallback((read: StartupRead) => {
+    setAnswered((prev) => (prev.has(read) ? prev : new Set(prev).add(read)));
+  }, []);
 
   useEffect(() => {
     const unsubErrors = subscribeStoreErrors(pushToast);
@@ -167,19 +192,27 @@ export function useShellBootstrap({
         setSettings(next);
         if (notice) pushToast("warn", notice);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => markAnswered("settings"));
     // This machine's own file (docs/36). Read once here: it decides the role,
-    // and everything the role decides waits on it.
+    // and everything the role decides waits on it. A failure leaves `device`
+    // null, which is what a shell already treats as "not a collector" — the role
+    // is not guessed from a read that did not happen.
     initDeviceSettings()
       .then(setDevice)
-      .catch((e) => console.warn("failed to read device settings", e));
+      .catch((e) => console.warn("failed to read device settings", e))
+      .finally(() => markAnswered("device"));
     return unsubErrors;
-  }, [pushToast]);
+  }, [pushToast, markAnswered]);
 
   // Refresh provider connection state on mount and whenever Settings closes.
   useEffect(() => {
-    if (!settingsOpen) listProviders().then(setProvidersInfo).catch(() => {});
-  }, [settingsOpen]);
+    if (settingsOpen) return;
+    listProviders()
+      .then(setProvidersInfo)
+      .catch(() => {})
+      .finally(() => markAnswered("providers"));
+  }, [settingsOpen, markAnswered]);
 
   const adoptPulledSettings = useCallback(() => {
     pulledSettings()
@@ -235,6 +268,7 @@ export function useShellBootstrap({
     device,
     applyDevice,
     configured: isConfigured(settings, providersInfo),
+    ready: startupSettled(answered),
     syncReport,
   };
 }
