@@ -25,6 +25,7 @@ const EVEN: Record<ReadingReductionId, number> = {
   "booklist-thin": 5_000,
   "observation-trim": 5_000,
   "tool-result-stubs": 5_000,
+  "prep-notes-trim": 5_000,
   "classroom-inline": 5_000,
   "history-trim": 5_000,
 };
@@ -48,6 +49,7 @@ test("the reading ladder's order and its wording are pinned", () => {
     ["booklist-thin", ""],
     ["observation-trim", ""],
     ["tool-result-stubs", ""],
+    ["prep-notes-trim", "some of my notes on the reference papers were left out to make room"],
     [
       "classroom-inline",
       "the book didn't fit in context, so I read the pages I needed instead of having all of it in view",
@@ -72,16 +74,31 @@ test("redundancy goes first, all of it, and without a word", () => {
 test("tool-result stubs come after every silent drop and before any evidence", () => {
   const p = plan(FITS_AT + 26_000);
   expect(p.apply[p.apply.length - 1]).toBe("tool-result-stubs");
+  expect(p.apply).not.toContain("prep-notes-trim");
   expect(p.apply).not.toContain("classroom-inline");
   expect(p.notice).toBe("");
 });
 
-test("dropping the inlined book is told to the reader", () => {
+// The prep notes are evidence too, and go before the book: the survey is the
+// syllabus every citation is anchored to, while a note left out is still
+// reachable whole by read_note. Told to the reader all the same — which notes
+// the class was taught from is theirs to know.
+test("the prep notes are given up before the book, and are told to the reader", () => {
   const p = plan(FITS_AT + 31_000);
+  expect(p.apply[p.apply.length - 1]).toBe("prep-notes-trim");
+  expect(p.apply).not.toContain("classroom-inline");
+  expect(p.notice).toBe(
+    "Note: some of my notes on the reference papers were left out to make room.",
+  );
+});
+
+test("dropping the inlined book is told to the reader", () => {
+  const p = plan(FITS_AT + 36_000);
   expect(p.apply[p.apply.length - 1]).toBe("classroom-inline");
   expect(p.apply).not.toContain("history-trim");
   expect(p.notice).toBe(
-    "Note: the book didn't fit in context, so I read the pages I needed instead of having all of it in view.",
+    "Note: some of my notes on the reference papers were left out to make room; " +
+      "the book didn't fit in context, so I read the pages I needed instead of having all of it in view.",
   );
 });
 
@@ -89,19 +106,21 @@ test("dropping the inlined book is told to the reader", () => {
 // preserve an older stretch of thread is fired and forgotten, so a trim before
 // it lands is a straight loss of the conversation.
 test("history is the last thing given up, and it is told to the reader", () => {
-  const p = plan(FITS_AT + 36_000);
+  const p = plan(FITS_AT + 41_000);
   expect(p.apply[p.apply.length - 1]).toBe("history-trim");
   expect(p.notice).toBe(
-    "Note: the book didn't fit in context, so I read the pages I needed instead of having all of it in view; " +
+    "Note: some of my notes on the reference papers were left out to make room; " +
+      "the book didn't fit in context, so I read the pages I needed instead of having all of it in view; " +
       "earlier turns of this conversation were left out to make room.",
   );
 });
 
-// Pricing is a property of the rung, not of the caller: the inlined survey is an
-// order of magnitude bigger than everything above it, so it is measured against
-// the full prompt rather than alongside the small rungs, and the tool results
-// are never priced here at all because the agent loop applies them mid-turn.
-test("the two rungs that are not priced like the rest say so on the table", () => {
+// Pricing is a property of the rung, not of the caller: the inlined survey and
+// the prep notes are an order of magnitude bigger than everything above them, so
+// they are measured against the full prompt rather than alongside the small
+// rungs, and the tool results are never priced here at all because the agent loop
+// applies them mid-turn.
+test("the rungs that are not priced like the rest say so on the table", () => {
   const priced = Object.fromEntries(READING_LADDER.map((r) => [r.id, r.price ?? "prompt"]));
   expect(priced).toEqual({
     "figure-catalog": "prompt",
@@ -110,6 +129,7 @@ test("the two rungs that are not priced like the rest say so on the table", () =
     "booklist-thin": "prompt",
     "observation-trim": "prompt",
     "tool-result-stubs": "none",
+    "prep-notes-trim": "bulk",
     "classroom-inline": "bulk",
     "history-trim": "messages",
   });

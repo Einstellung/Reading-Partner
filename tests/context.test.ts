@@ -66,7 +66,7 @@ test("the book-level prompt drops every selection-derived part but keeps positio
     chapterTitle: "5. Global Value Numbering",
     surroundingText: "GVN folds redundant expressions across the graph.",
     materials,
-    hasTools: true,
+    toolNames: ["read_pages", "search_topic"],
   });
   // No passage, note, or surrounding text.
   expect(out).not.toContain("Marked passage");
@@ -132,12 +132,37 @@ test("the AI's guesses go in as guesses, and never as a depth verdict", () => {
   expect(readerProfileSection("", guesses)).toContain("Wants the era, not the method");
 });
 
-test("the tools paragraph and cross-book rule appear only with hasTools", () => {
-  const withTools = buildSystemPrompt({ ...base, hasTools: true });
+// The paragraph is rendered from the names of the tools actually wired, because
+// read_annotations is mounted only when some material carries a mark: on a book
+// with no marks the old fixed paragraph promised a tool that answers "unknown
+// tool", and one empty call teaches the model to stop reaching for any of them.
+test("the tools paragraph names the tools that were mounted, and only those", () => {
+  const withTools = buildSystemPrompt({
+    ...base,
+    toolNames: ["read_pages", "search_topic", "find_paper"],
+  });
   expect(withTools).toContain("read_pages(from, to)");
   expect(withTools).toContain("search_topic(query)");
-  expect(withTools).toContain("read_annotations(material)");
   expect(withTools).toContain("Answer from the current passage by default");
   expect(withTools).toContain("cite the");
-  expect(buildSystemPrompt({ ...base, hasTools: false })).not.toContain("Tools:");
+  // Mounted but not described here: find_paper carries its own paragraph, and a
+  // second mention would be a second place to keep true.
+  expect(withTools).not.toContain("find_paper");
+  // Not mounted, so not announced.
+  expect(withTools).not.toContain("read_annotations");
+});
+
+test("no described tool means no tools paragraph at all", () => {
+  expect(buildSystemPrompt({ ...base, toolNames: [] })).not.toContain("Tools:");
+  // A turn that mounted only tools with paragraphs of their own is the same case.
+  expect(buildSystemPrompt({ ...base, toolNames: ["find_paper"] })).not.toContain("Tools:");
+  expect(buildSystemPrompt(base)).not.toContain("Tools:");
+});
+
+test("read_annotations is announced exactly when it is mounted", () => {
+  const marked = buildSystemPrompt({ ...base, toolNames: ["read_pages", "read_annotations"] });
+  expect(marked).toContain("read_annotations(material)");
+  expect(buildSystemPrompt({ ...base, toolNames: ["read_pages"] })).not.toContain(
+    "read_annotations",
+  );
 });

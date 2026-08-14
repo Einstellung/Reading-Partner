@@ -4,9 +4,9 @@
 //
 //   tier 0  never dropped, so it is not on the ladder at all: the role and
 //           instructions, the current user message, the marked passage and the
-//           user's note on it, the current position, this chapter's prep notes,
-//           the tool schemas already offered this turn, and the last two rounds
-//           of conversation.
+//           user's note on it, the current position, the prep status list, the
+//           tool schemas already offered this turn, and the last two rounds of
+//           conversation.
 //   tier 1  redundancy. Nothing the model could not derive or fetch, so it goes
 //           silently.
 //   tier 2  still silent, because a tool can fetch it back — the stub says so.
@@ -22,6 +22,7 @@ export type ReadingReductionId =
   | "booklist-thin"
   | "observation-trim"
   | "tool-result-stubs"
+  | "prep-notes-trim"
   | "classroom-inline"
   | "history-trim";
 
@@ -38,8 +39,21 @@ export const READING_LADDER: readonly Rung<ReadingReductionId>[] = [
   // no tool results yet; it stays on the ladder because its position is the
   // statement that the model's own fetches outlive the material it was handed.
   { id: "tool-result-stubs", price: "none" },
-  // tier 3: evidence. An order of magnitude bigger than everything above it, so
-  // it is priced against the full prompt rather than alongside the small rungs.
+  // tier 3: evidence. Both rungs here are an order of magnitude bigger than
+  // everything above them, so they are priced against the full prompt rather
+  // than alongside the small rungs.
+  //
+  // The prep notes go before the inlined book. The survey is the syllabus and
+  // every citation is anchored to its pages; the notes are the shelf beside it,
+  // each one still reachable whole by read_note, and the prep list left in the
+  // prompt names every slug. It carries a notice all the same: which notes the
+  // class was taught from is the reader's business, and the model only fetches
+  // back what it thinks to fetch.
+  {
+    id: "prep-notes-trim",
+    price: "bulk",
+    notice: "some of my notes on the reference papers were left out to make room",
+  },
   {
     id: "classroom-inline",
     price: "bulk",

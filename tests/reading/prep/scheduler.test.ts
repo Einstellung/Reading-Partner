@@ -6,7 +6,6 @@ import {
   nextQueued,
   normalizeOnLoad,
   paperPriority,
-  papersForChapter,
 } from "../../../src/reading/prep/scheduler";
 import { createPrepState, type PrepChapter, type PrepPaper } from "../../../src/reading/prep/types";
 
@@ -87,14 +86,4 @@ test("normalizeOnLoad requeues cooldown papers and tolerates pre-retry state", (
   expect(out.papers[0].status).toBe("queued");
   expect(out.papers[0].retryAt).toBeUndefined();
   expect(out.papers[1].status).toBe("queued");
-});
-
-test("papersForChapter returns only noted papers cited in that chapter", () => {
-  const papers = [
-    paper("a", [1], "done"),
-    paper("b", [1], "abstract-only"),
-    paper("c", [1], "queued"),
-    paper("d", [2], "done"),
-  ];
-  expect(papersForChapter(papers, 1).map((p) => p.slug)).toEqual(["a", "b"]);
 });

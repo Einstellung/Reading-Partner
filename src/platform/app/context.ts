@@ -30,8 +30,9 @@ export interface ReadingContext {
   // Compact figure catalog for the current book (M9), or "" when the book has no
   // detected figures. Lets the model cite figures as [fig:N] and call view_figure.
   figureCatalog?: string;
-  // Whether any reading tool was wired for this call; gates the tools paragraph.
-  hasTools?: boolean;
+  // The names of the tools actually mounted for this call. The tools paragraph
+  // is generated from it and appears only when it names something.
+  toolNames?: readonly string[];
   // The book-level thread (docs/03: top-bar AI button). No passage was marked,
   // so every selection-derived part (marked passage, its note, surrounding text)
   // is dropped and the intro changes; position, chapter, booklist, tools stay.
@@ -40,6 +41,37 @@ export interface ReadingContext {
   // language via the "follow the user's language" line; any other value appends
   // an instruction pinning replies to that language.
   aiLanguage?: AiLanguage;
+}
+
+// The tools a reading turn can mount that have no prompt paragraph of their own,
+// and the single line each gets. Written down once and rendered from the names
+// actually wired, because a prompt that lists a tool unconditionally is a prompt
+// that lies: read_annotations is mounted only when some material carries a mark
+// (reading/context.ts), so on a book with no marks the model was being told to
+// call a tool that answers "unknown tool" — and one empty call is enough to
+// teach it to stop reaching for any of them.
+//
+// Absent on purpose: add_source, find_paper, research_literature, the
+// saved-article pair and the observation tools. Each carries its own paragraph
+// wherever it is mounted, and a second mention here would be a second place to
+// keep true.
+const TOOL_LINE: Record<string, string> = {
+  read_pages: "read_pages(from, to) — a page range of the book the reader is in.",
+  search_topic: "search_topic(query) — keyword search across every material in this topic.",
+  read_annotations:
+    "read_annotations(material) — the reader's highlights and notes on one named material.",
+  read_paper: "read_paper(slug, from, to) — pages of a pre-read reference paper's full text.",
+  read_note: "read_note(slug) — a pre-read paper's whole prep note.",
+  view_figure: "view_figure(id) — shows you a figure so you can describe what it depicts.",
+};
+
+// The described tools among `names`, in the table's order, as prompt lines.
+// Empty when the call mounted none of them, which is what gates the paragraph.
+export function toolLines(names: readonly string[]): string[] {
+  const mounted = new Set(names);
+  return Object.entries(TOOL_LINE)
+    .filter(([name]) => mounted.has(name))
+    .map(([, line]) => `- ${line}`);
 }
 
 function booklistLine(m: BooklistItem): string {
@@ -116,17 +148,13 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
     lines.push("", ctx.figureCatalog.trim());
   }
 
-  if (ctx.hasTools) {
+  const toolList = toolLines(ctx.toolNames ?? []);
+  if (toolList.length > 0) {
     lines.push(
       "",
       "Tools:",
-      "You can call tools to look past the marked passage: read_pages(from, to) pulls",
-      "a page range from the current book; search_topic(query) keyword-searches every",
-      "material in this topic; read_annotations(material) lists the user's highlights",
-      "and notes on a named material.",
-      ...(ctx.figureCatalog && ctx.figureCatalog.trim()
-        ? ["view_figure(id) shows you a figure from the catalog above so you can describe it."]
-        : []),
+      "You can call tools to look past the marked passage. Mounted this turn:",
+      ...toolList,
       "",
       "Answer from the current passage by default. Consult other books only when the",
       "user brings them up or the question plainly needs them — don't wander off to",

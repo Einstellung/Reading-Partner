@@ -25,7 +25,6 @@ export {
   nextQueued,
   normalizeOnLoad,
   paperPriority,
-  papersForChapter,
 } from "./scheduler";
 export {
   PrepPipeline,

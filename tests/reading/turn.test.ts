@@ -29,7 +29,9 @@ mock.module("../../src/platform/app/atomic-fs", () => app.atomicFs);
 const { backgroundFailureToast, buildReadingTurn, turnFailureView, EXPLAIN_KICKOFF, HISTORY_KEEP } =
   await import("../../src/reading/turn");
 const { getFulltext } = await import("../../src/fulltext/store");
-const { paperFulltextHash } = await import("../../src/reading/prep/store");
+const { paperFulltextHash, writePrepNote } = await import("../../src/reading/prep/store");
+const { CLASSROOM_NOTE_BUDGET } = await import("../../src/reading/prep/classroom");
+const { estimateTextTokens } = await import("../../src/budget");
 const { REFUSE_MIDTURN, REFUSE_ROUNDS } = await import("../../src/ai/agent");
 const { StoppedError } = await import("../../src/ai/watchdog");
 const { RESEARCH_TOOL_NAME, RESEARCH_TURN_ROUNDS } = await import(
@@ -415,6 +417,129 @@ test("classroom mode swaps the system prompt", async () => {
   expect(classroom!.systemPrompt).not.toBe(companion!.systemPrompt);
 });
 
+// --- what a classroom turn carries (docs/09) ---
+
+function notePaper(slug: string, chapters: number[]): PrepPaper {
+  return {
+    slug,
+    title: slug,
+    authors: [],
+    year: null,
+    arxivId: null,
+    citedInChapters: chapters,
+    reason: "load-bearing",
+    status: "done",
+  };
+}
+
+// Seven chapters, one per page, so the fixture's page 2 lands the reader in
+// chapter 2 the way chapterIndexForPage would on a real survey.
+function chaptered(papers: PrepPaper[]): PrepState {
+  return {
+    ...prepState(),
+    chapters: Array.from({ length: 7 }, (_, i) => ({
+      index: i + 1,
+      title: `Ch ${i + 1}`,
+      startPage: i + 1,
+    })),
+    papers,
+  };
+}
+
+// The reader's scroll position used to decide whether a note rode along at all:
+// parked on p.12 of the embodied-AI survey they were counted into chapter 5 and
+// the turn carried one of the twenty notes, while what they were being taught
+// was chapter 4. Every note there is comes now; the position only orders them.
+test("every prep note rides along, whatever chapter the reader is parked in", async () => {
+  const papers = [notePaper("all-a", [1]), notePaper("all-b", [4]), notePaper("all-c", [7])];
+  for (const p of papers) await writePrepNote(BOOK, p.slug, `body of ${p.slug}`);
+  const turn = await buildReadingTurn(
+    input({ classroom: true, getPipeline: () => pipeline(chaptered(papers)) }),
+  );
+  for (const p of papers) {
+    expect(turn!.systemPrompt).toContain(`body of ${p.slug}`);
+    expect(turn!.systemPrompt).toContain(`- ${p.slug} — ${p.slug} [note below]`);
+  }
+});
+
+// The cap is what makes "all of them" safe, and the order is what makes the cut
+// defensible: the chapter the reader is in is the last thing given up.
+test("the cap cuts the far end of the queue, and the prep list names who was cut", async () => {
+  const here = [1, 2, 3, 4].map((i) => notePaper(`cap-here-${i}`, [2]));
+  const far = [1, 2, 3, 4, 5, 6, 7, 8].map((i) => notePaper(`cap-far-${i}`, [7]));
+  // Far first, so nothing but the priority order can be what saves the others.
+  const papers = [...far, ...here];
+  for (const p of papers) await writePrepNote(BOOK, p.slug, "书".repeat(5_000));
+
+  const turn = await buildReadingTurn(
+    input({ classroom: true, getPipeline: () => pipeline(chaptered(papers)) }),
+  );
+  const carried = papers.filter((p) => turn!.systemPrompt.includes(`--- ${p.slug}:`));
+  expect(carried.length).toBeGreaterThan(0);
+  expect(carried.length).toBeLessThan(papers.length);
+  expect(carried.length * estimateTextTokens("书".repeat(5_000))).toBeLessThanOrEqual(
+    CLASSROOM_NOTE_BUDGET,
+  );
+  for (const p of here) expect(carried).toContain(p);
+  // And what did not fit is on the list, with the call that fetches it.
+  for (const p of papers.filter((x) => !carried.includes(x))) {
+    expect(turn!.systemPrompt).toContain(`read_note("${p.slug}")`);
+  }
+});
+
+// One source feeds the bodies and the status list, so the list cannot claim a
+// note is in front of the model when it is not.
+test("the prep list separates carried from on-disk from never fetched", async () => {
+  const papers = [
+    notePaper("state-carried", [2]),
+    { ...notePaper("state-missing", [2]), status: "failed" as const, error: "Connection error." },
+    {
+      ...notePaper("state-absent", [2]),
+      status: "failed" as const,
+      error: "not found on arXiv, OpenAlex, or Semantic Scholar",
+    },
+  ];
+  await writePrepNote(BOOK, "state-carried", "the carried body");
+  const turn = await buildReadingTurn(
+    input({ classroom: true, getPipeline: () => pipeline(chaptered(papers)) }),
+  );
+  expect(turn!.systemPrompt).toContain("- state-carried — state-carried [note below]");
+  expect(turn!.systemPrompt).toContain("[no full text: Connection error.]");
+  expect(turn!.systemPrompt).toContain(
+    "[no full text: not found on arXiv, OpenAlex, or Semantic Scholar]",
+  );
+});
+
+// A tool the prompt promises and the turn did not mount answers "unknown tool",
+// and one of those teaches the model to stop reaching for any of them.
+test("the tools paragraph names read_annotations only when a mark exists", async () => {
+  const bare = await buildReadingTurn(input());
+  expect(names(bare!.tools)).not.toContain("read_annotations");
+  expect(bare!.systemPrompt).not.toContain("read_annotations");
+
+  const marked = await buildReadingTurn(
+    input({
+      annotations: [
+        { id: "ann-1", text: "inline caches", position: { pageIndex: 1 } } as unknown as Annotation,
+      ],
+    }),
+  );
+  expect(names(marked!.tools)).toContain("read_annotations");
+  expect(marked!.systemPrompt).toContain("read_annotations(material)");
+});
+
+test("a classroom turn announces the paper tools only once a prep run exists", async () => {
+  const none = await buildReadingTurn(input({ classroom: true }));
+  expect(none!.systemPrompt).not.toContain("read_paper");
+  expect(none!.systemPrompt).not.toContain("read_note");
+
+  const prepped = await buildReadingTurn(
+    input({ classroom: true, getPipeline: () => pipeline(prepState()) }),
+  );
+  expect(prepped!.systemPrompt).toContain("read_paper(slug, from, to)");
+  expect(prepped!.systemPrompt).toContain("read_note(slug)");
+});
+
 test("history is replayed after the kickoff and trimmed to the cap", async () => {
   createThread(BOOK, "ann-1", "thread-1");
   for (let i = 0; i < HISTORY_KEEP + 5; i++) {
@@ -490,6 +615,47 @@ test("a survey too long for the window stops being inlined, and the user is told
   expect(turn!.systemPrompt).not.toContain("[fig:1]");
   // The tool that replaces the inline body is still mounted.
   expect(names(turn!.tools)).toContain("read_pages");
+});
+
+// The prep notes are on the ladder above the inlined book: a window that cannot
+// hold both gives up the shelf before the textbook, and says so. The trim is a
+// quarter of the cap walked in the same order, so what survives is a prefix of
+// what a roomy window carried — not a differently-chosen set.
+test("a window that cannot hold every note keeps the front of the queue, and says so", async () => {
+  const here = [1, 2, 3, 4].map((i) => notePaper(`rung-here-${i}`, [2]));
+  const far = [1, 2, 3, 4, 5, 6, 7, 8].map((i) => notePaper(`rung-far-${i}`, [7]));
+  const papers = [...here, ...far];
+  for (const p of papers) await writePrepNote(BOOK, p.slug, "书".repeat(5_000));
+  const carried = (turn: { systemPrompt: string }) =>
+    papers.filter((p) => turn.systemPrompt.includes(`--- ${p.slug}:`)).map((p) => p.slug);
+
+  const roomy = await buildReadingTurn(
+    input({
+      classroom: true,
+      fulltext: cjkSurvey(160),
+      getPipeline: () => pipeline(chaptered(papers)),
+    }),
+  );
+  const tight = await buildReadingTurn(
+    input({
+      classroom: true,
+      fulltext: cjkSurvey(160),
+      settings: small,
+      getPipeline: () => pipeline(chaptered(papers)),
+    }),
+  );
+
+  expect(roomy!.notice).toBe("");
+  expect(tight!.refusal).toBe("");
+  expect(tight!.notice).toBe(
+    "Note: some of my notes on the reference papers were left out to make room.",
+  );
+  // The book is below the notes on the ladder, so it is still here whole.
+  expect(tight!.systemPrompt).toContain("=== Page 2 ===");
+  const kept = carried(tight!);
+  expect(kept.length).toBeGreaterThan(0);
+  expect(carried(roomy!).slice(0, kept.length)).toEqual(kept);
+  expect(kept.length).toBeLessThan(carried(roomy!).length);
 });
 
 test("the same survey inside a 1M window is left alone", async () => {

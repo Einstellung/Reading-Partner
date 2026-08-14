@@ -77,13 +77,3 @@ export function normalizeOnLoad(state: PrepState): PrepState {
     ),
   };
 }
-
-// Papers whose notes belong in the classroom context for a chapter: cited in
-// that chapter and having a note on disk (done or abstract-only).
-export function papersForChapter(papers: PrepPaper[], chapter: number): PrepPaper[] {
-  return papers.filter(
-    (p) =>
-      (p.status === "done" || p.status === "abstract-only") &&
-      p.citedInChapters.includes(chapter),
-  );
-}

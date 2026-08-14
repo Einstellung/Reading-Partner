@@ -43,10 +43,16 @@ import {
   type Observation,
 } from "../observation";
 import { readOverviewNote } from "./notes/store";
-import { chapterIndexForPage, papersForChapter } from "./prep/scheduler";
+import { chapterIndexForPage } from "./prep/scheduler";
 import { paperFulltextHash, readPrepNote } from "./prep/store";
 import { parseNote } from "./prep/notes";
-import { buildClassroomSystemPrompt, type ClassroomNote } from "./prep/classroom";
+import {
+  buildClassroomSystemPrompt,
+  classroomNoteBody,
+  selectClassroomNotes,
+  CLASSROOM_NOTE_BUDGET_TIGHT,
+  type ClassroomNote,
+} from "./prep/classroom";
 import { buildClassroomTools } from "./prep/tools";
 import { ADD_SOURCE_PROMPT, buildSourceTools } from "./prep/source-tool";
 import {
@@ -287,6 +293,9 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   // the reading tools; the opening snapshot rides the system prompt below.
   let observationSection = "";
   let observationSectionTight = "";
+  // Whether the snapshot carries anything, as opposed to the tool guidance that
+  // rides with it either way. The classroom prompt points at it by name.
+  let hasObservations = false;
   if (topicId) {
     const observationsAdapter = getObservationAdapter(topicId);
     const observations = await observationsAdapter.listObservations().catch((): Observation[] => []);
@@ -296,7 +305,9 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
         onWrite: () => notifyObservationChange(topicId),
       }),
     ];
-    observationSection = observationPromptSection(buildObservationSnapshot(observations), true);
+    const snapshot = buildObservationSnapshot(observations);
+    hasObservations = snapshot !== "";
+    observationSection = observationPromptSection(snapshot, true);
     const recent = [...observations]
       .sort((a, b) => b.updated.localeCompare(a.updated))
       .slice(0, OBSERVATION_KEEP_TIGHT);
@@ -361,19 +372,46 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   }
 
   const isClassroom = classroom && currentFulltext?.status === "ok";
+  // Every prep note there is, capped, and the same list under a quarter of the
+  // budget for when the window is tight (the "prep-notes-trim" rung).
+  //
+  // Which chapter the reader is scrolled to used to decide *whether* a note rode
+  // along at all, and it is a bad witness: a reader parked on p.12 of the
+  // embodied-AI survey was two days into chapter 4, and the turn carried one of
+  // the twenty notes. The position now only orders them, and only once the cap
+  // bites (prep/classroom.ts) — including in the tight list, which is why that
+  // one is a smaller budget rather than a filter on the chapter number.
+  //
+  // The body stored here is the body that gets printed: classroomNoteBody is the
+  // one place a stored note becomes prompt text, so what selectClassroomNotes
+  // prices is what the prompt carries.
   let classroomNotes: ClassroomNote[] = [];
+  let classroomNotesTight: ClassroomNote[] = [];
   if (isClassroom) {
     const here = page ?? (pageIndex !== null ? pageIndex + 1 : 1);
     const chapterIdx = prepState ? chapterIndexForPage(prepState.chapters, here) : 1;
-    const notePapers = prepState ? papersForChapter(prepState.papers, chapterIdx) : [];
-    classroomNotes = (
+    const notePapers = (prepState?.papers ?? []).filter(
+      (p) => p.status === "done" || p.status === "abstract-only",
+    );
+    const onDisk = (
       await Promise.all(
         notePapers.map(async (p): Promise<ClassroomNote | null> => {
           const raw = await readPrepNote(bookId, p.slug);
-          return raw ? { slug: p.slug, title: p.title, body: parseNote(raw).body } : null;
+          if (!raw) return null;
+          return {
+            slug: p.slug,
+            title: p.title,
+            body: classroomNoteBody(parseNote(raw).body, p.slug),
+          };
         }),
       )
     ).filter((n): n is ClassroomNote => n !== null);
+    const sel = { chapter: chapterIdx, chapterCount: prepState?.chapters.length ?? 0 };
+    classroomNotes = selectClassroomNotes(onDisk, notePapers, sel);
+    classroomNotesTight = selectClassroomNotes(onDisk, notePapers, {
+      ...sel,
+      budget: CLASSROOM_NOTE_BUDGET_TIGHT,
+    });
     if (prepState) {
       tools = [...tools, ...buildClassroomTools(() => getPipeline()?.snapshot().state ?? prepState)];
     }
@@ -422,12 +460,6 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     }
   }
 
-  // Whether anything that reads *this book* was wired. Captured here, before the
-  // literature tools join the list, because the tools paragraph in the system
-  // prompt describes the reading tools by name: a book with no text layer mounts
-  // none of them, and the tools added below must not make that paragraph appear.
-  const hasReadingTools = tools.length > 0;
-
   // Academic literature (docs/24, docs/25), mounted on every reading turn. Not
   // gated on the prep pipeline or on classroom mode: "what is the latest research
   // on this" is a question the reader can have on any page of any book, and a tool
@@ -475,12 +507,18 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   // A booklist entry with no text layer and no marks is a title the model can do
   // nothing with; the first thing to go when the window is tight.
   const booklistThin = booklist.filter((m) => m.fulltextAvailable || m.annotationCount > 0);
+  // What the prompt is allowed to say exists. The tools paragraph is rendered
+  // from these names, so a tool that was not mounted — read_annotations on a book
+  // with no marks, read_paper with no prep run — is not announced. Taken after
+  // the whole list is assembled: the names the paragraph does not know are simply
+  // not in its table (platform/app/context.ts).
+  const toolNames = tools.map((t) => t.name);
 
   // The prompt as a function of what this turn had to give up (src/budget). The
   // pieces named by a ReadingReductionId are the optional ones; everything else — the
-  // role, the instructions, the marked passage and its note, the position, this
-  // chapter's prep notes — is assembled the same way no matter how tight the
-  // window is.
+  // role, the instructions, the marked passage and its note, the position, the
+  // prep status list — is assembled the same way no matter how tight the window
+  // is.
   function composePrompt(dropped: ReadonlySet<ReadingReductionId>): string {
     const catalog = dropped.has("figure-catalog") ? "" : figureCatalog;
     let prompt: string;
@@ -493,10 +531,11 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
         chapterTitle,
         selectionText,
         selectionComment,
-        notes: classroomNotes,
+        notes: dropped.has("prep-notes-trim") ? classroomNotesTight : classroomNotes,
         prep: prepState,
-        hasTools: hasReadingTools,
+        toolNames,
         figureCatalog: catalog,
+        hasObservations,
         inlineSurvey: !dropped.has("classroom-inline"),
       });
       // Classroom mode shares the AI output-language setting; the companion
@@ -515,7 +554,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
         fulltextAvailable: currentFulltext?.status === "ok",
         materials: dropped.has("booklist-thin") ? booklistThin : booklist,
         figureCatalog: catalog,
-        hasTools: hasReadingTools,
+        toolNames,
         bookLevel: isBook,
         aiLanguage: s.aiLanguage,
       });
@@ -584,12 +623,15 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   }
   // The catalog is only redundant while nothing is leaning on it: once the
   // conversation has cited a [fig:N], dropping the list of figures makes the
-  // reference dangle. And the inlined survey is only worth pricing when this
-  // turn carries one — composing it otherwise costs a full re-render for
-  // nothing.
+  // reference dangle. And the two classroom rungs are only worth pricing when
+  // this turn is a classroom turn — composing the prompt to price them otherwise
+  // costs a full re-render for nothing.
   const skip = new Set<ReadingReductionId>();
   if (composeMessages(new Set()).some((m) => m.text.includes("[fig:"))) skip.add("figure-catalog");
-  if (!isClassroom) skip.add("classroom-inline");
+  if (!isClassroom) {
+    skip.add("classroom-inline");
+    skip.add("prep-notes-trim");
+  }
 
   const fitted = fitToBudget<ReadingReductionId, ReadingTurnMessage>({
     model,
