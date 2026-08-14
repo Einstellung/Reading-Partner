@@ -31,7 +31,8 @@
 // by not making that request, strip every <img> in buildPublishedBodies instead
 // of only the data: ones — that call is the whole switch.
 
-import { readGuardedJson, readJson, writeTextAtomic } from "../../platform/app/atomic-fs";
+import { exists, readTextFile } from "@tauri-apps/plugin-fs";
+import { APPDATA, readJson, writeTextAtomic } from "../../platform/app/atomic-fs";
 import { stripDataImages } from "../extract/sanitize";
 import { loadArticles, loadItems, loadLatestBriefing, type CachedArticle } from "./store";
 import type { Briefing } from "./types";
@@ -233,20 +234,45 @@ export type BackfillOutcome =
   | "unreadable-published"
   | "published";
 
-// A published stamp, and whether this machine may write over that name. Same
-// shape as the shelf's reader (platform/app/library.ts): content that will not
-// parse is moved aside and the name is free again, but a file that could not be
-// read at all is left where it is and nothing is published over it. Without the
-// second case a briefing that was merely unopenable for one read reads as "the
-// readers never got one" and this machine republishes an older one over it.
+// A published stamp, and whether this machine may write over that name. Three
+// answers, not two:
+//
+//   nothing there, or bytes that will not parse into a stamp — no stamp, and
+//   the name is free. Republishing is the whole repair.
+//   a read that did not happen — no stamp either, and the name is NOT free.
+//   Nothing is known to be wrong with those bytes, and publishing over them is
+//   this machine's older briefing replacing a newer one it merely failed to
+//   open. Costs one restart; the next launch reads the file again.
+//
+// The same split readGuardedJson makes, minus its quarantine. Quarantine is for
+// files holding what the reader wrote and nothing can rebuild — the shelf, the
+// notes, the credentials: moving the bad bytes aside is what keeps the empty
+// fallback the caller saves next from becoming the only copy, and the reader is
+// told where the old one went. These two names are a copy of a briefing the
+// collector still has, replaced whole every run, and what they need is to hold
+// something — a reader has no other source for the day, and a stale briefing is
+// a screen where an absent one is nothing. Quarantining can leave the name empty
+// and keep it empty: set an unparseable briefing aside, hit a bodies file that
+// will not open, and the republish below is refused with nothing at that name
+// until the bodies open again.
 async function readPublishedStamp<T extends BriefingStamp>(
   file: string,
   validate: (raw: unknown) => T | null,
 ): Promise<{ stamp: T | null; writable: boolean }> {
-  const read = await readGuardedJson<T>(file, validate);
-  if (read.status === "ok") return { stamp: read.value, writable: true };
-  if (read.status === "missing") return { stamp: null, writable: true };
-  return { stamp: null, writable: read.savedAs !== null };
+  let text: string;
+  try {
+    if (!(await exists(file, APPDATA))) return { stamp: null, writable: true };
+    text = await readTextFile(file, APPDATA);
+  } catch (e) {
+    console.warn(`failed to read ${file}`, e);
+    return { stamp: null, writable: false };
+  }
+  try {
+    return { stamp: validate(JSON.parse(text) as unknown), writable: true };
+  } catch (e) {
+    console.warn(`failed to parse ${file}`, e);
+    return { stamp: null, writable: true };
+  }
 }
 
 function isStamp(raw: unknown): BriefingStamp | null {
@@ -272,9 +298,9 @@ export async function backfillPublish(): Promise<BackfillOutcome> {
     readPublishedStamp(PUBLISHED_BODIES_FILE, isStamp),
   ]);
   if (!local) return "nothing-local";
-  // One of the two names holds bytes this machine could not read. They are not
-  // known to be wrong, so they are not overwritten and not moved aside; the next
-  // launch reads them again.
+  // One of the two names holds bytes this machine could not read. Nothing is
+  // known to be wrong with them, so they are left exactly as they are and the
+  // next launch reads them again.
   if (!published.writable || !publishedBodies.writable) return "unreadable-published";
   const verdict = backfillVerdict(local, published.stamp, publishedBodies.stamp);
   if (verdict !== "publish") return verdict;

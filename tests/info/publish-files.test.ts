@@ -122,28 +122,61 @@ test("a published briefing that could not be read is not published over", async 
   expect(files.get(PUBLISHED_BRIEFING_FILE)).toBe(newer);
 });
 
+// The briefing already out is this machine's own, so what is left to decide is
+// whether the bodies match it — and the bodies are the half that will not open.
+// Read as absent they make the pair look half-published, the verdict is
+// "publish", and this machine writes over bytes it never saw.
 test("the bodies file counts too: neither half is published over an unread one", async () => {
   const local = briefing(1_000);
   putDayFiles(local);
-  const bodies = JSON.stringify({ date: DATE, generatedAt: 9_000, bodies: {} });
-  files.set(PUBLISHED_BRIEFING_FILE, JSON.stringify(briefing(9_000), null, 2));
+  const published = JSON.stringify(local, null, 2);
+  const bodies = JSON.stringify({ date: DATE, generatedAt: 1_000, bodies: {} });
+  files.set(PUBLISHED_BRIEFING_FILE, published);
   files.set(PUBLISHED_BODIES_FILE, bodies);
   unreadable.add(PUBLISHED_BODIES_FILE);
 
   expect(await backfillPublish()).toBe("unreadable-published");
   expect(files.get(PUBLISHED_BODIES_FILE)).toBe(bodies);
+  expect(files.get(PUBLISHED_BRIEFING_FILE)).toBe(published);
+
+  // It opens on the next launch, and the pair turns out to have been whole.
+  unreadable.clear();
+  expect(await backfillPublish()).toBe("up-to-date");
 });
 
-// Content that will not parse is the other branch: the name is free again, but
-// the bytes go somewhere first.
-test("a published briefing that is not JSON is set aside before it is replaced", async () => {
+// Content that will not parse is the other branch: the name is free, and the
+// bytes are replaced where they lie. Nothing is quarantined at either published
+// name — these are a copy of a briefing the collector still has, and a reader
+// with a stale one has a screen where a reader with none has nothing.
+test("a published briefing that is not JSON is replaced, not set aside", async () => {
   const local = briefing(1_000);
   putDayFiles(local);
   files.set(PUBLISHED_BRIEFING_FILE, "{ half a briefi");
 
   expect(await backfillPublish()).toBe("published");
   expect(JSON.parse(files.get(PUBLISHED_BRIEFING_FILE) ?? "null").generatedAt).toBe(1_000);
-  expect(files.get(`${PUBLISHED_BRIEFING_FILE}.corrupt-1700000000000`)).toBe("{ half a briefi");
+  expect([...files.keys()].some((k) => k.includes(".corrupt-"))).toBe(false);
+});
+
+// The two branches at once, which is where quarantining lost the name outright:
+// the briefing will not parse and the bodies will not open, so the republish
+// that would have replaced the briefing is refused. Set it aside and the readers
+// have nothing at that name — and nothing again on every launch until the bodies
+// open. Left alone, the unparseable bytes are still there to be replaced.
+test("an unparseable briefing survives a refused republish", async () => {
+  const local = briefing(1_000);
+  putDayFiles(local);
+  files.set(PUBLISHED_BRIEFING_FILE, "{ half a briefi");
+  files.set(PUBLISHED_BODIES_FILE, JSON.stringify({ date: DATE, generatedAt: 9_000, bodies: {} }));
+  unreadable.add(PUBLISHED_BODIES_FILE);
+
+  expect(await backfillPublish()).toBe("unreadable-published");
+  expect(files.get(PUBLISHED_BRIEFING_FILE)).toBe("{ half a briefi");
+
+  // The bodies open again, and the same briefing name is repaired in place.
+  unreadable.clear();
+  expect(await backfillPublish()).toBe("published");
+  expect(JSON.parse(files.get(PUBLISHED_BRIEFING_FILE) ?? "null").generatedAt).toBe(1_000);
 });
 
 // A re-triage on a day whose article cache has already been pruned. Every body
