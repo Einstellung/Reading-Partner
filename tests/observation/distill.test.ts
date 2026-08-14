@@ -577,12 +577,33 @@ test("selectSilentMarks with a null cursor takes everything, and drops empty mar
   expect(marks.map((m) => m.id)).toEqual(["c", "a"]);
 });
 
-test("selectSilentMarks caps the list at the most recent N", () => {
+// The cap and the cursor are one mechanism: the cursor is a single timestamp,
+// so the batch has to be the oldest end of the backlog or the marks left over
+// are older than the cursor the pass writes and no later pass ever selects them
+// again. 45 marks, a cap of 40, and the 5 that did not fit have to be exactly
+// what the next pass picks up.
+test("selectSilentMarks caps at the oldest N and leaves the rest for the next pass", () => {
   const anns = Array.from({ length: 45 }, (_, i) => mark({ id: `m${i}`, createdAt: i, text: `t${i}` }));
-  const { marks, capped } = selectSilentMarks(anns, null, 40);
+  const { marks, capped, cursor } = selectSilentMarks(anns, null, 40);
   expect(marks).toHaveLength(40);
   expect(capped).toBe(true);
-  expect(marks[0].id).toBe("m44"); // newest first
+  expect(marks[0].id).toBe("m39"); // newest of the batch, first
+  expect(marks[39].id).toBe("m0"); // and the batch starts at the oldest mark there is
+  expect(cursor).toBe(39); // the newest mark this pass looked at, not the newest there is
+
+  const next = selectSilentMarks(anns, cursor, 40);
+  expect(next.marks.map((m) => m.id)).toEqual(["m44", "m43", "m42", "m41", "m40"]);
+  expect(next.capped).toBe(false);
+});
+
+test("an uncapped selection is every fresh mark, newest first, and the cursor is the newest", () => {
+  const anns = Array.from({ length: 3 }, (_, i) => mark({ id: `m${i}`, createdAt: i, text: `t${i}` }));
+  const { marks, capped, cursor } = selectSilentMarks(anns, null, 40);
+  expect(marks.map((m) => m.id)).toEqual(["m2", "m1", "m0"]);
+  expect(capped).toBe(false);
+  expect(cursor).toBe(2);
+  expect(selectSilentMarks(anns, cursor, 40).marks).toEqual([]);
+  expect(selectSilentMarks([], null, 40).cursor).toBeNull();
 });
 
 test("formatSilentMarks renders a pattern block with ids, pages, and the cap note", () => {
@@ -592,7 +613,7 @@ test("formatSilentMarks renders a pattern block with ids, pages, and the cap not
   );
   expect(block).toContain("since the last distillation");
   expect(block).toContain("PATTERN");
-  expect(block).toContain("there were more"); // capped
+  expect(block).toContain("the rest follow in a later pass"); // capped
   expect(block).toContain('[x1] p7: "recursion" — note: confusing');
 });
 
@@ -651,6 +672,52 @@ test("a book with only marks is distilled on its own, and moves its cursor", asy
     lastAnnotationDistillAt: null,
     distilledMarks: { "book-7": 400 },
   });
+});
+
+// A reader who marked up a whole book before the first pass ran: 45 marks, a cap
+// of 40. The pass writes one timestamp as the book's cursor, and every mark not
+// newer than it is never selected again — so the cursor it writes has to be the
+// newest mark this pass actually put in front of the model, and the five it did
+// not have to be what the next pass reads. Against the old cap (newest 40,
+// cursor = the newest of all) the second pass here sees nothing and m0..m4 are
+// gone from the app's view of the book for good.
+test("a backlog bigger than the cap is drained across passes, not stepped over", async () => {
+  const { store, adapter } = makeStore();
+  const annotations = Array.from({ length: 45 }, (_, i) =>
+    mark({ id: `m${i}`, page: i + 1, text: `passage ${i}`, createdAt: 100 + i }),
+  );
+  const input = {
+    topicName: "investing",
+    bookId: "book-7",
+    bookName: "margin-of-safety.pdf",
+    annotations,
+  };
+
+  const first = loopRunner([{ text: "done" }]);
+  expect(
+    await runMarksDistillPass(input, { store, adapter, run: first.run, now: () => JULY_17 }),
+  ).toMatchObject({ ran: true, ok: true });
+  // The oldest 40 went to the model, and the cursor is the newest of those.
+  expect(first.requests[0].task).toContain("[m0]");
+  expect(first.requests[0].task).toContain("[m39]");
+  expect(first.requests[0].task).not.toContain("[m40]");
+  expect((await store.getMeta()).distilledMarks).toEqual({ "book-7": 139 });
+
+  const second = loopRunner([{ text: "done" }]);
+  expect(
+    await runMarksDistillPass(input, { store, adapter, run: second.run, now: () => JULY_20 }),
+  ).toMatchObject({ ran: true, ok: true });
+  // The five the cap left behind, and nothing the first pass already read.
+  expect(second.requests[0].task).toContain("[m44]");
+  expect(second.requests[0].task).toContain("[m40]");
+  expect(second.requests[0].task).not.toContain("[m39]");
+  expect((await store.getMeta()).distilledMarks).toEqual({ "book-7": 144 });
+
+  // And now there is nothing left: every one of the 45 has been looked at.
+  const third = loopRunner([{ text: "done" }]);
+  expect(
+    await runMarksDistillPass(input, { store, adapter, run: third.run, now: () => JULY_20 }),
+  ).toEqual({ ran: false, skipped: "no-new-marks" });
 });
 
 test("a marks pass below its threshold does not reach the model", async () => {

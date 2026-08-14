@@ -66,18 +66,31 @@ function clip(text: string, max = 160): string {
 }
 
 // The reader's marks created strictly after `since` (null = all), keeping only
-// ones with text or a note, newest first, capped. Pure — unit-tested.
+// ones with text or a note, newest first, capped. `cursor` is where the caller
+// moves the book's mark cursor to once the pass finishes. Pure — unit-tested.
+//
+// When the cap bites the batch is the OLDEST `cap` of them, not the newest. The
+// cursor is one timestamp and the next pass only looks at marks newer than it,
+// so whatever is left over has to be newer than every mark in the batch —
+// otherwise the cursor steps over it and no pass ever looks at that mark again.
+// Taking the newest 40 of a backlog of 300 and stamping the cursor with the
+// newest of them wrote off the other 260 in one go: the highlights stay on the
+// page, but the app has stopped noticing them. Draining from the oldest end
+// costs a pass per 40 and reaches all of them.
 export function selectSilentMarks(
   annotations: DistillAnnotation[],
   since: number | null,
   cap = 40,
-): { marks: DistillAnnotation[]; capped: boolean } {
+): { marks: DistillAnnotation[]; capped: boolean; cursor: number | null } {
   const fresh = annotations
     .filter((a) => (since === null ? true : a.createdAt > since))
     .filter((a) => a.text.trim() !== "" || (a.comment ?? "").trim() !== "")
     .sort((a, b) => b.createdAt - a.createdAt);
   const capped = fresh.length > cap;
-  return { marks: capped ? fresh.slice(0, cap) : fresh, capped };
+  // fresh is newest-first, so the tail is the oldest `cap` and marks[0] is the
+  // newest mark this batch covers — the only safe place for the cursor.
+  const marks = capped ? fresh.slice(fresh.length - cap) : fresh;
+  return { marks, capped, cursor: marks.length > 0 ? marks[0].createdAt : null };
 }
 
 // One bullet per mark: page, the passage, the reader's note. Shared by the two
@@ -99,7 +112,9 @@ export function formatSilentMarks(marks: DistillAnnotation[], capped: boolean): 
     "Marks the reader made since the last distillation, most made silently (no",
     "conversation). Look for a PATTERN across them, not one-off details:",
   ];
-  if (capped) lines.push(`(showing the ${marks.length} most recent; there were more)`);
+  if (capped) {
+    lines.push(`(the ${marks.length} oldest of a longer backlog; the rest follow in a later pass)`);
+  }
   return [...lines, ...markLines(marks)].join("\n");
 }
 
@@ -388,7 +403,7 @@ export async function runDistillPass(
   }
   if (fresh < (input.minNewMessages ?? 1)) return { ran: false, skipped: "no-new-messages" };
 
-  const { marks, capped } = selectSilentMarks(
+  const { marks, capped, cursor: markCursorNext } = selectSilentMarks(
     input.annotations ?? [],
     markCursor(meta, input.bookId),
   );
@@ -417,8 +432,8 @@ export async function runDistillPass(
     ...meta,
     lastDistilledAt: now(),
     distilledMessages: { ...(meta.distilledMessages ?? {}), [input.threadId]: input.messages.length },
-    ...(marks.length > 0
-      ? { distilledMarks: { ...(meta.distilledMarks ?? {}), [input.bookId]: marks[0].createdAt } }
+    ...(markCursorNext !== null
+      ? { distilledMarks: { ...(meta.distilledMarks ?? {}), [input.bookId]: markCursorNext } }
       : {}),
   });
   return { ran: true, ...result };
@@ -436,7 +451,8 @@ export const MARKS_DISTILL_AGENT_NAME = "marks_distiller";
 export interface MarksDistillInput {
   topicName: string;
   bookName: string;
-  // The marks since the book's cursor, newest first, already capped.
+  // The marks since the book's cursor, newest first, already capped (the oldest
+  // `cap` of them when there are more than that — see selectSilentMarks).
   marks: DistillAnnotation[];
   capped: boolean;
   indexText: string;
@@ -513,7 +529,9 @@ export function buildMarksDistillUserMessage(input: MarksDistillInput): string {
     "was discussed with you — there is no transcript for this stretch of reading.",
   ];
   if (input.capped) {
-    lines.push(`(showing the ${input.marks.length} most recent; there were more)`);
+    lines.push(
+      `(the ${input.marks.length} oldest of a longer backlog; the rest follow in a later pass)`,
+    );
   }
   return [...lines, ...markLines(input.marks)].join("\n");
 }
@@ -585,7 +603,10 @@ export async function runMarksDistillPass(
 ): Promise<MarksPassResult> {
   const now = deps.now ?? Date.now;
   const meta = await deps.store.getMeta();
-  const { marks, capped } = selectSilentMarks(input.annotations, markCursor(meta, input.bookId));
+  const { marks, capped, cursor } = selectSilentMarks(
+    input.annotations,
+    markCursor(meta, input.bookId),
+  );
   if (marks.length < (input.minNewMarks ?? 1)) return { ran: false, skipped: "no-new-marks" };
 
   const result = await runMarksDistillation(
@@ -604,7 +625,9 @@ export async function runMarksDistillPass(
   await deps.store.setMeta({
     ...meta,
     lastDistilledAt: now(),
-    distilledMarks: { ...(meta.distilledMarks ?? {}), [input.bookId]: marks[0].createdAt },
+    ...(cursor !== null
+      ? { distilledMarks: { ...(meta.distilledMarks ?? {}), [input.bookId]: cursor } }
+      : {}),
   });
   return { ran: true, ...result };
 }
