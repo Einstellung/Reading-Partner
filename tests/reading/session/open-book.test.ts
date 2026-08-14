@@ -7,12 +7,13 @@ import { openBook, openingViewState, type BookOpenIo } from "../../../src/readin
 import type { ReaderShell } from "../../../src/reading/session/shell";
 import type { Annotation, ViewState } from "../../../src/platform/app/reader-contract";
 import type { Fulltext } from "../../../src/fulltext";
-import type { FiguresIndex } from "../../../src/reading/figures";
+import { FIGURES_VERSION, type FiguresIndex } from "../../../src/reading/figures";
 
 const FULLTEXT: Fulltext = { version: 1, status: "ok", pages: ["page one"], outline: [] };
 const NO_TEXT: Fulltext = { version: 1, status: "no-text-layer", pages: [], outline: [] };
 const FIGURES: FiguresIndex = {
-  version: 2,
+  version: FIGURES_VERSION,
+  status: "ok",
   figures: [{ id: "1", page: 2, caption: "Figure 1: a schematic", bbox: null }],
 };
 

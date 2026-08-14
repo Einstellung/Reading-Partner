@@ -543,7 +543,7 @@ export function assembleIndex(perPage: Figure[][]): FiguresIndex {
     }
   }
   const figures = [...byId.values()].sort((a, b) => a.page - b.page || a.id.localeCompare(b.id));
-  return { version: FIGURES_VERSION, figures };
+  return { version: FIGURES_VERSION, status: "ok", figures };
 }
 
 // --- engine-backed path (browser only) ---

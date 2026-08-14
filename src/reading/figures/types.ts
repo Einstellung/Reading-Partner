@@ -5,7 +5,11 @@
 // grows downward, PDF points) so they feed renderPageRect / a pdf.js crop
 // directly — the same convention as src/reading/engine/convert.ts.
 
-export const FIGURES_VERSION = 2 as const;
+// 3: the index says whether it is the document's figures or the record of an
+// extraction that failed. Version 2 files cannot answer that — a failed
+// extraction wrote the same empty index a figure-less document does — so the
+// bump discards them and every document is read once more.
+export const FIGURES_VERSION = 3 as const;
 
 // Tight bounding box of a figure in top-left page space (PDF points).
 export interface FigureBBox {
@@ -29,7 +33,18 @@ export interface Figure {
   bbox: FigureBBox | null;
 }
 
+// "ok" is an answer about the document — including the honest empty one, for a
+// document with no figures in it. "failed" is an answer about the app: pdf.js
+// would not open the file, or the extraction threw. Kept apart because an empty
+// index is cached and consulted forever after, and one of the two deserves
+// another try (see FIGURES_RETRY_AFTER_MS in store.ts).
+export type FiguresStatus = "ok" | "failed";
+
 export interface FiguresIndex {
   version: typeof FIGURES_VERSION;
+  status: FiguresStatus;
   figures: Figure[];
+  // When the extraction failed. Only on a "failed" index, and what the retry
+  // window is measured from.
+  failedAt?: number;
 }

@@ -11,6 +11,7 @@
 // Run: bun test.
 
 import { beforeEach, expect, mock, test } from "bun:test";
+import { FIGURES_VERSION } from "../../../src/reading/figures/types";
 
 const files = new Map<string, string>();
 const blobs = new Map<string, Uint8Array>();
@@ -305,7 +306,8 @@ test("the figure index comes off disk too, with no engine", async () => {
   files.set(
     `figures-${BOOK}.json`,
     JSON.stringify({
-      version: 2,
+      version: FIGURES_VERSION,
+      status: "ok",
       figures: [{ id: "3", page: 2, caption: "Ganglion density", bbox: null }],
     }),
   );
