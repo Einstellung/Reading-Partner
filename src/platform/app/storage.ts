@@ -3,7 +3,7 @@
 // and across devices. Recency is tracked per-topic (see topics.ts), so this no
 // longer keeps a global recents list.
 
-import { readGuardedJson, writeTextAtomic } from "./atomic-fs";
+import { onFileWritten, readGuardedJson, writeTextAtomic } from "./atomic-fs";
 import type { ViewState } from "./reader-contract";
 
 // Exported so the pull route that drops the cache below can name it once
@@ -68,11 +68,31 @@ async function load(): Promise<{ store: Store; writable: boolean }> {
 // exists. A map already reconciled with the file can be written out whole,
 // because at exit there is no second writer.
 //
-// It is only ever as old as the last read or write of the file. What else
-// rewrites it in this process is the key migration (migrate.ts), which is
-// move-if-absent and simply runs again on the next open, and a sync pull —
-// which drops this through the pull route.
+// It is only ever as old as the last read or write of the file, because
+// anything else replacing the file drops it: every text write in the app goes
+// through writeTextAtomic, so the key migration (migrate.ts) and a sync pull
+// both announce themselves below.
+//
+// The announcement has to be the write and not the end of the pass that did it.
+// A sync pass writes reading-state.json in the middle — mergeOne writes the
+// merged bytes, then the remaining merges, every upload, the base seeding and
+// the books channel all run before onPulled is dispatched, and a pass that
+// throws anywhere in there dispatches nothing at all. Held across that window,
+// this map would be written back over the merge at exit, and the flattened file
+// then reads as local-changed against remote-unchanged, which reconcile calls an
+// upload: the other device downloads it.
+//
+// What is left is the ordinary lost update, which predates this map and is not
+// its to fix: a save whose read happened before a sync write and whose write
+// happens after it drops the merged positions either way.
 let cached: Store | null = null;
+
+// Anyone's write of the file, this module's own included; save() below puts the
+// map back straight after its own, since what it just wrote is what the file
+// now says.
+onFileWritten((path) => {
+  if (path === STATE_FILE) cached = null;
+});
 
 function hold(store: Store, writable: boolean): { store: Store; writable: boolean } {
   if (writable) cached = store;
@@ -85,8 +105,11 @@ export function dropViewStateCache(): void {
 }
 
 async function save(store: Store): Promise<void> {
-  cached = store;
   await writeTextAtomic(STATE_FILE, JSON.stringify(store, null, 2));
+  // After the write and not before: the write drops the map through the
+  // listener above, and this is what restores it. A write that threw leaves
+  // whatever was held, which for every caller here is this same object.
+  cached = store;
 }
 
 export async function getViewState(bookId: string): Promise<ViewState | null> {

@@ -37,6 +37,11 @@ mock.module("@tauri-apps/plugin-fs", () => ({
   writeTextFile: async (path: string, content: string) => {
     files.set(path, content);
   },
+  // Only so importing syncFs.ts resolves; nothing here reaches them. Its write
+  // takes the atomic-writer branch for the UTF-8 text every in-range file is.
+  readFile: async () => new Uint8Array(),
+  stat: async () => ({ mtime: null, size: 0 }),
+  writeFile: async () => {},
 }));
 
 mock.module("@tauri-apps/api/core", () => ({
@@ -60,6 +65,10 @@ mock.module("@tauri-apps/api/core", () => ({
 
 const { STATE_FILE, dropViewStateCache, getViewState, saveViewState, saveViewStateOnExit } =
   await import("../src/platform/app/storage");
+// The door every other writer of this file goes through, and the one sync's own
+// writes land on (syncFs.write).
+const { writeTextAtomic } = await import("../src/platform/app/atomic-fs");
+const { tauriSyncFs } = await import("../src/platform/sync/syncFs");
 
 const at = (pageIndex: number): ViewState => ({ pageIndex, scale: "auto", scrollMode: 0 });
 
@@ -188,4 +197,64 @@ test("a pull drops the held map, so the exit write does not undo it", async () =
     attention: at(31),
     ipad: at(5),
   });
+});
+
+// --- somebody else wrote the file -------------------------------------------
+
+// A sync pass writes reading-state.json in the middle of itself and tells the
+// pull routes at the end, after the remaining merges, every upload, the base
+// seeding and the books channel — and tells them nothing at all if it throws
+// first. So the held map is dropped by the write, not by the news of it.
+test("a write by anything else drops the held map, with no pull route involved", async () => {
+  // Opening a book primes the map, which is the case the exit path exists for.
+  expect(await getViewState("jit")).toEqual(at(120));
+
+  // What a merge leaves behind: this device's three books plus the iPad's.
+  await writeTextAtomic(
+    STATE_FILE,
+    JSON.stringify({ states: { ...STATES.states, ipad: at(5) } }, null, 2),
+  );
+
+  await saveViewStateOnExit("jit", at(140));
+
+  expect(onDisk().states).toEqual({
+    jit: at(140),
+    tracing: at(7),
+    attention: at(31),
+    ipad: at(5),
+  });
+});
+
+// The same write as sync actually makes it, through the fs surface the engine is
+// given rather than through the atomic writer by hand.
+test("a merge landing through syncFs drops it too", async () => {
+  expect(await getViewState("jit")).toEqual(at(120));
+
+  await tauriSyncFs.write(
+    STATE_FILE,
+    new TextEncoder().encode(
+      JSON.stringify({ states: { ...STATES.states, ipad: at(5) } }, null, 2),
+    ),
+  );
+
+  await saveViewStateOnExit("jit", at(140));
+  expect(Object.keys(onDisk().states).sort()).toEqual([
+    "attention",
+    "ipad",
+    "jit",
+    "tracing",
+  ]);
+});
+
+// The drop is by name. Another store saving is not a reason to spend the second
+// IPC at pagehide, which is the whole point of holding the map.
+test("another file being written leaves the held map alone", async () => {
+  await saveViewState("jit", at(121));
+  const before = reads;
+
+  await writeTextAtomic("topics.json", JSON.stringify({ topics: [] }, null, 2));
+  await saveViewStateOnExit("jit", at(140));
+
+  expect(reads).toBe(before);
+  expect(onDisk().states).toEqual({ jit: at(140), tracing: at(7), attention: at(31) });
 });

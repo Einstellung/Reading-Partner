@@ -70,6 +70,12 @@ export interface BookCacheDrops {
   // per book, but it is the same problem: storage.ts keeps the map it last saw
   // so the way out of the app can write in one IPC, and a pull that landed
   // another device's positions would be undone by that write.
+  //
+  // storage.ts also drops that map off the write itself, which is what actually
+  // closes the window — a pass writes reading-state.json in the middle and gets
+  // here at the end, if it gets here. This stays because the range's contract is
+  // that every synced file has a route, and because syncFs's fallback for bytes
+  // that are not valid UTF-8 does not go through the atomic writer.
   viewStates: () => void;
 }
 
