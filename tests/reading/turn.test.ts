@@ -9,23 +9,27 @@ import { DEFAULT_SETTINGS, type Settings } from "../../src/platform/app/settings
 import type { Fulltext } from "../../src/fulltext/types";
 import type { Figure } from "../../src/reading/figures/types";
 import type { PrepPaper, PrepState } from "../../src/reading/prep/types";
+import type { SavedArticle } from "../../src/reading/saved-articles";
 import type { SubagentTurnFn } from "../../src/ai/subagent";
+import { makeAppData } from "../support/appdata";
 
-// Headless: no AppData, so every optional read misses (the overview note, the
-// observation index). The turn treats all of them as "not there yet".
-mock.module("@tauri-apps/plugin-fs", () => ({
-  BaseDirectory: { AppData: 1 },
-  exists: async () => false,
-  mkdir: async () => {},
-  readDir: async () => [],
-  readTextFile: async () => {
-    throw new Error("no file");
-  },
-  remove: async () => {},
-}));
+// An empty in-memory AppData, so every optional read misses (the overview note,
+// the observation index) and the turn treats them as "not there yet" — and so the
+// one thing a turn here writes, the kept article's text going into the fulltext
+// cache, can be read back the way read_paper would.
+// atomic-fs goes in too, whole: mock.module is process-wide and the last file to
+// load wins, so another test file's two-export stub would otherwise be what the
+// stores here write through — and the write would land on a disk this file cannot
+// read back (tests/support/appdata.ts).
+const app = makeAppData();
+mock.module("@tauri-apps/plugin-fs", () => app.pluginFs);
+mock.module("@tauri-apps/api/core", () => app.core);
+mock.module("../../src/platform/app/atomic-fs", () => app.atomicFs);
 
 const { backgroundFailureToast, buildReadingTurn, turnFailureView, EXPLAIN_KICKOFF, HISTORY_KEEP } =
   await import("../../src/reading/turn");
+const { getFulltext } = await import("../../src/fulltext/store");
+const { paperFulltextHash } = await import("../../src/reading/prep/store");
 const { REFUSE_MIDTURN, REFUSE_ROUNDS } = await import("../../src/ai/agent");
 const { StoppedError } = await import("../../src/ai/watchdog");
 const { RESEARCH_TOOL_NAME, RESEARCH_TURN_ROUNDS } = await import(
@@ -67,14 +71,48 @@ function prepState(): PrepState {
   };
 }
 
-// Just enough of the prep pipeline for the turn: a snapshot and an ingest hook.
-function pipeline(state: PrepState | null) {
+// Just enough of the prep pipeline for the turn: a snapshot and the two ingest
+// hooks. `onCaptured` collects what a kept article was turned into, which is the
+// only place that mapping is visible from outside.
+function pipeline(
+  state: PrepState | null,
+  onCaptured?: (paper: PrepPaper, fetched: { fulltext?: Fulltext | null }) => void,
+) {
   return {
     snapshot: () => ({ state }),
     ingestSource: async () => {
       throw new Error("not called");
     },
+    ingestCaptured: async (
+      mint: (taken: Set<string>) => PrepPaper,
+      fetched: { fulltext?: Fulltext | null },
+    ) => {
+      const paper = mint(new Set((state?.papers ?? []).map((p) => p.slug)));
+      onCaptured?.(paper, fetched);
+      return { ...paper, status: "digesting" as const, pages: 1 };
+    },
   } as never;
+}
+
+// The kept-article store as the assembly sees it: a cheap gate and the records.
+function savedStore(list: SavedArticle[]) {
+  return { any: async () => list.length > 0, all: async () => list };
+}
+
+function savedArticle(): SavedArticle {
+  return {
+    id: "https://feed.test/piece",
+    topicId: "brief",
+    url: "https://feed.test/piece",
+    title: "A kept piece",
+    source: "feed",
+    sourceName: "The Feed",
+    publishedAt: "2026-07-20T08:00:00Z",
+    savedAt: 1,
+    summaryOnly: false,
+    text: "the kept body",
+    html: "<p>the kept body</p>",
+  };
 }
 
 const settings: Settings = {
@@ -205,6 +243,113 @@ test("classroom mode without a plan yet mounts no paper tools", async () => {
     "research_literature",
     "search_topic",
   ]);
+});
+
+// Kept info articles (docs/21). Three conditions, all of them necessary: the
+// classroom is where a prep list exists to put one on, the pipeline is what puts
+// it there, and a reader who has kept nothing gets no tool at all.
+test("classroom mode with kept articles mounts the saved-article tools and their prompt line", async () => {
+  const turn = await buildReadingTurn(
+    input({
+      classroom: true,
+      getPipeline: () => pipeline(prepState()),
+      savedArticles: savedStore([savedArticle()]),
+    }),
+  );
+  expect(names(turn!.tools)).toEqual([
+    "add_saved_article",
+    "add_source",
+    "find_paper",
+    "list_saved_articles",
+    "read_note",
+    "read_pages",
+    "read_paper",
+    "research_literature",
+    "search_topic",
+  ]);
+  expect(turn!.systemPrompt).toContain("list_saved_articles");
+  expect(turn!.systemPrompt).toContain("and only then");
+});
+
+test("no kept articles, or no classroom, means no saved-article tools", async () => {
+  const cases = [
+    // Classroom, pipeline, nothing kept.
+    input({ classroom: true, getPipeline: () => pipeline(prepState()) }),
+    // Kept articles, but companion mode: the prep list is the classroom's list.
+    input({ getPipeline: () => pipeline(prepState()), savedArticles: savedStore([savedArticle()]) }),
+    // Classroom and kept articles, but no pipeline to put one on.
+    input({ classroom: true, savedArticles: savedStore([savedArticle()]) }),
+  ];
+  for (const c of cases) {
+    const turn = await buildReadingTurn(c);
+    expect(names(turn!.tools)).not.toContain("list_saved_articles");
+    expect(names(turn!.tools)).not.toContain("add_saved_article");
+    expect(turn!.systemPrompt).not.toContain("list_saved_articles");
+  }
+});
+
+// Reading the records sanitizes every stored body, so the turn that only mounts
+// the tools must not pay for it — and a turn that uses them must not pay twice.
+test("the mount gate does not read the records; a tool call reads them once", async () => {
+  let gates = 0;
+  let reads = 0;
+  const turn = await buildReadingTurn(
+    input({
+      classroom: true,
+      getPipeline: () => pipeline(prepState()),
+      savedArticles: {
+        any: async () => {
+          gates++;
+          return true;
+        },
+        all: async () => {
+          reads++;
+          return [savedArticle()];
+        },
+      },
+    }),
+  );
+  expect(gates).toBe(1);
+  expect(reads).toBe(0);
+  const list = turn!.tools.find((t) => t.name === "list_saved_articles")!;
+  expect((await list.execute({})) as string).toContain("A kept piece");
+  await list.execute({ query: "feed" });
+  expect(reads).toBe(1);
+});
+
+// The whole wiring in one go: what the article turns into, what the pipeline is
+// asked to queue, and the cache entry read_paper will go looking for.
+test("add_saved_article queues the kept text and caches it under the slug it got", async () => {
+  const queued: PrepPaper[] = [];
+  const handed: { fulltext?: Fulltext | null }[] = [];
+  const turn = await buildReadingTurn(
+    input({
+      classroom: true,
+      getPipeline: () =>
+        pipeline(prepState(), (paper, fetched) => {
+          queued.push(paper);
+          handed.push(fetched);
+        }),
+      savedArticles: savedStore([savedArticle()]),
+    }),
+  );
+  const add = turn!.tools.find((t) => t.name === "add_saved_article")!;
+  const out = (await add.execute({ id: "https://feed.test/piece" })) as string;
+
+  expect(queued.length).toBe(1);
+  expect(queued[0].kind).toBe("article");
+  expect(queued[0].captured).toBe(true);
+  expect(queued[0].addedByUser).toBe(true);
+  expect(queued[0].sourceUrl).toBe("https://feed.test/piece");
+  expect(handed[0].fulltext?.pages[0]).toContain("the kept body");
+  expect(out).toContain(`read_paper("${queued[0].slug}"`);
+  expect(out).toContain("The Feed");
+  expect(out).toContain("published 2026-07-20");
+  // read_paper serves the fulltext cache, so the text has to have landed there
+  // under the slug the pipeline minted — not under a slug guessed beforehand.
+  const cached = await getFulltext(paperFulltextHash(BOOK, queued[0].slug));
+  expect(cached?.pages[0]).toContain("the kept body");
+  expect(cached?.pages[0]).toContain("Saved by the reader from The Feed");
 });
 
 test("no pipeline means no link ingestion", async () => {

@@ -92,8 +92,37 @@ export interface PrepActivity {
 
 export type PrepSnapshot = RunSnapshot<PrepState | null, PrepActivity>;
 
+// The fetch stage's outcome for a captured source on a resumed run: the text is
+// read back out of the fulltext cache the ingest wrote (prep/live.ts). Here
+// rather than inline in the live deps so the one rule it carries is testable —
+// a cached text is used as it stands, and a missing or unusable one is an error
+// rather than a fall through to the network. Falling through would fetch the
+// page the reader kept a copy of precisely because it may be paywalled or gone,
+// and would write whatever it got today over what they kept.
+export function capturedFetch(paper: PrepPaper, cached: Fulltext | null): FetchOutcome {
+  if (!cached || cached.status !== "ok") {
+    throw new Error("the kept copy of this article is no longer in the text cache");
+  }
+  return {
+    source: "url",
+    arxivId: null,
+    abstract: paper.abstract ?? "",
+    pdfBytes: null,
+    fulltext: cached,
+    kind: "article",
+    title: paper.title,
+  };
+}
+
 export class PrepPipeline extends ObservableRun<PrepState | null, PrepActivity> {
   private currentChapter = 1;
+  // Sources whose fetch stage is already over: their text was captured
+  // elsewhere and handed to ingestCaptured, so runOne uses it in place of a
+  // fetch. Entries are kept rather than consumed, so a requeue after a failed
+  // digest is served from the copy at hand too; the map lives and dies with the
+  // pipeline instance, and a run resumed in a later session reads the text back
+  // out of the fulltext cache instead (prep/live.ts, PrepPaper.captured).
+  private readonly captured = new Map<string, FetchOutcome>();
 
   constructor(
     private readonly surveyHash: string,
@@ -164,10 +193,29 @@ export class PrepPipeline extends ObservableRun<PrepState | null, PrepActivity> 
   // its post-fetch status (digesting on success, or failed/abstract-only).
   async ingestSource(url: string): Promise<PrepPaper> {
     await this.ensureLoaded();
-    const s = this.state!;
-    const taken = new Set(s.papers.map((p) => p.slug));
-    const paper = this.deps.resolveAddition(url, taken); // throws on non-https
-    s.papers.push(paper);
+    const taken = new Set(this.state!.papers.map((p) => p.slug));
+    return this.queue(this.deps.resolveAddition(url, taken)); // throws on non-https
+  }
+
+  // Ingest a source whose text is already in hand — an article the reader kept on
+  // the info side (docs/21). Same contract as ingestSource, minus the fetch:
+  // `fetched` stands in for the fetch stage, so no request goes out and a page
+  // that is behind a paywall now still arrives as the copy that was captured.
+  // `mint` is given the slugs taken right now, so it can pick a free one.
+  async ingestCaptured(
+    mint: (taken: Set<string>) => PrepPaper,
+    fetched: FetchOutcome,
+  ): Promise<PrepPaper> {
+    await this.ensureLoaded();
+    const paper = mint(new Set(this.state!.papers.map((p) => p.slug)));
+    this.captured.set(paper.slug, fetched);
+    return this.queue(paper);
+  }
+
+  // Put a freshly minted paper on the list and resolve once it leaves the fetch
+  // stage. State must already be loaded.
+  private async queue(paper: PrepPaper): Promise<PrepPaper> {
+    this.state!.papers.push(paper);
     await this.persist();
     const settled = this.awaitFetch(paper.slug);
     // An active run already picks this up (user papers jump the queue); when
@@ -367,7 +415,16 @@ export class PrepPipeline extends ObservableRun<PrepState | null, PrepActivity> 
 
     let fetched: FetchOutcome | null;
     try {
-      fetched = await this.deps.fetchPaper(paper);
+      // A captured source has nothing to fetch: its text came from the reader's
+      // own copy, and going to the network here would either fail on a paywall
+      // or replace what they kept with what the page serves today.
+      //
+      // The flag is checked, not just the map: nominated slugs are minted by
+      // parsePlan against the plan's own names only, so a replan can hand a
+      // survey reference the slug an ingested article already has, and a lookup
+      // by slug alone would digest the article's text under the reference's name.
+      const captured = paper.captured ? this.captured.get(paper.slug) : undefined;
+      fetched = captured ?? (await this.deps.fetchPaper(paper));
     } catch (e) {
       if (!this.skippedMeanwhile(paper)) {
         if (isRateLimitError(e)) this.cooldown(paper, e.message);

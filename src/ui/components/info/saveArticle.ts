@@ -1,10 +1,13 @@
-// Saving a briefing article into reading (docs/21, first slice). The mapping
-// from info's shapes to reading's SavedArticle lives here rather than in either
-// domain: info and reading have no import between them, and ui is the layer
-// allowed to touch both.
+// Saving a briefing article into reading (docs/21). The mapping from info's
+// shapes to reading's SavedArticle lives here rather than in either domain: info
+// and reading have no import between them, and ui is the layer allowed to touch
+// both.
 //
-// Store + display only. Nothing here feeds a prompt, packs a fulltext, or
-// proposes a topic — those are later slices.
+// What is written here is read back by more than the saved list now: in classroom
+// mode the reader can have an article put on the open book's prep list, where its
+// `text` becomes the material and its `summaryOnly` becomes the caveat that rides
+// with every quote (reading/saved-article-tools.ts). Nothing here proposes a
+// topic — that is still a later slice.
 //
 // What is kept is whatever the briefing view answered with (docs/36): the day's
 // article cache on the machine that collected it, images and all, or the

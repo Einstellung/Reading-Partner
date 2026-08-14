@@ -6,7 +6,7 @@
 
 import { callModel, resolveModel } from "../../ai/model-call";
 import { realTimers } from "../../ai/observable-run";
-import { ensureFulltext, saveFulltext } from "../../fulltext/store";
+import { ensureFulltext, getFulltext, saveFulltext } from "../../fulltext/store";
 import { FULLTEXT_VERSION, type Fulltext } from "../../fulltext/types";
 import { buildFigureCatalog, ensureFigures } from "../figures";
 import { loadSettings } from "../../platform/app/settings";
@@ -33,8 +33,13 @@ import {
   writePrepNote,
 } from "./store";
 import { fetchFromS2 } from "../papers/s2";
-import type { DigestOutcome, FetchOutcome, PipelineDeps } from "./pipeline";
-import { PrepPipeline } from "./pipeline";
+import {
+  capturedFetch,
+  PrepPipeline,
+  type DigestOutcome,
+  type FetchOutcome,
+  type PipelineDeps,
+} from "./pipeline";
 import type { PrepPaper } from "./types";
 
 // Largest source a pasted link may pull; a bigger response is aborted.
@@ -121,6 +126,14 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
     },
 
     async fetchPaper(paper): Promise<FetchOutcome | null> {
+      // A captured source is never fetched (docs/21: an article the reader kept).
+      // The ingest served the text from memory; this is the resumed run, which
+      // reads it back out of the fulltext cache the ingest wrote. Going to
+      // sourceUrl instead would fail on the paywall that made the kept copy
+      // valuable in the first place, or overwrite it with today's page.
+      if (paper.captured) {
+        return capturedFetch(paper, await getFulltext(paperFulltextHash(surveyHash, paper.slug)));
+      }
       // A user-pasted URL bypasses the arXiv/OpenAlex/S2 lookup: fetch the link
       // directly (link ingestion, docs/09). A cached PDF still short-circuits.
       if (paper.sourceUrl && !(await readPaperPdf(surveyHash, paper.slug))) {

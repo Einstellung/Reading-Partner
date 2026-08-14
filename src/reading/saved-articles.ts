@@ -1,7 +1,8 @@
-// Saved articles (docs/21, first slice): an info article the reader kept, filed
-// under a topic. Store + display only — nothing here reaches the AI yet, and no
-// TopicMaterial / fulltext is involved. The point of landing it now is that the
-// records accumulate, so the later AI path reads real data instead of nothing.
+// Saved articles (docs/21): an info article the reader kept, filed under a topic.
+// The store — reading it, writing it, keeping it mergeable. What reaches the AI is
+// one step further out: in classroom mode the model can list these records and put
+// one of them on the open book's prep list (saved-article-tools.ts). No
+// TopicMaterial is involved either way; a kept article is not a book.
 //
 // Read through readGuardedJson, for the reason the shelf and settings are: the
 // briefing a record came from is a day old and gone, keep/un-keep are both
@@ -12,8 +13,8 @@
 // topic record at a time, so two devices each saving an article on the same day
 // would overwrite each other's. Here the record is the article, so both survive.
 //
-// The body is kept twice: `text` for the future AI path, `html` for reading it
-// today. The html keeps its external image URLs — they render through the img:
+// The body is kept twice: `text` for the AI path, `html` for reading it today.
+// The html keeps its external image URLs — they render through the img:
 // proxy (docs/pitfall/30) — but any data: image is stripped, since a base64
 // body would dominate a record that syncs. Same rule and same function as the
 // bodies the collector publishes (info/briefing/publish.ts), so an article read
@@ -51,7 +52,8 @@ export interface SavedArticle {
   // discovery-layer-only source). A first-class state, not an error: whoever
   // quotes this must say the full text was never read.
   summaryOnly: boolean;
-  // Plain text of the body, for the future AI path. "" when there is none.
+  // Plain text of the body, and what the AI path feeds to the prep list
+  // (saved-article-tools.ts). "" when there is none.
   text: string;
   // Sanitized HTML of the body, for reading it now. "" when there is none.
   html: string;
@@ -301,6 +303,31 @@ export async function loadSavedArticles(
   io: SavedArticlesIo = savedArticlesIo,
 ): Promise<SavedArticle[]> {
   return (await readSavedArticles(io)).list;
+}
+
+// Whether anything is kept — without building the records.
+//
+// For callers that only need to decide whether to offer something: a full read
+// runs the html sanitizer over every stored body (a DOMParser parse plus a walk
+// of the whole tree, twice for a body carrying a data: image), and a classroom
+// turn that asks "is there anything kept" on the way past must not pay that for
+// bodies nobody is going to look at.
+//
+// An entry counts when it is shaped like a record, so an empty array answers
+// false and so does a file holding nothing but junk. Whatever those entries turn
+// out to be, this never returns null to readGuardedJson: the verdict "this is not
+// the shape I write" belongs to the real read, which is also the one that can
+// rebuild what it sets aside. Bytes that are not JSON at all are still moved
+// aside by the guarded read itself, the same as on any other read of the file.
+export async function hasSavedArticles(io: SavedArticlesIo = savedArticlesIo): Promise<boolean> {
+  let any = false;
+  await io.read(SAVED_ARTICLES_FILE, (raw) => {
+    if (Array.isArray(raw)) {
+      any = raw.some((e) => !!e && typeof e === "object" && !Array.isArray(e));
+    }
+    return [];
+  });
+  return any;
 }
 
 // Replace the file with `list`. Returns whether it was written.

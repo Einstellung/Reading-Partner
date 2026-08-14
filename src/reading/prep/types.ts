@@ -59,6 +59,12 @@ export interface PrepPaper {
   // URL is the fetch target; `kind` is filled in after the fetch sniffs content.
   sourceUrl?: string;
   kind?: "pdf" | "article";
+  // The text came from a copy the reader already had, not from the network (an
+  // article kept on the info side, docs/21). sourceUrl still records where it was
+  // published, but the fetch stage must not go there: the kept copy is the one
+  // that exists, and the page may be paywalled or gone. A run resumed in a later
+  // session reads the text back out of the fulltext cache (prep/live.ts).
+  captured?: boolean;
   abstract?: string;
   // Page count of the fetched PDF, set after extraction.
   pages?: number | null;

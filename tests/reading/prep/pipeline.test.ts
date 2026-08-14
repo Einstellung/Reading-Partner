@@ -9,6 +9,7 @@ import {
   type Model,
 } from "@earendil-works/pi-ai";
 import {
+  capturedFetch,
   PrepPipeline,
   type AiCallOptions,
   type DigestOutcome,
@@ -596,6 +597,147 @@ test("ingestSource rejects a non-https URL via resolveAddition", async () => {
   };
   const p = new PrepPipeline("h", "s", deps);
   await expect(p.ingestSource("http://insecure.test/x")).rejects.toThrow(/https/);
+});
+
+// A source whose text is already in hand (docs/21: an article the reader kept on
+// the info side). The fetch stage must never run for it: the page it came from may
+// be paywalled or gone, and the copy at hand is the one that exists.
+const CAPTURED: FetchOutcome = {
+  source: "url",
+  arxivId: null,
+  abstract: "",
+  pdfBytes: null,
+  fulltext: ARTICLE_FT,
+  kind: "article",
+  title: "Kept Title",
+};
+
+function keptMint(taken: Set<string>): PrepPaper {
+  return {
+    ...paper(taken.has("kept") ? "kept-2" : "kept", []),
+    addedByUser: true,
+    captured: true,
+    kind: "article",
+    sourceUrl: "https://example.test/kept",
+  };
+}
+
+async function settle(p: PrepPipeline): Promise<void> {
+  for (let i = 0; i < 20 && p.snapshot().running; i++) await new Promise((r) => setTimeout(r, 1));
+}
+
+test("ingestCaptured joins the prep list as an article and never calls the fetch dep", async () => {
+  let fetches = 0;
+  let digested: FetchOutcome | null = null;
+  const { deps, saved } = makeFakes({
+    initial: emptyPlannedState(),
+    fetch: async () => {
+      fetches++;
+      return null;
+    },
+    digest: async (_p, fetched) => {
+      digested = fetched;
+      return { body: "note", pages: 1, thin: false };
+    },
+  });
+  const p = new PrepPipeline("h", "s", deps);
+  const added = await p.ingestCaptured(keptMint, CAPTURED);
+  expect(fetches).toBe(0);
+  expect(added.slug).toBe("kept");
+  expect(added.kind).toBe("article");
+  expect(added.pages).toBe(1);
+  expect(added.title).toBe("Kept Title");
+  expect(added.status === "digesting" || added.status === "done").toBe(true);
+  // The digest reads the handed-in text, and the row is on the persisted list.
+  await settle(p);
+  expect(digested).toBe(CAPTURED);
+  const row = saved[saved.length - 1].papers.find((x) => x.slug === "kept");
+  expect(row?.kind).toBe("article");
+  expect(row?.captured).toBe(true);
+  expect(row?.status).toBe("done");
+});
+
+test("a requeued captured source is still served from the text at hand", async () => {
+  let fetches = 0;
+  // Every attempt fails, so the paper really ends up failed rather than being
+  // saved by the watchdog's retry.
+  let digestFails = true;
+  const { deps } = makeFakes({
+    initial: emptyPlannedState(),
+    fetch: async () => {
+      fetches++;
+      return null;
+    },
+    digest: async () => {
+      if (digestFails) throw new Error("model down");
+      return { body: "note", pages: 1, thin: false };
+    },
+  });
+  const p = new PrepPipeline("h", "s", deps);
+  const added = await p.ingestCaptured(keptMint, CAPTURED);
+  await settle(p);
+  expect(statuses(p)).toEqual({ [added.slug]: "failed" });
+  digestFails = false;
+  p.requeue(added.slug);
+  await settle(p);
+  expect(statuses(p)).toEqual({ [added.slug]: "done" });
+  expect(fetches).toBe(0);
+});
+
+// What the live deps do for a captured paper on a resumed run (prep/live.ts).
+// The rule is the whole point of the branch: a cached text is used, and a missing
+// one is an error rather than a quiet fall through to fetching the page.
+test("capturedFetch serves the cached text and refuses to go on without it", () => {
+  const kept: PrepPaper = {
+    ...paper("kept", []),
+    title: "Kept Title",
+    abstract: "abs",
+    captured: true,
+    kind: "article",
+    sourceUrl: "https://example.test/kept",
+  };
+  const out = capturedFetch(kept, ARTICLE_FT);
+  expect(out.fulltext).toBe(ARTICLE_FT);
+  expect(out.kind).toBe("article");
+  expect(out.pdfBytes).toBeNull();
+  expect(out.source).toBe("url");
+  expect(out.title).toBe("Kept Title");
+  expect(out.abstract).toBe("abs");
+  expect(() => capturedFetch(kept, null)).toThrow(/no longer in the text cache/);
+  expect(() =>
+    capturedFetch(kept, { ...ARTICLE_FT, status: "no-text-layer" as const }),
+  ).toThrow(/no longer in the text cache/);
+});
+
+// Nominated slugs are minted by parsePlan against the plan's own titles only, so
+// a replan can hand a survey reference the slug an ingested article already has.
+// The captured text belongs to the paper that was ingested with it, not to
+// whatever else lands on that slug — otherwise the reference's note is written
+// about a different piece entirely.
+test("a nominated paper landing on a captured slug is fetched, not handed the kept text", async () => {
+  const fetches: string[] = [];
+  const digested: string[] = [];
+  const { deps } = makeFakes({
+    initial: emptyPlannedState(),
+    plan: async () => ({ chapters: [], references: [], papers: [paper("kept", [1])] }),
+    fetch: async (p) => {
+      fetches.push(p.slug);
+      return { source: "arxiv", arxivId: null, abstract: "abs", pdfBytes: PDF };
+    },
+    digest: async (_p, fetched) => {
+      // What each paper was digested from: the outcome is the thing that must
+      // not be shared between them.
+      digested.push(fetched.fulltext?.pages[0] ?? "a pdf of its own");
+      return { body: "note", pages: 1, thin: false };
+    },
+  });
+  const p = new PrepPipeline("h", "s", deps);
+  await p.ingestCaptured(keptMint, CAPTURED);
+  await settle(p);
+  p.replan();
+  await settle(p);
+  expect(fetches).toEqual(["kept"]);
+  expect(digested).toEqual(["the fetched article body text", "a pdf of its own"]);
 });
 
 test("replan and retryPlan are no-ops while the pipeline is running", async () => {

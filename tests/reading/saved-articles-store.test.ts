@@ -20,6 +20,7 @@ import "../support/dom-parser";
 import { CORRUPT_SUFFIX, createFakeAppData, type FakeAppData } from "../support/guarded-appdata";
 import {
   SAVED_ARTICLES_FILE,
+  hasSavedArticles,
   loadSavedArticles,
   removeSavedArticle,
   saveArticle,
@@ -216,4 +217,35 @@ test("the first keep on a device with no file writes just that article", async (
   expect(await saveArticle(input(), io)).not.toBeNull();
   expect(idsOnDisk()).toEqual(["https://example.com/new"]);
   expect(io.files.has(ASIDE)).toBe(false);
+});
+
+// --- the cheap probe --------------------------------------------------------
+
+// The mount gate for the classroom's saved-article tools asks this on every turn
+// (reading/turn.ts), so it answers without building the records — a full read
+// sanitizes every stored body. It also never judges them: a file it cannot make
+// sense of is left where it is, and a read that fails answers "nothing kept"
+// rather than throwing into the turn.
+test("hasSavedArticles answers from the file without setting the records aside", async () => {
+  expect(await hasSavedArticles(io)).toBe(false);
+
+  io.files.set(FILE, "[]");
+  expect(await hasSavedArticles(io)).toBe(false);
+
+  io.files.set(FILE, JSON.stringify(KEPT));
+  expect(await hasSavedArticles(io)).toBe(true);
+
+  // Shapes no writer here produces. Still no records, and still nothing moved:
+  // the probe returns an empty list rather than the null that would quarantine.
+  io.files.set(FILE, JSON.stringify(["a", 1, null]));
+  expect(await hasSavedArticles(io)).toBe(false);
+  io.files.set(FILE, `{"articles":[]}`);
+  expect(await hasSavedArticles(io)).toBe(false);
+  expect(io.files.has(ASIDE)).toBe(false);
+});
+
+test("hasSavedArticles says no when the file cannot be read", async () => {
+  io.files.set(FILE, JSON.stringify(KEPT));
+  io.readFails = true;
+  expect(await hasSavedArticles(io)).toBe(false);
 });

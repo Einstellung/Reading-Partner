@@ -1,8 +1,8 @@
 // Assembly of one reading-companion turn (M6/M9, docs/03, docs/09, docs/14,
-// docs/24): system prompt, tool set and replayed history for the AI-pen bubble and
-// the book-level thread. Extracted from App so the branching (classroom vs
-// companion, figure tools, link ingestion, literature search, observations, history
-// trimming) is testable on its own. Pure assembly plus reads — it never touches React state
+// docs/21, docs/24): system prompt, tool set and replayed history for the AI-pen
+// bubble and the book-level thread. Extracted from App so the branching (classroom
+// vs companion, figure tools, link ingestion, kept info articles, literature
+// search, observations, history trimming) is testable on its own. Pure assembly plus reads — it never touches React state
 // and never starts the stream; the caller owns runAgentTurn.
 
 import type { Api, Model } from "@earendil-works/pi-ai";
@@ -24,7 +24,7 @@ import { languageInstruction, type Settings } from "../platform/app/settings";
 import { loadAnnotations } from "../platform/app/annotations";
 import { getThread, readThreadImages } from "../platform/app/threads";
 import { chapterAt } from "../fulltext/query";
-import { getFulltext } from "../fulltext/store";
+import { getFulltext, saveFulltext } from "../fulltext/store";
 import type { Fulltext } from "../fulltext/types";
 import { buildFigureCatalog } from "./figures/catalog";
 import { buildFigureTools } from "./figures/tools";
@@ -49,6 +49,13 @@ import { parseNote } from "./prep/notes";
 import { buildClassroomSystemPrompt, type ClassroomNote } from "./prep/classroom";
 import { buildClassroomTools } from "./prep/tools";
 import { ADD_SOURCE_PROMPT, buildSourceTools } from "./prep/source-tool";
+import {
+  buildSavedArticleTools,
+  prepareSavedArticle,
+  SAVED_ARTICLES_PROMPT,
+  type SavedArticleStore,
+} from "./saved-article-tools";
+import { hasSavedArticles, loadSavedArticles, type SavedArticle } from "./saved-articles";
 import { readingFetch } from "./papers/http";
 import { searchPapers, type PaperSearchFn } from "./papers/paper-search";
 import { buildFindPaperTool, FIND_PAPER_PROMPT } from "./papers/citation-tool";
@@ -81,6 +88,14 @@ export const TRIM_DISTILL_MIN_NEW = 20;
 export const HISTORY_KEEP_TIGHT = 6;
 // Observations kept when the ladder trims the opening snapshot.
 const OBSERVATION_KEEP_TIGHT = 3;
+
+// The real kept-article store. A failed read answers "nothing kept" rather than
+// failing the turn: the tools are an offer, and a turn the reader is waiting for
+// is not the place to raise a store problem the library screen will raise.
+const savedArticleStoreOnDisk: SavedArticleStore = {
+  any: () => hasSavedArticles().catch(() => false),
+  all: () => loadSavedArticles().catch((): SavedArticle[] => []),
+};
 
 // The live reading position and topic scope for the turn (App's ctxRef).
 export interface ReadingTurnContext {
@@ -121,6 +136,10 @@ export interface ReadingTurnInput {
   // the pipeline the reader is on now, matching the pre-extraction behaviour.
   getPipeline: () => PrepPipeline | null;
   distillAnnotations: () => DistillAnnotation[];
+  // The store of articles the reader kept on the info side (docs/21). Injected so
+  // the assembly runs with no AppData. Only classroom turns touch it at all, and
+  // they ask `any` — the records themselves are read when a tool actually runs.
+  savedArticles?: SavedArticleStore;
   // The turn's abort signal. It drops the assembly when the reader has already
   // moved on, and it is the signal the research sub-agent runs under, so hanging
   // up mid-search kills the run rather than leaving it fetching in the background.
@@ -229,6 +248,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     settings: s,
     getPipeline,
     distillAnnotations,
+    savedArticles = savedArticleStoreOnDisk,
     signal,
     onSubagentProgress,
     runSubagentTurn = runSubagentTurnLive,
@@ -359,6 +379,49 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     }
   }
 
+  // Saved info articles (docs/21): in classroom mode the model can list what the
+  // reader kept and put one into this book's prep list, then read it with
+  // read_paper. Gated on there being something kept — a tool whose only possible
+  // answer is "nothing" is one the model learns to call for nothing — and on the
+  // prep state existing, since read_paper is what the answer sends it to.
+  // Companion mode mounts neither: the prep list is the classroom's list.
+  let savedArticlesMounted = false;
+  if (isClassroom && livePipeline && prepState) {
+    savedArticlesMounted = await savedArticles.any().catch(() => false);
+    if (savedArticlesMounted) {
+      // The records are read on the first tool call, not here: reading them
+      // sanitizes every stored body, and most turns mount these tools without the
+      // model ever reaching for them. Read once per turn, however often it does.
+      let records: Promise<SavedArticle[]> | null = null;
+      const list = () => (records ??= savedArticles.all().catch((): SavedArticle[] => []));
+      tools = [
+        ...tools,
+        ...buildSavedArticleTools({
+          list,
+          add: async (article) => {
+            const prepared = prepareSavedArticle(article);
+            const paper = await livePipeline.ingestCaptured(prepared.mint, prepared.fetched);
+            // The kept text goes into the fulltext cache under the slug the paper
+            // got, which is why it is written after the ingest and not before:
+            // the slug is minted in there. Nothing reads that cache in between —
+            // the digest was handed the text directly, and read_paper is not
+            // reachable until this call answers.
+            await saveFulltext(paperFulltextHash(bookId, paper.slug), prepared.fulltext);
+            return {
+              slug: paper.slug,
+              title: paper.title,
+              kind: "article",
+              pages: prepared.fulltext.pages.length,
+              chars: prepared.chars,
+              status: paper.status,
+              error: paper.error,
+            };
+          },
+        }),
+      ];
+    }
+  }
+
   // Whether anything that reads *this book* was wired. Captured here, before the
   // literature tools join the list, because the tools paragraph in the system
   // prompt describes the reading tools by name: a book with no text layer mounts
@@ -462,6 +525,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     if (profileSection && !dropped.has("reader-profile")) prompt += "\n\n" + profileSection;
     if (notesOverview && !dropped.has("notes-overview")) prompt += "\n\n" + notesOverview;
     if (canIngestUrl) prompt += "\n\n" + ADD_SOURCE_PROMPT;
+    if (savedArticlesMounted) prompt += "\n\n" + SAVED_ARTICLES_PROMPT;
     prompt += "\n\n" + FIND_PAPER_PROMPT;
     prompt += "\n\n" + RESEARCH_PROMPT;
     return prompt;
