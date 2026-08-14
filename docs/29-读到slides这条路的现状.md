@@ -67,7 +67,7 @@ bbox 这一半：图注在图上方时 `pairFiguresOnPage` 拿不到任何区域
 - deck 无重启恢复。
 - deck 没有独立入口：只能开一本有笔记的书、进 Notes tab，且该书至少一章 done 才出现 Slides 按钮（`NotesPanel.tsx:240`）。
 - 无 PDF 导出、演讲者备注、单页编辑、主题换肤（docs/14 第 82 行已列为待定）。
-- 备课管线的笔记（`prep-<hash>/`，docs/09 第 42 行）完全不进 notes 与 slides，学习机模式预读的论文在 deck 里用不上。
+- 备课管线的笔记（`prep-<hash>/`，docs/09 第 48 行）完全不进 notes 与 slides，学习机模式预读的论文在 deck 里用不上。
 
 ## 未验证
 
