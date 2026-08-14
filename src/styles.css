@@ -74,6 +74,14 @@
     --input: #dcdcdc;
     --ring: #6c4fd0;
 
+    /* The chat reading surface, three layers stepped down from white: the
+       window, the user bubble on it, a code block inside either. Warm rather
+       than neutral grey, which goes blue against this off-white. The composer
+       keeps --background, so it floats off the window as a card. */
+    --chat-surface: #fcfcfb;
+    --chat-bubble: #f2f0ec;
+    --chat-code: #f7f5f1;
+
     /* 8px. The three radii in use fall straight out of it: rounded-sm 4px on
        the reader's small buttons, rounded-md 6px on the shell buttons and
        fields, rounded-lg 8px on the info chips. The arithmetic below reproduces
@@ -107,6 +115,9 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-chat-surface: var(--chat-surface);
+  --color-chat-bubble: var(--chat-bubble);
+  --color-chat-code: var(--chat-code);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
