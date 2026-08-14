@@ -46,6 +46,12 @@ export interface DebouncedWriterOptions<K> {
   // Write the key out. Whatever it writes comes from the caller's own cache;
   // this module holds no payload, only which keys are behind.
   write: (key: K) => Promise<void>;
+  // How the way out of the app writes, when that has to differ. The webview is
+  // suspended at pagehide with no second chance and no concurrent writer, so a
+  // store whose ordinary write is a read-then-write can spend one IPC here
+  // instead of two — and must never end up writing nothing because the read
+  // half failed. Falls back to `write` for the stores that have no such split.
+  writeOnExit?: (key: K) => Promise<void>;
   debounceMs?: number;
   // A failed write, never swallowed (pitfall 09). Both paths report through it:
   // the timer's and the one on the way out.
@@ -67,6 +73,7 @@ export interface DebouncedWriter<K> {
 
 export function createDebouncedWriter<K>({
   write,
+  writeOnExit,
   debounceMs = 500,
   onError = () => {},
   exit = exitOnPagehide,
@@ -80,29 +87,34 @@ export function createDebouncedWriter<K>({
   let inFlight: Promise<void> = Promise.resolve();
   let exitBound = false;
 
-  function writeNow(key: K): void {
+  function writeNow(key: K, writeKey: (key: K) => Promise<void>): void {
     dirty.delete(key);
     const t = timers.get(key);
     if (t !== undefined) {
       timer.cancel(t);
       timers.delete(key);
     }
-    inFlight = inFlight.then(() => write(key)).catch((e: unknown) => onError(e));
+    inFlight = inFlight.then(() => writeKey(key)).catch((e: unknown) => onError(e));
   }
 
   // Taking each key out of `dirty` before its write starts is what makes the
   // second flush a no-op: pagehide can fire more than once and observeAppExit
   // does not deduplicate, so the second call has to find nothing waiting.
-  async function flush(): Promise<void> {
-    for (const key of [...dirty]) writeNow(key);
+  async function flushWith(writeKey: (key: K) => Promise<void>): Promise<void> {
+    for (const key of [...dirty]) writeNow(key, writeKey);
     await inFlight;
   }
+
+  // The public flush is the ordinary write, so a caller that flushes to read the
+  // file back gets the same bytes the debounce would have written. Only the
+  // pagehide binding below takes the shorter way out.
+  const flush = (): Promise<void> => flushWith(write);
 
   function schedule(key: K): void {
     dirty.add(key);
     if (!exitBound) {
       exitBound = true;
-      exit(() => void flush());
+      exit(() => void flushWith(writeOnExit ?? write));
     }
     const existing = timers.get(key);
     if (existing !== undefined) timer.cancel(existing);
@@ -110,7 +122,7 @@ export function createDebouncedWriter<K>({
       key,
       timer.schedule(() => {
         timers.delete(key);
-        writeNow(key);
+        writeNow(key, write);
       }, debounceMs),
     );
   }

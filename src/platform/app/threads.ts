@@ -11,7 +11,16 @@
 // and merges what it holds onto what is there, so no path — not one that starts
 // from an empty map, not one that runs while the cache is being refreshed — can
 // turn a conversation history into a one-thread file. What that looked like
-// when it was possible is in tests/threads-store.test.ts.
+// when it was possible is in tests/threads-store.test.ts, and why it is written
+// down at all is in docs/13.
+//
+// The second rule follows from the first, because every write now spans two
+// awaits with the user still typing across them: nothing computed before an
+// await is ever assigned back over the cache afterwards. What comes back is
+// added to the live entry, key by key, and only where the entry has no opinion
+// (addMissing); whether the file it came from is still the file being compared
+// against is decided by Entry.gen. Snapshot-then-assign is how a conversation
+// created during a write disappeared out from under the button that opened it.
 //
 // Everything the store reaches outside itself is passed in (same shape as
 // annotations.ts and settings.ts), so a test can run the real store against an
@@ -26,7 +35,7 @@ import {
   readTextFile,
   writeFile,
 } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "./atomic-fs";
+import { quarantineFile, writeTextAtomic, type CorruptFileReport } from "./atomic-fs";
 import {
   createDebouncedWriter,
   type DebouncedWriter,
@@ -90,17 +99,39 @@ export interface ThreadIo {
   // difference between "no file yet" and "could not be read".
   read: (file: string) => Promise<string | null>;
   write: (file: string, contents: string) => Promise<void>;
+  // Move a file whose bytes will not parse aside, answering with its new name.
+  // Required rather than optional: without it the writer's only honest choice is
+  // to refuse, and refusing is permanent — every message of the session after
+  // the file went bad is dropped on the floor. atomic-fs's rule, applied here:
+  // the fallback is never destructive because the bad bytes are kept first.
+  quarantine: (file: string) => Promise<string | null>;
   onError?: (e: unknown) => void;
+  // A file whose bytes were moved aside. Reported apart from onError because it
+  // is a different sentence: the write did land, and what the user lost is the
+  // history that was in the file, not the message they just sent.
+  onCorrupt?: (report: CorruptFileReport) => void;
   timer?: WriterTimer;
   exit?: (onExit: () => void) => void;
 }
 
-// What the store holds for one file. `removed` is the deletions it owes the
-// file: the merge adds back anything on disk that is not in `threads`, so a
-// thread deleted here has to be named or it comes straight back.
+// What the store holds for one file.
 interface Entry {
   threads: ThreadMap;
+  // The deletions this process owes the file. The merge adds back anything on
+  // disk that is not in `threads`, so a thread deleted here has to be named or
+  // it comes straight back. Never emptied: it is also what stops a read issued
+  // before a delete and answered after it from resurrecting the thread, and a
+  // set of ids the user deleted in one session costs nothing to keep.
   removed: Set<string>;
+  // Whether this entry has ever been reconciled with the file — set by a load
+  // and by every write that merged the file in. Only a reconciled entry may be
+  // written without reading first, which is what the way out of the app does.
+  reconciled: boolean;
+  // Bumped by every change to this entry and by every write that starts. An
+  // operation that reads the file takes this number before its first await and
+  // compares it after: an unchanged number is the only proof that what came
+  // back still describes the entry it is about to be applied to.
+  gen: number;
 }
 
 export interface ThreadStore {
@@ -128,9 +159,52 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
   function entryFor(key: string): Entry {
     const held = cache.get(key);
     if (held) return held;
-    const fresh: Entry = { threads: {}, removed: new Set() };
+    const fresh: Entry = { threads: {}, removed: new Set(), reconciled: false, gen: 0 };
     cache.set(key, fresh);
     return fresh;
+  }
+
+  // The one rule for applying anything computed across an await: add what the
+  // entry has no opinion about, and change nothing else. A thread the entry
+  // holds is the copy being edited (cache wins per thread); a thread it has
+  // removed is a deletion it still owes the file. Both blockers this file was
+  // rewritten for were the other shape — a map snapshotted before an await and
+  // assigned back after it, erasing whatever was created or deleted in between.
+  function addMissing(entry: Entry, from: ThreadMap): void {
+    for (const [id, thread] of Object.entries(from)) {
+      if (id in entry.threads || entry.removed.has(id)) continue;
+      entry.threads[id] = thread;
+    }
+  }
+
+  // Keys whose write has begun and not finished. The debounced writer stops
+  // calling a key pending the moment its write starts, and a load landing in
+  // that window would take the file — which does not have the edit being
+  // written yet — for the whole truth.
+  const writing = new Set<string>();
+
+  // The file as a writer must see it. A read that fails throws: nothing is known
+  // to be wrong with the file, so nothing may be put over it. Bytes that will
+  // not parse are a different answer — they are moved aside first, and then "no
+  // threads" is the truth about what is left, so the session's messages land
+  // instead of every write for this book being refused for good.
+  async function readForWrite(key: string): Promise<ThreadMap> {
+    const file = fileFor(key);
+    const text = await io.read(file);
+    if (text === null) return {};
+    try {
+      return parseThreads(text);
+    } catch (e) {
+      // Named here rather than by the channel: the corrupt-file scope carries no
+      // log line of its own, because the store reporting one has already said
+      // which file and which parse error (atomic-fs does the same).
+      console.error(`failed to parse ${file}`, e);
+      // A quarantine that fails throws out of the write: the bad bytes are still
+      // where they were, and nothing may be put over them.
+      const savedAs = await io.quarantine(file);
+      io.onCorrupt?.({ file, savedAs });
+      return {};
+    }
   }
 
   // Read-modify-write, always. The alternative is to write the cache straight
@@ -141,40 +215,60 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
   // round-trip per debounce window and removes the whole class.
   //
   // Cache wins per thread: the copy this process is editing is the newer one for
-  // the threads it holds. A thread only this file has (another device's, pulled
+  // the threads it holds. A thread only the file has (another device's, pulled
   // under us) is kept as it is rather than erased, which is what v1 per-file LWW
   // used to do to it.
-  // Keys whose write has begun and not finished. The debounced writer stops
-  // calling a key pending the moment its write starts, and a load landing in
-  // that window would take the file — which does not have the edit being
-  // written yet — for the whole truth.
-  const writing = new Set<string>();
+  async function writeMerged(key: string): Promise<void> {
+    const entry = cache.get(key);
+    // Nothing held for this key: there is nothing to say about the file, and
+    // saying "{}" is exactly the bug this store is written against.
+    if (!entry) return;
+    writing.add(key);
+    entry.gen++;
+    try {
+      const onDisk = await readForWrite(key);
+      // Taken here, with no await between this and the write: everything the
+      // entry holds at the moment the bytes are handed over goes out with them,
+      // including a thread created while the file was being read.
+      const merged: ThreadMap = { ...onDisk, ...entry.threads };
+      for (const id of entry.removed) delete merged[id];
+      await io.write(fileFor(key), JSON.stringify({ threads: merged }, null, 2));
+      // Applied to the entry as it is now, not as `merged` left it: a thread
+      // created while the bytes were in the air belongs to the live entry, and
+      // assigning `merged` over it is how the top-bar button ended up holding a
+      // thread the store did not have and every message typed into it was lost.
+      addMissing(entry, onDisk);
+      entry.reconciled = true;
+    } finally {
+      writing.delete(key);
+    }
+  }
+
+  // The way out of the app. On iOS the webview is suspended at pagehide with
+  // whatever has not been written yet still in memory, so this is the last
+  // chance the session's final message gets — and it gets one IPC to take it,
+  // not two.
+  //
+  // A reconciled entry is written straight out, unmerged. There is no other
+  // writer in this process on the way out, the entry is the file plus this
+  // session's edits, and reading first buys a merge that can only lose: a read
+  // that fails would leave this path writing nothing at all, which is the exact
+  // failure it exists to prevent.
+  //
+  // An entry that has never been reconciled is the one case where writing it out
+  // is the incident — a book whose file was never read holds one new thread and
+  // nothing else. That one reads first and, if the read fails, writes nothing,
+  // because there is nothing safe to write.
+  async function writeOnExit(key: string): Promise<void> {
+    const entry = cache.get(key);
+    if (!entry) return;
+    if (!entry.reconciled) return writeMerged(key);
+    await io.write(fileFor(key), JSON.stringify({ threads: entry.threads }, null, 2));
+  }
 
   const writer: DebouncedWriter<string> = createDebouncedWriter<string>({
-    write: async (key) => {
-      const entry = cache.get(key);
-      // Nothing held for this key: there is nothing to say about the file, and
-      // saying "{}" is exactly the bug this store is written against.
-      if (!entry) return;
-      writing.add(key);
-      try {
-        const text = await io.read(fileFor(key));
-        // A parse failure throws out of here: it is reported (pitfall 09) and
-        // nothing is written. A file whose contents could not be read is never
-        // replaced — the bytes stay for the next attempt, or for a human.
-        const onDisk = text === null ? {} : parseThreads(text);
-        const merged: ThreadMap = { ...onDisk, ...entry.threads };
-        const removed = [...entry.removed];
-        for (const id of removed) delete merged[id];
-        await io.write(fileFor(key), JSON.stringify({ threads: merged }, null, 2));
-        // The file and the cache now agree, so the deletions are paid off and
-        // the threads that came in with the merge are what later reads answer.
-        entry.threads = merged;
-        for (const id of removed) entry.removed.delete(id);
-      } finally {
-        writing.delete(key);
-      }
-    },
+    write: writeMerged,
+    writeOnExit,
     debounceMs: SAVE_DEBOUNCE,
     onError: io.onError,
     timer: io.timer,
@@ -184,23 +278,30 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
   const schedule = (key: string): void => writer.schedule(key);
 
   // Load a document's threads. Missing file is normal ({}); read/parse errors
-  // rethrow so the caller can warn.
-  //
-  // Edits that have not reached disk yet outrank the file for the threads they
-  // touch: a load that ran between an append and its write would otherwise hand
-  // back — and cache — a conversation missing its last message.
+  // rethrow so the caller can warn — and so the top-bar button says so instead
+  // of starting a second conversation. Nothing is quarantined here: a file the
+  // user still has is worth a sentence, and the writer moves it aside only when
+  // it would otherwise be stuck refusing writes forever.
   async function load(bookId: string): Promise<ThreadMap> {
+    const before = cache.get(bookId)?.gen;
     const text = await io.read(fileFor(bookId));
     const onDisk = text === null ? {} : parseThreads(text);
-    const held = cache.get(bookId);
-    if (!held || (!writer.isPending(bookId) && !writing.has(bookId))) {
-      cache.set(bookId, { threads: onDisk, removed: new Set() });
-      return onDisk;
-    }
-    const merged: ThreadMap = { ...onDisk, ...held.threads };
-    for (const id of held.removed) delete merged[id];
-    held.threads = merged;
-    return merged;
+    const entry = entryFor(bookId);
+    // The file is this book's whole truth only when nothing happened to the
+    // entry while it was being read and nothing of the entry is still on its way
+    // to disk. `isPending` and `writing` are the two halves of "on its way";
+    // `gen` catches the third case both of them answer "no" to — a read slower
+    // than a whole debounce-and-write cycle, whose answer is a file that no
+    // longer exists by the time it arrives.
+    const current =
+      entry.gen === (before ?? 0) && !writer.isPending(bookId) && !writing.has(bookId);
+    // Adopt it: a thread another device deleted goes away here. The entry object
+    // itself is kept rather than replaced — a write in the air holds it — and
+    // this process's own deletions still outrank the file until they are paid.
+    if (current) for (const id of Object.keys(entry.threads)) delete entry.threads[id];
+    addMissing(entry, onDisk);
+    entry.reconciled = true;
+    return entry.threads;
   }
 
   // The on-disk threads of a book, without touching the cache — the sweep's read
@@ -227,6 +328,7 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
     };
     entry.threads[threadId] = thread;
     entry.removed.delete(threadId);
+    entry.gen++;
     schedule(bookId);
     return thread;
   }
@@ -239,7 +341,8 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
     // and that is what sent the top-bar AI button off to start a second
     // conversation over a history it could not see. The re-read is allowed to
     // be asynchronous and is allowed to fail, because it is no longer what
-    // keeps the file safe — the writer's merge is.
+    // keeps the file safe — the writer's merge is — and because load applies
+    // what comes back to the live entry instead of installing it over one.
     drop: (bookId) => {
       void load(bookId).catch((e: unknown) => io.onError?.(e));
     },
@@ -274,13 +377,16 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
       // Named, so the write's merge takes it out of the file instead of reading
       // it back in as a thread only the file has.
       held.removed.add(threadId);
+      held.gen++;
       schedule(bookId);
       return true;
     },
     append: (bookId, threadId, message) => {
-      const thread = cache.get(bookId)?.threads[threadId];
-      if (!thread) return undefined;
+      const entry = cache.get(bookId);
+      const thread = entry?.threads[threadId];
+      if (!entry || !thread) return undefined;
       thread.messages.push(message);
+      entry.gen++;
       schedule(bookId);
       return thread;
     },
@@ -288,11 +394,13 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
     // card's later state, e.g. a confirm card flipping to "added"). No-op when
     // the thread or message is gone.
     patch: (bookId, threadId, ts, patch) => {
-      const thread = cache.get(bookId)?.threads[threadId];
-      if (!thread) return;
+      const entry = cache.get(bookId);
+      const thread = entry?.threads[threadId];
+      if (!entry || !thread) return;
       const i = thread.messages.findIndex((m) => m.ts === ts);
       if (i < 0) return;
       thread.messages[i] = { ...thread.messages[i], ...patch };
+      entry.gen++;
       schedule(bookId);
     },
     flush: writer.flush,
@@ -305,7 +413,9 @@ const store = createThreadStore({
       ? readTextFile(file, { baseDir: BaseDirectory.AppData })
       : null,
   write: writeTextAtomic,
+  quarantine: quarantineFile,
   onError: (e) => reportStoreError("threads", e),
+  onCorrupt: (report) => reportStoreError("corrupt-file", report),
 });
 
 export const loadThreads = (bookId: string): Promise<ThreadMap> => store.load(bookId);
@@ -331,7 +441,6 @@ export const patchThreadMessage = (
   ts: number,
   patch: Partial<ThreadMessage>,
 ): void => store.patch(bookId, threadId, ts, patch);
-export const flushThreads = (): Promise<void> => store.flush();
 
 // Thread images live one directory per thread. Mirrors annotations.ts's base64
 // <-> bytes helpers; here `data` is bare base64 (no data: prefix), matching the

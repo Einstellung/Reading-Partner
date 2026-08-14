@@ -43,6 +43,8 @@ function fixture(contents?: string): {
     write: async (file, text) => {
       files.set(file, text);
     },
+    // Never reached: no file here is unparseable.
+    quarantine: async () => null,
     // Never fires: what reaches disk is not what this file is about.
     timer: { schedule: () => 0, cancel: () => {} },
     exit: () => {},

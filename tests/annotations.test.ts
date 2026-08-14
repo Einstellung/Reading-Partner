@@ -198,9 +198,11 @@ test("a delete right after a sync pull keeps the marks the pull brought", async 
   // The other device's copy arrives and the pull route hands it to the store.
   files.set("annotations-book10.json", JSON.stringify([mark("mine"), mark("theirs")]));
   store.drop("book10");
-  await settle();
 
   store.remove("book10", ["mine"]);
+  // The drop leaves nothing in memory, so the file has to come back before the
+  // delete can be worked out at all.
+  await settle();
   await advance(500);
 
   expect(idsIn("annotations-book10.json")).toEqual(["theirs"]);
@@ -210,4 +212,51 @@ test("an unreadable file throws out of load and reads as no marks out of peek", 
   files.set("annotations-book8.json", "{not json");
   await expect(store.load("book8")).rejects.toThrow();
   expect(await store.peek("book8")).toEqual([]);
+});
+
+// BLOCKER: what a pull leaves behind cannot be filled in asynchronously. A
+// re-read is an await long, and this store's writer cannot merge — the reader's
+// API is whole-set replacement, and merging would resurrect deleted highlights —
+// so a disk copy arriving behind a save simply replaces it.
+test("a highlight drawn while a pull is being taken up is not thrown away", async () => {
+  files.set("annotations-book11.json", JSON.stringify([mark("a"), mark("b")]));
+  await store.load("book11");
+
+  // Sync pulls the file and the route invalidates the cache.
+  store.drop("book11");
+  // The user drags a new highlight before anything the drop started could
+  // finish. The reader hands its whole set, which is what it had plus the new
+  // one — this is the only record of the drag there will ever be.
+  store.save("book11", [mark("a"), mark("b"), mark("just-made")]);
+  await advance(500);
+
+  expect(idsIn("annotations-book11.json")).toEqual(["a", "b", "just-made"]);
+});
+
+// The same window on the cache-less delete path: it reads the file, and the read
+// must not be allowed to decide what the book's marks were.
+test("a highlight drawn while a delete is reading the file is not thrown away", async () => {
+  files.set("annotations-book12.json", JSON.stringify([mark("a"), mark("b")]));
+
+  // Nothing in memory — a pull just dropped it. The user deletes one mark and
+  // draws another before the file comes back.
+  store.remove("book12", ["a"]);
+  store.save("book12", [mark("a"), mark("b"), mark("just-made")]);
+  await settle();
+  await advance(500);
+
+  expect(idsIn("annotations-book12.json")).toEqual(["b", "just-made"]);
+});
+
+// A load is an await long too, and a save that lands inside it is the reader's
+// whole set, which is newer than any file.
+test("a mark made while the file is being loaded is not replaced by it", async () => {
+  files.set("annotations-book13.json", JSON.stringify([mark("a")]));
+
+  const loading = store.load("book13");
+  store.save("book13", [mark("a"), mark("just-made")]);
+  await loading;
+  await advance(500);
+
+  expect(idsIn("annotations-book13.json")).toEqual(["a", "just-made"]);
 });
