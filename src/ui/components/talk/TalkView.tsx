@@ -12,9 +12,8 @@
 // provides a null CitationContext, which is what makes the markdown renderer
 // leave them alone.
 //
-// The conversation column is a ChatScaleScope, the same one the reader's call
-// window uses and on the same value: a reader who sized the type once has sized
-// it everywhere a conversation is the screen.
+// The conversation column is a ChatScaleScope, on the same value as the reader's
+// call window.
 
 import { useMemo, useState } from "react";
 import ChatScaleScope from "../base/ChatScaleScope";

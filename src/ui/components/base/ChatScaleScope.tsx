@@ -1,39 +1,11 @@
-// The subtree the chat scale applies to. It publishes `--chat-scale` and takes
-// the two gestures that change it; the content under it only ever reads the
-// variable, so a surface that is not wrapped is 1x by the variable's default and
-// needs no branch of its own.
+// The subtree the chat scale applies to: it publishes `--chat-scale` and takes
+// the two gestures that change it. Content under it only reads the variable, so
+// a surface that is not wrapped is 1x by the variable's default.
 
 import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { accumulateWheel, CHAT_SCALE_DEFAULT, shiftChatScale, stepChatScale } from './chat-scale';
+import { bindZoomKeys } from './chat-scale-keys';
 import { currentChatScale, setChatScale, useChatScale } from './useChatScale';
-
-// Ctrl/Cmd with the zoom keys, bound once however many scopes are mounted: two
-// listeners would take two steps per press. The count also survives the
-// mount/cleanup/mount an effect gets in development.
-let keyHosts = 0;
-
-function onZoomKey(e: KeyboardEvent): void {
-	if (!e.ctrlKey && !e.metaKey) return;
-	if (e.key === '=' || e.key === '+') {
-		e.preventDefault();
-		setChatScale(stepChatScale(currentChatScale(), 1));
-	} else if (e.key === '-' || e.key === '_') {
-		e.preventDefault();
-		setChatScale(stepChatScale(currentChatScale(), -1));
-	} else if (e.key === '0') {
-		e.preventDefault();
-		setChatScale(CHAT_SCALE_DEFAULT);
-	}
-}
-
-function bindZoomKeys(): () => void {
-	if (keyHosts === 0) window.addEventListener('keydown', onZoomKey);
-	keyHosts += 1;
-	return () => {
-		keyHosts -= 1;
-		if (keyHosts === 0) window.removeEventListener('keydown', onZoomKey);
-	};
-}
 
 export default function ChatScaleScope({
 	children,
@@ -49,9 +21,8 @@ export default function ChatScaleScope({
 	useEffect(() => {
 		const el = hostRef.current;
 		if (!el) return;
-		// Listened for directly, not through onWheel: React's wheel handler is
-		// passive, where preventDefault does nothing and the browser zooms the
-		// whole app instead of the column.
+		// Listened for directly: React's onWheel is passive, where preventDefault
+		// does nothing and the browser zooms the whole app instead of this column.
 		const onWheel = (e: WheelEvent) => {
 			if (!e.ctrlKey && !e.metaKey) return;
 			e.preventDefault();
@@ -63,7 +34,14 @@ export default function ChatScaleScope({
 		return () => el.removeEventListener('wheel', onWheel);
 	}, []);
 
-	useEffect(bindZoomKeys, []);
+	useEffect(
+		() =>
+			bindZoomKeys(window, (action) => {
+				if (action === 'reset') setChatScale(CHAT_SCALE_DEFAULT);
+				else setChatScale(stepChatScale(currentChatScale(), action === 'in' ? 1 : -1));
+			}),
+		[],
+	);
 
 	return (
 		<div ref={hostRef} className={className} style={{ '--chat-scale': String(scale) } as CSSProperties}>

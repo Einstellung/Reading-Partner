@@ -24,9 +24,11 @@ function read(path: string): string {
 }
 
 const scope = read("ui/components/base/ChatScaleScope.tsx");
+const keys = read("ui/components/base/chat-scale-keys.ts");
 const chat = read("ui/components/chat/chat.tsx");
 const callView = read("ui/components/chat/CallView.tsx");
 const talkView = read("ui/components/talk/TalkView.tsx");
+const infoCall = read("ui/components/info/InfoCall.tsx");
 const markdown = read("ui/components/markdown/MarkdownRenderer.tsx");
 
 test("the scope publishes the variable and takes the gestures", () => {
@@ -34,7 +36,11 @@ test("the scope publishes the variable and takes the gestures", () => {
   // Passive listeners cannot preventDefault, and React's onWheel is passive:
   // the browser would zoom the whole app instead of this column.
   expect(scope).toContain("{ passive: false }");
-  expect(scope).toContain("addEventListener('keydown'");
+  expect(scope).toContain("addEventListener('wheel'");
+  // The event's own unit, not an assumption that it is pixels.
+  expect(scope).toContain("e.deltaMode");
+  expect(scope).toContain("bindZoomKeys(window");
+  expect(keys).toContain("addEventListener('keydown'");
 });
 
 test("both maximized windows are wrapped, and on the same value", () => {
@@ -58,6 +64,21 @@ test("the message rows read the variable instead of importing the scale", () => 
   expect(scaled.length).toBeGreaterThanOrEqual(5);
 });
 
+test("a surface can stay out, and the phone's does", () => {
+  // The phone reaches CallView through InfoCall and has neither gesture, so
+  // what it would get is a non-passive wheel listener and nothing else.
+  expect(callView).toContain("scalable = true");
+  expect(infoCall).toContain("scalable={false}");
+});
+
+test("the composer's height cap is CSS, so it grows with the type", () => {
+  // Held as a JS constant the cap does not move, and a bigger font inside a
+  // fixed box is fewer lines the more the reader zooms in.
+  expect(chat).toContain("max-h-[calc(10rem*var(--chat-scale,1))]");
+  expect(chat).toContain("getComputedStyle");
+  expect(chat).not.toMatch(/maxHeight = pill/);
+});
+
 test("the composer keeps its 16px floor inside the scaled size", () => {
   // Below 16px a focused field makes WKWebView zoom the whole page, and the
   // minimum scale would put it at 14.4px. A coarse:text-[16px] override would
@@ -71,6 +92,18 @@ test("the scaled sizes carry unitless line heights", () => {
   // put while the type around it grew, and the lines would close up.
   for (const size of ["text-base leading-7", "text-[13px] leading-6", "text-[15px] leading-7"]) {
     expect(chat).not.toContain(size);
+  }
+  // An arbitrary font size brings no line height with it, where the named size
+  // it replaced did, so each one states its own. The prose row is not here: its
+  // leading comes from the markdown root inside it.
+  for (const pair of [
+    "text-[calc(0.875rem*var(--chat-scale,1))] leading-[1.43]",
+    "text-[calc(13px*var(--chat-scale,1))] leading-[1.85]",
+    "text-[calc(15px*var(--chat-scale,1))] leading-[1.87]",
+    "text-[calc(1rem*var(--chat-scale,1))] leading-[1.75]",
+    "text-[max(16px,calc(1rem*var(--chat-scale,1)))] leading-[1.5]",
+  ]) {
+    expect(chat).toContain(pair);
   }
 });
 
@@ -90,10 +123,13 @@ test("the corner bubble's own size is left where it was", () => {
   expect(chat).toContain("'gap-3 '");
 });
 
-test("markdown sizes are relative, so a reply's headings and code follow", () => {
-  // Nothing in the renderer is wrapped, and nothing needs to be: every size in
-  // it is em or inherit, so the whole reply is measured against the row.
+test("markdown is measured against the row, sizes and spacing both", () => {
+  // Nothing in the renderer is wrapped and nothing needs to be: every size and
+  // every margin in it is em or inherit, so a reply's rhythm holds at 1.8x and
+  // in a 12px reader panel alike.
   const absolute = markdown.match(/text-\[\d+(?:\.\d+)?(?:px|rem)\]/g) ?? [];
   expect(absolute).toEqual([]);
   expect(markdown).toContain("text-[inherit]");
+  const remSpacing = markdown.match(/\]:!?[mp][trblxy]?-[1-9]/g) ?? [];
+  expect(remSpacing).toEqual([]);
 });

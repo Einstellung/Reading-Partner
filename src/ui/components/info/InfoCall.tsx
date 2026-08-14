@@ -100,6 +100,7 @@ export function InfoCall({
           placeholder={anchor.placeholder}
           voice={voice}
           onCardAction={call.onCardAction}
+          scalable={false}
         />
       </div>
       {pipCards && (

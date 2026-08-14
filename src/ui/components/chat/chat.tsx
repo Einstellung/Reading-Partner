@@ -1,15 +1,12 @@
 // Shared chat pieces for the call UI (CallBubble, CallView). Tailwind-only.
 //
-// The `lg` size is the maximized window's, and it sets its type off
-// `--chat-scale` (ui/components/base/chat-scale.ts) so the reader can zoom the
-// conversation. Nothing here imports that: the variable carries a default, so a
-// row rendered outside a ChatScaleScope is 1x. `sm` is the corner bubble, which
-// does not zoom. The space around the type follows it: line heights in the
-// scaled sizes are unitless, and the gap between rows is an expression — a rem
-// value is measured against the root font size and would sit still while the
-// type around it grew.
+// The `lg` size sets its type and the space around it off `--chat-scale`, read
+// as a variable with a default so nothing here imports the zoom; `sm` is the
+// corner bubble and does not zoom. The scaled values are unitless or an
+// expression: a rem line height or gap is measured against the root font size
+// and would sit still while the type grew.
 
-import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { HIT_44 } from '../base/buttons';
 import { Button } from '../ui/button';
 import { IconCheck, IconCopy, IconSend, IconStop } from '../base/icons';
@@ -163,7 +160,8 @@ function TypingDots() {
 // Tool-call trace above a streaming AI reply (M6): a running tool is a subdued
 // line ending in an ellipsis; a failed one takes --destructive, the app's one red.
 function ToolTrace({ tools, size }: { tools: ToolStatus[]; size: 'sm' | 'lg' }) {
-	const text = size === 'lg' ? 'text-[calc(0.875rem*var(--chat-scale,1))]' : 'text-xs';
+	// An arbitrary font size brings no line height of its own, where text-sm did.
+	const text = size === 'lg' ? 'text-[calc(0.875rem*var(--chat-scale,1))] leading-[1.43]' : 'text-xs';
 	return (
 		<div className="flex flex-col gap-0.5">
 			{tools.map((t, i) =>
@@ -450,7 +448,6 @@ export function Composer({
 	const [value, setValue] = useState('');
 	const [voiceHint, setVoiceHint] = useState<string | null>(null);
 	const taRef = useRef<HTMLTextAreaElement>(null);
-	const maxHeight = pill ? 160 : 100;
 	const resolvedVoice = resolveComposerVoice(voice, hasNativeRecorder());
 	const cleanupModel = useDefaultCleanupModel();
 
@@ -462,13 +459,35 @@ export function Composer({
 	}
 
 	// Auto-grow: collapse to one row, then take the content height up to the cap
-	// (past it the textarea scrolls).
-	useLayoutEffect(() => {
+	// (past it the textarea scrolls). The cap is a CSS max-height and is measured
+	// rather than held here — it follows the chat zoom, which this component is
+	// not allowed to know about.
+	const grow = useCallback(() => {
 		const el = taRef.current;
 		if (!el) return;
 		el.style.height = 'auto';
-		el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
-	}, [value, maxHeight]);
+		const cap = Number.parseFloat(getComputedStyle(el).maxHeight);
+		el.style.height = `${Number.isFinite(cap) ? Math.min(el.scrollHeight, cap) : el.scrollHeight}px`;
+	}, []);
+	useLayoutEffect(grow, [value, grow]);
+
+	// A zoom changes the cap without re-rendering this component (the scope's
+	// children are the same elements), so the column's new width is the signal.
+	// Width only: the height this sets is the observed box, and reacting to it
+	// would be a loop.
+	const lastWidth = useRef(0);
+	useEffect(() => {
+		const el = taRef.current;
+		if (!el || typeof ResizeObserver === 'undefined') return;
+		const ro = new ResizeObserver((entries) => {
+			const width = entries[0]?.contentRect.width ?? 0;
+			if (width === lastWidth.current) return;
+			lastWidth.current = width;
+			grow();
+		});
+		ro.observe(el);
+		return () => ro.disconnect();
+	}, [grow]);
 
 	const hasImages = pendingImages.length > 0;
 	const hasLoading = pendingImages.some((p) => p.status === 'loading');
@@ -503,8 +522,8 @@ export function Composer({
 	const field =
 		'box-border min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent outline-none placeholder:text-neutral-400 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ' +
 		(pill
-			? 'py-1.5 text-[max(16px,calc(1rem*var(--chat-scale,1)))] leading-[1.5] text-neutral-800'
-			: 'px-1 py-1 text-[13px] leading-5 coarse:text-[16px] coarse:leading-6 text-neutral-800');
+			? 'max-h-[calc(10rem*var(--chat-scale,1))] py-1.5 text-[max(16px,calc(1rem*var(--chat-scale,1)))] leading-[1.5] text-neutral-800'
+			: 'max-h-[100px] px-1 py-1 text-[13px] leading-5 coarse:text-[16px] coarse:leading-6 text-neutral-800');
 	const stopBtn = 'flex shrink-0 items-center justify-center rounded-full bg-neutral-800 text-white';
 
 	return (

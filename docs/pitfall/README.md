@@ -10,6 +10,7 @@
 | 标注的颜色、不透明度、创建与导入 | EmbedPDF 引擎 |
 | iPad 触摸、笔、缩放、翻页 | 触摸与手势 + EmbedPDF 引擎 |
 | 手机上的手势、页面导航 | 触摸与手势 |
+| 鼠标滚轮、触控板 pinch | 触摸与手势 |
 | 发请求、外链资源、CSP | 网络与 CSP |
 | 读写 AppData | 存储与数据目录 |
 | 导入外部文件、拿文件选择器给的路径 | 存储与数据目录 |
@@ -72,6 +73,8 @@
 - [83-radix-menu-opens-on-pointerdown-and-the-lift-picks-a-row](./83-radix-menu-opens-on-pointerdown-and-the-lift-picks-a-row.md) — Radix 的菜单 trigger 在 pointerdown 上开，`MenuItem` 又会在没见过 pointerdown 的 pointerup 上自己 click，同一次点按能既开菜单又选中手指下方那一行；trigger 改成在 click 上开，并记住按下时的开合状态（关闭走的是 document 上的 dismiss，排在 React 之后）
 - [92-radix-select-already-opens-on-click-for-a-finger](./92-radix-select-already-opens-on-click-for-a-finger.md) — `SelectTrigger` 按指针类型分路（鼠标 pointerdown、手指和笔 click），坑 83 那套绕法照抄过去会双开；实测一按抬手时列表还不在 DOM 里
 - [117-webkit-takes-the-scroll-later-and-only-on-a-scrollable-axis](./117-webkit-takes-the-scroll-later-and-only-on-a-scrollable-axis.md) — 坑 70、71 的四个数在 iOS WKWebView 上一个都不成立：`touchmove` 从第一个像素就发、约 16px 才判滚动（其间每个 move 都 cancelable）、只 prevent 第一个 move 就够、而且只抢它真能滚的那个轴；3px 和「每个 move 都 prevent」是两个引擎的交集，不用改
+- [128-react-onwheel-is-passive](./128-react-onwheel-is-passive.md) — React 18 把 `wheel`/`touchstart`/`touchmove` 按 passive 挂在 root 上，`onWheel` 里的 `preventDefault()` 被忽略，自己的缩放和浏览器的页面缩放同时跑；要手挂原生监听并显式 `{ passive: false }`
+- [129-wheel-delta-comes-in-three-units](./129-wheel-delta-comes-in-three-units.md) — `deltaY` 的单位由 `deltaMode` 说了算（像素/行/页），行模式一格约 3，只按像素累计的手势在那种引擎上要拨十几下才动一格；累加前先归一到像素
 
 ## 网络与 CSP
 
@@ -158,6 +161,7 @@
 - [93-a-select-trigger-is-as-wide-as-the-chosen-value](./93-a-select-trigger-is-as-wide-as-the-chosen-value.md) — 原生 `<select>` 按最宽的 option 定宽，Radix 的 trigger 只装选中那一行，换值就跳宽；把所有选项零高 `invisible` 叠进同一个 grid 单元格占住列宽
 - [95-button-swallows-the-ref](./95-button-swallows-the-ref.md) — shadcn 生成的是 React 19 风格的函数组件，React 18 下 `<Button ref>` 恒为 `null`，类型全绿、生产构建无警告；已全部改成 `forwardRef`，护栏是 `tests/ui/components/forward-ref-contract.test.ts`，一次 `shadcn add` 就会写回来
 - [103-anchored-overlay-paints-under-the-surface-that-opened-it](./103-anchored-overlay-paints-under-the-surface-that-opened-it.md) — 全屏设置页是 `z-[70]` 的不透明白底，锚定浮层停在生成的 `z-50`，下拉全部画在开它的页面底下；Select 开着时页面外一切 `pointer-events: none`，手指照样落在看不见的列表上，于是报成「点不动」。`elementFromPoint` 打得中而屏幕上没有 = 画的顺序不对。一条命名 z 阶梯收进 `ui/overlay.tsx` 的 `OVERLAY_Z`，锚定层排在整条阶梯之上
+- [130-an-arbitrary-font-size-brings-no-line-height](./130-an-arbitrary-font-size-brings-no-line-height.md) — `text-sm` 编出 `font-size` 加 `line-height` 两条，`text-[任意值]` 只有 `font-size`，行距悄悄退回继承值；补的那条要无单位，`leading-5` 这种 rem 值不跟着字号走
 
 ## AI 调用与上下文窗口
 
