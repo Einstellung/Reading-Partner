@@ -43,13 +43,22 @@ export function parseFeedbackLog(text: string): FeedbackEvent[] {
   return out;
 }
 
-export async function loadFeedback(): Promise<FeedbackEvent[]> {
+// The log as it stands on disk: "" when there is no file yet, and null when it
+// is there and could not be read. The two are not the same answer, and the
+// difference is the whole of appendFeedback's safety — see readGuardedJson in
+// platform/app/atomic-fs.ts, the JSON-shaped version of this distinction.
+async function readLogText(): Promise<string | null> {
   try {
-    if (!(await exists(FEEDBACK_FILE, { baseDir: BaseDirectory.AppData }))) return [];
-    return parseFeedbackLog(await readTextFile(FEEDBACK_FILE, { baseDir: BaseDirectory.AppData }));
-  } catch {
-    return [];
+    if (!(await exists(FEEDBACK_FILE, { baseDir: BaseDirectory.AppData }))) return "";
+    return await readTextFile(FEEDBACK_FILE, { baseDir: BaseDirectory.AppData });
+  } catch (e) {
+    console.warn(`failed to read ${FEEDBACK_FILE}`, e);
+    return null;
   }
+}
+
+export async function loadFeedback(): Promise<FeedbackEvent[]> {
+  return parseFeedbackLog((await readLogText()) ?? "");
 }
 
 // Append one event. Read-modify-write rather than a true append (plugin-fs has no
@@ -61,14 +70,17 @@ export async function appendFeedback(event: {
   category?: string;
 }): Promise<void> {
   const full: FeedbackEvent = { ts: Date.now(), ...event };
-  let prior = "";
-  try {
-    if (await exists(FEEDBACK_FILE, { baseDir: BaseDirectory.AppData })) {
-      prior = await readTextFile(FEEDBACK_FILE, { baseDir: BaseDirectory.AppData });
-    }
-  } catch {
-    prior = "";
-  }
+  const prior = await readLogText();
+  // A file that could not be read is not an empty one. This write replaces the
+  // whole file (plugin-fs has no append mode), so carrying on with "" would put
+  // this single line where the reader's whole attention log was, and sync does
+  // not put it back: the line merge is a union only when there is no base, and
+  // with one a line the base has and this device dropped is a delete that takes
+  // it off the other device too (platform/sync/merge/records.ts). Skipping one
+  // reaction is the smaller loss, and the next one writes again.
+  if (prior === null) return;
+  // Bad bytes are kept verbatim: a half-written line is one line parseFeedbackLog
+  // skips, not a reason to rewrite the file.
   const body = (prior && !prior.endsWith("\n") ? prior + "\n" : prior) + JSON.stringify(full) + "\n";
   await writeTextAtomic(FEEDBACK_FILE, body);
 }
