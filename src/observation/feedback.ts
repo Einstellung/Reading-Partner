@@ -1,7 +1,15 @@
 // Append-only feedback log (docs/16): every reaction the reader gives a briefing
 // item is one JSONL line. Future triage reads the tail so the profile learns
-// from behavior, not just the written profile. Synced between devices (append-
-// only, so a merge is a union). Persisted to AppData/info-feedback.jsonl.
+// from behavior, not just the written profile. Persisted to
+// AppData/info-feedback.jsonl and synced between devices.
+//
+// Append-only is the format, not the write: plugin-fs has no append mode, so
+// every reaction rewrites the whole file, and a rewrite standing in for a failed
+// read truncated the log to its one new line. Nor does the merge put the rest
+// back — it is a union only without a base, and with one, lines this device no
+// longer has are deletes (platform/sync/merge/records.ts). So readLogText
+// answers "" for a file that is not there and null for one that would not open,
+// and appendFeedback writes nothing on null.
 
 import {
   BaseDirectory,

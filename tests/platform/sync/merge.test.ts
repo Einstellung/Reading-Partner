@@ -250,6 +250,28 @@ test("the feedback log unions its lines and keeps the trailing newline", () => {
   expect(out.contested).toBe(false);
 });
 
+// The other half of that union, and the reason appendFeedback would rather skip
+// a reaction than write over a log it could not read (observation/feedback.ts):
+// the lines merge is a union only when there is no base. With one, lines this
+// device no longer has are deletes, and they come off the other device too.
+test("a feedback log that lost lines does not get them back from the other device", () => {
+  const line = (ts: number) => JSON.stringify({ ts, itemId: `i${ts}`, title: "t", action: "opened" });
+  const full = `${line(1)}\n${line(2)}\n${line(3)}\n`;
+  // The desk truncated its log to one new line; the iPad still has all three.
+  const out = merge("info-feedback.jsonl", bytes(full), bytes(`${line(4)}\n`), bytes(full));
+  expect(text(out.merged).trimEnd().split("\n")).toEqual([line(4)]);
+  // Recoverable from the journal, but gone from the file on both devices.
+  expect(out.dropped.map((d) => d.id)).toEqual([line(1), line(2), line(3)]);
+
+  // Without a base the same pair is a union: nothing here can be told apart from
+  // an addition, so nothing is removed.
+  const noBase = merge("info-feedback.jsonl", null, bytes(`${line(4)}\n`), bytes(full));
+  expect(text(noBase.merged).trimEnd().split("\n").sort()).toEqual(
+    [line(1), line(2), line(3), line(4)].sort(),
+  );
+  expect(noBase.dropped).toEqual([]);
+});
+
 test("the case this exists for: a week of marks on each device, and both survive", () => {
   const base = json([ann("a", "1"), ann("b", "2"), ann("c", "3")]);
   const local = json([ann("a", "1"), ann("b", "2"), ann("c", "3"), ann("d", "desk"), ann("e", "desk")]);
