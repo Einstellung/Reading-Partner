@@ -31,7 +31,7 @@ import {
 } from "./guess";
 import {
   loadGuessState,
-  loadProfile,
+  loadProfileForWrite,
   saveGuessState,
   saveProfile,
 } from "./profile";
@@ -464,7 +464,7 @@ async function runGuessPass(trigger: DistillTrigger): Promise<void> {
     const result = await runProfileGuessPass(
       { topics, feedback: await loadFeedback() },
       {
-        profile: { load: loadProfile, save: saveProfile },
+        profile: { load: loadProfileForWrite, save: saveProfile },
         run: runSubagentTurnLive,
         model: {
           providerId: model.providerId,
@@ -474,6 +474,13 @@ async function runGuessPass(trigger: DistillTrigger): Promise<void> {
       },
     );
     if (!result.ran) {
+      // A profile that could not be read is the one skip whose stamp stays put:
+      // it is an IO failure, it may well be gone by the next tick, and looking
+      // again costs one file read and no model call.
+      if (result.skipped === "unreadable-profile") {
+        logEvent(AI_EVENT_TOPIC, "guess-failed", { trigger, outcome: result.skipped });
+        return;
+      }
       // Nothing was sent to a model, so the look itself counts as the pass: the
       // stamp moves, or a profile whose markers do not parse would be looked at
       // again every half hour for as long as it stays that way.
@@ -488,12 +495,16 @@ async function runGuessPass(trigger: DistillTrigger): Promise<void> {
       logEvent(AI_EVENT_TOPIC, "guess-failed", { trigger, outcome: result.outcome });
       return;
     }
+    // The model was called, so the stamp moves whatever came of it — including a
+    // refused write. Retrying costs another call, and the document that refused
+    // it will still be that document in half an hour.
     await saveGuessState(stamp);
     logEvent(AI_EVENT_TOPIC, "guess-run", {
       trigger,
       wrote: result.wrote,
       guesses: result.guesses,
       dropped: result.dropped,
+      refused: result.refused ?? null,
     });
   } catch (e) {
     if (e instanceof StoppedError) return;
