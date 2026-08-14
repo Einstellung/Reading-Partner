@@ -39,8 +39,32 @@ export function CardLabel({ children }: { children: React.ReactNode }) {
   return <div className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[#999]">{children}</div>;
 }
 
+// What a card body shows while its answer is still being read off disk.
+//
+// Two bars where the sentence goes, and nothing where the button goes. Every
+// settled state of these cards opens with a line or two of prose, so the bars
+// are the shape the answer will take whichever one it turns out to be; the
+// button is the part that differs between them, and a button that appears and
+// then changes its label is one the user can press on the way past and be sent
+// somewhere they did not ask for — Settings, when a provider was configured all
+// along. The card's own min-height already reserves the row the button lands
+// in, so nothing below it moves when it arrives.
+//
+// Not animated. On a machine that has the files this is on screen for a fraction
+// of a second, and a pulse that starts and is immediately replaced is the flicker
+// it was meant to prevent.
+export function CardBodyPlaceholder() {
+  return (
+    <div className="flex flex-1 flex-col" data-placeholder="card-body" aria-hidden="true">
+      <div className="h-3 w-4/5 rounded bg-[#f1f1f1]" />
+      <div className="mt-2.5 h-3 w-3/5 rounded bg-[#f1f1f1]" />
+    </div>
+  );
+}
+
 export function BriefingCardBody({
   snap,
+  ready,
   configured,
   hasSources,
   collecting,
@@ -52,6 +76,10 @@ export function BriefingCardBody({
   onStartSubscribing,
 }: {
   snap: InfoSnapshot | null;
+  // Whether the shell's start-up reads have answered (useShellBootstrap). Until
+  // they have, `configured` is false and `collecting` is false because nothing
+  // has been read, not because the answers are no.
+  ready: boolean;
   configured: boolean;
   // Whether the user has any source configured; null while loading.
   hasSources: boolean | null;
@@ -160,10 +188,13 @@ export function BriefingCardBody({
     );
   }
 
-  // Still resolving whether any source exists: hold the CTA to avoid a flash
-  // between "Start subscribing" and "Generate briefing".
-  if (configured && hasSources === null) {
-    return <div className="flex-1" />;
+  // Nothing below this point can be said yet: which sentence and which button
+  // belong here are decided by settings.json, the provider list, device.json and
+  // the source list, and until those have been read the values standing in for
+  // them are defaults. A briefing already in hand is drawn above regardless —
+  // that one is a fact, not a default.
+  if (!ready || (configured && hasSources === null)) {
+    return <CardBodyPlaceholder />;
   }
 
   // No sources yet (and provider configured): the onboarding entry point — on

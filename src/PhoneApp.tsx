@@ -68,7 +68,9 @@ export default function PhoneApp() {
   const [stack, setStack] = useState<NavStack>(INITIAL_STACK);
   // The kept articles (docs/21). Fixed to the Brief topic: the phone has no
   // other place to file one from. The one being read is a stack entry.
-  const [savedArticles, setSavedArticles] = useState<SavedArticle[]>([]);
+  // Null until saved-articles.json has been read: "Nothing kept yet" is a claim
+  // about a file nobody has opened.
+  const [savedArticles, setSavedArticles] = useState<SavedArticle[] | null>(null);
   const { toasts, push: pushToast, dismiss: dismissToast } = useToasts();
 
   // The info call InfoHome draws over its screens. It is not a stack entry, so
@@ -94,6 +96,7 @@ export default function PhoneApp() {
     device,
     applyDevice,
     configured,
+    ready: bootstrapped,
     syncReport,
   } = useShellBootstrap({ settingsOpen: showSettings, pushToast });
 
@@ -189,6 +192,7 @@ export default function PhoneApp() {
             onNavigate={onNavigate}
             role={device?.role ?? null}
             configured={configured}
+            launchReady={bootstrapped}
             onOpenSettings={openSettings}
             onTopicsChanged={refreshSavedArticles}
             onOverlayChange={onOverlayChange}
@@ -206,7 +210,7 @@ export default function PhoneApp() {
             renderLaunch={(launch) => (
               <PhoneHome
                 launch={launch}
-                savedCount={savedArticles.length}
+                savedCount={savedArticles?.length ?? null}
                 onOpenSaved={() => setStack((s) => push(s, screen("saved")))}
                 settingsAlert={syncReport.alert !== "none"}
               />
@@ -215,7 +219,7 @@ export default function PhoneApp() {
 
           {base.kind === "saved" && (
             <SavedList
-              articles={savedArticles}
+              articles={savedArticles ?? []}
               onOpen={(article) => setStack((s) => push(s, { kind: "savedArticle", article }))}
               onBack={goBack}
             />

@@ -3,7 +3,7 @@
 // open books at all, so an entry point to them would only lead to a dead end.
 
 import SettingsButton from "../common/SettingsButton";
-import { BriefingCardBody, Card, CardLabel } from "../info/HomeCard";
+import { BriefingCardBody, Card, CardBodyPlaceholder, CardLabel } from "../info/HomeCard";
 import type { LaunchProps } from "../info/InfoHome";
 
 export default function PhoneHome({
@@ -13,7 +13,8 @@ export default function PhoneHome({
   settingsAlert,
 }: {
   launch: LaunchProps;
-  savedCount: number;
+  // How many articles are kept, or null while saved-articles.json is being read.
+  savedCount: number | null;
   onOpenSaved: () => void;
   settingsAlert: boolean;
 }) {
@@ -32,6 +33,7 @@ export default function PhoneHome({
           <CardLabel>Today's briefing</CardLabel>
           <BriefingCardBody
             snap={launch.snap}
+            ready={launch.ready}
             configured={launch.configured}
             hasSources={launch.hasSources}
             collecting={launch.collecting}
@@ -46,7 +48,9 @@ export default function PhoneHome({
 
         <Card>
           <CardLabel>Saved</CardLabel>
-          {savedCount > 0 ? (
+          {savedCount === null ? (
+            <CardBodyPlaceholder />
+          ) : savedCount > 0 ? (
             <button
               className="flex flex-1 flex-col justify-between text-left coarse:min-h-[44px]"
               onClick={onOpenSaved}
