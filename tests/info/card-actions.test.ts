@@ -132,6 +132,26 @@ test("the applied card offers a re-triage only where one can be run", async () =
   expect(onCollector).toEqual({ ok: true, canRetriage: true });
 });
 
+// The other way an Apply can lose the document: the read fails, the store hands
+// back "" instead of saying so, and the splice writes a profile made of nothing
+// but the card's declared half over one that is still on disk.
+test("a profile that could not be read leaves the card drafted and writes nothing", async () => {
+  const written: string[] = [];
+  const store: ProfileStore = {
+    load: async () => {
+      throw new Error("EIO: user-profile.md");
+    },
+    save: async (t: string) => {
+      written.push(t);
+    },
+  };
+  expect(await applyProfileUpdate("# Me\n\nNew.", { collecting: true, hasBriefing: true }, store)).toEqual({
+    ok: false,
+    canRetriage: false,
+  });
+  expect(written).toEqual([]);
+});
+
 test("a profile write that failed leaves the card drafted", async () => {
   const store: ProfileStore = {
     load: async () => profileOnDisk("# Me"),

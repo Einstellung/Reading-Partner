@@ -497,6 +497,166 @@ test("a call that failed is a failed pass, and the profile is untouched", async 
   expect(state.text).toBe(before);
 });
 
+// --- the window between the read and the write -------------------------------
+//
+// The pass reads the profile, calls a sub-agent, and writes. The call takes tens
+// of seconds to minutes and the reader is awake for them: the Apply button on a
+// profile card writes the declared half in exactly that window
+// (info/companion/card-actions.ts). What the guesses are spliced onto has to be
+// the document as it is when the write happens, not the copy the pass took
+// before the call.
+
+const APPLIED = "Interests: robotics, macro, grid storage.\nTaste: allergic to vendor PR.\n";
+
+// A store whose load can be scripted per call: `undefined` in `loads` means "the
+// text as it stands", a string swaps the file underneath, and an Error throws.
+function scriptedProfile(initial: string, loads: (string | Error | undefined)[] = []) {
+  const state = { text: initial, saves: 0, reads: 0 };
+  return {
+    state,
+    store: {
+      load: async () => {
+        const scripted = loads[state.reads++];
+        if (scripted instanceof Error) throw scripted;
+        if (typeof scripted === "string") state.text = scripted;
+        return state.text;
+      },
+      save: async (text: string) => {
+        state.text = text;
+        state.saves++;
+      },
+    },
+  };
+}
+
+test("a card applied while the sub-agent is thinking is not rolled back by the splice", async () => {
+  const { state, store } = scriptedProfile(composeProfile(splitProfile(DECLARED), [guess()]));
+  const runner = loopRunner([
+    { calls: [setCall([{ guess: "Wants a read on the period", basis: "Every mark in trends.pdf is on capital flows" }])] },
+    { text: "done" },
+  ]);
+  // The reader presses Apply on a profile card while the call is in flight.
+  let applied = false;
+  const run: SubagentTurnFn = (request) => {
+    if (!applied) {
+      applied = true;
+      state.text = replaceDeclared(state.text, APPLIED);
+    }
+    return runner.run(request);
+  };
+
+  const result = await runProfileGuessPass(EVIDENCE, { profile: store, run, now: () => AUG_10 });
+
+  expect(result).toMatchObject({ ran: true, ok: true, wrote: true, guesses: 1 });
+  const split = splitProfile(state.text);
+  // On disk: the sentence the reader applied, not the one it replaced.
+  expect(declaredText(split).trim()).toBe(APPLIED.trim());
+  expect(state.text).toContain("grid storage");
+  expect(state.text).not.toContain("Interests: robotics, macro.");
+  // And the pass's own half of the document still landed.
+  expect(split.guesses.map((g) => g.text)).toEqual(["Wants a read on the period"]);
+});
+
+test("a guess set that arrived while the call was out keeps its own first-seen dates", async () => {
+  const before = composeProfile(splitProfile(DECLARED), [guess({ since: "2026-08-09" })]);
+  // A sync pull lands the same guess with an older date while the model runs.
+  const pulled = composeProfile(splitProfile(DECLARED), [guess({ since: "2026-06-01" })]);
+  const { state, store } = scriptedProfile(before, [undefined, pulled]);
+  const result = await runProfileGuessPass(EVIDENCE, {
+    profile: store,
+    run: loopRunner([
+      { calls: [setCall([{ guess: guess().text, basis: guess().basis }])] },
+      { text: "done" },
+    ]).run,
+    now: () => AUG_10,
+  });
+
+  expect(result).toMatchObject({ ran: true, ok: true });
+  // Dated from the entry on file, not from the copy the pass was holding.
+  expect(splitProfile(state.text).guesses[0].since).toBe("2026-06-01");
+  expect(state.saves).toBe(0);
+});
+
+test("a profile that could not be read never reaches the model and is never written", async () => {
+  const { state, store } = scriptedProfile(`${DECLARED}\nBackground: builds robots for a living.\n`, [
+    new Error("EIO: could not read user-profile.md"),
+  ]);
+  const before = state.text;
+  const runner = loopRunner([{ calls: [setCall([{ guess: "g", basis: "b" }])] }, { text: "done" }]);
+
+  const result = await runProfileGuessPass(EVIDENCE, { profile: store, run: runner.run, now: () => AUG_10 });
+
+  // An unreadable file must not read as an empty one: that is how a whole
+  // declared profile becomes a document holding nothing but a guess section.
+  expect(result).toEqual({ ran: false, skipped: "unreadable-profile" });
+  expect(runner.requests).toHaveLength(0);
+  expect(state.saves).toBe(0);
+  expect(state.text).toBe(before);
+});
+
+test("a re-read that fails refuses the write and leaves the file byte for byte", async () => {
+  const before = composeProfile(splitProfile(DECLARED), [guess()]);
+  const { state, store } = scriptedProfile(before, [undefined, new Error("EIO")]);
+  const result = await runProfileGuessPass(EVIDENCE, {
+    profile: store,
+    run: loopRunner([
+      { calls: [setCall([{ guess: "Newly noticed", basis: "Opened three capex pieces in 2026-08" }])] },
+      { text: "done" },
+    ]).run,
+    now: () => AUG_10,
+  });
+
+  expect(result).toMatchObject({ ran: true, ok: true, wrote: false, refused: "unreadable-profile" });
+  expect(state.saves).toBe(0);
+  expect(state.text).toBe(before);
+});
+
+test("a re-read whose markers no longer parse refuses the write", async () => {
+  const before = composeProfile(splitProfile(DECLARED), [guess()]);
+  // Half a section: a hand edit, or two copies merged by a pull. The boundary
+  // between the reader's half and the AI's can no longer be located, so there is
+  // nowhere to splice that does not risk eating the reader's words.
+  const mangled = `${DECLARED}\n${GUESS_BEGIN}\n- x | basis: y | since: 2026-08-01\n`;
+  const { state, store } = scriptedProfile(before, [undefined, mangled]);
+  const result = await runProfileGuessPass(EVIDENCE, {
+    profile: store,
+    run: loopRunner([
+      { calls: [setCall([{ guess: "Newly noticed", basis: "Opened three capex pieces in 2026-08" }])] },
+      { text: "done" },
+    ]).run,
+    now: () => AUG_10,
+  });
+
+  expect(result).toMatchObject({ ran: true, ok: true, wrote: false, refused: "unparseable-profile" });
+  expect(state.saves).toBe(0);
+  expect(state.text).toBe(mangled);
+});
+
+test("the section is cut to fit the declared half as it stands after the call, not before", async () => {
+  const grown = "Interests: " + "robotics and macro and grid storage, ".repeat(32);
+  const { state, store } = scriptedProfile(DECLARED, [undefined, grown]);
+  const many = Array.from({ length: 8 }, (_, i) => ({
+    guess: `Guess number ${i} about how this reader picks what to read next`,
+    basis: `Marked passages in trends.pdf, 2026-08, note ${i}`,
+  }));
+  const result = await runProfileGuessPass(EVIDENCE, {
+    profile: store,
+    run: loopRunner([{ calls: [setCall(many)] }, { text: "done" }]).run,
+    now: () => AUG_10,
+  });
+
+  // Two fit under what is left of the budget; against the short copy the pass
+  // was holding, four would have, and the document would have overrun.
+  expect(result).toMatchObject({ ran: true, ok: true, wrote: true, guesses: 2 });
+  expect(state.text.startsWith(grown)).toBe(true);
+  expect(guessPromptBlock(splitProfile(state.text).guesses).length).toBeLessThanOrEqual(
+    PROFILE_CHARS - grown.length,
+  );
+  expect(
+    normalizeGuesses(many, { today: "2026-08-10", declaredChars: DECLARED.length }),
+  ).toHaveLength(4);
+});
+
 // --- the prompts ---
 
 function promptInput(over: Partial<ProfileGuessInput> = {}): ProfileGuessInput {
