@@ -88,7 +88,7 @@ export default function CallView({
 
 	return (
 		<div
-			className="relative flex h-full w-full flex-col bg-white"
+			className="relative flex h-full w-full flex-col bg-chat-surface [--chat-bubble-bg:var(--chat-bubble)] [--chat-code-bg:var(--chat-code)]"
 			style={{ paddingBottom: keyboardInset || undefined }}
 		>
 			<div className="absolute left-4 top-4 z-10 flex items-center gap-1">

@@ -117,7 +117,9 @@ const MD = [
 	// Inline code.
 	'[&_code]:rounded [&_code]:bg-black/[0.06] [&_code]:px-[0.25em] [&_code]:py-[0.125em] [&_code]:font-mono [&_code]:text-[0.9em]',
 	// Code blocks — own the background so the highlight theme only paints tokens.
-	'[&_pre]:my-[0.5em] [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-black/10 [&_pre]:bg-neutral-50 [&_pre]:p-[0.75em] [&_pre]:leading-normal',
+	// The fill is whatever surface encloses this renderer (--chat-code-bg); the
+	// reader panels set nothing and get the neutral grey.
+	'[&_pre]:my-[0.5em] [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-black/10 [&_pre]:bg-[var(--chat-code-bg,var(--color-neutral-50))] [&_pre]:p-[0.75em] [&_pre]:leading-normal',
 	'[&_pre_code]:!bg-transparent [&_pre_code]:!p-0 [&_pre_code]:font-mono [&_pre_code]:text-[0.85em]',
 	// Blockquote.
 	'[&_blockquote]:my-[0.5em] [&_blockquote]:border-l-2 [&_blockquote]:border-black/15 [&_blockquote]:pl-[0.75em] [&_blockquote]:text-neutral-500',
