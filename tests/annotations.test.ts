@@ -30,6 +30,7 @@ let tasks: Task[] = [];
 let exitFlush: (() => void) | null = null;
 let errors: unknown[] = [];
 let writeFails = false;
+let reads = 0;
 
 let store: AnnotationStore;
 
@@ -40,9 +41,13 @@ beforeEach(() => {
   clock = 0;
   errors = [];
   writeFails = false;
+  reads = 0;
   exitFlush = null;
   store = createAnnotationStore({
-    read: async (file) => files.get(file) ?? null,
+    read: async (file) => {
+      reads++;
+      return files.get(file) ?? null;
+    },
     // A real write is an IPC round-trip, so the file cannot change before the
     // first await; landing it synchronously would let a flush that only starts
     // the write pass for one that waited.
@@ -161,13 +166,44 @@ test("a failed write is reported rather than swallowed", async () => {
 test("peeking at a book does not seed its cache", async () => {
   files.set("annotations-book7.json", JSON.stringify([mark("on-disk")]));
   expect((await store.peek("book7")).map((a) => a.id)).toEqual(["on-disk"]);
+  const afterPeek = reads;
 
-  // Nothing was cached, so the store's idea of book7 is still empty and a write
-  // against it says so. That emptiness is the point: a sweep that had seeded the
+  // Nothing was cached, so anything that has to know the book's marks has to go
+  // and read them. That emptiness is the point: a sweep that had seeded the
   // cache would let the next save flush a disk copy over marks made since.
   store.remove("book7", ["whatever"]);
   await advance(500);
-  expect(idsIn("annotations-book7.json")).toEqual([]);
+  expect(reads).toBe(afterPeek + 1);
+  expect(idsIn("annotations-book7.json")).toEqual(["on-disk"]);
+});
+
+// The same shape that emptied a thread file, on the store that holds the
+// highlights: after a pull the cache is not the record of what this book has,
+// and a delete that recomputes from nothing writes nothing over everything.
+test("a delete on a book whose marks are not in memory reads the file first", async () => {
+  files.set("annotations-book9.json", JSON.stringify([mark("a"), mark("b"), mark("c")]));
+
+  store.remove("book9", ["b"]);
+  // The file has to come back before the delete can be worked out at all.
+  await settle();
+  await advance(500);
+
+  expect(idsIn("annotations-book9.json")).toEqual(["a", "c"]);
+});
+
+test("a delete right after a sync pull keeps the marks the pull brought", async () => {
+  files.set("annotations-book10.json", JSON.stringify([mark("mine")]));
+  await store.load("book10");
+
+  // The other device's copy arrives and the pull route hands it to the store.
+  files.set("annotations-book10.json", JSON.stringify([mark("mine"), mark("theirs")]));
+  store.drop("book10");
+  await settle();
+
+  store.remove("book10", ["mine"]);
+  await advance(500);
+
+  expect(idsIn("annotations-book10.json")).toEqual(["theirs"]);
 });
 
 test("an unreadable file throws out of load and reads as no marks out of peek", async () => {

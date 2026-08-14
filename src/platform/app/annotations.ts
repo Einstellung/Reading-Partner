@@ -67,8 +67,16 @@ export function createAnnotationStore(io: AnnotationIo): AnnotationStore {
   // caller re-supplying everything and both paths share one debounced writer.
   const cache = new Map<string, Annotation[]>();
 
+  // A key the cache holds nothing for is not written. `?? []` here would replace
+  // a book's marks with an empty list whenever the cache went away between the
+  // change and the write — the same hole threads.ts lost a conversation to.
+  // Nothing to say about a file is not the same as "this book has no marks".
   const writer: DebouncedWriter<string> = createDebouncedWriter<string>({
-    write: (key) => io.write(fileFor(key), JSON.stringify(cache.get(key) ?? [], null, 2)),
+    write: async (key) => {
+      const held = cache.get(key);
+      if (!held) return;
+      await io.write(fileFor(key), JSON.stringify(held, null, 2));
+    },
     debounceMs: SAVE_DEBOUNCE,
     onError: io.onError,
     timer: io.timer,
@@ -111,12 +119,11 @@ export function createAnnotationStore(io: AnnotationIo): AnnotationStore {
   return {
     load,
     peek,
-    // Drop a book's cached annotations so the next load re-reads from disk. Used
-    // after sync pulls a newer annotations-<bookId>.json (src/sync): the cache is
-    // written back in full on the next mark, so a stale one would erase whatever
-    // the other device added.
+    // Sync pulled a newer annotations-<bookId>.json (src/sync). The cache is
+    // written back in full on the next mark, so it has to stop being the copy
+    // from before the pull.
     //
-    // A book with edits still waiting on the debounce is left alone — dropping it
+    // A book with edits still waiting on the debounce is left alone — re-reading
     // would throw away the mark the user just made, and the pull is picked up on
     // reopen instead. Same rule as dropThreadCache. Note this only settles the
     // on-disk copy: a book that is open keeps the reader's own annotation set,
@@ -124,15 +131,31 @@ export function createAnnotationStore(io: AnnotationIo): AnnotationStore {
     // reopen.
     drop: (bookId) => {
       if (writer.isPending(bookId)) return;
-      cache.delete(bookId);
+      // Re-read rather than forget. An absent entry is indistinguishable from a
+      // book with no marks, and every path that recomputes from the cache — a
+      // delete above all — then computes from nothing and writes that.
+      void load(bookId).catch((e: unknown) => io.onError?.(e));
     },
     save: (bookId, annotations) => {
       cache.set(bookId, annotations.map((a) => ({ ...a })));
       writer.schedule(bookId);
     },
     remove: (bookId, ids) => {
-      cache.set(bookId, (cache.get(bookId) ?? []).filter((a) => !ids.includes(a.id)));
-      writer.schedule(bookId);
+      const held = cache.get(bookId);
+      if (held) {
+        cache.set(bookId, held.filter((a) => !ids.includes(a.id)));
+        writer.schedule(bookId);
+        return;
+      }
+      // Nothing held: the file is the only record of what the other marks are,
+      // so it is read before one of them is taken out. Filtering an empty list
+      // and saving the result is how a delete erases a book.
+      void load(bookId)
+        .then((current) => {
+          cache.set(bookId, current.filter((a) => !ids.includes(a.id)));
+          writer.schedule(bookId);
+        })
+        .catch((e: unknown) => io.onError?.(e));
     },
     flush: writer.flush,
   };
