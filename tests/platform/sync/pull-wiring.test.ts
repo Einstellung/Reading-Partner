@@ -51,6 +51,7 @@ function recordingRoute() {
   const route = bookCachePullRoute({
     threads: (bookId) => dropped.push(`threads:${bookId}`),
     annotations: (bookId) => dropped.push(`annotations:${bookId}`),
+    viewStates: () => dropped.push("view-states"),
   });
   return { dropped, route };
 }
@@ -66,6 +67,7 @@ test("a pull of a book's threads or marks drops that book's cache", () => {
     "threads-abc123.json",
     "annotations-abc123.json",
     "threads-talk-t1.json",
+    "reading-state.json",
     "library.json",
   ]);
 
@@ -73,11 +75,12 @@ test("a pull of a book's threads or marks drops that book's cache", () => {
     "threads:abc123",
     "annotations:abc123",
     "threads:talk-t1",
+    "view-states",
   ]);
   off();
 
   dispatchPull(["threads-abc123.json"]);
-  expect(dropped.length).toBe(3);
+  expect(dropped.length).toBe(4);
 });
 
 // The registration itself, which is a bare statement at the bottom of

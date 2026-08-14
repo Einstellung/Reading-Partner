@@ -2,12 +2,7 @@
 // several PDFs read against one question (docs/01 §1). Topics store only path
 // references; files are never copied. Persisted to AppData/topics.json.
 
-import {
-  BaseDirectory,
-  exists,
-  readTextFile,
-} from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "./atomic-fs";
+import { readGuardedJson, writeTextAtomic } from "./atomic-fs";
 import { basename, decodeLegacyName, normalizeFilePath } from "./path";
 
 // Exported so the shelf's pull route can name it once (reading/pull-routes.ts).
@@ -83,38 +78,77 @@ export function healTopics(topics: Topic[]): Topic[] {
   return changed ? healed : topics;
 }
 
-// Missing/corrupt file reads as an empty library; genuine write failures
-// propagate so the caller can warn (never silently lose a topic).
-async function read(): Promise<Store> {
-  try {
-    if (!(await exists(TOPICS_FILE, { baseDir: BaseDirectory.AppData }))) {
-      return { topics: [] };
-    }
-    const parsed = JSON.parse(
-      await readTextFile(TOPICS_FILE, { baseDir: BaseDirectory.AppData }),
-    ) as Store;
-    return Array.isArray(parsed.topics) ? parsed : { topics: [] };
-  } catch {
-    return { topics: [] };
-  }
+// The topic library read, plus whether it is safe to write the result back.
+//
+// Nothing rebuilds a topic. The PDFs are still on disk, but which question they
+// were read against, when they were added and when they were last opened live
+// only here — and lastOpenedAt is the only source "Continue reading" has. So an
+// unreadable file must never turn into "one topic, the one being edited": the
+// shelf is one sync unit, so local-changed against remote-unchanged is
+// classified an upload rather than a merge (sync/reconcile.ts), the one-topic
+// file goes to Drive whole, and nothing is journalled to sync-trash.jsonl.
+//
+// Content that doesn't parse is quarantined and a fresh library takes over; a
+// file that could not be read at all is left where it is and writing is refused
+// until a later read succeeds.
+async function readStore(): Promise<{ store: Store; writable: boolean }> {
+  const read = await readGuardedJson<Store>(TOPICS_FILE, (raw) => {
+    const parsed = raw as Store | null;
+    return parsed && typeof parsed === "object" && Array.isArray(parsed.topics) ? parsed : null;
+  });
+  if (read.status === "ok") return { store: read.value, writable: true };
+  if (read.status === "missing") return { store: { topics: [] }, writable: true };
+  return { store: { topics: [] }, writable: read.savedAs !== null };
 }
 
 // Every read hands out repaired references, whether or not the file on disk has
 // been rewritten yet.
-async function load(): Promise<Store> {
-  const store = await read();
-  return { topics: healTopics(store.topics) };
+async function load(): Promise<{ store: Store; writable: boolean }> {
+  const { store, writable } = await readStore();
+  return { store: { topics: healTopics(store.topics) }, writable };
+}
+
+// What a mutator raises rather than writing its own copy of the library over a
+// file it could not read. The user has already been told which file it is and
+// where the bad bytes went (atomic-fs reports it); this is what stops the edit.
+function unreadable(): Error {
+  return new Error(`${TOPICS_FILE} could not be read; refusing to overwrite it`);
+}
+
+// Every mutator is load -> await -> save of the whole file, so two of them
+// overlapping read the same library twice and the second write drops the first
+// one's edit. The startup hash backfill does exactly that: it calls setFileHash
+// once per file across every topic with multi-second awaits in between, while
+// the user is on the shelf renaming and adding. So mutations run one at a time.
+//
+// This is one process's queue over its own module, not a lock on the file. The
+// sync engine writes topics.json through syncFs without taking anything, and
+// nothing here ever waits on the sync engine, so neither can be left waiting on
+// the other. A mutation overlapping a pull costs what it always did — one of
+// the two writes lands whole — which is what the shelf's pull route re-reads
+// for.
+let mutations: Promise<unknown> = Promise.resolve();
+
+function serialize<T>(run: () => Promise<T>): Promise<T> {
+  // Run whether the one before resolved or rejected, and keep the chain's own
+  // handle settled: a mutation that throws must neither block the next one nor
+  // surface here as an unhandled rejection. The caller still gets the rejection.
+  const next = mutations.then(run, run);
+  mutations = next.catch(() => {});
+  return next;
 }
 
 // Rewrite the file once with the repaired paths and names. A clean file writes
 // nothing, so this can run at every launch without producing a sync revision.
 // Returns whether it wrote.
-export async function repairTopicPaths(): Promise<boolean> {
-  const store = await read();
-  const healed = healTopics(store.topics);
-  if (healed === store.topics) return false;
-  await save({ topics: healed });
-  return true;
+export function repairTopicPaths(): Promise<boolean> {
+  return serialize(async () => {
+    const { store, writable } = await readStore();
+    const healed = healTopics(store.topics);
+    if (healed === store.topics || !writable) return false;
+    await save({ topics: healed });
+    return true;
+  });
 }
 
 async function save(store: Store): Promise<void> {
@@ -122,21 +156,24 @@ async function save(store: Store): Promise<void> {
 }
 
 export async function listTopics(): Promise<Topic[]> {
-  const { topics } = await load();
-  return topics.sort((a, b) => b.createdAt - a.createdAt);
+  const { store } = await load();
+  return store.topics.sort((a, b) => b.createdAt - a.createdAt);
 }
 
-export async function createTopic(name: string): Promise<Topic> {
-  const store = await load();
-  const topic: Topic = {
-    id: crypto.randomUUID(),
-    name: name.trim() || "Untitled",
-    createdAt: Date.now(),
-    files: [],
-  };
-  store.topics.push(topic);
-  await save(store);
-  return topic;
+export function createTopic(name: string): Promise<Topic> {
+  return serialize(async () => {
+    const { store, writable } = await load();
+    if (!writable) throw unreadable();
+    const topic: Topic = {
+      id: crypto.randomUUID(),
+      name: name.trim() || "Untitled",
+      createdAt: Date.now(),
+      files: [],
+    };
+    store.topics.push(topic);
+    await save(store);
+    return topic;
+  });
 }
 
 // Where saved info articles land until anything smarter exists (docs/21). A
@@ -147,72 +184,103 @@ export const BRIEF_TOPIC_ID = "brief";
 const BRIEF_TOPIC_NAME = "Brief";
 
 // The Brief topic, created on first use. Idempotent by id.
-export async function ensureBriefTopic(): Promise<Topic> {
-  const store = await load();
-  const found = store.topics.find((t) => t.id === BRIEF_TOPIC_ID);
-  if (found) return found;
-  const topic: Topic = {
-    id: BRIEF_TOPIC_ID,
-    name: BRIEF_TOPIC_NAME,
-    createdAt: Date.now(),
-    files: [],
-  };
-  store.topics.push(topic);
-  await save(store);
-  return topic;
+export function ensureBriefTopic(): Promise<Topic> {
+  return serialize(async () => {
+    const { store, writable } = await load();
+    // Before the lookup, not after: an unreadable file has no topics in it, so
+    // "not found" here would mean creating a second Brief over the first.
+    if (!writable) throw unreadable();
+    const found = store.topics.find((t) => t.id === BRIEF_TOPIC_ID);
+    if (found) return found;
+    const topic: Topic = {
+      id: BRIEF_TOPIC_ID,
+      name: BRIEF_TOPIC_NAME,
+      createdAt: Date.now(),
+      files: [],
+    };
+    store.topics.push(topic);
+    await save(store);
+    return topic;
+  });
 }
 
-export async function renameTopic(id: string, name: string): Promise<void> {
-  const store = await load();
-  const topic = store.topics.find((t) => t.id === id);
-  if (!topic) return;
-  topic.name = name.trim() || topic.name;
-  await save(store);
+export function renameTopic(id: string, name: string): Promise<void> {
+  return serialize(async () => {
+    const { store, writable } = await load();
+    if (!writable) throw unreadable();
+    const topic = store.topics.find((t) => t.id === id);
+    if (!topic) return;
+    topic.name = name.trim() || topic.name;
+    await save(store);
+  });
 }
 
-export async function deleteTopic(id: string): Promise<void> {
-  const store = await load();
-  store.topics = store.topics.filter((t) => t.id !== id);
-  await save(store);
+export function deleteTopic(id: string): Promise<void> {
+  return serialize(async () => {
+    const { store, writable } = await load();
+    // An unreadable file holds an unknown number of topics, so a delete over it
+    // deletes everything but this one rather than the one asked for.
+    if (!writable) throw unreadable();
+    store.topics = store.topics.filter((t) => t.id !== id);
+    await save(store);
+  });
 }
 
 // The one door a host path comes through: the file picker hands back a plain
 // path on desktop and a percent-encoded file URL on iOS, and everything stored
 // downstream (the library title, the notes state's book name) is derived from
 // what lands here. Normalize once, at the door.
-export async function addFileToTopic(id: string, rawPath: string): Promise<void> {
+export function addFileToTopic(id: string, rawPath: string): Promise<void> {
   const path = normalizeFilePath(rawPath);
-  const store = await load();
-  const topic = store.topics.find((t) => t.id === id);
-  if (!topic || topic.files.some((f) => f.path === path)) return;
-  topic.files.push({ path, name: basename(path), addedAt: Date.now() });
-  await save(store);
+  return serialize(async () => {
+    const { store, writable } = await load();
+    if (!writable) throw unreadable();
+    const topic = store.topics.find((t) => t.id === id);
+    if (!topic || topic.files.some((f) => f.path === path)) return;
+    topic.files.push({ path, name: basename(path), addedAt: Date.now() });
+    await save(store);
+  });
 }
 
-export async function removeFileFromTopic(id: string, path: string): Promise<void> {
-  const store = await load();
-  const topic = store.topics.find((t) => t.id === id);
-  if (!topic) return;
-  topic.files = topic.files.filter((f) => f.path !== path);
-  await save(store);
+export function removeFileFromTopic(id: string, path: string): Promise<void> {
+  return serialize(async () => {
+    const { store, writable } = await load();
+    if (!writable) throw unreadable();
+    const topic = store.topics.find((t) => t.id === id);
+    if (!topic) return;
+    topic.files = topic.files.filter((f) => f.path !== path);
+    await save(store);
+  });
 }
 
 // Record a file's book id (content hash) once known. Matched by path within the
 // topic; a no-op if already set to the same hash.
-export async function setFileHash(id: string, path: string, hash: string): Promise<void> {
-  const store = await load();
-  const file = store.topics.find((t) => t.id === id)?.files.find((f) => f.path === path);
-  if (!file || file.hash === hash) return;
-  file.hash = hash;
-  await save(store);
+//
+// This one and markOpened below are backfills that ride along with opening a
+// book, so an unreadable file makes them do nothing rather than raise: the book
+// still opens, and the id is written the next time it is opened after a read
+// that worked. Raising here would tell the user the file they are looking at
+// could not be opened (App.tsx's openFile catches around both).
+export function setFileHash(id: string, path: string, hash: string): Promise<void> {
+  return serialize(async () => {
+    const { store, writable } = await load();
+    if (!writable) return;
+    const file = store.topics.find((t) => t.id === id)?.files.find((f) => f.path === path);
+    if (!file || file.hash === hash) return;
+    file.hash = hash;
+    await save(store);
+  });
 }
 
-export async function markOpened(id: string, path: string): Promise<void> {
-  const store = await load();
-  const file = store.topics.find((t) => t.id === id)?.files.find((f) => f.path === path);
-  if (!file) return;
-  file.lastOpenedAt = Date.now();
-  await save(store);
+export function markOpened(id: string, path: string): Promise<void> {
+  return serialize(async () => {
+    const { store, writable } = await load();
+    if (!writable) return;
+    const file = store.topics.find((t) => t.id === id)?.files.find((f) => f.path === path);
+    if (!file) return;
+    file.lastOpenedAt = Date.now();
+    await save(store);
+  });
 }
 
 // Most-recently-opened first (falling back to when it was added).
