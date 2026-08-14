@@ -29,10 +29,8 @@ import {
   type Topic,
 } from "./platform/app/topics";
 import {
-  createBookThread,
   createThread,
   deleteThread,
-  getBookThread,
   getThread,
   type ThreadMessage,
 } from "./platform/app/threads";
@@ -70,6 +68,7 @@ import ReadingPipCard from "./ui/components/chat/ReadingPipCard";
 import ChatPipCard from "./ui/components/chat/ChatPipCard";
 import SettingsView from "./ui/components/SettingsView";
 import type { CallRow } from "./reading/call-state";
+import { resolveBookThread } from "./reading/session/book-thread";
 import { closeBook } from "./reading/session/close-book";
 import { useCall } from "./reading/session/use-call";
 import { openBook } from "./reading/session/open-book";
@@ -953,22 +952,33 @@ export default function App() {
   // history on later presses (and after hangup), the way a mark hosts its
   // thread. It has no anchor, so it never joins the trace list; this button is
   // its only way back. Opens straight to the main call view, skipping the bubble.
+  //
+  // Which thread that is comes from the file, not from the cache: see
+  // reading/session/book-thread.ts.
   const openBookThread = useCallback(() => {
     const bookId = bookIdRef.current;
     if (!bookId) return;
-    const thread = getBookThread(bookId) ?? createBookThread(bookId, crypto.randomUUID());
-    setPopup(null);
-    openThreadCall(
-      {
-        threadId: thread.id,
-        annotationId: "",
-        isBook: true,
-        view: "chat-main",
-        anchor: { x: 0, y: 0 },
-      },
-      thread.messages,
-    );
-  }, [openThreadCall]);
+    void (async () => {
+      const resolved = await resolveBookThread(bookId, () => bookIdRef.current !== bookId);
+      if (resolved.status === "unreadable") {
+        pushToast("warn", "Saved AI conversations could not be loaded");
+        return;
+      }
+      if (resolved.status === "cancelled") return;
+      const { thread } = resolved;
+      setPopup(null);
+      openThreadCall(
+        {
+          threadId: thread.id,
+          annotationId: "",
+          isBook: true,
+          view: "chat-main",
+          anchor: { x: 0, y: 0 },
+        },
+        thread.messages,
+      );
+    })();
+  }, [openThreadCall, pushToast]);
 
   // Jump the reading back to the thread's mark (from the reading corner card).
   // The book-level thread has no mark, so there is nothing to jump to.
