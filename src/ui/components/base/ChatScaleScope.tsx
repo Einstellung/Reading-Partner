@@ -4,7 +4,7 @@
 // needs no branch of its own.
 
 import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
-import { accumulateWheel, shiftChatScale, stepChatScale } from './chat-scale';
+import { accumulateWheel, CHAT_SCALE_DEFAULT, shiftChatScale, stepChatScale } from './chat-scale';
 import { currentChatScale, setChatScale, useChatScale } from './useChatScale';
 
 // Ctrl/Cmd with the zoom keys, bound once however many scopes are mounted: two
@@ -22,7 +22,7 @@ function onZoomKey(e: KeyboardEvent): void {
 		setChatScale(stepChatScale(currentChatScale(), -1));
 	} else if (e.key === '0') {
 		e.preventDefault();
-		setChatScale(1);
+		setChatScale(CHAT_SCALE_DEFAULT);
 	}
 }
 
@@ -55,7 +55,7 @@ export default function ChatScaleScope({
 		const onWheel = (e: WheelEvent) => {
 			if (!e.ctrlKey && !e.metaKey) return;
 			e.preventDefault();
-			const { acc, steps } = accumulateWheel(wheelAcc.current, e.deltaY);
+			const { acc, steps } = accumulateWheel(wheelAcc.current, e.deltaY, e.deltaMode);
 			wheelAcc.current = acc;
 			if (steps !== 0) setChatScale(shiftChatScale(currentChatScale(), steps));
 		};

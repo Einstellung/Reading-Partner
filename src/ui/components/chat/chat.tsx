@@ -4,8 +4,10 @@
 // `--chat-scale` (ui/components/base/chat-scale.ts) so the reader can zoom the
 // conversation. Nothing here imports that: the variable carries a default, so a
 // row rendered outside a ChatScaleScope is 1x. `sm` is the corner bubble, which
-// does not zoom. Line heights in the scaled sizes are unitless — a rem one is
-// measured against the root font size and would not follow.
+// does not zoom. The space around the type follows it: line heights in the
+// scaled sizes are unitless, and the gap between rows is an expression — a rem
+// value is measured against the root font size and would sit still while the
+// type around it grew.
 
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { HIT_44 } from '../base/buttons';
@@ -369,7 +371,14 @@ export function MessageList({
 	}, [messages.length]);
 
 	return (
-		<div className={'flex flex-col ' + (size === 'lg' ? 'gap-6 ' : 'gap-3 ') + 'overflow-y-auto ' + className}>
+		<div
+			className={
+				'flex flex-col ' +
+				(size === 'lg' ? 'gap-[calc(1.5rem*var(--chat-scale,1))] ' : 'gap-3 ') +
+				'overflow-y-auto ' +
+				className
+			}
+		>
 			{messages.map((m, i) => (
 				<MessageBubble key={i} message={m} size={size} surface={surface} onCardAction={onCardAction} />
 			))}

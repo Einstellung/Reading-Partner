@@ -13,6 +13,7 @@ import {
   clampChatScale,
   shiftChatScale,
   stepChatScale,
+  wheelDeltaPixels,
 } from "../../../src/ui/components/base/chat-scale";
 
 test("a value out of range is pulled to the nearest end", () => {
@@ -64,12 +65,12 @@ test("a pinch's fractional deltas are gathered, not spent one step each", () => 
   let taken = 0;
   // Six events of -6 is 36, one short of a notch: still nothing.
   for (let i = 0; i < 6; i += 1) {
-    const out = accumulateWheel(acc, -6);
+    const out = accumulateWheel(acc, -6, 0);
     acc = out.acc;
     taken += out.steps;
   }
   expect(taken).toBe(0);
-  const seventh = accumulateWheel(acc, -6);
+  const seventh = accumulateWheel(acc, -6, 0);
   expect(seventh.steps).toBe(1);
   // What was spent comes off the accumulator; the remainder counts toward the
   // next step, so a slow pinch keeps its pace instead of restarting each time.
@@ -77,26 +78,53 @@ test("a pinch's fractional deltas are gathered, not spent one step each", () => 
 });
 
 test("scrolling up zooms in and down zooms out", () => {
-  expect(accumulateWheel(0, -40).steps).toBe(1);
-  expect(accumulateWheel(0, 40).steps).toBe(-1);
+  expect(accumulateWheel(0, -40, 0).steps).toBe(1);
+  expect(accumulateWheel(0, 40, 0).steps).toBe(-1);
 });
 
 test("one big delta is worth every notch inside it", () => {
-  const out = accumulateWheel(0, -100);
+  const out = accumulateWheel(0, -100, 0);
   expect(out.steps).toBe(2);
   expect(out.acc).toBeCloseTo(-20, 10);
 });
 
 test("reversing drops what was gathered the other way", () => {
-  const gathered = accumulateWheel(0, -30);
+  const gathered = accumulateWheel(0, -30, 0);
   expect(gathered.acc).toBe(-30);
   // Without the reset the 30 already gathered would be one event away from
   // zooming in, and the first push of a zoom-out would zoom in instead.
-  const reversed = accumulateWheel(gathered.acc, 12);
+  const reversed = accumulateWheel(gathered.acc, 12, 0);
   expect(reversed.acc).toBe(12);
   expect(reversed.steps).toBe(0);
 });
 
 test("a delta that is not a number leaves the accumulator alone", () => {
-  expect(accumulateWheel(-12, NaN)).toEqual({ acc: -12, steps: 0 });
+  expect(accumulateWheel(-12, NaN, 0)).toEqual({ acc: -12, steps: 0 });
+});
+
+test("a sideways scroll leaves the accumulator alone rather than resetting it", () => {
+  // deltaY 0 has no sign, so the reversal test would match it and drop what a
+  // pinch had gathered one event before it completed a step.
+  expect(accumulateWheel(-36, 0, 0)).toEqual({ acc: -36, steps: 0 });
+});
+
+test("the same scroll is worth the same however the engine measures it", () => {
+  // Which of the three units an engine reports in is its own business, and this
+  // app runs on three engines. 240px, 15 lines and 0.3 of a page are the same
+  // gesture, and a mode left unconverted is a zoom that does not answer.
+  expect(accumulateWheel(0, -240, 0).steps).toBe(6);
+  expect(accumulateWheel(0, -15, 1).steps).toBe(6);
+  expect(accumulateWheel(0, -0.3, 2).steps).toBe(6);
+});
+
+test("one notch of a line-mode wheel is worth a step", () => {
+  // A line-mode engine reports about 3 per notch: read as pixels that is a
+  // fourteenth of a step, and the wheel would feel dead.
+  expect(accumulateWheel(0, -3, 1).steps).toBe(1);
+  expect(accumulateWheel(0, -3, 0).steps).toBe(0);
+});
+
+test("an unknown mode is read as pixels", () => {
+  expect(wheelDeltaPixels(-40, 0)).toBe(-40);
+  expect(wheelDeltaPixels(-40, 7)).toBe(-40);
 });

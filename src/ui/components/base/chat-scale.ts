@@ -11,10 +11,28 @@ export const CHAT_SCALE_MAX = 1.8;
 export const CHAT_SCALE_STEP = 0.1;
 export const CHAT_SCALE_DEFAULT = 1;
 
-// One notch of a mouse wheel, in the deltaY a browser reports for it. A pinch on
-// a trackpad arrives as ctrl+wheel too, but in fractional deltas dozens of
-// events long — one step per event would cross the whole range in a flick.
+// One notch of a mouse wheel, in pixels. A pinch on a trackpad arrives as
+// ctrl+wheel too, but in fractional deltas dozens of events long — one step per
+// event would cross the whole range in a flick.
 const WHEEL_NOTCH = 40;
+
+// What one unit of the two non-pixel wheel modes is worth. A wheel event reports
+// its delta in pixels, lines or pages (deltaMode 0, 1, 2) and which one is the
+// engine's business — this app runs on three of them. A line-mode engine reports
+// about 3 per notch, so unconverted it would take a dozen turns of the wheel to
+// reach the first step and the zoom would read as broken.
+const LINE_PX = 16;
+// A page is a viewport, which this file cannot measure and should not try to: it
+// holds no DOM. A scroll of about a screen is a large gesture on any screen.
+const PAGE_PX = 800;
+
+// A wheel delta in pixels, whatever unit the event came in. An unknown mode is
+// read as pixels, which is what every engine that has one reports.
+export function wheelDeltaPixels(deltaY: number, deltaMode: number): number {
+	if (deltaMode === 1) return deltaY * LINE_PX;
+	if (deltaMode === 2) return deltaY * PAGE_PX;
+	return deltaY;
+}
 
 // Snap to the step grid and drop the float noise: 0.9 + 0.1 is
 // 0.9999999999999999, which would leave the stored value a hair off every grid
@@ -46,10 +64,18 @@ export function stepChatScale(current: number, direction: 1 | -1): number {
 // completed. Scrolling up (deltaY < 0) zooms in, the direction every browser's
 // own ctrl+wheel zoom uses. A reversal drops what was accumulated: the leftover
 // from a zoom-in must not delay the first step of the zoom-out that follows it.
-export function accumulateWheel(acc: number, deltaY: number): { acc: number; steps: number } {
-	if (!Number.isFinite(deltaY)) return { acc, steps: 0 };
-	const aligned = acc !== 0 && Math.sign(acc) !== Math.sign(deltaY) ? 0 : acc;
-	const total = aligned + deltaY;
+export function accumulateWheel(
+	acc: number,
+	deltaY: number,
+	deltaMode: number,
+): { acc: number; steps: number } {
+	// A ctrl-held sideways scroll reports deltaY 0, whose sign matches no
+	// direction: taken as a reversal it would throw away what a pinch had
+	// gathered, one event before the step it was about to complete.
+	if (!Number.isFinite(deltaY) || deltaY === 0) return { acc, steps: 0 };
+	const delta = wheelDeltaPixels(deltaY, deltaMode);
+	const aligned = acc !== 0 && Math.sign(acc) !== Math.sign(delta) ? 0 : acc;
+	const total = aligned + delta;
 	const notches = Math.trunc(total / WHEEL_NOTCH);
 	// Not -notches when there are none: negating zero gives -0, which is not 0 to
 	// the equality every caller and test reaches for.

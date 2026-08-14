@@ -74,12 +74,20 @@ test("the scaled sizes carry unitless line heights", () => {
   }
 });
 
+test("the space between rows follows the type", () => {
+  // A rem gap is measured against the root font size: at 1.8x the type would
+  // have grown and the rows would sit as close together as they do at 1x.
+  expect(chat).toContain("gap-[calc(1.5rem*var(--chat-scale,1))]");
+  expect(chat).not.toContain("gap-6");
+});
+
 test("the corner bubble's own size is left where it was", () => {
   // The small size is the bubble's, which does not zoom: 13px body, 11px
   // notice, 12px trace.
   expect(chat).toContain("'px-3 py-1.5 text-[13px] leading-relaxed'");
   expect(chat).toContain("text-[11px] leading-relaxed");
   expect(chat).toContain("'text-xs'");
+  expect(chat).toContain("'gap-3 '");
 });
 
 test("markdown sizes are relative, so a reply's headings and code follow", () => {
