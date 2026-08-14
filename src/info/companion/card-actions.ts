@@ -11,7 +11,7 @@
 import type { SourceDescriptor } from "../sources/descriptor";
 import type { ProbeConfirmCardData } from "../sources/source-cards";
 import { replaceDeclared } from "../../observation/guess";
-import { loadProfile, saveProfile } from "../../observation/profile";
+import { loadProfileForWrite, saveProfile } from "../../observation/profile";
 
 // --- add a trialed source ---------------------------------------------------
 
@@ -67,11 +67,15 @@ export async function addSourceFromCard(
 // --- apply a drafted profile change -----------------------------------------
 
 export interface ProfileStore {
+  // Throws when the profile could not be read, rather than answering "" — Apply
+  // splices the card's declared half into what load returns, so an empty answer
+  // to a failed read would write a document with the guess section, and any
+  // declared text the card did not carry, gone.
   load(): Promise<string>;
   save(text: string): Promise<void>;
 }
 
-export const liveProfileStore: ProfileStore = { load: loadProfile, save: saveProfile };
+export const liveProfileStore: ProfileStore = { load: loadProfileForWrite, save: saveProfile };
 
 /**
  * Whether the applied card may offer a re-triage.
@@ -96,6 +100,10 @@ export interface ProfileApplied {
  * all the drafting model was shown — so the write splices it in and leaves the
  * AI's guess section where it is (observation/guess.ts). Apply is the only
  * write; the tool that drafted the card never saves.
+ *
+ * A read that failed is a failed Apply, not an Apply onto an empty document: the
+ * card stays drafted with the text still in it, and pressing it again once the
+ * file reads writes the same thing. Nothing is lost by waiting.
  */
 export async function applyProfileUpdate(
   declared: string,
