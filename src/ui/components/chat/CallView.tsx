@@ -3,7 +3,12 @@
 // composer. The parent overlays it on the reader and adds the reading pip card
 // in the top-right, so this leaves that corner clear (close sits top-left).
 // Tailwind-only.
+//
+// The conversation is a ChatScaleScope and its column width follows the zoom;
+// the hang-up button and the mode pills stay outside it.
 
+import type { ReactNode } from 'react';
+import ChatScaleScope from '../base/ChatScaleScope';
 import { IconClose } from '../base/icons';
 import { Composer, MessageList, type ComposerVoice } from './chat';
 import DeleteThreadButton from './DeleteThreadButton';
@@ -42,6 +47,14 @@ interface CallViewProps {
 	voice?: ComposerVoice | false;
 	// Dispatches a card's actions (add-source flow). Absent = a chat with no cards.
 	onCardAction?: CardActionHandler;
+	// Whether this call takes the chat zoom. The phone reaches this view too, and
+	// has neither of the gestures that drive it.
+	scalable?: boolean;
+}
+
+// The scope's box without the zoom, so the tree is the same shape either way.
+function PlainScope({ children, className = '' }: { children: ReactNode; className?: string }) {
+	return <div className={className}>{children}</div>;
 }
 
 export default function CallView({
@@ -63,8 +76,10 @@ export default function CallView({
 	placeholder = 'Ask about this passage…',
 	voice,
 	onCardAction,
+	scalable = true,
 }: CallViewProps) {
 	const empty = messages.length === 0;
+	const Scope = scalable ? ChatScaleScope : PlainScope;
 	const composerProps = { pendingImages, onRemoveImage, hint, streaming, onStop, voice };
 	// Reserve space for the soft keyboard so the bottom composer stays above it
 	// (iPad). box-sizing:border-box shrinks the flex column by this padding, so the
@@ -126,28 +141,33 @@ export default function CallView({
 			)}
 
 			{empty ? (
-				<div className="flex flex-1 flex-col items-center justify-center px-4">
-					<h1 className="mb-8 max-w-3xl text-center text-2xl font-medium text-neutral-700">
+				<Scope className="flex min-h-0 flex-1 flex-col items-center justify-center px-4">
+					<h1 className="mb-8 max-w-[calc(48rem*var(--chat-scale,1))] text-center text-[calc(1.5rem*var(--chat-scale,1))] font-medium text-neutral-700">
 						{emptyTitle}
 					</h1>
-					<div className="w-full max-w-3xl">
+					<div className="w-full max-w-[calc(48rem*var(--chat-scale,1))]">
 						<Composer onSend={onSend} placeholder={placeholder} pill {...composerProps} />
 					</div>
-				</div>
+				</Scope>
 			) : (
-				<>
+				<Scope className="flex min-h-0 flex-1 flex-col">
 					{/* pt-36 clears the reading card in the top-right corner (120px tall,
 					    top-3), not just the hang-up button — below that the first message
 					    renders under the card. */}
 					<div className="min-h-0 flex-1 overflow-y-auto px-4 pt-36">
-						<MessageList messages={messages} size="lg" className="mx-auto max-w-3xl pb-6" onCardAction={onCardAction} />
+						<MessageList
+							messages={messages}
+							size="lg"
+							className="mx-auto max-w-[calc(48rem*var(--chat-scale,1))] pb-6"
+							onCardAction={onCardAction}
+						/>
 					</div>
 					<div className="px-4 pb-6">
-						<div className="mx-auto w-full max-w-3xl">
+						<div className="mx-auto w-full max-w-[calc(48rem*var(--chat-scale,1))]">
 							<Composer onSend={onSend} placeholder="Reply…" pill {...composerProps} />
 						</div>
 					</div>
-				</>
+				</Scope>
 			)}
 		</div>
 	);

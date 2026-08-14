@@ -19,7 +19,7 @@ import {
 } from "../../../platform/sync/pull-routes";
 import {
   initDeviceSettings,
-  saveDeviceSettings,
+  patchDeviceSettings,
   type DeviceSettings,
 } from "../../../platform/app/device";
 import {
@@ -257,9 +257,13 @@ export function useShellBootstrap({
     saveSettings(next);
   }, []);
 
+  // Patched, not saved whole: this copy was read at startup and the settings
+  // screen shows none of the chat scale, which a chat window can have moved
+  // since. A whole-object save would carry the startup copy of it back to disk.
   const applyDevice = useCallback((next: DeviceSettings) => {
     setDevice(next);
-    saveDeviceSettings(next).catch((e) => console.warn("failed to persist device settings", e));
+    const { chatScale: _scale, ...owned } = next;
+    patchDeviceSettings(owned).catch((e) => console.warn("failed to persist device settings", e));
   }, []);
 
   return {
