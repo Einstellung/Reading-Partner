@@ -34,7 +34,9 @@ export function figureToolResult(
   if (!figure) {
     return { text: `No figure "${id}" in this document.` };
   }
-  const head = `Figure ${figure.id} (p.${figure.page}): ${figure.caption}`;
+  // The head carries the citation shorthand for this figure, so the model can
+  // copy [fig:N] straight out of what it was handed.
+  const head = `Figure ${figure.id} (p.${figure.page}) [fig:${figure.id}]: ${figure.caption}`;
   if (!modelSupportsImages) {
     return { text: `${head}\n\n(This model can't view images, so only the caption is available.)` };
   }

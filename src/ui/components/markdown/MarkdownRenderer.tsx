@@ -21,7 +21,7 @@ import 'katex/dist/katex.min.css';
 import 'highlight.js/styles/github.css';
 import { linkifyCitations, parseCitationHref } from '../../../reading/prep/anchors';
 import { linkActionFor, openExternal } from '../../../platform/app/external-link';
-import { CitationContext, FigureContext, type CitationHandler } from './Markdown';
+import { CitationContext, FigureContext, PrepSlugContext, type CitationHandler } from './Markdown';
 import FigureCard from './FigureCard';
 import { HIT_44 } from '../base/buttons';
 
@@ -138,7 +138,11 @@ const MD = [
 
 export default function MarkdownRenderer({ text }: { text: string }) {
 	const onCitation = useContext(CitationContext);
-	const source = useMemo(() => (onCitation ? linkifyCitations(text) : text), [text, onCitation]);
+	const prepSlugs = useContext(PrepSlugContext);
+	const source = useMemo(
+		() => (onCitation ? linkifyCitations(text, prepSlugs) : text),
+		[text, onCitation, prepSlugs],
+	);
 	// The anchor override is installed whether or not there is a citation host:
 	// without it, a plain link in a reply navigates the webview away from the app.
 	const components = useMemo<Components>(() => ({ a: makeAnchor(onCitation) }), [onCitation]);

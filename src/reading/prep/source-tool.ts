@@ -63,9 +63,13 @@ export function buildSourceTools(ingestor: SourceIngestor): AgentTool[] {
           );
         }
         const size = r.kind === "article" ? `${r.chars} characters` : `${r.pages} pages`;
+        // A web article has no page numbers, but the citation still needs one:
+        // a bare [slug] is not a citation shape the renderer knows, so every
+        // one of them rendered as plain text instead of a link. An article is
+        // one page as far as read_paper is concerned, so say p.1.
         const cite =
           r.kind === "article"
-            ? `cite it as [${r.slug}] (a web article — no page numbers)`
+            ? `cite it as [${r.slug} p.1] (a web article — it is all one page)`
             : `cite it as [${r.slug} p.N]`;
         return (
           `Ingested "${r.title}" (${r.kind}, ${size}). Its full text is readable now via ` +

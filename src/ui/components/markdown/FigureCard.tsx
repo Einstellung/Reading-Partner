@@ -3,8 +3,9 @@
 // jumps the reader to the figure's page.
 // The crop rasters lazily — only once the card scrolls into view — and the host
 // memo-caches it, so a long reply that cites many figures doesn't raster them all
-// at once. When the figure is unknown or the crop fails, it degrades to a small
-// text chip that still jumps.
+// at once. When the crop fails it degrades to a small text chip that still
+// jumps; when the figure is not in the catalog at all there is nowhere to jump,
+// so it is drawn as inert text rather than a control that does nothing.
 
 import { useEffect, useRef, useState } from "react";
 import type { FigureHost, RenderedCard } from "./Markdown";
@@ -18,9 +19,15 @@ export function figureChipLabel(figure: Figure): string {
 
 const CHIP =
   "!no-underline rounded bg-secondary px-1 py-0.5 !text-secondary-foreground text-[0.9em] can-hover:hover:bg-secondary-hover cursor-pointer";
+// The figure isn't in the document's catalog, so there is nowhere to jump. It
+// used to render as the chip above with no onClick: it looked like a control
+// and did nothing when pressed. Drawn as inert text instead, with the reason on
+// hover.
+const CHIP_DEAD =
+  "!no-underline rounded bg-black/[0.04] px-1 py-0.5 !text-neutral-400 text-[0.9em] cursor-default";
 
-// A quiet clickable chip — the unknown-figure / failed-render fallback.
-function Chip({ label, onClick }: { label: string; onClick?: () => void }) {
+// A quiet clickable chip — the failed-render fallback, which still jumps.
+function Chip({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button type="button" className={CHIP} onClick={onClick}>
       {label}
@@ -73,7 +80,12 @@ export default function FigureCard({ host, id }: { host: FigureHost; id: string 
     };
   }, [figure, visible, card, failed, host]);
 
-  if (!figure) return <Chip label={`fig:${id}`} />;
+  if (!figure)
+    return (
+      <span className={CHIP_DEAD} title={`No figure ${id} in this document.`}>
+        fig:{id}
+      </span>
+    );
   if (failed) return <Chip label={figureChipLabel(figure)} onClick={() => host.onJump(figure)} />;
 
   // Display at the crop's natural size (÷ dpr) so a small figure is never

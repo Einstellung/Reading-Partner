@@ -7,7 +7,8 @@ import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../ai/agent";
 import { formatPages } from "../../fulltext/format";
 import { getFulltext } from "../../fulltext/store";
-import { parseNote } from "./notes";
+import { requalifyNoteAnchors } from "./anchors";
+import { parseNote, stripModelAsides } from "./notes";
 import { paperFulltextHash, readPrepNote } from "./store";
 import type { PrepState } from "./types";
 
@@ -45,7 +46,16 @@ export function buildClassroomTools(getState: () => PrepState): AgentTool[] {
         if (!ft) {
           return `The full text of "${slug}" isn't cached (its prep may be abstract-only). Try read_note instead.`;
         }
-        const pages = formatPages(ft, Math.round(Number(args.from)), Math.round(Number(args.to)));
+        // Each page header carries the citation the model should write for it.
+        // Told only the slug, it abbreviated: a paper filed as
+        // dream-to-control-learning-behaviors-by-latent-imag came back cited as
+        // [dream-to-control], which links to nothing.
+        const pages = formatPages(
+          ft,
+          Math.round(Number(args.from)),
+          Math.round(Number(args.to)),
+          (p) => `=== Page ${p} === [${slug} p.${p}]`,
+        );
         return paper.kind === "article" ? ARTICLE_PREFIX + pages : pages;
       },
     },
@@ -64,7 +74,10 @@ export function buildClassroomTools(getState: () => PrepState): AgentTool[] {
         }
         const raw = await readPrepNote(state.surveyHash, slug);
         if (!raw) return `No note on disk yet for "${slug}" (status: ${paper.status}).`;
-        return parseNote(raw).body;
+        // The note is cleaned on the way out, not on disk: its own writer's
+        // asides dropped, and its bare [p.N] anchors — which mean pages of this
+        // paper, not the survey — named so they stay right once quoted.
+        return requalifyNoteAnchors(stripModelAsides(parseNote(raw).body), slug);
       },
     },
   ];

@@ -5,6 +5,8 @@
 // citation/tool instructions) appended after it.
 
 import type { Fulltext } from "../../fulltext/types";
+import { requalifyNoteAnchors } from "./anchors";
+import { stripModelAsides } from "./notes";
 import type { PrepPaper, PrepState } from "./types";
 
 export interface ClassroomNote {
@@ -102,12 +104,15 @@ export function buildClassroomSystemPrompt(ctx: ClassroomContext): string {
   if (ctx.notes.length > 0) {
     lines.push("", "Prep notes for references this chapter leans on:");
     for (const n of ctx.notes) {
-      lines.push("", `--- ${n.slug}: ${n.title} ---`, n.body);
+      // Inlined the same way read_note returns it: the writer's asides dropped
+      // and every page anchor already naming its own paper, so a citation
+      // copied out of a note cannot land in the survey's page namespace.
+      lines.push("", `--- ${n.slug}: ${n.title} ---`, requalifyNoteAnchors(stripModelAsides(n.body), n.slug));
     }
     lines.push(
       "",
-      "Note page anchors like [p.3] refer to pages of that paper, not the",
-      "survey; cite them as [paper-slug p.3].",
+      "Every page anchor in these notes already names its paper: copy it as it",
+      "stands, e.g. [paper-slug p.3]. A bare [p.3] means a page of the survey.",
     );
   }
 

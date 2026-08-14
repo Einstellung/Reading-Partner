@@ -145,6 +145,16 @@ export function makeAppData(): FakeAppData {
       const value = await readJson<T>(file, validate);
       return value ?? structuredClone(fallback);
     },
+    readGuardedText: async (file: string) => {
+      if (!files.has(file)) return { status: "missing" };
+      try {
+        return { status: "ok", value: await readText(file) };
+      } catch {
+        return { status: "corrupt", savedAs: null };
+      }
+    },
+    // Nothing here watches the disk, so the unsubscribe is all a caller needs.
+    onFileWritten: () => () => {},
   };
 
   return {

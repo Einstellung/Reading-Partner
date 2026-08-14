@@ -68,6 +68,24 @@ test("the inlined prompt keeps saying so", () => {
   expect(prompt).toContain("page two body");
 });
 
+// A note's [p.3] means page 3 of that paper. Inlined bare it lands in the
+// survey's page namespace, and a citation copied out of it jumps to the wrong
+// book. It is qualified on the way into the prompt, the same way read_note
+// returns it.
+test("an inlined note's page anchors name their own paper", () => {
+  const notes = [
+    {
+      slug: "world-models",
+      title: "World Models",
+      body: "I have enough to write the note.\n\nA controller [p.4] and a range [p.6-7].",
+    },
+  ];
+  const prompt = buildClassroomSystemPrompt(ctx({ notes }));
+  expect(prompt).toContain("A controller [world-models p.4] and a range [world-models p.6-7].");
+  // The writer's own aside does not go into the prompt.
+  expect(prompt).not.toContain("I have enough to write the note.");
+});
+
 test("everything outside the survey body is unchanged by the drop", () => {
   const notes = [{ slug: "smith2023", title: "Smith 2023", body: "note body" }];
   const inlined = buildClassroomSystemPrompt(ctx({ notes }));

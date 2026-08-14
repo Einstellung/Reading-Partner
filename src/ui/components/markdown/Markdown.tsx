@@ -14,13 +14,21 @@
 // so MessageBubble's memoization is undisturbed.
 
 import { createContext, lazy, memo, Suspense } from 'react';
-import type { Citation } from '../../../reading/prep/anchors';
+import type { Citation, KnownSlugs } from '../../../reading/prep/anchors';
 import type { Figure } from '../../../reading/figures/types';
 
 export type CitationHandler = (citation: Citation) => void;
 
 // Null = citation shorthands stay plain text.
 export const CitationContext = createContext<CitationHandler | null>(null);
+
+// The prep slugs a [slug p.N] citation may name. Its own context rather than a
+// field on the handler: the handler is a stable callback and the list changes as
+// papers are added, so pairing them would rebuild the handler for every prep
+// event. Null = not known here, and citations link on their shape alone (see
+// KnownSlugs) — which is what the panel's own note rendering gets, and what the
+// shell has for the moment before prep state loads.
+export const PrepSlugContext = createContext<KnownSlugs>(null);
 
 // Host services for inline [fig:N] cards (M9): resolve a figure by id, rasterize
 // its crop lazily, and jump the reader to it. Null = figures render as plain

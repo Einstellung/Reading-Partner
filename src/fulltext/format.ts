@@ -48,9 +48,24 @@ export const MAX_PAGES = 10;
 export const MAX_PAGE_CHARS = 4000;
 const SEARCH_LIMIT = 8;
 
+// The header above each page's text. The default is what the chapter-note
+// writer and the prep digest have always emitted, and their output is on disk,
+// so it stays exactly as it was. A caller whose output is read by a model that
+// will cite the page passes its own, carrying the literal citation shorthand —
+// a model copies the anchor it can see far more reliably than one it has to
+// assemble from a slug it was told about somewhere else.
+export type PageLabel = (page: number) => string;
+
+const DEFAULT_LABEL: PageLabel = (p) => `=== Page ${p} ===`;
+
 // A 1-based, inclusive page range from one book, capped at MAX_PAGES and clamped
 // to the book, each page labelled so the model can cite it.
-export function formatPages(ft: Fulltext | null, from: number, to: number): string {
+export function formatPages(
+  ft: Fulltext | null,
+  from: number,
+  to: number,
+  label: PageLabel = DEFAULT_LABEL,
+): string {
   if (!ft || ft.status !== "ok") {
     return "The full text of this book isn't machine-readable, so its pages can't be read.";
   }
@@ -65,7 +80,7 @@ export function formatPages(ft: Fulltext | null, from: number, to: number): stri
     const text = cut
       ? `${body.slice(0, MAX_PAGE_CHARS)}\n[page ${p} truncated at ${MAX_PAGE_CHARS} chars]`
       : body;
-    parts.push(`=== Page ${p} ===\n${text}`);
+    parts.push(`${label(p)}\n${text}`);
   }
   return parts.join("\n\n");
 }

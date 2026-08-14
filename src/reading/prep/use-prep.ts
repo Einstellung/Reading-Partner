@@ -16,7 +16,7 @@ import { logEvent } from "../../platform/app/events";
 import type { ViewStats } from "../../platform/app/reader-contract";
 import type { Fulltext } from "../../fulltext/types";
 import { getPrepPipeline, hasPrepState, peekPrepPipeline } from "./live";
-import { parseNote } from "./notes";
+import { parseNote, stripModelAsides } from "./notes";
 import type { PrepPipeline, PrepSnapshot } from "./pipeline";
 import { chapterIndexForPage } from "./scheduler";
 import { readPrepNote } from "./store";
@@ -171,7 +171,12 @@ export function usePrep(host: PrepHost): PrepController {
       const bookId = bookIdRef.current;
       if (!bookId) return null;
       const raw = await readPrepNote(bookId, slug);
-      return raw ? parseNote(raw).body : null;
+      // Same cleaning read_note does: the writer's asides are noise here too —
+      // expanding a note opened on "I have everything I need to write the
+      // note." in all 17 notes of one survey. Page anchors are left bare: with
+      // no citation host the panel renders them as text, and qualifying them
+      // would only make that text longer.
+      return raw ? stripModelAsides(parseNote(raw).body) : null;
     },
     [bookIdRef],
   );

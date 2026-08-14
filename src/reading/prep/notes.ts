@@ -66,6 +66,62 @@ export function abstractNoteBody(abstract: string | undefined): string {
     : "Full text unavailable and no abstract was found.";
 }
 
+// The note writer sometimes leaves its own stage directions in the body — "I
+// have everything I need to write the note.", "Here is the prep note:" — and 17
+// of 17 notes on one survey carry at least one. They are noise wherever the body
+// goes: the panel, and every classroom prompt the note is inlined into.
+//
+// Dropped on the way out of storage, never on disk: the file stays as written,
+// so a bad judgement here costs a rendering, not the note.
+//
+// Deliberately narrow, because a wrong deletion loses content silently. A block
+// is dropped only when all of these hold:
+//   - it stands alone between blank lines and is a single line;
+//   - it is at most 160 characters;
+//   - it carries no markdown structure (heading, list, quote, table, fence);
+//   - it carries no citation anchor — real body prose is dense with [p.N];
+//   - it opens in the writer's own voice ("I …", "Let me …", "Here is …");
+//   - and it names the act of writing the note, not the paper's contents.
+const ASIDE_OPENER =
+  /^(?:I\b|I'|Let me\b|Let's\b|Now I\b|Now let\b|OK[,!.\s]|Okay[,!.\s]|Sure[,!.\s]|Alright[,!.\s]|Here (?:is|are|'s)\b|Here's\b|好的|明白|收到|我(?:来|先|现在|要)|让我|以下是)/i;
+// Naming the act of writing, not the paper. "summary" is not on the list on its
+// own: "Here is the summary table the authors give." is about the paper and
+// meets every other condition. It still counts alongside write/note, which is
+// the shape an actual aside takes ("Let me write the summary.").
+const ASIDE_SUBJECT = /\b(?:notes?|write|writing|wrote)\b|笔记|总结|梳理|整理/i;
+const ASIDE_STRUCTURE = /^(?:#|>|\||[-*+]\s|\d+[.)]\s|```|~~~)/;
+const ASIDE_ANCHOR = /\[(?:pp?\.\s*\d|fig\s*:)/i;
+
+function isModelAside(block: string): boolean {
+  const s = block.trim();
+  return (
+    s.length <= 160 &&
+    !s.includes("\n") &&
+    !ASIDE_STRUCTURE.test(s) &&
+    !ASIDE_ANCHOR.test(s) &&
+    ASIDE_OPENER.test(s) &&
+    ASIDE_SUBJECT.test(s)
+  );
+}
+
+export function stripModelAsides(body: string): string {
+  const blocks = body.split(/\n{2,}/);
+  const kept: string[] = [];
+  let inFence = false;
+  let dropped = false;
+  for (const block of blocks) {
+    const fences = block.match(/^ {0,3}(?:`{3,}|~{3,})/gm)?.length ?? 0;
+    const wasInFence = inFence;
+    if (fences % 2 === 1) inFence = !inFence;
+    if (!wasInFence && !inFence && isModelAside(block)) {
+      dropped = true;
+      continue;
+    }
+    kept.push(block);
+  }
+  return dropped ? kept.join("\n\n").trim() : body;
+}
+
 export function parseNote(text: string): PrepNote {
   const m = /^---\n([\s\S]*?)\n---\n?/.exec(text);
   if (!m) return { meta: { ...EMPTY_META }, body: text.trim() };

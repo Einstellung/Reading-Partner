@@ -30,7 +30,7 @@ function fake(result: Partial<IngestResult>, spy?: (url: string) => void): Sourc
   };
 }
 
-test("article success: readable-now confirmation, slug, and no-page citation", async () => {
+test("article success: readable-now confirmation, slug, and a page-1 citation", async () => {
   let seen = "";
   const t = tool(fake({ kind: "article", chars: 4200 }, (u) => (seen = u)));
   const out = (await t.execute({ url: "https://a.test/post" })) as string;
@@ -40,7 +40,10 @@ test("article success: readable-now confirmation, slug, and no-page citation", a
   expect(out).toContain("4200 characters");
   expect(out).toContain('read_paper("src"');
   expect(out).toContain("reference material");
-  expect(out).toContain("[src]");
+  // Never a bare [src]: that is not a citation shape the renderer knows, so
+  // every one the model wrote rendered as plain text.
+  expect(out).toContain("[src p.1]");
+  expect(out).not.toContain("[src]");
 });
 
 test("pdf success: reports pages and a page citation", async () => {

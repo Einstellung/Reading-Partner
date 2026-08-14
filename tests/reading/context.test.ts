@@ -139,9 +139,11 @@ test("buildReadingTools includes only tools with usable data", async () => {
   expect(tools.map((t) => t.name).sort()).toEqual(["read_annotations", "read_pages", "search_topic"]);
 
   // read_pages execute rounds float/string args and returns labelled pages.
+  // Each header carries that page's citation shorthand, so the model copies an
+  // anchor it can see instead of assembling one.
   const readPagesTool = tools.find((t) => t.name === "read_pages")!;
   expect(await readPagesTool.execute({ from: 1.4, to: "2" })).toBe(
-    "=== Page 1 ===\npage 1 text\n\n=== Page 2 ===\npage 2 text",
+    "=== Page 1 === [p.1]\npage 1 text\n\n=== Page 2 === [p.2]\npage 2 text",
   );
 
   // Nothing extractable -> no tools (the agent answers from the prompt alone).

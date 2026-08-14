@@ -21,6 +21,18 @@ test("a vision model gets the image plus caption text", () => {
   expect(r.images).toEqual([{ data: "AAAA", mimeType: "image/jpeg" }]);
 });
 
+// The head carries the citation shorthand for the figure it just handed over,
+// so the model copies [fig:3] rather than assembling it.
+test("every result head carries the figure's own citation anchor", () => {
+  for (const r of [
+    figureToolResult(FIG, "3", true, IMG),
+    figureToolResult(FIG, "3", false, null),
+    figureToolResult(FIG, "3", true, null),
+  ]) {
+    expect(r.text).toContain("[fig:3]");
+  }
+});
+
 test("a text-only model gets the caption and a note it can't see images", () => {
   const r = figureToolResult(FIG, "3", false, null);
   expect(r.images).toBeUndefined();

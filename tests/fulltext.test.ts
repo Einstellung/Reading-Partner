@@ -207,6 +207,17 @@ test("formatPages caps the range, clamps to the book, and labels each page", () 
   expect(formatPages(null, 1, 1)).toContain("machine-readable");
 });
 
+// The default header is what the chapter-note writer and the prep digest have
+// always emitted and what their output on disk is full of, so it is pinned
+// separately from the label a tool may pass to carry a citation anchor.
+test("formatPages keeps its default header and honours a caller's own", () => {
+  const book = ft(["one", "two"]);
+  expect(formatPages(book, 1, 1)).toBe("=== Page 1 ===\none");
+  expect(formatPages(book, 1, 2, (p) => `=== Page ${p} === [slug p.${p}]`)).toBe(
+    "=== Page 1 === [slug p.1]\none\n\n=== Page 2 === [slug p.2]\ntwo",
+  );
+});
+
 // MAX_PAGES bounded how many pages a call returns, nothing bounded their size.
 // The cut has to be visible inside the page, or the model quotes across it as
 // if the text ran on.

@@ -6,7 +6,9 @@ import {
   linkifyCitations,
   pageCitationHref,
   paperCitationHref,
+  parseAnchor,
   parseCitationHref,
+  requalifyNoteAnchors,
 } from "../../../src/reading/prep/anchors";
 
 test("survey page citations become fragment links", () => {
@@ -113,4 +115,212 @@ test("parseCitationHref rejects foreign or malformed hrefs", () => {
   expect(parseCitationHref("#rp-paper-noseparator")).toBeNull();
   expect(parseCitationHref("#rp-fig-")).toBeNull();
   expect(parseCitationHref("#rp-fig-xyz")).toBeNull();
+});
+
+// --- what the wide scan must NOT touch -------------------------------------
+
+// Recognition is one wide scan over every bracket, so the interesting failure
+// is no longer a citation that stays plain — it is a piece of prose, notation
+// or code that turns into a link. Each of these came out of a real reply.
+const NOT_CITATIONS = [
+  "array[0] and array[i+1]", // indexing
+  "The state is [235] in the table.", // a bare number
+  "See [arXiv:2011.03506] for the preprint.", // an identifier
+  "The tensor is [M, 768].", // a shape
+  "Weights [0.8, 0.3] after the update.", // a vector
+  "编码器 [编码器 E] 的输出", // a Chinese gloss
+  "Prose that says [see p.9 above] in passing.", // a word before a page number
+  "A single letter before a page: [a p.3].",
+  "```\nconst cite = [p.12];\n```", // a fenced code block
+  "~~~\n[rt-1-robotics p.3]\n~~~", // a tilde fence
+  "Inline `[p.12]` shown literally.", // an inline code span
+  "Double-tick ``[fig:3]`` shown literally.",
+  "An escaped bracket: \\[p.12\\].",
+];
+
+test("brackets that are not citations survive the scan unchanged", () => {
+  for (const s of NOT_CITATIONS) {
+    expect(linkifyCitations(s)).toBe(s);
+    expect(linkifyCitations(s, new Set(["rt-1-robotics"]))).toBe(s);
+  }
+});
+
+// The other half of the false-positive risk, and the half no charset rule can
+// reach. A slug is whatever slugify emitted — any script, hyphens optional — so
+// "表2" and a Chinese paper's real slug are the same shape. Only the prep list
+// tells them apart, which is why the parser is given one.
+const NEEDS_THE_LIST = [
+  "见 [表2 p.5] 的对比", // a Chinese table reference
+  "见 [图2 p.7]",
+  "见 [第2章 p.30]",
+  "见 [附录A p.3]",
+  "As [Hawkins p.170] argues,", // an author-page reference
+  "See [Appendix p.20] for the derivation.",
+  "See [Table p.5].",
+  "In [2026 p.4] the authors revisit it.",
+];
+
+test("a well-shaped citation the prep list does not know stays plain text", () => {
+  const slugs = new Set(["world-models", "注意力就是你所需要的一切"]);
+  for (const s of NEEDS_THE_LIST) {
+    expect(linkifyCitations(s, slugs)).toBe(s);
+  }
+});
+
+// A paper whose title was Chinese gets a Chinese slug, and add_source tells the
+// model to cite exactly that. There is no charset it could be filtered by.
+test("a slug in the list is citable whatever script it is in", () => {
+  const slugs = new Set(["注意力就是你所需要的一切"]);
+  expect(linkifyCitations("[注意力就是你所需要的一切 p.1]", slugs)).toBe(
+    "[注意力就是你所需要的一切 p.1](#rp-paper-注意力就是你所需要的一切--1)",
+  );
+});
+
+// The model abbreviates a long slug: dream-to-control-learning-behaviors-by-
+// latent-imag came back as [dream-to-control] 14 times in one thread. Those
+// used to render as chips that opened an empty panel. A citation that leads
+// nowhere must not look like one that leads somewhere.
+test("an abbreviated slug renders as plain text, not a chip", () => {
+  const full = "dream-to-control-learning-behaviors-by-latent-imag";
+  const slugs = new Set([full]);
+  expect(linkifyCitations("[dream-to-control p.4]", slugs)).toBe("[dream-to-control p.4]");
+  expect(linkifyCitations(`[${full} p.4]`, slugs)).toBe(
+    `[${full} p.4](#rp-paper-${full}--4)`,
+  );
+});
+
+// Null and an empty set are different answers. The list loads a moment after a
+// book opens, and striking a real citation out for that moment is worse than
+// linking one the click check will catch.
+test("an unknown list links on shape; an empty list links nothing", () => {
+  const linked = "[world-models p.2](#rp-paper-world-models--2)";
+  expect(linkifyCitations("[world-models p.2]")).toBe(linked);
+  expect(linkifyCitations("[world-models p.2]", null)).toBe(linked);
+  expect(linkifyCitations("[world-models p.2]", undefined)).toBe(linked);
+  expect(linkifyCitations("[world-models p.2]", new Set())).toBe("[world-models p.2]");
+  // Survey pages never depend on the list — they name no paper.
+  expect(linkifyCitations("[p.2]", new Set())).toBe("[p.2](#rp-page-2)");
+  expect(linkifyCitations("[fig:3]", new Set())).toBe("[fig:3](#rp-fig-3)");
+});
+
+test("parseAnchor rejects the same set, bracket by bracket", () => {
+  const inners = [
+    "0",
+    "235",
+    "arXiv:2011.03506",
+    "M, 768",
+    "0.8, 0.3",
+    "编码器 E",
+    "see p.9 above",
+    "a p.3",
+    "",
+    "p.0",
+    "12",
+  ];
+  for (const inner of inners) expect(parseAnchor(inner)).toBeNull();
+});
+
+// --- the shapes that used to break -----------------------------------------
+
+test("a paper citation takes a page range, like the survey form always did", () => {
+  expect(linkifyCitations("[palm-e-an-embodied p.3-4]")).toBe(
+    "[palm-e-an-embodied p.3-4](#rp-paper-palm-e-an-embodied--3)",
+  );
+  expect(linkifyCitations("[palm-e p.8–9]")).toBe("[palm-e p.8–9](#rp-paper-palm-e--8)");
+});
+
+test("a page list links to the first page and keeps the whole label", () => {
+  expect(linkifyCitations("[rt-2-vla p.2, p.5-6]")).toBe(
+    "[rt-2-vla p.2, p.5-6](#rp-paper-rt-2-vla--2)",
+  );
+  expect(linkifyCitations("[p.9, p.24]")).toBe("[p.9, p.24](#rp-page-9)");
+});
+
+test("a slug outside ASCII is citable, because slugify emits them", () => {
+  // On disk: π0-a-vision-language-action-flow-model-for-general.md
+  expect(linkifyCitations("[π0-a-vision-language-action p.5]")).toBe(
+    "[π0-a-vision-language-action p.5](#rp-paper-π0-a-vision-language-action--5)",
+  );
+});
+
+test("a trailing label after the pages rides along in the chip text", () => {
+  expect(linkifyCitations("[p.3-4, Table I]")).toBe("[p.3-4, Table I](#rp-page-3)");
+  expect(linkifyCitations("[p.6, Table III]")).toBe("[p.6, Table III](#rp-page-6)");
+});
+
+test("CJK and curly quotation marks carry a quote the same as ASCII ones", () => {
+  expect(linkifyCitations("[p.190「预测的分歧程度是不确定性的指标」]")).toBe(
+    `[p.190](${pageCitationHref(190, "预测的分歧程度是不确定性的指标")})`,
+  );
+  expect(linkifyCitations("[p.7 “exact words”]")).toBe(
+    `[p.7](${pageCitationHref(7, "exact words")})`,
+  );
+  expect(linkifyCitations("[world-models p.2『内部模型』]")).toBe(
+    `[world-models p.2](${paperCitationHref("world-models", 2, "内部模型")})`,
+  );
+});
+
+test("an uppercase P. is still a page", () => {
+  expect(linkifyCitations("[P.12]")).toBe("[P.12](#rp-page-12)");
+  expect(linkifyCitations("[PP.12-14]")).toBe("[PP.12-14](#rp-page-12)");
+});
+
+test("a figure citation tolerates a space after the colon", () => {
+  expect(linkifyCitations("[fig: 3]")).toBe("[fig:3](#rp-fig-3)");
+});
+
+test("slug case is folded for the href but kept in the chip", () => {
+  expect(linkifyCitations("[World-Models p.2]")).toBe(
+    "[World-Models p.2](#rp-paper-world-models--2)",
+  );
+  // Folded before the list is consulted, too, so casing never misses a paper.
+  expect(linkifyCitations("[World-Models p.2]", new Set(["world-models"]))).toBe(
+    "[World-Models p.2](#rp-paper-world-models--2)",
+  );
+});
+
+test("a page bracket the tail grammar cannot account for still links", () => {
+  // Two quoted fragments with prose between them: page 10 is not in doubt, so
+  // the link stands and nothing is read as the quote.
+  expect(linkifyCitations('[p.10 "what exists" 和 "how things behave"]')).toBe(
+    '[p.10 "what exists" 和 "how things behave"](#rp-page-10)',
+  );
+});
+
+// --- note anchors ----------------------------------------------------------
+
+test("requalifyNoteAnchors names the paper a note's bare pages belong to", () => {
+  expect(requalifyNoteAnchors("Trained with ES [p.4].", "world-models")).toBe(
+    "Trained with ES [world-models p.4].",
+  );
+  expect(requalifyNoteAnchors("[p.1, p.2] and [pp.3-4]", "wm")).toBe(
+    "[wm p.1, p.2] and [wm pp.3-4]",
+  );
+  expect(requalifyNoteAnchors('A claim [p.5 "exact words"].', "wm")).toBe(
+    'A claim [wm p.5 "exact words"].',
+  );
+});
+
+test("requalifyNoteAnchors leaves alone what is not a bare page anchor", () => {
+  const already = "[other-paper p.3] and [fig:2] and array[0]";
+  expect(requalifyNoteAnchors(already, "wm")).toBe(already);
+  expect(requalifyNoteAnchors("```\n[p.12]\n```", "wm")).toBe("```\n[p.12]\n```");
+  expect(requalifyNoteAnchors("[p.4]", "")).toBe("[p.4]");
+});
+
+// The note's own slug is the one paper its body may name, so the round-trip
+// check never depends on a charset — a Chinese-titled paper requalifies too.
+test("requalifyNoteAnchors works for a slug in any script", () => {
+  expect(requalifyNoteAnchors("A claim [p.4].", "注意力就是你所需要的一切")).toBe(
+    "A claim [注意力就是你所需要的一切 p.4].",
+  );
+});
+
+test("a requalified note anchor parses back as a paper citation", () => {
+  const out = requalifyNoteAnchors("[p.3-4, Table I] [p.190「引文」]", "world-models");
+  expect(out).toBe("[world-models p.3-4, Table I] [world-models p.190「引文」]");
+  expect(linkifyCitations(out)).toBe(
+    "[world-models p.3-4, Table I](#rp-paper-world-models--3) " +
+      `[world-models p.190](${paperCitationHref("world-models", 190, "引文")})`,
+  );
 });

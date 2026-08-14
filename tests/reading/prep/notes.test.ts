@@ -1,7 +1,13 @@
 // Unit tests for note frontmatter round-tripping (src/reading/prep/notes.ts). Run: bun test.
 
 import { expect, test } from "bun:test";
-import { abstractNoteBody, parseNote, serializeNote, type NoteMeta } from "../../../src/reading/prep/notes";
+import {
+  abstractNoteBody,
+  parseNote,
+  serializeNote,
+  stripModelAsides,
+  type NoteMeta,
+} from "../../../src/reading/prep/notes";
 
 const META: NoteMeta = {
   title: "RT-1: Robotics Transformer",
@@ -80,4 +86,65 @@ test("abstractNoteBody degrades gracefully", () => {
   expect(abstractNoteBody("An abstract.")).toContain("An abstract.");
   expect(abstractNoteBody("")).toContain("no abstract");
   expect(abstractNoteBody(undefined)).toContain("no abstract");
+});
+
+// --- the writer's own stage directions -------------------------------------
+
+// Verbatim from the 17 notes of one survey; every one of them carried at least
+// one of these, and world-models.md carried three.
+const REAL_ASIDES = [
+  "I have everything I need to write a comprehensive note.",
+  "Let me finalize my note now.",
+  "Here is the prep note:",
+  "I have everything needed. Writing the note.",
+  "I now have all the information I need to write the note.",
+  "I now have comprehensive coverage of the paper. Let me write the prep note.",
+  "I have all the information I need from the core sections. Let me write the prep note.",
+  "I have enough material to write the note.",
+  // "summary" alongside the act of writing is still an aside.
+  "Let me write the summary now.",
+];
+
+test("stripModelAsides drops the writer's asides", () => {
+  for (const aside of REAL_ASIDES) {
+    const body = `${aside}\n\nThe paper argues X [p.2].`;
+    expect(stripModelAsides(body)).toBe("The paper argues X [p.2].");
+  }
+});
+
+// The judgement is deliberately narrow: five conditions must hold at once, so
+// anything that looks even a little like body prose stays. Losing a paragraph
+// is far worse than leaving one in.
+const KEPT = [
+  // Carries a citation anchor — real body prose is dense with them.
+  "I have everything I need to write the note [p.4].",
+  // Names no act of writing.
+  "I have everything I need.",
+  // Not in the writer's voice.
+  "The authors note that the model is small.",
+  "Writing the policy as a linear map keeps the controller tiny.",
+  "本文整理了三类方法。",
+  "作者在第三章整理了三类方法。",
+  // "summary" is about the paper here, and meets every other condition. It
+  // counts only alongside write/note.
+  "Here is the summary table the authors give.",
+  "Here is the key idea: attention is all you need.",
+  // Structure: a heading, a list item, a quote.
+  "# Here is the prep note",
+  "- I have enough to write the note.",
+  "> I have enough to write the note.",
+  // Too long to be an aside.
+  `I have everything I need to write the note about ${"x".repeat(140)}`,
+];
+
+test("stripModelAsides keeps anything that is not plainly an aside", () => {
+  for (const block of KEPT) {
+    const body = `${block}\n\nThe paper argues X [p.2].`;
+    expect(stripModelAsides(body)).toBe(body);
+  }
+});
+
+test("stripModelAsides does not reach inside a fenced block", () => {
+  const body = "```\nI have enough to write the note.\n\nmore code\n```\n\nBody [p.1].";
+  expect(stripModelAsides(body)).toBe(body);
 });

@@ -155,8 +155,15 @@ export function buildReadingTools(ctx: {
         from: Type.Number({ description: "First page (1-based)." }),
         to: Type.Number({ description: "Last page (1-based, inclusive)." }),
       }),
+      // Each page header carries the citation shorthand for that page, so the
+      // model copies an anchor it can see rather than assembling one.
       execute: async (args) =>
-        formatPages(currentFulltext, Math.round(Number(args.from)), Math.round(Number(args.to))),
+        formatPages(
+          currentFulltext,
+          Math.round(Number(args.from)),
+          Math.round(Number(args.to)),
+          (p) => `=== Page ${p} === [p.${p}]`,
+        ),
     });
   }
 

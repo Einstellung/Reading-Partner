@@ -51,7 +51,12 @@ import { logEvent } from "./platform/app/events";
 import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
 import EmbedReaderPane from "./reading/engine/EmbedReaderPane";
 import { openFailureText } from "./reading/engine/open-failure";
-import { CitationContext, FigureContext, type FigureHost } from "./ui/components/markdown/Markdown";
+import {
+  CitationContext,
+  FigureContext,
+  PrepSlugContext,
+  type FigureHost,
+} from "./ui/components/markdown/Markdown";
 import {
   findFigureById,
   renderFigure,
@@ -565,9 +570,30 @@ export default function App() {
       if (c.quote) void jumpToQuote(pageIndex, c.quote);
       else viewRef.current?.navigate({ pageIndex });
     } else if (c.kind === "figure") {
+      // Reachable when this document's figure list is empty, which is both "no
+      // figures in it" and "extraction hasn't finished" — nothing here can tell
+      // those apart. Either way the jump has nowhere to go, so say so rather
+      // than do nothing. (With a figure list, an unknown id never gets here: it
+      // renders as an inert chip instead of a control.)
       const fig = findFigureById(figuresRef.current, c.id);
-      if (fig) viewRef.current?.navigate({ pageIndex: fig.page - 1 });
+      if (!fig) {
+        pushToast("warn", `No figure ${c.id} in this document.`);
+        return;
+      }
+      viewRef.current?.navigate({ pageIndex: fig.page - 1 });
     } else {
+      // The model can cite a paper that isn't prepped — an abbreviated slug, or
+      // one it remembers from another book. Selecting it opened the prep panel
+      // on nothing, which reads as the panel being broken. Say so instead.
+      //
+      // Only once there is a list to check against: prep state loads a moment
+      // after the book does, and a citation clicked in that window is very
+      // likely real. No state means open the panel and let it catch up.
+      const papers = pipelineRef.current?.snapshot().state?.papers;
+      if (papers && !papers.some((p) => p.slug === c.slug)) {
+        pushToast("warn", `No prepped paper "${c.slug}" — the reply cited one that isn't here.`);
+        return;
+      }
       setSelectedPrepSlug(c.slug);
       setSidebarTab("prep");
       setSidebarOpen(true);
@@ -575,7 +601,7 @@ export default function App() {
     // Chat covering the reader has to get out of the way of the page it just
     // jumped to. A citation tapped in the bubble covers nothing, so it stays.
     swapToReading();
-  }, [jumpToQuote, swapToReading, setSelectedPrepSlug]);
+  }, [jumpToQuote, swapToReading, setSelectedPrepSlug, pipelineRef, pushToast]);
 
   // AI observations are a topic-level thing and show in the topic's sidebar
   // (ui/components/library/topic/ObservationSection.tsx, docs/31); the reader has
@@ -1085,9 +1111,22 @@ export default function App() {
     };
   }, [figures, onCitation]);
 
+  // The slugs a [slug p.N] citation may name. Null — not an empty set — until
+  // prep state has actually loaded: "this paper isn't prepped" and "the list
+  // isn't here yet" are different answers, and only the first should strike a
+  // citation back to plain text. Keyed on the slugs themselves so the set keeps
+  // its identity across the status changes that fire while prep runs, which is
+  // what keeps every rendered reply from re-linkifying each time.
+  const prepSlugKey = prepSnap?.state?.papers.map((p) => p.slug).join("\n") ?? null;
+  const prepSlugs = useMemo(
+    () => (prepSlugKey === null ? null : new Set(prepSlugKey.split("\n").filter(Boolean))),
+    [prepSlugKey],
+  );
+
   return (
     <CardRegistryProvider>
     <CitationContext.Provider value={onCitation}>
+    <PrepSlugContext.Provider value={prepSlugs}>
     <FigureContext.Provider value={figureHost}>
     {/* p-safe: the insets (iPad, viewport-fit=cover). box-sizing:border-box
         keeps the padding inside the full-height shell. Fixed overlays are not
@@ -1382,6 +1421,7 @@ export default function App() {
       )}
     </div>
     </FigureContext.Provider>
+    </PrepSlugContext.Provider>
     </CitationContext.Provider>
     </CardRegistryProvider>
   );
