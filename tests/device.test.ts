@@ -32,6 +32,15 @@ test("a machine with no file gets an identity and the migrated defaults", () => 
   expect(settings.role).toBe(DEFAULT_DEVICE_SETTINGS.role);
   expect(settings.backgroundCollect).toBe(true);
   expect(settings.fingerDraw).toBe(false);
+  expect(settings.chatScale).toBe(DEFAULT_DEVICE_SETTINGS.chatScale);
+});
+
+// Everything added to the file since is defaulted the same way, with no clause
+// of its own: a field the first run dropped would come back as 1x on a machine
+// whose reader had already sized the type.
+test("a field with no migration behind it still survives the first run", () => {
+  const { settings } = initialDeviceSettings({ deviceId: "id-1", chatScale: 1.4 }, {}, () => "unused");
+  expect(settings.chatScale).toBe(1.4);
 });
 
 // The migration reads settings.json once. What was on the account's file is the
@@ -55,6 +64,7 @@ test("a device that already answered keeps its answer and is not rewritten", () 
     autostart: true,
     backgroundCollect: false,
     fingerDraw: true,
+    chatScale: 1.4,
   };
   const { settings, changed } = initialDeviceSettings(
     stored,

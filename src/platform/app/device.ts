@@ -40,6 +40,11 @@ export interface DeviceSettings {
   // a stylus wants; a device without one turns this on to reach annotation at
   // all. The navigation lock still outranks it: while that is on, nothing draws.
   fingerDraw: boolean;
+  // How large the maximized chat window sets its content, as a multiplier on the
+  // body size (ui/components/base/chat-scale.ts). Per-device for the same reason
+  // fingerDraw is: a 4K desktop and an iPad held at arm's length do not have the
+  // same answer, and a synced one would carry the wrong answer onto the other.
+  chatScale: number;
 }
 
 export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
@@ -48,6 +53,7 @@ export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
   autostart: false,
   backgroundCollect: true,
   fingerDraw: false,
+  chatScale: 1,
 };
 
 // The role this device actually has, whatever the file says. iOS and Android are
@@ -167,4 +173,12 @@ export function currentDeviceId(): string {
 export function saveDeviceSettings(settings: DeviceSettings): Promise<void> {
   cached = withRole(settings);
   return writeTextAtomic(DEVICE_FILE, JSON.stringify(settings, null, 2));
+}
+
+// One field, without the caller having to hold the rest of the file. A whole-object
+// save carries whatever copy the caller last read, so two screens that each own
+// a different setting undo each other; a patch merges onto the live copy.
+export async function patchDeviceSettings(patch: Partial<DeviceSettings>): Promise<void> {
+  const current = cached ?? (await loadDeviceSettings());
+  await saveDeviceSettings({ ...current, ...patch });
 }

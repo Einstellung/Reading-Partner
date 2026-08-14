@@ -3,7 +3,13 @@
 // composer. The parent overlays it on the reader and adds the reading pip card
 // in the top-right, so this leaves that corner clear (close sits top-left).
 // Tailwind-only.
+//
+// The conversation sits in a ChatScaleScope: the reader can zoom it, and the
+// column widens with the type so the margins give way instead of the text
+// wrapping shorter. Only the conversation — the hang-up button and the mode
+// pills stay outside, at the size every other control in the app is.
 
+import ChatScaleScope from '../base/ChatScaleScope';
 import { IconClose } from '../base/icons';
 import { Composer, MessageList, type ComposerVoice } from './chat';
 import DeleteThreadButton from './DeleteThreadButton';
@@ -126,28 +132,33 @@ export default function CallView({
 			)}
 
 			{empty ? (
-				<div className="flex flex-1 flex-col items-center justify-center px-4">
-					<h1 className="mb-8 max-w-3xl text-center text-2xl font-medium text-neutral-700">
+				<ChatScaleScope className="flex min-h-0 flex-1 flex-col items-center justify-center px-4">
+					<h1 className="mb-8 max-w-[calc(48rem*var(--chat-scale,1))] text-center text-2xl font-medium text-neutral-700">
 						{emptyTitle}
 					</h1>
-					<div className="w-full max-w-3xl">
+					<div className="w-full max-w-[calc(48rem*var(--chat-scale,1))]">
 						<Composer onSend={onSend} placeholder={placeholder} pill {...composerProps} />
 					</div>
-				</div>
+				</ChatScaleScope>
 			) : (
-				<>
+				<ChatScaleScope className="flex min-h-0 flex-1 flex-col">
 					{/* pt-36 clears the reading card in the top-right corner (120px tall,
 					    top-3), not just the hang-up button — below that the first message
 					    renders under the card. */}
 					<div className="min-h-0 flex-1 overflow-y-auto px-4 pt-36">
-						<MessageList messages={messages} size="lg" className="mx-auto max-w-3xl pb-6" onCardAction={onCardAction} />
+						<MessageList
+							messages={messages}
+							size="lg"
+							className="mx-auto max-w-[calc(48rem*var(--chat-scale,1))] pb-6"
+							onCardAction={onCardAction}
+						/>
 					</div>
 					<div className="px-4 pb-6">
-						<div className="mx-auto w-full max-w-3xl">
+						<div className="mx-auto w-full max-w-[calc(48rem*var(--chat-scale,1))]">
 							<Composer onSend={onSend} placeholder="Reply…" pill {...composerProps} />
 						</div>
 					</div>
-				</>
+				</ChatScaleScope>
 			)}
 		</div>
 	);

@@ -11,8 +11,13 @@
 // with nothing is worse than the plain text it was made from — so this subtree
 // provides a null CitationContext, which is what makes the markdown renderer
 // leave them alone.
+//
+// The conversation column is a ChatScaleScope, the same one the reader's call
+// window uses and on the same value: a reader who sized the type once has sized
+// it everywhere a conversation is the screen.
 
 import { useMemo, useState } from "react";
+import ChatScaleScope from "../base/ChatScaleScope";
 import { CitationContext } from "../markdown/Markdown";
 import { IconClose, IconOutline } from "../base/icons";
 import { Composer, MessageList } from "../chat/chat";
@@ -103,7 +108,7 @@ export default function TalkView(props: {
         </div>
 
         <div className="flex min-h-0 flex-1">
-          <div className="flex min-w-0 flex-1 flex-col">
+          <ChatScaleScope className="flex min-w-0 flex-1 flex-col">
             {talk.error && (
               <p className="m-0 border-b border-border bg-muted/40 px-4 py-2 text-sm text-destructive">
                 {talk.error}
@@ -116,12 +121,12 @@ export default function TalkView(props: {
                 <MessageList
                   messages={talk.messages}
                   size="lg"
-                  className="mx-auto max-w-3xl pb-6"
+                  className="mx-auto max-w-[calc(48rem*var(--chat-scale,1))] pb-6"
                 />
               </div>
             )}
             <div className="px-4 pb-6">
-              <div className="mx-auto w-full max-w-3xl">
+              <div className="mx-auto w-full max-w-[calc(48rem*var(--chat-scale,1))]">
                 <Composer
                   onSend={talk.send}
                   placeholder="Say it in your own words…"
@@ -131,7 +136,7 @@ export default function TalkView(props: {
                 />
               </div>
             </div>
-          </div>
+          </ChatScaleScope>
 
           {outlineOpen && (
             <OutlinePane

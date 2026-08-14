@@ -1,4 +1,11 @@
 // Shared chat pieces for the call UI (CallBubble, CallView). Tailwind-only.
+//
+// The `lg` size is the maximized window's, and it sets its type off
+// `--chat-scale` (ui/components/base/chat-scale.ts) so the reader can zoom the
+// conversation. Nothing here imports that: the variable carries a default, so a
+// row rendered outside a ChatScaleScope is 1x. `sm` is the corner bubble, which
+// does not zoom. Line heights in the scaled sizes are unitless — a rem one is
+// measured against the root font size and would not follow.
 
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { HIT_44 } from '../base/buttons';
@@ -154,7 +161,7 @@ function TypingDots() {
 // Tool-call trace above a streaming AI reply (M6): a running tool is a subdued
 // line ending in an ellipsis; a failed one takes --destructive, the app's one red.
 function ToolTrace({ tools, size }: { tools: ToolStatus[]; size: 'sm' | 'lg' }) {
-	const text = size === 'lg' ? 'text-sm' : 'text-xs';
+	const text = size === 'lg' ? 'text-[calc(0.875rem*var(--chat-scale,1))]' : 'text-xs';
 	return (
 		<div className="flex flex-col gap-0.5">
 			{tools.map((t, i) =>
@@ -178,7 +185,14 @@ function ToolTrace({ tools, size }: { tools: ToolStatus[]; size: 'sm' | 'lg' }) 
 // low contrast, sitting where a footnote would.
 function BudgetNotice({ text, size }: { text: string; size: 'sm' | 'lg' }) {
 	return (
-		<div className={'text-neutral-400 ' + (size === 'lg' ? 'text-[13px] leading-6' : 'text-[11px] leading-relaxed')}>
+		<div
+			className={
+				'text-neutral-400 ' +
+				(size === 'lg'
+					? 'text-[calc(13px*var(--chat-scale,1))] leading-[1.85]'
+					: 'text-[11px] leading-relaxed')
+			}
+		>
 			{text}
 		</div>
 	);
@@ -253,7 +267,9 @@ const MessageBubble = memo(function MessageBubble({
 					<div
 						className={
 							'box-border max-w-[75%] whitespace-pre-wrap break-words rounded-2xl bg-neutral-100 text-neutral-900 ' +
-							(lg ? 'px-4 py-2.5 text-base leading-7' : 'px-3 py-1.5 text-[13px] leading-relaxed')
+							(lg
+								? 'px-4 py-2.5 text-[calc(1rem*var(--chat-scale,1))] leading-[1.75]'
+								: 'px-3 py-1.5 text-[13px] leading-relaxed')
 						}
 					>
 						{message.text}
@@ -288,7 +304,14 @@ const MessageBubble = memo(function MessageBubble({
 	// render, this is checked by a test rather than argued about.
 	if (failed && !notice) {
 		return (
-			<div className={'text-destructive ' + (lg ? 'text-[15px] leading-7' : 'text-[13px] leading-relaxed')}>
+			<div
+				className={
+					'text-destructive ' +
+					(lg
+						? 'text-[calc(15px*var(--chat-scale,1))] leading-[1.87]'
+						: 'text-[13px] leading-relaxed')
+				}
+			>
 				{message.text}
 			</div>
 		);
@@ -313,7 +336,7 @@ const MessageBubble = memo(function MessageBubble({
 	return (
 		<div ref={rowRef} className="group flex flex-col gap-2">
 			{trace}
-			<div className={'text-neutral-800 ' + (lg ? 'text-base' : 'text-[13px]')}>
+			<div className={'text-neutral-800 ' + (lg ? 'text-[calc(1rem*var(--chat-scale,1))]' : 'text-[13px]')}>
 				<Markdown text={textPart.text} />
 			</div>
 			{/* After the answer, before the copy affordance: the notice belongs to the
@@ -464,13 +487,15 @@ export function Composer({
 		: 'box-border rounded-xl border border-black/10 bg-white p-2 focus-within:border-primary';
 	// box-border: the auto-grow sets height from scrollHeight, which includes the
 	// padding. Hidden scrollbar: an appearing gutter would reflow the text mid-typing.
-	// 16px on a coarse pointer: WKWebView zooms the whole page in when a field
-	// smaller than that takes focus, and the reader needs pinch-zoom left on.
+	// 16px floor: WKWebView zooms the whole page in when a field smaller than that
+	// takes focus, and the reader needs pinch-zoom left on. The big composer keeps
+	// the floor inside its own size instead of as a coarse-pointer override — that
+	// override would outrank the scaled size and pin the field at 16px on a tablet.
 	const field =
-		'box-border min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent outline-none coarse:text-[16px] placeholder:text-neutral-400 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ' +
+		'box-border min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent outline-none placeholder:text-neutral-400 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ' +
 		(pill
-			? 'py-1.5 text-[15px] leading-6 text-neutral-800'
-			: 'px-1 py-1 text-[13px] leading-5 coarse:leading-6 text-neutral-800');
+			? 'py-1.5 text-[max(16px,calc(1rem*var(--chat-scale,1)))] leading-[1.5] text-neutral-800'
+			: 'px-1 py-1 text-[13px] leading-5 coarse:text-[16px] coarse:leading-6 text-neutral-800');
 	const stopBtn = 'flex shrink-0 items-center justify-center rounded-full bg-neutral-800 text-white';
 
 	return (
