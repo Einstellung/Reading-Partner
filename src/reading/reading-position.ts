@@ -15,7 +15,7 @@ import {
 } from "../platform/app/debounced-writer";
 import type { ViewState } from "../platform/app/reader-contract";
 import { reportStoreError } from "../platform/app/store-errors";
-import { saveViewState, withModes } from "../platform/app/storage";
+import { saveViewState, saveViewStateOnExit, withModes } from "../platform/app/storage";
 
 export interface ReadingModes {
   classroom: boolean;
@@ -23,6 +23,12 @@ export interface ReadingModes {
 
 export interface ReadingPositionIo {
   write: (bookId: string, state: ViewState) => Promise<void>;
+  // How the way out of the app writes. Every position lives in one file, so the
+  // ordinary write reads it back before replacing it; at pagehide that costs a
+  // second IPC the suspended webview may not get, and a read that fails there
+  // writes nothing — losing the last position of the session, which is the whole
+  // reason the exit path exists. Absent, the ordinary write is used.
+  writeOnExit?: (bookId: string, state: ViewState) => Promise<void>;
   onError?: (e: unknown) => void;
   timer?: WriterTimer;
   exit?: (onExit: () => void) => void;
@@ -48,11 +54,18 @@ export function createReadingPositions(io: ReadingPositionIo): ReadingPositions 
   // of the write that lands rather than being overtaken by it.
   const latest = new Map<string, ViewState>();
 
-  const writer = createDebouncedWriter<string>({
-    write: async (bookId) => {
+  // Both paths send the same thing — whatever `latest` holds at write time —
+  // and differ only in which door it goes out of.
+  const send =
+    (write: (bookId: string, state: ViewState) => Promise<void>) =>
+    async (bookId: string): Promise<void> => {
       const state = latest.get(bookId);
-      if (state) await io.write(bookId, state);
-    },
+      if (state) await write(bookId, state);
+    };
+
+  const writer = createDebouncedWriter<string>({
+    write: send(io.write),
+    writeOnExit: io.writeOnExit && send(io.writeOnExit),
     onError: io.onError,
     timer: io.timer,
     exit: io.exit,
@@ -79,6 +92,7 @@ export function createReadingPositions(io: ReadingPositionIo): ReadingPositions 
 
 const positions = createReadingPositions({
   write: saveViewState,
+  writeOnExit: saveViewStateOnExit,
   onError: (e) => reportStoreError("reading-position", e),
 });
 

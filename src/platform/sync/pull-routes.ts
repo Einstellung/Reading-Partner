@@ -13,6 +13,7 @@
 // written down as having no in-memory state.
 
 import { dropAnnotationCache } from "../app/annotations";
+import { dropViewStateCache, STATE_FILE } from "../app/storage";
 import { dropThreadCache } from "../app/threads";
 
 // A route without its handler: the half that can be stated up front, and the
@@ -59,29 +60,42 @@ export function dispatchPull(paths: readonly string[]): void {
 const THREADS_FILE = /^threads-(.+)\.json$/;
 const ANNOTATIONS_FILE = /^annotations-(.+)\.json$/;
 
-// What the route drops, taken as an argument: the two stores are module
-// singletons over Tauri, and swapping a module out for a test poisons every
-// other test file sharing the worker (pitfall 119).
+// What the route drops, taken as an argument: the stores are module singletons
+// over Tauri, and swapping a module out for a test poisons every other test file
+// sharing the worker (pitfall 119).
 export interface BookCacheDrops {
   threads: (bookId: string) => void;
   annotations: (bookId: string) => void;
+  // reading-state.json is one map of every book's position rather than a file
+  // per book, but it is the same problem: storage.ts keeps the map it last saw
+  // so the way out of the app can write in one IPC, and a pull that landed
+  // another device's positions would be undone by that write.
+  //
+  // storage.ts also drops that map off the write itself, which is what actually
+  // closes the window — a pass writes reading-state.json in the middle and gets
+  // here at the end, if it gets here. This stays because the range's contract is
+  // that every synced file has a route, and because syncFs's fallback for bytes
+  // that are not valid UTF-8 does not go through the atomic writer.
+  viewStates: () => void;
 }
 
-// The per-book caches, which no shell has anything to decide about: both stores
-// write themselves back in full, so a cache the pull did not invalidate erases
-// whatever the other device added on the next mark. Registered here rather than
-// by a shell — App registered it and PhoneApp did not, which left the phone's
-// info threads masked by a stale cache after every pull.
+// The book-keyed caches, which no shell has anything to decide about: every one
+// of these stores writes itself back in full, so a cache the pull did not
+// invalidate erases whatever the other device added on the next mark. Registered
+// here rather than by a shell — App registered it and PhoneApp did not, which
+// left the phone's info threads masked by a stale cache after every pull.
 export function bookCachePullRoute(drop: BookCacheDrops): PullRoute {
   return {
     id: "book-caches",
-    matches: (path) => THREADS_FILE.test(path) || ANNOTATIONS_FILE.test(path),
+    matches: (path) =>
+      THREADS_FILE.test(path) || ANNOTATIONS_FILE.test(path) || path === STATE_FILE,
     onPulled: (paths) => {
       for (const path of paths) {
         const threads = THREADS_FILE.exec(path);
         if (threads) drop.threads(threads[1]);
         const annotations = ANNOTATIONS_FILE.exec(path);
         if (annotations) drop.annotations(annotations[1]);
+        if (path === STATE_FILE) drop.viewStates();
       }
     },
   };
@@ -91,6 +105,7 @@ export function bookCachePullRoute(drop: BookCacheDrops): PullRoute {
 export const BOOK_CACHE_PULL_ROUTE: PullRoute = bookCachePullRoute({
   threads: dropThreadCache,
   annotations: dropAnnotationCache,
+  viewStates: dropViewStateCache,
 });
 
 registerPullRoute(BOOK_CACHE_PULL_ROUTE);

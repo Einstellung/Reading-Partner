@@ -22,9 +22,42 @@ import { reportStoreError } from "./store-errors";
  */
 export const APPDATA = { baseDir: BaseDirectory.AppData } as const;
 
+// Who to tell when a file is replaced. A store that holds a file's contents in
+// memory between reads is only right for as long as nothing else replaces the
+// file, and two things do: a sync pull landing the other device's copy, and the
+// key migration (migrate.ts). Both write through writeTextAtomic, as does every
+// other text write in the app, so this is where that can be said once — at the
+// moment the held copy stops being the file, rather than at the end of whatever
+// pass replaced it.
+//
+// The one text write that does not come through here is syncFs.write's fallback
+// for bytes that are not valid UTF-8. Nothing this app wrote is invalid UTF-8, so
+// a file arriving that way is not one any store here has a copy of.
+const writeListeners = new Set<(path: string) => void>();
+
+/**
+ * Hear about every AppData text file replaced through writeTextAtomic, by
+ * relative path, after the bytes have landed. Returns the undo.
+ */
+export function onFileWritten(listener: (path: string) => void): () => void {
+  writeListeners.add(listener);
+  return () => {
+    writeListeners.delete(listener);
+  };
+}
+
 /** Replace an AppData-relative text file atomically. Parent dirs are created. */
-export function writeTextAtomic(path: string, contents: string): Promise<void> {
-  return invoke("write_text_file_atomic", { path, contents });
+export async function writeTextAtomic(path: string, contents: string): Promise<void> {
+  await invoke("write_text_file_atomic", { path, contents });
+  // A listener exists to drop something; one that throws must not turn a write
+  // that landed into a write that failed.
+  for (const listener of [...writeListeners]) {
+    try {
+      listener(path);
+    } catch (e) {
+      console.error(`write listener failed for ${path}`, e);
+    }
+  }
 }
 
 /**

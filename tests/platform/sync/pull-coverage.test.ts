@@ -49,10 +49,6 @@ const ROUTES: PullMatcher[] = [
 // across a pull: each is read when the screen or the pass that wants it starts,
 // so the newer bytes are picked up by the next reader of the file.
 const NO_IN_MEMORY_STATE: Record<string, string> = {
-  // Written through a read-modify-write of the whole map, so another book's
-  // pulled position survives; the open book's own is the one this device is
-  // authoritative for anyway.
-  "reading-state.json": "rewritten per book from disk on every save",
   "user-profile.md": "loadProfile reads the file each time it is wanted",
   "info-profile.md": "the profile's old name, read the same way",
   "info-feedback.jsonl": "append-only, and read in full when it is read at all",
