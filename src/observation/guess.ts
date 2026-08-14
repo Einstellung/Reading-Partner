@@ -20,6 +20,11 @@
 // markers do not parse, the whole file is treated as declared and the pass gives
 // up rather than guessing where the boundary was.
 //
+// The other half of that property is timing. The splice targets the document as
+// read AFTER the sub-agent returns, not the copy taken before it: the reader is
+// awake during those minutes, and the Apply button on a profile card writes the
+// declared half.
+//
 // Pure: no filesystem, no provider. live.ts binds the store, the model and the
 // event log.
 
@@ -458,6 +463,11 @@ export function buildGuessAgent(
 // What the pass reads and writes. Injected so the whole thing runs against a
 // string in tests, with no provider and no filesystem.
 export interface ProfileGuessStore {
+  // Throws when the profile could not be read. It must not answer "" for that:
+  // an empty document is a profile with nothing in it, which this pass is
+  // entitled to add a guess section to, and a file it could not read is one it
+  // knows nothing about. observation/profile.ts's loadProfileForWrite is the
+  // live binding and draws exactly that line.
   load(): Promise<string>;
   save(text: string): Promise<void>;
 }
@@ -476,7 +486,15 @@ export interface ProfileGuessPassInput {
 }
 
 // Why a pass did nothing before it reached the model.
-export type GuessSkip = "unparseable-profile" | "no-evidence";
+export type GuessSkip = "unparseable-profile" | "unreadable-profile" | "no-evidence";
+
+// Why a pass that did reach the model still wrote nothing: the re-read found a
+// document the guesses cannot be spliced onto. Two shapes and only two — the
+// boundary between the halves can no longer be located, or the file can no
+// longer be read at all. A declared half that simply changed is not one of them:
+// the guesses are about the reader, not about the words the reader typed, so
+// they go onto the document as it now stands.
+export type GuessRefusal = "unparseable-profile" | "unreadable-profile";
 
 export type ProfileGuessResult =
   | { ran: false; skipped: GuessSkip }
@@ -491,6 +509,8 @@ export type ProfileGuessResult =
       // Entries the model sent that the rules above threw away.
       dropped: number;
       failure?: string;
+      // Set when the model answered and the write was refused anyway.
+      refused?: GuessRefusal;
     };
 
 // One pass. Rejects only for cancellation (StoppedError, raised by the
@@ -504,7 +524,15 @@ export async function runProfileGuessPass(
   deps: ProfileGuessDeps,
 ): Promise<ProfileGuessResult> {
   const now = deps.now ?? Date.now;
-  const text = await deps.profile.load();
+  let text: string;
+  try {
+    text = await deps.profile.load();
+  } catch {
+    // The file is there and could not be read. Carrying on would send the model
+    // an empty declared half and then write its answer over a profile nobody in
+    // this process has seen.
+    return { ran: false, skipped: "unreadable-profile" };
+  }
   const split = splitProfile(text);
   // Markers that do not parse: treat the whole file as the reader's and write
   // nothing. Splicing on a guessed boundary is how the declared half would be
@@ -567,18 +595,49 @@ export async function runProfileGuessPass(
     };
   }
 
+  // Read the document again. `split` was taken before the sub-agent ran, and
+  // that call is tens of seconds to minutes of a reader's evening: the Apply
+  // button on a profile card (info/companion/card-actions.ts) writes the
+  // declared half in exactly that window, and a sync pull can land a whole new
+  // file. Splicing onto the stale copy puts the reader's own paragraph back to
+  // what it said before they edited it, silently, once every six hours.
+  const stale = {
+    ran: true,
+    ok: true,
+    outcome: brief.outcome,
+    wrote: false,
+    guesses: split.guesses.length,
+    dropped: 0,
+  } as const;
+  let current: string;
+  try {
+    current = await deps.profile.load();
+  } catch {
+    return { ...stale, refused: "unreadable-profile" };
+  }
+  const target = splitProfile(current);
+  // The boundary moved out of reach while the model was thinking. Same rule as
+  // before the call, and the same reason: a splice would have to guess where the
+  // reader's half ends.
+  if (!target.ok) return { ...stale, refused: "unparseable-profile" };
+
+  // Everything the section is measured against comes from the re-read: `since`
+  // dates from the entries actually on file, so a set that arrived by sync keeps
+  // its own first-seen dates, and the character budget from the declared half as
+  // it now stands, so a reader who just doubled their profile gets a shorter
+  // guess section rather than an oversized document.
   const guesses = normalizeGuesses(raw, {
     today,
-    previous: split.guesses,
-    declaredChars: declaredText(split).length,
+    previous: target.guesses,
+    declaredChars: declaredText(target).length,
   });
-  const next = composeProfile(split, guesses);
-  if (next !== text) await deps.profile.save(next);
+  const next = composeProfile(target, guesses);
+  if (next !== current) await deps.profile.save(next);
   return {
     ran: true,
     ok: true,
     outcome: brief.outcome,
-    wrote: next !== text,
+    wrote: next !== current,
     guesses: guesses.length,
     dropped: raw.length - guesses.length,
   };

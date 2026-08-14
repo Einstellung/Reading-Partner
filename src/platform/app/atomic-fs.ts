@@ -117,6 +117,25 @@ export async function readJson<T>(
 }
 
 /**
+ * Read a text file that cannot be rebuilt from anything else and has no format
+ * to fail: markdown the reader wrote themselves. There is no parse step, so
+ * nothing here is ever quarantined — whatever bytes are there are the document.
+ * The one failure is a read that did not happen, reported as corrupt with a null
+ * `savedAs`: the file is still where it was, and the caller must not write over
+ * it with whatever it fell back to.
+ */
+export async function readGuardedText(file: string): Promise<GuardedRead<string>> {
+  try {
+    if (!(await exists(file, APPDATA))) return { status: "missing" };
+    return { status: "ok", value: await readTextFile(file, APPDATA) };
+  } catch (e) {
+    console.error(`failed to read ${file}`, e);
+    reportStoreError("corrupt-file", { file, savedAs: null });
+    return { status: "corrupt", savedAs: null };
+  }
+}
+
+/**
  * readJson for a store whose empty state is a shape rather than a null. The
  * fallback is copied before it is returned, so a caller may hold its empty
  * state in a module-level constant: what one read hands back and the caller

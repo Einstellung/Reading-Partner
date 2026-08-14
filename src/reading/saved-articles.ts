@@ -3,6 +3,11 @@
 // TopicMaterial / fulltext is involved. The point of landing it now is that the
 // records accumulate, so the later AI path reads real data instead of nothing.
 //
+// Read through readGuardedJson, for the reason the shelf and settings are: the
+// briefing a record came from is a day old and gone, keep/un-keep are both
+// load-modify-save, and a read answered with "[]" would have the next un-keep
+// write that over the file (docs/13).
+//
 // Its own records file rather than a field on Topic: topics.json merges a whole
 // topic record at a time, so two devices each saving an article on the same day
 // would overwrite each other's. Here the record is the article, so both survive.
@@ -15,11 +20,13 @@
 // from the briefing and the copy kept from it hold the same markup.
 
 import {
-  BaseDirectory,
-  exists,
-  readTextFile,
-} from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../platform/app/atomic-fs";
+  quarantineFile,
+  readGuardedJson,
+  writeTextAtomic,
+  type CorruptFileReport,
+  type GuardedRead,
+} from "../platform/app/atomic-fs";
+import { reportStoreError } from "../platform/app/store-errors";
 import { sanitizeArticleHtml, stripDataImages } from "../info/extract/sanitize";
 
 export const SAVED_ARTICLES_FILE = "saved-articles.json";
@@ -147,33 +154,77 @@ export function formatPublishedAt(publishedAt: string): string {
   return Number.isNaN(at.getTime()) ? raw : at.toLocaleDateString();
 }
 
-// Parse a saved-articles.json body, dropping anything that is not a record with
-// an id — one malformed entry must not blank the list, and a record without an
-// identity would make the whole file fall back to opaque merging.
+// What one read of saved-articles.json produced.
+export interface ParsedSavedArticles {
+  articles: SavedArticle[];
+  // True when the file held something no writer here produces: an entry that is
+  // not an object, a record with no identity and nothing to derive one from, a
+  // second copy of an id. Those entries are not in `articles`, so the bytes must
+  // be set aside before the next write replaces them (see save below).
+  repaired: boolean;
+}
+
+// Read the records out of a parsed saved-articles.json.
+//
+// A record is kept whenever it can be identified, however wrong the rest of it
+// looks: the id is what the sync merge keys on (platform/sync/merge/records.ts)
+// and what the reader un-keeps by, and a field this build does not recognise
+// still belongs to the reader. A record with no id but a url or a title gets the
+// id saveArticle would have given it, so it stops being unmergeable.
+//
+// Only three things are left out, and none of them can be carried: an entry that
+// is not an object at all, one with no identity and no way to derive one, and a
+// second record under an id already taken. Carrying those would not preserve
+// them either — readCollection turns down a whole file that holds one, and the
+// merge then falls back to copying one device's file over the other's, which
+// loses real records. They stay in the quarantined copy instead.
+//
+// Null when the file is not an array: that is not this writer's shape at all,
+// and readGuardedJson quarantines it.
 //
 // The body is sanitized here, on the way out of the file, and not only in
 // buildSavedArticle on the way in. This file lives in the synced folder and
-// merges record by record (platform/sync/merge/records.ts), so a record can
-// arrive without ever having passed through this device's write path: a folder
-// the reader shared, a second device, the Drive account. What SavedArticleView
-// does with `html` is dangerouslySetInnerHTML, so the guard belongs at the read,
-// same as the published briefing bodies (info/briefing/reader.ts). Doing it on
-// write as well is not wasted — it keeps the stored file clean — but write-side
-// alone guards nothing, because the attacker writes the file.
-export function parseSavedArticles(text: string): SavedArticle[] {
-  let data: unknown;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    return [];
+// merges record by record, so a record can arrive without ever having passed
+// through this device's write path: a folder the reader shared, a second device,
+// the Drive account. What SavedArticleView does with `html` is
+// dangerouslySetInnerHTML, so the guard belongs at the read, same as the
+// published briefing bodies (info/briefing/reader.ts). Doing it on write as well
+// is not wasted — it keeps the stored file clean — but write-side alone guards
+// nothing, because the attacker writes the file.
+export function parseSavedArticles(raw: unknown): ParsedSavedArticles | null {
+  if (!Array.isArray(raw)) return null;
+  const articles: SavedArticle[] = [];
+  const seen = new Set<string>();
+  let repaired = false;
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      repaired = true;
+      continue;
+    }
+    const record = entry as Partial<SavedArticle>;
+    let id = typeof record.id === "string" ? record.id : "";
+    if (id === "") {
+      // Healed, not dropped: nothing is left behind, so this alone does not
+      // make the file worth setting aside.
+      id = savedArticleId(asText(record.url), asText(record.title));
+      if (id === "") {
+        repaired = true;
+        continue;
+      }
+    }
+    if (seen.has(id)) {
+      repaired = true;
+      continue;
+    }
+    seen.add(id);
+    articles.push({ ...(entry as SavedArticle), id, html: sanitizeStoredHtml(record.html) });
   }
-  if (!Array.isArray(data)) return [];
-  return data
-    .filter(
-      (a): a is SavedArticle =>
-        !!a && typeof a === "object" && typeof (a as SavedArticle).id === "string" && (a as SavedArticle).id !== "",
-    )
-    .map((a) => ({ ...a, html: sanitizeStoredHtml(a.html) }));
+  return { articles, repaired };
+}
+
+// A field that should have been a string, from a file that may hold anything.
+function asText(value: unknown): string {
+  return typeof value === "string" ? value : "";
 }
 
 // One stored body, made safe to render. Not a string at all when the file was
@@ -199,31 +250,103 @@ export function sanitizeStoredHtml(html: unknown): string {
 
 // --- filesystem ------------------------------------------------------------
 
-export async function loadSavedArticles(): Promise<SavedArticle[]> {
-  try {
-    if (!(await exists(SAVED_ARTICLES_FILE, { baseDir: BaseDirectory.AppData }))) return [];
-    return parseSavedArticles(
-      await readTextFile(SAVED_ARTICLES_FILE, { baseDir: BaseDirectory.AppData }),
-    );
-  } catch {
-    return [];
-  }
+// The file access this store needs, as a parameter. A test hands it an
+// in-memory AppData instead of rewriting the module registry with mock.module,
+// which rewrites it for every other test file in the same worker (pitfall 119).
+// Every exported call takes it last and defaults to the real one, so callers
+// pass nothing.
+export interface SavedArticlesIo {
+  read(
+    file: string,
+    validate: (raw: unknown) => SavedArticle[] | null,
+  ): Promise<GuardedRead<SavedArticle[]>>;
+  write(file: string, contents: string): Promise<void>;
+  quarantine(file: string): Promise<string | null>;
+  reportCorrupt(report: CorruptFileReport): void;
 }
 
-async function save(list: SavedArticle[]): Promise<void> {
-  await writeTextAtomic(SAVED_ARTICLES_FILE, JSON.stringify(list, null, 2));
+export const savedArticlesIo: SavedArticlesIo = {
+  read: readGuardedJson,
+  write: writeTextAtomic,
+  quarantine: quarantineFile,
+  reportCorrupt: (report) => reportStoreError("corrupt-file", report),
+};
+
+// The records read, plus whether it is safe to write the result back and
+// whether what came off disk had to be repaired. The kept articles cannot be
+// rebuilt from anywhere — the briefing they came from is a day old and gone — so
+// a file that could not be read must never be replaced by "the one article being
+// kept", or by "everything except the one being un-kept". Content that does not
+// parse is quarantined by readGuardedJson and a fresh list takes over; a file
+// that could not be read at all is left alone and writing is refused until a
+// later read succeeds.
+async function readSavedArticles(io: SavedArticlesIo): Promise<{
+  list: SavedArticle[];
+  writable: boolean;
+  repaired: boolean;
+}> {
+  let repaired = false;
+  const read = await io.read(SAVED_ARTICLES_FILE, (raw) => {
+    const parsed = parseSavedArticles(raw);
+    if (parsed === null) return null;
+    repaired = parsed.repaired;
+    return parsed.articles;
+  });
+  if (read.status === "ok") return { list: read.value, writable: true, repaired };
+  if (read.status === "missing") return { list: [], writable: true, repaired: false };
+  return { list: [], writable: read.savedAs !== null, repaired: false };
+}
+
+export async function loadSavedArticles(
+  io: SavedArticlesIo = savedArticlesIo,
+): Promise<SavedArticle[]> {
+  return (await readSavedArticles(io)).list;
+}
+
+// Replace the file with `list`. Returns whether it was written.
+//
+// When the read had to leave an entry behind, the bytes go aside as
+// `.corrupt-<ms>` first, so the records this build could not place survive the
+// write that drops them, and the reader is told where they went. A quarantine
+// that fails leaves those bytes in place and the write is refused: the entries
+// would otherwise exist nowhere.
+async function save(io: SavedArticlesIo, list: SavedArticle[], repaired: boolean): Promise<boolean> {
+  if (repaired) {
+    let savedAs: string | null = null;
+    try {
+      savedAs = await io.quarantine(SAVED_ARTICLES_FILE);
+    } catch (e) {
+      console.error(`failed to quarantine ${SAVED_ARTICLES_FILE}`, e);
+    }
+    io.reportCorrupt({ file: SAVED_ARTICLES_FILE, savedAs });
+    if (savedAs === null) return false;
+  }
+  await io.write(SAVED_ARTICLES_FILE, JSON.stringify(list, null, 2));
+  return true;
 }
 
 // Save one article under a topic. Returns the record written, or null when the
-// article has no identity (no URL and no title) and so cannot be de-duplicated.
-export async function saveArticle(input: SavedArticleInput): Promise<SavedArticle | null> {
+// article has no identity (no URL and no title) and so cannot be de-duplicated,
+// or when the records file could not be read and must not be written over.
+export async function saveArticle(
+  input: SavedArticleInput,
+  io: SavedArticlesIo = savedArticlesIo,
+): Promise<SavedArticle | null> {
   const article = buildSavedArticle(input, Date.now());
   if (article.id === "") return null;
-  await save(upsertSavedArticle(await loadSavedArticles(), article));
-  return article;
+  const read = await readSavedArticles(io);
+  if (!read.writable) return null;
+  const wrote = await save(io, upsertSavedArticle(read.list, article), read.repaired);
+  return wrote ? article : null;
 }
 
-// Un-save an article: a real removal, not an archive (docs/21).
-export async function removeSavedArticle(id: string): Promise<void> {
-  await save(removeSavedArticleById(await loadSavedArticles(), id));
+// Un-save an article: a real removal, not an archive (docs/21). A file that
+// could not be read is left alone — every other kept article is in it.
+export async function removeSavedArticle(
+  id: string,
+  io: SavedArticlesIo = savedArticlesIo,
+): Promise<void> {
+  const read = await readSavedArticles(io);
+  if (!read.writable) return;
+  await save(io, removeSavedArticleById(read.list, id), read.repaired);
 }

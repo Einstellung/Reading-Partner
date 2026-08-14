@@ -18,7 +18,7 @@ import {
   exists,
   readTextFile,
 } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../platform/app/atomic-fs";
+import { readGuardedText, writeTextAtomic } from "../platform/app/atomic-fs";
 import type { GuessState } from "./guess";
 
 export const PROFILE_FILE = "user-profile.md";
@@ -48,33 +48,68 @@ export const PROFILE_SKELETON_GUIDANCE = [
   "what the user has actually said — no invented taste, unspoken sections left out.",
 ].join("\n");
 
-// Load the profile. No file means no profile yet — return empty (nothing is
-// seeded or written); every reader handles an empty profile. A read failure
-// returns empty too, never blocking a briefing.
+// The profile as it is on disk, and whether a writer may replace it. Empty and
+// writable is the first-run case: no file, nothing seeded, and the first thing
+// written becomes the profile. Empty and NOT writable is the failure this type
+// exists to name — the file is there and could not be read, so the empty string
+// is what a failed read had to return, not what the reader wrote. A writer that
+// cannot tell the two apart replaces a profile it never saw with one built from
+// nothing (docs/13, 拉下来之后，本地那份缓存).
+export interface ProfileRead {
+  text: string;
+  writable: boolean;
+}
+
+/** Raised by loadProfileForWrite when the profile could not be read. */
+export class ProfileUnreadableError extends Error {
+  constructor(file: string) {
+    super(`${file} could not be read`);
+    this.name = "ProfileUnreadableError";
+  }
+}
+
+// Load the profile, saying whether what came back is the document. No file means
+// no profile yet — empty, writable, nothing seeded. A read that failed is empty
+// and not writable: the bytes are still on disk untouched, and the next write
+// must not be the thing that replaces them.
 //
 // One-time migration: when the new file is absent but an older build's
 // info-profile.md exists, promote its content to user-profile.md and return it.
 // The old file is left in place so a device still on the old build keeps reading
-// it through the shared synced folder.
-export async function loadProfile(): Promise<string> {
+// it through the shared synced folder. A legacy file that exists and cannot be
+// read is also not writable: creating user-profile.md from an empty base would
+// retire the migration, and the older build's profile would never be promoted.
+export async function loadProfileGuarded(): Promise<ProfileRead> {
+  const read = await readGuardedText(PROFILE_FILE);
+  if (read.status === "ok") return { text: read.value, writable: true };
+  if (read.status === "corrupt") return { text: "", writable: false };
+
+  const legacy = await readGuardedText(LEGACY_PROFILE_FILE);
+  if (legacy.status === "missing") return { text: "", writable: true };
+  if (legacy.status === "corrupt") return { text: "", writable: false };
   try {
-    if (await exists(PROFILE_FILE, { baseDir: BaseDirectory.AppData })) {
-      return await readTextFile(PROFILE_FILE, { baseDir: BaseDirectory.AppData });
-    }
-    if (await exists(LEGACY_PROFILE_FILE, { baseDir: BaseDirectory.AppData })) {
-      const legacy = await readTextFile(LEGACY_PROFILE_FILE, { baseDir: BaseDirectory.AppData });
-      try {
-        await writeTextAtomic(PROFILE_FILE, legacy);
-      } catch {
-        // If the promote-write fails, the legacy content is still returned; the
-        // next read tries the migration again.
-      }
-      return legacy;
-    }
-    return "";
+    await writeTextAtomic(PROFILE_FILE, legacy.value);
   } catch {
-    return "";
+    // If the promote-write fails, the legacy content is still returned; the
+    // next read tries the migration again.
   }
+  return { text: legacy.value, writable: true };
+}
+
+// For readers: the profile, or "" when there is none. A read failure returns
+// empty too, never blocking a briefing — nothing on this path writes, so an
+// empty prompt section is the whole cost.
+export async function loadProfile(): Promise<string> {
+  return (await loadProfileGuarded()).text;
+}
+
+// For writers: the profile, or a throw. Every path that saves the document back
+// goes through this one, so "could not read it" can never arrive at a write
+// looking like "there is nothing in it".
+export async function loadProfileForWrite(): Promise<string> {
+  const read = await loadProfileGuarded();
+  if (!read.writable) throw new ProfileUnreadableError(PROFILE_FILE);
+  return read.text;
 }
 
 export async function saveProfile(text: string): Promise<void> {
