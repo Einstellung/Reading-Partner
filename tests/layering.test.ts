@@ -52,6 +52,7 @@ const LAYER: Record<string, Layer> = {
 
   info: "domain",
   "info/briefing": "domain",
+  "info/briefing/speech": "domain",
   "info/companion": "domain",
   "info/extract": "domain",
   "info/sources": "domain",
