@@ -1,0 +1,4980 @@
+{
+  "kind": "voice-probe-session",
+  "version": 2,
+  "exportedAt": "2026-08-15T07:17:16.792Z",
+  "host": {
+    "appVersion": "0.8.23",
+    "platform": "iPhone",
+    "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+  },
+  "status": {
+    "available": true,
+    "reason": null,
+    "supportedLocales": [
+      "fr-FR",
+      "fr-CH",
+      "fr-CA",
+      "fr-BE",
+      "ko-KR",
+      "pt-BR",
+      "pt-PT",
+      "de-AT",
+      "de-CH",
+      "de-DE",
+      "it-IT",
+      "it-CH",
+      "zh-CN",
+      "zh-TW",
+      "es-CL",
+      "es-ES",
+      "es-US",
+      "es-MX",
+      "en-ZA",
+      "en-CA",
+      "en-SG",
+      "en-IN",
+      "en-NZ",
+      "en-GB",
+      "en-AU",
+      "en-US",
+      "en-IE",
+      "yue-CN",
+      "zh-HK",
+      "ja-JP"
+    ],
+    "modelInstalled": true,
+    "micPermission": "granted"
+  },
+  "params": {
+    "locale": "zh-CN",
+    "volatileResults": true,
+    "fastResults": true,
+    "audioTimeRange": true,
+    "voiceProcessing": false,
+    "sampleRate": null,
+    "contextualStrings": [],
+    "playback": {
+      "enabled": true,
+      "baselineMs": 5000,
+      "captureMs": 10000,
+      "echoMs": 15000,
+      "bargeMs": 15000,
+      "volume": 1
+    }
+  },
+  "run": {
+    "id": 3,
+    "phase": "stopped",
+    "startedAt": "2026-08-15T07:16:16.692Z",
+    "stoppedAt": "2026-08-15T07:17:07.809Z",
+    "durationMs": 51117,
+    "actualFormat": {
+      "sampleRate": 16000,
+      "channels": 1
+    },
+    "error": null
+  },
+  "level": {
+    "count": 289,
+    "peak": 0.016875091940164566,
+    "peakDbfs": -35.45507704668261,
+    "peakSinceStartMs": 35455,
+    "mean": 0.0034964192549347198,
+    "meanDbfs": -49.12752993501111,
+    "droppedSamples": 0
+  },
+  "stages": [
+    {
+      "stage": "baseline",
+      "index": 0,
+      "sinceStartMs": 341,
+      "endedSinceStartMs": 5677,
+      "durationMs": 5336,
+      "plannedMs": 5000,
+      "playing": false,
+      "outputVolume": 1,
+      "message": "quiet room, nothing playing",
+      "level": {
+        "count": 31,
+        "peak": 0.0003410525096114725,
+        "peakDbfs": -69.34357500789905,
+        "mean": 0.00024812101436245645,
+        "meanDbfs": -72.10672904062046
+      },
+      "transcript": {
+        "text": "",
+        "finals": 0,
+        "volatileCount": 42
+      }
+    },
+    {
+      "stage": "record",
+      "index": 1,
+      "sinceStartMs": 5677,
+      "endedSinceStartMs": 16350,
+      "durationMs": 10673,
+      "plannedMs": 10000,
+      "playing": false,
+      "outputVolume": 1,
+      "message": "recording the clip; the user is talking",
+      "level": {
+        "count": 61,
+        "peak": 0.015415657311677933,
+        "peakDbfs": -36.24075905125223,
+        "mean": 0.0057761428537053345,
+        "meanDbfs": -44.76724148948595
+      },
+      "transcript": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试一下 ，看看第一部分是什么样子的吧 ，哈哈哈。",
+        "finals": 1,
+        "volatileCount": 0
+      }
+    },
+    {
+      "stage": "echo",
+      "index": 2,
+      "sinceStartMs": 16350,
+      "endedSinceStartMs": 32318,
+      "durationMs": 15968,
+      "plannedMs": 15000,
+      "playing": true,
+      "outputVolume": 1,
+      "message": "the clip is playing; the user is silent",
+      "level": {
+        "count": 91,
+        "peak": 0.001464165048673749,
+        "peakDbfs": -56.68819928948645,
+        "mean": 0.0006752704423059106,
+        "meanDbfs": -63.41044519290212
+      },
+      "transcript": {
+        "text": "哈。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试一下 ，看看第二部分内容会说出什么话来吧",
+        "finals": 1,
+        "volatileCount": 69
+      }
+    },
+    {
+      "stage": "barge",
+      "index": 3,
+      "sinceStartMs": 32318,
+      "endedSinceStartMs": 47322,
+      "durationMs": 15004,
+      "plannedMs": 15000,
+      "playing": true,
+      "outputVolume": 1,
+      "message": "the clip is playing; the user talks over it",
+      "level": {
+        "count": 85,
+        "peak": 0.016875091940164566,
+        "peakDbfs": -35.45507704668261,
+        "mean": 0.006696129705318634,
+        "meanDbfs": -43.483522851315676
+      },
+      "transcript": {
+        "text": "这是第二部分的内容 ，让我们尝试一下第二部分会说出什么的内容来。",
+        "finals": 1,
+        "volatileCount": 32
+      }
+    },
+    {
+      "stage": "done",
+      "index": 4,
+      "sinceStartMs": 47322,
+      "endedSinceStartMs": 51117,
+      "durationMs": 3795,
+      "plannedMs": 0,
+      "playing": false,
+      "outputVolume": 1,
+      "message": "playback stopped; the microphone is still open",
+      "level": {
+        "count": 21,
+        "peak": 0.007811611983925104,
+        "peakDbfs": -42.14518673990413,
+        "mean": 0.0009432411406167029,
+        "meanDbfs": -60.50754530429069
+      },
+      "transcript": {
+        "text": "",
+        "finals": 0,
+        "volatileCount": 0
+      }
+    }
+  ],
+  "aec": {
+    "voiceProcessing": false,
+    "outputVolume": 1,
+    "readings": [
+      {
+        "stage": "baseline",
+        "durationMs": 5336,
+        "levelSamples": 31,
+        "peakDbfs": -69.34357500789905,
+        "meanDbfs": -72.10672904062046,
+        "text": "",
+        "finals": 0,
+        "volatileCount": 42,
+        "playing": false,
+        "outputVolume": 1
+      },
+      {
+        "stage": "record",
+        "durationMs": 10673,
+        "levelSamples": 61,
+        "peakDbfs": -36.24075905125223,
+        "meanDbfs": -44.76724148948595,
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试一下 ，看看第一部分是什么样子的吧 ，哈哈哈。",
+        "finals": 1,
+        "volatileCount": 0,
+        "playing": false,
+        "outputVolume": 1
+      },
+      {
+        "stage": "echo",
+        "durationMs": 15968,
+        "levelSamples": 91,
+        "peakDbfs": -56.68819928948645,
+        "meanDbfs": -63.41044519290212,
+        "text": "哈。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试一下 ，看看第二部分内容会说出什么话来吧",
+        "finals": 1,
+        "volatileCount": 69,
+        "playing": true,
+        "outputVolume": 1
+      },
+      {
+        "stage": "barge",
+        "durationMs": 15004,
+        "levelSamples": 85,
+        "peakDbfs": -35.45507704668261,
+        "meanDbfs": -43.483522851315676,
+        "text": "这是第二部分的内容 ，让我们尝试一下第二部分会说出什么的内容来。",
+        "finals": 1,
+        "volatileCount": 32,
+        "playing": true,
+        "outputVolume": 1
+      },
+      {
+        "stage": "done",
+        "durationMs": 3795,
+        "levelSamples": 21,
+        "peakDbfs": -42.14518673990413,
+        "meanDbfs": -60.50754530429069,
+        "text": "",
+        "finals": 0,
+        "volatileCount": 0,
+        "playing": false,
+        "outputVolume": 1
+      }
+    ],
+    "residualOverBaselineDb": 8.696283847718348,
+    "echoTranscribed": true,
+    "echoText": "哈。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试一下 ，看看第二部分内容会说出什么话来吧",
+    "echoSimilarity": 0.5490196078431373,
+    "bargeTranscribed": true,
+    "bargeText": "这是第二部分的内容 ，让我们尝试一下第二部分会说出什么的内容来。"
+  },
+  "transcript": {
+    "finals": [
+      {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试一下 ，看看第一部分是什么样子的吧 ，哈哈哈。",
+        "isFinal": true,
+        "startMs": 6000,
+        "endMs": 15480,
+        "confidence": 0.579
+      },
+      {
+        "text": "哈。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试一下 ，看看第二部分内容会说出什么话来吧",
+        "isFinal": true,
+        "startMs": 24360,
+        "endMs": 40920,
+        "confidence": 0.36
+      },
+      {
+        "text": "这是第二部分的内容 ，让我们尝试一下第二部分会说出什么的内容来。",
+        "isFinal": true,
+        "startMs": 41220,
+        "endMs": 48120,
+        "confidence": 0.905
+      }
+    ],
+    "text": "这是第一部分的内容 ，然后让我们一起来去尝试一下 ，看看第一部分是什么样子的吧 ，哈哈哈。哈。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试一下 ，看看第二部分内容会说出什么话来吧这是第二部分的内容 ，让我们尝试一下第二部分会说出什么的内容来。",
+    "lastVolatile": null,
+    "legend": {
+      "timeRanges": "per-word ranges requested; a result with no word-level attribute falls back to its own range",
+      "confidence": "minimum across the runs in the result"
+    }
+  },
+  "events": [
+    {
+      "atMs": 1786778176692,
+      "sinceStartMs": 0,
+      "kind": "command",
+      "payload": {
+        "label": "start_probe",
+        "detail": "{\"locale\":\"zh-CN\",\"volatileResults\":true,\"fastResults\":true,\"audioTimeRange\":true,\"voiceProcessing\":false,\"sampleRate\":null,\"contextualStrings\":[],\"playback\":{\"enabled\":true,\"baselineMs\":5000,\"captureMs\":10000,\"echoMs\":15000,\"bargeMs\":15000,\"volume\":1}}"
+      }
+    },
+    {
+      "atMs": 1786778176702,
+      "sinceStartMs": 10,
+      "kind": "state",
+      "payload": {
+        "phase": "preparing",
+        "message": ""
+      }
+    },
+    {
+      "atMs": 1786778176702,
+      "sinceStartMs": 10,
+      "kind": "log",
+      "payload": {
+        "line": "params locale=zh-CN volatileResults=true fastResults=true audioTimeRange=true voiceProcessing=false sampleRate=auto contextualStrings=0"
+      }
+    },
+    {
+      "atMs": 1786778176708,
+      "sinceStartMs": 16,
+      "kind": "log",
+      "payload": {
+        "line": "locale zh-CN resolved to zh-CN"
+      }
+    },
+    {
+      "atMs": 1786778176709,
+      "sinceStartMs": 17,
+      "kind": "state",
+      "payload": {
+        "phase": "downloading",
+        "message": "0%"
+      }
+    },
+    {
+      "atMs": 1786778176709,
+      "sinceStartMs": 17,
+      "kind": "log",
+      "payload": {
+        "line": "downloading the speech model for zh-CN"
+      }
+    },
+    {
+      "atMs": 1786778176717,
+      "sinceStartMs": 25,
+      "kind": "log",
+      "payload": {
+        "line": "speech model installed"
+      }
+    },
+    {
+      "atMs": 1786778176717,
+      "sinceStartMs": 25,
+      "kind": "state",
+      "payload": {
+        "phase": "preparing",
+        "message": ""
+      }
+    },
+    {
+      "atMs": 1786778176719,
+      "sinceStartMs": 27,
+      "kind": "log",
+      "payload": {
+        "line": "asset inventory: reserved=[en-US, zh-CN] maximumReservedLocales=5 speechAuthorization=0"
+      }
+    },
+    {
+      "atMs": 1786778176805,
+      "sinceStartMs": 113,
+      "kind": "log",
+      "payload": {
+        "line": "session category=AVAudioSessionCategoryPlayAndRecord mode=AVAudioSessionModeVoiceChat sampleRate=48000.0 ioBufferDuration=0.023333333333333334"
+      }
+    },
+    {
+      "atMs": 1786778176819,
+      "sinceStartMs": 127,
+      "kind": "log",
+      "payload": {
+        "line": "voice processing: input=false output=false"
+      }
+    },
+    {
+      "atMs": 1786778176820,
+      "sinceStartMs": 128,
+      "kind": "log",
+      "payload": {
+        "line": "bestAvailableAudioFormat 16000Hz 1ch interleaved fmt=3; compatible formats [16000Hz 1ch interleaved fmt=3 | 8000Hz 1ch interleaved fmt=3]"
+      }
+    },
+    {
+      "atMs": 1786778176820,
+      "sinceStartMs": 128,
+      "kind": "log",
+      "payload": {
+        "line": "analyzer format 16000Hz 1ch interleaved fmt=3"
+      }
+    },
+    {
+      "atMs": 1786778176821,
+      "sinceStartMs": 129,
+      "kind": "log",
+      "payload": {
+        "line": "graph after preparing, before the mixer exists: input emits 48000Hz 1ch deinterleaved fmt=1; output accepts 48000Hz 2ch deinterleaved fmt=1 and its hardware is 48000Hz 2ch deinterleaved fmt=1; session sampleRate=48000.0 outputChannels=2; engine running=false"
+      }
+    },
+    {
+      "atMs": 1786778176821,
+      "sinceStartMs": 129,
+      "kind": "log",
+      "payload": {
+        "line": "graph after creating the main mixer: input emits 48000Hz 1ch deinterleaved fmt=1; output accepts 44100Hz 2ch deinterleaved fmt=1 and its hardware is 48000Hz 2ch deinterleaved fmt=1; session sampleRate=48000.0 outputChannels=2; engine running=false"
+      }
+    },
+    {
+      "atMs": 1786778176822,
+      "sinceStartMs": 130,
+      "kind": "log",
+      "payload": {
+        "line": "graph after reconnecting the main mixer at the output node's hardware format: input emits 48000Hz 1ch deinterleaved fmt=1; output accepts 48000Hz 2ch deinterleaved fmt=1 and its hardware is 48000Hz 2ch deinterleaved fmt=1; session sampleRate=48000.0 outputChannels=2; engine running=false"
+      }
+    },
+    {
+      "atMs": 1786778176822,
+      "sinceStartMs": 130,
+      "kind": "log",
+      "payload": {
+        "line": "microphone format 48000Hz 1ch deinterleaved fmt=1"
+      }
+    },
+    {
+      "atMs": 1786778176822,
+      "sinceStartMs": 130,
+      "kind": "log",
+      "payload": {
+        "line": "playback armed: up to 10.0s of clip, node volume 1.0, hardware volume 1.0"
+      }
+    },
+    {
+      "atMs": 1786778176870,
+      "sinceStartMs": 178,
+      "kind": "log",
+      "payload": {
+        "line": "graph after the tap, before starting: input emits 48000Hz 1ch deinterleaved fmt=1; output accepts 48000Hz 2ch deinterleaved fmt=1 and its hardware is 48000Hz 2ch deinterleaved fmt=1; session sampleRate=48000.0 outputChannels=2; engine running=false"
+      }
+    },
+    {
+      "atMs": 1786778177033,
+      "sinceStartMs": 341,
+      "kind": "command",
+      "payload": {
+        "label": "start_probe →",
+        "detail": "{\"started\":true,\"actualFormat\":{\"sampleRate\":16000,\"channels\":1},\"error\":null}"
+      }
+    },
+    {
+      "atMs": 1786778177032,
+      "sinceStartMs": 340,
+      "kind": "log",
+      "payload": {
+        "line": "graph after starting: input emits 48000Hz 1ch deinterleaved fmt=1; output accepts 48000Hz 2ch deinterleaved fmt=1 and its hardware is 48000Hz 2ch deinterleaved fmt=1; session sampleRate=48000.0 outputChannels=2; engine running=true"
+      }
+    },
+    {
+      "atMs": 1786778177033,
+      "sinceStartMs": 341,
+      "kind": "log",
+      "payload": {
+        "line": "route in=[iPhone Microphone/MicrophoneBuiltIn] out=[Speaker/Speaker]"
+      }
+    },
+    {
+      "atMs": 1786778177033,
+      "sinceStartMs": 341,
+      "kind": "log",
+      "payload": {
+        "line": "tap format 48000Hz 1ch deinterleaved fmt=1"
+      }
+    },
+    {
+      "atMs": 1786778177033,
+      "sinceStartMs": 341,
+      "kind": "state",
+      "payload": {
+        "phase": "running",
+        "message": ""
+      }
+    },
+    {
+      "atMs": 1786778177033,
+      "sinceStartMs": 341,
+      "kind": "log",
+      "payload": {
+        "line": "playback plan: baseline 5000ms -> record 10000ms -> echo 15000ms -> barge 15000ms -> done 0ms"
+      }
+    },
+    {
+      "atMs": 1786778177033,
+      "sinceStartMs": 341,
+      "kind": "stage",
+      "payload": {
+        "stage": "baseline",
+        "timestampMs": 338.49406242370605,
+        "analyzerMs": 0,
+        "plannedMs": 5000,
+        "playing": false,
+        "outputVolume": 1,
+        "message": "quiet room, nothing playing"
+      }
+    },
+    {
+      "atMs": 1786778177148,
+      "sinceStartMs": 456,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00011242040636716412,
+        "timestampMs": 452.89599895477295
+      }
+    },
+    {
+      "atMs": 1786778177335,
+      "sinceStartMs": 643,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00028164489776827395,
+        "timestampMs": 639.510989189148
+      }
+    },
+    {
+      "atMs": 1786778177452,
+      "sinceStartMs": 760,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00023009057622402904,
+        "timestampMs": 756.335973739624
+      }
+    },
+    {
+      "atMs": 1786778177641,
+      "sinceStartMs": 949,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00022459666070062667,
+        "timestampMs": 942.8479671478271
+      }
+    },
+    {
+      "atMs": 1786778177848,
+      "sinceStartMs": 1156,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00027348462026566267,
+        "timestampMs": 1152.6720523834229
+      }
+    },
+    {
+      "atMs": 1786778178035,
+      "sinceStartMs": 1343,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00026829869602806866,
+        "timestampMs": 1339.3180370330813
+      }
+    },
+    {
+      "atMs": 1786778178151,
+      "sinceStartMs": 1459,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0002351429866394028,
+        "timestampMs": 1456.0500383377075
+      }
+    },
+    {
+      "atMs": 1786778178338,
+      "sinceStartMs": 1646,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00026588627952151,
+        "timestampMs": 1642.6750421524048
+      }
+    },
+    {
+      "atMs": 1786778178548,
+      "sinceStartMs": 1856,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00019594564219005409,
+        "timestampMs": 1852.7690172195437
+      }
+    },
+    {
+      "atMs": 1786778178735,
+      "sinceStartMs": 2043,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00025119807105511427,
+        "timestampMs": 2039.4079685211184
+      }
+    },
+    {
+      "atMs": 1786778178851,
+      "sinceStartMs": 2159,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00023618531122338027,
+        "timestampMs": 2156.003952026367
+      }
+    },
+    {
+      "atMs": 1786778179038,
+      "sinceStartMs": 2346,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0002135547692887485,
+        "timestampMs": 2342.6380157470703
+      }
+    },
+    {
+      "atMs": 1786778179248,
+      "sinceStartMs": 2556,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00022210685710888356,
+        "timestampMs": 2552.751064300537
+      }
+    },
+    {
+      "atMs": 1786778179435,
+      "sinceStartMs": 2743,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00028081017080694437,
+        "timestampMs": 2739.264965057373
+      }
+    },
+    {
+      "atMs": 1786778179552,
+      "sinceStartMs": 2860,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0002487483434379101,
+        "timestampMs": 2856.0919761657715
+      }
+    },
+    {
+      "atMs": 1786778179739,
+      "sinceStartMs": 3047,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.000224905030336231,
+        "timestampMs": 3043.081045150757
+      }
+    },
+    {
+      "atMs": 1786778179949,
+      "sinceStartMs": 3257,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0002602501481305808,
+        "timestampMs": 3253.074049949646
+      }
+    },
+    {
+      "atMs": 1786778180136,
+      "sinceStartMs": 3444,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00027572709950618446,
+        "timestampMs": 3439.5769834518433
+      }
+    },
+    {
+      "atMs": 1786778180252,
+      "sinceStartMs": 3560,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0002662801125552505,
+        "timestampMs": 3556.2469959259033
+      }
+    },
+    {
+      "atMs": 1786778180441,
+      "sinceStartMs": 3749,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00030097150010988116,
+        "timestampMs": 3742.9200410842896
+      }
+    },
+    {
+      "atMs": 1786778180648,
+      "sinceStartMs": 3956,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0002858450170606375,
+        "timestampMs": 3953.009963035583
+      }
+    },
+    {
+      "atMs": 1786778180837,
+      "sinceStartMs": 4145,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0002219612215412781,
+        "timestampMs": 4139.74404335022
+      }
+    },
+    {
+      "atMs": 1786778180954,
+      "sinceStartMs": 4262,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00027349969604983926,
+        "timestampMs": 4256.625056266785
+      }
+    },
+    {
+      "atMs": 1786778181138,
+      "sinceStartMs": 4446,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0002674355637282133,
+        "timestampMs": 4442.9579973220825
+      }
+    },
+    {
+      "atMs": 1786778181350,
+      "sinceStartMs": 4658,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0003410525096114725,
+        "timestampMs": 4653.0410051345825
+      }
+    },
+    {
+      "atMs": 1786778181535,
+      "sinceStartMs": 4843,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0002307455870322883,
+        "timestampMs": 4839.3930196762085
+      }
+    },
+    {
+      "atMs": 1786778181652,
+      "sinceStartMs": 4960,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00029734440613538027,
+        "timestampMs": 4956.249952316284
+      }
+    },
+    {
+      "atMs": 1786778181838,
+      "sinceStartMs": 5146,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00021353464398998767,
+        "timestampMs": 5142.693042755127
+      }
+    },
+    {
+      "atMs": 1786778182048,
+      "sinceStartMs": 5356,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.000263498310232535,
+        "timestampMs": 5352.761030197144
+      }
+    },
+    {
+      "atMs": 1786778182235,
+      "sinceStartMs": 5543,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00021888579067308456,
+        "timestampMs": 5539.325952529907
+      }
+    },
+    {
+      "atMs": 1786778182351,
+      "sinceStartMs": 5659,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0002097005199175328,
+        "timestampMs": 5655.956983566284
+      }
+    },
+    {
+      "atMs": 1786778182369,
+      "sinceStartMs": 5677,
+      "kind": "stage",
+      "payload": {
+        "stage": "record",
+        "timestampMs": 5669.093012809753,
+        "analyzerMs": 5230.0625,
+        "plannedMs": 10000,
+        "playing": false,
+        "outputVolume": 1,
+        "message": "recording the clip; the user is talking"
+      }
+    },
+    {
+      "atMs": 1786778182538,
+      "sinceStartMs": 5846,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0002386781998211518,
+        "timestampMs": 5842.877984046936
+      }
+    },
+    {
+      "atMs": 1786778182750,
+      "sinceStartMs": 6058,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0002661577018443495,
+        "timestampMs": 6052.594065666199
+      }
+    },
+    {
+      "atMs": 1786778182934,
+      "sinceStartMs": 6242,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0002973988011945039,
+        "timestampMs": 6239.181995391846
+      }
+    },
+    {
+      "atMs": 1786778183053,
+      "sinceStartMs": 6361,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00021951603412162513,
+        "timestampMs": 6355.8900356292725
+      }
+    },
+    {
+      "atMs": 1786778183238,
+      "sinceStartMs": 6546,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00027461416902951896,
+        "timestampMs": 6542.600989341736
+      }
+    },
+    {
+      "atMs": 1786778183448,
+      "sinceStartMs": 6756,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0003455959667917341,
+        "timestampMs": 6752.591013908386
+      }
+    },
+    {
+      "atMs": 1786778183634,
+      "sinceStartMs": 6942,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.000847011455334723,
+        "timestampMs": 6939.213037490845
+      }
+    },
+    {
+      "atMs": 1786778183757,
+      "sinceStartMs": 7065,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.015415657311677933,
+        "timestampMs": 7056.004047393799
+      }
+    },
+    {
+      "atMs": 1786778183938,
+      "sinceStartMs": 7246,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.010694945231080055,
+        "timestampMs": 7242.52998828888
+      }
+    },
+    {
+      "atMs": 1786778184148,
+      "sinceStartMs": 7456,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.01222572848200798,
+        "timestampMs": 7452.581048011779
+      }
+    },
+    {
+      "atMs": 1786778184334,
+      "sinceStartMs": 7642,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.009751010686159134,
+        "timestampMs": 7639.237999916077
+      }
+    },
+    {
+      "atMs": 1786778184451,
+      "sinceStartMs": 7759,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.012373186647891998,
+        "timestampMs": 7756.008982658385
+      }
+    },
+    {
+      "atMs": 1786778184638,
+      "sinceStartMs": 7946,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.011548289097845554,
+        "timestampMs": 7942.564010620117
+      }
+    },
+    {
+      "atMs": 1786778184850,
+      "sinceStartMs": 8158,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.01329407375305891,
+        "timestampMs": 8152.794957160951
+      }
+    },
+    {
+      "atMs": 1786778184881,
+      "sinceStartMs": 8189,
+      "kind": "transcript",
+      "payload": {
+        "text": "这",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 7756.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778184894,
+      "sinceStartMs": 8202,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 7756.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778184897,
+      "sinceStartMs": 8205,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 7756.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778184901,
+      "sinceStartMs": 8209,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 7756.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778184905,
+      "sinceStartMs": 8213,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 7756.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778184909,
+      "sinceStartMs": 8217,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 7756.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778185034,
+      "sinceStartMs": 8342,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.01038780901581049,
+        "timestampMs": 8339.432954788208
+      }
+    },
+    {
+      "atMs": 1786778185151,
+      "sinceStartMs": 8459,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00865126121789217,
+        "timestampMs": 8455.996036529541
+      }
+    },
+    {
+      "atMs": 1786778185338,
+      "sinceStartMs": 8646,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.009187819436192513,
+        "timestampMs": 8642.645955085754
+      }
+    },
+    {
+      "atMs": 1786778185548,
+      "sinceStartMs": 8856,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.009478870779275894,
+        "timestampMs": 8852.537989616394
+      }
+    },
+    {
+      "atMs": 1786778185735,
+      "sinceStartMs": 9043,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.013219013810157776,
+        "timestampMs": 9039.237976074219
+      }
+    },
+    {
+      "atMs": 1786778185851,
+      "sinceStartMs": 9159,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0117879630997777,
+        "timestampMs": 9155.979990959167
+      }
+    },
+    {
+      "atMs": 1786778185873,
+      "sinceStartMs": 9181,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 8767.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778185880,
+      "sinceStartMs": 9188,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 8767.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778185886,
+      "sinceStartMs": 9194,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 8767.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778185895,
+      "sinceStartMs": 9203,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 8767.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778185898,
+      "sinceStartMs": 9206,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 8767.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778185901,
+      "sinceStartMs": 9209,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 8767.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778186038,
+      "sinceStartMs": 9346,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.006731192581355572,
+        "timestampMs": 9342.49997138977
+      }
+    },
+    {
+      "atMs": 1786778186248,
+      "sinceStartMs": 9556,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.007887848652899265,
+        "timestampMs": 9552.490949630737
+      }
+    },
+    {
+      "atMs": 1786778186435,
+      "sinceStartMs": 9743,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0026257263962179422,
+        "timestampMs": 9739.14396762848
+      }
+    },
+    {
+      "atMs": 1786778186551,
+      "sinceStartMs": 9859,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0028756598476320505,
+        "timestampMs": 9855.861067771912
+      }
+    },
+    {
+      "atMs": 1786778186738,
+      "sinceStartMs": 10046,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.006929398979991674,
+        "timestampMs": 10042.515993118286
+      }
+    },
+    {
+      "atMs": 1786778186765,
+      "sinceStartMs": 10073,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 9692.5,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778186769,
+      "sinceStartMs": 10077,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 9692.5,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778186773,
+      "sinceStartMs": 10081,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 9692.5,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778186779,
+      "sinceStartMs": 10087,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 9692.5,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778186783,
+      "sinceStartMs": 10091,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 9692.5,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778186948,
+      "sinceStartMs": 10256,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.008479645475745201,
+        "timestampMs": 10252.52401828766
+      }
+    },
+    {
+      "atMs": 1786778187135,
+      "sinceStartMs": 10443,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0013426486402750015,
+        "timestampMs": 10439.31806087494
+      }
+    },
+    {
+      "atMs": 1786778187251,
+      "sinceStartMs": 10559,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.009112297557294369,
+        "timestampMs": 10555.858969688416
+      }
+    },
+    {
+      "atMs": 1786778187438,
+      "sinceStartMs": 10746,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00706911226734519,
+        "timestampMs": 10742.472052574158
+      }
+    },
+    {
+      "atMs": 1786778187648,
+      "sinceStartMs": 10956,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0025031783152371645,
+        "timestampMs": 10952.525973320007
+      }
+    },
+    {
+      "atMs": 1786778187834,
+      "sinceStartMs": 11142,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.007473270408809185,
+        "timestampMs": 11139.119029045103
+      }
+    },
+    {
+      "atMs": 1786778187862,
+      "sinceStartMs": 11170,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 10788.4375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778187871,
+      "sinceStartMs": 11179,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 10788.4375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778187951,
+      "sinceStartMs": 11259,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0017843376845121384,
+        "timestampMs": 11256.111979484558
+      }
+    },
+    {
+      "atMs": 1786778188137,
+      "sinceStartMs": 11445,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.005895945243537426,
+        "timestampMs": 11442.783951759338
+      }
+    },
+    {
+      "atMs": 1786778188347,
+      "sinceStartMs": 11655,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00039683160139247775,
+        "timestampMs": 11652.443051338196
+      }
+    },
+    {
+      "atMs": 1786778188534,
+      "sinceStartMs": 11842,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00033334054751321673,
+        "timestampMs": 11839.140057563782
+      }
+    },
+    {
+      "atMs": 1786778188651,
+      "sinceStartMs": 11959,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0003303161938674748,
+        "timestampMs": 11955.99400997162
+      }
+    },
+    {
+      "atMs": 1786778188769,
+      "sinceStartMs": 12077,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 11635.0625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778188776,
+      "sinceStartMs": 12084,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 11635.0625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778188781,
+      "sinceStartMs": 12089,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试一",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 11635.0625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778188784,
+      "sinceStartMs": 12092,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试一下",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 11635.0625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778188839,
+      "sinceStartMs": 12147,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.01167429145425558,
+        "timestampMs": 12142.418026924131
+      }
+    },
+    {
+      "atMs": 1786778189050,
+      "sinceStartMs": 12358,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.009193982928991318,
+        "timestampMs": 12352.460026741028
+      }
+    },
+    {
+      "atMs": 1786778189234,
+      "sinceStartMs": 12542,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.011404951103031635,
+        "timestampMs": 12539.147973060608
+      }
+    },
+    {
+      "atMs": 1786778189352,
+      "sinceStartMs": 12660,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0034600968938320875,
+        "timestampMs": 12655.781984329224
+      }
+    },
+    {
+      "atMs": 1786778189538,
+      "sinceStartMs": 12846,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.007382422219961882,
+        "timestampMs": 12842.514991760254
+      }
+    },
+    {
+      "atMs": 1786778189656,
+      "sinceStartMs": 12964,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试一下 ，",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 12560.3125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778189661,
+      "sinceStartMs": 12969,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试一下 ，看",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 12560.3125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778189666,
+      "sinceStartMs": 12974,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试一下 ，看看",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 12560.3125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778189675,
+      "sinceStartMs": 12983,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试一下 ，看看第",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 12560.3125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778189675,
+      "sinceStartMs": 12983,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试一下 ，看看第一",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 12560.3125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778189680,
+      "sinceStartMs": 12988,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试一下 ，看看第一部",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 12560.3125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778189748,
+      "sinceStartMs": 13056,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.004619959741830826,
+        "timestampMs": 13052.45804786682
+      }
+    },
+    {
+      "atMs": 1786778189935,
+      "sinceStartMs": 13243,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.007501077838242054,
+        "timestampMs": 13239.13598060608
+      }
+    },
+    {
+      "atMs": 1786778190056,
+      "sinceStartMs": 13364,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00352855515666306,
+        "timestampMs": 13355.980038642883
+      }
+    },
+    {
+      "atMs": 1786778190240,
+      "sinceStartMs": 13548,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.006684354040771723,
+        "timestampMs": 13542.407989501951
+      }
+    },
+    {
+      "atMs": 1786778190448,
+      "sinceStartMs": 13756,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.009964530356228352,
+        "timestampMs": 13752.465963363647
+      }
+    },
+    {
+      "atMs": 1786778190634,
+      "sinceStartMs": 13942,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.005271610338240862,
+        "timestampMs": 13939.223051071169
+      }
+    },
+    {
+      "atMs": 1786778190661,
+      "sinceStartMs": 13969,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试一下 ，看看第一部分",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 13570.9375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778190666,
+      "sinceStartMs": 13974,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试一下 ，看看第一部分是",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 13570.9375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778190672,
+      "sinceStartMs": 13980,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试一下 ，看看第一部分是什",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 13570.9375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778190676,
+      "sinceStartMs": 13984,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试一下 ，看看第一部分是什么",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 13570.9375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778190681,
+      "sinceStartMs": 13989,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试一下 ，看看第一部分是什么样",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 13570.9375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778190751,
+      "sinceStartMs": 14059,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.008336452767252922,
+        "timestampMs": 14055.791974067688
+      }
+    },
+    {
+      "atMs": 1786778190938,
+      "sinceStartMs": 14246,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.006430237088352442,
+        "timestampMs": 14242.434978485107
+      }
+    },
+    {
+      "atMs": 1786778191148,
+      "sinceStartMs": 14456,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00034250429598614573,
+        "timestampMs": 14452.497959136965
+      }
+    },
+    {
+      "atMs": 1786778191334,
+      "sinceStartMs": 14642,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.011066661216318607,
+        "timestampMs": 14639.124989509584
+      }
+    },
+    {
+      "atMs": 1786778191451,
+      "sinceStartMs": 14759,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.007429952267557383,
+        "timestampMs": 14755.840063095093
+      }
+    },
+    {
+      "atMs": 1786778191571,
+      "sinceStartMs": 14879,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试一下 ，看看第一部分是什么样子",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 14496.25,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778191577,
+      "sinceStartMs": 14885,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试一下 ，看看第一部分是什么样子的",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 14496.25,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778191580,
+      "sinceStartMs": 14888,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试一下 ，看看第一部分是什么样子的吧",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 14496.25,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778191584,
+      "sinceStartMs": 14892,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试一下 ，看看第一部分是什么样子的吧。",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 14496.25,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778191637,
+      "sinceStartMs": 14945,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.003063857788220048,
+        "timestampMs": 14942.566990852356
+      }
+    },
+    {
+      "atMs": 1786778191848,
+      "sinceStartMs": 15156,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.009211505763232708,
+        "timestampMs": 15152.384996414185
+      }
+    },
+    {
+      "atMs": 1786778192034,
+      "sinceStartMs": 15342,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00036393979098647833,
+        "timestampMs": 15339.025020599363
+      }
+    },
+    {
+      "atMs": 1786778192154,
+      "sinceStartMs": 15462,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0003880517615471035,
+        "timestampMs": 15455.893039703367
+      }
+    },
+    {
+      "atMs": 1786778192338,
+      "sinceStartMs": 15646,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0006852229707874358,
+        "timestampMs": 15642.536997795103
+      }
+    },
+    {
+      "atMs": 1786778192548,
+      "sinceStartMs": 15856,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0005290028057061136,
+        "timestampMs": 15852.347016334534
+      }
+    },
+    {
+      "atMs": 1786778192577,
+      "sinceStartMs": 15885,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试一下 ，看看第一部分是什么样子的吧。哈",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 15428.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778192582,
+      "sinceStartMs": 15890,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试一下 ，看看第一部分是什么样子的吧。哈哈",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 15428.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778192587,
+      "sinceStartMs": 15895,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试一下 ，看看第一部分是什么样子的吧。哈哈哈",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 15428.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778192734,
+      "sinceStartMs": 16042,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0004671962815336883,
+        "timestampMs": 16039.126038551332
+      }
+    },
+    {
+      "atMs": 1786778192851,
+      "sinceStartMs": 16159,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0006519418675452471,
+        "timestampMs": 16155.804991722109
+      }
+    },
+    {
+      "atMs": 1786778193014,
+      "sinceStartMs": 16322,
+      "kind": "log",
+      "payload": {
+        "line": "playing back 10.0s of captured speech, looping (the clip filled its buffer)"
+      }
+    },
+    {
+      "atMs": 1786778193041,
+      "sinceStartMs": 16349,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.000417004048358649,
+        "timestampMs": 16342.637062072754
+      }
+    },
+    {
+      "atMs": 1786778193042,
+      "sinceStartMs": 16350,
+      "kind": "stage",
+      "payload": {
+        "stage": "echo",
+        "timestampMs": 16343.409061431885,
+        "analyzerMs": 15933.5,
+        "plannedMs": 15000,
+        "playing": true,
+        "outputVolume": 1,
+        "message": "the clip is playing; the user is silent"
+      }
+    },
+    {
+      "atMs": 1786778193248,
+      "sinceStartMs": 16556,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0005086087039671838,
+        "timestampMs": 16552.40499973297
+      }
+    },
+    {
+      "atMs": 1786778193435,
+      "sinceStartMs": 16743,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00037920963950455194,
+        "timestampMs": 16739.04299736023
+      }
+    },
+    {
+      "atMs": 1786778193551,
+      "sinceStartMs": 16859,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00036412396002560854,
+        "timestampMs": 16855.682015419006
+      }
+    },
+    {
+      "atMs": 1786778193578,
+      "sinceStartMs": 16886,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试一下 ，看看第一部分是什么样子的吧。哈哈哈。",
+        "isFinal": false,
+        "startMs": 0,
+        "endMs": 16438.8125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778193738,
+      "sinceStartMs": 17046,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0003966448421124369,
+        "timestampMs": 17042.39797592163
+      }
+    },
+    {
+      "atMs": 1786778193948,
+      "sinceStartMs": 17256,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0004835264990106225,
+        "timestampMs": 17252.38597393036
+      }
+    },
+    {
+      "atMs": 1786778194136,
+      "sinceStartMs": 17444,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0004016210732515902,
+        "timestampMs": 17439.146041870117
+      }
+    },
+    {
+      "atMs": 1786778194251,
+      "sinceStartMs": 17559,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.000371008412912488,
+        "timestampMs": 17555.930972099304
+      }
+    },
+    {
+      "atMs": 1786778194438,
+      "sinceStartMs": 17746,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00031591037986800075,
+        "timestampMs": 17742.343068122864
+      }
+    },
+    {
+      "atMs": 1786778194510,
+      "sinceStartMs": 17818,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第一部分的内容 ，然后让我们一起来去尝试一下 ，看看第一部分是什么样子的吧 ，哈哈哈。",
+        "isFinal": true,
+        "startMs": 6000,
+        "endMs": 15480,
+        "confidence": 0.579
+      }
+    },
+    {
+      "atMs": 1786778194648,
+      "sinceStartMs": 17956,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0004830720426980406,
+        "timestampMs": 17952.347993850708
+      }
+    },
+    {
+      "atMs": 1786778194834,
+      "sinceStartMs": 18142,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00038085709093138576,
+        "timestampMs": 18139.014959335327
+      }
+    },
+    {
+      "atMs": 1786778194951,
+      "sinceStartMs": 18259,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0003533602284733206,
+        "timestampMs": 18255.800008773804
+      }
+    },
+    {
+      "atMs": 1786778195138,
+      "sinceStartMs": 18446,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00031348312040790915,
+        "timestampMs": 18442.51298904419
+      }
+    },
+    {
+      "atMs": 1786778195349,
+      "sinceStartMs": 18657,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00035448066773824394,
+        "timestampMs": 18652.297973632812
+      }
+    },
+    {
+      "atMs": 1786778195534,
+      "sinceStartMs": 18842,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00041363268974237144,
+        "timestampMs": 18838.937997817993
+      }
+    },
+    {
+      "atMs": 1786778195651,
+      "sinceStartMs": 18959,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00045856079668737953,
+        "timestampMs": 18955.659985542297
+      }
+    },
+    {
+      "atMs": 1786778195837,
+      "sinceStartMs": 19145,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00036713815643452113,
+        "timestampMs": 19142.30704307556
+      }
+    },
+    {
+      "atMs": 1786778196048,
+      "sinceStartMs": 19356,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00047949852887541056,
+        "timestampMs": 19352.321982383728
+      }
+    },
+    {
+      "atMs": 1786778196234,
+      "sinceStartMs": 19542,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0005860723904334009,
+        "timestampMs": 19538.95604610443
+      }
+    },
+    {
+      "atMs": 1786778196354,
+      "sinceStartMs": 19662,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0006120139150880277,
+        "timestampMs": 19655.784010887142
+      }
+    },
+    {
+      "atMs": 1786778196538,
+      "sinceStartMs": 19846,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0007199074025265872,
+        "timestampMs": 19842.377066612244
+      }
+    },
+    {
+      "atMs": 1786778196748,
+      "sinceStartMs": 20056,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0009674759930931032,
+        "timestampMs": 20052.276015281677
+      }
+    },
+    {
+      "atMs": 1786778196934,
+      "sinceStartMs": 20242,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0007184214191511273,
+        "timestampMs": 20238.985061645508
+      }
+    },
+    {
+      "atMs": 1786778197051,
+      "sinceStartMs": 20359,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0008990659262053668,
+        "timestampMs": 20355.715036392212
+      }
+    },
+    {
+      "atMs": 1786778197238,
+      "sinceStartMs": 20546,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0007609478197991848,
+        "timestampMs": 20542.255997657776
+      }
+    },
+    {
+      "atMs": 1786778197447,
+      "sinceStartMs": 20755,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.000588645285461098,
+        "timestampMs": 20752.307057380676
+      }
+    },
+    {
+      "atMs": 1786778197634,
+      "sinceStartMs": 20942,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0006635348545387387,
+        "timestampMs": 20938.902974128723
+      }
+    },
+    {
+      "atMs": 1786778197751,
+      "sinceStartMs": 21059,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0007191894110292196,
+        "timestampMs": 21055.628061294556
+      }
+    },
+    {
+      "atMs": 1786778197938,
+      "sinceStartMs": 21246,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0005314262234605849,
+        "timestampMs": 21242.282032966617
+      }
+    },
+    {
+      "atMs": 1786778198147,
+      "sinceStartMs": 21455,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0006070139934308827,
+        "timestampMs": 21452.22795009613
+      }
+    },
+    {
+      "atMs": 1786778198334,
+      "sinceStartMs": 21642,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.000685222155880183,
+        "timestampMs": 21638.89706134796
+      }
+    },
+    {
+      "atMs": 1786778198451,
+      "sinceStartMs": 21759,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0006893749814480543,
+        "timestampMs": 21755.725026130676
+      }
+    },
+    {
+      "atMs": 1786778198637,
+      "sinceStartMs": 21945,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0008322033099830151,
+        "timestampMs": 21942.396998405457
+      }
+    },
+    {
+      "atMs": 1786778198849,
+      "sinceStartMs": 22157,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0006620450294576585,
+        "timestampMs": 22152.341961860657
+      }
+    },
+    {
+      "atMs": 1786778199034,
+      "sinceStartMs": 22342,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0007858164026401937,
+        "timestampMs": 22338.953971862793
+      }
+    },
+    {
+      "atMs": 1786778199151,
+      "sinceStartMs": 22459,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0010308385826647282,
+        "timestampMs": 22455.703973770145
+      }
+    },
+    {
+      "atMs": 1786778199337,
+      "sinceStartMs": 22645,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0011382693191990256,
+        "timestampMs": 22642.21501350403
+      }
+    },
+    {
+      "atMs": 1786778199548,
+      "sinceStartMs": 22856,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.001464165048673749,
+        "timestampMs": 22852.229952812195
+      }
+    },
+    {
+      "atMs": 1786778199734,
+      "sinceStartMs": 23042,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0011320707853883505,
+        "timestampMs": 23038.900017738342
+      }
+    },
+    {
+      "atMs": 1786778199851,
+      "sinceStartMs": 23159,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0010547195561230185,
+        "timestampMs": 23155.5860042572
+      }
+    },
+    {
+      "atMs": 1786778200038,
+      "sinceStartMs": 23346,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0008067154558375479,
+        "timestampMs": 23342.287063598633
+      }
+    },
+    {
+      "atMs": 1786778200247,
+      "sinceStartMs": 23555,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0008666777284815907,
+        "timestampMs": 23552.284955978394
+      }
+    },
+    {
+      "atMs": 1786778200434,
+      "sinceStartMs": 23742,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0009444483439438044,
+        "timestampMs": 23738.903045654297
+      }
+    },
+    {
+      "atMs": 1786778200551,
+      "sinceStartMs": 23859,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0006872893427498639,
+        "timestampMs": 23855.65304756165
+      }
+    },
+    {
+      "atMs": 1786778200741,
+      "sinceStartMs": 24049,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0007072228472679853,
+        "timestampMs": 24042.207956314087
+      }
+    },
+    {
+      "atMs": 1786778200948,
+      "sinceStartMs": 24256,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0005091922939755023,
+        "timestampMs": 24252.236008644104
+      }
+    },
+    {
+      "atMs": 1786778201134,
+      "sinceStartMs": 24442,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0006875315448269248,
+        "timestampMs": 24438.90500068665
+      }
+    },
+    {
+      "atMs": 1786778201251,
+      "sinceStartMs": 24559,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0006658827769570053,
+        "timestampMs": 24555.588960647583
+      }
+    },
+    {
+      "atMs": 1786778201438,
+      "sinceStartMs": 24746,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0008262229966931045,
+        "timestampMs": 24742.231965065
+      }
+    },
+    {
+      "atMs": 1786778201648,
+      "sinceStartMs": 24956,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0008208969957195222,
+        "timestampMs": 24952.193021774292
+      }
+    },
+    {
+      "atMs": 1786778201834,
+      "sinceStartMs": 25142,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0008700972539372742,
+        "timestampMs": 25138.83399963379
+      }
+    },
+    {
+      "atMs": 1786778201951,
+      "sinceStartMs": 25259,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0009865114698186517,
+        "timestampMs": 25255.560994148254
+      }
+    },
+    {
+      "atMs": 1786778202137,
+      "sinceStartMs": 25445,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0008504670695401728,
+        "timestampMs": 25442.19505786896
+      }
+    },
+    {
+      "atMs": 1786778202347,
+      "sinceStartMs": 25655,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0009806144516915083,
+        "timestampMs": 25652.174949645996
+      }
+    },
+    {
+      "atMs": 1786778202534,
+      "sinceStartMs": 25842,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0010981827508658173,
+        "timestampMs": 25838.832020759583
+      }
+    },
+    {
+      "atMs": 1786778202656,
+      "sinceStartMs": 25964,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0010660659754648805,
+        "timestampMs": 25955.595016479492
+      }
+    },
+    {
+      "atMs": 1786778202837,
+      "sinceStartMs": 26145,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0009761744295246899,
+        "timestampMs": 26142.140984535217
+      }
+    },
+    {
+      "atMs": 1786778203048,
+      "sinceStartMs": 26356,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0013203996932134032,
+        "timestampMs": 26352.216958999634
+      }
+    },
+    {
+      "atMs": 1786778203234,
+      "sinceStartMs": 26542,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0014152931980788708,
+        "timestampMs": 26538.892030715942
+      }
+    },
+    {
+      "atMs": 1786778203351,
+      "sinceStartMs": 26659,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.001164068467915058,
+        "timestampMs": 26655.54404258728
+      }
+    },
+    {
+      "atMs": 1786778203537,
+      "sinceStartMs": 26845,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0012097165454179049,
+        "timestampMs": 26842.12303161621
+      }
+    },
+    {
+      "atMs": 1786778203748,
+      "sinceStartMs": 27056,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0010193915804848077,
+        "timestampMs": 27052.157044410706
+      }
+    },
+    {
+      "atMs": 1786778203934,
+      "sinceStartMs": 27242,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0008698912570253015,
+        "timestampMs": 27238.842964172363
+      }
+    },
+    {
+      "atMs": 1786778204051,
+      "sinceStartMs": 27359,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0010248926701024177,
+        "timestampMs": 27355.636954307556
+      }
+    },
+    {
+      "atMs": 1786778204076,
+      "sinceStartMs": 27384,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 26971.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778204238,
+      "sinceStartMs": 27546,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0007654197979718447,
+        "timestampMs": 27542.20402240753
+      }
+    },
+    {
+      "atMs": 1786778204447,
+      "sinceStartMs": 27755,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0008405932458117605,
+        "timestampMs": 27752.146005630493
+      }
+    },
+    {
+      "atMs": 1786778204634,
+      "sinceStartMs": 27942,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0007579642115160823,
+        "timestampMs": 27938.804030418396
+      }
+    },
+    {
+      "atMs": 1786778204751,
+      "sinceStartMs": 28059,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0006696649943478405,
+        "timestampMs": 28055.50503730774
+      }
+    },
+    {
+      "atMs": 1786778204937,
+      "sinceStartMs": 28245,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0004970586742274463,
+        "timestampMs": 28242.2399520874
+      }
+    },
+    {
+      "atMs": 1786778205057,
+      "sinceStartMs": 28365,
+      "kind": "transcript",
+      "payload": {
+        "text": "哈。这",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 27982.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778205147,
+      "sinceStartMs": 28455,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0006486789789050817,
+        "timestampMs": 28452.082991600037
+      }
+    },
+    {
+      "atMs": 1786778205334,
+      "sinceStartMs": 28642,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00045438981032930315,
+        "timestampMs": 28638.762950897217
+      }
+    },
+    {
+      "atMs": 1786778205451,
+      "sinceStartMs": 28759,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0005384885589592159,
+        "timestampMs": 28755.584955215458
+      }
+    },
+    {
+      "atMs": 1786778205637,
+      "sinceStartMs": 28945,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0005750084528699517,
+        "timestampMs": 28942.092061042786
+      }
+    },
+    {
+      "atMs": 1786778205847,
+      "sinceStartMs": 29155,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00046901180758140987,
+        "timestampMs": 29152.06801891327
+      }
+    },
+    {
+      "atMs": 1786778206036,
+      "sinceStartMs": 29344,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0004137008509133011,
+        "timestampMs": 29338.76895904541
+      }
+    },
+    {
+      "atMs": 1786778206061,
+      "sinceStartMs": 29369,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 28992.8125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778206069,
+      "sinceStartMs": 29377,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 28992.8125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778206074,
+      "sinceStartMs": 29382,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 28992.8125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778206077,
+      "sinceStartMs": 29385,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 28992.8125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778206081,
+      "sinceStartMs": 29389,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一一部分",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 28992.8125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778206086,
+      "sinceStartMs": 29394,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 28992.8125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778206089,
+      "sinceStartMs": 29397,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 28992.8125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778206150,
+      "sinceStartMs": 29458,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0005029038875363767,
+        "timestampMs": 29455.64305782318
+      }
+    },
+    {
+      "atMs": 1786778206337,
+      "sinceStartMs": 29645,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0006070418166927993,
+        "timestampMs": 29642.08698272705
+      }
+    },
+    {
+      "atMs": 1786778206547,
+      "sinceStartMs": 29855,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0005693812272511423,
+        "timestampMs": 29852.064967155457
+      }
+    },
+    {
+      "atMs": 1786778206734,
+      "sinceStartMs": 30042,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0005789092392660677,
+        "timestampMs": 30038.76805305481
+      }
+    },
+    {
+      "atMs": 1786778206851,
+      "sinceStartMs": 30159,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0004158587544225156,
+        "timestampMs": 30155.521035194397
+      }
+    },
+    {
+      "atMs": 1786778206967,
+      "sinceStartMs": 30275,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 29839.4375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778206974,
+      "sinceStartMs": 30282,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 29839.4375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778206979,
+      "sinceStartMs": 30287,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 29839.4375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778206984,
+      "sinceStartMs": 30292,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 29839.4375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778206988,
+      "sinceStartMs": 30296,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 29839.4375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778207038,
+      "sinceStartMs": 30346,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0004577018844429403,
+        "timestampMs": 30342.123985290527
+      }
+    },
+    {
+      "atMs": 1786778207248,
+      "sinceStartMs": 30556,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00029530227766372263,
+        "timestampMs": 30552.206993103027
+      }
+    },
+    {
+      "atMs": 1786778207434,
+      "sinceStartMs": 30742,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0006280899397097528,
+        "timestampMs": 30738.770961761475
+      }
+    },
+    {
+      "atMs": 1786778207553,
+      "sinceStartMs": 30861,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0004204537835903466,
+        "timestampMs": 30855.45301437378
+      }
+    },
+    {
+      "atMs": 1786778207738,
+      "sinceStartMs": 31046,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0006190076819621027,
+        "timestampMs": 31042.114973068237
+      }
+    },
+    {
+      "atMs": 1786778207959,
+      "sinceStartMs": 31267,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.000387286941986531,
+        "timestampMs": 31252.436995506287
+      }
+    },
+    {
+      "atMs": 1786778207971,
+      "sinceStartMs": 31279,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 30850.0625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778207975,
+      "sinceStartMs": 31283,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 30850.0625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778207979,
+      "sinceStartMs": 31287,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 30850.0625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778207988,
+      "sinceStartMs": 31296,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 30850.0625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778208134,
+      "sinceStartMs": 31442,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0004064182576257735,
+        "timestampMs": 31438.848972320557
+      }
+    },
+    {
+      "atMs": 1786778208251,
+      "sinceStartMs": 31559,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00035056035267189145,
+        "timestampMs": 31555.538058280945
+      }
+    },
+    {
+      "atMs": 1786778208438,
+      "sinceStartMs": 31746,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0003719707019627094,
+        "timestampMs": 31742.10500717163
+      }
+    },
+    {
+      "atMs": 1786778208647,
+      "sinceStartMs": 31955,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00039822206599637866,
+        "timestampMs": 31952.02100276947
+      }
+    },
+    {
+      "atMs": 1786778208835,
+      "sinceStartMs": 32143,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00035154863144271076,
+        "timestampMs": 32138.69798183441
+      }
+    },
+    {
+      "atMs": 1786778208859,
+      "sinceStartMs": 32167,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 31775.3125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778208865,
+      "sinceStartMs": 32173,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 31775.3125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778208869,
+      "sinceStartMs": 32177,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 31775.3125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778208873,
+      "sinceStartMs": 32181,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 31775.3125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778208956,
+      "sinceStartMs": 32264,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.000411949644330889,
+        "timestampMs": 32255.48505783081
+      }
+    },
+    {
+      "atMs": 1786778209010,
+      "sinceStartMs": 32318,
+      "kind": "stage",
+      "payload": {
+        "stage": "barge",
+        "timestampMs": 32315.045952796936,
+        "analyzerMs": 31860.625,
+        "plannedMs": 15000,
+        "playing": true,
+        "outputVolume": 1,
+        "message": "the clip is playing; the user talks over it"
+      }
+    },
+    {
+      "atMs": 1786778209137,
+      "sinceStartMs": 32445,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0003762254782486707,
+        "timestampMs": 32442.309975624084
+      }
+    },
+    {
+      "atMs": 1786778209347,
+      "sinceStartMs": 32655,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0003009905922226608,
+        "timestampMs": 32652.114033699036
+      }
+    },
+    {
+      "atMs": 1786778209534,
+      "sinceStartMs": 32842,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00030963702010922134,
+        "timestampMs": 32838.65404129028
+      }
+    },
+    {
+      "atMs": 1786778209651,
+      "sinceStartMs": 32959,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00043923984048888087,
+        "timestampMs": 32955.384969711304
+      }
+    },
+    {
+      "atMs": 1786778209837,
+      "sinceStartMs": 33145,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0004262570291757584,
+        "timestampMs": 33141.99900627136
+      }
+    },
+    {
+      "atMs": 1786778209861,
+      "sinceStartMs": 33169,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 32785.9375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778209865,
+      "sinceStartMs": 33173,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 32785.9375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778210047,
+      "sinceStartMs": 33355,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0004519720387179405,
+        "timestampMs": 33352.00905799866
+      }
+    },
+    {
+      "atMs": 1786778210234,
+      "sinceStartMs": 33542,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0003653627063613385,
+        "timestampMs": 33538.83504867554
+      }
+    },
+    {
+      "atMs": 1786778210351,
+      "sinceStartMs": 33659,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00030462921131402254,
+        "timestampMs": 33655.369997024536
+      }
+    },
+    {
+      "atMs": 1786778210537,
+      "sinceStartMs": 33845,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0003640576323959976,
+        "timestampMs": 33842.06998348236
+      }
+    },
+    {
+      "atMs": 1786778210747,
+      "sinceStartMs": 34055,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0014337265165522697,
+        "timestampMs": 34052.003026008606
+      }
+    },
+    {
+      "atMs": 1786778210865,
+      "sinceStartMs": 34173,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 33796.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778210871,
+      "sinceStartMs": 34179,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 33796.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778210877,
+      "sinceStartMs": 34185,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 33796.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778210880,
+      "sinceStartMs": 34188,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 33796.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778210884,
+      "sinceStartMs": 34192,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 33796.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778210887,
+      "sinceStartMs": 34195,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 33796.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778210934,
+      "sinceStartMs": 34242,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.016554394736886024,
+        "timestampMs": 34238.921999931335
+      }
+    },
+    {
+      "atMs": 1786778211051,
+      "sinceStartMs": 34359,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.013931247405707836,
+        "timestampMs": 34355.49700260162
+      }
+    },
+    {
+      "atMs": 1786778211237,
+      "sinceStartMs": 34545,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.013626554980874062,
+        "timestampMs": 34542.186975479126
+      }
+    },
+    {
+      "atMs": 1786778211447,
+      "sinceStartMs": 34755,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.011033997870981692,
+        "timestampMs": 34752.02202796936
+      }
+    },
+    {
+      "atMs": 1786778211635,
+      "sinceStartMs": 34943,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.012273042462766172,
+        "timestampMs": 34938.65895271301
+      }
+    },
+    {
+      "atMs": 1786778211751,
+      "sinceStartMs": 35059,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0039370013400912285,
+        "timestampMs": 35055.397033691406
+      }
+    },
+    {
+      "atMs": 1786778211778,
+      "sinceStartMs": 35086,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 34643.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778211783,
+      "sinceStartMs": 35091,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 34643.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778211788,
+      "sinceStartMs": 35096,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 34643.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778211792,
+      "sinceStartMs": 35100,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 34643.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778211937,
+      "sinceStartMs": 35245,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.005314748268574476,
+        "timestampMs": 35242.03598499298
+      }
+    },
+    {
+      "atMs": 1786778212147,
+      "sinceStartMs": 35455,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.016875091940164566,
+        "timestampMs": 35452.113032341
+      }
+    },
+    {
+      "atMs": 1786778212334,
+      "sinceStartMs": 35642,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.013173759914934635,
+        "timestampMs": 35638.70406150818
+      }
+    },
+    {
+      "atMs": 1786778212451,
+      "sinceStartMs": 35759,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.008056581020355225,
+        "timestampMs": 35755.60402870178
+      }
+    },
+    {
+      "atMs": 1786778212638,
+      "sinceStartMs": 35946,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.01125665195286274,
+        "timestampMs": 35942.386984825134
+      }
+    },
+    {
+      "atMs": 1786778212754,
+      "sinceStartMs": 36062,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 35653.8125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778212759,
+      "sinceStartMs": 36067,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 35653.8125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778212764,
+      "sinceStartMs": 36072,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 35653.8125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778212767,
+      "sinceStartMs": 36075,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 35653.8125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778212847,
+      "sinceStartMs": 36155,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.011833308264613152,
+        "timestampMs": 36152.32598781586
+      }
+    },
+    {
+      "atMs": 1786778213034,
+      "sinceStartMs": 36342,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.009754468686878681,
+        "timestampMs": 36339.01298046112
+      }
+    },
+    {
+      "atMs": 1786778213151,
+      "sinceStartMs": 36459,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.008751659654080868,
+        "timestampMs": 36455.67798614502
+      }
+    },
+    {
+      "atMs": 1786778213337,
+      "sinceStartMs": 36645,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.007303235586732626,
+        "timestampMs": 36641.9689655304
+      }
+    },
+    {
+      "atMs": 1786778213547,
+      "sinceStartMs": 36855,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.010468922555446625,
+        "timestampMs": 36851.95696353912
+      }
+    },
+    {
+      "atMs": 1786778213660,
+      "sinceStartMs": 36968,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 36579.0625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778213665,
+      "sinceStartMs": 36973,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 36579.0625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778213669,
+      "sinceStartMs": 36977,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 36579.0625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778213672,
+      "sinceStartMs": 36980,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 36579.0625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778213675,
+      "sinceStartMs": 36983,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 36579.0625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778213733,
+      "sinceStartMs": 37041,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00830873940140009,
+        "timestampMs": 37038.8480424881
+      }
+    },
+    {
+      "atMs": 1786778213853,
+      "sinceStartMs": 37161,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.011019538156688212,
+        "timestampMs": 37155.678033828735
+      }
+    },
+    {
+      "atMs": 1786778214040,
+      "sinceStartMs": 37348,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.003975554835051298,
+        "timestampMs": 37342.23997592926
+      }
+    },
+    {
+      "atMs": 1786778214248,
+      "sinceStartMs": 37556,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.008340735919773579,
+        "timestampMs": 37552.38604545593
+      }
+    },
+    {
+      "atMs": 1786778214437,
+      "sinceStartMs": 37745,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.008885649032890797,
+        "timestampMs": 37738.99805545807
+      }
+    },
+    {
+      "atMs": 1786778214552,
+      "sinceStartMs": 37860,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.004194145556539297,
+        "timestampMs": 37855.62598705292
+      }
+    },
+    {
+      "atMs": 1786778214671,
+      "sinceStartMs": 37979,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 37589.6875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778214677,
+      "sinceStartMs": 37985,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 37589.6875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778214681,
+      "sinceStartMs": 37989,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 37589.6875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778214685,
+      "sinceStartMs": 37993,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 37589.6875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778214691,
+      "sinceStartMs": 37999,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 37589.6875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778214737,
+      "sinceStartMs": 38045,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00977618433535099,
+        "timestampMs": 38042.26195812225
+      }
+    },
+    {
+      "atMs": 1786778214948,
+      "sinceStartMs": 38256,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.010718981735408306,
+        "timestampMs": 38252.3250579834
+      }
+    },
+    {
+      "atMs": 1786778215135,
+      "sinceStartMs": 38443,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.004405878949910402,
+        "timestampMs": 38439.002990722656
+      }
+    },
+    {
+      "atMs": 1786778215251,
+      "sinceStartMs": 38559,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00716534024104476,
+        "timestampMs": 38555.69505691528
+      }
+    },
+    {
+      "atMs": 1786778215438,
+      "sinceStartMs": 38746,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0059638251550495625,
+        "timestampMs": 38741.97006225586
+      }
+    },
+    {
+      "atMs": 1786778215647,
+      "sinceStartMs": 38955,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.011482428759336472,
+        "timestampMs": 38951.905965805054
+      }
+    },
+    {
+      "atMs": 1786778215673,
+      "sinceStartMs": 38981,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 38521.625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778215679,
+      "sinceStartMs": 38987,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 38521.625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778215684,
+      "sinceStartMs": 38992,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试一",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 38521.625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778215688,
+      "sinceStartMs": 38996,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试一下",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 38521.625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778215697,
+      "sinceStartMs": 39005,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试一下 ，",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 38521.625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778215701,
+      "sinceStartMs": 39009,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试一下 ，看",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 38521.625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778215705,
+      "sinceStartMs": 39013,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试一下 ，看看",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 38521.625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778215834,
+      "sinceStartMs": 39142,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.004707044921815395,
+        "timestampMs": 39138.591051101685
+      }
+    },
+    {
+      "atMs": 1786778215950,
+      "sinceStartMs": 39258,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.010330094955861568,
+        "timestampMs": 39255.26702404022
+      }
+    },
+    {
+      "atMs": 1786778216137,
+      "sinceStartMs": 39445,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.008329044096171856,
+        "timestampMs": 39441.90001487732
+      }
+    },
+    {
+      "atMs": 1786778216347,
+      "sinceStartMs": 39655,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0030716562177985907,
+        "timestampMs": 39652.01497077942
+      }
+    },
+    {
+      "atMs": 1786778216534,
+      "sinceStartMs": 39842,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.005894652102142572,
+        "timestampMs": 39838.60003948212
+      }
+    },
+    {
+      "atMs": 1786778216564,
+      "sinceStartMs": 39872,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试一下 ，看看第",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 39446.9375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778216569,
+      "sinceStartMs": 39877,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试一下 ，看看第二",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 39446.9375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778216575,
+      "sinceStartMs": 39883,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试一下 ，看看第二部",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 39446.9375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778216579,
+      "sinceStartMs": 39887,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试一下 ，看看第二部分",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 39446.9375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778216583,
+      "sinceStartMs": 39891,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试一下 ，看看第二部分内",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 39446.9375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778216587,
+      "sinceStartMs": 39895,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试一下 ，看看第二部分内容",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 39446.9375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778216651,
+      "sinceStartMs": 39959,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.005787038244307041,
+        "timestampMs": 39955.543994903564
+      }
+    },
+    {
+      "atMs": 1786778216837,
+      "sinceStartMs": 40145,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.007012557238340378,
+        "timestampMs": 40141.92199707031
+      }
+    },
+    {
+      "atMs": 1786778217047,
+      "sinceStartMs": 40355,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0051486920565366745,
+        "timestampMs": 40351.8830537796
+      }
+    },
+    {
+      "atMs": 1786778217235,
+      "sinceStartMs": 40543,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00674008671194315,
+        "timestampMs": 40538.54203224182
+      }
+    },
+    {
+      "atMs": 1786778217351,
+      "sinceStartMs": 40659,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0043023452162742615,
+        "timestampMs": 40655.375957489014
+      }
+    },
+    {
+      "atMs": 1786778217537,
+      "sinceStartMs": 40845,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.013003232888877392,
+        "timestampMs": 40841.96400642395
+      }
+    },
+    {
+      "atMs": 1786778217568,
+      "sinceStartMs": 40876,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试一下 ，看看第二部分内容会",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 40457.5,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778217571,
+      "sinceStartMs": 40879,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试一下 ，看看第二部分内容会说",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 40457.5,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778217576,
+      "sinceStartMs": 40884,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试一下 ，看看第二部分内容会说出",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 40457.5,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778217582,
+      "sinceStartMs": 40890,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试一下 ，看看第二部分内容会说出什",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 40457.5,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778217584,
+      "sinceStartMs": 40892,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试一下 ，看看第二部分内容会说出什么",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 40457.5,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778217747,
+      "sinceStartMs": 41055,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.003830552799627185,
+        "timestampMs": 41051.88000202179
+      }
+    },
+    {
+      "atMs": 1786778217934,
+      "sinceStartMs": 41242,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0032969084568321705,
+        "timestampMs": 41238.51001262665
+      }
+    },
+    {
+      "atMs": 1786778218051,
+      "sinceStartMs": 41359,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0004353214462753386,
+        "timestampMs": 41355.32999038696
+      }
+    },
+    {
+      "atMs": 1786778218237,
+      "sinceStartMs": 41545,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0004481701471377164,
+        "timestampMs": 41541.866064071655
+      }
+    },
+    {
+      "atMs": 1786778218447,
+      "sinceStartMs": 41755,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00044668340706266463,
+        "timestampMs": 41751.85406208038
+      }
+    },
+    {
+      "atMs": 1786778218475,
+      "sinceStartMs": 41783,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试一下 ，看看第二部分内容会说出什么话",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 41382.8125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778218481,
+      "sinceStartMs": 41789,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试一下 ，看看第二部分内容会说出什么话来",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 41382.8125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778218488,
+      "sinceStartMs": 41796,
+      "kind": "transcript",
+      "payload": {
+        "text": "看。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试一下 ，看看第二部分内容会说出什么话来吧",
+        "isFinal": false,
+        "startMs": 16620,
+        "endMs": 41382.8125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778218546,
+      "sinceStartMs": 41854,
+      "kind": "transcript",
+      "payload": {
+        "text": "哈。这是第一部分的内容 ，然后让我们一起来去尝试一下看看第一部分现在这个是第二部分的内容 ，让我们来去尝试一下 ，看看第二部分内容会说出什么话来吧",
+        "isFinal": true,
+        "startMs": 24360,
+        "endMs": 40920,
+        "confidence": 0.36
+      }
+    },
+    {
+      "atMs": 1786778218633,
+      "sinceStartMs": 41941,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0013597712386399508,
+        "timestampMs": 41938.57395648956
+      }
+    },
+    {
+      "atMs": 1786778218751,
+      "sinceStartMs": 42059,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.014245876111090183,
+        "timestampMs": 42055.1940202713
+      }
+    },
+    {
+      "atMs": 1786778218937,
+      "sinceStartMs": 42245,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.007826493121683598,
+        "timestampMs": 42241.94002151489
+      }
+    },
+    {
+      "atMs": 1786778219149,
+      "sinceStartMs": 42457,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.01627289690077305,
+        "timestampMs": 42451.9909620285
+      }
+    },
+    {
+      "atMs": 1786778219334,
+      "sinceStartMs": 42642,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.006153280846774578,
+        "timestampMs": 42638.466000556946
+      }
+    },
+    {
+      "atMs": 1786778219450,
+      "sinceStartMs": 42758,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00818688329309225,
+        "timestampMs": 42755.30397891998
+      }
+    },
+    {
+      "atMs": 1786778219476,
+      "sinceStartMs": 42784,
+      "kind": "transcript",
+      "payload": {
+        "text": "。",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 42393.4375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778219480,
+      "sinceStartMs": 42788,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 42393.4375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778219484,
+      "sinceStartMs": 42792,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 42393.4375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778219487,
+      "sinceStartMs": 42795,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 42393.4375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778219637,
+      "sinceStartMs": 42945,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.008606319315731525,
+        "timestampMs": 42941.720962524414
+      }
+    },
+    {
+      "atMs": 1786778219847,
+      "sinceStartMs": 43155,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.009410517290234566,
+        "timestampMs": 43151.870012283325
+      }
+    },
+    {
+      "atMs": 1786778220034,
+      "sinceStartMs": 43342,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.006381832528859377,
+        "timestampMs": 43338.528990745544
+      }
+    },
+    {
+      "atMs": 1786778220150,
+      "sinceStartMs": 43458,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.005429121665656567,
+        "timestampMs": 43455.3359746933
+      }
+    },
+    {
+      "atMs": 1786778220337,
+      "sinceStartMs": 43645,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.009793790988624096,
+        "timestampMs": 43641.8160200119
+      }
+    },
+    {
+      "atMs": 1786778220447,
+      "sinceStartMs": 43755,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 43325.375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778220453,
+      "sinceStartMs": 43761,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 43325.375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778220456,
+      "sinceStartMs": 43764,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 43325.375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778220460,
+      "sinceStartMs": 43768,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分的",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 43325.375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778220462,
+      "sinceStartMs": 43770,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分的内",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 43325.375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778220465,
+      "sinceStartMs": 43773,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分的内容",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 43325.375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778220469,
+      "sinceStartMs": 43777,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分的内容 ，",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 43325.375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778220548,
+      "sinceStartMs": 43856,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.006606193259358406,
+        "timestampMs": 43851.97305679321
+      }
+    },
+    {
+      "atMs": 1786778220734,
+      "sinceStartMs": 44042,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.006217038258910179,
+        "timestampMs": 44038.45798969269
+      }
+    },
+    {
+      "atMs": 1786778220850,
+      "sinceStartMs": 44158,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0029722130857408047,
+        "timestampMs": 44155.20203113556
+      }
+    },
+    {
+      "atMs": 1786778221037,
+      "sinceStartMs": 44345,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.007548213470727204,
+        "timestampMs": 44341.79496765137
+      }
+    },
+    {
+      "atMs": 1786778221249,
+      "sinceStartMs": 44557,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0028755120001733303,
+        "timestampMs": 44551.82695388794
+      }
+    },
+    {
+      "atMs": 1786778221364,
+      "sinceStartMs": 44672,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分的内容 ，让",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 44250.6875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778221371,
+      "sinceStartMs": 44679,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分的内容 ，让我",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 44250.6875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778221375,
+      "sinceStartMs": 44683,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分的内容 ，让我们",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 44250.6875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778221434,
+      "sinceStartMs": 44742,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.005202163476496935,
+        "timestampMs": 44738.50703239441
+      }
+    },
+    {
+      "atMs": 1786778221551,
+      "sinceStartMs": 44859,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00466674380004406,
+        "timestampMs": 44855.27300834656
+      }
+    },
+    {
+      "atMs": 1786778221737,
+      "sinceStartMs": 45045,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0035726341884583235,
+        "timestampMs": 45041.80705547333
+      }
+    },
+    {
+      "atMs": 1786778221947,
+      "sinceStartMs": 45255,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.012168454006314278,
+        "timestampMs": 45251.75297260285
+      }
+    },
+    {
+      "atMs": 1786778222133,
+      "sinceStartMs": 45441,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.004365685861557722,
+        "timestampMs": 45438.457012176514
+      }
+    },
+    {
+      "atMs": 1786778222250,
+      "sinceStartMs": 45558,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0019202444236725569,
+        "timestampMs": 45555.15205860138
+      }
+    },
+    {
+      "atMs": 1786778222369,
+      "sinceStartMs": 45677,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分的内容 ，让我们尝",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 45261.25,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778222374,
+      "sinceStartMs": 45682,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分的内容 ，让我们尝试",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 45261.25,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778222379,
+      "sinceStartMs": 45687,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分的内容 ，让我们尝试一",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 45261.25,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778222383,
+      "sinceStartMs": 45691,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分的内容 ，让我们尝试一下",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 45261.25,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778222388,
+      "sinceStartMs": 45696,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分的内容 ，让我们尝试一下第",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 45261.25,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778222391,
+      "sinceStartMs": 45699,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分的内容 ，让我们尝试一下第二",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 45261.25,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778222440,
+      "sinceStartMs": 45748,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.007388446480035783,
+        "timestampMs": 45741.81306362152
+      }
+    },
+    {
+      "atMs": 1786778222647,
+      "sinceStartMs": 45955,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.012395960278809072,
+        "timestampMs": 45951.81500911713
+      }
+    },
+    {
+      "atMs": 1786778222834,
+      "sinceStartMs": 46142,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.012044702656567097,
+        "timestampMs": 46138.48805427551
+      }
+    },
+    {
+      "atMs": 1786778222950,
+      "sinceStartMs": 46258,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00620289845392108,
+        "timestampMs": 46255.131006240845
+      }
+    },
+    {
+      "atMs": 1786778223137,
+      "sinceStartMs": 46445,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.007395313587039709,
+        "timestampMs": 46441.80703163147
+      }
+    },
+    {
+      "atMs": 1786778223255,
+      "sinceStartMs": 46563,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分的内容 ，让我们尝试一下第二部",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 46186.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778223261,
+      "sinceStartMs": 46569,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分的内容 ，让我们尝试一下第二部分",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 46186.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778223267,
+      "sinceStartMs": 46575,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分的内容 ，让我们尝试一下第二部分会",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 46186.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778223274,
+      "sinceStartMs": 46582,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分的内容 ，让我们尝试一下第二部分会说",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 46186.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778223277,
+      "sinceStartMs": 46585,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分的内容 ，让我们尝试一下第二部分会说出",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 46186.5625,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778223347,
+      "sinceStartMs": 46655,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0061599318869411945,
+        "timestampMs": 46651.86095237732
+      }
+    },
+    {
+      "atMs": 1786778223534,
+      "sinceStartMs": 46842,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0036706996615976095,
+        "timestampMs": 46838.38701248169
+      }
+    },
+    {
+      "atMs": 1786778223650,
+      "sinceStartMs": 46958,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0004992472822777927,
+        "timestampMs": 46955.18398284912
+      }
+    },
+    {
+      "atMs": 1786778223837,
+      "sinceStartMs": 47145,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.005694097839295864,
+        "timestampMs": 47141.903042793274
+      }
+    },
+    {
+      "atMs": 1786778224014,
+      "sinceStartMs": 47322,
+      "kind": "stage",
+      "payload": {
+        "stage": "done",
+        "timestampMs": 47317.291021347046,
+        "analyzerMs": 46862.5,
+        "plannedMs": 0,
+        "playing": false,
+        "outputVolume": 1,
+        "message": "playback stopped; the microphone is still open"
+      }
+    },
+    {
+      "atMs": 1786778224047,
+      "sinceStartMs": 47355,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.007811611983925104,
+        "timestampMs": 47351.974964141846
+      }
+    },
+    {
+      "atMs": 1786778224234,
+      "sinceStartMs": 47542,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0030880661215633154,
+        "timestampMs": 47538.4019613266
+      }
+    },
+    {
+      "atMs": 1786778224262,
+      "sinceStartMs": 47570,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分的内容 ，让我们尝试一下第二部分会说出什",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 47197.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778224267,
+      "sinceStartMs": 47575,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分的内容 ，让我们尝试一下第二部分会说出什么",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 47197.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778224273,
+      "sinceStartMs": 47581,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分的内容 ，让我们尝试一下第二部分会说出什么的",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 47197.1875,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778224350,
+      "sinceStartMs": 47658,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0016960174543783069,
+        "timestampMs": 47655.20095825195
+      }
+    },
+    {
+      "atMs": 1786778224537,
+      "sinceStartMs": 47845,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00033032509963959455,
+        "timestampMs": 47841.70997142792
+      }
+    },
+    {
+      "atMs": 1786778224747,
+      "sinceStartMs": 48055,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00028058444149792194,
+        "timestampMs": 48051.70297622681
+      }
+    },
+    {
+      "atMs": 1786778224934,
+      "sinceStartMs": 48242,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0002561397268436849,
+        "timestampMs": 48238.4090423584
+      }
+    },
+    {
+      "atMs": 1786778225050,
+      "sinceStartMs": 48358,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0002466670412104577,
+        "timestampMs": 48355.11004924774
+      }
+    },
+    {
+      "atMs": 1786778225237,
+      "sinceStartMs": 48545,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.000298354949336499,
+        "timestampMs": 48541.72706604004
+      }
+    },
+    {
+      "atMs": 1786778225263,
+      "sinceStartMs": 48571,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分的内容 ，让我们尝试一下第二部分会说出什么的内",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 48129.125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778225268,
+      "sinceStartMs": 48576,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分的内容 ，让我们尝试一下第二部分会说出什么的内容",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 48129.125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778225274,
+      "sinceStartMs": 48582,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分的内容 ，让我们尝试一下第二部分会说出什么的内容来",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 48129.125,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778225447,
+      "sinceStartMs": 48755,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00034893606789410114,
+        "timestampMs": 48751.75905227661
+      }
+    },
+    {
+      "atMs": 1786778225633,
+      "sinceStartMs": 48941,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00046026395284570754,
+        "timestampMs": 48938.37296962738
+      }
+    },
+    {
+      "atMs": 1786778225750,
+      "sinceStartMs": 49058,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00048345347750000656,
+        "timestampMs": 49055.103063583374
+      }
+    },
+    {
+      "atMs": 1786778225937,
+      "sinceStartMs": 49245,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0004196877416688949,
+        "timestampMs": 49241.67597293854
+      }
+    },
+    {
+      "atMs": 1786778226147,
+      "sinceStartMs": 49455,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0005007844883948565,
+        "timestampMs": 49451.719999313354
+      }
+    },
+    {
+      "atMs": 1786778226172,
+      "sinceStartMs": 49480,
+      "kind": "transcript",
+      "payload": {
+        "text": "。这是第二部分的内容 ，让我们尝试一下第二部分会说出什么的内容来。",
+        "isFinal": false,
+        "startMs": 41220,
+        "endMs": 49054.4375,
+        "confidence": 0
+      }
+    },
+    {
+      "atMs": 1786778226333,
+      "sinceStartMs": 49641,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.000421969685703516,
+        "timestampMs": 49638.40103149414
+      }
+    },
+    {
+      "atMs": 1786778226450,
+      "sinceStartMs": 49758,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.000372059439541772,
+        "timestampMs": 49755.053997039795
+      }
+    },
+    {
+      "atMs": 1786778226637,
+      "sinceStartMs": 49945,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00039589678635820746,
+        "timestampMs": 49941.69199466705
+      }
+    },
+    {
+      "atMs": 1786778226848,
+      "sinceStartMs": 50156,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.00044491951121017337,
+        "timestampMs": 50152.17399597168
+      }
+    },
+    {
+      "atMs": 1786778227034,
+      "sinceStartMs": 50342,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0005523015279322863,
+        "timestampMs": 50338.726043701165
+      }
+    },
+    {
+      "atMs": 1786778227150,
+      "sinceStartMs": 50458,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0005959361442364752,
+        "timestampMs": 50455.09195327758
+      }
+    },
+    {
+      "atMs": 1786778227216,
+      "sinceStartMs": 50524,
+      "kind": "transcript",
+      "payload": {
+        "text": "这是第二部分的内容 ，让我们尝试一下第二部分会说出什么的内容来。",
+        "isFinal": true,
+        "startMs": 41220,
+        "endMs": 48120,
+        "confidence": 0.905
+      }
+    },
+    {
+      "atMs": 1786778227337,
+      "sinceStartMs": 50645,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.000503063085488975,
+        "timestampMs": 50641.729950904846
+      }
+    },
+    {
+      "atMs": 1786778227547,
+      "sinceStartMs": 50855,
+      "kind": "level",
+      "payload": {
+        "inputRms": 0.0003010252257809043,
+        "timestampMs": 50851.778984069824
+      }
+    },
+    {
+      "atMs": 1786778227624,
+      "sinceStartMs": 50932,
+      "kind": "command",
+      "payload": {
+        "label": "stop_probe",
+        "detail": ""
+      }
+    },
+    {
+      "atMs": 1786778227710,
+      "sinceStartMs": 51018,
+      "kind": "log",
+      "payload": {
+        "line": "the results stream ended"
+      }
+    },
+    {
+      "atMs": 1786778227809,
+      "sinceStartMs": 51117,
+      "kind": "command",
+      "payload": {
+        "label": "stop_probe →",
+        "detail": "{\"stopped\":true}"
+      }
+    },
+    {
+      "atMs": 1786778227806,
+      "sinceStartMs": 51114,
+      "kind": "state",
+      "payload": {
+        "phase": "stopped",
+        "message": "stopped by the app"
+      }
+    }
+  ]
+}

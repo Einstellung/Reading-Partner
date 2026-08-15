@@ -17,6 +17,7 @@
 | 同步引擎、Drive 后端 | 存储与数据目录 + 网络与 CSP + WebKit / webview |
 | 全文/图片提取、裁图 | 提取（壳侧 pdf.js） |
 | 出 iOS 包、签名、图标、深链接 | iOS 构建与签名 |
+| 原生录音、回声消除、后台识别 | 原生音频与语音 |
 | 出 Android 包、签名、对齐 | Android 构建与签名 |
 | 桌面 webview 行为异常 | WebKit / webview |
 | 隐藏 webview 取正文、反爬、UA、站点登录与退出 | WebKit / webview + 网络与 CSP |
@@ -114,6 +115,11 @@
 ## Android 构建与签名
 
 - [104-zipalign-page-size-flag-needs-build-tools-35](./104-zipalign-page-size-flag-needs-build-tools-35.md) — `zipalign -P 16`（16 KB 页对齐）是 build-tools 35 才加的参数，34.0.0 上直接退 2；对齐真正来自 NDK r28+，产物上用 readelf 逐段断言
+
+## 原生音频与语音
+
+- [132-audio-engine-start-returns-without-running](./132-audio-engine-start-returns-without-running.md) — `AVAudioEngine.start()` 不 throw 也照样没起来，`isRunning` 是 false、tap 一个回调都不触发，采集全程静默且零报错；`start()` 之后自己断言 `isRunning`，错误信息里带输出链接受的格式、输出节点的硬件格式和会话 `sampleRate`
+- [133-a-rebuilt-vpio-unit-answers-with-a-default-output-format](./133-a-rebuilt-vpio-unit-answers-with-a-default-output-format.md) — `setVoiceProcessingEnabled(true)` 重建 IO 单元之后、`prepare()` 之前，输出侧对硬件的回答是 44100Hz 2ch 默认值；`mainMixerNode` 第一次被读到就会建出来并接上输出节点，接在 `prepare()` 之前整条输出链按默认值定死，引擎起不来（表现即坑 132）。`prepare()` 排在第一次访问 `mainMixerNode` 之前，硬件格式读 `outputNode.outputFormat(forBus:)`
 
 ## WebKit / webview
 
