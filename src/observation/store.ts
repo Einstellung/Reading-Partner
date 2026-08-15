@@ -56,6 +56,27 @@ export interface ObservationMeta {
 
 const ENTRY_FILE = /^(m-[0-9a-f]{8})\.md$/;
 
+// A conflict copy sync left beside an entry: `<id>.conflict-<digest>.md`, the
+// whole losing version of a file two devices both edited (platform/sync/merge).
+// ENTRY_FILE is deliberately narrow enough not to match one — a copy must not
+// join the index or a prompt, and must not be rewritten by a later update — but
+// nothing else matched them either, so the reader's own writing sat on disk with
+// no way to know it was there. This is that way.
+const CONFLICT_FILE = /^(m-[0-9a-f]{8})\.conflict-[0-9a-f]+\.md$/;
+
+// One conflict copy, parsed here so a renderer never has to know the file
+// format. The fields are empty when the copy does not parse, which leaves the
+// path — and the path is what makes it findable either way.
+export interface ObservationConflict {
+  // Path under the app data dir.
+  path: string;
+  // The observation this is a copy of.
+  id: string;
+  summary: string;
+  body: string;
+  updated: string;
+}
+
 function newId(): string {
   return `m-${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
 }
@@ -100,6 +121,31 @@ export class ObservationFileStore {
     }
     entries.sort((a, b) => b.updated.localeCompare(a.updated) || a.id.localeCompare(b.id));
     return entries;
+  }
+
+  // The conflict copies sitting in this topic's directory, oldest name first.
+  // Read-only and separate from list(): a copy is a second version of one
+  // observation, not a second observation, so nothing derived — the index, a
+  // prompt, recall — may take it for one.
+  async listConflicts(): Promise<ObservationConflict[]> {
+    const names = await this.fs.listDir(this.dir);
+    const out: ObservationConflict[] = [];
+    for (const name of names) {
+      const m = CONFLICT_FILE.exec(name);
+      if (!m) continue;
+      const path = `${this.dir}/${name}`;
+      const text = await this.fs.read(path);
+      const entry = text === null ? null : parseObservation(text);
+      out.push({
+        path,
+        id: m[1],
+        summary: entry?.summary ?? "",
+        body: entry?.body ?? "",
+        updated: entry?.updated ?? "",
+      });
+    }
+    out.sort((a, b) => a.path.localeCompare(b.path));
+    return out;
   }
 
   async create(input: RetainInput): Promise<Observation> {

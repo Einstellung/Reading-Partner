@@ -2,6 +2,8 @@
 // fs — write/index/update/evolution rewrite/delete/rebuild. Run: bun test.
 
 import { expect, test } from "bun:test";
+import { conflictCopyPath } from "../../src/platform/sync/merge";
+import { serializeObservation } from "../../src/observation/files";
 import { ObservationFileStore } from "../../src/observation/store";
 import { JULY_17, JULY_20, makeFakeFs } from "./fakefs";
 
@@ -108,4 +110,59 @@ test("meta round-trips and defaults to no distillation", async () => {
   expect(await store.getMeta()).toEqual({ lastDistilledAt: null, lastAnnotationDistillAt: null });
   await store.setMeta({ lastDistilledAt: 123, lastAnnotationDistillAt: 45 });
   expect(await store.getMeta()).toEqual({ lastDistilledAt: 123, lastAnnotationDistillAt: 45 });
+});
+
+// --- conflict copies sync leaves behind ---
+
+test("conflict copies are readable, and still not observations", async () => {
+  const { store, files } = makeStore();
+  const entry = await store.create({
+    type: "belief",
+    summary: "Thinks attention is just soft lookup",
+    body: "Said so twice.",
+  });
+
+  // The copy is written the way sync writes one: the losing side's whole file,
+  // named from its own bytes (platform/sync/merge). Using that function here is
+  // the point of the test — the store's pattern has to match what sync produces.
+  const losing = serializeObservation({
+    ...entry,
+    summary: "Thinks attention is a soft lookup, and says the iPad version",
+    body: "The version this device had.",
+  });
+  const bytes = new TextEncoder().encode(losing);
+  const path = conflictCopyPath(`memory-topic-1/${entry.id}.md`, bytes);
+  files.set(path, losing);
+
+  const conflicts = await store.listConflicts();
+  expect(conflicts).toHaveLength(1);
+  expect(conflicts[0].path).toBe(path);
+  expect(conflicts[0].id).toBe(entry.id);
+  expect(conflicts[0].summary).toBe("Thinks attention is a soft lookup, and says the iPad version");
+  expect(conflicts[0].body).toBe("The version this device had.");
+
+  // And it stays out of everything derived: one observation, one index line.
+  expect(await store.list()).toHaveLength(1);
+  expect(await store.readIndex()).toHaveLength(1);
+  await store.rebuildIndex();
+  expect((await store.readIndexText()).split("\n").filter(Boolean)).toHaveLength(1);
+  expect(files.has(path)).toBe(true);
+});
+
+test("a conflict copy that will not parse is still reported", async () => {
+  const { store, files } = makeStore();
+  files.set("memory-topic-1/m-1a2b3c4d.conflict-deadbeef.md", "not frontmatter at all");
+  // A copy of the derived index is not a copy of anything the reader wrote.
+  files.set("memory-topic-1/index.conflict-cafebabe.md", "- [belief] x (updated 2026-07-17, id m-1a2b3c4d)");
+
+  const conflicts = await store.listConflicts();
+  expect(conflicts).toHaveLength(1);
+  expect(conflicts[0].id).toBe("m-1a2b3c4d");
+  expect(conflicts[0].summary).toBe("");
+});
+
+test("a topic with no conflict copies reports none", async () => {
+  const { store } = makeStore();
+  await store.create({ type: "belief", summary: "s", body: "b" });
+  expect(await store.listConflicts()).toEqual([]);
 });

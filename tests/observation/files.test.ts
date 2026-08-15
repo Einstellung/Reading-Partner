@@ -4,6 +4,7 @@ import { expect, test } from "bun:test";
 import {
   buildIndex,
   isoDate,
+  localDate,
   oneLine,
   parseIndex,
   parseIndexLine,
@@ -68,4 +69,12 @@ test("buildIndex sorts newest-updated first and parseIndex skips junk lines", ()
 test("isoDate and oneLine", () => {
   expect(isoDate(new Date("2026-07-17T23:59:00Z").getTime())).toBe("2026-07-17");
   expect(oneLine("  a\n b\tc ")).toBe("a b c");
+});
+
+test("localDate reads the device's own clock, not UTC", () => {
+  // Whatever zone the test machine is in, the local date is the one the reader
+  // would name — which is what an observation about a conversation is dated by.
+  const at = new Date(2026, 6, 17, 0, 30, 0);
+  expect(localDate(at.getTime())).toBe("2026-07-17");
+  expect(localDate(new Date(2026, 0, 5, 23, 59, 59).getTime())).toBe("2026-01-05");
 });

@@ -117,7 +117,7 @@ function input(overrides: Partial<RehearsalDistillInput> = {}): RehearsalDistill
     ],
     earlier: 0,
     indexText: "",
-    today: "2026-07-17",
+    dates: { first: "2026-07-17", last: "2026-07-17" },
     ...overrides,
   };
 }
@@ -305,7 +305,7 @@ test("the system prompt leads with reconciliation against the current index", ()
   expect(prompt).toContain("Crossing types is");
   expect(prompt).toContain("Never leave two observations standing for the two ends of one story");
   expect(prompt).toContain("timeline");
-  expect(prompt).toContain("today is 2026-07-17");
+  expect(prompt).toContain("rehearsal below happened on 2026-07-17");
 });
 
 test("the system prompt writes down the examiner's bias and the three things to keep", () => {

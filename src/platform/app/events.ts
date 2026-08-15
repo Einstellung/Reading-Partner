@@ -24,9 +24,14 @@ export type EventType =
   // { talkId, messages } — which talk it was and how many messages it covered.
   | "distill-run" // { trigger, threadId?, bookId?, created, updated, deleted, talkId?, messages? }
   // A distillation pass that did not finish, so nothing was observed and its
-  // cursors did not advance. `outcome` is the sub-agent's (src/ai/subagent), e.g.
-  // "out-of-turns" or "failed".
-  | "distill-failed" // { trigger, threadId?, bookId?, outcome, created?, updated?, deleted?, talkId? }
+  // cursors did not advance. `stage` is how far it got and `reason` is the one
+  // category the failure sorts into; `outcome` is the sub-agent's
+  // (src/ai/subagent) and is null when the pass never reached a run. `from`/`to`
+  // are the message indexes the pass would have moved the cursor over and
+  // `fromTs`/`toTs` the timestamps at the ends of that stretch — which is the
+  // stretch a later pass has to redo. Fields and the classifier are in
+  // observation/distill.ts (distillFailurePayload).
+  | "distill-failed" // { trigger, threadId?, bookId?, talkId?, stage, reason, outcome, from, to, fromTs, toTs, created, updated, deleted }
   // A profile-guess pass that finished (observation/guess.ts), in events-ai.jsonl
   // rather than a topic's log: the pass looks across every topic at once.
   // `wrote` says whether the guess section actually changed.
@@ -48,6 +53,10 @@ export type EventType =
   | "notes-run" // { phase: "start" | "done" | "failed" }
   | "notes-chapter-regenerate" // { index }
   | "notes-tab-open" // {}
+  // The reader opened a topic's AI observations. The one face of the observation
+  // machinery they can look at, and until this line nothing said whether they
+  // ever did.
+  | "observations-open" // {}
   // One attempt at reading a model's machine-readable output, in
   // events-ai.jsonl rather than a topic's log. See structured-output.ts for the
   // fields and for why it has no topic.

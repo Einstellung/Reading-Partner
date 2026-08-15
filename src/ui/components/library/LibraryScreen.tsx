@@ -24,6 +24,7 @@ import {
   type FileRef,
   type Topic,
 } from "../../../platform/app/topics";
+import { logEvent } from "../../../platform/app/events";
 import { getViewState } from "../../../platform/app/storage";
 import { getFulltext } from "../../../fulltext";
 import { loadAnnotations } from "../../../platform/app/annotations";
@@ -154,7 +155,15 @@ export default function LibraryScreen(props: {
   if (activeTopic) {
     return (
       <div className="absolute inset-0 flex items-stretch bg-white">
-        <TopicNav section={section} onSelect={setSection} open={navOpen} onToggle={toggleNav} />
+        <TopicNav
+          section={section}
+          onSelect={(next) => {
+            if (next === "observations") logEvent(activeTopic.id, "observations-open");
+            setSection(next);
+          }}
+          open={navOpen}
+          onToggle={toggleNav}
+        />
         {section === "observations" ? (
           // The panel scrolls inside itself, so this column does not scroll.
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden">

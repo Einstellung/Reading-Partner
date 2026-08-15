@@ -19,11 +19,16 @@ import type { ObservationAdapter } from "./adapter";
 import {
   DISTILL_BRIEF_TOKENS,
   DISTILL_MAX_ROUNDS,
+  datingRule,
+  distillCoverage,
+  evidenceDates,
+  formatEvidenceSpan,
+  type DistillCoverage,
   type DistillDeps,
   type DistillMessage,
   type DistillResult,
+  type EvidenceDates,
 } from "./distill";
-import { isoDate } from "./files";
 import type { ObservationMeta } from "./store";
 import { buildObservationTools, type ObservationWriteAction } from "./tools";
 
@@ -45,7 +50,9 @@ export interface RehearsalDistillInput {
   // The current observation index — the whole of it, every pass. The first thing
   // the prompt asks for is a reconciliation against these lines.
   indexText: string;
-  today: string; // YYYY-MM-DD, so the model writes absolute dates
+  // When the stretch below happened, from the messages' own timestamps. A talk
+  // is left and re-entered over days (docs/31), so this is routinely not today.
+  dates: EvidenceDates | null;
 }
 
 // The conversation this pass has not seen yet, and the cursor to store if it
@@ -149,7 +156,7 @@ export function buildRehearsalDistillSystemPrompt(input: RehearsalDistillInput):
     "- One chapter rehearsed twice is one observation, updated, with a timeline in",
     "  the body. Do not let a single chapter grow three entries: the index is what",
     "  the next conversation reads, and it is short.",
-    `- Write absolute dates (today is ${input.today}); never "recently" or "last week".`,
+    ...datingRule("rehearsal", input.dates),
     "- Anchor evidence: pass the message ids an observation came from.",
     "- A short or shallow stretch of conversation may yield nothing worth keeping;",
     "  making no tool call at all is a fine outcome.",
@@ -166,7 +173,7 @@ export function buildRehearsalDistillUserMessage(input: RehearsalDistillInput): 
     `Material${input.materials.length === 1 ? "" : "s"}: ${
       input.materials.length ? input.materials.join(", ") : "(none named)"
     }`,
-    `Rehearsal date: ${input.today}`,
+    ...(input.dates ? [`Rehearsal date: ${formatEvidenceSpan(input.dates)}`] : []),
     `Thread ${input.threadId}`,
   ];
   if (input.earlier > 0) {
@@ -262,7 +269,7 @@ export type RehearsalSkip = "no-new-messages" | "reader-silent";
 
 export type RehearsalPassResult =
   | { ran: false; skipped: RehearsalSkip }
-  | ({ ran: true; distilled: number } & DistillResult);
+  | ({ ran: true; distilled: number; coverage: DistillCoverage } & DistillResult);
 
 // Assemble the input from the cursor, run the pass, and move the cursor only if
 // it finished — the same discipline the reading pass keeps with its timestamps,
@@ -289,6 +296,8 @@ export async function runRehearsalDistillPass(
     return { ran: false, skipped: "reader-silent" };
   }
 
+  const stamps = fresh.map((m) => m.ts);
+  const coverage = distillCoverage(stamps, cursor);
   const result = await runRehearsalDistillation(
     {
       topicName: input.topicName,
@@ -298,12 +307,12 @@ export async function runRehearsalDistillPass(
       messages: fresh,
       earlier: cursor,
       indexText: await deps.store.readIndexText(),
-      today: isoDate(now()),
+      dates: evidenceDates(stamps),
     },
     deps.adapter,
     { run: deps.run, model: deps.model, signal: deps.signal },
   );
-  if (!result.ok) return { ran: true, distilled: fresh.length, ...result };
+  if (!result.ok) return { ran: true, distilled: fresh.length, coverage, ...result };
   // Spread first: the reading pass's two stamps live in the same file and this
   // one has no business moving them.
   await deps.store.setMeta({
@@ -311,5 +320,5 @@ export async function runRehearsalDistillPass(
     lastDistilledAt: now(),
     distilledMessages: { ...(meta.distilledMessages ?? {}), [input.threadId]: total },
   });
-  return { ran: true, distilled: fresh.length, ...result };
+  return { ran: true, distilled: fresh.length, coverage, ...result };
 }

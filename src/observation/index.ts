@@ -10,8 +10,13 @@ export type {
   RetainInput,
 } from "./types";
 export { OBSERVATION_TYPES, isObservationType } from "./types";
-export { isoDate, parseIndex, parseObservation, serializeObservation } from "./files";
-export { ObservationFileStore, type ObservationFs, type ObservationMeta } from "./store";
+export { isoDate, localDate, parseIndex, parseObservation, serializeObservation } from "./files";
+export {
+  ObservationFileStore,
+  type ObservationConflict,
+  type ObservationFs,
+  type ObservationMeta,
+} from "./store";
 export { FileObservationAdapter, type ObservationAdapter } from "./adapter";
 export { buildObservationSnapshot, observationPromptSection, trimObservations } from "./snapshot";
 export {
@@ -29,7 +34,13 @@ export {
   buildMarksDistillAgent,
   buildMarksDistillSystemPrompt,
   buildMarksDistillUserMessage,
+  classifyDistillFailure,
   countNewReaderMessages,
+  datingRule,
+  distillCoverage,
+  distillFailurePayload,
+  evidenceDates,
+  formatEvidenceSpan,
   formatSilentMarks,
   markCursor,
   messageCursor,
@@ -43,7 +54,11 @@ export {
   DISTILL_MAX_ROUNDS,
   MARKS_DISTILL_AGENT_NAME,
   type DistillAnnotation,
+  type DistillCoverage,
   type DistillDeps,
+  type DistillFailureInput,
+  type DistillFailureReason,
+  type DistillFailureStage,
   type DistillInput,
   type DistillMessage,
   type DistillPassDeps,
@@ -52,6 +67,7 @@ export {
   type DistillPassStore,
   type DistillResult,
   type DistillSkip,
+  type EvidenceDates,
   type MarksDistillInput,
   type MarksPassInput,
   type MarksPassResult,
@@ -130,6 +146,7 @@ export {
   distillThread,
   getLastDistillation,
   getObservationAdapter,
+  listObservationConflicts,
   notifyObservationChange,
   onObservationChange,
   startDistillSweeps,

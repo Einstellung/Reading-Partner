@@ -27,7 +27,13 @@ import {
   formatSilentMarks,
   buildMarksDistillSystemPrompt,
   buildMarksDistillUserMessage,
+  classifyDistillFailure,
   countNewReaderMessages,
+  datingRule,
+  distillCoverage,
+  distillFailurePayload,
+  evidenceDates,
+  formatEvidenceSpan,
   runDistillPass,
   runDistillation,
   runMarksDistillPass,
@@ -115,7 +121,7 @@ function makeInput(overrides: Partial<DistillInput> = {}): DistillInput {
       { role: "ai", text: "because every token attends to every token", ts: 200 },
     ],
     indexText: "",
-    today: "2026-07-17",
+    dates: { first: "2026-07-17", last: "2026-07-17" },
     ...overrides,
   };
 }
@@ -537,7 +543,7 @@ test("a signal already aborted never reaches the model", async () => {
 test("system prompt carries the curation rules, the date, and the index", () => {
   const prompt = buildDistillSystemPrompt(makeInput({ indexText: "- [belief] x (updated 2026-07-01, id m-11111111)" }));
   expect(prompt).toContain("Update, don't duplicate");
-  expect(prompt).toContain("today is 2026-07-17");
+  expect(prompt).toContain("conversation below happened on 2026-07-17");
   expect(prompt).toContain("evolution");
   expect(prompt).toContain("id m-11111111");
   expect(prompt).toContain("cannot be re-derived");
@@ -804,7 +810,7 @@ test("the marks prompt says there was no conversation and refuses comprehension 
     marks: [mark({ id: "m1", page: 20, text: "owner earnings", comment: "why not FCF?" })],
     capped: false,
     indexText: "- [belief] x (updated 2026-07-01, id m-11111111)",
-    today: "2026-07-17",
+    dates: { first: "2026-07-17", last: "2026-07-17" },
   };
   const prompt = buildMarksDistillSystemPrompt(input);
   // It never claims a transcript it does not have.
@@ -815,11 +821,224 @@ test("the marks prompt says there was no conversation and refuses comprehension 
   expect(prompt).toContain("Do not record understood-concept");
   expect(prompt).toContain("Aggregate.");
   expect(prompt).toContain("Update, don't duplicate");
-  expect(prompt).toContain("today is 2026-07-17");
+  expect(prompt).toContain("stretch of marks below happened on 2026-07-17");
   expect(prompt).toContain("id m-11111111");
 
   const msg = buildMarksDistillUserMessage(input);
   expect(msg).toContain("margin-of-safety.pdf");
   expect(msg).toContain("there is no transcript");
   expect(msg).toContain('[m1] p20: "owner earnings" — note: why not FCF?');
+});
+
+// --- when the evidence happened (the pass is not the conversation) ---
+
+// Local noon, so the assertions hold in any zone the tests run in.
+const noon = (y: number, m: number, d: number) => new Date(y, m - 1, d, 12, 0, 0).getTime();
+
+test("evidenceDates spans the timestamps and ignores the unusable ones", () => {
+  expect(evidenceDates([noon(2026, 8, 4), noon(2026, 8, 1), noon(2026, 8, 3)])).toEqual({
+    first: "2026-08-01",
+    last: "2026-08-04",
+  });
+  expect(evidenceDates([noon(2026, 8, 4)])).toEqual({ first: "2026-08-04", last: "2026-08-04" });
+  // Rows written before messages carried a stamp must not date a pass to 1970.
+  expect(evidenceDates([0, Number.NaN, noon(2026, 8, 4)])).toEqual({
+    first: "2026-08-04",
+    last: "2026-08-04",
+  });
+  expect(evidenceDates([])).toBeNull();
+  expect(evidenceDates([0, 0])).toBeNull();
+});
+
+test("formatEvidenceSpan collapses one day and spells out a range", () => {
+  expect(formatEvidenceSpan({ first: "2026-08-04", last: "2026-08-04" })).toBe("2026-08-04");
+  expect(formatEvidenceSpan({ first: "2026-08-01", last: "2026-08-04" })).toBe(
+    "2026-08-01 to 2026-08-04",
+  );
+});
+
+test("the dating rule names the last covered day and never the day the pass runs", () => {
+  const spanned = datingRule("conversation", { first: "2026-08-01", last: "2026-08-04" }).join("\n");
+  expect(spanned).toContain("2026-08-01 to 2026-08-04");
+  // An observation states what is true of the reader now, so it takes the newest
+  // day the evidence reaches.
+  expect(spanned).toContain("dated 2026-08-04");
+  expect(spanned).not.toContain("today is");
+
+  // Nothing datable: the pass says so instead of falling back on its own clock.
+  const undated = datingRule("conversation", null).join("\n");
+  expect(undated).toContain("only dates this conversation gives you");
+  expect(undated).toContain("not date anything by the day");
+});
+
+test("a pass dates the prompt by the messages, not by the day it runs", async () => {
+  const { store, adapter } = makeStore();
+  const runner = loopRunner([{ text: "done" }]);
+  // The arrears sweep reaching a thread three days after the conversation.
+  const spoke = noon(2026, 7, 17);
+  await runDistillPass(
+    {
+      topicName: "attention",
+      bookId: "book-1",
+      bookName: "survey.pdf",
+      threadId: "thread-1",
+      annotationId: "ann-1",
+      page: 12,
+      markedText: "",
+      messages: [
+        { role: "user", text: "why is this quadratic?", ts: spoke },
+        { role: "ai", text: "every token attends to every token", ts: spoke + 60_000 },
+      ],
+    },
+    { store, adapter, now: () => JULY_20, run: runner.run },
+  );
+
+  const sent = runner.requests[0];
+  expect(sent.systemPrompt).toContain("2026-07-17");
+  expect(sent.systemPrompt).not.toContain("2026-07-20");
+  expect(sent.task).toContain("Conversation date: 2026-07-17");
+});
+
+test("a marks pass dates the prompt by the marks, not by the day it runs", async () => {
+  const { store, adapter } = makeStore();
+  const runner = loopRunner([{ text: "done" }]);
+  await runMarksDistillPass(
+    {
+      topicName: "investing",
+      bookId: "book-2",
+      bookName: "margin-of-safety.pdf",
+      annotations: [
+        mark({ id: "m1", page: 20, text: "owner earnings", createdAt: noon(2026, 7, 14) }),
+        mark({ id: "m2", page: 24, text: "float", createdAt: noon(2026, 7, 16) }),
+      ],
+    },
+    { store, adapter, now: () => JULY_20, run: runner.run },
+  );
+
+  const sent = runner.requests[0];
+  expect(sent.task).toContain("Marks made: 2026-07-14 to 2026-07-16");
+  expect(sent.systemPrompt).not.toContain("2026-07-20");
+});
+
+// --- what a failed pass records ---
+
+test("distillCoverage reports the stretch a failed pass leaves behind", () => {
+  const stamps = [noon(2026, 8, 1), noon(2026, 8, 4)];
+  expect(distillCoverage(stamps, 6)).toEqual({
+    from: 6,
+    to: 8,
+    fromTs: stamps[0],
+    toTs: stamps[1],
+  });
+  expect(distillCoverage([], 6)).toEqual({ from: 6, to: 6, fromTs: null, toTs: null });
+});
+
+test("a failed pass carries the message range it did not fold in", async () => {
+  const { store, adapter } = makeStore();
+  const spoke = noon(2026, 7, 17);
+  const messages: DistillMessage[] = [
+    { role: "user", text: "first", ts: spoke },
+    { role: "ai", text: "answer", ts: spoke + 1000 },
+    { role: "user", text: "second", ts: spoke + 2000 },
+  ];
+  await store.setMeta({
+    lastDistilledAt: null,
+    lastAnnotationDistillAt: null,
+    distilledMessages: { "thread-1": 1 },
+  });
+  const result = await runDistillPass(
+    {
+      topicName: "attention",
+      bookId: "book-1",
+      bookName: "survey.pdf",
+      threadId: "thread-1",
+      annotationId: "ann-1",
+      page: null,
+      markedText: "",
+      messages,
+    },
+    { store, adapter, now: () => JULY_20, ...scriptedRunner([{ error: "connection reset" }]) },
+  );
+
+  expect(result).toMatchObject({ ran: true, ok: false });
+  if (!result.ran) throw new Error("expected the pass to have run");
+  // From the cursor to the end of the thread: exactly what the next pass redoes.
+  expect(result.coverage).toEqual({
+    from: 1,
+    to: 3,
+    fromTs: spoke + 1000,
+    toTs: spoke + 2000,
+  });
+});
+
+test("classifyDistillFailure sorts an outcome, then an error's own words", () => {
+  expect(classifyDistillFailure({ outcome: "out-of-turns" })).toBe("turn-cap");
+  expect(classifyDistillFailure({ outcome: "out-of-budget" })).toBe("turn-cap");
+  expect(classifyDistillFailure({ outcome: "out-of-context" })).toBe("context");
+  expect(classifyDistillFailure({ outcome: "refused" })).toBe("refused");
+  expect(classifyDistillFailure({ outcome: "no-evidence" })).toBe("no-evidence");
+
+  const failed = (message: string) =>
+    classifyDistillFailure({ outcome: "failed", error: new Error(message) });
+  expect(failed("no default AI provider configured (Settings)")).toBe("no-provider");
+  expect(failed("fetch failed: ECONNRESET")).toBe("network");
+  expect(failed("request timed out after 60s")).toBe("network");
+  expect(failed("429 rate limit exceeded")).toBe("rate-limit");
+  expect(failed("401 unauthorized: invalid api key")).toBe("auth");
+  expect(failed("prompt is too long for the context window")).toBe("context");
+  expect(failed("failed to write memory-x/m-11111111.md: os error 2")).toBe("storage");
+  expect(failed("unexpected token in JSON at position 4")).toBe("parse");
+  expect(failed("something nobody has seen before")).toBe("unknown");
+  // A thrown non-Error still classifies rather than throwing again.
+  expect(classifyDistillFailure({ outcome: "failed", error: "network unreachable" })).toBe("network");
+  expect(classifyDistillFailure({ outcome: "failed", error: { weird: true } })).toBe("unknown");
+});
+
+test("the failure payload answers where, why and over what — and quotes nothing", () => {
+  const payload = distillFailurePayload({
+    stage: "run",
+    outcome: "failed",
+    error: undefined,
+    coverage: { from: 1, to: 3, fromTs: 111, toTs: 222 },
+    counts: { created: 1, updated: 0, deleted: 0 },
+  });
+  expect(payload).toEqual({
+    stage: "run",
+    reason: "unknown",
+    outcome: "failed",
+    from: 1,
+    to: 3,
+    fromTs: 111,
+    toTs: 222,
+    created: 1,
+    updated: 0,
+    deleted: 0,
+  });
+
+  // A pass that never reached a run has no outcome, no coverage and no counts,
+  // and says so with nulls rather than with zeros somebody would read as facts.
+  const setup = distillFailurePayload({
+    stage: "setup",
+    error: new Error("no default AI provider configured (Settings)"),
+  });
+  expect(setup).toEqual({
+    stage: "setup",
+    reason: "no-provider",
+    outcome: null,
+    from: null,
+    to: null,
+    fromTs: null,
+    toTs: null,
+    created: null,
+    updated: null,
+    deleted: null,
+  });
+
+  // Nothing the model or the reader wrote may reach the log.
+  const quoted = distillFailurePayload({
+    stage: "run",
+    outcome: "refused",
+    error: new Error("the reader said the lesion studies were the point"),
+  });
+  expect(JSON.stringify(quoted)).not.toContain("lesion");
 });

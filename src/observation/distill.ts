@@ -20,8 +20,9 @@ import {
   type SubagentOutcome,
   type SubagentTurnFn,
 } from "../ai/subagent";
+import type { EventPayload } from "../platform/app/events";
 import type { ObservationAdapter } from "./adapter";
-import { isoDate } from "./files";
+import { localDate } from "./files";
 import type { ObservationMeta } from "./store";
 import { buildObservationTools, type ObservationWriteAction } from "./tools";
 
@@ -41,6 +42,77 @@ export interface DistillAnnotation {
   createdAt: number; // ms epoch, for the "since last distillation" filter
 }
 
+// --- when the evidence happened ---
+
+// The calendar days a pass's evidence spans, on the reader's own clock.
+export interface EvidenceDates {
+  first: string; // YYYY-MM-DD
+  last: string;
+}
+
+function stampSpan(stamps: readonly number[]): { lo: number; hi: number } | null {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const ts of stamps) {
+    // Guards the rows written before messages carried a timestamp, and anything
+    // a corrupt file hands back: an unusable stamp is dropped rather than
+    // formatted into 1970.
+    if (!Number.isFinite(ts) || ts <= 0) continue;
+    if (ts < lo) lo = ts;
+    if (ts > hi) hi = ts;
+  }
+  return hi < 0 ? null : { lo, hi };
+}
+
+// The days a pass's evidence covers, from the evidence's own timestamps — a
+// message's ts, a mark's createdAt. Null when nothing carries a usable one, in
+// which case the pass says nothing about when it happened.
+//
+// Every distiller used to date its evidence by the clock the pass ran on, which
+// is a different day whenever the arrears sweep is the trigger: the sweep comes
+// back to a thread every half hour for as long as it is owed, so a conversation
+// gets read days after it happened. Measured on one library: 18 of 32 anchored
+// observations carried a date the conversation behind them did not have, the
+// worst off by 16 days, and one of them was read out to the reader as fact.
+export function evidenceDates(stamps: readonly number[]): EvidenceDates | null {
+  const span = stampSpan(stamps);
+  return span === null ? null : { first: localDate(span.lo), last: localDate(span.hi) };
+}
+
+// A span as a prompt writes it: one date when the evidence is all from one day.
+export function formatEvidenceSpan(dates: EvidenceDates): string {
+  return dates.first === dates.last ? dates.first : `${dates.first} to ${dates.last}`;
+}
+
+// The dating rule the three distillers share, as prompt lines. `what` names the
+// evidence in the words of that pass ("conversation", "stretch of marks").
+//
+// An observation is dated by the LAST covered day, because an observation states
+// what is true of the reader now — stuck on this, has reached that — and the
+// newest evidence is when that was last true; dating it by the first message
+// would backdate a state the conversation only arrived at at the end. The first
+// day is named as well when the evidence crosses days, so a thread the sweep
+// picked up after a week reads as a span instead of being pinned to its final
+// afternoon.
+export function datingRule(what: string, dates: EvidenceDates | null): string[] {
+  if (dates === null) {
+    return [
+      `- Write absolute dates, and only dates this ${what} gives you; never a`,
+      '  relative one ("recently", "last week"). Do not date anything by the day',
+      "  this pass runs — that is not the day the reader was here.",
+    ];
+  }
+  const when =
+    dates.first === dates.last
+      ? `happened on ${dates.first}`
+      : `runs from ${dates.first} to ${dates.last}`;
+  return [
+    `- The ${what} below ${when}. Date what you observe by that, never by the day`,
+    "  this pass runs — it can be weeks later. Where the reader stands at the end",
+    `  of it is dated ${dates.last}. Absolute dates only, never "recently".`,
+  ];
+}
+
 export interface DistillInput {
   topicName: string;
   bookName: string;
@@ -51,7 +123,9 @@ export interface DistillInput {
   messages: DistillMessage[];
   // The current observation index (what "update, don't duplicate" checks against).
   indexText: string;
-  today: string; // YYYY-MM-DD, so the model writes absolute dates
+  // When the transcript below happened, from the messages' own timestamps. Null
+  // when none of them carries one.
+  dates: EvidenceDates | null;
   // The reader's silent marks since the last distillation, already filtered and
   // capped by selectSilentMarks. Empty (or absent) when there are none.
   silentMarks?: DistillAnnotation[];
@@ -170,6 +244,130 @@ export interface DistillResult {
   failure?: string;
 }
 
+// --- what a failed pass records ---
+
+// Which stretch of evidence a pass covered: indexes [from, to) — `from` is the
+// cursor the pass started at, `to` is how far it would have moved it — and the
+// timestamps at the ends of that stretch. A marks pass has no index cursor of
+// that kind and reports 0 with the size of its batch.
+//
+// It is on the failure line and not only on the success line because the failure
+// line is the one that answers "which conversation is still not folded in": a
+// failed pass leaves the cursor where it was, so this is the stretch that will be
+// redone, and until now nothing on disk said which stretch that was.
+export interface DistillCoverage {
+  from: number;
+  to: number;
+  fromTs: number | null;
+  toTs: number | null;
+}
+
+export function distillCoverage(stamps: readonly number[], from: number): DistillCoverage {
+  const span = stampSpan(stamps);
+  return { from, to: from + stamps.length, fromTs: span?.lo ?? null, toTs: span?.hi ?? null };
+}
+
+// Where a pass stopped. Two values, because from outside a pass only two are
+// distinguishable: "run" is the sub-agent run reporting that it did not finish,
+// "setup" is anything the pass threw around that run — resolving the provider,
+// reading the store, writing the cursors back. Which of those three a "setup"
+// was is in the reason ("no-provider", "storage").
+export type DistillFailureStage = "setup" | "run";
+
+// Why it stopped, in the few piles that want different fixes. Coarse on purpose:
+// the question this answers is "were ten failures in a row ten of the same
+// thing", which a free-text sentence cannot be sorted by — and a free-text
+// sentence is also the one thing that must not go in this log, since a model's
+// own account of a failure can quote what it was reading.
+export type DistillFailureReason =
+  | "no-provider" // nothing configured to call
+  | "network" // the request never completed: offline, DNS, timeout, reset
+  | "auth" // credentials rejected
+  | "rate-limit" // the provider pushed back
+  | "context" // a round outgrew the model's context window
+  | "turn-cap" // spent its turn or budget allowance without finishing
+  | "refused" // the model declined
+  | "no-evidence" // the model answered with no successful tool call behind it
+  | "parse" // the model's output could not be read
+  | "storage" // a read or write under AppData failed
+  | "unknown";
+
+// Matched against the error's own message, in this order: the earlier patterns
+// are the ones whose words also appear inside the later ones.
+const REASON_PATTERNS: [RegExp, DistillFailureReason][] = [
+  [/no (default )?ai provider|no provider|not configured/i, "no-provider"],
+  [/context (window|length)|maximum context|too many tokens|prompt is too long/i, "context"],
+  [/\b(429|529)\b|rate.?limit|too many requests|overloaded|quota|capacity/i, "rate-limit"],
+  [/\b(401|403)\b|unauthori[sz]ed|api ?key|credential|authentication|token (has )?expired/i, "auth"],
+  [
+    /network|fetch failed|failed to fetch|econn|etimedout|enotfound|epipe|socket|timed? ?out|offline|dns/i,
+    "network",
+  ],
+  [/os error|no such file|permission denied|read-only file system|enospc|forbidden path/i, "storage"],
+  [/json|unexpected token|malformed|does not match the schema|could not parse|invalid response/i, "parse"],
+];
+
+function errorText(error: unknown): string {
+  if (error instanceof Error) return `${error.name}: ${error.message}`;
+  return typeof error === "string" ? error : "";
+}
+
+// One category for a failure, from the sub-agent's outcome when there is one and
+// from the error's own message when there is not. The message itself is read here
+// and goes no further.
+export function classifyDistillFailure(input: {
+  outcome?: SubagentOutcome;
+  error?: unknown;
+}): DistillFailureReason {
+  switch (input.outcome) {
+    case "out-of-context":
+      return "context";
+    case "out-of-turns":
+    case "out-of-budget":
+      return "turn-cap";
+    case "refused":
+      return "refused";
+    case "no-evidence":
+      return "no-evidence";
+    default:
+      break;
+  }
+  const text = errorText(input.error);
+  for (const [pattern, reason] of REASON_PATTERNS) if (pattern.test(text)) return reason;
+  return "unknown";
+}
+
+export interface DistillFailureInput {
+  stage: DistillFailureStage;
+  // The sub-agent's outcome, when the pass got as far as a run.
+  outcome?: SubagentOutcome;
+  // What was thrown, when it did not. Only its category is recorded.
+  error?: unknown;
+  coverage?: DistillCoverage | null;
+  // Writes the pass managed before it stopped. They are already on disk.
+  counts?: { created: number; updated: number; deleted: number };
+}
+
+// The fields of a `distill-failed` line that describe the failure itself; the
+// caller adds which thread or book it was and what triggered it. Ids and numbers
+// only, like every other line in that log — no transcript, no observation text,
+// no failure sentence.
+export function distillFailurePayload(input: DistillFailureInput): EventPayload {
+  const c = input.coverage ?? null;
+  return {
+    stage: input.stage,
+    reason: classifyDistillFailure(input),
+    outcome: input.outcome ?? null,
+    from: c?.from ?? null,
+    to: c?.to ?? null,
+    fromTs: c?.fromTs ?? null,
+    toTs: c?.toTs ?? null,
+    created: input.counts?.created ?? null,
+    updated: input.counts?.updated ?? null,
+    deleted: input.counts?.deleted ?? null,
+  };
+}
+
 // The sub-agent's name, which is what its honest-failure sentences are about
 // ("The observation_distiller sub-agent could not complete: …"). Lowercase with
 // underscores, like every other tool name in the app (docs/24).
@@ -246,7 +444,7 @@ export function buildDistillSystemPrompt(input: DistillInput): string {
     "- On contradiction with an existing observation (e.g. the reader was stuck and",
     "  now gets it), never silently drop the old state: rewrite that observation as",
     '  an evolution — "was stuck on X, resolved on <date>" — so both states stay visible.',
-    `- Write absolute dates (today is ${input.today}); never "recently" or "last week".`,
+    ...datingRule("conversation", input.dates),
     "- Record only what cannot be re-derived from the book or the reader's",
     "  annotations: their understanding, confusions, beliefs, corrections, and where",
     "  they are. Do not copy book content or annotation text into an observation.",
@@ -274,7 +472,9 @@ export function buildDistillUserMessage(input: DistillInput): string {
   const lines = [
     `Topic: ${input.topicName}`,
     `Book: ${input.bookName}`,
-    `Conversation date: ${input.today}`,
+    // Omitted rather than filled in with today when the messages carry no usable
+    // timestamp: a date the transcript cannot support is the bug this line had.
+    ...(input.dates ? [`Conversation date: ${formatEvidenceSpan(input.dates)}`] : []),
     `Thread ${input.threadId}, anchored on annotation ${input.annotationId}` +
       (input.page !== null ? ` (page ${input.page})` : ""),
   ];
@@ -368,7 +568,7 @@ export type DistillSkip = "no-new-messages" | "reader-silent";
 
 export type DistillPassResult =
   | { ran: false; skipped: DistillSkip }
-  | ({ ran: true } & DistillResult);
+  | ({ ran: true; coverage: DistillCoverage } & DistillResult);
 
 // How many of a thread's messages have already been folded in.
 export function messageCursor(meta: ObservationMeta, threadId: string): number {
@@ -418,6 +618,13 @@ export async function runDistillPass(
     input.annotations ?? [],
     markCursor(meta, input.bookId),
   );
+  // The stretch the cursor would move over. The whole transcript still goes to
+  // the model — a conversation about one passage is one unit — so the dates come
+  // from all of it, while the coverage is the part that is still owed.
+  const coverage = distillCoverage(
+    input.messages.slice(cursor).map((m) => m.ts),
+    cursor,
+  );
   const result = await runDistillation(
     {
       topicName: input.topicName,
@@ -428,14 +635,14 @@ export async function runDistillPass(
       markedText: input.markedText,
       messages: input.messages,
       indexText: await deps.store.readIndexText(),
-      today: isoDate(now()),
+      dates: evidenceDates(input.messages.map((m) => m.ts)),
       silentMarks: marks,
       silentMarksCapped: capped,
     },
     deps.adapter,
     { run: deps.run, model: deps.model, signal: deps.signal },
   );
-  if (!result.ok) return { ran: true, ...result };
+  if (!result.ok) return { ran: true, coverage, ...result };
   // The transcript's cursor, and — when this pass actually saw the marks — the
   // book's mark cursor. Spread first: the rehearsal pass keeps its own per-thread
   // cursor in the same file (rehearsal.ts) and a hangup here must not wipe it.
@@ -447,7 +654,7 @@ export async function runDistillPass(
       ? { distilledMarks: { ...(meta.distilledMarks ?? {}), [input.bookId]: markCursorNext } }
       : {}),
   });
-  return { ran: true, ...result };
+  return { ran: true, coverage, ...result };
 }
 
 // --- marks with no conversation ---
@@ -467,7 +674,8 @@ export interface MarksDistillInput {
   marks: DistillAnnotation[];
   capped: boolean;
   indexText: string;
-  today: string; // YYYY-MM-DD, so the model writes absolute dates
+  // When the marks below were made, from their own createdAt.
+  dates: EvidenceDates | null;
 }
 
 export function buildMarksDistillSystemPrompt(input: MarksDistillInput): string {
@@ -518,7 +726,7 @@ export function buildMarksDistillSystemPrompt(input: MarksDistillInput): string 
     "- On contradiction with an existing observation, never silently drop the old",
     "  state: rewrite it as an evolution — \"was stuck on X, marked it again on",
     '  <date>" — so both states stay visible.',
-    `- Write absolute dates (today is ${input.today}); never "recently" or "last week".`,
+    ...datingRule("stretch of marks", input.dates),
     "- Do not copy the marked passages into an observation. They are already",
     "  stored; what is not stored is what marking them says about the reader.",
     "- Anchor evidence: pass the annotation ids an observation came from.",
@@ -534,7 +742,7 @@ export function buildMarksDistillUserMessage(input: MarksDistillInput): string {
   const lines = [
     `Topic: ${input.topicName}`,
     `Book: ${input.bookName}`,
-    `Date: ${input.today}`,
+    ...(input.dates ? [`Marks made: ${formatEvidenceSpan(input.dates)}`] : []),
     "",
     `${input.marks.length} mark(s) since the last pass, newest first. None of them`,
     "was discussed with you — there is no transcript for this stretch of reading.",
@@ -604,7 +812,9 @@ export interface MarksPassInput {
   minNewMarks?: number;
 }
 
-export type MarksPassResult = { ran: false; skipped: "no-new-marks" } | ({ ran: true } & DistillResult);
+export type MarksPassResult =
+  | { ran: false; skipped: "no-new-marks" }
+  | ({ ran: true; coverage: DistillCoverage } & DistillResult);
 
 // One pass over a book's silent marks, with the same cursor discipline as the
 // transcript pass: the book's mark cursor moves only if the pass finished.
@@ -620,6 +830,8 @@ export async function runMarksDistillPass(
   );
   if (marks.length < (input.minNewMarks ?? 1)) return { ran: false, skipped: "no-new-marks" };
 
+  const stamps = marks.map((m) => m.createdAt);
+  const coverage = distillCoverage(stamps, 0);
   const result = await runMarksDistillation(
     {
       topicName: input.topicName,
@@ -627,12 +839,12 @@ export async function runMarksDistillPass(
       marks,
       capped,
       indexText: await deps.store.readIndexText(),
-      today: isoDate(now()),
+      dates: evidenceDates(stamps),
     },
     deps.adapter,
     { run: deps.run, model: deps.model, signal: deps.signal },
   );
-  if (!result.ok) return { ran: true, ...result };
+  if (!result.ok) return { ran: true, coverage, ...result };
   await deps.store.setMeta({
     ...meta,
     lastDistilledAt: now(),
@@ -640,5 +852,5 @@ export async function runMarksDistillPass(
       ? { distilledMarks: { ...(meta.distilledMarks ?? {}), [input.bookId]: cursor } }
       : {}),
   });
-  return { ran: true, ...result };
+  return { ran: true, coverage, ...result };
 }

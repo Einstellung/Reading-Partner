@@ -4,7 +4,7 @@
 // pattern as the prep panel.
 
 import { useState } from "react";
-import type { Observation, ObservationType } from "../../../observation";
+import type { Observation, ObservationConflict, ObservationType } from "../../../observation";
 import { CitationContext, Markdown } from "../markdown/Markdown";
 
 const TYPE_STYLE: Record<ObservationType, string> = {
@@ -21,6 +21,10 @@ interface ObservationPanelProps {
   // null while loading; [] when the topic has no observations yet.
   entries: Observation[] | null;
   lastDistilledAt: number | null;
+  // Versions sync kept when two devices changed the same observation. Read-only
+  // here on purpose: this panel exists so the reader knows a copy is there and
+  // can find it, not so they can resolve it — resolving is a conversation.
+  conflicts: ObservationConflict[];
 }
 
 function ObservationRow({ entry }: { entry: Observation }) {
@@ -60,7 +64,40 @@ function ObservationRow({ entry }: { entry: Observation }) {
   );
 }
 
-export default function ObservationPanel({ entries, lastDistilledAt }: ObservationPanelProps) {
+// The conflict copies. A line that never appears on a library that has none, and
+// on one that has some says how many and names the file each is in — nothing
+// behind a disclosure, because a copy the reader has to click to learn the path
+// of is barely less hidden than one nothing mentions at all.
+//
+// It stops at showing them. Resolving a conflict is a conversation ("keep the
+// iPad's version of that one"), not a merge screen.
+function ConflictNotice({ conflicts }: { conflicts: ObservationConflict[] }) {
+  if (conflicts.length === 0) return null;
+  return (
+    <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+      <div>
+        {conflicts.length === 1 ? "1 conflict copy" : `${conflicts.length} conflict copies`} from
+        sync. Two devices changed the same observation; the version that lost is kept beside it.
+      </div>
+      <ul className="m-0 mt-1.5 list-none space-y-1.5 p-0">
+        {conflicts.map((c) => (
+          <li key={c.path}>
+            <div className="font-mono text-[10px] break-all text-amber-700">{c.path}</div>
+            <div className="text-amber-900">
+              {c.summary || "(this copy could not be read; open the file to see it)"}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export default function ObservationPanel({
+  entries,
+  lastDistilledAt,
+  conflicts,
+}: ObservationPanelProps) {
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-[#eee] px-3 py-2">
@@ -71,6 +108,8 @@ export default function ObservationPanel({ entries, lastDistilledAt }: Observati
             : "No distillation has run yet."}
         </div>
       </div>
+
+      <ConflictNotice conflicts={conflicts} />
 
       <ul className="m-0 min-h-0 flex-1 list-none overflow-y-auto p-0">
         {entries === null && (

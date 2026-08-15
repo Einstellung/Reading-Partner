@@ -47,9 +47,14 @@ import {
   type ThreadArrears,
   type TopicArrears,
 } from "./arrears";
-import { ObservationFileStore, type ObservationFs } from "./store";
+import {
+  ObservationFileStore,
+  type ObservationConflict,
+  type ObservationFs,
+} from "./store";
 import type { ObservationIndexEntry } from "./types";
 import {
+  distillFailurePayload,
   markCursor,
   messageCursor,
   runDistillPass,
@@ -107,6 +112,14 @@ export function getObservationAdapter(topicId: string): ObservationAdapter {
 
 export async function getLastDistillation(topicId: string): Promise<number | null> {
   return (await getStore(topicId).getMeta()).lastDistilledAt;
+}
+
+// The conflict copies sync left in this topic's directory (store.ts). Its own
+// entry point rather than a method on the adapter: a conflict copy is an artifact
+// of the file engine and of sync, not something an observation engine would have
+// to be able to answer for.
+export function listObservationConflicts(topicId: string): Promise<ObservationConflict[]> {
+  return getStore(topicId).listConflicts();
 }
 
 // The parsed observation index for one topic (what a prompt would load), read
@@ -231,10 +244,12 @@ export function distillThread(
         logEvent(opts.topicId, "distill-failed", {
           threadId,
           trigger: opts.trigger,
-          outcome: result.outcome,
-          created: result.created,
-          updated: result.updated,
-          deleted: result.deleted,
+          ...distillFailurePayload({
+            stage: "run",
+            outcome: result.outcome,
+            coverage: result.coverage,
+            counts: result,
+          }),
         });
         if (result.created + result.updated + result.deleted > 0) {
           notifyObservationChange(opts.topicId);
@@ -259,7 +274,7 @@ export function distillThread(
       logEvent(opts.topicId, "distill-failed", {
         threadId,
         trigger: opts.trigger,
-        outcome: "failed",
+        ...distillFailurePayload({ stage: "setup", error: e }),
       });
     }
   });
@@ -309,10 +324,12 @@ export function distillMarks(opts: DistillMarksOptions): Promise<void> {
         logEvent(opts.topicId, "distill-failed", {
           bookId: opts.bookId,
           trigger: opts.trigger,
-          outcome: result.outcome,
-          created: result.created,
-          updated: result.updated,
-          deleted: result.deleted,
+          ...distillFailurePayload({
+            stage: "run",
+            outcome: result.outcome,
+            coverage: result.coverage,
+            counts: result,
+          }),
         });
         if (result.created + result.updated + result.deleted > 0) {
           notifyObservationChange(opts.topicId);
@@ -333,7 +350,7 @@ export function distillMarks(opts: DistillMarksOptions): Promise<void> {
       logEvent(opts.topicId, "distill-failed", {
         bookId: opts.bookId,
         trigger: opts.trigger,
-        outcome: "failed",
+        ...distillFailurePayload({ stage: "setup", error: e }),
       });
     }
   });
@@ -613,10 +630,12 @@ export function distillRehearsal(opts: DistillRehearsalOptions): Promise<void> {
           threadId,
           talkId: opts.talkId,
           trigger: "talk-exit",
-          outcome: result.outcome,
-          created: result.created,
-          updated: result.updated,
-          deleted: result.deleted,
+          ...distillFailurePayload({
+            stage: "run",
+            outcome: result.outcome,
+            coverage: result.coverage,
+            counts: result,
+          }),
         });
         if (result.created + result.updated + result.deleted > 0) notifyObservationChange(topicId);
         return;
@@ -638,7 +657,7 @@ export function distillRehearsal(opts: DistillRehearsalOptions): Promise<void> {
         threadId,
         talkId: opts.talkId,
         trigger: "talk-exit",
-        outcome: "failed",
+        ...distillFailurePayload({ stage: "setup", error: e }),
       });
     }
   });

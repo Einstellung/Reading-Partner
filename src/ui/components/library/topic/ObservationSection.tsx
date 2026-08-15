@@ -12,8 +12,10 @@ import { useCallback, useEffect, useState } from "react";
 import {
   getLastDistillation,
   getObservationAdapter,
+  listObservationConflicts,
   onObservationChange,
   type Observation,
+  type ObservationConflict,
 } from "../../../../observation";
 import ObservationPanel from "../../reader/ObservationPanel";
 
@@ -21,16 +23,29 @@ export default function ObservationSection({ topicId }: { topicId: string }) {
   // null while loading; [] when nothing has been distilled for this topic.
   const [entries, setEntries] = useState<Observation[] | null>(null);
   const [lastDistilledAt, setLastDistilledAt] = useState<number | null>(null);
+  // Read on the same pass as the entries. A copy is written by sync rather than
+  // by a distillation, so nothing notifies this view when one appears; opening
+  // the section is when it is looked for, which is also when it can be seen.
+  const [conflicts, setConflicts] = useState<ObservationConflict[]>([]);
 
   const refresh = useCallback(() => {
     void (async () => {
       try {
-        const [list, last] = await Promise.all([
+        const [list, last, forked] = await Promise.all([
           getObservationAdapter(topicId).listObservations(),
           getLastDistillation(topicId),
+          // Caught on its own so an unreadable directory listing costs the
+          // conflict line and not the observations beside it — and said out
+          // loud, because a read that fails without a word is how the last one
+          // of these went unnoticed (docs/pitfall/09).
+          listObservationConflicts(topicId).catch((e): ObservationConflict[] => {
+            console.warn("failed to read observation conflict copies", e);
+            return [];
+          }),
         ]);
         setEntries(list);
         setLastDistilledAt(last);
+        setConflicts(forked);
       } catch (e) {
         console.warn("failed to load observations", e);
         setEntries([]);
@@ -41,6 +56,7 @@ export default function ObservationSection({ topicId }: { topicId: string }) {
   useEffect(() => {
     setEntries(null);
     setLastDistilledAt(null);
+    setConflicts([]);
     refresh();
   }, [refresh]);
 
@@ -53,5 +69,11 @@ export default function ObservationSection({ topicId }: { topicId: string }) {
     [topicId, refresh],
   );
 
-  return <ObservationPanel entries={entries} lastDistilledAt={lastDistilledAt} />;
+  return (
+    <ObservationPanel
+      entries={entries}
+      lastDistilledAt={lastDistilledAt}
+      conflicts={conflicts}
+    />
+  );
 }

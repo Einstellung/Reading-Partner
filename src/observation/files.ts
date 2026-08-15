@@ -13,6 +13,18 @@ export function isoDate(now: number): string {
   return new Date(now).toISOString().slice(0, 10);
 }
 
+// The same YYYY-MM-DD on the device's own clock. Two date formatters rather than
+// one because they date different things: isoDate stamps a file write, where any
+// consistent clock will do, while this one dates something the reader remembers
+// happening. At UTC+8 an hour of late-night reading falls on the previous UTC
+// day, so a conversation held after midnight would be written up as the day
+// before — a small version of exactly the lie this is here to stop.
+export function localDate(now: number): string {
+  const d = new Date(now);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 // Summaries are one line by contract: collapse whitespace so neither the
 // frontmatter nor the index format can be broken by a newline.
 export function oneLine(text: string): string {
