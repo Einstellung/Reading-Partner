@@ -304,6 +304,7 @@ export function useTalk(talkId: string, topicName: string): TalkController {
         tools: turn.tools,
         signal: controller.signal,
         reasoning: toReasoning(s.chatThinking),
+        telemetry: { surface: "talk", thread: threadId },
         onDelta: (chunk) => {
           const p = partialRef.current;
           if (p) p.text += chunk;

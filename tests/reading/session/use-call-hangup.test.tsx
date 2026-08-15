@@ -104,6 +104,7 @@ test("the thread the hangup distils is read when the turn lands, not when the âœ
     systemPrompt: "",
     tools: [],
     messages: [],
+    classroom: false,
     notice: "",
     refusal: "",
   });

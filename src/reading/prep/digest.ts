@@ -193,6 +193,7 @@ export function runDigest(params: {
         reasoning: model.reasoning,
         maxRounds: DIGEST_MAX_ROUNDS,
         purpose: "digest",
+        telemetry: { surface: "digest" },
         onDelta,
         onThinking,
         onToolStart: () => {},

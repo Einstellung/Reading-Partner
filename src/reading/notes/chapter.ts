@@ -241,6 +241,7 @@ export function runNoteChapter(params: {
       reasoning: model.reasoning,
       maxRounds: CHAPTER_MAX_ROUNDS,
       purpose: "chapter-note",
+      telemetry: { surface: "notes" },
       onDelta: bump,
       onThinking: bump,
       onToolStart: () => {},

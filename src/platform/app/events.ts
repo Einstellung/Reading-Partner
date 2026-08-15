@@ -51,7 +51,12 @@ export type EventType =
   // One attempt at reading a model's machine-readable output, in
   // events-ai.jsonl rather than a topic's log. See structured-output.ts for the
   // fields and for why it has no topic.
-  | "structured-parse";
+  | "structured-parse"
+  // What prompt caching did on one model turn, in the same log and for the same
+  // reason: a turn belongs to a face of the app, not to a book. See
+  // cache-telemetry.ts for the fields and for why the gap to the previous turn
+  // on the same thread is one of them.
+  | "prompt-cache";
 
 // The reserved topic id the briefing's timing lines are filed under:
 // events-info.jsonl. Topic ids are UUIDs, so this cannot collide with one —

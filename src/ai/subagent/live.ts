@@ -29,6 +29,9 @@ export const runSubagentTurnLive: SubagentTurnFn = async (request) => {
       reasoning: model.reasoning,
       maxRounds: request.maxRounds,
       purpose: request.purpose,
+      // No thread: a run replays no history, so nothing before it shares its
+      // prefix and runAgentTurn stands a fresh id in.
+      telemetry: { surface: "subagent" },
       ...settler.callbacks,
     });
     return await settler.outcome;

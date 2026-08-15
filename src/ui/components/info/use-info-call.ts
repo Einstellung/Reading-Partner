@@ -370,6 +370,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       tools,
       reasoning: toReasoning(settings.chatThinking),
       signal: controller.signal,
+      telemetry: { surface: "info", thread: anchor.threadId },
       onDelta: (t) => {
         full += t;
         patchLast({ text: full, streaming: true });

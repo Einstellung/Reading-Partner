@@ -4,7 +4,7 @@
 // Kept out of src/ so the shell's `tsc --noEmit` (include: ["src"]) doesn't try to
 // typecheck the bun:test import, which has no ambient types in this project.
 
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import {
 	Type,
 	createAssistantMessageEventStream,
@@ -27,6 +27,7 @@ import {
 	type AgentTool,
 	type StreamFn,
 } from "../../src/ai/agent";
+import * as cacheTelemetry from "../../src/platform/app/cache-telemetry";
 import { DEFAULT_MAX_RETRIES } from "../../src/ai/providers";
 import { contextBudget, estimateContextTokens, piBudget } from "../../src/budget";
 
@@ -707,4 +708,91 @@ test("a round over the line on the script-aware count is rescued by stubbing old
 	expect(third.slice(0, 2).every(isStub)).toBe(true);
 	expect(third.slice(2, 6).every((t) => t.length === 33_000)).toBe(true);
 	expect(third[6].length).toBe(200);
+});
+
+// --- prompt-cache accounting ------------------------------------------------
+//
+// Every round that reached the provider is measured
+// (platform/app/cache-telemetry.ts), so the misses can be attributed before
+// anything is reordered to fix them.
+
+test("each round of a turn is recorded once, in order, under the caller's face", async () => {
+	const record = spyOn(cacheTelemetry, "recordCacheTurn").mockImplementation(() => {});
+	try {
+		const script = scriptStream([
+			{ text: "checking", calls: [{ name: "echo", args: { value: "hi" }, id: "t1" }] },
+			{ text: "hi" },
+		]);
+		const c = collectCallbacks();
+
+		await runAgentLoop({
+			stream: script.fn,
+			model: MODEL,
+			messages: [{ role: "user", content: "say hi", timestamp: 0 }],
+			tools: [echoTool],
+			maxRounds: 8,
+			telemetry: { surface: "classroom", thread: "thread-1" },
+			...c.cb,
+		});
+
+		expect(record).toHaveBeenCalledTimes(2);
+		const first = record.mock.calls[0][0];
+		const second = record.mock.calls[1][0];
+		expect(first.telemetry).toEqual({ surface: "classroom", thread: "thread-1" });
+		expect(first.round).toBe(1);
+		expect(second.round).toBe(2);
+		expect(first.ok).toBe(true);
+		expect(first.usage).toBeDefined();
+		// Stamped before the request, so the gap the summary reads spans the previous
+		// answer rather than starting after it.
+		expect(second.startedAt).toBeGreaterThanOrEqual(first.startedAt);
+	} finally {
+		record.mockRestore();
+	}
+});
+
+test("a round that failed is still recorded: it spent its input tokens", async () => {
+	const record = spyOn(cacheTelemetry, "recordCacheTurn").mockImplementation(() => {});
+	try {
+		const script = scriptStream([{ error: "boom" }]);
+		const c = collectCallbacks();
+
+		await runAgentLoop({
+			stream: script.fn,
+			model: MODEL,
+			messages: [{ role: "user", content: "say hi", timestamp: 0 }],
+			tools: [echoTool],
+			maxRounds: 8,
+			telemetry: { surface: "reading", thread: "thread-2" },
+			...c.cb,
+		});
+
+		expect(c.error).toBe("boom");
+		expect(record).toHaveBeenCalledTimes(1);
+		expect(record.mock.calls[0][0].ok).toBe(false);
+	} finally {
+		record.mockRestore();
+	}
+});
+
+test("a loop driven with no telemetry records nothing", async () => {
+	const record = spyOn(cacheTelemetry, "recordCacheTurn").mockImplementation(() => {});
+	try {
+		const script = scriptStream([{ text: "hi" }]);
+		const c = collectCallbacks();
+
+		await runAgentLoop({
+			stream: script.fn,
+			model: MODEL,
+			messages: [{ role: "user", content: "say hi", timestamp: 0 }],
+			tools: [],
+			maxRounds: 8,
+			...c.cb,
+		});
+
+		expect(c.done).toBe("hi");
+		expect(record).not.toHaveBeenCalled();
+	} finally {
+		record.mockRestore();
+	}
 });

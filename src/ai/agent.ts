@@ -37,6 +37,13 @@ import {
 	TOOL_RESULTS_KEPT,
 	type BudgetPurpose,
 } from "../budget";
+import {
+	newRunId,
+	recordCacheTurn,
+	resolveRetention,
+	type AiSurface,
+	type TurnTelemetry,
+} from "../platform/app/cache-telemetry";
 import { recordToolArgs } from "../platform/app/structured-output";
 import {
 	DEFAULT_MAX_RETRIES,
@@ -134,6 +141,13 @@ export interface RunAgentTurnOptions extends AgentCallbacks {
 	// What the answer is for, which sets how much output room each round must
 	// leave (src/budget). "chat" when unset.
 	purpose?: BudgetPurpose;
+	// Which face of the app this turn is, and the conversation it continues, so
+	// each round's cache accounting can be attributed and dated
+	// (platform/app/cache-telemetry.ts). Required: an unlabelled turn is missing
+	// from the measurement without saying so. `thread` may be left out by a run
+	// that has no conversation of its own — a fresh id stands in, which is what a
+	// one-off run is.
+	telemetry: { surface: AiSurface; thread?: string };
 }
 
 const DEFAULT_MAX_ROUNDS = 8;
@@ -200,6 +214,9 @@ export interface AgentLoopParams extends AgentCallbacks {
 	maxRounds: number;
 	// Output floor to hold each round to; "chat" when unset.
 	purpose?: BudgetPurpose;
+	// Already resolved to a thread. Unset in tests that drive the loop directly,
+	// which then record nothing.
+	telemetry?: TurnTelemetry;
 }
 
 // Core loop, provider-injected so tests can drive it with a fake stream. Aborts
@@ -222,6 +239,32 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 	// array replaces this one, so what was given up does not come back next round.
 	let messages: Message[] = [...params.messages];
 	const purpose = params.purpose ?? "chat";
+	// Read once, beside the send rather than at the log: if this loop ever passes
+	// cacheRetention to the stream, it has to pass the same value here or the log
+	// describes a setting the request did not carry.
+	const retention = resolveRetention();
+	const telemetry = params.telemetry;
+	// One line per round that reached the provider, whichever way it ended. A
+	// round that failed still spent its input tokens, and a round that ended with
+	// no message of any kind has no usage to report.
+	const recordRound = (
+		round: number,
+		startedAt: number,
+		message: AssistantMessage | undefined,
+		ok: boolean,
+	): void => {
+		if (!telemetry || !message) return;
+		recordCacheTurn({
+			telemetry,
+			providerId: model.provider,
+			modelId: model.id,
+			round,
+			startedAt,
+			usage: message.usage,
+			ok,
+			retention,
+		});
+	};
 
 	try {
 		for (let round = 0; round < maxRounds; round++) {
@@ -259,6 +302,10 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 				}
 			}
 			onRound?.({ round: round + 1, rounds: maxRounds });
+			// Stamped before the request rather than after the answer: the entry a
+			// round reads was written when the request before it went out, so
+			// start-to-start is the interval the retention window is spent on.
+			const startedAt = Date.now();
 			const s = stream(model, context, {
 				apiKey,
 				signal,
@@ -277,6 +324,10 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 				} else if (ev.type === "done") {
 					final = ev.message;
 				} else if (ev.type === "error") {
+					// The round is recorded either way: an abort and a provider failure
+					// both leave the tokens the request already cost, and pi fills the
+					// usage it had at message_start.
+					recordRound(round + 1, startedAt, ev.error, false);
 					// pi reports an aborted signal as an error event; treat it as a
 					// silent stop rather than a surfaced failure.
 					if (ev.reason === "aborted" || signal?.aborted) return;
@@ -284,6 +335,7 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 					return;
 				}
 			}
+			recordRound(round + 1, startedAt, final, true);
 
 			if (signal?.aborted) return;
 			if (!final) {
@@ -387,6 +439,12 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
 		onError,
 		onRefusal,
 	} = options;
+	// A run with no conversation of its own is its own thread: nothing before it
+	// shares a prefix with it, and a fresh id says exactly that.
+	const telemetry: TurnTelemetry = {
+		surface: options.telemetry.surface,
+		thread: options.telemetry.thread ?? newRunId(),
+	};
 
 	try {
 		const call = await resolveCall(providerId, modelId, messages, reasoning);
@@ -403,6 +461,7 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
 			transport: call.transport,
 			maxRounds,
 			purpose,
+			telemetry,
 			onDelta,
 			onThinking,
 			onResponse,

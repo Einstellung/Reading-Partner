@@ -163,6 +163,12 @@ export interface ReadingTurn {
   systemPrompt: string;
   tools: AgentTool[];
   messages: ReadingTurnMessage[];
+  // Whether this turn was actually assembled as a classroom turn. Not the same
+  // as the caller's classroom flag: classroom mode needs the book's text, and a
+  // turn taken before extraction finishes runs the companion prompt instead.
+  // The caller reports which face it was (platform/app/cache-telemetry.ts), so
+  // it has to be told which one it got rather than which one it asked for.
+  classroom: boolean;
   // A low-key line for the end of the reply, naming what this turn had to leave
   // out, or "" when nothing was dropped that the user has a stake in.
   notice: string;
@@ -617,6 +623,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
       systemPrompt: composePrompt(new Set()),
       tools,
       messages: composeMessages(new Set()),
+      classroom: isClassroom,
       notice: "",
       refusal: "",
     };
@@ -647,6 +654,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     systemPrompt: fitted.systemPrompt,
     tools,
     messages: fitted.messages,
+    classroom: isClassroom,
     notice: fitted.notice,
     refusal: fitted.refusal,
   };

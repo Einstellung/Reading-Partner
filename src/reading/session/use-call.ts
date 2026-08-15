@@ -386,6 +386,9 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         tools: turn.tools,
         signal: controller.signal,
         reasoning: toReasoning(s.chatThinking),
+        // Which prompt this turn was actually assembled with, not which mode the
+        // toggle is in: the two diverge while a book is still being extracted.
+        telemetry: { surface: turn.classroom ? "classroom" : "reading", thread: threadId },
         onDelta: (chunk) => write({ kind: "delta", chunk }, ts),
         onToolStart: (info) => onToolStart(info, ts),
         onToolEnd: (info) => onToolEnd(info, ts),
