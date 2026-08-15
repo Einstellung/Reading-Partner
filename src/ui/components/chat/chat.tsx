@@ -13,6 +13,7 @@ import { IconCheck, IconCopy, IconSend, IconStop } from '../base/icons';
 import { Markdown } from '../markdown/Markdown';
 import { MicButton } from './MicButton';
 import { useFlickerProbe } from '../common/useFlickerProbe';
+import { stickToBottom } from '../common/stick-to-bottom';
 import type { PendingImage, ThreadMessage } from './types';
 import type { CompressedImage } from '../../../ai/image-utils';
 import type { ToolStatus } from '../../../ai/tool-status';
@@ -355,6 +356,7 @@ export function MessageList({
 	className = '',
 	surface = 'call',
 	onCardAction,
+	stickKey,
 }: {
 	messages: ThreadMessage[];
 	size?: 'sm' | 'lg';
@@ -364,14 +366,20 @@ export function MessageList({
 	surface?: CardSurface;
 	// The card action dispatcher. Absent on chats with no cards (the reader).
 	onCardAction?: CardActionHandler;
+	// Identifies the conversation on display. Changing it pins the list back to
+	// the bottom, so switching threads starts at the newest message rather than
+	// wherever the previous one had been scrolled to.
+	stickKey?: string | number;
 }) {
-	const endRef = useRef<HTMLDivElement>(null);
-	useEffect(() => {
-		endRef.current?.scrollIntoView({ block: 'end' });
-	}, [messages.length]);
+	const listRef = useRef<HTMLDivElement>(null);
+	useLayoutEffect(() => {
+		const list = listRef.current;
+		return list ? stickToBottom(list) : undefined;
+	}, [stickKey]);
 
 	return (
 		<div
+			ref={listRef}
 			className={
 				'flex flex-col ' +
 				(size === 'lg' ? 'gap-[calc(1.5rem*var(--chat-scale,1))] ' : 'gap-3 ') +
@@ -382,7 +390,6 @@ export function MessageList({
 			{messages.map((m, i) => (
 				<MessageBubble key={i} message={m} size={size} surface={surface} onCardAction={onCardAction} />
 			))}
-			<div ref={endRef} />
 		</div>
 	);
 }
