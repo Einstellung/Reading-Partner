@@ -628,7 +628,7 @@ async function settle(p: PrepPipeline): Promise<void> {
 
 test("ingestCaptured joins the prep list as an article and never calls the fetch dep", async () => {
   let fetches = 0;
-  let digested: FetchOutcome | null = null;
+  const digestedWith: FetchOutcome[] = [];
   const { deps, saved } = makeFakes({
     initial: emptyPlannedState(),
     fetch: async () => {
@@ -636,7 +636,7 @@ test("ingestCaptured joins the prep list as an article and never calls the fetch
       return null;
     },
     digest: async (_p, fetched) => {
-      digested = fetched;
+      digestedWith.push(fetched);
       return { body: "note", pages: 1, thin: false };
     },
   });
@@ -650,7 +650,7 @@ test("ingestCaptured joins the prep list as an article and never calls the fetch
   expect(added.status === "digesting" || added.status === "done").toBe(true);
   // The digest reads the handed-in text, and the row is on the persisted list.
   await settle(p);
-  expect(digested).toBe(CAPTURED);
+  expect(digestedWith[0]).toBe(CAPTURED);
   const row = saved[saved.length - 1].papers.find((x) => x.slug === "kept");
   expect(row?.kind).toBe("article");
   expect(row?.captured).toBe(true);

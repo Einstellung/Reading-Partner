@@ -56,10 +56,6 @@ async function resolvePath(): Promise<string> {
   throw new Error(`no events-ai.jsonl found; pass one:\n  ${DEFAULT_PATHS.join("\n  ")}`);
 }
 
-function prompt(l: Line): number {
-  return (l.input ?? 0) + (l.cacheRead ?? 0) + (l.cacheWrite ?? 0);
-}
-
 interface Group {
   turns: number;
   withUsage: number;
