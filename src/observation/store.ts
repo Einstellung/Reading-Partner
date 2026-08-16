@@ -64,6 +64,14 @@ const ENTRY_FILE = /^(m-[0-9a-f]{8})\.md$/;
 // no way to know it was there. This is that way.
 const CONFLICT_FILE = /^(m-[0-9a-f]{8})\.conflict-[0-9a-f]+\.md$/;
 
+// A conflict copy of the index, which is a different thing entirely: the index
+// is derived — rebuilt from the entry files after every mutation — so a losing
+// version of it holds nothing the entry files do not already say. Sync has no
+// way to know that (a .md file is prose to it) and parks a copy that then
+// travels between devices forever. Deleted by rebuildIndex, the one place that
+// owns this file's content.
+const INDEX_CONFLICT_FILE = /^index\.conflict-[0-9a-f]+\.md$/;
+
 // One conflict copy, parsed here so a renderer never has to know the file
 // format. The fields are empty when the copy does not parse, which leaves the
 // path — and the path is what makes it findable either way.
@@ -111,7 +119,10 @@ export class ObservationFileStore {
 
   // All observations, read from the entry files (index-independent), newest first.
   async list(): Promise<Observation[]> {
-    const names = await this.fs.listDir(this.dir);
+    return this.readEntries(await this.fs.listDir(this.dir));
+  }
+
+  private async readEntries(names: string[]): Promise<Observation[]> {
     const entries: Observation[] = [];
     for (const name of names) {
       if (!ENTRY_FILE.test(name)) continue;
@@ -199,13 +210,20 @@ export class ObservationFileStore {
     return parseIndex(await this.readIndexText());
   }
 
-  // Regenerate the index from the entry files (they are the source of truth).
+  // Regenerate the index from the entry files (they are the source of truth),
+  // and drop any conflict copy of the index while here — see INDEX_CONFLICT_FILE.
+  // An entry's own copies are left alone: those are versions of what the model
+  // wrote about the reader, and the panel shows them.
   async rebuildIndex(): Promise<void> {
-    const entries = await this.list();
+    const names = await this.fs.listDir(this.dir);
+    const entries = await this.readEntries(names);
     await this.fs.write(
       `${this.dir}/index.md`,
       buildIndex(entries.map(({ id, type, summary, updated }) => ({ id, type, summary, updated }))),
     );
+    for (const name of names) {
+      if (INDEX_CONFLICT_FILE.test(name)) await this.fs.remove(`${this.dir}/${name}`);
+    }
   }
 
   async getMeta(): Promise<ObservationMeta> {

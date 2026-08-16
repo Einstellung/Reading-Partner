@@ -161,6 +161,26 @@ test("a conflict copy that will not parse is still reported", async () => {
   expect(conflicts[0].summary).toBe("");
 });
 
+test("rebuilding the index deletes the conflict copies of the index, and only those", async () => {
+  const { store, files } = makeStore();
+  const entry = await store.create({ type: "belief", summary: "s", body: "b" });
+  const entryCopy = `memory-topic-1/${entry.id}.conflict-deadbeef.md`;
+  files.set(entryCopy, serializeObservation({ ...entry, body: "the other device's version" }));
+  files.set("memory-topic-1/index.conflict-cafebabe.md", "- [belief] s (updated 2026-07-17, id m-1)");
+  files.set("memory-topic-1/index.conflict-0badf00d.md", "");
+  // A different topic's directory is not this store's to touch.
+  files.set("memory-topic-2/index.conflict-cafebabe.md", "");
+
+  await store.rebuildIndex();
+
+  expect(files.has("memory-topic-1/index.conflict-cafebabe.md")).toBe(false);
+  expect(files.has("memory-topic-1/index.conflict-0badf00d.md")).toBe(false);
+  expect(files.has("memory-topic-2/index.conflict-cafebabe.md")).toBe(true);
+  expect(files.has(entryCopy)).toBe(true);
+  expect(await store.listConflicts()).toHaveLength(1);
+  expect(await store.readIndex()).toHaveLength(1);
+});
+
 test("a topic with no conflict copies reports none", async () => {
   const { store } = makeStore();
   await store.create({ type: "belief", summary: "s", body: "b" });
