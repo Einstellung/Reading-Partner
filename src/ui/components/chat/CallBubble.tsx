@@ -6,6 +6,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconExpand } from '../base/icons';
 import { Composer, MessageList, type ComposerVoice } from './chat';
+import type { CardActionHandler } from './chatParts';
 import { Button } from '../ui/button';
 import { cn } from '../lib/utils';
 import { OVERLAY_Z, useOverlaySafePadding } from '../ui/overlay';
@@ -29,6 +30,10 @@ interface CallBubbleProps {
 	streaming?: boolean;
 	onStop?(): void;
 	voice?: ComposerVoice | false;
+	// What a card in this conversation raises. The bubble carries cards too — a
+	// diagram drawn in a classroom turn lands here when the reader never expanded
+	// to chat-main — so it forwards the dispatcher the same way CallView does.
+	onCardAction?: CardActionHandler;
 }
 
 const WIDTH = 360;
@@ -47,6 +52,7 @@ export default function CallBubble({
 	streaming,
 	onStop,
 	voice,
+	onCardAction,
 }: CallBubbleProps) {
 	const ref = useRef<HTMLDivElement>(null);
 	const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
@@ -123,7 +129,14 @@ export default function CallBubble({
 				</div>
 			</div>
 
-			{messages.length > 0 && <MessageList messages={messages} surface="bubble" className="max-h-64 pr-0.5" />}
+			{messages.length > 0 && (
+				<MessageList
+					messages={messages}
+					surface="bubble"
+					className="max-h-64 pr-0.5"
+					onCardAction={onCardAction}
+				/>
+			)}
 
 			<Composer
 				onSend={onSend}
