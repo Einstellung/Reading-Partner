@@ -29,6 +29,22 @@ export function hasNativeRecorder(): boolean {
 	}
 }
 
+// Whether the host transcribes speech on the device, streaming partials as it
+// goes (docs/15). Only iOS does: the commands behind it wrap SpeechAnalyzer,
+// which exists nowhere else. A second voice path rather than a fallback for
+// hasNativeRecorder — that one records a WAV and ships it to an STT host, this
+// one never leaves the phone and has no key to configure.
+export function hasOnDeviceDictation(): boolean {
+	try {
+		return platform() === "ios";
+	} catch {
+		// Not running under Tauri (unit tests, plain-browser dev): no commands, so
+		// no dictation. Deliberately not isIOS()'s UA fallback — that one answers
+		// "is this an iPad" for a layout, and an iPad browser has no plugin.
+		return false;
+	}
+}
+
 // Whether the host can render an article in a hidden webview
 // (src-tauri/src/webview_fetch, docs/17). Same shape as hasNativeRecorder: the
 // command is compiled `#[cfg(desktop)]`, and the DOM bridge behind it is
