@@ -22,6 +22,30 @@ export { transcribe } from "./stt";
 export { buildGlossary, cleanupTranscript, type CleanupModel, type GlossarySource } from "./cleanup";
 export { startRecording, stopRecording, cancelRecording } from "./recorder";
 export {
+  EMPTY_TRANSCRIPT,
+  applyDictationEvent,
+  assembleTranscript,
+  hasOnDeviceDictation,
+  joinSpeech,
+  nativeDictation,
+  transcriptText,
+  type DictationEvent,
+  type DictationOptions,
+  type DictationSource,
+  type Transcript,
+} from "./dictation";
+export {
+  FINISH_TIMEOUT_MS,
+  INITIAL_HOLD_STATE,
+  holdReducer,
+  type HoldEffect,
+  type HoldEvent,
+  type HoldResult,
+  type HoldState,
+  type HoldStatus,
+  type Zone,
+} from "./hold-machine";
+export {
   INITIAL_PRESS_STATE,
   NEEDS_KEY_HINT,
   NO_SPEECH_HINT,
