@@ -5,7 +5,7 @@
 // the honest-failure mapping, tool-failure accounting, the round ledger, the cap
 // on what crosses back — runs in a test with no provider, no credentials and no
 // network. live.ts supplies the real turn. This is the same dependency-injection
-// shape src/observation/distill.ts uses, for the same reason.
+// shape src/observation/distill/distill.ts uses, for the same reason.
 
 import { REFUSE_MIDTURN, REFUSE_ROUNDS, type AgentTool } from "../agent";
 import { StoppedError } from "../watchdog";

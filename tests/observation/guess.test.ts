@@ -1,4 +1,4 @@
-// The AI's guess section of the user profile (src/observation/guess.ts): the
+// The AI's guess section of the user profile (src/observation/profile/guess.ts): the
 // two-section format, the rules that decide what may be written, the gate that
 // decides when the pass runs, and one pass end to end with a mocked AI turn
 // (same harness as tests/observation/distill.test.ts — the real agent loop over a
@@ -18,7 +18,7 @@ import {
 import { runAgentLoop, type StreamFn } from "../../src/ai/agent";
 import { createTurnSettler } from "../../src/ai/subagent/turn";
 import type { SubagentTurnFn, SubagentTurnRequest } from "../../src/ai/subagent/types";
-import type { FeedbackEvent } from "../../src/observation/feedback";
+import type { FeedbackEvent } from "../../src/observation/profile/feedback";
 import {
   buildGuessSystemPrompt,
   buildGuessUserMessage,
@@ -42,7 +42,7 @@ import {
   type ProfileGuess,
   type ProfileGuessInput,
   type RawGuess,
-} from "../../src/observation/guess";
+} from "../../src/observation/profile/guess";
 
 // --- the scripted turn (copied from distill.test.ts: one self-contained file) ---
 

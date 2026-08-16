@@ -8,17 +8,17 @@ export type {
   ObservationPatch,
   ObservationType,
   RetainInput,
-} from "./types";
-export { OBSERVATION_TYPES, isObservationType } from "./types";
-export { isoDate, localDate, parseIndex, parseObservation, serializeObservation } from "./files";
+} from "./record/types";
+export { OBSERVATION_TYPES, isObservationType } from "./record/types";
+export { isoDate, localDate, parseIndex, parseObservation, serializeObservation } from "./record/files";
 export {
   ObservationFileStore,
   type ObservationConflict,
   type ObservationFs,
   type ObservationMeta,
-} from "./store";
-export { FileObservationAdapter, type ObservationAdapter } from "./adapter";
-export { buildObservationSnapshot, observationPromptSection, trimObservations } from "./snapshot";
+} from "./record/store";
+export { FileObservationAdapter, type ObservationAdapter } from "./record/adapter";
+export { buildObservationSnapshot, observationPromptSection, trimObservations } from "./record/snapshot";
 export {
   assembleIdentity,
   assembleReadingContext,
@@ -26,7 +26,7 @@ export {
   READING_SIGNAL_BUDGET,
   type TopicObservationSignal,
 } from "./assemble";
-export { buildObservationTools, type ObservationToolOptions, type ObservationWriteAction } from "./tools";
+export { buildObservationTools, type ObservationToolOptions, type ObservationWriteAction } from "./record/tools";
 export {
   buildDistillAgent,
   buildDistillSystemPrompt,
@@ -71,7 +71,7 @@ export {
   type MarksDistillInput,
   type MarksPassInput,
   type MarksPassResult,
-} from "./distill";
+} from "./distill/distill";
 export {
   countNewMarks,
   isTopicDue,
@@ -88,7 +88,7 @@ export {
   type DistillJob,
   type ThreadArrears,
   type TopicArrears,
-} from "./arrears";
+} from "./distill/arrears";
 export {
   buildGuessAgent,
   buildGuessSystemPrompt,
@@ -125,7 +125,7 @@ export {
   type ProfileGuessStore,
   type ProfileSplit,
   type RawGuess,
-} from "./guess";
+} from "./profile/guess";
 export {
   buildRehearsalDistillAgent,
   buildRehearsalDistillSystemPrompt,
@@ -139,7 +139,7 @@ export {
   type RehearsalPassInput,
   type RehearsalPassResult,
   type RehearsalPassStore,
-} from "./rehearsal";
+} from "./distill/rehearsal";
 export {
   distillMarks,
   distillRehearsal,

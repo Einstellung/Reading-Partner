@@ -10,8 +10,8 @@
 
 import type { SourceDescriptor } from "../sources/descriptor";
 import type { ProbeConfirmCardData } from "../sources/source-cards";
-import { replaceDeclared } from "../../observation/guess";
-import { loadProfileForWrite, saveProfile } from "../../observation/profile";
+import { replaceDeclared } from "../../observation/profile/guess";
+import { loadProfileForWrite, saveProfile } from "../../observation/profile/profile";
 
 // --- add a trialed source ---------------------------------------------------
 
@@ -98,7 +98,7 @@ export interface ProfileApplied {
 /**
  * The profile card's Apply. The card carries the declared half only — that is
  * all the drafting model was shown — so the write splices it in and leaves the
- * AI's guess section where it is (observation/guess.ts). Apply is the only
+ * AI's guess section where it is (observation/profile/guess.ts). Apply is the only
  * write; the tool that drafted the card never saves.
  *
  * A read that failed is a failed Apply, not an Apply onto an empty document: the

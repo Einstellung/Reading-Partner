@@ -1,4 +1,4 @@
-// User profile persistence + one-time rename migration (src/observation/profile.ts).
+// User profile persistence + one-time rename migration (src/observation/profile/profile.ts).
 // There is no factory seed, so a first run (no file) returns an empty profile and
 // writes nothing; an existing file is read verbatim. When only the old
 // info-profile.md exists, loadProfile promotes it to user-profile.md once and
@@ -48,7 +48,7 @@ mock.module("../../src/platform/app/atomic-fs", () => ({
 }));
 
 const { loadProfile, loadProfileForWrite, loadProfileGuarded, saveProfile, PROFILE_FILE, LEGACY_PROFILE_FILE } =
-  await import("../../src/observation/profile");
+  await import("../../src/observation/profile/profile");
 // The live Apply path, over the real store rather than an injected one: what the
 // wiring does with a failed read is the whole question here.
 const { applyProfileUpdate } = await import("../../src/info/companion/card-actions");

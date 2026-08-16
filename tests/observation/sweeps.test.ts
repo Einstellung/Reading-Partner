@@ -1,4 +1,4 @@
-// The background sweeps (src/observation/sweeps.ts): the re-entry rules around
+// The background sweeps (src/observation/distill/sweeps.ts): the re-entry rules around
 // distillation and the profile guess. Two passes over the same topic at once
 // would each write back the meta they read before the other one wrote, and one
 // of the two cursors would be lost — a failure that leaves no trace and cannot
@@ -11,8 +11,8 @@ import {
   createSweeps,
   type DistillTrigger,
   type SweepDeps,
-} from "../../src/observation/sweeps";
-import type { DistillJob, TopicArrears } from "../../src/observation/arrears";
+} from "../../src/observation/distill/sweeps";
+import type { DistillJob, TopicArrears } from "../../src/observation/distill/arrears";
 
 const MIN = 60_000;
 

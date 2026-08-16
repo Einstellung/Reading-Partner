@@ -6,8 +6,8 @@
 
 import { aiLanguageName, type AiLanguage } from "../../platform/app/settings";
 import type { ParseTally } from "../../platform/app/structured-output";
-import type { FeedbackEvent } from "../../observation/feedback";
-import { profileForPrompt } from "../../observation/guess";
+import type { FeedbackEvent } from "../../observation/profile/feedback";
+import { profileForPrompt } from "../../observation/profile/guess";
 import type { TriageResult } from "./types";
 import type { InfoItem } from "../sources/item";
 

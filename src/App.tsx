@@ -518,7 +518,7 @@ export default function App() {
   });
 
   // Pay down whatever the observations still owe, on a timer and whenever the
-  // app comes back (src/observation/arrears.ts). Silent throughout: a sweep that
+  // app comes back (src/observation/distill/arrears.ts). Silent throughout: a sweep that
   // finds nothing owed does nothing, and one that runs a pass shows no UI. The
   // predicate keeps it off a thread whose reply is still being written.
   useEffect(() => startDistillSweeps((threadId) => isAnswering(threadId)), [isAnswering]);

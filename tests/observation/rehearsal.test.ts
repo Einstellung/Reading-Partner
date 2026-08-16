@@ -1,4 +1,4 @@
-// Rehearsal distillation (src/observation/rehearsal.ts): the pass that runs when
+// Rehearsal distillation (src/observation/distill/rehearsal.ts): the pass that runs when
 // the reader leaves a talk. Same harness as tests/observation/distill.test.ts —
 // the sub-agent turn is the real agent loop over a scripted stream, so the real
 // observation tools and the real failure mapping run against a fake fs with no
@@ -18,8 +18,8 @@ import {
 import { runAgentLoop, type StreamFn } from "../../src/ai/agent";
 import { createTurnSettler } from "../../src/ai/subagent/turn";
 import type { SubagentTurnFn, SubagentTurnRequest } from "../../src/ai/subagent/types";
-import { FileObservationAdapter } from "../../src/observation/adapter";
-import { runDistillPass } from "../../src/observation/distill";
+import { FileObservationAdapter } from "../../src/observation/record/adapter";
+import { runDistillPass } from "../../src/observation/distill/distill";
 import {
   buildRehearsalDistillSystemPrompt,
   buildRehearsalDistillUserMessage,
@@ -27,8 +27,8 @@ import {
   selectNewMessages,
   type RehearsalDistillInput,
   type RehearsalPassInput,
-} from "../../src/observation/rehearsal";
-import { ObservationFileStore } from "../../src/observation/store";
+} from "../../src/observation/distill/rehearsal";
+import { ObservationFileStore } from "../../src/observation/record/store";
 import { JULY_17, JULY_20, makeFakeFs } from "./fakefs";
 
 type ToolReq = { name: string; args: Record<string, any>; id: string };

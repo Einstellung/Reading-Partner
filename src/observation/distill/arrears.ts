@@ -10,8 +10,8 @@
 //
 // Pure: live.ts reads the files and runs the job this picks.
 
-import type { Annotation } from "../platform/app/reader-contract";
-import { annotationPage } from "../platform/app/reader-contract";
+import type { Annotation } from "../../platform/app/reader-contract";
+import { annotationPage } from "../../platform/app/reader-contract";
 import { countNewReaderMessages, type DistillAnnotation, type DistillMessage } from "./distill";
 
 // How often the app looks, while it is open.

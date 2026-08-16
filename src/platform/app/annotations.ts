@@ -158,7 +158,7 @@ export function createAnnotationStore(io: AnnotationIo): AnnotationStore {
   }
 
   // The on-disk marks of a book that is not being read, without touching the
-  // cache. The observation sweep (src/observation/arrears.ts) walks every book
+  // cache. The observation sweep (src/observation/distill/arrears.ts) walks every book
   // of every topic every half hour and must not go through load: that seeds the
   // cache from disk, and doing it while the open book has a debounced write
   // pending would flush the stale copy over the mark just made. Missing or

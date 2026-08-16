@@ -33,8 +33,8 @@ import {
   type SavedArticleInput,
 } from "../../../reading/saved-articles";
 import { toSavedArticleInput } from "./saveArticle";
-import { appendFeedback } from "../../../observation/feedback";
-import { loadProfile } from "../../../observation/profile";
+import { appendFeedback } from "../../../observation/profile/feedback";
+import { loadProfile } from "../../../observation/profile/profile";
 import {
   articleAnchor,
   briefingAnchor,

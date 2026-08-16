@@ -16,7 +16,7 @@ import {
   exists,
   readTextFile,
 } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../platform/app/atomic-fs";
+import { writeTextAtomic } from "../../platform/app/atomic-fs";
 
 export const FEEDBACK_FILE = "info-feedback.jsonl";
 

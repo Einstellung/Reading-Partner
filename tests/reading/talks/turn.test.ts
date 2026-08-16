@@ -8,8 +8,8 @@ import { expect, test } from "bun:test";
 import { DEFAULT_SETTINGS, type Settings } from "../../../src/platform/app/settings";
 import type { Fulltext } from "../../../src/fulltext/types";
 import type { Figure } from "../../../src/reading/figures/types";
-import { trimObservations } from "../../../src/observation/snapshot";
-import type { ObservationIndexEntry, ObservationType } from "../../../src/observation/types";
+import { trimObservations } from "../../../src/observation/record/snapshot";
+import type { ObservationIndexEntry, ObservationType } from "../../../src/observation/record/types";
 
 // No filesystem mock on purpose: every disk read this assembly makes is
 // optional and already wrapped (a chapter note, the topic's observation index), so

@@ -1,9 +1,9 @@
-// Unit tests for the file-backed Observation Adapter (src/observation/adapter.ts) —
+// Unit tests for the file-backed Observation Adapter (src/observation/record/adapter.ts) —
 // BM25 recall over observation bodies, correct-with-null deletion. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { FileObservationAdapter } from "../../src/observation/adapter";
-import { ObservationFileStore } from "../../src/observation/store";
+import { FileObservationAdapter } from "../../src/observation/record/adapter";
+import { ObservationFileStore } from "../../src/observation/record/store";
 import { JULY_17, makeFakeFs } from "./fakefs";
 
 function makeAdapter() {

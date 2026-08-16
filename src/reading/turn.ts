@@ -505,7 +505,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   // The cross-scenario user profile: who the companion is reading with, so it
   // pitches explanation depth to their background. Empty profile → no section.
   // The declared half and the AI's own guess section go in separately, and the
-  // guesses go in labelled as guesses (observation/guess.ts).
+  // guesses go in labelled as guesses (observation/profile/guess.ts).
   const identity = profileForPrompt(await assembleIdentity().catch(() => ""));
   const profileSection = readerProfileSection(identity.declared, identity.guesses);
   // The whole-book outline from the reader's notes (docs/14), when they exist.

@@ -4,8 +4,8 @@
 // engine: the per-topic file store with BM25 recall (reusing the M6 search
 // implementation — each observation is one one-page document).
 
-import { bm25Search } from "../fulltext/bm25";
-import { FULLTEXT_VERSION, type SearchDoc } from "../fulltext/types";
+import { bm25Search } from "../../fulltext/bm25";
+import { FULLTEXT_VERSION, type SearchDoc } from "../../fulltext/types";
 import type { ObservationFileStore } from "./store";
 import type { Observation, ObservationHit, ObservationPatch, RetainInput } from "./types";
 

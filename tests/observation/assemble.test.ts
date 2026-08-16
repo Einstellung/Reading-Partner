@@ -4,7 +4,7 @@
 
 import { expect, test } from "bun:test";
 import { assembleReadingSignal, type TopicObservationSignal } from "../../src/observation/assemble";
-import type { ObservationIndexEntry } from "../../src/observation/types";
+import type { ObservationIndexEntry } from "../../src/observation/record/types";
 
 function e(
   type: ObservationIndexEntry["type"],

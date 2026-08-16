@@ -1,5 +1,5 @@
 // One-off repair for the dates written into observations before the distillers
-// learned to read them off the evidence (src/observation/distill.ts). Every pass
+// learned to read them off the evidence (src/observation/distill/distill.ts). Every pass
 // used to tell the model "today is <the day this pass runs>", and the arrears
 // sweep runs days after the conversation it distils, so the prose says a day the
 // reader was not there. The frontmatter is fine — `created`/`updated` are write
@@ -27,8 +27,8 @@
 import { mkdirSync, copyFileSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { dirname, join } from "node:path";
-import { localDate, parseIndexLine, serializeIndexLine } from "../src/observation/files";
-import { isObservationType } from "../src/observation/types";
+import { localDate, parseIndexLine, serializeIndexLine } from "../src/observation/record/files";
+import { isObservationType } from "../src/observation/record/types";
 
 // --- pure: what the anchors say ---------------------------------------------
 

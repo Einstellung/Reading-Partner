@@ -12,19 +12,19 @@
 // The turn is still injected (SubagentTurnFn), so every test here runs with no
 // provider, no credentials and no network.
 
-import type { AgentTool } from "../ai/agent";
+import type { AgentTool } from "../../ai/agent";
 import {
   runSubagent,
   type SubagentDefinition,
   type SubagentModel,
   type SubagentOutcome,
   type SubagentTurnFn,
-} from "../ai/subagent";
-import type { EventPayload } from "../platform/app/events";
-import type { ObservationAdapter } from "./adapter";
-import { localDate } from "./files";
-import type { ObservationMeta } from "./store";
-import { buildObservationTools, type ObservationWriteAction } from "./tools";
+} from "../../ai/subagent";
+import type { EventPayload } from "../../platform/app/events";
+import type { ObservationAdapter } from "../record/adapter";
+import { localDate } from "../record/files";
+import type { ObservationMeta } from "../record/store";
+import { buildObservationTools, type ObservationWriteAction } from "../record/tools";
 
 export interface DistillMessage {
   role: "user" | "ai";

@@ -12,7 +12,7 @@
 
 import { aiLanguageName, type AiLanguage } from "../../platform/app/settings";
 import type { ParseTally } from "../../platform/app/structured-output";
-import { profileForPrompt } from "../../observation/guess";
+import { profileForPrompt } from "../../observation/profile/guess";
 import type { InfoItem } from "../sources/item";
 
 // Items per screening call. Big enough that a few hundred items are a handful

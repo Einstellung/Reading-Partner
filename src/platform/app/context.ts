@@ -179,7 +179,7 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
 //
 // The two halves arrive separately and stay separate here. `declared` is what the
 // reader said about themselves; `guesses` is what the AI inferred on its own
-// (observation/guess.ts), which is wrong often enough that a prompt must not be
+// (observation/profile/guess.ts), which is wrong often enough that a prompt must not be
 // able to act on it as a fact. The caller splits them (profileForPrompt) —
 // platform/app imports nothing, so the parsing lives in the domain that owns
 // the format.

@@ -11,7 +11,7 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../ai/agent";
-import { PROFILE_SKELETON_GUIDANCE } from "../../observation/profile";
+import { PROFILE_SKELETON_GUIDANCE } from "../../observation/profile/profile";
 import type { ProfileUpdateCardData } from "../briefing/cards";
 import type { RequestOutcome } from "../briefing/reader";
 import { buildSourceTools, sourceToolStatusLabel, type SourceToolDeps } from "../sources/source-tools";

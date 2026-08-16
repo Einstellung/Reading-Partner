@@ -1,4 +1,4 @@
-// Appending to the attention log (src/observation/feedback.ts) against an
+// Appending to the attention log (src/observation/profile/feedback.ts) against an
 // in-memory AppData. Its own file rather than feedback.test.ts's, because the
 // mocked filesystem has to be installed before the module under test is
 // imported.
@@ -18,7 +18,7 @@ mock.module("@tauri-apps/api/core", () => app.core);
 mock.module("../../src/platform/app/atomic-fs", () => app.atomicFs);
 
 const { appendFeedback, FEEDBACK_FILE, loadFeedback, parseFeedbackLog } = await import(
-  "../../src/observation/feedback"
+  "../../src/observation/profile/feedback"
 );
 
 function line(itemId: string): string {

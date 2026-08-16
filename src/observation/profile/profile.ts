@@ -18,7 +18,7 @@ import {
   exists,
   readTextFile,
 } from "@tauri-apps/plugin-fs";
-import { readGuardedText, writeTextAtomic } from "../platform/app/atomic-fs";
+import { readGuardedText, writeTextAtomic } from "../../platform/app/atomic-fs";
 import type { GuessState } from "./guess";
 
 export const PROFILE_FILE = "user-profile.md";

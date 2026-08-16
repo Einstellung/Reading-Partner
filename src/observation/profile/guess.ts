@@ -29,16 +29,16 @@
 // event log.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../ai/agent";
+import type { AgentTool } from "../../ai/agent";
 import {
   runSubagent,
   type SubagentDefinition,
   type SubagentModel,
   type SubagentOutcome,
   type SubagentTurnFn,
-} from "../ai/subagent";
+} from "../../ai/subagent";
 import type { FeedbackEvent } from "./feedback";
-import type { ObservationIndexEntry } from "./types";
+import type { ObservationIndexEntry } from "../record/types";
 
 // --- the section markers ---
 
@@ -466,7 +466,7 @@ export interface ProfileGuessStore {
   // Throws when the profile could not be read. It must not answer "" for that:
   // an empty document is a profile with nothing in it, which this pass is
   // entitled to add a guess section to, and a file it could not read is one it
-  // knows nothing about. observation/profile.ts's loadProfileForWrite is the
+  // knows nothing about. observation/profile/profile.ts's loadProfileForWrite is the
   // live binding and draws exactly that line.
   load(): Promise<string>;
   save(text: string): Promise<void>;

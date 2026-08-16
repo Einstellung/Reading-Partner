@@ -1,4 +1,4 @@
-// Distillation flow tests (src/observation/distill.ts) with a mocked AI turn: the
+// Distillation flow tests (src/observation/distill/distill.ts) with a mocked AI turn: the
 // sub-agent turn is backed by runAgentLoop over a scripted fake stream (same
 // pattern as tests/ai/subagent.test.ts), so the real observation tools, the real
 // honest-failure mapping and the real abort path run against the fake store with
@@ -19,7 +19,7 @@ import { runAgentLoop, type StreamFn } from "../../src/ai/agent";
 import { createTurnSettler } from "../../src/ai/subagent/turn";
 import type { SubagentTurnFn, SubagentTurnRequest } from "../../src/ai/subagent/types";
 import { StoppedError } from "../../src/ai/watchdog";
-import { FileObservationAdapter } from "../../src/observation/adapter";
+import { FileObservationAdapter } from "../../src/observation/record/adapter";
 import {
   buildDistillAgent,
   buildDistillSystemPrompt,
@@ -43,8 +43,8 @@ import {
   type DistillInput,
   type DistillMessage,
   type DistillPassInput,
-} from "../../src/observation/distill";
-import { ObservationFileStore } from "../../src/observation/store";
+} from "../../src/observation/distill/distill";
+import { ObservationFileStore } from "../../src/observation/record/store";
 import { JULY_17, JULY_20, makeFakeFs } from "./fakefs";
 
 type ToolReq = { name: string; args: Record<string, any>; id: string };

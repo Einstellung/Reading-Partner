@@ -23,19 +23,19 @@ import { observeAppLifecycle } from "../platform/app/lifecycle";
 import { AI_EVENT_TOPIC } from "../platform/app/structured-output";
 import { peekThreads } from "../platform/app/threads";
 import { listTopics } from "../platform/app/topics";
-import { loadFeedback } from "./feedback";
+import { loadFeedback } from "./profile/feedback";
 import {
   isGuessDue,
   runProfileGuessPass,
   type GuessTopicEvidence,
-} from "./guess";
+} from "./profile/guess";
 import {
   loadGuessState,
   loadProfileForWrite,
   saveGuessState,
   saveProfile,
-} from "./profile";
-import { FileObservationAdapter, type ObservationAdapter } from "./adapter";
+} from "./profile/profile";
+import { FileObservationAdapter, type ObservationAdapter } from "./record/adapter";
 import {
   SWEEP_INTERVAL_MS,
   MIN_NEW_MARKS,
@@ -46,13 +46,13 @@ import {
   type DistillJob,
   type ThreadArrears,
   type TopicArrears,
-} from "./arrears";
+} from "./distill/arrears";
 import {
   ObservationFileStore,
   type ObservationConflict,
   type ObservationFs,
-} from "./store";
-import type { ObservationIndexEntry } from "./types";
+} from "./record/store";
+import type { ObservationIndexEntry } from "./record/types";
 import {
   distillFailurePayload,
   markCursor,
@@ -61,13 +61,13 @@ import {
   runMarksDistillPass,
   type DistillAnnotation,
   type DistillMessage,
-} from "./distill";
-import { runRehearsalDistillPass } from "./rehearsal";
+} from "./distill/distill";
+import { runRehearsalDistillPass } from "./distill/rehearsal";
 import {
   createDistillGate,
   createSweeps,
   type DistillTrigger,
-} from "./sweeps";
+} from "./distill/sweeps";
 
 const tauriFs: ObservationFs = {
   async read(path) {

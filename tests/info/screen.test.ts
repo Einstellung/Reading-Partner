@@ -14,7 +14,7 @@ import {
   SCREEN_BATCH_SIZE,
   SCREEN_SUMMARY_CHARS,
 } from "../../src/info/briefing/screen";
-import { GUESS_BEGIN, GUESS_END } from "../../src/observation/guess";
+import { GUESS_BEGIN, GUESS_END } from "../../src/observation/profile/guess";
 import type { InfoItem } from "../../src/info/sources/item";
 
 function item(id: string, over: Partial<InfoItem> = {}): InfoItem {

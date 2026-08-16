@@ -36,8 +36,8 @@ import {
   saveSourceHealth,
   SOURCES_PULL_ROUTE,
 } from "../sources/source-store";
-import { loadFeedback } from "../../observation/feedback";
-import { loadProfile } from "../../observation/profile";
+import { loadFeedback } from "../../observation/profile/feedback";
+import { loadProfile } from "../../observation/profile/profile";
 import { assembleReadingContext } from "../../observation/assemble";
 import { InfoPipeline, type InfoSourceRef, type SourceResult } from "./pipeline";
 import {
@@ -90,7 +90,7 @@ import {
   triageUserMessage,
   type ParseOutcome,
 } from "./triage";
-import type { FeedbackEvent } from "../../observation/feedback";
+import type { FeedbackEvent } from "../../observation/profile/feedback";
 import type { Briefing, TriageResult } from "./types";
 import type { InfoItem } from "../sources/item";
 

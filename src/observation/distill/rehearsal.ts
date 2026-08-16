@@ -13,9 +13,9 @@
 // It never imports the talks domain: everything about the talk arrives as input
 // (the trigger point is on the talk's side, in ui/components/talk/useTalk.ts).
 
-import type { AgentTool } from "../ai/agent";
-import { runSubagent, type SubagentDefinition, type SubagentModel } from "../ai/subagent";
-import type { ObservationAdapter } from "./adapter";
+import type { AgentTool } from "../../ai/agent";
+import { runSubagent, type SubagentDefinition, type SubagentModel } from "../../ai/subagent";
+import type { ObservationAdapter } from "../record/adapter";
 import {
   DISTILL_BRIEF_TOKENS,
   DISTILL_MAX_ROUNDS,
@@ -29,8 +29,8 @@ import {
   type DistillResult,
   type EvidenceDates,
 } from "./distill";
-import type { ObservationMeta } from "./store";
-import { buildObservationTools, type ObservationWriteAction } from "./tools";
+import type { ObservationMeta } from "../record/store";
+import { buildObservationTools, type ObservationWriteAction } from "../record/tools";
 
 export const REHEARSAL_DISTILL_AGENT_NAME = "rehearsal_distiller";
 

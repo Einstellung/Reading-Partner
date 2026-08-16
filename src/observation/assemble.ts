@@ -13,8 +13,8 @@
 
 import { listTopics } from "../platform/app/topics";
 import { readObservationIndex } from "./live";
-import { loadProfile } from "./profile";
-import type { ObservationIndexEntry, ObservationType } from "./types";
+import { loadProfile } from "./profile/profile";
+import type { ObservationIndexEntry, ObservationType } from "./record/types";
 
 // The identity document, verbatim (empty string when the user has no profile yet).
 export function assembleIdentity(): Promise<string> {
