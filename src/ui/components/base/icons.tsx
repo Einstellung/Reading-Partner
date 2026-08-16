@@ -189,6 +189,21 @@ export function IconMic({ size = 16 }: IconProps) {
 	);
 }
 
+// Keyboard, for switching a composer back out of voice mode.
+export function IconKeyboard({ size = 16 }: IconProps) {
+	return (
+		<svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+			<rect x="1.25" y="3.75" width="13.5" height="8.5" rx="1.75" stroke="currentColor" strokeWidth="1.3" />
+			<path
+				d="M4 6.25h.01M6.5 6.25h.01M9 6.25h.01M11.5 6.25h.01M4 8.5h.01M6.5 8.5h.01M9 8.5h.01M11.5 8.5h.01M5.25 10.5h5.5"
+				stroke="currentColor"
+				strokeWidth="1.3"
+				strokeLinecap="round"
+			/>
+		</svg>
+	);
+}
+
 // Filled square to stop a streaming reply.
 export function IconStop({ size = 16 }: IconProps) {
 	return (

@@ -9,9 +9,10 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { HIT_44 } from '../base/buttons';
 import { Button } from '../ui/button';
-import { IconCheck, IconCopy, IconSend, IconStop } from '../base/icons';
+import { IconCheck, IconCopy, IconKeyboard, IconMic, IconSend, IconStop } from '../base/icons';
 import { Markdown } from '../markdown/Markdown';
 import { MicButton } from './MicButton';
+import { HoldToTalk } from './HoldToTalk';
 import { useFlickerProbe } from '../common/useFlickerProbe';
 import { stickToBottom } from '../common/stick-to-bottom';
 import type { PendingImage, ThreadMessage } from './types';
@@ -22,7 +23,7 @@ import { useCardRegistry } from './cardRegistryContext';
 import type { CleanupModel } from '../../../ai/voice';
 import type { ProviderId } from '../../../ai/providers';
 import { loadSettings, toReasoning } from '../../../platform/app/settings';
-import { hasNativeRecorder } from '../../../platform/app/platform';
+import { hasNativeRecorder, hasOnDeviceDictation } from '../../../platform/app/platform';
 
 // Optional enrichment for the composer's built-in voice input. The mic is on by
 // default; this only adds context. `glossary` seeds the STT cleanup pass with
@@ -42,6 +43,19 @@ export function resolveComposerVoice(
 	hasRecorder: boolean,
 ): { glossary: string } | null {
 	if (voice === false || !hasRecorder) return null;
+	return { glossary: voice?.glossary ?? '' };
+}
+
+// Whether the composer offers the hold-to-talk mode: the same opt-out, against
+// the other capability. The two are exclusive in practice — a host either
+// records for an STT round trip or dictates on device — but they are asked
+// separately, so a host that grew both would show both rather than silently
+// pick one.
+export function resolveComposerDictation(
+	voice: ComposerVoice | false | undefined,
+	hasDictation: boolean,
+): { glossary: string } | null {
+	if (voice === false || !hasDictation) return null;
 	return { glossary: voice?.glossary ?? '' };
 }
 
@@ -458,6 +472,10 @@ export function Composer({
 	const [voiceHint, setVoiceHint] = useState<string | null>(null);
 	const taRef = useRef<HTMLTextAreaElement>(null);
 	const resolvedVoice = resolveComposerVoice(voice, hasNativeRecorder());
+	const dictation = resolveComposerDictation(voice, hasOnDeviceDictation());
+	// Which half of the composer is showing on a host that dictates. Keyboard
+	// first: the mode is a place the user goes, not one they land in.
+	const [voiceMode, setVoiceMode] = useState(false);
 	const cleanupModel = useDefaultCleanupModel();
 
 	// Drop a cleaned voice transcript into the composer for review (never
@@ -465,6 +483,13 @@ export function Composer({
 	function insertVoiceText(text: string) {
 		setValue((v) => (v.trim() ? v.replace(/\s+$/, '') + ' ' + text : text));
 		requestAnimationFrame(() => taRef.current?.focus());
+	}
+
+	// A hold released over Edit: the same drop, plus the keyboard back, because
+	// asking to edit is asking for the thing you edit with.
+	function editVoiceText(text: string) {
+		setVoiceMode(false);
+		insertVoiceText(text);
 	}
 
 	// Auto-grow: collapse to one row, then take the content height up to the cap
@@ -543,16 +568,38 @@ export function Composer({
 						<StagingCards images={pendingImages} onRemove={onRemoveImage} size={cardSize} />
 					</div>
 				)}
-				<div className={pill ? 'flex items-end gap-2 pl-3' : 'flex items-end gap-2'}>
-					<textarea
-						ref={taRef}
-						rows={1}
-						className={field}
-						placeholder={placeholder}
-						value={value}
-						onChange={(e) => setValue(e.target.value)}
-						onKeyDown={onKeyDown}
-					/>
+				<div className={pill && !dictation ? 'flex items-end gap-2 pl-3' : 'flex items-end gap-2'}>
+					{dictation && (
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon"
+							aria-label={voiceMode ? 'Switch to keyboard' : 'Switch to voice'}
+							onClick={() => setVoiceMode((on) => !on)}
+							className="shrink-0 rounded-full text-neutral-400"
+						>
+							{voiceMode ? <IconKeyboard size={18} /> : <IconMic size={17} />}
+						</Button>
+					)}
+					{dictation && voiceMode ? (
+						<HoldToTalk
+							onSend={onSend}
+							onInsert={editVoiceText}
+							onHint={setVoiceHint}
+							glossary={dictation.glossary}
+							disabled={streaming}
+						/>
+					) : (
+						<textarea
+							ref={taRef}
+							rows={1}
+							className={field}
+							placeholder={placeholder}
+							value={value}
+							onChange={(e) => setValue(e.target.value)}
+							onKeyDown={onKeyDown}
+						/>
+					)}
 					{resolvedVoice && !streaming && (
 						<MicButton
 							onInsert={insertVoiceText}
@@ -563,6 +610,7 @@ export function Composer({
 						/>
 					)}
 					{pill &&
+						!(voiceMode && !streaming) &&
 						(streaming ? (
 							<button type="button" aria-label="Stop" onClick={onStop} className={`${stopBtn} h-9 w-9 coarse:h-11 coarse:w-11`}>
 								<IconStop size={16} />
