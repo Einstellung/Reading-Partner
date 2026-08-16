@@ -65,7 +65,14 @@ export type EventType =
   // reason: a turn belongs to a face of the app, not to a book. See
   // cache-telemetry.ts for the fields and for why the gap to the previous turn
   // on the same thread is one of them.
-  | "prompt-cache";
+  | "prompt-cache"
+  // A reading turn that rendered the pages around the reader's highlight and
+  // sent them as images (reading/figures/page-window.ts), in events-ai.jsonl
+  // beside the cache line. `tokens` is what the pictures cost the request, which
+  // is the number that decides whether the gate is drawn in the right place;
+  // `sent` is false when the budget ladder took the window back off the call
+  // after it was rendered.
+  | "page-window"; // { thread, gate, anchor, from, to, pages, tokens, px, sent }
 
 // The reserved topic id the briefing's timing lines are filed under:
 // events-info.jsonl. Topic ids are UUIDs, so this cannot collide with one —

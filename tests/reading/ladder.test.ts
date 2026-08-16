@@ -24,6 +24,7 @@ const EVEN: Record<ReadingReductionId, number> = {
   "notes-overview": 5_000,
   "booklist-thin": 5_000,
   "observation-trim": 5_000,
+  "page-window": 5_000,
   "tool-result-stubs": 5_000,
   "prep-notes-trim": 5_000,
   "classroom-inline": 5_000,
@@ -48,6 +49,7 @@ test("the reading ladder's order and its wording are pinned", () => {
     ["notes-overview", ""],
     ["booklist-thin", ""],
     ["observation-trim", ""],
+    ["page-window", ""],
     ["tool-result-stubs", ""],
     ["prep-notes-trim", "some of my notes on the reference papers were left out to make room"],
     [
@@ -72,8 +74,10 @@ test("redundancy goes first, all of it, and without a word", () => {
 });
 
 test("tool-result stubs come after every silent drop and before any evidence", () => {
-  const p = plan(FITS_AT + 26_000);
+  const p = plan(FITS_AT + 31_000);
   expect(p.apply[p.apply.length - 1]).toBe("tool-result-stubs");
+  // The page images around the highlight are silent too, and go before it.
+  expect(p.apply).toContain("page-window");
   expect(p.apply).not.toContain("prep-notes-trim");
   expect(p.apply).not.toContain("classroom-inline");
   expect(p.notice).toBe("");
@@ -84,7 +88,7 @@ test("tool-result stubs come after every silent drop and before any evidence", (
 // reachable whole by read_note. Told to the reader all the same — which notes
 // the class was taught from is theirs to know.
 test("the prep notes are given up before the book, and are told to the reader", () => {
-  const p = plan(FITS_AT + 31_000);
+  const p = plan(FITS_AT + 36_000);
   expect(p.apply[p.apply.length - 1]).toBe("prep-notes-trim");
   expect(p.apply).not.toContain("classroom-inline");
   expect(p.notice).toBe(
@@ -93,7 +97,7 @@ test("the prep notes are given up before the book, and are told to the reader", 
 });
 
 test("dropping the inlined book is told to the reader", () => {
-  const p = plan(FITS_AT + 36_000);
+  const p = plan(FITS_AT + 41_000);
   expect(p.apply[p.apply.length - 1]).toBe("classroom-inline");
   expect(p.apply).not.toContain("history-trim");
   expect(p.notice).toBe(
@@ -106,7 +110,7 @@ test("dropping the inlined book is told to the reader", () => {
 // preserve an older stretch of thread is fired and forgotten, so a trim before
 // it lands is a straight loss of the conversation.
 test("history is the last thing given up, and it is told to the reader", () => {
-  const p = plan(FITS_AT + 41_000);
+  const p = plan(FITS_AT + 46_000);
   expect(p.apply[p.apply.length - 1]).toBe("history-trim");
   expect(p.notice).toBe(
     "Note: some of my notes on the reference papers were left out to make room; " +
@@ -128,6 +132,7 @@ test("the rungs that are not priced like the rest say so on the table", () => {
     "notes-overview": "prompt",
     "booklist-thin": "prompt",
     "observation-trim": "prompt",
+    "page-window": "messages",
     "tool-result-stubs": "none",
     "prep-notes-trim": "bulk",
     "classroom-inline": "bulk",

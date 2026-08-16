@@ -915,3 +915,133 @@ test("the reader's abort signal is the one the sub-agent runs under", async () =
   await expect(research.execute({ task: "recent work" })).rejects.toBeInstanceOf(StoppedError);
   expect(seen).toBeUndefined();
 });
+
+// --- the visual window around a highlight (figures/page-window.ts) ---
+
+// Four pages of ordinary typeset prose, so the sparse-text arm of the gate stays
+// shut and a test can say which arm it is exercising.
+function dense(): Fulltext {
+  return {
+    version: 1,
+    status: "ok",
+    pages: Array.from({ length: 4 }, (_, i) => `Page ${i + 1}. `.repeat(120)),
+    outline: [],
+  };
+}
+
+// The rasterizer as the assembly sees it: records what it was asked for and
+// hands back a page-shaped picture.
+function pageRenderer() {
+  const asked: { page: number; widthPx: number }[] = [];
+  return {
+    asked,
+    render: async (page: number, widthPx: number) => {
+      asked.push({ page, widthPx });
+      return {
+        data: `page-${page}`,
+        mediaType: "image/jpeg",
+        width: widthPx,
+        height: Math.round(widthPx * 1.29),
+      };
+    },
+  };
+}
+
+// A fresh thread id per test: the fake disk outlives dropThreadCache, so a test
+// sharing "thread-1" inherits the forty messages an earlier one appended to it.
+const withWindow = (
+  threadId: string,
+  renderPage: (p: number, w: number) => Promise<any>,
+  over: Partial<Parameters<typeof buildReadingTurn>[0]> = {},
+) =>
+  input({
+    threadId,
+    fulltext: dense(),
+    figures: [{ id: "1", page: 2, caption: "Inline cache layout", bbox: null }] as Figure[],
+    renderPage,
+    ...over,
+  });
+
+test("a marked page with a figure near it carries page images and says what they are", async () => {
+  const r = pageRenderer();
+  const turn = await buildReadingTurn(withWindow("win-1", r.render));
+  // The marked page at full size, its neighbours smaller. Page 3 is off the end
+  // of this four-page fixture's window only if the anchor is at the edge; here
+  // the anchor is page 2, so the window is 1-3.
+  expect(r.asked.map((a) => a.page)).toEqual([1, 2, 3]);
+  expect(r.asked[1].widthPx).toBeGreaterThan(r.asked[0].widthPx);
+  expect(r.asked[0].widthPx).toBe(r.asked[2].widthPx);
+  const last = turn!.messages[turn!.messages.length - 1];
+  expect(last.images?.map((i) => i.data)).toEqual(["page-1", "page-2", "page-3"]);
+  expect(turn!.systemPrompt).toContain("p.2, the page their highlight is on");
+});
+
+test("a page of plain prose with no figures near it sends no images", async () => {
+  const r = pageRenderer();
+  const turn = await buildReadingTurn(
+    input({ threadId: "win-2", fulltext: dense(), figures: [], renderPage: r.render }),
+  );
+  expect(r.asked).toEqual([]);
+  expect(turn!.messages.some((m) => m.images?.length)).toBe(false);
+  expect(turn!.systemPrompt).not.toContain("highlight is on");
+});
+
+// A scan has no text layer, so figure detection (caption-anchored) finds nothing
+// on it. It is also the document that needs the pictures most.
+test("a document with no text layer sends the pages anyway", async () => {
+  const r = pageRenderer();
+  const turn = await buildReadingTurn(
+    input({ threadId: "win-3", fulltext: fulltext("no-text-layer"), figures: [], renderPage: r.render }),
+  );
+  expect(r.asked.map((a) => a.page)).toEqual([1, 2]);
+  expect(turn!.messages[turn!.messages.length - 1].images).toHaveLength(2);
+});
+
+test("a text-only model is sent no page images and told about none", async () => {
+  const r = pageRenderer();
+  const turn = await buildReadingTurn(withWindow("win-4", r.render, { settings: tiny }));
+  expect(r.asked).toEqual([]);
+  expect(turn!.messages.some((m) => m.images?.length)).toBe(false);
+  expect(turn!.systemPrompt).not.toContain("highlight is on");
+});
+
+// The book-level thread follows the reader's scrolling, so what an earlier turn
+// of it showed cannot be reconstructed and the degraded line would be a guess.
+test("the book-level thread sends no page images", async () => {
+  const r = pageRenderer();
+  const turn = await buildReadingTurn(
+    withWindow("win-5", r.render, { annotationId: "", annotation: undefined }),
+  );
+  expect(r.asked).toEqual([]);
+  expect(turn!.messages.some((m) => m.images?.length)).toBe(false);
+});
+
+// The hard one: however long the conversation runs, one window is in context.
+test("only the turn being answered carries the pictures; older turns carry a line", async () => {
+  createThread(BOOK, "ann-1", "win-6");
+  appendMessage(BOOK, "win-6", { role: "ai", text: "a1", ts: 1 });
+  appendMessage(BOOK, "win-6", { role: "user", text: "and the arrow?", ts: 2 });
+  appendMessage(BOOK, "win-6", { role: "ai", text: "a2", ts: 3 });
+  appendMessage(BOOK, "win-6", { role: "user", text: "and the axis?", ts: 4 });
+  const r = pageRenderer();
+  const turn = await buildReadingTurn(withWindow("win-6", r.render));
+  const withImages = turn!.messages.filter((m) => m.images?.length);
+  expect(withImages).toHaveLength(1);
+  expect(withImages[0].text).toBe("and the axis?");
+  // Every earlier user turn — the kickoff included, since it was the current
+  // message when the thread opened — says what it was shown.
+  const marker = "[page images of pp.1–3 were attached here]";
+  expect(turn!.messages[0].text.endsWith(marker)).toBe(true);
+  expect(turn!.messages[2].text).toBe(`and the arrow?\n\n${marker}`);
+  // Assistant turns are left exactly as they were written.
+  expect(turn!.messages[1].text).toBe("a1");
+  expect(turn!.messages[3].text).toBe("a2");
+});
+
+// A render that fails is one image fewer, not a broken turn — and if every page
+// fails there is nothing to announce.
+test("a failing rasterizer leaves the turn without images and without the prompt line", async () => {
+  const turn = await buildReadingTurn(withWindow("win-7", async () => null));
+  expect(turn!.messages.some((m) => m.images?.length)).toBe(false);
+  expect(turn!.systemPrompt).not.toContain("highlight is on");
+});

@@ -21,6 +21,7 @@ export type ReadingReductionId =
   | "notes-overview"
   | "booklist-thin"
   | "observation-trim"
+  | "page-window"
   | "tool-result-stubs"
   | "prep-notes-trim"
   | "classroom-inline"
@@ -34,6 +35,13 @@ export const READING_LADDER: readonly Rung<ReadingReductionId>[] = [
   { id: "notes-overview" },
   { id: "booklist-thin" },
   { id: "observation-trim" },
+  // The page images around the highlight (reading/figures/page-window.ts). Last
+  // of the silent rungs and priced against the messages, because it is the one
+  // thing here big enough to be worth several of the rungs above it. It goes
+  // without a notice for the same reason they do: the figure catalog names what
+  // is on those pages and view_figure fetches any of it back, so what is lost is
+  // a look the model can ask for again rather than material it cannot reach.
+  { id: "page-window", price: "messages" },
   // tier 2: gone from the prompt, still reachable by a tool, and the stub says
   // so. Applied inside the agent loop rather than here, since this assembly has
   // no tool results yet; it stays on the ladder because its position is the
