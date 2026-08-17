@@ -17,7 +17,11 @@ const isolationHeaders = {
 // than loopback. Unset everywhere else, and `host: undefined` / `hmr: undefined`
 // are Vite's own defaults, so desktop dev is untouched. Port 1422 for the HMR
 // socket because 1421 is `vite preview`.
-const devHost = process.env.TAURI_DEV_HOST;
+// `|| undefined` rather than a bare read: Vite only special-cases undefined,
+// false and true, so an empty string reaches `listen(port, "")` and Node binds
+// the unspecified address — `TAURI_DEV_HOST=` typed to unset it would do the
+// exact opposite and put the checkout root on every interface over plain HTTP.
+const devHost = process.env.TAURI_DEV_HOST || undefined;
 
 // Tauri expects a fixed port and no clearing of the terminal.
 export default defineConfig({

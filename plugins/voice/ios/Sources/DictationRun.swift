@@ -155,11 +155,16 @@ final class DictationRun {
 
     // MARK: - Level
 
-    /// A ceiling, not a rate. The tap decides the real one: 4096 frames at the
-    /// microphone's 48 kHz is a buffer every 85 ms, so the meter updates about
-    /// eleven times a second however low this is set. Measured 9.6-10.0 Hz over
-    /// twelve holds, inside the 10-20 Hz the meter's 75 ms CSS transition wants,
-    /// so the buffer stays big and this stays a guard against a smaller one.
+    /// A ceiling, not a rate. The tap decides the real one, and it comes out at
+    /// a measured 9.6-10.0 Hz over twelve holds — inside the 10-20 Hz the
+    /// meter's 75 ms CSS transition wants, so the buffer stays big and this
+    /// stays a guard against a smaller one.
+    ///
+    /// Which buffer size produces that is not settled: the 4096 frames asked for
+    /// below would be 85 ms and 11.7 Hz, and 4800 (100 ms, exactly 10 Hz) fits
+    /// every hold length better. bufferSize is a request, not a contract, so
+    /// consume() logs the delivered frame count on the first buffer rather than
+    /// arguing from the requested one (docs/pitfall/140).
     private static let levelInterval: CFAbsoluteTime = 1.0 / 15.0
     private var lastLevelAt: CFAbsoluteTime = 0
     /// Linear RMS mapped to 0..1 across this window. VPIO's AGC moves near-voice
@@ -744,7 +749,16 @@ final class DictationRun {
     private func consume(_ buffer: AVAudioPCMBuffer) {
         if firstBufferAt == 0 {
             firstBufferAt = CFAbsoluteTimeGetCurrent()
-            NSLog("RP-DICT firstBuffer +%.0fms", (firstBufferAt - pressedAt) * 1000)
+            // The frame count is here because pitfall 140 argued from 4096 and
+            // the arithmetic did not match the measurement: 4096 at 48 kHz
+            // predicts 11.7 Hz and twelve holds read 9.6-10.0. installTap's
+            // bufferSize is a request, not a contract, and nothing had ever
+            // logged what was actually delivered.
+            NSLog(
+                "RP-DICT firstBuffer +%.0fms frames=%u rate=%.0f",
+                (firstBufferAt - pressedAt) * 1000,
+                buffer.frameLength,
+                buffer.format.sampleRate)
         }
         emitLevel(buffer)
 

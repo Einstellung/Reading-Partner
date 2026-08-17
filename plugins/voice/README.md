@@ -16,12 +16,17 @@ Commands, all invoked as `plugin:voice|<name>`:
 | `stop_dictation` | — | `{ transcript }` |
 | `cancel_dictation` | — | — |
 
-Both `start_dictation` arguments are usually absent rather than null: the invoke
+Both `start_dictation` arguments can be absent rather than null: the invoke
 payload is `JSON.stringify`d and undefined properties vanish, so a book with no
-glossary sends `{}`. Without a locale the native side walks
-`Locale.preferredLanguages` and takes the first one in
-`SpeechTranscriber.supportedLocales`, falling back to `en-US`;
-`Locale.current` is not usable for this (docs/33).
+glossary and no language chosen sends `{}`.
+
+The composer normally does pass a locale, from `settings.dictationLocale`.
+Without one the native side walks `Locale.preferredLanguages` and takes the
+first in `SpeechTranscriber.supportedLocales`, falling back to `en-US` —
+a fallback for the window before settings load, not a mode to rely on. Following
+the device is what transcribes Chinese speech as confident English
+(docs/pitfall/143), because cross-language decoding is total rather than
+degraded. `Locale.current` is not usable for any of this (docs/33).
 
 One event, subscribed with `addPluginListener('voice', 'dictation', cb)`:
 
@@ -29,7 +34,7 @@ One event, subscribed with `addPluginListener('voice', 'dictation', cb)`:
 |---|---|
 | `{ kind: "volatile", text }` | the un-finalized tail was re-guessed; it replaces the last volatile, and covers only what is beyond the last final |
 | `{ kind: "final", text }` | a stretch settled and is appended; it also clears the tail, empty text included |
-| `{ kind: "level", value }` | input level 0..1 for the meter, 15 Hz |
+| `{ kind: "level", value }` | input level 0..1 for the meter, about 10 Hz |
 
 Those three `kind` values are the whole vocabulary. The webview's reducer has no
 default branch, so a fourth kind leaves it holding `undefined` and the next

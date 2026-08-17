@@ -136,7 +136,12 @@ test("stop drops the listener even when the flush rejects", async () => {
   expect(b.unregistered()).toBe(1);
 });
 
-test("cancel unsubscribes before it invokes, so a late event reaches nobody", async () => {
+// Named for what it checks. The ordering it used to claim — unsubscribe before
+// invoke — is real in the source but unobservable here: unregister() in the real
+// Tauri client only sends remove_listener and never clears the JS Channel's
+// onmessage, so a faithful mock cannot stop delivering either, and swapping the
+// two statements leaves this test green.
+test("cancel unregisters the listener and invokes the cancel command", async () => {
   const b = bridge();
   const seen: DictationEvent[] = [];
   const source = createNativeDictation({}, b.it);

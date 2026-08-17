@@ -93,8 +93,14 @@ export interface HoldResult extends HoldState {
 // sits there saying "Finishing…" after the user is done.
 //
 // Measured on an iPhone 16 / iOS 26.6, one person hand-holding at 0.5-0.8 m in a
-// quiet room, eleven holds through this bar, timed from the pointerup to the
-// text being delivered with the IPC round trip inside it.
+// quiet room, eleven holds through this bar.
+//
+// "pointerup" is the harness's synthesised one, not a finger:
+// src/smoke/dictation-guided.ts drives this component with dispatched pointer
+// events, because a person cannot hold a button for exactly 2.5 seconds or say
+// when they let go. The interval is from that dispatch to the send/insert/hint
+// effect firing, with the IPC round trip inside it — which is the interval the
+// timer below covers, since the timer is armed in a useEffect one commit later.
 //
 // The population that matters is the eight holds where a final was still
 // arriving when the finger came up — the others had already settled and had
@@ -104,6 +110,10 @@ export interface HoldResult extends HoldState {
 //                                      p50 314, p90 351, p95 482
 //   already settled  (n=3):            314 342 396 ms
 //   native finalize alone (n=11):      76-276 ms, median 104
+//
+// Re-derivable from scripts/ios-dictation/guided-run.sh plus
+// scripts/ios-dictation/guided-analyse.py, which splits the two populations by
+// whether a final was logged after the hold's last level line.
 //
 // 1500 is a little over three times the p95. It is not p95 + 300, and the reason
 // is what firing early costs: the emission gate closes the moment stop_dictation
