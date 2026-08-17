@@ -18,6 +18,8 @@ The collector publishes the finished briefing and the text of the articles in it
 
 A phone with no desktop behind it gets an app with no briefing in it.
 
+The iPhone app needs **iOS 26 or later, on an iPhone 11 or newer**. It talks and listens on the device — hold the composer's bar and speak, and the transcript is written by the phone with nothing uploaded — and the framework behind that (`SpeechAnalyzer`) is iOS 26 API whose availability is also a hardware answer, false on smaller Neural Engines and always false in the simulator. The floor is the whole app's, not the feature's.
+
 ## Daily briefing
 
 The app opens to a Today home: one card to continue the book you were reading, one for the day's briefing. The briefing is a finite document you read top to bottom, sorted into four tiers, with a clear end.

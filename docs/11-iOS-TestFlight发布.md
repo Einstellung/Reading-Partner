@@ -59,6 +59,7 @@ Actions → iOS TestFlight → Run workflow(main 分支)。20-40 分钟。
 - Internal Testing → 加号建组(如 `internal`)。External Testing 的组同理。组只在这里建,分发脚本不建组,但会自动带上新建的组。
 - 添加测试员:内测测试员必须先是团队成员(Users and Access 里邀请);个人账号自己就是成员,直接把自己的 Apple ID 加进组。外测测试员填邮箱或用公开链接即可。
 - iPad 上装 TestFlight app,用同一 Apple ID 登录,接受邮件邀请后即可安装。
+- What to Test 里写清系统和机型下限:**iOS 26 及以上,iPhone 11 及以上**。`bundle.iOS.minimumSystemVersion` 是 26.0,低于这个版本的设备在 TestFlight 里根本装不上,不写清楚测试员只会看到"不兼容"。机型下限是因为 `SpeechTranscriber.isAvailable` 是硬件答案(神经引擎大小),不是系统版本。
 
 ## 7. 分发(每次自动)
 
