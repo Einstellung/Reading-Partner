@@ -89,7 +89,13 @@ import SettingsButton from "./ui/components/common/SettingsButton";
 import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
 import type { Annotation as PopupAnnotation, ToolType } from "./ui/components/reader/types";
 import type { PendingImage } from "./ui/components/chat/types";
-import { rehydrateMessage, type ChatPart } from "./ui/components/chat/chatParts";
+import {
+  cardRow,
+  nextCardId,
+  rehydrateMessage,
+  type CardAction,
+  type ChatPart,
+} from "./ui/components/chat/chatParts";
 import { CardRegistryProvider } from "./ui/components/CardRegistryProvider";
 import { refreshInfoCollector } from "./info/briefing/live";
 
@@ -491,6 +497,7 @@ export default function App() {
     showChat: showChatMain,
     showReading: swapToReading,
     stageImage,
+    stepDiagram,
     stop: stopTurn,
   } = useCall<CallMessage, PendingImage>({
     annsRef,
@@ -507,6 +514,19 @@ export default function App() {
     settingsRef,
     toDisplay: toDisplayMessages,
     newRow: (row) => row,
+    // The card channel the drawing tools write through (docs/40). Card parts are
+    // this layer's, so the session is handed the three operations rather than
+    // the type — the same split as newRow above.
+    cards: {
+      id: nextCardId,
+      row: (cardId, card, ts) => cardRow(cardId, card, ts),
+      write: (row, cardId, card) => ({
+        ...row,
+        parts: (row.parts ?? []).map((p) =>
+          p.type === "card" && p.id === cardId ? { ...p, card } : p,
+        ),
+      }),
+    },
     maxImages: MAX_PENDING_IMAGES,
     imageLimitHint: `You can attach up to ${MAX_PENDING_IMAGES} images.`,
     loadingImage: (id) => ({ id, status: "loading" }),
@@ -516,6 +536,19 @@ export default function App() {
         ? null
         : staged.flatMap((p) => (p.status === "ready" ? [{ data: p.data, mediaType: p.mediaType }] : [])),
   });
+
+  // What a card in the reading conversation raises. Only the diagram card raises
+  // anything today, and only its stepper: stepping is a `local` patch, and it is
+  // routed through the session rather than kept in the component so that the
+  // step the reader reached is written to the thread and survives reopening it.
+  const onCardAction = useCallback(
+    (cardId: string, action: CardAction) => {
+      if (action.kind !== "local") return;
+      const stage = action.patch.stage;
+      if (typeof stage === "number") stepDiagram(cardId, stage);
+    },
+    [stepDiagram],
+  );
 
   // Pay down whatever the observations still owe, on a timer and whenever the
   // app comes back (src/observation/distill/arrears.ts). Silent throughout: a sweep that
@@ -1300,6 +1333,7 @@ export default function App() {
             hint={imageHint}
             streaming={streaming}
             onStop={stopTurn}
+            onCardAction={onCardAction}
             voice={callVoice}
           />
         )}
@@ -1358,6 +1392,7 @@ export default function App() {
                 hint={imageHint}
                 streaming={streaming}
                 onStop={stopTurn}
+                onCardAction={onCardAction}
                 classroomOn={classroomOn}
                 onToggleClassroom={toggleClassroom}
                 classroomStatus={prepStatusLine}

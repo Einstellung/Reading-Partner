@@ -28,6 +28,8 @@ import { getFulltext, saveFulltext } from "../fulltext/store";
 import type { Fulltext } from "../fulltext/types";
 import { buildFigureCatalog } from "./figures/catalog";
 import { buildFigureTools } from "./figures/tools";
+import { buildDiagramTools, type DiagramToolDeps } from "./diagrams/tools";
+import { buildVisualAidGuidance } from "./diagrams/prompt";
 import { renderFigure, renderPageImage } from "./figures/render";
 import {
   attachPageWindow,
@@ -172,6 +174,11 @@ export interface ReadingTurnInput {
   // the figure renderer is: it needs a canvas and a loaded pdf.js, and the
   // assembly around it has to run under `bun test`.
   renderPage?: PageRenderFn;
+  // The channel draw_diagram / update_diagram write through: the caller owns the
+  // chat rows and the thread file, this assembly only mounts the tools. Absent
+  // in headless tests and on any surface with no card rows, and then the two
+  // tools are not mounted at all and the prompt does not offer them.
+  diagrams?: DiagramToolDeps;
 }
 
 // One page of the open book as an image, with the pixel size it came out at so
@@ -293,6 +300,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
       const r = await renderPageImage(bookId, buffer, pageNo, widthPx);
       return r ? { data: r.base64, mediaType: r.mimeType, width: r.width, height: r.height } : null;
     },
+    diagrams,
   } = input;
   const { topicId, topicName, fileName, pageLabel, pageIndex, files } = context;
   const materials = await gatherTopicMaterials(files, bookId, currentFulltext, annotations);
@@ -484,6 +492,14 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     }
   }
 
+  // Drawing (docs/40). Classroom mode only, and only where the caller owns chat
+  // rows to put a card in: mounting the tools is promising the reader a picture,
+  // so a surface that cannot show one must not be told it can draw. Not gated on
+  // the document having figures — the commonest use is a structure the book
+  // never drew at all.
+  const canDraw = isClassroom && !!diagrams;
+  if (canDraw && diagrams) tools = [...tools, ...buildDiagramTools(diagrams)];
+
   // Saved info articles (docs/21): in classroom mode the model can list what the
   // reader kept and put one into this book's prep list, then read it with
   // read_paper. Gated on there being something kept — a tool whose only possible
@@ -601,7 +617,15 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
         notes: dropped.has("prep-notes-trim") ? classroomNotesTight : classroomNotes,
         prep: prepState,
         toolNames,
-        figureCatalog: catalog,
+        // The classroom prompt takes the whole visual-aid ladder here, not the
+        // bare figure list: when to cite a figure and when to draw one is one
+        // judgement and is written in one place (reading/diagrams/prompt.ts).
+        figureCatalog: buildVisualAidGuidance({
+          figures: figuresIndex,
+          currentPage: page ?? currentPage ?? null,
+          omitCatalog: dropped.has("figure-catalog"),
+          canDraw,
+        }),
         hasObservations,
         inlineSurvey: !dropped.has("classroom-inline"),
       });

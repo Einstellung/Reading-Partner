@@ -159,6 +159,13 @@ export type CallAction<M extends CallRow> =
   | { type: "row-changed"; threadId: string; ts: number; change: RowChange; error?: boolean }
   // A row that is not a turn's: the reader's own message.
   | { type: "row-appended"; threadId: string; row: M }
+  // A row that belongs above the one a turn is writing: a card the model raised
+  // mid-turn, which is about the answer being written and so goes before it.
+  | { type: "row-inserted-before-last"; threadId: string; row: M }
+  // A finished row rewritten wholesale. What editing a card in place looks like
+  // from here: the reducer does not know what a card is, only that the row it
+  // sits on now reads differently.
+  | { type: "row-replaced"; threadId: string; ts: number; row: M }
   // A turn stopped before writing anything, so its row is not a row.
   | { type: "row-dropped"; threadId: string; ts: number };
 
@@ -222,6 +229,20 @@ export function callReducer<M extends CallRow>(
       };
     case "row-appended":
       return { ...state, messages: [...state.messages, action.row] };
+    case "row-inserted-before-last": {
+      const rows = [...state.messages];
+      rows.splice(Math.max(rows.length - 1, 0), 0, action.row);
+      return { ...state, messages: rows };
+    }
+    case "row-replaced": {
+      let hit = false;
+      const rows = state.messages.map((m) => {
+        if (m.ts !== action.ts || m.role !== "ai") return m;
+        hit = true;
+        return action.row;
+      });
+      return hit ? { ...state, messages: rows } : state;
+    }
     case "row-dropped":
       return {
         ...state,

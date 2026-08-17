@@ -17,6 +17,11 @@ export interface CatalogOptions {
   max?: number;
   // When the catalog is capped, keep the figures nearest this 1-based page.
   currentPage?: number | null;
+  // The line above the list. Overridden by the visual-aid block in
+  // reading/diagrams/prompt.ts, which states when to cite a figure as part of a
+  // larger rule covering drawing one too — so that judgement is written in one
+  // place and this file does not repeat half of it.
+  heading?: string;
 }
 
 // Select at most `max` figures, preferring those near `currentPage` when capping,
@@ -37,7 +42,9 @@ export function selectCatalogFigures(figures: Figure[], opts: CatalogOptions = {
 export function buildFigureCatalog(figures: Figure[], opts: CatalogOptions = {}): string {
   if (figures.length === 0) return "";
   const chosen = selectCatalogFigures(figures, opts);
-  const lines = ["Figures in this document (cite one as [fig:N] when it shows what you explain):"];
+  const lines = [
+    opts.heading ?? "Figures in this document (cite one as [fig:N] when it shows what you explain):",
+  ];
   for (const f of chosen) {
     lines.push(`- [fig:${f.id}] p.${f.page} — ${clip(f.caption, CAPTION_CHARS)}`);
   }

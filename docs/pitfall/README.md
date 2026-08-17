@@ -28,6 +28,8 @@
 | 顶栏、工具条、下拉浮层的定位 | 界面与布局 |
 | 全局样式、Tailwind layer、字体与行高 | 界面与布局 + EmbedPDF 引擎 |
 | 加测试文件、给 store 写单测 | 开发环境 |
+| 画 SVG、聊天里的图表卡 | 界面与布局 |
+| 无头截图核对渲染 | 开发环境 |
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
@@ -165,6 +167,7 @@
 - [90-leading-normal-is-not-the-inherited-line-height](./90-leading-normal-is-not-the-inherited-line-height.md) — shadcn 的文本原语自带 `leading-none`，还原原来的行高要写 `leading-normal`（1.5，preflight 给 `html` 的那个），`leading-[normal]` 是字体建议行距、少 3px
 - [91-select-item-aligned-ignores-the-safe-area-recipe](./91-select-item-aligned-ignores-the-safe-area-recipe.md) — shadcn 生成的 `SelectContent` 是 `position="item-aligned"`，不发布 `--radix-popper-available-*` 也不收 `collisionPadding`，`OVERLAY_SAFE.anchored` 和安全区那半全部静默失效；写死 `position="popper"`
 - [93-a-select-trigger-is-as-wide-as-the-chosen-value](./93-a-select-trigger-is-as-wide-as-the-chosen-value.md) — 原生 `<select>` 按最宽的 option 定宽，Radix 的 trigger 只装选中那一行，换值就跳宽；把所有选项零高 `invisible` 叠进同一个 grid 单元格占住列宽
+- [136-react-18-warns-on-every-hyphenated-svg-attribute](./136-react-18-warns-on-every-hyphenated-svg-attribute.md) — React 18 把 `stroke-width` 这类连字符 SVG 属性照写进 DOM，但每个都报一次 `Invalid DOM property`，一张图刷几十条；元素树保留真名，交给 React 前驼峰化，`aria-*`/`data-*` 除外
 - [95-button-swallows-the-ref](./95-button-swallows-the-ref.md) — shadcn 生成的是 React 19 风格的函数组件，React 18 下 `<Button ref>` 恒为 `null`，类型全绿、生产构建无警告；已全部改成 `forwardRef`，护栏是 `tests/ui/components/forward-ref-contract.test.ts`，一次 `shadcn add` 就会写回来
 - [103-anchored-overlay-paints-under-the-surface-that-opened-it](./103-anchored-overlay-paints-under-the-surface-that-opened-it.md) — 全屏设置页是 `z-[70]` 的不透明白底，锚定浮层停在生成的 `z-50`，下拉全部画在开它的页面底下；Select 开着时页面外一切 `pointer-events: none`，手指照样落在看不见的列表上，于是报成「点不动」。`elementFromPoint` 打得中而屏幕上没有 = 画的顺序不对。一条命名 z 阶梯收进 `ui/overlay.tsx` 的 `OVERLAY_Z`，锚定层排在整条阶梯之上
 - [130-an-arbitrary-font-size-brings-no-line-height](./130-an-arbitrary-font-size-brings-no-line-height.md) — `text-sm` 编出 `font-size` 加 `line-height` 两条，`text-[任意值]` 只有 `font-size`，行距悄悄退回继承值；补的那条要无单位，`leading-5` 这种 rem 值不跟着字号走
@@ -185,6 +188,7 @@
 - [120-a-registered-dom-outlives-the-file-that-registered-it](./120-a-registered-dom-outlives-the-file-that-registered-it.md) — `bun test` 全场一个进程，注册一次 DOM 之后每个文件都有 `window`，`isTauri()`/settings 退出 flush/debounced-writer/overlay 全被推到浏览器分支；窗口按文件搭按文件拆（`tests/support/dom.ts` 的 `useDom()`），拆在 `afterAll`，要趁 DOM 还在做的事放 `afterEach`；跑过一次真 DOM 全场一次性慢 0.11s，不随文件数涨
 - [121-react-dom-decides-once-whether-it-is-in-a-browser](./121-react-dom-decides-once-whether-it-is-in-a-browser.md) — react-dom 在模块求值时算一次 `canUseDOM`，晚了就永久不监听 `input`，受控 input 的 `onChange` 静默不响；bun 先求值 node_modules 再求值本地依赖，调 import 顺序没用，只能让 `useDom()` 注册完窗口再动态 import 并返回 `@testing-library/react`
 - [122-spyon-swaps-an-esm-export-and-puts-it-back](./122-spyon-swaps-an-esm-export-and-puts-it-back.md) — bun 的 ESM 命名空间可写：`spyOn(ns, "导出名")` 导入方看得见，`mockRestore()` 能还原，命名导出/默认导出/再导出链都成立；这是 119 之外替换模块导出的另一条路，还原写在 finally 里
+- [135-headless-chrome-window-size-is-not-the-viewport](./135-headless-chrome-window-size-is-not-the-viewport.md) — 无头截图核对渲染时 `--window-size` 给的是外窗，视口矮 87px、宽度还有 500px 下限，图底部被裁掉一截还容易误判成布局出界；窗口开大 + `--force-device-scale-factor=1` + 零边距包装页
 - [123-vite-serves-node-modules-over-http](./123-vite-serves-node-modules-over-http.md) — `node_modules` 在 `server.fs.allow` 默认的根下面，dev server 照样按 HTTP 发出去（还给套一层明文 sourcemap）；秘密要写在服务的树之外，`.gitignore` 和 0600 都拦不住
 - [124-fs-deny-replaces-the-defaults](./124-fs-deny-replaces-the-defaults.md) — vite 解析 `server.fs?.deny || ['.env', '.env.*', '*.{crt,pem}']`，插件从 `config()` 返回一份 deny 就把这三条默认值整个顶掉，dev server 当场 200 发出 `.env` 正文外加明文 sourcemap；要加只能在 `configResolved` 里往已解析的数组 push。凡是 `x || 默认值` 解析的 vite 字段都是提供即替换
 - [134-dropthreadcache-reloads-instead-of-dropping](./134-dropthreadcache-reloads-instead-of-dropping.md) — `dropThreadCache` 不删缓存条目，它从文件重读一遍再合进去；`beforeEach` 里调它不隔离用例，同一个 `threadId` 会继承上一个用例追加的整段历史，用例之间要换 id

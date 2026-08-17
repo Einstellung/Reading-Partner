@@ -13,6 +13,7 @@
 
 import type { FC } from "react";
 import type { InfoCard } from "../../../info/briefing/cards";
+import type { DiagramCard } from "../../../reading/diagrams/cards";
 import type { ReadingCard } from "../../../reading/rehearsal/cards";
 import type {
   PersistedCardPayload,
@@ -23,12 +24,14 @@ import type { ThreadMessage } from "./types";
 import type { ToolStatus } from "../../../ai/tool-status";
 
 // The domain payload a card renders. Payload types stay in the domain layer
-// (info/briefing/cards.ts, reading/rehearsal/cards.ts); this protocol only
-// references the union, so the dependency direction stays components -> domain
-// and never the reverse. Each domain contributes its own union member, and the
-// registry (ui/components/cardRegistry.ts, one level above chat/) is where the
-// components are gathered.
-export type CardPayload = InfoCard | ReadingCard;
+// (info/briefing/cards.ts, reading/rehearsal/cards.ts, reading/diagrams/cards.ts);
+// this protocol only references the union, so the dependency direction stays
+// components -> domain and never the reverse. Each unit contributes its own
+// member — a unit, not a whole domain: reading/diagrams contributes separately
+// from reading/rehearsal so neither has to import the other to be in the union.
+// The registry (ui/components/cardRegistry.ts, one level above chat/) is where
+// the components are gathered.
+export type CardPayload = InfoCard | ReadingCard | DiagramCard;
 export type CardKind = CardPayload["kind"];
 
 // The component table the render layer looks a card up in, by kind. The mapped
@@ -207,7 +210,12 @@ export function isPersistableCardKind(kind: CardKind): boolean {
     kind === "probe-confirm" ||
     kind === "briefing-ready" ||
     kind === "profile-update" ||
-    kind === "rehearsal-decision"
+    kind === "rehearsal-decision" ||
+    // A diagram is part of the explanation around it: reopening the thread to
+    // find prose pointing at a picture that is gone is worse than not having
+    // drawn it. Cheap to keep — what is stored is the structure the model wrote,
+    // and the picture is laid out again from it on open.
+    kind === "diagram"
   );
 }
 
