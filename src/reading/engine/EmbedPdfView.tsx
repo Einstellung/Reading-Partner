@@ -21,7 +21,12 @@ import { ScrollPluginPackage, Scroller } from "@embedpdf/plugin-scroll/react";
 import { ScrollStrategy } from "@embedpdf/plugin-scroll";
 import { RenderPluginPackage, RenderLayer } from "@embedpdf/plugin-render/react";
 import { TilingPluginPackage, TilingLayer } from "@embedpdf/plugin-tiling/react";
-import { ZoomPluginPackage, ZoomMode, ZoomGestureWrapper } from "@embedpdf/plugin-zoom/react";
+import {
+  ZoomPluginPackage,
+  ZoomMode,
+  ZoomGestureWrapper,
+  useZoomCapability,
+} from "@embedpdf/plugin-zoom/react";
 import { InteractionManagerPluginPackage, PagePointerProvider } from "@embedpdf/plugin-interaction-manager/react";
 import { SelectionPluginPackage, SelectionLayer } from "@embedpdf/plugin-selection/react";
 import { HistoryPluginPackage } from "@embedpdf/plugin-history/react";
@@ -32,6 +37,7 @@ import { SELECT_AFTER_CREATE } from "./annotation-selection";
 import { PAGE_FRAME } from "./page-frame";
 import { TouchDebugOverlay } from "./gesture/touch-debug";
 import { attachTouchRouter } from "./gesture/attach-touch";
+import { attachWheelZoom } from "./gesture/wheel-zoom";
 import { perfMark, wireEngine } from "./wire-engine";
 import type {
   AnnotationAnchor,
@@ -183,6 +189,38 @@ function TouchInputRouter({
       detach?.();
     };
   }, [documentId, ctx, vpRef]);
+  return null;
+}
+
+// Ctrl/Cmd + wheel zoom, on the same container and behind the same wait-for-it
+// as the touch router. The zoom plugin's own wheel path is off (see the
+// ZoomGestureWrapper below); the step lives in gesture/wheel-zoom.ts.
+function WheelZoomInput({ documentId }: { documentId: string }): ReactNode {
+  const vpRef = useViewportElement();
+  const { provides: zoom } = useZoomCapability();
+  useEffect(() => {
+    if (!zoom) return;
+    const scope = zoom.forDocument(documentId);
+    let raf = 0;
+    let detach: (() => void) | null = null;
+    const waitForViewport = () => {
+      const el = vpRef?.current;
+      if (el) {
+        detach = attachWheelZoom(el, {
+          currentZoom: () => scope.getState().currentZoomLevel,
+          requestZoom: (level, center) => scope.requestZoom(level, center),
+        });
+        return;
+      }
+      raf = requestAnimationFrame(waitForViewport);
+    };
+
+    waitForViewport();
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      detach?.();
+    };
+  }, [documentId, vpRef, zoom]);
   return null;
 }
 
@@ -365,15 +403,13 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
               documentId={activeDocumentId}
               style={{ height: "100%", width: "100%", backgroundColor: PAGE_FRAME.background }}
             >
-              {/* enableWheel is the ctrl/meta+wheel path only: the plugin's
-                  wheel handler returns on the first line unless one of those
-                  modifiers is down, so a bare wheel still scrolls. A trackpad
-                  pinch reaches a webview as ctrl+wheel too, so the same flag
-                  covers it. The zoom anchors on the pointer, previews with a CSS
-                  transform and commits 150ms after the last notch; one mouse
-                  notch is a whole doubling and there is no knob for it
-                  (docs/pitfall/137). enablePinch (touch) stays on by default. */}
-              <ZoomGestureWrapper documentId={activeDocumentId} enableWheel>
+              {/* enableWheel is the ctrl/meta+wheel path only (a bare wheel
+                  returns on that handler's first line and scrolls as always),
+                  and its step is a whole doubling per mouse notch with no knob
+                  for it — so that path stays off and WheelZoomInput above owns
+                  it instead (docs/pitfall/137). enablePinch, the touch path,
+                  stays on: the two never see the same event. */}
+              <ZoomGestureWrapper documentId={activeDocumentId} enableWheel={false}>
               <Scroller
                 documentId={activeDocumentId}
                 renderPage={({ pageIndex, width, height }) => (
@@ -418,6 +454,7 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
               />
               </ZoomGestureWrapper>
               <TouchInputRouter documentId={activeDocumentId} ctx={pagedRef} />
+              <WheelZoomInput documentId={activeDocumentId} />
               <TouchDebugOverlay />
             </Viewport>
           )

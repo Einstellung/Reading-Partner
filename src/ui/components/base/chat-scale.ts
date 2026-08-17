@@ -4,6 +4,8 @@
 // The value reaches the components as `--chat-scale`, so nothing in a message
 // row imports any of this and an unwrapped surface is 1x with no branch.
 
+import { wheelDeltaPixels } from '../../../platform/app/wheel';
+
 export const CHAT_SCALE_MIN = 0.9;
 export const CHAT_SCALE_MAX = 1.8;
 export const CHAT_SCALE_STEP = 0.1;
@@ -13,20 +15,6 @@ export const CHAT_SCALE_DEFAULT = 1;
 // in fractional deltas dozens of events long — a step per event would cross the
 // whole range in a flick.
 const WHEEL_NOTCH = 40;
-
-// What one unit of the two non-pixel wheel modes is worth. A line-mode engine
-// reports about 3 per notch, so unconverted the first step would be a dozen
-// turns of the wheel away. A page is a viewport, which a file holding no DOM
-// cannot measure; about a screen is close enough on any screen.
-const LINE_PX = 16;
-const PAGE_PX = 800;
-
-// A wheel delta in pixels, whatever unit the event came in (deltaMode 0, 1, 2).
-export function wheelDeltaPixels(deltaY: number, deltaMode: number): number {
-	if (deltaMode === 1) return deltaY * LINE_PX;
-	if (deltaMode === 2) return deltaY * PAGE_PX;
-	return deltaY;
-}
 
 // Snap to the grid and drop the float noise: 0.9 + 0.1 is 0.9999999999999999,
 // which would never compare equal to the default it just landed on.

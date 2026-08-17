@@ -13,7 +13,6 @@ import {
   clampChatScale,
   shiftChatScale,
   stepChatScale,
-  wheelDeltaPixels,
 } from "../../../src/ui/components/base/chat-scale";
 
 test("a value out of range is pulled to the nearest end", () => {
@@ -122,9 +121,4 @@ test("one notch of a line-mode wheel is worth a step", () => {
   // fourteenth of a step, and the wheel would feel dead.
   expect(accumulateWheel(0, -3, 1).steps).toBe(1);
   expect(accumulateWheel(0, -3, 0).steps).toBe(0);
-});
-
-test("an unknown mode is read as pixels", () => {
-  expect(wheelDeltaPixels(-40, 0)).toBe(-40);
-  expect(wheelDeltaPixels(-40, 7)).toBe(-40);
 });
