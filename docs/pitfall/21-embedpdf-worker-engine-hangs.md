@@ -19,4 +19,8 @@ new URL("/pdfium/pdfium.wasm", location.href).href
 
 顺带：worker 引擎实际起 3 个 blob module worker——PDFium 一个，`ImageEncoderWorkerPool` 默认 `encoderPoolSize ?? 2` 两个。
 
-实测覆盖：Chromium 和真 WebKit（Playwright webkit-2336，Linux 上就是 WebKitGTK）都验过，跨源隔离关掉、`SharedArrayBuffer` 不存在时 worker 引擎照样开 14 页——SAB 和这件事无关。Tauri 打包后的自定义协议（iOS/macOS/Linux 都是 `tauri://localhost`）下 worker 里的 fetch 能不能到 WKURLSchemeHandler，见坑 33 和 `src/smoke/smoke.ts` 记的 `engineMode`。
+实测覆盖：
+
+- Chromium 和真 WebKit（Playwright webkit-2336，Linux 上就是 WebKitGTK）都验过：跨源隔离关掉、`SharedArrayBuffer` 不存在时 worker 引擎照样开 14 页。
+- Tauri 打包（`tauri build --debug --no-bundle`）后在 macOS WKWebView 上跑 `VITE_SMOKE=1` 的冒烟：`location.origin` 是 `tauri://localhost`（不是 `"null"`），拼出的 `tauri://localhost/pdfium/pdfium.wasm` 被 blob worker 里的 fetch 取到了，`engineMode: "worker"`，`crossOriginIsolated: false`，渲染出 18240 非白像素。自定义协议下 worker 的 fetch 能到 WKURLSchemeHandler、CSP 的 `connect-src 'self'` 也匹配，这两条在 macOS 上是实测结论。
+- iOS 真机/模拟器没验。iOS 和 macOS 共用 WKWebView 和同一份 Tauri 协议实现，但内存压力下 worker 被回收之类的差异只有真机能答；`.github/workflows/ios-simulator-smoke.yml` 的冒烟结果里有 `engineMode`，看那一栏。

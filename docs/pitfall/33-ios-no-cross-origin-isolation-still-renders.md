@@ -6,10 +6,10 @@
 
 结论：
 
-- iOS 继续用直连引擎（`engine-singleton` 已是 `createPdfiumEngine`，worker:false 等价），不要在 iOS 试 worker 引擎。
+- 渲染不依赖 SAB。（当时写的是"iOS 继续用直连引擎，不要试 worker 引擎"，已推翻：worker 引擎同样不需要 SAB，见坑 21。在 macOS WKWebView 的 `tauri://localhost` 下实测 `engineMode: "worker"`、`crossOriginIsolated: false`、渲染 18240 非白像素。iOS 真机未验，`engine-singleton.ts` 起不来就退回主线程。）
 - 不必为 iOS 折腾让 COOP/COEP 生效，渲染不需要。但 COEP=require-corp 仍会拦跨源子资源，坑 30 的外链图 http 路由内联在 iOS 同样需要（本冒烟未覆盖，iPad 适配时验证）。
 - 闸门可以在模拟器上无签名验证，不需要第一个 TestFlight 包——推翻 docs/11 的旧结论。链路见 `.github/workflows/ios-simulator-smoke.yml` 和 `src/smoke/`。
 
-遗留风险：若将来升级 `@embedpdf` 且新版直连引擎硬依赖 SAB，iOS 会退回坑 18 的静默挂起；冒烟的 `failLayer` 会标 `document-open` 或 `no-cross-origin-isolation`，据此定位。`minimumSystemVersion` 现为 16.0，WebKit 的 SAB 要 16.4，但既然 iOS 根本没启用隔离、渲染也不靠它，此处不阻塞；将来若要多线程 SAB，得同时解决自定义协议隔离 + 抬到 16.4。
+2.14.4 的 pdfium.wasm 根本不是 pthread 构建（二进制里没有 memory import、没有 pthread 字符串），所以"没 SAB 就退化成单线程"这句话也不准确——它本来就只有单线程。SAB 与这条链路无关。冒烟结果里的 `engineMode` 记的是实际跑起来的引擎。
 
 验证手法（simctl 链路，供复现）：`tauri ios build --target aarch64-sim --no-sign` 出 `.app`（非 ipa、跳签名，需 Apple Silicon runner）→ `simctl list devices available -j` 选现成 iPad → `bootstatus -b` → install/launch → 结果 JSON 写在 app 数据容器。`BaseDirectory.AppData` 在 iOS 的具体落点不确定，CI 按唯一文件名 `find` 而不是硬编码路径。
