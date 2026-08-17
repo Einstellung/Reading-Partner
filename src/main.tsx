@@ -43,6 +43,10 @@ if (import.meta.env.VITE_SMOKE === "1") {
   void import("./smoke/smoke").then(({ runSmoke }) => runSmoke());
 } else if (import.meta.env.VITE_SMOKE === "dictation") {
   void import("./smoke/dictation").then(({ runDictationSmoke }) => runDictationSmoke());
+} else if (import.meta.env.VITE_SMOKE === "dictation-long") {
+  // The rehearsal feature's gate: twenty minutes of continuous recognition,
+  // which is four times the dictation backstop and a span nothing has run for.
+  void import("./smoke/dictation-long").then(({ runLongDictation }) => runLongDictation());
 } else if (import.meta.env.VITE_SMOKE === "dictation-guided") {
   // The half of the dictation measurements that needs a person in front of the
   // phone: a level curve and a flush latency are both about a human voice, and
