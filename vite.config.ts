@@ -4,9 +4,10 @@ import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath } from "node:url";
 import { simBridge } from "./scripts/sim-bridge";
 
-// The PDFium wasm is a pthread build: it needs SharedArrayBuffer, which the
-// browser grants only to a cross-origin-isolated page (pitfall 18). Production
-// gets the same headers from tauri.conf.json (app.security.headers).
+// Cross-origin isolation, kept but not for the reason it was added. The wasm was
+// believed to be a pthread build needing SharedArrayBuffer; it is not, and the
+// reader runs with crossOriginIsolated false in the packaged app (pitfall 18).
+// Production gets the same headers from tauri.conf.json (app.security.headers).
 const isolationHeaders = {
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Embedder-Policy": "require-corp",

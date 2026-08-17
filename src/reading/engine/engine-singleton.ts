@@ -20,9 +20,10 @@
 // a custom scheme the origin can serialise to "null", and href is a usable base
 // either way.
 //
-// fontFallback:null keeps it offline (no CDN fonts). encoderPoolSize was
-// measured to not move first paint — raster, not encode, is the cost — so it is
-// left at the default.
+// fontFallback:null keeps it offline (no CDN fonts). encoderPoolSize is left at
+// the default: the measurement that once said it does not move first paint was
+// taken on the direct engine, which never reads the option at all
+// (docs/pitfall/139), so it says nothing about the worker engine that does.
 
 import type { PdfEngine } from "@embedpdf/models";
 import { probePdfBytes, startEngine, type EngineMode } from "./engine-start";
