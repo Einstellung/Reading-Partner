@@ -156,3 +156,28 @@ test("a failed start drops the listener rather than leaking one per press", asyn
   await expect(source.start(() => {})).rejects.toThrow("Microphone access is off.");
   expect(b.unregistered()).toBe(1);
 });
+
+// The dictation language is a setting rather than the device's own language, and
+// the whole value of that decision is that the string reaches the plugin. It
+// crosses four hands to get there — settings.json, a hook in chat.tsx, a prop on
+// HoldToTalk, then DictationOptions — and nothing else checks the last one.
+test("the chosen locale is what the start command carries", async () => {
+  const b = bridge();
+  const source = createNativeDictation({ locale: "zh-CN" }, b.it);
+  await source.start(() => {});
+
+  expect((b.calls[0].args as Record<string, unknown>).locale).toBe("zh-CN");
+});
+
+// Absent, not null. A phone told nothing follows its own preferred language,
+// which is the behaviour the setting exists to override — but it is still the
+// right fallback for the window before settings load.
+test("no locale means the key is absent rather than null", async () => {
+  const b = bridge();
+  const source = createNativeDictation({ contextualStrings: ["Transformer"] }, b.it);
+  await source.start(() => {});
+
+  const args = b.calls[0].args as Record<string, unknown>;
+  expect("locale" in args && args.locale !== undefined).toBe(false);
+  expect(JSON.stringify(args)).toBe('{"contextualStrings":["Transformer"]}');
+});

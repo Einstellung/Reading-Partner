@@ -13,6 +13,8 @@ import { CARD } from "./cardStyles";
 import IllustrationsCard from "./IllustrationsCard";
 import { SETTINGS_PANEL, SettingsSection } from "./SettingsSection";
 import VoiceInputCard from "./VoiceInputCard";
+import DictationLanguageCard from "./DictationLanguageCard";
+import { hasOnDeviceDictation } from "../../../platform/app/platform";
 
 export default function OptionalPanel({
   settings,
@@ -53,7 +55,15 @@ export default function OptionalPanel({
         </SettingsSection>
 
         <SettingsSection title="Voice input">
-          <VoiceInputCard settings={settings} onSettingsChange={onSettingsChange} />
+          {/* One card per voice path, and only the one this machine has. They are
+              deliberately separate features (platform.ts): the desktop records a
+              WAV and ships it to an STT host, the phone transcribes on device
+              with no key at all, and neither is a fallback for the other. */}
+          {hasOnDeviceDictation() ? (
+            <DictationLanguageCard settings={settings} onSettingsChange={onSettingsChange} />
+          ) : (
+            <VoiceInputCard settings={settings} onSettingsChange={onSettingsChange} />
+          )}
         </SettingsSection>
 
         <SettingsSection title="Illustrations">

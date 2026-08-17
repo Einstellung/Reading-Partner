@@ -62,6 +62,29 @@ export const AI_LANGUAGE_OPTIONS: { value: AiLanguage; label: string }[] = [
   })),
 ];
 
+// Which language the phone listens for when dictating on device (docs/15).
+//
+// BCP-47 as SpeechTranscriber spells it, because the value is passed straight to
+// the plugin and matched against `SpeechTranscriber.supportedLocales` — the only
+// test that means anything there (docs/33).
+//
+// There is no "auto". Following the device's own language is what produced
+// eleven holds of Chinese speech transcribed by the en-US model on 2026-08-17
+// ("注意力机制取代了循环结构" came back as "2 E D, teacher, Chidalo, Shun."), because
+// this reader's phone is en-US and they talk to the AI in Chinese. Getting it
+// wrong is not a degraded transcript, it is a confident wrong one.
+export type DictationLocale = "zh-CN" | "en-US";
+
+// Two entries, hardcoded, and it should be more. The device really supports
+// thirty (docs/33) and the honest list is `SpeechTranscriber.supportedLocales`,
+// but reading it from the webview needs a command the plugin does not have, and
+// adding one to widen a dropdown was not worth the surface. These two are the
+// ones this reader uses; widen it when the list can be asked for.
+export const DICTATION_LOCALE_OPTIONS: { value: DictationLocale; label: string }[] = [
+  { value: "zh-CN", label: "简体中文" },
+  { value: "en-US", label: "English (US)" },
+];
+
 // One sentence appended to a system prompt to pin user-facing output to the
 // chosen language. Empty for "auto" (no instruction — the surface keeps its own
 // default, usually mirroring the user's language).
@@ -100,6 +123,15 @@ export interface Settings {
   // SenseVoice defaults (see src/ai/voice/config.ts).
   sttApiBase: string | null;
   sttModel: string | null;
+  // Which language the phone's on-device dictation listens for (docs/15). A
+  // setting rather than the device's own language, because cross-language
+  // decoding is total rather than degraded (docs/33): a Chinese sentence spoken
+  // into the en-US model comes back as plausible English words, not as bad
+  // Chinese, and this reader's phone is en-US while they talk to the AI in
+  // Chinese. Defaults to zh-CN for that reason. Desktop ignores it — that path
+  // records a WAV and ships it to an STT host, which detects the language
+  // itself.
+  dictationLocale: DictationLocale;
   // Generate chapter notes automatically from the reader's highlights (docs/14).
   // The manual "Generate notes" button and per-chapter Regenerate work regardless.
   autoNotes: boolean;
@@ -126,6 +158,7 @@ export const DEFAULT_SETTINGS: Settings = {
   illustrationModel: null,
   sttApiBase: null,
   sttModel: null,
+  dictationLocale: "zh-CN",
   autoNotes: true,
   aiLanguage: "auto",
 };

@@ -126,6 +126,7 @@
 - [139-volatile-results-arrive-in-bursts](./139-volatile-results-arrive-in-bursts.md) — 开了 `fastResults` 之后 volatile 成串到达，同一毫秒六条、每条比上一条多几个字符，每条都是一次 IPC 加一次整棵重渲染；按住说话本来就不显示实时文字，所以累加器全收、往外发的节流到 10Hz，final 不许节流。顺带实测：volatile 只覆盖未定稿的尾巴，不是累计整句
 - [140-the-tap-buffer-decides-the-level-rate](./140-the-tap-buffer-decides-the-level-rate.md) — 电平事件按 15Hz 节流，实测 9.6-10.0Hz：真正定频率的是 `installTap` 的 `bufferSize`（4096 帧 / 48kHz = 85ms），节流阈值比到达间隔还短，一次都没生效。要改频率去改 bufferSize
 - [141-a-locked-screen-takes-the-microphone-without-an-interruption](./141-a-locked-screen-takes-the-microphone-without-an-interruption.md) — 自动锁屏把 app 切后台，输入路由变成 `in=[]`，麦克风再无一个 buffer，但 `interruptionNotification` 一条都不来、`isRunning` 还是 true；真手指按着屏幕不会锁，只有合成 pointer 事件的无人值守脚本会撞上
+- [143-the-wrong-dictation-locale-invents-rather-than-degrades](./143-the-wrong-dictation-locale-invents-rather-than-degrades.md) — 送错语种的模型不会「识别得差一点」，会按音节猜出一串语法通顺的目标语言词：中文「注意力机制取代了循环结构」按 en-US 出来是 `2 E D, teacher, Chidalo, Shun.`，十五秒的长句只剩一串逗号。看起来像正常输出，所以比空转写更难发现。不跟随设备语言，做成设置项（`settings.dictationLocale`，默认 zh-CN）
 
 ## WebKit / webview
 

@@ -22,7 +22,7 @@ import { messageToParts, type CardActionHandler, type CardSurface } from './chat
 import { useCardRegistry } from './cardRegistryContext';
 import type { CleanupModel } from '../../../ai/voice';
 import type { ProviderId } from '../../../ai/providers';
-import { loadSettings, toReasoning } from '../../../platform/app/settings';
+import { loadSettings, toReasoning, type DictationLocale } from '../../../platform/app/settings';
 import { hasNativeRecorder, hasOnDeviceDictation } from '../../../platform/app/platform';
 
 // Optional enrichment for the composer's built-in voice input. The mic is on by
@@ -57,6 +57,25 @@ export function resolveComposerDictation(
 ): { glossary: string } | null {
 	if (voice === false || !hasDictation) return null;
 	return { glossary: voice?.glossary ?? '' };
+}
+
+// Which language the phone listens for, from settings (docs/15). Undefined until
+// settings load; a hold that begins in that window falls back to the device's
+// own preferred language for that one hold rather than blocking the press.
+function useDictationLocale(): DictationLocale | undefined {
+	const [locale, setLocale] = useState<DictationLocale | undefined>(undefined);
+	useEffect(() => {
+		let alive = true;
+		loadSettings()
+			.then((s) => {
+				if (alive) setLocale(s.dictationLocale);
+			})
+			.catch(() => {});
+		return () => {
+			alive = false;
+		};
+	}, []);
+	return locale;
 }
 
 // The cleanup model the composer's voice input runs on, derived from settings so
@@ -477,6 +496,7 @@ export function Composer({
 	// first: the mode is a place the user goes, not one they land in.
 	const [voiceMode, setVoiceMode] = useState(false);
 	const cleanupModel = useDefaultCleanupModel();
+	const dictationLocale = useDictationLocale();
 
 	// Drop a cleaned voice transcript into the composer for review (never
 	// auto-sent), appended after any text the user already typed.
@@ -587,6 +607,7 @@ export function Composer({
 							onInsert={editVoiceText}
 							onHint={setVoiceHint}
 							glossary={dictation.glossary}
+							locale={dictationLocale}
 							disabled={streaming}
 						/>
 					) : (

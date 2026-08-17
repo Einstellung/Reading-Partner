@@ -70,6 +70,7 @@ test("loadSettings round-trips a fully persisted object", async () => {
     illustrationModel: "m",
     sttApiBase: "https://stt.test",
     sttModel: "sense",
+    dictationLocale: "en-US",
     autoNotes: false,
     aiLanguage: "zh-CN",
   };

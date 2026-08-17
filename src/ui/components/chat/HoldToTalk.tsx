@@ -26,12 +26,14 @@ import {
 	type Zone,
 } from '../../../ai/voice';
 import { METER_BARS, RELEASE_LABEL, barHeights, zoneAt, type Box } from './hold-zones';
+import type { DictationLocale } from '../../../platform/app/settings';
 
 export function HoldToTalk({
 	onSend,
 	onInsert,
 	onHint,
 	glossary,
+	locale,
 	disabled = false,
 }: {
 	// Send the finished transcript as a message, with no review step.
@@ -42,6 +44,12 @@ export function HoldToTalk({
 	onHint(message: string | null): void;
 	// Proper names to bias recognition towards (book title, outline).
 	glossary?: string;
+	// Which language to listen for. Absent lets the phone follow its own
+	// preferred language, which is only right when the two agree — the reader
+	// this was built for has an en-US phone and speaks Chinese to the AI, and
+	// docs/33 measured that the wrong model does not degrade, it invents
+	// (docs/pitfall/143).
+	locale?: DictationLocale;
 	disabled?: boolean;
 }) {
 	const [state, setState] = useState<HoldState>(INITIAL_HOLD_STATE);
@@ -90,6 +98,7 @@ export function HoldToTalk({
 
 	async function begin() {
 		const source = nativeDictation({
+			locale,
 			contextualStrings: glossary ? glossary.split('\n').filter(Boolean) : undefined,
 		});
 		if (!source) {
