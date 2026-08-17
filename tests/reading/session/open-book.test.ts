@@ -172,6 +172,15 @@ test("a book that never chose a layout opens scrolling", () => {
   ).toBe("paged");
 });
 
+test("a book that was never opened is mounted with no scale, so it opens at page width", () => {
+  // The reader restores a numeric scale and leaves anything else to the layout's
+  // fit (engine/layout-modes.openingZoom). A number here would be a measurement
+  // of a window nobody ever opened this book in, and the book would open at it.
+  expect(typeof openingViewState(null).scale).not.toBe("number");
+  // A saved scale is the reader's own and carries across untouched.
+  expect(openingViewState({ pageIndex: 4, scale: 2.328, scrollMode: 0 } as ViewState).scale).toBe(2.328);
+});
+
 test("the position the reader will move from is seeded before the pane is mounted", async () => {
   const log: Call[] = [];
   const state = { pageIndex: 12, scale: "auto", scrollMode: 0, layout: "paged" } as ViewState;

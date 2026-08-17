@@ -30,7 +30,13 @@ import {
 } from "./convert";
 import { selectionChanged } from "./annotation-selection";
 import { pageCenterAlign } from "./gesture/paged-gesture";
-import { LAYOUT_SETTINGS, readingPosition, type VisiblePage, type ZoomLock } from "./layout-modes";
+import {
+  LAYOUT_SETTINGS,
+  openingZoom,
+  readingPosition,
+  type VisiblePage,
+  type ZoomLock,
+} from "./layout-modes";
 import {
   centeredScrollX,
   geometrySettled,
@@ -795,6 +801,12 @@ export async function wireEngine(
     refreshViewportMetrics();
     importAll(propsRef.current.annotations ?? []);
     const iv = propsRef.current.initialViewState;
+    // The scale, before either branch places a page: whatever it ends up being
+    // is what the placement below is measured against. Null is the answer for a
+    // book with nothing saved and for paged either way, and it means the plugin
+    // keeps the fit it was registered with (layout-modes.openingZoom).
+    const restoreZoom = iv ? openingZoom(layout, iv.zoom) : null;
+    if (restoreZoom !== null) zoomScope.requestZoom(restoreZoom);
     if (iv && layout === "paged") {
       // Of a saved state, paged mode restores the page and nothing else. The
       // scale and the in-page offset are one window's presentation of it — the
@@ -819,15 +831,20 @@ export async function wireEngine(
       const target = Math.min(Math.max(iv.pageIndex + 1, 1), scrollScope.getTotalPages() || 1);
       settleLayout("paged", target, "instant", true);
     } else if (iv) {
-      zoomScope.requestZoom(iv.zoom);
       // Restore the exact in-page position when the saved state carries one
       // (unscaled page coordinates; the plugin scales them at scroll time).
       // scrollToPage adds the viewport gap on top of the target point, while the
       // captured pageX/pageY (visibility metrics) measure the actual visible
       // offset — subtract the gap (unscaled) so the round trip is exact.
+      //
+      // The scale that converts the gap is the one in force, read back after the
+      // request above rather than taken from the saved state: with nothing to
+      // restore there is no saved number to divide by, and the fit the plugin
+      // resolved is the scale the offset will actually be applied at.
       let pageCoordinates: { x: number; y: number } | undefined;
       if (typeof iv.pageY === "number") {
-        const gap = cap<ViewportCapability>(registry, "viewport").getViewportGap() / iv.zoom;
+        const scale = zoomScope.getState().currentZoomLevel || 1;
+        const gap = cap<ViewportCapability>(registry, "viewport").getViewportGap() / scale;
         pageCoordinates = {
           x: Math.max(0, (iv.pageX ?? 0) - gap),
           y: Math.max(0, iv.pageY - gap),

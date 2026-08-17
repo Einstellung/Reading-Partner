@@ -60,6 +60,7 @@
 - [101-page-coordinates-are-a-scroll-offset-on-both-axes](./101-page-coordinates-are-a-scroll-offset-on-both-axes.md) — `scrollToPage` 的 `pageCoordinates.x` 会原样加进水平滚动位置，`alignX` 不传就没人减回去；跳到标注时页面被拉走"标注离页左边缘多远"那么多（实测 60px），左边距的标注偏一点、右半页的标注偏半屏。跳到页内某点一律显式补 `alignX`：页面放得下就居中页面（`x` 传 0），放大到超出视口就居中标注（`x` 传标注 x、`alignX` 传 50）
 - [102-render-quality-option-is-read-under-another-name](./102-render-quality-option-is-read-under-another-name.md) — `renderPage` 的 `imageQuality` 调 0.01 和 1.0 出来一样大：编码器读的是 `options.quality`（类型里没有这个字段），质量永远落在 canvas 默认；两个名字都传
 - [105-markup-is-drawn-from-strokecolor-and-tool-opacity](./105-markup-is-drawn-from-strokecolor-and-tool-opacity.md) — 高亮/下划线渲染读的是 `strokeColor`（`color` 是 deprecated 别名），只写 `color` 就画成兜底黄；不透明度又分两处（导入写死 0.4、创建取工具默认值 1），于是刚划的那一下深、重开变浅，两次都不是选的那个颜色。颜色两个字段一起写，不透明度收成一个数、注册期用 `tools` 覆盖工具默认值
+- [150-restoring-a-scale-nobody-saved-overrides-fit-width](./150-restoring-a-scale-nobody-saved-overrides-fit-width.md) — 没开过的书也带着一个合成的 viewState 进来，`scale: "auto"` 这个哨兵在壳里被折成数字 1，`requestZoom(1)` 当场作废注册时的 `FitWidth`，第一次开书停在 100%、改窗口也不再重新适配；"没存过的缩放"要一路保持"没有"，还原判据收进纯函数 `openingZoom`
 
 ## 触摸与手势
 
