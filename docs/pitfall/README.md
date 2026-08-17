@@ -38,7 +38,7 @@
 - [18-embedpdf-load-hangs-progress-zero](./18-embedpdf-load-hangs-progress-zero.md) — 文档加载静默卡 progress 0，需跨源隔离头 + 直连引擎（worker:false）
 - [19-embedpdf-initialdocuments-hang](./19-embedpdf-initialdocuments-hang.md) — initialDocuments 卡 loading，改成 init 后显式 openDocumentBuffer
 - [20-embedpdf-renderlayer-eats-pointer](./20-embedpdf-renderlayer-eats-pointer.md) — RenderLayer 的 img 吃指针事件，划词失效，需 pointerEvents:none
-- [21-embedpdf-worker-engine-hangs](./21-embedpdf-worker-engine-hangs.md) — worker 引擎 openDocument 永久挂起（blob worker 里解析不了 pthread 辅助 worker），走直连引擎 + tiling
+- [21-embedpdf-worker-engine-hangs](./21-embedpdf-worker-engine-hangs.md) — worker 引擎拿根相对 wasmUrl 会永久挂起（blob: 基址解不了根相对路径，错误 post 成主线程不认的消息类型），wasmUrl 要用 `location.href` 拼绝对地址；旧文档归因到 pthread 辅助 worker，是错的
 - [22-embedpdf-scrolltopage-viewport-gap](./22-embedpdf-scrolltopage-viewport-gap.md) — scrollToPage 的 pageCoordinates 多加 viewport gap，页内位置还原要减掉
 - [23-embedpdf-current-page-metrics-zero](./23-embedpdf-current-page-metrics-zero.md) — "当前页"的可见区 origin 常是 0，持久化锚点要用最顶上的可见页
 - [27-embedpdf-searchinpage-not-on-engine](./27-embedpdf-searchinpage-not-on-engine.md) — searchInPage 在 IPdfiumExecutor 不在 PdfEngine，定点搜索改用 searchAllPages 按页过滤

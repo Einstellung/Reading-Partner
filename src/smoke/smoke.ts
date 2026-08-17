@@ -4,11 +4,11 @@
 // normal build — the dynamic import in main.tsx is guarded by the env flag, so
 // this whole module is a separate chunk that a non-smoke build never loads.
 //
-// It answers one question: can EmbedPDF's pthread PDFium WASM (SharedArrayBuffer
-// + cross-origin isolation, served over WKWebView's custom scheme on iOS) load
-// and rasterize a page? It runs the exact production engine path
-// (getPdfiumEngine, the shared direct engine), opens a tiny embedded PDF, renders
-// page 1, and counts non-white pixels. The machine-readable verdict is written to
+// It answers one question: can EmbedPDF's PDFium WASM, served over WKWebView's
+// custom scheme on iOS, load and rasterize a page? It runs the exact production
+// engine path (getPdfiumEngine — the shared engine, in a worker or on the main
+// thread depending on what that platform allows), opens a tiny embedded PDF,
+// renders page 1, and counts non-white pixels. The verdict is written to
 // a JSON file under the app data dir (the CI reads it back with simctl
 // get_app_container); the on-screen status is only a human witness for the
 // screenshot artifact.
@@ -16,7 +16,7 @@
 import { mkdir, BaseDirectory } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../platform/app/atomic-fs";
 import type { PdfEngine } from "@embedpdf/models";
-import { getPdfiumEngine } from "../reading/engine/engine-singleton";
+import { getPdfiumEngine, pdfiumEngineMode } from "../reading/engine/engine-singleton";
 import { SMOKE_PDF_BASE64, decodeBase64 } from "./smoke-pdf";
 
 // Where the verdict is written, relative to the app data dir. The CI does not
@@ -42,6 +42,17 @@ export interface SmokeResult {
   crossOriginIsolated: boolean;
   hasSharedArrayBuffer: boolean;
   userAgent: string;
+  // Where the page is served from, and the absolute wasm URL derived from it.
+  // Packaged builds use a custom scheme (tauri://localhost), and the worker
+  // engine can only fetch the wasm through an absolute URL built from this —
+  // so if the engine came up on the main thread, these say whether the address
+  // was the reason.
+  origin: string;
+  wasmUrl: string;
+  // Which engine answered: "worker" or "main-thread" (engine-singleton.ts falls
+  // back when the worker cannot start). A pass on the main thread is still a
+  // pass — the reader works — but it is a slower one, so it is recorded.
+  engineMode: string | null;
   // Timings (ms), filled as each stage completes.
   engineReadyMs: number | null;
   openMs: number | null;
@@ -132,6 +143,9 @@ export async function runSmoke(): Promise<void> {
     crossOriginIsolated: self.crossOriginIsolated === true,
     hasSharedArrayBuffer: typeof SharedArrayBuffer !== "undefined",
     userAgent: navigator.userAgent,
+    origin: location.origin,
+    wasmUrl: new URL("/pdfium/pdfium.wasm", location.href).href,
+    engineMode: null,
     engineReadyMs: null,
     openMs: null,
     renderMs: null,
@@ -163,6 +177,7 @@ export async function runSmoke(): Promise<void> {
       throw e;
     }
     result.engineReadyMs = Math.round(performance.now() - t0);
+    result.engineMode = pdfiumEngineMode();
     result.stage = "engine-ready";
 
     result.stage = "open";
