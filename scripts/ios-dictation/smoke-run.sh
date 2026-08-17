@@ -37,6 +37,28 @@ sudo -A launchctl asuser "$GUI_UID" sudo -u "$GUI_USER" \
 IPA=$(find src-tauri/gen/apple/build -name '*.ipa' -type f | head -1)
 echo "ipa: $IPA"
 
+step "kill any stale instance"
+# `devicectl device install app` does NOT stop a running instance, and a smoke
+# that has finished still has its result page on screen. Without this, a re-run
+# relaunches an app that is already up and you cannot tell a fresh run from the
+# last one's leftovers.
+#
+# The two-instance state pitfall 138 describes is reachable from here in theory
+# — the losing instance's configureSession() throws "The microphone is in use by
+# something else" — but it has never been observed in the wild. A sighting of
+# two pids on 2026-08-17 turned out to be the normal transient during install.
+# This guard is here for determinism, not for that.
+for pid in $(xcrun devicectl device info processes --device "$DEVICE" 2>/dev/null \
+             | grep "Reading Partner.app" | awk '{print $1}'); do
+  echo "terminating stale pid $pid"
+  xcrun devicectl device process signal --device "$DEVICE" --pid "$pid" --signal SIGKILL >/dev/null 2>&1 || true
+done
+sleep 2
+if xcrun devicectl device info processes --device "$DEVICE" 2>/dev/null | grep -q "Reading Partner.app"; then
+  echo "REFUSING TO INSTALL: an instance is still running"
+  exit 1
+fi
+
 step "install"
 xcrun devicectl device install app --device "$DEVICE" "$IPA" 2>&1 | tail -3
 

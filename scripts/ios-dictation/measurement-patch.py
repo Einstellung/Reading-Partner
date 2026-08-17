@@ -11,6 +11,12 @@ is: in the working tree of the Mac's clone only, reverted when the run is done.
      the number of settled stretches and the accumulator's size. Resident memory
      and thermal state are only readable from inside the process, and a shipping
      build has no business sampling either.
+  3. The recognised text back into the per-result console line. The committed
+     code logs a character count, because the plist promises the user their
+     speech never leaves the phone and a sysdiagnose is an upload. The harness
+     needs the words to check punctuation, CJK seams and volatile scoping, so it
+     puts them back here rather than behind a flag in the source — a flag would
+     be one `#if` away from shipping.
 
 Usage:  measurement-patch.py apply|revert [repo]
 Verify: `git status --short` in the Mac clone should show exactly
@@ -79,6 +85,16 @@ TELEMETRY_CANCEL_ON = """        backstopTask?.cancel()
         telemetryTask = nil
 """
 
+TEXTLOG_OFF = """        NSLog(
+            "RP-DICT %@ %.0fms %d chars",
+            result.isFinal ? "final" : "volatile",
+            (CFAbsoluteTimeGetCurrent() - startedAt) * 1000, text.count)"""
+
+TEXTLOG_ON = """        NSLog(  // MEASUREMENT BUILD — logs the user's speech, never commit
+            "RP-DICT %@ %.0fms %@",
+            result.isFinal ? "final" : "volatile",
+            (CFAbsoluteTimeGetCurrent() - startedAt) * 1000, text)"""
+
 
 def apply() -> None:
     s = SWIFT.read_text()
@@ -88,11 +104,13 @@ def apply() -> None:
     assert BACKSTOP_OFF in s, "backstop constant not found"
     assert ANCHOR in s, "startBackstop not found"
     assert TELEMETRY_CANCEL_OFF in s, "backstop cancel not found"
+    assert TEXTLOG_OFF in s, "per-result log line not found"
     s = s.replace(BACKSTOP_OFF, BACKSTOP_ON, 1)
     s = s.replace(ANCHOR, TELEMETRY, 1)
     s = s.replace(TELEMETRY_CANCEL_OFF, TELEMETRY_CANCEL_ON, 1)
+    s = s.replace(TEXTLOG_OFF, TEXTLOG_ON, 1)
     SWIFT.write_text(s)
-    print("applied: backstop 1500s + 30s telemetry")
+    print("applied: backstop 1500s + 30s telemetry + verbose text logging")
 
 
 def revert() -> None:
@@ -103,7 +121,9 @@ def revert() -> None:
     s = s.replace(BACKSTOP_ON, BACKSTOP_OFF, 1)
     s = s.replace(TELEMETRY, ANCHOR, 1)
     s = s.replace(TELEMETRY_CANCEL_ON, TELEMETRY_CANCEL_OFF, 1)
+    s = s.replace(TEXTLOG_ON, TEXTLOG_OFF, 1)
     SWIFT.write_text(s)
+    assert "MEASUREMENT BUILD" not in s, "revert left something behind"
     print("reverted")
 
 
