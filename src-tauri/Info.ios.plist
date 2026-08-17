@@ -13,5 +13,15 @@
        match the appiconset (AppIcon). See docs/pitfall/34. -->
   <key>CFBundleIconName</key>
   <string>AppIcon</string>
+  <!-- Hold-to-talk dictation (docs/15). The recognition itself needs no
+       authorization — the probe measured exactly one prompt and
+       SFSpeechRecognizer.authorizationStatus() stayed notDetermined while
+       transcription ran (docs/33), so NSSpeechRecognitionUsageDescription is
+       deliberately absent. A missing microphone string is a hard crash on first
+       access, not a refusal. These keys are merged into the app at build time,
+       so a freshly generated src-tauri/gen/apple/Info.plist will not show
+       them. -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Reading Partner uses the microphone when you hold the bar to talk. Your speech is transcribed on this iPhone and never uploaded.</string>
 </dict>
 </plist>

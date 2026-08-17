@@ -47,7 +47,11 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_os::init())
-        .plugin(tauri_plugin_clipboard_manager::init());
+        .plugin(tauri_plugin_clipboard_manager::init())
+        // Ours, out of plugins/voice: the native half of hold-to-talk dictation
+        // (docs/15). Everything it does is in Swift and only on iOS; elsewhere
+        // it registers and rejects the start with a sentence.
+        .plugin(tauri_plugin_voice::init());
 
     // The voice commands and their state only exist on desktop (see the module
     // note above); everything else is registered on both.

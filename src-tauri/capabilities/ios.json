@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "ios",
+  "description": "What only an iPhone has. On-device dictation (docs/15) is iOS-only by construction — SpeechAnalyzer exists nowhere else — and the plugin's commands are the only thing behind hold-to-talk. Isolated the same way desktop.json isolates autostart: the permission is real on every platform the plugin registers on, but granting it in the shared capability would put a dead ACL entry on desktop and Android, where the composer never offers the bar.",
+  "platforms": ["iOS"],
+  "windows": ["main"],
+  "permissions": ["voice:default"]
+}
