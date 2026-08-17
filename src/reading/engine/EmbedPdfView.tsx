@@ -365,10 +365,15 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
               documentId={activeDocumentId}
               style={{ height: "100%", width: "100%", backgroundColor: PAGE_FRAME.background }}
             >
-              {/* enableWheel:false keeps the desktop scroll-wheel scrolling (not
-                  zooming); pinch only fires on a two-finger touch, so mouse and
-                  keyboard paths are untouched. */}
-              <ZoomGestureWrapper documentId={activeDocumentId} enableWheel={false}>
+              {/* enableWheel is the ctrl/meta+wheel path only: the plugin's
+                  wheel handler returns on the first line unless one of those
+                  modifiers is down, so a bare wheel still scrolls. A trackpad
+                  pinch reaches a webview as ctrl+wheel too, so the same flag
+                  covers it. The zoom anchors on the pointer, previews with a CSS
+                  transform and commits 150ms after the last notch; one mouse
+                  notch is a whole doubling and there is no knob for it
+                  (docs/pitfall/137). enablePinch (touch) stays on by default. */}
+              <ZoomGestureWrapper documentId={activeDocumentId} enableWheel>
               <Scroller
                 documentId={activeDocumentId}
                 renderPage={({ pageIndex, width, height }) => (

@@ -78,6 +78,7 @@
 - [117-webkit-takes-the-scroll-later-and-only-on-a-scrollable-axis](./117-webkit-takes-the-scroll-later-and-only-on-a-scrollable-axis.md) — 坑 70、71 的四个数在 iOS WKWebView 上一个都不成立：`touchmove` 从第一个像素就发、约 16px 才判滚动（其间每个 move 都 cancelable）、只 prevent 第一个 move 就够、而且只抢它真能滚的那个轴；3px 和「每个 move 都 prevent」是两个引擎的交集，不用改
 - [128-react-onwheel-is-passive](./128-react-onwheel-is-passive.md) — React 18 把 `wheel`/`touchstart`/`touchmove` 按 passive 挂在 root 上，`onWheel` 里的 `preventDefault()` 被忽略，自己的缩放和浏览器的页面缩放同时跑；要手挂原生监听并显式 `{ passive: false }`
 - [129-wheel-delta-comes-in-three-units](./129-wheel-delta-comes-in-three-units.md) — `deltaY` 的单位由 `deltaMode` 说了算（像素/行/页），行模式一格约 3，只按像素累计的手势在那种引擎上要拨十几下才动一格；累加前先归一到像素
+- [137-zoom-plugin-wheel-is-ctrl-only-and-doubles-per-notch](./137-zoom-plugin-wheel-is-ctrl-only-and-doubles-per-notch.md) — 缩放插件的 `enableWheel` 只是 ctrl/meta+滚轮的开关（裸滚轮在 handler 第一行就返回，从来不归它管），关掉它等于白白没有桌面缩放；步长是 `1 - deltaY*0.01`，Chromium 一格 100px 就翻倍，没有灵敏度选项
 
 ## 网络与 CSP
 

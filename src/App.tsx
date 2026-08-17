@@ -66,6 +66,7 @@ import {
 import PrepPanel from "./ui/components/reader/PrepPanel";
 import NotesPanel from "./ui/components/reader/NotesPanel";
 import ReaderTopBar from "./ui/components/reader/ReaderTopBar";
+import { useReaderZoomKeys } from "./ui/components/reader/reader-zoom-keys";
 import AnnotationPopup from "./ui/components/reader/AnnotationPopup";
 import CallBubble from "./ui/components/chat/CallBubble";
 import CallView from "./ui/components/chat/CallView";
@@ -1116,6 +1117,14 @@ export default function App() {
   const showGuidance = call?.view === "bubble" && call.messages.length === 0 && !configured;
   const lastCallMsg = call?.messages[call.messages.length - 1];
   const streaming = !!(lastCallMsg?.role === "ai" && lastCallMsg.streaming);
+
+  // Ctrl/Cmd + = / - / 0 on the page. No control goes with it: the More menu
+  // already carries the three visible zoom items.
+  useReaderZoomKeys({
+    view: viewRef,
+    layout: stats?.layout,
+    ctx: { inReader, chatFullWindow: call?.view === "chat-main" },
+  });
 
   // One-line prep status beside the Classroom toggle.
   const prepStatusLine = (() => {

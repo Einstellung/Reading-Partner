@@ -1,13 +1,13 @@
 // The keyboard half of the chat zoom
-// (src/ui/components/base/chat-scale-keys.ts): which presses it claims, and the
-// count that keeps one listener on the window however many chat windows are
-// open. The target is injected, so none of this needs a DOM. Run: bun test.
+// (src/ui/components/base/chat-scale-keys.ts): the count that keeps one listener
+// on the window however many chat windows are open. Which presses count is
+// zoom-keys.test.ts. The target is injected, so none of this needs a DOM.
+// Run: bun test.
 
 import { afterEach, expect, test } from "bun:test";
 import {
   bindZoomKeys,
   resetZoomKeys,
-  zoomKeyAction,
   type ZoomAction,
 } from "../../../src/ui/components/base/chat-scale-keys";
 
@@ -44,27 +44,6 @@ function fakeTarget() {
     },
   } as unknown as EventTarget & { handlers: Set<EventListener>; send(event: unknown): void };
 }
-
-test("the zoom keys, on either modifier", () => {
-  expect(zoomKeyAction(press("=", { ctrl: true }))).toBe("in");
-  expect(zoomKeyAction(press("+", { ctrl: true }))).toBe("in");
-  expect(zoomKeyAction(press("-", { meta: true }))).toBe("out");
-  expect(zoomKeyAction(press("_", { meta: true }))).toBe("out");
-  expect(zoomKeyAction(press("0", { ctrl: true }))).toBe("reset");
-});
-
-test("an unmodified press is the document's, not the zoom's", () => {
-  expect(zoomKeyAction(press("="))).toBe(null);
-  expect(zoomKeyAction(press("0"))).toBe(null);
-  expect(zoomKeyAction(press("a", { ctrl: true }))).toBe(null);
-});
-
-test("AltGr is left alone", () => {
-  // Layouts that put a character on AltGr send it with ctrlKey set. Claiming
-  // those presses would eat the character and zoom instead of typing it.
-  expect(zoomKeyAction(press("0", { ctrl: true, alt: true }))).toBe(null);
-  expect(zoomKeyAction(press("-", { ctrl: true, alt: true }))).toBe(null);
-});
 
 test("one listener however many windows are open", () => {
   const target = fakeTarget();
