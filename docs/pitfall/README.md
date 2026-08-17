@@ -65,6 +65,7 @@
 - [138-the-open-task-resolves-before-the-document-lands](./138-the-open-task-resolves-before-the-document-lands.md) — `openDocumentBuffer` 的外层 task 在 dispatch 完就 resolve，文档要等内层引擎 task 才进 store；直连引擎同微任务内完成看不出来，worker 下 `getDocument` 读到 null，宿主整半边接线被跳过（页面照画、顶栏说打不开）。两层都 await，不用轮询
 - [139-encoderpoolsize-is-only-read-by-the-worker-engine](./139-encoderpoolsize-is-only-read-by-the-worker-engine.md) — 两个引擎共用同一份选项类型，但直连版写死主线程 canvas 编码、从不读 `encoderPoolSize`，传了等于没传；要编码池只能用 worker 引擎（`ImageEncoderWorkerPool` 不在包的 exports 里，拼不出来）
 - [140-buffersize-widens-the-window-it-does-not-move-it](./140-buffersize-widens-the-window-it-does-not-move-it.md) — `bufferSize` 只决定预取窗口多宽，`endIndex + bufferSize - 1` 在 1 时已经提前一页；调大只多常驻几张光栅，停顿时刻分毫不动。小 fixture 上调到 ≥ 页数会整本预渲染完，量出一组假数字
+- [150-restoring-a-scale-nobody-saved-overrides-fit-width](./150-restoring-a-scale-nobody-saved-overrides-fit-width.md) — 没开过的书也带着一个合成的 viewState 进来，`scale: "auto"` 这个哨兵在壳里被折成数字 1，`requestZoom(1)` 当场作废注册时的 `FitWidth`，第一次开书停在 100%、改窗口也不再重新适配；"没存过的缩放"要一路保持"没有"，还原判据收进纯函数 `openingZoom`
 
 ## 触摸与手势
 

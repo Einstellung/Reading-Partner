@@ -122,6 +122,29 @@ export function readingPosition(
   return { pageIndex: Math.max(0, top.pageNumber - 1), pageX: top.pageX, pageY: top.pageY };
 }
 
+// The scale a book opens at, given what was saved for it — the counterpart of
+// readingPosition above, which reads a position back out.
+//
+// null means "nothing to restore": the zoom plugin is registered with this
+// layout's `zoom` lock as its default, and leaving it alone is what opens the
+// book at that fit. A number is the reader's own scale, and vertical restores
+// it, because remembering how a book was zoomed is the point.
+//
+// Paged restores nothing, for the reason its saved position carries no in-page
+// offset either: its contract is one whole page, which is the fit for the screen
+// in front of the reader and not the one that last saved.
+//
+// A saved state with no scale in it is not the same as a scale of 1. A book that
+// has never been opened still arrives here with a state — the shell builds one
+// so the layout is decided before the first paint — and that state's scale is
+// the "nothing was saved" sentinel, not a measurement. Requesting a number for
+// it overrides the fit the plugin was registered with, which is how a fresh book
+// opened at 100% on a screen wide enough for 233%.
+export function openingZoom(layout: ReadingLayout, saved: number | undefined): number | null {
+  if (LAYOUT_SETTINGS[layout].zoom === "fit-page") return null;
+  return typeof saved === "number" && saved > 0 ? saved : null;
+}
+
 // Everything a layout switch owns, in the abstract: the engine settings above
 // plus the touch router's live state. The router state is in here because a
 // switch must never inherit a gesture from the layout it just left — a drag, a
