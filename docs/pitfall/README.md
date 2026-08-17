@@ -28,6 +28,8 @@
 | 顶栏、工具条、下拉浮层的定位 | 界面与布局 |
 | 全局样式、Tailwind layer、字体与行高 | 界面与布局 + EmbedPDF 引擎 |
 | 加测试文件、给 store 写单测 | 开发环境 |
+| 在 worktree 里起 dev server 做实验 | 开发环境 |
+| 查滚动卡顿、主线程占用 | WebKit / webview + EmbedPDF 引擎 |
 | 画 SVG、聊天里的图表卡 | 界面与布局 |
 | 无头截图核对渲染 | 开发环境 |
 
@@ -35,7 +37,7 @@
 
 ## EmbedPDF 引擎
 
-- [18-embedpdf-load-hangs-progress-zero](./18-embedpdf-load-hangs-progress-zero.md) — 文档加载静默卡 progress 0，需跨源隔离头 + 直连引擎（worker:false）
+- [18-embedpdf-load-hangs-progress-zero](./18-embedpdf-load-hangs-progress-zero.md) — 文档加载静默卡 progress 0，解法是跨源隔离头 + 直连引擎（worker:false）；归因是错的：pdfium.wasm 不是 pthread 构建，不需要 SharedArrayBuffer，worker 那次挂在根相对 wasmUrl（坑 21）
 - [19-embedpdf-initialdocuments-hang](./19-embedpdf-initialdocuments-hang.md) — initialDocuments 卡 loading，改成 init 后显式 openDocumentBuffer
 - [20-embedpdf-renderlayer-eats-pointer](./20-embedpdf-renderlayer-eats-pointer.md) — RenderLayer 的 img 吃指针事件，划词失效，需 pointerEvents:none
 - [21-embedpdf-worker-engine-hangs](./21-embedpdf-worker-engine-hangs.md) — worker 引擎拿根相对 wasmUrl 会永久挂起（blob: 基址解不了根相对路径，错误 post 成主线程不认的消息类型），wasmUrl 要用 `location.href` 拼绝对地址；旧文档归因到 pthread 辅助 worker，是错的
@@ -60,6 +62,9 @@
 - [101-page-coordinates-are-a-scroll-offset-on-both-axes](./101-page-coordinates-are-a-scroll-offset-on-both-axes.md) — `scrollToPage` 的 `pageCoordinates.x` 会原样加进水平滚动位置，`alignX` 不传就没人减回去；跳到标注时页面被拉走"标注离页左边缘多远"那么多（实测 60px），左边距的标注偏一点、右半页的标注偏半屏。跳到页内某点一律显式补 `alignX`：页面放得下就居中页面（`x` 传 0），放大到超出视口就居中标注（`x` 传标注 x、`alignX` 传 50）
 - [102-render-quality-option-is-read-under-another-name](./102-render-quality-option-is-read-under-another-name.md) — `renderPage` 的 `imageQuality` 调 0.01 和 1.0 出来一样大：编码器读的是 `options.quality`（类型里没有这个字段），质量永远落在 canvas 默认；两个名字都传
 - [105-markup-is-drawn-from-strokecolor-and-tool-opacity](./105-markup-is-drawn-from-strokecolor-and-tool-opacity.md) — 高亮/下划线渲染读的是 `strokeColor`（`color` 是 deprecated 别名），只写 `color` 就画成兜底黄；不透明度又分两处（导入写死 0.4、创建取工具默认值 1），于是刚划的那一下深、重开变浅，两次都不是选的那个颜色。颜色两个字段一起写，不透明度收成一个数、注册期用 `tools` 覆盖工具默认值
+- [138-the-open-task-resolves-before-the-document-lands](./138-the-open-task-resolves-before-the-document-lands.md) — `openDocumentBuffer` 的外层 task 在 dispatch 完就 resolve，文档要等内层引擎 task 才进 store；直连引擎同微任务内完成看不出来，worker 下 `getDocument` 读到 null，宿主整半边接线被跳过（页面照画、顶栏说打不开）。两层都 await，不用轮询
+- [139-encoderpoolsize-is-only-read-by-the-worker-engine](./139-encoderpoolsize-is-only-read-by-the-worker-engine.md) — 两个引擎共用同一份选项类型，但直连版写死主线程 canvas 编码、从不读 `encoderPoolSize`，传了等于没传；要编码池只能用 worker 引擎（`ImageEncoderWorkerPool` 不在包的 exports 里，拼不出来）
+- [140-buffersize-widens-the-window-it-does-not-move-it](./140-buffersize-widens-the-window-it-does-not-move-it.md) — `bufferSize` 只决定预取窗口多宽，`endIndex + bufferSize - 1` 在 1 时已经提前一页；调大只多常驻几张光栅，停顿时刻分毫不动。小 fixture 上调到 ≥ 页数会整本预渲染完，量出一组假数字
 
 ## 触摸与手势
 
@@ -146,6 +151,7 @@
 - [114-httponly-bot-cookies-land-before-load-finished](./114-httponly-bot-cookies-land-before-load-finished.md) — 预热睡 15 秒的理由是「PX 的 cookie 是 httpOnly 没东西可 poll」，但看不见的只是注入的 JS：WebKitGTK 边跑边把 jar 写到 `<profile>/cookies`，实测 `_px3` 在 +6.5s 就落盘，而那次 `finished` 60 秒没来。预热改成和取正文同一条判据（不再变化且不是拦截页，1.5 秒）
 - [115-the-cookie-count-does-not-say-the-warm-up-worked](./115-the-cookie-count-does-not-say-the-warm-up-worked.md) — 预热改看 jar 之后，"该站 cookie 条数不再增长"两头都不成立：停在服务端那几条上的加载会被判成功（`_px3` 根本没来），热 profile 上重写 13 行而条数不变的加载会被判成什么都没发生；判据要看与顺序无关的行内容指纹变了几次，安静 6 秒（实测一次加载内部最宽间隔 3.25s，写完之后下一件事在 30 秒开外）
 - [116-no-sign-in-control-is-not-a-session](./116-no-sign-in-control-is-not-a-session.md) — 「页面上还有没有登录入口」在登录窗口里两头不成立：彭博登录页上一个可点标签都不匹配（写的是 Continue），按这个信号读出来用户正在输密码的那页是"已登录"；未登录首页的登录入口第 2 次 poll（约 6 秒）才渲染出来，而 readyState 到 21 秒才 complete。要同站、非登录路径、字符数 ≥2000、且字符数不再变化连续两次才认
+- [141-a-blocked-main-thread-stops-the-scroll-outright](./141-a-blocked-main-thread-stops-the-scroll-outright.md) — 主线程占多久屏幕就冻多久（90ms 阻塞冻 82-119ms），和挂不挂 wheel 监听、passive 与否无关，Chromium 同样冻；滚动路径上别占主线程，判据用屏幕像素不用页内计数
 
 ## 界面与布局
 
@@ -193,6 +199,7 @@
 - [123-vite-serves-node-modules-over-http](./123-vite-serves-node-modules-over-http.md) — `node_modules` 在 `server.fs.allow` 默认的根下面，dev server 照样按 HTTP 发出去（还给套一层明文 sourcemap）；秘密要写在服务的树之外，`.gitignore` 和 0600 都拦不住
 - [124-fs-deny-replaces-the-defaults](./124-fs-deny-replaces-the-defaults.md) — vite 解析 `server.fs?.deny || ['.env', '.env.*', '*.{crt,pem}']`，插件从 `config()` 返回一份 deny 就把这三条默认值整个顶掉，dev server 当场 200 发出 `.env` 正文外加明文 sourcemap；要加只能在 `configResolved` 里往已解析的数组 push。凡是 `x || 默认值` 解析的 vite 字段都是提供即替换
 - [134-dropthreadcache-reloads-instead-of-dropping](./134-dropthreadcache-reloads-instead-of-dropping.md) — `dropThreadCache` 不删缓存条目，它从文件重读一遍再合进去；`beforeEach` 里调它不隔离用例，同一个 `threadId` 会继承上一个用例追加的整段历史，用例之间要换 id
+- [142-a-worktree-vite-writes-the-main-checkouts-dep-cache](./142-a-worktree-vite-writes-the-main-checkouts-dep-cache.md) — worktree 的 `node_modules` 是主 checkout 的软链，vite 默认把依赖预构建缓存写进 `node_modules/.vite`，打断用户的 `tauri dev`（`--force` 更是直接清掉）；实验用私有 config 覆盖 `cacheDir` 和 `watch.ignored`，每轮 curl 确认吐的是新代码
 
 ## 历史（zotero/reader 引擎时代）
 
