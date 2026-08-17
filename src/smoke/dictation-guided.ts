@@ -261,6 +261,14 @@ export async function runGuidedDictation(): Promise<void> {
     "",
   );
 
+  // Written before anyone touches the phone, so the host can tell "the screen is
+  // up and waiting" from "the chunk threw and the phone is showing white" —
+  // there is no way to see the screen from here (iOS 26 moved the screenshot
+  // service behind the personalised developer image, which libimobiledevice
+  // cannot mount), and a person should not be called over to find out.
+  result.stage = "waiting-for-tap";
+  await write(result);
+
   await new Promise<void>((resolve) => {
     begin.addEventListener("click", () => resolve(), { once: true });
   });
