@@ -89,11 +89,24 @@ export interface HoldResult extends HoldState {
 }
 
 // How long a release waits for the recognizer's flush before going with the text
-// it already has. A guess pending a measurement on device: the flush is one
-// finalization pass over audio already captured, seen at up to two seconds in
-// the reports this was written against, and nothing in the API bounds it. Too
-// short truncates the last words; too long is a bar that sits there saying
-// "Finishing…" after the user is done. Measure a real device before moving it.
+// it already has. Too short truncates the last words; too long is a bar that
+// sits there saying "Finishing…" after the user is done.
+//
+// Measured on an iPhone 16 / iOS 26.6, pointerup to the stop promise settling,
+// IPC included: 261 277 294 303 306 307 315 316 318 326 334 345 346 352 362 ms
+// over fifteen holds, plus 262 264 277 300 ms for the four that went through the
+// bar itself. One outlier at 1311 ms, the first hold after a cold launch. An
+// explicit finalizeAndFinishThroughEndOfInput() is nothing like the ~2.6 s
+// docs/33 measured for natural finalization after a pause — it returns in
+// 70-330 ms — and the native side now caps its own wait at 2 s besides
+// (docs/pitfall/138), so this can only be reached by something already broken.
+//
+// Still 2500 because that sample is not the one this number deserves. Almost
+// every hold in it was silent: the harness played speech from a loudspeaker into
+// the room and the phone's voice-processing unit suppressed most of it, so what
+// was measured is mostly the cost of finalizing nothing. The flush that matters
+// is the one with words still unsettled in it. Ten holds of real speech, five
+// zh-CN and five en-US, some ~2 s and some ~15 s, then set this to p95 + 300 ms.
 export const FINISH_TIMEOUT_MS = 2500;
 
 // The same line the desktop press shows for the same outcome; both paths end in

@@ -111,6 +111,7 @@
 - [47-asc-key-role-cloud-signing](./47-asc-key-role-cloud-signing.md) — CI 云签名要 Admin 权限的 App Store Connect API key，App Manager 在 export 阶段被拒；试探权限不能用坏 payload
 - [48-tauri-ios-signing-log-noise](./48-tauri-ios-signing-log-noise.md) — "找不到证书"警告和 `Apple Distribution: Tauri (unset)` 证书都是 Tauri 自己的噪音，签名成没成看 export 阶段
 - [107-testflight-upload-is-not-distribution](./107-testflight-upload-is-not-distribution.md) — altool 上传成功只是 ingest，build 不 link 到 beta 组就谁也装不到（内测组没开自动分发要逐个加，外测组还要 What's New 和 beta 审核）；上传后必须跑分发脚本。外测加组 404 说 build 不存在：端点要用 builds 那一侧、审核提交要排在加组前面、先查 `buildAudienceType` 和 `externalBuildState`。`fields[builds]` 漏列 relationship 会把 `include` 的数据一起吞掉。上传返回时 build 资源还没建出来，要等它出现和等它 VALID 两段轮询，且不许猜「最新那个」
+- [142-idevicesyslog-drops-lines-when-it-is-not-filtered](./142-idevicesyslog-drops-lines-when-it-is-not-filtered.md) — 不加过滤的 `idevicesyslog` 四分钟落盘 127MB，里面自己 app 的 NSLog 只有 13 行：设备日志本身 0.5MB/s，中继跟不上就丢，丢哪段不挑。用 `-m/--match` 在中继侧过滤，判据是行数不是文件大小
 
 ## Android 构建与签名
 
@@ -120,6 +121,11 @@
 
 - [132-audio-engine-start-returns-without-running](./132-audio-engine-start-returns-without-running.md) — `AVAudioEngine.start()` 不 throw 也照样没起来，`isRunning` 是 false、tap 一个回调都不触发，采集全程静默且零报错；`start()` 之后自己断言 `isRunning`，错误信息里带输出链接受的格式、输出节点的硬件格式和会话 `sampleRate`
 - [133-a-rebuilt-vpio-unit-answers-with-a-default-output-format](./133-a-rebuilt-vpio-unit-answers-with-a-default-output-format.md) — `setVoiceProcessingEnabled(true)` 重建 IO 单元之后、`prepare()` 之前，输出侧对硬件的回答是 44100Hz 2ch 默认值；`mainMixerNode` 第一次被读到就会建出来并接上输出节点，接在 `prepare()` 之前整条输出链按默认值定死，引擎起不来（表现即坑 132）。`prepare()` 排在第一次访问 `mainMixerNode` 之前，硬件格式读 `outputNode.outputFormat(forBus:)`
+- [137-asset-installation-request-is-never-nil](./137-asset-installation-request-is-never-nil.md) — 模型已装，`AssetInventory.assetInstallationRequest(supporting:)` 照样每次返回非 nil；`downloadAndInstall()` 对已装 locale 是 4-40ms 的空操作，真下载是分钟级。别把「非 nil」当成「要下载」去给用户看进度
+- [138-finalize-hangs-when-another-instance-holds-the-session](./138-finalize-hangs-when-another-instance-holds-the-session.md) — 健康会话上 `finalizeAndFinishThroughEndOfInput()` 是 70-330ms，另一个 app 实例占着会话时实测挂了 89 秒；三个命令共用一条串行链，链头挂住后面每一次按住说话都排队干等。给 finalize 设 2 秒上限（用一次性闩，不能用 task group：Swift 放弃不了「等另一个 Task 结束」的 await），装包前先按 pid 杀掉旧实例
+- [139-volatile-results-arrive-in-bursts](./139-volatile-results-arrive-in-bursts.md) — 开了 `fastResults` 之后 volatile 成串到达，同一毫秒六条、每条比上一条多几个字符，每条都是一次 IPC 加一次整棵重渲染；按住说话本来就不显示实时文字，所以累加器全收、往外发的节流到 10Hz，final 不许节流。顺带实测：volatile 只覆盖未定稿的尾巴，不是累计整句
+- [140-the-tap-buffer-decides-the-level-rate](./140-the-tap-buffer-decides-the-level-rate.md) — 电平事件按 15Hz 节流，实测 9.6-10.0Hz：真正定频率的是 `installTap` 的 `bufferSize`（4096 帧 / 48kHz = 85ms），节流阈值比到达间隔还短，一次都没生效。要改频率去改 bufferSize
+- [141-a-locked-screen-takes-the-microphone-without-an-interruption](./141-a-locked-screen-takes-the-microphone-without-an-interruption.md) — 自动锁屏把 app 切后台，输入路由变成 `in=[]`，麦克风再无一个 buffer，但 `interruptionNotification` 一条都不来、`isRunning` 还是 true；真手指按着屏幕不会锁，只有合成 pointer 事件的无人值守脚本会撞上
 
 ## WebKit / webview
 
