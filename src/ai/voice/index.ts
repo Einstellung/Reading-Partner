@@ -36,6 +36,8 @@ export {
 } from "./dictation";
 export {
   FINISH_TIMEOUT_MS,
+  START_TIMEOUT_HINT,
+  START_TIMEOUT_MS,
   INITIAL_HOLD_STATE,
   holdReducer,
   type HoldEffect,

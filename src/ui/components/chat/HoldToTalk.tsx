@@ -16,6 +16,8 @@ import { Button } from '../ui/button';
 import { IconMic } from '../base/icons';
 import {
 	FINISH_TIMEOUT_MS,
+	START_TIMEOUT_HINT,
+	START_TIMEOUT_MS,
 	INITIAL_HOLD_STATE,
 	holdReducer,
 	nativeDictation,
@@ -106,11 +108,36 @@ export function HoldToTalk({
 			return;
 		}
 		sourceRef.current = source;
+
+		// Nothing bounds the native start, and its first-hold path downloads a
+		// speech model (START_TIMEOUT_MS). The machine has no timer for `arming`,
+		// so without this the bar says "Listening…" over a session that does not
+		// exist and then refuses every press until the download finishes.
+		let abandoned = false;
+		const timer = window.setTimeout(() => {
+			abandoned = true;
+			dispatch({ type: 'failed', message: START_TIMEOUT_HINT });
+		}, START_TIMEOUT_MS);
+
 		try {
 			await source.start((e) => dispatchRef.current({ type: 'event', event: e }));
 		} catch (e) {
+			window.clearTimeout(timer);
+			// A start that failed after being abandoned has nothing to report: the
+			// machine is back at idle and already told the user.
+			if (abandoned) return;
 			sourceRef.current = null;
 			dispatch({ type: 'failed', message: e instanceof Error ? e.message : String(e) });
+			return;
+		}
+		window.clearTimeout(timer);
+
+		if (abandoned) {
+			// It came up after the machine stopped waiting. `started` would be
+			// dropped in `idle`, so nothing else would ever release it — that is a
+			// live microphone with no path to it but the native backstop.
+			if (sourceRef.current === source) sourceRef.current = null;
+			void source.cancel().catch(() => {});
 			return;
 		}
 		dispatch({ type: 'started' });

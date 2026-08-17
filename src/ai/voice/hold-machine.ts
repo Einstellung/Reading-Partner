@@ -128,6 +128,31 @@ export interface HoldResult extends HoldState {
 // language. A zh-CN flush has not been timed.
 export const FINISH_TIMEOUT_MS = 1500;
 
+// How long a press waits for the recognizer to come up before giving up on it.
+//
+// Nothing bounds start_dictation on the native side and one step inside it is
+// genuinely unbounded: the first hold in a language downloads the model, which
+// is minutes on a slow network, and AssetInventory hands back a request on every
+// single run so the branch is always entered (docs/pitfall/137). Asking for the
+// microphone the first time is the same shape.
+//
+// Without a bound the bar reads "Listening…" with a live-looking meter over a
+// session that does not exist, and after release it looks pressable while
+// ignoring every press, because `aborting` only leaves on `started` or `failed`
+// and neither can arrive. Self-recovering, eventually — which is to say it lies
+// to the user for as long as the download takes.
+//
+// 10 s against a measured 0.7 s warm and 1.05 s cold press-to-first-buffer. Long
+// enough that nothing healthy trips it, short enough that the lie is short. The
+// start is not cancelled when it trips — it is left to finish installing the
+// model, and the recognizer it eventually produces is released rather than left
+// holding the microphone (HoldToTalk.begin).
+export const START_TIMEOUT_MS = 10_000;
+
+// Shown when it trips. It says "again" because the second hold is usually the
+// fast one: the work the first press paid for is done and kept.
+export const START_TIMEOUT_HINT = "Still getting dictation ready. Hold again in a moment.";
+
 // The same line the desktop press shows for the same outcome; both paths end in
 // "you held the button and nothing came out".
 export { NO_SPEECH_HINT };
