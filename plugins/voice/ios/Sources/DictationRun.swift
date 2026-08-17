@@ -166,7 +166,7 @@ final class DictationRun {
         // Apple considers too small. Neither is recoverable.
         guard SpeechTranscriber.isAvailable else {
             throw DictationError(
-                "This iPhone cannot transcribe on device. It needs iOS 26 on an iPhone 11 or later.")
+                "This iPhone cannot transcribe on device. It needs iOS 26 on an iPhone 12 or later.")
         }
 
         try await ensureMicrophonePermission()

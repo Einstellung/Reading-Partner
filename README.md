@@ -18,7 +18,7 @@ The collector publishes the finished briefing and the text of the articles in it
 
 A phone with no desktop behind it gets an app with no briefing in it.
 
-The iPhone app needs **iOS 26 or later, on an iPhone 11 or newer**. It talks and listens on the device — hold the composer's bar and speak, and the transcript is written by the phone with nothing uploaded — and the framework behind that (`SpeechAnalyzer`) is iOS 26 API whose availability is also a hardware answer, false on smaller Neural Engines and always false in the simulator. The floor is the whole app's, not the feature's.
+The iPhone app needs **iOS 26 or later, on an iPhone 14 or newer**. It listens on the device — hold the composer's bar and speak, and the transcript is written by the phone with nothing uploaded — and the framework behind that (`SpeechAnalyzer`) is iOS 26 API whose availability is also a hardware answer: it is false on a Neural Engine below a certain size, and always false in the simulator. Measured reports put the real cutoff at iPhone 12; the stated floor keeps a notch of margin. Either way it is the whole app's floor, not the feature's.
 
 ## Daily briefing
 
