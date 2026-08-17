@@ -67,7 +67,7 @@ echo "ipa: $IPA"
 
 step "kill any stale instance"
 for pid in $(xcrun devicectl device info processes --device "$DEVICE" 2>/dev/null \
-             | grep "Reading Partner.app" | awk '{print $1}'); do
+             | grep "$DEV_NAME.app" | awk '{print $1}'); do
   echo "terminating $pid"
   xcrun devicectl device process signal --device "$DEVICE" --pid "$pid" --signal SIGKILL >/dev/null 2>&1 || true
 done

@@ -69,12 +69,12 @@ step "kill any stale instance"
 # two pids on 2026-08-17 turned out to be the normal transient during install.
 # This guard is here for determinism, not for that.
 for pid in $(xcrun devicectl device info processes --device "$DEVICE" 2>/dev/null \
-             | grep "Reading Partner.app" | awk '{print $1}'); do
+             | grep "$DEV_NAME.app" | awk '{print $1}'); do
   echo "terminating stale pid $pid"
   xcrun devicectl device process signal --device "$DEVICE" --pid "$pid" --signal SIGKILL >/dev/null 2>&1 || true
 done
 sleep 2
-if xcrun devicectl device info processes --device "$DEVICE" 2>/dev/null | grep -q "Reading Partner.app"; then
+if xcrun devicectl device info processes --device "$DEVICE" 2>/dev/null | grep -q "$DEV_NAME.app"; then
   echo "REFUSING TO INSTALL: an instance is still running"
   exit 1
 fi

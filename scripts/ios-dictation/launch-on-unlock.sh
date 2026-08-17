@@ -16,13 +16,16 @@
 export PATH="/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 DEVICE=00008140-000C31641EEB001C
 APP=com.xinyuan.readingpartner.dev
+# The local build's bundle name, which is not "Reading Partner" — that is the
+# TestFlight one, and killing the user's copy of it is not ours to do.
+DEV_NAME="RP DEV"
 
 for i in $(seq 1 900); do
   if xcrun devicectl device info lockState --device "$DEVICE" 2>&1 | grep -q 'passcodeRequired: false'; then
     echo "$(date +%H:%M:%S) unlocked after $i polls"
     xcrun devicectl device process terminate --device "$DEVICE" --console "$APP" > /dev/null 2>&1 || true
     for pid in $(xcrun devicectl device info processes --device "$DEVICE" 2>/dev/null \
-                 | grep "Reading Partner.app" | awk '{print $1}'); do
+                 | grep "$DEV_NAME.app" | awk '{print $1}'); do
       echo "terminating stale pid $pid"
       xcrun devicectl device process signal --device "$DEVICE" --pid "$pid" --signal SIGKILL > /dev/null 2>&1 || true
     done
