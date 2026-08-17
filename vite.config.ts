@@ -12,6 +12,13 @@ const isolationHeaders = {
   "Cross-Origin-Embedder-Policy": "require-corp",
 };
 
+// `tauri ios dev` sets this to the Mac's LAN address: the phone loads the
+// frontend over the network, so the dev server has to answer on something other
+// than loopback. Unset everywhere else, and `host: undefined` / `hmr: undefined`
+// are Vite's own defaults, so desktop dev is untouched. Port 1422 for the HMR
+// socket because 1421 is `vite preview`.
+const devHost = process.env.TAURI_DEV_HOST;
+
 // Tauri expects a fixed port and no clearing of the terminal.
 export default defineConfig({
   // simBridge is dev-only (apply: "serve") and loopback-only: it injects the
@@ -26,8 +33,10 @@ export default defineConfig({
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },
   server: {
+    host: devHost,
     port: 1420,
     strictPort: true,
+    hmr: devHost ? { protocol: "ws", host: devHost, port: 1422 } : undefined,
     headers: isolationHeaders,
     // Transform the entry graph while the Rust side is still compiling, instead
     // of on the first page load. Dev serves ~410 separate modules and Vite
