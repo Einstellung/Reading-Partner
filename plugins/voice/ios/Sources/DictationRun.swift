@@ -55,6 +55,50 @@ struct DictationError: Error {
     }
 }
 
+/// A one-shot latch that can be waited on with a deadline. Swift has no way to
+/// abandon an `await` on another task's completion — cancelling the waiter does
+/// not return it — so the deadline resolves the wait instead of racing it: a
+/// timer signals the same latch, and whoever gets there first wakes everybody.
+private final class Gate {
+    private let lock = NSLock()
+    private var opened = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func signal() {
+        lock.lock()
+        opened = true
+        let pending = waiters
+        waiters = []
+        lock.unlock()
+        for waiter in pending { waiter.resume() }
+    }
+
+    func wait(upToMs: UInt64, onTimeout: (() -> Void)? = nil) async {
+        lock.lock()
+        let already = opened
+        lock.unlock()
+        if already { return }
+
+        let timer = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: upToMs * 1_000_000)
+            if Task.isCancelled { return }
+            onTimeout?()
+            self?.signal()
+        }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            lock.lock()
+            if opened {
+                lock.unlock()
+                continuation.resume()
+                return
+            }
+            waiters.append(continuation)
+            lock.unlock()
+        }
+        timer.cancel()
+    }
+}
+
 final class DictationRun {
     /// One event, three shapes: `{kind:"volatile"|"final",text}` and
     /// `{kind:"level",value}`. The webview's reducer has no default branch, so
@@ -111,13 +155,23 @@ final class DictationRun {
 
     // MARK: - Level
 
-    /// 15 Hz. The meter's CSS transition is 75 ms, so below ~13 Hz it reads
-    /// steppy; above ~30 Hz every event is a full React re-render of thirteen
-    /// spans in a WKWebView while recognition is running.
+    /// A ceiling, not a rate. The tap decides the real one: 4096 frames at the
+    /// microphone's 48 kHz is a buffer every 85 ms, so the meter updates about
+    /// eleven times a second however low this is set. Measured 9.6-10.0 Hz over
+    /// twelve holds, inside the 10-20 Hz the meter's 75 ms CSS transition wants,
+    /// so the buffer stays big and this stays a guard against a smaller one.
     private static let levelInterval: CFAbsoluteTime = 1.0 / 15.0
     private var lastLevelAt: CFAbsoluteTime = 0
     /// Linear RMS mapped to 0..1 across this window. VPIO's AGC moves near-voice
     /// level by ~18 dB (docs/33), so the floor is well below a quiet room.
+    ///
+    /// UNTUNED. The floor is measured and real: with voice processing on, a
+    /// silent room reads -80 dB, not the -50 a raw microphone gives, so the
+    /// bottom third of this window is spent on silence. The top is not measured
+    /// — the only voice this has ever heard is a loudspeaker across a desk, and
+    /// VPIO treats a loudspeaker differently from a mouth near the phone, which
+    /// is exactly the level it would be tuned against. It needs one hold from a
+    /// person at arm's length before either end moves.
     private static let quietDb: Float = -50
     private static let loudDb: Float = -10
 
@@ -129,6 +183,15 @@ final class DictationRun {
     private var firstBufferAt: CFAbsoluteTime = 0
     private var pressedAt: CFAbsoluteTime = 0
 
+    /// Volatile results arrive in bursts — six of them inside one millisecond,
+    /// each a longer prefix of the same guess. Nothing displays them (the bar
+    /// deliberately shows no live text), so their only reader is the timeout
+    /// fallback, and every one costs an IPC message and a React state update in
+    /// a WKWebView that is also running recognition. The accumulator still takes
+    /// every one; only the emission is thinned.
+    private static let volatileInterval: CFAbsoluteTime = 0.1
+    private var lastVolatileAt: CFAbsoluteTime = 0
+
     // MARK: - Backstop
 
     /// A hold nobody released. The webview has no duration cap at all and the
@@ -138,13 +201,19 @@ final class DictationRun {
     private var backstopTask: Task<Void, Never>?
 
     /// How long stop() waits for the results task to deliver the last final
-    /// after finalizeAndFinishThroughEndOfInput() returns. Bounded so a stuck
-    /// stream cannot hold the next hold's start behind it.
+    /// after the analyzer has finalized. Bounded so a stuck stream cannot hold
+    /// the next hold's start behind it.
     private static let resultsGraceMs: UInt64 = 500
+    private let resultsGate = Gate()
 
-    private var resultsDone = false
-    private var resultsWaiters: [CheckedContinuation<Void, Never>] = []
-    private let resultsLock = NSLock()
+    /// How long stop() waits for finalizeAndFinishThroughEndOfInput(). Measured
+    /// at 70-330 ms on a healthy session — and at 89 seconds once, on a session
+    /// another instance of the app had taken the microphone from. The three
+    /// commands run on one serial chain, so an unbounded wait here does not
+    /// just delay one answer: it parks every hold after it. The composer gives
+    /// up on the flush at 2.5 s and lets the user press again, and that press
+    /// would queue behind this.
+    private static let finalizeGraceMs: UInt64 = 2000
 
     init(emit: @escaping Emit) {
         self.emit = emit
@@ -355,11 +424,18 @@ final class DictationRun {
         // then flushes whatever it was still holding as volatile.
         inputContinuation?.finish()
         if let analyzer = analyzer {
-            do {
-                try await analyzer.finalizeAndFinishThroughEndOfInput()
-            } catch {
-                recordFailure("Dictation stopped unexpectedly.")
-                NSLog("RP-DICT finalize failed: %@", DictationError.describe(error))
+            let finalized = Gate()
+            Task {
+                do {
+                    try await analyzer.finalizeAndFinishThroughEndOfInput()
+                } catch {
+                    self.recordFailure("Dictation stopped unexpectedly.")
+                    NSLog("RP-DICT finalize failed: %@", DictationError.describe(error))
+                }
+                finalized.signal()
+            }
+            await finalized.wait(upToMs: Self.finalizeGraceMs) {
+                NSLog("RP-DICT finalize did not return in %llums", Self.finalizeGraceMs)
             }
         }
         mark("finalized", since: t0)
@@ -368,7 +444,11 @@ final class DictationRun {
         // last final when finalize returns. Waiting for the stream to end is
         // what makes the accumulator complete; the grace period keeps a stuck
         // stream from holding the next hold's start behind it.
-        await waitForResults()
+        if resultsTask != nil {
+            await resultsGate.wait(upToMs: Self.resultsGraceMs) {
+                NSLog("RP-DICT results grace expired")
+            }
+        }
         resultsTask?.cancel()
         resultsTask = nil
         mark("results", since: t0)
@@ -727,7 +807,7 @@ final class DictationRun {
                 NSLog("RP-DICT the results stream failed: %@", DictationError.describe(error))
                 self?.recordFailure("Dictation stopped unexpectedly.")
             }
-            self?.markResultsDone()
+            self?.resultsGate.signal()
         }
     }
 
@@ -754,44 +834,18 @@ final class DictationRun {
             "RP-DICT %@ %.0fms %@",
             result.isFinal ? "final" : "volatile",
             (CFAbsoluteTimeGetCurrent() - startedAt) * 1000, text)
-        send(["kind": result.isFinal ? "final" : "volatile", "text": text])
-    }
 
-    private func markResultsDone() {
-        resultsLock.lock()
-        resultsDone = true
-        let waiters = resultsWaiters
-        resultsWaiters = []
-        resultsLock.unlock()
-        for waiter in waiters { waiter.resume() }
-    }
-
-    private func waitForResults() async {
-        resultsLock.lock()
-        let already = resultsDone || resultsTask == nil
-        resultsLock.unlock()
-        if already { return }
-
-        // The grace period resolves the wait rather than racing it: a task group
-        // could not cancel an await on another task's completion, and this way
-        // the waiter is resumed exactly once either way.
-        let grace = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: Self.resultsGraceMs * 1_000_000)
-            if Task.isCancelled { return }
-            NSLog("RP-DICT results grace expired")
-            self?.markResultsDone()
+        if result.isFinal {
+            // Always: a final is what the webview appends, and it also clears
+            // the tail, so dropping one loses words.
+            lastVolatileAt = 0
+            send(["kind": "final", "text": text])
+            return
         }
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            resultsLock.lock()
-            if resultsDone {
-                resultsLock.unlock()
-                continuation.resume()
-                return
-            }
-            resultsWaiters.append(continuation)
-            resultsLock.unlock()
-        }
-        grace.cancel()
+        let now = CFAbsoluteTimeGetCurrent()
+        guard now - lastVolatileAt >= Self.volatileInterval else { return }
+        lastVolatileAt = now
+        send(["kind": "volatile", "text": text])
     }
 
     // MARK: - Permission
