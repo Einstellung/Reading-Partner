@@ -10,13 +10,12 @@
 //   plugin:voice|start_dictation   { locale?, contextualStrings? }
 //   plugin:voice|stop_dictation    -> { transcript }
 //   plugin:voice|cancel_dictation
-//   event "voice://dictation"      payload: DictationEvent
+//   plugin event ("voice", "dictation")   payload: DictationEvent
 //
 // A DictationSource is an interface so the gesture and the transcript can be
 // tested with a fake one on a machine that has no plugin at all.
 
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { addPluginListener, invoke } from "@tauri-apps/api/core";
 import { hasOnDeviceDictation } from "../../platform/app/platform";
 
 export type DictationEvent =
@@ -107,20 +106,45 @@ export function assembleTranscript(events: readonly DictationEvent[]): string {
 
 // --- the host's source ------------------------------------------------------
 
-const DICTATION_EVENT = "voice://dictation";
+// The plugin's own listener bus, not the global one. A Swift plugin can only
+// `trigger` into channels registered by `register_listener`, which is what
+// addPluginListener creates; there is no way to emit a global app event from
+// Swift, so `listen("voice://dictation")` would have subscribed to something
+// nobody can ever fire — silently, since listen() on a dead name throws nothing.
+const VOICE_PLUGIN = "voice";
+const DICTATION_EVENT = "dictation";
+
+// The three commands and the one subscription, as parameters rather than
+// imports. Under bun `nativeDictation()` returns null, so nothing in this file
+// below the transcript would otherwise be exercised at all — and the command
+// strings, the argument keys, the `{transcript}` shape and the event name are
+// exactly the kind of thing a typo hides in until a device build. Injecting the
+// bridge lets the test check them without `mock.module`, which rewrites the
+// whole worker's module registry and does not roll back (docs/pitfall/119).
+export interface DictationBridge {
+  invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
+  subscribe(
+    plugin: string,
+    event: string,
+    cb: (e: DictationEvent) => void,
+  ): Promise<{ unregister(): Promise<void> }>;
+}
 
 // The plugin, wrapped. One listener per run, dropped by both stop and cancel, so
 // a second hold never sees the first one's events. A start that fails drops the
 // listener too — otherwise a missing plugin would leak one per press.
 class NativeDictation implements DictationSource {
-  private unlisten: UnlistenFn | null = null;
+  private listener: { unregister(): Promise<void> } | null = null;
 
-  constructor(private readonly options: DictationOptions) {}
+  constructor(
+    private readonly options: DictationOptions,
+    private readonly bridge: DictationBridge,
+  ) {}
 
   async start(onEvent: (e: DictationEvent) => void): Promise<void> {
-    this.unlisten = await listen<DictationEvent>(DICTATION_EVENT, (e) => onEvent(e.payload));
+    this.listener = await this.bridge.subscribe(VOICE_PLUGIN, DICTATION_EVENT, onEvent);
     try {
-      await invoke<void>("plugin:voice|start_dictation", {
+      await this.bridge.invoke<void>("plugin:voice|start_dictation", {
         locale: this.options.locale,
         contextualStrings: this.options.contextualStrings,
       });
@@ -132,7 +156,7 @@ class NativeDictation implements DictationSource {
 
   async stop(): Promise<string> {
     try {
-      const res = await invoke<{ transcript: string }>("plugin:voice|stop_dictation");
+      const res = await this.bridge.invoke<{ transcript: string }>("plugin:voice|stop_dictation");
       return res?.transcript ?? "";
     } finally {
       this.drop();
@@ -141,17 +165,32 @@ class NativeDictation implements DictationSource {
 
   async cancel(): Promise<void> {
     this.drop();
-    await invoke<void>("plugin:voice|cancel_dictation");
+    await this.bridge.invoke<void>("plugin:voice|cancel_dictation");
   }
 
   private drop(): void {
-    this.unlisten?.();
-    this.unlisten = null;
+    // unregister() is a round trip of its own and its rejection is nobody's
+    // business here: the listener is already off this object either way.
+    void this.listener?.unregister().catch(() => {});
+    this.listener = null;
   }
 }
+
+// For tests and for anything that has its own transport.
+export function createNativeDictation(
+  options: DictationOptions,
+  bridge: DictationBridge,
+): DictationSource {
+  return new NativeDictation(options, bridge);
+}
+
+const tauriBridge: DictationBridge = {
+  invoke: (command, args) => invoke(command, args),
+  subscribe: (plugin, event, cb) => addPluginListener<DictationEvent>(plugin, event, cb),
+};
 
 // The host's dictation, or null where there is none.
 export function nativeDictation(options: DictationOptions = {}): DictationSource | null {
   if (!hasOnDeviceDictation()) return null;
-  return new NativeDictation(options);
+  return new NativeDictation(options, tauriBridge);
 }
