@@ -28,8 +28,18 @@ import { getFulltext, saveFulltext } from "../fulltext/store";
 import type { Fulltext } from "../fulltext/types";
 import { buildFigureCatalog } from "./figures/catalog";
 import { buildFigureTools } from "./figures/tools";
-import { renderFigure } from "./figures/render";
+import { renderFigure, renderPageImage } from "./figures/render";
+import {
+  attachPageWindow,
+  pageImageTokens,
+  pageWindowPrompt,
+  planPageWindow,
+  type PageWindowImage,
+  type PageWindowPlan,
+} from "./figures/page-window";
 import type { Figure } from "./figures/types";
+import { logEvent } from "../platform/app/events";
+import { AI_EVENT_TOPIC } from "../platform/app/structured-output";
 import {
   assembleIdentity,
   buildObservationSnapshot,
@@ -157,7 +167,21 @@ export interface ReadingTurnInput {
   // The sub-agent turn behind research_literature. Injected so the assembly and
   // its research tool can be exercised with no provider, no key and no network.
   runSubagentTurn?: SubagentTurnFn;
+  // Rasterize one whole page of the open book (the visual window around the
+  // reader's highlight, figures/page-window.ts). Injected for the same reason
+  // the figure renderer is: it needs a canvas and a loaded pdf.js, and the
+  // assembly around it has to run under `bun test`.
+  renderPage?: PageRenderFn;
 }
+
+// One page of the open book as an image, with the pixel size it came out at so
+// the turn can price what it is about to send.
+export interface RenderedPage extends PageWindowImage {
+  width: number;
+  height: number;
+}
+
+export type PageRenderFn = (page: number, widthPx: number) => Promise<RenderedPage | null>;
 
 export interface ReadingTurn {
   systemPrompt: string;
@@ -264,6 +288,11 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     signal,
     onSubagentProgress,
     runSubagentTurn = runSubagentTurnLive,
+    renderPage = async (pageNo, widthPx) => {
+      if (!buffer) return null;
+      const r = await renderPageImage(bookId, buffer, pageNo, widthPx);
+      return r ? { data: r.base64, mediaType: r.mimeType, width: r.width, height: r.height } : null;
+    },
   } = input;
   const { topicId, topicName, fileName, pageLabel, pageIndex, files } = context;
   const materials = await gatherTopicMaterials(files, bookId, currentFulltext, annotations);
@@ -324,11 +353,11 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   const figureCatalog = figuresIndex.length
     ? buildFigureCatalog(figuresIndex, { currentPage: page ?? currentPage ?? null })
     : "";
+  const supportsImages = modelSupportsImages(
+    s.defaultProviderId as ProviderId,
+    s.defaultModelId as string,
+  );
   if (figuresIndex.length) {
-    const supportsImages = modelSupportsImages(
-      s.defaultProviderId as ProviderId,
-      s.defaultModelId as string,
-    );
     tools = [
       ...tools,
       ...buildFigureTools({
@@ -342,6 +371,38 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
       }),
     ];
   }
+  // The visual window (docs/12, figures/page-window.ts): the marked page and the pages
+  // either side, as images, so the model sees the plot the paragraph is about
+  // instead of the text layer's account of the axis labels.
+  //
+  // Only on a mark-anchored thread. The book-level thread's page moves with the
+  // reader's scrolling, so a window sent on one of its turns says nothing about
+  // where the earlier ones were, and the history line that stands in for the
+  // pictures next turn would be a guess.
+  const pageWindow: PageWindowPlan | null = isBook
+    ? null
+    : planPageWindow({
+        anchor: page,
+        pageCount: currentFulltext?.pages.length ?? null,
+        figures: figuresIndex,
+        fulltext: currentFulltext,
+        modelSupportsImages: supportsImages,
+      });
+  let pageImages: RenderedPage[] = [];
+  if (pageWindow) {
+    const rendered = await Promise.all(
+      pageWindow.pages.map((p) => renderPage(p.page, p.widthPx).catch(() => null)),
+    );
+    pageImages = rendered.filter((r): r is RenderedPage => r !== null);
+  }
+  if (signal?.aborted) return null;
+  // The pixel sizes are kept for the telemetry line only; what goes on the wire
+  // is the image block and nothing else.
+  const windowImages: PageWindowImage[] = pageImages.map(({ data, mediaType }) => ({
+    data,
+    mediaType,
+  }));
+
   const prepState = getPipeline()?.snapshot().state ?? null;
 
   // Link ingestion (docs/09): when a prep pipeline exists for this book, the
@@ -565,6 +626,12 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
         aiLanguage: s.aiLanguage,
       });
     }
+    // Said only when the pictures are actually going: a prompt that describes a
+    // window the ladder took back is a prompt that tells the model to look at
+    // something that is not there.
+    if (pageWindow && pageImages.length > 0 && !dropped.has("page-window")) {
+      prompt += "\n\n" + pageWindowPrompt(pageWindow);
+    }
     const observed = dropped.has("observation-trim") ? observationSectionTight : observationSection;
     if (observed) prompt += "\n\n" + observed;
     if (profileSection && !dropped.has("reader-profile")) prompt += "\n\n" + profileSection;
@@ -610,7 +677,13 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   function composeMessages(dropped: ReadonlySet<ReadingReductionId>): ReadingTurnMessage[] {
     const keep = dropped.has("history-trim") ? HISTORY_KEEP_TIGHT : HISTORY_KEEP;
     const tail = prior.length > keep ? prior.slice(prior.length - keep) : prior;
-    return [{ role: "user" as const, text: EXPLAIN_KICKOFF }, ...tail];
+    const msgs: ReadingTurnMessage[] = [{ role: "user" as const, text: EXPLAIN_KICKOFF }, ...tail];
+    // The pictures ride the message being answered and nothing else. Every
+    // earlier turn of this thread was sent the same window when it was the
+    // current one, so those messages carry the line that says so instead — one
+    // window in context at a time, however long the conversation runs.
+    if (!pageWindow || pageImages.length === 0 || dropped.has("page-window")) return msgs;
+    return attachPageWindow(msgs, pageWindow, windowImages);
   }
 
   // Fit the call to the model's context window before it is sent. Left
@@ -619,6 +692,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   // gets parsed (src/budget/estimate.ts).
   const model = configuredModel(s);
   if (!model) {
+    reportPageWindow(threadId, pageWindow, pageImages, true);
     return {
       systemPrompt: composePrompt(new Set()),
       tools,
@@ -639,6 +713,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     skip.add("classroom-inline");
     skip.add("prep-notes-trim");
   }
+  if (!pageWindow || pageImages.length === 0) skip.add("page-window");
 
   const fitted = fitToBudget<ReadingReductionId, ReadingTurnMessage>({
     model,
@@ -650,6 +725,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     purpose: "chat",
     skip,
   });
+  reportPageWindow(threadId, pageWindow, pageImages, !fitted.dropped.has("page-window"));
   return {
     systemPrompt: fitted.systemPrompt,
     tools,
@@ -660,6 +736,37 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   };
 }
 
+
+// One line per turn that sent page images, so what the visual window costs is a
+// number somebody can read back rather than a guess (events-ai.jsonl). Fire and
+// forget, like every other event: a turn is never failed by its instrumentation.
+// Silent when the turn planned no window at all — a line saying "no pictures"
+// on every companion turn would bury the ones that mean something.
+function reportPageWindow(
+  threadId: string,
+  plan: PageWindowPlan | null,
+  images: RenderedPage[],
+  sent: boolean,
+): void {
+  if (!plan || images.length === 0) return;
+  let tokens = 0;
+  let px = 0;
+  for (const im of images) {
+    tokens += pageImageTokens(im.width, im.height);
+    px += im.width * im.height;
+  }
+  logEvent(AI_EVENT_TOPIC, "page-window", {
+    thread: threadId,
+    gate: plan.gate,
+    anchor: plan.anchor,
+    from: plan.pages[0].page,
+    to: plan.pages[plan.pages.length - 1].page,
+    pages: images.length,
+    tokens,
+    px,
+    sent,
+  });
+}
 
 // Assemble the topic's materials for a call (M6): each file's cached full text
 // and its annotations, scoped to the active topic. The current book uses the

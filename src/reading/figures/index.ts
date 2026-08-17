@@ -6,11 +6,30 @@ export { ensureFigures, getFigures, parseFiguresCache } from "./store";
 export { buildFigureCatalog, selectCatalogFigures, type CatalogOptions } from "./catalog";
 export {
   renderFigure,
+  renderPageImage,
   clearFigureCache,
   cardDisplayWidth,
   type RenderedFigure,
   type FigureTier,
 } from "./render";
+export {
+  attachPageWindow,
+  pageImageTokens,
+  pageRangeLabel,
+  pageWindowGate,
+  pageWindowMarker,
+  pageWindowPages,
+  pageWindowPrompt,
+  planPageWindow,
+  ANCHOR_PAGE_WIDTH_PX,
+  NEIGHBOUR_PAGE_WIDTH_PX,
+  PAGE_WINDOW_RADIUS,
+  SPARSE_PAGE_CHARS,
+  type PageWindowGate,
+  type PageWindowImage,
+  type PageWindowPage,
+  type PageWindowPlan,
+} from "./page-window";
 export {
   buildFigureTools,
   figureToolResult,

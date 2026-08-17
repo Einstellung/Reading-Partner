@@ -187,6 +187,8 @@
 - [122-spyon-swaps-an-esm-export-and-puts-it-back](./122-spyon-swaps-an-esm-export-and-puts-it-back.md) — bun 的 ESM 命名空间可写：`spyOn(ns, "导出名")` 导入方看得见，`mockRestore()` 能还原，命名导出/默认导出/再导出链都成立；这是 119 之外替换模块导出的另一条路，还原写在 finally 里
 - [123-vite-serves-node-modules-over-http](./123-vite-serves-node-modules-over-http.md) — `node_modules` 在 `server.fs.allow` 默认的根下面，dev server 照样按 HTTP 发出去（还给套一层明文 sourcemap）；秘密要写在服务的树之外，`.gitignore` 和 0600 都拦不住
 - [124-fs-deny-replaces-the-defaults](./124-fs-deny-replaces-the-defaults.md) — vite 解析 `server.fs?.deny || ['.env', '.env.*', '*.{crt,pem}']`，插件从 `config()` 返回一份 deny 就把这三条默认值整个顶掉，dev server 当场 200 发出 `.env` 正文外加明文 sourcemap；要加只能在 `configResolved` 里往已解析的数组 push。凡是 `x || 默认值` 解析的 vite 字段都是提供即替换
+- [134-dropthreadcache-reloads-instead-of-dropping](./134-dropthreadcache-reloads-instead-of-dropping.md) — `dropThreadCache` 不删缓存条目，它从文件重读一遍再合进去；`beforeEach` 里调它不隔离用例，同一个 `threadId` 会继承上一个用例追加的整段历史，用例之间要换 id
+
 ## 历史（zotero/reader 引擎时代）
 
 引擎已换成 EmbedPDF，这几篇留着是因为还有东西没随引擎一起死。每篇开头一行写明哪部分还成立。

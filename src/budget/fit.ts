@@ -43,9 +43,13 @@ export interface FitInput<Id extends string, M> {
   skip?: ReadonlySet<Id>;
 }
 
-export interface FittedCall<M> {
+export interface FittedCall<Id extends string, M> {
   systemPrompt: string;
   messages: M[];
+  // The rungs this call actually gave up. Empty when it fitted as assembled.
+  // Handed back rather than re-derived: a caller that instrumented a piece of
+  // the call has no other way to say whether the piece it measured was sent.
+  dropped: ReadonlySet<Id>;
   // What this turn had to leave out, or "" when nothing the reader has a stake
   // in was dropped.
   notice: string;
@@ -58,7 +62,7 @@ export interface FittedCall<M> {
 // passes. Left unchecked an over-full request comes back one token long with a
 // normal `done` and no error (docs/pitfall/65), so the check is not optional —
 // but it is also not free, and a call that fits must not pay for it.
-export function fitToBudget<Id extends string, M>(input: FitInput<Id, M>): FittedCall<M> {
+export function fitToBudget<Id extends string, M>(input: FitInput<Id, M>): FittedCall<Id, M> {
   const { model, tools, composePrompt, composeMessages, toPi, rungs, purpose, skip } = input;
 
   const none: ReadonlySet<Id> = new Set<Id>();
@@ -72,7 +76,9 @@ export function fitToBudget<Id extends string, M>(input: FitInput<Id, M>): Fitte
   });
 
   const budget = contextBudget(model, piContext(systemPrompt, messages));
-  if (fitsBudget(budget, purpose)) return { systemPrompt, messages, notice: "", refusal: "" };
+  if (fitsBudget(budget, purpose)) {
+    return { systemPrompt, messages, dropped: none, notice: "", refusal: "" };
+  }
 
   // The bulk rungs are held out of the baseline whether or not this call can
   // take them, so the small rungs are always measured against the same prompt.
@@ -115,10 +121,10 @@ export function fitToBudget<Id extends string, M>(input: FitInput<Id, M>): Fitte
     floorTokens: budget.used - total,
     savings,
   });
+  const dropped = new Set(plan.apply);
   if (plan.apply.length > 0) {
-    const dropped = new Set(plan.apply);
     systemPrompt = composePrompt(dropped);
     messages = composeMessages(dropped);
   }
-  return { systemPrompt, messages, notice: plan.notice, refusal: plan.refusal };
+  return { systemPrompt, messages, dropped, notice: plan.notice, refusal: plan.refusal };
 }
