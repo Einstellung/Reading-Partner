@@ -31,11 +31,18 @@ if (import.meta.env.DEV) {
   });
 }
 
-// Smoke build (VITE_SMOKE=1, set only by the iOS simulator smoke workflow): run
-// the unattended engine check instead of mounting the app. Guarded by the env
-// flag so a normal build never loads the smoke chunk.
+// Smoke build (VITE_SMOKE, set only by the iOS simulator smoke workflow and by
+// the device dictation check): run an unattended check instead of mounting the
+// app. Guarded by the env flag so a normal build never loads either chunk.
+//
+// "1" is the engine check, which the simulator can answer. "dictation" is the
+// voice plugin, which it cannot: SpeechTranscriber.isAvailable is false without
+// a Neural Engine, and a hold is a finger on a screen, so that one only means
+// anything on a real phone driven by src/smoke/dictation.ts.
 if (import.meta.env.VITE_SMOKE === "1") {
   void import("./smoke/smoke").then(({ runSmoke }) => runSmoke());
+} else if (import.meta.env.VITE_SMOKE === "dictation") {
+  void import("./smoke/dictation").then(({ runDictationSmoke }) => runDictationSmoke());
 } else {
   // The bridge must be in place before pi-ai (imported via App) initializes, in
   // case the underlying SDK captures a reference to the global fetch at module
