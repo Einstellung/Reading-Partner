@@ -1,0 +1,70 @@
+// The native half of on-device dictation (docs/15, docs/33). Audio capture,
+// echo cancellation and SpeechAnalyzer recognition all live in Swift, under
+// ios/; this crate is the bridge and nothing else.
+//
+// Three commands and one event. `start_dictation` / `stop_dictation` /
+// `cancel_dictation` are invoked from the composer's hold-to-talk bar; the
+// `dictation` event carries `{kind:"volatile"|"final",text}` and
+// `{kind:"level",value}` and reaches the frontend as a plugin listener.
+
+use tauri::{
+    plugin::{Builder, TauriPlugin},
+    Manager, Runtime,
+};
+
+pub use models::*;
+
+// Split by target_os rather than by tauri's desktop/mobile cfg: Android is
+// mobile and has no implementation here either.
+#[cfg(not(target_os = "ios"))]
+mod fallback;
+#[cfg(target_os = "ios")]
+mod ios;
+
+mod commands;
+mod error;
+mod models;
+
+pub use error::{Error, Result};
+
+#[cfg(not(target_os = "ios"))]
+use fallback::Voice;
+#[cfg(target_os = "ios")]
+use ios::Voice;
+
+/// Extensions to [`tauri::App`], [`tauri::AppHandle`] and [`tauri::Window`] to access the voice APIs.
+pub trait VoiceExt<R: Runtime> {
+    fn voice(&self) -> &Voice<R>;
+}
+
+impl<R: Runtime, T: Manager<R>> crate::VoiceExt<R> for T {
+    fn voice(&self) -> &Voice<R> {
+        self.state::<Voice<R>>().inner()
+    }
+}
+
+/// Initializes the plugin.
+///
+/// The name given here is what makes the invoke prefix `plugin:voice|` and the
+/// Swift registration name `voice`; it has to agree with `links` in Cargo.toml,
+/// which is what names the ACL namespace, and nothing checks that at compile
+/// time.
+pub fn init<R: Runtime>() -> TauriPlugin<R> {
+    Builder::new("voice")
+        .invoke_handler(tauri::generate_handler![
+            commands::start_dictation,
+            commands::stop_dictation,
+            commands::cancel_dictation,
+            commands::register_listener,
+            commands::remove_listener
+        ])
+        .setup(|app, api| {
+            #[cfg(target_os = "ios")]
+            let voice = ios::init(app, api)?;
+            #[cfg(not(target_os = "ios"))]
+            let voice = fallback::init(app, api)?;
+            app.manage(voice);
+            Ok(())
+        })
+        .build()
+}

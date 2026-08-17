@@ -1,0 +1,9 @@
+[default]
+description = "Dictate on the device: start, stop and cancel a hold, and subscribe to the dictation event."
+permissions = [
+  "allow-start-dictation",
+  "allow-stop-dictation",
+  "allow-cancel-dictation",
+  "allow-register-listener",
+  "allow-remove-listener",
+]
