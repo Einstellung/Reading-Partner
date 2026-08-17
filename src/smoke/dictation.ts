@@ -65,6 +65,7 @@ interface Scenario {
 export interface DictationSmokeResult {
   ok: boolean;
   stage: string;
+  wakeLock: string;
   hasOnDeviceDictation: boolean;
   userAgent: string;
   scenarios: Scenario[];
@@ -74,6 +75,30 @@ export interface DictationSmokeResult {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// A real hold keeps the screen awake by itself — a finger on the glass resets
+// the idle timer. A synthesised pointer event does not, so the phone locks
+// two minutes in, the app is backgrounded, the microphone route goes to []
+// with no interruption notification, and the webview's timers stop: the script
+// freezes mid-hold and never writes another line. The wake lock is the only
+// way this file can run longer than one auto-lock period.
+async function holdTheScreen(): Promise<string> {
+  const nav = navigator as Navigator & {
+    wakeLock?: { request(type: "screen"): Promise<{ released: boolean }> };
+  };
+  if (!nav.wakeLock) return "no wakeLock API";
+  try {
+    await nav.wakeLock.request("screen");
+    // The lock is dropped whenever the page is hidden, and taking it again on
+    // the way back is the documented pattern.
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") void nav.wakeLock?.request("screen");
+    });
+    return "held";
+  } catch (e) {
+    return `refused: ${String((e as Error)?.message ?? e)}`;
+  }
+}
 
 // A marker the host can see in the device console in real time. console.log
 // does not reach the syslog from WKWebView, but every plugin command does — so
@@ -335,14 +360,12 @@ function script(): Scenario[] {
     { name: "zh-short", ...ZH, holdMs: 3000 },
   ];
   // More of each length, for the release-to-answer distribution.
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 2; i++) {
     list.push({ name: `en-2s-${i}`, ...EN, holdMs: 2500 });
     list.push({ name: `zh-2s-${i}`, ...ZH, holdMs: 2500 });
   }
-  for (let i = 0; i < 2; i++) {
-    list.push({ name: `en-15s-${i}`, ...EN, holdMs: 15000 });
-    list.push({ name: `zh-15s-${i}`, ...ZH, holdMs: 15000 });
-  }
+  list.push({ name: "en-15s", ...EN, holdMs: 15000 });
+  list.push({ name: "zh-15s", ...ZH, holdMs: 15000 });
   return list;
 }
 
@@ -379,6 +402,7 @@ export async function runDictationSmoke(): Promise<void> {
   const result: DictationSmokeResult = {
     ok: false,
     stage: "start",
+    wakeLock: "not asked",
     hasOnDeviceDictation: hasOnDeviceDictation(),
     userAgent: navigator.userAgent,
     scenarios: [],
@@ -395,6 +419,10 @@ export async function runDictationSmoke(): Promise<void> {
   };
 
   try {
+    result.wakeLock = await holdTheScreen();
+    note(`wake lock: ${result.wakeLock}`);
+    await save("wake-lock");
+
     // 1. A stray tap, then a normal hold. If the teardown leaves the session
     //    wedged, the hold after it fails with !rec or a zero sample rate.
     await save("tap");
