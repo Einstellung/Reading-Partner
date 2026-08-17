@@ -847,10 +847,18 @@ final class DictationRun {
         }
         transcriptLock.unlock()
 
+        // Shape and timing, never the words. The plist promises the user their
+        // speech "is transcribed on this iPhone and never uploaded", and a
+        // sysdiagnose is an upload — one they are routinely asked for by support
+        // and by Feedback Assistant. There is deliberately no compile-time or
+        // runtime switch here that could put the text back: the measurement
+        // builds that need it get it from scripts/ios-dictation/measurement-patch.py,
+        // which rewrites this call in the Mac's working tree and is never
+        // committed. A flag in this file would be one `#if` away from shipping.
         NSLog(
-            "RP-DICT %@ %.0fms %@",
+            "RP-DICT %@ %.0fms %d chars",
             result.isFinal ? "final" : "volatile",
-            (CFAbsoluteTimeGetCurrent() - startedAt) * 1000, text)
+            (CFAbsoluteTimeGetCurrent() - startedAt) * 1000, text.count)
 
         if result.isFinal {
             // Always: a final is what the webview appends, and it also clears
