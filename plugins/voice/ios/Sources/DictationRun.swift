@@ -688,12 +688,30 @@ final class DictationRun {
         notificationObservers.append(
             center.addObserver(
                 forName: AVAudioSession.routeChangeNotification, object: session, queue: .main
-            ) { _ in
+            ) { [weak self] _ in
                 let route = AVAudioSession.sharedInstance().currentRoute
                 NSLog(
                     "RP-DICT route in=[%@] out=[%@]",
                     route.inputs.map { $0.portType.rawValue }.joined(separator: ", "),
                     route.outputs.map { $0.portType.rawValue }.joined(separator: ", "))
+                guard let self = self else { return }
+
+                // An empty input route is the end of the capture, and it is the
+                // only notice given: no interruption fires, the engine still
+                // says isRunning, and the tap simply stops being called
+                // (docs/pitfall/141). Left unhandled it reads as a hold that
+                // heard nothing, which is exactly how a fourteen-second run died
+                // on 2026-08-17 with no reason recorded anywhere.
+                //
+                // Only once capture is really up: the route changes on the way
+                // in too, while the session is being configured, and inputs are
+                // legitimately empty for part of that.
+                guard self.tapInstalled, route.inputs.isEmpty else { return }
+                NSLog("RP-DICT the microphone went away mid-hold")
+                self.recordFailure(
+                    "The microphone became unavailable. Hold again to keep going.")
+                self.endEmitting()
+                Task { [weak self] in await self?.stop() }
             })
 
         // The engine posts this when the hardware format changes under it, and

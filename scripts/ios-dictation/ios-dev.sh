@@ -33,6 +33,8 @@ GUI_UID=501
 GUI_USER=mima1234
 TEAM=NNXRL2S9SA
 DEV_ID=com.xinyuan.readingpartner.dev
+# What the icon says, so it cannot be confused with the TestFlight build.
+DEV_NAME="RP DEV"
 DEVICE=00008140-000C31641EEB001C
 
 cd "$REPO"
@@ -48,16 +50,29 @@ bun install
 step "port 1420"
 lsof -ti tcp:1420 | xargs kill -9 2>/dev/null || true
 
-# --- the .dev bundle id, uncommitted --------------------------------------
-step "bundle id"
+# --- the .dev bundle id and display name, uncommitted ----------------------
+# The name matters as much as the id. The TestFlight build sits on the same home
+# screen under the same name, so two identical "Reading Partner" icons meant the
+# user opened whichever they found first — which on 2026-08-17 was the wrong one.
+step "bundle id and display name"
 if grep -q '"identifier": "com.xinyuan.readingpartner"' src-tauri/tauri.conf.json; then
   sed -i '' "s|\"identifier\": \"com.xinyuan.readingpartner\"|\"identifier\": \"$DEV_ID\"|" \
     src-tauri/tauri.conf.json
-  echo "applied $DEV_ID (working tree only)"
-else
-  echo "already $DEV_ID"
 fi
-grep '"identifier"' src-tauri/tauri.conf.json
+if grep -q '"productName": "Reading Partner"' src-tauri/tauri.conf.json; then
+  sed -i '' "s|\"productName\": \"Reading Partner\"|\"productName\": \"$DEV_NAME\"|" \
+    src-tauri/tauri.conf.json
+fi
+grep -E '"identifier"|"productName"' src-tauri/tauri.conf.json
+
+# productName reaches the home screen through gen/apple/project.yml, which only
+# `tauri ios init` rewrites — a stale gen/apple keeps the old name however many
+# times tauri.conf.json changes.
+if ! grep -q "$DEV_NAME" src-tauri/gen/apple/project.yml 2>/dev/null; then
+  echo "regenerating gen/apple so the display name takes"
+  rm -rf src-tauri/gen/apple
+  bun run tauri ios init --ci 2>&1 | tail -2
+fi
 
 # --- gen/apple, regenerated when the target moved -------------------------
 WANT_TARGET=$(python3 -c 'import json;print(json.load(open("src-tauri/tauri.conf.json"))["bundle"]["iOS"]["minimumSystemVersion"])')
