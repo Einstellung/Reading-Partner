@@ -420,13 +420,19 @@ export async function runDictationSmoke(): Promise<void> {
     );
     await save("after-tap-hold-done");
 
-    // 2. The script.
-    for (const s of script()) {
-      await sleep(1200);
-      await save(`scenario:${s.name}`);
-      result.scenarios.push(await runScenario(s));
-      await save(`scenario:${s.name}:done`);
-    }
+    // 2. The composer's own bar, twice: once with speech, once silent. First,
+    //    because this is the path that has to be shown working and the phone
+    //    can auto-lock out from under the rest of the script.
+    //    A glossary of one line is the cue for the host to speak English; the
+    //    second pass has none, so the room stays quiet and the bar has to
+    //    produce its own "No speech detected." line.
+    await sleep(1200);
+    await save("bar-driven");
+    result.barDriven.push(await holdTheBar(9000, "Transformer"));
+    await save("bar-driven-1-done");
+    await sleep(1200);
+    result.barDriven.push(await holdTheBar(3000));
+    await save("bar-driven-2-done");
 
     // 3. A start while the previous stop is still flushing.
     await sleep(1200);
@@ -434,16 +440,13 @@ export async function runDictationSmoke(): Promise<void> {
     (result as unknown as Record<string, unknown>).overlapping = await overlappingStart();
     await save("overlapping-start-done");
 
-    // 4. The composer's own bar, twice: once with speech, once silent.
-    await sleep(1200);
-    await save("bar-driven");
-    // A glossary of one line is the cue for the host to speak English; the
-    // second pass has none, so the room stays quiet and the bar has to produce
-    // its own "No speech detected." line.
-    result.barDriven.push(await holdTheBar(9000, "Transformer"));
-    await save("bar-driven-1-done");
-    await sleep(1200);
-    result.barDriven.push(await holdTheBar(3000));
+    // 4. The scripted holds, longest tail last.
+    for (const s of script()) {
+      await sleep(1200);
+      await save(`scenario:${s.name}`);
+      result.scenarios.push(await runScenario(s));
+      await save(`scenario:${s.name}:done`);
+    }
 
     result.ok = true;
     await save("done");
