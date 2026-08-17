@@ -11,13 +11,19 @@
 // the only fakes, exactly as in dictation.ts.
 //
 // What it answers:
-//   1. The level curve. `quietDb`/`loudDb` in DictationRun.swift have never
-//      heard a voice — only a loudspeaker across a desk, which the
+//   1. The level curve. `quietDb`/`loudDb` in DictationRun.swift had never heard
+//      a voice before this — only a loudspeaker across a desk, which the
 //      voice-processing unit treats differently on purpose. The numbers come
 //      out of the plugin's own `RP-DICT level rms=… db=…` console lines, which
 //      is why nothing here records levels itself.
-//   2. FINISH_TIMEOUT_MS. Ten holds, five per language, short and long, each
-//      one timed from the synthetic pointerup to the bar delivering its text.
+//   2. FINISH_TIMEOUT_MS, timed from the synthetic pointerup to the bar
+//      delivering its text. Only the holds that still had a final arriving at
+//      release count towards it; the rest were finished settling before the
+//      finger came up and measure the cost of flushing nothing.
+//
+// Both were answered by the first run, on 2026-08-17: eleven holds, one person
+// hand-holding at 0.5-0.8 m in a quiet empty room. What it did not answer is
+// anything about Chinese — see `read` below.
 //
 // The first tap is load-bearing beyond starting the run: the screen wake lock
 // is refused without user activation, and without it the phone locks two
@@ -32,7 +38,18 @@ export const GUIDED_RESULT_FILE = "smoke/dictation-guided.json";
 
 interface Hold {
   id: string;
-  locale: "en-US" | "zh-CN";
+  /// Which language the person is asked to read, and nothing more. It does NOT
+  /// reach the recogniser: HoldToTalk takes a glossary and no locale, so every
+  /// hold below runs on whatever `Locale.preferredLanguages` resolves to. The
+  /// first run of this script asked for five zh-CN holds and got five holds of
+  /// Chinese speech decoded by the en-US model — "注意力机制取代了循环结构" came
+  /// back as "2 E D, teacher, Chidalo, Shun.", which is docs/33's "cross-language
+  /// decoding is total, not degraded" arriving by accident.
+  ///
+  /// To measure zh-CN through this bar, the device's own preferred language has
+  /// to be Chinese. Passing a locale would mean giving HoldToTalk a prop the
+  /// composer has no use for yet.
+  read: "en-US" | "zh-CN";
   holdMs: number;
   /// Shown in large type. Reading is easier than improvising and keeps every
   /// hold the same length of speech.
@@ -44,7 +61,7 @@ interface Hold {
 interface HoldResult {
   index: number;
   id: string;
-  locale: string;
+  read: string;
   holdMs: number;
   /// Device epoch ms, so a hold can be lined up against the console's level
   /// lines. Holds run strictly in order, so the Nth `RP-DICT start` is this one.
@@ -80,17 +97,17 @@ const ZH_LONG =
 // against; the long ones are 15 s because a long hold is where a flush has the
 // most left to settle.
 const SCRIPT: Hold[] = [
-  { id: "calibrate", locale: "en-US", holdMs: 5000, say: EN_SHORT, calibration: true },
-  { id: "en-short-1", locale: "en-US", holdMs: 2500, say: EN_SHORT },
-  { id: "en-short-2", locale: "en-US", holdMs: 2500, say: EN_SHORT },
-  { id: "en-short-3", locale: "en-US", holdMs: 2500, say: EN_SHORT },
-  { id: "en-long-1", locale: "en-US", holdMs: 15000, say: EN_LONG },
-  { id: "en-long-2", locale: "en-US", holdMs: 15000, say: EN_LONG },
-  { id: "zh-short-1", locale: "zh-CN", holdMs: 2500, say: ZH_SHORT },
-  { id: "zh-short-2", locale: "zh-CN", holdMs: 2500, say: ZH_SHORT },
-  { id: "zh-short-3", locale: "zh-CN", holdMs: 2500, say: ZH_SHORT },
-  { id: "zh-long-1", locale: "zh-CN", holdMs: 15000, say: ZH_LONG },
-  { id: "zh-long-2", locale: "zh-CN", holdMs: 15000, say: ZH_LONG },
+  { id: "calibrate", read: "en-US", holdMs: 5000, say: EN_SHORT, calibration: true },
+  { id: "en-short-1", read: "en-US", holdMs: 2500, say: EN_SHORT },
+  { id: "en-short-2", read: "en-US", holdMs: 2500, say: EN_SHORT },
+  { id: "en-short-3", read: "en-US", holdMs: 2500, say: EN_SHORT },
+  { id: "en-long-1", read: "en-US", holdMs: 15000, say: EN_LONG },
+  { id: "en-long-2", read: "en-US", holdMs: 15000, say: EN_LONG },
+  { id: "zh-short-1", read: "zh-CN", holdMs: 2500, say: ZH_SHORT },
+  { id: "zh-short-2", read: "zh-CN", holdMs: 2500, say: ZH_SHORT },
+  { id: "zh-short-3", read: "zh-CN", holdMs: 2500, say: ZH_SHORT },
+  { id: "zh-long-1", read: "zh-CN", holdMs: 15000, say: ZH_LONG },
+  { id: "zh-long-2", read: "zh-CN", holdMs: 15000, say: ZH_LONG },
 ];
 
 const COUNTDOWN_MS = 3000;
@@ -285,7 +302,7 @@ export async function runGuidedDictation(): Promise<void> {
 
   for (let i = 0; i < SCRIPT.length; i++) {
     const hold = SCRIPT[i];
-    const language = hold.locale === "zh-CN" ? "中文" : "English";
+    const language = hold.read === "zh-CN" ? "中文" : "English";
     const label = `${i + 1} of ${SCRIPT.length} · ${language}${
       hold.calibration ? " · meter check" : ""
     }`;
@@ -334,7 +351,7 @@ export async function runGuidedDictation(): Promise<void> {
     result.holds.push({
       index: i,
       id: hold.id,
-      locale: hold.locale,
+      read: hold.read,
       holdMs: hold.holdMs,
       pressedAtEpoch,
       releasedAtEpoch,

@@ -165,13 +165,23 @@ final class DictationRun {
     /// Linear RMS mapped to 0..1 across this window. VPIO's AGC moves near-voice
     /// level by ~18 dB (docs/33), so the floor is well below a quiet room.
     ///
-    /// UNTUNED. The floor is measured and real: with voice processing on, a
-    /// silent room reads -80 dB, not the -50 a raw microphone gives, so the
-    /// bottom third of this window is spent on silence. The top is not measured
-    /// — the only voice this has ever heard is a loudspeaker across a desk, and
-    /// VPIO treats a loudspeaker differently from a mouth near the phone, which
-    /// is exactly the level it would be tuned against. It needs one hold from a
-    /// person at arm's length before either end moves.
+    /// Measured, and kept. Eleven hand-held holds by one person at 0.5-0.8 m in
+    /// a quiet empty room, 752 level samples: silence between phrases sits at
+    /// -85 to -90 dB, median speech at -22 to -26 dB, per-hold p90 at -16 to
+    /// -21 dB, loudest single sample -11.3 dB.
+    ///
+    /// Through this window that is 0.00 for silence, 0.59-0.70 for median
+    /// speech, 0.73-0.85 at p90 and 0.79-0.97 at the peak — alive across most
+    /// of the bar with nothing clipping. -10 sits 1.2 dB above the loudest
+    /// sample seen, which is the headroom a closer hold needs: hold-to-talk
+    /// puts the phone in a hand, and 0.3 m would add about 6 dB. Fitting the
+    /// top to the median peak instead would peg the meter for every word at
+    /// that distance and stop it carrying information.
+    ///
+    /// The spread across holds is 4.3 dB at the median and 7.2 dB at the peak,
+    /// and it is not the arm moving: the Chinese holds are the loud end
+    /// (peaks -11 to -15) and the English ones the quiet end (-15 to -18)
+    /// throughout. -10 is set against the loud end deliberately.
     private static let quietDb: Float = -50
     private static let loudDb: Float = -10
 
@@ -207,12 +217,19 @@ final class DictationRun {
     private let resultsGate = Gate()
 
     /// How long stop() waits for finalizeAndFinishThroughEndOfInput(). Measured
-    /// at 70-330 ms on a healthy session — and at 89 seconds once, on a session
-    /// another instance of the app had taken the microphone from. The three
-    /// commands run on one serial chain, so an unbounded wait here does not
-    /// just delay one answer: it parks every hold after it. The composer gives
-    /// up on the flush at 2.5 s and lets the user press again, and that press
-    /// would queue behind this.
+    /// at 76-276 ms over eleven human-voice holds (median 104 ms) — and at 89
+    /// seconds once, on a session another instance of the app had taken the
+    /// microphone from. The three commands run on one serial chain, so an
+    /// unbounded wait here does not just delay one answer: it parks every hold
+    /// after it, including the one the user makes after the composer gives up
+    /// on the flush at FINISH_TIMEOUT_MS and lets them press again.
+    ///
+    /// Left generous on purpose. This is an anti-wedge net for a state that
+    /// should not happen with one app instance, not a latency budget: tightening
+    /// it towards the measured 276 ms would start truncating healthy long
+    /// flushes, and the thing a truncated flush loses is the last final — which
+    /// is emitted to nobody, because the emission gate closes when
+    /// stop_dictation arrives.
     private static let finalizeGraceMs: UInt64 = 2000
 
     init(emit: @escaping Emit) {

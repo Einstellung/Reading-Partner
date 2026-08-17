@@ -92,22 +92,31 @@ export interface HoldResult extends HoldState {
 // it already has. Too short truncates the last words; too long is a bar that
 // sits there saying "Finishing…" after the user is done.
 //
-// Measured on an iPhone 16 / iOS 26.6, pointerup to the stop promise settling,
-// IPC included: 261 277 294 303 306 307 315 316 318 326 334 345 346 352 362 ms
-// over fifteen holds, plus 262 264 277 300 ms for the four that went through the
-// bar itself. One outlier at 1311 ms, the first hold after a cold launch. An
-// explicit finalizeAndFinishThroughEndOfInput() is nothing like the ~2.6 s
-// docs/33 measured for natural finalization after a pause — it returns in
-// 70-330 ms — and the native side now caps its own wait at 2 s besides
-// (docs/pitfall/138), so this can only be reached by something already broken.
+// Measured on an iPhone 16 / iOS 26.6, one person hand-holding at 0.5-0.8 m in a
+// quiet room, eleven holds through this bar, timed from the pointerup to the
+// text being delivered with the IPC round trip inside it.
 //
-// Still 2500 because that sample is not the one this number deserves. Almost
-// every hold in it was silent: the harness played speech from a loudspeaker into
-// the room and the phone's voice-processing unit suppressed most of it, so what
-// was measured is mostly the cost of finalizing nothing. The flush that matters
-// is the one with words still unsettled in it. Ten holds of real speech, five
-// zh-CN and five en-US, some ~2 s and some ~15 s, then set this to p95 + 300 ms.
-export const FINISH_TIMEOUT_MS = 2500;
+// The population that matters is the eight holds where a final was still
+// arriving when the finger came up — the others had already settled and had
+// nothing to flush:
+//
+//   still unsettled at release (n=8):  285 301 310 313 314 328 351 482 ms
+//                                      p50 314, p90 351, p95 482
+//   already settled  (n=3):            314 342 396 ms
+//   native finalize alone (n=11):      76-276 ms, median 104
+//
+// 1500 is a little over three times the p95. It is not p95 + 300, and the reason
+// is what firing early costs: the emission gate closes the moment stop_dictation
+// is received, so the final that lands during the flush reaches the accumulator
+// and never reaches the webview. Eight of eleven holds had one. Timing out does
+// not shave a few milliseconds off a complete transcript — it drops the last
+// sentence of most holds. Margin is worth more here than a tighter ceiling, and
+// 1500 still cuts a second off the worst case a user can see.
+//
+// Both languages in that sample were transcribed by the en-US recogniser: the
+// bar takes a glossary but no locale, so every hold used the device's preferred
+// language. A zh-CN flush has not been timed.
+export const FINISH_TIMEOUT_MS = 1500;
 
 // The same line the desktop press shows for the same outcome; both paths end in
 // "you held the button and nothing came out".
