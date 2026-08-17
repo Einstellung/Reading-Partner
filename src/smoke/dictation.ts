@@ -346,16 +346,22 @@ async function holdTheBar(holdMs: number, glossary?: string): Promise<Record<str
 
 // The host cannot see this file while it runs, so the cue it plays speech
 // against is what the plugin logs at the top of every start: the locale and the
-// number of hot words. en-US means the English phrase, zh-CN the Chinese one,
-// and a run with no locale and no hot words is a run that wants silence.
+// number of hot words. The locale picks the language, the count picks the
+// length — a six-second passage played into a two-second hold measures nothing
+// — and a run with no locale and no hot words is a run that wants silence.
 const EN = { locale: "en-US", contextualStrings: ["Transformer"] };
 const ZH = { locale: "zh-CN", contextualStrings: ["注意力", "机器之心"] };
+const EN_LONG = { locale: "en-US", contextualStrings: ["Transformer", "attention", "recurrence"] };
+const ZH_LONG = {
+  locale: "zh-CN",
+  contextualStrings: ["注意力", "机器之心", "循环结构", "自注意力"],
+};
 
 function script(): Scenario[] {
   const list: Scenario[] = [
     { name: "silent-5s", holdMs: 5000 },
-    { name: "en-long", ...EN, holdMs: 14000 },
-    { name: "zh-long", ...ZH, holdMs: 14000 },
+    { name: "en-long", ...EN_LONG, holdMs: 14000 },
+    { name: "zh-long", ...ZH_LONG, holdMs: 14000 },
     { name: "en-short", ...EN, holdMs: 3000 },
     { name: "zh-short", ...ZH, holdMs: 3000 },
   ];
@@ -364,8 +370,8 @@ function script(): Scenario[] {
     list.push({ name: `en-2s-${i}`, ...EN, holdMs: 2500 });
     list.push({ name: `zh-2s-${i}`, ...ZH, holdMs: 2500 });
   }
-  list.push({ name: "en-15s", ...EN, holdMs: 15000 });
-  list.push({ name: "zh-15s", ...ZH, holdMs: 15000 });
+  list.push({ name: "en-15s", ...EN_LONG, holdMs: 15000 });
+  list.push({ name: "zh-15s", ...ZH_LONG, holdMs: 15000 });
   return list;
 }
 
