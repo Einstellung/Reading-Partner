@@ -127,6 +127,7 @@
 - [140-the-tap-buffer-decides-the-level-rate](./140-the-tap-buffer-decides-the-level-rate.md) — 电平事件按 15Hz 节流，实测 9.6-10.0Hz：真正定频率的是 `installTap` 的 `bufferSize`（4096 帧 / 48kHz = 85ms），节流阈值比到达间隔还短，一次都没生效。要改频率去改 bufferSize
 - [141-a-locked-screen-takes-the-microphone-without-an-interruption](./141-a-locked-screen-takes-the-microphone-without-an-interruption.md) — 自动锁屏把 app 切后台，输入路由变成 `in=[]`，麦克风再无一个 buffer，但 `interruptionNotification` 一条都不来、`isRunning` 还是 true；真手指按着屏幕不会锁，只有合成 pointer 事件的无人值守脚本会撞上
 - [143-the-wrong-dictation-locale-invents-rather-than-degrades](./143-the-wrong-dictation-locale-invents-rather-than-degrades.md) — 送错语种的模型不会「识别得差一点」，会按音节猜出一串语法通顺的目标语言词：中文「注意力机制取代了循环结构」按 en-US 出来是 `2 E D, teacher, Chidalo, Shun.`，十五秒的长句只剩一串逗号。看起来像正常输出，所以比空转写更难发现。不跟随设备语言，做成设置项（`settings.dictationLocale`，默认 zh-CN）
+- [144-a-harness-that-buffers-cannot-report-the-crash-it-watches-for](./144-a-harness-that-buffers-cannot-report-the-crash-it-watches-for.md) — 探针把记录攒在内存里、跑完才落盘，就报不了它自己要抓的那种死法：jetsam、看门狗、锁屏挂起定时器都不给收尾机会，死在第十八分钟和从没开始过取回来是同一个空文件。按事件 `append` 一行 JSON，每条带墙钟时间戳；高频事件只计数不入账。有了它，跑多久就没那么要紧——死在第四分钟就是四分钟的数据
 
 ## WebKit / webview
 
