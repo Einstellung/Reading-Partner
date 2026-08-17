@@ -29,7 +29,11 @@ for i in $(seq 1 900); do
     sleep 2
     bash /tmp/syslog.sh /tmp/rp-dict.log
     pkill -f 'speaker.sh' 2>/dev/null || true
-    ( nohup bash /tmp/speaker.sh /tmp/rp-dict.log > /tmp/speaker.log 2>&1 < /dev/null & )
+    if [ "${1:-}" = "--no-speaker" ]; then
+      echo "speaker suppressed: this run wants a human voice, not a loudspeaker"
+    else
+      ( nohup bash /tmp/speaker.sh /tmp/rp-dict.log > /tmp/speaker.log 2>&1 < /dev/null & )
+    fi
     sleep 1
     xcrun devicectl device process launch --device "$DEVICE" "$APP" 2>&1 | tail -2
     echo "$(date +%H:%M:%S) launched"

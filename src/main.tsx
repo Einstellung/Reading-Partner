@@ -43,6 +43,11 @@ if (import.meta.env.VITE_SMOKE === "1") {
   void import("./smoke/smoke").then(({ runSmoke }) => runSmoke());
 } else if (import.meta.env.VITE_SMOKE === "dictation") {
   void import("./smoke/dictation").then(({ runDictationSmoke }) => runDictationSmoke());
+} else if (import.meta.env.VITE_SMOKE === "dictation-guided") {
+  // The half of the dictation measurements that needs a person in front of the
+  // phone: a level curve and a flush latency are both about a human voice, and
+  // a loudspeaker is not one.
+  void import("./smoke/dictation-guided").then(({ runGuidedDictation }) => runGuidedDictation());
 } else {
   // The bridge must be in place before pi-ai (imported via App) initializes, in
   // case the underlying SDK captures a reference to the global fetch at module
