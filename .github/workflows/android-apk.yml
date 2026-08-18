@@ -4,7 +4,7 @@
 # the smoke build: VITE_SMOKE is unset, so main.tsx mounts the app.
 #
 # Reusable: release.yml calls it with the tag name so the same build also lands
-# on the draft GitHub release next to the desktop bundles. Called with no tag
+# on the GitHub release next to the desktop bundles. Called with no tag
 # (or dispatched by hand) the APK is a workflow artifact only.
 #
 # Signing: the release APK is built UNSIGNED, then signed out-of-band with
@@ -217,7 +217,7 @@ jobs:
           path: ${{ env.APK_NAME }}
           if-no-files-found: error
 
-      # Only when release.yml called us with a tag. The release is the draft
+      # Only when release.yml called us with a tag. The release is the one
       # tauri-action created for the desktop bundles, so this job must run after
       # it; --clobber keeps a re-run idempotent.
       - name: Attach the APK to the release
