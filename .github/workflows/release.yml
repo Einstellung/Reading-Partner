@@ -64,12 +64,12 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Reading Partner ${{ github.ref_name }}"
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
 
   # The fourth product of the same tag: a signed arm64 APK, built once by the
-  # reusable Android workflow and attached to the draft release the desktop
+  # reusable Android workflow and attached to the release the desktop
   # matrix just created. `needs: app` is what makes that release exist first —
   # tauri-action creates it, nothing else does. On a workflow_dispatch there is
   # no tag and so no release; release_tag is then empty and the APK is only a
