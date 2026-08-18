@@ -1,10 +1,10 @@
 # Android 落地调研
 
-调研日期 2026-07-28,2026-08-05、2026-08-06 按落地后的状态改写。前提是 docs/22 定的手机形态:手机只做 info,不加载 EmbedPDF / PDFium WASM。
+调研日期 2026-07-28,2026-08-05、2026-08-06、2026-08-18 按落地后的状态改写。前提是 docs/22 定的手机形态:手机只做 info,不加载 EmbedPDF / PDFium WASM。
 
 ## 结论
 
-构建这一环已经通了,而且接进了发布线。两条 workflow 在当前代码上跑绿:签名 release APK 出货,PDFium 引擎冒烟在 Android 模拟器上 `ok:true`。打 tag 发版时 `release.yml` 把同一个 APK 挂到 draft release 上,和三个桌面平台并列。签名密钥的四个 secret 已经在仓库里。
+构建这一环已经通了,而且接进了发布线。两条 workflow 在当前代码上跑绿:签名 release APK 出货,PDFium 引擎冒烟在 Android 模拟器上 `ok:true`。打 tag 发版时 `release.yml` 把同一个 APK 挂到那次 tag 的 release 上,和三个桌面平台并列。签名密钥的四个 secret 已经在仓库里。
 
 Google 登录 2026-08-06 也接上了,走 Android 类型 client + 自定义 URI scheme + PKCE,和 iOS 同形态。代码在主线上,真机一步没验,见下面「Google 登录」。
 
@@ -82,11 +82,11 @@ NDK 从 spike 的 `26.3.11579264` 换成 `28.2.13676358`(r28c)。理由是 16 KB
 
 冒烟那条多一段:装 x86_64 + arm64 的 universal debug APK,`reactivecircus/android-emulator-runner` 启 API 34 google_apis 模拟器,`adb run-as` 从 app 私有目录读回 verdict。gate 脚本单独放 `.github/scripts/android-smoke-gate.sh`,因为 emulator-runner 的内联 `script` 是逐行喂 dash 的,多行 shell 会散架。
 
-`android-apk.yml` 同时是 `workflow_call`,`release.yml` 打 tag 时把它当第四个平台调,`secrets: inherit`,`needs: app`。desktop 那三个包由 `tauri-apps/tauri-action` 出,顺手建那份 draft release —— release 是它建的,所以 APK 这一步必须排在它后面,建完才有东西可挂。挂的动作是 `gh release upload <tag> <apk> --clobber`;`gh` 认 draft release 的 tag 名(实测过一次:建一个 draft、传一个文件、再传一次覆盖,都成,`isDraft: true`)。没有 tag 时(`workflow_dispatch`、push)`release_tag` 是空的,那一步跳过,APK 只留在 workflow artifact 里 —— run 30972780114 实测就是 skipped。APK 只构建一次,不复制第二条产线。
+`android-apk.yml` 同时是 `workflow_call`,`release.yml` 打 tag 时把它当第四个平台调,`secrets: inherit`,`needs: app`。desktop 那三个包由 `tauri-apps/tauri-action` 出,顺手建那份 release —— release 是它建的,所以 APK 这一步必须排在它后面,建完才有东西可挂。`releaseDraft: false`,tag 一推就是正式发布。挂的动作是 `gh release upload <tag> <apk> --clobber`。没有 tag 时(`workflow_dispatch`、push)`release_tag` 是空的,那一步跳过,APK 只留在 workflow artifact 里 —— run 30972780114 实测就是 skipped。APK 只构建一次,不复制第二条产线。
 
-这条线分开验过四件:`gh release upload` 认 draft 的 tag 名;没 tag 时那一步 skipped(run 30972780114);`release.yml` 在 android-spike 上 `workflow_dispatch` 一次,GitHub 把 `android` 解析成了真的一个 job 并挂在 `needs: app` 后面(run 30973489551,起来几秒就取消掉了,desktop 那三条没跑完,也没建出 release);APK 本身出货。没验的是把这四件串起来:tag 触发、`release_tag` 真的非空、挂到 tauri-action 刚建的那份 draft 上。要知道只有真打一个 tag。
+这条线分开验过四件:`gh release upload` 认 tag 名(验的时候这条线出的还是草稿 release:建一个草稿、传一个文件、再传一次覆盖,都成,`isDraft: true`);没 tag 时那一步 skipped(run 30972780114);`release.yml` 在 android-spike 上 `workflow_dispatch` 一次,GitHub 把 `android` 解析成了真的一个 job 并挂在 `needs: app` 后面(run 30973489551,起来几秒就取消掉了,desktop 那三条没跑完,也没建出 release);APK 本身出货。没验的是把这四件串起来:tag 触发、`release_tag` 真的非空、挂到 tauri-action 刚建的那份 release 上。要知道只有真打一个 tag。
 
-还有一条形状上的取舍:`needs: app` 意味着 desktop 三个平台里任何一个红了,APK 这一步就不跑。draft release 仍然在(先跑完的那条腿建的),但里面没有 APK。
+还有一条形状上的取舍:`needs: app` 意味着 desktop 三个平台里任何一个红了,APK 这一步就不跑。release 仍然在(先跑完的那条腿建的),但里面没有 APK。
 
 Android 的构建只注入 `VITE_GOOGLE_ANDROID_CLIENT_ID`,值明文写在 workflow 的 job env 里,由 `beforeBuildCommand`(`bun run build`)烤进前端。桌面那两个不注入,见下面「Google 登录」。
 
