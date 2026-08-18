@@ -27,7 +27,6 @@ export default function IntentChips({ intents, onPick, className }: IntentChipsP
 					variant="subtle"
 					size="chip"
 					onClick={() => onPick(intent.message)}
-					className="text-neutral-600"
 				>
 					{intent.label}
 				</Button>
