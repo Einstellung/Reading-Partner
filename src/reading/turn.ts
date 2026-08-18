@@ -17,6 +17,7 @@ import { toAnnotationLite, type AnnotationLite, type TopicMaterial } from "../fu
 import { modelSupportsImages, type ProviderId } from "../ai/aiClient";
 import { providers, toPiMessages } from "../ai/providers";
 import { fitToBudget } from "../budget";
+import { EXPLAIN_KICKOFF } from "./intents";
 import { READING_LADDER, type ReadingReductionId } from "./ladder";
 import type { Annotation } from "../platform/app/reader-contract";
 import { buildSystemPrompt, readerProfileSection, type BooklistItem } from "../platform/app/context";
@@ -91,9 +92,11 @@ import {
 } from "../ai/subagent";
 import type { PrepPipeline } from "./prep/pipeline";
 
-// Auto-explanation kickoff (docs/03: the bubble starts explaining, unprompted).
-export const EXPLAIN_KICKOFF =
-  "Please explain the passage I just marked, using the reading context above.";
+// The opening ask on a marked passage (reading/intents.ts), re-exported here
+// because this is where every caller has always imported it from. Nothing sends
+// it unprompted any more — the reader picks it off a chip — but it is still the
+// stand-in first user message below.
+export { EXPLAIN_KICKOFF };
 // Replayed thread history is trimmed to this many messages per turn; crossing
 // the cap fires the fallback distillation before older turns fall out
 // of context (docs/02: hangup is the main trigger, trimming the backstop).
@@ -701,7 +704,15 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   function composeMessages(dropped: ReadonlySet<ReadingReductionId>): ReadingTurnMessage[] {
     const keep = dropped.has("history-trim") ? HISTORY_KEEP_TIGHT : HISTORY_KEEP;
     const tail = prior.length > keep ? prior.slice(prior.length - keep) : prior;
-    const msgs: ReadingTurnMessage[] = [{ role: "user" as const, text: EXPLAIN_KICKOFF }, ...tail];
+    // Every provider wants the exchange to open on a user message. A thread the
+    // reader started from a chip already does, and is replayed as it stands so
+    // the model reads the ask they actually picked. What needs a stand-in is a
+    // tail that opens on a reply: a thread from before the chips, and any thread
+    // long enough that the trim above cut its first message off.
+    const opensOnUser = tail.length > 0 && tail[0].role === "user";
+    const msgs: ReadingTurnMessage[] = opensOnUser
+      ? [...tail]
+      : [{ role: "user" as const, text: EXPLAIN_KICKOFF }, ...tail];
     // The pictures ride the message being answered and nothing else. Every
     // earlier turn of this thread was sent the same window when it was the
     // current one, so those messages carry the line that says so instead — one

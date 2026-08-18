@@ -131,8 +131,8 @@ export interface CallController<M extends CallRow, I extends StagedImage> {
   view(): CallView | "none";
 
   // Open a thread's conversation: its history plus the reply still being
-  // written, the images it stored, and the first turn when the thread is empty
-  // and nothing is already answering it.
+  // written, and the images it stored. Opening sends nothing — an empty thread
+  // waits for the reader to pick an opening intent or type.
   openThread(call: OpeningCall<M>, stored: ThreadMessage[]): void;
   // Whether a reply is still being written on that thread. The observation
   // sweeps ask before they read a transcript.
@@ -362,8 +362,9 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   );
 
   // Run one assistant turn for a thread: assemble the reading context, stream the
-  // reply into the bubble, persist on done. Stable (reads refs). No-ops (leaving
-  // the bubble empty for the guidance) when no provider is configured.
+  // reply into the bubble, persist on done. Stable (reads refs). No-ops when no
+  // provider is configured — the shell puts the Settings guidance where the
+  // conversation would be, so nothing reaches this anyway.
   //
   // The turn belongs to its thread, not to the view: closing the bubble leaves it
   // running (docs/03) and every callback below writes through liveTurns, so the
@@ -553,7 +554,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
 
   const openThread = useCallback(
     (opening: OpeningCall<M>, stored: ThreadMessage[]) => {
-      const { threadId, annotationId } = opening;
+      const { threadId } = opening;
       // Thread history the way an opening view shows it: what the file holds,
       // plus the reply still being written if that thread has a turn running.
       // Reopening a mark mid-answer joins the stream where it is, instead of
@@ -561,12 +562,12 @@ export function useCall<M extends CallRow, I extends StagedImage>(
       const messages = liveTurnsRef.current.withLive(threadId, shapes.current.toDisplay(stored));
       dispatch({ type: "opened", call: { ...opening, messages } });
       hydrateThreadImages(threadId, stored);
-      // An empty thread nothing is already answering explains itself (docs/03).
-      // If no provider is configured, runTurn no-ops and the empty bubble shows
-      // the guidance.
-      if (stored.length === 0 && !liveTurnsRef.current.has(threadId)) runTurn(threadId, annotationId);
+      // An empty thread sends nothing (docs/03). Marking a passage says the
+      // reader wants something here, not which thing, so the empty conversation
+      // offers the opening intents (reading/intents.ts) and waits — one press is
+      // an ordinary send from there on.
     },
-    [hydrateThreadImages, runTurn],
+    [hydrateThreadImages],
   );
 
   // Sending appends the user line (with any ready staged images, persisted to

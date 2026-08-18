@@ -1,11 +1,14 @@
 // CallBubble: the bubble state of a reading call (docs/03). Anchored beside the
-// mark, the AI starts answering; the reader can follow up, expand, or click away
-// to keep reading (close, not hang up). Closing at any time is safe, mid-answer
-// included: the turn goes on writing into the thread. Tailwind-only.
+// mark, it opens with a row of intent chips rather than an answer; the reader
+// can pick one, type, expand, or click away to keep reading (close, not hang
+// up). Closing at any time is safe, mid-answer included: the turn goes on
+// writing into the thread. Tailwind-only.
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { ReadingIntent } from '../../../reading/intents';
 import { IconExpand } from '../base/icons';
 import { Composer, MessageList, type ComposerVoice } from './chat';
+import IntentChips from './IntentChips';
 import type { CardActionHandler } from './chatParts';
 import { Button } from '../ui/button';
 import { cn } from '../lib/utils';
@@ -34,6 +37,9 @@ interface CallBubbleProps {
 	// diagram drawn in a classroom turn lands here when the reader never expanded
 	// to chat-main — so it forwards the dispatcher the same way CallView does.
 	onCardAction?: CardActionHandler;
+	// What an empty conversation offers instead of an unprompted answer
+	// (reading/intents.ts). Shown only while the thread has nothing in it.
+	intents?: readonly ReadingIntent[];
 }
 
 const WIDTH = 360;
@@ -53,6 +59,7 @@ export default function CallBubble({
 	onStop,
 	voice,
 	onCardAction,
+	intents,
 }: CallBubbleProps) {
 	const ref = useRef<HTMLDivElement>(null);
 	const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
@@ -129,13 +136,15 @@ export default function CallBubble({
 				</div>
 			</div>
 
-			{messages.length > 0 && (
+			{messages.length > 0 ? (
 				<MessageList
 					messages={messages}
 					surface="bubble"
 					className="max-h-64 pr-0.5"
 					onCardAction={onCardAction}
 				/>
+			) : (
+				intents && intents.length > 0 && <IntentChips intents={intents} onPick={onSend} />
 			)}
 
 			<Composer

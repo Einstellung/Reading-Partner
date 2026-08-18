@@ -8,9 +8,11 @@
 // the hang-up button and the mode pills stay outside it.
 
 import type { ReactNode } from 'react';
+import type { ReadingIntent } from '../../../reading/intents';
 import ChatScaleScope from '../base/ChatScaleScope';
 import { IconClose } from '../base/icons';
 import { Composer, MessageList, type ComposerVoice } from './chat';
+import IntentChips from './IntentChips';
 import DeleteThreadButton from './DeleteThreadButton';
 import { useKeyboardInset } from '../common/useKeyboardInset';
 import type { PendingImage, ThreadMessage } from './types';
@@ -44,6 +46,9 @@ interface CallViewProps {
 	// title and "Ask about this book…".
 	emptyTitle?: string;
 	placeholder?: string;
+	// What an empty conversation offers under the composer (reading/intents.ts).
+	// Absent on a surface that has no opening intents — info's chat is one.
+	intents?: readonly ReadingIntent[];
 	voice?: ComposerVoice | false;
 	// Dispatches a card's actions (add-source flow). Absent = a chat with no cards.
 	onCardAction?: CardActionHandler;
@@ -74,6 +79,7 @@ export default function CallView({
 	onToggleRehearsal,
 	emptyTitle = 'Ask about this passage',
 	placeholder = 'Ask about this passage…',
+	intents,
 	voice,
 	onCardAction,
 	scalable = true,
@@ -147,6 +153,9 @@ export default function CallView({
 					</h1>
 					<div className="w-full max-w-[calc(48rem*var(--chat-scale,1))]">
 						<Composer onSend={onSend} placeholder={placeholder} pill {...composerProps} />
+						{intents && intents.length > 0 && (
+							<IntentChips intents={intents} onPick={onSend} className="mt-3 justify-center" />
+						)}
 					</div>
 				</Scope>
 			) : (

@@ -552,6 +552,18 @@ test("history is replayed after the kickoff and trimmed to the cap", async () =>
   expect(turn!.messages[turn!.messages.length - 1].text).toBe(`m${HISTORY_KEEP + 4}`);
 });
 
+// The chips (reading/intents.ts) mean a thread now opens on whatever the reader
+// picked, and that line is already a user message. Prefixing the explain kickoff
+// in front of it would tell the model to explain the passage when the reader
+// asked for an example.
+test("a thread that opens on the reader's own ask replays it, with no kickoff in front", async () => {
+  createThread(BOOK, "ann-1", "thread-1");
+  appendMessage(BOOK, "thread-1", { role: "user", text: "Can you give me an example?", ts: 1 });
+  appendMessage(BOOK, "thread-1", { role: "ai", text: "Here is one.", ts: 2 });
+  const turn = await buildReadingTurn(input());
+  expect(turn!.messages.map((m) => m.text)).toEqual(["Can you give me an example?", "Here is one."]);
+});
+
 test("an aborted signal drops the turn", async () => {
   const controller = new AbortController();
   controller.abort();
@@ -728,8 +740,9 @@ test("the reading ladder drops the catalog, then the book, and leaves the conver
     "Note: the book didn't fit in context, so I read the pages I needed instead of having all of it in view.",
   );
   // Below the book on the ladder, so it was never reached: the full replay tail
-  // is still here, ending on the most recent turn.
-  expect(turn!.messages.length).toBe(HISTORY_KEEP + 1);
+  // is still here, ending on the most recent turn. No kickoff in front of it —
+  // this tail happens to start on a user message, so it needs no stand-in.
+  expect(turn!.messages.length).toBe(HISTORY_KEEP);
   expect(turn!.messages[turn!.messages.length - 1].text).toBe(`m${HISTORY_KEEP + 9}`);
 });
 

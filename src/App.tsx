@@ -74,6 +74,7 @@ import ReadingPipCard from "./ui/components/chat/ReadingPipCard";
 import ChatPipCard from "./ui/components/chat/ChatPipCard";
 import SettingsView from "./ui/components/SettingsView";
 import type { CallRow } from "./reading/call-state";
+import { openingIntents } from "./reading/intents";
 import { resolveBookThread } from "./reading/session/book-thread";
 import { closeBook } from "./reading/session/close-book";
 import { useCall } from "./reading/session/use-call";
@@ -701,8 +702,8 @@ export default function App() {
           ? { x: up.x, y: up.y }
           : { x: (rect?.left ?? 0) + (rect?.width ?? 480) / 2, y: (rect?.top ?? 0) + 240 };
         setPopup(null);
-        // A brand-new thread has nothing stored, so opening it is what starts
-        // the explanation (docs/03).
+        // A brand-new thread has nothing stored: the bubble opens on the
+        // opening intents and sends nothing until one is pressed (docs/03).
         openThreadCall(
           {
             threadId: aiCreated.threadId,
@@ -1114,6 +1115,10 @@ export default function App() {
   const sidebarBusy = !!(prepSnap?.running || notesSnap?.running);
 
   const inReader = !!title;
+  // A bubble on a conversation that has not started, with nowhere to send it:
+  // the Settings guidance takes the bubble's place. `configured` is what decides
+  // it — an empty bubble is now the ordinary opening state (it offers the intent
+  // chips), so emptiness on its own says nothing about the provider.
   const showGuidance = call?.view === "bubble" && call.messages.length === 0 && !configured;
   const lastCallMsg = call?.messages[call.messages.length - 1];
   const streaming = !!(lastCallMsg?.role === "ai" && lastCallMsg.streaming);
@@ -1344,10 +1349,13 @@ export default function App() {
             onStop={stopTurn}
             onCardAction={onCardAction}
             voice={callVoice}
+            intents={openingIntents(call.isBook ?? false)}
           />
         )}
 
-        {/* No provider configured: guide to Settings instead of chatting. */}
+        {/* No provider configured: guide to Settings instead of chatting. The
+            bubble is empty either way now, so this is keyed on `configured`
+            alone — see showGuidance. */}
         {showGuidance && call && (
           <div
             className={`fixed anchor-safe ${OVERLAY_Z.floating} flex w-[300px] flex-col gap-3 rounded-xl border border-black/10 bg-white p-4 shadow-[0_8px_40px_rgba(0,0,0,0.18)]`}
@@ -1407,6 +1415,7 @@ export default function App() {
                 classroomStatus={prepStatusLine}
                 emptyTitle={call.isBook ? title ?? "This book" : undefined}
                 placeholder={call.isBook ? "Ask about this book…" : undefined}
+                intents={openingIntents(call.isBook ?? false)}
                 voice={callVoice}
               />
             </div>
