@@ -16,11 +16,14 @@ test("core user-data files are in range", () => {
     "memory-topic1/m-ab12cd34.md",
     "memory-topic1/index.md",
     "memory-topic1/meta.json",
+    // A document's prep material (docs/09). Whichever kind it turns out to need
+    // sits under the one prep-<hash>/ directory: paper notes at the top, chapter
+    // spines a level down.
     "prep-deadbeef/state.json",
     "prep-deadbeef/attention-is-all-you-need.md",
-    "notes-deadbeef/state.json",
-    "notes-deadbeef/overview.md",
-    "notes-deadbeef/chapter-01.md",
+    "prep-deadbeef/chapters/state.json",
+    "prep-deadbeef/chapters/overview.md",
+    "prep-deadbeef/chapters/chapter-01.md",
     // A talk (docs/31): its materials and the outline its rehearsal settled.
     // Nothing rebuilds it from the books, so it travels like marks and threads
     // rather than like the caches below — and so does its conversation, which is
@@ -64,13 +67,17 @@ test("caches, logs, sync internals, and book blobs are out of range", () => {
     // under it would come back as a second copy of the file it mirrors.
     "sync-base/library.json",
     "sync-base/memory-topic1/m-ab12cd34.md",
-    "sync-base/notes-deadbeef/state.json",
+    "sync-base/prep-deadbeef/chapters/state.json",
     "credentials.json",
     "prep-deadbeef/pdf/some-paper.pdf",
-    "notes-deadbeef/cache/raster.png",
+    "prep-deadbeef/cache/raster.png",
+    // One level down, chapters/ is the only nested directory in range; a cache
+    // beside it is not, and neither is anything deeper.
+    "prep-deadbeef/chapters/figures/fig-01.png",
+    "prep-deadbeef/drafts/chapter-01.md",
     "slides/talks.json",
     "slides/1737000000000-my-talk.html",
-    // A talk's own state and products stay out too, unlike notes-*/state.json:
+    // A talk's own state and products stay out too, unlike prep-*/state.json:
     // the index alone rebuilds nothing, and what it indexes is megabytes of
     // slide bodies and base64 images (src/reading/slides/store.ts).
     "slides/1737000000000/state.json",

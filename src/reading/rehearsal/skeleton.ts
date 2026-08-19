@@ -11,7 +11,7 @@ import type { OutlineItem } from "../../fulltext/types";
 import type { RehearsalChapter, Skeleton } from "./types";
 
 export interface SkeletonInput {
-  // The notes pipeline's chapter plan (notes-<bookId>/state.json), or null.
+  // The notes pipeline's chapter plan (prep-<bookId>/chapters/state.json), or null.
   notesChapters: NoteChapter[] | null;
   // The PDF's own table of contents, used when there is no notes plan.
   outline: OutlineItem[];

@@ -55,8 +55,7 @@ const NO_IN_MEMORY_STATE: Record<string, string> = {
   "info-pool-marks.json": "read at the start of a collection run, not held between them",
   "talk-": "a talk is read from disk when it is opened",
   "memory-": "the observation store reads its entries per query",
-  "prep-": "lesson prep is read when the book it belongs to opens",
-  "notes-": "book notes are read when the book they belong to opens",
+  "prep-": "a document's prep material is read when the document it belongs to opens",
 };
 
 const SRC = fileURLToPath(new URL("../../../src/platform/sync/syncFs.ts", import.meta.url));
@@ -83,8 +82,12 @@ function sampleForRegex(literal: string): string {
 // the prefix cannot say, so it is said here.
 const DIRECTORY_SAMPLES: Record<string, string[]> = {
   "memory-": ["memory-topic1/entries.jsonl", "memory-topic1/index.json"],
-  "prep-": ["prep-book1/state.json", "prep-book1/attention-is-all-you-need.md"],
-  "notes-": ["notes-book1/state.json", "notes-book1/chapter-3.md"],
+  "prep-": [
+    "prep-book1/state.json",
+    "prep-book1/attention-is-all-you-need.md",
+    "prep-book1/chapters/state.json",
+    "prep-book1/chapters/chapter-03.md",
+  ],
 };
 
 function perKeySamples(): { pattern: string; paths: string[] }[] {
@@ -113,10 +116,10 @@ test("the samples this test is built from are all in sync range", () => {
   for (const file of ROOT_FILES) expect(inSyncRange(file)).toBe(true);
 
   const patterns = perKeySamples();
-  // Five filename patterns and three directory prefixes, as of this writing;
+  // Five filename patterns and two directory prefixes, as of this writing;
   // the count is asserted so a pattern that stops being found by the scan is
   // noticed rather than quietly dropping its files from the check.
-  expect(patterns.length).toBe(8);
+  expect(patterns.length).toBe(7);
   for (const { pattern, paths } of patterns) {
     for (const path of paths) {
       expect(`${pattern} -> ${path}: ${inSyncRange(path)}`).toBe(`${pattern} -> ${path}: true`);

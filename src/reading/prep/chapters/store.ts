@@ -1,9 +1,13 @@
-// Notes persistence under AppData, same posture as the prep store: derived,
-// rebuildable, one directory per book. Layout:
-//   notes-<bookId>/state.json      — plan + per-chapter statuses (the resume point)
-//   notes-<bookId>/overview.md     — the whole-book framework
-//   notes-<bookId>/chapter-NN.md   — one note per chapter (NN zero-padded)
-// The bookId is the library.ts content hash.
+// Chapter-spine persistence under AppData: derived, rebuildable, and inside the
+// document's own prep directory, because a document gets one kind of prep
+// material and this is where the other kind already lives. Layout:
+//   prep-<bookId>/chapters/state.json    — the chapter table and per-chapter
+//                                          statuses (the resume point)
+//   prep-<bookId>/chapters/overview.md   — the chapter graph
+//   prep-<bookId>/chapters/chapter-NN.md — one spine per chapter (NN zero-padded)
+// The bookId is the library.ts content hash — the same hash the paper side keys
+// prep-<surveyHash>/ by, so a document has one prep directory whichever kind of
+// material it turns out to need.
 
 import {
   BaseDirectory,
@@ -15,7 +19,7 @@ import { writeTextAtomic } from "../../../platform/app/atomic-fs";
 import { NOTES_VERSION, type NotesState } from "./types";
 
 function dirFor(bookId: string): string {
-  return `notes-${bookId}`;
+  return `prep-${bookId}/chapters`;
 }
 
 function stateFile(bookId: string): string {

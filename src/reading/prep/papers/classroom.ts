@@ -35,7 +35,7 @@ export interface ClassroomNote {
 //   1. The plan's chapter table, non-empty. It is evidence, not a veto: without
 //      it there is nothing saying where the body ends, and lazy prep means a
 //      class can start before the plan lands (docs/09). Use PrepState.chapters,
-//      the table the prep run produced — the one in notes-*/state.json is a
+//      the table the prep run produced — the one in prep-*/chapters/state.json is a
 //      different table and is wrong here.
 //   2. A references heading ("REFERENCES", also "R EFERENCES" once the extractor
 //      has been at the small caps) somewhere in the book. The LAST one, since a

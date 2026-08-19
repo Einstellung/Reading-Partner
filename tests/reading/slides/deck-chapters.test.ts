@@ -102,7 +102,7 @@ function putFulltext(bookId: string) {
 
 function putNotes(bookId: string) {
   files.set(
-    `notes-${bookId}/state.json`,
+    `prep-${bookId}/chapters/state.json`,
     JSON.stringify({
       version: NOTES_VERSION,
       bookId,
@@ -116,8 +116,8 @@ function putNotes(bookId: string) {
       overviewStatus: "done",
     }),
   );
-  files.set(`notes-${bookId}/chapter-01.md`, "The first chapter argues that seeing is inference.");
-  files.set(`notes-${bookId}/chapter-02.md`, "The second chapter argues that belief follows.");
+  files.set(`prep-${bookId}/chapters/chapter-01.md`, "The first chapter argues that seeing is inference.");
+  files.set(`prep-${bookId}/chapters/chapter-02.md`, "The second chapter argues that belief follows.");
 }
 
 beforeEach(() => {

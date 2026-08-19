@@ -253,7 +253,7 @@ test("the skeleton comes from the notes plan the reader's notes pass wrote", asy
     JSON.stringify({ version: 1, status: "ok", pages: ["a", "b", "c"], outline: [] }),
   );
   files.set(
-    `notes-${BOOK}/state.json`,
+    `prep-${BOOK}/chapters/state.json`,
     JSON.stringify({
       version: NOTES_VERSION,
       chapters: [

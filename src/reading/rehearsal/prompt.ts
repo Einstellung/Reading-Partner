@@ -25,7 +25,7 @@ import { formatPlan } from "./plan";
 import { formatSkeleton } from "./skeleton";
 import type { Mark, RehearsalPlan, Skeleton } from "./types";
 
-// A chapter note already on disk (notes-<bookId>/chapter-NN.md), inlined so the
+// A chapter note already on disk (prep-<bookId>/chapters/chapter-NN.md), inlined so the
 // AI knows what the reader's own notes pass already said about the chapter.
 export interface RehearsalNote {
   chapter: number;
