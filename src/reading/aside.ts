@@ -19,6 +19,14 @@
 // none further back. Three rounds is where the evidence stops.
 export const ASIDE_PARENT_ROUNDS = 3;
 
+// And a hard ceiling on the messages, because rounds are counted by the reader's
+// questions and bound nothing at all when they asked none: an entry that opens
+// on the model's turn, or a stretch of nothing but drawn cards, has no user
+// message for the walk to stop at and the whole conversation comes back. Twelve
+// is three rounds at the widest a round gets — a question, a card row, and the
+// text beside it.
+export const ASIDE_PARENT_MAX_MESSAGES = 12;
+
 // The stand-in first user message when an aside's replayed history opens on a
 // reply — the question that reply answered fell outside the tail, or off the
 // end of the budget's tight rung. Every provider wants the exchange to open on a
@@ -52,8 +60,9 @@ export function asideParentTail<T extends AsideTailMessage>(
   messages: readonly T[],
   anchorTs: number | null,
   rounds = ASIDE_PARENT_ROUNDS,
+  max = ASIDE_PARENT_MAX_MESSAGES,
 ): T[] {
-  if (messages.length === 0 || rounds <= 0) return [];
+  if (messages.length === 0 || rounds <= 0 || max <= 0) return [];
   const at = anchorTs === null ? -1 : messages.findIndex((m) => m.ts === anchorTs);
   const end = at >= 0 ? at : messages.length - 1;
   let start = 0;
@@ -63,6 +72,14 @@ export function asideParentTail<T extends AsideTailMessage>(
     asks++;
     start = i;
     if (asks === rounds) break;
+  }
+  if (end + 1 - start > max) {
+    start = end + 1 - max;
+    // Back onto a question if there is one left in the window, so the ceiling
+    // cuts where the walk would have.
+    let i = start;
+    while (i <= end && messages[i].role !== "user") i++;
+    if (i <= end) start = i;
   }
   return messages.slice(start, end + 1);
 }

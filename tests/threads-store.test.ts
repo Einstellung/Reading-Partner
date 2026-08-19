@@ -769,6 +769,70 @@ test("deleting a parent takes its asides, and none of them come back", async () 
   expect(onDisk()).toEqual(["t1"]);
 });
 
+// The cascade is one operation on the entry, not a rule the bytes apply on the
+// way out. An id named in `removed` and still in `threads` is the docs/13 shape:
+// the store keeps answering with a conversation the file does not have, every
+// message typed into it is dropped by the debounced write, and the exit path —
+// which writes the entry unmerged — puts it back with them.
+test("a parent's asides leave the cache with it, not just the file", async () => {
+  writeFile([
+    thread("bt", { book: true, annotationId: "" }),
+    thread("as-1", { annotationId: "", parentThreadId: "bt" }),
+    thread("t1"),
+  ]);
+  await store.load("book1");
+
+  // The single-thread delete, which is what a caller with nothing else keyed by
+  // thread id reaches for.
+  expect(store.remove("book1", "bt")).toBe(true);
+
+  expect(store.get("book1", "as-1")).toBeUndefined();
+  expect(store.list("book1").map((t) => t.id)).toEqual(["t1"]);
+  // Nothing to append to, so nothing is written and then thrown away.
+  expect(store.append("book1", "as-1", { role: "user", text: "typed after", ts: 9 })).toBeUndefined();
+
+  await advance(500);
+  expect(onDisk()).toEqual(["t1"]);
+});
+
+test("the way out of the app does not resurrect a deleted conversation", async () => {
+  writeFile([
+    thread("bt", { book: true, annotationId: "" }),
+    thread("as-1", { annotationId: "", parentThreadId: "bt" }),
+    thread("t1"),
+  ]);
+  await store.load("book1");
+  store.remove("book1", "bt");
+  await advance(500);
+  expect(onDisk()).toEqual(["t1"]);
+
+  // The last message of the session, on a thread that is still there. The exit
+  // path skips the merge and writes the entry as it stands, so anything the
+  // entry is still holding goes out with it.
+  store.append("book1", "t1", { role: "user", text: "last thing said", ts: 9 });
+  exitFlush?.();
+  await settle();
+  await settle();
+
+  expect(onDisk()).toEqual(["t1"]);
+});
+
+// The other way the two could disagree: the write path took an aside out of the
+// bytes and left it in the entry. Whatever the entry holds, the entry decides —
+// so an aside made against a parent this session deleted is an ordinary orphan,
+// on disk and in the cache alike, rather than a thread only one of them has.
+test("an aside created against a deleted parent is on disk as well as in the cache", async () => {
+  writeFile([thread("bt", { book: true, annotationId: "" })]);
+  await store.load("book1");
+  store.removeTree("book1", "bt");
+  store.createAside("book1", "as-x", { parentThreadId: "bt" });
+  await advance(500);
+
+  expect(store.get("book1", "as-x")).toBeDefined();
+  expect(onDisk()).toEqual(["as-x"]);
+  expect(store.orphanAsides("book1").map((t) => t.id)).toEqual(["as-x"]);
+});
+
 test("deleting an aside leaves the conversation it hangs off alone", async () => {
   writeFile([
     thread("bt", { book: true, annotationId: "" }),

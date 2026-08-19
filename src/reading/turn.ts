@@ -599,7 +599,13 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   let classroomNotes: ClassroomNote[] = [];
   let classroomNotesTight: ClassroomNote[] = [];
   if (prepState) {
-    const here = focusChapter?.startPage ?? page ?? (pageIndex !== null ? pageIndex + 1 : 1);
+    // An aside orders them from where its parent would, never from its own
+    // mark. This ordering is in the stable half: a mark two chapters away from
+    // the reader's position re-sorts the notes, and the lesson's copy of the
+    // block — 40k of budget, above the spine and the overview — stops matching
+    // and gets written again instead of read from the cache.
+    const notePage = kind === "aside" ? currentPage : page;
+    const here = focusChapter?.startPage ?? notePage ?? (pageIndex !== null ? pageIndex + 1 : 1);
     const chapterIdx = chapterIndexForPage(prepState.chapters, here);
     const notePapers = (prepState?.papers ?? []).filter(
       (p) => p.status === "done" || p.status === "abstract-only",
@@ -812,7 +818,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
         prepNotes: notes.length,
         hasChapterTable: !!chapterTable,
         ...(spineProgress ? { spine: spineProgress } : {}),
-        ...(aside ? { aside } : {}),
+        ...(aside ? { aside: { ...aside, lessonReplayed: replayedLesson(dropped) > 0 } } : {}),
       }),
     });
   }
@@ -868,10 +874,22 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
         page: folded ? (unit.annotationId === "" ? currentPage : null) : page,
         markedText: folded ? "" : selectionText,
         messages: unit?.messages ?? threadMsgs.map(({ role, text, ts }) => ({ role, text, ts })),
+        ...(unit ? { parts: unit.parts } : {}),
         annotations: distillAnnotations(),
       },
       TRIM_DISTILL_MIN_NEW,
     );
+  }
+
+  // How many messages of the parent's stretch survive into this turn, given what
+  // the budget gave up. composeMessages trims the joined history from the front,
+  // so the borrowed half is the first thing to go — and on an aside long enough
+  // to fill the history by itself, or one whose parent is gone, there was never
+  // any. The prompt says so rather than describing a stretch that is not there.
+  function replayedLesson(dropped: ReadonlySet<ReadingReductionId>): number {
+    const keep = dropped.has("history-trim") ? HISTORY_KEEP_TIGHT : HISTORY_KEEP;
+    const cut = Math.max(0, parentTail.length + prior.length - keep);
+    return Math.max(0, parentTail.length - cut);
   }
 
   function composeMessages(dropped: ReadonlySet<ReadingReductionId>): ReadingTurnMessage[] {
@@ -925,13 +943,22 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   if (classroomNotes.length === 0) skip.add("prep-notes-trim");
   if (!pageWindow || pageImages.length === 0) skip.add("page-window");
 
-  // An aside is priced as if it were paying for the inlined chapter in full —
+  // An aside is priced as if it were paying for the inlined chapter in full:
   // src/budget/fit.ts knows one assembled call, not two conversations sharing a
-  // provider cache — and that costs it nothing. Its stable half is the lesson's
-  // byte for byte, its history is a handful of messages against the lesson's
-  // forty, and it carries no page window unless it was drawn on a page. The call
-  // is never bigger than the lesson's own, so a window the lesson fits in fits
-  // this too and the ladder gives up no more here than it does there.
+  // provider cache. For a chat-span aside that costs nothing — its stable half is
+  // the lesson's byte for byte, it carries no page window and no surrounding
+  // text, and its history is a handful of messages against the lesson's forty, so
+  // its call is smaller than the lesson's and a window the lesson fits in fits it.
+  //
+  // One drawn on the page is bigger: the page images and the text around the mark
+  // are its own. If that is what puts it over the line, the ladder gives up
+  // reader-profile and notes-overview before it gives up the page window, and
+  // both are stable-half blocks — so the shared prefix ends where the profile
+  // was, and the chapter below it is written again. Left as it is: those rungs
+  // are ahead of the window because they are the cheapest things in the call to
+  // lose, and the same order costs the lesson its own prefix on its own tight
+  // turns. Pricing a rung by what it does to the next turn's cache is a change to
+  // the ladder, not to this turn.
   const fitted = fitToBudget<ReadingReductionId, ReadingTurnMessage>({
     model,
     tools,

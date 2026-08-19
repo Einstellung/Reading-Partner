@@ -62,6 +62,7 @@ import {
   runMarksDistillPass,
   type DistillAnnotation,
   type DistillMessage,
+  type DistillUnitPart,
 } from "./distill/distill";
 import { runRehearsalDistillPass } from "./distill/rehearsal";
 import {
@@ -159,6 +160,10 @@ export interface DistillThreadOptions {
   page: number | null;
   markedText: string;
   messages: DistillMessage[];
+  // The threads `messages` was merged from, when it was merged from more than
+  // one (observation/distill/arrears.ts). Each carries a cursor over its own
+  // messages and the pass moves all of them. Absent is the single-thread pass.
+  parts?: readonly DistillUnitPart[];
   // The book's annotations, so distillation can fold in silent marks made since
   // the last pass (docs/02 part 2). Absent/empty is fine.
   annotations?: DistillAnnotation[];
@@ -219,6 +224,7 @@ export function distillThread(
           page: opts.page,
           markedText: opts.markedText,
           messages,
+          ...(opts.parts ? { parts: opts.parts } : {}),
           annotations: opts.annotations,
           minNewMessages,
         },
@@ -385,11 +391,12 @@ async function collectArrears(
       const busy = new Set(stored.filter((t) => threadBusy(t.id)).map((t) => t.id));
       const threads: ThreadArrears[] = [];
       for (const unit of distillUnits(stored)) {
-        // A thread with a reply still being written is left out, and so is a
-        // unit any part of which is: a pass over half a sentence is a pass over
-        // the wrong transcript, and the next sweep picks it up.
-        if (busy.has(unit.threadId)) continue;
-        if (stored.some((t) => t.parentThreadId === unit.threadId && busy.has(t.id))) continue;
+        // A thread with a reply still being written is left out, and so is the
+        // unit it is part of: a pass over half a sentence is a pass over the
+        // wrong transcript, and the next sweep picks it up. Only threads whose
+        // messages are actually in this transcript — a mark-anchored aside is a
+        // unit of its own and holds up nothing.
+        if (unit.parts.some((p) => busy.has(p.threadId))) continue;
         const anchor = byId.get(unit.annotationId);
         threads.push(
           threadArrears(
@@ -401,8 +408,9 @@ async function collectArrears(
               page: anchor?.page ?? null,
               markedText: anchor?.text ?? "",
               messages: unit.messages,
+              parts: unit.parts,
             },
-            messageCursor(meta, unit.threadId),
+            (threadId) => messageCursor(meta, threadId),
           ),
         );
       }
@@ -438,6 +446,7 @@ function runDistillJob(job: DistillJob, trigger: DistillTrigger): Promise<void> 
       page: job.thread.page,
       markedText: job.thread.markedText,
       messages: job.thread.messages,
+      ...(job.thread.parts ? { parts: job.thread.parts } : {}),
       annotations: job.book.marks,
       trigger,
     });

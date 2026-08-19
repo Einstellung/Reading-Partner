@@ -1158,6 +1158,42 @@ test("an aside's prompt is the lesson's up to the position, byte for byte", asyn
   expect(stable(asideTurn!.systemPrompt)).toContain("=== Page 61 === [p.61]");
 });
 
+// The same property for the flavour that has a page of its own, on a lesson
+// with no chapter in focus — where the prep notes are ordered by where the
+// reader is. A mark two chapters away re-sorts them, and that block sits in the
+// stable half above the spine and the overview, so the prefix would end there
+// and everything under it would be written again.
+test("an aside drawn far from the reader's page still matches the lesson's prompt", async () => {
+  const papers = [
+    notePaper("near-a", [2]),
+    notePaper("near-b", [2]),
+    notePaper("far-a", [7]),
+    notePaper("far-b", [7]),
+  ];
+  for (const p of papers) await writePrepNote(BOOK, p.slug, `body of ${p.slug}`);
+  // The reader is on page 2; the mark the aside was drawn on is on page 7.
+  const far = { id: "ann-far", text: "a sentence on page seven", position: { pageIndex: 6 } } as unknown as Annotation;
+  const withPrep = {
+    getPipeline: () => pipeline(chaptered(papers)),
+    annotations: [far],
+    fulltext: chaptersBook(),
+  };
+
+  createBookThread(BOOK, "lesson-far");
+  createAsideThread(BOOK, "aside-far", { parentThreadId: "lesson-far", annotationId: "ann-far" });
+
+  const lessonTurn = await buildReadingTurn(
+    input({ ...withPrep, threadId: "lesson-far", annotationId: "", annotation: undefined }),
+  );
+  const asideTurn = await buildReadingTurn(
+    input({ ...withPrep, threadId: "aside-far", annotationId: "ann-far", annotation: far }),
+  );
+
+  const stable = (out: string): string => out.slice(0, out.indexOf("Current reading context:"));
+  expect(stable(asideTurn!.systemPrompt)).toBe(stable(lessonTurn!.systemPrompt));
+  expect(stable(asideTurn!.systemPrompt)).toContain("body of near-a");
+});
+
 // The focus is what puts the chapter's body in the prompt, overrides the
 // position line, picks the observation window and orders the prep notes. An
 // aside that lost it would be answering about a sentence from a chapter it can
@@ -1168,7 +1204,7 @@ test("an aside inherits the chapter its parent is parked on", async () => {
 
   expect(turn!.inline).toBe("chapter");
   expect(turn!.systemPrompt).toContain("=== Page 61 === [p.61]");
-  expect(turn!.systemPrompt).toContain("This conversation is on chapter 3");
+  expect(turn!.systemPrompt).toContain("The lesson this came out of is on chapter 3");
   expect(turn!.systemPrompt).toContain('the full text of chapter 3 ("第 3 章 编码注意力机制")');
 });
 
@@ -1179,7 +1215,7 @@ test("a chat-span aside carries its span and says where it came from", async () 
   const turn = await buildReadingTurn(bookTurn(aside));
 
   expect(turn!.systemPrompt).toContain(
-    'pulled this out of your last answer and asked about it: "编码注意力机制 as a routing problem"',
+    'wrote earlier in the lesson: "编码注意力机制 as a routing problem"',
   );
   expect(turn!.systemPrompt).toContain("This turn is a side conversation");
   expect(turn!.systemPrompt).toContain("pulled one\nsentence out of the lesson");
@@ -1217,6 +1253,30 @@ test("an aside replays the stretch of the lesson its span came out of", async ()
   ]);
 });
 
+// Whether the lesson's stretch is there is a fact about the assembled turn, and
+// the prompt has to follow it: an aside whose parent is gone replays nothing of
+// it, and one long enough to fill the history on its own trims it off the front.
+test("an aside with no lesson replayed does not claim to open on one", async () => {
+  createAsideThread(BOOK, "aside-orphan", { parentThreadId: "no-such-lesson" });
+  appendMessage(BOOK, "aside-orphan", { role: "user", text: "about that", ts: 1 });
+  const orphan = await buildReadingTurn(bookTurn("aside-orphan"));
+
+  expect(orphan!.systemPrompt).toContain("None of the lesson itself is replayed");
+  expect(orphan!.systemPrompt).not.toContain("open on the stretch of the lesson");
+  expect(orphan!.messages.map((m) => m.text)).toEqual(["about that"]);
+
+  // And the same when it is the length of this conversation that pushed it out.
+  const { lesson, aside } = lessonWithAside("crowded", 2);
+  appendMessage(BOOK, lesson, { role: "user", text: "u1", ts: 1 });
+  appendMessage(BOOK, lesson, { role: "ai", text: "a1", ts: 2 });
+  for (let i = 0; i < HISTORY_KEEP; i++) {
+    appendMessage(BOOK, aside, { role: i % 2 === 0 ? "user" : "ai", text: `s${i}`, ts: 100 + i });
+  }
+  const crowded = await buildReadingTurn(bookTurn(aside));
+  expect(crowded!.messages).toHaveLength(HISTORY_KEEP);
+  expect(crowded!.systemPrompt).toContain("None of the lesson itself is replayed");
+});
+
 // Every provider wants the exchange to open on a user turn, and an aside's tail
 // legitimately opens on a reply. The mark thread's stand-in would send the model
 // looking for a passage the prompt does not carry.
@@ -1245,7 +1305,7 @@ test("an aside drawn on the page keeps the mark-anchored blocks", async () => {
 
   expect(turn!.systemPrompt).toContain('- Marked passage: "inline caches"');
   expect(turn!.systemPrompt).toContain("marked a\npassage on the page mid-lesson");
-  expect(turn!.systemPrompt).not.toContain("pulled this out of your last answer");
+  expect(turn!.systemPrompt).not.toContain("taken by the reader out of something you");
 });
 
 // Writing a focus on itself would be dead — the focus it reads is the parent's —

@@ -559,6 +559,13 @@ export interface DistillPassInput {
   page: number | null;
   markedText: string;
   messages: DistillMessage[];
+  // The threads `messages` was merged from, when it was merged from more than
+  // one — a lesson and the asides pulled out of it (observation/distill/arrears.ts).
+  // Each of them carries a cursor over its own messages and this pass moves all
+  // of them, so a folded conversation that is later deleted or lost to sync
+  // leaves every other cursor still meaning what it meant. Absent is the
+  // ordinary single-thread pass.
+  parts?: readonly DistillUnitPart[];
   // The book's marks, filtered here against the store's cursor.
   annotations?: DistillAnnotation[];
   // How much new conversation the pass is worth. The whole transcript is still
@@ -595,6 +602,31 @@ export function countNewReaderMessages(
   return n;
 }
 
+// One thread's own messages inside a transcript made of several — a lesson and
+// the asides pulled out of it (observation/distill/arrears.ts).
+//
+// The cursors stay per thread and each one still counts over that thread's own
+// messages, which is what they have always meant and what the talk pipeline's
+// own cursors in the same map mean (docs/02). A single cursor over the merged
+// list would be a number whose meaning changes when one of the threads is
+// deleted or lost to sync: the list shrinks under it, and everything it now
+// points past is skipped for good.
+export interface DistillUnitPart {
+  threadId: string;
+  messages: DistillMessage[];
+}
+
+// How much of such a transcript the reader has said that no pass has folded in
+// yet, given where each thread's cursor stands.
+export function countNewUnitMessages(
+  parts: readonly DistillUnitPart[],
+  cursorOf: (threadId: string) => number,
+): number {
+  let n = 0;
+  for (const p of parts) n += countNewReaderMessages(p.messages, cursorOf(p.threadId));
+  return n;
+}
+
 // Assemble the input, run the pass, and advance the bookkeeping only if it
 // finished. The stamps say what has already been folded into the observations,
 // so moving them after a pass that did not write is how a conversation silently
@@ -609,13 +641,25 @@ export async function runDistillPass(
 ): Promise<DistillPassResult> {
   const now = deps.now ?? Date.now;
   const meta = await deps.store.getMeta();
-  const cursor = messageCursor(meta, input.threadId);
-  const fresh = countNewReaderMessages(input.messages, cursor);
+  // One part per thread whose messages are in this transcript. A pass over one
+  // thread is the single-part case and reads exactly as it did before folded
+  // units existed.
+  const parts: readonly DistillUnitPart[] = input.parts ?? [
+    { threadId: input.threadId, messages: input.messages },
+  ];
+  const cursorOf = (threadId: string): number => messageCursor(meta, threadId);
+  const fresh = countNewUnitMessages(parts, cursorOf);
+  // Where the whole unit stands: how much of it is behind its cursors, so
+  // "nothing new" can be told from "the reader said nothing".
+  const behind = parts.reduce(
+    (n, p) => n + Math.min(cursorOf(p.threadId), p.messages.length),
+    0,
+  );
   // Nothing the reader said → nothing that can't be re-derived from the book and
   // the mark itself. Marks with no conversation at all are a pass of their own
   // (runMarksDistillPass), not a degenerate case of this one.
   if (fresh === 0) {
-    return { ran: false, skipped: cursor >= input.messages.length ? "no-new-messages" : "reader-silent" };
+    return { ran: false, skipped: behind >= input.messages.length ? "no-new-messages" : "reader-silent" };
   }
   if (fresh < (input.minNewMessages ?? 1)) return { ran: false, skipped: "no-new-messages" };
 
@@ -623,12 +667,15 @@ export async function runDistillPass(
     input.annotations ?? [],
     markCursor(meta, input.bookId),
   );
-  // The stretch the cursor would move over. The whole transcript still goes to
+  // The stretch the cursors would move over. The whole transcript still goes to
   // the model — a conversation about one passage is one unit — so the dates come
-  // from all of it, while the coverage is the part that is still owed.
+  // from all of it, while the coverage is the part that is still owed. Across a
+  // folded unit that is every thread's own tail, which is why it is gathered per
+  // part rather than sliced off the merged list.
+  const owed = parts.flatMap((p) => p.messages.slice(cursorOf(p.threadId)));
   const coverage = distillCoverage(
-    input.messages.slice(cursor).map((m) => m.ts),
-    cursor,
+    owed.map((m) => m.ts).sort((a, b) => a - b),
+    behind,
   );
   const result = await runDistillation(
     {
@@ -649,13 +696,17 @@ export async function runDistillPass(
     { run: deps.run, model: deps.model, signal: deps.signal },
   );
   if (!result.ok) return { ran: true, coverage, ...result };
-  // The transcript's cursor, and — when this pass actually saw the marks — the
-  // book's mark cursor. Spread first: the rehearsal pass keeps its own per-thread
-  // cursor in the same file (rehearsal.ts) and a hangup here must not wipe it.
+  // One cursor per thread this transcript came from, and — when this pass
+  // actually saw the marks — the book's mark cursor. Spread first: the rehearsal
+  // pass keeps its own per-thread cursor in the same file (rehearsal.ts) and a
+  // hangup here must not wipe it.
   await deps.store.setMeta({
     ...meta,
     lastDistilledAt: now(),
-    distilledMessages: { ...(meta.distilledMessages ?? {}), [input.threadId]: input.messages.length },
+    distilledMessages: {
+      ...(meta.distilledMessages ?? {}),
+      ...Object.fromEntries(parts.map((p) => [p.threadId, p.messages.length])),
+    },
     ...(markCursorNext !== null
       ? { distilledMarks: { ...(meta.distilledMarks ?? {}), [input.bookId]: markCursorNext } }
       : {}),

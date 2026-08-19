@@ -199,15 +199,19 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
   push(
     (bookLevel
       ? [
-          // "no passage is marked" used to sit in this sentence. It came out
-          // when asides arrived: an aside borrows this block verbatim to keep
-          // the cache prefix, and prints the span it was opened on a few blocks
-          // below, so the clause would have been contradicted inside the same
-          // prompt. Nothing else changes — the book-level thread never carried a
-          // passage and still does not.
+          // Three conversations share this block, because an aside borrows its
+          // parent's stable half verbatim to keep the cache prefix and then
+          // prints the passage it was opened on a few blocks below. So it says
+          // only what is true of all three, and hands the reading context the
+          // job of saying which one this is. "— no passage is marked —" used to
+          // sit in the second line and could not survive that; the last sentence
+          // is what replaced it, and it is vacuous on the lesson's own turns,
+          // where nothing below names a passage.
           "You are a reading companion embedded in a PDF reader. The user opened a",
           "conversation about the book as a whole — to be taught part of it, to be",
-          "pointed at where to start, or to ask what a chapter holds.",
+          "pointed at where to start, or to ask what a chapter holds. Where the",
+          "reading context below names a passage, this turn is a side conversation",
+          "off that one and that passage is its subject.",
         ]
       : [
           "You are a reading companion embedded in a PDF reader. The user is reading",
@@ -257,12 +261,18 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
   ];
   if (ctx.pageLabel) position.push(`- Page: ${ctx.pageLabel}`);
   if (ctx.chapterTitle) position.push(`- Chapter: ${ctx.chapterTitle}`);
-  if (ctx.focusLabel) {
+  // Which chapter the talking is about, and what it is not. An aside states the
+  // chapter as a fact about the lesson it hangs off and stops there: what it is
+  // about is the passage below, so the two lines that hand the subject to the
+  // chapter, or take it away from the page, would both be false here.
+  if (ctx.focusLabel && ctx.aside) {
+    position.push(`- The lesson this came out of is on ${ctx.focusLabel}.`);
+  } else if (ctx.focusLabel) {
     position.push(
       `- This conversation is on ${ctx.focusLabel}. That, and not the page above, is`,
       "  what it is about; the reader can be scrolled anywhere while you talk.",
     );
-  } else if (bookLevel) {
+  } else if (bookLevel && ctx.aside?.from !== "mark") {
     position.push(
       "- Where the reader is scrolled to is not the subject. Take that from the",
       "  conversation, not from the page number.",
@@ -272,9 +282,15 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
   // out of a reply, not out of the book, so it is named for what it is; every
   // other anchored conversation — a mark thread, an aside drawn on the page — is
   // a marked passage and says so.
+  //
+  // Said without pointing at a message. The reader goes on talking here and this
+  // block is rebuilt every turn, so "your last answer" would be a different
+  // answer by the second one, and the message the span came out of may not be in
+  // the replayed history at all.
   if (ctx.aside?.from === "chat") {
     position.push(
-      `- The reader pulled this out of your last answer and asked about it: "${ctx.selectionText.trim()}"`,
+      `- The subject of this side conversation, taken by the reader out of something you`,
+      `  wrote earlier in the lesson: "${ctx.selectionText.trim()}"`,
     );
   } else if (!bookLevel || ctx.aside) {
     position.push(`- Marked passage: "${ctx.selectionText.trim()}"`);

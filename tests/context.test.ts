@@ -295,10 +295,62 @@ test("a chat-span aside names the span for what it is and carries no page text",
     selectionText: "  the semantics in SSA form  ",
     surroundingText: "GVN folds redundant expressions across the graph.",
   });
-  expect(out).toContain('pulled this out of your last answer and asked about it: "the semantics in SSA form"');
+  expect(out).toContain('taken by the reader out of something you');
+  expect(out).toContain('wrote earlier in the lesson: "the semantics in SSA form"');
   expect(out).not.toContain("Marked passage");
   // The text around a page has nothing to do with words out of a reply.
   expect(out).not.toContain("Text around the marked passage");
+});
+
+// Rebuilt every turn from the stored span, so it may not point at anything the
+// model can still see: the reader goes on talking here, and the message the span
+// came out of can be trimmed off the replayed history altogether.
+test("the span is named without pointing at a message", () => {
+  const out = buildSystemPrompt({ ...base, bookLevel: true, aside: { from: "chat" } });
+  // The anchor line itself, not the teaching rules above it.
+  const anchor = out.slice(out.indexOf("- The subject of this side conversation"));
+  expect(anchor).toContain('"the semantics in SSA form"');
+  for (const pointer of ["last answer", "last turn", "the message above", "just now", "just wrote"]) {
+    expect(`${pointer}: ${anchor.includes(pointer)}`).toBe(`${pointer}: false`);
+  }
+});
+
+// Both aside flavours state the chapter as a fact about the lesson. The line the
+// lesson gets hands the subject to the chapter and takes it away from the page,
+// and an aside's subject is neither: it is the passage below.
+test("an aside states its parent's chapter without claiming to be about it", () => {
+  const focusLabel = 'chapter 3 ("Coding Attention Mechanisms"), p.64-107';
+  for (const from of ["chat", "mark"] as const) {
+    const out = buildSystemPrompt({ ...base, bookLevel: true, focusLabel, aside: { from } });
+    expect(out).toContain("- The lesson this came out of is on chapter 3");
+    expect(out).not.toContain("what it is about");
+    expect(out).not.toContain("Where the reader is scrolled to is not the subject");
+  }
+  // The lesson's own line is untouched.
+  const lesson = buildSystemPrompt({ ...base, bookLevel: true, focusLabel });
+  expect(lesson).toContain("This conversation is on chapter 3");
+  expect(lesson).toContain("what it is about");
+});
+
+// The subject is a passage on a page, so the line that says the page is not the
+// subject cannot ride. It still does for a span out of a reply, where it is true.
+test("an aside drawn on the page is not told to ignore the page", () => {
+  const drawn = buildSystemPrompt({ ...base, bookLevel: true, aside: { from: "mark" } });
+  expect(drawn).not.toContain("Where the reader is scrolled to is not the subject");
+  const span = buildSystemPrompt({ ...base, bookLevel: true, aside: { from: "chat" } });
+  expect(span).toContain("Where the reader is scrolled to is not the subject");
+});
+
+// The shared opening says only what is true of all three doors, and hands the
+// reading context the job of saying which one this is.
+test("the shared opening is true whether or not a passage is named below", () => {
+  const lesson = buildSystemPrompt({ ...base, bookLevel: true });
+  expect(lesson).toContain("Where the\nreading context below names a passage");
+  // Nothing in it asserts that no passage is marked.
+  expect(lesson).not.toContain("no passage is marked");
+  expect(buildSystemPrompt({ ...base, bookLevel: true, aside: { from: "mark" } })).toContain(
+    "that passage is its subject",
+  );
 });
 
 test("an aside drawn on the page is a marked passage like any other", () => {
@@ -312,14 +364,14 @@ test("an aside drawn on the page is a marked passage like any other", () => {
   expect(out).toContain('- Marked passage: "the semantics in SSA form"');
   expect(out).toContain('- The user\'s note on it: "confusing"');
   expect(out).toContain("Text around the marked passage:");
-  expect(out).not.toContain("pulled this out of your last answer");
+  expect(out).not.toContain("taken by the reader out of something you");
 });
 
 // The lesson itself is unchanged by any of this.
 test("the book-level thread still carries nothing selection-derived", () => {
   const out = buildSystemPrompt({ ...base, bookLevel: true, surroundingText: "around" });
   expect(out).not.toContain("Marked passage");
-  expect(out).not.toContain("pulled this out of your last answer");
+  expect(out).not.toContain("taken by the reader out of something you");
   expect(out).not.toContain("Text around the marked passage");
 });
 

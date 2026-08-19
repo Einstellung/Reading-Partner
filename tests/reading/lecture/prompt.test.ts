@@ -169,6 +169,39 @@ test("an aside says what this turn is, and where the passage came from", () => {
   expect(turnLoadStatement(load)).not.toContain("side conversation");
 });
 
+// The block is rebuilt every turn, and by the second one the lesson's stretch
+// may be gone — trimmed off the front by the budget, or never there at all on an
+// aside whose parent is. A sentence about a stretch that is not in the messages
+// is the thing this block exists not to write.
+test("an aside says the lesson is replayed only when it is", () => {
+  const load = { mode: "chapter" as const, bookName: "book.pdf", pageCount: 401, chapter: CH3 };
+  const withTail = turnLoadStatement({ ...load, aside: { from: "chat", lessonReplayed: true } });
+  expect(withTail).toContain("open on the stretch of the lesson this broke off from");
+  expect(withTail).not.toContain("None of the lesson itself is replayed");
+
+  for (const alone of [
+    turnLoadStatement({ ...load, aside: { from: "chat", lessonReplayed: false } }),
+    // Absent is the same answer: nothing said it was replayed.
+    turnLoadStatement({ ...load, aside: { from: "chat" } }),
+  ]) {
+    expect(alone).toContain("None of the lesson itself is replayed");
+    expect(alone).not.toContain("open on the stretch of the lesson");
+  }
+});
+
+// The passage is in the reading context on both flavours, so the instruction a
+// mark thread gets in its teaching rules is given here instead — the rules
+// themselves are the lesson's, byte for byte, and cannot say it.
+test("an aside is told the passage is above it rather than to quote it back", () => {
+  const load = { mode: "none" as const, bookName: "book.pdf", pageCount: 401, chapter: null };
+  for (const from of ["chat", "mark"] as const) {
+    const out = turnLoadStatement({ ...load, aside: { from } });
+    expect(out).toContain("in the reading context above");
+    expect(out).toContain("rather than quoting it back in full");
+  }
+  expect(turnLoadStatement(load)).not.toContain("in the reading context above");
+});
+
 // docs/09: the question decides the length, whichever door the reader came in
 // by. An aside is the shortest door there is and must not be the one that says
 // so. Nor may it examine the reader (docs/09, dropped 2026-08-19).

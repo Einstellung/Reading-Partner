@@ -8,6 +8,7 @@ import {
   distillUnitOf,
   type DistillAnnotation,
   type DistillMessage,
+  type DistillUnitPart,
   type UnitThread,
 } from "../../observation";
 
@@ -47,6 +48,9 @@ export interface HangupPass {
   page: number | null;
   markedText: string;
   messages: DistillMessage[];
+  // The threads this transcript was merged from, so the pass moves a cursor per
+  // thread (observation/distill/arrears.ts).
+  parts: DistillUnitPart[];
   annotations: DistillAnnotation[];
 }
 
@@ -80,6 +84,7 @@ export function hangupPass(input: {
     threadId: call.threadId,
     annotationId: call.annotationId,
     messages: own,
+    parts: [{ threadId: call.threadId, messages: own }],
   };
   // Where the pass says it happened follows the unit, not the call. Hanging up
   // inside an aside distils the lesson it belongs to, and the lesson's position
@@ -107,6 +112,7 @@ export function hangupPass(input: {
     markedText:
       isSelf && !call.isBook && typeof annotation?.text === "string" ? annotation.text : "",
     messages: unit.messages,
+    parts: unit.parts,
     annotations,
   };
 }
