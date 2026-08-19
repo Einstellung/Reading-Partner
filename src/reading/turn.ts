@@ -60,10 +60,10 @@ import {
   type DistillAnnotation,
   type Observation,
 } from "../observation";
-import { readOverviewNote } from "./notes/store";
-import { chapterIndexForPage } from "./prep/scheduler";
-import { paperFulltextHash, readPrepNote } from "./prep/store";
-import { parseNote } from "./prep/notes";
+import { readOverviewNote } from "./prep/chapters/store";
+import { chapterIndexForPage } from "./prep/papers/scheduler";
+import { paperFulltextHash, readPrepNote } from "./prep/papers/store";
+import { parseNote } from "./prep/papers/notes";
 import {
   classroomNoteBody,
   prepNotesSection,
@@ -72,7 +72,7 @@ import {
   surveyBodyPageCount,
   CLASSROOM_NOTE_BUDGET_TIGHT,
   type ClassroomNote,
-} from "./prep/classroom";
+} from "./prep/papers/classroom";
 import {
   buildReadChapterTool,
   chapterOutlineSection,
@@ -96,8 +96,8 @@ import {
   pageRangeText,
   type TableChapter,
 } from "./chapters";
-import { buildClassroomTools } from "./prep/tools";
-import { ADD_SOURCE_PROMPT, buildSourceTools } from "./prep/source-tool";
+import { buildClassroomTools } from "./prep/papers/tools";
+import { ADD_SOURCE_PROMPT, buildSourceTools } from "./prep/papers/source-tool";
 import {
   buildSavedArticleTools,
   prepareSavedArticle,
@@ -120,7 +120,7 @@ import {
   type SubagentProgress,
   type SubagentTurnFn,
 } from "../ai/subagent";
-import type { PrepPipeline } from "./prep/pipeline";
+import type { PrepPipeline } from "./prep/papers/pipeline";
 
 // The opening ask on a marked passage (reading/intents.ts), re-exported here
 // because this is where every caller has always imported it from. Nothing sends
@@ -540,7 +540,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   // along at all, and it is a bad witness: a reader parked on p.12 of the
   // embodied-AI survey was two days into chapter 4, and the turn carried one of
   // the twenty notes. The position now only orders them, and only once the cap
-  // bites (prep/classroom.ts) — including in the tight list, which is why that
+  // bites (prep/papers/classroom.ts) — including in the tight list, which is why that
   // one is a smaller budget rather than a filter on the chapter number.
   //
   // The body stored here is the body that gets printed: classroomNoteBody is the

@@ -91,7 +91,7 @@ export function inlinePages(ft: Fulltext, from: number, to: number): string {
 }
 
 // The whole-book block: every body page, and a line about the pages left out
-// when the reference list was trimmed off the end (prep/classroom.ts decides
+// when the reference list was trimmed off the end (prep/papers/classroom.ts decides
 // where the body ends; this only prints what it was told).
 export function wholeBookSection(bookName: string, ft: Fulltext, bodyPages: number): string {
   const kept = Math.max(1, Math.min(ft.pages.length, bodyPages));

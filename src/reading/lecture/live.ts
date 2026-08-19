@@ -11,8 +11,8 @@ import {
   type TableChapter,
   type ChapterEntry,
 } from "../chapters";
-import { loadNotesState, readChapterNote } from "../notes/store";
-import type { PrepChapter } from "../prep/types";
+import { loadNotesState, readChapterNote } from "../prep/chapters/store";
+import type { PrepChapter } from "../prep/papers/types";
 import type { ChapterOutline } from "./prompt";
 
 // The chapter table for a book, from the best source that has one (docs/09):

@@ -4,7 +4,7 @@
 // discovered, which items have been judged, which bodies have been fetched. Cut
 // off — backgrounded and killed, crashed, app closed, stopped — the next start
 // picks the run up and pays only for what is still owed. Same posture as the
-// notes state file (src/reading/notes/types.ts): a derived, rebuildable JSON the
+// notes state file (src/reading/prep/chapters/types.ts): a derived, rebuildable JSON the
 // pipeline reads once at startup and rewrites at every checkpoint.
 //
 // Pure: the clock, the filesystem, and the fetching are the caller's business.

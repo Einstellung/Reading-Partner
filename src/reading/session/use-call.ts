@@ -51,7 +51,7 @@ import { createLiveTurns, type LiveTurn } from "../live-turns";
 import { RESEARCH_TOOL_NAME, researchStatusLabel } from "../papers/research-agent";
 import { deferHangup } from "./hangup";
 import { createPendingImages, type StagedImage } from "../pending-images";
-import type { PrepPipeline } from "../prep/pipeline";
+import type { PrepPipeline } from "../prep/papers/pipeline";
 import {
   backgroundFailureToast,
   buildReadingTurn,

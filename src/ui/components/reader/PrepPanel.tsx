@@ -4,8 +4,8 @@
 // Plain and functional by design — visibility over polish. Tailwind-only.
 
 import { useEffect, useState } from "react";
-import type { PrepActivity, PrepSnapshot } from "../../../reading/prep/pipeline";
-import type { PaperStatus, PrepPaper } from "../../../reading/prep/types";
+import type { PrepActivity, PrepSnapshot } from "../../../reading/prep/papers/pipeline";
+import type { PaperStatus, PrepPaper } from "../../../reading/prep/papers/types";
 import { CitationContext, Markdown } from "../markdown/Markdown";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";

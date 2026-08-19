@@ -8,7 +8,7 @@ import {
   chapterOfPage,
   formatSkeleton,
 } from "../../../src/reading/rehearsal/skeleton";
-import type { NoteChapter } from "../../../src/reading/notes/types";
+import type { NoteChapter } from "../../../src/reading/prep/chapters/types";
 import type { OutlineItem } from "../../../src/fulltext/types";
 
 const notesPlan: NoteChapter[] = [

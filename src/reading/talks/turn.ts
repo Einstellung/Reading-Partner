@@ -33,7 +33,7 @@ import { buildFigureCatalog } from "../figures/catalog";
 import { buildFigureTools } from "../figures/tools";
 import { renderFigure } from "../figures/render";
 import type { Figure } from "../figures/types";
-import { readChapterNote } from "../notes/store";
+import { readChapterNote } from "../prep/chapters/store";
 import {
   buildRehearsalSystemPrompt,
   buildRehearsalTools,

@@ -18,7 +18,7 @@ import { toAnnotationLite, type AnnotationLite } from "../../fulltext/format";
 import { buildSkeleton, type Skeleton } from "../rehearsal";
 import { getFigures } from "../figures/store";
 import type { Figure } from "../figures/types";
-import { loadNotesState } from "../notes/store";
+import { loadNotesState } from "../prep/chapters/store";
 import type { TalkMaterial } from "./types";
 
 // One material of a talk with everything the rehearsal reads about it.

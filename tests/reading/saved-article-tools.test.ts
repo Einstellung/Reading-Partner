@@ -16,7 +16,7 @@ import {
   savedArticleProvenance,
   type SavedArticlePorts,
 } from "../../src/reading/saved-article-tools";
-import type { IngestResult } from "../../src/reading/prep/source-tool";
+import type { IngestResult } from "../../src/reading/prep/papers/source-tool";
 import type { SavedArticle } from "../../src/reading/saved-articles";
 
 function article(over: Partial<SavedArticle> = {}): SavedArticle {

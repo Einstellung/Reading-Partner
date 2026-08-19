@@ -1,16 +1,19 @@
-// Public surface of the lesson-prep module (docs/09).
+// AI preparation for a document (docs/09). Two kinds of material, one per
+// document, chosen by the inline-citation density of its text
+// (fulltext/citations.ts): a paper reaches outwards, so ./papers prepares the
+// works it leans on; a book reaches inwards, so ./chapters prepares what each
+// chapter does and how the chapters depend on each other. No document gets both.
+//
+// This file is the third thing, the part neither half owns: the anchor grammar
+// prepared material is written in. Both kinds of note carry [p.N] anchors, and a
+// chat reply that quotes one has to be rendered with the same grammar, so it
+// cannot live in either subdirectory without the other importing it. Both
+// subdirectories and the markdown renderer read it from here.
+//
+// The two pipelines share nothing else: their scaffolding — the stall watchdog,
+// the pacing limiter, the observable run — is in src/ai, where the slides
+// pipeline reads it too.
 
-export type {
-  PaperStatus,
-  PlanStatus,
-  PrepChapter,
-  PrepPaper,
-  PrepReference,
-  PrepState,
-} from "./types";
-export { PREP_VERSION } from "./types";
-export { parsePlan, planUserMessage, slugify, uniqueSlug, PLAN_SYSTEM_PROMPT } from "./plan";
-export { parseNote, serializeNote, abstractNoteBody, type NoteMeta, type PrepNote } from "./notes";
 export {
   linkifyCitations,
   parseCitationHref,
@@ -20,30 +23,3 @@ export {
   type Citation,
 } from "./anchors";
 export { locateQuote, normalizeForMatch } from "./quote-locate";
-export {
-  chapterIndexForPage,
-  nextQueued,
-  normalizeOnLoad,
-  paperPriority,
-} from "./scheduler";
-export {
-  PrepPipeline,
-  type PipelineDeps,
-  type PrepSnapshot,
-  type PrepActivity,
-} from "./pipeline";
-export { getPrepPipeline, peekPrepPipeline, hasPrepState } from "./live";
-export { readPrepNote, paperFulltextHash } from "./store";
-export {
-  prepNotesSection,
-  prepStatusSection,
-  surveyBodyPageCount,
-  type ClassroomNote,
-} from "./classroom";
-export { buildClassroomTools } from "./tools";
-export {
-  buildSourceTools,
-  ADD_SOURCE_PROMPT,
-  type SourceIngestor,
-  type IngestResult,
-} from "./source-tool";
