@@ -28,6 +28,7 @@ import { callLayout } from "../chat/call-layout";
 import ReadingPipCard from "../chat/ReadingPipCard";
 import { useInfoCall } from "./use-info-call";
 import type { ComposerVoice } from "../chat/chat";
+import { chatGlance } from "../chat/chatParts";
 import type { BriefingView } from "../../../info/briefing/reader";
 import type { InfoCallAnchor } from "../../../info/companion/anchors";
 
@@ -77,7 +78,7 @@ export function InfoCall({
   // there is no way to set it and no layout to set it to (call-layout.ts).
   const layout = callLayout(pipCards, call.swapped);
   const { position } = anchor;
-  const lastMessage = call.messages.length ? call.messages[call.messages.length - 1].text : null;
+  const lastMessage = chatGlance(call.messages);
 
   if (layout === "chat-pip") {
     return (

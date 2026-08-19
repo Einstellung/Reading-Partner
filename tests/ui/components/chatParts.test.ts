@@ -5,6 +5,7 @@
 import { expect, test } from "bun:test";
 import {
   cardRow,
+  chatGlance,
   findCardPart,
   insertBeforeLast,
   isPersistableCardKind,
@@ -159,4 +160,38 @@ test("rehydrateMessage leaves a plain (pre-parts) message text-only", () => {
   const empty = rehydrateMessage({ role: "ai", text: "hi", ts: 4, parts: [] });
   expect(empty.parts).toBeUndefined();
   expect(messageToParts(empty)).toEqual([{ type: "text", text: "hi" }]);
+});
+
+// --- the one-line glance (the corner chat card) ----------------------------
+
+// A row carrying a card renders as the card and nothing else, so its `text` is
+// not something the reader has ever been shown. An aside's receipt puts the
+// sentence written for the model in that field, and the corner card was printing
+// it verbatim — as the newest row, immediately after every return.
+test("the glance skips a card row and answers with the prose above it", () => {
+  const messages: ThreadMessage[] = [
+    { role: "user", text: "what is a head?", ts: 1 },
+    { role: "ai", text: "three matrices", ts: 2 },
+    {
+      role: "ai",
+      text: '[Aside, now closed: the reader stepped out of this conversation to ask "x".]',
+      ts: 3,
+      parts: [{ type: "card", id: "aside-1", card: probe() }],
+    },
+  ];
+  expect(chatGlance(messages)).toBe("three matrices");
+});
+
+test("the glance skips a row with nothing in it, and answers null for a conversation with none", () => {
+  expect(chatGlance([{ role: "ai", text: "  ", ts: 1 }])).toBeNull();
+  expect(chatGlance([])).toBeNull();
+  expect(chatGlance([cardRow("c1", probe())])).toBeNull();
+});
+
+test("the glance takes the newest prose when nothing is a card", () => {
+  const messages: ThreadMessage[] = [
+    { role: "ai", text: "older", ts: 1 },
+    { role: "user", text: " newer ", ts: 2 },
+  ];
+  expect(chatGlance(messages)).toBe("newer");
 });

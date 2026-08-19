@@ -56,8 +56,9 @@ interface CallViewProps {
 	// what keeps an aside one level deep.
 	onOpenAside?(anchor: AsideAnchor): void;
 	// This conversation is itself an aside: what it was opened on, and the way
-	// back to the one it came off. Absent = it is not one.
-	aside?: { span: string; onBack(): void };
+	// back to the one it came off. Absent = it is not one; a present `aside` with
+	// no `onBack` is one whose parent is gone, which still says what it is about.
+	aside?: { span: string; onBack?(): void };
 	// Whether this call takes the chat zoom. The phone reaches this view too, and
 	// has neither of the gestures that drive it.
 	scalable?: boolean;
@@ -67,18 +68,20 @@ interface CallViewProps {
 // the reader can see which one they stepped away from. It takes the slot the
 // chapter-focus line uses — an aside never carries a chapter focus of its own
 // (it reads its parent's), so the two never want it at once.
-function AsideBar({ span, onBack }: { span: string; onBack(): void }) {
+function AsideBar({ span, onBack }: { span: string; onBack?(): void }) {
 	return (
 		<div className="absolute left-1/2 top-4 z-10 flex max-w-[70%] -translate-x-1/2 items-center gap-2">
-			<Button
-				type="button"
-				variant="ghost"
-				size={null}
-				onClick={onBack}
-				className="shrink-0 whitespace-nowrap rounded-full px-2.5 py-1.5 text-xs text-neutral-500 coarse:py-2.5"
-			>
-				‹ Back to the lesson
-			</Button>
+			{onBack && (
+				<Button
+					type="button"
+					variant="ghost"
+					size={null}
+					onClick={onBack}
+					className="shrink-0 whitespace-nowrap rounded-full px-2.5 py-1.5 text-xs text-neutral-500 coarse:py-2.5"
+				>
+					‹ Back to the lesson
+				</Button>
+			)}
 			<span className="truncate text-xs italic text-neutral-400">“{span}”</span>
 		</div>
 	);

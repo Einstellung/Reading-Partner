@@ -9,6 +9,7 @@
 // pinned here is only what the session itself reads and writes.
 
 import type { CompressedImage } from "../ai/image-utils";
+import type { AsideAnchor } from "../platform/app/threads";
 import {
   appendRunningTool,
   relabelRunningTool,
@@ -58,6 +59,14 @@ export interface CallState<M extends CallRow> {
     // the lesson ran (reading/aside.ts).
     from: "chat" | "mark";
     span: string;
+    // The reply the span came out of. Held here rather than read back off the
+    // record because a chat-span aside has no record until the reader asks
+    // something in it — opening one has to cost nothing.
+    anchor?: AsideAnchor;
+    // The view the conversation this came off was in. Going back restores it: a
+    // lesson left as the corner card while the reader read the page must not
+    // come back as chat over that page.
+    parentView?: CallView;
   };
   view: CallView;
   anchor: { x: number; y: number };

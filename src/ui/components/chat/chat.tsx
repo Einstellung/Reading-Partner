@@ -200,9 +200,15 @@ function useAsideSelection(list: RefObject<HTMLElement>, enabled: boolean): Asid
 }
 
 // The box the control is given. anchor-safe clamps it inside the safe area from
-// these numbers (styles.css), so they are the size it is drawn at rather than a
+// these numbers (styles.css), so they are what it is drawn at rather than a
 // measurement of it.
-const ASIDE_CONTROL = { width: 150, height: 34 };
+//
+// The height is the coarse-pointer one. The control's own height comes from the
+// size table in ui/button.tsx, which is where this project keeps the 44px touch
+// minimum, so it is 34px under a mouse and 44 under a finger — and the clamp,
+// which only has to keep it on screen, is given the taller of the two on both.
+const ASIDE_CONTROL_WIDTH = 150;
+const ASIDE_CONTROL_HEIGHT = 44;
 // Distance from the bottom of the selection.
 const ASIDE_CONTROL_GAP = 8;
 
@@ -223,8 +229,10 @@ function AskAsideControl({ pick, onOpen }: { pick: AsidePick; onOpen(anchor: Asi
 	// a button that acts on pointerdown gets no click of its own.
 	const open = () => onOpen(pick.anchor);
 	return (
-		<button
+		<Button
 			type="button"
+			variant="outline"
+			size="chip"
 			onPointerDown={(e) => {
 				e.preventDefault();
 				open();
@@ -236,21 +244,20 @@ function AskAsideControl({ pick, onOpen }: { pick: AsidePick; onOpen(anchor: Asi
 			}}
 			style={
 				{
-					'--anchor-x': `${pick.x - ASIDE_CONTROL.width / 2}px`,
+					'--anchor-x': `${pick.x - ASIDE_CONTROL_WIDTH / 2}px`,
 					'--anchor-y': `${pick.y + ASIDE_CONTROL_GAP}px`,
-					'--anchor-w': `${ASIDE_CONTROL.width}px`,
-					'--anchor-h': `${ASIDE_CONTROL.height}px`,
-					width: ASIDE_CONTROL.width,
-					height: ASIDE_CONTROL.height,
+					'--anchor-w': `${ASIDE_CONTROL_WIDTH}px`,
+					'--anchor-h': `${ASIDE_CONTROL_HEIGHT}px`,
+					width: ASIDE_CONTROL_WIDTH,
 				} as CSSProperties
 			}
 			className={cn(
-				'fixed anchor-safe flex select-none items-center justify-center rounded-full border border-black/10 bg-white text-[13px] text-neutral-700 shadow-[0_4px_16px_rgba(0,0,0,0.14)]',
+				'fixed anchor-safe select-none rounded-full shadow-[0_4px_16px_rgba(0,0,0,0.14)]',
 				OVERLAY_Z.floatingTop,
 			)}
 		>
 			Ask about this
-		</button>
+		</Button>
 	);
 }
 
@@ -468,16 +475,22 @@ const MessageBubble = memo(function MessageBubble({
 		);
 	}
 	return (
-		// The marker useAsideSelection resolves a selection against. It is the
-		// predicate, written where it can be read back off the DOM: a row without
-		// it is not a row an aside can be opened from.
-		<div
-			ref={rowRef}
-			data-aside-ts={mayOpenAside(message, bookLevel) ? message.ts : undefined}
-			className="group flex flex-col gap-2"
-		>
+		<div ref={rowRef} className="group flex flex-col gap-2">
 			{trace}
-			<div className={'text-neutral-800 ' + (lg ? 'text-[calc(1rem*var(--chat-scale,1))]' : 'text-[13px]')}>
+			{/* data-aside-ts is the marker useAsideSelection resolves a selection
+			    against — the predicate, written where it can be read back off the
+			    DOM. On the prose element and not on the row: the row also holds the
+			    tool trace kept for a failed call and the budget notice, which are
+			    the app's words about the turn, and a selection that started in the
+			    reply and overshot into one of them has its common ancestor on the
+			    row. Marked there it was accepted, and Selection.toString() handed
+			    back both concatenated — half of a span the prompt then presents as
+			    what the reader picked out of the model's answer. Marked here that
+			    selection resolves to nothing and no aside is offered for it. */}
+			<div
+				data-aside-ts={mayOpenAside(message, bookLevel) ? message.ts : undefined}
+				className={'text-neutral-800 ' + (lg ? 'text-[calc(1rem*var(--chat-scale,1))]' : 'text-[13px]')}
+			>
 				<Markdown text={textPart.text} />
 			</div>
 			{/* After the answer, before the copy affordance: the notice belongs to the
@@ -541,10 +554,13 @@ export function MessageList({
 				{/* Keyed by position, not by ts: a reader's message and the reply to it
 				    are written in the same millisecond often enough that the reducer
 				    already has to disambiguate them by role (reading/call-state.ts), so
-				    ts is not unique and a duplicate key corrupts silently. Rows are only
-				    ever added or dropped at the tail, and MessageBubble is memoized on
-				    the message, so a settled row's DOM — and any Range into it — survives
-				    the re-key. */}
+				    ts is not unique and a duplicate key corrupts silently. What position
+				    costs is that a row added or dropped above another re-keys it, and
+				    both of those happen at the end of the list — a card goes in before
+				    the row a turn is writing, and a turn starting drops the rows that
+				    hold no answer, which is the last turn's failure. A settled reply
+				    further up keeps its key, its memoized component and its DOM, so a
+				    Range into it survives. */}
 				{messages.map((m, i) => (
 					<MessageBubble
 						key={i}

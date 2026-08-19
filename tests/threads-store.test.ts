@@ -919,6 +919,26 @@ test("the asides of a thread are enumerable for the delete paths", async () => {
   expect(store.list("book1").map((t) => t.id).sort()).toEqual(["as-1", "as-2", "bt", "t1"]);
 });
 
+// A read hands back the record the store is holding, and an append pushes into
+// that record's own array. Both are relied on above this file: a caller that
+// took a conversation's messages a moment before something was appended to it is
+// holding the list with that message in it, which is how an aside's receipt is
+// in the lesson's history at the door the reader walks through and not one door
+// later (reading/session/use-call.ts). Copy on either side and the line would
+// only show up the next time the conversation was opened.
+test("a read is the store's own record and an append lands in the list already handed out", async () => {
+  writeFile([thread("t1")]);
+  await store.load("book1");
+
+  const held = store.get("book1", "t1")!;
+  const messages = held.messages;
+  store.append("book1", "t1", { role: "ai", text: "landed", ts: 7 });
+
+  expect(store.get("book1", "t1")).toBe(held);
+  expect(held.messages).toBe(messages);
+  expect(messages[messages.length - 1].text).toBe("landed");
+});
+
 // The additive rule the file has kept since `book` and `focusChapter`: a record
 // written by a device that has never heard of asides carries neither field, and
 // nothing here may mind.

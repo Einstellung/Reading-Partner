@@ -234,6 +234,10 @@ test("the receipt is the aside's first question, taken without a second model ca
   // note rather than as something it said out loud.
   expect(receipt?.text).toContain("what is a head, concretely?");
   expect(receipt?.text.startsWith("[")).toBe(true);
+  // The same line is written when the reader hangs up in the aside instead of
+  // stepping back, so it may not say they came back.
+  expect(receipt?.text).not.toContain("came back");
+  expect(receipt?.text).toContain("now closed");
 });
 
 test("an aside nobody asked anything in leaves nothing behind", () => {

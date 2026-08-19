@@ -23,23 +23,44 @@ const messages: ThreadMessage[] = [
   { role: "ai", text: REPLY, ts: 2 },
 ];
 
-// Select `text` wherever it appears inside `root`, the way a drag or a long
-// press would, and let the listener see it.
-async function select(root: HTMLElement, text: string): Promise<void> {
+function textNodeHolding(root: HTMLElement, text: string): Node {
   const node = [...root.querySelectorAll("*")]
     .flatMap((el) => [...el.childNodes])
     .find((n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? "").includes(text));
   if (!node) throw new Error(`no text node holding ${JSON.stringify(text)}`);
-  const at = (node.textContent ?? "").indexOf(text);
-  const range = document.createRange();
-  range.setStart(node, at);
-  range.setEnd(node, at + text.length);
+  return node;
+}
+
+// Put the selection over a range, the way a drag or a long press would, and let
+// the listener see it.
+async function applyRange(range: Range): Promise<void> {
   await act(async () => {
     const selection = document.getSelection()!;
     selection.removeAllRanges();
     selection.addRange(range);
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+}
+
+// Select `text` wherever it appears inside `root`.
+async function select(root: HTMLElement, text: string): Promise<void> {
+  const node = textNodeHolding(root, text);
+  const at = (node.textContent ?? "").indexOf(text);
+  const range = document.createRange();
+  range.setStart(node, at);
+  range.setEnd(node, at + text.length);
+  await applyRange(range);
+}
+
+// A drag that starts inside the reply and carries on past its end, which is what
+// a finger does.
+async function selectFromTo(root: HTMLElement, from: string, to: string): Promise<void> {
+  const start = textNodeHolding(root, from);
+  const end = textNodeHolding(root, to);
+  const range = document.createRange();
+  range.setStart(start, (start.textContent ?? "").indexOf(from));
+  range.setEnd(end, (end.textContent ?? "").indexOf(to) + to.length);
+  await applyRange(range);
 }
 
 function control(): HTMLElement | null {
@@ -76,6 +97,35 @@ test("a selection inside a reply raises the control, and it opens on those words
     fireEvent.pointerDown(button!);
   });
   expect(opened).toEqual([{ messageTs: 2, text: "three matrices" }]);
+});
+
+// Everything captured has to be words the model wrote. The row also holds the
+// budget notice and the tool trace kept for a failed call, which are the app's
+// words about the turn; a drag that started in the reply and carried on into one
+// of them used to be accepted, and Selection.toString() handed back both
+// concatenated — half of a span the prompt then presents as what the reader
+// picked out of the answer.
+test("a selection that runs past the end of the reply captures nothing", async () => {
+  const opened: AsideAnchor[] = [];
+  const withNotice: ThreadMessage[] = [
+    { role: "ai", text: REPLY, ts: 2, notice: "Chapter 4 was left out to fit" },
+  ];
+  const view = render(
+    createElement(MessageList, {
+      messages: withNotice,
+      onOpenAside: (a: AsideAnchor) => void opened.push(a),
+    }),
+  );
+
+  await selectFromTo(view.container, "three matrices", "left out to fit");
+  expect(document.getSelection()!.toString()).toContain("left out to fit");
+  expect(control()).toBeNull();
+  expect(opened).toEqual([]);
+
+  // The same drag stopped at the end of the reply is offered, and what it caught
+  // is the reply's own words.
+  await select(view.container, "three matrices");
+  expect(control()).not.toBeNull();
 });
 
 test("a selection in the reader's own message raises nothing", async () => {

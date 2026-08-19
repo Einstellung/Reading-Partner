@@ -124,10 +124,19 @@ export function asideSpan(raw: string): string | null {
   return text.length < ASIDE_SPAN_MIN ? null : text;
 }
 
-// That span with the reply it came out of. The text, never a character offset:
-// linkifyCitations rewrites a message's source before react-markdown parses it,
-// so an offset taken off the rendered reply does not index the stored text
-// (platform/app/threads.ts: AsideAnchor).
+// That span with the reply it came out of.
+//
+// The text, never a character offset. What the reader dragged over is the
+// rendered reply, and linkifyCitations rewrites a message's source before
+// react-markdown parses it, so an offset taken off the rendering indexes
+// different words in the stored text — or runs past its end.
+//
+// What is kept is therefore the rendering's words, which are not always a
+// substring of the stored text either: Markdown syntax is gone from them, and a
+// citation whose visible label drops its quote payload
+// (reading/prep/anchors.ts) reads shorter than its source. That costs nothing,
+// because nothing looks the span up in the message it came from — it is carried
+// to the prompt as the words the reader picked out, and it is those words.
 export function asideAnchorAt(messageTs: number, raw: string): AsideAnchor | null {
   const text = asideSpan(raw);
   return text === null ? null : { messageTs, text };
@@ -174,6 +183,10 @@ export interface AsideFraming {
   span: string;
 }
 
+// Whether the parent is still there is not asked here and is not this answer's
+// to give: the line above an aside says what it is about, which is true of an
+// orphan too. Offering a way back is decided where the parent can be looked up
+// (asideReturn).
 export function asideFraming(
   thread: Pick<Thread, "annotationId" | "book" | "parentThreadId" | "asideAnchor">,
   markText: string,
@@ -257,7 +270,11 @@ export function asideReceipt(input: {
     // Bracketed, and about the reader rather than to them: the row is written
     // with the assistant's role, so the model reads this back as a note it left
     // itself rather than as something it said out loud.
-    text: `[Aside: the reader stepped out of this conversation to ask "${question}", and came back.]`,
+    //
+    // "now closed" and not "and came back": the same line is written when the
+    // reader hangs up inside the aside, and then they have not come back. What
+    // is true on every way out is that the side conversation is over.
+    text: `[Aside, now closed: the reader stepped out of this conversation to ask "${question}".]`,
     card: { kind: "aside", threadId, span: oneLine(span, ASIDE_SPAN_MAX), question },
   };
 }

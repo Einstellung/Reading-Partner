@@ -31,7 +31,6 @@ import {
 import {
   createAsideThread,
   createThread,
-  deleteThreadTree,
   getThread,
   type Thread,
   type ThreadMessage,
@@ -76,8 +75,8 @@ import CallView from "./ui/components/chat/CallView";
 import ReadingPipCard from "./ui/components/chat/ReadingPipCard";
 import ChatPipCard from "./ui/components/chat/ChatPipCard";
 import SettingsView from "./ui/components/SettingsView";
-import type { CallRow, CallState } from "./reading/call-state";
-import { asideFraming } from "./reading/aside";
+import type { CallRow, CallState, CallView as CallViewMode } from "./reading/call-state";
+import { asideFraming, asideReturn } from "./reading/aside";
 import { asideIntents, bookTextNotice, openingIntents, type ReadingIntent } from "./reading/intents";
 import { chapterAtPage } from "./reading/chapters";
 import { resolveBookThread } from "./reading/session/book-thread";
@@ -98,6 +97,7 @@ import type { Annotation as PopupAnnotation, ToolType } from "./ui/components/re
 import type { PendingImage } from "./ui/components/chat/types";
 import {
   cardRow,
+  chatGlance,
   nextCardId,
   rehydrateMessage,
   type CardAction,
@@ -135,6 +135,11 @@ interface CallMessage extends CallRow {
 // separately (hydrateThreadImages), so images start absent here. Stored parts
 // come back as render parts (rehydrateMessage), so a rehearsal decision card is
 // still there when the conversation is reopened days later.
+// The part of a thread record that says whether it is a side conversation and
+// what of. Narrow, so a conversation being created can be framed before it has a
+// record of its own.
+type AsideThread = Pick<Thread, "annotationId" | "book" | "parentThreadId" | "asideAnchor">;
+
 function toDisplayMessages(msgs: ThreadMessage[]): CallMessage[] {
   return msgs.map(rehydrateMessage);
 }
@@ -469,16 +474,21 @@ export default function App() {
     return toDistillAnnotations([...annsRef.current.values()]);
   }, []);
 
-  // How a stored thread opens as a call when it is a side conversation
-  // (docs/03): the way back and the span it was opened on. Undefined for every
-  // other thread, which spreads into the call as nothing at all. A drawn aside's
-  // span is its mark's text, which lives on the annotation and not on the
-  // record, so it is read here.
+  // How a thread opens as a call when it is a side conversation (docs/03): the
+  // way back and the span it was opened on. Undefined for every other thread,
+  // which spreads into the call as nothing at all. A drawn aside's span is its
+  // mark's text, which lives on the annotation and not on the record, so it is
+  // read here.
+  //
+  // `parentView` is the view the conversation it came off is in, where that is
+  // known — drawing a mark mid-lesson knows it. Reopening one from its chip or
+  // from its mark days later does not, and the default puts the reader back in
+  // the full window.
   const asideFramingFor = useCallback(
-    (thread: Thread | undefined): Pick<CallState<CallMessage>, "aside"> => {
+    (thread: AsideThread | undefined, parentView?: CallViewMode): Pick<CallState<CallMessage>, "aside"> => {
       if (!thread) return {};
       const framing = asideFraming(thread, callExcerpt(annsRef.current.get(thread.annotationId)));
-      return framing ? { aside: framing } : {};
+      return framing ? { aside: { ...framing, ...(parentView ? { parentView } : {}) } } : {};
     },
     [],
   );
@@ -791,14 +801,16 @@ export default function App() {
           {
             threadId: aiCreated.threadId,
             annotationId: aiCreated.annotation.id,
+            // Through asideFraming like every other door, so the span is the
+            // one shape everywhere: one line, cut to the same length.
+            // `parentView` is what the reader had the lesson in when they drew —
+            // the corner card, in the flow this is for — and going back restores
+            // it rather than putting chat over the page they were reading.
             ...(parentThreadId
-              ? {
-                  aside: {
-                    parentThreadId,
-                    from: "mark" as const,
-                    span: callExcerpt(aiCreated.annotation),
-                  },
-                }
+              ? asideFramingFor(
+                  { annotationId: aiCreated.annotation.id, parentThreadId },
+                  lesson?.view,
+                )
               : {}),
             view: "bubble",
             anchor,
@@ -1065,23 +1077,15 @@ export default function App() {
   // The mark and its thread go together. The mark is the thread's only door —
   // tapping it on the page, or its sparkle in the trace list — so a thread left
   // behind is a conversation nothing can ever open again, syncing forever. That
-  // is the same pairing the ✕'s delete already makes from the other end. The
-  // mark goes through removeAnnotation like every other deletion, so the
-  // annotations file, the in-memory map and sync stay in agreement; the thread
-  // goes through deleteThreadTree, an in-file rewrite its own cache owns, which
-  // also takes any side conversation hanging off it rather than leaving one
-  // pointing at a parent that is gone. What was distilled from the talk stays,
-  // and the event log is appended to, not rewritten.
+  // is the same pairing the ✕'s delete already makes from the other end, and
+  // both ends now go through the same one in the session: the threads file, the
+  // turn, the staging and the event line are all keyed by thread id and none of
+  // them is this file's. The mark goes through removeAnnotation like every other
+  // deletion, so the annotations file, the in-memory map and sync stay in
+  // agreement. What was distilled from the talk stays.
   const deleteTraceAnnotation = useCallback(
     (id: string) => {
-      const bookId = bookIdRef.current;
-      const threadId = annsRef.current.get(id)?.aiThreadId as string | undefined;
-      const removed = bookId && threadId ? deleteThreadTree(bookId, threadId) : [];
-      dropThread(id, removed);
-      const topicId = ctxRef.current.topicId;
-      if (topicId) {
-        for (const gone of removed) logEvent(topicId, "thread-delete", { threadId: gone, book: false });
-      }
+      dropThread(id, annsRef.current.get(id)?.aiThreadId as string | undefined);
       removeAnnotation(id);
     },
     [dropThread, removeAnnotation],
@@ -1304,6 +1308,19 @@ export default function App() {
       );
   intentsRef.current = callIntents;
 
+  // The empty state, and whether there is a lesson to go back to.
+  //
+  // A side conversation drawn on the page is a marked passage like any other and
+  // keeps the passage wording (docs/09); only one pulled out of a reply has no
+  // passage to name. And a conversation whose parent is gone — a delete that
+  // arrived from another device — still says what it is about, without offering
+  // a way back that could only apologise.
+  const spanAside = call?.aside?.from === "chat";
+  const asideBack =
+    call?.aside && asideReturnable(bookIdRef.current, call.aside.parentThreadId)
+      ? returnFromAside
+      : undefined;
+
   // And why it is short, while it is. Extracting the text is what the chapter
   // chip waits on, and on a long book that is tens of seconds of the entry
   // looking like it has nothing to offer.
@@ -1523,7 +1540,7 @@ export default function App() {
             onCardAction={onCardAction}
             voice={callVoice}
             intents={callIntents}
-            onBackToLesson={call.aside ? returnFromAside : undefined}
+            onBackToLesson={asideBack}
           />
         )}
 
@@ -1607,15 +1624,13 @@ export default function App() {
                         prep: prepLineProgress,
                       }
                 }
-                aside={
-                  call.aside ? { span: call.aside.span, onBack: returnFromAside } : undefined
-                }
+                aside={call.aside ? { span: call.aside.span, onBack: asideBack } : undefined}
                 onOpenAside={call.isBook ? openChatAside : undefined}
                 emptyTitle={
-                  call.aside ? "Ask about this" : call.isBook ? title ?? "This book" : undefined
+                  spanAside ? "Ask about this" : call.isBook ? title ?? "This book" : undefined
                 }
                 placeholder={
-                  call.aside ? "Ask about this…" : call.isBook ? "Ask about this book…" : undefined
+                  spanAside ? "Ask about this…" : call.isBook ? "Ask about this book…" : undefined
                 }
                 intents={callIntents}
                 emptyNote={callNote}
@@ -1655,7 +1670,7 @@ export default function App() {
         {call?.view === "chat-pip" && (
           <div className="absolute right-3 top-3 z-50">
             <ChatPipCard
-              lastMessage={call.messages.length ? call.messages[call.messages.length - 1].text : null}
+              lastMessage={chatGlance(call.messages)}
               onClick={showChatMain}
               onHangUp={endCall}
             />
@@ -1681,6 +1696,16 @@ export default function App() {
     </CitationContext.Provider>
     </CardRegistryProvider>
   );
+}
+
+// Whether a side conversation still has somewhere to go back to: a record under
+// its parent link that is not itself an aside (reading/aside.ts). Read at render
+// rather than settled when it opened, because the parent can go while it is open
+// — another device's delete arrives through sync.
+function asideReturnable(bookId: string | null, parentThreadId: string): boolean {
+  if (!bookId) return false;
+  const parent = getThread(bookId, parentThreadId);
+  return !!parent && !!asideReturn(parent);
 }
 
 function callExcerpt(ann: Annotation | undefined): string {

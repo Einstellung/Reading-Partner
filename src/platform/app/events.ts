@@ -15,7 +15,10 @@ export type EventType =
   | "talk-open" // { talkId } — a talk was opened from the topic's list
   | "citation-click" // { kind: "page", page } | { kind: "paper", slug }
   | "page-nav" // { from, to, dwellMs } — dwell is time spent on the previous page
-  | "call-start" // { threadId }
+  // { threadId, book, aside? } — a conversation opened. `book` is the top-bar
+  // entry's one per-book thread; `aside` is on a side conversation only, and
+  // says which door its span came in by ("chat" | "mark", docs/03).
+  | "call-start"
   | "call-end" // { threadId } — hangup
   | "thread-delete" // { threadId, book } — conversation deleted (and its mark, if any)
   // A pass that finished. `trigger` is what set it going (hangup, trim, timer,
