@@ -498,6 +498,11 @@ export function IconBooks({ size = 20 }: IconProps) {
 // left empty on purpose: two light dots inside it turned the whole thing into a
 // small face, which is the mascot problem again in one more disguise. The
 // palette is the app's own (src-tauri/icons).
+//
+// Sized against its neighbours rather than against its own viewBox: the drawn
+// mark fills 73% of the box's height, which is what IconSparkle and
+// IconHighlight do in theirs. An earlier cut filled 65% and read a size small
+// next to them even though both render at 18px.
 const MARK = {
 	deep: '#2F4F39',
 	mid: '#7FA971',
@@ -507,12 +512,12 @@ const MARK = {
 export function IconReadTogether({ size = 20 }: IconProps) {
 	return (
 		<svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-			<rect x="2.2" y="4.2" width="19.6" height="15.6" rx="3" fill={MARK.pale} stroke={MARK.mid} strokeWidth="1.5" />
-			<path d="M12 4.8V19.2" stroke={MARK.mid} strokeWidth="1.2" strokeLinecap="round" />
-			<path d="M5.4 9.6H9.4" stroke={MARK.mid} strokeWidth="1.9" strokeLinecap="round" />
-			<path d="M5.4 13.4H8.2" stroke={MARK.mid} strokeWidth="1.9" strokeLinecap="round" />
-			<path d="M14.9 13.9L15.2 17.4L18 13.9Z" fill={MARK.deep} />
-			<rect x="13.4" y="7.9" width="7.4" height="6.4" rx="2.5" fill={MARK.deep} />
+			<rect x="3" y="3.2" width="18" height="17.6" rx="3.2" fill={MARK.pale} stroke={MARK.mid} strokeWidth="1.6" />
+			<path d="M12 3.9V20.1" stroke={MARK.mid} strokeWidth="1.3" strokeLinecap="round" />
+			<path d="M6.4 9.2H10.4" stroke={MARK.mid} strokeWidth="2" strokeLinecap="round" />
+			<path d="M6.4 13.4H9.2" stroke={MARK.mid} strokeWidth="2" strokeLinecap="round" />
+			<path d="M15.2 14.2L15.5 18L18.5 14.2Z" fill={MARK.deep} />
+			<rect x="13.6" y="7.4" width="6.9" height="7" rx="2.6" fill={MARK.deep} />
 		</svg>
 	);
 }
