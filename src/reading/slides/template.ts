@@ -35,16 +35,113 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-// Decode the few entities our fragments carry, so a title reads as text rather
-// than as markup (it is re-escaped into the attribute by the caller).
+// The entity names a slide title is likely to carry. Deliberately a table and
+// not an implementation: HTML5 defines over two thousand names, and a deck's
+// title is a line of prose written by a model, so the ones worth carrying are
+// the typographic marks, the maths and arrows, and the accented letters and
+// symbols that turn up in book and paper titles. A name outside the table is
+// left as written — the deck page itself still shows it correctly, because the
+// browser parses it; only the recorded title keeps the raw `&name;`.
+// Case matters, as it does in HTML (`&prime;` and `&Prime;` are different
+// marks); the six below that predate that rule are also read in any case,
+// because the decoder they replace did.
+const NAMED = new Map<string, string>(
+  Object.entries({
+    // The original six.
+    nbsp: " ",
+    lt: "<",
+    gt: ">",
+    quot: '"',
+    apos: "'",
+    amp: "&",
+    // Typography.
+    mdash: "—",
+    ndash: "–",
+    hellip: "…",
+    bull: "•",
+    middot: "·",
+    prime: "′",
+    Prime: "″",
+    lsquo: "‘",
+    rsquo: "’",
+    ldquo: "“",
+    rdquo: "”",
+    laquo: "«",
+    raquo: "»",
+    // Maths and arrows.
+    times: "×",
+    divide: "÷",
+    ne: "≠",
+    le: "≤",
+    ge: "≥",
+    asymp: "≈",
+    infin: "∞",
+    plusmn: "±",
+    deg: "°",
+    minus: "−",
+    larr: "←",
+    rarr: "→",
+    harr: "↔",
+    rArr: "⇒",
+    // Letters and symbols. The capitals are here too: a title is title-cased,
+    // and "École" is exactly where an accented capital shows up.
+    eacute: "é",
+    Eacute: "É",
+    egrave: "è",
+    Egrave: "È",
+    agrave: "à",
+    Agrave: "À",
+    uuml: "ü",
+    Uuml: "Ü",
+    ouml: "ö",
+    Ouml: "Ö",
+    auml: "ä",
+    Auml: "Ä",
+    ccedil: "ç",
+    Ccedil: "Ç",
+    ntilde: "ñ",
+    Ntilde: "Ñ",
+    copy: "©",
+    reg: "®",
+    trade: "™",
+    sect: "§",
+    para: "¶",
+    dagger: "†",
+    permil: "‰",
+    euro: "€",
+    pound: "£",
+    yen: "¥",
+  }),
+);
+
+const ANY_CASE = new Set(["nbsp", "lt", "gt", "quot", "apos", "amp"]);
+
+// Whether a numeric reference names a character we are willing to write into a
+// title. Out of Unicode's range, and the lone surrogates, are left as the text
+// they were: the title is about to be JSON on disk, and half a surrogate pair
+// would not survive the trip.
+function decodable(cp: number): boolean {
+  if (!Number.isFinite(cp) || cp < 1 || cp > 0x10ffff) return false;
+  return cp < 0xd800 || cp > 0xdfff;
+}
+
+const ENTITY = /&(#[0-9]+|#[xX][0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);/g;
+
+// Decode the entities our fragments carry, so a title reads as text rather than
+// as markup (it is re-escaped into the attribute by the caller). One pass, on
+// purpose: `&amp;lt;` is a title that says "&lt;", not one that says "<".
 function decodeEntities(s: string): string {
-  return s
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#0*39;|&apos;/gi, "'")
-    .replace(/&amp;/gi, "&");
+  return s.replace(ENTITY, (whole, body: string) => {
+    if (body.startsWith("#")) {
+      const hex = body[1] === "x" || body[1] === "X";
+      const cp = Number.parseInt(hex ? body.slice(2) : body.slice(1), hex ? 16 : 10);
+      return decodable(cp) ? String.fromCodePoint(cp) : whole;
+    }
+    const exact = NAMED.get(body);
+    if (exact !== undefined) return exact;
+    const lower = body.toLowerCase();
+    return ANY_CASE.has(lower) ? (NAMED.get(lower) as string) : whole;
+  });
 }
 
 // The plain-text title of a slide, for the host bridge's data-title: the <h2>

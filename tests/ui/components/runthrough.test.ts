@@ -4,6 +4,8 @@
 
 import { expect, test } from "bun:test";
 import {
+  checkDeckProtocol,
+  DECK_PROTOCOL,
   endEvent,
   formatElapsed,
   formatRunDate,
@@ -60,6 +62,36 @@ test("a slide message missing its labels still counts as a page", () => {
     kind: "",
     title: "",
   });
+});
+
+test("a deck that speaks this app's protocol passes", () => {
+  const ready = readDeckSignal({ source: "deck", type: "ready", protocol: DECK_PROTOCOL, total: 9 });
+  const check = checkDeckProtocol(ready as never);
+  expect(check.ok).toBe(true);
+  expect(check.notice).toBe("");
+  expect(check).toEqual({ ok: true, deck: DECK_PROTOCOL, host: DECK_PROTOCOL, notice: "" });
+});
+
+test("a deck built by an older app is named as one, with both versions", () => {
+  const ready = readDeckSignal({ source: "deck", type: "ready", protocol: 1, total: 9 });
+  const check = checkDeckProtocol(ready as never, 2);
+  expect(check.ok).toBe(false);
+  expect(check.deck).toBe(1);
+  expect(check.host).toBe(2);
+  expect(check.notice).toBe(
+    "This deck was built by an older version of the app (deck protocol 1, this app speaks 2). " +
+      "What it reports may not be the page on screen — generate the deck again.",
+  );
+});
+
+test("a deck built by a newer app is named as one, and does not ask for a rebuild", () => {
+  const ready = readDeckSignal({ source: "deck", type: "ready", protocol: 3, total: 9 });
+  const check = checkDeckProtocol(ready as never, 2);
+  expect(check.ok).toBe(false);
+  expect(check.notice).toBe(
+    "This deck was built by a newer version of the app (deck protocol 3, this app speaks 2). " +
+      "What it reports may not be the page on screen — update the app.",
+  );
 });
 
 test("the host's goto is addressed to the deck", () => {

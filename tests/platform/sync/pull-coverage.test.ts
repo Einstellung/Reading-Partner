@@ -45,16 +45,16 @@ const ROUTES: PullMatcher[] = [
   ASK_PULL_ROUTE,
 ];
 
-// Synced files that no route needs, and why. Nothing here is held in memory
-// across a pull: each is read when the screen or the pass that wants it starts,
-// so the newer bytes are picked up by the next reader of the file.
+// Synced files that no route needs, and why. Each is read when the screen or the
+// pass that wants it starts and nothing outlives that, so a pull's newer bytes
+// are picked up the next time one starts.
 const NO_IN_MEMORY_STATE: Record<string, string> = {
   "user-profile.md": "loadProfile reads the file each time it is wanted",
   "info-profile.md": "the profile's old name, read the same way",
   "info-feedback.jsonl": "append-only, and read in full when it is read at all",
   "info-pool-marks.json": "read at the start of a collection run, not held between them",
   "talk-": "a talk is read from disk when it is opened",
-  "runthrough-": "a talk's run-throughs are read when its list is drawn, not held between draws",
+  "runthrough-": "a talk's run-throughs are read with the talk, when that talk is opened",
   "memory-": "the observation store reads its entries per query",
   "prep-": "a document's prep material is read when the document it belongs to opens",
 };

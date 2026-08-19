@@ -74,6 +74,36 @@ export function readDeckSignal(data: unknown): DeckSignal | null {
   return null;
 }
 
+export interface ProtocolCheck {
+  ok: boolean;
+  deck: number;
+  host: number;
+  // Empty when ok. What the chrome around the frame says about the mismatch:
+  // which side is behind, both version numbers, and the one thing to do.
+  notice: string;
+}
+
+// Whether this deck and this app are speaking the same bridge. A deck is a file
+// on disk that is never rebuilt on its own, so an app that has moved on will
+// happily record pages a deck of another version reported, and the record would
+// look exactly like a good one. Say it instead: a run that may not line up with
+// what was on screen has to be visibly that, not silently that.
+export function checkDeckProtocol(sig: DeckReady, host: number = DECK_PROTOCOL): ProtocolCheck {
+  const deck = sig.protocol;
+  if (deck === host) return { ok: true, deck, host, notice: "" };
+  const side =
+    deck < host
+      ? "This deck was built by an older version of the app"
+      : "This deck was built by a newer version of the app";
+  const fix = deck < host ? "generate the deck again" : "update the app";
+  return {
+    ok: false,
+    deck,
+    host,
+    notice: `${side} (deck protocol ${deck}, this app speaks ${host}). What it reports may not be the page on screen — ${fix}.`,
+  };
+}
+
 export function slideEvent(sig: DeckSlide, at: number): RunthroughEvent {
   return { kind: "slide", at, index: sig.index, slideKind: sig.kind, title: sig.title };
 }

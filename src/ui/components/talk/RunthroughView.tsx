@@ -27,10 +27,12 @@ import {
 } from "../../../reading/runthrough";
 import { useDeckHtml } from "./useRunthrough";
 import {
+  checkDeckProtocol,
   endEvent,
   formatElapsed,
   hasRecordedPages,
   positionLabel,
+  type ProtocolCheck,
   readDeckSignal,
   utteranceEvent,
   withSlideEvent,
@@ -67,6 +69,7 @@ export default function RunthroughView({
     null,
   );
   const [elapsed, setElapsed] = useState(0);
+  const [mismatch, setMismatch] = useState<ProtocolCheck | null>(null);
 
   // Only messages from this view's own frame count. `source === 'deck'` alone is
   // not enough: any document that gets a handle on this window can say it.
@@ -75,7 +78,15 @@ export default function RunthroughView({
       const frame = frameRef.current;
       if (!frame || !e.source || e.source !== frame.contentWindow) return;
       const signal = readDeckSignal(e.data);
-      if (!signal || signal.type !== "slide") return;
+      if (!signal) return;
+      // The deck names its bridge version on the way in. A deck that speaks a
+      // different one still pages fine — it is its own script — but what it
+      // reports is not something this run can claim to have got right.
+      if (signal.type === "ready") {
+        const check = checkDeckProtocol(signal);
+        setMismatch(check.ok ? null : check);
+        return;
+      }
       eventsRef.current = withSlideEvent(eventsRef.current, signal, Date.now());
       setCurrent({ index: signal.index, total: signal.total, title: signal.title });
     };
@@ -178,6 +189,15 @@ export default function RunthroughView({
           End the run-through
         </Button>
       </div>
+
+      {mismatch ? (
+        <p
+          role="status"
+          className="m-0 flex-none border-y border-amber-400/30 bg-amber-400/10 px-3 py-2 text-[13px] text-amber-200"
+        >
+          {mismatch.notice}
+        </p>
+      ) : null}
 
       <div className="relative min-h-0 flex-1">
         {error ? (
