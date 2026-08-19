@@ -31,6 +31,7 @@
 
 import { mkdir, writeTextFile, BaseDirectory } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../platform/app/atomic-fs";
+import { holdTheScreen } from "./wake-lock";
 import { nativeDictation, type DictationEvent } from "../ai/voice/dictation";
 
 export const LONG_RESULT_DIR = "smoke";
@@ -86,22 +87,6 @@ function join(left: string, right: string): string {
       ? ""
       : " ";
   return left + seam + right;
-}
-
-async function holdTheScreen(): Promise<string> {
-  const nav = navigator as Navigator & {
-    wakeLock?: { request(type: "screen"): Promise<unknown> };
-  };
-  if (!nav.wakeLock) return "no wakeLock API";
-  try {
-    await nav.wakeLock.request("screen");
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") void nav.wakeLock?.request("screen");
-    });
-    return "held";
-  } catch (e) {
-    return `refused: ${String((e as Error)?.message ?? e)}`;
-  }
 }
 
 // One line, appended, flushed before the next thing happens. Failures are

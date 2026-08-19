@@ -20,6 +20,7 @@
 
 import { mkdir, BaseDirectory } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../platform/app/atomic-fs";
+import { holdTheScreen } from "./wake-lock";
 import {
   hasOnDeviceDictation,
   nativeDictation,
@@ -77,28 +78,11 @@ export interface DictationSmokeResult {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // A real hold keeps the screen awake by itself — a finger on the glass resets
-// the idle timer. A synthesised pointer event does not, so the phone locks
-// two minutes in, the app is backgrounded, the microphone route goes to []
-// with no interruption notification, and the webview's timers stop: the script
-// freezes mid-hold and never writes another line. The wake lock is the only
-// way this file can run longer than one auto-lock period.
-async function holdTheScreen(): Promise<string> {
-  const nav = navigator as Navigator & {
-    wakeLock?: { request(type: "screen"): Promise<{ released: boolean }> };
-  };
-  if (!nav.wakeLock) return "no wakeLock API";
-  try {
-    await nav.wakeLock.request("screen");
-    // The lock is dropped whenever the page is hidden, and taking it again on
-    // the way back is the documented pattern.
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") void nav.wakeLock?.request("screen");
-    });
-    return "held";
-  } catch (e) {
-    return `refused: ${String((e as Error)?.message ?? e)}`;
-  }
-}
+// the idle timer. A synthesised pointer event does not, so without the shared
+// wake lock the phone locks two minutes in, the app is backgrounded, the
+// microphone route goes to [] with no interruption notification, and the
+// webview's timers stop: the script freezes mid-hold and never writes another
+// line.
 
 // A marker the host can see in the device console in real time. console.log
 // does not reach the syslog from WKWebView, but every plugin command does — so

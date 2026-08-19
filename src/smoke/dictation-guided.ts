@@ -31,6 +31,7 @@
 
 import { mkdir, BaseDirectory } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../platform/app/atomic-fs";
+import { holdTheScreen } from "./wake-lock";
 import { hasOnDeviceDictation } from "../ai/voice/dictation";
 
 export const GUIDED_RESULT_DIR = "smoke";
@@ -189,22 +190,6 @@ function pointer(el: Element, type: string, x: number, y: number): void {
       buttons: type === "pointerup" ? 0 : 1,
     }),
   );
-}
-
-async function holdTheScreen(): Promise<string> {
-  const nav = navigator as Navigator & {
-    wakeLock?: { request(type: "screen"): Promise<unknown> };
-  };
-  if (!nav.wakeLock) return "no wakeLock API";
-  try {
-    await nav.wakeLock.request("screen");
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") void nav.wakeLock?.request("screen");
-    });
-    return "held";
-  } catch (e) {
-    return `refused: ${String((e as Error)?.message ?? e)}`;
-  }
 }
 
 async function write(result: GuidedResult): Promise<void> {
