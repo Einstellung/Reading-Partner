@@ -44,6 +44,7 @@ import { buildGlossary } from "./ai/voice";
 import { modelSupportsImages, type ProviderId } from "./ai/aiClient";
 import { locateQuote, prepKind, type Citation } from "./reading/prep";
 import { usePrep } from "./reading/prep/papers/use-prep";
+import { usePrepTrigger } from "./reading/session/use-prep-trigger";
 import { purgeLegacyChapterNotes } from "./reading/prep/chapters/purge";
 import { useNotes } from "./reading/prep/chapters/use-notes";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
@@ -284,6 +285,7 @@ export default function App() {
     snapshot: prepSnap,
     panel: prepPanelProps,
     pipelineRef,
+    start: startPaperPrep,
     setSelectedSlug: setSelectedPrepSlug,
     reset: resetPrep,
     resume: resumePrep,
@@ -660,10 +662,9 @@ export default function App() {
   const {
     snapshot: notesSnap,
     panel: notesPanelProps,
-    scheduleAuto: scheduleAutoNotes,
+    start: startChapterPrep,
     reset: resetNotes,
     resume: resumeNotes,
-    finalPass: finalPassNotes,
   } = useNotes({
     bookIdRef,
     ctxRef,
@@ -672,6 +673,23 @@ export default function App() {
     bufferRef,
     annsRef,
     pushToast,
+  });
+
+  // The two things that start preparation (docs/09): a mark landing, and the
+  // top-bar lecture entry. Which of the two kinds of prep runs is decided per
+  // document by the citation density, so this is the only caller that needs to
+  // see both halves.
+  const {
+    onMark: onMarkPrepTrigger,
+    onEntry: onEntryPrepTrigger,
+    onClose: finalPassPrep,
+  } = usePrepTrigger({
+    bookIdRef,
+    ctxRef,
+    currentFulltextRef,
+    annsRef,
+    startChapters: startChapterPrep,
+    startPapers: startPaperPrep,
   });
 
   // Engine created/modified annotations (drag-to-highlight, AI-pen underline, etc.).
@@ -699,7 +717,7 @@ export default function App() {
       syncTraceList();
       // A new mark is the only signal for highlight-driven notes (docs/14): page
       // navigation is not, so the frontier only ever advances on a fresh mark.
-      if (newMark) scheduleAutoNotes();
+      if (newMark) onMarkPrepTrigger();
 
       if (aiCreated) {
         // Persist the aiThreadId into the engine model, open the thread + bubble.
@@ -725,7 +743,7 @@ export default function App() {
         );
       }
     },
-    [persistAnnotations, syncTraceList, openThreadCall, scheduleAutoNotes],
+    [persistAnnotations, syncTraceList, openThreadCall, onMarkPrepTrigger],
   );
 
   const onDeleteAnnotations = useCallback(
@@ -804,7 +822,7 @@ export default function App() {
       resumePrep,
       resetNotes,
       resumeNotes,
-      finalPassNotes,
+      finalPassPrep,
       trackFulltext: (extraction) => {
         currentFulltextRef.current = extraction;
       },
@@ -828,7 +846,7 @@ export default function App() {
       closeCall,
       discardStagedImages,
       endBookTurns,
-      finalPassNotes,
+      finalPassPrep,
       pushToast,
       resetNotes,
       resetPrep,
@@ -1029,6 +1047,10 @@ export default function App() {
   const openBookThread = useCallback(() => {
     const bookId = bookIdRef.current;
     if (!bookId) return;
+    // Pressing the entry is the intent, so it is also what starts preparation on
+    // a document nobody has marked (docs/09). Fire-and-forget and off the
+    // conversation's path: the lecture never waits for prepared material.
+    onEntryPrepTrigger();
     void (async () => {
       const resolved = await resolveBookThread(bookId, () => bookIdRef.current !== bookId);
       if (resolved.status === "unreadable") {
@@ -1049,7 +1071,7 @@ export default function App() {
         thread.messages,
       );
     })();
-  }, [openThreadCall, pushToast]);
+  }, [openThreadCall, pushToast, onEntryPrepTrigger]);
 
   // Jump the reading back to the thread's mark (from the reading corner card).
   // The book-level thread has no mark, so there is nothing to jump to.

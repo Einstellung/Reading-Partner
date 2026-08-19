@@ -1,7 +1,12 @@
 // The chapter-spine hub (docs/09), lifted out of App: which pipeline the panel is
-// looking at, the unattended start, and the panel's callbacks. It owns
-// the snapshot state and renders nothing — the shell calls it and spreads
-// `panel` into the Prep panel's chapter half.
+// looking at, and the panel's callbacks. It owns the snapshot state and renders
+// nothing — the shell calls it and spreads `panel` into the Prep panel's chapter
+// half.
+//
+// What it does not decide is when a run starts. Both triggers — a mark landing,
+// the lecture entry being pressed — are one decision across both kinds of prep
+// and live in reading/session/use-prep-trigger.ts; this hook only offers the
+// `start` they call.
 //
 // Everything book-specific comes from the shell's refs rather than props: the
 // open book's id, name, full text, figures, bytes and marks are all read at call
@@ -17,10 +22,6 @@ import type { FiguresIndex } from "../../figures";
 import { getNotesPipeline, hasNotesState, peekNotesPipeline, type NotesInputs } from "./live";
 import type { NotesPipeline, NotesSnapshot } from "./pipeline";
 import { readChapterNote as readNotesChapter, readOverviewNote } from "./store";
-
-// Coalesce bursts of annotation-created events before deciding whether to start
-// the book's preparation.
-const AUTO_NOTES_DEBOUNCE = 4000;
 
 // A ref the shell owns and this hook only reads.
 type HostRef<T> = { readonly current: T };
@@ -59,15 +60,15 @@ export interface NotesController {
   // Mirror of the attached pipeline, for the panel and the drawer's busy dot.
   snapshot: NotesSnapshot | null;
   panel: NotesPanelBindings;
-  // A fresh mark landed: start the book's preparation if it has not started,
-  // debounced.
-  scheduleAuto(): void;
+  // Start (or pick up) this book's spine run. Called by the trigger, which has
+  // already decided that this is the kind of prep this document gets.
+  // Idempotent: the pipeline is a module singleton per book and never re-runs a
+  // finished chapter.
+  start(bookId: string, name: string, ft: Fulltext): Promise<void>;
   // Book open: detach the previous book's panel (its pipeline keeps running).
   reset(): void;
   // Book open, once the full text is in: resume a persisted or running pipeline.
   resume(bookId: string, name: string, ft: Fulltext): Promise<void>;
-  // Book close: last chance to start or resume the run.
-  finalPass(): void;
 }
 
 export function useNotes(host: NotesHost): NotesController {
@@ -159,45 +160,16 @@ export function useNotes(host: NotesHost): NotesController {
     [annsRef, bufferRef, ctxRef, currentFiguresRef],
   );
 
-  // Whether the reader has marked anything in the open book. Preparation is
-  // whole-book, so marks no longer decide which chapters run (docs/09) — a mark
-  // is only the sign that this book is being worked with rather than glanced at.
-  const bookHasMarks = useCallback((): boolean => {
-    for (const a of annsRef.current.values()) {
-      if (annotationPage(a as { position?: { pageIndex?: number } })) return true;
-    }
-    return false;
-  }, [annsRef]);
-
-  // Unattended start (docs/09): prepare the whole book in the background. Gated
-  // on the reader having marked something, so a book that was opened and closed
-  // does not spend anything. Fire-and-forget; the pipeline serializes its own
-  // runs and never re-runs a finished chapter.
-  const autoStartNotes = useCallback(
-    async (force?: boolean) => {
-      const bookId = bookIdRef.current;
-      const name = ctxRef.current.fileName;
-      if (!bookId) return;
-      const ft = await currentFulltextRef.current;
-      if (bookIdRef.current !== bookId) return; // switched books while extracting
-      if (!ft || ft.status !== "ok") return;
-      if (!force && !bookHasMarks()) return;
+  // Start this book's spine run and let it go. The trigger has already checked
+  // everything that gates it (reading/prep/trigger.ts); what is left here is
+  // attaching the panel and kicking the pipeline.
+  const startNotes = useCallback(
+    async (bookId: string, name: string, ft: Fulltext) => {
       const pipeline = attachNotes(bookId, name, ft);
       await pipeline.ensureStarted();
     },
-    [attachNotes, bookHasMarks, bookIdRef, ctxRef, currentFulltextRef],
+    [attachNotes],
   );
-
-  // Debounced: annotation-created events fire in bursts, so coalesce them and
-  // check at most once every few seconds.
-  const autoNotesTimer = useRef<number | null>(null);
-  const scheduleAutoNotes = useCallback(() => {
-    if (autoNotesTimer.current) window.clearTimeout(autoNotesTimer.current);
-    autoNotesTimer.current = window.setTimeout(() => {
-      autoNotesTimer.current = null;
-      void autoStartNotes();
-    }, AUTO_NOTES_DEBOUNCE);
-  }, [autoStartNotes]);
 
   // The Prep panel's Generate / Resume button: the manual whole-book run.
   const generateNotes = useCallback(async () => {
@@ -273,23 +245,6 @@ export function useNotes(host: NotesHost): NotesController {
     [attachNotes, bookIdRef],
   );
 
-  // Book close: one more chance to start (or resume) the run for a book the
-  // reader worked in. Nothing about the last chapter is special any more — the
-  // whole book is prepared in one go — but the close is still the moment a
-  // session's marks are all in. Only when a pipeline already exists or the
-  // reader marked something; otherwise the manual button is the fallback. Fire
-  // before the shell tears its refs down.
-  const finalPassNotes = useCallback(() => {
-    const bookId = bookIdRef.current;
-    if (!bookId) return;
-    const existing = peekNotesPipeline(bookId);
-    if (existing) {
-      existing.ensureStarted().catch(() => {});
-      return;
-    }
-    void autoStartNotes();
-  }, [autoStartNotes, bookIdRef]);
-
   return {
     snapshot: notesSnap,
     panel: {
@@ -304,9 +259,8 @@ export function useNotes(host: NotesHost): NotesController {
       onGenerateChapter: notesGenerateChapter,
       onRegenerateOverview: notesRegenerateOverview,
     },
-    scheduleAuto: scheduleAutoNotes,
+    start: startNotes,
     reset: resetNotes,
     resume: resumeNotes,
-    finalPass: finalPassNotes,
   };
 }

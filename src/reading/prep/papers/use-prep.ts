@@ -2,9 +2,11 @@
 // looking at, the snapshot and the selected paper. It renders nothing — the
 // shell calls it and spreads `panel` into PrepPanel.
 //
-// Prep has one entry, the panel's Start button. There is no classroom mode any
-// more (docs/09: the entry is the top-bar button, not a switch), so nothing here
-// starts prep as a side effect of something else.
+// What starts a run is not decided here. Both triggers — a mark landing, the
+// lecture entry being pressed — are one decision across both kinds of prep and
+// live in reading/session/use-prep-trigger.ts; this hook offers the `start` they
+// call, plus the panel's own Start button for the reader who presses it
+// directly.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { logEvent } from "../../../platform/app/events";
@@ -51,6 +53,10 @@ export interface PrepController {
   snapshot: PrepSnapshot | null;
   panel: PrepPanelBindings;
   pipelineRef: HostRef<PrepPipeline | null>;
+  // Start (or pick up) this document's paper run. Called by the trigger, which
+  // has already decided that this is the kind of prep this document gets.
+  // Idempotent: the pipeline is a module singleton per document.
+  start(bookId: string, name: string, ft: Fulltext): void;
   // A clicked [paper-slug p.N] citation selects that paper in the panel.
   setSelectedSlug(slug: string | null): void;
   // Book open and book close: detach the panel from the previous book. The
@@ -189,6 +195,7 @@ export function usePrep(host: PrepHost): PrepController {
       selectedSlug: selectedPrepSlug,
     },
     pipelineRef,
+    start: attachPipeline,
     setSelectedSlug: setSelectedPrepSlug,
     reset: resetPrep,
     resume: resumePrep,

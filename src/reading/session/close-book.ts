@@ -19,7 +19,7 @@ export function closeBook(
   shell.captureHangup();
   sweep("book-switch");
   // Fire before the refs are torn down below.
-  shell.finalPassNotes();
+  shell.finalPassPrep();
   shell.closeCall();
   shell.discardStagedImages();
   shell.showTitle(null);

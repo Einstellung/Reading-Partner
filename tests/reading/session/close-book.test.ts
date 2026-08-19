@@ -45,7 +45,7 @@ test("what the book still owes is collected before its refs are let go", () => {
   expect(order).toEqual([
     "endBookTurns",
     "captureHangup",
-    "finalPassNotes",
+    "finalPassPrep",
     "closeCall",
     "discardStagedImages",
     "showTitle",
@@ -70,7 +70,7 @@ test("the last chapter's notes pass fires before the book is released", () => {
   const log: Call[] = [];
   closeBook(fakeShell(log), "book-1", () => {});
 
-  before(log, "finalPassNotes", "releaseBook");
+  before(log, "finalPassPrep", "releaseBook");
 });
 
 test("closing with no book open stops no turns and still tears the reader down", () => {

@@ -53,9 +53,10 @@ export interface ReaderShell {
   resumePrep(bookId: string, name: string, ft: Fulltext): Promise<void>;
   resetNotes(): void;
   resumeNotes(bookId: string, name: string, ft: Fulltext): Promise<void>;
-  // The last chapter cannot be reached by a "next chapter" highlight, so the
-  // frontier is evaluated once on the way out (docs/14).
-  finalPassNotes(): void;
+  // Closing is the last moment this session's marks are all in, and the mark
+  // trigger is debounced, so preparation gets one more chance on the way out
+  // (reading/session/use-prep-trigger.ts).
+  finalPassPrep(): void;
 
   // The background extractions, handed over as promises so a turn being
   // assembled can await whichever is still running.
