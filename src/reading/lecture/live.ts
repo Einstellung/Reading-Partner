@@ -1,0 +1,80 @@
+// The disk side of the lecture assembly: where the chapter table and the chapter
+// spine are read from. Everything here is best-effort — a lecture turn is never
+// blocked, failed or delayed by material that has not been written yet — and
+// every decision it makes lives in the pure modules beside it.
+
+import type { Fulltext } from "../../fulltext/types";
+import { chaptersFromOutline } from "../notes/plan";
+import { loadNotesState, readChapterNote } from "../notes/store";
+import type { PrepChapter } from "../prep/types";
+import { chapterNumber, pickChapterTable, type ChapterEntry, type LectureChapter } from "./chapters";
+import type { ChapterOutline } from "./prompt";
+
+// The chapter table for a book, from the best source that has one (docs/09):
+//
+//   1. the PDF outline's level-0 entries — right when the book's bookmarks are
+//      its chapters, which is one book in five,
+//   2. the notes pass's own table (notes-<bookId>/state.json), which is either
+//      the same outline or a table the model read out of the printed contents,
+//   3. the prep plan's chapters.
+//
+// Null when none of them survives the filtering: the chapter chip then does not
+// appear and read_chapter takes a page range instead.
+export async function loadChapterTable(
+  bookId: string,
+  ft: Fulltext | null,
+  prepChapters: readonly PrepChapter[] = [],
+): Promise<LectureChapter[] | null> {
+  if (!ft || ft.status !== "ok") return null;
+  const total = ft.pages.length;
+
+  const fromOutline: ChapterEntry[] = (chaptersFromOutline(ft.outline, total) ?? []).map((c) => ({
+    title: c.title,
+    startPage: c.startPage,
+  }));
+
+  const state = await loadNotesState(bookId).catch(() => null);
+  const fromNotes: ChapterEntry[] = (state?.chapters ?? []).map((c) => ({
+    title: c.title,
+    startPage: c.startPage,
+  }));
+
+  const fromPrep: ChapterEntry[] = prepChapters.map((c) => ({
+    title: c.title,
+    startPage: c.startPage,
+  }));
+
+  return pickChapterTable([fromOutline, fromNotes, fromPrep], ft);
+}
+
+// The chapter spine, one paragraph per chapter, as the notes pass left it
+// (docs/09). Read against that pass's own chapter table rather than the lecture
+// table, because a note was written about the range that pass had in mind.
+//
+// This function is the whole contract between the two: the pass writes a chapter
+// note where its store puts it, this reads every finished one. A pass that
+// changes what it writes changes nothing here; a pass that has not run yet
+// answers [] and the lecture goes ahead without a spine.
+export async function loadChapterOutlines(bookId: string): Promise<ChapterOutline[]> {
+  const state = await loadNotesState(bookId).catch(() => null);
+  if (!state || state.chapters.length === 0) return [];
+  const done = state.chapters.filter((c) => c.status === "done");
+  const bodies = await Promise.all(
+    done.map((c) => readChapterNote(bookId, c.index).catch(() => null)),
+  );
+  const out: ChapterOutline[] = [];
+  for (let i = 0; i < done.length; i++) {
+    const body = (bodies[i] ?? "").trim();
+    if (!body) continue;
+    const c = done[i];
+    out.push({
+      index: c.index,
+      number: chapterNumber(c.title),
+      title: c.title,
+      startPage: c.startPage,
+      endPage: c.endPage,
+      body,
+    });
+  }
+  return out;
+}

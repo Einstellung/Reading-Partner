@@ -147,7 +147,7 @@ export interface RunAgentTurnOptions extends AgentCallbacks {
 	// from the measurement without saying so. `thread` may be left out by a run
 	// that has no conversation of its own — a fresh id stands in, which is what a
 	// one-off run is.
-	telemetry: { surface: AiSurface; thread?: string };
+	telemetry: { surface: AiSurface; thread?: string; inline?: TurnTelemetry["inline"] };
 }
 
 const DEFAULT_MAX_ROUNDS = 8;
@@ -444,6 +444,7 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
 	const telemetry: TurnTelemetry = {
 		surface: options.telemetry.surface,
 		thread: options.telemetry.thread ?? newRunId(),
+		...(options.telemetry.inline ? { inline: options.telemetry.inline } : {}),
 	};
 
 	try {

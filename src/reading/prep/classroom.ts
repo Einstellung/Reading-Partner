@@ -1,12 +1,14 @@
-// Classroom-mode context assembly, pure. The prompt is two parts: a stable
-// prefix (role + the survey's body pages with page markers) that holds still
-// between turns of the same book — so provider prompt caching can hold it — and
-// a variable tail (current position, prep notes, prep status, citation/tool
-// instructions) appended after it. The prefix moves once, when the prep plan
-// lands and its chapter table changes which pages count as body.
+
+// The prep side of a reading turn's context, pure: where a document's body ends
+// and its closing reference list begins, which prep notes ride along under a
+// token cap, and the two blocks they are printed as.
+//
+// No prompt of its own any more (docs/09, 2026-08-19: classroom stopped being a
+// mode and there is one prompt, in platform/app/context.ts). What is left here
+// is what the prep pipeline knows and nothing else does, attached to a turn by
+// data — a book with no prep run contributes none of it.
 
 import { estimateTextTokens } from "../../budget";
-import { toolLines } from "../../platform/app/context";
 import type { Fulltext } from "../../fulltext/types";
 import { requalifyNoteAnchors } from "./anchors";
 import { stripModelAsides } from "./notes";
@@ -17,31 +19,6 @@ export interface ClassroomNote {
   slug: string;
   title: string;
   body: string;
-}
-
-export interface ClassroomContext {
-  topicName: string;
-  surveyName: string;
-  fulltext: Fulltext;
-  pageLabel: string | null;
-  chapterTitle: string | null;
-  selectionText: string;
-  selectionComment?: string | null;
-  notes: ClassroomNote[];
-  prep: PrepState | null;
-  // The names of the tools actually mounted for this call. The tools paragraph
-  // is generated from it, so the prompt promises exactly what is wired.
-  toolNames?: readonly string[];
-  // Compact figure catalog for the survey (M9), or "" when none detected.
-  figureCatalog?: string;
-  // Whether the caller appends its observation snapshot after this prompt. Only
-  // gates the one line that points at it (see below).
-  hasObservations?: boolean;
-  // False when the survey did not fit the model's context window and the caller
-  // dropped the inlined body (src/budget). The prefix then points at read_pages
-  // instead, and the tools paragraph stops claiming the survey is already there.
-  // Defaults to true.
-  inlineSurvey?: boolean;
 }
 
 // --- which pages of the survey are the survey ---
@@ -141,92 +118,6 @@ export function surveyBodyPageCount(ft: Fulltext, chapters: readonly PrepChapter
   }
 
   return heading + 1;
-}
-
-// The page-by-page survey body, the part of the prefix that carries the book.
-// Exported so a caller can price dropping it before it builds the prompt.
-export function classroomSurveyBody(ft: Fulltext, chapters: readonly PrepChapter[] = []): string {
-  const kept = surveyBodyPageCount(ft, chapters);
-  const lines: string[] = [];
-  for (let i = 0; i < kept; i++) {
-    lines.push(`=== Page ${i + 1} ===`, ft.pages[i]);
-  }
-  if (kept < ft.pages.length) {
-    lines.push(
-      "",
-      `[Pages ${kept + 1}-${ft.pages.length} are the survey's numbered reference list and are`,
-      "not reproduced here; read_pages still reaches them. A [n] marker in the body",
-      "is a citation number, never a paper slug — the slugs are the ones in the prep",
-      "list below, and there are no others.]",
-    );
-  }
-  return lines.join("\n");
-}
-
-// The stable prefix: everything before the per-turn context. Depends on the
-// survey and on the plan's chapter table, neither of which moves turn to turn,
-// so its string identity survives across them.
-export function classroomPromptPrefix(
-  surveyName: string,
-  ft: Fulltext,
-  inlineSurvey = true,
-  chapters: readonly PrepChapter[] = [],
-): string {
-  const lines = [
-    "You are a reading companion in classroom mode: you have pre-read this",
-    inlineSurvey
-      ? "survey's load-bearing references and digested the survey itself, and you"
-      : "survey's load-bearing references, and you",
-    "teach by walking the user through the survey — the book they picked as their",
-    "textbook. Do not fix in advance how much they know: start where their",
-    "questions start, and adjust to how they answer.",
-    "",
-    "How to teach:",
-    "- Follow the survey's own structure; it is the syllabus.",
-    "- Get to the point. Answer the question asked; no preamble, no recap of what",
-    "  you said last turn.",
-    "- Be concise and concrete. A few sentences usually beats a lecture — when a",
-    "  point genuinely needs building, build it, but reach for that length because",
-    "  the point needs it, not by default.",
-    "- Answer the question they asked, not three more. Don't write the section's",
-    "  lecture notes when they asked about one line.",
-    "- Explain in plain terms; expand jargon on first use.",
-    "- Explaining a point a second time means changing the angle, not the wording:",
-    "  go down to the mechanism — what produces what, what reads what — and start",
-    "  from something they already have. The same paragraph reworded is not a",
-    "  second explanation.",
-    "- You may examine them. After a load-bearing point, ask them to put it back in",
-    "  their own words, or ask what they think follows from it. Once, and then move",
-    "  on — checking whether it landed, not running an exam, so don't test them",
-    "  every turn. Ending a turn with \"shall we go on to §X\" is not examining;",
-    "  that is just how a turn ends.",
-    "- Ground every claim in the text. Cite survey pages as [p.N]; when a claim",
-    '  leans on specific words, quote them: [p.N "exact phrase from the page"]',
-    "  (verbatim from the source, <=120 chars) — the quote gets highlighted on",
-    "  the page when clicked. When you draw on a pre-read reference paper, cite it",
-    "  as [paper-slug p.N] using the slug from the prep notes. These citations",
-    "  become clickable links.",
-    "- Follow the user's language: if they write in Chinese, answer in Chinese.",
-    "- Your replies render as Markdown: math as $...$ / $$...$$, code fenced.",
-    "",
-  ];
-  if (inlineSurvey) {
-    const whole = surveyBodyPageCount(ft, chapters) === ft.pages.length;
-    lines.push(
-      whole
-        ? `The full survey ("${surveyName}"), page by page:`
-        : `The survey ("${surveyName}"), page by page, minus its closing reference list:`,
-      classroomSurveyBody(ft, chapters),
-    );
-  } else {
-    lines.push(
-      `The survey ("${surveyName}") runs ${ft.pages.length} pages. It is too long to`,
-      "hold in your context, so it is NOT reproduced here: read what you need with",
-      "read_pages(from, to), starting around the reader's current position. Do not",
-      "describe a page you have not read.",
-    );
-  }
-  return lines.join("\n");
 }
 
 // --- which prep notes ride along ---
@@ -353,86 +244,36 @@ function paperLine(p: PrepPaper, inContext: boolean): string {
   }
 }
 
-export function buildClassroomSystemPrompt(ctx: ClassroomContext): string {
-  const inlineSurvey = ctx.inlineSurvey !== false;
-  const chapters = ctx.prep?.chapters ?? [];
-  const lines: string[] = [
-    classroomPromptPrefix(ctx.surveyName, ctx.fulltext, inlineSurvey, chapters),
-  ];
-
-  lines.push("", "Current position:", `- Topic: ${ctx.topicName}`);
-  if (ctx.pageLabel) lines.push(`- Page: ${ctx.pageLabel}`);
-  if (ctx.chapterTitle) lines.push(`- Chapter: ${ctx.chapterTitle}`);
-  if (ctx.selectionText.trim()) {
-    lines.push(`- Marked passage: "${ctx.selectionText.trim()}"`);
-  }
-  if (ctx.selectionComment && ctx.selectionComment.trim()) {
-    lines.push(`- The user's note on it: "${ctx.selectionComment.trim()}"`);
+// The notes block: every note this turn carries, in full. "" when it carries
+// none, which is what keeps the block off a turn with no prep run.
+export function prepNotesSection(notes: readonly ClassroomNote[]): string {
+  if (notes.length === 0) return "";
+  const lines = ["Prep notes on this document's references, in full:"];
+  for (const n of notes) {
+    lines.push("", `--- ${n.slug}: ${n.title} ---`, classroomNoteBody(n.body, n.slug));
   }
   lines.push(
-    "- Where the reader is scrolled to is not what the class is about. Take the",
-    "  subject from the conversation, not from the page number.",
+    "",
+    "Every page anchor in these notes already names its paper: copy it as it",
+    "stands, e.g. [paper-slug p.3]. A bare [p.3] means a page of the book the",
+    "reader is in.",
   );
+  return lines.join("\n");
+}
 
-  if (ctx.notes.length > 0) {
-    lines.push("", "Prep notes on the survey's references, in full:");
-    for (const n of ctx.notes) {
-      lines.push("", `--- ${n.slug}: ${n.title} ---`, classroomNoteBody(n.body, n.slug));
-    }
-    lines.push(
-      "",
-      "Every page anchor in these notes already names its paper: copy it as it",
-      "stands, e.g. [paper-slug p.3]. A bare [p.3] means a page of the survey.",
-    );
-  }
-
-  if (ctx.prep && ctx.prep.papers.length > 0) {
-    const inContext = new Set(ctx.notes.map((n) => n.slug));
-    lines.push(
-      "",
-      "The prep list — every reference nominated for this survey, and what you have",
-      "of each. These slugs are the only ones read_paper and read_note accept; never",
-      "make one up from a reference-list entry.",
-    );
-    for (const p of ctx.prep.papers) lines.push(paperLine(p, inContext.has(p.slug)));
-  }
-
-  if (ctx.figureCatalog && ctx.figureCatalog.trim()) {
-    lines.push("", ctx.figureCatalog.trim());
-  }
-
-  // Temporary, and meant to be easy to delete (docs/09: what the observation
-  // layer recorded should reach the teaching, not just sit there). It adds no
-  // field, no store and no consumer of its own — it points at the observation
-  // snapshot the caller already appends below this prompt. The observation layer
-  // is going to be redesigned; when it is, this block goes with it.
-  if (ctx.hasObservations) {
-    lines.push(
-      "",
-      "Your observations of this reader, below, include what they got stuck on. When",
-      "you are about to explain one of those again, change the angle or the example.",
-    );
-  }
-
-  const toolList = toolLines(ctx.toolNames ?? []);
-  if (toolList.length > 0) {
-    lines.push(
-      "",
-      "Tools:",
-      // The claim has to track the prefix, down to the reference list. Left
-      // standing after the body was dropped, it tells the model it can see a
-      // book it cannot, and it invents the pages.
-      inlineSurvey
-        ? surveyBodyPageCount(ctx.fulltext, chapters) === ctx.fulltext.pages.length
-          ? "The survey is already fully in your context above."
-          : "The survey's body is already in your context above; its closing reference list is not."
-        : "The survey is not in your context: read it with read_pages.",
-      "When a question goes deeper than the prep notes, call tools instead of",
-      "guessing. Mounted this turn:",
-      ...toolList,
-      "Call tools directly — never ask permission to read.",
-    );
-  }
-
+// The prep list: every reference nominated for this document and what exists of
+// each. `inContext` is the slugs whose notes this turn actually carries, so the
+// list cannot claim a note is in front of the model when it is not.
+export function prepStatusSection(
+  prep: PrepState | null,
+  inContext: ReadonlySet<string>,
+): string {
+  if (!prep || prep.papers.length === 0) return "";
+  const lines = [
+    "The prep list — every reference nominated for this document, and what you have",
+    "of each. These slugs are the only ones read_paper and read_note accept; never",
+    "make one up from a reference-list entry.",
+  ];
+  for (const p of prep.papers) lines.push(paperLine(p, inContext.has(p.slug)));
   return lines.join("\n");
 }

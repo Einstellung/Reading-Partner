@@ -42,6 +42,7 @@ export function serializeObservation(entry: Observation): string {
     line("created", entry.created),
     line("updated", entry.updated),
     line("summary", oneLine(entry.summary)),
+    line("book", entry.bookId ?? ""),
     line("annotations", entry.anchors.annotationIds.join(", ")),
     line("messages", entry.anchors.messageIds.join(", ")),
   ].filter((l): l is string => l !== null);
@@ -67,10 +68,15 @@ export function parseObservation(text: string): Observation | null {
   const id = fields.get("id") ?? "";
   const type = fields.get("type") ?? "";
   if (!id || !isObservationType(type)) return null;
+  const bookId = fields.get("book") ?? "";
   return {
     id,
     type,
     summary: fields.get("summary") ?? "",
+    // Absent on every file written before the field existed, which is why it is
+    // optional rather than "": a lecture asks "is this about the open book",
+    // and "" would have to be special-cased at every asking.
+    ...(bookId ? { bookId } : {}),
     body: text.slice(m[0].length).trim(),
     created: fields.get("created") ?? "",
     updated: fields.get("updated") ?? "",

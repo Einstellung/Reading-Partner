@@ -169,6 +169,7 @@ export class ObservationFileStore {
       created: today,
       updated: today,
       anchors: normalizeAnchors(input.anchors),
+      ...(input.bookId ? { bookId: input.bookId } : {}),
     };
     await this.fs.write(this.entryPath(entry.id), serializeObservation(entry));
     await this.rebuildIndex();
@@ -187,6 +188,9 @@ export class ObservationFileStore {
       summary: patch.summary !== undefined ? oneLine(patch.summary) : prev.summary,
       body: patch.body !== undefined ? patch.body.trim() : prev.body,
       anchors: patch.anchors !== undefined ? normalizeAnchors(patch.anchors) : prev.anchors,
+      // Filled in when the entry predates the field; never overwritten, because
+      // the session correcting an observation is not always the one it is about.
+      ...(prev.bookId ?? patch.bookId ? { bookId: prev.bookId ?? patch.bookId } : {}),
       updated: isoDate(this.now()),
     };
     await this.fs.write(this.entryPath(id), serializeObservation(entry));

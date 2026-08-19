@@ -44,6 +44,17 @@ export interface Observation {
   created: string; // YYYY-MM-DD
   updated: string; // YYYY-MM-DD
   anchors: EvidenceAnchors;
+  // The book this was observed on (library.ts content hash). Absent on every
+  // observation written before it existed, and on anything not about one book.
+  //
+  // Observations are stored per topic and a topic is several books, so "which
+  // book is this about" had only one answer: reverse-lookup the annotation ids
+  // in anchors against that book's annotations file. That still works and is
+  // still the fallback; this field is the same answer without the lookup, and
+  // the only answer for an observation whose evidence is messages rather than
+  // marks. Page numbers in the body are not an answer at all — two of the books
+  // measured have the same page range about different subjects (docs/09).
+  bookId?: string;
 }
 
 // The per-line view of the index file — everything the snapshot needs without
@@ -60,6 +71,10 @@ export interface RetainInput {
   summary: string;
   body: string;
   anchors?: Partial<EvidenceAnchors>;
+  // Stamped by the caller that mounted the tools, never asked of the model: the
+  // book being read is a fact about the session, and a model asked for it fills
+  // it in wrong.
+  bookId?: string;
 }
 
 // A correction patch; every field optional, anchors replace when given.
@@ -68,6 +83,7 @@ export interface ObservationPatch {
   summary?: string;
   body?: string;
   anchors?: Partial<EvidenceAnchors>;
+  bookId?: string;
 }
 
 export interface ObservationHit {

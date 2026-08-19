@@ -2,7 +2,12 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { buildSystemPrompt, readerProfileSection, type BooklistItem } from "../src/platform/app/context";
+import {
+  buildSystemPrompt,
+  readerProfileSection,
+  LECTURE_QUIZ,
+  type BooklistItem,
+} from "../src/platform/app/context";
 import { languageInstruction } from "../src/platform/app/settings";
 
 const base = {
@@ -20,7 +25,7 @@ test("base prompt carries the reading context and trims the marked passage", () 
   expect(out).toContain('- Marked passage: "the semantics in SSA form"');
   // No M6 sections when their fields are absent.
   expect(out).not.toContain("Text around the marked passage");
-  expect(out).not.toContain("Other materials in this topic");
+  expect(out).not.toContain("The materials in this topic");
   expect(out).not.toContain("Tools:");
   expect(out).not.toContain("machine-readable");
 });
@@ -49,7 +54,7 @@ test("the topic booklist renders one line per material with counts", () => {
     { label: "Scan B.pdf", pageCount: 0, annotationCount: 0, fulltextAvailable: false, isCurrent: false },
   ];
   const out = buildSystemPrompt({ ...base, materials });
-  expect(out).toContain("Other materials in this topic:");
+  expect(out).toContain("The materials in this topic:");
   expect(out).toContain("- Book A.pdf — 210 pages, 1 annotation");
   expect(out).toContain("- Scan B.pdf — full text not available, 0 annotations");
 });
@@ -78,7 +83,7 @@ test("the book-level prompt drops every selection-derived part but keeps positio
   expect(out).toContain("- File: sea-of-nodes.pdf");
   expect(out).toContain("- Page: 12");
   expect(out).toContain("- Chapter: 5. Global Value Numbering");
-  expect(out).toContain("Other materials in this topic:");
+  expect(out).toContain("The materials in this topic:");
   expect(out).toContain("read_pages(from, to)");
   // Intro reflects the whole-book framing, not the marked-passage one.
   expect(out).toContain("about the book as a whole");
@@ -143,7 +148,7 @@ test("the tools paragraph names the tools that were mounted, and only those", ()
   });
   expect(withTools).toContain("read_pages(from, to)");
   expect(withTools).toContain("search_topic(query)");
-  expect(withTools).toContain("Answer from the current passage by default");
+  expect(withTools).toContain("Answer from the book the reader is in by default");
   expect(withTools).toContain("cite the");
   // Mounted but not described here: find_paper carries its own paragraph, and a
   // second mention would be a second place to keep true.
@@ -165,4 +170,100 @@ test("read_annotations is announced exactly when it is mounted", () => {
   expect(buildSystemPrompt({ ...base, toolNames: ["read_pages"] })).not.toContain(
     "read_annotations",
   );
+});
+
+// --- one prompt, loaded by data (docs/09) ---
+
+// The order is what a provider's prompt cache matches on: everything that holds
+// still between two turns of a conversation before anything that moves. Measured
+// before the reorder, two questions three minutes apart in one thread read 2,061
+// tokens from cache, because the position line sat above the whole prompt.
+test("everything stable comes before everything that moves", () => {
+  const out = buildSystemPrompt({
+    ...base,
+    toolNames: ["read_pages"],
+    chapterTable: "CHAPTER TABLE",
+    inlineBody: "INLINE BODY",
+    prepNotes: "PREP NOTES",
+    chapterSpine: "CHAPTER SPINE",
+    notesOverview: "NOTES OVERVIEW",
+    profile: "PROFILE",
+    toolPrompts: ["TOOL PROMPT"],
+    figureCatalog: "FIGURES",
+    observations: "OBSERVATIONS",
+    prepStatus: "PREP STATUS",
+    pageWindow: "PAGE WINDOW",
+    loaded: "LOADED THIS TURN",
+  });
+  const at = (needle: string) => out.indexOf(needle);
+  const stable = ["TOOL PROMPT", "PROFILE", "CHAPTER TABLE", "INLINE BODY", "PREP NOTES", "CHAPTER SPINE", "NOTES OVERVIEW"];
+  const volatile = ["- Page: 12", "FIGURES", "OBSERVATIONS", "PREP STATUS", "PAGE WINDOW"];
+  for (const s of stable) {
+    for (const v of volatile) expect(at(s)).toBeLessThan(at(v));
+  }
+  // The body sits above the notes and the spine, and the statement of what this
+  // turn holds is the last thing before the question.
+  expect(at("CHAPTER TABLE")).toBeLessThan(at("INLINE BODY"));
+  expect(at("INLINE BODY")).toBeLessThan(at("PREP NOTES"));
+  expect(at("LOADED THIS TURN")).toBe(out.length - "LOADED THIS TURN".length);
+});
+
+// A block whose material was not gathered is not mentioned: a prompt that
+// describes what the turn does not have is how a model came to describe pages it
+// could not see.
+test("a block with no material is not mentioned", () => {
+  const out = buildSystemPrompt(base);
+  for (const absent of [
+    "This book's chapters",
+    'The prep list',
+    'The spine of this book',
+    "in this turn's prompt",
+    'page by page',
+  ]) {
+    expect(out).not.toContain(absent);
+  }
+});
+
+// The slug citation rule only works when there are slugs to cite. Without the
+// notes it is an invitation to invent one, which is what it was being used for.
+test("the paper-slug citation rule rides with the prep notes and not otherwise", () => {
+  expect(buildSystemPrompt({ ...base, citePaperSlugs: true })).toContain("[paper-slug p.N]");
+  expect(buildSystemPrompt(base)).not.toContain("[paper-slug p.N]");
+});
+
+// docs/09: the entry decides the range of the question, never the shape of the
+// answer. Nothing in either prompt may say "book level is long, a mark is short".
+test("neither entry hardwires how long an answer should be", () => {
+  for (const bookLevel of [true, false]) {
+    const out = buildSystemPrompt({ ...base, bookLevel });
+    expect(out).toContain("Let the question set the length");
+    expect(out).not.toContain("A few sentences usually beats a lecture");
+    expect(out).not.toContain("lecture notes when they asked about one line");
+  }
+});
+
+test("a chapter in focus outranks the page the reader is scrolled to", () => {
+  const focused = buildSystemPrompt({
+    ...base,
+    bookLevel: true,
+    focusLabel: 'chapter 3 ("Coding Attention Mechanisms"), p.64-107',
+  });
+  expect(focused).toContain("This conversation is on chapter 3");
+  expect(focused).toContain("not the page above");
+  // With no focus, the book-level thread is told the same thing about scrolling
+  // in the general form.
+  const loose = buildSystemPrompt({ ...base, bookLevel: true });
+  expect(loose).toContain("Where the reader is scrolled to is not the subject");
+});
+
+// docs/09 leaves the quiz undecided. One constant turns it off everywhere; this
+// pins that it is one place and not several.
+test("the quiz is one block behind one constant", () => {
+  const out = buildSystemPrompt(base);
+  const asks = out.includes("you may close with one question");
+  expect(asks).toBe(LECTURE_QUIZ);
+  if (LECTURE_QUIZ) {
+    expect(out).toContain("One question, never two");
+    expect(out).toContain("judge it in a sentence and move");
+  }
 });

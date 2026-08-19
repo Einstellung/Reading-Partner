@@ -58,13 +58,27 @@ export type PageLabel = (page: number) => string;
 
 const DEFAULT_LABEL: PageLabel = (p) => `=== Page ${p} ===`;
 
-// A 1-based, inclusive page range from one book, capped at MAX_PAGES and clamped
-// to the book, each page labelled so the model can cite it.
+// The header every page of the book the reader is in gets, wherever that page is
+// printed: the read_pages and read_chapter tools, and the body a lecture turn
+// inlines (reading/lecture). One function because a single turn puts all three
+// in front of the same model and it cites out of all three — the inlined body
+// used to carry a bare header, which made the material the model was handed
+// harder to cite correctly than the material it fetched for itself.
+export const BOOK_PAGE_LABEL: PageLabel = (p) => `=== Page ${p} === [p.${p}]`;
+
+// A 1-based, inclusive page range from one book, capped at `maxPages` and
+// clamped to the book, each page labelled so the model can cite it.
+//
+// The cap is a parameter rather than the constant because it is a judgement
+// about one tool, not about page ranges: read_pages is a look at a couple of
+// pages and 10 is generous, while read_chapter has to answer with a whole
+// chapter and 10 would truncate nearly every one of them.
 export function formatPages(
   ft: Fulltext | null,
   from: number,
   to: number,
   label: PageLabel = DEFAULT_LABEL,
+  maxPages: number = MAX_PAGES,
 ): string {
   if (!ft || ft.status !== "ok") {
     return "The full text of this book isn't machine-readable, so its pages can't be read.";
@@ -72,7 +86,7 @@ export function formatPages(
   const total = ft.pages.length;
   const lo = Math.max(1, Math.min(from, to));
   if (lo > total) return `This book has ${total} pages; page ${lo} is out of range.`;
-  const hi = Math.min(total, Math.max(from, to), lo + MAX_PAGES - 1);
+  const hi = Math.min(total, Math.max(from, to), lo + Math.max(1, Math.round(maxPages)) - 1);
   const parts: string[] = [];
   for (let p = lo; p <= hi; p++) {
     const body = readPages(ft, p, p);

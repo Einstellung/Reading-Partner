@@ -10,7 +10,14 @@ export type {
   RetainInput,
 } from "./record/types";
 export { OBSERVATION_TYPES, isObservationType } from "./record/types";
-export { isoDate, localDate, parseIndex, parseObservation, serializeObservation } from "./record/files";
+export {
+  isoDate,
+  localDate,
+  parseIndex,
+  parseObservation,
+  serializeIndexLine,
+  serializeObservation,
+} from "./record/files";
 export {
   ObservationFileStore,
   type ObservationConflict,

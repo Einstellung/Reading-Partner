@@ -5,9 +5,6 @@
 // Prep has one entry, the panel's Start button. There is no classroom mode any
 // more (docs/09: the entry is the top-bar button, not a switch), so nothing here
 // starts prep as a side effect of something else.
-//
-// `classroomRef` is still handed back for the AI turn to read; it is false for
-// good and goes when the turn stops branching on it.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { logEvent } from "../../platform/app/events";
@@ -53,10 +50,6 @@ export interface PrepController {
   // Mirror of the attached pipeline, for the panel and the drawer's busy dot.
   snapshot: PrepSnapshot | null;
   panel: PrepPanelBindings;
-  // Read by the shell when it assembles an AI turn. Pinned to false since the
-  // mode went away; kept one version so the turn side can drop its branch on its
-  // own schedule.
-  classroomRef: HostRef<boolean>;
   pipelineRef: HostRef<PrepPipeline | null>;
   // A clicked [paper-slug p.N] citation selects that paper in the panel.
   setSelectedSlug(slug: string | null): void;
@@ -75,8 +68,6 @@ export function usePrep(host: PrepHost): PrepController {
   const [prepSnap, setPrepSnap] = useState<PrepSnapshot | null>(null);
   const [selectedPrepSlug, setSelectedPrepSlug] = useState<string | null>(null);
 
-  // Read by the shell's stable runTurn callback. Nothing writes it (docs/09).
-  const classroomRef = useRef(false);
   // The lesson-prep pipeline attached to the open book (module singleton; this
   // ref only tracks which one the UI is looking at) and its unsubscribe.
   const pipelineRef = useRef<PrepPipeline | null>(null);
@@ -197,7 +188,6 @@ export function usePrep(host: PrepHost): PrepController {
       onReplan: prepReplan,
       selectedSlug: selectedPrepSlug,
     },
-    classroomRef,
     pipelineRef,
     setSelectedSlug: setSelectedPrepSlug,
     reset: resetPrep,

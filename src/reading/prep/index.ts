@@ -34,7 +34,12 @@ export {
 } from "./pipeline";
 export { getPrepPipeline, peekPrepPipeline, hasPrepState } from "./live";
 export { readPrepNote, paperFulltextHash } from "./store";
-export { buildClassroomSystemPrompt, classroomPromptPrefix, type ClassroomNote } from "./classroom";
+export {
+  prepNotesSection,
+  prepStatusSection,
+  surveyBodyPageCount,
+  type ClassroomNote,
+} from "./classroom";
 export { buildClassroomTools } from "./tools";
 export {
   buildSourceTools,

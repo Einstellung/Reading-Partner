@@ -9,8 +9,18 @@ import {
   BOOK_INTENTS,
   EXPLAIN_KICKOFF,
   MARK_INTENTS,
+  chapterIntent,
   openingIntents,
 } from "../../src/reading/intents";
+import type { LectureChapter } from "../../src/reading/lecture";
+
+const CH3: LectureChapter = {
+  index: 4,
+  number: 3,
+  title: "Coding Attention Mechanisms",
+  startPage: 64,
+  endPage: 107,
+};
 
 test("the first mark intent is the old unprompted kickoff, word for word", () => {
   expect(MARK_INTENTS[0].id).toBe("explain");
@@ -37,6 +47,36 @@ test("no book-level intent points at a marked passage", () => {
     expect(message).not.toContain("marked");
     expect(message).not.toContain("highlight");
   }
+});
+
+// docs/09: the chip carries the reader's own five requirements, and the label
+// carries the chapter's title and page range, so a press is never a guess about
+// which chapter was meant.
+test("the chapter chip names the chapter and asks for it the way the reader did", () => {
+  const chip = chapterIntent(CH3)!;
+  expect(chip.focusChapter).toBe(3);
+  expect(chip.label).toContain("ch.3");
+  expect(chip.label).toContain("p.64-107");
+  for (const part of ["p.64-107", "compressed", "stuck", "skip", "read myself"]) {
+    expect(chip.message).toContain(part);
+  }
+});
+
+// The focus is stored as the number the reader would say, so a chapter with no
+// printed number cannot be parked on and is not offered.
+test("a chapter with no printed number offers no chip", () => {
+  expect(chapterIntent({ ...CH3, number: null })).toBeNull();
+  expect(chapterIntent(null)).toBeNull();
+  expect(openingIntents(true, { ...CH3, number: null })).toBe(BOOK_INTENTS);
+});
+
+test("the chapter chip leads the book-level set, and only there", () => {
+  const withChapter = openingIntents(true, CH3);
+  expect(withChapter[0].id).toBe("teach-chapter");
+  expect(withChapter.length).toBe(BOOK_INTENTS.length + 1);
+  // A marked passage's conversation is about the passage; the chapter chip has
+  // no business in it.
+  expect(openingIntents(false, CH3)).toBe(MARK_INTENTS);
 });
 
 test("every intent is a distinct id with a label and a message", () => {

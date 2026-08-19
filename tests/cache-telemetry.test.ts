@@ -107,6 +107,7 @@ test("nothing but ids and numbers reaches the line", () => {
     "cacheRead",
     "cacheWrite",
     "cacheWrite1h",
+    "inline",
     "input",
     "model",
     "ms",

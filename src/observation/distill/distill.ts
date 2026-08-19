@@ -115,6 +115,10 @@ export function datingRule(what: string, dates: EvidenceDates | null): string[] 
 
 export interface DistillInput {
   topicName: string;
+  // The book the conversation was about (library.ts content hash), stamped onto
+  // whatever this pass writes (record/types.ts). Absent on a pass with no one
+  // book behind it.
+  bookId?: string;
   bookName: string;
   threadId: string;
   annotationId: string;
@@ -497,6 +501,7 @@ export async function runDistillation(
 ): Promise<DistillResult> {
   const counts = { created: 0, updated: 0, deleted: 0 };
   const tools = buildObservationTools(adapter, {
+    bookId: input.bookId,
     onWrite: (action: ObservationWriteAction) => {
       if (action === "create") counts.created++;
       else if (action === "update") counts.updated++;
@@ -628,6 +633,7 @@ export async function runDistillPass(
   const result = await runDistillation(
     {
       topicName: input.topicName,
+      bookId: input.bookId,
       bookName: input.bookName,
       threadId: input.threadId,
       annotationId: input.annotationId,
@@ -668,6 +674,8 @@ export const MARKS_DISTILL_AGENT_NAME = "marks_distiller";
 
 export interface MarksDistillInput {
   topicName: string;
+  // The book the marks are on, stamped onto whatever this pass writes.
+  bookId?: string;
   bookName: string;
   // The marks since the book's cursor, newest first, already capped (the oldest
   // `cap` of them when there are more than that — see selectSilentMarks).
@@ -783,6 +791,7 @@ export async function runMarksDistillation(
 ): Promise<DistillResult> {
   const counts = { created: 0, updated: 0, deleted: 0 };
   const tools = buildObservationTools(adapter, {
+    bookId: input.bookId,
     onWrite: (action: ObservationWriteAction) => {
       if (action === "create") counts.created++;
       else if (action === "update") counts.updated++;
@@ -835,6 +844,7 @@ export async function runMarksDistillPass(
   const result = await runMarksDistillation(
     {
       topicName: input.topicName,
+      bookId: input.bookId,
       bookName: input.bookName,
       marks,
       capped,

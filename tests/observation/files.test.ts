@@ -37,6 +37,19 @@ test("empty anchors are omitted from the frontmatter and parse back empty", () =
   expect(parseObservation(text)).toEqual(entry);
 });
 
+// docs/09: which book an observation is about, stamped at write time. Absent on
+// every file written before it existed, and absent rather than "" so a reader
+// asking "is this about the open book" has one thing to check.
+test("the book id round-trips, and an older file without one parses as before", () => {
+  const stamped = { ...ENTRY, bookId: "book-hash" };
+  const text = serializeObservation(stamped);
+  expect(text).toContain("book: book-hash");
+  expect(parseObservation(text)).toEqual(stamped);
+
+  expect(serializeObservation(ENTRY)).not.toContain("book:");
+  expect(parseObservation(serializeObservation(ENTRY))?.bookId).toBeUndefined();
+});
+
 test("a multi-line summary is collapsed to one line on write", () => {
   const text = serializeObservation({ ...ENTRY, summary: "line one\nline  two" });
   expect(parseObservation(text)?.summary).toBe("line one line two");

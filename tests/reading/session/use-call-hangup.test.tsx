@@ -59,7 +59,6 @@ function host(): Parameters<typeof useCall<CallRow, StagedImage>>[0] {
     currentFulltextRef: { current: null },
     currentFiguresRef: { current: null },
     bufferRef: { current: null },
-    classroomRef: { current: false },
     pipelineRef: { current: null },
     pushToast: () => {},
     distillAnnotations: () => [],
@@ -102,9 +101,9 @@ test("the thread the hangup distils is read when the turn lands, not when the âœ
   // about: the turn is only here to be in flight.
   const buildReadingTurn = spyOn(turn, "buildReadingTurn").mockResolvedValue({
     systemPrompt: "",
+    inline: "none" as const,
     tools: [],
     messages: [],
-    classroom: false,
     notice: "",
     refusal: "",
   });
