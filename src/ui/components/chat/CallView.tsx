@@ -46,6 +46,11 @@ interface CallViewProps {
 	// title and "Ask about this book…".
 	emptyTitle?: string;
 	placeholder?: string;
+	// The chapter this conversation is parked on (docs/09), or null. Data only:
+	// the shell resolves it from the thread's focusChapter against the book's
+	// chapter table, and clearing it is one call back.
+	focusChapter?: { number: number | null; title: string; startPage: number; endPage: number } | null;
+	onClearFocusChapter?(): void;
 	// What an empty conversation offers under the composer (reading/intents.ts).
 	// Absent on a surface that has no opening intents — info's chat is one.
 	intents?: readonly ReadingIntent[];
@@ -79,6 +84,8 @@ export default function CallView({
 	onToggleRehearsal,
 	emptyTitle = 'Ask about this passage',
 	placeholder = 'Ask about this passage…',
+	focusChapter,
+	onClearFocusChapter,
 	intents,
 	voice,
 	onCardAction,
@@ -112,7 +119,32 @@ export default function CallView({
 				{onDelete && <DeleteThreadButton onDelete={onDelete} />}
 			</div>
 
-			{(onToggleClassroom || onToggleRehearsal) && (
+			{/* The chapter focus row. Read-only apart from the ✕, and present only
+			    while a chapter is in focus. Plain text for now: the presentation is
+			    the reader-UI pass's, these props are the contract it renders. */}
+			{focusChapter && (
+				<div className="absolute left-1/2 top-4 z-10 flex -translate-x-1/2 items-center gap-2 text-[13px] text-neutral-500">
+					<span>
+						{focusChapter.number === null ? '' : `Ch.${focusChapter.number} `}
+						{focusChapter.title} · p.{focusChapter.startPage}-{focusChapter.endPage}
+					</span>
+					{onClearFocusChapter && (
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon"
+							title="Clear the chapter focus"
+							aria-label="Clear the chapter focus"
+							onClick={onClearFocusChapter}
+							className="h-7 w-7 rounded-full text-neutral-400"
+						>
+							<IconClose size={14} />
+						</Button>
+					)}
+				</div>
+			)}
+
+			{!focusChapter && (onToggleClassroom || onToggleRehearsal) && (
 				<div className="absolute left-1/2 top-4 z-10 flex -translate-x-1/2 items-center gap-2">
 					{onToggleClassroom && (
 						<Button

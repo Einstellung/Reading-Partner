@@ -78,6 +78,23 @@ export function observationPromptSection(snapshot: string, hasTools: boolean): s
       snapshot,
     );
   }
+  // What to do with them. Not gated on the snapshot carrying anything: this
+  // paragraph was written for the classroom prompt and fired only when the
+  // opening snapshot was non-empty, which is the turn where it matters least —
+  // an observation the model finds with observation_search mid-turn needs the
+  // same handling as one it was handed. It still needs one of the two to be
+  // there, since with no observations and no way to find any it is advice about
+  // nothing.
+  if (snapshot || hasTools) {
+    if (lines.length > 0) lines.push("");
+    lines.push(
+      "When you are about to explain something an observation says this reader got",
+      "stuck on, change the angle, not the wording: go down to the mechanism — what",
+      "produces what, what reads what — and start from something they already have.",
+      "The same paragraph reworded is not a second explanation. Where an observation",
+      "records what worked for them or what did not, follow it.",
+    );
+  }
   if (hasTools) {
     if (lines.length > 0) lines.push("");
     lines.push(

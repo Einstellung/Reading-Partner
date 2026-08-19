@@ -46,6 +46,12 @@ export type AiSurface =
 export interface TurnTelemetry {
   surface: AiSurface;
   thread: string;
+  // How much of the book the reading turn inlined (docs/09): none, one chapter,
+  // or the whole thing. A second axis rather than a second surface, deliberately
+  // — "classroom" was a surface, and retiring it would have broken every
+  // comparison with a line logged before today. Reading turns keep answering
+  // surface=reading and differ here instead. Absent on every other surface.
+  inline?: "none" | "chapter" | "whole";
 }
 
 // A one-off id for such a run. Never persisted and never shown: it only has to
@@ -124,6 +130,7 @@ export function cacheTurnPayload(
   const usage = input.usage;
   return {
     surface: input.telemetry.surface,
+    inline: input.telemetry.inline ?? null,
     thread: input.telemetry.thread,
     round: input.round,
     provider: input.providerId,

@@ -74,7 +74,8 @@ import ReadingPipCard from "./ui/components/chat/ReadingPipCard";
 import ChatPipCard from "./ui/components/chat/ChatPipCard";
 import SettingsView from "./ui/components/SettingsView";
 import type { CallRow } from "./reading/call-state";
-import { openingIntents } from "./reading/intents";
+import { openingIntents, type ReadingIntent } from "./reading/intents";
+import { chapterAtPage } from "./reading/lecture";
 import { resolveBookThread } from "./reading/session/book-thread";
 import { closeBook } from "./reading/session/close-book";
 import { useCall } from "./reading/session/use-call";
@@ -477,6 +478,11 @@ export default function App() {
   // out of it. Two shapes stay this file's — a chat row, whose parts are the
   // render layer's protocol, and a staged image — so the session is handed the
   // four one-line constructors below instead of the types.
+  // The opening chips currently on screen. Kept in a ref so the send path can
+  // tell a chip press from typed text: IntentChips sends the intent's message
+  // down the ordinary send path, and the chapter chip has to park the
+  // conversation on its chapter before that message goes (docs/09).
+  const intentsRef = useRef<readonly ReadingIntent[]>([]);
   const {
     call,
     captureHangup,
@@ -501,11 +507,13 @@ export default function App() {
     stageImage,
     stepDiagram,
     stop: stopTurn,
+    chapters: bookChapters,
+    focusChapter,
+    setFocusChapter,
   } = useCall<CallMessage, PendingImage>({
     annsRef,
     bookIdRef,
     bufferRef,
-    classroomRef,
     ctxRef,
     currentFiguresRef,
     currentFulltextRef,
@@ -538,6 +546,19 @@ export default function App() {
         ? null
         : staged.flatMap((p) => (p.status === "ready" ? [{ data: p.data, mediaType: p.mediaType }] : [])),
   });
+
+  // Everything a chat surface sends goes through here, so that pressing a chip
+  // can do the one thing typing its words cannot: park the conversation on the
+  // chapter the chip named (docs/09). The chips are matched by their message
+  // text, which is what IntentChips passes back.
+  const sendFromChat = useCallback(
+    (text: string) => {
+      const picked = intentsRef.current.find((i) => i.message === text);
+      if (picked?.focusChapter !== undefined) setFocusChapter(picked.focusChapter);
+      sendCallMessage(text);
+    },
+    [sendCallMessage, setFocusChapter],
+  );
 
   // What a card in the reading conversation raises. Only the diagram card raises
   // anything today, and only its stepper: stepping is a `local` patch, and it is
@@ -1131,6 +1152,16 @@ export default function App() {
     ctx: { inReader, chatFullWindow: call?.view === "chat-main" },
   });
 
+  // What an empty conversation offers. The chapter chip is resolved against
+  // where the reader is scrolled *now* — the one moment a scroll position
+  // decides anything (docs/09) — and disappears on a book with no usable
+  // chapter table.
+  const callIntents = openingIntents(
+    call?.isBook ?? false,
+    chapterAtPage(bookChapters ?? [], stats ? stats.pageIndex + 1 : null),
+  );
+  intentsRef.current = callIntents;
+
   // One-line prep status beside the Classroom toggle.
   const prepStatusLine = (() => {
     const s = prepSnap?.state;
@@ -1338,7 +1369,7 @@ export default function App() {
           <CallBubble
             anchor={call.anchor}
             messages={call.messages}
-            onSend={sendCallMessage}
+            onSend={sendFromChat}
             onExpand={showChatMain}
             onClose={endCall}
             onDelete={deleteOpenThread}
@@ -1349,7 +1380,7 @@ export default function App() {
             onStop={stopTurn}
             onCardAction={onCardAction}
             voice={callVoice}
-            intents={openingIntents(call.isBook ?? false)}
+            intents={callIntents}
           />
         )}
 
@@ -1401,7 +1432,7 @@ export default function App() {
             <div className="absolute inset-0 z-40">
               <CallView
                 messages={call.messages}
-                onSend={sendCallMessage}
+                onSend={sendFromChat}
                 onHangUp={endCall}
                 onDelete={deleteOpenThread}
                 pendingImages={pendingImages}
@@ -1415,7 +1446,9 @@ export default function App() {
                 classroomStatus={prepStatusLine}
                 emptyTitle={call.isBook ? title ?? "This book" : undefined}
                 placeholder={call.isBook ? "Ask about this book…" : undefined}
-                intents={openingIntents(call.isBook ?? false)}
+                intents={callIntents}
+                focusChapter={focusChapter}
+                onClearFocusChapter={() => setFocusChapter(null)}
                 voice={callVoice}
               />
             </div>

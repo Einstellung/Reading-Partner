@@ -83,6 +83,15 @@ export interface Thread {
   path: string;
   createdAt: number;
   messages: ThreadMessage[];
+  // The chapter this conversation is parked on (docs/09), by the number printed
+  // in the book. Absent on every thread that has none, which is most of them and
+  // all of the ones written before this existed — a sync pull from an older
+  // device carries records without it and nothing here may mind.
+  //
+  // Only the book-level thread ever gets one. A marked passage's conversation
+  // can be asked to teach chapter 3 and will, but it stays a conversation about
+  // the mark, so nothing is written down.
+  focusChapter?: number;
 }
 
 type ThreadMap = Record<string, Thread>;
@@ -148,6 +157,7 @@ export interface ThreadStore {
   remove: (bookId: string, threadId: string) => boolean;
   append: (bookId: string, threadId: string, message: ThreadMessage) => Thread | undefined;
   patch: (bookId: string, threadId: string, ts: number, patch: Partial<ThreadMessage>) => void;
+  setFocusChapter: (bookId: string, threadId: string, chapter: number | null) => void;
   flush: () => Promise<void>;
 }
 
@@ -413,6 +423,21 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
       entry.gen++;
       schedule(bookId);
     },
+    // Park the conversation on a chapter, or clear it (docs/09). Written on the
+    // thread rather than beside it because it is what the next turn of *this*
+    // conversation loads, and a book with two conversations open must not have
+    // one of them decide what the other is about.
+    setFocusChapter: (bookId, threadId, chapter) => {
+      const entry = cache.get(bookId);
+      const thread = entry?.threads[threadId];
+      if (!entry || !thread) return;
+      const next = chapter === null ? undefined : Math.round(chapter);
+      if (thread.focusChapter === next) return;
+      if (next === undefined) delete thread.focusChapter;
+      else thread.focusChapter = next;
+      entry.gen++;
+      schedule(bookId);
+    },
     flush: writer.flush,
   };
 }
@@ -451,6 +476,11 @@ export const patchThreadMessage = (
   ts: number,
   patch: Partial<ThreadMessage>,
 ): void => store.patch(bookId, threadId, ts, patch);
+export const setThreadFocusChapter = (
+  bookId: string,
+  threadId: string,
+  chapter: number | null,
+): void => store.setFocusChapter(bookId, threadId, chapter);
 
 // Thread images live one directory per thread. Mirrors annotations.ts's base64
 // <-> bytes helpers; here `data` is bare base64 (no data: prefix), matching the

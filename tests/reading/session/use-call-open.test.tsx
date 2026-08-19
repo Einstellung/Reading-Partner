@@ -50,7 +50,6 @@ function host(): Parameters<typeof useCall<CallRow, StagedImage>>[0] {
     currentFulltextRef: { current: null },
     currentFiguresRef: { current: null },
     bufferRef: { current: null },
-    classroomRef: { current: false },
     pipelineRef: { current: null },
     pushToast: () => {},
     distillAnnotations: () => [],
@@ -130,9 +129,9 @@ test("picking an intent sends it like anything else the reader types", async () 
   );
   const buildReadingTurn = spyOn(turn, "buildReadingTurn").mockResolvedValue({
     systemPrompt: "",
+    inline: "none" as const,
     tools: [],
     messages: [],
-    classroom: false,
     notice: "",
     refusal: "",
   });

@@ -10,6 +10,8 @@
 // layer. `label` is what the chip says, `message` is what the reader is taken
 // to have said.
 
+import type { LectureChapter } from "./lecture";
+
 export interface ReadingIntent {
   id: string;
   // The chip's text. Short enough to sit two-across in a 360px bubble.
@@ -17,6 +19,11 @@ export interface ReadingIntent {
   // The message sent as the reader's own words. Written the way a reader talks,
   // not as an instruction to a model.
   message: string;
+  // The chapter pressing this chip parks the conversation on (docs/09). Only the
+  // chapter chip carries one, and it is resolved from the reader's scroll
+  // position at the moment the chips are built — the one moment where the scroll
+  // position decides anything.
+  focusChapter?: number;
 }
 
 // The opening ask on a marked passage. Unchanged in wording, and still exported
@@ -46,14 +53,8 @@ export const MARK_INTENTS: readonly ReadingIntent[] = [
 ];
 
 // The book-level thread (top-bar AI button): no passage is marked, so nothing
-// here may point at one. The reader's position is in the prompt, which is what
-// "the chapter I'm on" resolves against.
+// here may point at one.
 export const BOOK_INTENTS: readonly ReadingIntent[] = [
-  {
-    id: "chapter",
-    label: "What's this chapter about",
-    message: "What is the chapter I'm on about?",
-  },
   {
     id: "start",
     label: "Where should I start",
@@ -66,8 +67,50 @@ export const BOOK_INTENTS: readonly ReadingIntent[] = [
   },
 ];
 
+// How much of a chapter title the chip shows before it is cut.
+const CHIP_TITLE_CHARS = 22;
+
+function shortTitle(title: string): string {
+  const t = title.trim();
+  return t.length > CHIP_TITLE_CHARS ? `${t.slice(0, CHIP_TITLE_CHARS - 1)}…` : t;
+}
+
+// "Teach me this chapter", the book-level thread's first chip (docs/09).
+//
+// The message is written the way the reader wrote it themselves, on the turn
+// that produced the two answers they accepted: read this page range, teach it
+// compressed, go heavier where I got stuck, say what I can skip, end by pointing
+// me at something to read myself. It stays in the message rather than moving
+// into the system prompt on purpose — the two good answers had these
+// requirements typed into the user message, and the turn that had "the whole
+// book is in your context" in the system prompt instead came back at 545 tokens
+// with no tool call.
+//
+// Null when the chapter carries no number: the focus is stored as the number the
+// reader would say, so a chapter that has none cannot be parked on.
+export function chapterIntent(chapter: LectureChapter | null): ReadingIntent | null {
+  if (!chapter || chapter.number === null) return null;
+  const range = `p.${chapter.startPage}-${chapter.endPage}`;
+  return {
+    id: "teach-chapter",
+    label: `Teach ch.${chapter.number}: ${shortTitle(chapter.title)} · ${range}`,
+    message:
+      `Read ${range} — chapter ${chapter.number}, "${chapter.title}" — and teach it to me, ` +
+      "compressed. Go heavier where I have gotten stuck before. Say plainly which parts I " +
+      "can skip. End by pointing me at one passage to read myself.",
+    focusChapter: chapter.number,
+  };
+}
+
 // Which set a thread opens with. The book-level thread is the one with no mark
-// (annotationId ""), so that is the whole test.
-export function openingIntents(isBookLevel: boolean): readonly ReadingIntent[] {
-  return isBookLevel ? BOOK_INTENTS : MARK_INTENTS;
+// (annotationId ""), so that is the whole test; the chapter the reader is
+// currently scrolled into adds a chip in front when the book has a usable
+// chapter table, and nothing at all when it does not.
+export function openingIntents(
+  isBookLevel: boolean,
+  chapter: LectureChapter | null = null,
+): readonly ReadingIntent[] {
+  if (!isBookLevel) return MARK_INTENTS;
+  const teach = chapterIntent(chapter);
+  return teach ? [teach, ...BOOK_INTENTS] : BOOK_INTENTS;
 }

@@ -27,7 +27,7 @@ const EVEN: Record<ReadingReductionId, number> = {
   "page-window": 5_000,
   "tool-result-stubs": 5_000,
   "prep-notes-trim": 5_000,
-  "classroom-inline": 5_000,
+  "chapter-inline": 5_000,
   "history-trim": 5_000,
 };
 
@@ -53,8 +53,8 @@ test("the reading ladder's order and its wording are pinned", () => {
     ["tool-result-stubs", ""],
     ["prep-notes-trim", "some of my notes on the reference papers were left out to make room"],
     [
-      "classroom-inline",
-      "the book didn't fit in context, so I read the pages I needed instead of having all of it in view",
+      "chapter-inline",
+      "this didn't fit in context, so I read the pages I needed instead of having it all in view",
     ],
     ["history-trim", "earlier turns of this conversation were left out to make room"],
   ]);
@@ -79,7 +79,7 @@ test("tool-result stubs come after every silent drop and before any evidence", (
   // The page images around the highlight are silent too, and go before it.
   expect(p.apply).toContain("page-window");
   expect(p.apply).not.toContain("prep-notes-trim");
-  expect(p.apply).not.toContain("classroom-inline");
+  expect(p.apply).not.toContain("chapter-inline");
   expect(p.notice).toBe("");
 });
 
@@ -90,7 +90,7 @@ test("tool-result stubs come after every silent drop and before any evidence", (
 test("the prep notes are given up before the book, and are told to the reader", () => {
   const p = plan(FITS_AT + 36_000);
   expect(p.apply[p.apply.length - 1]).toBe("prep-notes-trim");
-  expect(p.apply).not.toContain("classroom-inline");
+  expect(p.apply).not.toContain("chapter-inline");
   expect(p.notice).toBe(
     "Note: some of my notes on the reference papers were left out to make room.",
   );
@@ -98,11 +98,11 @@ test("the prep notes are given up before the book, and are told to the reader", 
 
 test("dropping the inlined book is told to the reader", () => {
   const p = plan(FITS_AT + 41_000);
-  expect(p.apply[p.apply.length - 1]).toBe("classroom-inline");
+  expect(p.apply[p.apply.length - 1]).toBe("chapter-inline");
   expect(p.apply).not.toContain("history-trim");
   expect(p.notice).toBe(
     "Note: some of my notes on the reference papers were left out to make room; " +
-      "the book didn't fit in context, so I read the pages I needed instead of having all of it in view.",
+      "this didn't fit in context, so I read the pages I needed instead of having it all in view.",
   );
 });
 
@@ -114,7 +114,7 @@ test("history is the last thing given up, and it is told to the reader", () => {
   expect(p.apply[p.apply.length - 1]).toBe("history-trim");
   expect(p.notice).toBe(
     "Note: some of my notes on the reference papers were left out to make room; " +
-      "the book didn't fit in context, so I read the pages I needed instead of having all of it in view; " +
+      "this didn't fit in context, so I read the pages I needed instead of having it all in view; " +
       "earlier turns of this conversation were left out to make room.",
   );
 });
@@ -135,7 +135,7 @@ test("the rungs that are not priced like the rest say so on the table", () => {
     "page-window": "messages",
     "tool-result-stubs": "none",
     "prep-notes-trim": "bulk",
-    "classroom-inline": "bulk",
+    "chapter-inline": "bulk",
     "history-trim": "messages",
   });
 });

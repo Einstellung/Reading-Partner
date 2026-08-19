@@ -12,6 +12,10 @@ export type ObservationWriteAction = "create" | "update" | "delete";
 
 export interface ObservationToolOptions {
   onWrite?(action: ObservationWriteAction): void;
+  // The book the session is on, stamped onto anything created through these
+  // tools (record/types.ts). Not a tool parameter: the model does not know the
+  // content hash and would invent one. Absent where there is no one book.
+  bookId?: string;
 }
 
 function describeEntry(e: Observation): string {
@@ -95,7 +99,13 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
           const summary = String(args.summary ?? "").trim();
           const body = String(args.body ?? "").trim();
           if (!summary || !body) throw new Error("create requires summary and body");
-          const entry = await adapter.retain({ type, summary, body, anchors });
+          const entry = await adapter.retain({
+            type,
+            summary,
+            body,
+            anchors,
+            ...(opts.bookId ? { bookId: opts.bookId } : {}),
+          });
           opts.onWrite?.("create");
           return `Created ${entry.id}.`;
         }

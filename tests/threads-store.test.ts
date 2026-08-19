@@ -214,6 +214,29 @@ test("a book whose file was never read is added to, not replaced", async () => {
   expect(onDisk()).toEqual(["bt-new", "t1", "t2"]);
 });
 
+// docs/09: the one storage change. A thread that has never been parked on a
+// chapter carries no field at all, which is what a device running an older
+// version writes and what its file has to keep meaning.
+test("a chapter focus is written on the thread, cleared, and absent until set", async () => {
+  writeFile([thread("t1")]);
+  await store.load("book1");
+  expect(store.get("book1", "t1")?.focusChapter).toBeUndefined();
+
+  store.setFocusChapter("book1", "t1", 3);
+  await advance(500);
+  const parked = JSON.parse(files.get(FILE)!) as { threads: Record<string, Thread> };
+  expect(parked.threads.t1.focusChapter).toBe(3);
+
+  store.setFocusChapter("book1", "t1", null);
+  await advance(500);
+  const cleared = JSON.parse(files.get(FILE)!) as { threads: Record<string, Thread> };
+  expect("focusChapter" in cleared.threads.t1).toBe(false);
+
+  // A thread that is gone is not a write.
+  store.setFocusChapter("book1", "missing", 2);
+  expect(store.get("book1", "missing")).toBeUndefined();
+});
+
 test("a message appended to a thread the file does not know is merged in", async () => {
   writeFile([thread("t1")]);
   await store.load("book1");

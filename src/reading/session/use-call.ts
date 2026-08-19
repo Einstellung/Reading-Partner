@@ -27,6 +27,7 @@ import {
   patchThreadMessage,
   readThreadImages,
   saveThreadImages,
+  setThreadFocusChapter,
   type PersistedCardPayload,
   type ThreadMessage,
 } from "../../platform/app/threads";
@@ -43,6 +44,11 @@ import {
   type RowChange,
 } from "../call-state";
 import { toolStatusLabel } from "../context";
+import {
+  chapterByNumber,
+  loadChapterTable,
+  type LectureChapter,
+} from "../lecture";
 import type { FiguresIndex } from "../figures";
 import { createLiveTurns, type LiveTurn } from "../live-turns";
 import { RESEARCH_TOOL_NAME, researchStatusLabel } from "../papers/research-agent";
@@ -107,9 +113,8 @@ export interface CallHost<M extends CallRow, I extends StagedImage> extends Call
   currentFulltextRef: HostRef<Promise<Fulltext | null> | null>;
   currentFiguresRef: HostRef<Promise<FiguresIndex | null> | null>;
   bufferRef: HostRef<ArrayBuffer | null>;
-  // Classroom mode and the lesson-prep pipeline, both read live: a tool invoked
-  // mid-turn sees the pipeline the reader is on now.
-  classroomRef: HostRef<boolean>;
+  // The lesson-prep pipeline, read live: a tool invoked mid-turn sees the
+  // pipeline the reader is on now.
   pipelineRef: HostRef<PrepPipeline | null>;
   pushToast(kind: "warn" | "error", message: string): void;
   // The open book's marks as distillation's silent-marks input (docs/02).
@@ -158,6 +163,19 @@ export interface CallController<M extends CallRow, I extends StagedImage> {
   // The reader stepped a staged diagram card to another step.
   stepDiagram(cardId: string, stage: number): void;
 
+  // The open book's chapter table, or null when it has none worth using
+  // (reading/lecture). The chapter chip is built from it, and it is what a
+  // chapter number is resolved against.
+  chapters: LectureChapter[] | null;
+  // The chapter the open conversation is parked on (docs/09), resolved. Null on
+  // a mark-anchored thread, always: a mark's conversation can be asked to teach
+  // a chapter without becoming a conversation about one.
+  focusChapter: LectureChapter | null;
+  // Park the open conversation on a chapter, or clear it. The chip presses this
+  // with the chapter the reader was scrolled into, which is the one moment the
+  // scroll position decides anything (docs/09).
+  setFocusChapter(chapter: number | null): void;
+
   // What opening and closing a book need (session/open-book.ts).
   captureHangup(): void;
   close(): void;
@@ -179,7 +197,6 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     annsRef,
     bookIdRef,
     bufferRef,
-    classroomRef,
     ctxRef,
     currentFiguresRef,
     currentFulltextRef,
@@ -231,6 +248,67 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     setPendingImages(pendingRef.current.images(threadId));
     setImageHint(pendingRef.current.hint(threadId));
   }, []);
+
+  // The open book's chapters and the chapter this conversation is parked on
+  // (docs/09). Held here rather than read at render because both come off disk:
+  // the table from the book's outline / notes state / prep plan, the focus from
+  // the thread file — which read_chapter also writes to, mid-turn, so the focus
+  // is re-read whenever a turn settles as well as when a chip sets it.
+  const [chapters, setChapters] = useState<LectureChapter[] | null>(null);
+  const chaptersRef = useRef<LectureChapter[] | null>(null);
+  chaptersRef.current = chapters;
+  const [focusChapter, setFocusChapterState] = useState<LectureChapter | null>(null);
+
+  const syncFocusChapter = useCallback(() => {
+    const bookId = bookIdRef.current;
+    const c = callRef.current;
+    if (!bookId || !c || c.isBook !== true) {
+      setFocusChapterState(null);
+      return;
+    }
+    const n = getThread(bookId, c.threadId)?.focusChapter ?? null;
+    const table = chaptersRef.current;
+    setFocusChapterState(n === null || !table ? null : chapterByNumber(table, n));
+  }, [bookIdRef]);
+
+  const openThreadId = call?.threadId ?? null;
+  const openIsBook = call?.isBook === true;
+  useEffect(() => {
+    if (!openIsBook) {
+      setChapters(null);
+      setFocusChapterState(null);
+      return;
+    }
+    let alive = true;
+    void (async () => {
+      const bookId = bookIdRef.current;
+      if (!bookId) return;
+      const ft = (await currentFulltextRef.current) ?? null;
+      const table = await loadChapterTable(
+        bookId,
+        ft,
+        pipelineRef.current?.snapshot().state?.chapters ?? [],
+      ).catch(() => null);
+      if (!alive) return;
+      chaptersRef.current = table;
+      setChapters(table);
+      syncFocusChapter();
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [openIsBook, openThreadId, bookIdRef, currentFulltextRef, pipelineRef, syncFocusChapter]);
+
+  const setFocusChapter = useCallback(
+    (chapter: number | null) => {
+      const bookId = bookIdRef.current;
+      const c = callRef.current;
+      if (!bookId || !c || c.isBook !== true) return;
+      setThreadFocusChapter(bookId, c.threadId, chapter);
+      syncFocusChapter();
+    },
+    [bookIdRef, syncFocusChapter],
+  );
 
   const noteImageHint = useCallback(
     (threadId: string, hint: string) => {
@@ -480,7 +558,6 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         figures,
         buffer: bufferRef.current,
         context: ctxRef.current,
-        classroom: classroomRef.current,
         settings: s,
         getPipeline: () => pipelineRef.current,
         distillAnnotations,
@@ -512,7 +589,11 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         reasoning: toReasoning(s.chatThinking),
         // Which prompt this turn was actually assembled with, not which mode the
         // toggle is in: the two diverge while a book is still being extracted.
-        telemetry: { surface: turn.classroom ? "classroom" : "reading", thread: threadId },
+        // One surface for every reading turn, whatever it was loaded with:
+        // "classroom" was a surface and retiring it would have broken the
+        // comparison with every line logged before today. How much of the book
+        // went in is the second axis (docs/09).
+        telemetry: { surface: "reading", inline: turn.inline, thread: threadId },
         onDelta: (chunk) => write({ kind: "delta", chunk }, ts),
         onToolStart: (info) => onToolStart(info, ts),
         onToolEnd: (info) => onToolEnd(info, ts),
@@ -524,6 +605,9 @@ export function useCall<M extends CallRow, I extends StagedImage>(
           // turn whose assembly no longer applies.
           write({ kind: "answer", text: full, ...(turn.notice ? { notice: turn.notice } : {}) }, ts);
           appendMessage(bookId, threadId, { role: "ai", text: full, ts });
+          // read_chapter may have parked the conversation on a chapter while the
+          // turn ran (docs/09); the status row is how the reader finds out.
+          syncFocusChapter();
           // A hangup that happened mid-answer waited for this (see captureHangup):
           // distillation reads the thread file, which only now holds the reply.
           live?.onSettled?.();
@@ -542,7 +626,6 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     annsRef,
     bookIdRef,
     bufferRef,
-    classroomRef,
     ctxRef,
     currentFiguresRef,
     currentFulltextRef,
@@ -550,6 +633,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     pipelineRef,
     pushToast,
     settingsRef,
+    syncFocusChapter,
   ]);
 
   const openThread = useCallback(
@@ -774,6 +858,9 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     retry,
     stop,
     stepDiagram,
+    chapters,
+    focusChapter,
+    setFocusChapter,
     showChat,
     showReading,
     hangUp,

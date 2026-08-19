@@ -1,45 +1,26 @@
-// Classroom-mode prompt assembly (src/reading/prep/classroom.ts): what it says
-// about the survey when the survey no longer fits, which pages of the survey are
-// the survey, which prep notes ride along under the cap, what the prep list says
-// about each paper, and which tools it is allowed to claim exist. Pure.
-// Run: bun test.
+// The prep side of a reading turn's context (src/reading/prep/classroom.ts):
+// which pages of a document are the document and which are its closing
+// reference list, which prep notes ride along under the cap, and what the notes
+// block and the prep list say. Pure. The prompt they are attached to is
+// tests/context.test.ts's. Run: bun test.
 
 import { expect, test } from "bun:test";
 import { FULLTEXT_VERSION, type Fulltext } from "../../../src/fulltext/types";
 import { estimateTextTokens } from "../../../src/budget";
 import type { PrepChapter, PrepPaper, PrepState } from "../../../src/reading/prep/types";
 import {
-  buildClassroomSystemPrompt,
   classroomNoteBody,
-  classroomPromptPrefix,
-  classroomSurveyBody,
+  prepNotesSection,
+  prepStatusSection,
   selectClassroomNotes,
   surveyBodyPageCount,
   CLASSROOM_NOTE_BUDGET,
   CLASSROOM_NOTE_BUDGET_TIGHT,
-  type ClassroomContext,
   type ClassroomNote,
 } from "../../../src/reading/prep/classroom";
 
 function ft(pages: string[]): Fulltext {
   return { version: FULLTEXT_VERSION, status: "ok", pages, outline: [] };
-}
-
-const SURVEY = ft(["page one body", "page two body", "page three body"]);
-
-function ctx(over: Partial<ClassroomContext> = {}): ClassroomContext {
-  return {
-    topicName: "JITs",
-    surveyName: "survey.pdf",
-    fulltext: SURVEY,
-    pageLabel: "2",
-    chapterTitle: "One",
-    selectionText: "inline caches",
-    notes: [],
-    prep: null,
-    toolNames: ["read_pages", "search_topic"],
-    ...over,
-  };
 }
 
 function paper(over: Partial<PrepPaper> = {}): PrepPaper {
@@ -69,43 +50,6 @@ function prep(papers: PrepPaper[], chapters: PrepChapter[] = []): PrepState {
   };
 }
 
-test("the prefix inlines the survey page by page by default", () => {
-  const prefix = classroomPromptPrefix("survey.pdf", SURVEY);
-  expect(prefix).toContain('The full survey ("survey.pdf"), page by page:');
-  expect(prefix).toContain("=== Page 2 ===\npage two body");
-  // Stable across calls, so provider prompt caching can hold it.
-  expect(prefix).toBe(classroomPromptPrefix("survey.pdf", SURVEY));
-});
-
-test("classroomSurveyBody is the part the prefix can give up", () => {
-  const body = classroomSurveyBody(SURVEY);
-  expect(body).toBe(
-    "=== Page 1 ===\npage one body\n=== Page 2 ===\npage two body\n=== Page 3 ===\npage three body",
-  );
-  expect(classroomPromptPrefix("survey.pdf", SURVEY)).toContain(body);
-  expect(classroomPromptPrefix("survey.pdf", SURVEY, false)).not.toContain(body);
-});
-
-// The failure this guards: the body goes but the sentence claiming the body is
-// there stays, and the model starts describing pages it cannot see.
-test("dropping the inline survey retracts every claim that it is in context", () => {
-  const prompt = buildClassroomSystemPrompt(ctx({ inlineSurvey: false }));
-  expect(prompt).not.toContain("already fully in your context");
-  expect(prompt).not.toContain("digested the survey itself");
-  expect(prompt).toContain("The survey is not in your context: read it with read_pages.");
-  expect(prompt).toContain("It is too long to");
-  expect(prompt).toContain("Do not");
-  expect(prompt).toContain("3 pages");
-  expect(prompt).not.toContain("page two body");
-});
-
-test("the inlined prompt keeps saying so", () => {
-  const prompt = buildClassroomSystemPrompt(ctx());
-  expect(prompt).toContain("The survey is already fully in your context above.");
-  expect(prompt).toContain("digested the survey itself");
-  expect(prompt).toContain("page two body");
-});
-
 // A note's [p.3] means page 3 of that paper. Inlined bare it lands in the
 // survey's page namespace, and a citation copied out of it jumps to the wrong
 // book. It is qualified on the way into the prompt, the same way read_note
@@ -118,20 +62,10 @@ test("an inlined note's page anchors name their own paper", () => {
       body: "I have enough to write the note.\n\nA controller [p.4] and a range [p.6-7].",
     },
   ];
-  const prompt = buildClassroomSystemPrompt(ctx({ notes }));
+  const prompt = prepNotesSection(notes);
   expect(prompt).toContain("A controller [world-models p.4] and a range [world-models p.6-7].");
   // The writer's own aside does not go into the prompt.
   expect(prompt).not.toContain("I have enough to write the note.");
-});
-
-test("everything outside the survey body is unchanged by the drop", () => {
-  const notes = [{ slug: "smith2023", title: "Smith 2023", body: "note body" }];
-  const inlined = buildClassroomSystemPrompt(ctx({ notes }));
-  const dropped = buildClassroomSystemPrompt(ctx({ notes, inlineSurvey: false }));
-  for (const part of ["- Marked passage: \"inline caches\"", "- Chapter: One", "smith2023", "note body"]) {
-    expect(inlined).toContain(part);
-    expect(dropped).toContain(part);
-  }
 });
 
 // --- the closing reference list ---
@@ -168,21 +102,6 @@ const REF_CHAPTERS: PrepChapter[] = [
 
 test("the pages after the references heading are left out, the heading page kept", () => {
   expect(surveyBodyPageCount(REF_BOOK, REF_CHAPTERS)).toBe(3);
-  const body = classroomSurveyBody(REF_BOOK, REF_CHAPTERS);
-  expect(body).toContain("=== Page 3 ===");
-  expect(body).not.toContain("=== Page 4 ===");
-  expect(body).toContain("[Pages 4-5 are the survey's numbered reference list and are");
-  // And the prompt says what the model may not do with the citation numbers it
-  // can still see in the body — inventing paper slugs out of them is what it did.
-  const prompt = classroomPromptPrefix("survey.pdf", REF_BOOK, true, REF_CHAPTERS);
-  expect(prompt).toContain("minus its closing reference list");
-  expect(prompt).toContain("never a paper slug");
-  // And the tools paragraph stops claiming the whole book is in context.
-  const full = buildClassroomSystemPrompt(
-    ctx({ fulltext: REF_BOOK, prep: prep([], REF_CHAPTERS) }),
-  );
-  expect(full).not.toContain("The survey is already fully in your context above.");
-  expect(full).toContain("its closing reference list is not");
 });
 
 // Every way the test can fail lands on the same answer: keep the whole book.
@@ -380,8 +299,7 @@ test("the note body the prompt prints is the one that was priced", () => {
   const papers = [paper({ slug: "one", citedInChapters: [1] })];
   const notes = [note("one", classroomNoteBody("a body [p.3]", "one"))];
   const picked = selectClassroomNotes(notes, papers, { chapter: 1, chapterCount: 1 });
-  const prompt = buildClassroomSystemPrompt(ctx({ notes: picked, prep: prep(papers) }));
-  expect(prompt).toContain(picked[0].body);
+  expect(prepNotesSection(picked)).toContain(picked[0].body);
 });
 
 // --- the prep list ---
@@ -392,12 +310,7 @@ test("the prep list says which papers this turn is actually carrying", () => {
     paper({ slug: "on-disk", title: "On Disk" }),
     paper({ slug: "thin", title: "Thin", status: "abstract-only" }),
   ];
-  const prompt = buildClassroomSystemPrompt(
-    ctx({
-      notes: [note("carried", "note body"), note("thin", "abstract body")],
-      prep: prep(papers),
-    }),
-  );
+  const prompt = prepStatusSection(prep(papers), new Set(["carried", "thin"]));
   expect(prompt).toContain("- carried — Carried (2023) [note below]");
   expect(prompt).toContain(
     '- on-disk — On Disk (2023) [note ready, not in this turn\'s context — read_note("on-disk")]',
@@ -416,7 +329,7 @@ test("a failed paper carries its reason, clipped", () => {
     paper({ slug: "silent", status: "failed" }),
     paper({ slug: "waiting", status: "queued" }),
   ];
-  const prompt = buildClassroomSystemPrompt(ctx({ prep: prep(papers) }));
+  const prompt = prepStatusSection(prep(papers), new Set());
   expect(prompt).toContain("[no full text: not found on arXiv, OpenAlex, or Semantic Scholar]");
   expect(prompt).toContain("[no full text: Connection error.]");
   expect(prompt).toContain("[no full text: no reason recorded]");
@@ -428,58 +341,12 @@ test("a failed paper carries its reason, clipped", () => {
 });
 
 test("the prep list is where the slugs come from, and it says so", () => {
-  const prompt = buildClassroomSystemPrompt(ctx({ prep: prep([paper()]) }));
+  const prompt = prepStatusSection(prep([paper()]), new Set());
   expect(prompt).toContain("never");
   expect(prompt).toContain("make one up from a reference-list entry");
 });
 
 // --- the tools paragraph ---
 
-// read_annotations is mounted only when some material carries a mark. The book
-// this was measured on had none, the paragraph promised the tool anyway, and a
-// model that hits one "unknown tool" stops reaching for the others.
-test("the tools paragraph names what was mounted and nothing else", () => {
-  const prompt = buildClassroomSystemPrompt(
-    ctx({ toolNames: ["read_pages", "search_topic", "read_paper", "read_note", "add_source"] }),
-  );
-  expect(prompt).toContain("read_paper(slug, from, to)");
-  expect(prompt).toContain("read_note(slug)");
-  expect(prompt).not.toContain("read_annotations");
-  // add_source is mounted but carries its own paragraph elsewhere.
-  expect(prompt).not.toContain("add_source");
-});
-
-test("no described tool means no tools paragraph", () => {
-  expect(buildClassroomSystemPrompt(ctx({ toolNames: [] }))).not.toContain("Tools:");
-  expect(buildClassroomSystemPrompt(ctx({ toolNames: undefined }))).not.toContain("Tools:");
-});
-
 // --- the teaching discipline (docs/09) ---
 
-test("the classroom prompt carries the companion's brevity discipline and the rest", () => {
-  const prompt = buildClassroomSystemPrompt(ctx());
-  expect(prompt).toContain("Get to the point.");
-  // The companion's line, but qualified: teaching is the job here, so an
-  // unqualified "a few sentences" would overshoot.
-  expect(prompt).toContain("A few sentences usually beats a lecture");
-  expect(prompt).toContain("when a");
-  expect(prompt).toContain("point genuinely needs building, build it");
-  // About what to answer, not about what to ask.
-  expect(prompt).toContain("Answer the question they asked, not three more.");
-  expect(prompt).toContain("changing the angle, not the wording");
-  expect(prompt).toContain("You may examine them.");
-  // What is banned is quizzing every turn. Ending on "shall we go on to §X" is
-  // the classroom's kept shape (docs/09), so it is named as allowed.
-  expect(prompt).toContain("don't test them");
-  expect(prompt).toContain("is not examining");
-  expect(prompt).not.toContain("end without a question");
-  // The reader is not pinned as a newcomer any more.
-  expect(prompt).not.toContain("newcomer");
-});
-
-test("the observation line appears only when a snapshot is appended", () => {
-  expect(buildClassroomSystemPrompt(ctx({ hasObservations: true }))).toContain(
-    "include what they got stuck on",
-  );
-  expect(buildClassroomSystemPrompt(ctx())).not.toContain("include what they got stuck on");
-});
