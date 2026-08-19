@@ -31,3 +31,4 @@ export {
   readChapterNote,
   readOverviewNote,
 } from "./store";
+export { findLegacyChapterNotes, purgeLegacyChapterNotes } from "./purge";

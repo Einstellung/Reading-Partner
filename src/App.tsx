@@ -44,6 +44,7 @@ import { buildGlossary } from "./ai/voice";
 import { modelSupportsImages, type ProviderId } from "./ai/aiClient";
 import { locateQuote, type Citation } from "./reading/prep";
 import { usePrep } from "./reading/prep/papers/use-prep";
+import { purgeLegacyChapterNotes } from "./reading/prep/chapters/purge";
 import { useNotes } from "./reading/prep/chapters/use-notes";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import { startDistillSweeps, toDistillAnnotations, type DistillAnnotation } from "./observation";
@@ -387,7 +388,13 @@ export default function App() {
   // pull-routes.ts): the per-book caches are platform's, settings.json is the
   // shared bootstrap's, and the briefing is the info screen's.
   useEffect(() => {
-    void initSync("desktop").catch((e) => console.warn("sync init failed", e));
+    // Once, on the way up: the chapter notes written before this was a
+    // chapter-spine pass are deleted from here and queued for deletion from
+    // Drive. After initSync, so the queue is written to the state file that was
+    // just read rather than to the placeholder it replaced.
+    void initSync("desktop")
+      .catch((e) => console.warn("sync init failed", e))
+      .finally(() => void purgeLegacyChapterNotes());
     return registerPullRoute({
       ...SHELF_PULL_ROUTE,
       onPulled: () => {

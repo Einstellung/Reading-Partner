@@ -110,6 +110,14 @@ export interface SyncBackend {
   // never published for content that did not land.
   upload(name: string, bytes: Uint8Array, meta: RemoteMeta): Promise<void>;
 
+  // Take a data file out of the remote for good. Never reached by reconcile — a
+  // file missing locally is left alone there, and that stays true (docs/13).
+  // This serves the one thing reconcile cannot express: a build that has decided
+  // a file is not data any more and must not survive on the other devices. A
+  // name that is not in the remote is success, not an error: the state this asks
+  // for already holds.
+  remove(name: string): Promise<void>;
+
   hasBook(hash: string): Promise<boolean>;
   uploadBook(hash: string, bytes: Uint8Array): Promise<void>;
   // Throws RemoteGoneError when the blob is not in the remote any more.
