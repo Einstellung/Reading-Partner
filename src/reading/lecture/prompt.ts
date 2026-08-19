@@ -102,7 +102,13 @@ export interface TurnLoad {
   // This turn is an aside (docs/03, reading/aside.ts), and where its span came
   // from. The stable half of the prompt above is the parent lesson's verbatim,
   // so this is where the model is told which of the two it is answering.
-  aside?: { from: "chat" | "mark" };
+  //
+  // `lessonReplayed` is whether any of the parent conversation actually survived
+  // into this turn's messages. It does not on an aside long enough to fill the
+  // history on its own, on one the budget's tight rung cut back, or on one whose
+  // parent is gone — and a sentence about a stretch that is not there is the
+  // thing this block exists not to do.
+  aside?: { from: "chat" | "mark"; lessonReplayed?: boolean };
 }
 
 // What an aside's turn is, as a fact about this turn — the same footing as
@@ -110,22 +116,26 @@ export interface TurnLoad {
 // is in a lesson, pulled one thing out of it, and goes back when this is
 // settled. Says nothing about how long the answer should be: that is the
 // question's to decide, whichever door the reader came in by (docs/09).
-function asideStatement(from: "chat" | "mark"): string {
+function asideStatement(from: "chat" | "mark", lessonReplayed: boolean): string {
   const opening =
     from === "chat"
       ? [
           "This turn is a side conversation off a lesson on this book. The reader pulled one",
           "sentence out of the lesson and asked about it; the lesson is still open and they",
-          "go back to it after.",
+          "go back to it after. The passage is in the reading context above — refer to it",
+          "rather than quoting it back in full.",
         ]
       : [
           "This turn is a side conversation off a lesson on this book. The reader marked a",
           "passage on the page mid-lesson and asked about it; the lesson is still open and",
-          "they go back to it after.",
+          "they go back to it after. The passage is in the reading context above — refer to",
+          "it rather than quoting it back in full.",
         ];
   return [
     ...opening,
-    "The messages replayed to you open on the stretch of the lesson this broke off from.",
+    ...(lessonReplayed
+      ? ["The messages replayed to you open on the stretch of the lesson this broke off from."]
+      : ["None of the lesson itself is replayed to you; what follows is this side conversation alone."]),
     "Answer what they asked here — do not restart the lesson and do not recap it.",
   ].join("\n");
 }
@@ -193,5 +203,7 @@ export function turnLoadStatement(load: TurnLoad): string {
     "page image sent with one, are gone — do not reason from having seen them.",
   );
   // First, because it says what this turn is; the list after it says what it holds.
-  return load.aside ? `${asideStatement(load.aside.from)}\n\n${lines.join("\n")}` : lines.join("\n");
+  if (!load.aside) return lines.join("\n");
+  const said = asideStatement(load.aside.from, load.aside.lessonReplayed === true);
+  return `${said}\n\n${lines.join("\n")}`;
 }

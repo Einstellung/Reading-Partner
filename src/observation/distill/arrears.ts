@@ -12,7 +12,12 @@
 
 import type { Annotation } from "../../platform/app/reader-contract";
 import { annotationPage } from "../../platform/app/reader-contract";
-import { countNewReaderMessages, type DistillAnnotation, type DistillMessage } from "./distill";
+import {
+  countNewUnitMessages,
+  type DistillAnnotation,
+  type DistillMessage,
+  type DistillUnitPart,
+} from "./distill";
 
 // How often the app looks, while it is open.
 export const SWEEP_INTERVAL_MS = 30 * 60_000;
@@ -38,11 +43,14 @@ export interface UnitThread {
   messages: readonly DistillMessage[];
 }
 
-// One conversation's worth of transcript, and the thread whose cursor covers it.
+// One conversation's worth of transcript: the merged view that goes to the
+// model, the thread the pass is named for, and the threads whose cursors the
+// pass moves.
 export interface DistillUnit {
   threadId: string;
   annotationId: string;
   messages: DistillMessage[];
+  parts: DistillUnitPart[];
 }
 
 // Whether a thread's transcript is folded into another's, and whose.
@@ -82,19 +90,21 @@ function plain(messages: readonly DistillMessage[]): DistillMessage[] {
 // index the lot across restarts.
 export function distillUnits(threads: readonly UnitThread[]): DistillUnit[] {
   const present = new Set(threads.map((t) => t.id));
-  const folded = new Map<string, DistillMessage[]>();
+  const folded = new Map<string, DistillUnitPart[]>();
   for (const t of threads) {
     const into = foldsInto(t, present);
     if (into === null) continue;
-    folded.set(into, [...(folded.get(into) ?? []), ...plain(t.messages)]);
+    folded.set(into, [...(folded.get(into) ?? []), { threadId: t.id, messages: plain(t.messages) }]);
   }
   const units: DistillUnit[] = [];
   for (const t of threads) {
     if (foldsInto(t, present) !== null) continue;
+    const own: DistillUnitPart = { threadId: t.id, messages: plain(t.messages) };
     const joined = folded.get(t.id);
-    const messages = joined ? [...plain(t.messages), ...joined] : plain(t.messages);
+    const parts = joined ? [own, ...joined] : [own];
+    const messages = parts.flatMap((p) => p.messages);
     if (joined) messages.sort((a, b) => a.ts - b.ts);
-    units.push({ threadId: t.id, annotationId: t.annotationId, messages });
+    units.push({ threadId: t.id, annotationId: t.annotationId, messages, parts });
   }
   return units;
 }
@@ -119,6 +129,9 @@ export interface ThreadArrears {
   // The whole thread, oldest first. A conversation about one passage is the
   // unit; the cursor only decides whether to run.
   messages: DistillMessage[];
+  // The threads this unit is made of, when it is made of more than one. Absent
+  // is the ordinary case and means the thread itself (distillUnits).
+  parts?: DistillUnitPart[];
   newMessages: number;
 }
 
@@ -178,12 +191,16 @@ export function countNewMarks(
   return n;
 }
 
-// The arrears of one thread, given how many of its messages are already folded in.
+// The arrears of one unit, given how much of it is already folded in. A number
+// is where this thread's own cursor stands; a unit made of more than one thread
+// needs the lookup, because each of them carries a cursor of its own.
 export function threadArrears(
   thread: Omit<ThreadArrears, "newMessages">,
-  cursor: number,
+  cursor: number | ((threadId: string) => number),
 ): ThreadArrears {
-  return { ...thread, newMessages: countNewReaderMessages(thread.messages, cursor) };
+  const at = typeof cursor === "number" ? () => cursor : cursor;
+  const parts = thread.parts ?? [{ threadId: thread.threadId, messages: thread.messages }];
+  return { ...thread, newMessages: countNewUnitMessages(parts, at) };
 }
 
 export function topicDebt(topic: TopicArrears): { marks: number; messages: number } {

@@ -439,6 +439,99 @@ test("minNewMessages holds the trim fallback back", async () => {
   expect(runner.requests.length).toBe(0);
 });
 
+// --- a transcript merged from several threads (docs/03: asides) ---
+//
+// A lesson and the aside pulled out of it are one pass, and the cursors it moves
+// are one per thread over that thread's own messages. A single cursor over the
+// merged list is a number whose meaning changes the moment one of the threads
+// goes away, and both directions of that lose something.
+
+const LESSON = [
+  { role: "user" as const, text: "teach me chapter 3", ts: 100 },
+  { role: "ai" as const, text: "chapter 3 is about attention", ts: 200 },
+];
+const SIDE = [
+  { role: "user" as const, text: "what does routing mean there?", ts: 300 },
+  { role: "ai" as const, text: "each head picks what to read", ts: 400 },
+];
+
+function foldedInput(overrides: Partial<DistillPassInput> = {}): DistillPassInput {
+  return passInput({
+    threadId: "lesson",
+    annotationId: "",
+    page: null,
+    markedText: "",
+    messages: [...LESSON, ...SIDE],
+    parts: [
+      { threadId: "lesson", messages: LESSON },
+      { threadId: "aside", messages: SIDE },
+    ],
+    ...overrides,
+  });
+}
+
+test("a folded pass moves a cursor per thread, each over its own messages", async () => {
+  const { store, adapter } = makeStore();
+  const result = await runDistillPass(foldedInput(), {
+    store,
+    adapter,
+    now: () => JULY_17,
+    ...scriptedRunner([{ text: "done" }]),
+  });
+
+  expect(result).toMatchObject({ ran: true, ok: true });
+  expect((await store.getMeta()).distilledMessages).toEqual({ lesson: 2, aside: 2 });
+});
+
+// The lesson goes on after the aside is deleted. A cursor stamped at the merged
+// length would sit past the end of the lesson's own messages, and
+// countNewReaderMessages clamps that to "nothing new" — so everything the reader
+// asked afterwards would never be distilled, and never would be.
+test("deleting a folded aside does not strand the lesson's cursor past its messages", async () => {
+  const { store, adapter } = makeStore();
+  await runDistillPass(foldedInput(), {
+    store,
+    adapter,
+    now: () => JULY_17,
+    ...scriptedRunner([{ text: "done" }]),
+  });
+
+  const carriedOn = [
+    ...LESSON,
+    { role: "user" as const, text: "and what breaks without it?", ts: 500 },
+    { role: "ai" as const, text: "the model reads positionally", ts: 600 },
+  ];
+  const again = await runDistillPass(
+    passInput({ threadId: "lesson", annotationId: "", page: null, markedText: "", messages: carriedOn }),
+    { store, adapter, now: () => JULY_20, ...scriptedRunner([{ text: "done" }]) },
+  );
+
+  expect(again).toMatchObject({ ran: true, ok: true });
+  expect((await store.getMeta()).distilledMessages).toEqual({ lesson: 4, aside: 2 });
+});
+
+// The other direction: sync deletes the lesson elsewhere and the aside is left
+// behind, so it becomes a unit of its own. Its own cursor was moved by the
+// folded pass, so there is nothing left to distil and nothing is written twice.
+test("an aside orphaned after a folded pass does not distil itself again", async () => {
+  const { store, adapter } = makeStore();
+  await runDistillPass(foldedInput(), {
+    store,
+    adapter,
+    now: () => JULY_17,
+    ...scriptedRunner([{ text: "done" }]),
+  });
+
+  const runner = loopRunner([{ text: "done" }]);
+  const alone = await runDistillPass(
+    passInput({ threadId: "aside", annotationId: "", page: null, markedText: "", messages: SIDE }),
+    { store, adapter, run: runner.run, now: () => JULY_20 },
+  );
+
+  expect(alone).toEqual({ ran: false, skipped: "no-new-messages" });
+  expect(runner.requests.length).toBe(0);
+});
+
 test("a book's mark cursor is its own, so a sibling book's pass never buries it", async () => {
   const { store, adapter } = makeStore();
   await runDistillPass(passInput(), {

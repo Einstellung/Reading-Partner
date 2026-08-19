@@ -322,7 +322,14 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
       // Same cascade, applied to the bytes about to go out: an aside the file
       // still has whose parent this process deleted goes with it, and is named
       // so the merge after this one does not put it back.
+      //
+      // Only ids the file brought. A thread the entry holds is never taken out
+      // here: that is how the file and the cache came to disagree — the id was
+      // dropped from the bytes, kept in memory, and everything typed into it
+      // afterwards was written and thrown away by turns depending on which write
+      // path ran. Whatever the entry holds, the entry decides (removeFrom).
       for (const [id, thread] of Object.entries(merged)) {
+        if (id in entry.threads) continue;
         if (thread.parentThreadId && entry.removed.has(thread.parentThreadId)) {
           entry.removed.add(id);
           delete merged[id];
@@ -366,7 +373,13 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
     const entry = cache.get(key);
     if (!entry) return;
     if (!entry.reconciled) return writeMerged(key);
-    await io.write(fileFor(key), JSON.stringify({ threads: entry.threads }, null, 2));
+    // `removed` is applied even though nothing it names can be in `threads`
+    // (removeFrom takes both together). It is one line, and it makes this path's
+    // guarantee local: the write that skips the merge cannot be the one that
+    // resurrects a conversation the reader deleted.
+    const out: ThreadMap = { ...entry.threads };
+    for (const id of entry.removed) delete out[id];
+    await io.write(fileFor(key), JSON.stringify({ threads: out }, null, 2));
   }
 
   const writer: DebouncedWriter<string> = createDebouncedWriter<string>({
@@ -457,6 +470,33 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
     return Object.values(held.threads).filter((t) => t.parentThreadId === threadId);
   }
 
+  // The one way a thread leaves an entry, so the cache and the file cannot end
+  // up saying different things about the same id. A conversation takes its
+  // asides with it — deleting the lesson deletes what hangs off it — and every
+  // id that goes is named in `removed`, or the next read-modify-write reads it
+  // straight back in (docs/13).
+  //
+  // Named ids are gone from `threads` as well, always. An id in both is the
+  // shape this store exists to make impossible: `get` keeps answering with a
+  // thread the file does not have, `append` writes messages the debounced write
+  // then drops, and the exit path — which writes the entry unmerged — puts it
+  // back with them.
+  function removeFrom(entry: Entry, threadId: string): string[] {
+    if (!(threadId in entry.threads)) return [];
+    const gone = [
+      threadId,
+      ...Object.values(entry.threads)
+        .filter((t) => t.parentThreadId === threadId)
+        .map((t) => t.id),
+    ];
+    for (const id of gone) {
+      delete entry.threads[id];
+      entry.removed.add(id);
+    }
+    entry.gen++;
+    return gone;
+  }
+
   return {
     load,
     peek,
@@ -522,42 +562,31 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
         parentThreadId: init.parentThreadId,
         ...(init.asideAnchor ? { asideAnchor: init.asideAnchor } : {}),
       }),
-    // Remove a thread from its file by id. The file stays and is rewritten
-    // without this thread — an in-file edit, so per-file LWW sync carries the
+    // Remove a thread from its file by id, and the asides branched off it with
+    // it — there is one delete, and this is the answer for a caller that only
+    // wants to know whether the thread was there. The file stays and is
+    // rewritten without them — an in-file edit, so per-file LWW sync carries the
     // removal to other devices (unlike a whole-file deletion, which v1 sync does
-    // not propagate). The thread's images under images/threads/<threadId>/ are
+    // not propagate). The threads' images under images/threads/<threadId>/ are
     // left on disk; they are not synced and a stale directory is harmless. No-op
     // when the thread is already gone.
     remove: (bookId, threadId) => {
       const held = cache.get(bookId);
-      if (!held || !(threadId in held.threads)) return false;
-      delete held.threads[threadId];
-      // Named, so the write's merge takes it out of the file instead of reading
-      // it back in as a thread only the file has.
-      held.removed.add(threadId);
-      held.gen++;
+      if (!held) return false;
+      const gone = removeFrom(held, threadId);
+      if (gone.length === 0) return false;
       schedule(bookId);
       return true;
     },
-    // Delete a thread and the asides branched off it, answering with every id
-    // that went — the caller needs them for whatever else is keyed by thread id
-    // (a live turn, staged images, an event line). Deleting an aside takes only
-    // the aside: it has no children, and its parent is the conversation the
-    // reader is still in.
-    //
-    // Every id is named in `removed`, including the asides. An aside dropped
-    // from the cache and not named comes straight back on the next
-    // read-modify-write as a thread only the file has (docs/13).
+    // The same delete, answering with every id that went — the caller needs them
+    // for whatever else is keyed by thread id (a live turn, staged images, an
+    // event line). Deleting an aside takes only the aside: it has no children,
+    // and its parent is the conversation the reader is still in.
     removeTree: (bookId, threadId) => {
       const held = cache.get(bookId);
-      if (!held || !(threadId in held.threads)) return [];
-      const gone = [threadId, ...asidesOf(bookId, threadId).map((t) => t.id)];
-      for (const id of gone) {
-        delete held.threads[id];
-        held.removed.add(id);
-      }
-      held.gen++;
-      schedule(bookId);
+      if (!held) return [];
+      const gone = removeFrom(held, threadId);
+      if (gone.length > 0) schedule(bookId);
       return gone;
     },
     append: (bookId, threadId, message) => {
@@ -630,9 +659,9 @@ export const createAsideThread = (bookId: string, threadId: string, init: AsideI
   store.createAside(bookId, threadId, init);
 export const deleteThread = (bookId: string, threadId: string): boolean =>
   store.remove(bookId, threadId);
-// The delete every caller wants: a thread and its asides, with every id that
-// went named back. `deleteThread` is still there for the one case that means it
-// — deleting a single aside — and leaves a parent's asides behind.
+// The same delete as `deleteThread`, with every id that went named back. Use
+// this wherever something else is keyed by thread id — a live turn, staged
+// images — and `deleteThread` where the only question is whether it was there.
 export const deleteThreadTree = (bookId: string, threadId: string): string[] =>
   store.removeTree(bookId, threadId);
 export const appendMessage = (

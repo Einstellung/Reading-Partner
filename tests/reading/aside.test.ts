@@ -14,6 +14,7 @@ import {
   carriesAsideReceipt,
   mayOpenAside,
   ASIDE_KICKOFF,
+  ASIDE_PARENT_MAX_MESSAGES,
   ASIDE_PARENT_ROUNDS,
   ASIDE_QUESTION_MAX,
   ASIDE_SPAN_MAX,
@@ -79,6 +80,36 @@ test("rounds are counted by the reader's questions, not by pairs", () => {
     { role: "ai" as const, text: "a3", ts: 6 },
   ];
   expect(texts(asideParentTail(uneven, 6, 2))).toEqual(["u2", "u3", "a3"]);
+});
+
+// Rounds are counted by the reader's questions, so they bound nothing when the
+// reader asked none: an entry that opened on the model's turn, or a stretch of
+// drawn cards, used to hand back the whole conversation.
+test("a parent with no question in it is still bounded", () => {
+  const aiOnly = Array.from({ length: 60 }, (_, i) => ({
+    role: "ai" as const,
+    text: `a${i}`,
+    ts: i + 1,
+  }));
+  const tail = asideParentTail(aiOnly, null);
+  expect(tail.length).toBe(ASIDE_PARENT_MAX_MESSAGES);
+  // The end of the conversation, which is what the reader was looking at.
+  expect(tail[tail.length - 1].text).toBe("a59");
+});
+
+// The ceiling cuts where the walk would have: onto a question, when one is left
+// in the window.
+test("the ceiling lands on a question when the window still holds one", () => {
+  const long = [
+    { role: "user" as const, text: "u1", ts: 1 },
+    ...Array.from({ length: 20 }, (_, i) => ({ role: "ai" as const, text: `a${i}`, ts: i + 2 })),
+    { role: "user" as const, text: "u2", ts: 30 },
+    { role: "ai" as const, text: "last", ts: 31 },
+  ];
+  const tail = asideParentTail(long, 31);
+  expect(tail.length).toBeLessThanOrEqual(ASIDE_PARENT_MAX_MESSAGES);
+  expect(tail[0].role).toBe("user");
+  expect(tail[0].text).toBe("u2");
 });
 
 // Every provider wants the exchange to open on a user turn. Nothing was marked
