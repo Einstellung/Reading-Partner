@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
-import { IconBlackboard, IconSparkle } from "../../../src/ui/components/base/icons";
+import { IconMortarboard, IconSparkle } from "../../../src/ui/components/base/icons";
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "../../../src");
 const read = (path: string): string => readFileSync(join(SRC, path), "utf8");
@@ -20,26 +20,27 @@ const read = (path: string): string => readFileSync(join(SRC, path), "utf8");
 const topBar = read("ui/components/reader/ReaderTopBar.tsx");
 const rack = read("ui/components/reader/PenToolbar.tsx");
 
-test("the blackboard is drawn in the same system as the other icons", () => {
-  const markup = renderToStaticMarkup(<IconBlackboard size={18} />);
+test("the mortarboard is drawn in the same system as the other icons", () => {
+  const markup = renderToStaticMarkup(<IconMortarboard size={18} />);
   expect(markup).toContain('viewBox="0 0 20 20"');
   expect(markup).toContain('stroke="currentColor"');
   expect(markup).toContain('width="18"');
   expect(markup).toContain('height="18"');
-  // A board, two chalk lines and two legs — no fills, and few enough shapes to
-  // read at 18px.
-  expect(markup.match(/<path/g)?.length).toBe(5);
+  // The cap, the body under it and the tassel — few enough shapes to read at
+  // 18px, and the cap is filled so the silhouette carries at that size.
+  expect(markup.match(/<path/g)?.length).toBe(3);
+  expect(markup).toContain('fill="currentColor"');
   expect(markup).not.toContain('fill="#');
 });
 
 test("the blackboard and the sparkle are different drawings", () => {
-  expect(renderToStaticMarkup(<IconBlackboard size={18} />)).not.toBe(
+  expect(renderToStaticMarkup(<IconMortarboard size={18} />)).not.toBe(
     renderToStaticMarkup(<IconSparkle size={18} />),
   );
 });
 
 test("the top bar's book entry wears the blackboard and says what it opens", () => {
-  expect(topBar).toContain("IconBlackboard");
+  expect(topBar).toContain("IconMortarboard");
   expect(topBar).not.toContain("IconSparkle");
   expect(topBar).toContain('title="Learn this book with AI"');
   expect(topBar).toContain('aria-label="Learn this book with AI"');
@@ -48,5 +49,5 @@ test("the top bar's book entry wears the blackboard and says what it opens", () 
 
 test("the pen rack keeps the sparkle for the passage-level pen", () => {
   expect(rack).toContain("IconSparkle");
-  expect(rack).not.toContain("IconBlackboard");
+  expect(rack).not.toContain("IconMortarboard");
 });

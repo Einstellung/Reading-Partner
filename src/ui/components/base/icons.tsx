@@ -485,20 +485,13 @@ export function IconBooks({ size = 20 }: IconProps) {
 }
 
 // A board on legs with two lines of chalk: the whole book or paper, taught.
-export function IconBlackboard({ size = 20 }: IconProps) {
+export function IconMortarboard({ size = 20 }: IconProps) {
 	return (
-		<svg
-			{...svgProps(size)}
-			stroke="currentColor"
-			strokeWidth="1.4"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-		>
-			<path d="M2.75 3.5H17.25V13.5H2.75V3.5Z" />
-			<path d="M5.75 7.25H11.75" />
-			<path d="M5.75 10.25H9.25" />
-			<path d="M6.75 16.5L8 13.5" />
-			<path d="M13.25 16.5L12 13.5" />
+		<svg {...svgProps(size)} stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+			<path d="M10 3.7L18.6 7.5L10 11.3L1.4 7.5Z" fill="currentColor" stroke="none" />
+			<path d="M6 9.2V13.1C6 15.1 14 15.1 14 13.1V9.2" />
+			<path d="M17.7 8.25V12.4" />
+			<circle cx="17.7" cy="13.75" r="1" fill="currentColor" stroke="none" />
 		</svg>
 	);
 }
