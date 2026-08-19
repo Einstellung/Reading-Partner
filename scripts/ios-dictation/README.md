@@ -16,12 +16,20 @@ iPhone 16, iOS 26.6, UDID `00008140-000C31641EEB001C`, attached over USB.
 | script | what it does |
 |---|---|
 | `ios-dev.sh` | build the normal app for the device and install it. `--reinit` regenerates `gen/apple` |
+| `bench-run.sh` | the same, with `VITE_SMOKE=dictation-bench`, then launch. The interactive one — for a person to hold the bar |
 | `smoke-run.sh` | the same, with `VITE_SMOKE=dictation`, then start the console and the speaker and launch |
 | `launch-on-unlock.sh` | wait for the phone to unlock, kill any stale instance, start the console and speaker, launch |
 | `syslog.sh` | `idevicesyslog` filtered to `RP-DICT` |
 | `speaker.sh` | watch the console and speak into the room on each hold's cue |
 | `fetch-result.sh` | pull `dictation-result.json` out of the app data container |
 | `analyse.py` | print the numbers §7 of the brief asks for |
+
+The four `VITE_SMOKE` values and who each one is for: `dictation` and
+`dictation-long` are unattended and write a JSON verdict; `dictation-guided`
+drives the bar on a schedule while a person reads lines aloud; `dictation-bench`
+drives nothing and measures nothing — it mounts the real composer so the bar can
+be held by hand, which is the only way to judge it on a build that cannot sign
+in (docs/pitfall/31).
 
 ## What each one had to learn the hard way
 
