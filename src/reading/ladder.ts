@@ -32,6 +32,10 @@ export const READING_LADDER: readonly Rung<ReadingReductionId>[] = [
   // tier 1: redundancy.
   { id: "figure-catalog" },
   { id: "reader-profile" },
+  // Both products of the notes pass: the reader's whole-book outline and the
+  // chapter spine (docs/09). They go together because they are the same
+  // material at two grains, and because what they are for — orientation and
+  // route questions — is what a turn tight enough to be here is not doing.
   { id: "notes-overview" },
   { id: "booklist-thin" },
   { id: "observation-trim" },
