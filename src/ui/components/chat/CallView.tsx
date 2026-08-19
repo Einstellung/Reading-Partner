@@ -5,12 +5,13 @@
 // Tailwind-only.
 //
 // The conversation is a ChatScaleScope and its column width follows the zoom;
-// the hang-up button and the mode pills stay outside it.
+// the hang-up button and the chapter-focus line stay outside it.
 
 import type { ReactNode } from 'react';
 import type { ReadingIntent } from '../../../reading/intents';
 import ChatScaleScope from '../base/ChatScaleScope';
 import { IconClose } from '../base/icons';
+import ChapterFocusBar, { type ChapterFocusBarProps } from './ChapterFocusBar';
 import { Composer, MessageList, type ComposerVoice } from './chat';
 import IntentChips from './IntentChips';
 import DeleteThreadButton from './DeleteThreadButton';
@@ -31,16 +32,9 @@ interface CallViewProps {
 	hint?: string;
 	streaming?: boolean;
 	onStop?(): void;
-	// Classroom mode (docs/09): the toggle lives at the top of the chat window.
-	// Absent handler = no button (e.g. no book open).
-	classroomOn?: boolean;
-	onToggleClassroom?(): void;
-	// One-line prep status shown beside the toggle while classroom is on.
-	classroomStatus?: string | null;
-	// Rehearsal mode (docs/31), the third posture, beside the classroom toggle.
-	// The two are mutually exclusive; the host owns that, not this row.
-	rehearsalOn?: boolean;
-	onToggleRehearsal?(): void;
+	// The chapter this conversation is focused on (docs/09), stated at the top of
+	// the window. Null, or an absent chapter, = no focus and no line.
+	chapterFocus?: ChapterFocusBarProps | null;
 	// The empty-state heading and composer placeholder. Default to the passage
 	// wording; the book-level thread (docs/03: top-bar AI button) passes the book
 	// title and "Ask about this book…".
@@ -72,11 +66,7 @@ export default function CallView({
 	hint,
 	streaming,
 	onStop,
-	classroomOn = false,
-	onToggleClassroom,
-	classroomStatus,
-	rehearsalOn = false,
-	onToggleRehearsal,
+	chapterFocus,
 	emptyTitle = 'Ask about this passage',
 	placeholder = 'Ask about this passage…',
 	intents,
@@ -112,39 +102,7 @@ export default function CallView({
 				{onDelete && <DeleteThreadButton onDelete={onDelete} />}
 			</div>
 
-			{(onToggleClassroom || onToggleRehearsal) && (
-				<div className="absolute left-1/2 top-4 z-10 flex -translate-x-1/2 items-center gap-2">
-					{onToggleClassroom && (
-						<Button
-							type="button"
-							variant={classroomOn ? 'secondary' : 'outline'}
-							aria-pressed={classroomOn}
-							onClick={onToggleClassroom}
-							className={
-								'rounded-full coarse:py-2.5 ' + (classroomOn ? '' : 'text-neutral-600')
-							}
-						>
-							Classroom
-						</Button>
-					)}
-					{onToggleRehearsal && (
-						<Button
-							type="button"
-							variant={rehearsalOn ? 'secondary' : 'outline'}
-							aria-pressed={rehearsalOn}
-							onClick={onToggleRehearsal}
-							className={
-								'rounded-full coarse:py-2.5 ' + (rehearsalOn ? '' : 'text-neutral-600')
-							}
-						>
-							Rehearsal
-						</Button>
-					)}
-					{classroomOn && classroomStatus && (
-						<span className="text-xs text-neutral-400">{classroomStatus}</span>
-					)}
-				</div>
-			)}
+			{chapterFocus && <ChapterFocusBar {...chapterFocus} />}
 
 			{empty ? (
 				<Scope className="flex min-h-0 flex-1 flex-col items-center justify-center px-4">

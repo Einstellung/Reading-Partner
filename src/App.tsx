@@ -82,7 +82,7 @@ import { openBook } from "./reading/session/open-book";
 import { resolveBookSource } from "./reading/session/open-file";
 import type { ReaderShell } from "./reading/session/shell";
 import { SHELF_PULL_ROUTE } from "./reading/pull-routes";
-import { keepReadingPosition, setReadingModes } from "./reading/reading-position";
+import { keepReadingPosition } from "./reading/reading-position";
 import { Button } from "./ui/components/ui/button";
 import { OVERLAY_Z } from "./ui/components/ui/overlay";
 import LibraryScreen from "./ui/components/library/LibraryScreen";
@@ -275,18 +275,16 @@ export default function App() {
     };
   });
 
-  // Classroom mode and lesson prep (docs/09): the panel's state and every
-  // callback that serves it. Called here so its two effects — the classroom
-  // mirror and the scheduler following the reader — keep firing among the
-  // shell's own, and it reads the open book through the shell's refs.
+  // Lesson prep (docs/09): the panel's state and every callback that serves it.
+  // Called here so its effect — the scheduler following the reader — keeps
+  // firing among the shell's own, and it reads the open book through the
+  // shell's refs.
   const {
     snapshot: prepSnap,
     panel: prepPanelProps,
-    classroomOn,
     classroomRef,
     pipelineRef,
     setSelectedSlug: setSelectedPrepSlug,
-    setClassroom,
     reset: resetPrep,
     resume: resumePrep,
   } = usePrep({
@@ -296,17 +294,6 @@ export default function App() {
     currentFulltextRef,
     pushToast,
   });
-
-  // One press of the classroom toggle. Persisted immediately rather than on the
-  // debounced position save, so the mode survives a book that is closed without
-  // the reader scrolling again.
-  const toggleClassroom = useCallback(() => {
-    const on = !classroomRef.current;
-    setClassroom(on);
-    const bookId = bookIdRef.current;
-    if (!bookId) return;
-    setReadingModes(bookId, { classroom: on });
-  }, [classroomRef, setClassroom]);
 
   // Page-navigation events, with the dwell time on the page being left. The
   // ref makes this idempotent under StrictMode's double effect runs.
@@ -435,14 +422,12 @@ export default function App() {
   }, [fingerDraw, viewReady]);
 
   // The reader moved. The debounce, the flush on the way out and the failure
-  // that must not be silent (pitfall 09) are all reading-position.ts's; the
-  // sticky classroom flag (docs/09) rides along with the position, which the
-  // reader itself never carries.
+  // that must not be silent (pitfall 09) are all reading-position.ts's.
   const persist = useCallback((state: ViewState) => {
     const bookId = bookIdRef.current;
     if (!bookId) return;
-    keepReadingPosition(bookId, state, { classroom: classroomRef.current });
-  }, [classroomRef]);
+    keepReadingPosition(bookId, state);
+  }, []);
 
   const syncTraceList = useCallback(() => {
     setTraceAnns([...annsRef.current.values()]);
@@ -1131,16 +1116,6 @@ export default function App() {
     ctx: { inReader, chatFullWindow: call?.view === "chat-main" },
   });
 
-  // One-line prep status beside the Classroom toggle.
-  const prepStatusLine = (() => {
-    const s = prepSnap?.state;
-    if (!s) return classroomOn ? "Starting prep…" : null;
-    if (s.planStatus === "pending" || s.planStatus === "running") return "Reading the references…";
-    if (s.planStatus === "failed") return "Prep failed — see the prep panel";
-    const ready = s.papers.filter((p) => p.status === "done" || p.status === "abstract-only").length;
-    return `${ready}/${s.papers.length} papers ready`;
-  })();
-
   // Host for inline [fig:N] cards (M9): resolve/raster/jump against the open
   // book. Null when the book has no figures, so cards fall back to text chips.
   const figureHost = useMemo<FigureHost | null>(() => {
@@ -1410,9 +1385,7 @@ export default function App() {
                 streaming={streaming}
                 onStop={stopTurn}
                 onCardAction={onCardAction}
-                classroomOn={classroomOn}
-                onToggleClassroom={toggleClassroom}
-                classroomStatus={prepStatusLine}
+                chapterFocus={null}
                 emptyTitle={call.isBook ? title ?? "This book" : undefined}
                 placeholder={call.isBook ? "Ask about this book…" : undefined}
                 intents={openingIntents(call.isBook ?? false)}

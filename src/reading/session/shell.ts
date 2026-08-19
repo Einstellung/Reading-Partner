@@ -49,8 +49,8 @@ export interface ReaderShell {
   releaseBook(): void;
 
   // The two panels attached to the open book (docs/09, docs/14).
-  resetPrep(classroom: boolean): void;
-  resumePrep(bookId: string, name: string, ft: Fulltext, classroom: boolean): Promise<void>;
+  resetPrep(): void;
+  resumePrep(bookId: string, name: string, ft: Fulltext): Promise<void>;
   resetNotes(): void;
   resumeNotes(bookId: string, name: string, ft: Fulltext): Promise<void>;
   // The last chapter cannot be reached by a "next chapter" highlight, so the

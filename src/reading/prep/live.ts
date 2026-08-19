@@ -1,8 +1,8 @@
 // Live wiring of the prep pipeline: real deps (Tauri fs store, arXiv/Semantic
 // Scholar over the http plugin, pi-ai through the app's provider config) bound
 // to the dep-injected PrepPipeline. One pipeline instance per survey hash for
-// the app's lifetime, so prep keeps running in the background across
-// classroom toggles.
+// the app's lifetime, so prep keeps running in the background while the reader
+// moves between books.
 
 import { callModel, resolveModel } from "../../ai/model-call";
 import { realTimers } from "../../ai/observable-run";

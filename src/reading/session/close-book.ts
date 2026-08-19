@@ -27,6 +27,6 @@ export function closeBook(
   shell.showFulltext(null, false);
   shell.unmountReader();
   // Detach the prep UI; the pipeline keeps prepping in the background.
-  shell.resetPrep(false);
+  shell.resetPrep();
   shell.releaseBook();
 }

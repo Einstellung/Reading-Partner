@@ -9,11 +9,11 @@ import { ANNOTATION_COLORS } from "../../../platform/app/annotations";
 import { setTouchDebugEnabled } from "../../../reading/engine/gesture/touch-debug";
 import type { ToolType } from "./types";
 import {
+  IconBlackboard,
   IconFitWidth,
   IconGear,
   IconPagedLayout,
   IconSidebar,
-  IconSparkle,
   IconTouchProbe,
   IconZoomIn,
   IconZoomOut,
@@ -164,11 +164,11 @@ export default function ReaderTopBar(props: {
           variant="ghost"
           size="icon"
           className="flex-none text-[#555]"
-          title="Talk about this book"
-          aria-label="Talk about this book"
+          title="Learn this book with AI"
+          aria-label="Learn this book with AI"
           onClick={props.onOpenBookThread}
         >
-          <IconSparkle size={18} />
+          <IconBlackboard size={18} />
         </Button>
         <MoreMenu items={moreItems} alert={props.settingsAlert} />
       </div>

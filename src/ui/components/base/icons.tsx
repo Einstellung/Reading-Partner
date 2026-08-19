@@ -506,6 +506,25 @@ export function IconBooks({ size = 20 }: IconProps) {
 	);
 }
 
+// A board on legs with two lines of chalk: the whole book or paper, taught.
+export function IconBlackboard({ size = 20 }: IconProps) {
+	return (
+		<svg
+			{...svgProps(size)}
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<path d="M2.75 3.5H17.25V13.5H2.75V3.5Z" />
+			<path d="M5.75 7.25H11.75" />
+			<path d="M5.75 10.25H9.25" />
+			<path d="M6.75 16.5L8 13.5" />
+			<path d="M13.25 16.5L12 13.5" />
+		</svg>
+	);
+}
+
 // A screen on a stand: a talk, which is a deck shown to someone.
 export function IconTalk({ size = 20 }: IconProps) {
 	return (

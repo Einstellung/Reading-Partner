@@ -89,5 +89,5 @@ test("nothing is left of the book on the screen", () => {
   expect(log.find((c) => c.name === "showTitle")?.args).toEqual([null]);
   expect(log.find((c) => c.name === "showFulltext")?.args).toEqual([null, false]);
   // The pipeline keeps prepping in the background; only the panel is detached.
-  expect(log.find((c) => c.name === "resetPrep")?.args).toEqual([false]);
+  expect(log.find((c) => c.name === "resetPrep")?.args).toEqual([]);
 });

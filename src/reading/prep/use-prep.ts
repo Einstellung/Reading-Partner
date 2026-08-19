@@ -1,15 +1,13 @@
-// The lesson-prep hub (docs/09), lifted out of App: classroom mode, the pipeline
-// the panel is looking at, and the panel's callbacks. It owns the classroom flag,
-// the snapshot and the selected paper, and renders nothing — the shell calls it
-// and spreads `panel` into PrepPanel.
+// The lesson-prep hub (docs/09), lifted out of App: the pipeline the panel is
+// looking at, the snapshot and the selected paper. It renders nothing — the
+// shell calls it and spreads `panel` into PrepPanel.
 //
-// Two of its refs go back to the shell as they are: the sticky classroom flag
-// rides along with the persisted reading position and with every AI turn, and
-// the attached pipeline backs the turn's classroom tools.
+// Prep has one entry, the panel's Start button. There is no classroom mode any
+// more (docs/09: the entry is the top-bar button, not a switch), so nothing here
+// starts prep as a side effect of something else.
 //
-// It does not persist the flag. Classroom is one of two mutually exclusive modes
-// (src/reading/rehearsal/mode.ts) and both are written together, so the shell
-// owns the write and this hook only owns the classroom half of the state.
+// `classroomRef` is still handed back for the AI turn to read; it is false for
+// good and goes when the turn stops branching on it.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { logEvent } from "../../platform/app/events";
@@ -55,34 +53,29 @@ export interface PrepController {
   // Mirror of the attached pipeline, for the panel and the drawer's busy dot.
   snapshot: PrepSnapshot | null;
   panel: PrepPanelBindings;
-  classroomOn: boolean;
-  // Read by the shell from its own stable callbacks: the classroom flag when it
-  // persists the reading position and when it assembles an AI turn, the pipeline
-  // when that turn needs the classroom tools.
+  // Read by the shell when it assembles an AI turn. Pinned to false since the
+  // mode went away; kept one version so the turn side can drop its branch on its
+  // own schedule.
   classroomRef: HostRef<boolean>;
   pipelineRef: HostRef<PrepPipeline | null>;
   // A clicked [paper-slug p.N] citation selects that paper in the panel.
   setSelectedSlug(slug: string | null): void;
-  // Turn classroom mode on or off. Switching it on kicks lesson prep; the shell
-  // persists the mode flags (both of them, together).
-  setClassroom(on: boolean): void;
-  // Book open (with the book's restored flag) and book close (off): detach the
-  // panel from the previous book. The pipeline keeps prepping in the background.
-  reset(classroom: boolean): void;
+  // Book open and book close: detach the panel from the previous book. The
+  // pipeline keeps prepping in the background.
+  reset(): void;
   // Book open, once the full text is in: resume a persisted or running pipeline.
-  resume(bookId: string, name: string, ft: Fulltext, restoreClassroom: boolean): Promise<void>;
+  resume(bookId: string, name: string, ft: Fulltext): Promise<void>;
 }
 
 export function usePrep(host: PrepHost): PrepController {
   const { bookIdRef, ctxRef, currentFulltextRef, pushToast, stats } = host;
 
-  // Classroom mode + lesson prep (docs/09). classroomOn is per open book and
-  // resets on open/close; prepSnap mirrors the pipeline for the panel.
-  const [classroomOn, setClassroomOn] = useState(false);
+  // prepSnap mirrors the attached pipeline for the panel; it resets on
+  // open/close.
   const [prepSnap, setPrepSnap] = useState<PrepSnapshot | null>(null);
   const [selectedPrepSlug, setSelectedPrepSlug] = useState<string | null>(null);
 
-  // Classroom mode (docs/09), mirrored for the shell's stable runTurn callback.
+  // Read by the shell's stable runTurn callback. Nothing writes it (docs/09).
   const classroomRef = useRef(false);
   // The lesson-prep pipeline attached to the open book (module singleton; this
   // ref only tracks which one the UI is looking at) and its unsubscribe.
@@ -90,10 +83,6 @@ export function usePrep(host: PrepHost): PrepController {
   const prepUnsubRef = useRef<(() => void) | null>(null);
   // Paper statuses already seen, so only transitions are logged (M8).
   const prepStatusesRef = useRef<Map<string, string>>(new Map());
-
-  useEffect(() => {
-    classroomRef.current = classroomOn;
-  }, [classroomOn]);
 
   // Lazy prep follows the reader: on every page change, tell the scheduler
   // which chapter the user is in so its papers prep first.
@@ -133,7 +122,7 @@ export function usePrep(host: PrepHost): PrepController {
     [ctxRef],
   );
 
-  // First classroom press (or the panel's Start button) kicks off lesson prep.
+  // The panel's Start button kicks off lesson prep.
   const startPrep = useCallback(async () => {
     const bookId = bookIdRef.current;
     const name = ctxRef.current.fileName;
@@ -146,24 +135,6 @@ export function usePrep(host: PrepHost): PrepController {
     }
     attachPipeline(bookId, name, ft);
   }, [attachPipeline, pushToast, bookIdRef, ctxRef, currentFulltextRef]);
-
-  const setClassroom = useCallback(
-    (on: boolean) => {
-      // Outside the state updater: StrictMode double-invokes updaters, which
-      // would double-log the event. The no-op guard is what makes it safe for the
-      // shell to call this on every mode press, including the ones that leave
-      // classroom where it was.
-      if (on === classroomRef.current) return;
-      const topicId = ctxRef.current.topicId;
-      if (topicId) logEvent(topicId, "classroom-toggle", { on });
-      // Written here and not only by the mirroring effect: two presses in the
-      // same tick would otherwise both read the pre-render value.
-      classroomRef.current = on;
-      if (on) void startPrep();
-      setClassroomOn(on);
-    },
-    [startPrep, ctxRef],
-  );
 
   // The prep panel reads a note's body on expand (frontmatter stripped).
   const loadPrepNoteBody = useCallback(
@@ -189,9 +160,7 @@ export function usePrep(host: PrepHost): PrepController {
   const prepReplan = useCallback(() => pipelineRef.current?.replan(), []);
 
   // Detach the prep UI; the pipeline keeps prepping in the background.
-  const resetPrep = useCallback((classroom: boolean) => {
-    classroomRef.current = classroom;
-    setClassroomOn(classroom);
+  const resetPrep = useCallback(() => {
     setSelectedPrepSlug(null);
     prepUnsubRef.current?.();
     prepUnsubRef.current = null;
@@ -199,15 +168,13 @@ export function usePrep(host: PrepHost): PrepController {
     setPrepSnap(null);
   }, []);
 
-  // Resume lesson prep from its persisted state (docs/09: restartable
-  // from the breakpoint) or re-attach a pipeline already running. A
-  // restored classroom flag also kicks a fresh pipeline when none exists
-  // yet (e.g. the book moved devices) — the same path a manual toggle-on
-  // takes via startPrep.
+  // Resume lesson prep from its persisted state (docs/09: restartable from the
+  // breakpoint) or re-attach a pipeline already running. A book that was never
+  // prepped stays detached until Start prep is pressed.
   const resumePrep = useCallback(
-    async (bookId: string, name: string, ft: Fulltext, restoreClassroom: boolean) => {
+    async (bookId: string, name: string, ft: Fulltext) => {
       try {
-        if (restoreClassroom || peekPrepPipeline(bookId) || (await hasPrepState(bookId))) {
+        if (peekPrepPipeline(bookId) || (await hasPrepState(bookId))) {
           if (bookIdRef.current === bookId) attachPipeline(bookId, name, ft);
         }
       } catch (e) {
@@ -230,11 +197,9 @@ export function usePrep(host: PrepHost): PrepController {
       onReplan: prepReplan,
       selectedSlug: selectedPrepSlug,
     },
-    classroomOn,
     classroomRef,
     pipelineRef,
     setSelectedSlug: setSelectedPrepSlug,
-    setClassroom,
     reset: resetPrep,
     resume: resumePrep,
   };

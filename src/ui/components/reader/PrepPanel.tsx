@@ -198,7 +198,7 @@ export default function PrepPanel({
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 px-4 text-center">
         <p className="m-0 text-sm text-neutral-500">
-          No lesson prep for this book yet. Start it here or with the Classroom button in a chat.
+          No lesson prep for this book yet. Start it here.
         </p>
         <Button
           type="button"

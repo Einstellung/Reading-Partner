@@ -191,24 +191,17 @@ test("the position the reader will move from is seeded before the pane is mounte
   expect((argsOf(log, "mountReader")[0] as { viewState: ViewState }).viewState.pageIndex).toBe(12);
 });
 
-test("a classroom flag stored with the position comes back on", async () => {
+// A legacy classroom flag in the stored position is inert: classroom stopped
+// being a mode (docs/09), so opening a book never carries one into prep.
+test("a book opens with its prep detached, legacy classroom flag or not", async () => {
   const log: Call[] = [];
   const state = { pageIndex: 0, scale: "auto", scrollMode: 0, classroom: true } as ViewState;
   const shell = fakeShell(log, { currentBookId: () => "book-1" });
   await openBook(shell, book, fakeIo(log, { getViewState: async () => state }));
   await settle();
 
-  expect(argsOf(log, "resetPrep")).toEqual([true]);
-  expect(argsOf(log, "resumePrep")).toEqual(["book-1", "A Book.pdf", FULLTEXT, true]);
-});
-
-test("a book opened without the flag starts its prep detached", async () => {
-  const log: Call[] = [];
-  await openBook(fakeShell(log, { currentBookId: () => "book-1" }), book, fakeIo(log));
-  await settle();
-
-  expect(argsOf(log, "resetPrep")).toEqual([false]);
-  expect(argsOf(log, "resumePrep")).toEqual(["book-1", "A Book.pdf", FULLTEXT, false]);
+  expect(argsOf(log, "resetPrep")).toEqual([]);
+  expect(argsOf(log, "resumePrep")).toEqual(["book-1", "A Book.pdf", FULLTEXT]);
   expect(argsOf(log, "resumeNotes")).toEqual(["book-1", "A Book.pdf", FULLTEXT]);
 });
 
