@@ -682,3 +682,194 @@ test("a second pagehide on the way out writes nothing more", async () => {
   await advance(500);
   expect(files.get(FILE)).toBe(after!);
 });
+
+// --- asides (docs/03) ---
+//
+// A side conversation off a live one, one level deep. Two things about it are
+// storage rules rather than UI: it is never the thread the top-bar button
+// reopens, and deleting the conversation it hangs off takes it too.
+
+test("an aside is written with its parent link and never with the book marker", async () => {
+  writeFile([thread("bt", { book: true, annotationId: "" })]);
+  await store.load("book1");
+
+  store.createAside("book1", "as-1", {
+    parentThreadId: "bt",
+    asideAnchor: { messageTs: 7, text: "the sentence they pulled out" },
+  });
+  await advance(500);
+
+  const parsed = JSON.parse(files.get(FILE)!) as { threads: Record<string, Thread> };
+  expect(parsed.threads["as-1"].parentThreadId).toBe("bt");
+  expect(parsed.threads["as-1"].asideAnchor).toEqual({
+    messageTs: 7,
+    text: "the sentence they pulled out",
+  });
+  expect(parsed.threads["as-1"].annotationId).toBe("");
+  expect("book" in parsed.threads["as-1"]).toBe(false);
+});
+
+// The mark-anchored flavour: drawn on the page while the lesson ran, so it has
+// an annotation like any mark thread and no span of its own.
+test("a mark-anchored aside carries its mark and no anchor text", async () => {
+  writeFile([thread("bt", { book: true, annotationId: "" })]);
+  await store.load("book1");
+
+  const made = store.createAside("book1", "as-2", {
+    parentThreadId: "bt",
+    annotationId: "ann-drawn",
+  });
+
+  expect(made.annotationId).toBe("ann-drawn");
+  expect(made.asideAnchor).toBeUndefined();
+  expect(made.parentThreadId).toBe("bt");
+});
+
+// What the top-bar AI button opens. An aside answering here is the reader's side
+// conversation put where the lesson goes.
+test("the book thread lookup skips asides, whatever they carry", async () => {
+  writeFile([
+    thread("bt", { book: true, annotationId: "", createdAt: 5 }),
+    // Older, and wrongly carrying the marker a past version could have written.
+    thread("as-old", { annotationId: "", createdAt: 1, parentThreadId: "bt", book: true }),
+  ]);
+  await store.load("book1");
+
+  expect(store.getBook("book1")?.id).toBe("bt");
+});
+
+test("a book whose only thread is an aside has no book thread at all", async () => {
+  writeFile([thread("as", { annotationId: "", parentThreadId: "gone" })]);
+  await store.load("book1");
+
+  expect(store.getBook("book1")).toBeUndefined();
+});
+
+// Deleting the lesson deletes what hangs off it, and every id has to be named:
+// an aside dropped from the cache and not named comes straight back on the next
+// read-modify-write as a thread only the file has.
+test("deleting a parent takes its asides, and none of them come back", async () => {
+  const shape = (): Thread[] => [
+    thread("bt", { book: true, annotationId: "" }),
+    thread("as-1", { annotationId: "", parentThreadId: "bt" }),
+    thread("as-2", { annotationId: "ann-drawn", parentThreadId: "bt" }),
+    thread("t1"),
+  ];
+  writeFile(shape());
+  await store.load("book1");
+
+  expect(store.removeTree("book1", "bt").sort()).toEqual(["as-1", "as-2", "bt"]);
+  await advance(500);
+  expect(onDisk()).toEqual(["t1"]);
+
+  // The file comes back with all three, the way a sync pull would deliver it.
+  writeFile(shape());
+  store.append("book1", "t1", { role: "user", text: "still here", ts: 9 });
+  await advance(500);
+  expect(onDisk()).toEqual(["t1"]);
+});
+
+test("deleting an aside leaves the conversation it hangs off alone", async () => {
+  writeFile([
+    thread("bt", { book: true, annotationId: "" }),
+    thread("as-1", { annotationId: "", parentThreadId: "bt" }),
+  ]);
+  await store.load("book1");
+
+  expect(store.removeTree("book1", "as-1")).toEqual(["as-1"]);
+  await advance(500);
+  expect(onDisk()).toEqual(["bt"]);
+});
+
+test("deleting a thread that is not there removes nothing and names nothing", async () => {
+  writeFile([thread("t1")]);
+  await store.load("book1");
+  expect(store.removeTree("book1", "missing")).toEqual([]);
+  expect(store.removeTree("never-loaded", "t1")).toEqual([]);
+});
+
+// The cascade's other half. Per-record sync merge has no referential integrity:
+// an aside edited on another device outranks this device's delete and arrives
+// back with its parent gone. On the device whose user asked for the deletion,
+// finishing it is what the delete meant.
+test("an aside whose parent this session deleted does not survive the merge", async () => {
+  writeFile([
+    thread("bt", { book: true, annotationId: "" }),
+    thread("as-1", { annotationId: "", parentThreadId: "bt" }),
+  ]);
+  await store.load("book1");
+  store.removeTree("book1", "bt");
+  await advance(500);
+  expect(onDisk()).toEqual([]);
+
+  // The other device's edited copy lands in the file, and beside it an aside off
+  // the same parent that this device has never seen — an id `removed` cannot
+  // name, caught by the link instead.
+  writeFile([
+    thread("as-1", {
+      annotationId: "",
+      parentThreadId: "bt",
+      messages: [{ role: "user", text: "edited elsewhere", ts: 3 }],
+    }),
+    thread("as-theirs", { annotationId: "", parentThreadId: "bt" }),
+    thread("t9"),
+  ]);
+  store.create("book1", "ann-9", "t-new");
+  await advance(500);
+
+  expect(onDisk()).toEqual(["t-new", "t9"]);
+  expect(store.get("book1", "as-1")).toBeUndefined();
+  expect(store.get("book1", "as-theirs")).toBeUndefined();
+});
+
+// The device on the other side of that: its user deleted nothing, so its side
+// conversation stays. It is not silently unreachable — the store enumerates it.
+test("an orphaned aside is kept and enumerated rather than reaped", async () => {
+  writeFile([
+    thread("as-1", { annotationId: "", parentThreadId: "gone" }),
+    thread("as-2", { annotationId: "ann-drawn", parentThreadId: "bt" }),
+    thread("bt", { book: true, annotationId: "" }),
+    thread("t1"),
+  ]);
+  await store.load("book1");
+
+  expect(store.orphanAsides("book1").map((t) => t.id)).toEqual(["as-1"]);
+  expect(store.get("book1", "as-1")).toBeDefined();
+
+  store.append("book1", "t1", { role: "user", text: "unrelated", ts: 4 });
+  await advance(500);
+  expect(onDisk()).toEqual(["as-1", "as-2", "bt", "t1"]);
+});
+
+test("the asides of a thread are enumerable for the delete paths", async () => {
+  writeFile([
+    thread("bt", { book: true, annotationId: "" }),
+    thread("as-1", { annotationId: "", parentThreadId: "bt" }),
+    thread("as-2", { annotationId: "ann-drawn", parentThreadId: "bt" }),
+    thread("t1"),
+  ]);
+  await store.load("book1");
+
+  expect(store.asides("book1", "bt").map((t) => t.id).sort()).toEqual(["as-1", "as-2"]);
+  expect(store.asides("book1", "t1")).toEqual([]);
+  expect(store.list("book1").map((t) => t.id).sort()).toEqual(["as-1", "as-2", "bt", "t1"]);
+});
+
+// The additive rule the file has kept since `book` and `focusChapter`: a record
+// written by a device that has never heard of asides carries neither field, and
+// nothing here may mind.
+test("a file written before asides existed merges unchanged", async () => {
+  writeFile([thread("t1"), thread("bt", { book: true, annotationId: "" })]);
+  await store.load("book1");
+
+  expect(store.get("book1", "t1")?.parentThreadId).toBeUndefined();
+  expect(store.get("book1", "t1")?.asideAnchor).toBeUndefined();
+  expect(store.getBook("book1")?.id).toBe("bt");
+
+  store.append("book1", "t1", { role: "ai", text: "answered", ts: 6 });
+  await advance(500);
+  const parsed = JSON.parse(files.get(FILE)!) as { threads: Record<string, Thread> };
+  expect("parentThreadId" in parsed.threads.t1).toBe(false);
+  expect("asideAnchor" in parsed.threads.t1).toBe(false);
+  expect(onDisk()).toEqual(["bt", "t1"]);
+});

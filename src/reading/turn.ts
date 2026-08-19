@@ -25,12 +25,20 @@ import { modelSupportsImages, type ProviderId } from "../ai/aiClient";
 import { providers, toPiMessages } from "../ai/providers";
 import { estimateTextTokens, fitToBudget } from "../budget";
 import { EXPLAIN_KICKOFF } from "./intents";
+import { asideParentTail, ASIDE_KICKOFF } from "./aside";
 import { READING_LADDER, type ReadingReductionId } from "./ladder";
 import type { Annotation } from "../platform/app/reader-contract";
 import { buildSystemPrompt, readerProfileSection, type BooklistItem } from "../platform/app/context";
 import type { Settings } from "../platform/app/settings";
 import { loadAnnotations } from "../platform/app/annotations";
-import { getThread, readThreadImages, setThreadFocusChapter } from "../platform/app/threads";
+import {
+  getThread,
+  listThreads,
+  readThreadImages,
+  setThreadFocusChapter,
+  threadKind,
+  type ThreadKind,
+} from "../platform/app/threads";
 import { chapterAt } from "../fulltext/query";
 import { getFulltext, saveFulltext } from "../fulltext/store";
 import type { Fulltext } from "../fulltext/types";
@@ -53,6 +61,7 @@ import {
   assembleIdentity,
   buildObservationTools,
   distillThread,
+  distillUnitOf,
   getObservationAdapter,
   observationPromptSection,
   notifyObservationChange,
@@ -166,7 +175,10 @@ export interface ReadingTurnInput {
   // The open book's content hash: keys its threads, prep notes and figure crops.
   bookId: string;
   threadId: string;
-  // The AI-pen mark hosting this thread; empty string for the book-level thread.
+  // The AI-pen mark hosting this thread; empty string for the book-level thread
+  // and for an aside pulled out of a chat message. Which of the three this is
+  // comes off the thread record, not from here (platform/app/threads.ts:
+  // threadKind), so a caller cannot open an aside as if it were the lesson.
   annotationId: string;
   // That mark, and every mark on the open book (the current book's materials use
   // the in-memory copies rather than re-reading them from disk).
@@ -333,18 +345,36 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   } = input;
   const { topicId, topicName, fileName, pageLabel, pageIndex, files } = context;
   const materials = await gatherTopicMaterials(files, bookId, currentFulltext, annotations);
-  // The book-level thread (top-bar AI button) has no mark: its position is
-  // wherever the reader currently is, and it carries no selection-derived
-  // context (marked passage / surrounding text).
-  const isBook = annotationId === "";
+  // Which of the three doors this conversation came in by
+  // (platform/app/threads.ts). Whether a mark is hosting it is the caller's to
+  // say — it opened the conversation — and whether it hangs off another one is
+  // only on the record, so the two are read together through the one derivation.
+  // A thread the store has not got yet answers exactly as it did before asides
+  // existed.
+  const thread = getThread(bookId, threadId);
+  const kind: ThreadKind = threadKind({ ...thread, annotationId });
+  const isBook = kind === "book";
+  // The conversation this aside was pulled out of. Read live, like everything
+  // else about the thread: the parent goes on being written to while an aside is
+  // open, and none of it is copied onto the aside.
+  const parent =
+    kind === "aside" && thread?.parentThreadId
+      ? getThread(bookId, thread.parentThreadId)
+      : undefined;
+  const aside: { from: "chat" | "mark" } | null =
+    kind === "aside" ? { from: annotationId === "" ? "chat" : "mark" } : null;
+  // Anchored on a page: a mark thread, and an aside drawn on the page. The
+  // book-level thread's position is wherever the reader currently is, and so is
+  // a chat-span aside's — its span came out of a reply, not out of a page.
+  const onMark = annotationId !== "";
   const currentPage = pageIndex !== null ? pageIndex + 1 : null;
-  const page = isBook
-    ? currentPage
-    : annotationPage(ann as { position?: { pageIndex?: number } } | undefined);
+  const page = onMark
+    ? annotationPage(ann as { position?: { pageIndex?: number } } | undefined)
+    : currentPage;
   const chapterTitle =
     currentFulltext && page ? chapterAt(currentFulltext, page)?.title ?? null : null;
   const surrounding =
-    !isBook && currentFulltext && page ? surroundingText(currentFulltext, page) : "";
+    onMark && currentFulltext && page ? surroundingText(currentFulltext, page) : "";
   // The current book is in the list, marked as current. It used to be filtered
   // out, which read as "the other materials" and was fine until read_annotations
   // was mounted: that tool takes a title "as shown in the topic booklist", and
@@ -356,7 +386,15 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     fulltextAvailable: m.fulltext?.status === "ok",
     isCurrent: m.path === bookId,
   }));
-  const selectionText = typeof ann?.text === "string" ? ann.text : "";
+  // The passage in the prompt's anchor slot. A chat-span aside has no mark, so
+  // it is the span the reader selected out of the reply, stored verbatim on the
+  // thread (platform/app/threads.ts: never an offset).
+  const selectionText =
+    aside?.from === "chat"
+      ? thread?.asideAnchor?.text ?? ""
+      : typeof ann?.text === "string"
+        ? ann.text
+        : "";
   const selectionComment = typeof ann?.comment === "string" ? ann.comment : undefined;
 
   let tools = buildReadingTools({ currentFulltext, materials });
@@ -368,7 +406,13 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   // turn has to see what the last one wrote.
   const prepState = getPipeline()?.snapshot().state ?? null;
   const chapterTable = await loadChapterTable(bookId, currentFulltext, prepState?.chapters ?? []);
-  const focusNumber = isBook ? getThread(bookId, threadId)?.focusChapter ?? null : null;
+  // An aside reads its parent's focus. That focus is what puts the chapter's
+  // body in the prompt, overrides the position line, picks the observation
+  // window and orders the prep notes; an aside that lost it would be answering
+  // about a sentence from a chapter it can no longer see, and its stable half
+  // would stop matching the lesson's.
+  const focusHolder = kind === "aside" ? parent : thread;
+  const focusNumber = kind === "mark" ? null : focusHolder?.focusChapter ?? null;
   const focusChapter: TableChapter | null =
     chapterTable && focusNumber !== null ? chapterByNumber(chapterTable, focusNumber) : null;
   const bodyPages =
@@ -385,10 +429,14 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
       focusChapter && currentFulltext ? chapterTokens(currentFulltext, focusChapter) : 0,
   });
   // One call, one whole chapter (docs/09). read_pages caps at 10 pages, which
-  // cannot return the measured 44-page chapter. Mounted on both kinds of thread:
+  // cannot return the measured 44-page chapter. Mounted on every kind of thread:
   // a marked passage's conversation may be asked to teach chapter 3 and gets it,
   // it just does not become a conversation about chapter 3 — only the book-level
   // thread writes a focus down.
+  //
+  // Nor does an aside, on either end. Writing one on itself would be dead — the
+  // focus it reads is the parent's — and writing one on the parent would let a
+  // side conversation move the lesson the reader is going back to.
   if (currentFulltext?.status === "ok") {
     tools = [
       ...tools,
@@ -472,11 +520,11 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   // either side, as images, so the model sees the plot the paragraph is about
   // instead of the text layer's account of the axis labels.
   //
-  // Only on a mark-anchored thread. The book-level thread's page moves with the
+  // Only where there is a mark. The book-level thread's page moves with the
   // reader's scrolling, so a window sent on one of its turns says nothing about
   // where the earlier ones were, and the history line that stands in for the
-  // pictures next turn would be a guess.
-  const pageWindow: PageWindowPlan | null = isBook
+  // pictures next turn would be a guess. A chat-span aside has no page at all.
+  const pageWindow: PageWindowPlan | null = !onMark
     ? null
     : planPageWindow({
         anchor: page,
@@ -727,7 +775,14 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
         canDraw,
       }),
       toolNames,
-      bookLevel: isBook,
+      // An aside takes its parent's framing, which is what keeps the stable half
+      // of this prompt byte-identical to the lesson's: the provider's cache
+      // matches on a prefix, so one differing word in the first block turns a
+      // read of the inlined chapter into a second write of it (measured at ~82k
+      // tokens on a chapter-inlined turn). What the aside is gets said in the
+      // volatile half — the anchor line below, and the load statement last.
+      bookLevel: kind !== "mark",
+      ...(aside ? { aside } : {}),
       aiLanguage: s.aiLanguage,
       citePaperSlugs: notes.length > 0,
       chapterTable: chapterTable ? chapterTableSection(chapterTable) : "",
@@ -757,6 +812,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
         prepNotes: notes.length,
         hasChapterTable: !!chapterTable,
         ...(spineProgress ? { spine: spineProgress } : {}),
+        ...(aside ? { aside } : {}),
       }),
     });
   }
@@ -769,23 +825,49 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
       images: m.images?.length ? await readThreadImages(threadId, m.images) : undefined,
     })),
   );
+  // What an aside opens on: the stretch of the parent the span was pulled out
+  // of. Read here rather than copied onto the aside when it was created — the
+  // lesson goes on being written to while the aside is open, and two records
+  // holding the same messages is two places for them to drift.
+  //
+  // Text only. The images on those messages belong to the lesson's own turns;
+  // carrying them into every turn of an aside prices a picture the question is
+  // not about.
+  const parentTail: ReadingTurnMessage[] = parent
+    ? asideParentTail(parent.messages, thread?.asideAnchor?.messageTs ?? null).map((m) => ({
+        role: m.role,
+        text: m.text,
+      }))
+    : [];
   if (signal?.aborted) return null;
   // Replay only the tail of a long thread, and before the older turns fall
   // out of context, run the fallback distillation (docs/02: hangup is the
   // main trigger, the trim is the backstop).
-  if (prior.length > HISTORY_KEEP && topicId) {
+  //
+  // Counted on the thread's own messages, not on what gets replayed: the
+  // parent's tail rides an aside's every turn and is not a length this
+  // conversation reached.
+  if (threadMsgs.length > HISTORY_KEEP && topicId) {
+    // Whose arrears these are (observation/distill/arrears.ts). A chat-span
+    // aside has no mark, so it is no unit of its own and this stretch belongs to
+    // the conversation it was pulled out of.
+    const unit = distillUnitOf(listThreads(bookId), threadId);
+    // Where the pass says it happened follows the unit. Folded into the lesson,
+    // the position is the reader's own page — the same answer the lesson gives
+    // for itself — and there is no marked passage, because the lesson has none.
+    const folded = !!unit && unit.threadId !== threadId;
     void distillThread(
       {
         topicId,
         topicName,
         bookId,
         bookName: fileName,
-        threadId,
+        threadId: unit?.threadId ?? threadId,
         trigger: "trim",
-        annotationId,
-        page,
-        markedText: selectionText,
-        messages: threadMsgs.map(({ role, text, ts }) => ({ role, text, ts })),
+        annotationId: unit?.annotationId ?? annotationId,
+        page: folded ? (unit.annotationId === "" ? currentPage : null) : page,
+        markedText: folded ? "" : selectionText,
+        messages: unit?.messages ?? threadMsgs.map(({ role, text, ts }) => ({ role, text, ts })),
         annotations: distillAnnotations(),
       },
       TRIM_DISTILL_MIN_NEW,
@@ -794,7 +876,11 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
 
   function composeMessages(dropped: ReadonlySet<ReadingReductionId>): ReadingTurnMessage[] {
     const keep = dropped.has("history-trim") ? HISTORY_KEEP_TIGHT : HISTORY_KEEP;
-    const tail = prior.length > keep ? prior.slice(prior.length - keep) : prior;
+    // The parent's stretch first, this conversation's own after. Trimmed from
+    // the front, so the borrowed context is what the tight rung gives up before
+    // it starts cutting into what the reader said here.
+    const history = [...parentTail, ...prior];
+    const tail = history.length > keep ? history.slice(history.length - keep) : history;
     // Every provider wants the exchange to open on a user message. A thread the
     // reader started from a chip already does, and is replayed as it stands so
     // the model reads the ask they actually picked. What needs a stand-in is a
@@ -803,7 +889,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     const opensOnUser = tail.length > 0 && tail[0].role === "user";
     const msgs: ReadingTurnMessage[] = opensOnUser
       ? [...tail]
-      : [{ role: "user" as const, text: EXPLAIN_KICKOFF }, ...tail];
+      : [{ role: "user" as const, text: aside ? ASIDE_KICKOFF : EXPLAIN_KICKOFF }, ...tail];
     // The pictures ride the message being answered and nothing else. Every
     // earlier turn of this thread was sent the same window when it was the
     // current one, so those messages carry the line that says so instead — one
@@ -839,6 +925,13 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   if (classroomNotes.length === 0) skip.add("prep-notes-trim");
   if (!pageWindow || pageImages.length === 0) skip.add("page-window");
 
+  // An aside is priced as if it were paying for the inlined chapter in full —
+  // src/budget/fit.ts knows one assembled call, not two conversations sharing a
+  // provider cache — and that costs it nothing. Its stable half is the lesson's
+  // byte for byte, its history is a handful of messages against the lesson's
+  // forty, and it carries no page window unless it was drawn on a page. The call
+  // is never bigger than the lesson's own, so a window the lesson fits in fits
+  // this too and the ladder gives up no more here than it does there.
   const fitted = fitToBudget<ReadingReductionId, ReadingTurnMessage>({
     model,
     tools,

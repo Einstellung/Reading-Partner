@@ -99,6 +99,35 @@ export interface TurnLoad {
   // when no run exists and when one has finished, which are both "nothing to
   // say".
   spine?: { done: number; total: number };
+  // This turn is an aside (docs/03, reading/aside.ts), and where its span came
+  // from. The stable half of the prompt above is the parent lesson's verbatim,
+  // so this is where the model is told which of the two it is answering.
+  aside?: { from: "chat" | "mark" };
+}
+
+// What an aside's turn is, as a fact about this turn — the same footing as
+// everything else here, and not a claim about what happened earlier. The reader
+// is in a lesson, pulled one thing out of it, and goes back when this is
+// settled. Says nothing about how long the answer should be: that is the
+// question's to decide, whichever door the reader came in by (docs/09).
+function asideStatement(from: "chat" | "mark"): string {
+  const opening =
+    from === "chat"
+      ? [
+          "This turn is a side conversation off a lesson on this book. The reader pulled one",
+          "sentence out of the lesson and asked about it; the lesson is still open and they",
+          "go back to it after.",
+        ]
+      : [
+          "This turn is a side conversation off a lesson on this book. The reader marked a",
+          "passage on the page mid-lesson and asked about it; the lesson is still open and",
+          "they go back to it after.",
+        ];
+  return [
+    ...opening,
+    "The messages replayed to you open on the stretch of the lesson this broke off from.",
+    "Answer what they asked here — do not restart the lesson and do not recap it.",
+  ].join("\n");
 }
 
 // The line docs/09 requires: what the model has this turn, as a statement about
@@ -163,5 +192,6 @@ export function turnLoadStatement(load: TurnLoad): string {
     "This describes this turn only. What a tool returned in an earlier turn, and any",
     "page image sent with one, are gone — do not reason from having seen them.",
   );
-  return lines.join("\n");
+  // First, because it says what this turn is; the list after it says what it holds.
+  return load.aside ? `${asideStatement(load.aside.from)}\n\n${lines.join("\n")}` : lines.join("\n");
 }

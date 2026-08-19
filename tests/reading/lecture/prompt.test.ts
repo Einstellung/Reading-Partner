@@ -148,3 +148,46 @@ test("no spine progress is no sentence about it", () => {
   });
   expect(loaded).not.toContain("still being written");
 });
+
+// An aside borrows its parent's stable half verbatim, so this block — last in
+// the prompt, nearest the question — is where it is told which of the two it is
+// answering (docs/03).
+test("an aside says what this turn is, and where the passage came from", () => {
+  const load = { mode: "chapter" as const, bookName: "book.pdf", pageCount: 401, chapter: CH3 };
+  const chat = turnLoadStatement({ ...load, aside: { from: "chat" } });
+  expect(chat).toContain("This turn is a side conversation");
+  expect(chat).toContain("pulled one\nsentence out of the lesson");
+  expect(chat).toContain("do not restart the lesson");
+  // Still a statement of what this turn holds, after saying what it is.
+  expect(chat.indexOf("side conversation")).toBeLessThan(chat.indexOf("What you have in this turn's prompt"));
+
+  const drawn = turnLoadStatement({ ...load, aside: { from: "mark" } });
+  expect(drawn).toContain("marked a\npassage on the page mid-lesson");
+  expect(drawn).not.toContain("pulled one\nsentence out of the lesson");
+
+  // The lesson's own turn is untouched.
+  expect(turnLoadStatement(load)).not.toContain("side conversation");
+});
+
+// docs/09: the question decides the length, whichever door the reader came in
+// by. An aside is the shortest door there is and must not be the one that says
+// so. Nor may it examine the reader (docs/09, dropped 2026-08-19).
+test("an aside does not fix the length of an answer or quiz the reader", () => {
+  const loaded = turnLoadStatement({
+    mode: "chapter",
+    bookName: "book.pdf",
+    pageCount: 401,
+    chapter: CH3,
+    aside: { from: "chat" },
+  });
+  for (const phrase of [
+    "keep it short",
+    "briefly",
+    "a few sentences",
+    "one question",
+    "check whether it landed",
+    "in their own words",
+  ]) {
+    expect(`${phrase}: ${loaded.toLowerCase().includes(phrase)}`).toBe(`${phrase}: false`);
+  }
+});

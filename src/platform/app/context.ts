@@ -48,7 +48,17 @@ export interface ReadingContext {
   toolNames?: readonly string[];
   // The book-level thread (docs/03: the top-bar AI button). No passage was
   // marked, so every selection-derived part is dropped and the intro changes.
+  //
+  // An aside sets this too, because its parent does: the stable half below is
+  // the parent's byte for byte, which is what makes a turn on an aside a cache
+  // read instead of a second copy of the inlined chapter. What the aside is
+  // gets said in the volatile half, next to the question.
   bookLevel?: boolean;
+  // A side conversation off the thread above (docs/03), and where its span came
+  // from: the reader's selection inside a chat message, or a mark they drew on
+  // the page while the lesson ran. The span itself rides `selectionText`, in the
+  // slot a marked passage goes in — tier 0, never dropped (reading/ladder.ts).
+  aside?: { from: "chat" | "mark" };
   aiLanguage?: AiLanguage;
 
   // --- the stable half, in cache order (docs/09) ---
@@ -189,9 +199,15 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
   push(
     (bookLevel
       ? [
+          // "no passage is marked" used to sit in this sentence. It came out
+          // when asides arrived: an aside borrows this block verbatim to keep
+          // the cache prefix, and prints the span it was opened on a few blocks
+          // below, so the clause would have been contradicted inside the same
+          // prompt. Nothing else changes — the book-level thread never carried a
+          // passage and still does not.
           "You are a reading companion embedded in a PDF reader. The user opened a",
-          "conversation about the book as a whole — no passage is marked — to be taught",
-          "part of it, to be pointed at where to start, or to ask what a chapter holds.",
+          "conversation about the book as a whole — to be taught part of it, to be",
+          "pointed at where to start, or to ask what a chapter holds.",
         ]
       : [
           "You are a reading companion embedded in a PDF reader. The user is reading",
@@ -252,7 +268,15 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
       "  conversation, not from the page number.",
     );
   }
-  if (!bookLevel) {
+  // What this conversation is anchored on. A chat-span aside's anchor is words
+  // out of a reply, not out of the book, so it is named for what it is; every
+  // other anchored conversation — a mark thread, an aside drawn on the page — is
+  // a marked passage and says so.
+  if (ctx.aside?.from === "chat") {
+    position.push(
+      `- The reader pulled this out of your last answer and asked about it: "${ctx.selectionText.trim()}"`,
+    );
+  } else if (!bookLevel || ctx.aside) {
     position.push(`- Marked passage: "${ctx.selectionText.trim()}"`);
     if (ctx.selectionComment && ctx.selectionComment.trim()) {
       position.push(`- The user's note on it: "${ctx.selectionComment.trim()}"`);
@@ -260,7 +284,11 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
   }
   push(position.join("\n"));
 
-  if (!bookLevel && ctx.surroundingText && ctx.surroundingText.trim()) {
+  // Page-anchored, so it rides only where there is a page: a chat-span aside's
+  // span came out of a reply and the text around the reader's scroll position
+  // has nothing to do with it.
+  const pageAnchored = !bookLevel || ctx.aside?.from === "mark";
+  if (pageAnchored && ctx.surroundingText && ctx.surroundingText.trim()) {
     push(["Text around the marked passage:", '"""', ctx.surroundingText.trim(), '"""'].join("\n"));
   }
   if (ctx.fulltextAvailable === false) {

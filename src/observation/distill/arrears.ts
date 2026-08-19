@@ -26,6 +26,91 @@ export const MIN_NEW_MARKS = 5;
 // enough: something the reader said is the scarce thing.
 export const MIN_NEW_MESSAGES = 1;
 
+// --- what counts as one conversation ---
+
+// A thread as the unit rule sees it. Structural, so the rule can be applied to
+// the live store's records and to the sweep's on-disk ones without either side
+// importing the other's shape.
+export interface UnitThread {
+  id: string;
+  annotationId: string;
+  parentThreadId?: string;
+  messages: readonly DistillMessage[];
+}
+
+// One conversation's worth of transcript, and the thread whose cursor covers it.
+export interface DistillUnit {
+  threadId: string;
+  annotationId: string;
+  messages: DistillMessage[];
+}
+
+// Whether a thread's transcript is folded into another's, and whose.
+//
+// A chat-span aside has no annotation, so the sweep resolves it to page null and
+// markedText "" — it would spend a sub-agent run on a pass that cannot say where
+// in the book it happened. It is not a conversation of its own anyway: the
+// reader pulled a sentence out of the lesson and went back to it. So it joins
+// its parent, whose cursor then advances over both, and one learn session
+// distils once.
+//
+// A mark-anchored aside has a mark and a page, so it stays a unit, exactly like
+// the mark thread it is drawn beside. "Does it have an annotation" is the whole
+// test; there is no switch on how the aside was opened.
+//
+// An aside whose parent is not here is a unit of its own rather than nothing.
+// Deleting a parent cascades, but sync can leave one behind
+// (platform/app/threads.ts), and folding into a thread that does not exist is
+// how the reader's best material would go quietly missing.
+function foldsInto(t: UnitThread, present: ReadonlySet<string>): string | null {
+  if (t.annotationId !== "" || !t.parentThreadId) return null;
+  return present.has(t.parentThreadId) ? t.parentThreadId : null;
+}
+
+// Only the three fields a transcript is made of, the same narrowing the hangup
+// path has always done: a stored message also carries image filenames and the
+// display row's parts, and neither is the talk.
+function plain(messages: readonly DistillMessage[]): DistillMessage[] {
+  return messages.map(({ role, text, ts }) => ({ role, text, ts }));
+}
+
+// Every thread of one book reduced to the passes that should run over it.
+//
+// A folded transcript is merged into its parent's by timestamp. An aside opens
+// mid-lesson and the reader goes back to the lesson after, so a merge by ts is
+// append-only in time — which is what lets one cursor, counted in messages,
+// index the lot across restarts.
+export function distillUnits(threads: readonly UnitThread[]): DistillUnit[] {
+  const present = new Set(threads.map((t) => t.id));
+  const folded = new Map<string, DistillMessage[]>();
+  for (const t of threads) {
+    const into = foldsInto(t, present);
+    if (into === null) continue;
+    folded.set(into, [...(folded.get(into) ?? []), ...plain(t.messages)]);
+  }
+  const units: DistillUnit[] = [];
+  for (const t of threads) {
+    if (foldsInto(t, present) !== null) continue;
+    const joined = folded.get(t.id);
+    const messages = joined ? [...plain(t.messages), ...joined] : plain(t.messages);
+    if (joined) messages.sort((a, b) => a.ts - b.ts);
+    units.push({ threadId: t.id, annotationId: t.annotationId, messages });
+  }
+  return units;
+}
+
+// The unit one thread belongs to — the parent's when it folds in, its own
+// otherwise. Null when the thread is not among the ones given.
+export function distillUnitOf(
+  threads: readonly UnitThread[],
+  threadId: string,
+): DistillUnit | null {
+  const self = threads.find((t) => t.id === threadId);
+  if (!self) return null;
+  const into = foldsInto(self, new Set(threads.map((t) => t.id))) ?? threadId;
+  return distillUnits(threads).find((u) => u.threadId === into) ?? null;
+}
+
 export interface ThreadArrears {
   threadId: string;
   annotationId: string;

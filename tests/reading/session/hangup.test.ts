@@ -210,3 +210,102 @@ test("a hangup with nothing in flight distils the thread as it stands", () => {
   expect(distilled).toHaveLength(1);
   expect(distilled[0]?.messages).toEqual(stored);
 });
+
+// --- asides (docs/03) ---
+
+const lesson = {
+  id: "bt",
+  annotationId: "",
+  messages: [
+    { role: "user" as const, text: "teach me ch.3", ts: 1 },
+    { role: "ai" as const, text: "chapter 3 is about", ts: 2 },
+  ],
+};
+
+// A chat-span aside has no mark, so a pass of its own would be one with page
+// null and markedText "" — a sub-agent run that cannot say where in the book it
+// happened. It belongs to the lesson it was pulled out of.
+test("hanging up inside a chat-span aside distils the lesson it came out of", () => {
+  const pass = hangupPass({
+    call: { threadId: "as", annotationId: "" },
+    context,
+    annotation: undefined,
+    stored: [{ role: "user", text: "what does routing mean", ts: 3 }],
+    annotations: [],
+    threads: [lesson, { id: "as", annotationId: "", parentThreadId: "bt", messages: [] }],
+  });
+
+  expect(pass.threadId).toBe("bt");
+  expect(pass.annotationId).toBe("");
+  // The lesson's position is where the reader is, as it is when it hangs up itself.
+  expect(pass.page).toBe(12);
+  expect(pass.markedText).toBe("");
+  expect(pass.messages.map((m) => m.text)).toEqual([
+    "teach me ch.3",
+    "chapter 3 is about",
+    "what does routing mean",
+  ]);
+});
+
+// The same unit from the other end: hanging up on the lesson owes the asides'
+// transcripts too, or the parent's cursor steps over messages no pass has seen.
+test("hanging up on the lesson takes the asides opened out of it", () => {
+  const pass = hangupPass({
+    call: { threadId: "bt", annotationId: "", isBook: true },
+    context,
+    annotation: undefined,
+    stored: [...lesson.messages, { role: "user", text: "carry on", ts: 5 }],
+    annotations: [],
+    threads: [
+      lesson,
+      {
+        id: "as",
+        annotationId: "",
+        parentThreadId: "bt",
+        messages: [{ role: "user", text: "what does routing mean", ts: 3 }],
+      },
+    ],
+  });
+
+  expect(pass.threadId).toBe("bt");
+  expect(pass.messages.map((m) => m.text)).toEqual([
+    "teach me ch.3",
+    "chapter 3 is about",
+    "what does routing mean",
+    "carry on",
+  ]);
+});
+
+// An aside drawn on the page has a mark and a page, so it is a unit like any
+// mark thread and hangs up as one.
+test("a mark-anchored aside hangs up as its own conversation", () => {
+  const pass = hangupPass({
+    call: { threadId: "as", annotationId: "mark-1" },
+    context,
+    annotation: mark,
+    stored,
+    annotations: [],
+    threads: [lesson, { id: "as", annotationId: "mark-1", parentThreadId: "bt", messages: [] }],
+  });
+
+  expect(pass.threadId).toBe("as");
+  expect(pass.page).toBe(5);
+  expect(pass.markedText).toBe("the marked sentence");
+  expect(pass.messages).toEqual(stored);
+});
+
+// Sync can leave an aside whose parent was deleted elsewhere. Folding it into a
+// thread that is not there is how the reader's best material goes missing.
+test("an aside with no parent left hangs up on its own", () => {
+  const pass = hangupPass({
+    call: { threadId: "as", annotationId: "" },
+    context,
+    annotation: undefined,
+    stored,
+    annotations: [],
+    threads: [{ id: "as", annotationId: "", parentThreadId: "gone", messages: [] }],
+  });
+
+  expect(pass.threadId).toBe("as");
+  expect(pass.messages).toEqual(stored);
+});

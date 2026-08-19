@@ -39,6 +39,7 @@ import { FileObservationAdapter, type ObservationAdapter } from "./record/adapte
 import {
   SWEEP_INTERVAL_MS,
   MIN_NEW_MARKS,
+  distillUnits,
   threadArrears,
   toDistillAnnotations,
   countNewMarks,
@@ -377,22 +378,31 @@ async function collectArrears(
       seen.add(bookId);
       const marks = toDistillAnnotations(await peekAnnotations(bookId));
       const byId = new Map(marks.map((m) => [m.id, m]));
+      // By unit, not by thread: a chat-span aside's transcript is part of its
+      // parent's (distillUnits), so it is neither offered as a pass of its own
+      // nor left out of what the parent owes.
+      const stored = await peekThreads(bookId);
+      const busy = new Set(stored.filter((t) => threadBusy(t.id)).map((t) => t.id));
       const threads: ThreadArrears[] = [];
-      for (const thread of await peekThreads(bookId)) {
-        if (threadBusy(thread.id)) continue;
-        const anchor = byId.get(thread.annotationId);
+      for (const unit of distillUnits(stored)) {
+        // A thread with a reply still being written is left out, and so is a
+        // unit any part of which is: a pass over half a sentence is a pass over
+        // the wrong transcript, and the next sweep picks it up.
+        if (busy.has(unit.threadId)) continue;
+        if (stored.some((t) => t.parentThreadId === unit.threadId && busy.has(t.id))) continue;
+        const anchor = byId.get(unit.annotationId);
         threads.push(
           threadArrears(
             {
-              threadId: thread.id,
-              annotationId: thread.annotationId,
+              threadId: unit.threadId,
+              annotationId: unit.annotationId,
               // The book-level thread has no mark and so no page of its own; the
               // sweep has no current page to stand in for it either.
               page: anchor?.page ?? null,
               markedText: anchor?.text ?? "",
-              messages: thread.messages.map(({ role, text, ts }) => ({ role, text, ts })),
+              messages: unit.messages,
             },
-            messageCursor(meta, thread.id),
+            messageCursor(meta, unit.threadId),
           ),
         );
       }

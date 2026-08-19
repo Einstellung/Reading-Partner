@@ -255,6 +255,74 @@ test("a chapter in focus outranks the page the reader is scrolled to", () => {
   expect(loose).toContain("Where the reader is scrolled to is not the subject");
 });
 
+// --- asides (docs/03) ---
+//
+// An aside borrows its parent's stable half verbatim. A provider's prompt cache
+// matches on a prefix, so one differing word in the first block turns a read of
+// the inlined chapter into a second write of it — measured at ~82k tokens on a
+// chapter-inlined turn. Everything the aside is gets said below the position.
+test("an aside's stable half is the lesson's, byte for byte", () => {
+  const shared = {
+    ...base,
+    bookLevel: true,
+    toolNames: ["read_pages", "search_topic"],
+    toolPrompts: ["TOOL PROMPT"],
+    profile: "PROFILE",
+    materials: [
+      { label: "Book A.pdf", pageCount: 210, annotationCount: 1, fulltextAvailable: true, isCurrent: true },
+    ],
+    chapterTable: "CHAPTER TABLE",
+    inlineBody: "INLINE BODY",
+    prepNotes: "PREP NOTES",
+    chapterSpine: "CHAPTER SPINE",
+    spineOverview: "NOTES OVERVIEW",
+    citePaperSlugs: true,
+  };
+  const lesson = buildSystemPrompt(shared);
+  const aside = buildSystemPrompt({ ...shared, aside: { from: "chat" } });
+  // Up to the first volatile block, the two prompts are the same string.
+  const upTo = (out: string): string => out.slice(0, out.indexOf("Current reading context:"));
+  expect(upTo(aside)).toBe(upTo(lesson));
+  expect(upTo(aside)).toContain("INLINE BODY");
+  expect(aside).not.toBe(lesson);
+});
+
+test("a chat-span aside names the span for what it is and carries no page text", () => {
+  const out = buildSystemPrompt({
+    ...base,
+    bookLevel: true,
+    aside: { from: "chat" },
+    selectionText: "  the semantics in SSA form  ",
+    surroundingText: "GVN folds redundant expressions across the graph.",
+  });
+  expect(out).toContain('pulled this out of your last answer and asked about it: "the semantics in SSA form"');
+  expect(out).not.toContain("Marked passage");
+  // The text around a page has nothing to do with words out of a reply.
+  expect(out).not.toContain("Text around the marked passage");
+});
+
+test("an aside drawn on the page is a marked passage like any other", () => {
+  const out = buildSystemPrompt({
+    ...base,
+    bookLevel: true,
+    aside: { from: "mark" },
+    selectionComment: "confusing",
+    surroundingText: "GVN folds redundant expressions across the graph.",
+  });
+  expect(out).toContain('- Marked passage: "the semantics in SSA form"');
+  expect(out).toContain('- The user\'s note on it: "confusing"');
+  expect(out).toContain("Text around the marked passage:");
+  expect(out).not.toContain("pulled this out of your last answer");
+});
+
+// The lesson itself is unchanged by any of this.
+test("the book-level thread still carries nothing selection-derived", () => {
+  const out = buildSystemPrompt({ ...base, bookLevel: true, surroundingText: "around" });
+  expect(out).not.toContain("Marked passage");
+  expect(out).not.toContain("pulled this out of your last answer");
+  expect(out).not.toContain("Text around the marked passage");
+});
+
 // The entry leads the reader through a chapter; it does not examine them
 // (docs/09, dropped 2026-08-19). Pinned so a quiz cannot come back by accident.
 test("nothing in the prompt examines the reader", () => {

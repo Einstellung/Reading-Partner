@@ -121,6 +121,14 @@ export function useChapterSpine(host: ChapterSpineHost): ChapterSpineController 
         // Chat threads carried into chapter generation: anchor each mark-anchored
         // thread to its annotation's page; book-level threads have no anchor and
         // are dropped.
+        //
+        // Which takes an aside with it, or leaves it in, by the same rule and on
+        // purpose. One drawn on the page has a mark and rides, like any mark
+        // thread. A chat-span aside has none: what it is about is a sentence of
+        // a reply, and the spine pass writes per chapter from page-anchored
+        // evidence, so there is no page to file it under. It is not lost — that
+        // conversation is distilled into its parent's memory unit
+        // (observation/distill/arrears.ts).
         getChatThreads: async () => {
           const threadMap = await loadThreads(bookId);
           return Object.values(threadMap)

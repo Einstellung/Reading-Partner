@@ -81,6 +81,8 @@ export {
 } from "./distill/distill";
 export {
   countNewMarks,
+  distillUnitOf,
+  distillUnits,
   isTopicDue,
   maxBookMarks,
   selectDistillJob,
@@ -93,8 +95,10 @@ export {
   SWEEP_INTERVAL_MS,
   type BookArrears,
   type DistillJob,
+  type DistillUnit,
   type ThreadArrears,
   type TopicArrears,
+  type UnitThread,
 } from "./distill/arrears";
 export {
   buildGuessAgent,
