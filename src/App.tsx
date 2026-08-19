@@ -285,6 +285,7 @@ export default function App() {
     snapshot: prepSnap,
     panel: prepPanelProps,
     pipelineRef,
+    progress: paperPrepProgress,
     start: startPaperPrep,
     setSelectedSlug: setSelectedPrepSlug,
     reset: resetPrep,
@@ -662,6 +663,7 @@ export default function App() {
   const {
     snapshot: notesSnap,
     panel: notesPanelProps,
+    progress: chapterPrepProgress,
     start: startChapterPrep,
     reset: resetNotes,
     resume: resumeNotes,
@@ -1158,6 +1160,16 @@ export default function App() {
   // toggle carries a status dot so progress is visible while the drawer is shut.
   const sidebarBusy = !!(prepSnap?.running || notesSnap?.running);
 
+  // What the status line above a conversation says about preparation (docs/09).
+  // Only while a run is actually going: the line is a report on work in flight,
+  // and a finished run has nothing to say there. Whichever half is running is
+  // the one this document got — they are never both.
+  const prepLineProgress = notesSnap?.running
+    ? chapterPrepProgress
+    : prepSnap?.running
+      ? paperPrepProgress
+      : null;
+
   const inReader = !!title;
   // A bubble on a conversation that has not started, with nowhere to send it:
   // the Settings guidance takes the bubble's place. `configured` is what decides
@@ -1455,18 +1467,21 @@ export default function App() {
                 streaming={streaming}
                 onStop={stopTurn}
                 onCardAction={onCardAction}
-                chapterFocus={
-                  focusChapter
+                chapterFocus={{
+                  // The chapter as the book names it: `number` is parsed out of
+                  // the title, so the title already carries it. Absent when the
+                  // conversation has not settled on one, which the line handles
+                  // — preparation can be running with no chapter in focus.
+                  ...(focusChapter
                     ? {
-                        // The chapter as the book names it: `number` is parsed out
-                        // of the title, so the title already carries it.
                         chapter: focusChapter.title,
                         firstPage: focusChapter.startPage,
                         lastPage: focusChapter.endPage,
                         onClear: () => setFocusChapter(null),
                       }
-                    : null
-                }
+                    : {}),
+                  prep: prepLineProgress,
+                }}
                 emptyTitle={call.isBook ? title ?? "This book" : undefined}
                 placeholder={call.isBook ? "Ask about this book…" : undefined}
                 intents={callIntents}

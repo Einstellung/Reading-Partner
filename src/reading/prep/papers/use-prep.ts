@@ -8,7 +8,7 @@
 // call, plus the panel's own Start button for the reader who presses it
 // directly.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { logEvent } from "../../../platform/app/events";
 import type { ViewStats } from "../../../platform/app/reader-contract";
 import type { Fulltext } from "../../../fulltext/types";
@@ -17,6 +17,7 @@ import { parseNote, stripModelAsides } from "./notes";
 import type { PrepPipeline, PrepSnapshot } from "./pipeline";
 import { chapterIndexForPage } from "./scheduler";
 import { readPrepNote } from "./store";
+import { prepProgress, type PrepProgress } from "../progress";
 
 // A ref the shell owns and this hook only reads.
 type HostRef<T> = { readonly current: T };
@@ -51,6 +52,9 @@ export interface PrepPanelBindings {
 export interface PrepController {
   // Mirror of the attached pipeline, for the panel and the drawer's busy dot.
   snapshot: PrepSnapshot | null;
+  // How far this document's papers have got, for the line above a conversation.
+  // Null when no run is attached.
+  progress: PrepProgress | null;
   panel: PrepPanelBindings;
   pipelineRef: HostRef<PrepPipeline | null>;
   // Start (or pick up) this document's paper run. Called by the trigger, which
@@ -181,8 +185,20 @@ export function usePrep(host: PrepHost): PrepController {
     [attachPipeline, bookIdRef],
   );
 
+  // A paper is behind us once it has a note, has been given up on, or was
+  // deliberately left out; the four working statuses are what is still ahead.
+  const paperProgress = useMemo(() => {
+    const papers = prepSnap?.state?.papers;
+    if (!papers) return null;
+    return prepProgress(
+      papers,
+      (p) => !["queued", "fetching", "digesting", "cooldown"].includes(p.status),
+    );
+  }, [prepSnap]);
+
   return {
     snapshot: prepSnap,
+    progress: paperProgress,
     panel: {
       snapshot: prepSnap,
       loadNote: loadPrepNoteBody,

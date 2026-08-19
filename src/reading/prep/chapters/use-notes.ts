@@ -13,12 +13,13 @@
 // time, so every callback here keeps the stable identity it had inside App and a
 // notes run never re-renders the reader.
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { annotationPage, type Annotation } from "../../../platform/app/reader-contract";
 import { logEvent } from "../../../platform/app/events";
 import { loadThreads } from "../../../platform/app/threads";
 import type { Fulltext } from "../../../fulltext/types";
 import type { FiguresIndex } from "../../figures";
+import { prepProgress, type PrepProgress } from "../progress";
 import { getNotesPipeline, hasNotesState, peekNotesPipeline, type NotesInputs } from "./live";
 import type { NotesPipeline, NotesSnapshot } from "./pipeline";
 import { readChapterNote as readNotesChapter, readOverviewNote } from "./store";
@@ -59,6 +60,9 @@ export interface NotesPanelBindings {
 export interface NotesController {
   // Mirror of the attached pipeline, for the panel and the drawer's busy dot.
   snapshot: NotesSnapshot | null;
+  // How far this book's spines have got, for the line above a conversation.
+  // Null when no run is attached.
+  progress: PrepProgress | null;
   panel: NotesPanelBindings;
   // Start (or pick up) this book's spine run. Called by the trigger, which has
   // already decided that this is the kind of prep this document gets.
@@ -245,8 +249,18 @@ export function useNotes(host: NotesHost): NotesController {
     [attachNotes, bookIdRef],
   );
 
+  // A chapter is behind us once it is written or given up on; the graph pass
+  // that follows is not counted, so the line reads in chapters, which is what
+  // the reader can see in the panel.
+  const notesProgress = useMemo(() => {
+    const chapters = notesSnap?.state?.chapters;
+    if (!chapters) return null;
+    return prepProgress(chapters, (c) => c.status === "done" || c.status === "failed");
+  }, [notesSnap]);
+
   return {
     snapshot: notesSnap,
+    progress: notesProgress,
     panel: {
       snapshot: notesSnap,
       loadOverview: loadNotesOverview,
