@@ -4,11 +4,13 @@
 // works it leans on; a book reaches inwards, so ./chapters prepares what each
 // chapter does and how the chapters depend on each other. No document gets both.
 //
-// This file is the third thing, the part neither half owns: the anchor grammar
-// prepared material is written in. Both kinds of note carry [p.N] anchors, and a
-// chat reply that quotes one has to be rendered with the same grammar, so it
-// cannot live in either subdirectory without the other importing it. Both
-// subdirectories and the markdown renderer read it from here.
+// This file is also the parts neither half owns: which kind a document gets
+// (./kind.ts), what starts a run (./trigger.ts), how far one has got
+// (./progress.ts), and the anchor grammar prepared
+// material is written in (./anchors.ts). Both kinds of note carry [p.N] anchors,
+// and a chat reply that quotes one has to be rendered with the same grammar, so
+// the grammar cannot live in either subdirectory without the other importing it.
+// Both subdirectories and the markdown renderer read it from here.
 //
 // The two pipelines share nothing else: their scaffolding — the stall watchdog,
 // the pacing limiter, the observable run — is in src/ai, where the slides
@@ -24,3 +26,10 @@ export {
 } from "./anchors";
 export { locateQuote, normalizeForMatch } from "./quote-locate";
 export { prepKind, type PrepKind, type PrepPresence } from "./kind";
+export { prepProgress, type PrepProgress } from "./progress";
+export {
+  prepTriggerDecision,
+  type PrepTrigger,
+  type PrepTriggerDecision,
+  type PrepTriggerInput,
+} from "./trigger";

@@ -15,7 +15,7 @@
 import type { BookChapter } from "../../chapters";
 import { decodeLegacyName } from "../../../platform/app/path";
 
-export const NOTES_VERSION = 2 as const;
+export const CHAPTER_SPINE_VERSION = 2 as const;
 
 // Status of a phase that runs one long AI call: pending (not started or
 // requeued), running (in flight), done, or failed. Mid-run "running" is
@@ -35,16 +35,16 @@ export type ChapterStatus = PhaseStatus;
 // regenerated automatically; the panel offers a button.
 export type OverviewStatus = PhaseStatus | "stale";
 
-// A chapter as the notes pipeline holds it: the book's own chapter
+// A chapter as the spine pipeline holds it: the book's own chapter
 // (reading/chapters BookChapter) plus how far its note has got. Ranges are
 // 1-based inclusive, contiguous, and cover the whole book.
-export interface NoteChapter extends BookChapter {
+export interface SpineChapter extends BookChapter {
   status: ChapterStatus;
   error?: string;
 }
 
-export interface NotesState {
-  version: typeof NOTES_VERSION;
+export interface ChapterSpineState {
+  version: typeof CHAPTER_SPINE_VERSION;
   bookId: string;
   bookName: string;
   createdAt: number;
@@ -53,14 +53,14 @@ export interface NotesState {
   // Where the chapter structure came from: the PDF outline, or the model reading
   // the table of contents. Informational (shown in the panel).
   planSource?: "outline" | "ai";
-  chapters: NoteChapter[];
+  chapters: SpineChapter[];
   overviewStatus: OverviewStatus;
   overviewError?: string;
 }
 
-export function createNotesState(bookId: string, bookName: string, now: number): NotesState {
+export function createChapterSpineState(bookId: string, bookName: string, now: number): ChapterSpineState {
   return {
-    version: NOTES_VERSION,
+    version: CHAPTER_SPINE_VERSION,
     bookId,
     bookName,
     createdAt: now,
@@ -78,7 +78,7 @@ export function createNotesState(bookId: string, bookName: string, now: number):
 // goes into the chapter prompts, so a state written before path normalization
 // existed would otherwise keep telling the model the book is "%E5%85%A8...".
 // No write of its own: the repaired name reaches disk with the next save.
-export function normalizeNotesOnLoad(state: NotesState): NotesState {
+export function normalizeChapterSpineOnLoad(state: ChapterSpineState): ChapterSpineState {
   return {
     ...state,
     bookName: decodeLegacyName(state.bookName),

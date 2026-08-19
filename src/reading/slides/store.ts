@@ -75,7 +75,7 @@ async function readIfExists(path: string): Promise<string | null> {
 
 // Missing state is normal (this talk was never started); a corrupt or
 // stale-version state reads as null so the caller starts a fresh talk instead of
-// crashing. Same posture as loadNotesState.
+// crashing. Same posture as loadChapterSpineState.
 export async function loadSlidesState(talkId: string): Promise<SlidesState | null> {
   const text = await readIfExists(stateFile(talkId));
   if (text === null) return null;

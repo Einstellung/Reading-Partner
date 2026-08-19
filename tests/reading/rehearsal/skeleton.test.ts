@@ -8,10 +8,10 @@ import {
   chapterOfPage,
   formatSkeleton,
 } from "../../../src/reading/rehearsal/skeleton";
-import type { NoteChapter } from "../../../src/reading/prep/chapters/types";
+import type { SpineChapter } from "../../../src/reading/prep/chapters/types";
 import type { OutlineItem } from "../../../src/fulltext/types";
 
-const notesPlan: NoteChapter[] = [
+const notesPlan: SpineChapter[] = [
   { index: 1, title: "Openings", startPage: 1, endPage: 20, status: "done" },
   { index: 2, title: "Middlegame", startPage: 21, endPage: 60, status: "pending" },
   { index: 3, title: "Endings", startPage: 61, endPage: 90, status: "failed" },
@@ -24,7 +24,7 @@ const outline: OutlineItem[] = [
 ];
 
 test("the notes plan wins: real titles, real ranges, and note availability", () => {
-  const s = buildSkeleton({ notesChapters: notesPlan, outline, pageCount: 90 });
+  const s = buildSkeleton({ spineChapters: notesPlan, outline, pageCount: 90 });
   expect(s.source).toBe("notes-plan");
   expect(s.chapters.map((c) => c.title)).toEqual(["Openings", "Middlegame", "Endings"]);
   // Only a chapter the notes pass finished has a chapter-NN.md to read.
@@ -32,7 +32,7 @@ test("the notes plan wins: real titles, real ranges, and note availability", () 
 });
 
 test("no notes plan falls back to the book's own top-level outline", () => {
-  const s = buildSkeleton({ notesChapters: null, outline, pageCount: 90 });
+  const s = buildSkeleton({ spineChapters: null, outline, pageCount: 90 });
   expect(s.source).toBe("outline");
   expect(s.chapters.map((c) => c.title)).toEqual(["Part I", "Part II"]);
   // The first chapter is pulled back to page 1 so front matter is covered, and
@@ -43,24 +43,24 @@ test("no notes plan falls back to the book's own top-level outline", () => {
 });
 
 test("an empty notes plan is not a plan", () => {
-  expect(buildSkeleton({ notesChapters: [], outline, pageCount: 90 }).source).toBe("outline");
+  expect(buildSkeleton({ spineChapters: [], outline, pageCount: 90 }).source).toBe("outline");
 });
 
 test("neither: the whole book is one chapter, and the rehearsal still runs", () => {
-  const s = buildSkeleton({ notesChapters: null, outline: [], pageCount: 12 });
+  const s = buildSkeleton({ spineChapters: null, outline: [], pageCount: 12 });
   expect(s.source).toBe("whole-book");
   expect(s.chapters).toHaveLength(1);
   expect(s.chapters[0]).toMatchObject({ index: 1, startPage: 1, endPage: 12 });
 });
 
 test("a book with no text layer at all still produces one chapter", () => {
-  const s = buildSkeleton({ notesChapters: null, outline: [], pageCount: 0 });
+  const s = buildSkeleton({ spineChapters: null, outline: [], pageCount: 0 });
   expect(s.chapters).toHaveLength(1);
   expect(s.chapters[0].endPage).toBe(1);
 });
 
 test("a page maps to the chapter whose range holds it", () => {
-  const chapters = buildSkeleton({ notesChapters: notesPlan, outline, pageCount: 90 }).chapters;
+  const chapters = buildSkeleton({ spineChapters: notesPlan, outline, pageCount: 90 }).chapters;
   expect(chapterOfPage(chapters, 1)).toBe(1);
   expect(chapterOfPage(chapters, 20)).toBe(1);
   expect(chapterOfPage(chapters, 21)).toBe(2);
@@ -71,7 +71,7 @@ test("a page maps to the chapter whose range holds it", () => {
 // it because no range claims it would lose it silently.
 test("a page outside every range clamps to the nearest end", () => {
   const chapters = buildSkeleton({
-    notesChapters: [{ index: 1, title: "Only", startPage: 5, endPage: 9, status: "done" }],
+    spineChapters: [{ index: 1, title: "Only", startPage: 5, endPage: 9, status: "done" }],
     outline: [],
     pageCount: 20,
   }).chapters;
@@ -80,7 +80,7 @@ test("a page outside every range clamps to the nearest end", () => {
 });
 
 test("the formatted list carries ranges, mark counts and note availability", () => {
-  const s = buildSkeleton({ notesChapters: notesPlan, outline, pageCount: 90 });
+  const s = buildSkeleton({ spineChapters: notesPlan, outline, pageCount: 90 });
   const text = formatSkeleton(s, new Map([[1, 12], [2, 0], [3, 1]]));
   expect(text).toContain("1. Openings — pp.1-20, 12 highlights, chapter note on file");
   expect(text).toContain("2. Middlegame — pp.21-60, 0 highlights");
@@ -89,8 +89,8 @@ test("the formatted list carries ranges, mark counts and note availability", () 
 });
 
 test("the formatted list says where the structure came from", () => {
-  const fromOutline = buildSkeleton({ notesChapters: null, outline, pageCount: 90 });
+  const fromOutline = buildSkeleton({ spineChapters: null, outline, pageCount: 90 });
   expect(formatSkeleton(fromOutline, new Map())).toContain("table of contents");
-  const none = buildSkeleton({ notesChapters: null, outline: [], pageCount: 9 });
+  const none = buildSkeleton({ spineChapters: null, outline: [], pageCount: 9 });
   expect(formatSkeleton(none, new Map())).toContain("one stretch");
 });

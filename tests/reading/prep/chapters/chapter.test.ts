@@ -9,7 +9,7 @@ import {
   type ChatThread,
 } from "../../../../src/reading/prep/chapters/chapter";
 import type { BookChapter } from "../../../../src/reading/chapters";
-import type { NoteChapter } from "../../../../src/reading/prep/chapters/types";
+import type { SpineChapter } from "../../../../src/reading/prep/chapters/types";
 
 function thread(page: number, createdAt: number, msgs: [ChatThread["messages"][number]["role"], string][]): ChatThread {
   return { page, createdAt, messages: msgs.map(([role, text]) => ({ role, text })) };
@@ -91,7 +91,7 @@ test("formatChatThreads trims oldest threads first past the total cap", () => {
   expect(out).not.toContain("OLDEST");
 });
 
-const CHAPTER: NoteChapter = {
+const CHAPTER: SpineChapter = {
   index: 2,
   title: "Method",
   startPage: 4,

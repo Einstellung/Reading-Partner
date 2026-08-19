@@ -6,19 +6,19 @@
 // document to produce). Three sources, best first.
 
 import { chaptersFromOutline, type TableChapter } from "../chapters";
-import type { NoteChapter } from "../prep/chapters/types";
+import type { SpineChapter } from "../prep/chapters/types";
 import type { OutlineItem } from "../../fulltext/types";
 import type { RehearsalChapter, Skeleton } from "./types";
 
 export interface SkeletonInput {
   // The notes pipeline's chapter plan (prep-<bookId>/chapters/state.json), or null.
-  notesChapters: NoteChapter[] | null;
+  spineChapters: SpineChapter[] | null;
   // The PDF's own table of contents, used when there is no notes plan.
   outline: OutlineItem[];
   pageCount: number;
 }
 
-function withNotes(chapters: NoteChapter[]): RehearsalChapter[] {
+function withSpine(chapters: SpineChapter[]): RehearsalChapter[] {
   return chapters.map((c) => ({
     index: c.index,
     title: c.title,
@@ -42,8 +42,8 @@ function unwritten(chapters: TableChapter[]): RehearsalChapter[] {
 
 export function buildSkeleton(input: SkeletonInput): Skeleton {
   const total = Math.max(1, Math.round(input.pageCount) || 1);
-  if (input.notesChapters && input.notesChapters.length > 0) {
-    return { source: "notes-plan", chapters: withNotes(input.notesChapters) };
+  if (input.spineChapters && input.spineChapters.length > 0) {
+    return { source: "notes-plan", chapters: withSpine(input.spineChapters) };
   }
   const fromOutline = chaptersFromOutline(input.outline ?? [], total);
   if (fromOutline) return { source: "outline", chapters: unwritten(fromOutline) };

@@ -5,30 +5,39 @@
 
 export type {
   ChapterStatus,
-  NoteChapter,
-  NotesState,
+  SpineChapter,
+  ChapterSpineState,
   OverviewStatus,
   PhaseStatus,
 } from "./types";
-export { NOTES_VERSION, createNotesState, normalizeNotesOnLoad } from "./types";
 export {
-  parseNotesPlan,
+  CHAPTER_SPINE_VERSION,
+  createChapterSpineState,
+  normalizeChapterSpineOnLoad,
+} from "./types";
+export {
+  parseChapterSpinePlan,
   planUserMessage,
-  NOTES_PLAN_SYSTEM_PROMPT,
+  CHAPTER_SPINE_PLAN_SYSTEM_PROMPT,
   TOC_MAX_PAGES,
 } from "./plan";
 export { formatChapterTable, formatEmphasisSignals, type EmphasisSignal } from "./chapter";
 export {
-  NotesPipeline,
-  type NotesActivity,
-  type NotesDeps,
-  type NotesSnapshot,
+  ChapterSpinePipeline,
+  type ChapterSpineActivity,
+  type ChapterSpineDeps,
+  type ChapterSpineSnapshot,
   type PlanOutcome,
 } from "./pipeline";
-export { getNotesPipeline, hasNotesState, peekNotesPipeline, type NotesInputs } from "./live";
+export {
+  getChapterSpinePipeline,
+  hasChapterSpineState,
+  peekChapterSpinePipeline,
+  type ChapterSpineInputs,
+} from "./live";
 export {
   chapterFileName,
-  readChapterNote,
-  readOverviewNote,
+  readChapterSpine,
+  readSpineOverview,
 } from "./store";
 export { findLegacyChapterNotes, purgeLegacyChapterNotes } from "./purge";

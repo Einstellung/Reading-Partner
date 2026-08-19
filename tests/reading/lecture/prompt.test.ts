@@ -107,3 +107,44 @@ test("a turn carrying no text of the book says that in one line", () => {
   expect(loaded).toContain('No text from "book.pdf" itself');
   expect(loaded).toContain("read_chapter / read_pages / search_topic");
 });
+
+// docs/09: the prompt states the spine's progress and stops there. Telling the
+// reader to wait would be wrong most of the time — teaching the chapter in front
+// of them needs none of it, only the links between chapters do — so the sentence
+// is a fact and the model decides from the question, the same way it already
+// decides how long an answer should be.
+test("a spine still being written is stated as a fact, with no instruction to wait", () => {
+  const loaded = turnLoadStatement({
+    mode: "chapter",
+    bookName: "从零构建大语言模型",
+    pageCount: 401,
+    chapter: CH3,
+    outlines: 5,
+    hasChapterTable: true,
+    spine: { done: 5, total: 12 },
+  });
+  expect(loaded).toContain("still being written: 5 of its");
+  expect(loaded).toContain("12 chapters are in");
+  // What is actually missing, named: the links, not the chapters themselves.
+  expect(loaded).toContain("links between chapters");
+  expect(loaded).toContain("A chapter's own content does not wait on this");
+  // The judgement is handed to the model in the words the rest of the prompt
+  // already uses for it.
+  expect(loaded).toContain("Let the question decide");
+  for (const nag of ["wait a", "come back", "try again later", "in a moment", "ask them to wait"]) {
+    expect(loaded.toLowerCase()).not.toContain(nag);
+  }
+});
+
+// No run, or a finished one: the turn says nothing about progress at all. A
+// prompt that says "the spine is complete" every turn is noise.
+test("no spine progress is no sentence about it", () => {
+  const loaded = turnLoadStatement({
+    mode: "chapter",
+    bookName: "book.pdf",
+    pageCount: 401,
+    chapter: CH3,
+    outlines: 12,
+  });
+  expect(loaded).not.toContain("still being written");
+});

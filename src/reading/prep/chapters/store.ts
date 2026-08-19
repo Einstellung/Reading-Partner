@@ -16,7 +16,7 @@ import {
   readTextFile,
 } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../../../platform/app/atomic-fs";
-import { NOTES_VERSION, type NotesState } from "./types";
+import { CHAPTER_SPINE_VERSION, type ChapterSpineState } from "./types";
 
 function dirFor(bookId: string): string {
   return `prep-${bookId}/chapters`;
@@ -38,37 +38,37 @@ function overviewFile(bookId: string): string {
   return `${dirFor(bookId)}/overview.md`;
 }
 
-async function ensureNotesDir(bookId: string): Promise<void> {
+async function ensureChapterSpineDir(bookId: string): Promise<void> {
   await mkdir(dirFor(bookId), { baseDir: BaseDirectory.AppData, recursive: true });
 }
 
-// Missing state is normal (notes never generated); a corrupt or stale-version
+// Missing state is normal (the spine was never generated); a corrupt or stale-version
 // state reads as null so the pipeline starts fresh instead of crashing.
-export async function loadNotesState(bookId: string): Promise<NotesState | null> {
+export async function loadChapterSpineState(bookId: string): Promise<ChapterSpineState | null> {
   try {
     if (!(await exists(stateFile(bookId), { baseDir: BaseDirectory.AppData }))) return null;
     const parsed = JSON.parse(
       await readTextFile(stateFile(bookId), { baseDir: BaseDirectory.AppData }),
-    ) as NotesState;
-    if (!parsed || parsed.version !== NOTES_VERSION) return null;
+    ) as ChapterSpineState;
+    if (!parsed || parsed.version !== CHAPTER_SPINE_VERSION) return null;
     return parsed;
   } catch (e) {
-    console.warn("failed to read notes state", e);
+    console.warn("failed to read chapter-spine state", e);
     return null;
   }
 }
 
-export async function saveNotesState(state: NotesState): Promise<void> {
-  await ensureNotesDir(state.bookId);
+export async function saveChapterSpineState(state: ChapterSpineState): Promise<void> {
+  await ensureChapterSpineDir(state.bookId);
   await writeTextAtomic(stateFile(state.bookId), JSON.stringify(state, null, 2));
 }
 
-export async function writeChapterNote(bookId: string, index: number, body: string): Promise<void> {
-  await ensureNotesDir(bookId);
+export async function writeChapterSpine(bookId: string, index: number, body: string): Promise<void> {
+  await ensureChapterSpineDir(bookId);
   await writeTextAtomic(chapterFile(bookId, index), `${body.trim()}\n`);
 }
 
-export async function readChapterNote(bookId: string, index: number): Promise<string | null> {
+export async function readChapterSpine(bookId: string, index: number): Promise<string | null> {
   try {
     if (!(await exists(chapterFile(bookId, index), { baseDir: BaseDirectory.AppData }))) return null;
     return await readTextFile(chapterFile(bookId, index), { baseDir: BaseDirectory.AppData });
@@ -78,12 +78,12 @@ export async function readChapterNote(bookId: string, index: number): Promise<st
   }
 }
 
-export async function writeOverviewNote(bookId: string, body: string): Promise<void> {
-  await ensureNotesDir(bookId);
+export async function writeSpineOverview(bookId: string, body: string): Promise<void> {
+  await ensureChapterSpineDir(bookId);
   await writeTextAtomic(overviewFile(bookId), `${body.trim()}\n`);
 }
 
-export async function readOverviewNote(bookId: string): Promise<string | null> {
+export async function readSpineOverview(bookId: string): Promise<string | null> {
   try {
     if (!(await exists(overviewFile(bookId), { baseDir: BaseDirectory.AppData }))) return null;
     return await readTextFile(overviewFile(bookId), { baseDir: BaseDirectory.AppData });

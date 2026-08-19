@@ -44,8 +44,9 @@ import { buildGlossary } from "./ai/voice";
 import { modelSupportsImages, type ProviderId } from "./ai/aiClient";
 import { locateQuote, prepKind, type Citation } from "./reading/prep";
 import { usePrep } from "./reading/prep/papers/use-prep";
+import { usePrepTrigger } from "./reading/session/use-prep-trigger";
 import { purgeLegacyChapterNotes } from "./reading/prep/chapters/purge";
-import { useNotes } from "./reading/prep/chapters/use-notes";
+import { useChapterSpine } from "./reading/prep/chapters/use-chapter-spine";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import { startDistillSweeps, toDistillAnnotations, type DistillAnnotation } from "./observation";
 import { logEvent } from "./platform/app/events";
@@ -74,7 +75,7 @@ import ReadingPipCard from "./ui/components/chat/ReadingPipCard";
 import ChatPipCard from "./ui/components/chat/ChatPipCard";
 import SettingsView from "./ui/components/SettingsView";
 import type { CallRow } from "./reading/call-state";
-import { openingIntents, type ReadingIntent } from "./reading/intents";
+import { bookTextNotice, openingIntents, type ReadingIntent } from "./reading/intents";
 import { chapterAtPage } from "./reading/chapters";
 import { resolveBookThread } from "./reading/session/book-thread";
 import { closeBook } from "./reading/session/close-book";
@@ -284,6 +285,8 @@ export default function App() {
     snapshot: prepSnap,
     panel: prepPanelProps,
     pipelineRef,
+    progress: paperPrepProgress,
+    start: startPaperPrep,
     setSelectedSlug: setSelectedPrepSlug,
     reset: resetPrep,
     resume: resumePrep,
@@ -658,21 +661,37 @@ export default function App() {
   // callback that serves it. It reads the open book through the shell's refs, so
   // what it returns is stable the way it was when this code sat here.
   const {
-    snapshot: notesSnap,
-    panel: notesPanelProps,
-    scheduleAuto: scheduleAutoNotes,
-    reset: resetNotes,
-    resume: resumeNotes,
-    finalPass: finalPassNotes,
-  } = useNotes({
+    snapshot: spineSnap,
+    panel: spinePanelProps,
+    progress: chapterPrepProgress,
+    start: startChapterPrep,
+    reset: resetChapterSpine,
+    resume: resumeChapterSpine,
+  } = useChapterSpine({
     bookIdRef,
     ctxRef,
-    settingsRef,
     currentFulltextRef,
     currentFiguresRef,
     bufferRef,
     annsRef,
     pushToast,
+  });
+
+  // The two things that start preparation (docs/09): a mark landing, and the
+  // top-bar lecture entry. Which of the two kinds of prep runs is decided per
+  // document by the citation density, so this is the only caller that needs to
+  // see both halves.
+  const {
+    onMark: onMarkPrepTrigger,
+    onEntry: onEntryPrepTrigger,
+    onClose: finalPassPrep,
+  } = usePrepTrigger({
+    bookIdRef,
+    ctxRef,
+    currentFulltextRef,
+    annsRef,
+    startChapters: startChapterPrep,
+    startPapers: startPaperPrep,
   });
 
   // Engine created/modified annotations (drag-to-highlight, AI-pen underline, etc.).
@@ -698,9 +717,9 @@ export default function App() {
       }
       persistAnnotations();
       syncTraceList();
-      // A new mark is the only signal for highlight-driven notes (docs/14): page
+      // A new mark is the only signal for the highlight trigger (docs/09): page
       // navigation is not, so the frontier only ever advances on a fresh mark.
-      if (newMark) scheduleAutoNotes();
+      if (newMark) onMarkPrepTrigger();
 
       if (aiCreated) {
         // Persist the aiThreadId into the engine model, open the thread + bubble.
@@ -726,7 +745,7 @@ export default function App() {
         );
       }
     },
-    [persistAnnotations, syncTraceList, openThreadCall, scheduleAutoNotes],
+    [persistAnnotations, syncTraceList, openThreadCall, onMarkPrepTrigger],
   );
 
   const onDeleteAnnotations = useCallback(
@@ -803,9 +822,9 @@ export default function App() {
       },
       resetPrep,
       resumePrep,
-      resetNotes,
-      resumeNotes,
-      finalPassNotes,
+      resetChapterSpine,
+      resumeChapterSpine,
+      finalPassPrep,
       trackFulltext: (extraction) => {
         currentFulltextRef.current = extraction;
       },
@@ -829,11 +848,11 @@ export default function App() {
       closeCall,
       discardStagedImages,
       endBookTurns,
-      finalPassNotes,
+      finalPassPrep,
       pushToast,
-      resetNotes,
+      resetChapterSpine,
       resetPrep,
-      resumeNotes,
+      resumeChapterSpine,
       resumePrep,
     ],
   );
@@ -1030,6 +1049,10 @@ export default function App() {
   const openBookThread = useCallback(() => {
     const bookId = bookIdRef.current;
     if (!bookId) return;
+    // Pressing the entry is the intent, so it is also what starts preparation on
+    // a document nobody has marked (docs/09). Fire-and-forget and off the
+    // conversation's path: the lecture never waits for prepared material.
+    onEntryPrepTrigger();
     void (async () => {
       const resolved = await resolveBookThread(bookId, () => bookIdRef.current !== bookId);
       if (resolved.status === "unreadable") {
@@ -1050,7 +1073,7 @@ export default function App() {
         thread.messages,
       );
     })();
-  }, [openThreadCall, pushToast]);
+  }, [openThreadCall, pushToast, onEntryPrepTrigger]);
 
   // Jump the reading back to the thread's mark (from the reading corner card).
   // The book-level thread has no mark, so there is nothing to jump to.
@@ -1127,7 +1150,7 @@ export default function App() {
   // just started without waiting for anything to be written.
   const panelPrepKind = prepKind({
     papers: !!prepSnap?.state,
-    chapters: !!notesSnap?.state,
+    chapters: !!spineSnap?.state,
     // Still extracting: "unknown" is the honest answer, and it is what the panel
     // shows until the text is in.
     shape: fulltext ? documentShape(fulltext) : "unknown",
@@ -1135,7 +1158,17 @@ export default function App() {
 
   // Background work the drawer would show if open (either half of prep): the
   // toggle carries a status dot so progress is visible while the drawer is shut.
-  const sidebarBusy = !!(prepSnap?.running || notesSnap?.running);
+  const sidebarBusy = !!(prepSnap?.running || spineSnap?.running);
+
+  // What the status line above a conversation says about preparation (docs/09).
+  // Only while a run is actually going: the line is a report on work in flight,
+  // and a finished run has nothing to say there. Whichever half is running is
+  // the one this document got — they are never both.
+  const prepLineProgress = spineSnap?.running
+    ? chapterPrepProgress
+    : prepSnap?.running
+      ? paperPrepProgress
+      : null;
 
   const inReader = !!title;
   // A bubble on a conversation that has not started, with nowhere to send it:
@@ -1163,6 +1196,15 @@ export default function App() {
     chapterAtPage(bookChapters ?? [], stats ? stats.pageIndex + 1 : null),
   );
   intentsRef.current = callIntents;
+
+  // And why it is short, while it is. Extracting the text is what the chapter
+  // chip waits on, and on a long book that is tens of seconds of the entry
+  // looking like it has nothing to offer.
+  const callNote = call?.isBook
+    ? bookTextNotice(
+        fulltextPending ? "extracting" : fulltext?.status === "ok" ? "ok" : "unreadable",
+      )
+    : null;
 
   // Host for inline [fig:N] cards (M9): resolve/raster/jump against the open
   // book. Null when the book has no figures, so cards fall back to text chips.
@@ -1285,7 +1327,7 @@ export default function App() {
             onDeleteAnnotation={deleteTraceAnnotation}
             onOpenThread={openThreadForAnnotation}
             prepPanel={
-              <PrepPanel kind={panelPrepKind} papers={prepPanelProps} chapters={notesPanelProps} />
+              <PrepPanel kind={panelPrepKind} papers={prepPanelProps} chapters={spinePanelProps} />
             }
           />
         )}
@@ -1434,21 +1476,25 @@ export default function App() {
                 streaming={streaming}
                 onStop={stopTurn}
                 onCardAction={onCardAction}
-                chapterFocus={
-                  focusChapter
+                chapterFocus={{
+                  // The chapter as the book names it: `number` is parsed out of
+                  // the title, so the title already carries it. Absent when the
+                  // conversation has not settled on one, which the line handles
+                  // — preparation can be running with no chapter in focus.
+                  ...(focusChapter
                     ? {
-                        // The chapter as the book names it: `number` is parsed out
-                        // of the title, so the title already carries it.
                         chapter: focusChapter.title,
                         firstPage: focusChapter.startPage,
                         lastPage: focusChapter.endPage,
                         onClear: () => setFocusChapter(null),
                       }
-                    : null
-                }
+                    : {}),
+                  prep: prepLineProgress,
+                }}
                 emptyTitle={call.isBook ? title ?? "This book" : undefined}
                 placeholder={call.isBook ? "Ask about this book…" : undefined}
                 intents={callIntents}
+                emptyNote={callNote}
                 voice={callVoice}
               />
             </div>

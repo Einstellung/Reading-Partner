@@ -8,7 +8,7 @@ import type { InlineMode } from "./inline";
 
 // --- the chapter spine (docs/09: 章脉络) ---
 //
-// One paragraph per chapter, written by the notes pass: what the chapter covers,
+// One paragraph per chapter, written by the spine pass: what the chapter covers,
 // which earlier chapter it builds on, which later chapter uses it. Loaded by
 // data — present when that pass has run, absent when it has not, and a lecture
 // turn never waits for it. The contract with the pass that writes it is this
@@ -95,6 +95,10 @@ export interface TurnLoad {
   outlines?: number;
   prepNotes?: number;
   hasChapterTable?: boolean;
+  // How far the pass that writes the spine has got, when it is under way. Absent
+  // when no run exists and when one has finished, which are both "nothing to
+  // say".
+  spine?: { done: number; total: number };
 }
 
 // The line docs/09 requires: what the model has this turn, as a statement about
@@ -137,6 +141,23 @@ export function turnLoadStatement(load: TurnLoad): string {
         "  read_chapter / read_pages / search_topic before you describe it.",
       );
     }
+  }
+  // The spine's progress, stated as a fact and nothing else. What one chapter
+  // covers is in the book's pages and does not wait on any of this; what one
+  // chapter takes from another is written only after every chapter is. Which of
+  // those the reader asked about is the model's judgement, the same judgement it
+  // already makes about how long an answer should be — a prompt that decided in
+  // advance would have every reader waiting for material half of them do not
+  // need.
+  if (load.spine) {
+    lines.push(
+      `- The chapter spine for this book is still being written: ${load.spine.done} of its`,
+      `  ${load.spine.total} chapters are in, and the links between chapters — what one builds`,
+      "  on, what a later one takes from it — are written only once every chapter is.",
+      "  A chapter's own content does not wait on this; it comes from the book's own",
+      "  pages. Let the question decide whether any of that is worth saying, the way",
+      "  the question decides the length of an answer.",
+    );
   }
   lines.push(
     "This describes this turn only. What a tool returned in an earlier turn, and any",

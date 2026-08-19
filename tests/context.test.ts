@@ -186,7 +186,7 @@ test("everything stable comes before everything that moves", () => {
     inlineBody: "INLINE BODY",
     prepNotes: "PREP NOTES",
     chapterSpine: "CHAPTER SPINE",
-    notesOverview: "NOTES OVERVIEW",
+    spineOverview: "NOTES OVERVIEW",
     profile: "PROFILE",
     toolPrompts: ["TOOL PROMPT"],
     figureCatalog: "FIGURES",

@@ -17,7 +17,7 @@ import type { AgentTool } from "../ai/agent";
 import {
   annotationPage,
   buildReadingTools,
-  notesOverviewSection,
+  spineOverviewSection,
   surroundingText,
 } from "./context";
 import { toAnnotationLite, type AnnotationLite, type TopicMaterial } from "../fulltext/format";
@@ -60,7 +60,7 @@ import {
   type DistillAnnotation,
   type Observation,
 } from "../observation";
-import { readOverviewNote } from "./prep/chapters/store";
+import { readSpineOverview } from "./prep/chapters/store";
 import { chapterIndexForPage } from "./prep/papers/scheduler";
 import { paperFulltextHash, readPrepNote } from "./prep/papers/store";
 import { parseNote } from "./prep/papers/notes";
@@ -78,7 +78,7 @@ import {
   chapterOutlineSection,
   decideInline,
   lectureObservationSnapshot,
-  loadChapterOutlines,
+  loadChapterSpine,
   loadChapterTable,
   selectLectureObservations,
   turnLoadStatement,
@@ -407,8 +407,10 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     ];
   }
   // The chapter spine, when the notes pass has written one (docs/09). By data:
-  // absent until it runs, and a lecture never waits for it.
-  const chapterOutlines = await loadChapterOutlines(bookId);
+  // absent until it runs, and a lecture never waits for it. A run still going
+  // also reports how far it has got, which the turn states as a fact rather than
+  // acts on.
+  const { outlines: chapterOutlines, progress: spineProgress } = await loadChapterSpine(bookId);
   const chapterSpine = chapterOutlineSection(chapterOutlines);
 
   // Per-topic AI observations (M8): the observation tools join the same loop as
@@ -668,7 +670,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   const identity = profileForPrompt(await assembleIdentity().catch(() => ""));
   const profileSection = readerProfileSection(identity.declared, identity.guesses);
   // The whole-book outline from the reader's notes (docs/14), when they exist.
-  const notesOverview = notesOverviewSection(await readOverviewNote(bookId));
+  const spineOverview = spineOverviewSection(await readSpineOverview(bookId));
   // A booklist entry with no text layer and no marks is a title the model can do
   // nothing with; the first thing to go when the window is tight.
   const booklistThin = booklist.filter((m) => m.fulltextAvailable || m.annotationCount > 0);
@@ -732,7 +734,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
       inlineBody,
       prepNotes: prepNotesSection(notes),
       chapterSpine: dropped.has("notes-overview") ? "" : chapterSpine,
-      notesOverview: dropped.has("notes-overview") ? "" : notesOverview,
+      spineOverview: dropped.has("notes-overview") ? "" : spineOverview,
       profile: dropped.has("reader-profile") ? "" : profileSection,
       toolPrompts,
       ...(focusChapter ? { focusLabel: chapterFocusLabel(focusChapter) } : {}),
@@ -754,6 +756,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
         outlines: chapterSpine ? chapterOutlines.length : 0,
         prepNotes: notes.length,
         hasChapterTable: !!chapterTable,
+        ...(spineProgress ? { spine: spineProgress } : {}),
       }),
     });
   }

@@ -1,7 +1,7 @@
-// The chapter-focus status line (docs/09). A book-level conversation that has
-// settled on one chapter says which one above the messages, so the reader can
-// see what the AI is holding and drop it. Pure, so the wording is testable
-// without a renderer.
+// The status line above a book-level conversation (docs/09). Two things share
+// it, because they are the same question — what does the AI have right now:
+// which chapter the conversation has settled on, and how far this book's
+// preparation has got. Pure, so the wording is testable without a renderer.
 
 export interface ChapterFocus {
   // The chapter as the book itself names it, numbering and all ("Chapter 3
@@ -28,4 +28,20 @@ export function chapterFocusLabel(focus: ChapterFocus): string | null {
   if (!chapter) return null;
   const pages = pageRange(focus.firstPage, focus.lastPage);
   return pages ? `${chapter} · ${pages}` : chapter;
+}
+
+// How far preparation has got, as the line says it. The caller passes this only
+// while a run is going, so there is no "finished" wording to write: a line that
+// says nothing about preparation means nothing is being prepared.
+//
+// "Preparing…" with no numbers is the first phase, before the run knows how many
+// chapters (or papers) there are. Saying nothing at all there would make the
+// line appear a minute after the reader triggered it, which reads as the trigger
+// having missed.
+export function prepProgressLabel(
+  prep: { done: number; total: number } | null | undefined,
+): string | null {
+  if (!prep) return null;
+  if (prep.total <= 0) return "Preparing…";
+  return `Preparing ${prep.done}/${prep.total}`;
 }

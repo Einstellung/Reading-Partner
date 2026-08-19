@@ -4,7 +4,7 @@
 // and hands what it returns to CallBubble / CallView.
 //
 // Everything book-specific comes from the shell's refs rather than from props,
-// the same way usePrep and useNotes take theirs: the open book's id, marks,
+// the same way usePrep and useChapterSpine take theirs: the open book's id, marks,
 // text, figures and bytes are read at call time, so every callback here keeps a
 // stable identity and a streaming reply never re-renders the reader.
 //
@@ -248,7 +248,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
 
   // The open book's chapters and the chapter this conversation is parked on
   // (docs/09). Held here rather than read at render because both come off disk:
-  // the table from the book's outline / notes state / prep plan, the focus from
+  // the table from the book's outline / spine state / prep plan, the focus from
   // the thread file — which read_chapter also writes to, mid-turn, so the focus
   // is re-read whenever a turn settles as well as when a chip sets it.
   const [chapters, setChapters] = useState<TableChapter[] | null>(null);

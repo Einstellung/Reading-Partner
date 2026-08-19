@@ -71,7 +71,7 @@ export interface ReadingContext {
   // One paragraph per chapter: what it covers, what it builds on, what uses it.
   chapterSpine?: string;
   // The reader's own whole-book outline, from their notes.
-  notesOverview?: string;
+  spineOverview?: string;
   // Who the reader is (declared) and what has been guessed about them.
   profile?: string;
   // Paragraphs belonging to individual tools, each written where its tool is.
@@ -246,7 +246,7 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
   push(ctx.inlineBody);
   push(ctx.prepNotes);
   push(ctx.chapterSpine);
-  push(ctx.notesOverview);
+  push(ctx.spineOverview);
 
   // --- everything below here moves from turn to turn ---
 

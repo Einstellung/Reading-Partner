@@ -58,21 +58,6 @@ export default function FeaturesPanel({
         <div className={CARD}>
           <Label>
             <Checkbox
-              checked={settings.autoNotes}
-              onCheckedChange={(v) => onSettingsChange({ ...settings, autoNotes: v === true })}
-            />
-            Generate chapter notes automatically from your highlights
-          </Label>
-          <p className="m-0 text-xs text-[#777]">
-            As you mark up the book, notes for the chapters you have finished are written in the
-            background. Chapters you marked nothing in are skipped. The manual Generate button
-            always works too.
-          </p>
-        </div>
-
-        <div className={CARD}>
-          <Label>
-            <Checkbox
               checked={!!device?.fingerDraw}
               disabled={!device}
               onCheckedChange={(v) =>
