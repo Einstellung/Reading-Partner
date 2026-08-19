@@ -124,6 +124,9 @@ const OUTCOME: Record<Outcome, { label: string; note: string; tint: string; rule
 // hold; only the level goes through state, and only to move a bar.
 function useDictationTap(): {
   level: number;
+  // Start a hold's tally over and drop the meter back to the floor, so the last
+  // hold's level is not still standing there under the next one.
+  reset: () => void;
   tally: React.MutableRefObject<Heard>;
   error: string | null;
 } {
@@ -161,7 +164,12 @@ function useDictationTap(): {
     };
   }, []);
 
-  return { level, tally, error };
+  const reset = useCallback(() => {
+    tally.current = { ...NO_HEARD };
+    setLevel(0);
+  }, []);
+
+  return { level, reset, tally, error };
 }
 
 // --- the screen --------------------------------------------------------------
@@ -171,7 +179,7 @@ function Bench() {
   const [locale, setLocale] = useState<DictationLocale | null>(null);
   const [switching, setSwitching] = useState(false);
   const [holding, setHolding] = useState(false);
-  const { level, tally, error } = useDictationTap();
+  const { level, reset, tally, error } = useDictationTap();
 
   const hostRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -238,7 +246,7 @@ function Bench() {
       if (label && label !== "Listening") return;
       // A hold that started while the last one was still open closes it first.
       settle(false, "");
-      tally.current = { ...NO_HEARD };
+      reset();
       gesture.current = { at: Date.now(), releasedAt: 0, timer: 0 };
       setHolding(true);
       // The screen lock is refused without user activation (docs/pitfall/141),
@@ -246,7 +254,7 @@ function Bench() {
       // are harmless and the phone auto-locks in two minutes without one.
       void holdTheScreen();
     },
-    [settle, tally],
+    [reset, settle],
   );
 
   const onPointerUpCapture = useCallback(() => {
@@ -442,7 +450,31 @@ function Instructions() {
 
 // --- entry point -------------------------------------------------------------
 
+// Nothing on this build can be watched from outside it: console.log does not
+// reach the device syslog from WKWebView, and iOS 26 moved the screenshot
+// service behind the personalised developer image, which libimobiledevice
+// cannot mount. So a page that throws is a white screen and no way to find out
+// why — from here or from the person holding the phone. Both nets below turn
+// that into a sentence they can read out.
+function complain(what: string, e: unknown): void {
+  const root = document.getElementById("root");
+  if (!root) return;
+  const line = document.createElement("pre");
+  line.style.cssText =
+    "margin:0;padding:12px 14px;font:13px/1.45 ui-monospace,Menlo,monospace;" +
+    "white-space:pre-wrap;word-break:break-word;color:#b91c1c;background:#fef2f2";
+  line.textContent = `${what}: ${e instanceof Error ? `${e.message}\n${e.stack ?? ""}` : String(e)}`;
+  root.prepend(line);
+}
+
 export function runDictationBench(): void {
-  const root = document.getElementById("root") as HTMLElement;
-  ReactDOM.createRoot(root).render(<Bench />);
+  window.addEventListener("unhandledrejection", (event) => {
+    complain("unhandled rejection", event.reason);
+  });
+  try {
+    const root = document.getElementById("root") as HTMLElement;
+    ReactDOM.createRoot(root).render(<Bench />);
+  } catch (e) {
+    complain("the bench did not mount", e);
+  }
 }
