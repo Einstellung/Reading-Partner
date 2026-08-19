@@ -81,3 +81,30 @@ test("the ends of the list cannot be moved further out", () => {
 test("an empty outline says what will land there, not nothing", () => {
   expect(render([])).toContain("Nothing settled yet");
 });
+
+// The run-throughs at the foot of the pane: a talk that has been given has
+// somewhere to show it, and a talk that has not says so instead of hiding.
+test("the passes through the talk are counted at the foot", () => {
+  const run = {
+    id: "r1",
+    ordinal: 1,
+    talkId: "t1",
+    deckFile: "slides/t1-x.html",
+    startedAt: Date.now(),
+    endedAt: null,
+    pages: [],
+  };
+  const withRuns = renderToStaticMarkup(
+    <OutlinePane
+      rows={rows}
+      runs={[run, { ...run, id: "r2", ordinal: 2 }]}
+      onMove={() => {}}
+      onSetIncluded={() => {}}
+      onRemove={() => {}}
+      onClose={() => {}}
+    />,
+  );
+  expect(withRuns).toContain("Run-throughs (2)");
+  expect(render(rows)).toContain("Run-throughs");
+  expect(render(rows)).toContain("Give the talk once");
+});
