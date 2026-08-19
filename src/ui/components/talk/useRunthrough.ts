@@ -69,7 +69,14 @@ export function useDeckHtml(file: string | null): { html: string | null; error: 
 }
 
 // This talk's run-throughs, newest first. `reloadKey` is bumped by the caller
-// when a run ends, which is the only moment the list can have changed.
+// when a run ends, which is the only moment this device changes the list.
+//
+// A sync pull changes it too — another device's pass through the same talk —
+// and this hook deliberately does not hear about it. The list is read when the
+// talk opens, as the talk itself is (tests/platform/sync/pull-coverage.test.ts
+// registers both on that ground), so the two go stale together and reopening
+// the talk picks both up. Routing the pull here alone would refresh the history
+// under a talk still showing the copy it was opened with.
 export function useRunthroughs(talkId: string, reloadKey: number): RunthroughRun[] {
   const [runs, setRuns] = useState<RunthroughRun[]>([]);
 

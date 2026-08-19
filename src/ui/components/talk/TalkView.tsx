@@ -63,7 +63,8 @@ export default function TalkView(props: {
   const [deckKey, setDeckKey] = useState(0);
   const deck = useTalkDeckFile(props.talkId, deckKey);
   const readiness = rehearsalReadiness({ deckFile: deck.file, loading: deck.loading });
-  // Bumped when a run ends: that is the only moment the history can have changed.
+  // Bumped when a run ends: the only moment this device changes the history (a
+  // pull can too, and useRunthroughs says why it does not follow that).
   const [runsKey, setRunsKey] = useState(0);
   const runs = useRunthroughs(props.talkId, runsKey);
 
