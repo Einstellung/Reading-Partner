@@ -83,8 +83,10 @@ test("slideTitleText drops the page badge and unwraps inline markup", () => {
   expect(slideTitleText('<h2><span class="pg">p.7</span>Lead</h2>')).toBe("Lead");
 });
 
-test("slideTitleText falls back to the title slide's deck-title, then to nothing", () => {
+test("slideTitleText falls back to any h1, then to nothing", () => {
   expect(slideTitleText('<h1 class="deck-title">A &amp; B</h1>')).toBe("A & B");
+  // A fragment that forgot the deck-title class still names its slide.
+  expect(slideTitleText("<h1>Bare heading</h1>")).toBe("Bare heading");
   expect(slideTitleText('<div class="kicker">chapter 3</div><ul class="pts"><li>x</li></ul>')).toBe(
     "",
   );

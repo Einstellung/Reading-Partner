@@ -48,13 +48,13 @@ function decodeEntities(s: string): string {
 }
 
 // The plain-text title of a slide, for the host bridge's data-title: the <h2>
-// headline, else the title slide's <h1 class="deck-title">, else nothing. A page
-// badge is chrome, not title, so it is dropped with its text; other inline
-// markup (<b>, plain <span>) is unwrapped and its text kept.
+// headline, else the title slide's <h1>, else nothing. A page badge is chrome,
+// not title, so it is dropped with its text; other inline markup (<b>, plain
+// <span>) is unwrapped and its text kept.
 export function slideTitleText(fragment: string): string {
   const inner =
     /<h2\b[^>]*>([\s\S]*?)<\/h2>/i.exec(fragment)?.[1] ??
-    /<h1\b[^>]*\bdeck-title\b[^>]*>([\s\S]*?)<\/h1>/i.exec(fragment)?.[1];
+    /<h1\b[^>]*>([\s\S]*?)<\/h1>/i.exec(fragment)?.[1];
   if (!inner) return "";
   const text = inner
     .replace(/<span\b[^>]*\bpg\b[^>]*>[\s\S]*?<\/span>/gi, " ")
