@@ -3,7 +3,9 @@
 // counter and a progress bar. The design is lifted from the hand-made prototype
 // the consensus was validated against. assembleDeck injects the per-slide
 // fragments and base64 assets into this shell; the result opens in any browser
-// with no network. Pure and testable.
+// with no network. It also carries a host bridge (protocol 1): embedded in an
+// iframe it reports the slide it is showing and takes goto from the host, so the
+// app can follow a rehearsal without owning the playback. Pure and testable.
 
 import type { SlideKind } from "./types";
 
@@ -31,6 +33,33 @@ function escapeHtml(s: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+// Decode the few entities our fragments carry, so a title reads as text rather
+// than as markup (it is re-escaped into the attribute by the caller).
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0*39;|&apos;/gi, "'")
+    .replace(/&amp;/gi, "&");
+}
+
+// The plain-text title of a slide, for the host bridge's data-title: the <h2>
+// headline, else the title slide's <h1 class="deck-title">, else nothing. A page
+// badge is chrome, not title, so it is dropped with its text; other inline
+// markup (<b>, plain <span>) is unwrapped and its text kept.
+export function slideTitleText(fragment: string): string {
+  const inner =
+    /<h2\b[^>]*>([\s\S]*?)<\/h2>/i.exec(fragment)?.[1] ??
+    /<h1\b[^>]*\bdeck-title\b[^>]*>([\s\S]*?)<\/h1>/i.exec(fragment)?.[1];
+  if (!inner) return "";
+  const text = inner
+    .replace(/<span\b[^>]*\bpg\b[^>]*>[\s\S]*?<\/span>/gi, " ")
+    .replace(/<[^>]*>/g, " ");
+  return decodeEntities(text).replace(/\s+/g, " ").trim();
 }
 
 const SLIDE_CLASS: Record<SlideKind, string> = {
@@ -220,7 +249,18 @@ const SCRIPT = `
   const counter = document.getElementById('counter');
   const progress = document.getElementById('progress');
   const warn = document.getElementById('overflow-warn');
+  // Host bridge (protocol 1). Only when the deck runs inside somebody's frame:
+  // opened on its own there is no parent and none of this speaks up.
+  const host = window.parent !== window ? window.parent : null;
   let i = 0;
+  function report(){
+    if (!host) return;
+    const s = slides[i];
+    host.postMessage({
+      source: 'deck', type: 'slide', index: i, total: slides.length,
+      kind: s ? s.dataset.kind : '', title: s ? s.dataset.title : ''
+    }, '*');
+  }
   function show(n){
     i = Math.max(0, Math.min(slides.length - 1, n));
     slides.forEach((s, k) => s.classList.toggle('active', k === i));
@@ -231,6 +271,7 @@ const SCRIPT = `
     const active = slides[i];
     const over = active && active.scrollHeight > active.clientHeight + 2;
     warn.classList.toggle('on', !!over);
+    report();
   }
   addEventListener('resize', () => show(i));
   function next(){ show(i + 1); }
@@ -246,6 +287,16 @@ const SCRIPT = `
     const r = e.currentTarget.getBoundingClientRect();
     if ((e.clientX - r.left) < r.width * 0.28) prev(); else next();
   });
+  if (host) {
+    addEventListener('message', e => {
+      const d = e.data;
+      if (!d || d.source !== 'deck-host') return;
+      // show() clamps a number, but a missing or non-numeric index would leave
+      // it NaN and blank the stage, so a malformed goto is dropped.
+      if (d.type === 'goto' && Number.isFinite(d.index)) show(d.index);
+    });
+    host.postMessage({ source: 'deck', type: 'ready', protocol: 1, total: slides.length }, '*');
+  }
   show(0);
 `;
 
@@ -253,7 +304,11 @@ const SCRIPT = `
 // all CSS/JS inline, every asset a data: URL, no external references.
 export function assembleDeck(deck: { title: string; slides: AssembledSlide[] }): string {
   const sections = deck.slides
-    .map((s) => `  <section class="${SLIDE_CLASS[s.kind]}">\n${injectAsset(s.fragment, s.asset)}\n  </section>`)
+    .map((s, index) => {
+      const title = escapeHtml(slideTitleText(s.fragment));
+      const attrs = `class="${SLIDE_CLASS[s.kind]}" data-slide="${index}" data-kind="${s.kind}" data-title="${title}"`;
+      return `  <section ${attrs}>\n${injectAsset(s.fragment, s.asset)}\n  </section>`;
+    })
     .join("\n\n");
 
   const total = deck.slides.length;
