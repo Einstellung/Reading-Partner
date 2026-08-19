@@ -18,3 +18,11 @@ export {
   type TopicMaterial,
 } from "./format";
 export { extractFulltext } from "./extract";
+export {
+  citationDensity,
+  documentShape,
+  MIN_MEASURABLE_CHARS,
+  PAPER_CITATION_DENSITY,
+  type CitationDensity,
+  type DocumentShape,
+} from "./citations";

@@ -13,14 +13,11 @@ import {
   type WatchdogConfig,
 } from "../../ai/watchdog";
 import { ObservableRun, type RunSnapshot } from "../../ai/observable-run";
+import { cooldownAfter } from "../../ai/limiter";
 import { isRateLimitError } from "../papers/http";
 import { abstractNoteBody } from "./notes";
 import { earliestCooldown, nextQueued, normalizeOnLoad } from "./scheduler";
 import { createPrepState, type PrepPaper, type PrepState } from "./types";
-
-// How long a rate-limited paper waits before its next attempt, by cooldown
-// round. After the last one is spent, another 429 fails the paper.
-const COOLDOWN_MS = [60_000, 300_000, 900_000];
 
 // The stall-watchdog defaults, re-exported for callers that tuned them before.
 export { DEFAULT_WATCHDOG_MS, DEFAULT_MAX_ATTEMPTS, DEFAULT_RETRY_DELAY_MS };
@@ -482,18 +479,20 @@ export class PrepPipeline extends ObservableRun<PrepState | null, PrepActivity> 
   }
 
   // A terminal 429: cool the paper down for a growing interval instead of
-  // failing it. After the cooldown rounds are spent, give up with the 429
-  // message so the paper reads as failed for a real reason.
+  // failing it. The ladder is the shared one (src/ai/limiter); after its rounds
+  // are spent, give up with the 429 message so the paper reads as failed for a
+  // real reason.
   private cooldown(paper: PrepPaper, message: string): void {
     const round = paper.fetchAttempts ?? 0;
-    if (round >= COOLDOWN_MS.length) {
+    const wait = cooldownAfter(round);
+    if (wait === null) {
       paper.status = "failed";
       paper.error = message;
       return;
     }
     paper.fetchAttempts = round + 1;
     paper.status = "cooldown";
-    paper.retryAt = this.deps.now() + COOLDOWN_MS[round];
+    paper.retryAt = this.deps.now() + wait;
     paper.error = undefined;
   }
 

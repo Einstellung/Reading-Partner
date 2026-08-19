@@ -1,5 +1,5 @@
-// The book-notes hub (docs/14), lifted out of App: which pipeline the panel is
-// looking at, the highlight-driven auto runs, and the panel's callbacks. It owns
+// The chapter-spine hub (docs/09), lifted out of App: which pipeline the panel is
+// looking at, the unattended start, and the panel's callbacks. It owns
 // the snapshot state and renders nothing — the shell calls it and spreads
 // `panel` into NotesPanel.
 //
@@ -19,8 +19,8 @@ import { getNotesPipeline, hasNotesState, peekNotesPipeline, type NotesInputs } 
 import type { NotesPipeline, NotesSnapshot } from "./pipeline";
 import { readChapterNote as readNotesChapter, readOverviewNote } from "./store";
 
-// Coalesce bursts of annotation-created events before re-evaluating the notes
-// highlight frontier (docs/14).
+// Coalesce bursts of annotation-created events before deciding whether to start
+// the book's preparation.
 const AUTO_NOTES_DEBOUNCE = 4000;
 
 // A ref the shell owns and this hook only reads.
@@ -60,13 +60,14 @@ export interface NotesController {
   // Mirror of the attached pipeline, for the panel and the drawer's busy dot.
   snapshot: NotesSnapshot | null;
   panel: NotesPanelBindings;
-  // A fresh mark landed: re-evaluate the frontier, debounced.
+  // A fresh mark landed: start the book's preparation if it has not started,
+  // debounced.
   scheduleAuto(): void;
   // Book open: detach the previous book's panel (its pipeline keeps running).
   reset(): void;
   // Book open, once the full text is in: resume a persisted or running pipeline.
   resume(bookId: string, name: string, ft: Fulltext): Promise<void>;
-  // Book close: the inclusive last-chapter pass.
+  // Book close: last chance to start or resume the run.
   finalPass(): void;
 }
 
@@ -83,19 +84,19 @@ export function useNotes(host: NotesHost): NotesController {
   } = host;
 
   const [notesSnap, setNotesSnap] = useState<NotesSnapshot | null>(null);
-  // The book-notes pipeline attached to the open book (docs/14), its unsubscribe,
+  // The spine pipeline attached to the open book, its unsubscribe,
   // and the last-seen plan/overview phases so run start/done/failed log as
   // transitions.
   const notesRef = useRef<NotesPipeline | null>(null);
   const notesUnsubRef = useRef<(() => void) | null>(null);
   const notesPhaseRef = useRef<{ plan: string; overview: string }>({ plan: "pending", overview: "pending" });
 
-  // Attach the open book's notes pipeline to the UI (docs/14): subscribe the
+  // Attach the open book's spine pipeline to the UI: subscribe the
   // panel to the book's pipeline. Book-specific inputs (buffer, figure index,
   // annotations) are captured now so a background run reads this book's data, not
   // whatever book is open later. Idempotent — the pipeline is a module singleton
-  // per book. It does not kick generation; callers choose manual (ensureStarted)
-  // or highlight-driven (autoAdvance) and returns the pipeline for that.
+  // per book. It does not kick generation — the caller decides — and returns the
+  // pipeline.
   const attachNotes = useCallback(
     (bookId: string, name: string, ft: Fulltext): NotesPipeline => {
       const buffer = bufferRef.current;
@@ -116,7 +117,7 @@ export function useNotes(host: NotesHost): NotesController {
             .filter((s) => s.page > 0 && s.text.trim() !== ""),
         // Chat threads carried into chapter generation: anchor each mark-anchored
         // thread to its annotation's page; book-level threads have no anchor and
-        // are dropped (docs/14).
+        // are dropped.
         getChatThreads: async () => {
           const threadMap = await loadThreads(bookId);
           return Object.values(threadMap)
@@ -160,19 +161,23 @@ export function useNotes(host: NotesHost): NotesController {
     [annsRef, bufferRef, ctxRef, currentFiguresRef],
   );
 
-  // The reader's marks reduced to pages, for the highlight frontier (docs/14).
-  const notesAnnotationPages = useCallback((): { page: number }[] => {
-    return [...annsRef.current.values()]
-      .map((a) => ({ page: annotationPage(a as { position?: { pageIndex?: number } }) ?? 0 }))
-      .filter((a) => a.page > 0);
+  // Whether the reader has marked anything in the open book. Preparation is
+  // whole-book, so marks no longer decide which chapters run (docs/09) — a mark
+  // is only the sign that this book is being worked with rather than glanced at,
+  // which is what the autoNotes setting is about.
+  const bookHasMarks = useCallback((): boolean => {
+    for (const a of annsRef.current.values()) {
+      if (annotationPage(a as { position?: { pageIndex?: number } })) return true;
+    }
+    return false;
   }, [annsRef]);
 
-  // Highlight-driven auto generation (docs/14): (re)evaluate the frontier for the
-  // open book and let the pipeline plan/skip/generate. Gated on the autoNotes
-  // setting. `finalPass` (book close / re-attach) lets the last chapter settle by
-  // the inclusive rule. Fire-and-forget; the pipeline serializes its own runs.
-  const autoAdvanceNotes = useCallback(
-    async (finalPass?: { readingPage: number }) => {
+  // Unattended start (docs/09): prepare the whole book in the background. Gated
+  // on the autoNotes setting and on the reader having marked something, so a book
+  // that was opened and closed does not spend anything. Fire-and-forget; the
+  // pipeline serializes its own runs and never re-runs a finished chapter.
+  const autoStartNotes = useCallback(
+    async (force?: boolean) => {
       if (!settingsRef.current.autoNotes) return;
       const bookId = bookIdRef.current;
       const name = ctxRef.current.fileName;
@@ -180,25 +185,24 @@ export function useNotes(host: NotesHost): NotesController {
       const ft = await currentFulltextRef.current;
       if (bookIdRef.current !== bookId) return; // switched books while extracting
       if (!ft || ft.status !== "ok") return;
-      const anns = notesAnnotationPages();
-      if (anns.length === 0 && !finalPass) return;
+      if (!force && !bookHasMarks()) return;
       const pipeline = attachNotes(bookId, name, ft);
-      await pipeline.autoAdvance(anns, finalPass);
+      await pipeline.ensureStarted();
     },
-    [attachNotes, notesAnnotationPages, bookIdRef, ctxRef, currentFulltextRef, settingsRef],
+    [attachNotes, bookHasMarks, bookIdRef, ctxRef, currentFulltextRef, settingsRef],
   );
 
-  // Debounced frontier evaluation: annotation-created events fire in bursts, so
-  // coalesce them and evaluate at most once every few seconds (docs/14).
+  // Debounced: annotation-created events fire in bursts, so coalesce them and
+  // check at most once every few seconds.
   const autoNotesTimer = useRef<number | null>(null);
   const scheduleAutoNotes = useCallback(() => {
     if (!settingsRef.current.autoNotes) return;
     if (autoNotesTimer.current) window.clearTimeout(autoNotesTimer.current);
     autoNotesTimer.current = window.setTimeout(() => {
       autoNotesTimer.current = null;
-      void autoAdvanceNotes();
+      void autoStartNotes();
     }, AUTO_NOTES_DEBOUNCE);
-  }, [autoAdvanceNotes, settingsRef]);
+  }, [autoStartNotes, settingsRef]);
 
   // The Notes tab's Generate / Resume button: the manual whole-book run, always
   // available regardless of the autoNotes setting.
@@ -230,7 +234,7 @@ export function useNotes(host: NotesHost): NotesController {
     },
     [ctxRef],
   );
-  // Override a skipped (zero-mark) chapter (docs/14): generate just that chapter.
+  // Generate a single chapter left pending by a stop or a failure.
   const notesGenerateChapter = useCallback((index: number) => notesRef.current?.generateChapter(index), []);
   const notesRegenerateOverview = useCallback(() => notesRef.current?.regenerateOverview(), []);
   const loadNotesOverview = useCallback(() => {
@@ -255,42 +259,43 @@ export function useNotes(host: NotesHost): NotesController {
     setNotesSnap(null);
   }, []);
 
-  // Resume book notes from persisted state (docs/14): subscribe the panel,
-  // then re-evaluate the highlight frontier (autoNotes) or resume the
-  // interrupted manual run.
+  // Resume a book's spines from persisted state: subscribe the panel, then pick
+  // up wherever the last run stopped. A run that already exists is resumed
+  // whatever the autoNotes setting says — the spend was already agreed to, and
+  // half a book's spines are worth less than none.
   const resumeNotes = useCallback(
     async (bookId: string, name: string, ft: Fulltext) => {
       try {
         if (peekNotesPipeline(bookId) || (await hasNotesState(bookId))) {
           if (bookIdRef.current === bookId) {
             const pipeline = attachNotes(bookId, name, ft);
-            if (settingsRef.current.autoNotes) void autoAdvanceNotes();
-            else void pipeline.ensureStarted();
+            void pipeline.ensureStarted();
           }
         }
       } catch (e) {
         console.warn("failed to resume book notes", e);
       }
     },
-    [attachNotes, autoAdvanceNotes, bookIdRef, settingsRef],
+    [attachNotes, bookIdRef],
   );
 
-  // The last chapter can't be reached by a "next chapter" highlight, so on
-  // close evaluate the frontier once with the inclusive rule (docs/14). Only
-  // when a notes pipeline already exists; otherwise the manual button is the
-  // fallback. Fire before the shell tears its refs down.
+  // Book close: one more chance to start (or resume) the run for a book the
+  // reader worked in. Nothing about the last chapter is special any more — the
+  // whole book is prepared in one go — but the close is still the moment a
+  // session's marks are all in. Only when a pipeline already exists or the
+  // reader marked something; otherwise the manual button is the fallback. Fire
+  // before the shell tears its refs down.
   const finalPassNotes = useCallback(() => {
-    if (settingsRef.current.autoNotes) {
-      const bookId = bookIdRef.current;
-      const pipeline = bookId ? peekNotesPipeline(bookId) : null;
-      if (pipeline) {
-        const pageIndex = ctxRef.current.pageIndex;
-        pipeline.autoAdvance(notesAnnotationPages(), {
-          readingPage: pageIndex !== null ? pageIndex + 1 : 1,
-        }).catch(() => {});
-      }
+    if (!settingsRef.current.autoNotes) return;
+    const bookId = bookIdRef.current;
+    if (!bookId) return;
+    const existing = peekNotesPipeline(bookId);
+    if (existing) {
+      existing.ensureStarted().catch(() => {});
+      return;
     }
-  }, [notesAnnotationPages, bookIdRef, ctxRef, settingsRef]);
+    void autoStartNotes();
+  }, [autoStartNotes, bookIdRef, settingsRef]);
 
   return {
     snapshot: notesSnap,

@@ -1,9 +1,17 @@
-// Per-chapter note generation (docs/14). One unattended M6 tool loop per chapter:
-// the model reads the chapter's page range, may look at figures it judges worth
-// putting in the lecture notes, and writes a note that traces the argument,
-// anchors claims to [p.N], and cites key figures as [fig:N]. Pure parts (prompts,
-// tool building, emphasis-signal formatting) are exported for tests; the AI call
-// is wired in live.ts.
+// Per-chapter spine generation (docs/09). One unattended M6 tool loop per
+// chapter: the model reads the chapter's page range, may look at figures that
+// carry a result, and writes the chapter's spine — what it does, what it builds
+// on, what it defines, where the load-bearing pages are.
+//
+// The reader of this text is the lecture entry, not a person. That is the whole
+// difference from the lecture notes this pipeline used to write: labelled
+// sections instead of prose, page anchors on every claim instead of a readable
+// argument, and no attempt to be self-contained — the companion has the pages
+// themselves when it teaches, and asks the spine what the chapter is for and how
+// it hangs on the ones around it.
+//
+// Pure parts (prompts, tool building, emphasis-signal formatting) are exported
+// for tests; the AI call is wired in live.ts.
 
 import { Type, type ThinkingLevel } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../ai/agent";
@@ -13,7 +21,7 @@ import { buildFigureTools, type FigureImage } from "../figures/tools";
 import type { Figure } from "../figures/types";
 import type { Fulltext } from "../../fulltext/types";
 import { aiLanguageName, type AiLanguage } from "../../platform/app/settings";
-import type { NoteChapter } from "./types";
+import type { BookChapter, NoteChapter } from "./types";
 
 const CHAPTER_MAX_ROUNDS = 16;
 
@@ -100,35 +108,58 @@ export function formatEmphasisSignals(
   return lines.join("\n");
 }
 
+// The book's chapter table, with the one being written marked. Every chapter is
+// written in parallel, so a chapter cannot be handed the spines of the chapters
+// before it — but "builds on" still has to name them by number, and the numbers
+// have to be the ones the rest of the app uses. The table is what makes that
+// possible: the chapter's own back-references supply the content, this supplies
+// the numbering.
+export function formatChapterTable(chapters: BookChapter[], current: number): string {
+  if (chapters.length === 0) return "";
+  const lines = ["The book's chapters:"];
+  for (const c of chapters) {
+    const mark = c.index === current ? ">" : " ";
+    lines.push(`${mark} ch.${c.index} ${c.title} — p.${c.startPage}-${c.endPage}`);
+  }
+  return lines.join("\n");
+}
+
 export function chapterSystemPrompt(params: {
   bookName: string;
   chapter: NoteChapter;
+  chapters?: BookChapter[];
   figureCatalog?: string;
   emphasis?: string;
   chats?: string;
   instruction?: string;
   aiLanguage?: AiLanguage;
 }): string {
-  const { bookName, chapter, figureCatalog, emphasis, chats, instruction, aiLanguage } = params;
+  const { bookName, chapter, chapters, figureCatalog, emphasis, chats, instruction, aiLanguage } =
+    params;
   const lines = [
-    "You are writing lecture notes for a reading companion — the intermediate",
-    "product a later slide deck is built from, so it must stand on its own.",
-    `The book is "${bookName}". Write the note for one chapter of it.`,
+    "You are preparing a book for a reading companion that teaches it a chapter at",
+    "a time. What you write is read by that companion, not by a person: it is",
+    "loaded into the companion's context before it talks about this chapter,",
+    "alongside as much of the chapter's own pages as fit. So write it for lookup —",
+    "no opening line, no closing line, no praise of the book, nothing the pages",
+    "themselves already say better.",
+    `The book is "${bookName}". Write the spine of one chapter of it.`,
     "",
     `Chapter ${chapter.index}: ${chapter.title}`,
     `Pages ${chapter.startPage}-${chapter.endPage} (1-based).`,
   ];
+  if (chapters && chapters.length > 0) {
+    lines.push("", formatChapterTable(chapters, chapter.index));
+  }
   if (figureCatalog && figureCatalog.trim()) lines.push("", figureCatalog.trim());
   if (emphasis && emphasis.trim()) lines.push("", emphasis.trim());
   if (chats && chats.trim()) {
     lines.push(
       "",
-      "The reader's conversations with you while reading this chapter follow. Where",
-      "the reader explicitly endorsed an explanation or asked for it to be recorded in",
-      "the notes, absorb that explanation's substance into the note — rewritten in the",
-      "note's own voice, never pasted as dialogue — and give it priority over your own",
-      "summary of the same material. Otherwise treat the conversations only as emphasis",
-      "signals for what to expand; do not quote them.",
+      "The reader's conversations with you while reading this chapter follow. They",
+      "are an emphasis signal only — they say where the reader slowed down, which is",
+      "worth a line in Landmarks. Do not quote them and do not carry their content",
+      "into the spine.",
       "",
       chats.trim(),
     );
@@ -136,20 +167,37 @@ export function chapterSystemPrompt(params: {
   if (instruction && instruction.trim()) {
     lines.push("", `The reader asked for this revision: ${instruction.trim()}`);
   }
-  // The output language is templated into the "write the note in ___" line, not
-  // pinned by an appended instruction, so the prompt holds one language directive:
+  // The output language is templated into the "write it in ___" line, not pinned
+  // by an appended instruction, so the prompt holds one language directive:
   // "auto" keeps English, a set language replaces it.
   const lang = aiLanguageName(aiLanguage ?? "auto") ?? "English";
   lines.push(
     "",
     "Read the chapter's pages with the tools before writing (read_pages, and",
-    `search_book / view_figure as needed). Then write the note in ${lang} as`,
-    "markdown, 300-700 words. Cover: the chapter's argument and how it moves, the",
-    "key terms and examples, and the figures that carry a result. Anchor every",
-    "factual claim to the book with a page marker in the exact form [p.N] (N is",
-    "the 1-based page). When a figure carries a key point, cite it as [fig:N].",
-    "Do not add a title heading; start directly with the content. Output only the",
-    "note.",
+    `search_book / view_figure as needed). Then write it in ${lang} as markdown,`,
+    "200-350 words, in exactly these four sections and in this order:",
+    "",
+    "## Covers",
+    "What the chapter does: the claims it makes, the machinery it builds, the order",
+    "it goes in. Name things the way the book names them. Anchor every claim to a",
+    "page marker in the exact form [p.N] (N is the 1-based page).",
+    "",
+    "## Builds on",
+    "Which earlier chapters this one stands on and what it takes from each, one per",
+    "line as `ch.N — what is carried over [p.N]`. Take this from the chapter's own",
+    "back-references and from the chapter table above; never from a guess about a",
+    "chapter you have not read. Write `nothing — this chapter opens the book` when",
+    "it stands alone.",
+    "",
+    "## Introduces",
+    "The terms, notation and results defined here that a later chapter has to know,",
+    "one per line as `term [p.N] — one clause`.",
+    "",
+    "## Landmarks",
+    "Two to four page ranges worth reading in full, one per line as `p.N-M — what",
+    "is there`. Cite a figure that carries a result as [fig:N].",
+    "",
+    "Output only those four sections.",
   );
   return lines.join("\n");
 }
@@ -157,9 +205,9 @@ export function chapterSystemPrompt(params: {
 // The loop's kickoff message; the model pulls the chapter's pages itself.
 export function chapterKickoff(chapter: NoteChapter): string {
   return (
-    `Write the note for chapter ${chapter.index} ("${chapter.title}"), pages ` +
+    `Write the spine for chapter ${chapter.index} ("${chapter.title}"), pages ` +
     `${chapter.startPage}-${chapter.endPage}. Read the pages with read_pages first, ` +
-    "then write the note."
+    "then write it."
   );
 }
 
@@ -211,6 +259,7 @@ export interface ChapterModel {
 export function runNoteChapter(params: {
   bookName: string;
   chapter: NoteChapter;
+  chapters?: BookChapter[];
   tools: AgentTool[];
   model: ChapterModel;
   figureCatalog?: string;
@@ -221,9 +270,18 @@ export function runNoteChapter(params: {
   signal?: AbortSignal;
   onProgress?: (chars: number) => void;
 }): Promise<string> {
-  const { bookName, chapter, tools, model, figureCatalog, emphasis, chats, instruction, aiLanguage, signal, onProgress } =
+  const { bookName, chapter, chapters, tools, model, figureCatalog, emphasis, chats, instruction, aiLanguage, signal, onProgress } =
     params;
-  const systemPrompt = chapterSystemPrompt({ bookName, chapter, figureCatalog, emphasis, chats, instruction, aiLanguage });
+  const systemPrompt = chapterSystemPrompt({
+    bookName,
+    chapter,
+    chapters,
+    figureCatalog,
+    emphasis,
+    chats,
+    instruction,
+    aiLanguage,
+  });
 
   return new Promise<string>((resolve, reject) => {
     let chars = 0;
