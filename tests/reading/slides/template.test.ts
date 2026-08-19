@@ -145,3 +145,75 @@ test("standalone playback is unchanged: keys, click, counter and progress stay",
   expect(html).toContain("counter.textContent = (i + 1) + ' / ' + slides.length;");
   expect(html).toContain("progress.style.width");
 });
+
+test("slideTitleText decodes numeric references, decimal and hex", () => {
+  expect(slideTitleText("<h2>Symbols &#38; statistics &#8212; the long argument</h2>")).toBe(
+    "Symbols & statistics — the long argument",
+  );
+  expect(slideTitleText("<h2>Symbols &#x26; statistics &#x2014; the long argument</h2>")).toBe(
+    "Symbols & statistics — the long argument",
+  );
+  expect(slideTitleText("<h2>&#X2014; and &#x2014;</h2>")).toBe("— and —");
+  expect(slideTitleText("<h2>Leading zeros &#0038;</h2>")).toBe("Leading zeros &");
+});
+
+test("slideTitleText decodes references above the basic plane", () => {
+  expect(slideTitleText("<h2>Ancient scripts &#x10330; and emoji &#128218;</h2>")).toBe(
+    "Ancient scripts \u{10330} and emoji \u{1f4da}",
+  );
+});
+
+test("slideTitleText leaves a code point outside Unicode as it was written", () => {
+  // Out of range, and the lone surrogates: decoding these would put a character
+  // in the run record that cannot round-trip, so the raw reference stays.
+  expect(slideTitleText("<h2>&#x110000; &#1114112; &#xD800; &#0;</h2>")).toBe(
+    "&#x110000; &#1114112; &#xD800; &#0;",
+  );
+});
+
+test("slideTitleText decodes the named entities a model writes in a title", () => {
+  expect(slideTitleText("<h2>Symbols &amp; statistics &mdash; the long argument</h2>")).toBe(
+    "Symbols & statistics — the long argument",
+  );
+  expect(slideTitleText("<h2>Turing 1936&ndash;1950 &hellip; and after</h2>")).toBe(
+    "Turing 1936–1950 … and after",
+  );
+  expect(slideTitleText("<h2>P &ne; NP when n &ge; 3 &times; 10</h2>")).toBe(
+    "P ≠ NP when n ≥ 3 × 10",
+  );
+  expect(slideTitleText("<h2>Cause &rarr; effect &rArr; theory</h2>")).toBe(
+    "Cause → effect ⇒ theory",
+  );
+  expect(slideTitleText("<h2>Poincar&eacute;, G&ouml;del, &Eacute;cole normale</h2>")).toBe(
+    "Poincaré, Gödel, École normale",
+  );
+  expect(slideTitleText("<h2>&ldquo;Attention&rdquo; &copy; 2017 &mdash; 30&deg;</h2>")).toBe(
+    "“Attention” © 2017 — 30°",
+  );
+  expect(slideTitleText("<h2>&prime; and &Prime; are not the same mark</h2>")).toBe(
+    "′ and ″ are not the same mark",
+  );
+});
+
+test("slideTitleText leaves a name outside the table as it was written", () => {
+  // The known edge of the table (the deck page still renders these correctly;
+  // only the recorded title keeps the raw name). Add a name here when a real
+  // title needs it.
+  expect(slideTitleText("<h2>&thinsp;&oelig;&Sigma;&hearts;&notaname;</h2>")).toBe(
+    "&thinsp;&oelig;&Sigma;&hearts;&notaname;",
+  );
+});
+
+test("slideTitleText decodes once, so an escaped entity stays an entity", () => {
+  expect(slideTitleText("<h2>Write &amp;lt; for a less-than</h2>")).toBe(
+    "Write &lt; for a less-than",
+  );
+  expect(slideTitleText("<h2>&amp;#8212; is how you write an em dash</h2>")).toBe(
+    "&#8212; is how you write an em dash",
+  );
+  expect(slideTitleText("<h2>&amp;amp;</h2>")).toBe("&amp;");
+});
+
+test("slideTitleText still reads the six original entities in any case", () => {
+  expect(slideTitleText("<h2>a &AMP; b &NBSP;&QUOT;c&QUOT;</h2>")).toBe('a & b "c"');
+});
