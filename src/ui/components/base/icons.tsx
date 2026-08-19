@@ -494,13 +494,14 @@ export function IconBooks({ size = 20 }: IconProps) {
 // graduation; the app's own two mascots over a book turned to mush at 18px,
 // because a scene cannot survive at the size a stroke glyph has to work at.
 // Colour does the work strokes could not: the pale spread reads as paper and the
-// dark bubble reads as speech with no interior detail to lose. The palette is
-// the app's own (src-tauri/icons).
+// dark bubble reads as speech with no interior detail to lose. The bubble is
+// left empty on purpose: two light dots inside it turned the whole thing into a
+// small face, which is the mascot problem again in one more disguise. The
+// palette is the app's own (src-tauri/icons).
 const MARK = {
 	deep: '#2F4F39',
 	mid: '#7FA971',
 	pale: '#E7F0D8',
-	glow: '#A8D48A',
 } as const;
 
 export function IconReadTogether({ size = 20 }: IconProps) {
@@ -512,8 +513,6 @@ export function IconReadTogether({ size = 20 }: IconProps) {
 			<path d="M5.4 13.4H8.2" stroke={MARK.mid} strokeWidth="1.9" strokeLinecap="round" />
 			<path d="M14.9 13.9L15.2 17.4L18 13.9Z" fill={MARK.deep} />
 			<rect x="13.4" y="7.9" width="7.4" height="6.4" rx="2.5" fill={MARK.deep} />
-			<circle cx="15.9" cy="11.1" r="0.85" fill={MARK.glow} />
-			<circle cx="18.4" cy="11.1" r="0.85" fill={MARK.glow} />
 		</svg>
 	);
 }
