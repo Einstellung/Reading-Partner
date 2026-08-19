@@ -4,11 +4,23 @@
 >
 > 补记：「定位」一节的"笔记是中间产物，为讲义／PPT 服务"已作废，笔记不再是 PPT 的必经中间层，见 [31](./31-读完之后的梳理与讲.md)。大纲改由读完之后的梳理对话长出来。slides 的产物形态和落地细节照旧有效。
 >
-> 补记 2026-08-19：「生成」一节的产物形态和触发方式已作废，改按 [09](./09-学习机模式.md) 的「书的备课：章脉络」重做。逐章产物从给人看的笔记变成给 AI 读的章脉络（Covers / Builds on / Introduces / Landmarks 四段），第二遍从"全书框架"变成章间依赖图；全备不再按划线前沿挑章，`skipped` 状态和 auto.ts 的前沿逻辑一并删掉；逐章改成并发。落盘布局不变（`notes-<bookId>/` 下 `state.json`、`chapter-NN.md`、`overview.md`），`NOTES_VERSION` 升到 2——v1 的章文件是旧形态，留着会被当成脉络喂给模型。
+> 补记 2026-08-19：「生成」一节的产物形态和触发方式已作废，改按 [09](./09-学习机模式.md) 的「书的备课：章脉络」重做。逐章产物从给人看的笔记变成给 AI 读的章脉络（Covers / Builds on / Introduces / Landmarks 四段），第二遍从"全书框架"变成章间依赖图；全备不再按划线前沿挑章，`skipped` 状态和 auto.ts 的前沿逻辑一并删掉；逐章改成并发。`NOTES_VERSION` 升到 2——v1 的章文件是旧形态，留着会被当成脉络喂给模型。
+>
+> 作废 2026-08-19（晚）：全文前半（「定位」到「落地：M-note-1」）的前提——这条管线的产物是给人看的书本笔记——不再成立。现行共识在 [09](./09-学习机模式.md) 的「书的备课：章脉络」和「代码归属、存储与遥测」。已经变掉的：
+>
+> - 产物是 AI 备课料，不是笔记。没有人类读者，所以「结构」「修订」「素材」三节里为人考虑的部分（全书框架当 PPT 素材、无定稿仪式、选段改写）全部作废。
+> - 目录：`src/reading/notes/` → `src/reading/prep/chapters/`。同一份文档的两条备课料并在 `src/reading/prep/` 之下（论文那条是 `prep/papers/`）。
+> - 落盘：`notes-<bookId>/` → `prep-<bookId>/chapters/`，一份文档一个 `prep-<hash>/`。原「落盘布局不变」作废。
+> - 入口：侧栏 Notes tab 删掉，与 Prep 面板合成一个。
+> - v1 的章文件本地和 Drive 都删干净了，不留回收余地。
+>
+> 「PPT（slides）共识」和「落地：M-ppt-1」两节照旧有效，只是「笔记」在那里读作「章脉络」，入口早已移到 talk（见 [31](./31-读完之后的梳理与讲.md)）。
 
 ---
 
 ## 定位
+
+作废 2026-08-19（晚）：整节作废，见文首。产物不是笔记，没有人类读者。以下留作历史。
 
 笔记是中间产物，为讲义／PPT 服务。一本书一份。
 
@@ -52,13 +64,13 @@ PPT 用于线下分享，形态是 HTML slides，从笔记派生而非直接从�
 
 ## 入口
 
-侧栏 Notes tab，与 Prep／Memory 并列。空态是"Generate notes"按钮；运行中显示章节列表加进度／活性；完成后渲染全书框架加各章，每章标题旁有 Regenerate。`[p.N]` 点击跳页，`[fig:N]` 渲染图卡——与聊天里同一套渲染，笔记里的引用是活的。
+作废 2026-08-19（晚）："侧栏 Notes tab，与 Prep／Memory 并列"。Notes tab 删掉，内容并进 Prep 面板的章脉络那一半，其余（空态按钮、章节列表加进度／活性、每章的 Regenerate、`[p.N]` 跳页、`[fig:N]` 图卡）原样保留。
 
 ## 落地：M-note-1
 
-- 存储 `notes-<bookId>/`：`state.json`（plan、每章状态、页码范围、overview 状态）、`overview.md`、`chapter-NN.md`。bookId 即内容 hash（[library.ts](../src/platform/app/library.ts)）。派生视图、可重建，与备课同一姿态。
-- 管线 `src/reading/notes/`：plan／逐章／overview 三段，纯逻辑（章节划分、状态机、范围计算）注入式可测，AI 调用在 `live.ts`。
-- 同步：`state.json` 与 `*.md` 进同步范围（[13](./13-账户同步.md)），下载缓存不进。
+- 存储 `notes-<bookId>/`：`state.json`（plan、每章状态、页码范围、overview 状态）、`overview.md`、`chapter-NN.md`。bookId 即内容 hash（[library.ts](../src/platform/app/library.ts)）。派生视图、可重建，与备课同一姿态。作废 2026-08-19（晚）：现在是 `prep-<bookId>/chapters/` 下的同三个文件。
+- 管线 `src/reading/notes/`：plan／逐章／overview 三段，纯逻辑（章节划分、状态机、范围计算）注入式可测，AI 调用在 `live.ts`。作废 2026-08-19（晚）：现在是 `src/reading/prep/chapters/`，三段不变。
+- 同步：`state.json` 与 `*.md` 进同步范围（[13](./13-账户同步.md)），下载缓存不进。嵌一层之后同步范围多收 `prep-*/chapters/` 这一层的同两样，`prep-*/pdf/**` 仍排除。
 - 已知限制：笔记管线的输入（buffer、图索引、批注）在首次挂载时捕获并冻结，与备课一样；后台跑期间换书不影响，但同一本书重开后台已在跑的那次读到的批注可能略旧。
 
 ## PPT（slides）共识

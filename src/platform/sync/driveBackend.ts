@@ -608,6 +608,33 @@ export class DriveBackend implements SyncBackend {
     await this.d.persistIds();
   }
 
+  // Delete for good, not to trash: a file the app has decided is not data any
+  // more would otherwise sit in the user's Drive bin for thirty days, and this
+  // is the app's own folder, not something the user filed there. A cached id is
+  // tried first and, when it turns out to be stale, the name is searched — the
+  // same two steps download and upload take, for the same reason. 404 counts as
+  // done: the file is not there, which is what was asked for.
+  async remove(name: string): Promise<void> {
+    const del = (id: string): Promise<undefined> =>
+      this.send(`${DRIVE}/files/${id}`, { method: "DELETE" }, "delete", SMALL, async () => undefined);
+
+    const cached = await this.withCachedId(this.ids.fileIds[name], () => this.forgetFile(name), del);
+    if (!cached.done) {
+      const found = await this.findDataFile(name);
+      if (found) {
+        try {
+          await del(found.id);
+        } catch (e) {
+          // Someone else deleted it between the search and the delete. The file
+          // is gone, which is the whole of what this was asked to arrange.
+          if (!(e instanceof SyncHttpError) || e.status !== 404) throw e;
+        }
+      }
+    }
+    this.forgetFile(name);
+    await this.d.persistIds();
+  }
+
   private async findBook(hash: string): Promise<DriveFile | null> {
     return this.findOne(
       `name='${escapeQ(hash)}.pdf' and '${this.ids.booksFolderId}' in parents and trashed=false`,

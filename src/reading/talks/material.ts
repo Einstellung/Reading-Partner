@@ -4,7 +4,7 @@
 // app: it happens in the topic, with no book open, no reader mounted and no
 // engine running. Everything it needs is already on disk under the book's
 // content hash — fulltext-<hash>.json, annotations-<hash>.json,
-// figures-<hash>.json, notes-<hash>/ — so the path is a set of reads, not an
+// figures-<hash>.json, prep-<hash>/chapters/ — so the path is a set of reads, not an
 // engine. The book's bytes are only read when a figure actually has to be
 // rasterized, which is the one thing that needs them (figures/render.ts crops
 // with pdf.js, no reader and no PDFium).
@@ -18,7 +18,7 @@ import { toAnnotationLite, type AnnotationLite } from "../../fulltext/format";
 import { buildSkeleton, type Skeleton } from "../rehearsal";
 import { getFigures } from "../figures/store";
 import type { Figure } from "../figures/types";
-import { loadNotesState } from "../notes/store";
+import { loadNotesState } from "../prep/chapters/store";
 import type { TalkMaterial } from "./types";
 
 // One material of a talk with everything the rehearsal reads about it.

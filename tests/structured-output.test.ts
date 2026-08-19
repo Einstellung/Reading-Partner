@@ -15,8 +15,8 @@ import {
   type ParseSite,
 } from "../src/platform/app/structured-output";
 import type { EventPayload, EventType } from "../src/platform/app/events";
-import { parsePlan } from "../src/reading/prep/plan";
-import { parseNotesPlan } from "../src/reading/notes/plan";
+import { parsePlan } from "../src/reading/prep/papers/plan";
+import { parseNotesPlan } from "../src/reading/prep/chapters/plan";
 import { parseSlidePlan } from "../src/reading/slides/plan";
 import { parseTriageResult } from "../src/info/briefing/triage";
 

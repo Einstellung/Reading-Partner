@@ -8,13 +8,13 @@ import {
   chapterOfPage,
   formatSkeleton,
 } from "../../../src/reading/rehearsal/skeleton";
-import type { NoteChapter } from "../../../src/reading/notes/types";
+import type { NoteChapter } from "../../../src/reading/prep/chapters/types";
 import type { OutlineItem } from "../../../src/fulltext/types";
 
 const notesPlan: NoteChapter[] = [
   { index: 1, title: "Openings", startPage: 1, endPage: 20, status: "done" },
   { index: 2, title: "Middlegame", startPage: 21, endPage: 60, status: "pending" },
-  { index: 3, title: "Endings", startPage: 61, endPage: 90, status: "skipped" },
+  { index: 3, title: "Endings", startPage: 61, endPage: 90, status: "failed" },
 ];
 
 const outline: OutlineItem[] = [

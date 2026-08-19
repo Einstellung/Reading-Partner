@@ -16,7 +16,7 @@ import { findFigureById } from "../figures/lookup";
 import { getFigures } from "../figures/store";
 import { renderFigure } from "../figures/render";
 import { getLibraryEntry, readLibraryBook } from "../../platform/app/library";
-import { loadNotesState, readChapterNote, readOverviewNote } from "../notes/store";
+import { loadNotesState, readChapterNote, readOverviewNote } from "../prep/chapters/store";
 import { loadSettings } from "../../platform/app/settings";
 import { recordParse } from "../../platform/app/structured-output";
 import { contentSystemPrompt, contentUserMessage, sanitizeFragment } from "./content";

@@ -48,6 +48,9 @@ function makeBackend(seedRemote: RemoteState = {}, seedData: Record<string, stri
     Object.entries(seedData).map(([k, v]) => [k, enc(v)]),
   );
   const books = new Map<string, Uint8Array>();
+  // Every remove the engine asked for, and the names that refuse to go.
+  const removed: string[] = [];
+  const failRemove = new Set<string>();
   let ensureLayoutCalls = 0;
   const backend: SyncBackend = {
     async ensureLayout() {
@@ -65,6 +68,12 @@ function makeBackend(seedRemote: RemoteState = {}, seedData: Record<string, stri
       data.set(name, bytes);
       meta.set(name, { rev: m.rev, mtime: m.mtime, size: bytes.length, hash: m.hash });
     },
+    async remove(name) {
+      removed.push(name);
+      if (failRemove.has(name)) throw new Error(`cannot delete ${name}`);
+      data.delete(name);
+      meta.delete(name);
+    },
     async hasBook(hash) {
       return books.has(hash);
     },
@@ -81,6 +90,8 @@ function makeBackend(seedRemote: RemoteState = {}, seedData: Record<string, stri
     backend,
     data,
     books,
+    removed,
+    failRemove,
     remote: () => Object.fromEntries(meta),
     ensureLayoutCalls: () => ensureLayoutCalls,
   };
@@ -1036,4 +1047,81 @@ test("a clean pass still moves a seeded timestamp forward", async () => {
 
   expect(engine.status().lastSyncAt).toBe(9000);
   expect(state.lastSyncAt).toBe(9000);
+});
+
+// --- the purge queue -------------------------------------------------------
+//
+// The one deletion a pass performs, and the only way a file ever leaves the
+// remote. Everything below is about the queue being the record: an entry comes
+// off it when its delete has landed and not before.
+
+test("purge: a queued path is deleted from the remote and forgotten locally", async () => {
+  const hash = await h("old");
+  const be = makeBackend(
+    { "notes-b1/chapter-01.md": { rev: 4, mtime: 1, size: 3, hash } },
+    { "notes-b1/chapter-01.md": "old" },
+  );
+  const base = makeBase({ "notes-b1/chapter-01.md": "old" });
+  const snapshot: Snapshot = { "notes-b1/chapter-01.md": { rev: 4, mtime: 1, size: 3, hash } };
+  const purge = ["notes-b1/chapter-01.md"];
+  const { engine } = makeEngine({ backend: be.backend, base: base.base, snapshot, purge });
+
+  await engine.syncNow();
+
+  expect(be.removed).toEqual(["notes-b1/chapter-01.md"]);
+  expect(be.remote()).toEqual({});
+  // The queue is empty, so a later pass does not ask again.
+  expect(purge).toEqual([]);
+  // And nothing this device remembered about the file is left to reason from.
+  expect(engine.status().snapshot["notes-b1/chapter-01.md"]).toBeUndefined();
+  expect(base.text("notes-b1/chapter-01.md")).toBeNull();
+});
+
+test("purge: a delete that fails keeps its entry for the next pass", async () => {
+  const hash = await h("{}");
+  const be = makeBackend(
+    { "notes-b1/state.json": { rev: 1, mtime: 1, size: 2, hash } },
+    { "notes-b1/state.json": "{}" },
+  );
+  be.failRemove.add("notes-b1/state.json");
+  const snapshot: Snapshot = { "notes-b1/state.json": { rev: 1, mtime: 1, size: 2, hash } };
+  const purge = ["notes-b1/state.json"];
+  const { engine } = makeEngine({ backend: be.backend, snapshot, purge });
+
+  await engine.syncNow();
+
+  expect(purge).toEqual(["notes-b1/state.json"]);
+  // The file is still in the remote, so the snapshot entry that describes it
+  // must still be there too.
+  expect(engine.status().snapshot["notes-b1/state.json"]).toBeDefined();
+  expect(engine.status().lastError).toStartWith("delete notes-b1/state.json failed:");
+
+  be.failRemove.clear();
+  await engine.syncNow();
+  expect(purge).toEqual([]);
+  expect(be.remote()).toEqual({});
+});
+
+test("purge: the path is gone before the plan is made, so nothing pulls it back", async () => {
+  const be = makeBackend(
+    { "notes-b1/overview.md": { rev: 2, mtime: 1, size: 4 } },
+    { "notes-b1/overview.md": "gone" },
+  );
+  const fs = makeFs();
+  // No snapshot entry at all: exactly the device that would otherwise treat a
+  // remote-only file as new and write it to disk.
+  const purge = ["notes-b1/overview.md"];
+  const { engine, pulled } = makeEngine({ backend: be.backend, fs: fs.fs, snapshot: {}, purge });
+
+  await engine.syncNow();
+
+  expect(fs.files.has("notes-b1/overview.md")).toBe(false);
+  expect(pulled).toEqual([]);
+});
+
+test("purge: nothing queued costs the pass nothing", async () => {
+  const be = makeBackend();
+  const { engine } = makeEngine({ backend: be.backend, snapshot: {}, purge: [] });
+  await engine.syncNow();
+  expect(be.removed).toEqual([]);
 });

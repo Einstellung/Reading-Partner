@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bindSystemBack } from "./platform/app/back-button";
 import { BRIEF_TOPIC_ID } from "./platform/app/topics";
 import { initSync } from "./platform/sync";
+import { purgeLegacyChapterNotes } from "./reading/prep/chapters/purge";
 import { registerPullRoute } from "./platform/sync/pull-routes";
 import { KEPT_ARTICLES_PULL_ROUTE } from "./reading/pull-routes";
 import {
@@ -139,7 +140,13 @@ export default function PhoneApp() {
   useEffect(() => {
     // "phone": the books channel stays off here, since nothing on this shell
     // can open a PDF (docs/22).
-    void initSync("phone").catch((e) => console.warn("sync init failed", e));
+    // Once, on the way up: the chapter notes written before this was a
+    // chapter-spine pass are deleted from here and queued for deletion from
+    // Drive. After initSync, so the queue is written to the state file that was
+    // just read rather than to the placeholder it replaced.
+    void initSync("phone")
+      .catch((e) => console.warn("sync init failed", e))
+      .finally(() => void purgeLegacyChapterNotes());
     return registerPullRoute({
       ...KEPT_ARTICLES_PULL_ROUTE,
       onPulled: () => void refreshSavedArticles(),

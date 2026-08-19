@@ -5,7 +5,7 @@
 //   slides/<talkId>/asset-NN.txt       — that slide's resolved asset (data: URL)
 //   slides/<talkId>-<slug>.html        — the assembled deck
 //
-// One directory per talk, same shape as notes-<bookId>/: the bodies and assets
+// One directory per talk, same shape as prep-<bookId>/chapters/: the bodies and assets
 // are the expensive part, so they live on disk and assemble is pure assembly —
 // read what is there, write a deck — which is what makes re-running one page
 // (or just re-assembling) possible.

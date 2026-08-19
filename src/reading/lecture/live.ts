@@ -11,16 +11,17 @@ import {
   type TableChapter,
   type ChapterEntry,
 } from "../chapters";
-import { loadNotesState, readChapterNote } from "../notes/store";
-import type { PrepChapter } from "../prep/types";
+import { loadNotesState, readChapterNote } from "../prep/chapters/store";
+import type { PrepChapter } from "../prep/papers/types";
 import type { ChapterOutline } from "./prompt";
 
 // The chapter table for a book, from the best source that has one (docs/09):
 //
 //   1. the PDF outline's level-0 entries — right when the book's bookmarks are
 //      its chapters, which is one book in five,
-//   2. the notes pass's own table (notes-<bookId>/state.json), which is either
-//      the same outline or a table the model read out of the printed contents,
+//   2. the chapter-spine pass's own table (prep-<bookId>/chapters/state.json),
+//      which is either the same outline or a table the model read out of the
+//      printed contents,
 //   3. the prep plan's chapters.
 //
 // Null when none of them survives the filtering: the chapter chip then does not

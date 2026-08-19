@@ -12,7 +12,7 @@
 
 import { beforeEach, expect, mock, test } from "bun:test";
 import { FIGURES_VERSION } from "../../../src/reading/figures/types";
-import { NOTES_VERSION } from "../../../src/reading/notes/types";
+import { NOTES_VERSION } from "../../../src/reading/prep/chapters/types";
 
 const files = new Map<string, string>();
 const blobs = new Map<string, Uint8Array>();
@@ -253,7 +253,7 @@ test("the skeleton comes from the notes plan the reader's notes pass wrote", asy
     JSON.stringify({ version: 1, status: "ok", pages: ["a", "b", "c"], outline: [] }),
   );
   files.set(
-    `notes-${BOOK}/state.json`,
+    `prep-${BOOK}/chapters/state.json`,
     JSON.stringify({
       version: NOTES_VERSION,
       chapters: [
