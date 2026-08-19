@@ -16,9 +16,9 @@ headless 摄入值得先做，但不是"EPUB → 完整 Fulltext"，是"EPUB 只
 
 ### 页码在哪里是数据，在哪里只是显示
 
-不可重建的持久化只有两处：`reading-state.json` 的 `ViewState`，和 `annotations-<bookId>.json` 的 `position.pageIndex` + PDF 点坐标 `rects`。其余带页码的文件（`fulltext-*.json`、`figures-*.json`、`notes-*/state.json`、`prep-*/state.json`）都是派生的，版本号一升就重算，迁移成本为零。
+不可重建的持久化只有两处：`reading-state.json` 的 `ViewState`，和 `annotations-<bookId>.json` 的 `position.pageIndex` + PDF 点坐标 `rects`。其余带页码的文件（`fulltext-*.json`、`figures-*.json`、`prep-*/chapters/state.json`、`prep-*/state.json`）都是派生的，版本号一升就重算，迁移成本为零。
 
-第三类最麻烦：`notes-*/chapter-NN.md`、`notes-*/overview.md`、`prep-*/<slug>.md` 里散落着 AI 写进正文的 `[p.N]`。没有任何东西会重写它们。页码含义一变，这些字符串就永久指错地方。
+第三类最麻烦：`prep-*/chapters/chapter-NN.md`、`prep-*/chapters/overview.md`、`prep-*/<slug>.md` 里散落着 AI 写进正文的 `[p.N]`。没有任何东西会重写它们。页码含义一变，这些字符串就永久指错地方。
 
 纯显示的页码（顶栏 `12 / 400`、大纲右侧页码列、痕迹行的 `Page N`、书架进度条、`Fig. 3 · p.7`）不存盘，随便改。
 

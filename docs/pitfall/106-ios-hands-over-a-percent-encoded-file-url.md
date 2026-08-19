@@ -20,7 +20,7 @@ file:///private/var/mobile/Containers/Data/Application/<UUID>/tmp/<bundle-id>-In
 
 ——带 scheme、且整条路径被 percent-encode 过；桌面返回的是普通路径。`basename()` 直接切最后一段，切出来的就是编码串。fs 插件两种形态都能读（`FilePath` 认 URL），所以除了名字没有任何症状。
 
-这个编码串随即被抄进三处落盘数据：`library.json` 的 `title`/`originalFilename`、`topics.json` 的 `files[].name`（`path` 本身就是那条 URL）、`notes-<bookId>/state.json` 的 `bookName`（它还会进章节提示词，模型被告知这本书叫 `%E5%85%A8...`）。bookId 是内容 sha256，不受影响。
+这个编码串随即被抄进三处落盘数据：`library.json` 的 `title`/`originalFilename`、`topics.json` 的 `files[].name`（`path` 本身就是那条 URL）、`prep-<bookId>/chapters/state.json`（当时叫 `notes-<bookId>/state.json`）的 `bookName`（它还会进章节提示词，模型被告知这本书叫 `%E5%85%A8...`）。bookId 是内容 sha256，不受影响。
 
 ## 解法
 
