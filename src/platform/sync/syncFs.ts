@@ -3,7 +3,8 @@
 //
 // Sync range (docs/13): the user's own data — reading position, marks, AI
 // threads, topics, per-topic AI observations, lesson-prep plans and notes, book notes
-// (docs/14), talks and what their rehearsal settled (docs/31), the cross-scenario user profile and
+// (docs/14), talks and what their rehearsal settled plus the record of each time
+// one was given (docs/31), the cross-scenario user profile and
 // info feedback log (docs/16), and app settings. Book PDFs travel the separate books channel
 // (content-addressed blobs), never the data channel. Excluded: derived caches
 // (fulltext-*, figures-*, prep-*/pdf and its caches), generated slide decks
@@ -102,6 +103,11 @@ export function inSyncRange(path: string): boolean {
       // travels like marks and threads rather than like a cache. The deck it
       // produces (slides/**) stays out: that is a build output.
       /^talk-.+\.json$/.test(top) ||
+      // What the reader left behind giving that talk against its deck
+      // (docs/31): which page was up when, and what was said to it. A trace,
+      // not a derivation — no deck and no book rebuilds it. The .bad copy a
+      // failed parse leaves beside it is deliberately not matched.
+      /^runthrough-.+\.json$/.test(top) ||
       // The two files devices leave for each other (docs/36). One per device and
       // written by that device alone, so there is never a merge to do: a
       // collector says who it is and when it was last alive, and a reader asks
