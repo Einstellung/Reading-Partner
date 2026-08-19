@@ -20,17 +20,23 @@ const read = (path: string): string => readFileSync(join(SRC, path), "utf8");
 const topBar = read("ui/components/reader/ReaderTopBar.tsx");
 const rack = read("ui/components/reader/PenToolbar.tsx");
 
-test("the read-together glyph is drawn in the same system as the other icons", () => {
+test("the entry's mark is the one icon in colour, and the only one", () => {
   const markup = renderToStaticMarkup(<IconReadTogether size={18} />);
-  expect(markup).toContain('viewBox="0 0 20 20"');
-  expect(markup).toContain('stroke="currentColor"');
+  expect(markup).toContain('viewBox="0 0 24 24"');
   expect(markup).toContain('width="18"');
   expect(markup).toContain('height="18"');
-  // Two heads, an antenna, the book and its spine. The heads are arcs, not
-  // circles, so the book sits in front of them without needing a fill.
-  expect(markup.match(/<path/g)?.length).toBe(5);
-  expect(markup).toContain('fill="currentColor"');
-  expect(markup).not.toContain('fill="#');
+  // Colour is the point: three monochrome glyphs were tried and failed at 18px
+  // (see the comment on the icon). Nothing in it falls back to currentColor.
+  expect(markup).toContain("#2F4F39");
+  expect(markup).not.toContain("currentColor");
+
+  // The rest of the tray stays one system. Every other icon in the file draws in
+  // currentColor, so a stray hex outside the mark's own palette is a regression.
+  const icons = read("ui/components/base/icons.tsx");
+  const from = icons.indexOf("const MARK");
+  const mark = icons.slice(from, icons.indexOf("} as const;", from));
+  const strays = icons.replace(mark, "").match(/#[0-9A-Fa-f]{6}/g) ?? [];
+  expect(strays).toEqual([]);
 });
 
 test("the blackboard and the sparkle are different drawings", () => {

@@ -484,24 +484,36 @@ export function IconBooks({ size = 20 }: IconProps) {
 	);
 }
 
-// Two reading the same book: the reader's book-level AI entry (docs/09). The
-// app's own mark is a robot and a sprout side by side over one open book, and
-// this is that mark at 20px — the heads are arcs rather than circles so the
-// book reads as being in front of them without a fill to hide behind.
+// The reader's book-level AI entry (docs/09): one spread, the book's own text on
+// one page and the conversation about it on the other. That pairing is what the
+// button opens, and it is the one thing in the tray that is not a tool.
 //
-// Two glyphs were tried and dropped first. A board on an easel read as a
-// television: an outlined rectangle with rules inside is the screen glyph, and
-// legs underneath only make it a monitor on a stand. A mortarboard was legible
-// but wrong — it says graduation, and this button is not a lecture.
+// It is also the only icon here that is not currentColor, and deliberately so —
+// three glyphs were drawn in the house system first and all three failed for the
+// same reason. A board on an easel read as a television; a mortarboard read as
+// graduation; the app's own two mascots over a book turned to mush at 18px,
+// because a scene cannot survive at the size a stroke glyph has to work at.
+// Colour does the work strokes could not: the pale spread reads as paper and the
+// dark bubble reads as speech with no interior detail to lose. The palette is
+// the app's own (src-tauri/icons).
+const MARK = {
+	deep: '#2F4F39',
+	mid: '#7FA971',
+	pale: '#E7F0D8',
+	glow: '#A8D48A',
+} as const;
+
 export function IconReadTogether({ size = 20 }: IconProps) {
 	return (
-		<svg {...svgProps(size)} stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-			<path d="M5.52 11.4A2.9 2.9 0 1 1 8.08 11.4" />
-			<path d="M6.8 5.95V4.4" />
-			<circle cx="6.8" cy="3.5" r="0.95" fill="currentColor" stroke="none" />
-			<path d="M11.92 11.4A2.9 2.9 0 1 1 14.48 11.4" />
-			<path d="M2.6 11.4C5.6 11.1 8.6 11.7 10 12.9C11.4 11.7 14.4 11.1 17.4 11.4V16.6C14.4 16.3 11.4 16.9 10 18.1C8.6 16.9 5.6 16.3 2.6 16.6Z" />
-			<path d="M10 12.9V18.1" />
+		<svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+			<rect x="2.2" y="4.2" width="19.6" height="15.6" rx="3" fill={MARK.pale} stroke={MARK.mid} strokeWidth="1.5" />
+			<path d="M12 4.8V19.2" stroke={MARK.mid} strokeWidth="1.2" strokeLinecap="round" />
+			<path d="M5.4 9.6H9.4" stroke={MARK.mid} strokeWidth="1.9" strokeLinecap="round" />
+			<path d="M5.4 13.4H8.2" stroke={MARK.mid} strokeWidth="1.9" strokeLinecap="round" />
+			<path d="M14.9 13.9L15.2 17.4L18 13.9Z" fill={MARK.deep} />
+			<rect x="13.4" y="7.9" width="7.4" height="6.4" rx="2.5" fill={MARK.deep} />
+			<circle cx="15.9" cy="11.1" r="0.85" fill={MARK.glow} />
+			<circle cx="18.4" cy="11.1" r="0.85" fill={MARK.glow} />
 		</svg>
 	);
 }
