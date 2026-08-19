@@ -16,7 +16,7 @@ import { findFigureById } from "../figures/lookup";
 import { getFigures } from "../figures/store";
 import { renderFigure } from "../figures/render";
 import { getLibraryEntry, readLibraryBook } from "../../platform/app/library";
-import { loadNotesState, readChapterNote, readOverviewNote } from "../prep/chapters/store";
+import { loadChapterSpineState, readChapterSpine, readSpineOverview } from "../prep/chapters/store";
 import { loadSettings } from "../../platform/app/settings";
 import { recordParse } from "../../platform/app/structured-output";
 import { contentSystemPrompt, contentUserMessage, sanitizeFragment } from "./content";
@@ -78,8 +78,8 @@ const first40Words = (text: string): string =>
 
 // Whether a book has usable notes for a talk: notes state exists with at least
 // one done chapter (docs/14).
-async function bookHasNotes(bookId: string): Promise<boolean> {
-  const st = await loadNotesState(bookId);
+async function bookHasSpine(bookId: string): Promise<boolean> {
+  const st = await loadChapterSpineState(bookId);
   return !!st && st.chapters.some((c) => c.status === "done");
 }
 
@@ -107,7 +107,7 @@ export async function listDeckTalks(): Promise<DeckTalk[]> {
     if (settled === 0) {
       let usable = false;
       for (const m of talk.materials) {
-        if (await bookHasNotes(m.bookId)) {
+        if (await bookHasSpine(m.bookId)) {
           usable = true;
           break;
         }
@@ -135,10 +135,10 @@ export async function listDeckTalks(): Promise<DeckTalk[]> {
 // the model's citations against.
 export async function planMaterial(bookId: string): Promise<PlanBook> {
   const material = await loadMaterial({ bookId, title: "" });
-  const overview = (await readOverviewNote(bookId))?.trim() ?? "";
+  const overview = (await readSpineOverview(bookId))?.trim() ?? "";
   const chapters: PlanChapter[] = [];
   for (const c of material.skeleton.chapters) {
-    const note = c.hasNote ? await readChapterNote(bookId, c.index) : null;
+    const note = c.hasNote ? await readChapterSpine(bookId, c.index) : null;
     chapters.push({
       index: c.index,
       title: c.title,
@@ -181,7 +181,7 @@ async function gatherSlideNotes(slide: SlideRun, bookIds: string[]): Promise<Gat
   if (slide.bookId && slide.sourceChapters?.length) {
     const missing: number[] = [];
     for (const i of slide.sourceChapters) {
-      const note = await readChapterNote(slide.bookId, i);
+      const note = await readChapterSpine(slide.bookId, i);
       if (note) parts.push(note.trim());
       else missing.push(i);
     }
@@ -198,7 +198,7 @@ async function gatherSlideNotes(slide: SlideRun, bookIds: string[]): Promise<Gat
     ? `Chapter ${slide.sourceChapters.join(", ")} had no note on disk. `
     : "";
   if (slide.bookId) {
-    const ov = await readOverviewNote(slide.bookId);
+    const ov = await readSpineOverview(slide.bookId);
     if (ov) {
       return {
         text: clip(ov.trim()),
@@ -213,7 +213,7 @@ async function gatherSlideNotes(slide: SlideRun, bookIds: string[]): Promise<Gat
     };
   }
   for (const id of bookIds) {
-    const ov = await readOverviewNote(id);
+    const ov = await readSpineOverview(id);
     if (ov) parts.push(`# ${(await getLibraryEntry(id))?.title ?? id}\n${ov.trim()}`);
   }
   return { text: clip(parts.join("\n\n")) };

@@ -27,7 +27,7 @@ import { runWithWatchdog, StoppedError, type AiCallOptions, type WatchdogConfig 
 import { CallLimiter, type LimiterConfig } from "../../../ai/limiter";
 import { ObservableRun, type RunActivity, type RunSnapshot } from "../../../ai/observable-run";
 import type { BookChapter } from "../../chapters";
-import { createNotesState, normalizeNotesOnLoad, type NoteChapter, type NotesState } from "./types";
+import { createChapterSpineState, normalizeChapterSpineOnLoad, type SpineChapter, type ChapterSpineState } from "./types";
 
 export type { AiCallOptions };
 
@@ -39,12 +39,12 @@ export interface PipelineConfig extends WatchdogConfig {
 }
 
 export interface PlanOutcome {
-  chapters: NoteChapter[];
+  chapters: SpineChapter[];
   source: "outline" | "ai";
 }
 
 export interface ChapterGenInput {
-  chapter: NoteChapter;
+  chapter: SpineChapter;
   // The whole chapter table. Chapters are written in parallel, so a chapter never
   // sees the spines written before it; the table is how "builds on" still names
   // real chapters by the numbers the rest of the app uses.
@@ -53,13 +53,13 @@ export interface ChapterGenInput {
   instruction?: string;
 }
 
-export interface NotesDeps {
-  loadState(bookId: string): Promise<NotesState | null>;
-  saveState(state: NotesState): Promise<void>;
+export interface ChapterSpineDeps {
+  loadState(bookId: string): Promise<ChapterSpineState | null>;
+  saveState(state: ChapterSpineState): Promise<void>;
   buildPlan(opts: AiCallOptions): Promise<PlanOutcome>;
   generateChapter(input: ChapterGenInput, opts: AiCallOptions): Promise<string>;
   writeChapter(index: number, body: string): Promise<void>;
-  readChapterNote(index: number): Promise<string | null>;
+  readChapter(index: number): Promise<string | null>;
   buildOverview(
     chapters: { index: number; title: string; body: string }[],
     opts: AiCallOptions,
@@ -75,7 +75,7 @@ export interface NotesDeps {
 // the panel can show a live counter. With several chapters in flight the snapshot
 // carries the one that started earliest; which chapters are running is in the
 // state's per-chapter statuses, where the panel already reads it.
-export interface NotesActivity {
+export interface ChapterSpineActivity {
   kind: "plan" | "chapter" | "overview";
   // The chapter index for a "chapter" activity.
   chapter?: number;
@@ -85,17 +85,17 @@ export interface NotesActivity {
   attempts: number;
 }
 
-export type NotesSnapshot = RunSnapshot<NotesState | null, NotesActivity>;
+export type ChapterSpineSnapshot = RunSnapshot<ChapterSpineState | null, ChapterSpineActivity>;
 
 // How often the published activity may be refreshed by streamed progress. Six
 // streams at once would otherwise copy the whole state per delta.
 const ACTIVITY_PUBLISH_MS = 250;
 
-function toBookChapter(c: NoteChapter): BookChapter {
+function toBookChapter(c: SpineChapter): BookChapter {
   return { index: c.index, title: c.title, startPage: c.startPage, endPage: c.endPage };
 }
 
-export class NotesPipeline extends ObservableRun<NotesState | null, NotesActivity> {
+export class ChapterSpinePipeline extends ObservableRun<ChapterSpineState | null, ChapterSpineActivity> {
   private stopFlag = false;
   // One-line steers for a pending regenerate, keyed by chapter index (not
   // persisted — a steer only applies to the run it was requested for).
@@ -106,14 +106,14 @@ export class NotesPipeline extends ObservableRun<NotesState | null, NotesActivit
   private targets: Set<number> | null = null;
   // The in-flight calls' liveness, keyed by call. The snapshot shows one of them;
   // this is what decides which.
-  private readonly live = new Map<string, NotesActivity>();
+  private readonly live = new Map<string, ChapterSpineActivity>();
   private lastPublish = 0;
   private readonly limiter: CallLimiter;
 
   constructor(
     private readonly bookId: string,
     private readonly bookName: string,
-    private readonly deps: NotesDeps,
+    private readonly deps: ChapterSpineDeps,
     config: Partial<PipelineConfig> = {},
   ) {
     super(null, deps, config);
@@ -123,7 +123,7 @@ export class NotesPipeline extends ObservableRun<NotesState | null, NotesActivit
     this.limiter = new CallLimiter(limiter, deps);
   }
 
-  protected copyState(state: NotesState | null): NotesState | null {
+  protected copyState(state: ChapterSpineState | null): ChapterSpineState | null {
     return state ? { ...state, chapters: state.chapters.map((c) => ({ ...c })) } : null;
   }
 
@@ -161,7 +161,7 @@ export class NotesPipeline extends ObservableRun<NotesState | null, NotesActivit
         try {
           if (this.state) await this.deps.saveState(this.state);
         } catch (e) {
-          console.warn("failed to persist notes state", e);
+          console.warn("failed to persist chapter-spine state", e);
         }
         for (const w of waiters) w();
       }
@@ -180,7 +180,7 @@ export class NotesPipeline extends ObservableRun<NotesState | null, NotesActivit
       if (now - this.lastPublish < ACTIVITY_PUBLISH_MS) return;
     }
     this.lastPublish = this.deps.now();
-    let earliest: NotesActivity | null = null;
+    let earliest: ChapterSpineActivity | null = null;
     for (const a of this.live.values()) {
       if (!earliest || a.startedAt < earliest.startedAt) earliest = a;
     }
@@ -193,7 +193,7 @@ export class NotesPipeline extends ObservableRun<NotesState | null, NotesActivit
   // than being answered by this one call alone.
   private async callTracked<T>(
     key: string,
-    info: Omit<NotesActivity, keyof RunActivity>,
+    info: Omit<ChapterSpineActivity, keyof RunActivity>,
     invoke: (opts: AiCallOptions) => Promise<T>,
   ): Promise<T> {
     try {
@@ -229,8 +229,8 @@ export class NotesPipeline extends ObservableRun<NotesState | null, NotesActivit
     if (this.state) return;
     const loaded = await this.deps.loadState(this.bookId);
     this.state = loaded
-      ? normalizeNotesOnLoad(loaded)
-      : createNotesState(this.bookId, this.bookName, this.deps.now());
+      ? normalizeChapterSpineOnLoad(loaded)
+      : createChapterSpineState(this.bookId, this.bookName, this.deps.now());
     this.notify();
   }
 
@@ -317,7 +317,7 @@ export class NotesPipeline extends ObservableRun<NotesState | null, NotesActivit
   // preparation there is no chapter the pass is allowed to leave out: an edge
   // missing because a chapter was never written reads exactly like a chapter
   // nothing depends on.
-  private allChaptersSettled(s: NotesState): boolean {
+  private allChaptersSettled(s: ChapterSpineState): boolean {
     return s.chapters.length > 0 && s.chapters.every((c) => c.status === "done");
   }
 
@@ -399,7 +399,7 @@ export class NotesPipeline extends ObservableRun<NotesState | null, NotesActivit
     await Promise.all(due.map((ch) => this.runChapter(ch, table)));
   }
 
-  private async runChapter(ch: NoteChapter, table: BookChapter[]): Promise<void> {
+  private async runChapter(ch: SpineChapter, table: BookChapter[]): Promise<void> {
     if (this.stopFlag) return;
     const instruction = this.instructions.get(ch.index);
     try {
@@ -442,7 +442,7 @@ export class NotesPipeline extends ObservableRun<NotesState | null, NotesActivit
     try {
       const inputs: { index: number; title: string; body: string }[] = [];
       for (const c of s.chapters) {
-        const body = (await this.deps.readChapterNote(c.index)) ?? "";
+        const body = (await this.deps.readChapter(c.index)) ?? "";
         inputs.push({ index: c.index, title: c.title, body });
       }
       const body = await this.limiter.run(

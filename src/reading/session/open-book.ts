@@ -106,11 +106,11 @@ export async function openBook(
   shell.restartDwell();
 
   // Detach the previous book's prep panel (the pipeline itself keeps running in
-  // the background as a module singleton). Notes are per book too. Prep for this
+  // the background as a module singleton). The spine is per book too. Prep for this
   // book re-attaches below only if it has been prepped before; starting a fresh
   // run is the trigger's (reading/session/use-prep-trigger.ts), not the open's.
   shell.resetPrep();
-  shell.resetNotes();
+  shell.resetChapterSpine();
 
   // Extract the full text and the figure index in the background so the AI can
   // see the book (M6, M9). Fire-and-forget: neither blocks rendering, and a book
@@ -139,7 +139,7 @@ export async function openBook(
     shell.showFulltext(ft, false);
     if (ft && ft.status === "ok") {
       await shell.resumePrep(bookId, name, ft);
-      await shell.resumeNotes(bookId, name, ft);
+      await shell.resumeChapterSpine(bookId, name, ft);
     }
   });
 

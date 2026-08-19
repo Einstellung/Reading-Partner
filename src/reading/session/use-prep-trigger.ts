@@ -18,7 +18,7 @@ import { documentShape } from "../../fulltext";
 import type { Fulltext } from "../../fulltext/types";
 import { annotationPage, type Annotation } from "../../platform/app/reader-contract";
 import { prepTriggerDecision, type PrepTrigger } from "../prep";
-import { hasNotesState, peekNotesPipeline } from "../prep/chapters/live";
+import { hasChapterSpineState, peekChapterSpinePipeline } from "../prep/chapters/live";
 import { hasPrepState, peekPrepPipeline } from "../prep/papers/live";
 
 // Marks land in bursts — one stroke can save several annotations — so coalesce
@@ -80,7 +80,7 @@ export function usePrepTrigger(
       const ft = (await ftPromise) ?? null;
       const presence = {
         papers: !!peekPrepPipeline(bookId) || (await hasPrepState(bookId).catch(() => false)),
-        chapters: !!peekNotesPipeline(bookId) || (await hasNotesState(bookId).catch(() => false)),
+        chapters: !!peekChapterSpinePipeline(bookId) || (await hasChapterSpineState(bookId).catch(() => false)),
         shape: ft && ft.status === "ok" ? documentShape(ft) : ("unknown" as const),
       };
       if (bookIdRef.current !== bookId) return; // switched documents while extracting
@@ -129,7 +129,7 @@ export function usePrepTrigger(
     }
     const bookId = bookIdRef.current;
     if (!bookId) return;
-    const running = peekNotesPipeline(bookId) ?? peekPrepPipeline(bookId);
+    const running = peekChapterSpinePipeline(bookId) ?? peekPrepPipeline(bookId);
     if (running) {
       running.ensureStarted().catch(() => {});
       return;

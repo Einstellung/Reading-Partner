@@ -3,7 +3,7 @@
 // entry press does not wait for it, that the document's own text picks which
 // pipeline is started, and that a mark and a press never start two runs.
 //
-// Nothing is on disk here, so hasPrepState / hasNotesState both answer false
+// Nothing is on disk here, so hasPrepState / hasChapterSpineState both answer false
 // through their own catch and the presence probe is honest about a fresh
 // document. What is left under test is exactly the wiring.
 //

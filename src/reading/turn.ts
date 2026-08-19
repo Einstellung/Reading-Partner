@@ -17,7 +17,7 @@ import type { AgentTool } from "../ai/agent";
 import {
   annotationPage,
   buildReadingTools,
-  notesOverviewSection,
+  spineOverviewSection,
   surroundingText,
 } from "./context";
 import { toAnnotationLite, type AnnotationLite, type TopicMaterial } from "../fulltext/format";
@@ -60,7 +60,7 @@ import {
   type DistillAnnotation,
   type Observation,
 } from "../observation";
-import { readOverviewNote } from "./prep/chapters/store";
+import { readSpineOverview } from "./prep/chapters/store";
 import { chapterIndexForPage } from "./prep/papers/scheduler";
 import { paperFulltextHash, readPrepNote } from "./prep/papers/store";
 import { parseNote } from "./prep/papers/notes";
@@ -670,7 +670,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   const identity = profileForPrompt(await assembleIdentity().catch(() => ""));
   const profileSection = readerProfileSection(identity.declared, identity.guesses);
   // The whole-book outline from the reader's notes (docs/14), when they exist.
-  const notesOverview = notesOverviewSection(await readOverviewNote(bookId));
+  const spineOverview = spineOverviewSection(await readSpineOverview(bookId));
   // A booklist entry with no text layer and no marks is a title the model can do
   // nothing with; the first thing to go when the window is tight.
   const booklistThin = booklist.filter((m) => m.fulltextAvailable || m.annotationCount > 0);
@@ -734,7 +734,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
       inlineBody,
       prepNotes: prepNotesSection(notes),
       chapterSpine: dropped.has("notes-overview") ? "" : chapterSpine,
-      notesOverview: dropped.has("notes-overview") ? "" : notesOverview,
+      spineOverview: dropped.has("notes-overview") ? "" : spineOverview,
       profile: dropped.has("reader-profile") ? "" : profileSection,
       toolPrompts,
       ...(focusChapter ? { focusLabel: chapterFocusLabel(focusChapter) } : {}),

@@ -40,7 +40,7 @@ const lands =
 function fakeShell(log: Call[], over: Partial<Record<keyof ReaderShell, (...a: any[]) => unknown>> = {}) {
   const async: Partial<Record<keyof ReaderShell, (...a: any[]) => unknown>> = {
     resumePrep: lands(log, "resumePrep"),
-    resumeNotes: lands(log, "resumeNotes"),
+    resumeChapterSpine: lands(log, "resumeChapterSpine"),
   };
   return new Proxy(
     {},
@@ -202,7 +202,7 @@ test("a book opens with its prep detached, legacy classroom flag or not", async 
 
   expect(argsOf(log, "resetPrep")).toEqual([]);
   expect(argsOf(log, "resumePrep")).toEqual(["book-1", "A Book.pdf", FULLTEXT]);
-  expect(argsOf(log, "resumeNotes")).toEqual(["book-1", "A Book.pdf", FULLTEXT]);
+  expect(argsOf(log, "resumeChapterSpine")).toEqual(["book-1", "A Book.pdf", FULLTEXT]);
 });
 
 // The two panels are resumed one after the other, not both at once: prep runs
@@ -216,8 +216,8 @@ test("the notes panel is resumed only after the prep panel has finished", async 
   expect(names(log).filter((n) => n.startsWith("resume"))).toEqual([
     "resumePrep",
     "resumePrep:landed",
-    "resumeNotes",
-    "resumeNotes:landed",
+    "resumeChapterSpine",
+    "resumeChapterSpine:landed",
   ]);
 });
 
@@ -243,7 +243,7 @@ test("a book with no text layer resumes neither panel", async () => {
   expect(argsOf(log, "showFulltext")).toEqual([null, true]);
   expect(last(log, "showFulltext")?.args).toEqual([NO_TEXT, false]);
   expect(names(log)).not.toContain("resumePrep");
-  expect(names(log)).not.toContain("resumeNotes");
+  expect(names(log)).not.toContain("resumeChapterSpine");
 });
 
 test("an extraction that lands after the reader moved on is thrown away", async () => {

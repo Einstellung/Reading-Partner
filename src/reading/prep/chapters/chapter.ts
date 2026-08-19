@@ -22,7 +22,7 @@ import type { Figure } from "../../figures/types";
 import type { Fulltext } from "../../../fulltext/types";
 import { aiLanguageName, type AiLanguage } from "../../../platform/app/settings";
 import type { BookChapter } from "../../chapters";
-import type { NoteChapter } from "./types";
+import type { SpineChapter } from "./types";
 
 const CHAPTER_MAX_ROUNDS = 16;
 
@@ -127,7 +127,7 @@ export function formatChapterTable(chapters: BookChapter[], current: number): st
 
 export function chapterSystemPrompt(params: {
   bookName: string;
-  chapter: NoteChapter;
+  chapter: SpineChapter;
   chapters?: BookChapter[];
   figureCatalog?: string;
   emphasis?: string;
@@ -204,7 +204,7 @@ export function chapterSystemPrompt(params: {
 }
 
 // The loop's kickoff message; the model pulls the chapter's pages itself.
-export function chapterKickoff(chapter: NoteChapter): string {
+export function chapterKickoff(chapter: SpineChapter): string {
   return (
     `Write the spine for chapter ${chapter.index} ("${chapter.title}"), pages ` +
     `${chapter.startPage}-${chapter.endPage}. Read the pages with read_pages first, ` +
@@ -257,9 +257,9 @@ export interface ChapterModel {
 // Run the chapter tool loop and resolve with the note body. Errors reject.
 // onProgress reports the cumulative received character count (drives the
 // pipeline's stall watchdog and liveness counter). signal aborts the call.
-export function runNoteChapter(params: {
+export function runSpineChapter(params: {
   bookName: string;
-  chapter: NoteChapter;
+  chapter: SpineChapter;
   chapters?: BookChapter[];
   tools: AgentTool[];
   model: ChapterModel;

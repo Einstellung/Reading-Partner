@@ -18,7 +18,7 @@ import { toAnnotationLite, type AnnotationLite } from "../../fulltext/format";
 import { buildSkeleton, type Skeleton } from "../rehearsal";
 import { getFigures } from "../figures/store";
 import type { Figure } from "../figures/types";
-import { loadNotesState } from "../prep/chapters/store";
+import { loadChapterSpineState } from "../prep/chapters/store";
 import type { TalkMaterial } from "./types";
 
 // One material of a talk with everything the rehearsal reads about it.
@@ -38,15 +38,15 @@ export interface LoadedMaterial {
 // talk and being told "this book contributes nothing" is more use than an error.
 export async function loadMaterial(material: TalkMaterial): Promise<LoadedMaterial> {
   const { bookId } = material;
-  const [entry, fulltext, anns, notesState, figures] = await Promise.all([
+  const [entry, fulltext, anns, spineState, figures] = await Promise.all([
     getLibraryEntry(bookId).catch(() => null),
     getFulltext(bookId).catch(() => null),
     loadAnnotations(bookId).catch((): Annotation[] => []),
-    loadNotesState(bookId).catch(() => null),
+    loadChapterSpineState(bookId).catch(() => null),
     getFigures(bookId).catch(() => null),
   ]);
   const skeleton = buildSkeleton({
-    notesChapters: notesState?.chapters ?? null,
+    spineChapters: spineState?.chapters ?? null,
     outline: fulltext?.outline ?? [],
     pageCount: fulltext?.pages.length ?? 0,
   });

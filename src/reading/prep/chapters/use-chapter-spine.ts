@@ -11,7 +11,7 @@
 // Everything book-specific comes from the shell's refs rather than props: the
 // open book's id, name, full text, figures, bytes and marks are all read at call
 // time, so every callback here keeps the stable identity it had inside App and a
-// notes run never re-renders the reader.
+// spine run never re-renders the reader.
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import { annotationPage, type Annotation } from "../../../platform/app/reader-contract";
@@ -20,17 +20,17 @@ import { loadThreads } from "../../../platform/app/threads";
 import type { Fulltext } from "../../../fulltext/types";
 import type { FiguresIndex } from "../../figures";
 import { prepProgress, type PrepProgress } from "../progress";
-import { getNotesPipeline, hasNotesState, peekNotesPipeline, type NotesInputs } from "./live";
-import type { NotesPipeline, NotesSnapshot } from "./pipeline";
-import { readChapterNote as readNotesChapter, readOverviewNote } from "./store";
+import { getChapterSpinePipeline, hasChapterSpineState, peekChapterSpinePipeline, type ChapterSpineInputs } from "./live";
+import type { ChapterSpinePipeline, ChapterSpineSnapshot } from "./pipeline";
+import { readChapterSpine as readSpineChapter, readSpineOverview } from "./store";
 
 // A ref the shell owns and this hook only reads.
 type HostRef<T> = { readonly current: T };
 
-// What the notes feature needs from the shell. Refs, because the callbacks below
+// What the chapter-spine feature needs from the shell. Refs, because the callbacks below
 // are stable and must see the book that is open when they run, not the one that
 // was open when they were created.
-export interface NotesHost {
+export interface ChapterSpineHost {
   // The open book's id, null in the library. Re-read after every await: a book
   // switch mid-extraction abandons the run.
   bookIdRef: HostRef<string | null>;
@@ -44,8 +44,8 @@ export interface NotesHost {
 
 // Exactly the Prep panel's chapter bindings, so the shell can hand them over
 // whole (ui/components/reader/PrepPanel.tsx, ChapterPrepBindings).
-export interface NotesPanelBindings {
-  snapshot: NotesSnapshot | null;
+export interface ChapterSpinePanelBindings {
+  snapshot: ChapterSpineSnapshot | null;
   loadOverview(): Promise<string | null>;
   loadChapter(index: number): Promise<string | null>;
   onGenerate(): void;
@@ -57,13 +57,13 @@ export interface NotesPanelBindings {
   onRegenerateOverview(): void;
 }
 
-export interface NotesController {
+export interface ChapterSpineController {
   // Mirror of the attached pipeline, for the panel and the drawer's busy dot.
-  snapshot: NotesSnapshot | null;
+  snapshot: ChapterSpineSnapshot | null;
   // How far this book's spines have got, for the line above a conversation.
   // Null when no run is attached.
   progress: PrepProgress | null;
-  panel: NotesPanelBindings;
+  panel: ChapterSpinePanelBindings;
   // Start (or pick up) this book's spine run. Called by the trigger, which has
   // already decided that this is the kind of prep this document gets.
   // Idempotent: the pipeline is a module singleton per book and never re-runs a
@@ -75,7 +75,7 @@ export interface NotesController {
   resume(bookId: string, name: string, ft: Fulltext): Promise<void>;
 }
 
-export function useNotes(host: NotesHost): NotesController {
+export function useChapterSpine(host: ChapterSpineHost): ChapterSpineController {
   const {
     annsRef,
     bookIdRef,
@@ -86,13 +86,13 @@ export function useNotes(host: NotesHost): NotesController {
     pushToast,
   } = host;
 
-  const [notesSnap, setNotesSnap] = useState<NotesSnapshot | null>(null);
+  const [spineSnap, setSpineSnap] = useState<ChapterSpineSnapshot | null>(null);
   // The spine pipeline attached to the open book, its unsubscribe,
   // and the last-seen plan/overview phases so run start/done/failed log as
   // transitions.
-  const notesRef = useRef<NotesPipeline | null>(null);
-  const notesUnsubRef = useRef<(() => void) | null>(null);
-  const notesPhaseRef = useRef<{ plan: string; overview: string }>({ plan: "pending", overview: "pending" });
+  const spineRef = useRef<ChapterSpinePipeline | null>(null);
+  const spineUnsubRef = useRef<(() => void) | null>(null);
+  const spinePhaseRef = useRef<{ plan: string; overview: string }>({ plan: "pending", overview: "pending" });
 
   // Attach the open book's spine pipeline to the UI: subscribe the
   // panel to the book's pipeline. Book-specific inputs (buffer, figure index,
@@ -100,12 +100,12 @@ export function useNotes(host: NotesHost): NotesController {
   // whatever book is open later. Idempotent — the pipeline is a module singleton
   // per book. It does not kick generation — the caller decides — and returns the
   // pipeline.
-  const attachNotes = useCallback(
-    (bookId: string, name: string, ft: Fulltext): NotesPipeline => {
+  const attachSpine = useCallback(
+    (bookId: string, name: string, ft: Fulltext): ChapterSpinePipeline => {
       const buffer = bufferRef.current;
       const figuresPromise = currentFiguresRef.current;
       const annMap = annsRef.current;
-      const inputs: NotesInputs = {
+      const inputs: ChapterSpineInputs = {
         fulltext: ft,
         getBuffer: () => buffer,
         getFigures: async () => (await figuresPromise)?.figures ?? [],
@@ -137,27 +137,27 @@ export function useNotes(host: NotesHost): NotesController {
             .filter((t): t is NonNullable<typeof t> => t !== null);
         },
       };
-      const pipeline = getNotesPipeline(bookId, name, inputs);
-      notesRef.current = pipeline;
-      notesUnsubRef.current?.();
-      notesPhaseRef.current = { plan: "pending", overview: "pending" };
+      const pipeline = getChapterSpinePipeline(bookId, name, inputs);
+      spineRef.current = pipeline;
+      spineUnsubRef.current?.();
+      spinePhaseRef.current = { plan: "pending", overview: "pending" };
       const sync = () => {
         const snap = pipeline.snapshot();
         const topicId = ctxRef.current.topicId;
         const st = snap.state;
         if (st && topicId) {
-          const prev = notesPhaseRef.current;
+          const prev = spinePhaseRef.current;
           if (st.overviewStatus === "done" && prev.overview !== "done") {
             logEvent(topicId, "notes-run", { phase: "done" });
           }
           if (st.planStatus === "failed" && prev.plan !== "failed") {
             logEvent(topicId, "notes-run", { phase: "failed" });
           }
-          notesPhaseRef.current = { plan: st.planStatus, overview: st.overviewStatus };
+          spinePhaseRef.current = { plan: st.planStatus, overview: st.overviewStatus };
         }
-        setNotesSnap(snap);
+        setSpineSnap(snap);
       };
-      notesUnsubRef.current = pipeline.subscribe(sync);
+      spineUnsubRef.current = pipeline.subscribe(sync);
       sync();
       return pipeline;
     },
@@ -167,114 +167,114 @@ export function useNotes(host: NotesHost): NotesController {
   // Start this book's spine run and let it go. The trigger has already checked
   // everything that gates it (reading/prep/trigger.ts); what is left here is
   // attaching the panel and kicking the pipeline.
-  const startNotes = useCallback(
+  const startSpine = useCallback(
     async (bookId: string, name: string, ft: Fulltext) => {
-      const pipeline = attachNotes(bookId, name, ft);
+      const pipeline = attachSpine(bookId, name, ft);
       await pipeline.ensureStarted();
     },
-    [attachNotes],
+    [attachSpine],
   );
 
   // The Prep panel's Generate / Resume button: the manual whole-book run.
-  const generateNotes = useCallback(async () => {
+  const generateSpine = useCallback(async () => {
     const bookId = bookIdRef.current;
     const name = ctxRef.current.fileName;
     if (!bookId) return;
     const ft = await currentFulltextRef.current;
     if (bookIdRef.current !== bookId) return; // switched books while extracting
     if (!ft || ft.status !== "ok") {
-      pushToast("warn", "This book has no readable text layer, so notes can't be generated.");
+      pushToast("warn", "This book has no readable text layer, so its chapter spine can't be prepared.");
       return;
     }
     const topicId = ctxRef.current.topicId;
     if (topicId) logEvent(topicId, "notes-run", { phase: "start" });
-    const pipeline = attachNotes(bookId, name, ft);
+    const pipeline = attachSpine(bookId, name, ft);
     void pipeline.ensureStarted();
-  }, [attachNotes, pushToast, bookIdRef, ctxRef, currentFulltextRef]);
+  }, [attachSpine, pushToast, bookIdRef, ctxRef, currentFulltextRef]);
 
-  const notesGenerate = useCallback(() => void generateNotes(), [generateNotes]);
-  const notesStop = useCallback(() => notesRef.current?.stop(), []);
-  const notesRetryPlan = useCallback(() => notesRef.current?.retryPlan(), []);
-  const notesRetryChapter = useCallback((index: number) => notesRef.current?.retryChapter(index), []);
-  const notesRegenerateChapter = useCallback(
+  const spineGenerate = useCallback(() => void generateSpine(), [generateSpine]);
+  const spineStop = useCallback(() => spineRef.current?.stop(), []);
+  const spineRetryPlan = useCallback(() => spineRef.current?.retryPlan(), []);
+  const spineRetryChapter = useCallback((index: number) => spineRef.current?.retryChapter(index), []);
+  const spineRegenerateChapter = useCallback(
     (index: number, instruction?: string) => {
       const topicId = ctxRef.current.topicId;
       if (topicId) logEvent(topicId, "notes-chapter-regenerate", { index });
-      notesRef.current?.regenerateChapter(index, instruction);
+      spineRef.current?.regenerateChapter(index, instruction);
     },
     [ctxRef],
   );
   // Generate a single chapter left pending by a stop or a failure.
-  const notesGenerateChapter = useCallback((index: number) => notesRef.current?.generateChapter(index), []);
-  const notesRegenerateOverview = useCallback(() => notesRef.current?.regenerateOverview(), []);
-  const loadNotesOverview = useCallback(() => {
+  const spineGenerateChapter = useCallback((index: number) => spineRef.current?.generateChapter(index), []);
+  const spineRegenerateOverview = useCallback(() => spineRef.current?.regenerateOverview(), []);
+  const loadSpineOverview = useCallback(() => {
     const bookId = bookIdRef.current;
-    return bookId ? readOverviewNote(bookId) : Promise.resolve(null);
+    return bookId ? readSpineOverview(bookId) : Promise.resolve(null);
   }, [bookIdRef]);
-  const loadNotesChapter = useCallback(
+  const loadSpineChapter = useCallback(
     (index: number) => {
       const bookId = bookIdRef.current;
-      return bookId ? readNotesChapter(bookId, index) : Promise.resolve(null);
+      return bookId ? readSpineChapter(bookId, index) : Promise.resolve(null);
     },
     [bookIdRef],
   );
 
-  // Notes are per book; detach the previous book's panel (the pipeline keeps
+  // Spines are per book; detach the previous book's panel (the pipeline keeps
   // running in the background as a module singleton).
-  const resetNotes = useCallback(() => {
-    notesUnsubRef.current?.();
-    notesUnsubRef.current = null;
-    notesRef.current = null;
-    notesPhaseRef.current = { plan: "pending", overview: "pending" };
-    setNotesSnap(null);
+  const resetChapterSpine = useCallback(() => {
+    spineUnsubRef.current?.();
+    spineUnsubRef.current = null;
+    spineRef.current = null;
+    spinePhaseRef.current = { plan: "pending", overview: "pending" };
+    setSpineSnap(null);
   }, []);
 
   // Resume a book's spines from persisted state: subscribe the panel, then pick
   // up wherever the last run stopped. A run that already exists is always
   // resumed — the spend was already agreed to, and half a book's spines are
   // worth less than none.
-  const resumeNotes = useCallback(
+  const resumeChapterSpine = useCallback(
     async (bookId: string, name: string, ft: Fulltext) => {
       try {
-        if (peekNotesPipeline(bookId) || (await hasNotesState(bookId))) {
+        if (peekChapterSpinePipeline(bookId) || (await hasChapterSpineState(bookId))) {
           if (bookIdRef.current === bookId) {
-            const pipeline = attachNotes(bookId, name, ft);
+            const pipeline = attachSpine(bookId, name, ft);
             void pipeline.ensureStarted();
           }
         }
       } catch (e) {
-        console.warn("failed to resume book notes", e);
+        console.warn("failed to resume the book's chapter spine", e);
       }
     },
-    [attachNotes, bookIdRef],
+    [attachSpine, bookIdRef],
   );
 
   // A chapter is behind us once it is written or given up on; the graph pass
   // that follows is not counted, so the line reads in chapters, which is what
   // the reader can see in the panel.
-  const notesProgress = useMemo(() => {
-    const chapters = notesSnap?.state?.chapters;
+  const spineProgress = useMemo(() => {
+    const chapters = spineSnap?.state?.chapters;
     if (!chapters) return null;
     return prepProgress(chapters, (c) => c.status === "done" || c.status === "failed");
-  }, [notesSnap]);
+  }, [spineSnap]);
 
   return {
-    snapshot: notesSnap,
-    progress: notesProgress,
+    snapshot: spineSnap,
+    progress: spineProgress,
     panel: {
-      snapshot: notesSnap,
-      loadOverview: loadNotesOverview,
-      loadChapter: loadNotesChapter,
-      onGenerate: notesGenerate,
-      onStop: notesStop,
-      onRetryPlan: notesRetryPlan,
-      onRetryChapter: notesRetryChapter,
-      onRegenerateChapter: notesRegenerateChapter,
-      onGenerateChapter: notesGenerateChapter,
-      onRegenerateOverview: notesRegenerateOverview,
+      snapshot: spineSnap,
+      loadOverview: loadSpineOverview,
+      loadChapter: loadSpineChapter,
+      onGenerate: spineGenerate,
+      onStop: spineStop,
+      onRetryPlan: spineRetryPlan,
+      onRetryChapter: spineRetryChapter,
+      onRegenerateChapter: spineRegenerateChapter,
+      onGenerateChapter: spineGenerateChapter,
+      onRegenerateOverview: spineRegenerateOverview,
     },
-    start: startNotes,
-    reset: resetNotes,
-    resume: resumeNotes,
+    start: startSpine,
+    reset: resetChapterSpine,
+    resume: resumeChapterSpine,
   };
 }

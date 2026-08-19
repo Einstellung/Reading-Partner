@@ -1,6 +1,6 @@
 // Live wiring of the chapter-spine pipeline (docs/09): real deps (Tauri fs store, pi-ai
 // through the app's provider config, the book's figure index for view_figure)
-// bound to the dep-injected NotesPipeline. One pipeline instance per book id for
+// bound to the dep-injected ChapterSpinePipeline. One pipeline instance per book id for
 // the app's lifetime, so generation keeps running in the background across book
 // switches. The book's full text, figures, buffer and reader emphasis signals
 // are supplied by the host (App) so this module stays decoupled from the reader.
@@ -17,26 +17,26 @@ import {
   buildChapterTools,
   formatChatThreads,
   formatEmphasisSignals,
-  runNoteChapter,
+  runSpineChapter,
   type ChatThread,
   type EmphasisSignal,
 } from "./chapter";
 import { outlineEntries, pickChapterTable, type TableChapter } from "../../chapters";
-import { NOTES_PLAN_SYSTEM_PROMPT, parseNotesPlan, planUserMessage } from "./plan";
-import type { NoteChapter } from "./types";
+import { CHAPTER_SPINE_PLAN_SYSTEM_PROMPT, parseChapterSpinePlan, planUserMessage } from "./plan";
+import type { SpineChapter } from "./types";
 import { overviewSystemPrompt, overviewUserMessage } from "./overview";
-import { NotesPipeline, type NotesDeps } from "./pipeline";
+import { ChapterSpinePipeline, type ChapterSpineDeps } from "./pipeline";
 import {
-  loadNotesState,
-  readChapterNote,
-  saveNotesState,
-  writeChapterNote,
-  writeOverviewNote,
+  loadChapterSpineState,
+  readChapterSpine,
+  saveChapterSpineState,
+  writeChapterSpine,
+  writeSpineOverview,
 } from "./store";
 
-// What the host feeds a book's notes pipeline. Getters are read at generation
+// What the host feeds a book's chapter-spine pipeline. Getters are read at generation
 // time so figures finishing extraction and fresh annotations are picked up.
-export interface NotesInputs {
+export interface ChapterSpineInputs {
   fulltext: Fulltext; // the book's full text (status "ok")
   getBuffer(): ArrayBuffer | null; // book bytes for figure rasterization
   getFigures(): Promise<Figure[]>; // the book's figure index
@@ -50,7 +50,7 @@ export interface NotesInputs {
 // A row of the book's chapter table as a chapter of this run: nothing prepared
 // yet. The printed chapter number is not carried into the state file — it is a
 // function of the title, and a persisted copy is one more thing to keep true.
-function pending(c: TableChapter): NoteChapter {
+function pending(c: TableChapter): SpineChapter {
   return {
     index: c.index,
     title: c.title,
@@ -60,11 +60,11 @@ function pending(c: TableChapter): NoteChapter {
   };
 }
 
-function makeDeps(bookId: string, bookName: string, inputs: NotesInputs): NotesDeps {
+function makeDeps(bookId: string, bookName: string, inputs: ChapterSpineInputs): ChapterSpineDeps {
   const { fulltext } = inputs;
   return {
-    loadState: loadNotesState,
-    saveState: saveNotesState,
+    loadState: loadChapterSpineState,
+    saveState: saveChapterSpineState,
 
     async buildPlan(opts) {
       // The PDF outline is the chapter structure when it has one, minus the
@@ -85,12 +85,12 @@ function makeDeps(bookId: string, bookName: string, inputs: NotesInputs): NotesD
       const text = await callModel(
         "prep",
         "plan",
-        NOTES_PLAN_SYSTEM_PROMPT,
+        CHAPTER_SPINE_PLAN_SYSTEM_PROMPT,
         planUserMessage(fulltext),
         opts,
       );
       const parsed = recordParse("notes-plan", model, text, (tally) =>
-        parseNotesPlan(text, total, tally),
+        parseChapterSpinePlan(text, total, tally),
       );
       // Filtered when the filter leaves a usable table; the model's own answer
       // when it does not, because a plan the filter rejects is still better than
@@ -129,7 +129,7 @@ function makeDeps(bookId: string, bookName: string, inputs: NotesInputs): NotesD
         chapter.startPage,
         chapter.endPage,
       );
-      return runNoteChapter({
+      return runSpineChapter({
         bookName,
         chapter,
         chapters,
@@ -145,8 +145,8 @@ function makeDeps(bookId: string, bookName: string, inputs: NotesInputs): NotesD
       });
     },
 
-    writeChapter: (index, body) => writeChapterNote(bookId, index, body),
-    readChapterNote: (index) => readChapterNote(bookId, index),
+    writeChapter: (index, body) => writeChapterSpine(bookId, index, body),
+    readChapter: (index) => readChapterSpine(bookId, index),
 
     async buildOverview(chapters, opts) {
       return callModel(
@@ -158,18 +158,22 @@ function makeDeps(bookId: string, bookName: string, inputs: NotesInputs): NotesD
       );
     },
 
-    writeOverview: (body) => writeOverviewNote(bookId, body),
+    writeOverview: (body) => writeSpineOverview(bookId, body),
 
     ...realTimers,
   };
 }
 
-const pipelines = new Map<string, NotesPipeline>();
+const pipelines = new Map<string, ChapterSpinePipeline>();
 
-export function getNotesPipeline(bookId: string, bookName: string, inputs: NotesInputs): NotesPipeline {
+export function getChapterSpinePipeline(
+  bookId: string,
+  bookName: string,
+  inputs: ChapterSpineInputs,
+): ChapterSpinePipeline {
   let p = pipelines.get(bookId);
   if (!p) {
-    p = new NotesPipeline(bookId, bookName, makeDeps(bookId, bookName, inputs));
+    p = new ChapterSpinePipeline(bookId, bookName, makeDeps(bookId, bookName, inputs));
     pipelines.set(bookId, p);
   }
   return p;
@@ -177,11 +181,11 @@ export function getNotesPipeline(bookId: string, bookName: string, inputs: Notes
 
 // A pipeline that may already exist for a book (no creation): lets the app
 // re-attach UI after switching books without restarting anything.
-export function peekNotesPipeline(bookId: string): NotesPipeline | null {
+export function peekChapterSpinePipeline(bookId: string): ChapterSpinePipeline | null {
   return pipelines.get(bookId) ?? null;
 }
 
-// Whether a book has notes state on disk (drives auto-resume on book open).
-export async function hasNotesState(bookId: string): Promise<boolean> {
-  return (await loadNotesState(bookId)) !== null;
+// Whether a book has chapter-spine state on disk (drives auto-resume on book open).
+export async function hasChapterSpineState(bookId: string): Promise<boolean> {
+  return (await loadChapterSpineState(bookId)) !== null;
 }

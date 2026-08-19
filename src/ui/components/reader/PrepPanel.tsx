@@ -20,9 +20,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { PrepKind } from "../../../reading/prep";
 import type {
-  NotesActivity,
-  NotesSnapshot,
-  NoteChapter,
+  ChapterSpineActivity,
+  ChapterSpineSnapshot,
+  SpineChapter,
 } from "../../../reading/prep/chapters";
 import type {
   PaperStatus,
@@ -95,7 +95,7 @@ const PAPER_STATUS_STYLE: Record<PaperStatus, string> = {
   skipped: "bg-neutral-100 text-neutral-400",
 };
 
-const CHAPTER_STATUS_STYLE: Record<NoteChapter["status"], string> = {
+const CHAPTER_STATUS_STYLE: Record<SpineChapter["status"], string> = {
   pending: "bg-neutral-100 text-neutral-500",
   running: "bg-amber-100 text-amber-700",
   done: "bg-green-100 text-green-700",
@@ -118,9 +118,9 @@ export interface PaperPrepBindings {
   selectedSlug?: string | null;
 }
 
-// The chapter half's, from reading/prep/chapters/use-notes.
+// The chapter half's, from reading/prep/chapters/use-chapter-spine.
 export interface ChapterPrepBindings {
-  snapshot: NotesSnapshot | null;
+  snapshot: ChapterSpineSnapshot | null;
   loadOverview(): Promise<string | null>;
   loadChapter(index: number): Promise<string | null>;
   onGenerate(): void;
@@ -369,9 +369,9 @@ function ChapterSection({
   onRegenerate,
   onGenerate,
 }: {
-  chapter: NoteChapter;
+  chapter: SpineChapter;
   body: string | null;
-  activity: NotesActivity | null;
+  activity: ChapterSpineActivity | null;
   // Controls (Regenerate) are inert while any run is in flight.
   disabled: boolean;
   onRetry(): void;

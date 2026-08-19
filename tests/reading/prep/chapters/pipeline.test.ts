@@ -5,20 +5,20 @@
 
 import { expect, test } from "bun:test";
 import {
-  NotesPipeline,
+  ChapterSpinePipeline,
   type AiCallOptions,
   type ChapterGenInput,
-  type NotesDeps,
+  type ChapterSpineDeps,
   type PlanOutcome,
 } from "../../../../src/reading/prep/chapters/pipeline";
-import { NOTES_VERSION, type NoteChapter, type NotesState } from "../../../../src/reading/prep/chapters/types";
+import { CHAPTER_SPINE_VERSION, type SpineChapter, type ChapterSpineState } from "../../../../src/reading/prep/chapters/types";
 
 // A short retry delay so error-path tests (which retry the stall watchdog's
 // maxAttempts) don't wait out the real 2s default between attempts, and no
 // stagger so the parallel tests don't wait out the real 3s ramp.
 const TEST_CONFIG = { retryDelayMs: 5, rampMs: 0 };
 
-function chapter(index: number, title = `ch${index}`): NoteChapter {
+function chapter(index: number, title = `ch${index}`): SpineChapter {
   return { index, title, startPage: index, endPage: index, status: "pending" };
 }
 
@@ -32,22 +32,22 @@ function planOf(n: number): PlanOutcome {
 }
 
 interface FakeOptions {
-  initial?: NotesState | null;
+  initial?: ChapterSpineState | null;
   plan?: (opts: AiCallOptions) => Promise<PlanOutcome>;
   chapter?: (input: ChapterGenInput, opts: AiCallOptions) => Promise<string>;
   overview?: (
     chapters: { index: number; title: string; body: string }[],
     opts: AiCallOptions,
   ) => Promise<string>;
-  saveState?: (state: NotesState) => Promise<void>;
-  timers?: Partial<Pick<NotesDeps, "now" | "sleep" | "setTimer">>;
+  saveState?: (state: ChapterSpineState) => Promise<void>;
+  timers?: Partial<Pick<ChapterSpineDeps, "now" | "sleep" | "setTimer">>;
 }
 
 function makeFakes(opts: FakeOptions = {}) {
   const chapters = new Map<number, string>();
   let overview: string | null = null;
-  const saved: NotesState[] = [];
-  const deps: NotesDeps = {
+  const saved: ChapterSpineState[] = [];
+  const deps: ChapterSpineDeps = {
     loadState: async () => opts.initial ?? null,
     saveState:
       opts.saveState ??
@@ -60,7 +60,7 @@ function makeFakes(opts: FakeOptions = {}) {
     writeChapter: async (index, body) => {
       chapters.set(index, body);
     },
-    readChapterNote: async (index) => chapters.get(index) ?? null,
+    readChapter: async (index) => chapters.get(index) ?? null,
     buildOverview: opts.overview ?? (async () => "the chapter graph"),
     writeOverview: async (body) => {
       overview = body;
@@ -77,13 +77,13 @@ function makeFakes(opts: FakeOptions = {}) {
   return { deps, chapters, saved, getOverview: () => overview };
 }
 
-function statuses(p: NotesPipeline): Record<number, string> {
+function statuses(p: ChapterSpinePipeline): Record<number, string> {
   const out: Record<number, string> = {};
   for (const c of p.snapshot().state?.chapters ?? []) out[c.index] = c.status;
   return out;
 }
 
-async function drain(p: NotesPipeline): Promise<void> {
+async function drain(p: ChapterSpinePipeline): Promise<void> {
   for (let i = 0; i < 200 && p.snapshot().running; i++) await new Promise((r) => setTimeout(r, 1));
 }
 
@@ -139,7 +139,7 @@ function makeClock(start = 1000) {
 
 test("full run: plan, every chapter, the graph, everything on disk", async () => {
   const { deps, chapters, getOverview } = makeFakes();
-  const p = new NotesPipeline("book", "Book.pdf", deps, TEST_CONFIG);
+  const p = new ChapterSpinePipeline("book", "Book.pdf", deps, TEST_CONFIG);
   await p.ensureStarted();
   expect(p.snapshot().state?.planStatus).toBe("done");
   expect(p.snapshot().state?.planSource).toBe("outline");
@@ -164,7 +164,7 @@ test("chapters run together, up to the limit", async () => {
       return "n";
     },
   });
-  const p = new NotesPipeline("b", "s", deps, { ...TEST_CONFIG, limit: 3 });
+  const p = new ChapterSpinePipeline("b", "s", deps, { ...TEST_CONFIG, limit: 3 });
   await p.ensureStarted();
   expect(peak).toBe(3);
   expect(statuses(p)).toEqual({ 1: "done", 2: "done", 3: "done", 4: "done", 5: "done", 6: "done" });
@@ -186,7 +186,7 @@ test("state writes never overlap", async () => {
       writing--;
     },
   });
-  const p = new NotesPipeline("b", "s", deps, TEST_CONFIG);
+  const p = new ChapterSpinePipeline("b", "s", deps, TEST_CONFIG);
   await p.ensureStarted();
   expect(overlaps).toBe(0);
   expect(writes).toBeGreaterThan(0);
@@ -202,7 +202,7 @@ test("each chapter call is handed the whole chapter table, with itself in it", a
       return "n";
     },
   });
-  const p = new NotesPipeline("b", "s", deps, TEST_CONFIG);
+  const p = new ChapterSpinePipeline("b", "s", deps, TEST_CONFIG);
   await p.ensureStarted();
   expect(seen.length).toBe(3);
   for (const s of seen) expect(s.table).toEqual([1, 2, 3]);
@@ -215,7 +215,7 @@ test("a failed chapter is isolated and blocks the graph", async () => {
       return "n";
     },
   });
-  const p = new NotesPipeline("b", "s", deps, TEST_CONFIG);
+  const p = new ChapterSpinePipeline("b", "s", deps, TEST_CONFIG);
   await p.ensureStarted();
   expect(statuses(p)).toEqual({ 1: "failed", 2: "done" });
   expect(p.snapshot().state?.chapters[0].error).toBe("model down");
@@ -231,7 +231,7 @@ test("retryChapter reruns a failed chapter and then the graph", async () => {
       return "n";
     },
   });
-  const p = new NotesPipeline("b", "s", deps, TEST_CONFIG);
+  const p = new ChapterSpinePipeline("b", "s", deps, TEST_CONFIG);
   await p.ensureStarted();
   expect(statuses(p)[1]).toBe("failed");
   fail = false;
@@ -247,7 +247,7 @@ test("a failed plan is recorded; chapters never start", async () => {
       throw new Error("bad toc");
     },
   });
-  const p = new NotesPipeline("b", "s", deps, TEST_CONFIG);
+  const p = new ChapterSpinePipeline("b", "s", deps, TEST_CONFIG);
   await p.ensureStarted();
   expect(p.snapshot().state?.planStatus).toBe("failed");
   expect(p.snapshot().state?.planError).toBe("bad toc");
@@ -262,7 +262,7 @@ test("retryPlan replans a failed plan and completes", async () => {
       return JSON.parse(JSON.stringify(PLAN));
     },
   });
-  const p = new NotesPipeline("b", "s", deps, TEST_CONFIG);
+  const p = new ChapterSpinePipeline("b", "s", deps, TEST_CONFIG);
   await p.ensureStarted();
   expect(p.snapshot().state?.planStatus).toBe("failed");
   fail = false;
@@ -273,8 +273,8 @@ test("retryPlan replans a failed plan and completes", async () => {
 });
 
 test("resume: an interrupted running chapter is requeued and finishes", async () => {
-  const initial: NotesState = {
-    version: NOTES_VERSION,
+  const initial: ChapterSpineState = {
+    version: CHAPTER_SPINE_VERSION,
     bookId: "b",
     bookName: "s",
     createdAt: 0,
@@ -286,7 +286,7 @@ test("resume: an interrupted running chapter is requeued and finishes", async ()
     overviewStatus: "pending",
   };
   const { deps } = makeFakes({ initial });
-  const p = new NotesPipeline("b", "s", deps, TEST_CONFIG);
+  const p = new ChapterSpinePipeline("b", "s", deps, TEST_CONFIG);
   await p.ensureStarted();
   expect(statuses(p)).toEqual({ 1: "done", 2: "done" });
   expect(p.snapshot().state?.overviewStatus).toBe("done");
@@ -301,7 +301,7 @@ test("the graph is written from every chapter's spine", async () => {
       return "graph";
     },
   });
-  const p = new NotesPipeline("b", "s", deps, TEST_CONFIG);
+  const p = new ChapterSpinePipeline("b", "s", deps, TEST_CONFIG);
   await p.ensureStarted();
   expect(graphInputs).toEqual([1, 2, 3, 4]);
 });
@@ -314,7 +314,7 @@ test("regenerateChapter reruns just that chapter and marks the graph stale", asy
       return instruction ? `revised: ${instruction}` : `spine ${c.index}`;
     },
   });
-  const p = new NotesPipeline("b", "s", deps, TEST_CONFIG);
+  const p = new ChapterSpinePipeline("b", "s", deps, TEST_CONFIG);
   await p.ensureStarted();
   expect(p.snapshot().state?.overviewStatus).toBe("done");
   expect(gen1).toBe(1);
@@ -334,7 +334,7 @@ test("regenerateOverview refreshes a stale graph", async () => {
       return `graph v${graphCalls}`;
     },
   });
-  const p = new NotesPipeline("b", "s", deps, TEST_CONFIG);
+  const p = new ChapterSpinePipeline("b", "s", deps, TEST_CONFIG);
   await p.ensureStarted();
   p.regenerateChapter(2);
   await drain(p);
@@ -360,7 +360,7 @@ test("stop aborts every in-flight chapter and starts none of the queued ones", a
     // A huge watchdog window so the stall timer never fires during the test.
     timers: { setTimer: () => () => {} },
   });
-  const p = new NotesPipeline("b", "s", deps, { ...TEST_CONFIG, limit: 2 });
+  const p = new ChapterSpinePipeline("b", "s", deps, { ...TEST_CONFIG, limit: 2 });
   const run = p.ensureStarted();
   for (let i = 0; i < 50 && started.size < 2; i++) await new Promise((r) => setTimeout(r, 1));
   expect(started.size).toBe(2); // the limit, not all four
@@ -393,7 +393,7 @@ test("a rate limit slows the whole group, and the call retries after it", async 
     },
     timers: clock,
   });
-  const p = new NotesPipeline("b", "s", deps, { retryDelayMs: 5, rampMs: 0, limit: 1 });
+  const p = new ChapterSpinePipeline("b", "s", deps, { retryDelayMs: 5, rampMs: 0, limit: 1 });
   const run = p.ensureStarted();
   for (let i = 0; i < 400 && p.snapshot().running; i++) await new Promise((r) => setTimeout(r, 0));
   await run;
@@ -408,8 +408,8 @@ test("a rate limit slows the whole group, and the call retries after it", async 
 // paths were normalized holds the percent-encoded filename, and the model was
 // being told the book is called "%E4%B8%AD%E6%96%87.pdf".
 test("resume: a book name left percent-encoded by an iOS import is decoded", async () => {
-  const initial: NotesState = {
-    version: NOTES_VERSION,
+  const initial: ChapterSpineState = {
+    version: CHAPTER_SPINE_VERSION,
     bookId: "b",
     bookName: "%E4%B8%AD%E6%96%87.pdf",
     createdAt: 0,
@@ -418,7 +418,7 @@ test("resume: a book name left percent-encoded by an iOS import is decoded", asy
     overviewStatus: "done",
   };
   const { deps } = makeFakes({ initial });
-  const p = new NotesPipeline("b", "中文.pdf", deps, TEST_CONFIG);
+  const p = new ChapterSpinePipeline("b", "中文.pdf", deps, TEST_CONFIG);
   await p.ensureStarted();
   expect(p.snapshot().state?.bookName).toBe("中文.pdf");
 });

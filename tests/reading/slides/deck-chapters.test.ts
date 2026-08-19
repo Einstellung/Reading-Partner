@@ -13,7 +13,7 @@
 
 import { beforeEach, expect, mock, test } from "bun:test";
 import { FIGURES_VERSION } from "../../../src/reading/figures/types";
-import { NOTES_VERSION } from "../../../src/reading/prep/chapters/types";
+import { CHAPTER_SPINE_VERSION } from "../../../src/reading/prep/chapters/types";
 
 const files = new Map<string, string>();
 const blobs = new Map<string, Uint8Array>();
@@ -104,7 +104,7 @@ function putNotes(bookId: string) {
   files.set(
     `prep-${bookId}/chapters/state.json`,
     JSON.stringify({
-      version: NOTES_VERSION,
+      version: CHAPTER_SPINE_VERSION,
       bookId,
       bookName: "Eye and Brain",
       createdAt: 1,
@@ -153,7 +153,7 @@ test("a book with no notes is planned against the same chapters the rehearsal wa
   putFulltext(NO_NOTES);
   const fulltext = JSON.parse(files.get(`fulltext-${NO_NOTES}.json`)!);
   const skeleton = buildSkeleton({
-    notesChapters: null,
+    spineChapters: null,
     outline: fulltext.outline,
     pageCount: fulltext.pages.length,
   });

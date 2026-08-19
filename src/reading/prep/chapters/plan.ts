@@ -1,4 +1,4 @@
-// Notes plan (docs/14): the model reads the front matter's table of contents and
+// Chapter-spine plan (docs/09): the model reads the front matter's table of contents and
 // returns the book's chapter structure as JSON. Used when the PDF outline has no
 // usable table of its own — reading the outline, and turning either source into
 // contiguous page ranges, is reading/chapters. The AI call itself lives in
@@ -12,7 +12,7 @@ import { chapterRanges, type TableChapter } from "../../chapters";
 // table of contents itself (no PDF outline).
 export const TOC_MAX_PAGES = 12;
 
-export const NOTES_PLAN_SYSTEM_PROMPT = [
+export const CHAPTER_SPINE_PLAN_SYSTEM_PROMPT = [
   "You are the note-taking stage of a reading companion. You are given the front",
   "matter of a book (its first pages, which usually hold the table of contents).",
   "Produce the book's chapter structure as a single JSON object and nothing else",
@@ -55,7 +55,7 @@ export function extractJson(text: string): string {
 // `tally` is an optional out-parameter for the structured-output measurement
 // (structured-output.ts). `kept` is counted after the ranging, so chapters
 // dropped for sharing a start page count as lost too.
-export function parseNotesPlan(
+export function parseChapterSpinePlan(
   text: string,
   totalPages: number,
   tally?: ParseTally,

@@ -8,7 +8,7 @@ import type { InlineMode } from "./inline";
 
 // --- the chapter spine (docs/09: 章脉络) ---
 //
-// One paragraph per chapter, written by the notes pass: what the chapter covers,
+// One paragraph per chapter, written by the spine pass: what the chapter covers,
 // which earlier chapter it builds on, which later chapter uses it. Loaded by
 // data — present when that pass has run, absent when it has not, and a lecture
 // turn never waits for it. The contract with the pass that writes it is this

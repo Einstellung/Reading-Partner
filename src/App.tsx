@@ -46,7 +46,7 @@ import { locateQuote, prepKind, type Citation } from "./reading/prep";
 import { usePrep } from "./reading/prep/papers/use-prep";
 import { usePrepTrigger } from "./reading/session/use-prep-trigger";
 import { purgeLegacyChapterNotes } from "./reading/prep/chapters/purge";
-import { useNotes } from "./reading/prep/chapters/use-notes";
+import { useChapterSpine } from "./reading/prep/chapters/use-chapter-spine";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import { startDistillSweeps, toDistillAnnotations, type DistillAnnotation } from "./observation";
 import { logEvent } from "./platform/app/events";
@@ -661,13 +661,13 @@ export default function App() {
   // callback that serves it. It reads the open book through the shell's refs, so
   // what it returns is stable the way it was when this code sat here.
   const {
-    snapshot: notesSnap,
-    panel: notesPanelProps,
+    snapshot: spineSnap,
+    panel: spinePanelProps,
     progress: chapterPrepProgress,
     start: startChapterPrep,
-    reset: resetNotes,
-    resume: resumeNotes,
-  } = useNotes({
+    reset: resetChapterSpine,
+    resume: resumeChapterSpine,
+  } = useChapterSpine({
     bookIdRef,
     ctxRef,
     currentFulltextRef,
@@ -717,7 +717,7 @@ export default function App() {
       }
       persistAnnotations();
       syncTraceList();
-      // A new mark is the only signal for highlight-driven notes (docs/14): page
+      // A new mark is the only signal for the highlight trigger (docs/09): page
       // navigation is not, so the frontier only ever advances on a fresh mark.
       if (newMark) onMarkPrepTrigger();
 
@@ -822,8 +822,8 @@ export default function App() {
       },
       resetPrep,
       resumePrep,
-      resetNotes,
-      resumeNotes,
+      resetChapterSpine,
+      resumeChapterSpine,
       finalPassPrep,
       trackFulltext: (extraction) => {
         currentFulltextRef.current = extraction;
@@ -850,9 +850,9 @@ export default function App() {
       endBookTurns,
       finalPassPrep,
       pushToast,
-      resetNotes,
+      resetChapterSpine,
       resetPrep,
-      resumeNotes,
+      resumeChapterSpine,
       resumePrep,
     ],
   );
@@ -1150,7 +1150,7 @@ export default function App() {
   // just started without waiting for anything to be written.
   const panelPrepKind = prepKind({
     papers: !!prepSnap?.state,
-    chapters: !!notesSnap?.state,
+    chapters: !!spineSnap?.state,
     // Still extracting: "unknown" is the honest answer, and it is what the panel
     // shows until the text is in.
     shape: fulltext ? documentShape(fulltext) : "unknown",
@@ -1158,13 +1158,13 @@ export default function App() {
 
   // Background work the drawer would show if open (either half of prep): the
   // toggle carries a status dot so progress is visible while the drawer is shut.
-  const sidebarBusy = !!(prepSnap?.running || notesSnap?.running);
+  const sidebarBusy = !!(prepSnap?.running || spineSnap?.running);
 
   // What the status line above a conversation says about preparation (docs/09).
   // Only while a run is actually going: the line is a report on work in flight,
   // and a finished run has nothing to say there. Whichever half is running is
   // the one this document got — they are never both.
-  const prepLineProgress = notesSnap?.running
+  const prepLineProgress = spineSnap?.running
     ? chapterPrepProgress
     : prepSnap?.running
       ? paperPrepProgress
@@ -1327,7 +1327,7 @@ export default function App() {
             onDeleteAnnotation={deleteTraceAnnotation}
             onOpenThread={openThreadForAnnotation}
             prepPanel={
-              <PrepPanel kind={panelPrepKind} papers={prepPanelProps} chapters={notesPanelProps} />
+              <PrepPanel kind={panelPrepKind} papers={prepPanelProps} chapters={spinePanelProps} />
             }
           />
         )}
