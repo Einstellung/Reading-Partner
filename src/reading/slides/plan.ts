@@ -13,6 +13,7 @@
 // chapter that does not exist or has no note is caught here rather than at
 // content time.
 
+import { findFigureById } from "../figures/lookup";
 import { languageInstruction, type AiLanguage } from "../../platform/app/settings";
 import type { BookChapter } from "../notes/types";
 import type { ParseTally } from "../../platform/app/structured-output";
@@ -274,8 +275,7 @@ export function validateDeckPlan(plan: DeckPlan, books: PlanBook[]): DeckPlan {
 
     if (out.figure) {
       const figBook = byId.get(out.figure.bookId);
-      const figId = out.figure.figId.toLowerCase();
-      const known = figBook?.figures.some((f) => f.id.toLowerCase() === figId) ?? false;
+      const known = !!figBook && findFigureById(figBook.figures, out.figure.figId) !== null;
       if (!known) {
         notices.push(
           `Figure "${out.figure.figId}" is not in ${figBook ? `"${figBook.title}"` : "any selected book"}'s figure index — the slide has no figure.`,

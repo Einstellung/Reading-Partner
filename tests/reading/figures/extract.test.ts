@@ -9,6 +9,7 @@ import {
   captionAnchoredRegion,
   captionLinesFromText,
   clusterBoxes,
+  figureCaptionId,
   figuresForPage,
   graphicsBoxesFromOps,
   imageBoxesFromOps,
@@ -71,7 +72,7 @@ test("caption lines are detected across Figure/Fig variants with ids", () => {
   const items: TextItem[] = [
     caption("Figure 1: A schematic", 100, 480),
     caption("Fig. 2: details", 100, 300),
-    caption("FIG 3a left panel", 100, 200),
+    caption("FIG 3a. Left panel", 100, 200),
     caption("Ordinary sentence about figure 9", 100, 100),
   ];
   const lines = captionLinesFromText(items);
@@ -304,4 +305,119 @@ test("assembleIndex dedups by id, preferring the occurrence with a bbox", () => 
   expect(idx.figures.find((f) => f.id === "1")).toEqual(withBox);
   // Sorted by page.
   expect(idx.figures.map((f) => f.id)).toEqual(["2", "1"]);
+});
+
+// --- caption recognition: language, section numbering, and prose ------------
+//
+// The lines below are copied from the text layer of real books in the library
+// (a translated Manning title numbering "图 3.8", an O'Reilly translation
+// numbering "Figure 3-1"/"图3-1", and papers numbering "Figure 3.1"), including
+// the body sentences that open with a figure reference and must not be read as
+// captions.
+
+test("Chinese captions are read, with and without a space before the number", () => {
+  expect(figureCaptionId("图 2.10 在处理多个独立文本来源时，我们在这些文本之间添加标记。")).toBe("2.10");
+  expect(figureCaptionId("图2.1 编码LLM的三个主要阶段。")).toBe("2.1");
+  expect(figureCaptionId("图3-1. 语言人工智能历史的一瞥。")).toBe("3-1");
+  expect(figureCaptionId("图　1.4　初始 Transformer 架构的简化描绘")).toBe("1.4");
+  expect(figureCaptionId("图表 2-3：词元的分布")).toBe("2-3");
+  expect(figureCaptionId("插图 5：注意力")).toBe("5");
+});
+
+test("a figure number keeps every section it was printed with", () => {
+  expect(figureCaptionId("Figure 3-1. The architecture")).toBe("3-1");
+  expect(figureCaptionId("Figure 3.8: Performance on SuperGLUE")).toBe("3.8");
+  expect(figureCaptionId("Figure 2.1.3 — Overview")).toBe("2.1.3");
+  expect(figureCaptionId("Figure 3-1a. Left half")).toBe("3-1a");
+  expect(figureCaptionId("Fig. 2. Dependence on scale")).toBe("2");
+  expect(figureCaptionId("Figure 10")).toBe("10");
+});
+
+test("a sentence that opens with a figure reference is not a caption", () => {
+  // Chinese: the number runs straight into the predicate.
+  expect(figureCaptionId("图3.7显示了一个输入序列，记作x")).toBeNull();
+  expect(figureCaptionId("图4.1所示的LLM架构由几个构建模块组成")).toBeNull();
+  // Chinese: a space, but what follows the number is still a predicate.
+  expect(figureCaptionId("图 3 显示了模型的整体结构")).toBeNull();
+  expect(figureCaptionId("图 3.23 总结了我们迄今为止所完成的工作。")).toBeNull();
+  expect(figureCaptionId("图 3-16 展示了这两个步骤。")).toBeNull();
+  // English: the sentence carries on in lowercase.
+  expect(figureCaptionId("Figure 11 shows the performance across all of the tasks")).toBeNull();
+  expect(figureCaptionId("Figure 1.2 illustrates the conditions we study")).toBeNull();
+  expect(figureCaptionId("Figure 4 compares the performance of phi-3-mini")).toBeNull();
+  // English: the tail of "As shown in Figure 1-19, ...".
+  expect(figureCaptionId("Figure 1-19, this process is similar to the RNN decoder")).toBeNull();
+  expect(figureCaptionId("Fig. 1, middle). Both platforms have been used")).toBeNull();
+});
+
+test("a caption whose own words start where a reference would put a verb is kept", () => {
+  // The subject here is the caption's own; prose would put a predicate there.
+  expect(figureCaptionId("图 1.1 这个层次结构描绘了不同领域之间的关系")).toBe("1.1");
+  expect(figureCaptionId("图 3.23 这是我们迄今为止所做的工作。")).toBe("3.23");
+  expect(figureCaptionId("Figure 3 A schematic of the pipeline")).toBe("3");
+});
+
+test("a label that is only the start of a longer word is not a caption", () => {
+  expect(figureCaptionId('FIG_124M["emb_dim"] = 768')).toBeNull();
+  expect(figureCaptionId("图所示。使用词嵌入技术时，对应于类似概念的词语")).toBeNull();
+  expect(figureCaptionId("图像分割的三种方法")).toBeNull();
+  expect(figureCaptionId("Figures 3 and 4 are reproduced from")).toBeNull();
+  expect(figureCaptionId("表 3.1 超参数")).toBeNull();
+});
+
+test("assembleIndex keeps one entry per figure across a bilingual book", () => {
+  // A translated book prints both captions over one picture; the English line
+  // sits nearer the art and takes the bbox.
+  const en = {
+    id: "3-1",
+    page: 40,
+    caption: "Figure 3-1. Tokenization",
+    bbox: { x: 0, y: 0, width: 90, height: 60 },
+  };
+  const zh = { id: "3-1", page: 40, caption: "图3-1. 分词", bbox: null };
+  const idx = assembleIndex([[en, zh]]);
+  expect(idx.figures).toHaveLength(1);
+  expect(idx.figures[0]).toEqual(en);
+});
+
+test("assembleIndex folds a separator written both ways into one entry", () => {
+  const dot = { id: "3.1", page: 4, caption: "Figure 3.1", bbox: null };
+  const dash = {
+    id: "3-1",
+    page: 9,
+    caption: "Figure 3-1",
+    bbox: { x: 0, y: 0, width: 10, height: 10 },
+  };
+  const idx = assembleIndex([[dot], [dash]]);
+  expect(idx.figures.map((f) => f.id)).toEqual(["3-1"]);
+});
+
+test("assembleIndex orders figures on a page by their printed number", () => {
+  const mk = (id: string, page: number) => ({ id, page, caption: `Figure ${id}`, bbox: null });
+  const idx = assembleIndex([[mk("3.10", 7), mk("3.8", 7), mk("3.8a", 7), mk("3.2", 7)]]);
+  expect(idx.figures.map((f) => f.id)).toEqual(["3.2", "3.8", "3.8a", "3.10"]);
+});
+
+test("every figure of a chapter survives, not just the first", () => {
+  // The regression: "(\\d+[a-z]?)" captured "3" for 3-1, 3-2 and 3-3 alike, and
+  // the de-duplication then left one figure per chapter.
+  const pages = [1, 2, 3].map((n) => [
+    { id: `3-${n}`, page: 20 + n, caption: `Figure 3-${n}. Step ${n}`, bbox: null },
+  ]);
+  const idx = assembleIndex(pages);
+  expect(idx.figures.map((f) => f.id)).toEqual(["3-1", "3-2", "3-3"]);
+});
+
+test("a Chinese caption line pairs with the art above it", () => {
+  const boxes = imageBoxesFromOps(ops([transform([200, 0, 0, 150, 100, 500]), IMAGE]), CODES);
+  const captions = captionLinesFromText([caption("图 3.8 总体目标是计算上下文向量", 110, 485)]);
+  const figs = pairFiguresOnPage(boxes, captions, 6, 800);
+  expect(figs).toEqual([
+    {
+      id: "3.8",
+      page: 6,
+      caption: "图 3.8 总体目标是计算上下文向量",
+      bbox: { x: 100, y: 150, width: 200, height: 150 },
+    },
+  ]);
 });

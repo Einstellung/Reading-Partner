@@ -50,9 +50,10 @@ export const SPARSE_PAGE_CHARS = 400;
 //   "sparse-text" one of these pages has (almost) no extractable text, so the
 //                 page is a picture as far as the model is concerned. This is
 //                 the arm scanned documents come in on: figure detection is
-//                 caption-anchored (/^Figure N/ in the text layer), so a scan
-//                 has no figures to find and would otherwise be the one kind of
-//                 document that needs the images most and never gets them.
+//                 caption-anchored (a "Figure N" / "图 N" line in the text
+//                 layer), so a scan has no figures to find and would otherwise
+//                 be the one kind of document that needs the images most and
+//                 never gets them.
 export type PageWindowGate = "figures" | "sparse-text";
 
 export interface PageWindowPage {

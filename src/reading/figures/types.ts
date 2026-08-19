@@ -9,7 +9,14 @@
 // extraction that failed. Version 2 files cannot answer that — a failed
 // extraction wrote the same empty index a figure-less document does — so the
 // bump discards them and every document is read once more.
-export const FIGURES_VERSION = 3 as const;
+//
+// 4: captions are read in Chinese as well as English, and a figure number keeps
+// every section it was printed with. A version-3 index of a translated book is
+// empty, and one of a chapter-numbered book holds the first figure of each
+// chapter and nothing else — both are wrong about the document, not merely
+// thinner, so they are discarded rather than kept until something else evicts
+// them.
+export const FIGURES_VERSION = 4 as const;
 
 // Tight bounding box of a figure in top-left page space (PDF points).
 export interface FigureBBox {
@@ -20,8 +27,11 @@ export interface FigureBBox {
 }
 
 export interface Figure {
-  // Figure number as written, lower-cased: "3", "3a", "10". Sub-panels that get
-  // their own caption ("Figure 3a") are separate entries.
+  // Figure number as the document prints it, minus the label and lower-cased:
+  // "3", "3a", "3.8", "3-1", "3-1a". Sub-panels that get their own caption
+  // ("Figure 3a") are separate entries. Chinese and English captions over the
+  // same picture give the same id, and matching folds "." against every dash —
+  // see lookup.ts.
   id: string;
   // 1-based page the caption sits on.
   page: number;

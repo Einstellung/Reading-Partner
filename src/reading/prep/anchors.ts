@@ -16,6 +16,8 @@
 // wholesale. tests/reading/prep/anchors.test.ts pins a table of brackets that
 // must survive untouched.
 
+import { FIGURE_ID_PATTERN, FIGURE_ID_RE } from "../figures/lookup";
+
 export type Citation =
   | { kind: "page"; page: number; quote?: string }
   | { kind: "paper"; slug: string; page: number; quote?: string }
@@ -77,15 +79,19 @@ export function parseCitationHref(href: string | undefined): Citation | null {
   }
   if (href.startsWith(FIGURE_HREF)) {
     const id = href.slice(FIGURE_HREF.length);
-    return /^\d+[a-z]?$/.test(id) ? { kind: "figure", id } : null;
+    return FIGURE_ID_RE.test(id) ? { kind: "figure", id } : null;
   }
   return null;
 }
 
 // --- the grammar -----------------------------------------------------------
 
-// [fig:3] / [fig: 3a] — a figure citation (M9). Case-normalized.
-const FIGURE_INNER = /^fig\s*:\s*(\d+[a-z]?)$/i;
+// [fig:3] / [fig: 3a] / [fig:3.8] / [fig:3-1] — a figure citation (M9).
+// Case-normalized. The id shape is the figures module's (lookup.ts), not a
+// second opinion about it: a chapter-numbered book's figures are "3-1", and a
+// citation shape that only knew about bare integers left every one of them as
+// literal text.
+const FIGURE_INNER = new RegExp(`^fig\\s*:\\s*(${FIGURE_ID_PATTERN})$`, "i");
 // The page number a citation opens with: p.12 / pp. 12 / P.12.
 const PAGE_HEAD = /^pp?\.\s*(\d+)/i;
 // A slug in front of the page number, in the charset plan.ts's slugify emits:

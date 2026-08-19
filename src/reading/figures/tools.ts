@@ -54,9 +54,9 @@ export function buildFigureTools(opts: BuildFigureToolsOptions): AgentTool[] {
     {
       name: "view_figure",
       description:
-        "Look at a figure from the current document by its number (e.g. \"3\" or \"3a\", as listed in the figure catalog). Returns the figure image so you can describe what it shows.",
+        "Look at a figure from the current document by its number, exactly as the figure catalog lists it (\"3\", \"3a\", \"3.8\", \"3-1\"). Returns the figure image so you can describe what it shows.",
       parameters: Type.Object({
-        id: Type.String({ description: 'Figure number, e.g. "3" or "3a".' }),
+        id: Type.String({ description: 'Figure number as the catalog lists it, e.g. "3", "3a", "3.8" or "3-1".' }),
       }),
       execute: async (args): Promise<ToolResult> => {
         const id = String(args.id);

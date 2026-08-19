@@ -49,6 +49,26 @@ test("figure citations become fragment links (M9)", () => {
   expect(linkifyCitations("[FIG:2]")).toBe("[fig:2](#rp-fig-2)"); // case-normalized
 });
 
+test("a section-numbered figure citation is a citation too", () => {
+  // A chapter-numbered book's figures are "3-1"/"3.8"; a grammar that only knew
+  // bare integers left every one of them as literal text in the reply.
+  expect(linkifyCitations("See [fig:3.8] for the attention scores.")).toBe(
+    "See [fig:3.8](#rp-fig-3.8) for the attention scores.",
+  );
+  expect(linkifyCitations("[fig:3-1]")).toBe("[fig:3-1](#rp-fig-3-1)");
+  expect(linkifyCitations("[fig:3-1a]")).toBe("[fig:3-1a](#rp-fig-3-1a)");
+  expect(linkifyCitations("[fig: 2.1.3]")).toBe("[fig:2.1.3](#rp-fig-2.1.3)");
+  expect(parseCitationHref(figureCitationHref("3-1"))).toEqual({ kind: "figure", id: "3-1" });
+  expect(parseCitationHref(figureCitationHref("3.8"))).toEqual({ kind: "figure", id: "3.8" });
+});
+
+test("a bracket that only looks like a figure number is left alone", () => {
+  expect(linkifyCitations("[fig:3.8.9.10.11]")).toBe("[fig:3.8.9.10.11]");
+  expect(linkifyCitations("[fig:-1]")).toBe("[fig:-1]");
+  expect(linkifyCitations("[fig:3 8]")).toBe("[fig:3 8]");
+  expect(parseCitationHref("#rp-fig-3..8")).toBeNull();
+});
+
 test("an already-linked figure citation is left alone", () => {
   const already = "[fig:3](#rp-fig-3)";
   expect(linkifyCitations(already)).toBe(already);

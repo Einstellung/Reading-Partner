@@ -3,6 +3,7 @@
 // cite them as [fig:N] without spending tokens on full captions. Capped; for a
 // long survey the cap keeps the figures nearest the reader's current page. Pure.
 
+import { compareFigureIds } from "./lookup";
 import type { Figure } from "./types";
 
 const DEFAULT_MAX = 40;
@@ -29,13 +30,13 @@ export interface CatalogOptions {
 export function selectCatalogFigures(figures: Figure[], opts: CatalogOptions = {}): Figure[] {
   const max = opts.max ?? DEFAULT_MAX;
   if (figures.length <= max) {
-    return [...figures].sort((a, b) => a.page - b.page || a.id.localeCompare(b.id));
+    return [...figures].sort((a, b) => a.page - b.page || compareFigureIds(a.id, b.id));
   }
   const anchor = opts.currentPage ?? figures[0]?.page ?? 1;
   const nearest = [...figures]
     .sort((a, b) => Math.abs(a.page - anchor) - Math.abs(b.page - anchor))
     .slice(0, max);
-  return nearest.sort((a, b) => a.page - b.page || a.id.localeCompare(b.id));
+  return nearest.sort((a, b) => a.page - b.page || compareFigureIds(a.id, b.id));
 }
 
 // The catalog block for a system prompt, or "" when there are no figures.

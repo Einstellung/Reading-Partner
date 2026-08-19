@@ -12,6 +12,7 @@
 import { getImageGenKey } from "../../ai/credentials";
 import { callModel, resolveModel } from "../../ai/model-call";
 import { realTimers } from "../../ai/observable-run";
+import { findFigureById } from "../figures/lookup";
 import { getFigures } from "../figures/store";
 import { renderFigure } from "../figures/render";
 import { getLibraryEntry, readLibraryBook } from "../../platform/app/library";
@@ -325,7 +326,7 @@ function makeDeps(talkId: string, bookIds: string[], instruction: string): Slide
     async renderFigureAsset(ref: SlideFigureRef): Promise<AssetOutcome> {
       const figures = (await getFigures(ref.bookId))?.figures ?? [];
       if (!figures.length) return { url: null, reason: "This book has no figure index." };
-      const fig = figures.find((f) => f.id === ref.figId);
+      const fig = findFigureById(figures, ref.figId);
       if (!fig) return { url: null, reason: `Figure ${ref.figId} is not in this book's figure index.` };
       // Known extraction gap (docs/29): a figure whose caption sits above the
       // artwork gets no bbox, so there is no region to crop.

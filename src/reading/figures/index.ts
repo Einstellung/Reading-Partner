@@ -36,4 +36,11 @@ export {
   type FigureImage,
   type BuildFigureToolsOptions,
 } from "./tools";
-export { findFigureById } from "./lookup";
+export {
+  canonicalFigureId,
+  compareFigureIds,
+  findFigureById,
+  normalizeFigureId,
+  FIGURE_ID_PATTERN,
+  FIGURE_ID_RE,
+} from "./lookup";

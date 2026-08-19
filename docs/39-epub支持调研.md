@@ -114,15 +114,15 @@ foliate-js 的 README 自己写着：不上 CSP 就别用任何电子书库，�
 
 ## 三、图管线
 
-`src/reading/figures/` 现在 1144 行加 668 行测试。`extract.ts` 638 行拆成 11 个阶段：op code 表、CTM 栈图形盒遍历、噪声过滤、并查集聚类、文本行重组配合 `/^(?:figure|fig\.?)\s*(\d+[a-z]?)\b/i` 认图注、图注与区域配对（含跨栏守卫）、标签吸收、宽度兜底、坐标翻转、跨页去重。其中 1–4 和 6–9 全部是在还原 PDF 没有陈述的几何。EPUB 有 `<img>` 和 `<figcaption>`，这些整块不需要。
+`src/reading/figures/` 现在 1144 行加 668 行测试。`extract.ts` 638 行拆成 11 个阶段：op code 表、CTM 栈图形盒遍历、噪声过滤、并查集聚类、文本行重组配合 `figureCaptionId` 认图注、图注与区域配对（含跨栏守卫）、标签吸收、宽度兜底、坐标翻转、跨页去重。其中 1–4 和 6–9 全部是在还原 PDF 没有陈述的几何。EPUB 有 `<img>` 和 `<figcaption>`，这些整块不需要。
 
 EPUB 侧建目录：遍历 spine 文档里的 `<img>` / `<svg><image>` / `<figure>`，每个图记下 zip 里的条目路径、所在 spine 项、以及它所在位置块的合成页号。
 
-编号：图注文本能匹配 `^(图|Figure|Fig\.?)\s*(\d+[A-Za-z]?)` 就沿用书上印的号，`[fig:3]` 的含义与 PDF 侧一致。匹配不上就发 `c3-2`（第 3 章第 2 张）。`lookup.ts` 的 `normalizeFigureId` 只剥 `fig`/`figure` 前缀和标点，`c3-2` 原样通过，不会撞号。
+编号：图注文本能过 `extract.ts` 的 `figureCaptionId` 就沿用书上印的号，`[fig:3]` 的含义与 PDF 侧一致。匹配不上就发 `c3-2`（第 3 章第 2 张）。`lookup.ts` 的 `normalizeFigureId` 只剥标签前缀和标点，`c3-2` 原样通过，不会撞号。
 
 图注逐级退：`<figcaption>` → `alt` → `aria-label` / `title` → 紧邻段落（短且像图注才取） → 视觉模型看一眼。前四级在摄入时同步做完，第五级按需触发并落盘。
 
-视觉模型这条是新的：现在全仓库唯一把图交给模型的路径就是 `view_figure` 自己（`tools.ts` 把 JPEG base64 塞进 `ToolResult.images`），没有独立的"描述这张图"helper，也没有任何地方持久化过图的描述。要加的是 `Figure.caption` 旁边一个 `captionSource: "figcaption" | "alt" | "nearby" | "vision" | "none"`，并升 `FIGURES_VERSION`（现在是 3，v2→v3 就是直接丢弃重建的，先例在）。`store.ts` 已有的 `ok | failed` 加 24 小时重试模型直接扩展给视觉描述用。
+视觉模型这条是新的：现在全仓库唯一把图交给模型的路径就是 `view_figure` 自己（`tools.ts` 把 JPEG base64 塞进 `ToolResult.images`），没有独立的"描述这张图"helper，也没有任何地方持久化过图的描述。要加的是 `Figure.caption` 旁边一个 `captionSource: "figcaption" | "alt" | "nearby" | "vision" | "none"`，并升 `FIGURES_VERSION`（现在是 4，每次升都是直接丢弃重建的，先例在）。`store.ts` 已有的 `ok | failed` 加 24 小时重试模型直接扩展给视觉描述用。
 
 类型改成：
 

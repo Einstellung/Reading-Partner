@@ -106,7 +106,7 @@ const DIAGRAM = Type.Object({
   stages: Type.Optional(Type.Array(STAGE, { description: "Two or more steps that build the diagram up. Omit for a diagram shown whole." })),
   source: Type.Optional(
     Type.Object({
-      figure: Type.Optional(Type.String({ description: 'The figure this redraws, as its catalog id — "3" for [fig:3]. Set it whenever you are simplifying a figure from the book.' })),
+      figure: Type.Optional(Type.String({ description: 'The figure this redraws, as its catalog id — "3" for [fig:3], "3.8" for [fig:3.8]. Set it whenever you are simplifying a figure from the book.' })),
       page: Type.Optional(Type.Number({ description: "1-based page in the current document." })),
     }),
   ),
