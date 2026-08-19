@@ -484,14 +484,24 @@ export function IconBooks({ size = 20 }: IconProps) {
 	);
 }
 
-// A board on legs with two lines of chalk: the whole book or paper, taught.
-export function IconMortarboard({ size = 20 }: IconProps) {
+// Two reading the same book: the reader's book-level AI entry (docs/09). The
+// app's own mark is a robot and a sprout side by side over one open book, and
+// this is that mark at 20px — the heads are arcs rather than circles so the
+// book reads as being in front of them without a fill to hide behind.
+//
+// Two glyphs were tried and dropped first. A board on an easel read as a
+// television: an outlined rectangle with rules inside is the screen glyph, and
+// legs underneath only make it a monitor on a stand. A mortarboard was legible
+// but wrong — it says graduation, and this button is not a lecture.
+export function IconReadTogether({ size = 20 }: IconProps) {
 	return (
 		<svg {...svgProps(size)} stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-			<path d="M10 3.7L18.6 7.5L10 11.3L1.4 7.5Z" fill="currentColor" stroke="none" />
-			<path d="M6 9.2V13.1C6 15.1 14 15.1 14 13.1V9.2" />
-			<path d="M17.7 8.25V12.4" />
-			<circle cx="17.7" cy="13.75" r="1" fill="currentColor" stroke="none" />
+			<path d="M5.52 11.4A2.9 2.9 0 1 1 8.08 11.4" />
+			<path d="M6.8 5.95V4.4" />
+			<circle cx="6.8" cy="3.5" r="0.95" fill="currentColor" stroke="none" />
+			<path d="M11.92 11.4A2.9 2.9 0 1 1 14.48 11.4" />
+			<path d="M2.6 11.4C5.6 11.1 8.6 11.7 10 12.9C11.4 11.7 14.4 11.1 17.4 11.4V16.6C14.4 16.3 11.4 16.9 10 18.1C8.6 16.9 5.6 16.3 2.6 16.6Z" />
+			<path d="M10 12.9V18.1" />
 		</svg>
 	);
 }

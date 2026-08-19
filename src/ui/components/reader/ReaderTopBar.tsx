@@ -9,7 +9,7 @@ import { ANNOTATION_COLORS } from "../../../platform/app/annotations";
 import { setTouchDebugEnabled } from "../../../reading/engine/gesture/touch-debug";
 import type { ToolType } from "./types";
 import {
-  IconMortarboard,
+  IconReadTogether,
   IconFitWidth,
   IconGear,
   IconPagedLayout,
@@ -168,7 +168,7 @@ export default function ReaderTopBar(props: {
           aria-label="Learn this book with AI"
           onClick={props.onOpenBookThread}
         >
-          <IconMortarboard size={18} />
+          <IconReadTogether size={18} />
         </Button>
         <MoreMenu items={moreItems} alert={props.settingsAlert} />
       </div>
