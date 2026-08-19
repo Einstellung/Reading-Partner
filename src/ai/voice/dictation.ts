@@ -111,8 +111,14 @@ export function assembleTranscript(events: readonly DictationEvent[]): string {
 // addPluginListener creates; there is no way to emit a global app event from
 // Swift, so `listen("voice://dictation")` would have subscribed to something
 // nobody can ever fire — silently, since listen() on a dead name throws nothing.
-const VOICE_PLUGIN = "voice";
-const DICTATION_EVENT = "dictation";
+// Exported because the interactive bench (src/smoke/dictation-bench.tsx)
+// subscribes a second listener to the same stream, to show a run's level and
+// event counts beside the bar without going through the gesture. Tauri's Swift
+// Plugin keeps one array of channels per event name and `trigger` fans out to
+// all of them, so a passive listener is additive: it sees every event and takes
+// none away from the composer's.
+export const VOICE_PLUGIN = "voice";
+export const DICTATION_EVENT = "dictation";
 
 // The three commands and the one subscription, as parameters rather than
 // imports. Under bun `nativeDictation()` returns null, so nothing in this file

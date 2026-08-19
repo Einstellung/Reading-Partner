@@ -47,6 +47,10 @@ if (import.meta.env.VITE_SMOKE === "1") {
   // The rehearsal feature's gate: twenty minutes of continuous recognition,
   // which is four times the dictation backstop and a span nothing has run for.
   void import("./smoke/dictation-long").then(({ runLongDictation }) => runLongDictation());
+} else if (import.meta.env.VITE_SMOKE === "dictation-bench") {
+  // The interactive one: the real composer with nothing above it, so the bar
+  // can be tried by hand on a .dev build that cannot sign in (docs/pitfall/31).
+  void import("./smoke/dictation-bench").then(({ runDictationBench }) => runDictationBench());
 } else if (import.meta.env.VITE_SMOKE === "dictation-guided") {
   // The half of the dictation measurements that needs a person in front of the
   // phone: a level curve and a flush latency are both about a human voice, and
