@@ -1,6 +1,6 @@
-// Unit tests for the chapter prompt builders (src/reading/notes/chapter.ts): the chat
-// thread block (in-range filtering, roles, clipping, caps, empty case) and the
-// system prompt embedding it with its instruction. Run: bun test.
+// Unit tests for the chapter-spine prompt builders (src/reading/notes/chapter.ts):
+// the chat thread block (in-range filtering, roles, clipping, caps, empty case)
+// and the system prompt it goes into. Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
@@ -8,7 +8,7 @@ import {
   formatChatThreads,
   type ChatThread,
 } from "../../../src/reading/notes/chapter";
-import type { NoteChapter } from "../../../src/reading/notes/types";
+import type { BookChapter, NoteChapter } from "../../../src/reading/notes/types";
 
 function thread(page: number, createdAt: number, msgs: [ChatThread["messages"][number]["role"], string][]): ChatThread {
   return { page, createdAt, messages: msgs.map(([role, text]) => ({ role, text })) };
@@ -98,31 +98,55 @@ const CHAPTER: NoteChapter = {
   status: "pending",
 };
 
-test("chapterSystemPrompt embeds the chat block and its endorsement instruction", () => {
+test("chapterSystemPrompt embeds the chat block as an emphasis signal only", () => {
   const chats = formatChatThreads([thread(5, 1, [["user", "note this down"], ["ai", "here is the idea"]])], 4, 9);
   const prompt = chapterSystemPrompt({ bookName: "Book", chapter: CHAPTER, chats });
   expect(prompt).toContain("here is the idea");
   expect(prompt).toContain("[p.5]");
-  expect(prompt).toMatch(/endorsed an explanation or asked for it to be recorded/);
-  expect(prompt).toMatch(/rewritten in the/);
+  expect(prompt).toMatch(/emphasis signal only/);
+  // The spine is written from the book, so a conversation is never carried into it.
+  expect(prompt).toMatch(/Do not quote them and do not carry their content/);
 });
 
 test("chapterSystemPrompt omits the chat instruction when there are no chats", () => {
   const prompt = chapterSystemPrompt({ bookName: "Book", chapter: CHAPTER, chats: "" });
-  expect(prompt).not.toMatch(/asked for it to be recorded/);
+  expect(prompt).not.toMatch(/emphasis signal only/);
+});
+
+test("chapterSystemPrompt asks for the four spine sections", () => {
+  const prompt = chapterSystemPrompt({ bookName: "Book", chapter: CHAPTER });
+  for (const section of ["## Covers", "## Builds on", "## Introduces", "## Landmarks"]) {
+    expect(prompt).toContain(section);
+  }
+  // Written for the companion, not for the reader.
+  expect(prompt).toMatch(/read by that companion, not by a person/);
+});
+
+// Chapters are written in parallel, so "builds on" cannot be read off the spines
+// written before this one; the chapter table is what makes the numbering real.
+test("chapterSystemPrompt carries the chapter table with this chapter marked", () => {
+  const table: BookChapter[] = [
+    { index: 1, title: "Setup", startPage: 1, endPage: 3 },
+    { index: 2, title: "Method", startPage: 4, endPage: 9 },
+    { index: 3, title: "Results", startPage: 10, endPage: 20 },
+  ];
+  const prompt = chapterSystemPrompt({ bookName: "Book", chapter: CHAPTER, chapters: table });
+  expect(prompt).toContain("  ch.1 Setup — p.1-3");
+  expect(prompt).toContain("> ch.2 Method — p.4-9");
+  expect(prompt).toContain("  ch.3 Results — p.10-20");
 });
 
 test("chapterSystemPrompt templates the output language into the write line, English by default", () => {
   const pinned = chapterSystemPrompt({ bookName: "Book", chapter: CHAPTER, aiLanguage: "fr" });
-  // The language is templated into the one "write the note in ___" line, not appended.
-  expect(pinned).toContain("write the note in Français as");
-  expect(pinned).not.toContain("write the note in English as");
+  // The language is templated into the one "write it in ___" line, not appended.
+  expect(pinned).toContain("write it in Français as markdown");
+  expect(pinned).not.toContain("write it in English as markdown");
   expect(pinned).not.toContain("must be written in");
   // Default and explicit auto both keep the English line and add no second directive.
   const def = chapterSystemPrompt({ bookName: "Book", chapter: CHAPTER });
-  expect(def).toContain("write the note in English as");
+  expect(def).toContain("write it in English as markdown");
   expect(def).not.toContain("must be written in");
   expect(
     chapterSystemPrompt({ bookName: "Book", chapter: CHAPTER, aiLanguage: "auto" }),
-  ).toContain("write the note in English as");
+  ).toContain("write it in English as markdown");
 });

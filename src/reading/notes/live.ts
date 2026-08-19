@@ -1,4 +1,4 @@
-// Live wiring of the notes pipeline (docs/14): real deps (Tauri fs store, pi-ai
+// Live wiring of the chapter-spine pipeline (docs/09): real deps (Tauri fs store, pi-ai
 // through the app's provider config, the book's figure index for view_figure)
 // bound to the dep-injected NotesPipeline. One pipeline instance per book id for
 // the app's lifetime, so generation keeps running in the background across book
@@ -21,12 +21,8 @@ import {
   type ChatThread,
   type EmphasisSignal,
 } from "./chapter";
-import {
-  chaptersFromOutline,
-  NOTES_PLAN_SYSTEM_PROMPT,
-  parseNotesPlan,
-  planUserMessage,
-} from "./plan";
+import { filterChapterTable, outlineChapterTable } from "./chapter-table";
+import { NOTES_PLAN_SYSTEM_PROMPT, parseNotesPlan, planUserMessage } from "./plan";
 import { overviewSystemPrompt, overviewUserMessage } from "./overview";
 import { NotesPipeline, type NotesDeps } from "./pipeline";
 import {
@@ -57,9 +53,11 @@ function makeDeps(bookId: string, bookName: string, inputs: NotesInputs): NotesD
     saveState: saveNotesState,
 
     async buildPlan(opts) {
-      // The PDF outline is the chapter structure when it has one; otherwise the
-      // model reads the front matter's table of contents.
-      const fromOutline = chaptersFromOutline(fulltext.outline, fulltext.pages.length);
+      // The PDF outline is the chapter structure when it has one, minus the
+      // entries that point at a cover or a part divider rather than a chapter;
+      // otherwise the model reads the front matter's table of contents, and its
+      // answer goes through the same filter.
+      const fromOutline = outlineChapterTable(fulltext.outline, fulltext.pages);
       if (fromOutline) return { chapters: fromOutline, source: "outline" };
       // Resolved up front only so the parse can be attributed to the model that
       // produced it; the call itself resolves the same settings again.
@@ -71,13 +69,14 @@ function makeDeps(bookId: string, bookName: string, inputs: NotesInputs): NotesD
         planUserMessage(fulltext),
         opts,
       );
-      const chapters = recordParse("notes-plan", model, text, (tally) =>
+      const parsed = recordParse("notes-plan", model, text, (tally) =>
         parseNotesPlan(text, fulltext.pages.length, tally),
       );
+      const chapters = filterChapterTable(parsed, fulltext.pages) ?? parsed;
       return { chapters, source: "ai" };
     },
 
-    async generateChapter({ chapter, instruction }, opts) {
+    async generateChapter({ chapter, chapters, instruction }, opts) {
       const model = await resolveModel("prep");
       const figures = await inputs.getFigures().catch(() => []);
       const inRange = figures.filter((f) => f.page >= chapter.startPage && f.page <= chapter.endPage);
@@ -109,6 +108,7 @@ function makeDeps(bookId: string, bookName: string, inputs: NotesInputs): NotesD
       return runNoteChapter({
         bookName,
         chapter,
+        chapters,
         tools,
         model: { providerId: model.providerId, modelId: model.modelId, reasoning: model.reasoning },
         figureCatalog,

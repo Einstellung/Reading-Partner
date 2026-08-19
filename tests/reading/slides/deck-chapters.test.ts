@@ -13,6 +13,7 @@
 
 import { beforeEach, expect, mock, test } from "bun:test";
 import { FIGURES_VERSION } from "../../../src/reading/figures/types";
+import { NOTES_VERSION } from "../../../src/reading/notes/types";
 
 const files = new Map<string, string>();
 const blobs = new Map<string, Uint8Array>();
@@ -103,7 +104,7 @@ function putNotes(bookId: string) {
   files.set(
     `notes-${bookId}/state.json`,
     JSON.stringify({
-      version: 1,
+      version: NOTES_VERSION,
       bookId,
       bookName: "Eye and Brain",
       createdAt: 1,
