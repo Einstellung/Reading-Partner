@@ -12,6 +12,7 @@ export {
   chapterByNumber,
   chapterFocusLabel,
   chapterNumber,
+  chapterRanges,
   chapterTableSection,
   chapterTableUsable,
   chapterTokens,
@@ -19,6 +20,9 @@ export {
   pickChapterTable,
   MIN_CHAPTERS,
   MIN_CHAPTER_CHARS,
+  type BookChapter,
   type ChapterEntry,
-  type LectureChapter,
+  type RangeOptions,
+  type TableChapter,
 } from "./table";
+export { chaptersFromOutline, outlineEntries, MIN_OUTLINE_ENTRIES } from "./outline";

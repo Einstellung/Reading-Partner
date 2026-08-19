@@ -4,7 +4,7 @@
 import { expect, test } from "bun:test";
 import { MAX_PAGES } from "../../../src/fulltext/format";
 import { FULLTEXT_VERSION, type Fulltext } from "../../../src/fulltext/types";
-import { buildChapterTable, type LectureChapter } from "../../../src/reading/chapters";
+import { buildChapterTable, type TableChapter } from "../../../src/reading/chapters";
 import { buildReadChapterTool, READ_CHAPTER_MAX_PAGES } from "../../../src/reading/lecture";
 
 function book(pages: number): Fulltext {
@@ -17,7 +17,7 @@ function book(pages: number): Fulltext {
 }
 
 const BOOK = book(107);
-const TABLE: LectureChapter[] = buildChapterTable(
+const TABLE: TableChapter[] = buildChapterTable(
   [
     { title: "封面与前言", startPage: 1 },
     { title: "第 1 章 一", startPage: 12 },

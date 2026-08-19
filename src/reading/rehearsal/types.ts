@@ -9,7 +9,7 @@
 // (reading/talks): this module only says what one looks like and how a set of
 // them reads back to the model.
 
-import type { BookChapter } from "../notes/types";
+import type { BookChapter } from "../chapters";
 
 export const REHEARSAL_VERSION = 1 as const;
 
@@ -21,7 +21,7 @@ export const REHEARSAL_VERSION = 1 as const;
 export type SkeletonSource = "notes-plan" | "outline" | "whole-book";
 
 // A chapter of the book as the rehearsal walks it: the book's own division
-// (notes/types.ts BookChapter) plus the one thing a rehearsal asks of it.
+// (reading/chapters BookChapter) plus the one thing a rehearsal asks of it.
 export interface RehearsalChapter extends BookChapter {
   // A chapter note exists on disk for this chapter (notes status "done").
   hasNote: boolean;

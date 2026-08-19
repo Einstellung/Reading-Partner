@@ -12,6 +12,7 @@
 //
 // Generation and revision granularity is still the chapter.
 
+import type { BookChapter } from "../chapters";
 import { decodeLegacyName } from "../../platform/app/path";
 
 export const NOTES_VERSION = 2 as const;
@@ -36,21 +37,9 @@ export type ChapterStatus = PhaseStatus | "skipped";
 // regenerated automatically; the panel offers a button.
 export type OverviewStatus = PhaseStatus | "stale";
 
-// One chapter of one book: where it is and what it is called. Declared here
-// because the notes pipeline is what decides a book's chapters (plan.ts
-// toChapters), and every later stage reads that same division back — the
-// rehearsal walks it, the deck plan cites it. Each of those adds its own field
-// to this record; none of them redraws it.
-//
-// Ranges are 1-based inclusive, contiguous, and cover the whole book.
-export interface BookChapter {
-  index: number; // 1-based reading order
-  title: string;
-  startPage: number; // 1-based inclusive
-  endPage: number; // 1-based inclusive
-}
-
-// A chapter as the notes pipeline holds it: plus how far its note has got.
+// A chapter as the notes pipeline holds it: the book's own chapter
+// (reading/chapters BookChapter) plus how far its note has got. Ranges are
+// 1-based inclusive, contiguous, and cover the whole book.
 export interface NoteChapter extends BookChapter {
   status: ChapterStatus;
   error?: string;

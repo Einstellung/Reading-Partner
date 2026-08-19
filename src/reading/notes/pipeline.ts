@@ -26,7 +26,8 @@
 import { runWithWatchdog, StoppedError, type AiCallOptions, type WatchdogConfig } from "../../ai/watchdog";
 import { CallLimiter, type LimiterConfig } from "../../ai/limiter";
 import { ObservableRun, type RunActivity, type RunSnapshot } from "../../ai/observable-run";
-import { createNotesState, normalizeNotesOnLoad, type BookChapter, type NoteChapter, type NotesState } from "./types";
+import type { BookChapter } from "../chapters";
+import { createNotesState, normalizeNotesOnLoad, type NoteChapter, type NotesState } from "./types";
 
 export type { AiCallOptions };
 

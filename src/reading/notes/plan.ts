@@ -1,75 +1,16 @@
-// Notes plan (docs/14), pure parts: turn a book into a chapter list with page
-// ranges. The PDF outline is preferred (its top-level entries are the chapters);
-// when there is no usable outline the model reads the front matter's table of
-// contents and returns the structure as JSON. Both go through toChapters, which
-// makes the ranges contiguous and covering the whole book. The AI call itself
-// lives in live.ts.
+// Notes plan (docs/14): the model reads the front matter's table of contents and
+// returns the book's chapter structure as JSON. Used when the PDF outline has no
+// usable table of its own — reading the outline, and turning either source into
+// contiguous page ranges, is reading/chapters. The AI call itself lives in
+// live.ts.
 
-import type { Fulltext, OutlineItem } from "../../fulltext/types";
+import type { Fulltext } from "../../fulltext/types";
 import type { ParseTally } from "../../platform/app/structured-output";
-import type { NoteChapter } from "./types";
+import { chapterRanges, type TableChapter } from "../chapters";
 
 // How many leading pages of the book to hand the model when it has to read the
 // table of contents itself (no PDF outline).
 export const TOC_MAX_PAGES = 12;
-
-// Assign contiguous, whole-book-covering page ranges to a list of chapter starts.
-// Inputs are (title, startPage) in any order; output is 1-based, sorted, with
-// each chapter ending the page before the next begins and the last ending at the
-// final page. The first chapter is pulled back to page 1 so front matter is
-// covered, and chapters sharing a start page are de-duplicated. Pure.
-export function toChapters(
-  items: { title: string; startPage: number }[],
-  totalPages: number,
-): NoteChapter[] {
-  const total = Math.max(1, Math.round(totalPages));
-  const clean = items
-    .map((it) => ({
-      title: it.title.trim() || "Untitled",
-      startPage: Math.max(1, Math.min(total, Math.round(it.startPage))),
-    }))
-    .sort((a, b) => a.startPage - b.startPage);
-
-  const dd: { title: string; startPage: number }[] = [];
-  for (const it of clean) {
-    if (dd.length && dd[dd.length - 1].startPage === it.startPage) continue;
-    dd.push(it);
-  }
-  if (dd.length === 0) {
-    return [{ index: 1, title: "The whole book", startPage: 1, endPage: total, status: "pending" }];
-  }
-  dd[0].startPage = 1; // cover any front matter before the first heading
-
-  return dd.map((it, i) => {
-    const endPage = i < dd.length - 1 ? dd[i + 1].startPage - 1 : total;
-    return {
-      index: i + 1,
-      title: it.title,
-      startPage: it.startPage,
-      endPage: Math.max(it.startPage, endPage),
-      status: "pending" as const,
-    };
-  });
-}
-
-// Chapters from a PDF outline: the top-level (level 0) entries in reading order.
-// Returns null when the outline has fewer than two usable top-level entries — the
-// caller then falls back to the model reading the table of contents.
-export function chaptersFromOutline(
-  outline: OutlineItem[],
-  totalPages: number,
-): NoteChapter[] | null {
-  const total = Math.max(1, Math.round(totalPages));
-  const tops = outline.filter((o) => o.level === 0 && o.page >= 1 && o.page <= total);
-  if (tops.length < 2) return null;
-  const chapters = toChapters(
-    tops.map((o) => ({ title: o.title, startPage: o.page })),
-    total,
-  );
-  return chapters.length >= 2 ? chapters : null;
-}
-
-// --- AI table-of-contents fallback ---
 
 export const NOTES_PLAN_SYSTEM_PROMPT = [
   "You are the note-taking stage of a reading companion. You are given the front",
@@ -112,13 +53,13 @@ export function extractJson(text: string): string {
 // when no chapter is parseable so the pipeline can surface a plan failure.
 //
 // `tally` is an optional out-parameter for the structured-output measurement
-// (structured-output.ts). `kept` is counted after toChapters, so chapters
+// (structured-output.ts). `kept` is counted after the ranging, so chapters
 // dropped for sharing a start page count as lost too.
 export function parseNotesPlan(
   text: string,
   totalPages: number,
   tally?: ParseTally,
-): NoteChapter[] {
+): TableChapter[] {
   const raw = JSON.parse(extractJson(text)) as Record<string, unknown>;
   const rawChapters = Array.isArray(raw.chapters) ? raw.chapters : [];
   if (tally) tally.seen += rawChapters.length;
@@ -135,7 +76,7 @@ export function parseNotesPlan(
     if (tally) tally.fail = rawChapters.length ? "empty-result" : "missing-field";
     throw new Error("plan has no parseable chapters");
   }
-  const chapters = toChapters(items, totalPages);
+  const chapters = chapterRanges(items, totalPages, { fromFirstPage: true });
   if (tally) tally.kept += chapters.length;
   return chapters;
 }

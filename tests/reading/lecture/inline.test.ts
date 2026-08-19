@@ -18,7 +18,7 @@ import {
   MAX_CHAPTER_PAGES,
   WHOLE_BOOK_MAX_TOKENS,
 } from "../../../src/reading/lecture";
-import type { LectureChapter } from "../../../src/reading/chapters";
+import type { TableChapter } from "../../../src/reading/chapters";
 
 function ft(pages: string[]): Fulltext {
   return { version: FULLTEXT_VERSION, status: "ok", pages, outline: [] };
@@ -26,7 +26,7 @@ function ft(pages: string[]): Fulltext {
 
 const BOOK = ft(["page one text", "page two text", "page three text"]);
 
-const CH: LectureChapter = {
+const CH: TableChapter = {
   index: 2,
   number: 3,
   title: "编码注意力机制",

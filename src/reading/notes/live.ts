@@ -21,8 +21,9 @@ import {
   type ChatThread,
   type EmphasisSignal,
 } from "./chapter";
-import { filterChapterTable, outlineChapterTable } from "./chapter-table";
+import { outlineEntries, pickChapterTable, type TableChapter } from "../chapters";
 import { NOTES_PLAN_SYSTEM_PROMPT, parseNotesPlan, planUserMessage } from "./plan";
+import type { NoteChapter } from "./types";
 import { overviewSystemPrompt, overviewUserMessage } from "./overview";
 import { NotesPipeline, type NotesDeps } from "./pipeline";
 import {
@@ -46,6 +47,19 @@ export interface NotesInputs {
   getChatThreads(): Promise<ChatThread[]>;
 }
 
+// A row of the book's chapter table as a chapter of this run: nothing prepared
+// yet. The printed chapter number is not carried into the state file — it is a
+// function of the title, and a persisted copy is one more thing to keep true.
+function pending(c: TableChapter): NoteChapter {
+  return {
+    index: c.index,
+    title: c.title,
+    startPage: c.startPage,
+    endPage: c.endPage,
+    status: "pending",
+  };
+}
+
 function makeDeps(bookId: string, bookName: string, inputs: NotesInputs): NotesDeps {
   const { fulltext } = inputs;
   return {
@@ -56,9 +70,15 @@ function makeDeps(bookId: string, bookName: string, inputs: NotesInputs): NotesD
       // The PDF outline is the chapter structure when it has one, minus the
       // entries that point at a cover or a part divider rather than a chapter;
       // otherwise the model reads the front matter's table of contents, and its
-      // answer goes through the same filter.
-      const fromOutline = outlineChapterTable(fulltext.outline, fulltext.pages);
-      if (fromOutline) return { chapters: fromOutline, source: "outline" };
+      // answer goes through the same filter. Both go through reading/chapters,
+      // so a book's chapters are the same list here and in a lecture turn.
+      // fromFirstPage: what is prepared here is every page of the book, so the
+      // pages before the first heading belong to the first chapter.
+      const total = fulltext.pages.length;
+      const fromOutline = pickChapterTable([outlineEntries(fulltext.outline, total)], fulltext, {
+        fromFirstPage: true,
+      });
+      if (fromOutline) return { chapters: fromOutline.map(pending), source: "outline" };
       // Resolved up front only so the parse can be attributed to the model that
       // produced it; the call itself resolves the same settings again.
       const model = await resolveModel("prep");
@@ -70,10 +90,14 @@ function makeDeps(bookId: string, bookName: string, inputs: NotesInputs): NotesD
         opts,
       );
       const parsed = recordParse("notes-plan", model, text, (tally) =>
-        parseNotesPlan(text, fulltext.pages.length, tally),
+        parseNotesPlan(text, total, tally),
       );
-      const chapters = filterChapterTable(parsed, fulltext.pages) ?? parsed;
-      return { chapters, source: "ai" };
+      // Filtered when the filter leaves a usable table; the model's own answer
+      // when it does not, because a plan the filter rejects is still better than
+      // no chapters at all here (a lecture, which can fall back to page ranges,
+      // decides that differently).
+      const filtered = pickChapterTable([parsed], fulltext, { fromFirstPage: true });
+      return { chapters: (filtered ?? parsed).map(pending), source: "ai" };
     },
 
     async generateChapter({ chapter, chapters, instruction }, opts) {

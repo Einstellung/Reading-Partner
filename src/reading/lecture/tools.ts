@@ -19,7 +19,7 @@ import type { AgentTool } from "../../ai/agent";
 import { BOOK_PAGE_LABEL, formatPages } from "../../fulltext/format";
 import type { Fulltext } from "../../fulltext/types";
 import { MAX_CHAPTER_PAGES } from "./inline";
-import type { LectureChapter } from "../chapters";
+import type { TableChapter } from "../chapters";
 
 // The page-range form's cap. Four times read_pages', because the reader asking
 // for "the part about attention" on a book with no chapter table is asking for
@@ -32,7 +32,7 @@ const ONLY_WHEN_NAMED =
   "Only call this when the reader has explicitly named a chapter or asked for one to be " +
   "taught. Never call it to check what a book is about, and never call it twice in a turn.";
 
-function chapterList(chapters: readonly LectureChapter[]): string {
+function chapterList(chapters: readonly TableChapter[]): string {
   return (
     chapters
       .map((c) => `${c.number === null ? c.title : `${c.number} (${c.title})`}`)
@@ -45,12 +45,12 @@ export interface ReadChapterDeps {
   fulltext: Fulltext;
   // The chapter table, or null when there is no usable one and the tool takes a
   // page range instead.
-  chapters: readonly LectureChapter[] | null;
+  chapters: readonly TableChapter[] | null;
   // Where a chapter focus goes when this tool reads one. Absent on a
   // mark-anchored thread: the reader may ask a marked passage's conversation to
   // teach chapter 3 and get it, but the thread is still about the mark, so
   // nothing about it changes (docs/09).
-  onFocus?: (chapter: LectureChapter) => void;
+  onFocus?: (chapter: TableChapter) => void;
 }
 
 export function buildReadChapterTool(deps: ReadChapterDeps): AgentTool {

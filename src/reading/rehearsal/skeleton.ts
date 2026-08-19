@@ -5,7 +5,7 @@
 // minute of nothing (docs/31: the skeleton is the AI's working sheet, not a
 // document to produce). Three sources, best first.
 
-import { chaptersFromOutline, toChapters } from "../notes/plan";
+import { chaptersFromOutline, type TableChapter } from "../chapters";
 import type { NoteChapter } from "../notes/types";
 import type { OutlineItem } from "../../fulltext/types";
 import type { RehearsalChapter, Skeleton } from "./types";
@@ -29,14 +29,32 @@ function withNotes(chapters: NoteChapter[]): RehearsalChapter[] {
   }));
 }
 
+// The book's own chapters, with no note behind any of them yet.
+function unwritten(chapters: TableChapter[]): RehearsalChapter[] {
+  return chapters.map((c) => ({
+    index: c.index,
+    title: c.title,
+    startPage: c.startPage,
+    endPage: c.endPage,
+    hasNote: false,
+  }));
+}
+
 export function buildSkeleton(input: SkeletonInput): Skeleton {
   const total = Math.max(1, Math.round(input.pageCount) || 1);
   if (input.notesChapters && input.notesChapters.length > 0) {
     return { source: "notes-plan", chapters: withNotes(input.notesChapters) };
   }
   const fromOutline = chaptersFromOutline(input.outline ?? [], total);
-  if (fromOutline) return { source: "outline", chapters: withNotes(fromOutline) };
-  return { source: "whole-book", chapters: withNotes(toChapters([], total)) };
+  if (fromOutline) return { source: "outline", chapters: unwritten(fromOutline) };
+  // Neither: one chapter that is the book. Not a chapter table — there is no
+  // division to find here — so it is written out rather than asked for.
+  return {
+    source: "whole-book",
+    chapters: [
+      { index: 1, title: "The whole book", startPage: 1, endPage: total, hasNote: false },
+    ],
+  };
 }
 
 // The 1-based chapter a page falls in. Pages outside every range clamp to the

@@ -15,11 +15,11 @@
 
 import { findFigureById } from "../figures/lookup";
 import { languageInstruction, type AiLanguage } from "../../platform/app/settings";
-import type { BookChapter } from "../notes/types";
+import type { BookChapter } from "../chapters";
 import type { ParseTally } from "../../platform/app/structured-output";
 import type { SlideKind, SlideOutline } from "./types";
 
-// One chapter as the planner sees it: the book's own division (notes/types.ts
+// One chapter as the planner sees it: the book's own division (reading/chapters
 // BookChapter), whether a note exists to distil from, and the note's opening
 // words as a hint of its content.
 export interface PlanChapter extends BookChapter {

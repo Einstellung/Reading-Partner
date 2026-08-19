@@ -12,6 +12,7 @@ import {
   chapterByNumber,
   chapterFocusLabel,
   chapterNumber,
+  chapterRanges,
   chapterTableSection,
   chapterTableUsable,
   pickChapterTable,
@@ -184,4 +185,81 @@ test("the table's prompt block names the number the reader would say", () => {
   expect(section).toContain("- 封面与前言 — p.1-19");
   expect(section).toContain("- [ch.1] 第 1 章 一 — p.20-39");
   expect(chapterTableSection([])).toBe("");
+});
+
+// --- ranging, the part both readers of the table share ---
+
+test("ranges are contiguous and cover the whole book", () => {
+  const chapters = chapterRanges(
+    [
+      { title: "Intro", startPage: 3 },
+      { title: "Body", startPage: 10 },
+      { title: "End", startPage: 20 },
+    ],
+    30,
+    { fromFirstPage: true },
+  );
+  expect(chapters.map((c) => [c.startPage, c.endPage])).toEqual([
+    [1, 9], // first pulled back to page 1
+    [10, 19],
+    [20, 30], // last runs to the final page
+  ]);
+  expect(chapters.map((c) => c.index)).toEqual([1, 2, 3]);
+});
+
+// The one behaviour the two readers of the table want differently: the spine
+// pass prepares every page of the book, so the front matter belongs to chapter
+// one; a lecture teaches chapters, and the pages before chapter one are not it.
+test("front matter is folded in only when the caller asks for it", () => {
+  const entries = [
+    { title: "One", startPage: 5 },
+    { title: "Two", startPage: 20 },
+  ];
+  expect(chapterRanges(entries, 40, { fromFirstPage: true })[0].startPage).toBe(1);
+  expect(chapterRanges(entries, 40)[0].startPage).toBe(5);
+});
+
+test("ranging sorts, de-dupes shared start pages, and clamps to the book", () => {
+  const chapters = chapterRanges(
+    [
+      { title: "B", startPage: 10 },
+      { title: "A", startPage: 5 },
+      { title: "dupe", startPage: 5 },
+      { title: "past end", startPage: 999 },
+    ],
+    40,
+    { fromFirstPage: true },
+  );
+  expect(chapters.map((c) => c.title)).toEqual(["A", "B", "past end"]);
+  expect(chapters.map((c) => [c.startPage, c.endPage])).toEqual([
+    [1, 9],
+    [10, 39],
+    [40, 40],
+  ]);
+});
+
+// No entries is no table. The one-chapter-that-is-the-book fallback belongs to
+// the caller that wants one (rehearsal/skeleton.ts), not here: a book with no
+// divisions has no chapter table, and saying otherwise invents a chapter.
+test("no entries ranges to no chapters", () => {
+  expect(chapterRanges([], 12)).toEqual([]);
+});
+
+// The AI table-of-contents path re-enters the filter with a table that already
+// has ranges; a clean one has to come back unchanged.
+test("an already-clean table survives the filter untouched", () => {
+  const table = buildChapterTable(
+    [
+      { title: "One", startPage: 1 },
+      { title: "Two", startPage: 6 },
+      { title: "Three", startPage: 11 },
+    ],
+    book(20),
+    { fromFirstPage: true },
+  );
+  expect(table.map((c) => [c.index, c.title, c.startPage, c.endPage])).toEqual([
+    [1, "One", 1, 5],
+    [2, "Two", 6, 10],
+    [3, "Three", 11, 20],
+  ]);
 });

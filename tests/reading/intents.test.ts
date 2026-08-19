@@ -12,9 +12,9 @@ import {
   chapterIntent,
   openingIntents,
 } from "../../src/reading/intents";
-import type { LectureChapter } from "../../src/reading/chapters";
+import type { TableChapter } from "../../src/reading/chapters";
 
-const CH3: LectureChapter = {
+const CH3: TableChapter = {
   index: 4,
   number: 3,
   title: "Coding Attention Mechanisms",

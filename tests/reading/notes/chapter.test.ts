@@ -8,7 +8,8 @@ import {
   formatChatThreads,
   type ChatThread,
 } from "../../../src/reading/notes/chapter";
-import type { BookChapter, NoteChapter } from "../../../src/reading/notes/types";
+import type { BookChapter } from "../../../src/reading/chapters";
+import type { NoteChapter } from "../../../src/reading/notes/types";
 
 function thread(page: number, createdAt: number, msgs: [ChatThread["messages"][number]["role"], string][]): ChatThread {
   return { page, createdAt, messages: msgs.map(([role, text]) => ({ role, text })) };

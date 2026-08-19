@@ -21,7 +21,8 @@ import { buildFigureTools, type FigureImage } from "../figures/tools";
 import type { Figure } from "../figures/types";
 import type { Fulltext } from "../../fulltext/types";
 import { aiLanguageName, type AiLanguage } from "../../platform/app/settings";
-import type { BookChapter, NoteChapter } from "./types";
+import type { BookChapter } from "../chapters";
+import type { NoteChapter } from "./types";
 
 const CHAPTER_MAX_ROUNDS = 16;
 

@@ -44,7 +44,7 @@ import {
   type RowChange,
 } from "../call-state";
 import { toolStatusLabel } from "../context";
-import { chapterByNumber, type LectureChapter } from "../chapters";
+import { chapterByNumber, type TableChapter } from "../chapters";
 import { loadChapterTable } from "../lecture";
 import type { FiguresIndex } from "../figures";
 import { createLiveTurns, type LiveTurn } from "../live-turns";
@@ -163,11 +163,11 @@ export interface CallController<M extends CallRow, I extends StagedImage> {
   // The open book's chapter table, or null when it has none worth using
   // (reading/lecture). The chapter chip is built from it, and it is what a
   // chapter number is resolved against.
-  chapters: LectureChapter[] | null;
+  chapters: TableChapter[] | null;
   // The chapter the open conversation is parked on (docs/09), resolved. Null on
   // a mark-anchored thread, always: a mark's conversation can be asked to teach
   // a chapter without becoming a conversation about one.
-  focusChapter: LectureChapter | null;
+  focusChapter: TableChapter | null;
   // Park the open conversation on a chapter, or clear it. The chip presses this
   // with the chapter the reader was scrolled into, which is the one moment the
   // scroll position decides anything (docs/09).
@@ -251,10 +251,10 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   // the table from the book's outline / notes state / prep plan, the focus from
   // the thread file — which read_chapter also writes to, mid-turn, so the focus
   // is re-read whenever a turn settles as well as when a chip sets it.
-  const [chapters, setChapters] = useState<LectureChapter[] | null>(null);
-  const chaptersRef = useRef<LectureChapter[] | null>(null);
+  const [chapters, setChapters] = useState<TableChapter[] | null>(null);
+  const chaptersRef = useRef<TableChapter[] | null>(null);
   chaptersRef.current = chapters;
-  const [focusChapter, setFocusChapterState] = useState<LectureChapter | null>(null);
+  const [focusChapter, setFocusChapterState] = useState<TableChapter | null>(null);
 
   const syncFocusChapter = useCallback(() => {
     const bookId = bookIdRef.current;

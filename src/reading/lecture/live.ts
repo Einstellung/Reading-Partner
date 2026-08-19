@@ -4,10 +4,15 @@
 // every decision it makes lives in the pure modules beside it.
 
 import type { Fulltext } from "../../fulltext/types";
-import { chaptersFromOutline } from "../notes/plan";
+import {
+  chapterNumber,
+  outlineEntries,
+  pickChapterTable,
+  type TableChapter,
+  type ChapterEntry,
+} from "../chapters";
 import { loadNotesState, readChapterNote } from "../notes/store";
 import type { PrepChapter } from "../prep/types";
-import { chapterNumber, pickChapterTable, type ChapterEntry, type LectureChapter } from "../chapters";
 import type { ChapterOutline } from "./prompt";
 
 // The chapter table for a book, from the best source that has one (docs/09):
@@ -24,14 +29,11 @@ export async function loadChapterTable(
   bookId: string,
   ft: Fulltext | null,
   prepChapters: readonly PrepChapter[] = [],
-): Promise<LectureChapter[] | null> {
+): Promise<TableChapter[] | null> {
   if (!ft || ft.status !== "ok") return null;
   const total = ft.pages.length;
 
-  const fromOutline: ChapterEntry[] = (chaptersFromOutline(ft.outline, total) ?? []).map((c) => ({
-    title: c.title,
-    startPage: c.startPage,
-  }));
+  const fromOutline = outlineEntries(ft.outline, total);
 
   const state = await loadNotesState(bookId).catch(() => null);
   const fromNotes: ChapterEntry[] = (state?.chapters ?? []).map((c) => ({

@@ -94,7 +94,7 @@ import {
   chapterTableSection,
   chapterTokens,
   pageRangeText,
-  type LectureChapter,
+  type TableChapter,
 } from "./chapters";
 import { buildClassroomTools } from "./prep/tools";
 import { ADD_SOURCE_PROMPT, buildSourceTools } from "./prep/source-tool";
@@ -369,7 +369,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   const prepState = getPipeline()?.snapshot().state ?? null;
   const chapterTable = await loadChapterTable(bookId, currentFulltext, prepState?.chapters ?? []);
   const focusNumber = isBook ? getThread(bookId, threadId)?.focusChapter ?? null : null;
-  const focusChapter: LectureChapter | null =
+  const focusChapter: TableChapter | null =
     chapterTable && focusNumber !== null ? chapterByNumber(chapterTable, focusNumber) : null;
   const bodyPages =
     currentFulltext?.status === "ok"
@@ -398,7 +398,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
         chapters: chapterTable,
         ...(isBook
           ? {
-              onFocus: (c: LectureChapter) => {
+              onFocus: (c: TableChapter) => {
                 if (c.number !== null) setThreadFocusChapter(bookId, threadId, c.number);
               },
             }

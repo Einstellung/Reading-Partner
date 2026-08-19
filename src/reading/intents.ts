@@ -10,7 +10,7 @@
 // layer. `label` is what the chip says, `message` is what the reader is taken
 // to have said.
 
-import type { LectureChapter } from "./chapters";
+import type { TableChapter } from "./chapters";
 
 export interface ReadingIntent {
   id: string;
@@ -88,7 +88,7 @@ function shortTitle(title: string): string {
 //
 // Null when the chapter carries no number: the focus is stored as the number the
 // reader would say, so a chapter that has none cannot be parked on.
-export function chapterIntent(chapter: LectureChapter | null): ReadingIntent | null {
+export function chapterIntent(chapter: TableChapter | null): ReadingIntent | null {
   if (!chapter || chapter.number === null) return null;
   const range = `p.${chapter.startPage}-${chapter.endPage}`;
   return {
@@ -108,7 +108,7 @@ export function chapterIntent(chapter: LectureChapter | null): ReadingIntent | n
 // chapter table, and nothing at all when it does not.
 export function openingIntents(
   isBookLevel: boolean,
-  chapter: LectureChapter | null = null,
+  chapter: TableChapter | null = null,
 ): readonly ReadingIntent[] {
   if (!isBookLevel) return MARK_INTENTS;
   const teach = chapterIntent(chapter);

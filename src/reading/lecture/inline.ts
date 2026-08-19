@@ -21,7 +21,7 @@
 import { estimateTextTokens } from "../../budget";
 import { BOOK_PAGE_LABEL } from "../../fulltext/format";
 import type { Fulltext } from "../../fulltext/types";
-import type { LectureChapter } from "../chapters";
+import type { TableChapter } from "../chapters";
 
 // What the prompt was loaded with this turn. Also the telemetry value
 // (platform/app/cache-telemetry.ts), so the three names are the axis a later
@@ -61,7 +61,7 @@ export interface InlineInput {
   // would actually be inlined, i.e. after the reference list is trimmed.
   bodyEstimate: number;
   // The chapter in focus this turn, and its uncorrected estimate.
-  chapter: LectureChapter | null;
+  chapter: TableChapter | null;
   chapterEstimate?: number;
   // False when there is no usable text layer at all.
   hasText: boolean;
@@ -116,7 +116,7 @@ export function wholeBookSection(bookName: string, ft: Fulltext, bodyPages: numb
 
 // The chapter block: one chapter, page by page, named by the number the reader
 // would say rather than by its position in the table.
-export function chapterSection(bookName: string, ft: Fulltext, chapter: LectureChapter): string {
+export function chapterSection(bookName: string, ft: Fulltext, chapter: TableChapter): string {
   const to = Math.min(chapter.endPage, chapter.startPage + MAX_CHAPTER_PAGES - 1);
   const name = chapter.number === null ? `"${chapter.title}"` : `Chapter ${chapter.number}, "${chapter.title}"`;
   const lines = [

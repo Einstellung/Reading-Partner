@@ -3,7 +3,7 @@
 // carrying. Pure.
 
 import { estimateTextTokens } from "../../budget";
-import type { LectureChapter } from "../chapters";
+import type { TableChapter } from "../chapters";
 import type { InlineMode } from "./inline";
 
 // --- the chapter spine (docs/09: 章脉络) ---
@@ -87,7 +87,7 @@ export interface TurnLoad {
   bookName: string;
   pageCount: number;
   // The chapter inlined this turn, when mode is "chapter".
-  chapter: LectureChapter | null;
+  chapter: TableChapter | null;
   // How many body pages went in, when mode is "whole".
   bodyPages?: number;
   // Counts of the other blocks, so the sentence describes the prompt rather than

@@ -8,7 +8,7 @@ import {
   OUTLINE_BUDGET_TOKENS,
   type ChapterOutline,
 } from "../../../src/reading/lecture";
-import type { LectureChapter } from "../../../src/reading/chapters";
+import type { TableChapter } from "../../../src/reading/chapters";
 
 function outline(over: Partial<ChapterOutline> & { index: number }): ChapterOutline {
   return {
@@ -21,7 +21,7 @@ function outline(over: Partial<ChapterOutline> & { index: number }): ChapterOutl
   };
 }
 
-const CH3: LectureChapter = {
+const CH3: TableChapter = {
   index: 4,
   number: 3,
   title: "Coding Attention Mechanisms",
