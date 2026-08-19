@@ -67,6 +67,35 @@ export const BOOK_INTENTS: readonly ReadingIntent[] = [
   },
 ];
 
+// A side conversation opened on words the reader picked out of a reply (docs/03).
+// There is no mark and no page here, so nothing in this set may point at one —
+// MARK_INTENTS opens on "the passage I just marked", which would send the model
+// looking for something the prompt does not carry. The span itself is in the
+// prompt; what these ask is what to do with it.
+export const SPAN_INTENTS: readonly ReadingIntent[] = [
+  {
+    id: "span-explain",
+    label: "Explain this",
+    message: "Explain the part of your answer I just picked out.",
+  },
+  {
+    id: "span-example",
+    label: "Give an example",
+    message: "Can you give me a concrete example of what that means?",
+  },
+  {
+    id: "span-doubt",
+    label: "I have doubts",
+    message: "Something there doesn't add up for me. What am I missing?",
+  },
+];
+
+// Which set an aside opens with. One drawn on the page is a marked passage like
+// any other and gets the same chips; one pulled out of a reply is not.
+export function asideIntents(from: "chat" | "mark"): readonly ReadingIntent[] {
+  return from === "chat" ? SPAN_INTENTS : MARK_INTENTS;
+}
+
 // How much of a chapter title the chip shows before it is cut.
 const CHIP_TITLE_CHARS = 22;
 

@@ -40,6 +40,11 @@ interface CallBubbleProps {
 	// What an empty conversation offers instead of an unprompted answer
 	// (reading/intents.ts). Shown only while the thread has nothing in it.
 	intents?: readonly ReadingIntent[];
+	// This conversation is a side one off a live lesson (docs/03), drawn on the
+	// page while it ran: the way back. Absent = it is not one, and the header says
+	// what it says today. What this bubble is about is the mark it is pinned
+	// beside, so there is nothing here to restate the span with.
+	onBackToLesson?(): void;
 }
 
 const WIDTH = 360;
@@ -60,6 +65,7 @@ export default function CallBubble({
 	voice,
 	onCardAction,
 	intents,
+	onBackToLesson,
 }: CallBubbleProps) {
 	const ref = useRef<HTMLDivElement>(null);
 	const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
@@ -119,7 +125,19 @@ export default function CallBubble({
 			)}
 		>
 			<div className="flex items-center justify-between">
-				<span className="text-[11px] font-medium uppercase tracking-wide text-neutral-400">Reading with AI</span>
+				{onBackToLesson ? (
+					<Button
+						type="button"
+						variant="ghost"
+						size={null}
+						onClick={onBackToLesson}
+						className="rounded-md px-1.5 py-1 text-[11px] font-medium uppercase tracking-wide text-neutral-400 can-hover:hover:text-neutral-600 coarse:px-2.5 coarse:py-2"
+					>
+						‹ Back to the lesson
+					</Button>
+				) : (
+					<span className="text-[11px] font-medium uppercase tracking-wide text-neutral-400">Reading with AI</span>
+				)}
 				<div className="flex items-center gap-0.5">
 					{onDelete && <DeleteThreadButton onDelete={onDelete} />}
 					<Button

@@ -43,9 +43,22 @@ export interface CallRow {
 export interface CallState<M extends CallRow> {
   threadId: string;
   // The AI-pen mark hosting this call. Empty string for the book-level thread
-  // (docs/03: top-bar AI button), flagged by `isBook`.
+  // (docs/03: top-bar AI button), flagged by `isBook`, and for a side
+  // conversation pulled out of a chat message.
   annotationId: string;
   isBook?: boolean;
+  // This conversation is a side one off another (docs/03), which the slot below
+  // holds instead of it: what it was opened on, and where going back leads.
+  // Never set together with `isBook` — an aside is never the lesson — and its
+  // presence is what says the affordance that opens one must not be offered
+  // again, which is how one level deep is enforced.
+  aside?: {
+    parentThreadId: string;
+    // "chat" is a span pulled out of a reply, "mark" one drawn on the page while
+    // the lesson ran (reading/aside.ts).
+    from: "chat" | "mark";
+    span: string;
+  };
   view: CallView;
   anchor: { x: number; y: number };
   messages: M[];

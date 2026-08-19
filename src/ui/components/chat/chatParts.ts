@@ -13,6 +13,7 @@
 
 import type { FC } from "react";
 import type { InfoCard } from "../../../info/briefing/cards";
+import type { AsideCard } from "../../../reading/aside";
 import type { DiagramCard } from "../../../reading/diagrams/cards";
 import type { ReadingCard } from "../../../reading/rehearsal/cards";
 import type {
@@ -31,7 +32,7 @@ import type { ToolStatus } from "../../../ai/tool-status";
 // from reading/rehearsal so neither has to import the other to be in the union.
 // The registry (ui/components/cardRegistry.ts, one level above chat/) is where
 // the components are gathered.
-export type CardPayload = InfoCard | ReadingCard | DiagramCard;
+export type CardPayload = InfoCard | ReadingCard | DiagramCard | AsideCard;
 export type CardKind = CardPayload["kind"];
 
 // The component table the render layer looks a card up in, by kind. The mapped
@@ -215,7 +216,12 @@ export function isPersistableCardKind(kind: CardKind): boolean {
     // find prose pointing at a picture that is gone is worse than not having
     // drawn it. Cheap to keep — what is stored is the structure the model wrote,
     // and the picture is laid out again from it on open.
-    kind === "diagram"
+    kind === "diagram" ||
+    // An aside's receipt is the only door back into a side conversation pulled
+    // out of a reply (reading/aside.ts): it carries no mark and no page, so the
+    // chip in the lesson's transcript is where it is reached from. Losing the
+    // chip on reopen would lose the conversation.
+    kind === "aside"
   );
 }
 

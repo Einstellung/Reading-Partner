@@ -6,7 +6,16 @@
 // expression: a rem line height or gap is measured against the root font size
 // and would sit still while the type grew.
 
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+	memo,
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+	type CSSProperties,
+	type RefObject,
+} from 'react';
 import { HIT_44 } from '../base/buttons';
 import { Button } from '../ui/button';
 import { IconCheck, IconCopy, IconSend, IconStop } from '../base/icons';
@@ -17,6 +26,10 @@ import { stickToBottom } from '../common/stick-to-bottom';
 import type { PendingImage, ThreadMessage } from './types';
 import type { CompressedImage } from '../../../ai/image-utils';
 import type { ToolStatus } from '../../../ai/tool-status';
+import { asideAnchorAt, mayOpenAside } from '../../../reading/aside';
+import type { AsideAnchor } from '../../../platform/app/threads';
+import { cn } from '../lib/utils';
+import { OVERLAY_Z } from '../ui/overlay';
 import { messageToParts, type CardActionHandler, type CardSurface } from './chatParts';
 import { useCardRegistry } from './cardRegistryContext';
 import type { CleanupModel } from '../../../ai/voice';
@@ -125,6 +138,119 @@ function CopyButton({ text }: { text: string }) {
 			{copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
 			{copied && 'Copied'}
 		</Button>
+	);
+}
+
+// --- opening a side conversation out of a reply (docs/03) ------------------
+
+// A selection worth acting on: which reply it came out of, and where on screen
+// it sits so the control can be put under it.
+interface AsidePick {
+	anchor: AsideAnchor;
+	x: number;
+	y: number;
+}
+
+// The reader's selection inside a settled reply. One listener for the whole
+// list rather than one per row: which row the selection landed in comes off the
+// DOM, from the marker a row stamps on itself when it may offer this at all
+// (mayOpenAside), so a row that may not is not even a candidate.
+//
+// selectionchange is the only event that fires for every way a selection is
+// made — mouse drag, double click, long press, shift+arrow — and it fires on the
+// document rather than on the element the selection is in.
+//
+// The words are taken here and held. By the time the control is pressed the
+// selection may already be gone, and the span is what an aside is opened on.
+function useAsideSelection(list: RefObject<HTMLElement>, enabled: boolean): AsidePick | null {
+	const [picked, setPicked] = useState<AsidePick | null>(null);
+	useEffect(() => {
+		if (!enabled) {
+			setPicked(null);
+			return;
+		}
+		const read = () => {
+			const sel = document.getSelection();
+			const host = list.current;
+			if (!sel || sel.isCollapsed || sel.rangeCount === 0 || !host) {
+				setPicked(null);
+				return;
+			}
+			const range = sel.getRangeAt(0);
+			const node = range.commonAncestorContainer;
+			const el = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
+			const row = el?.closest('[data-aside-ts]') ?? null;
+			// Outside a reply, or inside another list's: only this one's rows count.
+			if (!row || !host.contains(row)) {
+				setPicked(null);
+				return;
+			}
+			const anchor = asideAnchorAt(Number(row.getAttribute('data-aside-ts')), sel.toString());
+			if (!anchor) {
+				setPicked(null);
+				return;
+			}
+			const rect = range.getBoundingClientRect();
+			setPicked({ anchor, x: rect.left + rect.width / 2, y: rect.bottom });
+		};
+		document.addEventListener('selectionchange', read);
+		return () => document.removeEventListener('selectionchange', read);
+	}, [enabled, list]);
+	return picked;
+}
+
+// The box the control is given. anchor-safe clamps it inside the safe area from
+// these numbers (styles.css), so they are the size it is drawn at rather than a
+// measurement of it.
+const ASIDE_CONTROL = { width: 150, height: 34 };
+// Distance from the bottom of the selection.
+const ASIDE_CONTROL_GAP = 8;
+
+// The control the selection raises, under the selected words.
+//
+// Under, deliberately. On a tablet a long press raises WebKit's own Copy | Look
+// Up | Translate bar over the selection — chat text sits outside
+// [data-reader-surface], so the callout is not suppressed there — and that bar
+// takes the space above. Below it the two stand side by side and neither has to
+// be dismissed to reach the other. Nothing is permanently visible either way:
+// this appears with a selection and goes with it, on every pointer type, rather
+// than adding a second always-on chip under every reply the way a hover-revealed
+// affordance degrades to on a coarse pointer.
+function AskAsideControl({ pick, onOpen }: { pick: AsidePick; onOpen(anchor: AsideAnchor): void }) {
+	// pointerdown, not click. On a tap the click arrives after the selection has
+	// collapsed, and this exists only while there is one — it would be unmounted
+	// before the click landed. Keyboard activation is bound for the same reason:
+	// a button that acts on pointerdown gets no click of its own.
+	const open = () => onOpen(pick.anchor);
+	return (
+		<button
+			type="button"
+			onPointerDown={(e) => {
+				e.preventDefault();
+				open();
+			}}
+			onKeyDown={(e) => {
+				if (e.key !== 'Enter' && e.key !== ' ') return;
+				e.preventDefault();
+				open();
+			}}
+			style={
+				{
+					'--anchor-x': `${pick.x - ASIDE_CONTROL.width / 2}px`,
+					'--anchor-y': `${pick.y + ASIDE_CONTROL_GAP}px`,
+					'--anchor-w': `${ASIDE_CONTROL.width}px`,
+					'--anchor-h': `${ASIDE_CONTROL.height}px`,
+					width: ASIDE_CONTROL.width,
+					height: ASIDE_CONTROL.height,
+				} as CSSProperties
+			}
+			className={cn(
+				'fixed anchor-safe flex select-none items-center justify-center rounded-full border border-black/10 bg-white text-[13px] text-neutral-700 shadow-[0_4px_16px_rgba(0,0,0,0.14)]',
+				OVERLAY_Z.floatingTop,
+			)}
+		>
+			Ask about this
+		</button>
 	);
 }
 
@@ -246,11 +372,16 @@ const MessageBubble = memo(function MessageBubble({
 	size,
 	surface,
 	onCardAction,
+	bookLevel = false,
 }: {
 	message: ThreadMessage;
 	size: 'sm' | 'lg';
 	surface: CardSurface;
 	onCardAction?: CardActionHandler;
+	// This row is in the book-level conversation, so a span of it may be pulled
+	// out into a side conversation (docs/03). False everywhere else, which is
+	// what keeps an aside one level deep.
+	bookLevel?: boolean;
 }) {
 	const { role, images, streaming, failed, notice } = message;
 	const lg = size === 'lg';
@@ -337,7 +468,14 @@ const MessageBubble = memo(function MessageBubble({
 		);
 	}
 	return (
-		<div ref={rowRef} className="group flex flex-col gap-2">
+		// The marker useAsideSelection resolves a selection against. It is the
+		// predicate, written where it can be read back off the DOM: a row without
+		// it is not a row an aside can be opened from.
+		<div
+			ref={rowRef}
+			data-aside-ts={mayOpenAside(message, bookLevel) ? message.ts : undefined}
+			className="group flex flex-col gap-2"
+		>
 			{trace}
 			<div className={'text-neutral-800 ' + (lg ? 'text-[calc(1rem*var(--chat-scale,1))]' : 'text-[13px]')}>
 				<Markdown text={textPart.text} />
@@ -357,6 +495,7 @@ export function MessageList({
 	surface = 'call',
 	onCardAction,
 	stickKey,
+	onOpenAside,
 }: {
 	messages: ThreadMessage[];
 	size?: 'sm' | 'lg';
@@ -370,6 +509,11 @@ export function MessageList({
 	// the bottom, so switching threads starts at the newest message rather than
 	// wherever the previous one had been scrolled to.
 	stickKey?: string | number;
+	// Open a side conversation on a span of one of these replies (docs/03).
+	// Present only on the book-level conversation; its absence is what says this
+	// list offers nothing of the sort, which is every other chat in the app and
+	// every conversation that is already an aside.
+	onOpenAside?(anchor: AsideAnchor): void;
 }) {
 	const listRef = useRef<HTMLDivElement>(null);
 	useLayoutEffect(() => {
@@ -377,20 +521,43 @@ export function MessageList({
 		return list ? stickToBottom(list) : undefined;
 	}, [stickKey]);
 
+	const bookLevel = !!onOpenAside;
+	// The control is fixed and outside the list's flow, so raising it changes no
+	// height: a list still pinned to its bottom (stick-to-bottom.ts re-pins on
+	// every growth) does not scroll the sentence the reader just selected away.
+	const picked = useAsideSelection(listRef, bookLevel);
+
 	return (
-		<div
-			ref={listRef}
-			className={
-				'flex flex-col ' +
-				(size === 'lg' ? 'gap-[calc(1.5rem*var(--chat-scale,1))] ' : 'gap-3 ') +
-				'overflow-y-auto ' +
-				className
-			}
-		>
-			{messages.map((m, i) => (
-				<MessageBubble key={i} message={m} size={size} surface={surface} onCardAction={onCardAction} />
-			))}
-		</div>
+		<>
+			<div
+				ref={listRef}
+				className={
+					'flex flex-col ' +
+					(size === 'lg' ? 'gap-[calc(1.5rem*var(--chat-scale,1))] ' : 'gap-3 ') +
+					'overflow-y-auto ' +
+					className
+				}
+			>
+				{/* Keyed by position, not by ts: a reader's message and the reply to it
+				    are written in the same millisecond often enough that the reducer
+				    already has to disambiguate them by role (reading/call-state.ts), so
+				    ts is not unique and a duplicate key corrupts silently. Rows are only
+				    ever added or dropped at the tail, and MessageBubble is memoized on
+				    the message, so a settled row's DOM — and any Range into it — survives
+				    the re-key. */}
+				{messages.map((m, i) => (
+					<MessageBubble
+						key={i}
+						message={m}
+						size={size}
+						surface={surface}
+						onCardAction={onCardAction}
+						bookLevel={bookLevel}
+					/>
+				))}
+			</div>
+			{picked && onOpenAside && <AskAsideControl pick={picked} onOpen={onOpenAside} />}
+		</>
 	);
 }
 

@@ -22,15 +22,18 @@ import type { Annotation } from "../../platform/app/reader-contract";
 import { toReasoning, type Settings } from "../../platform/app/settings";
 import {
   appendMessage,
-  deleteThread,
+  createAsideThread,
+  deleteThreadTree,
   getThread,
   patchThreadMessage,
   readThreadImages,
   saveThreadImages,
   setThreadFocusChapter,
+  type AsideAnchor,
   type PersistedCardPayload,
   type ThreadMessage,
 } from "../../platform/app/threads";
+import { asideReceipt, asideReturn } from "../aside";
 import type { DiagramCardData } from "../diagrams/cards";
 import type { Diagram } from "../diagrams/types";
 import type { Fulltext } from "../../fulltext";
@@ -135,7 +138,18 @@ export interface CallController<M extends CallRow, I extends StagedImage> {
   // Open a thread's conversation: its history plus the reply still being
   // written, and the images it stored. Opening sends nothing — an empty thread
   // waits for the reader to pick an opening intent or type.
+  //
+  // This is also every way out of an aside that is not a hangup, so it is where
+  // the line an aside leaves on its parent is written.
   openThread(call: OpeningCall<M>, stored: ThreadMessage[]): void;
+  // Step out of the book-level conversation into a side one on a span of one of
+  // its replies (docs/03). The aside replaces it in this one slot. No-op unless
+  // the open call is the book-level one, which is what keeps asides one level
+  // deep from this end.
+  openChatAside(anchor: AsideAnchor): void;
+  // Back to the conversation this aside came off, reopened as itself. No-op when
+  // the open call is not an aside.
+  returnFromAside(): void;
   // Whether a reply is still being written on that thread. The observation
   // sweeps ask before they read a transcript.
   isAnswering(threadId: string): boolean;
@@ -153,9 +167,10 @@ export interface CallController<M extends CallRow, I extends StagedImage> {
   dismissOnPaneTouch(): void;
   // The conversation is thrown away, mark and all.
   deleteOpenThread(): void;
-  // A mark was deleted from the trace list: its thread's turn and staging go,
-  // and the call goes too if it was the one open.
-  dropThread(annotationId: string, threadId: string | undefined): void;
+  // A mark was deleted from the trace list, taking its conversation and every
+  // aside off it: their turns and staging go, and the call goes too if it was on
+  // any of them.
+  dropThread(annotationId: string, threadIds: readonly string[]): void;
 
   // The reader stepped a staged diagram card to another step.
   stepDiagram(cardId: string, stage: number): void;
@@ -633,9 +648,58 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     syncFocusChapter,
   ]);
 
+  // The line an aside leaves on the conversation it came off (docs/09): a chip
+  // the reader sees in the lesson's transcript and a sentence the model reads on
+  // its next turn, both taken from the aside's own first question. No second
+  // model call, so closing an aside waits for nothing.
+  //
+  // Written to the parent's file, never to the screen: the reader either goes
+  // back to the parent, which is reopened from that file a moment later, or they
+  // hang up, and then there is no screen to write to. Idempotent — reopening an
+  // aside from its chip and stepping back again must not restate it
+  // (reading/aside.ts).
+  const writeAsideReceipt = useCallback(
+    (c: CallState<M>) => {
+      const bookId = bookIdRef.current;
+      if (!bookId || !c.aside) return;
+      const parent = getThread(bookId, c.aside.parentThreadId);
+      if (!parent) return;
+      const receipt = asideReceipt({
+        threadId: c.threadId,
+        span: c.aside.span,
+        messages: getThread(bookId, c.threadId)?.messages ?? [],
+        parent: parent.messages,
+      });
+      if (!receipt) return;
+      appendMessage(bookId, parent.id, {
+        role: "ai",
+        text: receipt.text,
+        ts: Date.now(),
+        parts: [
+          {
+            type: "card",
+            // The shell's card ids, like every other card this layer raises. The
+            // fallback is for a surface with no card channel at all, where the
+            // sentence still has to be written even though nothing will draw the
+            // chip; one receipt per aside, so the aside's own id serves.
+            id: shapes.current.cards?.id("aside") ?? `aside-${c.threadId}`,
+            card: receipt.card as unknown as PersistedCardPayload,
+          },
+        ],
+      });
+    },
+    [bookIdRef],
+  );
+
   const openThread = useCallback(
     (opening: OpeningCall<M>, stored: ThreadMessage[]) => {
       const { threadId } = opening;
+      // Leaving an aside for another conversation — back to the lesson, the
+      // top-bar button, a mark tapped on the page, the trace list. Every one of
+      // them comes through here, so the receipt is written once, here, rather
+      // than at each door (the ✕ and Escape are hangUp's).
+      const leaving = callRef.current;
+      if (leaving?.aside && leaving.threadId !== threadId) writeAsideReceipt(leaving);
       // Thread history the way an opening view shows it: what the file holds,
       // plus the reply still being written if that thread has a turn running.
       // Reopening a mark mid-answer joins the stream where it is, instead of
@@ -648,7 +712,34 @@ export function useCall<M extends CallRow, I extends StagedImage>(
       // offers the opening intents (reading/intents.ts) and waits — one press is
       // an ordinary send from there on.
     },
-    [hydrateThreadImages],
+    [hydrateThreadImages, writeAsideReceipt],
+  );
+
+  // Step out of the lesson onto a span of one of its replies (docs/03). The
+  // aside is a record of its own from the moment it opens, so the reader can
+  // hang up in it and still find it from the chip it left behind.
+  const openChatAside = useCallback(
+    (anchor: AsideAnchor) => {
+      const c = callRef.current;
+      const bookId = bookIdRef.current;
+      // Only off the lesson. An aside off an aside is the one thing this shape
+      // does not do, and a mark's conversation is not what this opens from.
+      if (!c || !bookId || c.isBook !== true) return;
+      const threadId = crypto.randomUUID();
+      createAsideThread(bookId, threadId, { parentThreadId: c.threadId, asideAnchor: anchor });
+      openThread(
+        {
+          threadId,
+          // No mark: the span came out of a reply, not off the page.
+          annotationId: "",
+          aside: { parentThreadId: c.threadId, from: "chat", span: anchor.text },
+          view: "chat-main",
+          anchor: { x: 0, y: 0 },
+        },
+        [],
+      );
+    },
+    [bookIdRef, openThread],
   );
 
   // Sending appends the user line (with any ready staged images, persisted to
@@ -761,7 +852,18 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     const c = callRef.current;
     const bookId = bookIdRef.current;
     const { topicId, topicName, fileName, pageIndex } = ctxRef.current;
-    if (!c || !bookId || !topicId) return;
+    if (!c || !bookId) return;
+    // A side conversation ended rather than stepped out of still leaves its line
+    // on the one it came off — the ✕, Escape, touching the book, closing the
+    // reader, opening another book. Every one of those is this, and stepping out
+    // is openThread's; between them there is no way to leave an aside that
+    // writes nothing.
+    //
+    // Above the topic check, not below it: the line is part of the conversation,
+    // where the log and the distillation below are things a topic owns, and a
+    // book can be open without one (the vestibule opens it without entering it).
+    if (c.aside) writeAsideReceipt(c);
+    if (!topicId) return;
     logEvent(topicId, "call-end", { threadId: c.threadId, book: c.isBook ?? false });
     deferHangup({
       call: c,
@@ -772,7 +874,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
       whenSettled: (threadId, run) => liveTurnsRef.current.whenSettled(threadId, run),
       distill: (pass) => void distillThread(pass),
     });
-  }, [annsRef, bookIdRef, ctxRef, distillAnnotations]);
+  }, [annsRef, bookIdRef, ctxRef, distillAnnotations, writeAsideReceipt]);
 
   const close = useCallback(() => dispatch({ type: "closed" }), []);
 
@@ -787,6 +889,39 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     dispatch({ type: "closed" });
   }, [captureHangup]);
 
+  // Back to the lesson, reopened from its file rather than from anything held
+  // here.
+  //
+  // The line goes on before the file is read, so the history the reader lands on
+  // already carries it — read first and the receipt would only appear the next
+  // time the lesson was opened. openThread writes it for every other way out and
+  // will find it already there, so this is not a second one.
+  const returnFromAside = useCallback(() => {
+    const c = callRef.current;
+    const bookId = bookIdRef.current;
+    if (!c?.aside || !bookId) return;
+    writeAsideReceipt(c);
+    const parent = getThread(bookId, c.aside.parentThreadId);
+    const back = parent ? asideReturn(parent) : null;
+    if (!parent || !back) {
+      // The conversation this hangs off was deleted, here or on another device.
+      // There is nowhere to go back to, so this becomes the ordinary way out.
+      pushToast("warn", "The conversation this came off is gone.");
+      hangUp();
+      return;
+    }
+    openThread(
+      {
+        threadId: back.threadId,
+        annotationId: back.annotationId,
+        ...(back.isBook ? { isBook: true } : {}),
+        view: "chat-main",
+        anchor: { x: 0, y: 0 },
+      },
+      parent.messages,
+    );
+  }, [bookIdRef, hangUp, openThread, pushToast, writeAsideReceipt]);
+
   // Touching the book dismisses the bubble / chat corner card (docs/03).
   // chat-main is not dismissable this way (CallView covers the reader). AI-pen
   // draws and mark clicks fire this on pointerdown, then re-open on save/select.
@@ -796,44 +931,83 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   // This is a hangup, not a lesser dismissal: the conversation is over either
   // way, so it does the same bookkeeping the ✕ does. On a tablet it is the exit
   // that actually gets used.
+  //
+  // Except under the lesson (docs/09). With a book-level conversation live the
+  // reader may read, scroll and mark the page without ending it, so the pen no
+  // longer reaches its bubble through a hangup: what it draws becomes an aside
+  // of the lesson, and the `opened` that carries it replaces the call directly
+  // (App.tsx: onSaveAnnotations). A mark tapped while the lesson is up replaces
+  // it the same way, which is what the trace list and the top-bar button have
+  // always done.
   const dismissOnPaneTouch = useCallback(() => {
+    if (callRef.current?.isBook) return;
     if (callViewRef.current === "bubble" || callViewRef.current === "chat-pip") hangUp();
   }, [hangUp]);
 
-  // Delete the open conversation. Destructive and confirmed at the button
-  // (DeleteThreadButton's two-step). Removes the thread from its threads file and,
-  // for a mark-anchored thread, its anchoring AI-pen mark too (the highlight and
-  // its trace-list entry disappear); the book-level thread has no mark, so only
-  // the thread goes. Both removals are in-file rewrites, so per-file LWW sync
-  // carries them to other devices. Unlike a hangup this does not distill — the
-  // talk is being thrown away — and anything already distilled from it stays.
+  // The AI-pen mark hosting each of these conversations, where there is one. A
+  // mark is its conversation's only door, so a mark left behind by a deleted
+  // thread opens nothing — which is the same pairing, read from the other end,
+  // that takes a thread with its mark.
+  const marksOf = useCallback(
+    (threadIds: readonly string[]): string[] => {
+      const wanted = new Set(threadIds);
+      const marks: string[] = [];
+      for (const a of annsRef.current.values()) {
+        if (typeof a.aiThreadId === "string" && wanted.has(a.aiThreadId)) marks.push(a.id);
+      }
+      return marks;
+    },
+    [annsRef],
+  );
+
+  // Delete the open conversation and the asides off it. Destructive and confirmed
+  // at the button (DeleteThreadButton's two-step). Removes the threads from the
+  // book's threads file and, for each that a mark hosts, that mark too (the
+  // highlight and its trace-list entry disappear); the book-level thread has no
+  // mark of its own, but an aside drawn on the page while it ran does. Both
+  // removals are in-file rewrites, so per-file LWW sync carries them to other
+  // devices. Unlike a hangup this does not distill — the talk is being thrown
+  // away — and anything already distilled from it stays.
   const deleteOpenThread = useCallback(() => {
     const c = callRef.current;
     const bookId = bookIdRef.current;
     if (!c || !bookId) return;
-    // The one close that does stop the turn: the conversation it would land in
-    // is being thrown away.
-    liveTurnsRef.current.stop(c.threadId);
-    deleteThread(bookId, c.threadId);
-    if (!c.isBook && c.annotationId) removeMark(c.annotationId);
+    // Every id the delete named, so nothing is keyed by a thread that is gone. A
+    // thread the store has no record of names none, and the open one still has
+    // its runtime state to clear.
+    const removed = deleteThreadTree(bookId, c.threadId);
+    const gone = removed.length > 0 ? removed : [c.threadId];
     const topicId = ctxRef.current.topicId;
-    if (topicId) logEvent(topicId, "thread-delete", { threadId: c.threadId, book: c.isBook ?? false });
-    // Nothing is left to send them to.
-    pendingRef.current.clear(c.threadId);
+    for (const id of gone) {
+      // The one close that does stop the turn: the conversation it would land in
+      // is being thrown away.
+      liveTurnsRef.current.stop(id);
+      // Nothing is left to send them to.
+      pendingRef.current.clear(id);
+      if (topicId) logEvent(topicId, "thread-delete", { threadId: id, book: c.isBook ?? false });
+    }
+    for (const mark of marksOf(gone)) removeMark(mark);
     dispatch({ type: "closed" });
-  }, [bookIdRef, ctxRef, removeMark]);
+  }, [bookIdRef, ctxRef, marksOf, removeMark]);
 
   // The other end of the same pairing: the mark is being deleted, so its thread
-  // goes with it. A conversation open on that mark goes too — leaving the bubble
-  // on screen over a mark that is gone reads as a bug even when it is not.
+  // goes with it, and so do the asides off that thread. A conversation open on
+  // any of them goes too — leaving the bubble on screen over a mark that is gone
+  // reads as a bug even when it is not, and an aside left open on a record that
+  // has been deleted has nowhere to write.
   const dropThread = useCallback(
-    (annotationId: string, threadId: string | undefined) => {
-      dispatch({ type: "closed-with-mark", annotationId });
-      // The turn and the unsent images go with the thread wherever it was
+    (annotationId: string, threadIds: readonly string[]) => {
+      const open = callRef.current?.threadId;
+      // Matched by id as well as by mark: an aside pulled out of a reply carries
+      // no mark of its own and the mark test would not reach it.
+      if (open && threadIds.includes(open)) dispatch({ type: "closed" });
+      else dispatch({ type: "closed-with-mark", annotationId });
+      // The turns and the unsent images go with the threads wherever they were
       // started from.
-      if (!threadId) return;
-      liveTurnsRef.current.stop(threadId);
-      pendingRef.current.clear(threadId);
+      for (const id of threadIds) {
+        liveTurnsRef.current.stop(id);
+        pendingRef.current.clear(id);
+      }
     },
     [],
   );
@@ -850,6 +1024,8 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     current,
     view,
     openThread,
+    openChatAside,
+    returnFromAside,
     isAnswering,
     send,
     retry,

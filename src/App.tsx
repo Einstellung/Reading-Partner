@@ -29,9 +29,11 @@ import {
   type Topic,
 } from "./platform/app/topics";
 import {
+  createAsideThread,
   createThread,
-  deleteThread,
+  deleteThreadTree,
   getThread,
+  type Thread,
   type ThreadMessage,
 } from "./platform/app/threads";
 import { initSync } from "./platform/sync";
@@ -74,8 +76,9 @@ import CallView from "./ui/components/chat/CallView";
 import ReadingPipCard from "./ui/components/chat/ReadingPipCard";
 import ChatPipCard from "./ui/components/chat/ChatPipCard";
 import SettingsView from "./ui/components/SettingsView";
-import type { CallRow } from "./reading/call-state";
-import { bookTextNotice, openingIntents, type ReadingIntent } from "./reading/intents";
+import type { CallRow, CallState } from "./reading/call-state";
+import { asideFraming } from "./reading/aside";
+import { asideIntents, bookTextNotice, openingIntents, type ReadingIntent } from "./reading/intents";
 import { chapterAtPage } from "./reading/chapters";
 import { resolveBookThread } from "./reading/session/book-thread";
 import { closeBook } from "./reading/session/close-book";
@@ -466,6 +469,20 @@ export default function App() {
     return toDistillAnnotations([...annsRef.current.values()]);
   }, []);
 
+  // How a stored thread opens as a call when it is a side conversation
+  // (docs/03): the way back and the span it was opened on. Undefined for every
+  // other thread, which spreads into the call as nothing at all. A drawn aside's
+  // span is its mark's text, which lives on the annotation and not on the
+  // record, so it is read here.
+  const asideFramingFor = useCallback(
+    (thread: Thread | undefined): Pick<CallState<CallMessage>, "aside"> => {
+      if (!thread) return {};
+      const framing = asideFraming(thread, callExcerpt(annsRef.current.get(thread.annotationId)));
+      return framing ? { aside: framing } : {};
+    },
+    [],
+  );
+
   // The conversation about the book (docs/03): the open call, the turns running
   // on its threads, the images staged for its next send, and every way in and
   // out of it. Two shapes stay this file's — a chat row, whose parts are the
@@ -476,6 +493,11 @@ export default function App() {
   // down the ordinary send path, and the chapter chip has to park the
   // conversation on its chapter before that message goes (docs/09).
   const intentsRef = useRef<readonly ReadingIntent[]>([]);
+  // Reopening a side conversation from its receipt chip. Held in a ref for the
+  // same reason: the card dispatcher is a prop of both chat surfaces and is
+  // written above the callback it reaches, so reading it late keeps its identity
+  // stable and its declaration where it belongs.
+  const openAsideThreadRef = useRef<(threadId: string) => void>(() => {});
   const {
     call,
     captureHangup,
@@ -490,10 +512,12 @@ export default function App() {
     imageHint,
     isAnswering,
     noteImageHint,
+    openChatAside,
     openThread: openThreadCall,
     pendingImages,
     removePendingImage,
     retry: retryCall,
+    returnFromAside,
     send: sendCallMessage,
     showChat: showChatMain,
     showReading: swapToReading,
@@ -553,12 +577,17 @@ export default function App() {
     [sendCallMessage, setFocusChapter],
   );
 
-  // What a card in the reading conversation raises. Only the diagram card raises
-  // anything today, and only its stepper: stepping is a `local` patch, and it is
-  // routed through the session rather than kept in the component so that the
-  // step the reader reached is written to the thread and survives reopening it.
+  // What a card in the reading conversation raises. Two do: the diagram card's
+  // stepper, which is a `local` patch routed through the session so the step the
+  // reader reached is written to the thread and survives reopening it, and an
+  // aside's receipt, which navigates back into the side conversation it stands
+  // for.
   const onCardAction = useCallback(
     (cardId: string, action: CardAction) => {
+      if (action.kind === "navigate") {
+        if (action.to === "aside" && action.arg) openAsideThreadRef.current(action.arg);
+        return;
+      }
       if (action.kind !== "local") return;
       const stage = action.patch.stage;
       if (typeof stage === "number") stepDiagram(cardId, stage);
@@ -578,10 +607,19 @@ export default function App() {
     const id = call?.threadId ?? null;
     if (id && id !== lastCallThreadRef.current) {
       const topicId = ctxRef.current.topicId;
-      if (topicId) logEvent(topicId, "call-start", { threadId: id, book: call?.isBook ?? false });
+      if (topicId) {
+        logEvent(topicId, "call-start", {
+          threadId: id,
+          book: call?.isBook ?? false,
+          // Which door a side conversation came in by, and nothing at all when it
+          // is not one: how often the reader steps out of a lesson, and out of
+          // which of the two, is the measurement this shape was chosen on.
+          ...(call?.aside ? { aside: call.aside.from } : {}),
+        });
+      }
     }
     lastCallThreadRef.current = id;
-  }, [call?.threadId, call?.isBook]);
+  }, [call?.threadId, call?.isBook, call?.aside]);
 
   // A page citation carrying a source quote: confirm the quote against the
   // page's extracted text (fulltext cache), then hand the reader the exact
@@ -725,7 +763,22 @@ export default function App() {
         // Persist the aiThreadId into the engine model, open the thread + bubble.
         viewRef.current?.setAnnotations([aiCreated.annotation]);
         const bookId = bookIdRef.current;
-        if (bookId) createThread(bookId, aiCreated.annotation.id, aiCreated.threadId);
+        // Drawn while the lesson is live: this is a side conversation off it
+        // (docs/09), not an independent one. Everything else about the mark is
+        // unchanged — it keeps its thread back-pointer and its place in the
+        // trace list, and the bubble opens beside it exactly as it does with no
+        // lesson running. With no lesson, nothing here changes at all: 19 of 23
+        // of this reader's marked conversations happen hours or days from one.
+        const lesson = currentCall();
+        const parentThreadId = lesson?.isBook ? lesson.threadId : null;
+        if (bookId && parentThreadId) {
+          createAsideThread(bookId, aiCreated.threadId, {
+            parentThreadId,
+            annotationId: aiCreated.annotation.id,
+          });
+        } else if (bookId) {
+          createThread(bookId, aiCreated.annotation.id, aiCreated.threadId);
+        }
         const up = penUpRef.current;
         const rect = readerPaneRef.current?.getBoundingClientRect();
         const anchor = up
@@ -738,6 +791,15 @@ export default function App() {
           {
             threadId: aiCreated.threadId,
             annotationId: aiCreated.annotation.id,
+            ...(parentThreadId
+              ? {
+                  aside: {
+                    parentThreadId,
+                    from: "mark" as const,
+                    span: callExcerpt(aiCreated.annotation),
+                  },
+                }
+              : {}),
             view: "bubble",
             anchor,
           },
@@ -745,7 +807,7 @@ export default function App() {
         );
       }
     },
-    [persistAnnotations, syncTraceList, openThreadCall, onMarkPrepTrigger],
+    [persistAnnotations, syncTraceList, openThreadCall, currentCall, onMarkPrepTrigger],
   );
 
   const onDeleteAnnotations = useCallback(
@@ -774,11 +836,14 @@ export default function App() {
       const bookId = bookIdRef.current;
       const thread = bookId ? getThread(bookId, threadId) : undefined;
       setPopup(null);
-      openThreadCall({ threadId, annotationId: ann.id, view: "bubble", anchor }, thread?.messages ?? []);
+      openThreadCall(
+        { threadId, annotationId: ann.id, ...asideFramingFor(thread), view: "bubble", anchor },
+        thread?.messages ?? [],
+      );
     } else {
       setPopup({ annotation: ann, anchor });
     }
-  }, [openThreadCall]);
+  }, [openThreadCall, asideFramingFor]);
 
   // The pen stroke gives the host no coordinates, so track the last pen-lift
   // over the reader pane as the AI-pen bubble anchor (capture phase, so nothing
@@ -1003,17 +1068,19 @@ export default function App() {
   // is the same pairing the ✕'s delete already makes from the other end. The
   // mark goes through removeAnnotation like every other deletion, so the
   // annotations file, the in-memory map and sync stay in agreement; the thread
-  // goes through deleteThread, an in-file rewrite its own cache owns. What was
-  // distilled from the talk stays, and the event log is appended to, not
-  // rewritten.
+  // goes through deleteThreadTree, an in-file rewrite its own cache owns, which
+  // also takes any side conversation hanging off it rather than leaving one
+  // pointing at a parent that is gone. What was distilled from the talk stays,
+  // and the event log is appended to, not rewritten.
   const deleteTraceAnnotation = useCallback(
     (id: string) => {
       const bookId = bookIdRef.current;
       const threadId = annsRef.current.get(id)?.aiThreadId as string | undefined;
-      dropThread(id, threadId);
-      if (bookId && threadId && deleteThread(bookId, threadId)) {
-        const topicId = ctxRef.current.topicId;
-        if (topicId) logEvent(topicId, "thread-delete", { threadId, book: false });
+      const removed = bookId && threadId ? deleteThreadTree(bookId, threadId) : [];
+      dropThread(id, removed);
+      const topicId = ctxRef.current.topicId;
+      if (topicId) {
+        for (const gone of removed) logEvent(topicId, "thread-delete", { threadId: gone, book: false });
       }
       removeAnnotation(id);
     },
@@ -1031,12 +1098,46 @@ export default function App() {
       viewRef.current?.navigate({ annotationID: annotationId });
       setSelectedAnnId(annotationId);
       openThreadCall(
-        { threadId, annotationId, view: "chat-main", anchor: { x: 0, y: 0 } },
+        {
+          threadId,
+          annotationId,
+          ...asideFramingFor(thread),
+          view: "chat-main",
+          anchor: { x: 0, y: 0 },
+        },
         thread?.messages ?? [],
       );
     },
-    [openThreadCall],
+    [openThreadCall, asideFramingFor],
   );
+
+  // The receipt chip in a conversation's transcript (ui/components/reader/
+  // AsideCard.tsx): reopen the side conversation it stands for. This is the only
+  // door into one that was pulled out of a reply — it has no mark, so the trace
+  // list never holds it — and it is why the chip is a durable card part.
+  const openAsideThread = useCallback(
+    (threadId: string) => {
+      const bookId = bookIdRef.current;
+      const thread = bookId ? getThread(bookId, threadId) : undefined;
+      const framing = asideFramingFor(thread);
+      if (!thread || !framing.aside) {
+        pushToast("warn", "That side conversation is gone.");
+        return;
+      }
+      openThreadCall(
+        {
+          threadId,
+          annotationId: thread.annotationId,
+          ...framing,
+          view: "chat-main",
+          anchor: { x: 0, y: 0 },
+        },
+        thread.messages,
+      );
+    },
+    [openThreadCall, asideFramingFor, pushToast],
+  );
+  openAsideThreadRef.current = openAsideThread;
 
   // Top-bar AI button: the selection-free entry (docs/03). One persistent
   // book-level thread per book — created on first press, reopened with its
@@ -1114,18 +1215,20 @@ export default function App() {
   );
   const onEmbedSelect = useCallback((ids: string[]) => setSelectedAnnId(ids[0] ?? null), []);
 
-  // Escape closes whatever is topmost (Settings, else the open call — same path
-  // as the hang-up button, else the annotation popup); Ctrl/Cmd+\ toggles the
-  // sidebar. Escape works even while a composer has focus; the sidebar toggle is
-  // ignored while typing so it doesn't fight text input. The session's own
-  // reference to the open call (not `call`) keeps this listener stable across a
-  // streaming reply's frequent state churn.
+  // Escape closes whatever is topmost (Settings, else a side conversation — which
+  // steps back to the one it came off rather than out of both — else the open
+  // call, same path as the hang-up button, else the annotation popup); Ctrl/Cmd+\
+  // toggles the sidebar. Escape works even while a composer has focus; the
+  // sidebar toggle is ignored while typing so it doesn't fight text input. The
+  // session's own reference to the open call (not `call`) keeps this listener
+  // stable across a streaming reply's frequent state churn.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.repeat) return;
       if (e.key === "Escape") {
         if (showSettings) setShowSettings(false);
         else if (quoteHlActive) viewRef.current?.clearQuoteHighlight();
+        else if (currentCall()?.aside) returnFromAside();
         else if (currentCall()) endCall();
         else if (popup) setPopup(null);
         else if (sidebarOpen) setSidebarOpen(false);
@@ -1142,7 +1245,7 @@ export default function App() {
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [showSettings, popup, endCall, currentCall, quoteHlActive, sidebarOpen]);
+  }, [showSettings, popup, endCall, currentCall, returnFromAside, quoteHlActive, sidebarOpen]);
 
   // Which half of prep this document gets. Whichever run exists on disk wins;
   // with neither, the citation density decides (reading/prep/kind.ts). Read off
@@ -1190,11 +1293,15 @@ export default function App() {
   // What an empty conversation offers. The chapter chip is resolved against
   // where the reader is scrolled *now* — the one moment a scroll position
   // decides anything (docs/09) — and disappears on a book with no usable
-  // chapter table.
-  const callIntents = openingIntents(
-    call?.isBook ?? false,
-    chapterAtPage(bookChapters ?? [], stats ? stats.pageIndex + 1 : null),
-  );
+  // chapter table. A side conversation has its own set: one opened on words out
+  // of a reply has no marked passage, and nothing offered there may claim it has
+  // (reading/intents.ts).
+  const callIntents = call?.aside
+    ? asideIntents(call.aside.from)
+    : openingIntents(
+        call?.isBook ?? false,
+        chapterAtPage(bookChapters ?? [], stats ? stats.pageIndex + 1 : null),
+      );
   intentsRef.current = callIntents;
 
   // And why it is short, while it is. Extracting the text is what the chapter
@@ -1416,6 +1523,7 @@ export default function App() {
             onCardAction={onCardAction}
             voice={callVoice}
             intents={callIntents}
+            onBackToLesson={call.aside ? returnFromAside : undefined}
           />
         )}
 
@@ -1476,23 +1584,39 @@ export default function App() {
                 streaming={streaming}
                 onStop={stopTurn}
                 onCardAction={onCardAction}
-                chapterFocus={{
-                  // The chapter as the book names it: `number` is parsed out of
-                  // the title, so the title already carries it. Absent when the
-                  // conversation has not settled on one, which the line handles
-                  // — preparation can be running with no chapter in focus.
-                  ...(focusChapter
-                    ? {
-                        chapter: focusChapter.title,
-                        firstPage: focusChapter.startPage,
-                        lastPage: focusChapter.endPage,
-                        onClear: () => setFocusChapter(null),
+                chapterFocus={
+                  // A side conversation has no chapter of its own — it reads the
+                  // one its parent is parked on — and the line it does want is
+                  // the aside bar, which takes the same slot.
+                  call.aside
+                    ? null
+                    : {
+                        // The chapter as the book names it: `number` is parsed
+                        // out of the title, so the title already carries it.
+                        // Absent when the conversation has not settled on one,
+                        // which the line handles — preparation can be running
+                        // with no chapter in focus.
+                        ...(focusChapter
+                          ? {
+                              chapter: focusChapter.title,
+                              firstPage: focusChapter.startPage,
+                              lastPage: focusChapter.endPage,
+                              onClear: () => setFocusChapter(null),
+                            }
+                          : {}),
+                        prep: prepLineProgress,
                       }
-                    : {}),
-                  prep: prepLineProgress,
-                }}
-                emptyTitle={call.isBook ? title ?? "This book" : undefined}
-                placeholder={call.isBook ? "Ask about this book…" : undefined}
+                }
+                aside={
+                  call.aside ? { span: call.aside.span, onBack: returnFromAside } : undefined
+                }
+                onOpenAside={call.isBook ? openChatAside : undefined}
+                emptyTitle={
+                  call.aside ? "Ask about this" : call.isBook ? title ?? "This book" : undefined
+                }
+                placeholder={
+                  call.aside ? "Ask about this…" : call.isBook ? "Ask about this book…" : undefined
+                }
                 intents={callIntents}
                 emptyNote={callNote}
                 voice={callVoice}

@@ -9,6 +9,8 @@ import {
   BOOK_INTENTS,
   EXPLAIN_KICKOFF,
   MARK_INTENTS,
+  SPAN_INTENTS,
+  asideIntents,
   bookTextNotice,
   chapterIntent,
   openingIntents,
@@ -80,8 +82,25 @@ test("the chapter chip leads the book-level set, and only there", () => {
   expect(openingIntents(false, CH3)).toBe(MARK_INTENTS);
 });
 
+// A side conversation opened on words picked out of a reply: there is no mark
+// and no page, so a chip that opens on "the passage I just marked" would send
+// the model looking for something the prompt does not carry.
+test("a span pulled out of a reply is offered chips that claim no marked passage", () => {
+  expect(asideIntents("chat")).toBe(SPAN_INTENTS);
+  for (const intent of SPAN_INTENTS) {
+    expect(intent.message.toLowerCase()).not.toContain("mark");
+    expect(intent.message.toLowerCase()).not.toContain("passage");
+  }
+  expect(SPAN_INTENTS.some((i) => i.message === EXPLAIN_KICKOFF)).toBe(false);
+});
+
+// One drawn on the page while the lesson ran is a marked passage like any other.
+test("a side conversation drawn on the page keeps the mark's chips", () => {
+  expect(asideIntents("mark")).toBe(MARK_INTENTS);
+});
+
 test("every intent is a distinct id with a label and a message", () => {
-  const all = [...MARK_INTENTS, ...BOOK_INTENTS];
+  const all = [...MARK_INTENTS, ...BOOK_INTENTS, ...SPAN_INTENTS];
   expect(new Set(all.map((i) => i.id)).size).toBe(all.length);
   for (const intent of all) {
     expect(intent.label.length).toBeGreaterThan(0);

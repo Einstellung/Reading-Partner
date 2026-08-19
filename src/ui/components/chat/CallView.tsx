@@ -8,6 +8,7 @@
 // the hang-up button and the chapter-focus line stay outside it.
 
 import type { ReactNode } from 'react';
+import type { AsideAnchor } from '../../../platform/app/threads';
 import type { ReadingIntent } from '../../../reading/intents';
 import ChatScaleScope from '../base/ChatScaleScope';
 import { IconClose } from '../base/icons';
@@ -50,9 +51,37 @@ interface CallViewProps {
 	voice?: ComposerVoice | false;
 	// Dispatches a card's actions (add-source flow). Absent = a chat with no cards.
 	onCardAction?: CardActionHandler;
+	// Open a side conversation on a span of one of these replies (docs/03).
+	// Passed only on the book-level conversation; absent everywhere else, which is
+	// what keeps an aside one level deep.
+	onOpenAside?(anchor: AsideAnchor): void;
+	// This conversation is itself an aside: what it was opened on, and the way
+	// back to the one it came off. Absent = it is not one.
+	aside?: { span: string; onBack(): void };
 	// Whether this call takes the chat zoom. The phone reaches this view too, and
 	// has neither of the gestures that drive it.
 	scalable?: boolean;
+}
+
+// The top line of an aside: the way back, and the sentence it was opened on so
+// the reader can see which one they stepped away from. It takes the slot the
+// chapter-focus line uses — an aside never carries a chapter focus of its own
+// (it reads its parent's), so the two never want it at once.
+function AsideBar({ span, onBack }: { span: string; onBack(): void }) {
+	return (
+		<div className="absolute left-1/2 top-4 z-10 flex max-w-[70%] -translate-x-1/2 items-center gap-2">
+			<Button
+				type="button"
+				variant="ghost"
+				size={null}
+				onClick={onBack}
+				className="shrink-0 whitespace-nowrap rounded-full px-2.5 py-1.5 text-xs text-neutral-500 coarse:py-2.5"
+			>
+				‹ Back to the lesson
+			</Button>
+			<span className="truncate text-xs italic text-neutral-400">“{span}”</span>
+		</div>
+	);
 }
 
 // The scope's box without the zoom, so the tree is the same shape either way.
@@ -77,6 +106,8 @@ export default function CallView({
 	emptyNote,
 	voice,
 	onCardAction,
+	onOpenAside,
+	aside,
 	scalable = true,
 }: CallViewProps) {
 	const empty = messages.length === 0;
@@ -107,7 +138,7 @@ export default function CallView({
 				{onDelete && <DeleteThreadButton onDelete={onDelete} />}
 			</div>
 
-			{chapterFocus && <ChapterFocusBar {...chapterFocus} />}
+			{aside ? <AsideBar {...aside} /> : chapterFocus && <ChapterFocusBar {...chapterFocus} />}
 
 			{empty ? (
 				<Scope className="flex min-h-0 flex-1 flex-col items-center justify-center px-4">
@@ -135,6 +166,7 @@ export default function CallView({
 							size="lg"
 							className="mx-auto max-w-[calc(48rem*var(--chat-scale,1))] pb-6"
 							onCardAction={onCardAction}
+							onOpenAside={onOpenAside}
 						/>
 					</div>
 					<div className="px-4 pb-6">
