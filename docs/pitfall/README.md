@@ -26,6 +26,7 @@
 | 确认框、删除之类的破坏性操作 | WebKit / webview |
 | 调模型、改 provider 层、组装提示词、加长上下文 | AI 调用与上下文窗口 |
 | 顶栏、工具条、下拉浮层的定位 | 界面与布局 |
+| 选中文字后浮出来的控件 | 界面与布局 + 触摸与手势 |
 | 全局样式、Tailwind layer、字体与行高 | 界面与布局 + EmbedPDF 引擎 |
 | 加测试文件、给 store 写单测 | 开发环境 |
 | 搬目录、切子域、动分层表 | 开发环境 |
@@ -182,6 +183,7 @@
 - [95-button-swallows-the-ref](./95-button-swallows-the-ref.md) — shadcn 生成的是 React 19 风格的函数组件，React 18 下 `<Button ref>` 恒为 `null`，类型全绿、生产构建无警告；已全部改成 `forwardRef`，护栏是 `tests/ui/components/forward-ref-contract.test.ts`，一次 `shadcn add` 就会写回来
 - [103-anchored-overlay-paints-under-the-surface-that-opened-it](./103-anchored-overlay-paints-under-the-surface-that-opened-it.md) — 全屏设置页是 `z-[70]` 的不透明白底，锚定浮层停在生成的 `z-50`，下拉全部画在开它的页面底下；Select 开着时页面外一切 `pointer-events: none`，手指照样落在看不见的列表上，于是报成「点不动」。`elementFromPoint` 打得中而屏幕上没有 = 画的顺序不对。一条命名 z 阶梯收进 `ui/overlay.tsx` 的 `OVERLAY_Z`，锚定层排在整条阶梯之上
 - [130-an-arbitrary-font-size-brings-no-line-height](./130-an-arbitrary-font-size-brings-no-line-height.md) — `text-sm` 编出 `font-size` 加 `line-height` 两条，`text-[任意值]` 只有 `font-size`，行距悄悄退回继承值；补的那条要无单位，`leading-5` 这种 rem 值不跟着字号走
+- [119-ios-puts-its-selection-callout-below-the-selection](./119-ios-puts-its-selection-callout-below-the-selection.md) — iPad 上系统的 `Copy | Look Up | Translate` 条不是固定在选区上方：选区中心在安全区竖向中点以上时它在下方，以下时在上方，两边都是离选区 15px、高 44px，横向对着选区中心夹进屏幕。它是浮在 WKWebView 上的 UIKit 视图，DOM 里没有、`elementFromPoint` 看不见、落在它上面的触摸网页收不到；贴着选区放的浮动控件被盖掉 37px 只剩 7px 可点。两边都让：控件放到选区底下 59+8px
 
 ## AI 调用与上下文窗口
 

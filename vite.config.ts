@@ -45,6 +45,7 @@ export default defineConfig({
     },
   },
   preview: { port: 1421, strictPort: true, headers: isolationHeaders },
-  // The engine test harness (embedpdf-spike.html) is dev-only: Vite serves it
-  // on demand, but it is not built into the production bundle.
+  // The test harnesses (embedpdf-spike.html for the engine, chat-aside-spike.html
+  // for the chat's aside control) are dev-only: Vite serves them on demand, but
+  // only index.html is an entry, so neither is built into the production bundle.
 });

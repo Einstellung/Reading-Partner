@@ -27,6 +27,12 @@ import type { PendingImage, ThreadMessage } from './types';
 import type { CompressedImage } from '../../../ai/image-utils';
 import type { ToolStatus } from '../../../ai/tool-status';
 import { asideAnchorAt, mayOpenAside } from '../../../reading/aside';
+import {
+	asideControlAnchor,
+	ASIDE_CONTROL_HEIGHT,
+	ASIDE_CONTROL_WIDTH,
+	type AsideSelectionBox,
+} from './aside-control';
 import type { AsideAnchor } from '../../../platform/app/threads';
 import { cn } from '../lib/utils';
 import { OVERLAY_Z } from '../ui/overlay';
@@ -143,12 +149,11 @@ function CopyButton({ text }: { text: string }) {
 
 // --- opening a side conversation out of a reply (docs/03) ------------------
 
-// A selection worth acting on: which reply it came out of, and where on screen
-// it sits so the control can be put under it.
+// A selection worth acting on: which reply it came out of, and the box it draws
+// on screen, which is what the control is placed off (aside-control.ts).
 interface AsidePick {
 	anchor: AsideAnchor;
-	x: number;
-	y: number;
+	box: AsideSelectionBox;
 }
 
 // The reader's selection inside a settled reply. One listener for the whole
@@ -191,7 +196,7 @@ function useAsideSelection(list: RefObject<HTMLElement>, enabled: boolean): Asid
 				return;
 			}
 			const rect = range.getBoundingClientRect();
-			setPicked({ anchor, x: rect.left + rect.width / 2, y: rect.bottom });
+			setPicked({ anchor, box: { left: rect.left, right: rect.right, bottom: rect.bottom } });
 		};
 		document.addEventListener('selectionchange', read);
 		return () => document.removeEventListener('selectionchange', read);
@@ -199,26 +204,9 @@ function useAsideSelection(list: RefObject<HTMLElement>, enabled: boolean): Asid
 	return picked;
 }
 
-// The box the control is given. anchor-safe clamps it inside the safe area from
-// these numbers (styles.css), so they are what it is drawn at rather than a
-// measurement of it.
-//
-// The height is the coarse-pointer one. The control's own height comes from the
-// size table in ui/button.tsx, which is where this project keeps the 44px touch
-// minimum, so it is 34px under a mouse and 44 under a finger — and the clamp,
-// which only has to keep it on screen, is given the taller of the two on both.
-const ASIDE_CONTROL_WIDTH = 150;
-const ASIDE_CONTROL_HEIGHT = 44;
-// Distance from the bottom of the selection.
-const ASIDE_CONTROL_GAP = 8;
-
-// The control the selection raises, under the selected words.
-//
-// Under, deliberately. On a tablet a long press raises WebKit's own Copy | Look
-// Up | Translate bar over the selection — chat text sits outside
-// [data-reader-surface], so the callout is not suppressed there — and that bar
-// takes the space above. Below it the two stand side by side and neither has to
-// be dismissed to reach the other. Nothing is permanently visible either way:
+// The control the selection raises, under the selected words and clear of
+// WebKit's own callout bar. Where it goes and why it is not tight against the
+// selection is aside-control.ts. Nothing is permanently visible either way:
 // this appears with a selection and goes with it, on every pointer type, rather
 // than adding a second always-on chip under every reply the way a hover-revealed
 // affordance degrades to on a coarse pointer.
@@ -228,6 +216,7 @@ function AskAsideControl({ pick, onOpen }: { pick: AsidePick; onOpen(anchor: Asi
 	// before the click landed. Keyboard activation is bound for the same reason:
 	// a button that acts on pointerdown gets no click of its own.
 	const open = () => onOpen(pick.anchor);
+	const at = asideControlAnchor(pick.box);
 	return (
 		<Button
 			type="button"
@@ -244,8 +233,8 @@ function AskAsideControl({ pick, onOpen }: { pick: AsidePick; onOpen(anchor: Asi
 			}}
 			style={
 				{
-					'--anchor-x': `${pick.x - ASIDE_CONTROL_WIDTH / 2}px`,
-					'--anchor-y': `${pick.y + ASIDE_CONTROL_GAP}px`,
+					'--anchor-x': `${at.x}px`,
+					'--anchor-y': `${at.y}px`,
 					'--anchor-w': `${ASIDE_CONTROL_WIDTH}px`,
 					'--anchor-h': `${ASIDE_CONTROL_HEIGHT}px`,
 					width: ASIDE_CONTROL_WIDTH,

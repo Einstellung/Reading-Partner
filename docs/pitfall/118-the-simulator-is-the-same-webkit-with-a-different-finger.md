@@ -27,6 +27,8 @@
 
 跑法在 `scripts/ios-sim.sh`：`up` 起模拟器和 `tauri ios dev`（devUrl 就是 Mac 自己的 vite，模拟器和它共用 localhost，所以改前端只是刷新一次页面），`reader` 把 webview 开到 `embedpdf-spike.html`（它把整个 `EmbedPdfHandle` 挂在 `window.__spike` 上，工具、布局、fingerDraw、页码都能从外面设），`gesture <名字>` 跑一个记录过的场景并回一张截图。手势的结果不是靠看截图猜的：`scripts/sim-bridge.ts` 是一个只在 dev 生效的 vite 插件，往每个页面注入一段长轮询，`ios-sim.sh eval` 把 JS 送进那个 webview 再把值取回来，事件序列、`scrollTop`、容器 transform、SVG 笔画数都是这么读出来的。
 
+还有一样它能验而事先没想到的：系统自己浮在 webview 上的东西。选区的 `Copy | Look Up | Translate` 条、Translate 弹窗、分享面板都是 UIKit 视图，`eval` 看不见（DOM 里没有，`elementFromPoint` 也打不中），落在它们身上的触摸网页一个事件都收不到——`__rec` 只会记下一片空白，看着像手势没生效。`ios-sim.sh native` 走辅助功能树把它们的 label 和 frame 取出来，和 DOM 的矩形是同一套坐标，于是「系统条盖住了我们的按钮多少」是一个数而不是一张要眯眼看的截图（坑 119 就是这么量的）。长按用 `ios-sim.sh press`（`idb ui tap --duration`）；程序化选中不弹这条（坑 4），必须真按。聊天那侧的 harness 是 `chat-aside-spike.html`，把真的 `MessageList` 挂成书级对话，和引擎那张同一个路数。
+
 两个必须知道的坑中坑：一，合成 DOM 事件测不了这件事的核心——WebKit 判不判滚动、发不发 `pointercancel`，全发生在 JS 拿到事件之前，只有真注入的触摸才会触发；二，`tauri ios dev` 在改 `vite.config.ts` 之后重启 vite 会挂住不再监听 1420（页面还连着旧服务器），改完配置要整个 `up` 重来。
 
 ## 范围
