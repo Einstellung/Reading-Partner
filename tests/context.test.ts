@@ -5,7 +5,6 @@ import { expect, test } from "bun:test";
 import {
   buildSystemPrompt,
   readerProfileSection,
-  LECTURE_QUIZ,
   type BooklistItem,
 } from "../src/platform/app/context";
 import { languageInstruction } from "../src/platform/app/settings";
@@ -256,14 +255,16 @@ test("a chapter in focus outranks the page the reader is scrolled to", () => {
   expect(loose).toContain("Where the reader is scrolled to is not the subject");
 });
 
-// docs/09 leaves the quiz undecided. One constant turns it off everywhere; this
-// pins that it is one place and not several.
-test("the quiz is one block behind one constant", () => {
+// The entry leads the reader through a chapter; it does not examine them
+// (docs/09, dropped 2026-08-19). Pinned so a quiz cannot come back by accident.
+test("nothing in the prompt examines the reader", () => {
   const out = buildSystemPrompt(base);
-  const asks = out.includes("you may close with one question");
-  expect(asks).toBe(LECTURE_QUIZ);
-  if (LECTURE_QUIZ) {
-    expect(out).toContain("One question, never two");
-    expect(out).toContain("judge it in a sentence and move");
+  for (const phrase of [
+    "close with one question",
+    "One question, never two",
+    "checks whether it landed",
+    "in their own words",
+  ]) {
+    expect(`${phrase}: ${out.includes(phrase)}`).toBe(`${phrase}: false`);
   }
 });

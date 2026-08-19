@@ -27,11 +27,6 @@ export interface BooklistItem {
   isCurrent: boolean;
 }
 
-// Whether the model may close a taught block with one question (docs/09 leaves
-// this open and the project owner has not settled it). One constant and one
-// block below: set this to false and nothing anywhere examines the reader.
-export const LECTURE_QUIZ = true;
-
 export interface ReadingContext {
   topicName: string;
   fileName: string;
@@ -157,17 +152,6 @@ function teachingRules(bookLevel: boolean): string[] {
     lines.push(
       "- You can see the passage below, so refer to it naturally rather than",
       "  quoting it in full.",
-    );
-  }
-  if (LECTURE_QUIZ) {
-    lines.push(
-      "- When you have just taught a whole block — a chapter, a section, a mechanism",
-      "  built up over several paragraphs — you may close with one question that",
-      "  checks whether it landed: ask them to put the load-bearing point back in",
-      "  their own words, or what follows from it. One question, never two, and none",
-      "  after an ordinary answer. Whatever they say, judge it in a sentence and move",
-      '  on. Ending a turn with "shall we go on to §X" is not this; that is just how',
-      "  a turn ends.",
     );
   }
   return lines;
