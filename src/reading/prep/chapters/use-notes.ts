@@ -1,7 +1,7 @@
 // The chapter-spine hub (docs/09), lifted out of App: which pipeline the panel is
 // looking at, the unattended start, and the panel's callbacks. It owns
 // the snapshot state and renders nothing — the shell calls it and spreads
-// `panel` into NotesPanel.
+// `panel` into the Prep panel's chapter half.
 //
 // Everything book-specific comes from the shell's refs rather than props: the
 // open book's id, name, full text, figures, bytes and marks are all read at call
@@ -42,7 +42,8 @@ export interface NotesHost {
   pushToast(kind: "warn" | "error", message: string): void;
 }
 
-// Exactly the props NotesPanel takes, so the shell can spread them.
+// Exactly the Prep panel's chapter bindings, so the shell can hand them over
+// whole (ui/components/reader/PrepPanel.tsx, ChapterPrepBindings).
 export interface NotesPanelBindings {
   snapshot: NotesSnapshot | null;
   loadOverview(): Promise<string | null>;

@@ -52,7 +52,9 @@ export type EventType =
   | "prep-status" // { slug, status }
   | "notes-run" // { phase: "start" | "done" | "failed" }
   | "notes-chapter-regenerate" // { index }
-  | "notes-tab-open" // {}
+  // The reader opened the Prep tab. Its old name was "notes-tab-open", from
+  // when the two kinds of prep material had a tab each.
+  | "prep-tab-open" // {}
   // The reader opened a topic's AI observations. The one face of the observation
   // machinery they can look at, and until this line nothing said whether they
   // ever did.

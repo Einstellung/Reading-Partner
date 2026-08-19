@@ -22,15 +22,13 @@ export const NOTES_VERSION = 2 as const;
 // normalized back to "pending" on load so a restart resumes.
 export type PhaseStatus = "pending" | "running" | "done" | "failed";
 
-// "skipped" is dead: it meant the reader had marked nothing in a chapter's page
-// range, back when generation followed the highlight frontier. Preparation is
-// now whole-book (docs/09, 2026-08-19) — every chapter in the table is prepared,
-// because the questions the spine answers ("should I start at chapter 3?") need
-// the chapters the reader has not reached. The pipeline never writes it and
-// normalizeNotesOnLoad turns a persisted one back into "pending"; the literal
-// stays in the union only so the Notes panel, which is being rebuilt separately,
-// keeps compiling.
-export type ChapterStatus = PhaseStatus | "skipped";
+// A chapter has no state of its own beyond the phase it is in. There used to be
+// a "skipped" — the reader had marked nothing in the chapter's page range, back
+// when preparation followed the highlight frontier — and preparation is
+// whole-book now (docs/09, 2026-08-19): the questions a spine answers ("should I
+// start at chapter 3?") are about the chapters the reader has not reached, so
+// there is nothing to skip.
+export type ChapterStatus = PhaseStatus;
 
 // The second pass adds one more state: "stale" — the chapter graph was written,
 // then a chapter was regenerated, so its edges may be out of date. It is not
@@ -74,8 +72,7 @@ export function createNotesState(bookId: string, bookName: string, now: number):
 
 // Recover a persisted state at load: a plan or chapter or graph pass interrupted
 // mid-run ("running") goes back to "pending" so a restart resumes it instead of
-// hanging, and a chapter left "skipped" by an older build is prepared like every
-// other. Done/failed/stale phases are left alone (failed chapters wait for a
+// hanging. Done/failed/stale phases are left alone (failed chapters wait for a
 // manual retry; a stale graph stays stale until the user regenerates it).
 // A book name left percent-encoded by an iOS import is decoded here too — it
 // goes into the chapter prompts, so a state written before path normalization
@@ -88,7 +85,7 @@ export function normalizeNotesOnLoad(state: NotesState): NotesState {
     planStatus: state.planStatus === "running" ? "pending" : state.planStatus,
     overviewStatus: state.overviewStatus === "running" ? "pending" : state.overviewStatus,
     chapters: state.chapters.map((c) =>
-      c.status === "running" || c.status === "skipped" ? { ...c, status: "pending" as const } : c,
+      c.status === "running" ? { ...c, status: "pending" as const } : c,
     ),
   };
 }

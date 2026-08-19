@@ -277,28 +277,6 @@ export function IconOutline({ size = 20 }: IconProps) {
 	);
 }
 
-// Document with lines for the Notes tab (lecture notes derived from the book).
-export function IconNotes({ size = 20 }: IconProps) {
-	return (
-		<svg
-			width={size}
-			height={size}
-			viewBox="0 0 20 20"
-			fill="none"
-			stroke="currentColor"
-			strokeWidth="1.4"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-			xmlns="http://www.w3.org/2000/svg"
-		>
-			<path d="M5 2.75H12L15.25 6V17.25H5V2.75Z" />
-			<path d="M11.75 2.75V6.25H15.25" />
-			<path d="M7.5 10H12.5" />
-			<path d="M7.5 13H12.5" />
-		</svg>
-	);
-}
-
 // Paged reading layout: a page framed by left/right flip chevrons.
 export function IconPagedLayout({ size = 20 }: IconProps) {
 	return (

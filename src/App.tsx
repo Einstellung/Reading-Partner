@@ -11,7 +11,7 @@ import {
 import { hashPath } from "./platform/app/storage";
 import { importBook, repairLibraryNames } from "./platform/app/library";
 import { migrateBookLive } from "./platform/app/migrate";
-import type { Fulltext } from "./fulltext";
+import { documentShape, type Fulltext } from "./fulltext";
 import Sidebar, { type SidebarTab } from "./ui/components/reader/Sidebar";
 import {
   ANNOTATION_COLORS,
@@ -42,7 +42,7 @@ import { isTauri } from "./platform/app/host";
 import { DEFAULT_SETTINGS, type Settings } from "./platform/app/settings";
 import { buildGlossary } from "./ai/voice";
 import { modelSupportsImages, type ProviderId } from "./ai/aiClient";
-import { locateQuote, type Citation } from "./reading/prep";
+import { locateQuote, prepKind, type Citation } from "./reading/prep";
 import { usePrep } from "./reading/prep/papers/use-prep";
 import { purgeLegacyChapterNotes } from "./reading/prep/chapters/purge";
 import { useNotes } from "./reading/prep/chapters/use-notes";
@@ -65,7 +65,6 @@ import {
   type FiguresIndex,
 } from "./reading/figures";
 import PrepPanel from "./ui/components/reader/PrepPanel";
-import NotesPanel from "./ui/components/reader/NotesPanel";
 import ReaderTopBar from "./ui/components/reader/ReaderTopBar";
 import { useReaderZoomKeys } from "./ui/components/reader/reader-zoom-keys";
 import AnnotationPopup from "./ui/components/reader/AnnotationPopup";
@@ -655,9 +654,9 @@ export default function App() {
   // no copy of them. What is left here is the panel's old refresh signal, which
   // the topic panel subscribes to itself.
 
-  // The book-notes feature (docs/14): the panel's state and every callback that
-  // serves it. It reads the open book through the shell's refs, so what it
-  // returns is stable the way it was when this code sat here.
+  // The chapter-spine half of prep (docs/09): the panel's state and every
+  // callback that serves it. It reads the open book through the shell's refs, so
+  // what it returns is stable the way it was when this code sat here.
   const {
     snapshot: notesSnap,
     panel: notesPanelProps,
@@ -1122,7 +1121,19 @@ export default function App() {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [showSettings, popup, endCall, currentCall, quoteHlActive, sidebarOpen]);
 
-  // Background work the drawer would show if open (prep/notes generation): the
+  // Which half of prep this document gets. Whichever run exists on disk wins;
+  // with neither, the citation density decides (reading/prep/kind.ts). Read off
+  // the snapshots rather than the store, so the panel follows a run that has
+  // just started without waiting for anything to be written.
+  const panelPrepKind = prepKind({
+    papers: !!prepSnap?.state,
+    chapters: !!notesSnap?.state,
+    // Still extracting: "unknown" is the honest answer, and it is what the panel
+    // shows until the text is in.
+    shape: fulltext ? documentShape(fulltext) : "unknown",
+  });
+
+  // Background work the drawer would show if open (either half of prep): the
   // toggle carries a status dot so progress is visible while the drawer is shut.
   const sidebarBusy = !!(prepSnap?.running || notesSnap?.running);
 
@@ -1256,7 +1267,7 @@ export default function App() {
             tab={sidebarTab}
             onClose={() => setSidebarOpen(false)}
             onSelectTab={(t) => {
-              if (t === "notes" && activeTopic) logEvent(activeTopic.id, "notes-tab-open");
+              if (t === "prep" && activeTopic) logEvent(activeTopic.id, "prep-tab-open");
               setSidebarTab(t);
             }}
             fulltext={fulltext}
@@ -1273,8 +1284,9 @@ export default function App() {
             onSelectAnnotation={onTraceSelect}
             onDeleteAnnotation={deleteTraceAnnotation}
             onOpenThread={openThreadForAnnotation}
-            prepPanel={<PrepPanel {...prepPanelProps} />}
-            notesPanel={<NotesPanel {...notesPanelProps} />}
+            prepPanel={
+              <PrepPanel kind={panelPrepKind} papers={prepPanelProps} chapters={notesPanelProps} />
+            }
           />
         )}
 

@@ -292,36 +292,6 @@ test("resume: an interrupted running chapter is requeued and finishes", async ()
   expect(p.snapshot().state?.overviewStatus).toBe("done");
 });
 
-// Preparation is whole-book now, so a chapter an older build passed over for
-// having no marks is prepared like any other.
-test("resume: a chapter left skipped by an older build is prepared", async () => {
-  const initial: NotesState = {
-    version: NOTES_VERSION,
-    bookId: "b",
-    bookName: "s",
-    createdAt: 0,
-    planStatus: "done",
-    chapters: [
-      { ...chapter(1), status: "done" },
-      { ...chapter(2), status: "skipped" },
-    ],
-    overviewStatus: "pending",
-  };
-  const generated: number[] = [];
-  const { deps } = makeFakes({
-    initial,
-    chapter: async ({ chapter: c }) => {
-      generated.push(c.index);
-      return "n";
-    },
-  });
-  const p = new NotesPipeline("b", "s", deps, TEST_CONFIG);
-  await p.ensureStarted();
-  expect(generated).toEqual([2]);
-  expect(statuses(p)).toEqual({ 1: "done", 2: "done" });
-  expect(p.snapshot().state?.overviewStatus).toBe("done");
-});
-
 test("the graph is written from every chapter's spine", async () => {
   const graphInputs: number[] = [];
   const { deps } = makeFakes({

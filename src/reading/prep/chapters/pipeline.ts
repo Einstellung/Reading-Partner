@@ -282,12 +282,12 @@ export class NotesPipeline extends ObservableRun<NotesState | null, NotesActivit
     void this.kick();
   }
 
-  // Generate one chapter on demand (the panel's per-chapter affordance, and the
-  // way back for a chapter left pending by a stop). No-op while running.
+  // Prepare one chapter on demand: the way back for a chapter left pending by a
+  // stop, without re-running the whole book. No-op while running.
   generateChapter(index: number): void {
     if (this.running || !this.state) return;
     const ch = this.state.chapters.find((c) => c.index === index);
-    if (!ch || (ch.status !== "skipped" && ch.status !== "pending")) return;
+    if (!ch || ch.status !== "pending") return;
     ch.status = "pending";
     ch.error = undefined;
     this.targets = new Set([index]);

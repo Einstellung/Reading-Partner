@@ -23,3 +23,4 @@ export {
   type Citation,
 } from "./anchors";
 export { locateQuote, normalizeForMatch } from "./quote-locate";
+export { prepKind, type PrepKind, type PrepPresence } from "./kind";
