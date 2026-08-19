@@ -10,7 +10,7 @@ import {
   readTextFile,
   remove,
 } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../../platform/app/atomic-fs";
+import { readJson, writeTextAtomic } from "../../platform/app/atomic-fs";
 import { INFO_RUN_VERSION, type InfoRunState } from "./run-state";
 import type { Briefing } from "./types";
 import type { InfoItem } from "../sources/item";
@@ -197,6 +197,34 @@ export async function clearRun(date: string): Promise<void> {
   } catch {
     // Leave it; it costs disk, not correctness.
   }
+}
+
+// --- the morning round's anchor --------------------------------------------
+// Which anchor the 05:00 round has already been run for (daily.ts), as a local
+// YYYY-MM-DD. Its own file because nothing else on disk answers the question: a
+// briefing or a run for today says a briefing was made, not that the morning
+// round was the one that made it, and the round has to fire even on a day the
+// reader already generated one by hand.
+//
+// Out of sync range, and not in the collector claim it would otherwise fit in.
+// The claim travels to the readers, who have no use for this, and it is
+// per-device: a machine that takes the claim over from another one has to make
+// its own first round of the day rather than inherit somebody else's answer to
+// whether the morning has been dealt with.
+const DAILY_FILE = "info-daily-round.json";
+
+const LOCAL_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Missing or unreadable reads as null, which daily.ts answers with "arm": a lost
+// file costs at most one skipped morning, never a repeated one.
+export async function loadDailyRunDate(): Promise<string | null> {
+  const parsed = await readJson<{ date?: unknown }>(DAILY_FILE);
+  const date = parsed?.date;
+  return typeof date === "string" && LOCAL_DATE.test(date) ? date : null;
+}
+
+export async function saveDailyRunDate(date: string): Promise<void> {
+  await writeTextAtomic(DAILY_FILE, JSON.stringify({ date }));
 }
 
 // --- pruning the past days -------------------------------------------------
