@@ -54,6 +54,7 @@ const NO_IN_MEMORY_STATE: Record<string, string> = {
   "info-feedback.jsonl": "append-only, and read in full when it is read at all",
   "info-pool-marks.json": "read at the start of a collection run, not held between them",
   "talk-": "a talk is read from disk when it is opened",
+  "runthrough-": "a talk's run-throughs are read when its list is drawn, not held between draws",
   "memory-": "the observation store reads its entries per query",
   "prep-": "lesson prep is read when the book it belongs to opens",
   "notes-": "book notes are read when the book they belong to opens",
@@ -113,10 +114,10 @@ test("the samples this test is built from are all in sync range", () => {
   for (const file of ROOT_FILES) expect(inSyncRange(file)).toBe(true);
 
   const patterns = perKeySamples();
-  // Five filename patterns and three directory prefixes, as of this writing;
+  // Six filename patterns and three directory prefixes, as of this writing;
   // the count is asserted so a pattern that stops being found by the scan is
   // noticed rather than quietly dropping its files from the check.
-  expect(patterns.length).toBe(8);
+  expect(patterns.length).toBe(9);
   for (const { pattern, paths } of patterns) {
     for (const path of paths) {
       expect(`${pattern} -> ${path}: ${inSyncRange(path)}`).toBe(`${pattern} -> ${path}: true`);

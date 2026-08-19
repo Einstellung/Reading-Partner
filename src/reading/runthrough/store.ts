@@ -1,0 +1,109 @@
+// Run-throughs on disk: runthrough-<talkId>.json under AppData, beside the
+// talk-<talkId>.json they belong to. One file per talk, all of that talk's runs
+// inside it, oldest first — the runs of one talk are only ever read together
+// (this pass against the last one), and one file per run would make listing them
+// a directory scan for no gain.
+//
+// In the sync range (platform/sync/syncFs.ts): a run-through is a trace the
+// reader left and nothing can rebuild it — not the deck, not the book. The deck
+// it was given against stays out (slides/** is a build output).
+//
+// A file that will not parse is moved to runthrough-<talkId>.json.bad before the
+// empty log is handed back, so the next append cannot make the loss permanent.
+// That is the shape docs/29 recorded on slides/talks.json: parse fails, the
+// loader returns empty, the next write commits the empty version over the top,
+// and every entry is gone with no error anywhere.
+
+import { BaseDirectory, exists, readTextFile, remove, rename } from "@tauri-apps/plugin-fs";
+import { writeTextAtomic } from "../../platform/app/atomic-fs";
+import { emptyLog, normalizeLog, type RunthroughLog, type RunthroughRun } from "./types";
+
+const PREFIX = "runthrough-";
+const APPDATA = { baseDir: BaseDirectory.AppData } as const;
+
+export function runthroughFile(talkId: string): string {
+  return `${PREFIX}${talkId}.json`;
+}
+
+// Where a file that would not parse is kept. Out of the sync range, so a
+// device that could not read the file does not push its rescue copy at the
+// others.
+function badFile(talkId: string): string {
+  return `${runthroughFile(talkId)}.bad`;
+}
+
+// A talk id out of a file name, or null for anything else in the directory.
+export function runthroughIdOf(fileName: string): string | null {
+  if (!fileName.startsWith(PREFIX) || !fileName.endsWith(".json")) return null;
+  return fileName.slice(PREFIX.length, -".json".length) || null;
+}
+
+/**
+ * This talk's runs, oldest first. A talk that has never been given reads as an
+ * empty log, and so does one whose file this build cannot use — but in that
+ * case the bytes are moved aside first, so the empty log the caller gets is
+ * never the only copy left.
+ */
+export async function loadRunthroughs(talkId: string): Promise<RunthroughLog> {
+  const file = runthroughFile(talkId);
+  let text: string;
+  try {
+    if (!(await exists(file, APPDATA))) return emptyLog(talkId);
+    text = await readTextFile(file, APPDATA);
+  } catch (e) {
+    // An IO error says nothing is wrong with the file itself. Nothing is moved
+    // and nothing is written over it — appendRun goes through here, so a read
+    // that failed cannot turn into an overwrite.
+    console.warn("failed to read the run-throughs of", talkId, e);
+    return emptyLog(talkId);
+  }
+  let log: RunthroughLog | null = null;
+  try {
+    log = normalizeLog(JSON.parse(text) as unknown);
+  } catch (e) {
+    console.warn("failed to parse the run-throughs of", talkId, e);
+  }
+  if (log) return log;
+  await setAside(talkId);
+  return emptyLog(talkId);
+}
+
+async function setAside(talkId: string): Promise<void> {
+  const file = runthroughFile(talkId);
+  try {
+    await rename(file, badFile(talkId), {
+      oldPathBaseDir: BaseDirectory.AppData,
+      newPathBaseDir: BaseDirectory.AppData,
+    });
+    console.warn(`${file} could not be read; kept as ${badFile(talkId)} and started over`);
+  } catch (e) {
+    console.warn(`${file} could not be read and could not be moved aside`, e);
+  }
+}
+
+/**
+ * Add one run to its talk's log and write it. The ordinal is assigned here —
+ * one past the highest already on disk — because it is a property of the log
+ * and not of the run: a caller counting for itself would give two runs the same
+ * number the first time one is recorded from a stale list. Returns the run as
+ * it was stored, ordinal included.
+ */
+export async function appendRun(run: RunthroughRun): Promise<RunthroughRun> {
+  const log = await loadRunthroughs(run.talkId);
+  const ordinal = log.runs.reduce((max, r) => Math.max(max, r.ordinal), 0) + 1;
+  const stored: RunthroughRun = { ...run, ordinal };
+  const next: RunthroughLog = { ...log, runs: [...log.runs, stored] };
+  await writeTextAtomic(runthroughFile(run.talkId), JSON.stringify(next, null, 2));
+  return stored;
+}
+
+/** Drop a talk's run-throughs, and the rescue copy if there is one. */
+export async function deleteRunthroughs(talkId: string): Promise<void> {
+  for (const file of [runthroughFile(talkId), badFile(talkId)]) {
+    try {
+      if (await exists(file, APPDATA)) await remove(file, APPDATA);
+    } catch (e) {
+      console.warn("failed to delete", file, e);
+    }
+  }
+}
