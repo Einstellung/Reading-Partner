@@ -154,10 +154,10 @@ test("a pull that is read back keeps the merged field through the next save", as
   const backfilled = await store.load();
   expect(backfilled.aiLanguage).toBe("ja");
 
-  store.save({ ...backfilled, autoNotes: false });
+  store.save({ ...backfilled, sttModel: "sense" });
   await advance(500);
   expect(onDisk().aiLanguage).toBe("ja");
-  expect(onDisk().autoNotes).toBe(false);
+  expect(onDisk().sttModel).toBe("sense");
 });
 
 test("a pull with the panel open is deferred, not dropped", () => {

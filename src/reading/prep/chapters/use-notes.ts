@@ -11,7 +11,6 @@
 import { useCallback, useRef, useState } from "react";
 import { annotationPage, type Annotation } from "../../../platform/app/reader-contract";
 import { logEvent } from "../../../platform/app/events";
-import type { Settings } from "../../../platform/app/settings";
 import { loadThreads } from "../../../platform/app/threads";
 import type { Fulltext } from "../../../fulltext/types";
 import type { FiguresIndex } from "../../figures";
@@ -34,7 +33,6 @@ export interface NotesHost {
   // switch mid-extraction abandons the run.
   bookIdRef: HostRef<string | null>;
   ctxRef: HostRef<{ topicId: string | null; fileName: string; pageIndex: number | null }>;
-  settingsRef: HostRef<Settings>;
   currentFulltextRef: HostRef<Promise<Fulltext | null> | null>;
   currentFiguresRef: HostRef<Promise<FiguresIndex | null> | null>;
   bufferRef: HostRef<ArrayBuffer | null>;
@@ -81,7 +79,6 @@ export function useNotes(host: NotesHost): NotesController {
     currentFiguresRef,
     currentFulltextRef,
     pushToast,
-    settingsRef,
   } = host;
 
   const [notesSnap, setNotesSnap] = useState<NotesSnapshot | null>(null);
@@ -164,8 +161,7 @@ export function useNotes(host: NotesHost): NotesController {
 
   // Whether the reader has marked anything in the open book. Preparation is
   // whole-book, so marks no longer decide which chapters run (docs/09) — a mark
-  // is only the sign that this book is being worked with rather than glanced at,
-  // which is what the autoNotes setting is about.
+  // is only the sign that this book is being worked with rather than glanced at.
   const bookHasMarks = useCallback((): boolean => {
     for (const a of annsRef.current.values()) {
       if (annotationPage(a as { position?: { pageIndex?: number } })) return true;
@@ -174,12 +170,11 @@ export function useNotes(host: NotesHost): NotesController {
   }, [annsRef]);
 
   // Unattended start (docs/09): prepare the whole book in the background. Gated
-  // on the autoNotes setting and on the reader having marked something, so a book
-  // that was opened and closed does not spend anything. Fire-and-forget; the
-  // pipeline serializes its own runs and never re-runs a finished chapter.
+  // on the reader having marked something, so a book that was opened and closed
+  // does not spend anything. Fire-and-forget; the pipeline serializes its own
+  // runs and never re-runs a finished chapter.
   const autoStartNotes = useCallback(
     async (force?: boolean) => {
-      if (!settingsRef.current.autoNotes) return;
       const bookId = bookIdRef.current;
       const name = ctxRef.current.fileName;
       if (!bookId) return;
@@ -190,23 +185,21 @@ export function useNotes(host: NotesHost): NotesController {
       const pipeline = attachNotes(bookId, name, ft);
       await pipeline.ensureStarted();
     },
-    [attachNotes, bookHasMarks, bookIdRef, ctxRef, currentFulltextRef, settingsRef],
+    [attachNotes, bookHasMarks, bookIdRef, ctxRef, currentFulltextRef],
   );
 
   // Debounced: annotation-created events fire in bursts, so coalesce them and
   // check at most once every few seconds.
   const autoNotesTimer = useRef<number | null>(null);
   const scheduleAutoNotes = useCallback(() => {
-    if (!settingsRef.current.autoNotes) return;
     if (autoNotesTimer.current) window.clearTimeout(autoNotesTimer.current);
     autoNotesTimer.current = window.setTimeout(() => {
       autoNotesTimer.current = null;
       void autoStartNotes();
     }, AUTO_NOTES_DEBOUNCE);
-  }, [autoStartNotes, settingsRef]);
+  }, [autoStartNotes]);
 
-  // The Notes tab's Generate / Resume button: the manual whole-book run, always
-  // available regardless of the autoNotes setting.
+  // The Prep panel's Generate / Resume button: the manual whole-book run.
   const generateNotes = useCallback(async () => {
     const bookId = bookIdRef.current;
     const name = ctxRef.current.fileName;
@@ -261,9 +254,9 @@ export function useNotes(host: NotesHost): NotesController {
   }, []);
 
   // Resume a book's spines from persisted state: subscribe the panel, then pick
-  // up wherever the last run stopped. A run that already exists is resumed
-  // whatever the autoNotes setting says — the spend was already agreed to, and
-  // half a book's spines are worth less than none.
+  // up wherever the last run stopped. A run that already exists is always
+  // resumed — the spend was already agreed to, and half a book's spines are
+  // worth less than none.
   const resumeNotes = useCallback(
     async (bookId: string, name: string, ft: Fulltext) => {
       try {
@@ -287,7 +280,6 @@ export function useNotes(host: NotesHost): NotesController {
   // reader marked something; otherwise the manual button is the fallback. Fire
   // before the shell tears its refs down.
   const finalPassNotes = useCallback(() => {
-    if (!settingsRef.current.autoNotes) return;
     const bookId = bookIdRef.current;
     if (!bookId) return;
     const existing = peekNotesPipeline(bookId);
@@ -296,7 +288,7 @@ export function useNotes(host: NotesHost): NotesController {
       return;
     }
     void autoStartNotes();
-  }, [autoStartNotes, bookIdRef, settingsRef]);
+  }, [autoStartNotes, bookIdRef]);
 
   return {
     snapshot: notesSnap,

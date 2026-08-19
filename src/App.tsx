@@ -667,7 +667,6 @@ export default function App() {
   } = useNotes({
     bookIdRef,
     ctxRef,
-    settingsRef,
     currentFulltextRef,
     currentFiguresRef,
     bufferRef,
