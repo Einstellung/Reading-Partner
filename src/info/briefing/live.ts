@@ -53,15 +53,18 @@ import {
   loadArticle,
   loadArticles,
   loadBriefing,
+  loadDailyRunDate,
   loadItems,
   loadRun,
   pruneStaleDailyFiles,
   saveArticles,
   saveBriefing,
+  saveDailyRunDate,
   saveItems,
   saveRun,
   todayLocal,
 } from "./store";
+import { dailyAction, DAILY_TICK_MS, lastAnchorDate } from "./daily";
 import { collectorStatusLine, InfoCollector } from "./collector";
 import { createCollectorSession } from "./presence";
 import { backfillPublish, loadPublishedBriefing, publishBriefing } from "./publish";
@@ -340,15 +343,101 @@ async function saveAndPublishBriefing(briefing: Briefing): Promise<void> {
   }
 }
 
-// Whether a briefing may generate itself when the app opens (docs/35): a
-// provider to call, at least one source to read, and — since two collectors
-// would pay for the day twice and publish two different briefings — the claim
-// (docs/36).
+// Whether a briefing may generate itself — when the app opens, and every morning
+// at the anchor (docs/35): a provider to call, at least one source to read, and
+// — since two collectors would pay for the day twice and publish two different
+// briefings — the claim (docs/36).
+//
+// The claim is asked first of the three. It is the cheapest (a held election
+// answer, or an instant no on anything that is not a running collector) and the
+// one that says no most often, on every reader and on every desktop that lost
+// the election. That order only started mattering when a timer began asking the
+// question: it is the difference between two file reads a tick and none, on a
+// device whose answer was never going to be yes.
 async function canAutoGenerate(): Promise<boolean> {
+  if (!(await session.amICollecting())) return false;
   const [settings, sources] = await Promise.all([loadSettings(), loadSources()]);
   if (!settings.defaultProviderId || !settings.defaultModelId) return false;
-  if (!sources.some((d) => d.enabled)) return false;
-  return await session.amICollecting();
+  return sources.some((d) => d.enabled);
+}
+
+// --- the morning round (docs/35) --------------------------------------------
+//
+// The rule is in daily.ts, where it can be tested. What is here is what it is
+// bound to: the recorded date, the real clock, a repeating wake, and the two
+// gates a generate nobody asked for has to pass.
+
+// `undefined` until the file has been read once, which is not the same as the
+// `null` a machine that has never run a round has.
+let dailyRunDate: string | null | undefined;
+let cancelDailyTimer: (() => void) | null = null;
+let dailyStopped = false;
+
+// Record the anchor as dealt with. Held in memory before the write lands, so a
+// file that will not write costs the day's rounds and not one round per tick.
+async function noteDailyRound(now: number): Promise<void> {
+  const date = lastAnchorDate(now);
+  dailyRunDate = date;
+  try {
+    await saveDailyRunDate(date);
+  } catch (e) {
+    console.warn("failed to record the morning briefing round", e);
+  }
+}
+
+// One check. Cheap when there is nothing to do — a date comparison — and it has
+// to be, because it runs on a timer for the life of the app.
+async function dailyTick(): Promise<void> {
+  const now = realTimers.now();
+  if (dailyRunDate === undefined) dailyRunDate = await loadDailyRunDate();
+  const action = dailyAction(now, dailyRunDate);
+  if (action === "none") return;
+  if (action === "arm") {
+    await noteDailyRound(now);
+    return;
+  }
+  // generate() is the reader asking by hand and carries no guard of its own, so
+  // the automatic path puts back the one init() has in front of its own generate
+  // branch. The timer hangs off the pipeline's assembly, which a reader never
+  // constructs (docs/36), so this is not what keeps a phone from collecting —
+  // but it does not ask what role it is on either, and a machine that stops
+  // being the collector between two ticks stops here on the next one.
+  if (!(await canAutoGenerate())) return;
+  // A refresh, not a second briefing (pipeline.ts): the pool hands today's items
+  // back along with whatever has come in since, so a briefing the reader
+  // generated at two in the morning gains the hours between rather than being
+  // left to stand for the day.
+  //
+  // A run already going is left alone, and — this is why the answer is read —
+  // the day's round stays owed. Recording it here would let one collision, a
+  // reader's ask landing at five or a regenerate still finishing, swallow the
+  // round the morning is waiting for; the next tick finds the pipeline free and
+  // runs it.
+  if (getInfoPipeline().generate().start === "busy") return;
+  // Before the run rather than after it, for the reason a reader's ask is
+  // recorded before it runs (presence.ts): a round that dies halfway has still
+  // been the day's round, and a failure is not a reason to pay for it twice.
+  await noteDailyRound(now);
+}
+
+// Never rejects. A check that throws — settings that would not read, a claim
+// file the disk refused — is a round that is late, and it must not take the
+// schedule down with it.
+function checkDailyRound(): Promise<void> {
+  return dailyTick().catch((e) => {
+    console.warn("the morning briefing check failed", e);
+  });
+}
+
+// The wake is a hint and nothing more — the answer comes from the clock and the
+// recorded date — so a tick a suspended process never ran costs lateness, and
+// coming back to the foreground asks again regardless.
+function scheduleDailyTick(): void {
+  if (dailyStopped) return;
+  cancelDailyTimer = realTimers.setTimer(DAILY_TICK_MS, () => {
+    cancelDailyTimer = null;
+    void checkDailyRound().finally(scheduleDailyTick);
+  });
 }
 
 // Material (docs/35): the article bodies of the items screening kept. The
@@ -502,6 +591,11 @@ export function getInfoPipeline(): InfoPipeline {
       onForeground: () => {
         getInfoCollector().foreground();
         void p.init();
+        // After init(), so a run it starts is the one the morning round steps
+        // aside for rather than the other way round. This is the edge that
+        // catches a machine whose timers stopped while it was suspended — a
+        // laptop shut overnight, a phone in a pocket.
+        void checkDailyRound();
       },
       onBackground: () => {
         void p.flush();
@@ -509,8 +603,18 @@ export function getInfoPipeline(): InfoPipeline {
     });
     observeAppExit(window, () => {
       getInfoCollector().suspend();
+      // Nothing is in flight to unwind here; what the cancel is for is the tick
+      // that would otherwise land in the middle of a quit and start a run the
+      // app has no time left to make.
+      dailyStopped = true;
+      cancelDailyTimer?.();
+      cancelDailyTimer = null;
     });
     void getInfoCollector().refresh();
+    // The first check runs now rather than at the first wake: a machine started
+    // at nine in the morning has an anchor behind it already, and init() above
+    // only answers for a day with no briefing at all.
+    void checkDailyRound().finally(scheduleDailyTick);
   }
   return pipeline;
 }
