@@ -9,6 +9,7 @@ import {
   BOOK_INTENTS,
   EXPLAIN_KICKOFF,
   MARK_INTENTS,
+  bookTextNotice,
   chapterIntent,
   openingIntents,
 } from "../../src/reading/intents";
@@ -89,4 +90,30 @@ test("every intent is a distinct id with a label and a message", () => {
     expect(intent.message.length).toBeGreaterThan(intent.label.length);
     expect(intent.message.trim()).toBe(intent.message);
   }
+});
+
+// The chapter chip waits on the extraction, and on a long book that is tens of
+// seconds during which the entry opens on two generic chips with no reason for
+// the missing one. The reader gets a sentence instead of a guess.
+test("a book still being extracted says so, in words", () => {
+  const notice = bookTextNotice("extracting");
+  expect(notice).toBe("Still reading through this book — its chapters will show up here shortly.");
+  // Not a technical state and not an error: nothing about extraction, text
+  // layers, parsing or failure.
+  for (const jargon of ["extract", "fulltext", "parse", "error", "failed", "null"]) {
+    expect(notice!.toLowerCase()).not.toContain(jargon);
+  }
+});
+
+test("a book with no text layer says that, rather than promising chapters", () => {
+  const notice = bookTextNotice("unreadable");
+  expect(notice).toBe("This book's pages have no text layer, so they can't be read as text.");
+  expect(notice).not.toContain("shortly");
+});
+
+// Four books in five have no usable chapter table (docs/09). Once the text is
+// in, that is an ordinary book and not something to apologise for every time the
+// entry is opened.
+test("a book whose text is in says nothing", () => {
+  expect(bookTextNotice("ok")).toBeNull();
 });

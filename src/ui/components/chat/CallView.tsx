@@ -43,6 +43,10 @@ interface CallViewProps {
 	// What an empty conversation offers under the composer (reading/intents.ts).
 	// Absent on a surface that has no opening intents — info's chat is one.
 	intents?: readonly ReadingIntent[];
+	// One line under the chips saying why the list is shorter than it will be —
+	// the book is still being read through (reading/intents.ts bookTextNotice).
+	// Absent = there is nothing to explain.
+	emptyNote?: string | null;
 	voice?: ComposerVoice | false;
 	// Dispatches a card's actions (add-source flow). Absent = a chat with no cards.
 	onCardAction?: CardActionHandler;
@@ -70,6 +74,7 @@ export default function CallView({
 	emptyTitle = 'Ask about this passage',
 	placeholder = 'Ask about this passage…',
 	intents,
+	emptyNote,
 	voice,
 	onCardAction,
 	scalable = true,
@@ -113,6 +118,9 @@ export default function CallView({
 						<Composer onSend={onSend} placeholder={placeholder} pill {...composerProps} />
 						{intents && intents.length > 0 && (
 							<IntentChips intents={intents} onPick={onSend} className="mt-3 justify-center" />
+						)}
+						{emptyNote && (
+							<p className="m-0 mt-3 text-center text-xs text-neutral-400">{emptyNote}</p>
 						)}
 					</div>
 				</Scope>

@@ -41,4 +41,9 @@ export {
   type ChapterOutline,
   type TurnLoad,
 } from "./prompt";
-export { loadChapterOutlines, loadChapterTable } from "./live";
+export {
+  loadChapterSpine,
+  loadChapterTable,
+  type ChapterSpine,
+  type SpineProgress,
+} from "./live";

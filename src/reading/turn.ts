@@ -78,7 +78,7 @@ import {
   chapterOutlineSection,
   decideInline,
   lectureObservationSnapshot,
-  loadChapterOutlines,
+  loadChapterSpine,
   loadChapterTable,
   selectLectureObservations,
   turnLoadStatement,
@@ -407,8 +407,10 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     ];
   }
   // The chapter spine, when the notes pass has written one (docs/09). By data:
-  // absent until it runs, and a lecture never waits for it.
-  const chapterOutlines = await loadChapterOutlines(bookId);
+  // absent until it runs, and a lecture never waits for it. A run still going
+  // also reports how far it has got, which the turn states as a fact rather than
+  // acts on.
+  const { outlines: chapterOutlines, progress: spineProgress } = await loadChapterSpine(bookId);
   const chapterSpine = chapterOutlineSection(chapterOutlines);
 
   // Per-topic AI observations (M8): the observation tools join the same loop as
@@ -754,6 +756,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
         outlines: chapterSpine ? chapterOutlines.length : 0,
         prepNotes: notes.length,
         hasChapterTable: !!chapterTable,
+        ...(spineProgress ? { spine: spineProgress } : {}),
       }),
     });
   }

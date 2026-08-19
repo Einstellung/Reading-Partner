@@ -75,7 +75,7 @@ import ReadingPipCard from "./ui/components/chat/ReadingPipCard";
 import ChatPipCard from "./ui/components/chat/ChatPipCard";
 import SettingsView from "./ui/components/SettingsView";
 import type { CallRow } from "./reading/call-state";
-import { openingIntents, type ReadingIntent } from "./reading/intents";
+import { bookTextNotice, openingIntents, type ReadingIntent } from "./reading/intents";
 import { chapterAtPage } from "./reading/chapters";
 import { resolveBookThread } from "./reading/session/book-thread";
 import { closeBook } from "./reading/session/close-book";
@@ -1197,6 +1197,15 @@ export default function App() {
   );
   intentsRef.current = callIntents;
 
+  // And why it is short, while it is. Extracting the text is what the chapter
+  // chip waits on, and on a long book that is tens of seconds of the entry
+  // looking like it has nothing to offer.
+  const callNote = call?.isBook
+    ? bookTextNotice(
+        fulltextPending ? "extracting" : fulltext?.status === "ok" ? "ok" : "unreadable",
+      )
+    : null;
+
   // Host for inline [fig:N] cards (M9): resolve/raster/jump against the open
   // book. Null when the book has no figures, so cards fall back to text chips.
   const figureHost = useMemo<FigureHost | null>(() => {
@@ -1485,6 +1494,7 @@ export default function App() {
                 emptyTitle={call.isBook ? title ?? "This book" : undefined}
                 placeholder={call.isBook ? "Ask about this book…" : undefined}
                 intents={callIntents}
+                emptyNote={callNote}
                 voice={callVoice}
               />
             </div>

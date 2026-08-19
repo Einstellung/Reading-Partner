@@ -107,8 +107,8 @@ export async function openBook(
 
   // Detach the previous book's prep panel (the pipeline itself keeps running in
   // the background as a module singleton). Notes are per book too. Prep for this
-  // book re-attaches below only if it has been prepped before — since docs/09
-  // dropped classroom mode, nothing else starts it.
+  // book re-attaches below only if it has been prepped before; starting a fresh
+  // run is the trigger's (reading/session/use-prep-trigger.ts), not the open's.
   shell.resetPrep();
   shell.resetNotes();
 

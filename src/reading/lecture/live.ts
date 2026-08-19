@@ -50,17 +50,37 @@ export async function loadChapterTable(
   return pickChapterTable([fromOutline, fromNotes, fromPrep], ft);
 }
 
+// How far the pass that writes the spine has got, for the turn to state as a
+// fact: what a chapter covers is in the book's pages either way, but what one
+// chapter takes from another is only written once every chapter is.
+export interface SpineProgress {
+  done: number;
+  total: number;
+}
+
 // The chapter spine, one paragraph per chapter, as the notes pass left it
-// (docs/09). Read against that pass's own chapter table rather than the lecture
-// table, because a note was written about the range that pass had in mind.
+// (docs/09), and how far that pass has got. Read against that pass's own chapter
+// table rather than the lecture table, because a note was written about the
+// range that pass had in mind.
 //
 // This function is the whole contract between the two: the pass writes a chapter
 // note where its store puts it, this reads every finished one. A pass that
 // changes what it writes changes nothing here; a pass that has not run yet
-// answers [] and the lecture goes ahead without a spine.
-export async function loadChapterOutlines(bookId: string): Promise<ChapterOutline[]> {
+// answers no outlines and no progress, and the lecture goes ahead without a
+// spine.
+export interface ChapterSpine {
+  outlines: ChapterOutline[];
+  // Null when no run exists for this book, and when one has finished every
+  // chapter: in both cases there is nothing about progress to say.
+  progress: SpineProgress | null;
+}
+
+export async function loadChapterSpine(bookId: string): Promise<ChapterSpine> {
   const state = await loadNotesState(bookId).catch(() => null);
-  if (!state || state.chapters.length === 0) return [];
+  if (!state || state.chapters.length === 0) return { outlines: [], progress: null };
+  const settled = state.chapters.filter((c) => c.status === "done" || c.status === "failed").length;
+  const progress =
+    settled >= state.chapters.length ? null : { done: settled, total: state.chapters.length };
   const done = state.chapters.filter((c) => c.status === "done");
   const bodies = await Promise.all(
     done.map((c) => readChapterNote(bookId, c.index).catch(() => null)),
@@ -79,5 +99,5 @@ export async function loadChapterOutlines(bookId: string): Promise<ChapterOutlin
       body,
     });
   }
-  return out;
+  return { outlines: out, progress };
 }

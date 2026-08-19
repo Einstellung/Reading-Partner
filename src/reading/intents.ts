@@ -114,3 +114,29 @@ export function openingIntents(
   const teach = chapterIntent(chapter);
   return teach ? [teach, ...BOOK_INTENTS] : BOOK_INTENTS;
 }
+
+// What a book-level conversation says about itself while it cannot yet offer the
+// chapter chip (docs/09).
+//
+// Extracting the text is the shared prerequisite: no text, no chapter table, no
+// chapter to teach. On a 400-page book it takes tens of seconds, and for all of
+// them the entry opened on the book's title, two generic chips and no reason for
+// the missing one — which reads as the feature being absent rather than a
+// second away. This is the sentence that says which it is.
+//
+// Null when there is nothing to explain: with the text in, a book that still has
+// no usable chapter table is an ordinary book (docs/09: four in five) and saying
+// so every time would be noise.
+export type BookTextState =
+  // The extraction is still running.
+  | "extracting"
+  // The text is in and readable.
+  | "ok"
+  // The extraction finished with nothing usable, or failed outright.
+  | "unreadable";
+
+export function bookTextNotice(state: BookTextState): string | null {
+  if (state === "extracting") return "Still reading through this book — its chapters will show up here shortly.";
+  if (state === "unreadable") return "This book's pages have no text layer, so they can't be read as text.";
+  return null;
+}
