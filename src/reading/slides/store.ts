@@ -175,6 +175,15 @@ export async function recordTalk(entry: TalkEntry): Promise<void> {
   await writeTextAtomic(TALKS_FILE, JSON.stringify(talks, null, 2));
 }
 
+// Read a built deck back as text, by the AppData-relative path the registry
+// holds. This is what the in-app run-through embeds (docs/31): the deck is
+// self-contained, so the whole file is the whole thing to show — several
+// megabytes of it, most of that base64 images. Missing or unreadable reads as
+// null, the same as every other read here.
+export function readDeckHtml(file: string): Promise<string | null> {
+  return readIfExists(file);
+}
+
 // Hand a built deck to the system's default handler. Not live.ts's openDeck,
 // which starts a deck run: this one spends nothing and only reveals a file that
 // is already built.
