@@ -7,7 +7,7 @@ import type { Fulltext } from "../../fulltext/types";
 import { chaptersFromOutline } from "../notes/plan";
 import { loadNotesState, readChapterNote } from "../notes/store";
 import type { PrepChapter } from "../prep/types";
-import { chapterNumber, pickChapterTable, type ChapterEntry, type LectureChapter } from "./chapters";
+import { chapterNumber, pickChapterTable, type ChapterEntry, type LectureChapter } from "../chapters";
 import type { ChapterOutline } from "./prompt";
 
 // The chapter table for a book, from the best source that has one (docs/09):

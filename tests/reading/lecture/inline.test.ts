@@ -17,8 +17,8 @@ import {
   LECTURE_TOKEN_SAFETY,
   MAX_CHAPTER_PAGES,
   WHOLE_BOOK_MAX_TOKENS,
-  type LectureChapter,
 } from "../../../src/reading/lecture";
+import type { LectureChapter } from "../../../src/reading/chapters";
 
 function ft(pages: string[]): Fulltext {
   return { version: FULLTEXT_VERSION, status: "ok", pages, outline: [] };

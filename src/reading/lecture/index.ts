@@ -1,25 +1,9 @@
 // Teaching a book, or a chapter of one (docs/09). The pure decisions a lecture
-// turn is made of — which chapters a book has, how much of it goes in the
-// prompt, which of the reader's stuck points ride along — plus the one tool that
-// hands back a whole chapter. reading/turn.ts is the only assembler; this
-// directory holds nothing that reaches for state of its own.
+// turn is made of — how much of the book goes in the prompt, which of the
+// reader's stuck points ride along — plus the one tool that hands back a whole
+// chapter. The chapter table itself is reading/chapters, shared with the side
+// that prepares chapter spines. reading/turn.ts is the only assembler.
 
-export {
-  buildChapterTable,
-  chapterAtPage,
-  chapterByNumber,
-  chapterFocusLabel,
-  chapterNumber,
-  chapterTableSection,
-  chapterTableUsable,
-  chapterTokens,
-  pageRangeText,
-  pickChapterTable,
-  MIN_CHAPTERS,
-  MIN_CHAPTER_CHARS,
-  type ChapterEntry,
-  type LectureChapter,
-} from "./chapters";
 export {
   chapterSection,
   correctEstimate,

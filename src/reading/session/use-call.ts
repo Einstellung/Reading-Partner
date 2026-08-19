@@ -44,11 +44,8 @@ import {
   type RowChange,
 } from "../call-state";
 import { toolStatusLabel } from "../context";
-import {
-  chapterByNumber,
-  loadChapterTable,
-  type LectureChapter,
-} from "../lecture";
+import { chapterByNumber, type LectureChapter } from "../chapters";
+import { loadChapterTable } from "../lecture";
 import type { FiguresIndex } from "../figures";
 import { createLiveTurns, type LiveTurn } from "../live-turns";
 import { RESEARCH_TOOL_NAME, researchStatusLabel } from "../papers/research-agent";

@@ -1,4 +1,4 @@
-// The chapter table a lecture works from (src/reading/lecture/chapters.ts).
+// The book's chapter table (src/reading/chapters/table.ts).
 // Every case here is one of the five books measured in docs/09: a bookmark tree
 // that is the chapter list plus a cover entry, one with divider pages that hold
 // no text, one with a single-page entry, and two with no usable outline at all.
@@ -16,7 +16,7 @@ import {
   chapterTableUsable,
   pickChapterTable,
   MIN_CHAPTERS,
-} from "../../../src/reading/lecture";
+} from "../../../src/reading/chapters";
 
 // A book whose every page carries enough text to count as body, unless named in
 // `blank`, which stands in for a divider page.

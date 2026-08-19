@@ -7,8 +7,8 @@ import {
   turnLoadStatement,
   OUTLINE_BUDGET_TOKENS,
   type ChapterOutline,
-  type LectureChapter,
 } from "../../../src/reading/lecture";
+import type { LectureChapter } from "../../../src/reading/chapters";
 
 function outline(over: Partial<ChapterOutline> & { index: number }): ChapterOutline {
   return {

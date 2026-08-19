@@ -10,7 +10,7 @@
 // layer. `label` is what the chip says, `message` is what the reader is taken
 // to have said.
 
-import type { LectureChapter } from "./lecture";
+import type { LectureChapter } from "./chapters";
 
 export interface ReadingIntent {
   id: string;

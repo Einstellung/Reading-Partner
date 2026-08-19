@@ -21,7 +21,7 @@
 import { estimateTextTokens } from "../../budget";
 import { BOOK_PAGE_LABEL } from "../../fulltext/format";
 import type { Fulltext } from "../../fulltext/types";
-import type { LectureChapter } from "./chapters";
+import type { LectureChapter } from "../chapters";
 
 // What the prompt was loaded with this turn. Also the telemetry value
 // (platform/app/cache-telemetry.ts), so the three names are the axis a later

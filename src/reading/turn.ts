@@ -75,16 +75,11 @@ import {
 } from "./prep/classroom";
 import {
   buildReadChapterTool,
-  chapterByNumber,
-  chapterFocusLabel,
   chapterOutlineSection,
-  chapterTableSection,
-  chapterTokens,
   decideInline,
   lectureObservationSnapshot,
   loadChapterOutlines,
   loadChapterTable,
-  pageRangeText,
   selectLectureObservations,
   turnLoadStatement,
   wholeBookSection,
@@ -92,8 +87,15 @@ import {
   annotationPageMap,
   LECTURE_OBSERVATION_CAP_TIGHT,
   type InlineMode,
-  type LectureChapter,
 } from "./lecture";
+import {
+  chapterByNumber,
+  chapterFocusLabel,
+  chapterTableSection,
+  chapterTokens,
+  pageRangeText,
+  type LectureChapter,
+} from "./chapters";
 import { buildClassroomTools } from "./prep/tools";
 import { ADD_SOURCE_PROMPT, buildSourceTools } from "./prep/source-tool";
 import {

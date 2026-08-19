@@ -19,7 +19,7 @@ import type { AgentTool } from "../../ai/agent";
 import { BOOK_PAGE_LABEL, formatPages } from "../../fulltext/format";
 import type { Fulltext } from "../../fulltext/types";
 import { MAX_CHAPTER_PAGES } from "./inline";
-import type { LectureChapter } from "./chapters";
+import type { LectureChapter } from "../chapters";
 
 // The page-range form's cap. Four times read_pages', because the reader asking
 // for "the part about attention" on a book with no chapter table is asking for

@@ -12,7 +12,7 @@ import {
   chapterIntent,
   openingIntents,
 } from "../../src/reading/intents";
-import type { LectureChapter } from "../../src/reading/lecture";
+import type { LectureChapter } from "../../src/reading/chapters";
 
 const CH3: LectureChapter = {
   index: 4,

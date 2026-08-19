@@ -4,12 +4,8 @@
 import { expect, test } from "bun:test";
 import { MAX_PAGES } from "../../../src/fulltext/format";
 import { FULLTEXT_VERSION, type Fulltext } from "../../../src/fulltext/types";
-import {
-  buildReadChapterTool,
-  buildChapterTable,
-  READ_CHAPTER_MAX_PAGES,
-  type LectureChapter,
-} from "../../../src/reading/lecture";
+import { buildChapterTable, type LectureChapter } from "../../../src/reading/chapters";
+import { buildReadChapterTool, READ_CHAPTER_MAX_PAGES } from "../../../src/reading/lecture";
 
 function book(pages: number): Fulltext {
   return {

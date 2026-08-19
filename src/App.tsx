@@ -75,7 +75,7 @@ import ChatPipCard from "./ui/components/chat/ChatPipCard";
 import SettingsView from "./ui/components/SettingsView";
 import type { CallRow } from "./reading/call-state";
 import { openingIntents, type ReadingIntent } from "./reading/intents";
-import { chapterAtPage } from "./reading/lecture";
+import { chapterAtPage } from "./reading/chapters";
 import { resolveBookThread } from "./reading/session/book-thread";
 import { closeBook } from "./reading/session/close-book";
 import { useCall } from "./reading/session/use-call";

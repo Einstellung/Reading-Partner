@@ -3,7 +3,7 @@
 // carrying. Pure.
 
 import { estimateTextTokens } from "../../budget";
-import type { LectureChapter } from "./chapters";
+import type { LectureChapter } from "../chapters";
 import type { InlineMode } from "./inline";
 
 // --- the chapter spine (docs/09: 章脉络) ---
