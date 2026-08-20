@@ -30,6 +30,25 @@ export const CitationContext = createContext<CitationHandler | null>(null);
 // shell has for the moment before prep state loads.
 export const PrepSlugContext = createContext<KnownSlugs>(null);
 
+// Whether a page citation's quote is really the text on that page. A citation
+// that stands alone as a paragraph is drawn as a block printing its quote (see
+// citationBlock.ts), and that block asserts to a reader who has not opened the
+// book that these are the book's own words. Two ordinary things make that
+// false: the model paraphrases from memory instead of quoting, and text
+// extraction drifts from the page it was pulled from. Showing invented words as
+// the book's is worse than the highlight quietly missing, so the block is only
+// drawn for a quote that can still be found on its page; one that cannot falls
+// back to the chip, which claims nothing beyond the page number.
+//
+// Null = there is nothing to check against here (no book text on this surface),
+// and then a quote is shown as written. Same judgement as KnownSlugs above:
+// during the moment before the text layer loads, and on surfaces that never
+// have one, withholding a real quote costs more than showing one that later
+// turns out to be off.
+export type QuoteCheck = (page: number, quote: string) => boolean;
+
+export const QuoteCheckContext = createContext<QuoteCheck | null>(null);
+
 // Host services for inline [fig:N] cards (M9): resolve a figure by id, rasterize
 // its crop lazily, and jump the reader to it. Null = figures render as plain
 // text chips (the fallback when no book is open or figures aren't extracted).
