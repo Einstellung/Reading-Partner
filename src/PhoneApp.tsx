@@ -182,7 +182,7 @@ export default function PhoneApp() {
   return (
     // The backdrop the swipe reveals, and the clip that hides whatever has left
     // the screen. Only ever visible while a gesture or its animation is running.
-    <div className="relative h-full overflow-hidden bg-[#f1f3f5]">
+    <div className="relative h-full overflow-hidden bg-muted-soft">
       {/* p-safe: the notch and the home indicator (viewport-fit=cover). Fixed
           overlays are not covered by it and pad themselves — docs/pitfall/74. */}
       <div ref={surfaceRef} className="flex h-full flex-col bg-background p-safe">

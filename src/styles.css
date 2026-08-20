@@ -65,6 +65,19 @@
     --accent: #f0f0f0;
     --accent-foreground: #1b1b1b;
 
+    /* The neutral fills either side of --muted, named by weight and ordered
+       lightest first. faint is the shallowest step off --background (a note
+       body inset into a panel, a row hover, a code block outside the chat
+       window); soft is the fill that has to read as a shape of its own (a
+       status chip, a loading placeholder, the user bubble outside the chat
+       window); strong is the one that has to read as pressed. Each value is
+       the grey that was already written at those places, so the default
+       palette is unchanged — they are tokens because a neutral grey is the one
+       thing that cannot follow the ground when the ground turns warm. */
+    --muted-faint: #fafafa;
+    --muted-soft: #f5f5f5;
+    --muted-strong: #e5e5e5;
+
     --destructive: #b91c1c;
     --destructive-foreground: #ffffff;
     --destructive-border: #f0c8c8;
@@ -73,6 +86,17 @@
     --border: #dcdcdc;
     --input: #dcdcdc;
     --ring: #6c4fd0;
+
+    /* Rules lighter than --border, same weight names and again lightest first.
+       faint separates the rows of a dense list and only works while it stays
+       lighter than the rule that opens the list; subtle is that rule — under a
+       sticky header, between the sections of a panel; soft outlines a card in
+       the info and library screens, where a full --border reads as a box
+       drawn around it. Three steps rather than one because collapsing them
+       flattens relations the components are built on. */
+    --border-soft: #e6e6e6;
+    --border-subtle: #ececec;
+    --border-faint: #f6f6f6;
 
     /* The chat reading surface, three layers stepped down from white: the
        window, the user bubble on it, a code block inside either. Warm rather
@@ -83,7 +107,7 @@
        shared with the corner bubble, TalkView and the reader panels, all of
        which stay on white, so those two reach their elements through
        --chat-bubble-bg / --chat-code-bg, set on the CallView root and defaulted
-       back to the neutral greys everywhere else. */
+       to --muted-soft / --muted-faint everywhere else. */
     --chat-surface: #fcfcfb;
     --chat-bubble: #f2f0ec;
     --chat-code: #f7f5f1;
@@ -134,9 +158,15 @@
 
     --muted: #efe8d9;
     --accent: #efe8d9;
+    --muted-faint: #f7f2e5;
+    --muted-soft: #f2ebdd;
+    --muted-strong: #e7decb;
 
     --border: #ded5c2;
     --input: #ded5c2;
+    --border-soft: #e9e0cd;
+    --border-subtle: #eee6d5;
+    --border-faint: #f3eee0;
 
     --chat-surface: #f8f3e8;
     --chat-bubble: #f0e9da;
@@ -167,6 +197,9 @@
   --color-secondary-hover: var(--secondary-hover);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  --color-muted-faint: var(--muted-faint);
+  --color-muted-soft: var(--muted-soft);
+  --color-muted-strong: var(--muted-strong);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
@@ -174,6 +207,9 @@
   --color-destructive-border: var(--destructive-border);
   --color-destructive-hover: var(--destructive-hover);
   --color-border: var(--border);
+  --color-border-soft: var(--border-soft);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-faint: var(--border-faint);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-chat-surface: var(--chat-surface);

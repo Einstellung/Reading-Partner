@@ -34,7 +34,7 @@ export default function SavedArticleView({
     <div className="absolute inset-0 overflow-y-auto bg-background">
       <style>{ARTICLE_PROSE_CSS}</style>
       <div className="mx-auto flex w-full max-w-[46rem] flex-col px-4 py-5 sm:px-6 sm:py-8">
-        <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-2 border-b border-[#ececec] bg-background/85 px-4 py-2 backdrop-blur sm:-mx-6 sm:mb-6 sm:gap-3 sm:px-6 sm:py-3">
+        <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-2 border-b border-border-subtle bg-background/85 px-4 py-2 backdrop-blur sm:-mx-6 sm:mb-6 sm:gap-3 sm:px-6 sm:py-3">
           <Button variant="subtle" size="chip" onClick={onBack}>
             ‹ {backLabel}
           </Button>
@@ -71,7 +71,7 @@ export default function SavedArticleView({
           </p>
         )}
 
-        <div className="mt-8 border-t border-[#eee] pt-4 text-[12px] text-[#bbb] sm:mt-10">{article.url}</div>
+        <div className="mt-8 border-t border-border-subtle pt-4 text-[12px] text-[#bbb] sm:mt-10">{article.url}</div>
       </div>
     </div>
   );

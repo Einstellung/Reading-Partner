@@ -30,7 +30,7 @@ interface ObservationPanelProps {
 function ObservationRow({ entry }: { entry: Observation }) {
   const [expanded, setExpanded] = useState(false);
   return (
-    <li className="border-b border-[#eee] px-3 py-2">
+    <li className="border-b border-border-subtle px-3 py-2">
       <button
         type="button"
         className="flex w-full cursor-pointer flex-col items-start gap-1 border-0 bg-transparent p-0 text-left"
@@ -45,7 +45,7 @@ function ObservationRow({ entry }: { entry: Observation }) {
         </span>
       </button>
       {expanded && (
-        <div className="mt-2 rounded-md bg-[#fafafa] p-2 text-[12px] text-neutral-700">
+        <div className="mt-2 rounded-md bg-muted-faint p-2 text-[12px] text-neutral-700">
           <CitationContext.Provider value={null}>
             <Markdown text={entry.body} />
           </CitationContext.Provider>
@@ -100,7 +100,7 @@ export default function ObservationPanel({
 }: ObservationPanelProps) {
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-[#eee] px-3 py-2">
+      <div className="border-b border-border-subtle px-3 py-2">
         <div className="text-[13px] text-foreground">AI observations</div>
         <div className="mt-0.5 text-[11px] text-neutral-400">
           {lastDistilledAt
@@ -123,7 +123,7 @@ export default function ObservationPanel({
         {entries?.map((e) => <ObservationRow key={e.id} entry={e} />)}
       </ul>
 
-      <div className="border-t border-[#eee] px-3 py-2 text-[11px] text-neutral-400">
+      <div className="border-t border-border-subtle px-3 py-2 text-[11px] text-neutral-400">
         Observations are maintained by the AI. If one is off, say so in a conversation.
       </div>
     </div>

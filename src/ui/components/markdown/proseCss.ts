@@ -25,7 +25,7 @@ export const ARTICLE_PROSE_CSS = `
 .info-article-body h3 { font-size: 1.12em; }
 .info-article-body h4 { font-size: 1em; }
 .info-article-body h5, .info-article-body h6 { font-size: 0.92em; }
-.info-article-body hr { margin: 2em 0; border-top: 1px solid #e6e6e6; }
+.info-article-body hr { margin: 2em 0; border-top: 1px solid var(--border-soft); }
 
 .info-article-body ul, .info-article-body ol { margin: 0 0 1.1em; padding-left: 1.4em; }
 .info-article-body ul { list-style: disc; }
@@ -39,12 +39,12 @@ export const ARTICLE_PROSE_CSS = `
 .info-article-body dd { margin: 0.2em 0 0 1.4em; }
 
 .info-article-body blockquote { margin: 1.1em 0; padding-left: 1em; border-left: 3px solid #e0dcf3; color: #555; }
-.info-article-body pre { margin: 1.1em 0; overflow-x: auto; background: #f6f6f8; padding: 0.9em; border-radius: 8px; font-size: 0.9em; line-height: 1.6; }
+.info-article-body pre { margin: 1.1em 0; overflow-x: auto; background: var(--muted-faint); padding: 0.9em; border-radius: 8px; font-size: 0.9em; line-height: 1.6; }
 .info-article-body code, .info-article-body kbd, .info-article-body samp, .info-article-body tt { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }
 .info-article-body pre code { font-size: 1em; }
 
 .info-article-body table { margin: 1.2em 0; display: block; overflow-x: auto; border-collapse: collapse; }
-.info-article-body td, .info-article-body th { border: 1px solid #e6e6e6; padding: 0.4em 0.7em; }
+.info-article-body td, .info-article-body th { border: 1px solid var(--border-soft); padding: 0.4em 0.7em; }
 .info-article-body caption { margin-bottom: 0.5em; }
 
 .info-article-body img { max-width: 100%; height: auto; border-radius: 8px; margin: 1em 0; display: block; }
