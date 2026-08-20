@@ -189,6 +189,26 @@ export function orderTraceMarks(annotations: readonly Annotation[]): Annotation[
   return traceGroups(annotations).flatMap((g) => g.marks);
 }
 
+// The marks a set of conversations takes with it when it is deleted: the ids of
+// the page marks hosting them, and only those. A mark drawn on a reply may carry
+// an aiThreadId too — the AI pen opens a side conversation off a reply exactly
+// as it does off a passage — but the mark itself is the reader's on the book
+// continued (docs/09), so deleting that conversation leaves it in annotations
+// and in the trace list, the same way the highlight pen's mark on the same reply
+// is left. What it loses is its door.
+export function hostMarkIds(
+  annotations: Iterable<Annotation>,
+  threadIds: readonly string[],
+): string[] {
+  const wanted = new Set(threadIds);
+  const ids: string[] = [];
+  for (const a of annotations) {
+    if (isChatMark(a)) continue;
+    if (typeof a.aiThreadId === "string" && wanted.has(a.aiThreadId)) ids.push(a.id);
+  }
+  return ids;
+}
+
 // A stroke the reader has just made, as the surface reports it: which reply,
 // which words, and which copy of them. Everything else about the mark — its id,
 // its color, the conversation it may open — is the shell's to decide.

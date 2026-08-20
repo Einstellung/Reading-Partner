@@ -17,6 +17,7 @@ import {
   buildChatMark,
   chatMarkNote,
   chatMarksOn,
+  hostMarkIds,
   markedReplyText,
   locateChatMark,
   locateChatMarks,
@@ -207,6 +208,21 @@ test("the groups come out named, and an empty one is not a group", () => {
   ]);
   expect(traceGroups([chatMark("c1")]).map((g) => g.key)).toEqual(["chat"]);
   expect(traceGroups([])).toEqual([]);
+});
+
+// --- what a deleted conversation takes with it ----------------------------
+
+test("a deleted conversation takes the page mark hosting it and no mark off a reply", () => {
+  const hosted = { ...pageMark("p1"), aiThreadId: "aside-1" };
+  const elsewhere = { ...pageMark("p2"), aiThreadId: "aside-2" };
+  // The AI pen on a reply records the conversation it opened just as it does on
+  // a passage, and that is exactly the mark this must not reach.
+  const drawnOnAReply = chatMark("c1", { aiThreadId: "aside-1" });
+  const all = [hosted, elsewhere, drawnOnAReply, chatMark("c2")];
+
+  expect(hostMarkIds(all, ["aside-1"])).toEqual(["p1"]);
+  expect(hostMarkIds(all, ["aside-1", "aside-2"])).toEqual(["p1", "p2"]);
+  expect(hostMarkIds(all, [])).toEqual([]);
 });
 
 // --- creation -------------------------------------------------------------

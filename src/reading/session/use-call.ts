@@ -35,6 +35,7 @@ import {
   type ThreadMessage,
 } from "../../platform/app/threads";
 import { asideReceipt, asideReturn, type AsideReturn } from "../aside";
+import { hostMarkIds } from "../chat-marks";
 import type { DiagramCardData } from "../diagrams/cards";
 import type { Diagram } from "../diagrams/types";
 import type { Fulltext } from "../../fulltext";
@@ -1052,19 +1053,14 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     if (callViewRef.current === "bubble" || callViewRef.current === "chat-pip") hangUp();
   }, [hangUp]);
 
-  // The AI-pen mark hosting each of these conversations, where there is one. A
-  // mark is its conversation's only door, so a mark left behind by a deleted
-  // thread opens nothing — which is the same pairing, read from the other end,
-  // that takes a thread with its mark.
+  // The AI-pen mark on the page hosting each of these conversations, where there
+  // is one. A mark is its conversation's only door, so a mark left behind by a
+  // deleted thread opens nothing — which is the same pairing, read from the
+  // other end, that takes a thread with its mark. Which marks that pairing
+  // reaches, and why a mark drawn on a reply is not one of them, is
+  // reading/chat-marks.ts's.
   const marksOf = useCallback(
-    (threadIds: readonly string[]): string[] => {
-      const wanted = new Set(threadIds);
-      const marks: string[] = [];
-      for (const a of annsRef.current.values()) {
-        if (typeof a.aiThreadId === "string" && wanted.has(a.aiThreadId)) marks.push(a.id);
-      }
-      return marks;
-    },
+    (threadIds: readonly string[]): string[] => hostMarkIds(annsRef.current.values(), threadIds),
     [annsRef],
   );
 
@@ -1114,9 +1110,11 @@ export function useCall<M extends CallRow, I extends StagedImage>(
 
   // Delete the open conversation and the asides off it. Destructive and confirmed
   // at the button (DeleteThreadButton's two-step). Removes the threads from the
-  // book's threads file and, for each that a mark hosts, that mark too (the
-  // highlight and its trace-list entry disappear); the book-level thread has no
-  // mark of its own, but an aside drawn on the page while it ran does. Both
+  // book's threads file and, for each that a mark on the page hosts, that mark
+  // too (the highlight and its trace-list entry disappear); the book-level
+  // thread has no mark of its own, but an aside drawn on the page while it ran
+  // does. Marks drawn on the replies stay: they are the reader's on the book,
+  // not the conversation's (reading/chat-marks.ts: hostMarkIds). Both
   // removals are in-file rewrites, so per-file LWW sync carries them to other
   // devices. Unlike a hangup this does not distill — the talk is being thrown
   // away — and anything already distilled from it stays.
