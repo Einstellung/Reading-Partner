@@ -208,19 +208,6 @@ export function chapterByNumber(
   return chapters.find((c) => c.number === n) ?? null;
 }
 
-// The chapter a 1-based page falls in: the last one that starts at or before it.
-// Only ever asked at the moment the reader presses the chapter chip (docs/09:
-// the one moment the scroll position counts).
-export function chapterAtPage(
-  chapters: readonly TableChapter[],
-  page: number | null,
-): TableChapter | null {
-  if (page === null) return null;
-  let found: TableChapter | null = null;
-  for (const c of chapters) if (c.startPage <= page) found = c;
-  return found;
-}
-
 // How the chapter a conversation is parked on is named, in a prompt and in a
 // status row: the number the reader would say, its title, and its pages.
 export function chapterFocusLabel(chapter: TableChapter): string {

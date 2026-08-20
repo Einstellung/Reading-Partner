@@ -8,7 +8,6 @@ import { expect, test } from "bun:test";
 import { FULLTEXT_VERSION, type Fulltext } from "../../../src/fulltext/types";
 import {
   buildChapterTable,
-  chapterAtPage,
   chapterByNumber,
   chapterFocusLabel,
   chapterNumber,
@@ -155,21 +154,6 @@ test("sources are tried in order and the first usable one wins", () => {
   expect(pickChapterTable([outline, notes, prep], ft)!.map((c) => c.number)).toEqual([1, 2, 3]);
   expect(pickChapterTable([outline], ft)).toBeNull();
   expect(pickChapterTable([], ft)).toBeNull();
-});
-
-// The one moment a scroll position decides anything (docs/09).
-test("the chapter a page falls in is the last one that starts at or before it", () => {
-  const table = buildChapterTable(
-    [
-      { title: "第 1 章", startPage: 1 },
-      { title: "第 2 章", startPage: 20 },
-      { title: "第 3 章", startPage: 40 },
-    ],
-    book(60),
-  );
-  expect(chapterAtPage(table, 25)!.number).toBe(2);
-  expect(chapterAtPage(table, 40)!.number).toBe(3);
-  expect(chapterAtPage(table, null)).toBeNull();
 });
 
 test("the table's prompt block names the number the reader would say", () => {
