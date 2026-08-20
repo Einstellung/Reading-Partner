@@ -78,7 +78,13 @@ import type { ChatMarkHost } from "./ui/components/chat/chat";
 import ReadingPipCard from "./ui/components/chat/ReadingPipCard";
 import ChatPipCard from "./ui/components/chat/ChatPipCard";
 import SettingsView from "./ui/components/SettingsView";
-import type { CallRow, CallState, CallView as CallViewMode } from "./reading/call-state";
+import {
+  levelGate,
+  toolInCall,
+  type CallRow,
+  type CallState,
+  type CallView as CallViewMode,
+} from "./reading/call-state";
 import { asideAnchorAt, asideFraming, asideReturn } from "./reading/aside";
 import { buildChatMark, orderTraceMarks, type ChatMarkDraw } from "./reading/chat-marks";
 import { asideIntents, bookTextNotice, openingIntents, type ReadingIntent } from "./reading/intents";
@@ -232,7 +238,7 @@ export default function App() {
   const [stats, setStats] = useState<ViewStats | null>(null);
   const [title, setTitle] = useState<string | null>(null);
   const [status, setStatus] = useState("");
-  const [toolType, setToolType] = useState<ToolType>("none");
+  const [pickedTool, setPickedTool] = useState<ToolType>("none");
   const [penColor, setPenColor] = useState(ANNOTATION_COLORS[0].color);
   const [popup, setPopup] = useState<PopupState | null>(null);
   const [viewReady, setViewReady] = useState(false);
@@ -417,23 +423,6 @@ export default function App() {
     });
   }, [refreshTopics]);
 
-  // Apply the tool once the view is initialized (setTool before the pdf viewer
-  // is ready throws — PDFViewerApplication null, pitfall 11). The AI pen is the
-  // underline tool in a fixed purple.
-  useEffect(() => {
-    aiPenRef.current = toolType === "ai";
-    if (!viewReady) return;
-    const tool =
-      toolType === "none"
-        ? { type: "pointer" as const }
-        : toolType === "navlock"
-          ? { type: "navlock" as const }
-          : toolType === "ai"
-            ? { type: "underline" as const, color: AI_PEN_COLOR }
-            : { type: toolType, color: penColor };
-    viewRef.current?.setTool(tool);
-  }, [toolType, penColor, viewReady]);
-
   // Whether a finger may mark the page. Applied alongside the tool, and again
   // whenever the setting changes, so the reader never routes a finger by a stale
   // copy of it.
@@ -578,6 +567,29 @@ export default function App() {
         ? null
         : staged.flatMap((p) => (p.status === "ready" ? [{ data: p.data, mediaType: p.mediaType }] : [])),
   });
+
+  // Which of the two controls that open a level are live (docs/03), and the pen
+  // the rack acts with once the dim one is taken out of it. Both read the open
+  // call, so they sit below it and everything about the tool follows.
+  const gate = levelGate(call);
+  const toolType = toolInCall(pickedTool, call);
+
+  // Apply the tool once the view is initialized (setTool before the pdf viewer
+  // is ready throws — PDFViewerApplication null, pitfall 11). The AI pen is the
+  // underline tool in a fixed purple.
+  useEffect(() => {
+    aiPenRef.current = toolType === "ai";
+    if (!viewReady) return;
+    const tool =
+      toolType === "none"
+        ? { type: "pointer" as const }
+        : toolType === "navlock"
+          ? { type: "navlock" as const }
+          : toolType === "ai"
+            ? { type: "underline" as const, color: AI_PEN_COLOR }
+            : { type: toolType, color: penColor };
+    viewRef.current?.setTool(tool);
+  }, [toolType, penColor, viewReady]);
 
   // Everything a chat surface sends goes through here, so that pressing a chip
   // can do the one thing typing its words cannot: park the conversation on the
@@ -949,7 +961,7 @@ export default function App() {
       discardStagedImages,
       endBookTurns,
       clearSelectedMark: () => setSelectedAnnId(null),
-      resetTool: () => setToolType("none"),
+      resetTool: () => setPickedTool("none"),
       showMarks: (marks) => {
         // Every mark of the book, both kinds: the map is what gets written back
         // and what the trace list is built from. Only the engine's copy is
@@ -1227,7 +1239,9 @@ export default function App() {
   // book-level thread per book — created on first press, reopened with its
   // history on later presses (and after hangup), the way a mark hosts its
   // thread. It has no anchor, so it never joins the trace list; this button is
-  // its only way back. Opens straight to the main call view, skipping the bubble.
+  // how it is reached once it has been hung up, and while it is up the button
+  // goes dim and the corner card is the door. Opens straight to the main call
+  // view, skipping the bubble.
   //
   // Which thread that is comes from the file, not from the cache: see
   // reading/session/book-thread.ts.
@@ -1393,14 +1407,10 @@ export default function App() {
   // reader, so while it is up a stroke lands on a reply. Only there — in the
   // corner bubble the page is what the reader is looking at.
   //
-  // The AI pen is the one that is not always on offer: it opens a level, and
-  // only the lesson has one left to open.
+  // Whether the AI pen is on offer at all was settled above, in the tool: a rack
+  // that cannot open a level is not holding it.
   const chatPen: MarkPen | null =
-    toolType === "highlight" || toolType === "underline"
-      ? toolType
-      : toolType === "ai" && call?.isBook
-        ? "ai"
-        : null;
+    toolType === "none" || toolType === "navlock" ? null : toolType;
   const chatMarkHost = useMemo<ChatMarkHost | null>(
     () =>
       call?.view === "chat-main" && call.threadId
@@ -1496,9 +1506,10 @@ export default function App() {
             status={status}
             tool={{ type: toolType, color: penColor }}
             onToolChange={(t) => {
-              setToolType(t.type);
+              setPickedTool(t.type);
               setPenColor(t.color);
             }}
+            gate={gate}
             onOpenBookThread={openBookThread}
             onOpenSettings={() => setShowSettings(true)}
             settingsAlert={syncReport.alert !== "none"}
