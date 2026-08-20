@@ -1294,9 +1294,13 @@ export default function App() {
 
   // Jump the reading back to the thread's mark (from the reading corner card).
   // The book-level thread has no mark, so there is nothing to jump to.
+  // A conversation anchored on a mark drawn on a reply has no place either: the
+  // engine has never heard of that mark, and asking it to navigate names a page
+  // that does not exist.
   const onPositionClick = useCallback(() => {
     const c = currentCall();
     if (!c || !c.annotationId) return;
+    if (!isPageMark(annsRef.current.get(c.annotationId))) return;
     viewRef.current?.selectAnnotations([c.annotationId]);
     viewRef.current?.navigate({ annotationID: c.annotationId });
   }, [currentCall]);
@@ -1776,7 +1780,11 @@ export default function App() {
             </div>
             <div className="absolute right-3 top-3 z-50">
               {(() => {
-                const excerpt = markExcerpt(annsRef.current.get(call.annotationId)) || null;
+                // What the reader is looking at, so only a mark on the page has
+                // one. A conversation off a marked reply would otherwise print
+                // the AI's own words on the card that says where the book is.
+                const anchoring = annsRef.current.get(call.annotationId);
+                const excerpt = (isPageMark(anchoring) ? markExcerpt(anchoring) : "") || null;
                 return (
                   <ReadingPipCard
                     title={title ?? ""}

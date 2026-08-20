@@ -78,3 +78,12 @@ test("a stroke on a reply is passed on whole", () => {
   expect(body).toContain("asideAnchorAt(draw.messageTs, chatMarkWords(draw))");
 });
 
+// The corner card says where the reader is in the book. A conversation anchored
+// on a mark drawn on a reply is anchored on no page: the engine has never heard
+// of that mark, and the words under it are the AI's own.
+test("the reading corner card is only ever about the page", () => {
+  expect(decl("onPositionClick")).toContain(
+    "if (!isPageMark(annsRef.current.get(c.annotationId))) return;",
+  );
+  expect(app).toContain("isPageMark(anchoring) ? markExcerpt(anchoring) : \"\"");
+});
