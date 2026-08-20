@@ -64,3 +64,17 @@ test("the only conversation opened field by field is one that has no record yet"
   expect(app).not.toContain("isBook: true");
 });
 
+// A stroke that crossed a block has two strings: the verbatim one it is found
+// again by, and the one a person reads. Listing the mark's fields at the call
+// dropped the second, so the trace list, read_annotations, the note replayed to
+// the model and the line above the side conversation all showed two blocks run
+// together.
+test("a stroke on a reply is passed on whole", () => {
+  const body = decl("drawChatMark");
+  expect(body).toContain("buildChatMark({\n        ...draw,");
+  expect(body).not.toContain("text: draw.text");
+  // The span the side conversation is opened on is the readable string too. The
+  // anchor under the mark is not: it is what locates the words again.
+  expect(body).toContain("asideAnchorAt(draw.messageTs, chatMarkWords(draw))");
+});
+

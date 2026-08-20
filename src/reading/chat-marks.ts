@@ -309,6 +309,15 @@ export interface NewChatMark extends ChatMarkDraw {
   now?: number;
 }
 
+// The stroke's words as a person reads them. The rendering runs one block's
+// words straight into the next one's, which is right for finding a mark again
+// and wrong everywhere the words are shown — the trace list, read_annotations,
+// the note replayed to the model, the line above a side conversation. A stroke
+// that stayed inside one block, which is most of them, has only the one string.
+export function chatMarkWords(draw: Pick<ChatMarkDraw, "text" | "display">): string {
+  return draw.display?.trim() ? draw.display : draw.text;
+}
+
 // The annotation a pen leaves on a reply. Shaped like the ones the engine writes
 // — same id, type, text, color and dateCreated — because everything downstream
 // (the trace list, distillation, read_annotations) reads those fields and none
@@ -328,7 +337,7 @@ export function buildChatMark(input: NewChatMark): Annotation | null {
     // The readable string, and the verbatim one under chatAnchor: `text` is what
     // the trace list draws, what read_annotations reports and what the note
     // quotes back, and none of those may show two blocks run together.
-    text: input.display?.trim() ? input.display : input.text,
+    text: chatMarkWords(input),
     dateCreated: stamp,
     dateModified: stamp,
     ...(input.aiThreadId ? { aiThreadId: input.aiThreadId } : {}),

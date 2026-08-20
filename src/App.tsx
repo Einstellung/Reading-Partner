@@ -89,6 +89,7 @@ import { asideAnchorAt, asideFraming, asideReturn } from "./reading/aside";
 import { markExcerpt } from "./reading/reopen";
 import {
   buildChatMark,
+  chatMarkWords,
   markDoorThread,
   markOpenAction,
   orderTraceMarks,
@@ -916,16 +917,19 @@ export default function App() {
       // drawing, and when what it caught is too short to be a question — that
       // stroke is then an underline and nothing more, rather than a mark
       // pointing at a conversation that was never opened.
-      const asideAnchor = draw.pen === "ai" ? asideAnchorAt(draw.messageTs, draw.text) : null;
+      // The stroke's words as a person reads them, which is not the string it is
+      // found again by when it crossed a block (reading/chat-marks.ts:
+      // chatMarkWords). The whole draw is spread into the mark rather than
+      // copied field by field: the verbatim string, the copy of it and the
+      // readable one travel together or the mark is anchored on one and shown
+      // as another.
+      const asideAnchor = draw.pen === "ai" ? asideAnchorAt(draw.messageTs, chatMarkWords(draw)) : null;
       const aiThreadId = asideAnchor ? crypto.randomUUID() : undefined;
       const mark = buildChatMark({
+        ...draw,
         id: crypto.randomUUID(),
-        pen: draw.pen,
         color: draw.pen === "ai" ? AI_PEN_COLOR : penColor,
         threadId: lesson.threadId,
-        messageTs: draw.messageTs,
-        text: draw.text,
-        occurrence: draw.occurrence,
         ...(aiThreadId ? { aiThreadId } : {}),
       });
       if (!mark) return;
