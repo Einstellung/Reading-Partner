@@ -204,3 +204,54 @@ export function buildChatMark(input: NewChatMark): Annotation | null {
     },
   };
 }
+
+// What a reply the reader has drawn on carries when it is replayed next turn
+// (docs/09). The model wrote those words; which of them the reader kept is
+// something only this note can tell it.
+//
+// Appended as a bracketed block at the end, never woven through the sentences.
+// Replayed assistant messages are the model's own words and double as the shape
+// it writes the next ones in, so a delimiter wrapped around a marked phrase is a
+// syntax it starts emitting. A block after the reply, in brackets and naming the
+// reader as the one who did it, reads as a note on the reply rather than as part
+// of it — the same register as the page-window marker
+// (reading/figures/page-window.ts).
+//
+// Whitespace inside a passage is collapsed so each one is one line and a mark
+// spanning two paragraphs cannot break the block's shape. Nothing is truncated:
+// the note rides its message and falls out of context with it (turn.ts:
+// HISTORY_KEEP), so it needs no budget of its own.
+const MARKED_BY_READER = "marked by the reader in this reply:";
+
+export function chatMarkNote(marks: readonly Annotation[]): string {
+  const seen = new Set<string>();
+  for (const mark of marks) {
+    const anchor = chatAnchorOf(mark);
+    if (!anchor) continue;
+    const text = anchor.text.replace(/\s+/g, " ").trim();
+    // Two pens on the same sentence — a highlight and then the AI pen — is two
+    // marks and one passage. Saying it twice would read as two.
+    if (text !== "") seen.add(text);
+  }
+  const passages = [...seen].map((t) => `“${t}”`);
+  if (passages.length === 0) return "";
+  if (passages.length === 1) return `[${MARKED_BY_READER} ${passages[0]}]`;
+  return `[${MARKED_BY_READER}\n${passages.join("\n")}]`;
+}
+
+// One replayed row's text, with the note on it when the reader marked it.
+//
+// Only a reply carries one: the pens work on the AI's answers, and the reader's
+// own messages are not the book continued. Marks are matched by thread and
+// message stamp alone — no rendering is needed here, because the note quotes the
+// anchor's own words rather than pointing at a position in the text.
+export function markedReplyText(
+  row: { role: "user" | "ai"; text: string; ts: number },
+  annotations: readonly Annotation[],
+  threadId: string,
+): string {
+  if (row.role !== "ai") return row.text;
+  const note = chatMarkNote(chatMarksOn(annotations, threadId, row.ts));
+  if (note === "") return row.text;
+  return row.text ? `${row.text}\n\n${note}` : note;
+}

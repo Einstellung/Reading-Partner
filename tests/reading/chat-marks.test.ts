@@ -15,12 +15,15 @@ import {
 } from "../../src/platform/app/reader-contract";
 import {
   buildChatMark,
+  chatMarkNote,
   chatMarksOn,
+  markedReplyText,
   locateChatMark,
   locateChatMarks,
   mayMarkReply,
   occurrenceAt,
   orderTraceMarks,
+  type NewChatMark,
 } from "../../src/reading/chat-marks";
 import { annotationPageMap, observationScope } from "../../src/reading/lecture";
 import type { Observation } from "../../src/observation";
@@ -265,4 +268,72 @@ test("a pen draws on a settled reply and on nothing else", () => {
   // The app's words standing in for a reply, not the model's.
   expect(mayMarkReply({ ...reply, failed: true })).toBe(false);
   expect(mayMarkReply({ role: "ai", text: "  " })).toBe(false);
+});
+
+// --- what a marked reply carries into the next turn -------------------------
+
+const drawn = (id: string, over: Partial<NewChatMark> = {}): Annotation =>
+  buildChatMark({
+    id,
+    pen: "underline",
+    color: "#a28ae5",
+    threadId: "lesson",
+    messageTs: 1000,
+    text: "the words",
+    occurrence: 0,
+    now: 1700000000000,
+    ...over,
+  }) as Annotation;
+
+const said = { role: "ai" as const, text: "Attention is three matrices.", ts: 1000 };
+
+test("a marked reply comes back with the marked words named after it", () => {
+  const out = markedReplyText(said, [drawn("c1")], "lesson");
+  // The reply's own sentences come back byte for byte: nothing is wrapped
+  // around a phrase for the model to start writing that way itself.
+  expect(out.startsWith(`${said.text}\n\n[`)).toBe(true);
+  expect(out.endsWith("]")).toBe(true);
+  expect(out).toContain("reader");
+  expect(out).toContain("“the words”");
+});
+
+test("several marks are one block, one passage per line", () => {
+  const out = markedReplyText(
+    said,
+    [drawn("c1", { text: "three matrices" }), drawn("c2", { text: "Attention" })],
+    "lesson",
+  );
+  const block = out.slice(said.text.length + 2);
+  expect(block.split("\n")).toEqual(["[marked by the reader in this reply:", "“three matrices”", "“Attention”]"]);
+});
+
+test("two pens on the same sentence say it once", () => {
+  const out = markedReplyText(
+    said,
+    [drawn("c1", { text: "three matrices" }), drawn("c2", { text: "three matrices", pen: "highlight" })],
+    "lesson",
+  );
+  expect(out.split("“three matrices”")).toHaveLength(2);
+});
+
+// A mark spanning two paragraphs would otherwise break the one-per-line shape.
+test("a passage that runs across lines is collapsed to one", () => {
+  const out = markedReplyText(said, [drawn("c1", { text: "one\n\n two   three" })], "lesson");
+  expect(out).toContain("“one two three”");
+});
+
+test("nothing is added to a reply nobody drew on, or to the reader's own words", () => {
+  expect(markedReplyText(said, [], "lesson")).toBe(said.text);
+  expect(markedReplyText(said, [pageMark("p1")], "lesson")).toBe(said.text);
+  // Another message of this conversation, and the same stamp in another one.
+  expect(markedReplyText(said, [drawn("c1", { messageTs: 999 })], "lesson")).toBe(said.text);
+  expect(markedReplyText(said, [drawn("c1")], "aside-1")).toBe(said.text);
+  const asked = { role: "user" as const, text: "what is a head", ts: 1000 };
+  expect(markedReplyText(asked, [drawn("c1")], "lesson")).toBe(asked.text);
+});
+
+test("the note names the reader as the one who marked, and quotes nothing else", () => {
+  expect(chatMarkNote([])).toBe("");
+  expect(chatMarkNote([drawn("c1", { text: "   " })])).toBe("");
+  expect(chatMarkNote([drawn("c1")])).toBe("[marked by the reader in this reply: “the words”]");
 });

@@ -26,6 +26,7 @@ import { providers, toPiMessages } from "../ai/providers";
 import { estimateTextTokens, fitToBudget } from "../budget";
 import { EXPLAIN_KICKOFF } from "./intents";
 import { asideParentTail, ASIDE_KICKOFF } from "./aside";
+import { markedReplyText } from "./chat-marks";
 import { READING_LADDER, type ReadingReductionId } from "./ladder";
 import { isPageMark, type Annotation } from "../platform/app/reader-contract";
 import { buildSystemPrompt, readerProfileSection, type BooklistItem } from "../platform/app/context";
@@ -826,10 +827,15 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   }
 
   const threadMsgs = getThread(bookId, threadId)?.messages ?? [];
+  // A reply the reader drew on comes back with what they marked named after it
+  // (reading/chat-marks.ts). It rides the message, so it falls out of context
+  // when the message does, and it sits in the replayed history rather than in
+  // the prompt: the stable half stays byte-identical, and the only cache a new
+  // mark disturbs is the history's, once, on the turn after it was drawn.
   const prior = await Promise.all(
     threadMsgs.map(async (m) => ({
       role: m.role,
-      text: m.text,
+      text: markedReplyText(m, annotations, threadId),
       images: m.images?.length ? await readThreadImages(threadId, m.images) : undefined,
     })),
   );
@@ -844,7 +850,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   const parentTail: ReadingTurnMessage[] = parent
     ? asideParentTail(parent.messages, thread?.asideAnchor?.messageTs ?? null).map((m) => ({
         role: m.role,
-        text: m.text,
+        text: markedReplyText(m, annotations, parent.id),
       }))
     : [];
   if (signal?.aborted) return null;
