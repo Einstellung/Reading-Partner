@@ -86,7 +86,12 @@ import {
   type CallView as CallViewMode,
 } from "./reading/call-state";
 import { asideAnchorAt, asideFraming, asideReturn } from "./reading/aside";
-import { buildChatMark, orderTraceMarks, type ChatMarkDraw } from "./reading/chat-marks";
+import {
+  buildChatMark,
+  markDoorThread,
+  orderTraceMarks,
+  type ChatMarkDraw,
+} from "./reading/chat-marks";
 import { asideIntents, bookTextNotice, openingIntents, type ReadingIntent } from "./reading/intents";
 import { chapterAtPage } from "./reading/chapters";
 import { resolveBookThread } from "./reading/session/book-thread";
@@ -850,6 +855,19 @@ export default function App() {
     [syncTraceList],
   );
 
+  // The conversation a mark is a door into, when this device still has it
+  // (reading/chat-marks.ts: markDoorThread). Every press on a mark asks here
+  // first: annotations and threads sync as two files, so an id with no record
+  // behind it is a door to nothing, and opening a call on it would make an empty
+  // conversation the reader cannot get out of.
+  const markDoor = useCallback((ann: { id: string; aiThreadId?: unknown } | null | undefined) => {
+    const bookId = bookIdRef.current;
+    if (!bookId) return null;
+    const threadId = markDoorThread(ann, (t) => getThread(bookId, t) !== undefined);
+    const thread = threadId ? getThread(bookId, threadId) : undefined;
+    return threadId && thread ? { threadId, thread } : null;
+  }, []);
+
   // Clicking a mark. The engine shares the shell's document, so the rect is
   // already in viewport coordinates. An AI-pen mark (has aiThreadId) opens its
   // call bubble with history instead of the annotation editor.
@@ -861,19 +879,23 @@ export default function App() {
     const [l, , r, bottom] = params.rect;
     const anchor = { x: (l + r) / 2, y: bottom };
     const ann = params.annotation;
-    const threadId = ann.aiThreadId as string | undefined;
-    if (threadId) {
-      const bookId = bookIdRef.current;
-      const thread = bookId ? getThread(bookId, threadId) : undefined;
+    const door = markDoor(ann);
+    if (door) {
       setPopup(null);
       openThreadCall(
-        { threadId, annotationId: ann.id, ...asideFramingFor(thread), view: "bubble", anchor },
-        thread?.messages ?? [],
+        {
+          threadId: door.threadId,
+          annotationId: ann.id,
+          ...asideFramingFor(door.thread),
+          view: "bubble",
+          anchor,
+        },
+        door.thread.messages,
       );
     } else {
       setPopup({ annotation: ann, anchor });
     }
-  }, [openThreadCall, asideFramingFor]);
+  }, [openThreadCall, asideFramingFor, markDoor]);
 
   // A pen stroke on a reply (docs/09). The classroom's answers are the book
   // continued, so this writes the same kind of entry the page path writes, into
@@ -925,20 +947,26 @@ export default function App() {
   // same editor a mark on the page raises, at the words that were pressed.
   const openChatMark = useCallback(
     (ann: Annotation, at: { x: number; y: number }) => {
-      const threadId = ann.aiThreadId as string | undefined;
-      if (!threadId) {
+      const door = markDoor(ann);
+      if (!door) {
+        // No conversation behind it, or none left on this device: the editor at
+        // the words that were pressed, which is all such a mark has to show.
         setPopup({ annotation: ann, anchor: at });
         return;
       }
-      const bookId = bookIdRef.current;
-      const thread = bookId ? getThread(bookId, threadId) : undefined;
       setPopup(null);
       openThreadCall(
-        { threadId, annotationId: ann.id, ...asideFramingFor(thread), view: "chat-main", anchor: at },
-        thread?.messages ?? [],
+        {
+          threadId: door.threadId,
+          annotationId: ann.id,
+          ...asideFramingFor(door.thread),
+          view: "chat-main",
+          anchor: at,
+        },
+        door.thread.messages,
       );
     },
-    [openThreadCall, asideFramingFor],
+    [openThreadCall, asideFramingFor, markDoor],
   );
 
   // The pen stroke gives the host no coordinates, so track the last pen-lift
@@ -1186,25 +1214,25 @@ export default function App() {
   const openThreadForAnnotation = useCallback(
     (annotationId: string) => {
       const ann = annsRef.current.get(annotationId);
-      const threadId = ann?.aiThreadId as string | undefined;
-      const bookId = bookIdRef.current;
-      if (!threadId || !bookId) return;
-      const thread = getThread(bookId, threadId);
       viewRef.current?.selectAnnotations([annotationId]);
       viewRef.current?.navigate({ annotationID: annotationId });
       setSelectedAnnId(annotationId);
+      const door = markDoor(ann);
+      // The conversation is gone: the row still shows the words that were
+      // marked, and there is nothing to open beside them.
+      if (!door) return;
       openThreadCall(
         {
-          threadId,
+          threadId: door.threadId,
           annotationId,
-          ...asideFramingFor(thread),
+          ...asideFramingFor(door.thread),
           view: "chat-main",
           anchor: { x: 0, y: 0 },
         },
-        thread?.messages ?? [],
+        door.thread.messages,
       );
     },
-    [openThreadCall, asideFramingFor],
+    [openThreadCall, asideFramingFor, markDoor],
   );
 
   // The receipt chip in a conversation's transcript (ui/components/reader/

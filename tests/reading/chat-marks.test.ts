@@ -19,6 +19,7 @@ import {
   chatMarksOn,
   createStrokeGate,
   hostMarkIds,
+  markDoorThread,
   markedReplyText,
   locateChatMark,
   locateChatMarks,
@@ -328,6 +329,29 @@ test("what a mark is found by and what it is read as are two strings", () => {
   const legacy = { ...(inside as Annotation) };
   delete (legacy as { text?: unknown }).text;
   expect(chatMarkNote([legacy])).toContain("\u201Cone block\u201D");
+});
+
+// --- what a mark's door opens ---------------------------------------------
+
+// The conversations this device has a record of.
+const there =
+  (...ids: string[]) =>
+  (id: string) =>
+    ids.includes(id);
+
+test("a mark whose conversation is gone is a mark with no door", () => {
+  const withAside = chatMark("c1", { aiThreadId: "aside-1" });
+  expect(markDoorThread(withAside, there("aside-1"))).toBe("aside-1");
+  // annotations and threads are two files that sync apart: a device can hold
+  // the mark and not the conversation it points at. Opening a call on that id
+  // makes an empty one with no way back, and its first message is written down
+  // as a conversation of its own.
+  expect(markDoorThread(withAside, there())).toBeNull();
+  expect(markDoorThread(chatMark("c2"), there("aside-1"))).toBeNull();
+  expect(markDoorThread(pageMark("p1"), there("aside-1"))).toBeNull();
+  expect(markDoorThread(undefined, there("aside-1"))).toBeNull();
+  // A page mark's door is the same door.
+  expect(markDoorThread({ ...pageMark("p2"), aiThreadId: "t2" }, there("t2"))).toBe("t2");
 });
 
 // --- observation still finds the book it belongs to -----------------------

@@ -209,6 +209,27 @@ export function hostMarkIds(
   return ids;
 }
 
+// Whether a mark's door still leads anywhere, and where. `hasThread` is the
+// caller's lookup into the conversations this device holds.
+//
+// A mark carries the id of the conversation it opened; the conversations live in
+// another file, and the two sync apart. So a device can hold a mark whose
+// conversation another device deleted, and the id alone is not the door. Opening
+// a call on it would make a conversation with no aside frame, no history and no
+// way back — and the first message sent in it would be written down as a root of
+// its own. What such a mark has left to show is the words it was drawn on.
+// `id` is in the shape for the same reason traceGroups takes it: a parameter of
+// nothing but optional fields is a weak type, and TS rejects every caller for
+// sharing no property with it.
+export function markDoorThread(
+  ann: { id: string; aiThreadId?: unknown } | null | undefined,
+  hasThread: (threadId: string) => boolean,
+): string | null {
+  const opened = ann?.aiThreadId;
+  if (typeof opened !== "string" || opened === "") return null;
+  return hasThread(opened) ? opened : null;
+}
+
 // A stroke the reader has just made, as the surface reports it: which reply,
 // which words, and which copy of them. Everything else about the mark — its id,
 // its color, the conversation it may open — is the shell's to decide.
