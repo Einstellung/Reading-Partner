@@ -97,6 +97,44 @@ test("corrections have a quota of their own, past everything above them", () => 
   expect(picked.length).toBeLessThanOrEqual(LECTURE_OBSERVATION_CAP);
 });
 
+// docs/09, 2026-08-20: the classroom's reader has read none of the book, so
+// "they are on p.132" is the least of what a lecture turn should open with — and
+// reading-position entries are the newest there are, which is what put them
+// first. Kept, but last, and only if there is room.
+test("the reading position sinks to the end at book level and holds its place on a mark", () => {
+  const observations = [
+    obs({ id: "where", type: "reading-position", bookId: BOOK, updated: "2026-08-20" }),
+    obs({ id: "stuck", type: "stuck-point", bookId: BOOK, updated: "2026-08-01" }),
+  ];
+  const input = { observations, bookId: BOOK, annotationPages: new Map(), focus: null };
+  expect(
+    selectLectureObservations({ ...input, bookLevel: true }).map((p) => p.observation.id),
+  ).toEqual(["stuck", "where"]);
+  expect(selectLectureObservations(input).map((p) => p.observation.id)).toEqual(["where", "stuck"]);
+});
+
+// The band it is kept out of is the one with a cap, so a book-level turn full of
+// this book's own material spends none of it on the position.
+test("a full book-level turn spends no room on the reading position", () => {
+  const observations = [
+    ...Array.from({ length: 20 }, (_, i) =>
+      obs({ id: `pos-${i}`, type: "reading-position", bookId: BOOK, updated: "2026-08-20" }),
+    ),
+    ...Array.from({ length: 20 }, (_, i) =>
+      obs({ id: `stuck-${i}`, type: "stuck-point", bookId: BOOK, updated: "2026-08-19" }),
+    ),
+  ];
+  const picked = selectLectureObservations({
+    observations,
+    bookId: BOOK,
+    annotationPages: new Map(),
+    focus: null,
+    bookLevel: true,
+  });
+  expect(picked.length).toBe(LECTURE_OBSERVATION_CAP);
+  expect(picked.every((p) => p.observation.type === "stuck-point")).toBe(true);
+});
+
 test("the cap holds and nothing is picked twice", () => {
   const observations = Array.from({ length: 40 }, (_, i) =>
     obs({ id: `m-${i}`, bookId: BOOK, updated: `2026-08-${String((i % 28) + 1).padStart(2, "0")}` }),

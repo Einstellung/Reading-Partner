@@ -110,6 +110,13 @@ export interface LectureObservationInput {
   annotationPages: ReadonlyMap<string, number | null>;
   // The chapter in focus, or null. Only orders; never filters.
   focus?: LectureFocus | null;
+  // The conversation about the book as a whole, and its asides (docs/09,
+  // 2026-08-20). There, "this reader is on p.132" is close to false — they
+  // opened the blackboard because they are not getting through the book — so it
+  // is kept out of the two scope bands and can only arrive last, through the
+  // type-ordered fill below. On a marked passage the position is real and rides
+  // as it always has.
+  bookLevel?: boolean;
   limit?: number;
 }
 
@@ -154,8 +161,10 @@ export function selectLectureObservations(input: LectureObservationInput): Obser
     picked.push(pick);
   };
 
-  for (const p of scoped.filter((p) => p.scope === "chapter").slice(0, CHAPTER_HIT_CAP)) take(p);
-  for (const p of scoped.filter((p) => p.scope === "book").slice(0, BOOK_HIT_CAP)) take(p);
+  const inBand = (p: ObservationPick, scope: ObservationScope): boolean =>
+    p.scope === scope && !(input.bookLevel === true && p.observation.type === "reading-position");
+  for (const p of scoped.filter((p) => inBand(p, "chapter")).slice(0, CHAPTER_HIT_CAP)) take(p);
+  for (const p of scoped.filter((p) => inBand(p, "book")).slice(0, BOOK_HIT_CAP)) take(p);
   for (const p of scoped
     .filter((p) => p.observation.type === "correction" && !taken.has(p.observation.id))
     .slice(0, CORRECTION_QUOTA)) {

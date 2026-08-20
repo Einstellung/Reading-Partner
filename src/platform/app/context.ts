@@ -158,7 +158,21 @@ function teachingRules(bookLevel: boolean): string[] {
     "  much they know: start where their questions start, and adjust to how they",
     "  answer.",
   ];
-  if (!bookLevel) {
+  if (bookLevel) {
+    // The teaching discipline that follows from the premise stated above: they
+    // have read none of this. Every line here is something the model does
+    // otherwise — it writes to someone who has been through the book, because
+    // that is who a reading companion is usually talking to.
+    lines.push(
+      "- They have not read this book. Say what a page says instead of pointing at",
+      '  it: never "the diagram you saw on p.64" or "remember X from chapter 2". A',
+      "  concept you need again gets restated in one line before you build on it.",
+      "- Don't ask them what they made of a passage, or whether they remember one.",
+      "- Asked to teach a stretch of the book: compress it, go heavier where an",
+      "  observation says they got stuck, say plainly which parts they can skip, and",
+      "  end by pointing them at one passage or figure worth their own eyes.",
+    );
+  } else {
     lines.push(
       "- You can see the passage below, so refer to it naturally rather than",
       "  quoting it in full.",
@@ -199,6 +213,12 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
   push(
     (bookLevel
       ? [
+          // The premise, stated outright (docs/09, 2026-08-20): the reader has
+          // read none of this book and may never read more than a little of it.
+          // The old wording ("to be pointed at where to start") was written for
+          // someone about to read it themselves, which is the companion's
+          // reader, not this one.
+          //
           // Three conversations share this block, because an aside borrows its
           // parent's stable half verbatim to keep the cache prefix and then
           // prints the passage it was opened on a few blocks below. So it says
@@ -208,10 +228,12 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
           // is what replaced it, and it is vacuous on the lesson's own turns,
           // where nothing below names a passage.
           "You are a reading companion embedded in a PDF reader. The user opened a",
-          "conversation about the book as a whole — to be taught part of it, to be",
-          "pointed at where to start, or to ask what a chapter holds. Where the",
-          "reading context below names a passage, this turn is a side conversation",
-          "off that one and that passage is its subject.",
+          "conversation about the book as a whole. Assume they have read none of it",
+          "and may never read more than a little of it: you are how they get at this",
+          "book, and the book is what you draw on — the pages you cite, and the place",
+          "they open when they want to see something with their own eyes.",
+          "Where the reading context below names a passage, this turn is a side",
+          "conversation off that one and that passage is its subject.",
         ]
       : [
           "You are a reading companion embedded in a PDF reader. The user is reading",
@@ -259,7 +281,21 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
     `- Topic: ${ctx.topicName}`,
     `- File: ${ctx.fileName}`,
   ];
-  if (ctx.pageLabel) position.push(`- Page: ${ctx.pageLabel}`);
+  // What the page number is, on the door it came in by. On a marked passage it
+  // is where that passage sits. At book level it is the page they happen to have
+  // open — they came here because they are not reading it — so the line names
+  // itself for that and, with no chapter in focus to say what the talking is
+  // about, says that too. A page-mark aside is a marked passage: plain form.
+  const bookPage = bookLevel && ctx.aside?.from !== "mark";
+  if (ctx.pageLabel) {
+    position.push(`- ${bookPage ? "Page open on screen" : "Page"}: ${ctx.pageLabel}`);
+    if (bookPage && !ctx.focusLabel) {
+      position.push(
+        "  That is where they have the book open at this moment, not how far they have",
+        "  read and not what to talk about; the conversation decides that.",
+      );
+    }
+  }
   if (ctx.chapterTitle) position.push(`- Chapter: ${ctx.chapterTitle}`);
   // Which chapter the talking is about, and what it is not. An aside states the
   // chapter as a fact about the lesson it hangs off and stops there: what it is
@@ -271,11 +307,6 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
     position.push(
       `- This conversation is on ${ctx.focusLabel}. That, and not the page above, is`,
       "  what it is about; the reader can be scrolled anywhere while you talk.",
-    );
-  } else if (bookLevel && ctx.aside?.from !== "mark") {
-    position.push(
-      "- Where the reader is scrolled to is not the subject. Take that from the",
-      "  conversation, not from the page number.",
     );
   }
   // What this conversation is anchored on. A chat-span aside's anchor is words
@@ -300,11 +331,11 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
   }
   push(position.join("\n"));
 
-  // Page-anchored, so it rides only where there is a page: a chat-span aside's
-  // span came out of a reply and the text around the reader's scroll position
-  // has nothing to do with it.
-  const pageAnchored = !bookLevel || ctx.aside?.from === "mark";
-  if (pageAnchored && ctx.surroundingText && ctx.surroundingText.trim()) {
+  // Rides wherever the page is the passage's rather than whatever they have
+  // open — the same test as the page line above. A chat-span aside's span came
+  // out of a reply, and the text around the reader's scroll position has nothing
+  // to do with it.
+  if (!bookPage && ctx.surroundingText && ctx.surroundingText.trim()) {
     push(["Text around the marked passage:", '"""', ctx.surroundingText.trim(), '"""'].join("\n"));
   }
   if (ctx.fulltextAvailable === false) {
