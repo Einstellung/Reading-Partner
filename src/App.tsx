@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { open } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import {
+  isPageMark,
   type Annotation,
   type AnnotationPopupParams,
   type ViewInstance,
@@ -77,6 +78,7 @@ import ChatPipCard from "./ui/components/chat/ChatPipCard";
 import SettingsView from "./ui/components/SettingsView";
 import type { CallRow, CallState, CallView as CallViewMode } from "./reading/call-state";
 import { asideFraming, asideReturn } from "./reading/aside";
+import { orderTraceMarks } from "./reading/chat-marks";
 import { asideIntents, bookTextNotice, openingIntents, type ReadingIntent } from "./reading/intents";
 import { chapterAtPage } from "./reading/chapters";
 import { resolveBookThread } from "./reading/session/book-thread";
@@ -446,8 +448,9 @@ export default function App() {
     keepReadingPosition(bookId, state);
   }, []);
 
+  // Page marks first, classroom marks after (reading/chat-marks.ts).
   const syncTraceList = useCallback(() => {
-    setTraceAnns([...annsRef.current.values()]);
+    setTraceAnns(orderTraceMarks([...annsRef.current.values()]));
   }, []);
 
   const persistAnnotations = useCallback(() => {
@@ -771,7 +774,8 @@ export default function App() {
 
       if (aiCreated) {
         // Persist the aiThreadId into the engine model, open the thread + bubble.
-        viewRef.current?.setAnnotations([aiCreated.annotation]);
+        // A chat mark has no page anchor and is never the engine's to draw.
+        if (isPageMark(aiCreated.annotation)) viewRef.current?.setAnnotations([aiCreated.annotation]);
         const bookId = bookIdRef.current;
         // Drawn while the lesson is live: this is a side conversation off it
         // (docs/09), not an independent one. Everything else about the mark is
@@ -879,8 +883,11 @@ export default function App() {
       clearSelectedMark: () => setSelectedAnnId(null),
       resetTool: () => setToolType("none"),
       showMarks: (marks) => {
+        // Every mark of the book, both kinds: the map is what gets written back
+        // and what the trace list is built from. Only the engine's copy is
+        // filtered, and that happens where the reader is mounted (open-book.ts).
         annsRef.current = new Map(marks.map((a) => [a.id, a]));
-        setTraceAnns(marks);
+        setTraceAnns(orderTraceMarks(marks));
       },
       readerNotReady: () => setViewReady(false),
       takeBook: (bookId, name, buffer) => {
@@ -986,7 +993,7 @@ export default function App() {
       if (!prev) return;
       const updated: Annotation = { ...prev, ...patch, dateModified: new Date().toISOString() };
       annsRef.current.set(id, updated);
-      viewRef.current?.setAnnotations([updated]);
+      if (isPageMark(updated)) viewRef.current?.setAnnotations([updated]);
       persistAnnotations();
       syncTraceList();
       setPopup((p) => (p && p.annotation.id === id ? { ...p, annotation: updated } : p));
@@ -1000,8 +1007,13 @@ export default function App() {
     // Same as the outline jump: leaving the drawer open parks its backdrop over
     // the page we just navigated to, and the backdrop only answers a tap.
     setSidebarOpen(false);
-    viewRef.current?.selectAnnotations([id]);
-    viewRef.current?.navigate({ annotationID: id });
+    // A classroom mark is on no page: the engine has never heard of it, so
+    // selecting it there is at best a no-op and navigating to it asks for a
+    // page that does not exist. Selecting it in the list is all there is.
+    if (isPageMark(annsRef.current.get(id))) {
+      viewRef.current?.selectAnnotations([id]);
+      viewRef.current?.navigate({ annotationID: id });
+    }
     setSelectedAnnId(id);
   }, []);
 

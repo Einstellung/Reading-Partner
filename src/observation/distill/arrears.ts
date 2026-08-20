@@ -55,23 +55,36 @@ export interface DistillUnit {
 
 // Whether a thread's transcript is folded into another's, and whose.
 //
-// A chat-span aside has no annotation, so the sweep resolves it to page null and
-// markedText "" — it would spend a sub-agent run on a pass that cannot say where
-// in the book it happened. It is not a conversation of its own anyway: the
-// reader pulled a sentence out of the lesson and went back to it. So it joins
-// its parent, whose cursor then advances over both, and one learn session
-// distils once.
+// An aside with no page resolves to page null and markedText "" — it would spend
+// a sub-agent run on a pass that cannot say where in the book it happened. It is
+// not a conversation of its own anyway: the reader pulled a sentence out of the
+// lesson and went back to it. So it joins its parent, whose cursor then advances
+// over both, and one learn session distils once.
 //
-// A mark-anchored aside has a mark and a page, so it stays a unit, exactly like
-// the mark thread it is drawn beside. "Does it have an annotation" is the whole
-// test; there is no switch on how the aside was opened.
+// An aside drawn on a page has a mark and a page, so it stays a unit, exactly
+// like the mark thread it is drawn beside. "Is there a page" is the whole test.
+// It used to be "is there an annotation", which said the same thing until a pen
+// could mark an AI reply (docs/09): those marks are annotations too, and the
+// aside one of them opens has no page either.
+//
+// `pageless` is the annotation ids that sit on no page, which only the caller
+// can know — the rule is applied to the live store's records and to the sweep's
+// on-disk ones and neither carries the annotations. It names the exception
+// rather than the norm on purpose: an id that is not in it, including one that
+// is in no list the caller had, is treated as a page mark and keeps its own
+// unit, which is what every record written before chat marks existed is.
 //
 // An aside whose parent is not here is a unit of its own rather than nothing.
 // Deleting a parent cascades, but sync can leave one behind
 // (platform/app/threads.ts), and folding into a thread that does not exist is
 // how the reader's best material would go quietly missing.
-function foldsInto(t: UnitThread, present: ReadonlySet<string>): string | null {
-  if (t.annotationId !== "" || !t.parentThreadId) return null;
+function foldsInto(
+  t: UnitThread,
+  present: ReadonlySet<string>,
+  pageless?: ReadonlySet<string>,
+): string | null {
+  const onPage = t.annotationId !== "" && !pageless?.has(t.annotationId);
+  if (onPage || !t.parentThreadId) return null;
   return present.has(t.parentThreadId) ? t.parentThreadId : null;
 }
 
@@ -88,17 +101,20 @@ function plain(messages: readonly DistillMessage[]): DistillMessage[] {
 // mid-lesson and the reader goes back to the lesson after, so a merge by ts is
 // append-only in time — which is what lets one cursor, counted in messages,
 // index the lot across restarts.
-export function distillUnits(threads: readonly UnitThread[]): DistillUnit[] {
+export function distillUnits(
+  threads: readonly UnitThread[],
+  pageless?: ReadonlySet<string>,
+): DistillUnit[] {
   const present = new Set(threads.map((t) => t.id));
   const folded = new Map<string, DistillUnitPart[]>();
   for (const t of threads) {
-    const into = foldsInto(t, present);
+    const into = foldsInto(t, present, pageless);
     if (into === null) continue;
     folded.set(into, [...(folded.get(into) ?? []), { threadId: t.id, messages: plain(t.messages) }]);
   }
   const units: DistillUnit[] = [];
   for (const t of threads) {
-    if (foldsInto(t, present) !== null) continue;
+    if (foldsInto(t, present, pageless) !== null) continue;
     const own: DistillUnitPart = { threadId: t.id, messages: plain(t.messages) };
     const joined = folded.get(t.id);
     const parts = joined ? [own, ...joined] : [own];
@@ -114,11 +130,12 @@ export function distillUnits(threads: readonly UnitThread[]): DistillUnit[] {
 export function distillUnitOf(
   threads: readonly UnitThread[],
   threadId: string,
+  pageless?: ReadonlySet<string>,
 ): DistillUnit | null {
   const self = threads.find((t) => t.id === threadId);
   if (!self) return null;
-  const into = foldsInto(self, new Set(threads.map((t) => t.id))) ?? threadId;
-  return distillUnits(threads).find((u) => u.threadId === into) ?? null;
+  const into = foldsInto(self, new Set(threads.map((t) => t.id)), pageless) ?? threadId;
+  return distillUnits(threads, pageless).find((u) => u.threadId === into) ?? null;
 }
 
 export interface ThreadArrears {
@@ -173,6 +190,13 @@ export function toDistillAnnotations(
       createdAt: Number.isFinite(created) ? created : now(),
     };
   });
+}
+
+// The marks that sit on no page — the ones drawn on an AI reply — for the unit
+// rule above. Built from the same DistillAnnotation list the sweep already has,
+// so no caller needs the engine shapes to answer it.
+export function pagelessMarkIds(marks: readonly DistillAnnotation[]): Set<string> {
+  return new Set(marks.filter((m) => m.page === null).map((m) => m.id));
 }
 
 // Marks created strictly after the book's cursor. Marks with neither a passage

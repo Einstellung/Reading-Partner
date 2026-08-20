@@ -6,6 +6,7 @@ import { annotationPage, type Annotation } from "../../platform/app/reader-contr
 import { listThreads } from "../../platform/app/threads";
 import {
   distillUnitOf,
+  pagelessMarkIds,
   type DistillAnnotation,
   type DistillMessage,
   type DistillUnitPart,
@@ -80,7 +81,7 @@ export function hangupPass(input: {
   if (!records.some((t) => t.id === call.threadId)) {
     records.push({ id: call.threadId, annotationId: call.annotationId, messages: own });
   }
-  const unit = distillUnitOf(records, call.threadId) ?? {
+  const unit = distillUnitOf(records, call.threadId, pagelessMarkIds(annotations)) ?? {
     threadId: call.threadId,
     annotationId: call.annotationId,
     messages: own,

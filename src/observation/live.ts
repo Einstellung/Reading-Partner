@@ -40,6 +40,7 @@ import {
   SWEEP_INTERVAL_MS,
   MIN_NEW_MARKS,
   distillUnits,
+  pagelessMarkIds,
   threadArrears,
   toDistillAnnotations,
   countNewMarks,
@@ -390,7 +391,7 @@ async function collectArrears(
       const stored = await peekThreads(bookId);
       const busy = new Set(stored.filter((t) => threadBusy(t.id)).map((t) => t.id));
       const threads: ThreadArrears[] = [];
-      for (const unit of distillUnits(stored)) {
+      for (const unit of distillUnits(stored, pagelessMarkIds(marks))) {
         // A thread with a reply still being written is left out, and so is the
         // unit it is part of: a pass over half a sentence is a pass over the
         // wrong transcript, and the next sweep picks it up. Only threads whose

@@ -65,6 +65,7 @@ import {
   getObservationAdapter,
   observationPromptSection,
   notifyObservationChange,
+  pagelessMarkIds,
   profileForPrompt,
   type DistillAnnotation,
   type Observation,
@@ -857,7 +858,8 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     // Whose arrears these are (observation/distill/arrears.ts). A chat-span
     // aside has no mark, so it is no unit of its own and this stretch belongs to
     // the conversation it was pulled out of.
-    const unit = distillUnitOf(listThreads(bookId), threadId);
+    const marks = distillAnnotations();
+    const unit = distillUnitOf(listThreads(bookId), threadId, pagelessMarkIds(marks));
     // Where the pass says it happened follows the unit. Folded into the lesson,
     // the position is the reader's own page — the same answer the lesson gives
     // for itself — and there is no marked passage, because the lesson has none.
@@ -875,7 +877,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
         markedText: folded ? "" : selectionText,
         messages: unit?.messages ?? threadMsgs.map(({ role, text, ts }) => ({ role, text, ts })),
         ...(unit ? { parts: unit.parts } : {}),
-        annotations: distillAnnotations(),
+        annotations: marks,
       },
       TRIM_DISTILL_MIN_NEW,
     );
