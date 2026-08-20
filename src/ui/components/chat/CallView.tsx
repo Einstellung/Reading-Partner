@@ -36,15 +36,16 @@ interface CallViewProps {
 	// the window. Null, or an absent chapter, = no focus and no line.
 	chapterFocus?: ChapterFocusBarProps | null;
 	// The empty-state heading and composer placeholder. Default to the passage
-	// wording; the book-level thread (docs/03: top-bar AI button) passes the book
-	// title and "Ask about this book…".
+	// wording; the book-level thread (docs/03: the blackboard button) passes the
+	// book's title and the ask that opens a lesson.
 	emptyTitle?: string;
 	placeholder?: string;
 	// What an empty conversation offers under the composer (reading/intents.ts).
-	// Absent on a surface that has no opening intents — info's chat is one.
+	// Absent on a surface that has no opening intents — info's chat is one, and
+	// so is the book-level thread, where the reader types (docs/09).
 	intents?: readonly ReadingIntent[];
-	// One line under the chips saying why the list is shorter than it will be —
-	// the book is still being read through (reading/intents.ts bookTextNotice).
+	// One line under the composer saying why the book cannot be answered from yet
+	// (reading/intents.ts bookTextNotice).
 	// Absent = there is nothing to explain.
 	emptyNote?: string | null;
 	voice?: ComposerVoice | false;

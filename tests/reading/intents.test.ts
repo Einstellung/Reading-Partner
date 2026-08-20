@@ -1,29 +1,18 @@
 // The opening intents an empty conversation offers (src/reading/intents.ts).
 // The table is data, so what is worth pinning is what the render layer and the
 // turn assembly both depend on: the explain intent still sends the exact text
-// the bubble used to send unprompted, the two sets are distinct, and the
-// book-level set never points at a passage that is not there. Run: bun test.
+// the bubble used to send unprompted, the sets are distinct, and the book-level
+// thread offers nothing at all. Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
-  BOOK_INTENTS,
   EXPLAIN_KICKOFF,
   MARK_INTENTS,
   SPAN_INTENTS,
   asideIntents,
   bookTextNotice,
-  chapterIntent,
   openingIntents,
 } from "../../src/reading/intents";
-import type { TableChapter } from "../../src/reading/chapters";
-
-const CH3: TableChapter = {
-  index: 4,
-  number: 3,
-  title: "Coding Attention Mechanisms",
-  startPage: 64,
-  endPage: 107,
-};
 
 test("the first mark intent is the old unprompted kickoff, word for word", () => {
   expect(MARK_INTENTS[0].id).toBe("explain");
@@ -33,53 +22,18 @@ test("the first mark intent is the old unprompted kickoff, word for word", () =>
   );
 });
 
-test("a mark offers four ways in and the book-level thread its own", () => {
+test("a mark offers four ways in", () => {
   expect(MARK_INTENTS).toHaveLength(4);
   expect(openingIntents(false)).toBe(MARK_INTENTS);
-  expect(openingIntents(true)).toBe(BOOK_INTENTS);
-  expect(BOOK_INTENTS.length).toBeGreaterThan(0);
 });
 
-// The book-level thread has no mark, so its prompt carries no marked passage
-// (platform/app/context.ts drops every selection-derived part). An intent that
-// says "this passage" would be asking about something the model cannot see.
-test("no book-level intent points at a marked passage", () => {
-  for (const intent of BOOK_INTENTS) {
-    const message = intent.message.toLowerCase();
-    expect(message).not.toContain("passage");
-    expect(message).not.toContain("marked");
-    expect(message).not.toContain("highlight");
-  }
-});
-
-// docs/09: the chip carries the reader's own five requirements, and the label
-// carries the chapter's title and page range, so a press is never a guess about
-// which chapter was meant.
-test("the chapter chip names the chapter and asks for it the way the reader did", () => {
-  const chip = chapterIntent(CH3)!;
-  expect(chip.focusChapter).toBe(3);
-  expect(chip.label).toContain("ch.3");
-  expect(chip.label).toContain("p.64-107");
-  for (const part of ["p.64-107", "compressed", "stuck", "skip", "read myself"]) {
-    expect(chip.message).toContain(part);
-  }
-});
-
-// The focus is stored as the number the reader would say, so a chapter with no
-// printed number cannot be parked on and is not offered.
-test("a chapter with no printed number offers no chip", () => {
-  expect(chapterIntent({ ...CH3, number: null })).toBeNull();
-  expect(chapterIntent(null)).toBeNull();
-  expect(openingIntents(true, { ...CH3, number: null })).toBe(BOOK_INTENTS);
-});
-
-test("the chapter chip leads the book-level set, and only there", () => {
-  const withChapter = openingIntents(true, CH3);
-  expect(withChapter[0].id).toBe("teach-chapter");
-  expect(withChapter.length).toBe(BOOK_INTENTS.length + 1);
-  // A marked passage's conversation is about the passage; the chapter chip has
-  // no business in it.
-  expect(openingIntents(false, CH3)).toBe(MARK_INTENTS);
+// docs/09, 2026-08-20: the reader types. The chips that were here spoke to
+// someone deciding how to read the book themselves ("where should I start",
+// "key ideas so far"), and the entry no longer assumes anyone is reading it. The
+// one worth keeping said how to teach a chapter, and that is teaching discipline
+// in the system prompt now (pinned in tests/context.test.ts).
+test("the book-level thread opens with no chips at all", () => {
+  expect(openingIntents(true)).toEqual([]);
 });
 
 // A side conversation opened on words picked out of a reply: there is no mark
@@ -100,7 +54,7 @@ test("a side conversation drawn on the page keeps the mark's chips", () => {
 });
 
 test("every intent is a distinct id with a label and a message", () => {
-  const all = [...MARK_INTENTS, ...BOOK_INTENTS, ...SPAN_INTENTS];
+  const all = [...MARK_INTENTS, ...SPAN_INTENTS];
   expect(new Set(all.map((i) => i.id)).size).toBe(all.length);
   for (const intent of all) {
     expect(intent.label.length).toBeGreaterThan(0);
@@ -111,12 +65,14 @@ test("every intent is a distinct id with a label and a message", () => {
   }
 });
 
-// The chapter chip waits on the extraction, and on a long book that is tens of
-// seconds during which the entry opens on two generic chips with no reason for
-// the missing one. The reader gets a sentence instead of a guess.
+// The extraction is what a book-level conversation waits on, and on a long book
+// that is tens of seconds during which nothing it says can come out of the book.
+// The reader gets a sentence instead of a guess.
 test("a book still being extracted says so, in words", () => {
   const notice = bookTextNotice("extracting");
-  expect(notice).toBe("Still reading through this book — its chapters will show up here shortly.");
+  expect(notice).toBe(
+    "Still reading through this book — I can't teach from it just yet.",
+  );
   // Not a technical state and not an error: nothing about extraction, text
   // layers, parsing or failure.
   for (const jargon of ["extract", "fulltext", "parse", "error", "failed", "null"]) {
@@ -124,10 +80,10 @@ test("a book still being extracted says so, in words", () => {
   }
 });
 
-test("a book with no text layer says that, rather than promising chapters", () => {
+test("a book with no text layer says that, rather than promising it shortly", () => {
   const notice = bookTextNotice("unreadable");
   expect(notice).toBe("This book's pages have no text layer, so they can't be read as text.");
-  expect(notice).not.toContain("shortly");
+  expect(notice).not.toContain("just yet");
 });
 
 // Four books in five have no usable chapter table (docs/09). Once the text is

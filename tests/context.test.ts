@@ -80,7 +80,7 @@ test("the book-level prompt drops every selection-derived part but keeps positio
   // Position, chapter, booklist and tools all survive.
   expect(out).toContain("- Topic: what makes JITs fast");
   expect(out).toContain("- File: sea-of-nodes.pdf");
-  expect(out).toContain("- Page: 12");
+  expect(out).toContain("- Page open on screen: 12");
   expect(out).toContain("- Chapter: 5. Global Value Numbering");
   expect(out).toContain("The materials in this topic:");
   expect(out).toContain("read_pages(from, to)");
@@ -249,10 +249,12 @@ test("a chapter in focus outranks the page the reader is scrolled to", () => {
   });
   expect(focused).toContain("This conversation is on chapter 3");
   expect(focused).toContain("not the page above");
-  // With no focus, the book-level thread is told the same thing about scrolling
-  // in the general form.
+  // The chapter says what the talking is about, so the page line stops at the
+  // page: the two sentences would otherwise say the same thing twice.
+  expect(focused).not.toContain("the conversation decides that");
+  // With no focus, the page line is where that gets said.
   const loose = buildSystemPrompt({ ...base, bookLevel: true });
-  expect(loose).toContain("Where the reader is scrolled to is not the subject");
+  expect(loose).toContain("not what to talk about; the conversation decides that");
 });
 
 // --- asides (docs/03) ---
@@ -324,7 +326,7 @@ test("an aside states its parent's chapter without claiming to be about it", () 
     const out = buildSystemPrompt({ ...base, bookLevel: true, focusLabel, aside: { from } });
     expect(out).toContain("- The lesson this came out of is on chapter 3");
     expect(out).not.toContain("what it is about");
-    expect(out).not.toContain("Where the reader is scrolled to is not the subject");
+    expect(out).not.toContain("the conversation decides that");
   }
   // The lesson's own line is untouched.
   const lesson = buildSystemPrompt({ ...base, bookLevel: true, focusLabel });
@@ -332,20 +334,23 @@ test("an aside states its parent's chapter without claiming to be about it", () 
   expect(lesson).toContain("what it is about");
 });
 
-// The subject is a passage on a page, so the line that says the page is not the
-// subject cannot ride. It still does for a span out of a reply, where it is true.
+// The subject is a passage on a page, so the page is where that passage sits and
+// the line that hands the subject elsewhere cannot ride. It still does for a
+// span out of a reply, where the page is only what the reader has open.
 test("an aside drawn on the page is not told to ignore the page", () => {
   const drawn = buildSystemPrompt({ ...base, bookLevel: true, aside: { from: "mark" } });
-  expect(drawn).not.toContain("Where the reader is scrolled to is not the subject");
+  expect(drawn).toContain("- Page: 12");
+  expect(drawn).not.toContain("the conversation decides that");
   const span = buildSystemPrompt({ ...base, bookLevel: true, aside: { from: "chat" } });
-  expect(span).toContain("Where the reader is scrolled to is not the subject");
+  expect(span).toContain("- Page open on screen: 12");
+  expect(span).toContain("the conversation decides that");
 });
 
 // The shared opening says only what is true of all three doors, and hands the
 // reading context the job of saying which one this is.
 test("the shared opening is true whether or not a passage is named below", () => {
   const lesson = buildSystemPrompt({ ...base, bookLevel: true });
-  expect(lesson).toContain("Where the\nreading context below names a passage");
+  expect(lesson).toContain("Where the reading context below names a passage");
   // Nothing in it asserts that no passage is marked.
   expect(lesson).not.toContain("no passage is marked");
   expect(buildSystemPrompt({ ...base, bookLevel: true, aside: { from: "mark" } })).toContain(
@@ -378,13 +383,69 @@ test("the book-level thread still carries nothing selection-derived", () => {
 // The entry leads the reader through a chapter; it does not examine them
 // (docs/09, dropped 2026-08-19). Pinned so a quiz cannot come back by accident.
 test("nothing in the prompt examines the reader", () => {
-  const out = buildSystemPrompt(base);
-  for (const phrase of [
-    "close with one question",
-    "One question, never two",
-    "checks whether it landed",
-    "in their own words",
-  ]) {
-    expect(`${phrase}: ${out.includes(phrase)}`).toBe(`${phrase}: false`);
+  for (const bookLevel of [true, false]) {
+    const out = buildSystemPrompt({ ...base, bookLevel });
+    for (const phrase of [
+      "close with one question",
+      "One question, never two",
+      "checks whether it landed",
+      "in their own words",
+    ]) {
+      expect(`${phrase}: ${out.includes(phrase)}`).toBe(`${phrase}: false`);
+    }
   }
+});
+
+// --- the classroom's premise (docs/09, 2026-08-20) ---
+//
+// The reader has read none of this book and may never read more than a little of
+// it. The AI is how they get at it; the book is what the AI draws on and where
+// they go when they want to see something themselves. Pinned in both directions:
+// the premise is stated, and the wording written for a reader working through
+// the book on their own cannot come back.
+test("the book-level prompt states that the reader has not read the book", () => {
+  const out = buildSystemPrompt({ ...base, bookLevel: true });
+  expect(out).toContain("Assume they have read none of it");
+  expect(out).toContain("- They have not read this book.");
+  expect(out).not.toContain("pointed at where to start");
+  // The reading companion's own reader is the one who is reading.
+  const mark = buildSystemPrompt(base);
+  expect(mark).not.toContain("They have not read this book");
+  expect(mark).toContain("The user is reading");
+});
+
+test("the book-level prompt refuses to address the reader as someone who read it", () => {
+  const out = buildSystemPrompt({ ...base, bookLevel: true });
+  expect(out).toContain("Say what a page says instead of pointing at");
+  expect(out).toContain("gets restated in one line before you build on it");
+  expect(out).toContain("Don't ask them what they made of a passage");
+  // Grounding is untouched by any of it: every claim still carries a page.
+  expect(out).toContain("Ground every claim in the text");
+});
+
+// The shape of the answer the reader accepted twice (docs/09: 09:22 and 09:26).
+// It lived in the chapter chip's user message until the chips were dropped, so
+// the prompt is now the only place that carries it.
+test("how to teach a stretch of the book survived the chips", () => {
+  const out = buildSystemPrompt({ ...base, bookLevel: true });
+  for (const clause of [
+    "Asked to teach a stretch of the book: compress it",
+    "go heavier where an",
+    "which parts they can skip",
+    "one passage or figure worth their own eyes",
+  ]) {
+    expect(`${clause}: ${out.includes(clause)}`).toBe(`${clause}: true`);
+  }
+});
+
+// The page at book level is where they happen to have the book open. Saying it
+// as bare progress ("- Page: 132") is what let the model read the classroom as a
+// conversation with someone 132 pages in.
+test("the page a book-level thread reports is not read as progress", () => {
+  const out = buildSystemPrompt({ ...base, bookLevel: true });
+  expect(out).toContain("- Page open on screen: 12");
+  expect(out).toContain("not how far they have");
+  expect(out).not.toContain("- Page: 12");
+  // A marked passage sits on its page, and that page is stated plainly.
+  expect(buildSystemPrompt(base)).toContain("- Page: 12");
 });

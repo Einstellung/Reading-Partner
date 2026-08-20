@@ -349,6 +349,10 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   const thread = getThread(bookId, threadId);
   const kind: ThreadKind = threadKind({ ...thread, annotationId });
   const isBook = kind === "book";
+  // The classroom and everything opened off it: the reader has read none of this
+  // book (docs/09). It decides the prompt's opening and how much the reading
+  // position counts for; only a mark-anchored thread is outside it.
+  const bookLevel = kind !== "mark";
   // The conversation this aside was pulled out of. Read live, like everything
   // else about the thread: the parent goes on being written to while an aside is
   // open, and none of it is copied onto the aside.
@@ -482,6 +486,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
         bookId,
         annotationPages: annotationPageMap(annotations),
         focus,
+        bookLevel,
         ...(limit === undefined ? {} : { limit }),
       });
     observationSection = observationPromptSection(lectureObservationSnapshot(pick(), focus), true);
@@ -774,7 +779,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
       // read of the inlined chapter into a second write of it (measured at ~82k
       // tokens on a chapter-inlined turn). What the aside is gets said in the
       // volatile half — the anchor line below, and the load statement last.
-      bookLevel: kind !== "mark",
+      bookLevel,
       ...(aside ? { aside } : {}),
       aiLanguage: s.aiLanguage,
       citePaperSlugs: notes.length > 0,
