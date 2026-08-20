@@ -1,12 +1,5 @@
-// Emphasis around CJK, which CommonMark alone gets wrong.
-//
-// A `**` run closes only when it is right-flanking, and a run preceded by
-// punctuation has to be followed by whitespace or punctuation as well. Chinese
-// puts a full stop, a colon or a closing quote right before the delimiter and
-// an ideograph right after it, so the run never closes and the asterisks stay
-// on screen (docs/pitfall/153). The cjk-friendly plugins in remarkPlugins.ts
-// widen that rule; this pins the cases they fix and the ones they must leave
-// alone.
+// The CJK emphasis cases the remarkPlugins set has to get right, and the ones
+// it has to leave alone (docs/pitfall/153). Run: bun test.
 
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
@@ -35,9 +28,7 @@ test('the cases that already worked still work', () => {
 });
 
 test('inline math is untouched', () => {
-	// remark-math leaves the node for rehype-katex; without it the source stays
-	// verbatim. Either way the `$` pair must not become emphasis.
-	expect(html('数学 $x^2$ 行内')).not.toContain('<strong>');
+	expect(html('数学 $x^2$ 行内')).toContain('<code class="language-math math-inline">x^2</code>');
 });
 
 test('literal asterisks in prose stay literal', () => {

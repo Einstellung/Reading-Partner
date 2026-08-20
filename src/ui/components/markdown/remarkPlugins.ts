@@ -10,12 +10,13 @@
 // punctuation, the ideograph after it is a letter, so the run never closes and
 // the whole thing stays literal text (docs/pitfall/153). The plugins widen the
 // flanking rules for CJK; the strikethrough one patches gfm's `~~`, so it has
-// to run after remarkGfm.
+// to run after remarkGfm, and both come from /parseOnly because nothing here
+// serializes back to markdown.
 
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
-import remarkCjkFriendly from 'remark-cjk-friendly';
-import remarkCjkFriendlyGfmStrikethrough from 'remark-cjk-friendly-gfm-strikethrough';
+import remarkCjkFriendly from 'remark-cjk-friendly/parseOnly';
+import remarkCjkFriendlyGfmStrikethrough from 'remark-cjk-friendly-gfm-strikethrough/parseOnly';
 
 // Module-level constant so the array isn't recreated on each render.
 export const remarkPlugins = [
