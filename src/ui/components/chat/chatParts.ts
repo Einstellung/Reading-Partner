@@ -14,7 +14,6 @@
 import type { FC } from "react";
 import type { InfoCard } from "../../../info/briefing/cards";
 import type { AsideCard } from "../../../reading/aside";
-import type { DiagramCard } from "../../../reading/diagrams/cards";
 import type { ReadingCard } from "../../../reading/rehearsal/cards";
 import type {
   PersistedCardPayload,
@@ -25,14 +24,14 @@ import type { ThreadMessage } from "./types";
 import type { ToolStatus } from "../../../ai/tool-status";
 
 // The domain payload a card renders. Payload types stay in the domain layer
-// (info/briefing/cards.ts, reading/rehearsal/cards.ts, reading/diagrams/cards.ts);
-// this protocol only references the union, so the dependency direction stays
+// (info/briefing/cards.ts, reading/rehearsal/cards.ts, reading/aside.ts); this
+// protocol only references the union, so the dependency direction stays
 // components -> domain and never the reverse. Each unit contributes its own
-// member — a unit, not a whole domain: reading/diagrams contributes separately
-// from reading/rehearsal so neither has to import the other to be in the union.
-// The registry (ui/components/cardRegistry.ts, one level above chat/) is where
-// the components are gathered.
-export type CardPayload = InfoCard | ReadingCard | DiagramCard | AsideCard;
+// member — a unit, not a whole domain: reading/aside contributes separately from
+// reading/rehearsal so neither has to import the other to be in the union. The
+// registry (ui/components/cardRegistry.ts, one level above chat/) is where the
+// components are gathered.
+export type CardPayload = InfoCard | ReadingCard | AsideCard;
 export type CardKind = CardPayload["kind"];
 
 // The component table the render layer looks a card up in, by kind. The mapped
@@ -112,12 +111,11 @@ export function messageToParts(m: ThreadMessage): ChatPart[] {
 //
 // A row carrying a card part renders as the card and nothing else
 // (MessageBubble short-circuits it), so that row's `text` is not something the
-// reader has ever been shown. On a drawn diagram it is the empty string; on an
-// aside's receipt it is the sentence written for the model to read on the
-// lesson's next turn, and the glance was printing that to the reader verbatim,
-// as the newest row, immediately after every return. Card rows are skipped and
-// the prose above them answers instead — for any kind of card, including one
-// this version has no component for.
+// reader has ever been shown. On an aside's receipt it is the sentence written
+// for the model to read on the lesson's next turn, and the glance was printing
+// that to the reader verbatim, as the newest row, immediately after every
+// return. Card rows are skipped and the prose above them answers instead — for
+// any kind of card, including one this version has no component for.
 export function chatGlance(messages: readonly ThreadMessage[]): string | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
@@ -233,11 +231,6 @@ export function isPersistableCardKind(kind: CardKind): boolean {
     kind === "briefing-ready" ||
     kind === "profile-update" ||
     kind === "rehearsal-decision" ||
-    // A diagram is part of the explanation around it: reopening the thread to
-    // find prose pointing at a picture that is gone is worse than not having
-    // drawn it. Cheap to keep — what is stored is the structure the model wrote,
-    // and the picture is laid out again from it on open.
-    kind === "diagram" ||
     // An aside's receipt is the only door back into a side conversation pulled
     // out of a reply (reading/aside.ts): it carries no mark and no page, so the
     // chip in the lesson's transcript is where it is reached from. Losing the

@@ -5,7 +5,7 @@
 
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { CardRegistry } from "../../../src/ui/components/chat/chatParts";
+import type { CardPayload, CardRegistry } from "../../../src/ui/components/chat/chatParts";
 import type { ThreadMessage } from "../../../src/ui/components/chat/types";
 import type { RehearsalDecisionCardData } from "../../../src/reading/rehearsal/cards";
 import { useDom } from "../../support/dom";
@@ -83,6 +83,26 @@ test("the provider the shells mount renders the real card", () => {
     </CardRegistryProvider>,
   );
   expect(html).toContain("Endings");
+});
+
+// A thread written by an older version carries card kinds this one may no
+// longer have a component for — a drawn diagram, from before that feature was
+// removed. The lookup misses, that row renders nothing, and the conversation
+// around it comes out as it always did.
+test("a card kind with no component is skipped and the rest of the thread renders", () => {
+  const stale = { kind: "diagram", diagram: { nodes: [] } } as unknown as CardPayload;
+  const messages: ThreadMessage[] = [
+    { role: "ai", text: "the words above the picture", ts: 1 },
+    { role: "ai", text: "", ts: 2, parts: [{ type: "card", id: "old", card: stale }] },
+    { role: "user", text: "and the question after it", ts: 3 },
+  ];
+  const html = renderToStaticMarkup(
+    <CardRegistryProvider>
+      <MessageList messages={messages} />
+    </CardRegistryProvider>,
+  );
+  expect(html).toContain("the words above the picture");
+  expect(html).toContain("and the question after it");
 });
 
 // The shells themselves. Each mounts InfoHome where its screens go, and every

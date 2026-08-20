@@ -33,9 +33,9 @@ interface CallBubbleProps {
 	streaming?: boolean;
 	onStop?(): void;
 	voice?: ComposerVoice | false;
-	// What a card in this conversation raises. The bubble carries cards too — a
-	// diagram drawn in a classroom turn lands here when the reader never expanded
-	// to chat-main — so it forwards the dispatcher the same way CallView does.
+	// What a card in this conversation raises. The bubble carries cards too — an
+	// aside's receipt lands here when the reader never expanded to chat-main — so
+	// it forwards the dispatcher the same way CallView does.
 	onCardAction?: CardActionHandler;
 	// What an empty conversation offers instead of an unprompted answer
 	// (reading/intents.ts). Shown only while the thread has nothing in it.

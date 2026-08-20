@@ -127,11 +127,7 @@ function host(
     newRow: (row: CallRow) => row,
     // The card channel the shell owns (the receipt's chip is a card part, and
     // the render layer's protocol is not this layer's to import).
-    cards: {
-      id: (prefix: string) => `${prefix}-1`,
-      row: (_cardId, _card, ts) => ({ role: "ai" as const, text: "", ts }),
-      write: (row: CallRow) => row,
-    },
+    cards: { id: (prefix: string) => `${prefix}-1` },
     maxImages: 3,
     imageLimitHint: "",
     loadingImage: (id: string) => ({ id }),

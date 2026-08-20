@@ -39,9 +39,9 @@ export interface ReadingContext {
   // line telling the model it can't page through or search this book.
   fulltextAvailable?: boolean;
   materials?: BooklistItem[];
-  // The visual-aid block (reading/diagrams/prompt.ts): the figure catalog plus
-  // when to cite a figure, draw one, or do neither. Ordered around the reader's
-  // page, so it counts as volatile and sits after the position.
+  // The visual-aid block (reading/figures/prompt.ts): the figure catalog plus
+  // when to cite a figure and when to answer in words instead. Ordered around
+  // the reader's page, so it counts as volatile and sits after the position.
   figureCatalog?: string;
   // The names of the tools actually mounted for this call. The tools paragraph
   // is generated from it and appears only when it names something.

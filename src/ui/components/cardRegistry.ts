@@ -13,13 +13,11 @@
 
 import { ASIDE_CARD_REGISTRY } from "./reader/AsideCard";
 import type { CardRegistry } from "./chat/chatParts";
-import { DIAGRAM_CARD_REGISTRY } from "./diagram/DiagramCard";
 import { INFO_CARD_REGISTRY } from "./info/InfoCards";
 import { READING_CARD_REGISTRY } from "./reader/RehearsalCard";
 
 export const CARD_REGISTRY: CardRegistry = {
   ...INFO_CARD_REGISTRY,
   ...READING_CARD_REGISTRY,
-  ...DIAGRAM_CARD_REGISTRY,
   ...ASIDE_CARD_REGISTRY,
 };

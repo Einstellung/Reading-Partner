@@ -19,9 +19,9 @@ export interface CatalogOptions {
   // When the catalog is capped, keep the figures nearest this 1-based page.
   currentPage?: number | null;
   // The line above the list. Overridden by the visual-aid block in
-  // reading/diagrams/prompt.ts, which states when to cite a figure as part of a
-  // larger rule covering drawing one too — so that judgement is written in one
-  // place and this file does not repeat half of it.
+  // reading/figures/prompt.ts, which states when to cite a figure and when to
+  // answer in words instead — so that judgement is written in one place and this
+  // file does not repeat half of it.
   heading?: string;
 }
 

@@ -4,6 +4,7 @@ export type { Figure, FigureBBox, FiguresIndex } from "./types";
 export { FIGURES_VERSION } from "./types";
 export { ensureFigures, getFigures, parseFiguresCache } from "./store";
 export { buildFigureCatalog, selectCatalogFigures, type CatalogOptions } from "./catalog";
+export { buildVisualAidGuidance, type VisualAidOptions } from "./prompt";
 export {
   renderFigure,
   renderPageImage,

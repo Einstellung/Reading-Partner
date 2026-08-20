@@ -44,8 +44,7 @@ import { chapterAt } from "../fulltext/query";
 import { getFulltext, saveFulltext } from "../fulltext/store";
 import type { Fulltext } from "../fulltext/types";
 import { buildFigureTools } from "./figures/tools";
-import { buildDiagramTools, type DiagramToolDeps } from "./diagrams/tools";
-import { buildVisualAidGuidance } from "./diagrams/prompt";
+import { buildVisualAidGuidance } from "./figures/prompt";
 import { renderFigure, renderPageImage } from "./figures/render";
 import {
   attachPageWindow,
@@ -219,11 +218,6 @@ export interface ReadingTurnInput {
   // the figure renderer is: it needs a canvas and a loaded pdf.js, and the
   // assembly around it has to run under `bun test`.
   renderPage?: PageRenderFn;
-  // The channel draw_diagram / update_diagram write through: the caller owns the
-  // chat rows and the thread file, this assembly only mounts the tools. Absent
-  // in headless tests and on any surface with no card rows, and then the two
-  // tools are not mounted at all and the prompt does not offer them.
-  diagrams?: DiagramToolDeps;
 }
 
 // One page of the open book as an image, with the pixel size it came out at so
@@ -343,7 +337,6 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
       const r = await renderPageImage(bookId, buffer, pageNo, widthPx);
       return r ? { data: r.base64, mediaType: r.mimeType, width: r.width, height: r.height } : null;
     },
-    diagrams,
   } = input;
   const { topicId, topicName, fileName, pageLabel, pageIndex, files } = context;
   const materials = await gatherTopicMaterials(files, bookId, currentFulltext, annotations);
@@ -634,14 +627,6 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     });
   }
 
-  // Drawing (docs/40). Only where the caller owns chat rows to put a card in:
-  // mounting the tools is promising the reader a picture, so a surface that
-  // cannot show one must not be told it can draw. Not gated on the document
-  // having figures — the commonest use is a structure the book never drew at
-  // all.
-  const canDraw = !!diagrams && currentFulltext?.status === "ok";
-  if (canDraw && diagrams) tools = [...tools, ...buildDiagramTools(diagrams)];
-
   // Saved info articles (docs/21): the model can list what the reader kept and
   // put one into this book's prep list, then read it with read_paper. Gated on
   // there being something kept — a tool whose only possible answer is "nothing"
@@ -774,14 +759,13 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
       surroundingText: surrounding,
       fulltextAvailable: currentFulltext?.status === "ok",
       materials: dropped.has("booklist-thin") ? booklistThin : booklist,
-      // The whole visual-aid ladder, not the bare figure list: when to cite a
-      // figure and when to draw one is one judgement and is written in one place
-      // (reading/diagrams/prompt.ts).
+      // The whole visual-aid block, not the bare figure list: when to cite a
+      // figure and when to answer in words instead is one judgement and is
+      // written in one place (reading/figures/prompt.ts).
       figureCatalog: buildVisualAidGuidance({
         figures: figuresIndex,
         currentPage: page ?? currentPage ?? null,
         omitCatalog: dropped.has("figure-catalog"),
-        canDraw,
       }),
       toolNames,
       // An aside takes its parent's framing, which is what keeps the stable half

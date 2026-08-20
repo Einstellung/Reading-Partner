@@ -25,7 +25,6 @@ import {
   createAsideThread,
   deleteThreadTree,
   getThread,
-  patchThreadMessage,
   readThreadImages,
   saveThreadImages,
   setThreadFocusChapter,
@@ -37,8 +36,6 @@ import {
 import { asideReceipt, asideReturn, type AsideReturn } from "../aside";
 import { hostMarkIds } from "../chat-marks";
 import { markExcerpt, reopenCall } from "../reopen";
-import type { DiagramCardData } from "../diagrams/cards";
-import type { Diagram } from "../diagrams/types";
 import type { Fulltext } from "../../fulltext";
 import { distillThread, type DistillAnnotation } from "../../observation";
 import {
@@ -91,19 +88,13 @@ export interface CallShapes<M extends CallRow, I extends StagedImage> {
   // The staged list as the send needs it, and null while any of them is still
   // compressing — the composer disables the button then too.
   sendableImages(staged: I[]): CompressedImage[] | null;
-  // The card channel, for the tools that put a picture in the conversation
-  // (docs/40). A card *part* belongs to the render layer's protocol
+  // The card channel. A card *part* belongs to the render layer's protocol
   // (ui/components/chat/chatParts), which this layer may not import, so the
-  // shell supplies the three operations and the session decides when they
-  // happen — the same split as newRow/toDisplay above. Absent on a surface with
-  // no cards, and then the drawing tools are not mounted at all.
+  // shell supplies the operation and the session decides when it happens — the
+  // same split as newRow/toDisplay above. Absent on a surface with no cards.
   cards?: {
     // A fresh, process-unique card id.
     id(prefix: string): string;
-    // A standalone AI row carrying one diagram card.
-    row(cardId: string, card: DiagramCardData, ts: number): M;
-    // That row with the card's payload replaced.
-    write(row: M, cardId: string, card: DiagramCardData): M;
   };
 }
 
@@ -188,9 +179,6 @@ export interface CallController<M extends CallRow, I extends StagedImage> {
   // the call goes too if it was on any of them. The mark itself is the shell's,
   // which is mid-deletion when it calls this.
   dropThread(annotationId: string, threadId: string | undefined): void;
-
-  // The reader stepped a staged diagram card to another step.
-  stepDiagram(cardId: string, stage: number): void;
 
   // The open book's chapter table, or null when it has none worth using
   // (reading/lecture). The chapter chip is built from it, and it is what a
@@ -411,76 +399,6 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     })();
   }, []);
 
-  // --- drawn diagrams (docs/40) ---------------------------------------------
-  //
-  // A diagram lives in the thread file and nowhere else. Every read goes back to
-  // it rather than to a map kept alongside, and that is what makes the two cases
-  // that matter work: update_diagram called in the turn *after* the one that
-  // drew — which is every case it exists for, since "I still don't follow"
-  // always arrives a turn later — and a thread reopened after a restart, where
-  // the card comes back carrying the same id it was given.
-  const findDiagramCard = useCallback(
-    (bookId: string, threadId: string, cardId: string): { ts: number; card: DiagramCardData } | null => {
-      for (const m of getThread(bookId, threadId)?.messages ?? []) {
-        for (const part of m.parts ?? []) {
-          if (part.type !== "card" || part.id !== cardId) continue;
-          if (part.card.kind !== "diagram") continue;
-          return { ts: m.ts, card: part.card as unknown as DiagramCardData };
-        }
-      }
-      return null;
-    },
-    [],
-  );
-
-  // Put a diagram card on a thread: a new row when `at` is null, otherwise the
-  // row at that timestamp rewritten. Both mirrors are written — the stored one
-  // always, the one on screen only while that conversation is the open one, so a
-  // diagram edited after the reader walked away is still right when they return.
-  const writeDiagramCard = useCallback(
-    (bookId: string, threadId: string, cardId: string, card: DiagramCardData, at: number | null) => {
-      const cards = shapes.current.cards;
-      if (!cards) return;
-      const part = {
-        type: "card" as const,
-        id: cardId,
-        card: card as unknown as PersistedCardPayload,
-      };
-      if (at === null) {
-        const ts = Date.now();
-        dispatch({ type: "row-inserted-before-last", threadId, row: cards.row(cardId, card, ts) });
-        appendMessage(bookId, threadId, { role: "ai", text: "", ts, parts: [part] });
-        return;
-      }
-      const row =
-        callRef.current?.threadId === threadId
-          ? callRef.current.messages.find((m) => m.ts === at && m.role === "ai")
-          : undefined;
-      if (row) dispatch({ type: "row-replaced", threadId, ts: at, row: cards.write(row, cardId, card) });
-      patchThreadMessage(bookId, threadId, at, { parts: [part] });
-    },
-    [],
-  );
-
-  // The reader stepped a staged diagram. Persisted rather than held in the
-  // component, so reopening the thread comes back to the step they had reached
-  // instead of rewinding the build-up to its first frame.
-  const stepDiagram = useCallback(
-    (cardId: string, stage: number) => {
-      const bookId = bookIdRef.current;
-      const threadId = callRef.current?.threadId;
-      if (!bookId || !threadId) return;
-      const found = findDiagramCard(bookId, threadId, cardId);
-      if (!found) return;
-      const stages = found.card.diagram.stages?.length ?? 0;
-      if (stages === 0) return;
-      const next = Math.min(Math.max(Math.round(stage), 0), stages - 1);
-      if (next === (found.card.stage ?? 0)) return;
-      writeDiagramCard(bookId, threadId, cardId, { ...found.card, stage: next }, found.ts);
-    },
-    [bookIdRef, findDiagramCard, writeDiagramCard],
-  );
-
   // Run one assistant turn for a thread: assemble the reading context, stream the
   // reply into the bubble, persist on done. Stable (reads refs). No-ops when no
   // provider is configured — the shell puts the Settings guidance where the
@@ -549,37 +467,6 @@ export function useCall<M extends CallRow, I extends StagedImage>(
 
     const ann = annsRef.current.get(annotationId);
     const ts = Date.now();
-    // Drawing (docs/40). The tools describe a diagram; putting it on screen and
-    // keeping it there is this side's job — see writeDiagramCard above for why
-    // the thread file, and not a map beside it, is where a diagram lives.
-    const diagrams = shapes.current.cards
-      ? {
-          draw: (diagram: Diagram): string => {
-            const cardId = shapes.current.cards!.id("diagram");
-            writeDiagramCard(bookId, threadId, cardId, { kind: "diagram", diagram }, null);
-            return cardId;
-          },
-          read: (id: string): Diagram | null =>
-            findDiagramCard(bookId, threadId, id)?.card.diagram ?? null,
-          update: (id: string, diagram: Diagram) => {
-            const found = findDiagramCard(bookId, threadId, id);
-            if (!found) return;
-            // The step the reader had reached survives the edit, clamped: an
-            // edit that cut the stages down must not leave the card pointing
-            // past the end of the stepper.
-            const stages = diagram.stages?.length ?? 0;
-            const stage = stages > 0 ? Math.min(found.card.stage ?? 0, stages - 1) : undefined;
-            writeDiagramCard(
-              bookId,
-              threadId,
-              id,
-              { kind: "diagram", diagram, ...(stage === undefined ? {} : { stage }) },
-              found.ts,
-            );
-          },
-        }
-      : undefined;
-
     const streamingRow = shapes.current.newRow({ role: "ai", text: "", ts, streaming: true });
     liveTurns.start({ threadId, bookId, controller, message: streamingRow });
     dispatch({ type: "turn-started", threadId, row: streamingRow });
@@ -605,7 +492,6 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         distillAnnotations,
         signal: controller.signal,
         onSubagentProgress: (progress) => onSubagentProgress(progress, ts),
-        diagrams,
       });
       if (!turn) {
         liveTurns.settle(threadId, controller); // aborted while reading history
@@ -1194,7 +1080,6 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     send,
     retry,
     stop,
-    stepDiagram,
     chapters,
     focusChapter,
     setFocusChapter,

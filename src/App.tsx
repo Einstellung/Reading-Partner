@@ -115,7 +115,6 @@ import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
 import type { Annotation as PopupAnnotation, ToolType } from "./ui/components/reader/types";
 import type { PendingImage } from "./ui/components/chat/types";
 import {
-  cardRow,
   chatGlance,
   nextCardId,
   rehydrateMessage,
@@ -536,7 +535,6 @@ export default function App() {
     showChat: showChatMain,
     showReading: swapToReading,
     stageImage,
-    stepDiagram,
     stop: stopTurn,
     chapters: bookChapters,
     focusChapter,
@@ -555,19 +553,9 @@ export default function App() {
     settingsRef,
     toDisplay: toDisplayMessages,
     newRow: (row) => row,
-    // The card channel the drawing tools write through (docs/40). Card parts are
-    // this layer's, so the session is handed the three operations rather than
-    // the type — the same split as newRow above.
-    cards: {
-      id: nextCardId,
-      row: (cardId, card, ts) => cardRow(cardId, card, ts),
-      write: (row, cardId, card) => ({
-        ...row,
-        parts: (row.parts ?? []).map((p) =>
-          p.type === "card" && p.id === cardId ? { ...p, card } : p,
-        ),
-      }),
-    },
+    // The card channel. Card parts are this layer's, so the session is handed
+    // the operation rather than the type — the same split as newRow above.
+    cards: { id: nextCardId },
     maxImages: MAX_PENDING_IMAGES,
     imageLimitHint: `You can attach up to ${MAX_PENDING_IMAGES} images.`,
     loadingImage: (id) => ({ id, status: "loading" }),
@@ -622,23 +610,12 @@ export default function App() {
     [sendCallMessage, setFocusChapter],
   );
 
-  // What a card in the reading conversation raises. Two do: the diagram card's
-  // stepper, which is a `local` patch routed through the session so the step the
-  // reader reached is written to the thread and survives reopening it, and an
-  // aside's receipt, which navigates back into the side conversation it stands
-  // for.
-  const onCardAction = useCallback(
-    (cardId: string, action: CardAction) => {
-      if (action.kind === "navigate") {
-        if (action.to === "aside" && action.arg) openAsideThreadRef.current(action.arg);
-        return;
-      }
-      if (action.kind !== "local") return;
-      const stage = action.patch.stage;
-      if (typeof stage === "number") stepDiagram(cardId, stage);
-    },
-    [stepDiagram],
-  );
+  // What a card in the reading conversation raises. One does: an aside's
+  // receipt, which navigates back into the side conversation it stands for.
+  const onCardAction = useCallback((_cardId: string, action: CardAction) => {
+    if (action.kind !== "navigate") return;
+    if (action.to === "aside" && action.arg) openAsideThreadRef.current(action.arg);
+  }, []);
 
   // Pay down whatever the observations still owe, on a timer and whenever the
   // app comes back (src/observation/distill/arrears.ts). Silent throughout: a sweep that
