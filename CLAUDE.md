@@ -34,6 +34,8 @@ AI 陪读软件。设计共识在 `docs/`。阅读引擎用 EmbedPDF（PDFium WA
 
 - 包管理器用 bun。
 
+- 跑测试用 `scripts/t.sh`（参数原样转给 `bun test`）：`bun test` 把结论打在最后，绿跑会被截断在结论之前。
+
 - 样式:Tailwind v4(theme + preflight + utilities,拆开 import,layer 顺序在 `src/styles.css` 顶部显式声明,见坑 75),UI 一律用 Tailwind utility class。`styles.css` 只放全局基线。
 
 - 原语用 shadcn/ui（`components.json`，`bunx shadcn@latest add <component>` 写进 `src/ui/components/ui/`）。设计 token 在 `styles.css` 的 `:root` + `@theme inline`，取值映射到现有配色，见 `docs/30`。`@/` 别名指向 `src/`，只给 shadcn 生成的文件用；应用代码一律相对路径 import。按钮尺寸和 44px 触摸目标写在 `ui/button.tsx` 的变体表里，字段的写在 `ui/input.tsx` 的 `fieldClassName` 里，调用点不要各自补 `coarse:`。`add` 生成的文件会 import `lucide-react`（没装）并覆盖手写过的组件，add 完先看 `git status`；手改过的约定由 `tests/ui/components/*-contract.test.ts` 盯着。迁移已完成；再要引一个原语之前先看 `docs/30` 的「没引的」和「最终还剩的手写控件」。
