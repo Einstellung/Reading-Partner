@@ -1588,6 +1588,7 @@ export default function App() {
             }}
             annotations={traceAnns as unknown as PopupAnnotation[]}
             selectedId={selectedAnnId}
+            hasThread={hasThread}
             onSelectAnnotation={onTraceSelect}
             onDeleteAnnotation={deleteTraceAnnotation}
             onOpenThread={openThreadForAnnotation}

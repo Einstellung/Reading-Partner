@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { IconArea, IconHighlight, IconSparkle, IconTrash, IconUnderline } from '../base/icons';
 import { Button } from '../ui/button';
-import { traceGroups, type TraceGroupKey } from '../../../reading/chat-marks';
+import { markDoorThread, traceGroups, type TraceGroupKey } from '../../../reading/chat-marks';
 import type { Annotation } from './types';
 import {
 	SWIPE_ACTION_WIDTH,
@@ -32,6 +32,9 @@ import {
 interface TraceListProps {
 	annotations: Annotation[];
 	selectedId?: string | null;
+	// Whether this device still holds a conversation. A mark outlives the
+	// conversation it opened (docs/09), so the id on it is not on its own a door.
+	hasThread(threadId: string): boolean;
 	onSelect(id: string): void;
 	onDelete(id: string): void;
 	onOpenThread?(id: string): void;
@@ -71,13 +74,14 @@ interface TraceRowProps {
 	// Whether this is the list's one open row. The list holds it, so opening a
 	// second row shuts the first.
 	open: boolean;
+	hasThread(threadId: string): boolean;
 	onOpenChange(id: string, open: boolean): void;
 	onSelect(id: string): void;
 	onDelete(id: string): void;
 	onOpenThread?(id: string): void;
 }
 
-function TraceRow({ annotation, selected, open, onOpenChange, onSelect, onDelete, onOpenThread }: TraceRowProps) {
+function TraceRow({ annotation, selected, open, hasThread, onOpenChange, onSelect, onDelete, onOpenThread }: TraceRowProps) {
 	const a = annotation;
 	const contentRef = useRef<HTMLDivElement>(null);
 	const swipeRef = useRef<SwipeState>(initSwipeState());
@@ -122,7 +126,10 @@ function TraceRow({ annotation, selected, open, onOpenChange, onSelect, onDelete
 	const text = typeof a.text === 'string' ? a.text : '';
 	const comment = typeof a.comment === 'string' ? a.comment : '';
 	const pageLabel = typeof a.pageLabel === 'string' ? a.pageLabel : '';
-	const hasThread = typeof a.aiThreadId === 'string' && a.aiThreadId !== '';
+	// Not "does the mark carry an id": the conversation may have been deleted
+	// while the mark stayed (reading/chat-marks.ts: markDoorThread). A button that
+	// opens nothing is worse than no button.
+	const door = markDoorThread(a, hasThread) !== null;
 	const dragging = swipe.phase === 'dragging';
 
 	return (
@@ -178,7 +185,7 @@ function TraceRow({ annotation, selected, open, onOpenChange, onSelect, onDelete
 					{comment && <div className="line-clamp-2 text-xs leading-snug text-neutral-500">{comment}</div>}
 					<div className="flex items-center gap-1.5">
 						{pageLabel && <span className="text-[11px] text-neutral-400">Page {pageLabel}</span>}
-						{hasThread && (
+						{door && (
 							<Button
 								type="button"
 								variant="ghost"
@@ -221,7 +228,7 @@ function TraceRow({ annotation, selected, open, onOpenChange, onSelect, onDelete
 	);
 }
 
-export default function TraceList({ annotations, selectedId, onSelect, onDelete, onOpenThread }: TraceListProps) {
+export default function TraceList({ annotations, selectedId, hasThread, onSelect, onDelete, onOpenThread }: TraceListProps) {
 	// The one row standing open. Opening another shuts it, so there is never more
 	// than one Delete on screen.
 	const [openId, setOpenId] = useState<string | null>(null);
@@ -268,6 +275,7 @@ export default function TraceList({ annotations, selectedId, onSelect, onDelete,
 							annotation={a}
 							selected={a.id === selectedId}
 							open={a.id === openId}
+							hasThread={hasThread}
 							onOpenChange={onOpenChange}
 							onSelect={handleSelect}
 							onDelete={handleDelete}
