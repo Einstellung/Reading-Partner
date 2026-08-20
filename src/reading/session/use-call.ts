@@ -36,6 +36,7 @@ import {
 } from "../../platform/app/threads";
 import { asideReceipt, asideReturn, type AsideReturn } from "../aside";
 import { hostMarkIds } from "../chat-marks";
+import { markExcerpt, reopenCall } from "../reopen";
 import type { DiagramCardData } from "../diagrams/cards";
 import type { Diagram } from "../diagrams/types";
 import type { Fulltext } from "../../fulltext";
@@ -130,6 +131,15 @@ export interface CallHost<M extends CallRow, I extends StagedImage> extends Call
 // the thread file.
 export type OpeningCall<M extends CallRow> = Omit<CallState<M>, "messages">;
 
+// Where a door puts a conversation it reopens. `parentView` is the view the
+// conversation this one came off was in, and only a door pressed while that one
+// is on screen has it.
+export interface ReopenAt {
+  view: CallView;
+  anchor: { x: number; y: number };
+  parentView?: CallView;
+}
+
 export interface CallController<M extends CallRow, I extends StagedImage> {
   call: CallState<M> | null;
   // The open call and its view, for the handlers that cannot read React state —
@@ -144,6 +154,10 @@ export interface CallController<M extends CallRow, I extends StagedImage> {
   // This is also every way out of an aside that is not a hangup, so it is where
   // the line an aside leaves on its parent is written.
   openThread(call: OpeningCall<M>, stored: ThreadMessage[]): void;
+  // Open a conversation that already exists, as itself. The record says which
+  // of the three kinds it is and what it is anchored on (reading/reopen.ts);
+  // the door only says where on screen it opens.
+  reopenThread(thread: Thread, at: ReopenAt): void;
   // Step out of the book-level conversation into a side one on a span of one of
   // its replies (docs/03). The aside replaces it in this one slot. No-op unless
   // the open call is the book-level one, which is what keeps asides one level
@@ -767,6 +781,17 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     [hydrateThreadImages, writeAsideReceipt],
   );
 
+  // Every door back into a conversation that already exists: a mark on the page,
+  // a mark on a reply, a trace row, a receipt chip, the top bar's blackboard.
+  // None of them decides what the conversation is — the record does.
+  const reopenThread = useCallback(
+    (thread: Thread, at: ReopenAt) => {
+      const opening = reopenCall(thread, markExcerpt(annsRef.current.get(thread.annotationId)), at.parentView);
+      openThread({ ...opening, view: at.view, anchor: at.anchor }, thread.messages);
+    },
+    [annsRef, openThread],
+  );
+
   // Step out of the lesson onto a span of one of its replies (docs/03).
   //
   // Nothing is written down here. A conversation pulled out of a reply has no
@@ -1162,6 +1187,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     current,
     view,
     openThread,
+    reopenThread,
     openChatAside,
     returnFromAside,
     isAnswering,

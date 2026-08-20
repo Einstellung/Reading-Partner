@@ -86,6 +86,7 @@ import {
   type CallView as CallViewMode,
 } from "./reading/call-state";
 import { asideAnchorAt, asideFraming, asideReturn } from "./reading/aside";
+import { markExcerpt } from "./reading/reopen";
 import {
   buildChatMark,
   markDoorThread,
@@ -488,7 +489,7 @@ export default function App() {
   const asideFramingFor = useCallback(
     (thread: AsideThread | undefined, parentView?: CallViewMode): Pick<CallState<CallMessage>, "aside"> => {
       if (!thread) return {};
-      const framing = asideFraming(thread, callExcerpt(annsRef.current.get(thread.annotationId)));
+      const framing = asideFraming(thread, markExcerpt(annsRef.current.get(thread.annotationId)));
       return framing ? { aside: { ...framing, ...(parentView ? { parentView } : {}) } } : {};
     },
     [],
@@ -525,6 +526,7 @@ export default function App() {
     noteImageHint,
     openChatAside,
     openThread: openThreadCall,
+    reopenThread: reopenThreadCall,
     pendingImages,
     removePendingImage,
     retry: retryCall,
@@ -891,20 +893,11 @@ export default function App() {
     const door = markDoor(ann);
     if (door) {
       setPopup(null);
-      openThreadCall(
-        {
-          threadId: door.threadId,
-          annotationId: ann.id,
-          ...asideFramingFor(door.thread),
-          view: "bubble",
-          anchor,
-        },
-        door.thread.messages,
-      );
+      reopenThreadCall(door.thread, { view: "bubble", anchor });
     } else {
       setPopup({ annotation: ann, anchor });
     }
-  }, [openThreadCall, asideFramingFor, markDoor]);
+  }, [reopenThreadCall, markDoor]);
 
   // A pen stroke on a reply (docs/09). The classroom's answers are the book
   // continued, so this writes the same kind of entry the page path writes, into
@@ -964,18 +957,9 @@ export default function App() {
         return;
       }
       setPopup(null);
-      openThreadCall(
-        {
-          threadId: door.threadId,
-          annotationId: ann.id,
-          ...asideFramingFor(door.thread),
-          view: "chat-main",
-          anchor: at,
-        },
-        door.thread.messages,
-      );
+      reopenThreadCall(door.thread, { view: "chat-main", anchor: at });
     },
-    [openThreadCall, asideFramingFor, markDoor],
+    [reopenThreadCall, markDoor],
   );
 
   // The pen stroke gives the host no coordinates, so track the last pen-lift
@@ -1141,18 +1125,13 @@ export default function App() {
       }
       const bookId = bookIdRef.current;
       const thread = bookId ? getThread(bookId, action.threadId) : undefined;
-      openThreadCall(
-        {
-          threadId: action.threadId,
-          annotationId: id,
-          ...asideFramingFor(thread),
-          view: "chat-main",
-          anchor: { x: 0, y: 0 },
-        },
-        thread?.messages ?? [],
-      );
+      // The row is a door into the conversation the mark opened, or failing that
+      // into the lesson it was drawn in — which is the book's own, and reopening
+      // it as anything else takes the AI pen, the chips and the empty-state line
+      // away from it (reading/reopen.ts).
+      if (thread) reopenThreadCall(thread, { view: "chat-main", anchor: { x: 0, y: 0 } });
     },
-    [openThreadCall, asideFramingFor, hasThread],
+    [reopenThreadCall, hasThread],
   );
 
   // Does the active default model accept images? (Gates a paste up front.)
@@ -1255,18 +1234,9 @@ export default function App() {
       if (!threadId) return;
       const bookId = bookIdRef.current;
       const thread = bookId ? getThread(bookId, threadId) : undefined;
-      openThreadCall(
-        {
-          threadId,
-          annotationId,
-          ...asideFramingFor(thread),
-          view: "chat-main",
-          anchor: { x: 0, y: 0 },
-        },
-        thread?.messages ?? [],
-      );
+      if (thread) reopenThreadCall(thread, { view: "chat-main", anchor: { x: 0, y: 0 } });
     },
-    [openThreadCall, asideFramingFor, hasThread],
+    [reopenThreadCall, hasThread],
   );
 
   // The receipt chip in a conversation's transcript (ui/components/reader/
@@ -1282,18 +1252,9 @@ export default function App() {
         pushToast("warn", "That side conversation is gone.");
         return;
       }
-      openThreadCall(
-        {
-          threadId,
-          annotationId: thread.annotationId,
-          ...framing,
-          view: "chat-main",
-          anchor: { x: 0, y: 0 },
-        },
-        thread.messages,
-      );
+      reopenThreadCall(thread, { view: "chat-main", anchor: { x: 0, y: 0 } });
     },
-    [openThreadCall, asideFramingFor, pushToast],
+    [reopenThreadCall, asideFramingFor, pushToast],
   );
   openAsideThreadRef.current = openAsideThread;
 
@@ -1323,18 +1284,9 @@ export default function App() {
       if (resolved.status === "cancelled") return;
       const { thread } = resolved;
       setPopup(null);
-      openThreadCall(
-        {
-          threadId: thread.id,
-          annotationId: "",
-          isBook: true,
-          view: "chat-main",
-          anchor: { x: 0, y: 0 },
-        },
-        thread.messages,
-      );
+      reopenThreadCall(thread, { view: "chat-main", anchor: { x: 0, y: 0 } });
     })();
-  }, [openThreadCall, pushToast, onEntryPrepTrigger]);
+  }, [reopenThreadCall, pushToast, onEntryPrepTrigger]);
 
   // Jump the reading back to the thread's mark (from the reading corner card).
   // The book-level thread has no mark, so there is nothing to jump to.
@@ -1820,7 +1772,7 @@ export default function App() {
             </div>
             <div className="absolute right-3 top-3 z-50">
               {(() => {
-                const excerpt = callExcerpt(annsRef.current.get(call.annotationId)) || null;
+                const excerpt = markExcerpt(annsRef.current.get(call.annotationId)) || null;
                 return (
                   <ReadingPipCard
                     title={title ?? ""}
@@ -1889,9 +1841,3 @@ function asideReturnable(bookId: string | null, parentThreadId: string): boolean
   return !!parent && !!asideReturn(parent);
 }
 
-function callExcerpt(ann: Annotation | undefined): string {
-  if (!ann) return "";
-  if (typeof ann.text === "string" && ann.text) return ann.text;
-  if (typeof ann.comment === "string" && ann.comment) return ann.comment;
-  return "";
-}
