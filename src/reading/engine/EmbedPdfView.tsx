@@ -35,6 +35,7 @@ import { AnnotationPluginPackage, AnnotationLayer } from "@embedpdf/plugin-annot
 import { MARKUP_TOOL_OVERRIDES } from "./convert";
 import { SELECT_AFTER_CREATE } from "./annotation-selection";
 import { PAGE_FRAME } from "./page-frame";
+import { PAGE_WASH_GROUP_STYLE, PAGE_WASH_STYLE } from "./page-wash";
 import { TouchDebugOverlay } from "./gesture/touch-debug";
 import { attachTouchRouter } from "./gesture/attach-touch";
 import { attachWheelZoom } from "./gesture/wheel-zoom";
@@ -413,28 +414,38 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
                 documentId={activeDocumentId}
                 renderPage={({ pageIndex, width, height }) => (
                   <PagePointerProvider documentId={activeDocumentId} pageIndex={pageIndex}>
-                    {/* The sheet: the paper under the raster and the edge that
-                        separates it from the next one. Its box is the page box
-                        (inset:0), so it cannot move a tile, a selection rect or
-                        an annotation relative to the page; the edge is a
-                        box-shadow, which paints outside that box and does not
-                        enter the scrollable area. */}
-                    <div
-                      aria-hidden
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        backgroundColor: PAGE_FRAME.pageBackground,
-                        boxShadow: PAGE_FRAME.pageEdge,
-                        pointerEvents: "none",
-                      }}
-                    />
-                    {/* Base raster fixed at scale 1 (CSS-scaled by the page box);
-                        tiles carry the crisp high-res for the visible area only.
-                        Both are non-interactive so pointer events reach selection. */}
-                    <div style={{ position: "absolute", inset: 0, width, height, pointerEvents: "none" }}>
-                      <RenderLayer documentId={activeDocumentId} pageIndex={pageIndex} scale={1} />
-                      <TilingLayer documentId={activeDocumentId} pageIndex={pageIndex} />
+                    {/* The paper: the sheet, the raster on it, and the tint over
+                        both, blended as one group and finished before anything
+                        the reader put on the page is drawn. Ordering the layers
+                        this way is what keeps a selection yellow, an annotation
+                        purple and a quote band the colours they were picked as —
+                        they sit outside the group, so the tint never multiplies
+                        them (page-wash.ts). */}
+                    <div style={PAGE_WASH_GROUP_STYLE}>
+                      {/* The sheet: the paper under the raster and the edge that
+                          separates it from the next one. Its box is the page box
+                          (inset:0), so it cannot move a tile, a selection rect or
+                          an annotation relative to the page; the edge is a
+                          box-shadow, which paints outside that box and does not
+                          enter the scrollable area. */}
+                      <div
+                        aria-hidden
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          backgroundColor: PAGE_FRAME.pageBackground,
+                          boxShadow: PAGE_FRAME.pageEdge,
+                          pointerEvents: "none",
+                        }}
+                      />
+                      {/* Base raster fixed at scale 1 (CSS-scaled by the page box);
+                          tiles carry the crisp high-res for the visible area only.
+                          Both are non-interactive so pointer events reach selection. */}
+                      <div style={{ position: "absolute", inset: 0, width, height, pointerEvents: "none" }}>
+                        <RenderLayer documentId={activeDocumentId} pageIndex={pageIndex} scale={1} />
+                        <TilingLayer documentId={activeDocumentId} pageIndex={pageIndex} />
+                      </div>
+                      <div aria-hidden style={PAGE_WASH_STYLE} />
                     </div>
                     <SelectionLayer documentId={activeDocumentId} pageIndex={pageIndex} />
                     <AnnotationLayer
