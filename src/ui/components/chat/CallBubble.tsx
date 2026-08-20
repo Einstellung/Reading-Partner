@@ -120,7 +120,7 @@ export default function CallBubble({
 			aria-label="AI conversation"
 			style={{ width, left: pos?.left, top: pos?.top, visibility: pos ? 'visible' : 'hidden' }}
 			className={cn(
-				'fixed box-border flex flex-col gap-2 rounded-xl border border-black/10 bg-white p-3 shadow-[0_8px_40px_rgba(0,0,0,0.18)]',
+				'fixed box-border flex flex-col gap-2 rounded-xl border border-black/10 bg-popover p-3 shadow-[0_8px_40px_rgba(0,0,0,0.18)]',
 				OVERLAY_Z.floating,
 			)}
 		>

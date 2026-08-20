@@ -4,6 +4,7 @@ import { installFetchBridge } from "./ai/fetch-bridge";
 import { applyStoredAutostart } from "./platform/app/autostart";
 import { initDeviceSettings } from "./platform/app/device";
 import { detectShell } from "./platform/app/shell";
+import { initPaperTint } from "./ui/components/base/paper-tint";
 import "./styles.css";
 
 // Dev-only: silence the Tauri http plugin's fire-and-forget cleanup rejections.
@@ -37,6 +38,14 @@ if (import.meta.env.DEV) {
 if (import.meta.env.VITE_SMOKE === "1") {
   void import("./smoke/smoke").then(({ runSmoke }) => runSmoke());
 } else {
+  // The palette, before anything is drawn in it. Synchronous and first: both
+  // shells are dynamic imports, so there are frames between this line and the
+  // first component, and every one of them would be white if the tint waited
+  // for React. Not in the smoke branch above — that page is a diagnostic
+  // readout, not the app, and it is looked at by a workflow rather than a
+  // person.
+  initPaperTint(window);
+
   // The bridge must be in place before pi-ai (imported via App) initializes, in
   // case the underlying SDK captures a reference to the global fetch at module
   // load. Hence the dynamic import.

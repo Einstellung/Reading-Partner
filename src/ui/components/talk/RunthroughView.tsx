@@ -162,8 +162,16 @@ export default function RunthroughView({
   };
 
   return (
+    // The one screen that is not on the app's palette and is not tinted with
+    // it: a run-through is a projected deck, and the chrome around it is dark so
+    // the room looks at the slide. The paper tint (styles.css) has nothing to
+    // say here — it lightens a reading surface, and there is none.
     <div className="absolute inset-0 flex flex-col bg-[#0d0f14]">
       <div className="flex flex-none items-center gap-3 px-3 py-2 text-white">
+        {/* The app's one surviving `bg-white`, and the reason it survives: a
+            tenth of white is how a control lights up on a near-black bar, and a
+            palette token would put a cream fill on it. The contract test names
+            this line (tests/ui/components/paper-tint-contract.test.ts). */}
         <Button
           type="button"
           variant="ghost"

@@ -94,7 +94,7 @@ export default function Sidebar({
 			    keeps the slide off the main thread. */}
 			<aside
 				className={
-					"absolute left-0 top-0 z-30 flex h-full flex-col border-r border-border bg-white shadow-xl [will-change:transform] transition-transform duration-200 ease-out " +
+					"absolute left-0 top-0 z-30 flex h-full flex-col border-r border-border bg-background shadow-xl [will-change:transform] transition-transform duration-200 ease-out " +
 					(open ? "translate-x-0" : "pointer-events-none -translate-x-full")
 				}
 				style={{ width: `min(${PANEL_WIDTH}px, 85vw)` }}

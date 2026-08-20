@@ -14,7 +14,7 @@ import { Badge } from "../ui/badge";
 export function RehearsalDecisionCard({ payload }: CardComponentProps<RehearsalDecisionCardData>) {
   const kept = payload.include;
   return (
-    <div className="w-full max-w-md rounded-xl border border-black/10 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+    <div className="w-full max-w-md rounded-xl border border-black/10 bg-card p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
       <div className="flex items-center gap-2">
         <span className="text-[11px] font-medium uppercase tracking-wider text-[#8a7fd0]">
           Chapter {payload.chapter}

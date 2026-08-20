@@ -99,7 +99,7 @@ export default function FigureCard({ host, id }: { host: FigureHost; id: string 
       ref={ref}
       type="button"
       onClick={() => host.onJump(figure)}
-      className="mx-auto my-2 flex w-fit max-w-full cursor-pointer flex-col items-center gap-1 rounded-lg border border-black/10 bg-white p-1.5 text-left can-hover:hover:border-secondary-border"
+      className="mx-auto my-2 flex w-fit max-w-full cursor-pointer flex-col items-center gap-1 rounded-lg border border-black/10 bg-card p-1.5 text-left can-hover:hover:border-secondary-border"
     >
       {card ? (
         <img

@@ -260,7 +260,7 @@ export default function TraceList({ annotations, selectedId, hasThread, onSelect
 	const groups = traceGroups(annotations);
 
 	return (
-		<div className="h-full overflow-y-auto bg-white text-[13px] text-neutral-800 select-none" role="listbox" aria-label="Traces">
+		<div className="h-full overflow-y-auto bg-background text-[13px] text-neutral-800 select-none" role="listbox" aria-label="Traces">
 			{groups.map((group) => (
 				<div key={group.key} role="group" aria-labelledby={`trace-group-${group.key}`}>
 					<div

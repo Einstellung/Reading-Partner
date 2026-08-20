@@ -55,6 +55,9 @@ test("the bubble and the code block read the variable, with the grey as default"
   expect(markdown).not.toContain("bg-chat-code");
 });
 
-test("the composer stays white so it lifts off the window", () => {
-  expect(chat).toContain("rounded-3xl border border-black/10 bg-white");
+test("the composer stays on the page colour so it lifts off the window", () => {
+  // --background, not white: on the paper tint the page colour is cream and a
+  // white composer would be the one white rectangle left on the screen. The
+  // step it needs is off --chat-surface, which moves with it.
+  expect(chat).toContain("rounded-3xl border border-black/10 bg-background");
 });

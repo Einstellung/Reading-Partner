@@ -46,7 +46,7 @@ function useSecondsSince(startedAt: number | null): number {
 export function ProbeConfirmCard({ payload, dispatch }: CardComponentProps<ProbeConfirmCardData>) {
   const { descriptor, pipeLabel, samples, added } = payload;
   return (
-    <div className="w-full max-w-md rounded-xl border border-black/10 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+    <div className="w-full max-w-md rounded-xl border border-black/10 bg-card p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
       <div className="flex items-center gap-2">
         <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-[#1b1b1b]">{descriptor.name}</span>
         <Badge className="shrink-0">{pipeLabel}</Badge>
@@ -168,7 +168,7 @@ export function ProfileUpdateCard({ payload, dispatch }: CardComponentProps<Prof
         {applied ? "Profile updated" : "Update reading profile"}
       </div>
       <div className="mt-1 text-[14px] font-medium text-[#1b1b1b]">{payload.summary}</div>
-      <pre className="m-0 mt-2 max-h-52 overflow-y-auto whitespace-pre-wrap rounded-lg border border-black/10 bg-white p-3 font-sans text-[12px] leading-relaxed text-[#333]">
+      <pre className="m-0 mt-2 max-h-52 overflow-y-auto whitespace-pre-wrap rounded-lg border border-black/10 bg-card p-3 font-sans text-[12px] leading-relaxed text-[#333]">
         {payload.profile.trim()}
       </pre>
       <div className="mt-3 flex items-center justify-end gap-2">
