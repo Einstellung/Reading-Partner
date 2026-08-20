@@ -7,7 +7,7 @@
 import { expect, test } from "bun:test";
 import IntentChips from "../../../src/ui/components/chat/IntentChips";
 import { Button } from "../../../src/ui/components/ui/button";
-import { MARK_INTENTS } from "../../../src/reading/intents";
+import { MARK_INTENTS, openingIntents } from "../../../src/reading/intents";
 
 type El = { type?: unknown; props?: Record<string, any> };
 
@@ -54,4 +54,14 @@ test("the chips carry no touch-target class of their own", () => {
 
 test("an empty set renders nothing", () => {
   expect(IntentChips({ intents: [], onPick: () => {} })).toBeNull();
+});
+
+// The book-level conversation is that empty set (docs/09, 2026-08-20): the
+// reader types. Read through openingIntents rather than as a literal `[]`, so
+// putting a chip back on that entry fails here too.
+test("the book-level conversation draws no chip row", () => {
+  expect(IntentChips({ intents: openingIntents(true), onPick: () => {} })).toBeNull();
+  expect(buttons(IntentChips({ intents: openingIntents(false), onPick: () => {} }))).not.toHaveLength(
+    0,
+  );
 });

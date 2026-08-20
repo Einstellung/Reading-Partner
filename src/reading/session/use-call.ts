@@ -192,17 +192,13 @@ export interface CallController<M extends CallRow, I extends StagedImage> {
   // The reader stepped a staged diagram card to another step.
   stepDiagram(cardId: string, stage: number): void;
 
-  // The open book's chapter table, or null when it has none worth using
-  // (reading/lecture). The chapter chip is built from it, and it is what a
-  // chapter number is resolved against.
-  chapters: TableChapter[] | null;
-  // The chapter the open conversation is parked on (docs/09), resolved. Null on
-  // a mark-anchored thread, always: a mark's conversation can be asked to teach
-  // a chapter without becoming a conversation about one.
+  // The chapter the open conversation is parked on (docs/09), resolved against
+  // the book's chapter table. Null on a mark-anchored thread, always: a mark's
+  // conversation can be asked to teach a chapter without becoming a
+  // conversation about one.
   focusChapter: TableChapter | null;
-  // Park the open conversation on a chapter, or clear it. The chip presses this
-  // with the chapter the reader was scrolled into, which is the one moment the
-  // scroll position decides anything (docs/09).
+  // Clear the chapter the open conversation is parked on, from the ✕ on the
+  // status row. read_chapter is what writes one (docs/09).
   setFocusChapter(chapter: number | null): void;
 
   // What opening and closing a book need (session/open-book.ts).
@@ -1195,7 +1191,6 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     retry,
     stop,
     stepDiagram,
-    chapters,
     focusChapter,
     setFocusChapter,
     showChat,

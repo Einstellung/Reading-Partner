@@ -96,8 +96,7 @@ import {
   traceSelectAction,
   type ChatMarkDraw,
 } from "./reading/chat-marks";
-import { asideIntents, bookTextNotice, openingIntents, type ReadingIntent } from "./reading/intents";
-import { chapterAtPage } from "./reading/chapters";
+import { asideIntents, bookTextNotice, openingIntents } from "./reading/intents";
 import { resolveBookThread } from "./reading/session/book-thread";
 import { closeBook } from "./reading/session/close-book";
 import { useCall } from "./reading/session/use-call";
@@ -501,13 +500,8 @@ export default function App() {
   // out of it. Two shapes stay this file's — a chat row, whose parts are the
   // render layer's protocol, and a staged image — so the session is handed the
   // four one-line constructors below instead of the types.
-  // The opening chips currently on screen. Kept in a ref so the send path can
-  // tell a chip press from typed text: IntentChips sends the intent's message
-  // down the ordinary send path, and the chapter chip has to park the
-  // conversation on its chapter before that message goes (docs/09).
-  const intentsRef = useRef<readonly ReadingIntent[]>([]);
-  // Reopening a side conversation from its receipt chip. Held in a ref for the
-  // same reason: the card dispatcher is a prop of both chat surfaces and is
+  // Reopening a side conversation from its receipt chip. Held in a ref because
+  // the card dispatcher is a prop of both chat surfaces and is
   // written above the callback it reaches, so reading it late keeps its identity
   // stable and its declaration where it belongs.
   const openAsideThreadRef = useRef<(threadId: string) => void>(() => {});
@@ -538,7 +532,6 @@ export default function App() {
     stageImage,
     stepDiagram,
     stop: stopTurn,
-    chapters: bookChapters,
     focusChapter,
     setFocusChapter,
   } = useCall<CallMessage, PendingImage>({
@@ -608,19 +601,6 @@ export default function App() {
             : { type: toolType, color: penColor };
     viewRef.current?.setTool(tool);
   }, [toolType, penColor, viewReady]);
-
-  // Everything a chat surface sends goes through here, so that pressing a chip
-  // can do the one thing typing its words cannot: park the conversation on the
-  // chapter the chip named (docs/09). The chips are matched by their message
-  // text, which is what IntentChips passes back.
-  const sendFromChat = useCallback(
-    (text: string) => {
-      const picked = intentsRef.current.find((i) => i.message === text);
-      if (picked?.focusChapter !== undefined) setFocusChapter(picked.focusChapter);
-      sendCallMessage(text);
-    },
-    [sendCallMessage, setFocusChapter],
-  );
 
   // What a card in the reading conversation raises. Two do: the diagram card's
   // stepper, which is a `local` patch routed through the session so the step the
@@ -1418,19 +1398,13 @@ export default function App() {
     ctx: { inReader, chatFullWindow: call?.view === "chat-main" },
   });
 
-  // What an empty conversation offers. The chapter chip is resolved against
-  // where the reader is scrolled *now* — the one moment a scroll position
-  // decides anything (docs/09) — and disappears on a book with no usable
-  // chapter table. A side conversation has its own set: one opened on words out
-  // of a reply has no marked passage, and nothing offered there may claim it has
-  // (reading/intents.ts).
+  // What an empty conversation offers. A mark and an aside drawn on the page
+  // open on the passage; one opened on words out of a reply has no marked
+  // passage and nothing offered there may claim it has; the book-level thread
+  // offers nothing at all and the reader types (reading/intents.ts).
   const callIntents = call?.aside
     ? asideIntents(call.aside.from)
-    : openingIntents(
-        call?.isBook ?? false,
-        chapterAtPage(bookChapters ?? [], stats ? stats.pageIndex + 1 : null),
-      );
-  intentsRef.current = callIntents;
+    : openingIntents(call?.isBook ?? false);
 
   // The two pens, aimed at the conversation on screen (docs/09). The rack is
   // always live and its target follows the main view: the classroom covers the
@@ -1677,7 +1651,7 @@ export default function App() {
           <CallBubble
             anchor={call.anchor}
             messages={call.messages}
-            onSend={sendFromChat}
+            onSend={sendCallMessage}
             onExpand={showChatMain}
             onClose={endCall}
             onDelete={deleteOpenThread}
@@ -1741,7 +1715,7 @@ export default function App() {
             <div className="absolute inset-0 z-40">
               <CallView
                 messages={call.messages}
-                onSend={sendFromChat}
+                onSend={sendCallMessage}
                 onHangUp={endCall}
                 onDelete={deleteOpenThread}
                 pendingImages={pendingImages}
@@ -1777,8 +1751,15 @@ export default function App() {
                 emptyTitle={
                   spanAside ? "Ask about this" : call.isBook ? title ?? "This book" : undefined
                 }
+                // With no chips left (docs/09), the placeholder is the only
+                // thing saying what this room is for: being taught out of the
+                // book, not asked about a book you have read.
                 placeholder={
-                  spanAside ? "Ask about this…" : call.isBook ? "Ask about this book…" : undefined
+                  spanAside
+                    ? "Ask about this…"
+                    : call.isBook
+                      ? "Ask me to teach you a chapter…"
+                      : undefined
                 }
                 intents={callIntents}
                 emptyNote={callNote}
