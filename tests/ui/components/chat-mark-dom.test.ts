@@ -21,6 +21,7 @@ import {
   paintBoxes,
   pointAt,
   rangeOfSpan,
+  spacedSlice,
   toBoxes,
   underlineBoxes,
   withAlpha,
@@ -46,6 +47,32 @@ test("the rendering is every text node in order, and nothing between the blocks"
   // rendering does not hold.
   expect(index.text).toBe("attention headsare three matrices");
   expect(index.runs).toHaveLength(2);
+});
+
+// The same walk answers two questions, and only one of them wants the words
+// glued: a mark is found again by the anchor string, and read by a person in the
+// trace list, in read_annotations and in the note replayed to the model.
+test("the string a reader is shown has a space where one block ended and the next began", () => {
+  const el = body("<p>attention heads</p><p>are three matrices</p>");
+  const index = indexRendered(el);
+  expect(index.breaks).toEqual([15]);
+  expect(spacedSlice(index, 0, index.text.length)).toBe("attention heads are three matrices");
+  // A stroke inside one block reads the same either way, and a break at the
+  // edge of the slice is not inside the words that were taken.
+  expect(spacedSlice(index, 0, 9)).toBe("attention");
+  expect(spacedSlice(index, 15, index.text.length)).toBe("are three matrices");
+});
+
+test("list items break, inline elements do not, and a gap already there is not doubled", () => {
+  const items = indexRendered(body("<ul><li>one</li><li>two</li></ul>"));
+  expect(spacedSlice(items, 0, items.text.length)).toBe("one two");
+  const inline = indexRendered(body("<p>query <em>vector</em> heads</p>"));
+  expect(inline.breaks).toEqual([]);
+  expect(spacedSlice(inline, 0, inline.text.length)).toBe("query vector heads");
+  const spaced = indexRendered(body("<p>query vector </p><p>and key</p>"));
+  expect(spacedSlice(spaced, 0, spaced.text.length)).toBe("query vector and key");
+  const broken = indexRendered(body("<p>one<br>two</p>"));
+  expect(spacedSlice(broken, 0, broken.text.length)).toBe("one two");
 });
 
 test("an empty text node claims no position", () => {

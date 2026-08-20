@@ -217,6 +217,11 @@ export interface ChatMarkDraw {
   // Verbatim out of the rendering, and the same string `occurrence` was counted
   // against.
   text: string;
+  // The same words for a person to read: the rendering runs one block's words
+  // straight into the next one's, which is right for finding a mark again and
+  // wrong everywhere the words are shown (chat-mark-dom.ts: spacedSlice).
+  // Absent when the stroke stayed inside one block, which is most of them.
+  display?: string;
   occurrence: number;
   pen: MarkPen;
 }
@@ -249,7 +254,10 @@ export function buildChatMark(input: NewChatMark): Annotation | null {
     // same stroke here.
     type: input.pen === "highlight" ? "highlight" : "underline",
     color: input.color,
-    text: input.text,
+    // The readable string, and the verbatim one under chatAnchor: `text` is what
+    // the trace list draws, what read_annotations reports and what the note
+    // quotes back, and none of those may show two blocks run together.
+    text: input.display?.trim() ? input.display : input.text,
     dateCreated: stamp,
     dateModified: stamp,
     ...(input.aiThreadId ? { aiThreadId: input.aiThreadId } : {}),
@@ -324,7 +332,10 @@ export function chatMarkNote(marks: readonly Annotation[]): string {
   for (const mark of marks) {
     const anchor = chatAnchorOf(mark);
     if (!anchor) continue;
-    const text = anchor.text.replace(/\s+/g, " ").trim();
+    // The mark's own words as they read, falling back to the anchor's for an
+    // entry written before the two were told apart.
+    const shown = typeof mark.text === "string" && mark.text.trim() !== "" ? mark.text : anchor.text;
+    const text = shown.replace(/\s+/g, " ").trim();
     // Two pens on the same sentence — a highlight and then the AI pen — is two
     // marks and one passage. Saying it twice would read as two.
     if (text !== "") seen.add(text);

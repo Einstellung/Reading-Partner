@@ -42,6 +42,7 @@ import {
 	offsetOf,
 	paintBoxes,
 	rangeOfSpan,
+	spacedSlice,
 	toBoxes,
 	type MarkBox,
 } from './chat-mark-dom';
@@ -368,7 +369,17 @@ function usePenStrokes(list: RefObject<HTMLElement>, host: ChatMarkHost | null):
 			if (text.trim() === '') return;
 			const occurrence = occurrenceAt(index.text, text, start);
 			if (occurrence < 0) return;
-			host.onDraw({ messageTs: Number(row.getAttribute('data-reply-ts')), text, occurrence, pen });
+			// Two strings when the stroke crossed a block: the verbatim one it is
+			// found again by, and the one a person reads. Only when they differ,
+			// which is the minority of strokes.
+			const display = spacedSlice(index, start, end);
+			host.onDraw({
+				messageTs: Number(row.getAttribute('data-reply-ts')),
+				text,
+				...(display === text ? {} : { display }),
+				occurrence,
+				pen,
+			});
 			strokes.drew();
 			sel.removeAllRanges();
 		};

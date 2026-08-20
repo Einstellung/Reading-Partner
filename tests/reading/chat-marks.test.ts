@@ -292,6 +292,44 @@ test("a pen's mark looks like every other mark downstream", () => {
   ).toBeNull();
 });
 
+test("what a mark is found by and what it is read as are two strings", () => {
+  // A stroke across two paragraphs. The rendering holds no character between
+  // them, so the anchor holds none either — that is what it is looked up by.
+  const made = buildChatMark({
+    id: "c6",
+    pen: "underline",
+    color: "#a28ae5",
+    threadId: "lesson",
+    messageTs: 7,
+    text: "the model.The next step",
+    display: "the model. The next step",
+    occurrence: 0,
+    now: 1700000000000,
+  });
+  expect(chatAnchorOf(made)?.text).toBe("the model.The next step");
+  // The trace list, read_annotations and the note replayed to the model all
+  // read this field, and none of them wants two sentences run together.
+  expect(made?.text).toBe("the model. The next step");
+  expect(chatMarkNote([made as Annotation])).toBe(
+    "[marked by the reader in this reply: \u201Cthe model. The next step\u201D]",
+  );
+  // A stroke inside one block separates nothing, and a mark written before the
+  // two strings were told apart has only the one.
+  const inside = buildChatMark({
+    id: "c5",
+    pen: "highlight",
+    color: "#ffd400",
+    threadId: "lesson",
+    messageTs: 7,
+    text: "one block",
+    occurrence: 0,
+  });
+  expect(inside?.text).toBe("one block");
+  const legacy = { ...(inside as Annotation) };
+  delete (legacy as { text?: unknown }).text;
+  expect(chatMarkNote([legacy])).toContain("\u201Cone block\u201D");
+});
+
 // --- observation still finds the book it belongs to -----------------------
 
 test("an observation anchored on a classroom mark is still about this book", () => {

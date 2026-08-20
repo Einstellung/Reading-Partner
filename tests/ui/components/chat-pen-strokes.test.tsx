@@ -84,22 +84,39 @@ async function lift(root: HTMLElement): Promise<void> {
   });
 }
 
-test("only settled replies carry the marker", () => {
+// A reply's Markdown is rendered lazily, and until it lands the row shows a
+// plain-text fallback. A selection taken against that fallback is thrown away
+// the moment the real elements replace it, so every render here waits for the
+// swap first — and a stroke is then measured against what a reader would have
+// been dragging over.
+async function renderChat(messages: ThreadMessage[], marks?: ChatMarkHost) {
+  const view = render(
+    marks
+      ? createElement(MessageList, { messages, marks })
+      : createElement(MessageList, { messages }),
+  );
+  for (let i = 0; i < 20 && view.container.querySelector("[data-reply-body] > span"); i++) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+  return view;
+}
+
+test("only settled replies carry the marker", async () => {
   const streaming: ThreadMessage[] = [
     ...messages,
     { role: "ai", text: "half a s", ts: 3, streaming: true },
     { role: "ai", text: "that failed", ts: 4, failed: true },
   ];
-  const view = render(createElement(MessageList, { messages: streaming }));
+  const view = await renderChat(streaming);
   const marked = view.container.querySelectorAll("[data-reply-ts]");
   expect([...marked].map((el) => el.getAttribute("data-reply-ts"))).toEqual(["2"]);
 });
 
 test("a stroke over a reply is taken when the finger comes off, and the selection goes", async () => {
   const drawn: ChatMarkDraw[] = [];
-  const view = render(
-    createElement(MessageList, { messages, marks: host("highlight", drawn) }),
-  );
+  const view = await renderChat(messages, host("highlight", drawn));
 
   await select(view.container, "three matrices");
   // Still nothing: the drag is not the stroke.
@@ -112,9 +129,33 @@ test("a stroke over a reply is taken when the finger comes off, and the selectio
   expect(document.getSelection()?.isCollapsed).toBe(true);
 });
 
+// react-markdown leaves a newline text node between most blocks, but nothing at
+// all between two table cells: the rendering runs "one" straight into "two", and
+// the anchor has to hold exactly that while the trace list, read_annotations and
+// the note replayed to the model do not.
+test("a stroke across two cells reports the glued words and the readable ones", async () => {
+  const drawn: ChatMarkDraw[] = [];
+  const table: ThreadMessage[] = [
+    { role: "ai", text: "| head | tail |\n| - | - |\n| one | two |", ts: 2 },
+  ];
+  const view = await renderChat(table, host("underline", drawn));
+
+  await selectFromTo(view.container, "one", "two");
+  await lift(view.container);
+  expect(drawn).toEqual([
+    {
+      messageTs: 2,
+      text: "onetwo",
+      display: "one two",
+      occurrence: 0,
+      pen: "underline",
+    },
+  ]);
+});
+
 test("the pen the top bar has selected is the pen that is recorded", async () => {
   const drawn: ChatMarkDraw[] = [];
-  const view = render(createElement(MessageList, { messages, marks: host("ai", drawn) }));
+  const view = await renderChat(messages, host("ai", drawn));
   await select(view.container, "attention heads");
   await lift(view.container);
   expect(drawn.map((d) => d.pen)).toEqual(["ai"]);
@@ -122,7 +163,7 @@ test("the pen the top bar has selected is the pen that is recorded", async () =>
 
 test("the pointer draws nothing at all", async () => {
   const drawn: ChatMarkDraw[] = [];
-  const view = render(createElement(MessageList, { messages, marks: host(null, drawn) }));
+  const view = await renderChat(messages, host(null, drawn));
   await select(view.container, "three matrices");
   await lift(view.container);
   expect(drawn).toEqual([]);
@@ -131,7 +172,7 @@ test("the pointer draws nothing at all", async () => {
 // No host is how a surface says a reply there is not the book continued: the
 // info chat, the talk, the corner bubble over a page the pen is aimed at.
 test("a chat with no marks host takes no stroke", async () => {
-  const view = render(createElement(MessageList, { messages }));
+  const view = await renderChat(messages);
   await select(view.container, "three matrices");
   await lift(view.container);
   // Nothing to assert but that it did not throw and marked nothing: there is no
@@ -147,9 +188,7 @@ test("a stroke that runs past the end of the reply catches nothing", async () =>
   const withNotice: ThreadMessage[] = [
     { role: "ai", text: REPLY, ts: 2, notice: "Chapter 4 was left out to fit" },
   ];
-  const view = render(
-    createElement(MessageList, { messages: withNotice, marks: host("underline", drawn) }),
-  );
+  const view = await renderChat(withNotice, host("underline", drawn));
 
   await selectFromTo(view.container, "three matrices", "left out to fit");
   await lift(view.container);
@@ -161,9 +200,7 @@ test("a stroke that runs past the end of the reply catches nothing", async () =>
 test("a repeated phrase records which copy was drawn over", async () => {
   const repeated: ThreadMessage[] = [{ role: "ai", text: "a head is a head", ts: 7 }];
   const drawn: ChatMarkDraw[] = [];
-  const view = render(
-    createElement(MessageList, { messages: repeated, marks: host("underline", drawn) }),
-  );
+  const view = await renderChat(repeated, host("underline", drawn));
 
   await select(view.container, "a head", 1);
   await lift(view.container);
@@ -231,9 +268,7 @@ test("the click that closes the drag the pen took as a stroke opens nothing", as
   try {
     const drawn: ChatMarkDraw[] = [];
     const opened: Annotation[] = [];
-    const view = render(
-      createElement(MessageList, { messages, marks: host("highlight", drawn) }),
-    );
+    const view = await renderChat(messages, host("highlight", drawn));
 
     await select(view.container, "three matrices");
     await lift(view.container);
@@ -261,9 +296,7 @@ test("a press on that mark once the finger has gone down again opens it", async 
   try {
     const opened: Annotation[] = [];
     const mark = markOf({ messageTs: 2, text: "three matrices", occurrence: 0, pen: "highlight" });
-    const view = render(
-      createElement(MessageList, { messages, marks: withMarks([mark], opened) }),
-    );
+    const view = await renderChat(messages, withMarks([mark], opened));
 
     const body = view.container.querySelector("[data-reply-body]") as HTMLElement;
     await act(async () => {

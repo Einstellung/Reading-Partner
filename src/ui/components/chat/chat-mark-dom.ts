@@ -22,30 +22,76 @@ export interface TextRun {
 export interface RenderedText {
   text: string;
   runs: TextRun[];
+  // Offsets in `text` where one block's words end and the next block's begin —
+  // the seams the walk left nothing at. Ascending, and never 0 or text.length.
+  breaks: number[];
 }
 
 const TEXT_NODE = 3;
 const ELEMENT_NODE = 1;
 
+// The tags that end a line of reading. A rendered reply is Markdown, so this is
+// what react-markdown emits, not the whole of HTML; anything not named here is
+// inline and its words run on. Tag names rather than computed style because a
+// headless DOM lays nothing out and would report every element the same.
+const SEPARATES = new Set([
+  "P", "DIV", "BR", "HR", "LI", "UL", "OL", "DL", "DT", "DD",
+  "BLOCKQUOTE", "PRE", "TABLE", "THEAD", "TBODY", "TR", "TD", "TH",
+  "H1", "H2", "H3", "H4", "H5", "H6",
+  "SECTION", "ARTICLE", "HEADER", "FOOTER", "FIGURE", "FIGCAPTION", "ASIDE",
+]);
+
 // The words of a rendered reply, in document order, with the map back to the
-// nodes they came from. Empty text nodes are left out: they carry no position a
-// reader can select and would make two runs share one offset.
+// nodes they came from, and where the blocks met. Empty text nodes are left
+// out: they carry no position a reader can select and would make two runs share
+// one offset.
+//
+// Nothing is inserted between blocks — an offset in this string has to name the
+// same characters when the mark is drawn and when it is drawn again, so the walk
+// stays lossless and reports the seams instead (spacedSlice).
 export function indexRendered(root: Node | null | undefined): RenderedText {
   const runs: TextRun[] = [];
+  const breaks: number[] = [];
   let text = "";
+  let seam = false;
   const walk = (node: Node): void => {
     if (node.nodeType === TEXT_NODE) {
       const value = (node as Text).data;
       if (value === "") return;
+      if (seam && text !== "") breaks.push(text.length);
+      seam = false;
       runs.push({ node: node as Text, at: text.length });
       text += value;
       return;
     }
     if (node.nodeType !== ELEMENT_NODE) return;
+    const block = SEPARATES.has((node as Element).tagName);
+    if (block) seam = true;
     for (const child of Array.from(node.childNodes)) walk(child);
+    if (block) seam = true;
   };
   if (root) walk(root);
-  return { text, runs };
+  return { text, runs, breaks };
+}
+
+// The same words as a person reads them: the slice, with a space where a block
+// ended inside it. The anchor string glues "the model." to "The next step" —
+// deliberately, because both directions of a mark are the one walk — and that
+// string must not be the one shown in the trace list, handed to read_annotations
+// or replayed to the model.
+//
+// A seam the rendering already has whitespace on either side of is left alone:
+// the gap is there, and a second space would be one the reply never had.
+export function spacedSlice(index: RenderedText, start: number, end: number): string {
+  let out = "";
+  let at = start;
+  for (const seam of index.breaks) {
+    if (seam <= start || seam >= end) continue;
+    if (/\s/.test(index.text[seam - 1] ?? "") || /\s/.test(index.text[seam] ?? "")) continue;
+    out += `${index.text.slice(at, seam)} `;
+    at = seam;
+  }
+  return out + index.text.slice(at, end);
 }
 
 // A DOM position as an offset into the rendering, or null when it is not in it.
