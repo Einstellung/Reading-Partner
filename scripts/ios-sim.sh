@@ -38,7 +38,7 @@
 #   scripts/ios-sim.sh eval -f <file.js>    ... from a file
 #   scripts/ios-sim.sh open <path>          navigate the webview (/, /embedpdf-spike.html)
 #   scripts/ios-sim.sh reader               open the engine harness on demo.pdf and wait for it
-#   scripts/ios-sim.sh chat                 open the chat aside harness and wait for it
+#   scripts/ios-sim.sh chat                 open the reply-pen harness and wait for it
 #   scripts/ios-sim.sh shot <out.png>       screenshot
 #   scripts/ios-sim.sh tap <x> <y>
 #   scripts/ios-sim.sh press <x> <y> [seconds]   a held tap (long press)
@@ -309,11 +309,11 @@ cmd_reader() {
 }
 
 # The chat harness (chat-aside-spike.html) mounts the real MessageList as a
-# book-level conversation with canned settled replies, and hands the rects both
-# sides of the screen have to window.__aside — which is what makes "does our
-# floating control collide with WebKit's own callout bar" a number. Pair it with
-# `press` to raise a selection and `native` to read where the bar landed
-# (docs/pitfall/119).
+# book-level conversation with canned settled replies, with a pen in hand, and
+# hands the rects and the strokes it took to window.__aside — which is what makes
+# "did that drag leave a mark on the words it crossed" a number. Pair it with
+# `press` to raise a selection and `native` to read the UIKit views floating over
+# the page (docs/pitfall/119).
 cmd_chat() {
   cmd_open /chat-aside-spike.html >/dev/null
   echo -n "waiting for the harness"
