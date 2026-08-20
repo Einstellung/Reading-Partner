@@ -91,6 +91,7 @@ import {
   markDoorThread,
   markOpenAction,
   orderTraceMarks,
+  traceSelectAction,
   type ChatMarkDraw,
 } from "./reading/chat-marks";
 import { asideIntents, bookTextNotice, openingIntents, type ReadingIntent } from "./reading/intents";
@@ -1119,19 +1120,40 @@ export default function App() {
 
   // Trace-list click: jump to the mark. Programmatic select does not open the
   // popup (pitfall 04), which is what we want for a list jump.
-  const onTraceSelect = useCallback((id: string) => {
-    // Same as the outline jump: leaving the drawer open parks its backdrop over
-    // the page we just navigated to, and the backdrop only answers a tap.
-    setSidebarOpen(false);
-    // A classroom mark is on no page: the engine has never heard of it, so
-    // selecting it there is at best a no-op and navigating to it asks for a
-    // page that does not exist. Selecting it in the list is all there is.
-    if (isPageMark(annsRef.current.get(id))) {
-      viewRef.current?.selectAnnotations([id]);
-      viewRef.current?.navigate({ annotationID: id });
-    }
-    setSelectedAnnId(id);
-  }, []);
+  const onTraceSelect = useCallback(
+    (id: string) => {
+      const action = traceSelectAction(annsRef.current.get(id), hasThread);
+      if (action.act === "mark") {
+        // A classroom mark with nothing left to open: the row is the only place
+        // those words are shown, so the drawer stays open around it. Closing it
+        // would answer the press with an empty screen.
+        setSelectedAnnId(id);
+        return;
+      }
+      // Same as the outline jump: leaving the drawer open parks its backdrop
+      // over the page we just navigated to, and the backdrop only answers a tap.
+      setSidebarOpen(false);
+      setSelectedAnnId(id);
+      if (action.act === "page") {
+        viewRef.current?.selectAnnotations([id]);
+        viewRef.current?.navigate({ annotationID: id });
+        return;
+      }
+      const bookId = bookIdRef.current;
+      const thread = bookId ? getThread(bookId, action.threadId) : undefined;
+      openThreadCall(
+        {
+          threadId: action.threadId,
+          annotationId: id,
+          ...asideFramingFor(thread),
+          view: "chat-main",
+          anchor: { x: 0, y: 0 },
+        },
+        thread?.messages ?? [],
+      );
+    },
+    [openThreadCall, asideFramingFor, hasThread],
+  );
 
   // Does the active default model accept images? (Gates a paste up front.)
   const modelTakesImages = useCallback(() => {

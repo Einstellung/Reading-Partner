@@ -250,6 +250,36 @@ export function markOpenAction(
   return { jump: isPageMark(ann), threadId: markDoorThread(ann, hasThread) };
 }
 
+// What pressing a row of the trace list does.
+//
+// A page mark jumps to its page, whether or not it also opened a conversation:
+// the row is the jump and the sparkle button beside it is the door. A classroom
+// mark is on no page — the engine has never heard of it, and asking it to
+// navigate names a page that does not exist — so the row is a door instead: into
+// the side conversation the mark made, or failing that into the lesson it was
+// drawn in. With neither left, the row itself is the only place those words are
+// shown, and the caller must leave the list open around it rather than close the
+// drawer onto nothing.
+export type TraceSelect =
+  | { act: "page" }
+  | { act: "thread"; threadId: string }
+  | { act: "mark" };
+
+export function traceSelectAction(
+  ann: Annotation | null | undefined,
+  hasThread: (threadId: string) => boolean,
+): TraceSelect {
+  // An id the shell no longer has an entry for reads as a page mark here, which
+  // is what it did before there were two kinds: the engine answers it or does
+  // nothing.
+  if (isPageMark(ann)) return { act: "page" };
+  const opened = markDoorThread(ann, hasThread);
+  if (opened) return { act: "thread", threadId: opened };
+  const room = chatAnchorOf(ann)?.threadId;
+  if (room && hasThread(room)) return { act: "thread", threadId: room };
+  return { act: "mark" };
+}
+
 // A stroke the reader has just made, as the surface reports it: which reply,
 // which words, and which copy of them. Everything else about the mark — its id,
 // its color, the conversation it may open — is the shell's to decide.

@@ -28,6 +28,7 @@ import {
   occurrenceAt,
   orderTraceMarks,
   traceGroups,
+  traceSelectAction,
   type NewChatMark,
 } from "../../src/reading/chat-marks";
 import { annotationPageMap, observationScope } from "../../src/reading/lecture";
@@ -374,6 +375,31 @@ test("the door on a trace row points the engine at nothing that has no page", ()
     jump: false,
     threadId: null,
   });
+});
+
+test("a trace row jumps to a page, opens a conversation, or shows nothing but itself", () => {
+  expect(traceSelectAction(pageMark("p1"), there())).toEqual({ act: "page" });
+  // A page mark with a live conversation still jumps to the page: the row is
+  // the jump, the sparkle button is the door.
+  expect(traceSelectAction({ ...pageMark("p2"), aiThreadId: "t2" }, there("t2"))).toEqual({
+    act: "page",
+  });
+  // A classroom mark is on no page. It opens the side conversation it made,
+  // and failing that the lesson it was drawn in.
+  expect(
+    traceSelectAction(chatMark("c1", { aiThreadId: "aside-1" }), there("aside-1", "lesson")),
+  ).toEqual({ act: "thread", threadId: "aside-1" });
+  expect(traceSelectAction(chatMark("c2"), there("lesson"))).toEqual({
+    act: "thread",
+    threadId: "lesson",
+  });
+  expect(traceSelectAction(chatMark("c3", { aiThreadId: "aside-1" }), there("lesson"))).toEqual({
+    act: "thread",
+    threadId: "lesson",
+  });
+  // Neither is left. The row is the only place those words are shown, so the
+  // drawer has to stay open around it.
+  expect(traceSelectAction(chatMark("c4"), there())).toEqual({ act: "mark" });
 });
 
 // --- observation still finds the book it belongs to -----------------------
