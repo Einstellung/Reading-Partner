@@ -150,13 +150,23 @@ test("conversations that cannot be read say so in their own words", async () => 
   expect(names(log)).toContain("mountReader");
 });
 
+// The shell is shown every mark; the engine is shown the ones that have a page.
+// A mark drawn on an AI reply has none, and handing it to EmbedPDF is drawing it
+// somewhere it does not belong.
 test("the marks that were read are what the pane is mounted with", async () => {
   const log: Call[] = [];
-  const marks = [{ id: "a" } as unknown as Annotation];
+  const marks = [
+    { id: "a", position: { pageIndex: 0 } } as unknown as Annotation,
+    {
+      id: "c",
+      chatAnchor: { threadId: "t", messageTs: 1, text: "x", occurrence: 0, pen: "ai" },
+    } as unknown as Annotation,
+  ];
   await openBook(fakeShell(log), book, fakeIo(log, { loadAnnotations: async () => marks }));
 
   expect(argsOf(log, "showMarks")).toEqual([marks]);
-  expect((argsOf(log, "mountReader")[0] as { annotations: Annotation[] }).annotations).toBe(marks);
+  const mounted = (argsOf(log, "mountReader")[0] as { annotations: Annotation[] }).annotations;
+  expect(mounted.map((a) => a.id)).toEqual(["a"]);
 });
 
 test("a book that never chose a layout opens scrolling", () => {

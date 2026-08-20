@@ -26,8 +26,9 @@ import { providers, toPiMessages } from "../ai/providers";
 import { estimateTextTokens, fitToBudget } from "../budget";
 import { EXPLAIN_KICKOFF } from "./intents";
 import { asideParentTail, ASIDE_KICKOFF } from "./aside";
+import { markedReplyText } from "./chat-marks";
 import { READING_LADDER, type ReadingReductionId } from "./ladder";
-import type { Annotation } from "../platform/app/reader-contract";
+import { isPageMark, type Annotation } from "../platform/app/reader-contract";
 import { buildSystemPrompt, readerProfileSection, type BooklistItem } from "../platform/app/context";
 import type { Settings } from "../platform/app/settings";
 import { loadAnnotations } from "../platform/app/annotations";
@@ -65,6 +66,7 @@ import {
   getObservationAdapter,
   observationPromptSection,
   notifyObservationChange,
+  pagelessMarkIds,
   profileForPrompt,
   type DistillAnnotation,
   type Observation,
@@ -361,12 +363,16 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     kind === "aside" && thread?.parentThreadId
       ? getThread(bookId, thread.parentThreadId)
       : undefined;
-  const aside: { from: "chat" | "mark" } | null =
-    kind === "aside" ? { from: annotationId === "" ? "chat" : "mark" } : null;
   // Anchored on a page: a mark thread, and an aside drawn on the page. The
   // book-level thread's position is wherever the reader currently is, and so is
   // a chat-span aside's — its span came out of a reply, not out of a page.
-  const onMark = annotationId !== "";
+  //
+  // A mark drawn on a reply is not a page anchor either (docs/09). It has an
+  // annotation like a drawn one and no page like a selected one, so what tells
+  // the two apart is the mark and not the presence of an id.
+  const onMark = annotationId !== "" && isPageMark(ann as Annotation | undefined);
+  const aside: { from: "chat" | "mark" } | null =
+    kind === "aside" ? { from: onMark ? "mark" : "chat" } : null;
   const currentPage = pageIndex !== null ? pageIndex + 1 : null;
   const page = onMark
     ? annotationPage(ann as { position?: { pageIndex?: number } } | undefined)
@@ -389,12 +395,9 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   // The passage in the prompt's anchor slot. A chat-span aside has no mark, so
   // it is the span the reader selected out of the reply, stored verbatim on the
   // thread (platform/app/threads.ts: never an offset).
+  const markText = typeof ann?.text === "string" ? ann.text : "";
   const selectionText =
-    aside?.from === "chat"
-      ? thread?.asideAnchor?.text ?? ""
-      : typeof ann?.text === "string"
-        ? ann.text
-        : "";
+    aside?.from === "chat" ? thread?.asideAnchor?.text ?? markText : markText;
   const selectionComment = typeof ann?.comment === "string" ? ann.comment : undefined;
 
   let tools = buildReadingTools({ currentFulltext, materials });
@@ -824,10 +827,15 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   }
 
   const threadMsgs = getThread(bookId, threadId)?.messages ?? [];
+  // A reply the reader drew on comes back with what they marked named after it
+  // (reading/chat-marks.ts). It rides the message, so it falls out of context
+  // when the message does, and it sits in the replayed history rather than in
+  // the prompt: the stable half stays byte-identical, and the only cache a new
+  // mark disturbs is the history's, once, on the turn after it was drawn.
   const prior = await Promise.all(
     threadMsgs.map(async (m) => ({
       role: m.role,
-      text: m.text,
+      text: markedReplyText(m, annotations, threadId),
       images: m.images?.length ? await readThreadImages(threadId, m.images) : undefined,
     })),
   );
@@ -842,7 +850,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   const parentTail: ReadingTurnMessage[] = parent
     ? asideParentTail(parent.messages, thread?.asideAnchor?.messageTs ?? null).map((m) => ({
         role: m.role,
-        text: m.text,
+        text: markedReplyText(m, annotations, parent.id),
       }))
     : [];
   if (signal?.aborted) return null;
@@ -857,7 +865,8 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     // Whose arrears these are (observation/distill/arrears.ts). A chat-span
     // aside has no mark, so it is no unit of its own and this stretch belongs to
     // the conversation it was pulled out of.
-    const unit = distillUnitOf(listThreads(bookId), threadId);
+    const marks = distillAnnotations();
+    const unit = distillUnitOf(listThreads(bookId), threadId, pagelessMarkIds(marks));
     // Where the pass says it happened follows the unit. Folded into the lesson,
     // the position is the reader's own page — the same answer the lesson gives
     // for itself — and there is no marked passage, because the lesson has none.
@@ -875,7 +884,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
         markedText: folded ? "" : selectionText,
         messages: unit?.messages ?? threadMsgs.map(({ role, text, ts }) => ({ role, text, ts })),
         ...(unit ? { parts: unit.parts } : {}),
-        annotations: distillAnnotations(),
+        annotations: marks,
       },
       TRIM_DISTILL_MIN_NEW,
     );

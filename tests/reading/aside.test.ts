@@ -12,7 +12,6 @@ import {
   asideReturn,
   asideSpan,
   carriesAsideReceipt,
-  mayOpenAside,
   ASIDE_KICKOFF,
   ASIDE_PARENT_MAX_MESSAGES,
   ASIDE_PARENT_ROUNDS,
@@ -144,23 +143,6 @@ test("a selection longer than the cap is cut, and marked as cut", () => {
 test("the anchor carries the reply the span came out of", () => {
   expect(asideAnchorAt(1700, " query  vector ")).toEqual({ messageTs: 1700, text: "query vector" });
   expect(asideAnchorAt(1700, " ")).toBeNull();
-});
-
-// --- which rows offer it ---------------------------------------------------
-
-const reply = { role: "ai" as const, text: "attention heads are three matrices" };
-
-test("only a settled reply in the book-level conversation offers an aside", () => {
-  expect(mayOpenAside(reply, true)).toBe(true);
-  // Outside the lesson there is no affordance at all, which is what keeps an
-  // aside one level deep: inside one there is no row to open a second from.
-  expect(mayOpenAside(reply, false)).toBe(false);
-  expect(mayOpenAside({ role: "user", text: "what is a head" }, true)).toBe(false);
-  // Every delta rebuilds a streaming row, so a Range into it is dead in a frame.
-  expect(mayOpenAside({ ...reply, streaming: true }, true)).toBe(false);
-  // The app's words standing in for a reply, not the model's.
-  expect(mayOpenAside({ ...reply, failed: true }, true)).toBe(false);
-  expect(mayOpenAside({ role: "ai", text: "  " }, true)).toBe(false);
 });
 
 // --- what a record opens as ------------------------------------------------

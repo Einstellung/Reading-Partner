@@ -1,15 +1,15 @@
-// Standalone runtime harness for the chat's aside control. Not part of the app;
-// it mounts the real MessageList in the shape CallView gives it — book-level,
-// size lg, the same column — with canned settled replies, so useAsideSelection
-// and AskAsideControl run for real in whatever webview this page is opened in.
-// Served by Vite in dev at /chat-aside-spike.html.
+// Standalone runtime harness for the pens on a reply (docs/09). Not part of the
+// app; it mounts the real MessageList in the shape CallView gives it — size lg,
+// the same column — with canned settled replies, so a stroke made by a real
+// finger runs for real in whatever webview this page is opened in. Served by
+// Vite in dev at /chat-aside-spike.html.
 //
-// It exists for one question the DOM alone cannot answer: where WebKit's own
-// Copy | Look Up | Translate bar lands relative to a control we place off a
-// selection. The callout is native and invisible to JS, so the measurement is
-// half from here (window.__aside) and half from the accessibility tree
-// (scripts/ios-sim.sh describe). This side has to supply a real long-pressable
-// reply and hand back exact rects — a programmatic selection raises no callout
+// It exists for the questions the DOM alone cannot answer: whether a long press
+// on a reply produces a selection this can read, and where WebKit's own
+// Copy | Look Up | Translate bar lands over the words that were just marked.
+// The callout is native and invisible to JS, so the measurement is half from
+// here (window.__aside) and half from the accessibility tree
+// (scripts/ios-sim.sh describe). A programmatic selection raises no callout
 // (docs/pitfall/04), so everything here is arranged for a real finger.
 
 import { useState } from "react";
@@ -20,7 +20,7 @@ import "../../../styles.css";
 import ChatScaleScope from "../base/ChatScaleScope";
 import { MessageList } from "./chat";
 import type { ThreadMessage } from "./types";
-import type { AsideAnchor } from "../../../platform/app/threads";
+import type { ChatMarkDraw } from "../../../reading/chat-marks";
 
 interface Rect {
   x: number;
@@ -38,7 +38,7 @@ declare global {
     __aside: {
       ready: boolean;
       // Every anchor the control has opened, newest last.
-      opened: AsideAnchor[];
+      opened: ChatMarkDraw[];
       // The control's own box, or null when it is not on screen.
       control(): Rect | null;
       // What is selected, as the page sees it: the string, the range's bounding
@@ -100,7 +100,7 @@ const MESSAGES: ThreadMessage[] = Array.from({ length: 4 }, (_, round) => [
 ]).flat();
 
 function Harness() {
-  const [opened, setOpened] = useState<AsideAnchor[]>([]);
+  const [opened, setOpened] = useState<ChatMarkDraw[]>([]);
   return (
     // CallView's own frame: the surface variables, the scroller, the centred
     // column. Without them the control would be measured against a different
@@ -112,9 +112,16 @@ function Harness() {
             messages={MESSAGES}
             size="lg"
             className="mx-auto max-w-[calc(48rem*var(--chat-scale,1))] pb-6"
-            onOpenAside={(anchor) => {
-              openedAnchors.push(anchor);
-              setOpened((prev) => [...prev, anchor]);
+            marks={{
+              threadId: "spike",
+              pen: "underline",
+              color: "#a28ae5",
+              marks: [],
+              onDraw: (draw) => {
+                openedAnchors.push(draw);
+                setOpened((prev) => [...prev, draw]);
+              },
+              onOpen: () => {},
             }}
           />
         </div>
@@ -132,18 +139,19 @@ function Harness() {
 
 // Module scope, and not named `opened`: the component has a state variable by
 // that name, and a shadowed push writes to the wrong array without a word.
-const openedAnchors: AsideAnchor[] = [];
+const openedAnchors: ChatMarkDraw[] = [];
 const scroller = () => document.querySelector<HTMLElement>("[data-aside-scroller]");
 const paragraphs = () =>
-  [...document.querySelectorAll<HTMLElement>("[data-aside-ts] p")];
+  [...document.querySelectorAll<HTMLElement>("[data-reply-ts] p")];
 
 window.__aside = {
   ready: false,
   opened: openedAnchors,
   control: () => {
-    // The control is the only fixed button outside the list.
-    const el = document.querySelector<HTMLElement>('button[data-slot="button"].fixed');
-    return el ? rect(el.getBoundingClientRect()) : null;
+    // Nothing is raised beside a selection any more — a stroke is committed on
+    // pointer-up. Kept so the probe's shape does not change under
+    // scripts/ios-sim.sh.
+    return null;
   },
   selection: () => {
     const sel = document.getSelection();

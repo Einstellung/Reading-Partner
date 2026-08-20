@@ -5,6 +5,7 @@
 
 import { useState, type RefObject } from "react";
 import type { ViewInstance, ViewStats } from "../../../platform/app/reader-contract";
+import type { LevelGate } from "../../../reading/call-state";
 import { ANNOTATION_COLORS } from "../../../platform/app/annotations";
 import { setTouchDebugEnabled } from "../../../reading/engine/gesture/touch-debug";
 import type { ToolType } from "./types";
@@ -23,6 +24,10 @@ import PenToolbar from "./PenToolbar";
 import { Button } from "../ui/button";
 import { Separator } from "../ui/separator";
 
+// The blackboard's label. What it opens, and the half of the dim button's line
+// that names the control.
+const BOOK_THREAD = "Learn this book with AI";
+
 export default function ReaderTopBar(props: {
   view: RefObject<ViewInstance | null>;
   stats: ViewStats | null;
@@ -36,11 +41,14 @@ export default function ReaderTopBar(props: {
   tool: { type: ToolType; color: string };
   onToolChange: (tool: { type: ToolType; color: string }) => void;
   onOpenBookThread: () => void;
+  // Which of the two controls that open a level are dim right now, and why
+  // (reading/call-state.ts). Null on a field means that one is live.
+  gate: LevelGate;
   onOpenSettings: () => void;
   // Something in Settings needs attention (today: sync is not running).
   settingsAlert: boolean;
 }) {
-  const { view, stats, sidebarOpen } = props;
+  const { view, stats, sidebarOpen, gate } = props;
   // On-device touch probe. Off by default, never persisted.
   const [touchDebug, setTouchDebug] = useState(false);
 
@@ -151,6 +159,7 @@ export default function ReaderTopBar(props: {
           tool={props.tool}
           colors={ANNOTATION_COLORS}
           onToolChange={props.onToolChange}
+          disabled={gate.aiPen === null ? undefined : { ai: gate.aiPen }}
         />
         <Separator orientation="vertical" className="flex-none data-[orientation=vertical]:h-5" />
         <span className="flex-none [font-variant-numeric:tabular-nums] text-[13px] text-[#555] whitespace-nowrap px-0.5">
@@ -164,8 +173,9 @@ export default function ReaderTopBar(props: {
           variant="ghost"
           size="icon"
           className="flex-none text-[#555]"
-          title="Learn this book with AI"
-          aria-label="Learn this book with AI"
+          disabled={gate.bookThread !== null}
+          title={gate.bookThread ?? BOOK_THREAD}
+          aria-label={gate.bookThread === null ? BOOK_THREAD : `${BOOK_THREAD}: ${gate.bookThread}`}
           onClick={props.onOpenBookThread}
         >
           <IconReadTogether size={18} />

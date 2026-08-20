@@ -56,3 +56,27 @@ test("rows come out in document order, whatever order they arrive in", () => {
   const html = render({ annotations: [MARKS[1], MARKS[0]] });
   expect(html.indexOf("first")).toBeLessThan(html.indexOf("second"));
 });
+
+// The two groups (docs/09). A mark drawn on a reply has no page and no
+// document-order key, and the list used to sort on that key alone, which put
+// every classroom mark above every page mark.
+const ON_A_REPLY: Annotation = {
+  id: "c",
+  type: "underline",
+  color: "#a28ae5",
+  text: "on a reply",
+  chatAnchor: { threadId: "lesson", messageTs: 1000, text: "on a reply", occurrence: 0, pen: "underline" },
+};
+
+test("classroom marks sit under their own heading, below the page group", () => {
+  const html = render({ annotations: [ON_A_REPLY, ...MARKS] });
+  expect(html.indexOf("On the page")).toBeLessThan(html.indexOf("first"));
+  expect(html.indexOf("first")).toBeLessThan(html.indexOf("second"));
+  expect(html.indexOf("second")).toBeLessThan(html.indexOf("In the classroom"));
+  expect(html.indexOf("In the classroom")).toBeLessThan(html.indexOf("on a reply"));
+});
+
+test("a group with nothing in it carries no heading", () => {
+  expect(render({ annotations: [ON_A_REPLY] })).not.toContain("On the page");
+  expect(render()).not.toContain("In the classroom");
+});

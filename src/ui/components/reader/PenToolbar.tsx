@@ -18,6 +18,10 @@ interface PenToolbarProps {
 	// 'horizontal' lays the rack out as a row for the header bar; 'vertical' is
 	// the floating rack beside the page.
 	orientation?: 'vertical' | 'horizontal';
+	// Tools the rack draws but will not act with, each with the one line that
+	// says why. Dim and unpressable, never dropped: the rack is where the rule
+	// about levels is legible (docs/03, reading/call-state.ts).
+	disabled?: Partial<Record<ToolType, string>>;
 }
 
 // 'none' is not a button: it is the state the rack is in when no button is
@@ -36,7 +40,13 @@ const CARD = 'rounded-xl border border-black/10 bg-white shadow-lg';
 // Distance from the swatch to the palette that opens off it.
 const GAP = 8;
 
-export default function PenToolbar({ tool, colors, onToolChange, orientation = 'vertical' }: PenToolbarProps) {
+export default function PenToolbar({
+	tool,
+	colors,
+	onToolChange,
+	orientation = 'vertical',
+	disabled,
+}: PenToolbarProps) {
 	const [paletteOpen, setPaletteOpen] = useState(false);
 	// Where the open palette sits, in viewport coordinates. It cannot be laid out
 	// against the swatch: the header's tool band scrolls horizontally, and a
@@ -137,14 +147,19 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 	// The navigation lock is a latch, not a tool, so its pressed state carries an
 	// extra inset ring — it has to read as held down across a whole reading
 	// session, not just as "most recently tapped".
-	const toolBtn = (active: boolean, type: ToolType) =>
+	// A dim tool drops the accent and the ghost variant's hover fill — the
+	// modifier chain has to repeat exactly to replace it (docs/pitfall/78). The
+	// 40% is the Button's own disabled opacity.
+	const toolBtn = (active: boolean, type: ToolType, off: boolean) =>
 		`rounded-lg ${toolSize} ` +
-		(active
-			? 'bg-secondary text-secondary-foreground can-hover:hover:bg-secondary' +
-				(type === 'navlock' ? ' ring-2 ring-inset ring-primary' : '')
-			: type === 'ai'
-				? 'text-primary'
-				: 'text-neutral-700');
+		(off
+			? 'text-neutral-700 can-hover:hover:bg-transparent'
+			: active
+				? 'bg-secondary text-secondary-foreground can-hover:hover:bg-secondary' +
+					(type === 'navlock' ? ' ring-2 ring-inset ring-primary' : '')
+				: type === 'ai'
+					? 'text-primary'
+					: 'text-neutral-700');
 
 	return (
 		<div
@@ -153,23 +168,27 @@ export default function PenToolbar({ tool, colors, onToolChange, orientation = '
 			aria-orientation={orientation}
 			aria-label="Reading tools"
 		>
-			{TOOLS.map(({ type, label, Icon }) => (
-				<Button
-					key={type}
-					type="button"
-					variant="ghost"
-					// The rack sets its own square geometry, so no size variant: the
-					// table's `icon` is 32px and these are 32 or 36 by orientation.
-					size={null}
-					className={toolBtn(tool.type === type, type)}
-					title={label}
-					aria-label={label}
-					aria-pressed={tool.type === type}
-					onClick={() => pickTool(type)}
-				>
-					<Icon size={20} />
-				</Button>
-			))}
+			{TOOLS.map(({ type, label, Icon }) => {
+				const why = disabled?.[type];
+				return (
+					<Button
+						key={type}
+						type="button"
+						variant="ghost"
+						// The rack sets its own square geometry, so no size variant: the
+						// table's `icon` is 32px and these are 32 or 36 by orientation.
+						size={null}
+						className={toolBtn(tool.type === type, type, why !== undefined)}
+						disabled={why !== undefined}
+						title={why ?? label}
+						aria-label={why === undefined ? label : `${label}: ${why}`}
+						aria-pressed={tool.type === type}
+						onClick={() => pickTool(type)}
+					>
+						<Icon size={20} />
+					</Button>
+				);
+			})}
 
 			{/* The divider and swatch always hold their place so the rack width never
 			    jumps between tools. */}

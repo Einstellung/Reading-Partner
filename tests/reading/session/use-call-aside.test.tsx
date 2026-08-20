@@ -559,3 +559,76 @@ test("deleting a mark stops its turn even when the store never held the thread",
     world.restore();
   }
 });
+
+// A mark drawn on a reply belongs to the book, not to the conversation it was
+// drawn in (docs/09). The AI pen's one carries the side conversation it opened,
+// exactly as a mark on a passage does — but deleting that conversation must
+// leave the mark in annotations and in the trace list, the same way the
+// highlight pen's mark on the same reply is left. What it loses is its door.
+function onReply(id: string, aiThreadId?: string): Annotation {
+  return {
+    id,
+    type: "underline",
+    ...(aiThreadId ? { aiThreadId } : {}),
+    chatAnchor: {
+      threadId: LESSON,
+      messageTs: 9,
+      text: `words ${id}`,
+      occurrence: 0,
+      pen: aiThreadId ? "ai" : "highlight",
+    },
+  };
+}
+
+const bothPens = (pageAside: string, replyAside: string): Annotation[] => [
+  { id: "p1", type: "underline", aiThreadId: pageAside },
+  onReply("c1", replyAside),
+  onReply("c2"),
+];
+
+test("deleting the lesson takes the marks off the page, and leaves the ones on its replies", () => {
+  const onPage = "page-aside";
+  const onAReply = "reply-aside";
+  const world = fakeWorld({
+    [LESSON]: thread(LESSON, { book: true }),
+    [onPage]: thread(onPage, { annotationId: "p1", parentThreadId: LESSON }),
+    [onAReply]: thread(onAReply, { annotationId: "c1", parentThreadId: LESSON }),
+  });
+  const removed: string[] = [];
+  try {
+    const view = renderHook(() =>
+      useCall<CallRow, StagedImage>(host(bothPens(onPage, onAReply), removed)),
+    );
+    act(() => view.result.current.openThread(lessonCall, []));
+    act(() => view.result.current.deleteOpenThread());
+
+    expect(Object.keys(world.held)).toEqual([]);
+    expect(removed).toEqual(["p1"]);
+  } finally {
+    world.restore();
+  }
+});
+
+// The other end of the same pairing: a mark deleted from the trace list takes
+// its conversation and the asides off it, and each of those takes the page mark
+// hosting it. A mark on a reply is not one of those either.
+test("deleting a page mark leaves the marks drawn on the replies of the thread it takes", () => {
+  const onPage = "page-aside";
+  const onAReply = "reply-aside";
+  const world = fakeWorld({
+    [LESSON]: thread(LESSON, { book: true }),
+    [onPage]: thread(onPage, { annotationId: "p1", parentThreadId: LESSON }),
+    [onAReply]: thread(onAReply, { annotationId: "c1", parentThreadId: LESSON }),
+  });
+  const removed: string[] = [];
+  try {
+    const view = renderHook(() =>
+      useCall<CallRow, StagedImage>(host(bothPens(onPage, onAReply), removed)),
+    );
+    act(() => view.result.current.dropThread("m0", LESSON));
+
+    expect(removed).toEqual(["p1"]);
+  } finally {
+    world.restore();
+  }
+});

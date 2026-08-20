@@ -7,6 +7,7 @@ import {
   countNewMarks,
   distillUnitOf,
   distillUnits,
+  pagelessMarkIds,
   isTopicDue,
   maxBookMarks,
   selectDistillJob,
@@ -279,10 +280,10 @@ test("a chat-span aside joins its parent's transcript, in the order it happened"
   expect(distillUnitOf(threads, "bt")?.threadId).toBe("bt");
 });
 
-// A mark-anchored aside has a mark and a page, so the pass can say where in the
-// book it happened. It stays its own unit, exactly like the mark thread it is
-// drawn beside; "does it have an annotation" is the whole test.
-test("a mark-anchored aside keeps a unit of its own", () => {
+// An aside drawn on a page has a mark and a page, so the pass can say where in
+// the book it happened. It stays its own unit, exactly like the mark thread it
+// is drawn beside.
+test("a page-anchored aside keeps a unit of its own", () => {
   const threads: UnitThread[] = [
     unit({ id: "bt", messages: [said1("l1", 1)] }),
     unit({ id: "as", annotationId: "ann-drawn", parentThreadId: "bt", messages: [said1("a1", 2)] }),
@@ -302,6 +303,26 @@ test("an aside with no parent left is distilled on its own rather than dropped",
   ];
   expect(distillUnits(threads).map((u) => u.threadId)).toEqual(["as"]);
   expect(distillUnitOf(threads, "as")?.messages.map((m) => m.text)).toEqual(["a1"]);
+});
+
+// A pen can mark an AI reply too (docs/09), and the aside that opens off one is
+// an annotation with no page. It folds into the lesson like a chat-span aside:
+// a pass over it could not say where in the book it happened.
+test("an aside drawn on a reply folds into its parent", () => {
+  const threads: UnitThread[] = [
+    unit({ id: "bt", messages: [said1("l1", 1)] }),
+    unit({ id: "as", annotationId: "ann-chat", parentThreadId: "bt", messages: [said1("a1", 2)] }),
+  ];
+  const pageless = pagelessMarkIds([
+    { id: "ann-page", page: 4, text: "x", createdAt: 1 },
+    { id: "ann-chat", page: null, text: "y", createdAt: 2 },
+  ]);
+  expect(distillUnits(threads, pageless).map((u) => u.threadId)).toEqual(["bt"]);
+  expect(distillUnitOf(threads, "as", pageless)?.threadId).toBe("bt");
+  // A mark the caller could not look up is left where it was: its own unit, the
+  // answer every record written before chat marks existed gets.
+  expect(distillUnits(threads, new Set()).map((u) => u.threadId).sort()).toEqual(["as", "bt"]);
+  expect(distillUnits(threads).map((u) => u.threadId).sort()).toEqual(["as", "bt"]);
 });
 
 test("a book with no asides is one unit per thread, unchanged", () => {

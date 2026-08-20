@@ -544,6 +544,39 @@ test("history is replayed after the kickoff and trimmed to the cap", async () =>
 // picked, and that line is already a user message. Prefixing the explain kickoff
 // in front of it would tell the model to explain the passage when the reader
 // asked for an example.
+// A mark drawn on a reply (src/reading/chat-marks.ts). Anchored on the message,
+// so it has no page and never goes near the engine.
+function chatMark(threadId: string, messageTs: number, text: string): Annotation {
+  return {
+    id: `chat-${threadId}-${messageTs}`,
+    type: "underline",
+    text,
+    chatAnchor: { threadId, messageTs, text, occurrence: 0, pen: "ai" },
+  } as unknown as Annotation;
+}
+
+// docs/09: the AI's answers are the book continued, so a reply the reader drew
+// on comes back saying which words those were. The note rides the message, so it
+// falls out of context with it and it never enters the prompt's stable half —
+// the provider's cache prefix — where one new mark would rewrite the chapter.
+test("a reply the reader marked replays with the marked words named after it", async () => {
+  createThread(BOOK, "ann-1", "thread-1");
+  appendMessage(BOOK, "thread-1", { role: "user", text: "why three matrices", ts: 1 });
+  appendMessage(BOOK, "thread-1", { role: "ai", text: "Query, key and value.", ts: 2 });
+  const marked = chatMark("thread-1", 2, "key and value");
+
+  const plain = await buildReadingTurn(input());
+  const turn = await buildReadingTurn(input({ annotations: [marked] }));
+
+  expect(plain!.messages.map((m) => m.text)).toEqual(["why three matrices", "Query, key and value."]);
+  expect(turn!.messages[1].text).toBe(
+    'Query, key and value.\n\n[marked by the reader in this reply: “key and value”]',
+  );
+  // The reader's own message is left alone, and so is the prompt.
+  expect(turn!.messages[0].text).toBe("why three matrices");
+  expect(turn!.systemPrompt).not.toContain("marked by the reader");
+});
+
 test("a thread that opens on the reader's own ask replays it, with no kickoff in front", async () => {
   createThread(BOOK, "ann-1", "thread-1");
   appendMessage(BOOK, "thread-1", { role: "user", text: "Can you give me an example?", ts: 1 });
@@ -1275,6 +1308,26 @@ test("an aside with no lesson replayed does not claim to open on one", async () 
   const crowded = await buildReadingTurn(bookTurn(aside));
   expect(crowded!.messages).toHaveLength(HISTORY_KEEP);
   expect(crowded!.systemPrompt).toContain("None of the lesson itself is replayed");
+});
+
+// The lesson's stretch is replayed history too, so a reply marked in the lesson
+// says so inside the aside as well — including the very passage the aside was
+// pulled out of.
+test("the lesson's replayed stretch carries what was marked on it", async () => {
+  const { lesson, aside } = lessonWithAside("marked", 2);
+  appendMessage(BOOK, lesson, { role: "user", text: "u1", ts: 1 });
+  appendMessage(BOOK, lesson, { role: "ai", text: "a1", ts: 2 });
+  appendMessage(BOOK, aside, { role: "user", text: "about that", ts: 3 });
+
+  const turn = await buildReadingTurn({
+    ...bookTurn(aside),
+    annotations: [chatMark(lesson, 2, "a1")],
+  });
+  expect(turn!.messages.map((m) => m.text)).toEqual([
+    "u1",
+    "a1\n\n[marked by the reader in this reply: “a1”]",
+    "about that",
+  ]);
 });
 
 // Every provider wants the exchange to open on a user turn, and an aside's tail

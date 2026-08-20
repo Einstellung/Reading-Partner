@@ -10,7 +10,7 @@
 import { getViewState } from "../../platform/app/storage";
 import { loadAnnotations } from "../../platform/app/annotations";
 import { loadThreads } from "../../platform/app/threads";
-import type { Annotation, ViewState } from "../../platform/app/reader-contract";
+import { pageMarks, type Annotation, type ViewState } from "../../platform/app/reader-contract";
 import { ensureFulltext, type Fulltext } from "../../fulltext";
 import { sweepDistillation } from "../../observation";
 import { clearFigureCache, ensureFigures, type FiguresIndex } from "../figures";
@@ -146,6 +146,15 @@ export async function openBook(
   // Mount the reader pane with the bytes. It calls back onView and onInitialized
   // once ready. It slices its own copy for PDFium and never detaches this one, so
   // it reads the shared buffer.
-  shell.mountReader({ bookId, name, buffer, annotations: saved, viewState: openingViewState(state) });
+  // The engine gets the page-anchored half only. The other half was drawn on
+  // the classroom's replies and has no page for EmbedPDF to put it on; the shell
+  // keeps the whole set (showMarks above), which is what is written back.
+  shell.mountReader({
+    bookId,
+    name,
+    buffer,
+    annotations: pageMarks(saved),
+    viewState: openingViewState(state),
+  });
   shell.showTitle(name);
 }

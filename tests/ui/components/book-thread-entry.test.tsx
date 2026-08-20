@@ -48,8 +48,9 @@ test("the blackboard and the sparkle are different drawings", () => {
 test("the top bar's book entry wears the blackboard and says what it opens", () => {
   expect(topBar).toContain("IconReadTogether");
   expect(topBar).not.toContain("IconSparkle");
-  expect(topBar).toContain('title="Learn this book with AI"');
-  expect(topBar).toContain('aria-label="Learn this book with AI"');
+  // The label is a constant: while the button is dim its title is the line that
+  // says why instead, and both readings are rendered in pen-rack-gate.test.tsx.
+  expect(topBar).toContain('const BOOK_THREAD = "Learn this book with AI"');
   expect(topBar).not.toContain("Talk about this book");
 });
 

@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { open } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import {
+  isPageMark,
   type Annotation,
   type AnnotationPopupParams,
+  type MarkPen,
   type ViewInstance,
   type ViewState,
   type ViewStats,
@@ -72,11 +74,28 @@ import { useReaderZoomKeys } from "./ui/components/reader/reader-zoom-keys";
 import AnnotationPopup from "./ui/components/reader/AnnotationPopup";
 import CallBubble from "./ui/components/chat/CallBubble";
 import CallView from "./ui/components/chat/CallView";
+import type { ChatMarkHost } from "./ui/components/chat/chat";
 import ReadingPipCard from "./ui/components/chat/ReadingPipCard";
 import ChatPipCard from "./ui/components/chat/ChatPipCard";
 import SettingsView from "./ui/components/SettingsView";
-import type { CallRow, CallState, CallView as CallViewMode } from "./reading/call-state";
-import { asideFraming, asideReturn } from "./reading/aside";
+import {
+  levelGate,
+  toolInCall,
+  type CallRow,
+  type CallState,
+  type CallView as CallViewMode,
+} from "./reading/call-state";
+import { asideAnchorAt, asideFraming, asideReturn } from "./reading/aside";
+import { markExcerpt } from "./reading/reopen";
+import {
+  buildChatMark,
+  chatMarkWords,
+  markDoorThread,
+  markOpenAction,
+  orderTraceMarks,
+  traceSelectAction,
+  type ChatMarkDraw,
+} from "./reading/chat-marks";
 import { asideIntents, bookTextNotice, openingIntents, type ReadingIntent } from "./reading/intents";
 import { chapterAtPage } from "./reading/chapters";
 import { resolveBookThread } from "./reading/session/book-thread";
@@ -228,7 +247,7 @@ export default function App() {
   const [stats, setStats] = useState<ViewStats | null>(null);
   const [title, setTitle] = useState<string | null>(null);
   const [status, setStatus] = useState("");
-  const [toolType, setToolType] = useState<ToolType>("none");
+  const [pickedTool, setPickedTool] = useState<ToolType>("none");
   const [penColor, setPenColor] = useState(ANNOTATION_COLORS[0].color);
   const [popup, setPopup] = useState<PopupState | null>(null);
   const [viewReady, setViewReady] = useState(false);
@@ -413,23 +432,6 @@ export default function App() {
     });
   }, [refreshTopics]);
 
-  // Apply the tool once the view is initialized (setTool before the pdf viewer
-  // is ready throws — PDFViewerApplication null, pitfall 11). The AI pen is the
-  // underline tool in a fixed purple.
-  useEffect(() => {
-    aiPenRef.current = toolType === "ai";
-    if (!viewReady) return;
-    const tool =
-      toolType === "none"
-        ? { type: "pointer" as const }
-        : toolType === "navlock"
-          ? { type: "navlock" as const }
-          : toolType === "ai"
-            ? { type: "underline" as const, color: AI_PEN_COLOR }
-            : { type: toolType, color: penColor };
-    viewRef.current?.setTool(tool);
-  }, [toolType, penColor, viewReady]);
-
   // Whether a finger may mark the page. Applied alongside the tool, and again
   // whenever the setting changes, so the reader never routes a finger by a stale
   // copy of it.
@@ -446,8 +448,9 @@ export default function App() {
     keepReadingPosition(bookId, state);
   }, []);
 
+  // Page marks first, classroom marks after (reading/chat-marks.ts).
   const syncTraceList = useCallback(() => {
-    setTraceAnns([...annsRef.current.values()]);
+    setTraceAnns(orderTraceMarks([...annsRef.current.values()]));
   }, []);
 
   const persistAnnotations = useCallback(() => {
@@ -487,7 +490,7 @@ export default function App() {
   const asideFramingFor = useCallback(
     (thread: AsideThread | undefined, parentView?: CallViewMode): Pick<CallState<CallMessage>, "aside"> => {
       if (!thread) return {};
-      const framing = asideFraming(thread, callExcerpt(annsRef.current.get(thread.annotationId)));
+      const framing = asideFraming(thread, markExcerpt(annsRef.current.get(thread.annotationId)));
       return framing ? { aside: { ...framing, ...(parentView ? { parentView } : {}) } } : {};
     },
     [],
@@ -524,6 +527,7 @@ export default function App() {
     noteImageHint,
     openChatAside,
     openThread: openThreadCall,
+    reopenThread: reopenThreadCall,
     pendingImages,
     removePendingImage,
     retry: retryCall,
@@ -573,6 +577,29 @@ export default function App() {
         ? null
         : staged.flatMap((p) => (p.status === "ready" ? [{ data: p.data, mediaType: p.mediaType }] : [])),
   });
+
+  // Which of the two controls that open a level are live (docs/03), and the pen
+  // the rack acts with once the dim one is taken out of it. Both read the open
+  // call, so they sit below it and everything about the tool follows.
+  const gate = levelGate(call);
+  const toolType = toolInCall(pickedTool, call);
+
+  // Apply the tool once the view is initialized (setTool before the pdf viewer
+  // is ready throws — PDFViewerApplication null, pitfall 11). The AI pen is the
+  // underline tool in a fixed purple.
+  useEffect(() => {
+    aiPenRef.current = toolType === "ai";
+    if (!viewReady) return;
+    const tool =
+      toolType === "none"
+        ? { type: "pointer" as const }
+        : toolType === "navlock"
+          ? { type: "navlock" as const }
+          : toolType === "ai"
+            ? { type: "underline" as const, color: AI_PEN_COLOR }
+            : { type: toolType, color: penColor };
+    viewRef.current?.setTool(tool);
+  }, [toolType, penColor, viewReady]);
 
   // Everything a chat surface sends goes through here, so that pressing a chip
   // can do the one thing typing its words cannot: park the conversation on the
@@ -771,7 +798,8 @@ export default function App() {
 
       if (aiCreated) {
         // Persist the aiThreadId into the engine model, open the thread + bubble.
-        viewRef.current?.setAnnotations([aiCreated.annotation]);
+        // A chat mark has no page anchor and is never the engine's to draw.
+        if (isPageMark(aiCreated.annotation)) viewRef.current?.setAnnotations([aiCreated.annotation]);
         const bookId = bookIdRef.current;
         // Drawn while the lesson is live: this is a side conversation off it
         // (docs/09), not an independent one. Everything else about the mark is
@@ -832,6 +860,26 @@ export default function App() {
     [syncTraceList],
   );
 
+  // The conversation a mark is a door into, when this device still has it
+  // (reading/chat-marks.ts: markDoorThread). Every press on a mark asks here
+  // first: annotations and threads sync as two files, so an id with no record
+  // behind it is a door to nothing, and opening a call on it would make an empty
+  // conversation the reader cannot get out of.
+  const hasThread = useCallback((threadId: string) => {
+    const bookId = bookIdRef.current;
+    return !!bookId && getThread(bookId, threadId) !== undefined;
+  }, []);
+
+  const markDoor = useCallback(
+    (ann: { id: string; aiThreadId?: unknown } | null | undefined) => {
+      const bookId = bookIdRef.current;
+      const threadId = markDoorThread(ann, hasThread);
+      const thread = bookId && threadId ? getThread(bookId, threadId) : undefined;
+      return threadId && thread ? { threadId, thread } : null;
+    },
+    [hasThread],
+  );
+
   // Clicking a mark. The engine shares the shell's document, so the rect is
   // already in viewport coordinates. An AI-pen mark (has aiThreadId) opens its
   // call bubble with history instead of the annotation editor.
@@ -843,19 +891,80 @@ export default function App() {
     const [l, , r, bottom] = params.rect;
     const anchor = { x: (l + r) / 2, y: bottom };
     const ann = params.annotation;
-    const threadId = ann.aiThreadId as string | undefined;
-    if (threadId) {
-      const bookId = bookIdRef.current;
-      const thread = bookId ? getThread(bookId, threadId) : undefined;
+    const door = markDoor(ann);
+    if (door) {
       setPopup(null);
-      openThreadCall(
-        { threadId, annotationId: ann.id, ...asideFramingFor(thread), view: "bubble", anchor },
-        thread?.messages ?? [],
-      );
+      reopenThreadCall(door.thread, { view: "bubble", anchor });
     } else {
       setPopup({ annotation: ann, anchor });
     }
-  }, [openThreadCall, asideFramingFor]);
+  }, [reopenThreadCall, markDoor]);
+
+  // A pen stroke on a reply (docs/09). The classroom's answers are the book
+  // continued, so this writes the same kind of entry the page path writes, into
+  // the same file — anchored on the message rather than on a page
+  // (reading/chat-marks.ts) and never handed to the engine.
+  //
+  // The AI pen also opens the second level: a side conversation off the lesson,
+  // on the words that were marked. It is written down at once rather than at the
+  // first question, exactly as one drawn on the page is — the mark is a door
+  // into it from the moment it exists.
+  const drawChatMark = useCallback(
+    (draw: ChatMarkDraw) => {
+      const lesson = currentCall();
+      if (!bookIdRef.current || !lesson) return;
+      // What the aside would be about. Null when the AI pen was not the one
+      // drawing, and when what it caught is too short to be a question — that
+      // stroke is then an underline and nothing more, rather than a mark
+      // pointing at a conversation that was never opened.
+      // The stroke's words as a person reads them, which is not the string it is
+      // found again by when it crossed a block (reading/chat-marks.ts:
+      // chatMarkWords). The whole draw is spread into the mark rather than
+      // copied field by field: the verbatim string, the copy of it and the
+      // readable one travel together or the mark is anchored on one and shown
+      // as another.
+      const asideAnchor = draw.pen === "ai" ? asideAnchorAt(draw.messageTs, chatMarkWords(draw)) : null;
+      const aiThreadId = asideAnchor ? crypto.randomUUID() : undefined;
+      const mark = buildChatMark({
+        ...draw,
+        id: crypto.randomUUID(),
+        color: draw.pen === "ai" ? AI_PEN_COLOR : penColor,
+        threadId: lesson.threadId,
+        ...(aiThreadId ? { aiThreadId } : {}),
+      });
+      if (!mark) return;
+      annsRef.current.set(mark.id, mark);
+      persistAnnotations();
+      syncTraceList();
+      // No prep trigger: that frontier is measured in pages and this mark is on
+      // none (reading/prep/use-prep-trigger.ts skips a mark with no page).
+      if (!asideAnchor || !aiThreadId) return;
+      setPopup(null);
+      // The same door the pen opens on the page, one level down: openChatAside
+      // takes the isBook guard with it, so an AI pen that reached here inside a
+      // side conversation opens nothing and the mark still stands.
+      openChatAside(asideAnchor, { annotationId: mark.id, threadId: aiThreadId });
+    },
+    [penColor, persistAnnotations, syncTraceList, currentCall, openChatAside],
+  );
+
+  // A press on a mark drawn on a reply. An AI-pen one is the door into the
+  // conversation it opened, the same as on the page; the other two raise the
+  // same editor a mark on the page raises, at the words that were pressed.
+  const openChatMark = useCallback(
+    (ann: Annotation, at: { x: number; y: number }) => {
+      const door = markDoor(ann);
+      if (!door) {
+        // No conversation behind it, or none left on this device: the editor at
+        // the words that were pressed, which is all such a mark has to show.
+        setPopup({ annotation: ann, anchor: at });
+        return;
+      }
+      setPopup(null);
+      reopenThreadCall(door.thread, { view: "chat-main", anchor: at });
+    },
+    [reopenThreadCall, markDoor],
+  );
 
   // The pen stroke gives the host no coordinates, so track the last pen-lift
   // over the reader pane as the AI-pen bubble anchor (capture phase, so nothing
@@ -877,10 +986,13 @@ export default function App() {
       discardStagedImages,
       endBookTurns,
       clearSelectedMark: () => setSelectedAnnId(null),
-      resetTool: () => setToolType("none"),
+      resetTool: () => setPickedTool("none"),
       showMarks: (marks) => {
+        // Every mark of the book, both kinds: the map is what gets written back
+        // and what the trace list is built from. Only the engine's copy is
+        // filtered, and that happens where the reader is mounted (open-book.ts).
         annsRef.current = new Map(marks.map((a) => [a.id, a]));
-        setTraceAnns(marks);
+        setTraceAnns(orderTraceMarks(marks));
       },
       readerNotReady: () => setViewReady(false),
       takeBook: (bookId, name, buffer) => {
@@ -986,7 +1098,7 @@ export default function App() {
       if (!prev) return;
       const updated: Annotation = { ...prev, ...patch, dateModified: new Date().toISOString() };
       annsRef.current.set(id, updated);
-      viewRef.current?.setAnnotations([updated]);
+      if (isPageMark(updated)) viewRef.current?.setAnnotations([updated]);
       persistAnnotations();
       syncTraceList();
       setPopup((p) => (p && p.annotation.id === id ? { ...p, annotation: updated } : p));
@@ -996,14 +1108,35 @@ export default function App() {
 
   // Trace-list click: jump to the mark. Programmatic select does not open the
   // popup (pitfall 04), which is what we want for a list jump.
-  const onTraceSelect = useCallback((id: string) => {
-    // Same as the outline jump: leaving the drawer open parks its backdrop over
-    // the page we just navigated to, and the backdrop only answers a tap.
-    setSidebarOpen(false);
-    viewRef.current?.selectAnnotations([id]);
-    viewRef.current?.navigate({ annotationID: id });
-    setSelectedAnnId(id);
-  }, []);
+  const onTraceSelect = useCallback(
+    (id: string) => {
+      const action = traceSelectAction(annsRef.current.get(id), hasThread);
+      if (action.act === "mark") {
+        // A classroom mark with nothing left to open: the row is the only place
+        // those words are shown, so the drawer stays open around it. Closing it
+        // would answer the press with an empty screen.
+        setSelectedAnnId(id);
+        return;
+      }
+      // Same as the outline jump: leaving the drawer open parks its backdrop
+      // over the page we just navigated to, and the backdrop only answers a tap.
+      setSidebarOpen(false);
+      setSelectedAnnId(id);
+      if (action.act === "page") {
+        viewRef.current?.selectAnnotations([id]);
+        viewRef.current?.navigate({ annotationID: id });
+        return;
+      }
+      const bookId = bookIdRef.current;
+      const thread = bookId ? getThread(bookId, action.threadId) : undefined;
+      // The row is a door into the conversation the mark opened, or failing that
+      // into the lesson it was drawn in — which is the book's own, and reopening
+      // it as anything else takes the AI pen, the chips and the empty-state line
+      // away from it (reading/reopen.ts).
+      if (thread) reopenThreadCall(thread, { view: "chat-main", anchor: { x: 0, y: 0 } });
+    },
+    [reopenThreadCall, hasThread],
+  );
 
   // Does the active default model accept images? (Gates a paste up front.)
   const modelTakesImages = useCallback(() => {
@@ -1094,25 +1227,20 @@ export default function App() {
   const openThreadForAnnotation = useCallback(
     (annotationId: string) => {
       const ann = annsRef.current.get(annotationId);
-      const threadId = ann?.aiThreadId as string | undefined;
-      const bookId = bookIdRef.current;
-      if (!threadId || !bookId) return;
-      const thread = getThread(bookId, threadId);
-      viewRef.current?.selectAnnotations([annotationId]);
-      viewRef.current?.navigate({ annotationID: annotationId });
+      const { jump, threadId } = markOpenAction(ann, hasThread);
+      if (jump) {
+        viewRef.current?.selectAnnotations([annotationId]);
+        viewRef.current?.navigate({ annotationID: annotationId });
+      }
       setSelectedAnnId(annotationId);
-      openThreadCall(
-        {
-          threadId,
-          annotationId,
-          ...asideFramingFor(thread),
-          view: "chat-main",
-          anchor: { x: 0, y: 0 },
-        },
-        thread?.messages ?? [],
-      );
+      // The conversation is gone: the row still shows the words that were
+      // marked, and there is nothing to open beside them.
+      if (!threadId) return;
+      const bookId = bookIdRef.current;
+      const thread = bookId ? getThread(bookId, threadId) : undefined;
+      if (thread) reopenThreadCall(thread, { view: "chat-main", anchor: { x: 0, y: 0 } });
     },
-    [openThreadCall, asideFramingFor],
+    [reopenThreadCall, hasThread],
   );
 
   // The receipt chip in a conversation's transcript (ui/components/reader/
@@ -1128,18 +1256,9 @@ export default function App() {
         pushToast("warn", "That side conversation is gone.");
         return;
       }
-      openThreadCall(
-        {
-          threadId,
-          annotationId: thread.annotationId,
-          ...framing,
-          view: "chat-main",
-          anchor: { x: 0, y: 0 },
-        },
-        thread.messages,
-      );
+      reopenThreadCall(thread, { view: "chat-main", anchor: { x: 0, y: 0 } });
     },
-    [openThreadCall, asideFramingFor, pushToast],
+    [reopenThreadCall, asideFramingFor, pushToast],
   );
   openAsideThreadRef.current = openAsideThread;
 
@@ -1147,7 +1266,9 @@ export default function App() {
   // book-level thread per book — created on first press, reopened with its
   // history on later presses (and after hangup), the way a mark hosts its
   // thread. It has no anchor, so it never joins the trace list; this button is
-  // its only way back. Opens straight to the main call view, skipping the bubble.
+  // how it is reached once it has been hung up, and while it is up the button
+  // goes dim and the corner card is the door. Opens straight to the main call
+  // view, skipping the bubble.
   //
   // Which thread that is comes from the file, not from the cache: see
   // reading/session/book-thread.ts.
@@ -1167,24 +1288,19 @@ export default function App() {
       if (resolved.status === "cancelled") return;
       const { thread } = resolved;
       setPopup(null);
-      openThreadCall(
-        {
-          threadId: thread.id,
-          annotationId: "",
-          isBook: true,
-          view: "chat-main",
-          anchor: { x: 0, y: 0 },
-        },
-        thread.messages,
-      );
+      reopenThreadCall(thread, { view: "chat-main", anchor: { x: 0, y: 0 } });
     })();
-  }, [openThreadCall, pushToast, onEntryPrepTrigger]);
+  }, [reopenThreadCall, pushToast, onEntryPrepTrigger]);
 
   // Jump the reading back to the thread's mark (from the reading corner card).
   // The book-level thread has no mark, so there is nothing to jump to.
+  // A conversation anchored on a mark drawn on a reply has no place either: the
+  // engine has never heard of that mark, and asking it to navigate names a page
+  // that does not exist.
   const onPositionClick = useCallback(() => {
     const c = currentCall();
     if (!c || !c.annotationId) return;
+    if (!isPageMark(annsRef.current.get(c.annotationId))) return;
     viewRef.current?.selectAnnotations([c.annotationId]);
     viewRef.current?.navigate({ annotationID: c.annotationId });
   }, [currentCall]);
@@ -1308,6 +1424,30 @@ export default function App() {
       );
   intentsRef.current = callIntents;
 
+  // The two pens, aimed at the conversation on screen (docs/09). The rack is
+  // always live and its target follows the main view: the classroom covers the
+  // reader, so while it is up a stroke lands on a reply. Only there — in the
+  // corner bubble the page is what the reader is looking at.
+  //
+  // Whether the AI pen is on offer at all was settled above, in the tool: a rack
+  // that cannot open a level is not holding it.
+  const chatPen: MarkPen | null =
+    toolType === "none" || toolType === "navlock" ? null : toolType;
+  const chatMarkHost = useMemo<ChatMarkHost | null>(
+    () =>
+      call?.view === "chat-main" && call.threadId
+        ? {
+            threadId: call.threadId,
+            pen: chatPen,
+            color: chatPen === "ai" ? AI_PEN_COLOR : penColor,
+            marks: traceAnns,
+            onDraw: drawChatMark,
+            onOpen: openChatMark,
+          }
+        : null,
+    [call?.view, call?.threadId, chatPen, penColor, traceAnns, drawChatMark, openChatMark],
+  );
+
   // The empty state, and whether there is a lesson to go back to.
   //
   // A side conversation drawn on the page is a marked passage like any other and
@@ -1388,9 +1528,10 @@ export default function App() {
             status={status}
             tool={{ type: toolType, color: penColor }}
             onToolChange={(t) => {
-              setToolType(t.type);
+              setPickedTool(t.type);
               setPenColor(t.color);
             }}
+            gate={gate}
             onOpenBookThread={openBookThread}
             onOpenSettings={() => setShowSettings(true)}
             settingsAlert={syncReport.alert !== "none"}
@@ -1625,7 +1766,7 @@ export default function App() {
                       }
                 }
                 aside={call.aside ? { span: call.aside.span, onBack: asideBack } : undefined}
-                onOpenAside={call.isBook ? openChatAside : undefined}
+                marks={chatMarkHost}
                 emptyTitle={
                   spanAside ? "Ask about this" : call.isBook ? title ?? "This book" : undefined
                 }
@@ -1639,7 +1780,11 @@ export default function App() {
             </div>
             <div className="absolute right-3 top-3 z-50">
               {(() => {
-                const excerpt = callExcerpt(annsRef.current.get(call.annotationId)) || null;
+                // What the reader is looking at, so only a mark on the page has
+                // one. A conversation off a marked reply would otherwise print
+                // the AI's own words on the card that says where the book is.
+                const anchoring = annsRef.current.get(call.annotationId);
+                const excerpt = (isPageMark(anchoring) ? markExcerpt(anchoring) : "") || null;
                 return (
                   <ReadingPipCard
                     title={title ?? ""}
@@ -1708,9 +1853,3 @@ function asideReturnable(bookId: string | null, parentThreadId: string): boolean
   return !!parent && !!asideReturn(parent);
 }
 
-function callExcerpt(ann: Annotation | undefined): string {
-  if (!ann) return "";
-  if (typeof ann.text === "string" && ann.text) return ann.text;
-  if (typeof ann.comment === "string" && ann.comment) return ann.comment;
-  return "";
-}

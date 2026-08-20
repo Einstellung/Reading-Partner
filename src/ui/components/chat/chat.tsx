@@ -7,13 +7,14 @@
 // and would sit still while the type grew.
 
 import {
+	createContext,
 	memo,
 	useCallback,
+	useContext,
 	useEffect,
 	useLayoutEffect,
 	useRef,
 	useState,
-	type CSSProperties,
 	type RefObject,
 } from 'react';
 import { HIT_44 } from '../base/buttons';
@@ -26,16 +27,25 @@ import { stickToBottom } from '../common/stick-to-bottom';
 import type { PendingImage, ThreadMessage } from './types';
 import type { CompressedImage } from '../../../ai/image-utils';
 import type { ToolStatus } from '../../../ai/tool-status';
-import { asideAnchorAt, mayOpenAside } from '../../../reading/aside';
 import {
-	asideControlAnchor,
-	ASIDE_CONTROL_HEIGHT,
-	ASIDE_CONTROL_WIDTH,
-	type AsideSelectionBox,
-} from './aside-control';
-import type { AsideAnchor } from '../../../platform/app/threads';
-import { cn } from '../lib/utils';
-import { OVERLAY_Z } from '../ui/overlay';
+	createStrokeGate,
+	locateChatMarks,
+	mayMarkReply,
+	occurrenceAt,
+	type ChatMarkDraw,
+} from '../../../reading/chat-marks';
+import type { Annotation, MarkPen } from '../../../platform/app/reader-contract';
+import {
+	boxesHold,
+	indexRendered,
+	markFill,
+	offsetOf,
+	paintBoxes,
+	rangeOfSpan,
+	spacedSlice,
+	toBoxes,
+	type MarkBox,
+} from './chat-mark-dom';
 import { messageToParts, type CardActionHandler, type CardSurface } from './chatParts';
 import { useCardRegistry } from './cardRegistryContext';
 import type { CleanupModel } from '../../../ai/voice';
@@ -147,107 +157,253 @@ function CopyButton({ text }: { text: string }) {
 	);
 }
 
-// --- opening a side conversation out of a reply (docs/03) ------------------
+// --- the two pens on a reply (docs/09) -------------------------------------
 
-// A selection worth acting on: which reply it came out of, and the box it draws
-// on screen, which is what the control is placed off (aside-control.ts).
-interface AsidePick {
-	anchor: AsideAnchor;
-	box: AsideSelectionBox;
+// What a conversation needs to carry marks: the pen the top bar has selected,
+// the book's marks so the ones on these replies can be drawn back, and the two
+// things a reader does with them. Absent = this chat is not the book's, so no
+// pen acts on it and nothing is drawn.
+export interface ChatMarkHost {
+	// The conversation these rows belong to — half of a mark's anchor
+	// (platform/app/reader-contract.ts: ChatAnchor).
+	threadId: string;
+	// Resolved for this surface: null for the pointer and the navigation lock,
+	// and null for the AI pen anywhere a third level would be opened.
+	pen: MarkPen | null;
+	color: string;
+	// Every mark of the open book. A row picks its own out of it.
+	marks: readonly Annotation[];
+	onDraw(draw: ChatMarkDraw): void;
+	// A press on a mark, with where it landed in viewport coordinates.
+	onOpen(annotation: Annotation, at: { x: number; y: number }): void;
 }
 
-// The reader's selection inside a settled reply. One listener for the whole
-// list rather than one per row: which row the selection landed in comes off the
-// DOM, from the marker a row stamps on itself when it may offer this at all
-// (mayOpenAside), so a row that may not is not even a candidate.
-//
-// selectionchange is the only event that fires for every way a selection is
-// made — mouse drag, double click, long press, shift+arrow — and it fires on the
-// document rather than on the element the selection is in.
-//
-// The words are taken here and held. By the time the control is pressed the
-// selection may already be gone, and the span is what an aside is opened on.
-function useAsideSelection(list: RefObject<HTMLElement>, enabled: boolean): AsidePick | null {
-	const [picked, setPicked] = useState<AsidePick | null>(null);
-	useEffect(() => {
-		if (!enabled) {
-			setPicked(null);
+// One gesture at a time, one document: the pen that takes a stroke and the layer
+// that answers a press are two components and the same finger, so the gate they
+// agree through is module scope rather than a prop threaded between them.
+const strokes = createStrokeGate();
+
+// In context rather than a prop on every row: a mark drawn on one reply must
+// not re-render the Markdown of all the others, and a row is memoized on its
+// message (MessageBubble). Only the layer inside a row subscribes.
+const ChatMarksContext = createContext<ChatMarkHost | null>(null);
+
+// One mark as it is drawn: the pieces it paints as, the line boxes it is
+// pressed on (a 2px rule is not a target — the words above it are), and the
+// entry both came from.
+interface PaintedMark {
+	annotation: Annotation;
+	pen: MarkPen;
+	color: string;
+	paint: MarkBox[];
+	hit: MarkBox[];
+}
+
+// Every mark on one reply, measured against the reply as it stands now. One
+// whose words are no longer there is not drawn and not an error: the entry
+// stays in the file, it just has nothing to sit on (reading/chat-marks.ts).
+function measureMarks(body: HTMLElement, host: ChatMarkHost, messageTs: number): PaintedMark[] {
+	const index = indexRendered(body);
+	if (index.text === '') return [];
+	const origin = body.getBoundingClientRect();
+	const out: PaintedMark[] = [];
+	for (const found of locateChatMarks(index.text, host.marks, host.threadId, messageTs)) {
+		const range = rangeOfSpan(index, found.span, body.ownerDocument);
+		if (!range) continue;
+		const hit = toBoxes(Array.from(range.getClientRects()), origin);
+		if (hit.length === 0) continue;
+		const color = typeof found.annotation.color === 'string' && found.annotation.color
+			? found.annotation.color
+			: host.color;
+		out.push({
+			annotation: found.annotation,
+			pen: found.anchor.pen,
+			color,
+			paint: paintBoxes(hit, found.anchor.pen),
+			hit,
+		});
+	}
+	return out;
+}
+
+// The marks on one reply, painted under its words, and the press that opens
+// one. The layer wraps the reply's body so the two always read the same
+// rendering — the words a mark is anchored against are the words this element
+// holds — and so the overlay it paints is a sibling of what it observes rather
+// than a child of it, which would have painting feed itself.
+function ChatMarkLayer({
+	messageTs,
+	markable,
+	children,
+}: {
+	messageTs: number;
+	markable: boolean;
+	children: React.ReactNode;
+}) {
+	const host = useContext(ChatMarksContext);
+	const body = useRef<HTMLDivElement>(null);
+	const [marks, setMarks] = useState<PaintedMark[]>([]);
+	// Read by the press handler, which is bound once and must not see a stale
+	// closure over the measurements.
+	const latest = useRef<PaintedMark[]>(marks);
+	latest.current = marks;
+	const live = markable && !!host;
+
+	useLayoutEffect(() => {
+		const el = body.current;
+		if (!live || !el || !host) {
+			setMarks((prev) => (prev.length === 0 ? prev : []));
 			return;
 		}
-		const read = () => {
-			const sel = document.getSelection();
-			const host = list.current;
-			if (!sel || sel.isCollapsed || sel.rangeCount === 0 || !host) {
-				setPicked(null);
-				return;
-			}
+		const measure = () => setMarks(measureMarks(el, host, messageTs));
+		measure();
+		// The reply reflows when the window or the chat zoom changes, and its
+		// contents change under React more than once: the Markdown renderer is a
+		// lazy chunk that swaps in after the first paint, and KaTeX and the
+		// highlighter rewrite what it produced.
+		const observers: { disconnect(): void }[] = [];
+		if (typeof ResizeObserver === 'function') {
+			const ro = new ResizeObserver(measure);
+			ro.observe(el);
+			observers.push(ro);
+		}
+		if (typeof MutationObserver === 'function') {
+			const mo = new MutationObserver(measure);
+			mo.observe(el, { childList: true, subtree: true, characterData: true });
+			observers.push(mo);
+		}
+		return () => {
+			for (const o of observers) o.disconnect();
+		};
+	}, [live, host, messageTs]);
+
+	useEffect(() => {
+		const el = body.current;
+		if (!live || !el || !host) return;
+		const onClick = (e: MouseEvent) => {
+			// The press that ended a drag belongs to the selection it made — or, when
+			// a pen took that drag as a stroke, to the stroke, which has dropped the
+			// selection by now and so cannot be recognised by it. One on a citation
+			// chip belongs to the chip.
+			if (strokes.closesAStroke()) return;
+			const sel = el.ownerDocument.getSelection();
+			if (sel && !sel.isCollapsed) return;
+			if ((e.target as Element | null)?.closest?.('a')) return;
+			const origin = el.getBoundingClientRect();
+			const on = latest.current.find((m) =>
+				boxesHold(m.hit, e.clientX - origin.left, e.clientY - origin.top),
+			);
+			if (!on) return;
+			e.preventDefault();
+			host.onOpen(on.annotation, { x: e.clientX, y: e.clientY });
+		};
+		el.addEventListener('click', onClick);
+		return () => el.removeEventListener('click', onClick);
+	}, [live, host]);
+
+	return (
+		<>
+			{marks.length > 0 && (
+				<div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
+					{marks.map((m) =>
+						m.paint.map((b, i) => (
+							<span
+								key={`${m.annotation.id}:${i}`}
+								data-chat-mark={m.annotation.id}
+								className="absolute rounded-[1px]"
+								style={{
+									left: b.left,
+									top: b.top,
+									width: b.width,
+									height: b.height,
+									backgroundColor: markFill(m.color, m.pen),
+								}}
+							/>
+						)),
+					)}
+				</div>
+			)}
+			<div ref={body} data-reply-body="">
+				{children}
+			</div>
+		</>
+	);
+}
+
+// The stroke a pen leaves on a reply, taken when the finger comes off.
+//
+// Not on selectionchange: a drag changes the selection continuously and a mark
+// is one thing, made once. Pointer-up is also when a long press has finished
+// producing its selection and when a double click has made its word.
+//
+// The words and the copy of them are read out of the same walk that draws marks
+// back (chat-mark-dom.ts), never off Selection.toString(), which puts a newline
+// between block elements and so describes a string no rendering holds.
+//
+// The selection is dropped afterwards: the words are marked now, and leaving
+// them blue leaves WebKit's callout bar sitting over them (docs/pitfall/49).
+// Which is why the stroke also has to say it happened: the click the browser
+// sends next lands on words that now carry a mark, with nothing in the selection
+// left to tell it from a press on one (reading/chat-marks.ts: StrokeGate).
+function usePenStrokes(list: RefObject<HTMLElement>, host: ChatMarkHost | null): void {
+	const pen = host?.pen ?? null;
+	useEffect(() => {
+		if (!host || !pen) return;
+		const doc = list.current?.ownerDocument ?? document;
+		const commit = () => {
+			const sel = doc.getSelection();
+			if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
 			const range = sel.getRangeAt(0);
 			const node = range.commonAncestorContainer;
 			const el = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
-			const row = el?.closest('[data-aside-ts]') ?? null;
-			// Outside a reply, or inside another list's: only this one's rows count.
-			if (!row || !host.contains(row)) {
-				setPicked(null);
-				return;
-			}
-			const anchor = asideAnchorAt(Number(row.getAttribute('data-aside-ts')), sel.toString());
-			if (!anchor) {
-				setPicked(null);
-				return;
-			}
-			const rect = range.getBoundingClientRect();
-			setPicked({ anchor, box: { left: rect.left, right: rect.right, bottom: rect.bottom } });
+			// Outside a settled reply, spanning two of them, or overshooting into
+			// the app's own words about the turn: the common ancestor is then the
+			// row or the list, and neither carries the marker.
+			const row = el?.closest('[data-reply-ts]') ?? null;
+			if (!row || !list.current?.contains(row)) return;
+			const index = indexRendered(row.querySelector('[data-reply-body]'));
+			const start = offsetOf(index, range.startContainer, range.startOffset);
+			const end = offsetOf(index, range.endContainer, range.endOffset);
+			if (start === null || end === null || end <= start) return;
+			const text = index.text.slice(start, end);
+			if (text.trim() === '') return;
+			const occurrence = occurrenceAt(index.text, text, start);
+			if (occurrence < 0) return;
+			// Two strings when the stroke crossed a block: the verbatim one it is
+			// found again by, and the one a person reads. Only when they differ,
+			// which is the minority of strokes.
+			const display = spacedSlice(index, start, end);
+			host.onDraw({
+				messageTs: Number(row.getAttribute('data-reply-ts')),
+				text,
+				...(display === text ? {} : { display }),
+				occurrence,
+				pen,
+			});
+			strokes.drew();
+			sel.removeAllRanges();
 		};
-		document.addEventListener('selectionchange', read);
-		return () => document.removeEventListener('selectionchange', read);
-	}, [enabled, list]);
-	return picked;
-}
-
-// The control the selection raises, under the selected words and clear of
-// WebKit's own callout bar. Where it goes and why it is not tight against the
-// selection is aside-control.ts. Nothing is permanently visible either way:
-// this appears with a selection and goes with it, on every pointer type, rather
-// than adding a second always-on chip under every reply the way a hover-revealed
-// affordance degrades to on a coarse pointer.
-function AskAsideControl({ pick, onOpen }: { pick: AsidePick; onOpen(anchor: AsideAnchor): void }) {
-	// pointerdown, not click. On a tap the click arrives after the selection has
-	// collapsed, and this exists only while there is one — it would be unmounted
-	// before the click landed. Keyboard activation is bound for the same reason:
-	// a button that acts on pointerdown gets no click of its own.
-	const open = () => onOpen(pick.anchor);
-	const at = asideControlAnchor(pick.box);
-	return (
-		<Button
-			type="button"
-			variant="outline"
-			size="chip"
-			onPointerDown={(e) => {
-				e.preventDefault();
-				open();
-			}}
-			onKeyDown={(e) => {
-				if (e.key !== 'Enter' && e.key !== ' ') return;
-				e.preventDefault();
-				open();
-			}}
-			style={
-				{
-					'--anchor-x': `${at.x}px`,
-					'--anchor-y': `${at.y}px`,
-					'--anchor-w': `${ASIDE_CONTROL_WIDTH}px`,
-					'--anchor-h': `${ASIDE_CONTROL_HEIGHT}px`,
-					width: ASIDE_CONTROL_WIDTH,
-				} as CSSProperties
-			}
-			className={cn(
-				'fixed anchor-safe select-none rounded-full shadow-[0_4px_16px_rgba(0,0,0,0.14)]',
-				OVERLAY_Z.floatingTop,
-			)}
-		>
-			Ask about this
-		</Button>
-	);
+		doc.addEventListener('pointerup', commit);
+		return () => doc.removeEventListener('pointerup', commit);
+	}, [host, pen, list]);
+	// A gesture begins whether or not a pen is in hand — which is why this is not
+	// in the effect above, whose deps carry the pen and the host, and whose host
+	// is a new object every time a mark is saved. A stroke that never produced a
+	// click (a finger on a touch screen usually does not) or produced one
+	// nowhere near a reply (it came up over the composer) leaves the gate armed;
+	// if the reader then puts the pen back, nothing here would be listening, and
+	// their next press on an existing mark is spent on a stroke they finished
+	// minutes ago. The ref is stable, so this binds once per surface and the
+	// unmount clears whatever the last stroke left owed.
+	useEffect(() => {
+		const doc = list.current?.ownerDocument ?? document;
+		const begin = () => strokes.began();
+		doc.addEventListener('pointerdown', begin);
+		return () => {
+			doc.removeEventListener('pointerdown', begin);
+			strokes.began();
+		};
+	}, [list]);
 }
 
 // Attached images, right-aligned above a user message. Constrained height so a
@@ -368,16 +524,11 @@ const MessageBubble = memo(function MessageBubble({
 	size,
 	surface,
 	onCardAction,
-	bookLevel = false,
 }: {
 	message: ThreadMessage;
 	size: 'sm' | 'lg';
 	surface: CardSurface;
 	onCardAction?: CardActionHandler;
-	// This row is in the book-level conversation, so a span of it may be pulled
-	// out into a side conversation (docs/03). False everywhere else, which is
-	// what keeps an aside one level deep.
-	bookLevel?: boolean;
 }) {
 	const { role, images, streaming, failed, notice } = message;
 	const lg = size === 'lg';
@@ -466,21 +617,27 @@ const MessageBubble = memo(function MessageBubble({
 	return (
 		<div ref={rowRef} className="group flex flex-col gap-2">
 			{trace}
-			{/* data-aside-ts is the marker useAsideSelection resolves a selection
-			    against — the predicate, written where it can be read back off the
+			{/* data-reply-ts is the marker a pen stroke resolves against — the
+			    predicate (mayMarkReply), written where it can be read back off the
 			    DOM. On the prose element and not on the row: the row also holds the
 			    tool trace kept for a failed call and the budget notice, which are
 			    the app's words about the turn, and a selection that started in the
 			    reply and overshot into one of them has its common ancestor on the
-			    row. Marked there it was accepted, and Selection.toString() handed
-			    back both concatenated — half of a span the prompt then presents as
-			    what the reader picked out of the model's answer. Marked here that
-			    selection resolves to nothing and no aside is offered for it. */}
+			    row. Marked there it would be accepted, and the app's sentence about
+			    the turn would end up marked as if the model had written it.
+
+			    `isolate` so the mark layer's negative z-index lands behind these
+			    words and not behind the surface they are drawn on. */}
 			<div
-				data-aside-ts={mayOpenAside(message, bookLevel) ? message.ts : undefined}
-				className={'text-neutral-800 ' + (lg ? 'text-[calc(1rem*var(--chat-scale,1))]' : 'text-[13px]')}
+				data-reply-ts={mayMarkReply(message) ? message.ts : undefined}
+				className={
+					'relative isolate text-neutral-800 ' +
+					(lg ? 'text-[calc(1rem*var(--chat-scale,1))]' : 'text-[13px]')
+				}
 			>
-				<Markdown text={textPart.text} />
+				<ChatMarkLayer messageTs={message.ts} markable={mayMarkReply(message)}>
+					<Markdown text={textPart.text} />
+				</ChatMarkLayer>
 			</div>
 			{/* After the answer, before the copy affordance: the notice belongs to the
 			    reply, but Copy takes the model's words only. */}
@@ -497,7 +654,7 @@ export function MessageList({
 	surface = 'call',
 	onCardAction,
 	stickKey,
-	onOpenAside,
+	marks,
 }: {
 	messages: ThreadMessage[];
 	size?: 'sm' | 'lg';
@@ -511,11 +668,10 @@ export function MessageList({
 	// the bottom, so switching threads starts at the newest message rather than
 	// wherever the previous one had been scrolled to.
 	stickKey?: string | number;
-	// Open a side conversation on a span of one of these replies (docs/03).
-	// Present only on the book-level conversation; its absence is what says this
-	// list offers nothing of the sort, which is every other chat in the app and
-	// every conversation that is already an aside.
-	onOpenAside?(anchor: AsideAnchor): void;
+	// The two pens on these replies (docs/09). Absent on every chat that is not
+	// the open book's — the info chat, the talk — where a reply is not the book
+	// continued and nothing is drawn on it.
+	marks?: ChatMarkHost | null;
 }) {
 	const listRef = useRef<HTMLDivElement>(null);
 	useLayoutEffect(() => {
@@ -523,14 +679,11 @@ export function MessageList({
 		return list ? stickToBottom(list) : undefined;
 	}, [stickKey]);
 
-	const bookLevel = !!onOpenAside;
-	// The control is fixed and outside the list's flow, so raising it changes no
-	// height: a list still pinned to its bottom (stick-to-bottom.ts re-pins on
-	// every growth) does not scroll the sentence the reader just selected away.
-	const picked = useAsideSelection(listRef, bookLevel);
+	const host = marks ?? null;
+	usePenStrokes(listRef, host);
 
 	return (
-		<>
+		<ChatMarksContext.Provider value={host}>
 			<div
 				ref={listRef}
 				className={
@@ -557,12 +710,10 @@ export function MessageList({
 						size={size}
 						surface={surface}
 						onCardAction={onCardAction}
-						bookLevel={bookLevel}
 					/>
 				))}
 			</div>
-			{picked && onOpenAside && <AskAsideControl pick={picked} onOpen={onOpenAside} />}
-		</>
+		</ChatMarksContext.Provider>
 	);
 }
 

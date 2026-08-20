@@ -35,6 +35,8 @@ import {
   type ThreadMessage,
 } from "../../platform/app/threads";
 import { asideReceipt, asideReturn, type AsideReturn } from "../aside";
+import { hostMarkIds } from "../chat-marks";
+import { markExcerpt, reopenCall } from "../reopen";
 import type { DiagramCardData } from "../diagrams/cards";
 import type { Diagram } from "../diagrams/types";
 import type { Fulltext } from "../../fulltext";
@@ -129,6 +131,15 @@ export interface CallHost<M extends CallRow, I extends StagedImage> extends Call
 // the thread file.
 export type OpeningCall<M extends CallRow> = Omit<CallState<M>, "messages">;
 
+// Where a door puts a conversation it reopens. `parentView` is the view the
+// conversation this one came off was in, and only a door pressed while that one
+// is on screen has it.
+export interface ReopenAt {
+  view: CallView;
+  anchor: { x: number; y: number };
+  parentView?: CallView;
+}
+
 export interface CallController<M extends CallRow, I extends StagedImage> {
   call: CallState<M> | null;
   // The open call and its view, for the handlers that cannot read React state —
@@ -143,11 +154,15 @@ export interface CallController<M extends CallRow, I extends StagedImage> {
   // This is also every way out of an aside that is not a hangup, so it is where
   // the line an aside leaves on its parent is written.
   openThread(call: OpeningCall<M>, stored: ThreadMessage[]): void;
+  // Open a conversation that already exists, as itself. The record says which
+  // of the three kinds it is and what it is anchored on (reading/reopen.ts);
+  // the door only says where on screen it opens.
+  reopenThread(thread: Thread, at: ReopenAt): void;
   // Step out of the book-level conversation into a side one on a span of one of
   // its replies (docs/03). The aside replaces it in this one slot. No-op unless
   // the open call is the book-level one, which is what keeps asides one level
   // deep from this end.
-  openChatAside(anchor: AsideAnchor): void;
+  openChatAside(anchor: AsideAnchor, mark?: ChatAsideMark): void;
   // Back to the conversation this aside came off, reopened as itself. No-op when
   // the open call is not an aside.
   returnFromAside(): void;
@@ -202,6 +217,14 @@ export interface CallController<M extends CallRow, I extends StagedImage> {
   stageImage(threadId: string, produce: () => Promise<CompressedImage>): void;
   noteImageHint(threadId: string, hint: string): void;
   removePendingImage(id: string): void;
+}
+
+// The mark an AI-pen stroke on a reply left behind, handed to openChatAside so
+// the conversation it opens is anchored on it: the mark reopens it, and it is
+// what the trace list and distillation see (docs/09).
+export interface ChatAsideMark {
+  annotationId: string;
+  threadId: string;
 }
 
 export function useCall<M extends CallRow, I extends StagedImage>(
@@ -758,6 +781,17 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     [hydrateThreadImages, writeAsideReceipt],
   );
 
+  // Every door back into a conversation that already exists: a mark on the page,
+  // a mark on a reply, a trace row, a receipt chip, the top bar's blackboard.
+  // None of them decides what the conversation is — the record does.
+  const reopenThread = useCallback(
+    (thread: Thread, at: ReopenAt) => {
+      const opening = reopenCall(thread, markExcerpt(annsRef.current.get(thread.annotationId)), at.parentView);
+      openThread({ ...opening, view: at.view, anchor: at.anchor }, thread.messages);
+    },
+    [annsRef, openThread],
+  );
+
   // Step out of the lesson onto a span of one of its replies (docs/03).
   //
   // Nothing is written down here. A conversation pulled out of a reply has no
@@ -768,16 +802,29 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   // thought better of, costs nothing at all; the record arrives with the first
   // question (ensureAsideRecord).
   const openChatAside = useCallback(
-    (anchor: AsideAnchor) => {
+    (anchor: AsideAnchor, mark?: ChatAsideMark) => {
       const c = callRef.current;
       // Only off the lesson. An aside off an aside is the one thing this shape
       // does not do, and a mark's conversation is not what this opens from.
       if (!c || c.isBook !== true) return;
+      const bookId = bookIdRef.current;
+      // Drawn with the AI pen (docs/09), so it left a mark on the reply. The
+      // record is written now rather than at the first question, because the
+      // mark is a door into this conversation from the moment it exists — the
+      // same reason one drawn on the page is written when it is drawn.
+      if (mark && bookId) {
+        createAsideThread(bookId, mark.threadId, {
+          parentThreadId: c.threadId,
+          annotationId: mark.annotationId,
+          asideAnchor: anchor,
+        });
+      }
       openThread(
         {
-          threadId: crypto.randomUUID(),
-          // No mark: the span came out of a reply, not off the page.
-          annotationId: "",
+          threadId: mark ? mark.threadId : crypto.randomUUID(),
+          // A span selected with no pen leaves nothing behind; one the AI pen
+          // drew is anchored on its mark as well as on the words.
+          annotationId: mark ? mark.annotationId : "",
           aside: {
             parentThreadId: c.threadId,
             from: "chat",
@@ -791,7 +838,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         [],
       );
     },
-    [openThread],
+    [openThread, bookIdRef],
   );
 
   // A side conversation is written down the first time the reader asks something
@@ -1031,19 +1078,14 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     if (callViewRef.current === "bubble" || callViewRef.current === "chat-pip") hangUp();
   }, [hangUp]);
 
-  // The AI-pen mark hosting each of these conversations, where there is one. A
-  // mark is its conversation's only door, so a mark left behind by a deleted
-  // thread opens nothing — which is the same pairing, read from the other end,
-  // that takes a thread with its mark.
+  // The AI-pen mark on the page hosting each of these conversations, where there
+  // is one. A mark is its conversation's only door, so a mark left behind by a
+  // deleted thread opens nothing — which is the same pairing, read from the
+  // other end, that takes a thread with its mark. Which marks that pairing
+  // reaches, and why a mark drawn on a reply is not one of them, is
+  // reading/chat-marks.ts's.
   const marksOf = useCallback(
-    (threadIds: readonly string[]): string[] => {
-      const wanted = new Set(threadIds);
-      const marks: string[] = [];
-      for (const a of annsRef.current.values()) {
-        if (typeof a.aiThreadId === "string" && wanted.has(a.aiThreadId)) marks.push(a.id);
-      }
-      return marks;
-    },
+    (threadIds: readonly string[]): string[] => hostMarkIds(annsRef.current.values(), threadIds),
     [annsRef],
   );
 
@@ -1093,9 +1135,11 @@ export function useCall<M extends CallRow, I extends StagedImage>(
 
   // Delete the open conversation and the asides off it. Destructive and confirmed
   // at the button (DeleteThreadButton's two-step). Removes the threads from the
-  // book's threads file and, for each that a mark hosts, that mark too (the
-  // highlight and its trace-list entry disappear); the book-level thread has no
-  // mark of its own, but an aside drawn on the page while it ran does. Both
+  // book's threads file and, for each that a mark on the page hosts, that mark
+  // too (the highlight and its trace-list entry disappear); the book-level
+  // thread has no mark of its own, but an aside drawn on the page while it ran
+  // does. Marks drawn on the replies stay: they are the reader's on the book,
+  // not the conversation's (reading/chat-marks.ts: hostMarkIds). Both
   // removals are in-file rewrites, so per-file LWW sync carries them to other
   // devices. Unlike a hangup this does not distill — the talk is being thrown
   // away — and anything already distilled from it stays.
@@ -1143,6 +1187,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     current,
     view,
     openThread,
+    reopenThread,
     openChatAside,
     returnFromAside,
     isAnswering,

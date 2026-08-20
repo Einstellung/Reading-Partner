@@ -142,31 +142,6 @@ export function asideAnchorAt(messageTs: number, raw: string): AsideAnchor | nul
   return text === null ? null : { messageTs, text };
 }
 
-// The part of a chat row this decides on.
-export interface AsideRow {
-  role: "user" | "ai";
-  text: string;
-  streaming?: boolean;
-  failed?: boolean;
-}
-
-// Whether the reader may step out of this row.
-//
-// `bookLevel` is what keeps an aside one level deep: the affordance is offered
-// on the lesson's replies and nowhere else, so inside an aside there is no row
-// to open a second one from.
-//
-// Only a settled reply. While one streams, every delta rebuilds the row and
-// re-parses the partial Markdown, so a Range into it is dead within a frame —
-// and there is nothing to ask about yet either. A failed row is the app's words
-// standing in for a reply, not the model's.
-export function mayOpenAside(row: AsideRow, bookLevel: boolean): boolean {
-  if (!bookLevel) return false;
-  if (row.role !== "ai") return false;
-  if (row.streaming || row.failed) return false;
-  return row.text.trim() !== "";
-}
-
 // --- what an aside's record opens as --------------------------------------
 
 // The framing a surface draws an aside in: which door its span came in by, what

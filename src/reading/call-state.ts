@@ -272,3 +272,67 @@ export function callReducer<M extends CallRow>(
       };
   }
 }
+
+// --- what the open call leaves open ---------------------------------------
+
+// Two levels, and the door decides which one is open, not how deep the reader
+// feels they are (docs/03): the top bar's blackboard opens the book's
+// conversation, a pen stroke inside it — on the page or on a reply — opens a
+// side conversation off it, and a side conversation opens nothing. A thread
+// opened by marking the page with no conversation running is a first level too,
+// so it opens nothing either.
+//
+// The controls that would open a level that is not there are drawn dim rather
+// than dropped: a rule the reader can see is a rule they can learn.
+
+// As much of the open call as the answers below read. Null is no call at all,
+// which is not the same as a side conversation: with nothing open, a stroke on
+// the page opens the first level itself.
+export interface OpenLevel {
+  isBook?: boolean;
+  aside?: { parentThreadId: string };
+}
+
+const AI_PEN_DIM = "Only the book's conversation can open a side one.";
+const BOOK_THREAD_OPEN = "This book's conversation is already open.";
+const BOOK_THREAD_BEHIND = "The book's conversation is behind this side one.";
+
+// The AI pen opens a level, so it is live only where there is one left to open.
+export function mayOpenAside(call: OpenLevel | null | undefined): boolean {
+  return !call || call.isBook === true;
+}
+
+// The blackboard is live only where the book's conversation is not already on
+// screen or one step behind. While it is up, the corner card is the way back to
+// it; two doors onto the same room is one too many.
+export function mayOpenBookThread(call: OpenLevel | null | undefined): boolean {
+  return !call || (!call.isBook && !call.aside);
+}
+
+// The pen the rack acts with. A dim AI pen is held rather than cleared: the
+// reader who steps into a side conversation and back gets the pen they were
+// holding back, and nothing they drew in between opened anything.
+export function toolInCall<T extends string>(
+  tool: T,
+  call: OpenLevel | null | undefined,
+): T | "none" {
+  return tool === "ai" && !mayOpenAside(call) ? "none" : tool;
+}
+
+// Why each of the two is dim, or null while it is live. The sentence is what the
+// control says about itself when it will not open.
+export interface LevelGate {
+  aiPen: string | null;
+  bookThread: string | null;
+}
+
+export function levelGate(call: OpenLevel | null | undefined): LevelGate {
+  return {
+    aiPen: mayOpenAside(call) ? null : AI_PEN_DIM,
+    bookThread: mayOpenBookThread(call)
+      ? null
+      : call?.aside
+        ? BOOK_THREAD_BEHIND
+        : BOOK_THREAD_OPEN,
+  };
+}

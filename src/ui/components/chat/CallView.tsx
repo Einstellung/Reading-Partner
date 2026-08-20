@@ -8,12 +8,11 @@
 // the hang-up button and the chapter-focus line stay outside it.
 
 import type { ReactNode } from 'react';
-import type { AsideAnchor } from '../../../platform/app/threads';
 import type { ReadingIntent } from '../../../reading/intents';
 import ChatScaleScope from '../base/ChatScaleScope';
 import { IconClose } from '../base/icons';
 import ChapterFocusBar, { type ChapterFocusBarProps } from './ChapterFocusBar';
-import { Composer, MessageList, type ComposerVoice } from './chat';
+import { Composer, MessageList, type ChatMarkHost, type ComposerVoice } from './chat';
 import IntentChips from './IntentChips';
 import DeleteThreadButton from './DeleteThreadButton';
 import { useKeyboardInset } from '../common/useKeyboardInset';
@@ -51,10 +50,10 @@ interface CallViewProps {
 	voice?: ComposerVoice | false;
 	// Dispatches a card's actions (add-source flow). Absent = a chat with no cards.
 	onCardAction?: CardActionHandler;
-	// Open a side conversation on a span of one of these replies (docs/03).
-	// Passed only on the book-level conversation; absent everywhere else, which is
-	// what keeps an aside one level deep.
-	onOpenAside?(anchor: AsideAnchor): void;
+	// The two pens on these replies (docs/09). Passed on the open book's
+	// conversations and nowhere else — a reply is the book continued, and the
+	// info chat's is not.
+	marks?: ChatMarkHost | null;
 	// This conversation is itself an aside: what it was opened on, and the way
 	// back to the one it came off. Absent = it is not one; a present `aside` with
 	// no `onBack` is one whose parent is gone, which still says what it is about.
@@ -109,7 +108,7 @@ export default function CallView({
 	emptyNote,
 	voice,
 	onCardAction,
-	onOpenAside,
+	marks,
 	aside,
 	scalable = true,
 }: CallViewProps) {
@@ -169,7 +168,7 @@ export default function CallView({
 							size="lg"
 							className="mx-auto max-w-[calc(48rem*var(--chat-scale,1))] pb-6"
 							onCardAction={onCardAction}
-							onOpenAside={onOpenAside}
+							marks={marks}
 						/>
 					</div>
 					<div className="px-4 pb-6">
