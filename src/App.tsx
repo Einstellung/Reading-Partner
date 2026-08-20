@@ -1752,8 +1752,7 @@ export default function App() {
                 onCardAction={onCardAction}
                 chapterFocus={
                   // A side conversation has no chapter of its own — it reads the
-                  // one its parent is parked on — and the line it does want is
-                  // the aside bar, which takes the same slot.
+                  // one its parent is parked on.
                   call.aside
                     ? null
                     : {
@@ -1773,7 +1772,7 @@ export default function App() {
                         prep: prepLineProgress,
                       }
                 }
-                aside={call.aside ? { span: call.aside.span, onBack: asideBack } : undefined}
+                aside={call.aside ? { onBack: asideBack } : undefined}
                 marks={chatMarkHost}
                 emptyTitle={
                   spanAside ? "Ask about this" : call.isBook ? title ?? "This book" : undefined
