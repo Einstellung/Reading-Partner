@@ -28,6 +28,7 @@ import type { PendingImage, ThreadMessage } from './types';
 import type { CompressedImage } from '../../../ai/image-utils';
 import type { ToolStatus } from '../../../ai/tool-status';
 import {
+	createStrokeGate,
 	locateChatMarks,
 	mayMarkReply,
 	occurrenceAt,
@@ -176,6 +177,11 @@ export interface ChatMarkHost {
 	onOpen(annotation: Annotation, at: { x: number; y: number }): void;
 }
 
+// One gesture at a time, one document: the pen that takes a stroke and the layer
+// that answers a press are two components and the same finger, so the gate they
+// agree through is module scope rather than a prop threaded between them.
+const strokes = createStrokeGate();
+
 // In context rather than a prop on every row: a mark drawn on one reply must
 // not re-render the Markdown of all the others, and a row is memoized on its
 // message (MessageBubble). Only the layer inside a row subscribes.
@@ -274,8 +280,11 @@ function ChatMarkLayer({
 		const el = body.current;
 		if (!live || !el || !host) return;
 		const onClick = (e: MouseEvent) => {
-			// The press that ended a drag belongs to the selection it made, and one
-			// on a citation chip belongs to the chip.
+			// The press that ended a drag belongs to the selection it made — or, when
+			// a pen took that drag as a stroke, to the stroke, which has dropped the
+			// selection by now and so cannot be recognised by it. One on a citation
+			// chip belongs to the chip.
+			if (strokes.closesAStroke()) return;
 			const sel = el.ownerDocument.getSelection();
 			if (sel && !sel.isCollapsed) return;
 			if ((e.target as Element | null)?.closest?.('a')) return;
@@ -332,6 +341,9 @@ function ChatMarkLayer({
 //
 // The selection is dropped afterwards: the words are marked now, and leaving
 // them blue leaves WebKit's callout bar sitting over them (docs/pitfall/49).
+// Which is why the stroke also has to say it happened: the click the browser
+// sends next lands on words that now carry a mark, with nothing in the selection
+// left to tell it from a press on one (reading/chat-marks.ts: StrokeGate).
 function usePenStrokes(list: RefObject<HTMLElement>, host: ChatMarkHost | null): void {
 	useEffect(() => {
 		const pen = host?.pen ?? null;
@@ -357,10 +369,16 @@ function usePenStrokes(list: RefObject<HTMLElement>, host: ChatMarkHost | null):
 			const occurrence = occurrenceAt(index.text, text, start);
 			if (occurrence < 0) return;
 			host.onDraw({ messageTs: Number(row.getAttribute('data-reply-ts')), text, occurrence, pen });
+			strokes.drew();
 			sel.removeAllRanges();
 		};
+		const begin = () => strokes.began();
+		doc.addEventListener('pointerdown', begin);
 		doc.addEventListener('pointerup', commit);
-		return () => doc.removeEventListener('pointerup', commit);
+		return () => {
+			doc.removeEventListener('pointerdown', begin);
+			doc.removeEventListener('pointerup', commit);
+		};
 	}, [host, list]);
 }
 

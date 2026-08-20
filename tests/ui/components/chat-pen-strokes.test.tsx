@@ -9,6 +9,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { createElement } from "react";
 import { MessageList, type ChatMarkHost } from "../../../src/ui/components/chat/chat";
+import type { Annotation } from "../../../src/platform/app/reader-contract";
 import type { ChatMarkDraw } from "../../../src/reading/chat-marks";
 import type { ThreadMessage } from "../../../src/ui/components/chat/types";
 import { useDom } from "../../support/dom";
@@ -167,4 +168,112 @@ test("a repeated phrase records which copy was drawn over", async () => {
   await select(view.container, "a head", 1);
   await lift(view.container);
   expect(drawn).toEqual([{ messageTs: 7, text: "a head", occurrence: 1, pen: "underline" }]);
+});
+
+// --- the click that closes the stroke's own drag --------------------------
+//
+// A drag ends pointerup → mouseup → click, and React has flushed the mark in
+// between: by the time the click arrives, the words it lands on carry a mark.
+// The selection is no help in telling that click from a press on a mark — the
+// pen drops it, which is what leaves WebKit's callout bar off the words — so
+// the reader used to get the annotation editor over the sentence they had just
+// marked. Marking a reply opens nothing (docs/09).
+
+// happy-dom lays nothing out: a Range reports no client rects, so a mark would
+// paint nowhere and no click could hit it. The reply's body gets an origin and
+// its ranges one box, which is all measureMarks reads.
+const BOX = { left: 10, top: 10, width: 100, height: 16, right: 110, bottom: 26 };
+const INSIDE = { clientX: 20, clientY: 15 };
+
+function layOut(): () => void {
+  const rects = Range.prototype.getClientRects;
+  const box = Element.prototype.getBoundingClientRect;
+  Range.prototype.getClientRects = () => [BOX] as unknown as DOMRectList;
+  Element.prototype.getBoundingClientRect = () =>
+    ({ left: 0, top: 0, right: 300, bottom: 40, width: 300, height: 40 }) as DOMRect;
+  return () => {
+    Range.prototype.getClientRects = rects;
+    Element.prototype.getBoundingClientRect = box;
+  };
+}
+
+// The mark the shell writes for a stroke and hands back on the next render,
+// which is what makes those words pressable.
+function markOf(draw: ChatMarkDraw): Annotation {
+  return {
+    id: "c1",
+    type: draw.pen === "highlight" ? "highlight" : "underline",
+    color: "#ffd400",
+    text: draw.text,
+    chatAnchor: {
+      threadId: "lesson",
+      messageTs: draw.messageTs,
+      text: draw.text,
+      occurrence: draw.occurrence,
+      pen: draw.pen,
+    },
+  };
+}
+
+function withMarks(marks: Annotation[], opened: Annotation[]): ChatMarkHost {
+  return {
+    threadId: "lesson",
+    pen: "highlight",
+    color: "#ffd400",
+    marks,
+    onDraw: () => {},
+    onOpen: (annotation) => void opened.push(annotation),
+  };
+}
+
+test("the click that closes the drag the pen took as a stroke opens nothing", async () => {
+  const restore = layOut();
+  try {
+    const drawn: ChatMarkDraw[] = [];
+    const opened: Annotation[] = [];
+    const view = render(
+      createElement(MessageList, { messages, marks: host("highlight", drawn) }),
+    );
+
+    await select(view.container, "three matrices");
+    await lift(view.container);
+    expect(drawn).toHaveLength(1);
+
+    const body = view.container.querySelector("[data-reply-body]") as HTMLElement;
+    await act(async () => {
+      view.rerender(
+        createElement(MessageList, {
+          messages,
+          marks: withMarks([markOf(drawn[0])], opened),
+        }),
+      );
+    });
+    fireEvent.click(body, INSIDE);
+
+    expect(opened).toEqual([]);
+  } finally {
+    restore();
+  }
+});
+
+test("a press on that mark once the finger has gone down again opens it", async () => {
+  const restore = layOut();
+  try {
+    const opened: Annotation[] = [];
+    const mark = markOf({ messageTs: 2, text: "three matrices", occurrence: 0, pen: "highlight" });
+    const view = render(
+      createElement(MessageList, { messages, marks: withMarks([mark], opened) }),
+    );
+
+    const body = view.container.querySelector("[data-reply-body]") as HTMLElement;
+    await act(async () => {
+      fireEvent.pointerDown(body);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    fireEvent.click(body, INSIDE);
+
+    expect(opened.map((a) => a.id)).toEqual(["c1"]);
+  } finally {
+    restore();
+  }
 });

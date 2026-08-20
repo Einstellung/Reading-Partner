@@ -17,6 +17,7 @@ import {
   buildChatMark,
   chatMarkNote,
   chatMarksOn,
+  createStrokeGate,
   hostMarkIds,
   markedReplyText,
   locateChatMark,
@@ -223,6 +224,25 @@ test("a deleted conversation takes the page mark hosting it and no mark off a re
   expect(hostMarkIds(all, ["aside-1"])).toEqual(["p1"]);
   expect(hostMarkIds(all, ["aside-1", "aside-2"])).toEqual(["p1", "p2"]);
   expect(hostMarkIds(all, [])).toEqual([]);
+});
+
+// --- the click a stroke ends on -------------------------------------------
+
+test("a stroke swallows one click, and only until the next gesture begins", () => {
+  const gate = createStrokeGate();
+  // A plain tap on a mark: nothing drew, nothing is swallowed.
+  expect(gate.closesAStroke()).toBe(false);
+
+  gate.drew();
+  expect(gate.closesAStroke()).toBe(true);
+  // The next click is the reader pressing the mark they just made.
+  expect(gate.closesAStroke()).toBe(false);
+
+  // A touch that draws and produces no click at all must not leave the tap
+  // after it swallowed.
+  gate.drew();
+  gate.began();
+  expect(gate.closesAStroke()).toBe(false);
 });
 
 // --- creation -------------------------------------------------------------

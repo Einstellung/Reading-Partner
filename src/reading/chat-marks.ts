@@ -263,6 +263,44 @@ export function buildChatMark(input: NewChatMark): Annotation | null {
   };
 }
 
+// A drag that a pen took as a stroke ends pointerup → mouseup → click, with the
+// mark already written and painted by the time the click lands — so the click
+// falls on words that now carry a mark and reads as a press on one. Nothing
+// else tells the two apart: the pen drops the selection as it commits, which is
+// what keeps WebKit's callout bar off the marked words, and an empty selection
+// is what a plain tap has too.
+//
+// So the stroke says it happened, and the one click that follows is spent on
+// saying so. A gesture beginning clears whatever the last one left, because a
+// touch that never produces a click — the reader draws and lifts, and the
+// browser sends none — must not leave the next tap swallowed.
+export interface StrokeGate {
+  // A pointer went down: a new gesture, and the last one's tail is not coming.
+  began(): void;
+  // A stroke was taken as the pointer came up.
+  drew(): void;
+  // Whether the click arriving now is that stroke's own tail. Asking spends it:
+  // one stroke swallows one click.
+  closesAStroke(): boolean;
+}
+
+export function createStrokeGate(): StrokeGate {
+  let armed = false;
+  return {
+    began: () => {
+      armed = false;
+    },
+    drew: () => {
+      armed = true;
+    },
+    closesAStroke: () => {
+      const was = armed;
+      armed = false;
+      return was;
+    },
+  };
+}
+
 // What a reply the reader has drawn on carries when it is replayed next turn
 // (docs/09). The model wrote those words; which of them the reader kept is
 // something only this note can tell it.
