@@ -11,8 +11,8 @@
 
 import {
   chatAnchorOf,
-  chatMarks,
-  pageMarks,
+  isChatMark,
+  isPageMark,
   type Annotation,
   type ChatAnchor,
   type MarkPen,
@@ -143,12 +143,50 @@ export function locateChatMarks(
 }
 
 // The trace list's two groups (docs/09): what was drawn on the page first, in
-// the order it already had, then what was drawn in the classroom. Interleaving
-// them would put entries that jump nowhere — a chat mark has no page, and the
-// conversation it was drawn in may since have been deleted — between entries
-// that do.
+// document order, then what was drawn in the classroom, in the order it was
+// saved. Interleaving them would put entries that jump nowhere — a chat mark has
+// no page, and the conversation it was drawn in may since have been deleted —
+// between entries that do.
+export type TraceGroupKey = "page" | "chat";
+
+export interface TraceGroup<T> {
+  key: TraceGroupKey;
+  marks: T[];
+}
+
+// sortIndex is the engine's document-order key (reading/engine/convert.ts) and
+// lexicographic order is document order. A chat mark has none — it was drawn
+// where there is no page — which is why the key alone cannot order the list:
+// the empty string sorts before every page's. The two groups are separated
+// first and only the page one is keyed.
+function inDocOrder<T>(marks: T[]): T[] {
+  const key = (m: T): string => {
+    const raw = (m as { sortIndex?: unknown }).sortIndex;
+    return typeof raw === "string" ? raw : "";
+  };
+  return marks.sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
+}
+
+// The list as it is shown, grouped. This is the one place its order is decided:
+// the shell keeps a flat copy for everything else that reads marks, and the list
+// component groups the same annotations through here, so the two cannot
+// disagree. An empty group is not a group — it would be a heading over nothing.
+// `id` is in the constraint so the parameter is not a weak type: an Annotation
+// declares no `chatAnchor` of its own — files written before chat marks existed
+// have none — and a constraint of nothing but optional fields would have TS
+// reject every caller for sharing no property with it.
+export function traceGroups<T extends { id: string; chatAnchor?: unknown }>(
+  annotations: readonly T[],
+): TraceGroup<T>[] {
+  const groups: TraceGroup<T>[] = [
+    { key: "page", marks: inDocOrder(annotations.filter(isPageMark)) },
+    { key: "chat", marks: annotations.filter(isChatMark) },
+  ];
+  return groups.filter((g) => g.marks.length > 0);
+}
+
 export function orderTraceMarks(annotations: readonly Annotation[]): Annotation[] {
-  return [...pageMarks(annotations), ...chatMarks(annotations)];
+  return traceGroups(annotations).flatMap((g) => g.marks);
 }
 
 // A stroke the reader has just made, as the surface reports it: which reply,

@@ -1,6 +1,8 @@
 // TraceList: the right-hand trace column — every mark the reader left on the
-// document, in document order. A read-only list with an AI thread shortcut and a
-// swipe-to-delete on each row. Controlled; styled with Tailwind utilities.
+// book, under the two headings it has: what was drawn on the page, in document
+// order, then what was drawn on a reply (docs/09). A read-only list with an AI
+// thread shortcut and a swipe-to-delete on each row. Controlled; styled with
+// Tailwind utilities.
 //
 // Deleting from here is the only way to get rid of an AI-pen mark: tapping one
 // on the page opens its conversation, not the annotation editor, so the editor's
@@ -14,6 +16,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { IconArea, IconHighlight, IconSparkle, IconTrash, IconUnderline } from '../base/icons';
 import { Button } from '../ui/button';
+import { traceGroups, type TraceGroupKey } from '../../../reading/chat-marks';
 import type { Annotation } from './types';
 import {
 	SWIPE_ACTION_WIDTH,
@@ -33,6 +36,13 @@ interface TraceListProps {
 	onDelete(id: string): void;
 	onOpenThread?(id: string): void;
 }
+
+// What each group is. A mark drawn on a reply has no page to jump to, so the
+// two are told apart here rather than left to read as one list with holes in it.
+const GROUP_TITLE: Record<TraceGroupKey, string> = {
+	page: 'On the page',
+	chat: 'In the classroom',
+};
 
 // The sliding content needs an opaque background of its own: the delete drawer
 // sits behind it, and a translucent hover tint would show it through.
@@ -238,26 +248,33 @@ export default function TraceList({ annotations, selectedId, onSelect, onDelete,
 		[onDelete],
 	);
 
-	// sortIndex is the document-order key; lexicographic order is document order.
-	const items = [...annotations].sort((a, b) => {
-		const sa = a.sortIndex ?? '';
-		const sb = b.sortIndex ?? '';
-		return sa < sb ? -1 : sa > sb ? 1 : 0;
-	});
+	// Both the order and the split are reading/chat-marks.ts's, so this list and
+	// the shell's flat copy of the same marks cannot end up disagreeing.
+	const groups = traceGroups(annotations);
 
 	return (
 		<div className="h-full overflow-y-auto bg-white text-[13px] text-neutral-800 select-none" role="listbox" aria-label="Traces">
-			{items.map((a) => (
-				<TraceRow
-					key={a.id}
-					annotation={a}
-					selected={a.id === selectedId}
-					open={a.id === openId}
-					onOpenChange={onOpenChange}
-					onSelect={handleSelect}
-					onDelete={handleDelete}
-					onOpenThread={onOpenThread}
-				/>
+			{groups.map((group) => (
+				<div key={group.key} role="group" aria-labelledby={`trace-group-${group.key}`}>
+					<div
+						id={`trace-group-${group.key}`}
+						className="px-3 pt-3 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+					>
+						{GROUP_TITLE[group.key]}
+					</div>
+					{group.marks.map((a) => (
+						<TraceRow
+							key={a.id}
+							annotation={a}
+							selected={a.id === selectedId}
+							open={a.id === openId}
+							onOpenChange={onOpenChange}
+							onSelect={handleSelect}
+							onDelete={handleDelete}
+							onOpenThread={onOpenThread}
+						/>
+					))}
+				</div>
 			))}
 		</div>
 	);

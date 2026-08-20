@@ -23,6 +23,7 @@ import {
   mayMarkReply,
   occurrenceAt,
   orderTraceMarks,
+  traceGroups,
   type NewChatMark,
 } from "../../src/reading/chat-marks";
 import { annotationPageMap, observationScope } from "../../src/reading/lecture";
@@ -48,6 +49,9 @@ const chatMark = (id: string, over: Partial<Annotation> = {}): Annotation => ({
   }) as Annotation),
   ...over,
 });
+
+// A page mark carrying the engine's document-order key (reading/engine/convert.ts).
+const onPage = (id: string, sortIndex: string): Annotation => ({ ...pageMark(id), sortIndex });
 
 // --- the anchor -----------------------------------------------------------
 
@@ -179,6 +183,30 @@ test("marks are found by thread and message, and located in reading order", () =
 test("the trace list is page marks first, classroom marks after, order kept inside", () => {
   const all = [chatMark("c1"), pageMark("p1"), chatMark("c2"), pageMark("p2", 3)];
   expect(orderTraceMarks(all).map((a) => a.id)).toEqual(["p1", "p2", "c1", "c2"]);
+});
+
+// The order is decided here and nowhere else. The list used to sort again on
+// sortIndex, which a classroom mark has none of, and the empty key sorts before
+// every page's — the second sort put the classroom group on top of the page one.
+test("page marks come out in document order whatever order they arrive in", () => {
+  const first = onPage("p1", "00001|000130|00100");
+  const second = onPage("p2", "00002|000130|00100");
+  expect(orderTraceMarks([second, first]).map((a) => a.id)).toEqual(["p1", "p2"]);
+});
+
+test("a classroom mark has no sortIndex and still lands after every page mark", () => {
+  const all = [chatMark("c1"), onPage("p1", "00001|000130|00100")];
+  expect(orderTraceMarks(all).map((a) => a.id)).toEqual(["p1", "c1"]);
+});
+
+test("the groups come out named, and an empty one is not a group", () => {
+  const all = [chatMark("c1"), onPage("p1", "00002|000130|00100"), onPage("p2", "00001|000130|00100")];
+  expect(traceGroups(all).map((g) => [g.key, g.marks.map((a) => a.id)])).toEqual([
+    ["page", ["p2", "p1"]],
+    ["chat", ["c1"]],
+  ]);
+  expect(traceGroups([chatMark("c1")]).map((g) => g.key)).toEqual(["chat"]);
+  expect(traceGroups([])).toEqual([]);
 });
 
 // --- creation -------------------------------------------------------------
