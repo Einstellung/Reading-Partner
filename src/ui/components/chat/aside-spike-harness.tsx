@@ -5,12 +5,12 @@
 // Vite in dev at /chat-aside-spike.html.
 //
 // It exists for the questions the DOM alone cannot answer: whether a long press
-// on a reply produces a selection this can read, and where WebKit's own
-// Copy | Look Up | Translate bar lands over the words that were just marked.
-// The callout is native and invisible to JS, so the measurement is half from
-// here (window.__aside) and half from the accessibility tree
-// (scripts/ios-sim.sh describe). A programmatic selection raises no callout
-// (docs/pitfall/04), so everything here is arranged for a real finger.
+// on a reply produces a selection a stroke can be read out of, and whether
+// WebKit's own Copy | Look Up | Translate bar is gone once the stroke drops that
+// selection. The bar is native and invisible to JS, so that half of the
+// measurement comes from the accessibility tree (scripts/ios-sim.sh native) and
+// the rest from here (window.__aside). A programmatic selection raises no
+// callout (docs/pitfall/04), so everything here is arranged for a real finger.
 
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -37,10 +37,8 @@ declare global {
   interface Window {
     __aside: {
       ready: boolean;
-      // Every anchor the control has opened, newest last.
+      // Every stroke committed on a reply, newest last.
       opened: ChatMarkDraw[];
-      // The control's own box, or null when it is not on screen.
-      control(): Rect | null;
       // What is selected, as the page sees it: the string, the range's bounding
       // box and every client rect the selection draws.
       selection(): { text: string; bounding: Rect | null; rects: Rect[] } | null;
@@ -126,9 +124,8 @@ function Harness() {
           />
         </div>
       </ChatScaleScope>
-      {/* A visible receipt for question 4: whether the tap reaches the control
-          at all is answered by the count going up, and the last span says which
-          words it was opened on. */}
+      {/* A visible receipt: the count goes up when a stroke commits, and the
+          last span says which words it landed on. */}
       <div data-aside-log className="px-4 pb-3 text-[13px] text-neutral-500">
         opened: {opened.length}
         {opened.length > 0 ? ` — “${opened[opened.length - 1].text.slice(0, 40)}”` : ""}
@@ -147,12 +144,6 @@ const paragraphs = () =>
 window.__aside = {
   ready: false,
   opened: openedAnchors,
-  control: () => {
-    // Nothing is raised beside a selection any more — a stroke is committed on
-    // pointer-up. Kept so the probe's shape does not change under
-    // scripts/ios-sim.sh.
-    return null;
-  },
   selection: () => {
     const sel = document.getSelection();
     if (!sel || sel.rangeCount === 0) return null;

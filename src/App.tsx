@@ -578,10 +578,18 @@ export default function App() {
         : staged.flatMap((p) => (p.status === "ready" ? [{ data: p.data, mediaType: p.mediaType }] : [])),
   });
 
+  // The Back out of a side conversation and the release of the blackboard are
+  // the same question: is the room this one came out of still here
+  // (asideReturnable, below). One answer, so the two cannot both be withheld.
+  const parentThreadThere = useCallback(
+    (parentThreadId: string) => asideReturnable(bookIdRef.current, parentThreadId),
+    [],
+  );
+
   // Which of the two controls that open a level are live (docs/03), and the pen
   // the rack acts with once the dim one is taken out of it. Both read the open
   // call, so they sit below it and everything about the tool follows.
-  const gate = levelGate(call);
+  const gate = levelGate(call, parentThreadThere);
   const toolType = toolInCall(pickedTool, call);
 
   // Apply the tool once the view is initialized (setTool before the pdf viewer
@@ -1454,12 +1462,11 @@ export default function App() {
   // keeps the passage wording (docs/09); only one pulled out of a reply has no
   // passage to name. And a conversation whose parent is gone — a delete that
   // arrived from another device — still says what it is about, without offering
-  // a way back that could only apologise.
+  // a way back that could only apologise. The way on from there is the
+  // blackboard, which the gate lights for exactly this case.
   const spanAside = call?.aside?.from === "chat";
   const asideBack =
-    call?.aside && asideReturnable(bookIdRef.current, call.aside.parentThreadId)
-      ? returnFromAside
-      : undefined;
+    call?.aside && parentThreadThere(call.aside.parentThreadId) ? returnFromAside : undefined;
 
   // And why it is short, while it is. Extracting the text is what the chapter
   // chip waits on, and on a long book that is tens of seconds of the entry
@@ -1588,6 +1595,7 @@ export default function App() {
             }}
             annotations={traceAnns as unknown as PopupAnnotation[]}
             selectedId={selectedAnnId}
+            hasThread={hasThread}
             onSelectAnnotation={onTraceSelect}
             onDeleteAnnotation={deleteTraceAnnotation}
             onOpenThread={openThreadForAnnotation}

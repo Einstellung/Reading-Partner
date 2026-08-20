@@ -23,7 +23,13 @@ const MARKS: Annotation[] = [
 
 function render(props: Partial<Parameters<typeof TraceList>[0]> = {}) {
   return renderToStaticMarkup(
-    <TraceList annotations={MARKS} onSelect={() => {}} onDelete={() => {}} {...props} />,
+    <TraceList
+      annotations={MARKS}
+      hasThread={() => true}
+      onSelect={() => {}}
+      onDelete={() => {}}
+      {...props}
+    />,
   );
 }
 
@@ -50,6 +56,13 @@ test("the delete action itself is not rendered until the row is opened", () => {
 test("the AI thread shortcut shows only on a mark that owns a thread", () => {
   const html = render();
   expect(html.split('aria-label="Open AI thread"').length - 1).toBe(1);
+});
+
+// A mark outlives the conversation it opened (docs/09): deleting the talk leaves
+// the mark on the book. The id on it is then a door to nothing, and a button
+// that cannot be answered is worse than no button.
+test("the shortcut goes when the conversation it points at is no longer here", () => {
+  expect(render({ hasThread: () => false })).not.toContain('aria-label="Open AI thread"');
 });
 
 test("rows come out in document order, whatever order they arrive in", () => {

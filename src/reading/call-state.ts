@@ -305,8 +305,20 @@ export function mayOpenAside(call: OpenLevel | null | undefined): boolean {
 // The blackboard is live only where the book's conversation is not already on
 // screen or one step behind. While it is up, the corner card is the way back to
 // it; two doors onto the same room is one too many.
-export function mayOpenBookThread(call: OpenLevel | null | undefined): boolean {
-  return !call || (!call.isBook && !call.aside);
+//
+// `hasParent` is the caller's lookup for the room a side conversation came out
+// of. A parent that was deleted on another device leaves the aside with no Back
+// (App.tsx: asideReturnable), and nothing is behind it any more, so the
+// blackboard is the door into the classroom rather than a second one onto it.
+// Dim it there and hanging up is the only way out.
+export function mayOpenBookThread(
+  call: OpenLevel | null | undefined,
+  hasParent: (parentThreadId: string) => boolean,
+): boolean {
+  if (!call) return true;
+  if (call.isBook) return false;
+  if (!call.aside) return true;
+  return !hasParent(call.aside.parentThreadId);
 }
 
 // The pen the rack acts with. A dim AI pen is held rather than cleared: the
@@ -326,10 +338,13 @@ export interface LevelGate {
   bookThread: string | null;
 }
 
-export function levelGate(call: OpenLevel | null | undefined): LevelGate {
+export function levelGate(
+  call: OpenLevel | null | undefined,
+  hasParent: (parentThreadId: string) => boolean,
+): LevelGate {
   return {
     aiPen: mayOpenAside(call) ? null : AI_PEN_DIM,
-    bookThread: mayOpenBookThread(call)
+    bookThread: mayOpenBookThread(call, hasParent)
       ? null
       : call?.aside
         ? BOOK_THREAD_BEHIND

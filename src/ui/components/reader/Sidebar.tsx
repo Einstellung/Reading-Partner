@@ -51,6 +51,9 @@ interface SidebarProps {
 	onNavigatePage(page: number): void;
 	annotations: Annotation[];
 	selectedId?: string | null;
+	// Passed to the trace list, which asks it per row whether the mark's
+	// conversation is still on this device.
+	hasThread(threadId: string): boolean;
 	onSelectAnnotation(id: string): void;
 	onDeleteAnnotation(id: string): void;
 	onOpenThread(id: string): void;
@@ -68,6 +71,7 @@ export default function Sidebar({
 	onNavigatePage,
 	annotations,
 	selectedId,
+	hasThread,
 	onSelectAnnotation,
 	onDeleteAnnotation,
 	onOpenThread,
@@ -125,6 +129,7 @@ export default function Sidebar({
 						<TraceList
 							annotations={annotations}
 							selectedId={selectedId}
+							hasThread={hasThread}
 							onSelect={onSelectAnnotation}
 							onDelete={onDeleteAnnotation}
 							onOpenThread={onOpenThread}
