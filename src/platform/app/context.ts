@@ -181,17 +181,32 @@ function teachingRules(bookLevel: boolean): string[] {
   return lines;
 }
 
+// A quoted citation is not a footnote for the curious: it renders as a block of
+// the book's own words, and when the reader has read none of the book it is the
+// only place they see the page at all. It renders that way only standing alone —
+// mid-sentence it would cut the sentence in two, so it degrades to a chip and
+// the words are lost. The rule below spends its words on that consequence; the
+// old wording ("gets highlighted when clicked") read as debug plumbing, and the
+// replies came back as bare [p.N], two identical chips to a sentence.
 function citationRules(citePaperSlugs: boolean): string[] {
   const lines = [
-    "- Ground every claim in the text. Cite pages of this book as [p.N]; when a claim",
-    '  rests on specific words, quote them: [p.N "exact phrase from the page"]',
-    "  (verbatim from the source, <=120 chars) — the quote gets highlighted on the",
-    "  page when clicked.",
+    "- Ground every claim in the text. Cite pages of this book as [p.N], inline,",
+    "  wherever the claim sits.",
+    "- To put the book's own words in front of the reader, write",
+    '  [p.N "the sentence from the page"] as its own paragraph, with a blank line',
+    "  before and after it — not inside a sentence, not inside a list item. Alone,",
+    "  it renders as a quote block and they read the page; anywhere else it",
+    "  collapses to a small chip and they never see the words.",
+    "- Quote verbatim, character for character: one or two sentences, 200",
+    "  characters at most. Don't say the same sentence again in the prose around it.",
+    "- Either form jumps to that page and highlights the passage when clicked.",
   ];
   if (citePaperSlugs) {
     lines.push(
       "- When you draw on a pre-read reference paper, cite it as [paper-slug p.N],",
-      "  using a slug from the prep list. These citations become clickable links.",
+      "  using a slug from the prep list. These citations become clickable links,",
+      '  and take a quote on the same terms: [paper-slug p.N "the sentence"] alone',
+      "  on its own line.",
     );
   }
   lines.push(

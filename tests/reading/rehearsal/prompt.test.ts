@@ -43,6 +43,18 @@ test("the instructions forbid the moves that would make the mode useless", () =>
   expect(REHEARSAL_INSTRUCTIONS).toContain("One question, two at most");
 });
 
+// A quoted citation renders as a block only when it stands alone; mid-sentence
+// it degrades to a chip and the reader never sees the page. The rule has to say
+// so, or the replies come back as bare [p.N].
+test("the citation rule says a quote stands alone, and what it costs when it does not", () => {
+  expect(REHEARSAL_INSTRUCTIONS).toContain("[p.N]");
+  expect(REHEARSAL_INSTRUCTIONS).toMatch(/as its own paragraph/);
+  expect(REHEARSAL_INSTRUCTIONS).toMatch(/not inside a sentence/);
+  expect(REHEARSAL_INSTRUCTIONS).toMatch(/collapses to a\s+small chip/);
+  expect(REHEARSAL_INSTRUCTIONS).toMatch(/verbatim/);
+  expect(REHEARSAL_INSTRUCTIONS).toContain("200 characters");
+});
+
 // The observations tell the AI where this reader broke down last time, which is
 // the strongest pull there is towards teaching the chapter instead of examining
 // it. The four rules that put them to work are each checked here.
