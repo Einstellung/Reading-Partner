@@ -5,6 +5,7 @@ import {
   isPageMark,
   type Annotation,
   type AnnotationPopupParams,
+  type MarkPen,
   type ViewInstance,
   type ViewState,
   type ViewStats,
@@ -73,12 +74,13 @@ import { useReaderZoomKeys } from "./ui/components/reader/reader-zoom-keys";
 import AnnotationPopup from "./ui/components/reader/AnnotationPopup";
 import CallBubble from "./ui/components/chat/CallBubble";
 import CallView from "./ui/components/chat/CallView";
+import type { ChatMarkHost } from "./ui/components/chat/chat";
 import ReadingPipCard from "./ui/components/chat/ReadingPipCard";
 import ChatPipCard from "./ui/components/chat/ChatPipCard";
 import SettingsView from "./ui/components/SettingsView";
 import type { CallRow, CallState, CallView as CallViewMode } from "./reading/call-state";
-import { asideFraming, asideReturn } from "./reading/aside";
-import { orderTraceMarks } from "./reading/chat-marks";
+import { asideAnchorAt, asideFraming, asideReturn } from "./reading/aside";
+import { buildChatMark, orderTraceMarks, type ChatMarkDraw } from "./reading/chat-marks";
 import { asideIntents, bookTextNotice, openingIntents, type ReadingIntent } from "./reading/intents";
 import { chapterAtPage } from "./reading/chapters";
 import { resolveBookThread } from "./reading/session/book-thread";
@@ -861,6 +863,72 @@ export default function App() {
     }
   }, [openThreadCall, asideFramingFor]);
 
+  // A pen stroke on a reply (docs/09). The classroom's answers are the book
+  // continued, so this writes the same kind of entry the page path writes, into
+  // the same file — anchored on the message rather than on a page
+  // (reading/chat-marks.ts) and never handed to the engine.
+  //
+  // The AI pen also opens the second level: a side conversation off the lesson,
+  // on the words that were marked. It is written down at once rather than at the
+  // first question, exactly as one drawn on the page is — the mark is a door
+  // into it from the moment it exists.
+  const drawChatMark = useCallback(
+    (draw: ChatMarkDraw) => {
+      const lesson = currentCall();
+      if (!bookIdRef.current || !lesson) return;
+      // What the aside would be about. Null when the AI pen was not the one
+      // drawing, and when what it caught is too short to be a question — that
+      // stroke is then an underline and nothing more, rather than a mark
+      // pointing at a conversation that was never opened.
+      const asideAnchor = draw.pen === "ai" ? asideAnchorAt(draw.messageTs, draw.text) : null;
+      const aiThreadId = asideAnchor ? crypto.randomUUID() : undefined;
+      const mark = buildChatMark({
+        id: crypto.randomUUID(),
+        pen: draw.pen,
+        color: draw.pen === "ai" ? AI_PEN_COLOR : penColor,
+        threadId: lesson.threadId,
+        messageTs: draw.messageTs,
+        text: draw.text,
+        occurrence: draw.occurrence,
+        ...(aiThreadId ? { aiThreadId } : {}),
+      });
+      if (!mark) return;
+      annsRef.current.set(mark.id, mark);
+      persistAnnotations();
+      syncTraceList();
+      // No prep trigger: that frontier is measured in pages and this mark is on
+      // none (reading/prep/use-prep-trigger.ts skips a mark with no page).
+      if (!asideAnchor || !aiThreadId) return;
+      setPopup(null);
+      // The same door the pen opens on the page, one level down: openChatAside
+      // takes the isBook guard with it, so an AI pen that reached here inside a
+      // side conversation opens nothing and the mark still stands.
+      openChatAside(asideAnchor, { annotationId: mark.id, threadId: aiThreadId });
+    },
+    [penColor, persistAnnotations, syncTraceList, currentCall, openChatAside],
+  );
+
+  // A press on a mark drawn on a reply. An AI-pen one is the door into the
+  // conversation it opened, the same as on the page; the other two raise the
+  // same editor a mark on the page raises, at the words that were pressed.
+  const openChatMark = useCallback(
+    (ann: Annotation, at: { x: number; y: number }) => {
+      const threadId = ann.aiThreadId as string | undefined;
+      if (!threadId) {
+        setPopup({ annotation: ann, anchor: at });
+        return;
+      }
+      const bookId = bookIdRef.current;
+      const thread = bookId ? getThread(bookId, threadId) : undefined;
+      setPopup(null);
+      openThreadCall(
+        { threadId, annotationId: ann.id, ...asideFramingFor(thread), view: "chat-main", anchor: at },
+        thread?.messages ?? [],
+      );
+    },
+    [openThreadCall, asideFramingFor],
+  );
+
   // The pen stroke gives the host no coordinates, so track the last pen-lift
   // over the reader pane as the AI-pen bubble anchor (capture phase, so nothing
   // inside the engine can swallow it).
@@ -1320,6 +1388,34 @@ export default function App() {
       );
   intentsRef.current = callIntents;
 
+  // The two pens, aimed at the conversation on screen (docs/09). The rack is
+  // always live and its target follows the main view: the classroom covers the
+  // reader, so while it is up a stroke lands on a reply. Only there — in the
+  // corner bubble the page is what the reader is looking at.
+  //
+  // The AI pen is the one that is not always on offer: it opens a level, and
+  // only the lesson has one left to open.
+  const chatPen: MarkPen | null =
+    toolType === "highlight" || toolType === "underline"
+      ? toolType
+      : toolType === "ai" && call?.isBook
+        ? "ai"
+        : null;
+  const chatMarkHost = useMemo<ChatMarkHost | null>(
+    () =>
+      call?.view === "chat-main" && call.threadId
+        ? {
+            threadId: call.threadId,
+            pen: chatPen,
+            color: chatPen === "ai" ? AI_PEN_COLOR : penColor,
+            marks: traceAnns,
+            onDraw: drawChatMark,
+            onOpen: openChatMark,
+          }
+        : null,
+    [call?.view, call?.threadId, chatPen, penColor, traceAnns, drawChatMark, openChatMark],
+  );
+
   // The empty state, and whether there is a lesson to go back to.
   //
   // A side conversation drawn on the page is a marked passage like any other and
@@ -1637,7 +1733,7 @@ export default function App() {
                       }
                 }
                 aside={call.aside ? { span: call.aside.span, onBack: asideBack } : undefined}
-                onOpenAside={call.isBook ? openChatAside : undefined}
+                marks={chatMarkHost}
                 emptyTitle={
                   spanAside ? "Ask about this" : call.isBook ? title ?? "This book" : undefined
                 }

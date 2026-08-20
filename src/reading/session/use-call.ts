@@ -147,7 +147,7 @@ export interface CallController<M extends CallRow, I extends StagedImage> {
   // its replies (docs/03). The aside replaces it in this one slot. No-op unless
   // the open call is the book-level one, which is what keeps asides one level
   // deep from this end.
-  openChatAside(anchor: AsideAnchor): void;
+  openChatAside(anchor: AsideAnchor, mark?: ChatAsideMark): void;
   // Back to the conversation this aside came off, reopened as itself. No-op when
   // the open call is not an aside.
   returnFromAside(): void;
@@ -202,6 +202,14 @@ export interface CallController<M extends CallRow, I extends StagedImage> {
   stageImage(threadId: string, produce: () => Promise<CompressedImage>): void;
   noteImageHint(threadId: string, hint: string): void;
   removePendingImage(id: string): void;
+}
+
+// The mark an AI-pen stroke on a reply left behind, handed to openChatAside so
+// the conversation it opens is anchored on it: the mark reopens it, and it is
+// what the trace list and distillation see (docs/09).
+export interface ChatAsideMark {
+  annotationId: string;
+  threadId: string;
 }
 
 export function useCall<M extends CallRow, I extends StagedImage>(
@@ -768,16 +776,29 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   // thought better of, costs nothing at all; the record arrives with the first
   // question (ensureAsideRecord).
   const openChatAside = useCallback(
-    (anchor: AsideAnchor) => {
+    (anchor: AsideAnchor, mark?: ChatAsideMark) => {
       const c = callRef.current;
       // Only off the lesson. An aside off an aside is the one thing this shape
       // does not do, and a mark's conversation is not what this opens from.
       if (!c || c.isBook !== true) return;
+      const bookId = bookIdRef.current;
+      // Drawn with the AI pen (docs/09), so it left a mark on the reply. The
+      // record is written now rather than at the first question, because the
+      // mark is a door into this conversation from the moment it exists — the
+      // same reason one drawn on the page is written when it is drawn.
+      if (mark && bookId) {
+        createAsideThread(bookId, mark.threadId, {
+          parentThreadId: c.threadId,
+          annotationId: mark.annotationId,
+          asideAnchor: anchor,
+        });
+      }
       openThread(
         {
-          threadId: crypto.randomUUID(),
-          // No mark: the span came out of a reply, not off the page.
-          annotationId: "",
+          threadId: mark ? mark.threadId : crypto.randomUUID(),
+          // A span selected with no pen leaves nothing behind; one the AI pen
+          // drew is anchored on its mark as well as on the words.
+          annotationId: mark ? mark.annotationId : "",
           aside: {
             parentThreadId: c.threadId,
             from: "chat",
@@ -791,7 +812,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         [],
       );
     },
-    [openThread],
+    [openThread, bookIdRef],
   );
 
   // A side conversation is written down the first time the reader asks something

@@ -27,7 +27,7 @@ import { estimateTextTokens, fitToBudget } from "../budget";
 import { EXPLAIN_KICKOFF } from "./intents";
 import { asideParentTail, ASIDE_KICKOFF } from "./aside";
 import { READING_LADDER, type ReadingReductionId } from "./ladder";
-import type { Annotation } from "../platform/app/reader-contract";
+import { isPageMark, type Annotation } from "../platform/app/reader-contract";
 import { buildSystemPrompt, readerProfileSection, type BooklistItem } from "../platform/app/context";
 import type { Settings } from "../platform/app/settings";
 import { loadAnnotations } from "../platform/app/annotations";
@@ -362,12 +362,16 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     kind === "aside" && thread?.parentThreadId
       ? getThread(bookId, thread.parentThreadId)
       : undefined;
-  const aside: { from: "chat" | "mark" } | null =
-    kind === "aside" ? { from: annotationId === "" ? "chat" : "mark" } : null;
   // Anchored on a page: a mark thread, and an aside drawn on the page. The
   // book-level thread's position is wherever the reader currently is, and so is
   // a chat-span aside's — its span came out of a reply, not out of a page.
-  const onMark = annotationId !== "";
+  //
+  // A mark drawn on a reply is not a page anchor either (docs/09). It has an
+  // annotation like a drawn one and no page like a selected one, so what tells
+  // the two apart is the mark and not the presence of an id.
+  const onMark = annotationId !== "" && isPageMark(ann as Annotation | undefined);
+  const aside: { from: "chat" | "mark" } | null =
+    kind === "aside" ? { from: onMark ? "mark" : "chat" } : null;
   const currentPage = pageIndex !== null ? pageIndex + 1 : null;
   const page = onMark
     ? annotationPage(ann as { position?: { pageIndex?: number } } | undefined)
@@ -390,12 +394,9 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   // The passage in the prompt's anchor slot. A chat-span aside has no mark, so
   // it is the span the reader selected out of the reply, stored verbatim on the
   // thread (platform/app/threads.ts: never an offset).
+  const markText = typeof ann?.text === "string" ? ann.text : "";
   const selectionText =
-    aside?.from === "chat"
-      ? thread?.asideAnchor?.text ?? ""
-      : typeof ann?.text === "string"
-        ? ann.text
-        : "";
+    aside?.from === "chat" ? thread?.asideAnchor?.text ?? markText : markText;
   const selectionComment = typeof ann?.comment === "string" ? ann.comment : undefined;
 
   let tools = buildReadingTools({ currentFulltext, materials });

@@ -18,6 +18,7 @@ import {
   chatMarksOn,
   locateChatMark,
   locateChatMarks,
+  mayMarkReply,
   occurrenceAt,
   orderTraceMarks,
 } from "../../src/reading/chat-marks";
@@ -244,4 +245,24 @@ test("an observation anchored on a classroom mark is still about this book", () 
   expect(
     observationScope(observation, "book-1", pages, { startPage: 1, endPage: 10 }),
   ).toBe("book");
+});
+
+// --- which rows a pen may be drawn across ----------------------------------
+
+const reply = { role: "ai" as const, text: "attention heads are three matrices" };
+
+// How deep the conversation is does not come into it: the highlight and the
+// underline work on a reply inside a side conversation too (docs/09). Only the
+// AI pen is withheld there, and that is decided before a stroke gets here.
+test("a pen draws on a settled reply and on nothing else", () => {
+  expect(mayMarkReply(reply)).toBe(true);
+  // The reader's own words are not the book continued.
+  expect(mayMarkReply({ role: "user", text: "what is a head" })).toBe(false);
+  // Every delta rebuilds a streaming row, so a Range into it is dead in a
+  // frame, and an anchor taken against half a sentence names words the finished
+  // reply may not have.
+  expect(mayMarkReply({ ...reply, streaming: true })).toBe(false);
+  // The app's words standing in for a reply, not the model's.
+  expect(mayMarkReply({ ...reply, failed: true })).toBe(false);
+  expect(mayMarkReply({ role: "ai", text: "  " })).toBe(false);
 });

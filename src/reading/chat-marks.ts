@@ -24,6 +24,32 @@ export interface ChatMarkSpan {
   end: number;
 }
 
+// The part of a chat row this decides on.
+export interface MarkableRow {
+  role: "user" | "ai";
+  text: string;
+  streaming?: boolean;
+  failed?: boolean;
+}
+
+// Whether a pen may be drawn across this row.
+//
+// Only a settled reply. While one streams, every delta rebuilds the row and
+// re-parses the partial Markdown, so a Range into it is dead within a frame —
+// and an anchor taken against half a sentence names words the finished reply
+// may not have. A failed row is the app's words standing in for a reply, not
+// the model's, and the reader's own message is not the book continued.
+//
+// How deep the conversation is does not come into it: the two underlines and
+// the highlight work on a reply wherever it is (docs/09). Which pens are on
+// offer is the shell's — the AI pen is dark inside an aside, because that would
+// be a third level — and by the time a draw reaches here it has been decided.
+export function mayMarkReply(row: MarkableRow): boolean {
+  if (row.role !== "ai") return false;
+  if (row.streaming || row.failed) return false;
+  return row.text.trim() !== "";
+}
+
 // Occurrences are counted overlapping (the scan steps one character, not one
 // needle), so every position a reader can select from is reachable by some
 // occurrence number. Non-overlapping counting cannot name the middle "aa" of
@@ -125,18 +151,24 @@ export function orderTraceMarks(annotations: readonly Annotation[]): Annotation[
   return [...pageMarks(annotations), ...chatMarks(annotations)];
 }
 
-export interface NewChatMark {
-  // The caller's id, so the mark can be handed to the store and to the thread
-  // it opens in the same breath.
-  id: string;
-  pen: MarkPen;
-  color: string;
-  threadId: string;
+// A stroke the reader has just made, as the surface reports it: which reply,
+// which words, and which copy of them. Everything else about the mark — its id,
+// its color, the conversation it may open — is the shell's to decide.
+export interface ChatMarkDraw {
   messageTs: number;
   // Verbatim out of the rendering, and the same string `occurrence` was counted
   // against.
   text: string;
   occurrence: number;
+  pen: MarkPen;
+}
+
+export interface NewChatMark extends ChatMarkDraw {
+  // The caller's id, so the mark can be handed to the store and to the thread
+  // it opens in the same breath.
+  id: string;
+  color: string;
+  threadId: string;
   // Set when the AI pen drew it, exactly as the page path sets it: the mark
   // carries the conversation it opened.
   aiThreadId?: string;
