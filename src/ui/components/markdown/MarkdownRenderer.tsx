@@ -13,8 +13,6 @@
 
 import { useContext, useMemo, type AnchorHTMLAttributes } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import rehypeHighlight from 'rehype-highlight';
 import 'katex/dist/katex.min.css';
@@ -22,11 +20,12 @@ import 'highlight.js/styles/github.css';
 import { linkifyCitations, parseCitationHref } from '../../../reading/prep/anchors';
 import { linkActionFor, openExternal } from '../../../platform/app/external-link';
 import { CitationContext, FigureContext, PrepSlugContext, type CitationHandler } from './Markdown';
+import { remarkPlugins } from './remarkPlugins';
 import FigureCard from './FigureCard';
 import { HIT_44 } from '../base/buttons';
 
-// Module-level constants so the plugin arrays aren't recreated each render.
-const remarkPlugins = [remarkGfm, remarkMath];
+// Module-level constant so the array isn't recreated each render. The remark
+// half lives in remarkPlugins.ts, which the markdown tests import too.
 const rehypePlugins = [rehypeHighlight, rehypeKatex];
 
 // The citation chip. It sits in a line of prose but it is a control, not a run
