@@ -12,7 +12,7 @@
 // module's async chunk.
 
 import { useContext, useMemo, type AnchorHTMLAttributes } from 'react';
-import ReactMarkdown, { type Components } from 'react-markdown';
+import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import rehypeHighlight from 'rehype-highlight';
 import 'katex/dist/katex.min.css';
@@ -43,8 +43,11 @@ const CITATION_CHIP = [
 // other link is a link the model wrote, and none of them may navigate the
 // webview: that would replace the app (docs/pitfall/94). A web link opens in
 // the system browser, anything that would reload our own page does nothing.
+//
+// `node` is the hast node react-markdown hands every custom component; it is
+// named here so the spreads below drop it instead of writing it to the DOM.
 function makeAnchor(onCitation: CitationHandler | null) {
-	return function Anchor({ href, children, ...rest }: AnchorHTMLAttributes<HTMLAnchorElement>) {
+	return function Anchor({ href, children, node, ...rest }: AnchorHTMLAttributes<HTMLAnchorElement> & ExtraProps) {
 		const figureHost = useContext(FigureContext);
 		const citation = onCitation ? parseCitationHref(href) : null;
 		if (!citation) {
