@@ -230,6 +230,25 @@ test("the paper-slug citation rule rides with the prep notes and not otherwise",
   expect(buildSystemPrompt(base)).not.toContain("[paper-slug p.N]");
 });
 
+// A quoted citation renders as a block of the book's own words only when it
+// stands alone; inside a sentence it degrades to a chip and the reader sees
+// nothing of the page. The rule states the consequence, and it states it the
+// same way whichever door the turn came in by — the quote is what the reader
+// reads, not a debug affordance that a mark thread could do without.
+test("the citation rule makes a quote stand alone and says what a buried one costs", () => {
+  for (const bookLevel of [true, false]) {
+    const out = buildSystemPrompt({ ...base, bookLevel, citePaperSlugs: true });
+    expect(out).toContain("[p.N]");
+    expect(out).toMatch(/as its own paragraph/);
+    expect(out).toMatch(/not inside a sentence/);
+    expect(out).toMatch(/collapses to a small chip/);
+    expect(out).toMatch(/Quote verbatim/);
+    expect(out).toContain("200");
+    // The slug form takes a quote on the same terms.
+    expect(out).toMatch(/\[paper-slug p\.N "the sentence"\] alone/);
+  }
+});
+
 // docs/09: the entry decides the range of the question, never the shape of the
 // answer. Nothing in either prompt may say "book level is long, a mark is short".
 test("neither entry hardwires how long an answer should be", () => {
