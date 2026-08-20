@@ -99,7 +99,7 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 		<div
 			ref={ref}
 			className={cn(
-				'fixed flex w-60 coarse:w-72 flex-col gap-2 rounded-lg border border-black/10 bg-white p-2.5 text-neutral-800 shadow-xl select-none',
+				'fixed flex w-60 coarse:w-72 flex-col gap-2 rounded-lg border border-black/10 bg-popover p-2.5 text-neutral-800 shadow-xl select-none',
 				OVERLAY_Z.floating,
 			)}
 			style={pos ? { left: pos.left, top: pos.top, visibility: 'visible' } : { visibility: 'hidden' }}
@@ -136,7 +136,7 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 			</div>
 
 			<textarea
-				className="max-h-40 min-h-[60px] w-full resize-y rounded-md border border-black/15 bg-white px-2 py-1.5 text-[13px] coarse:text-base text-neutral-800 select-text focus:border-primary focus:outline-none"
+				className="max-h-40 min-h-[60px] w-full resize-y rounded-md border border-black/15 bg-background px-2 py-1.5 text-[13px] coarse:text-base text-neutral-800 select-text focus:border-primary focus:outline-none"
 				placeholder="Add a comment"
 				value={draft}
 				onChange={(e) => {

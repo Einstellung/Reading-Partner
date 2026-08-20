@@ -36,7 +36,7 @@ const TOOLS: { type: ToolType; label: string; Icon: (p: { size?: number }) => JS
 // The two tools that paint in a color.
 type PenType = 'highlight' | 'underline';
 
-const CARD = 'rounded-xl border border-black/10 bg-white shadow-lg';
+const CARD = 'rounded-xl border border-black/10 bg-popover shadow-lg';
 // Distance from the swatch to the palette that opens off it.
 const GAP = 8;
 

@@ -79,7 +79,7 @@ function HealthDot({ health }: { health: SourceHealth | undefined }) {
         className={`relative h-2.5 w-2.5 rounded-full ${HIT_44} ${color}`}
       />
       {open && health && (
-        <div className="absolute right-0 top-4 z-10 w-56 rounded-lg border border-black/10 bg-white p-3 text-left text-[12px] shadow-lg">
+        <div className="absolute right-0 top-4 z-10 w-56 rounded-lg border border-black/10 bg-popover p-3 text-left text-[12px] shadow-lg">
           {health.lastSuccess ? (
             <div className="text-[#555]">Last success: {timeAgo(health.lastSuccess)}</div>
           ) : (
@@ -113,7 +113,7 @@ function SignInRow(props: {
   const working = work !== null;
   const signedIn = !!state && !state.unknown && state.signedIn;
   return (
-    <li className="flex items-center gap-3 rounded-xl border border-[#e6e6e6] bg-white px-4 py-3">
+    <li className="flex items-center gap-3 rounded-xl border border-[#e6e6e6] bg-card px-4 py-3">
       <span
         aria-hidden
         className={`h-2.5 w-2.5 flex-none rounded-full ${signedIn ? "bg-[#3fb950]" : "bg-[#d0d0d0]"}`}
@@ -240,7 +240,7 @@ export function SourcesPage(props: SourcesPageProps) {
               }
             }}
             placeholder="Paste a site or RSS URL…"
-            className="min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 text-[14px] text-[#1b1b1b] outline-none coarse:min-h-[44px] coarse:text-[16px] placeholder:text-neutral-400 focus:border-primary"
+            className="min-w-0 flex-1 rounded-lg border border-black/10 bg-background px-3 py-2 text-[14px] text-[#1b1b1b] outline-none coarse:min-h-[44px] coarse:text-[16px] placeholder:text-neutral-400 focus:border-primary"
           />
           <Button type="button" variant="cta" size="lg" onClick={() => void probe()} disabled={!url.trim() || probing}>
             {probing ? "Checking…" : "Add"}
@@ -280,7 +280,7 @@ export function SourcesPage(props: SourcesPageProps) {
               return (
                 <li
                   key={site.host}
-                  className="flex items-center gap-3 rounded-xl border border-[#e6e6e6] bg-white px-4 py-3"
+                  className="flex items-center gap-3 rounded-xl border border-[#e6e6e6] bg-card px-4 py-3"
                 >
                   <span
                     aria-hidden
@@ -342,7 +342,7 @@ export function SourcesPage(props: SourcesPageProps) {
           {props.sources.map((s) => (
             <li
               key={s.id}
-              className="group flex items-center gap-3 rounded-xl border border-[#e6e6e6] bg-white px-4 py-3"
+              className="group flex items-center gap-3 rounded-xl border border-[#e6e6e6] bg-card px-4 py-3"
             >
               <HealthDot health={props.health[s.id]} />
               <div className="min-w-0 flex-1">

@@ -56,7 +56,7 @@ export function BriefingPage(props: BriefingPageProps) {
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col px-4 py-5 sm:px-6 sm:py-8">
-      <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-2 border-b border-[#ececec] bg-white/85 px-4 py-2 backdrop-blur sm:-mx-6 sm:mb-6 sm:gap-3 sm:px-6 sm:py-3">
+      <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-2 border-b border-[#ececec] bg-background/85 px-4 py-2 backdrop-blur sm:-mx-6 sm:mb-6 sm:gap-3 sm:px-6 sm:py-3">
         <Button variant="subtle" size="chip" onClick={props.onBack}>
           ‹ Today
         </Button>
@@ -87,7 +87,7 @@ export function BriefingPage(props: BriefingPageProps) {
                 <div
                   key={r.itemId}
                   className={
-                    "group rounded-xl border border-[#e6e6e6] bg-white p-4 transition-colors hover:border-[#d3ccef] " +
+                    "group rounded-xl border border-[#e6e6e6] bg-card p-4 transition-colors hover:border-[#d3ccef] " +
                     (dismissed ? "opacity-45" : "")
                   }
                 >

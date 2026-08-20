@@ -70,7 +70,7 @@ export default function TalkView(props: {
 
   return (
     <CitationContext.Provider value={null}>
-      <div className="absolute inset-0 flex flex-col bg-white">
+      <div className="absolute inset-0 flex flex-col bg-background">
         <div className="flex flex-none items-center gap-2 border-b border-border px-3 py-2">
           <Button
             type="button"

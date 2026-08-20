@@ -43,7 +43,7 @@ export default function TopicNav(props: {
         // `p-safe` (App.tsx), and a rail whose gutters grow with the inset stops
         // holding its 44px button. 3.75rem minus the two 0.5rem gutters is that
         // button exactly.
-        "flex flex-none flex-col gap-1 overflow-y-auto border-r border-border bg-white px-2 py-4 " +
+        "flex flex-none flex-col gap-1 overflow-y-auto border-r border-border bg-background px-2 py-4 " +
         (props.open ? "w-[13rem]" : "w-[3.75rem] items-center")
       }
     >

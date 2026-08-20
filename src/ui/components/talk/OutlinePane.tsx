@@ -40,7 +40,7 @@ export default function OutlinePane({
   onClose,
 }: OutlinePaneProps) {
   return (
-    <aside className="flex h-full w-[300px] flex-none flex-col border-l border-border bg-white">
+    <aside className="flex h-full w-[300px] flex-none flex-col border-l border-border bg-background">
       <div className="flex flex-none items-center gap-2 border-b border-border px-3 py-2">
         <span className="flex-1 text-[13px] font-medium">The talk so far</span>
         <Button

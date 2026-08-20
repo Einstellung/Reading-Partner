@@ -185,7 +185,7 @@ export default function PhoneApp() {
     <div className="relative h-full overflow-hidden bg-[#f1f3f5]">
       {/* p-safe: the notch and the home indicator (viewport-fit=cover). Fixed
           overlays are not covered by it and pad themselves — docs/pitfall/74. */}
-      <div ref={surfaceRef} className="flex h-full flex-col bg-white p-safe">
+      <div ref={surfaceRef} className="flex h-full flex-col bg-background p-safe">
         {/* No shell header: every screen carries its own top bar, and a second
             one above them would cost a phone a line of reading height for
             nothing. */}

@@ -2,14 +2,17 @@
 // connected. Grouped by where the switch is felt — everywhere, in the reader,
 // in the briefing — with plain headings rather than another layer of folds.
 //
-// Two kinds of setting share this panel. The account's travel between devices
-// (settings.json); this device's do not (device.json, docs/36) and are drawn
-// only where they mean something: the role and the login item on a desktop, the
-// collection switch on a collector.
+// Three kinds of setting share this panel, and the difference is where each is
+// written. The account's travel between devices (settings.json); this device's
+// do not (device.json, docs/36) and are drawn only where they mean something —
+// the role and the login item on a desktop, the collection switch on a
+// collector; and the paper background is neither, because it has to be readable
+// before the first frame is painted (base/paper-tint.ts).
 
 import { hasAutostart } from "../../../platform/app/autostart";
 import { roleIsChoosable, type DeviceRole, type DeviceSettings } from "../../../platform/app/device";
 import { AI_LANGUAGE_OPTIONS, type AiLanguage, type Settings } from "../../../platform/app/settings";
+import { setPaperTint, usePaperTint } from "../base/usePaperTint";
 import { Checkbox } from "../ui/checkbox";
 import { Label } from "../ui/label";
 import AutostartCard from "./AutostartCard";
@@ -35,6 +38,11 @@ export default function FeaturesPanel({
   device: DeviceSettings | null;
   onDeviceChange: (next: DeviceSettings) => void;
 }) {
+  // Neither settings.json nor device.json: the tint is kept in localStorage and
+  // says why in ui/components/base/paper-tint.ts. It is drawn here anyway,
+  // beside the other switches that belong to this machine.
+  const paperTint = usePaperTint();
+
   return (
     <div className={SETTINGS_PANEL}>
       <SettingsSection title="General">
@@ -50,6 +58,18 @@ export default function FeaturesPanel({
           <p className="m-0 text-xs text-[#777]">
             The language the AI writes chat replies, notes, slides, and the news briefing in. Auto
             follows the language you write in. Voice transcription always follows what you speak.
+          </p>
+        </div>
+
+        <div className={CARD}>
+          <Label>
+            <Checkbox checked={paperTint} onCheckedChange={(v) => setPaperTint(v === true)} />
+            Paper background
+          </Label>
+          <p className="m-0 text-xs text-[#777]">
+            Turns the white behind the whole app — chats, shelves, sidebars, this dialog, and the
+            pages of a book — into an off-white paper colour. There is one shade and no darker
+            step; this is not a dark mode. The choice stays on this device.
           </p>
         </div>
       </SettingsSection>

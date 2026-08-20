@@ -21,7 +21,7 @@ export function AsideReceiptCard({ payload, dispatch }: CardComponentProps<Aside
       size="chip"
       title={payload.span}
       onClick={() => dispatch({ kind: "navigate", to: "aside", arg: payload.threadId })}
-      className="w-full max-w-md justify-start gap-2 rounded-xl bg-white/60 px-3 py-2 text-left can-hover:hover:bg-white"
+      className="w-full max-w-md justify-start gap-2 rounded-xl bg-card/60 px-3 py-2 text-left can-hover:hover:bg-card"
     >
       <span className="shrink-0 text-[11px] font-medium uppercase tracking-wider text-[#8a7fd0]">
         Aside
