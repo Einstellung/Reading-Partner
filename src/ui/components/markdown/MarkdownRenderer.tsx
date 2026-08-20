@@ -11,7 +11,7 @@
 // KaTeX woff2 fonts as assets from the CSS url() references, alongside this
 // module's async chunk.
 
-import { useContext, useMemo, type AnchorHTMLAttributes } from 'react';
+import { useContext, useMemo, type AnchorHTMLAttributes, type HTMLAttributes } from 'react';
 import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import rehypeHighlight from 'rehype-highlight';
@@ -19,7 +19,14 @@ import 'katex/dist/katex.min.css';
 import 'highlight.js/styles/github.css';
 import { linkifyCitations, parseCitationHref } from '../../../reading/prep/anchors';
 import { linkActionFor, openExternal } from '../../../platform/app/external-link';
-import { CitationContext, FigureContext, PrepSlugContext, type CitationHandler } from './Markdown';
+import {
+	CitationContext,
+	FigureContext,
+	PrepSlugContext,
+	QuoteCheckContext,
+	type CitationHandler,
+} from './Markdown';
+import { quotedCitationParagraph, type QuotedCitation } from './citationBlock';
 import { remarkPlugins } from './remarkPlugins';
 import FigureCard from './FigureCard';
 import { HIT_44 } from '../base/buttons';
@@ -37,6 +44,59 @@ const CITATION_CHIP = [
 	'relative !no-underline rounded bg-[#efecfb] px-[0.25em] py-[0.125em] !text-[#4a3a9e] text-[0.9em] hover:bg-[#e2dcf6]',
 	HIT_44,
 ].join(' ');
+
+// The quote block: a citation that is a paragraph of its own and carries the
+// book's words, drawn as one line of the book rather than a chip that hides it
+// (see citationBlock.ts for when this is reached). It is the chip's palette
+// pulled apart — the chip's fill becomes the hover state so the resting block
+// sits lighter than a control in a line of prose, and the chip's ink becomes
+// the rule down the left edge and the source marker under the quote.
+//
+// The quote itself keeps the body size. It is text to read, the only book text
+// a reader who has not opened the book will see, so shrinking it into a
+// footnote would be reading it wrong; only the marker under it steps down.
+//
+// The whole block is the target — a paragraph-wide box, so nothing here needs
+// HIT_44's centred pseudo-element (which would in any case be the wrong shape
+// for a box already taller than a line). Padding alone carries it past 44px:
+// in the 12px reader panels the two lines plus their gap are ~37px and the
+// 0.5em of padding above and below adds 12 more, and every part of that scales
+// with the container's font size rather than being calibrated for 16px.
+const QUOTE_BLOCK =
+	'my-[0.5em] flex w-full cursor-pointer flex-col items-start gap-[0.25em] rounded-r border-l-2 border-[#4a3a9e] bg-[#f6f4fd] px-[0.75em] py-[0.5em] text-left can-hover:hover:bg-[#efecfb]';
+
+function QuoteBlock({ quoted, onCitation }: { quoted: QuotedCitation; onCitation: CitationHandler }) {
+	return (
+		<button type="button" className={QUOTE_BLOCK} onClick={() => onCitation(quoted.citation)}>
+			{/* No quotation marks around it: the block is already the mark, and a
+			    pair added here would double the ones a CJK reply writes. */}
+			<span className="text-neutral-700">{quoted.quote}</span>
+			{quoted.label ? <span className="text-[0.85em] text-[#4a3a9e]">{quoted.label}</span> : null}
+		</button>
+	);
+}
+
+// Paragraphs. Nearly all of them are just <p>; the exception is a paragraph
+// holding nothing but one quoted citation, which becomes the block above.
+//
+// Only <p> is overridden, so a citation inside a list item keeps the inline
+// chip. That is not a gap to fill later: the block wants the full content width
+// and a list already owns an indent and a marker, and the prompt asks for a
+// quoted citation to stand as its own paragraph.
+function makeParagraph(onCitation: CitationHandler | null) {
+	return function Paragraph({ children, node, ...rest }: HTMLAttributes<HTMLParagraphElement> & ExtraProps) {
+		const verifyQuote = useContext(QuoteCheckContext);
+		const quoted = onCitation ? quotedCitationParagraph(node) : null;
+		// A paper citation has no full text on this side to check against, so it
+		// is shown as written; a page citation is checked when there is anything
+		// to check with, and a quote that isn't on its page keeps the chip.
+		const trusted =
+			quoted !== null &&
+			(quoted.citation.kind !== 'page' || !verifyQuote || verifyQuote(quoted.citation.page, quoted.quote));
+		if (quoted && trusted && onCitation) return <QuoteBlock quoted={quoted} onCitation={onCitation} />;
+		return <p {...rest}>{children}</p>;
+	};
+}
 
 // Citation links ([p.12] rewritten to #rp-… hrefs by linkifyCitations) render
 // as quiet chips that call back into the host instead of navigating. Every
@@ -147,7 +207,10 @@ export default function MarkdownRenderer({ text }: { text: string }) {
 	);
 	// The anchor override is installed whether or not there is a citation host:
 	// without it, a plain link in a reply navigates the webview away from the app.
-	const components = useMemo<Components>(() => ({ a: makeAnchor(onCitation) }), [onCitation]);
+	const components = useMemo<Components>(
+		() => ({ a: makeAnchor(onCitation), p: makeParagraph(onCitation) }),
+		[onCitation],
+	);
 	return (
 		<div className={MD}>
 			<ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>

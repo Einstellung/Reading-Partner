@@ -60,7 +60,9 @@ import {
   CitationContext,
   FigureContext,
   PrepSlugContext,
+  QuoteCheckContext,
   type FigureHost,
+  type QuoteCheck,
 } from "./ui/components/markdown/Markdown";
 import {
   findFigureById,
@@ -1457,11 +1459,40 @@ export default function App() {
     [prepSlugKey],
   );
 
+  // Whether a citation's quote is really on the page it names — what decides
+  // whether a reply prints it as the book's words or falls back to a bare page
+  // chip (QuoteCheckContext). The answer is the same one jumpToQuote asks for
+  // when the citation is clicked, so the two cannot disagree about what counts
+  // as found.
+  //
+  // Cached per (page, quote), and the cache belongs to this memo so it empties
+  // by construction whenever the book's text changes — a check made against the
+  // previous book's pages must not outlive it. The cache is not an optimization
+  // to skip: every delta of a streaming reply re-renders the whole tree, and
+  // locateQuote folds an entire page of text per call.
+  const verifyQuote = useMemo<QuoteCheck>(() => {
+    const cache = new Map<string, boolean>();
+    return (page, quote) => {
+      const key = `${page} ${quote}`;
+      const seen = cache.get(key);
+      if (seen !== undefined) return seen;
+      // No text for that page — extraction still running, an unreadable scan, a
+      // page number past the end. None of those is evidence against the quote,
+      // so it passes, the same way an unknown prep list lets a citation link on
+      // its shape alone.
+      const pageText = fulltext?.pages[page - 1];
+      const ok = pageText ? locateQuote(pageText, quote) !== null : true;
+      cache.set(key, ok);
+      return ok;
+    };
+  }, [fulltext]);
+
   return (
     <CardRegistryProvider>
     <CitationContext.Provider value={onCitation}>
     <PrepSlugContext.Provider value={prepSlugs}>
     <FigureContext.Provider value={figureHost}>
+    <QuoteCheckContext.Provider value={verifyQuote}>
     {/* p-safe: the insets (iPad, viewport-fit=cover). box-sizing:border-box
         keeps the padding inside the full-height shell. Fixed overlays are not
         covered by it and pad themselves — see docs/pitfall/74. */}
@@ -1801,6 +1832,7 @@ export default function App() {
         />
       )}
     </div>
+    </QuoteCheckContext.Provider>
     </FigureContext.Provider>
     </PrepSlugContext.Provider>
     </CitationContext.Provider>
