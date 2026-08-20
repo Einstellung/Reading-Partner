@@ -310,3 +310,67 @@ test("a press on that mark once the finger has gone down again opens it", async 
     restore();
   }
 });
+
+// A stroke arms the gate so the click that closes its own drag is spent on
+// saying so. On a touch screen that click often never comes, and one that ends
+// over the composer lands nowhere near a reply. Putting the pen back is where
+// the reader notices: the next press on an existing mark was swallowed by a
+// stroke drawn minutes ago.
+test("a stroke whose click never arrives does not swallow the next press on a mark", async () => {
+  const restore = layOut();
+  try {
+    const drawn: ChatMarkDraw[] = [];
+    const opened: Annotation[] = [];
+    const view = await renderChat(messages, host("highlight", drawn));
+
+    await select(view.container, "three matrices");
+    await lift(view.container);
+    expect(drawn).toHaveLength(1);
+
+    // The pen goes back in the rack, and the mark it drew comes back on the next
+    // render. No click ever followed the stroke.
+    await act(async () => {
+      view.rerender(
+        createElement(MessageList, {
+          messages,
+          marks: { ...withMarks([markOf(drawn[0])], opened), pen: null },
+        }),
+      );
+    });
+    const body = view.container.querySelector("[data-reply-body]") as HTMLElement;
+    await act(async () => {
+      fireEvent.pointerDown(body);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    fireEvent.click(body, INSIDE);
+
+    expect(opened.map((a) => a.id)).toEqual(["c1"]);
+  } finally {
+    restore();
+  }
+});
+
+// The same tail outliving the surface that made it. A press begins with a
+// pointer going down and would clear the gate on its way, so the click fired
+// here has none in front of it: what is under test is that closing the
+// conversation left nothing owed, not that the next press cleans up after it.
+test("a stroke does not outlive the conversation it was drawn in", async () => {
+  const restore = layOut();
+  try {
+    const drawn: ChatMarkDraw[] = [];
+    const opened: Annotation[] = [];
+    const first = await renderChat(messages, host("highlight", drawn));
+    await select(first.container, "three matrices");
+    await lift(first.container);
+    expect(drawn).toHaveLength(1);
+    first.unmount();
+
+    const view = await renderChat(messages, withMarks([markOf(drawn[0])], opened));
+    const body = view.container.querySelector("[data-reply-body]") as HTMLElement;
+    fireEvent.click(body, INSIDE);
+
+    expect(opened.map((a) => a.id)).toEqual(["c1"]);
+  } finally {
+    restore();
+  }
+});

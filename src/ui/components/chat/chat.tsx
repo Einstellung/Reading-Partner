@@ -346,8 +346,8 @@ function ChatMarkLayer({
 // sends next lands on words that now carry a mark, with nothing in the selection
 // left to tell it from a press on one (reading/chat-marks.ts: StrokeGate).
 function usePenStrokes(list: RefObject<HTMLElement>, host: ChatMarkHost | null): void {
+	const pen = host?.pen ?? null;
 	useEffect(() => {
-		const pen = host?.pen ?? null;
 		if (!host || !pen) return;
 		const doc = list.current?.ownerDocument ?? document;
 		const commit = () => {
@@ -383,14 +383,27 @@ function usePenStrokes(list: RefObject<HTMLElement>, host: ChatMarkHost | null):
 			strokes.drew();
 			sel.removeAllRanges();
 		};
+		doc.addEventListener('pointerup', commit);
+		return () => doc.removeEventListener('pointerup', commit);
+	}, [host, pen, list]);
+	// A gesture begins whether or not a pen is in hand — which is why this is not
+	// in the effect above, whose deps carry the pen and the host, and whose host
+	// is a new object every time a mark is saved. A stroke that never produced a
+	// click (a finger on a touch screen usually does not) or produced one
+	// nowhere near a reply (it came up over the composer) leaves the gate armed;
+	// if the reader then puts the pen back, nothing here would be listening, and
+	// their next press on an existing mark is spent on a stroke they finished
+	// minutes ago. The ref is stable, so this binds once per surface and the
+	// unmount clears whatever the last stroke left owed.
+	useEffect(() => {
+		const doc = list.current?.ownerDocument ?? document;
 		const begin = () => strokes.began();
 		doc.addEventListener('pointerdown', begin);
-		doc.addEventListener('pointerup', commit);
 		return () => {
 			doc.removeEventListener('pointerdown', begin);
-			doc.removeEventListener('pointerup', commit);
+			strokes.began();
 		};
-	}, [host, list]);
+	}, [list]);
 }
 
 // Attached images, right-aligned above a user message. Constrained height so a
