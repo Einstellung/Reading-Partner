@@ -20,6 +20,7 @@ import {
   createStrokeGate,
   hostMarkIds,
   markDoorThread,
+  markOpenAction,
   markedReplyText,
   locateChatMark,
   locateChatMarks,
@@ -352,6 +353,27 @@ test("a mark whose conversation is gone is a mark with no door", () => {
   expect(markDoorThread(undefined, there("aside-1"))).toBeNull();
   // A page mark's door is the same door.
   expect(markDoorThread({ ...pageMark("p2"), aiThreadId: "t2" }, there("t2"))).toBe("t2");
+});
+
+test("the door on a trace row points the engine at nothing that has no page", () => {
+  // The sparkle button is a door. A page mark is selected and jumped to as it
+  // opens; a classroom mark is on no page and must not reach the engine at all
+  // (platform/app/reader-contract.ts: pageMarks).
+  expect(markOpenAction({ ...pageMark("p1"), aiThreadId: "t1" }, there("t1"))).toEqual({
+    jump: true,
+    threadId: "t1",
+  });
+  expect(markOpenAction(pageMark("p2"), there())).toEqual({ jump: true, threadId: null });
+  expect(markOpenAction(chatMark("c1", { aiThreadId: "aside-1" }), there("aside-1"))).toEqual({
+    jump: false,
+    threadId: "aside-1",
+  });
+  // The conversation is gone: the row still shows the words, and the engine is
+  // no more the answer than it was.
+  expect(markOpenAction(chatMark("c2", { aiThreadId: "aside-1" }), there())).toEqual({
+    jump: false,
+    threadId: null,
+  });
 });
 
 // --- observation still finds the book it belongs to -----------------------

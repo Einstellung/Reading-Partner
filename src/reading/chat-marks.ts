@@ -230,6 +230,26 @@ export function markDoorThread(
   return hasThread(opened) ? opened : null;
 }
 
+// What the door on a trace row does (docs/09): the sparkle button beside a mark
+// that opened a conversation.
+//
+// `jump` is whether the engine may be pointed at the mark — it may not be
+// pointed at one with no page, which it has never heard of and which would have
+// it look for a page that does not exist. `threadId` is the conversation to
+// open, null when this device no longer holds it, in which case the row still
+// shows the words that were marked and there is nothing to open beside them.
+export interface MarkOpen {
+  jump: boolean;
+  threadId: string | null;
+}
+
+export function markOpenAction(
+  ann: Annotation | null | undefined,
+  hasThread: (threadId: string) => boolean,
+): MarkOpen {
+  return { jump: isPageMark(ann), threadId: markDoorThread(ann, hasThread) };
+}
+
 // A stroke the reader has just made, as the surface reports it: which reply,
 // which words, and which copy of them. Everything else about the mark — its id,
 // its color, the conversation it may open — is the shell's to decide.

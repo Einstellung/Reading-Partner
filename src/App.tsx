@@ -89,6 +89,7 @@ import { asideAnchorAt, asideFraming, asideReturn } from "./reading/aside";
 import {
   buildChatMark,
   markDoorThread,
+  markOpenAction,
   orderTraceMarks,
   type ChatMarkDraw,
 } from "./reading/chat-marks";
@@ -860,13 +861,20 @@ export default function App() {
   // first: annotations and threads sync as two files, so an id with no record
   // behind it is a door to nothing, and opening a call on it would make an empty
   // conversation the reader cannot get out of.
-  const markDoor = useCallback((ann: { id: string; aiThreadId?: unknown } | null | undefined) => {
+  const hasThread = useCallback((threadId: string) => {
     const bookId = bookIdRef.current;
-    if (!bookId) return null;
-    const threadId = markDoorThread(ann, (t) => getThread(bookId, t) !== undefined);
-    const thread = threadId ? getThread(bookId, threadId) : undefined;
-    return threadId && thread ? { threadId, thread } : null;
+    return !!bookId && getThread(bookId, threadId) !== undefined;
   }, []);
+
+  const markDoor = useCallback(
+    (ann: { id: string; aiThreadId?: unknown } | null | undefined) => {
+      const bookId = bookIdRef.current;
+      const threadId = markDoorThread(ann, hasThread);
+      const thread = bookId && threadId ? getThread(bookId, threadId) : undefined;
+      return threadId && thread ? { threadId, thread } : null;
+    },
+    [hasThread],
+  );
 
   // Clicking a mark. The engine shares the shell's document, so the rect is
   // already in viewport coordinates. An AI-pen mark (has aiThreadId) opens its
@@ -1214,25 +1222,29 @@ export default function App() {
   const openThreadForAnnotation = useCallback(
     (annotationId: string) => {
       const ann = annsRef.current.get(annotationId);
-      viewRef.current?.selectAnnotations([annotationId]);
-      viewRef.current?.navigate({ annotationID: annotationId });
+      const { jump, threadId } = markOpenAction(ann, hasThread);
+      if (jump) {
+        viewRef.current?.selectAnnotations([annotationId]);
+        viewRef.current?.navigate({ annotationID: annotationId });
+      }
       setSelectedAnnId(annotationId);
-      const door = markDoor(ann);
       // The conversation is gone: the row still shows the words that were
       // marked, and there is nothing to open beside them.
-      if (!door) return;
+      if (!threadId) return;
+      const bookId = bookIdRef.current;
+      const thread = bookId ? getThread(bookId, threadId) : undefined;
       openThreadCall(
         {
-          threadId: door.threadId,
+          threadId,
           annotationId,
-          ...asideFramingFor(door.thread),
+          ...asideFramingFor(thread),
           view: "chat-main",
           anchor: { x: 0, y: 0 },
         },
-        door.thread.messages,
+        thread?.messages ?? [],
       );
     },
-    [openThreadCall, asideFramingFor, markDoor],
+    [openThreadCall, asideFramingFor, hasThread],
   );
 
   // The receipt chip in a conversation's transcript (ui/components/reader/
