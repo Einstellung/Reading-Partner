@@ -16,11 +16,8 @@ import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
 import { linkifyCitations } from '../../../reading/prep/anchors';
-
-const remarkPlugins = [remarkGfm, remarkMath];
+import { remarkPlugins } from './remarkPlugins';
 
 // The block elements our chat CSS gives borders to (see Markdown.tsx MD):
 //   table/th/td -> vertical column rules, hr -> horizontal rule,
