@@ -79,24 +79,24 @@ function LivenessHint({ activity, withUnit }: { activity: Liveness; withUnit?: b
 }
 
 const STATUS_PILL = "rounded px-1.5 py-0.5 text-[10px] leading-none";
-const SECTION = "border-b border-[#eee] px-3 py-3";
-const HEADER = "border-b border-[#eee] px-3 py-2";
+const SECTION = "border-b border-border-subtle px-3 py-3";
+const HEADER = "border-b border-border-subtle px-3 py-2";
 const HEADER_LINK =
   "text-[11px] text-neutral-400 hover:text-neutral-600 disabled:opacity-50 coarse:py-0";
 
 const PAPER_STATUS_STYLE: Record<PaperStatus, string> = {
-  queued: "bg-neutral-100 text-neutral-500",
+  queued: "bg-muted-soft text-neutral-500",
   fetching: "bg-amber-100 text-amber-700",
   digesting: "bg-amber-100 text-amber-700",
   done: "bg-green-100 text-green-700",
   "abstract-only": "bg-sky-100 text-sky-700",
   failed: "bg-red-100 text-red-700",
   cooldown: "bg-amber-50 text-amber-600",
-  skipped: "bg-neutral-100 text-neutral-400",
+  skipped: "bg-muted-soft text-neutral-400",
 };
 
 const CHAPTER_STATUS_STYLE: Record<SpineChapter["status"], string> = {
-  pending: "bg-neutral-100 text-neutral-500",
+  pending: "bg-muted-soft text-neutral-500",
   running: "bg-amber-100 text-amber-700",
   done: "bg-green-100 text-green-700",
   failed: "bg-red-100 text-red-700",
@@ -180,7 +180,7 @@ function PaperRow({
   const active = paper.status === "queued" || paper.status === "fetching" || paper.status === "digesting";
 
   return (
-    <li className="border-b border-[#eee] px-3 py-2">
+    <li className="border-b border-border-subtle px-3 py-2">
       <button
         type="button"
         className="flex w-full cursor-pointer items-start gap-2 border-0 bg-transparent p-0 text-left"
@@ -228,7 +228,7 @@ function PaperRow({
         )}
       </div>
       {expanded && (
-        <div className="mt-2 rounded-md bg-[#fafafa] p-2 text-[12px] text-neutral-700">
+        <div className="mt-2 rounded-md bg-muted-faint p-2 text-[12px] text-neutral-700">
           {hasNote ? (
             note === null ? (
               <span className="text-neutral-400">Loading note…</span>
@@ -340,7 +340,7 @@ function PaperPrep({ papers }: { papers: PaperPrepBindings }) {
         )}
       </ul>
 
-      <div className="border-t border-[#eee] p-2">
+      <div className="border-t border-border-subtle p-2">
         <div className="flex gap-1.5">
           <Input
             className="px-2 py-1.5 text-[12px]"
@@ -549,7 +549,7 @@ function ChapterPrep({ chapters }: { chapters: ChapterPrepBindings }) {
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {(state.overviewStatus === "done" || state.overviewStatus === "stale") && (
-          <div className={`${SECTION} bg-[#fafafa]`}>
+          <div className={`${SECTION} bg-muted-faint`}>
             <div className="flex items-center justify-between gap-2">
               <div className="text-[13px] font-semibold text-[#1b1b1b]">Chapter graph</div>
               {state.overviewStatus === "stale" && !running && (
@@ -573,7 +573,7 @@ function ChapterPrep({ chapters }: { chapters: ChapterPrepBindings }) {
           </div>
         )}
         {state.overviewStatus === "running" && (
-          <div className="border-b border-[#eee] px-3 py-2 text-[11px] text-neutral-400">
+          <div className="border-b border-border-subtle px-3 py-2 text-[11px] text-neutral-400">
             Connecting the chapters…
             {overviewActivity && (
               <>
@@ -584,7 +584,7 @@ function ChapterPrep({ chapters }: { chapters: ChapterPrepBindings }) {
           </div>
         )}
         {state.overviewStatus === "failed" && (
-          <div className="border-b border-[#eee] px-3 py-2 text-[11px]">
+          <div className="border-b border-border-subtle px-3 py-2 text-[11px]">
             <span className="text-destructive">Chapter graph failed: {state.overviewError}</span>{" "}
             <Button type="button" variant="outline" size="xs" className="text-neutral-500" onClick={onRegenerateOverview} disabled={running}>
               Retry

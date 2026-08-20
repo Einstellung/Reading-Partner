@@ -547,7 +547,7 @@ const MessageBubble = memo(function MessageBubble({
 				{message.text && (
 					<div
 						className={
-							'box-border max-w-[75%] whitespace-pre-wrap break-words rounded-2xl bg-[var(--chat-bubble-bg,var(--color-neutral-100))] text-neutral-900 ' +
+							'box-border max-w-[75%] whitespace-pre-wrap break-words rounded-2xl bg-[var(--chat-bubble-bg,var(--color-muted-soft))] text-neutral-900 ' +
 							(lg
 								? 'px-4 py-2.5 text-[calc(1rem*var(--chat-scale,1))] leading-[1.75]'
 								: 'px-3 py-1.5 text-[13px] leading-relaxed')

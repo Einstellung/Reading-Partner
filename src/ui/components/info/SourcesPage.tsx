@@ -113,7 +113,7 @@ function SignInRow(props: {
   const working = work !== null;
   const signedIn = !!state && !state.unknown && state.signedIn;
   return (
-    <li className="flex items-center gap-3 rounded-xl border border-[#e6e6e6] bg-card px-4 py-3">
+    <li className="flex items-center gap-3 rounded-xl border border-border-soft bg-card px-4 py-3">
       <span
         aria-hidden
         className={`h-2.5 w-2.5 flex-none rounded-full ${signedIn ? "bg-[#3fb950]" : "bg-[#d0d0d0]"}`}
@@ -280,7 +280,7 @@ export function SourcesPage(props: SourcesPageProps) {
               return (
                 <li
                   key={site.host}
-                  className="flex items-center gap-3 rounded-xl border border-[#e6e6e6] bg-card px-4 py-3"
+                  className="flex items-center gap-3 rounded-xl border border-border-soft bg-card px-4 py-3"
                 >
                   <span
                     aria-hidden
@@ -342,7 +342,7 @@ export function SourcesPage(props: SourcesPageProps) {
           {props.sources.map((s) => (
             <li
               key={s.id}
-              className="group flex items-center gap-3 rounded-xl border border-[#e6e6e6] bg-card px-4 py-3"
+              className="group flex items-center gap-3 rounded-xl border border-border-soft bg-card px-4 py-3"
             >
               <HealthDot health={props.health[s.id]} />
               <div className="min-w-0 flex-1">

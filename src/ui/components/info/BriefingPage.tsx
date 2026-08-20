@@ -56,7 +56,7 @@ export function BriefingPage(props: BriefingPageProps) {
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col px-4 py-5 sm:px-6 sm:py-8">
-      <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-2 border-b border-[#ececec] bg-background/85 px-4 py-2 backdrop-blur sm:-mx-6 sm:mb-6 sm:gap-3 sm:px-6 sm:py-3">
+      <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-2 border-b border-border-subtle bg-background/85 px-4 py-2 backdrop-blur sm:-mx-6 sm:mb-6 sm:gap-3 sm:px-6 sm:py-3">
         <Button variant="subtle" size="chip" onClick={props.onBack}>
           ‹ Today
         </Button>
@@ -87,7 +87,7 @@ export function BriefingPage(props: BriefingPageProps) {
                 <div
                   key={r.itemId}
                   className={
-                    "group rounded-xl border border-[#e6e6e6] bg-card p-4 transition-colors hover:border-[#d3ccef] " +
+                    "group rounded-xl border border-border-soft bg-card p-4 transition-colors hover:border-[#d3ccef] " +
                     (dismissed ? "opacity-45" : "")
                   }
                 >
@@ -253,7 +253,7 @@ function FilteredSection({
               const m = meta(f.itemId);
               if (!m) return null;
               return (
-                <li key={f.itemId} className="group flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-[#fafafa]">
+                <li key={f.itemId} className="group flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted-faint">
                   <span className="w-24 flex-none truncate text-[11px] text-[#bbb]">{f.category}</span>
                   <span className="min-w-0 flex-1 truncate text-[13px] text-[#777]">{m.title}</span>
                   {openedIds.has(f.itemId) && <span className="text-[11px] text-[#bbb]">Read</span>}

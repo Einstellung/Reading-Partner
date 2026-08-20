@@ -29,7 +29,7 @@ function useElapsed(running: boolean): number {
 
 export function Card({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-[#e6e6e6] bg-card p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] sm:min-h-[220px] sm:p-6">
+    <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-border-soft bg-card p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] sm:min-h-[220px] sm:p-6">
       {children}
     </div>
   );
@@ -56,8 +56,8 @@ export function CardLabel({ children }: { children: React.ReactNode }) {
 export function CardBodyPlaceholder() {
   return (
     <div className="flex flex-1 flex-col" data-placeholder="card-body" aria-hidden="true">
-      <div className="h-3 w-4/5 rounded bg-[#f1f1f1]" />
-      <div className="mt-2.5 h-3 w-3/5 rounded bg-[#f1f1f1]" />
+      <div className="h-3 w-4/5 rounded bg-muted" />
+      <div className="mt-2.5 h-3 w-3/5 rounded bg-muted" />
     </div>
   );
 }

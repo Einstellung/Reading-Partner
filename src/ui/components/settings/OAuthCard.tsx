@@ -237,7 +237,7 @@ function DeviceCodePanel({
     return (
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-3">
-          <span className="rounded-md border border-[#dcdcdc] px-3 py-1.5 font-mono text-lg tracking-widest">
+          <span className="rounded-md border border-border px-3 py-1.5 font-mono text-lg tracking-widest">
             {state.userCode}
           </span>
           <Button type="button" variant="outline" onClick={() => onOpen(state.verificationUri)}>

@@ -110,7 +110,7 @@ export default function FigureCard({ host, id }: { host: FigureHost; id: string 
         />
       ) : (
         <span
-          className="flex items-center justify-center rounded bg-neutral-100 text-[0.8em] text-neutral-400"
+          className="flex items-center justify-center rounded bg-muted-soft text-[0.8em] text-neutral-400"
           style={{ minHeight: 80, minWidth: 160 }}
         >
           Loading figure…
