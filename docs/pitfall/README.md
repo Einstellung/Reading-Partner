@@ -16,7 +16,7 @@
 | 导入外部文件、拿文件选择器给的路径 | 存储与数据目录 |
 | 同步引擎、Drive 后端 | 存储与数据目录 + 网络与 CSP + WebKit / webview |
 | 全文/图片提取、裁图 | 提取（壳侧 pdf.js） |
-| 出 iOS 包、签名、图标、深链接 | iOS 构建与签名 |
+| 出 iOS 包、签名、图标、深链接 | iOS 构建与签名 + 开发环境 |
 | 原生录音、回声消除、后台识别 | 原生音频与语音 |
 | 出 Android 包、签名、对齐 | Android 构建与签名 |
 | 桌面 webview 行为异常 | WebKit / webview |
@@ -210,6 +210,7 @@
 - [134-dropthreadcache-reloads-instead-of-dropping](./134-dropthreadcache-reloads-instead-of-dropping.md) — `dropThreadCache` 不删缓存条目，它从文件重读一遍再合进去；`beforeEach` 里调它不隔离用例，同一个 `threadId` 会继承上一个用例追加的整段历史，用例之间要换 id
 - [142-a-worktree-vite-writes-the-main-checkouts-dep-cache](./142-a-worktree-vite-writes-the-main-checkouts-dep-cache.md) — worktree 的 `node_modules` 是主 checkout 的软链，vite 默认把依赖预构建缓存写进 `node_modules/.vite`，打断用户的 `tauri dev`（`--force` 更是直接清掉）；实验用私有 config 覆盖 `cacheDir` 和 `watch.ignored`，每轮 curl 确认吐的是新代码
 - [152-the-layering-test-reads-imports-inside-comments](./152-the-layering-test-reads-imports-inside-comments.md) — `tests/layering.test.ts` 不剥注释，注释里写成 `from "../lecture"` 形式的一行照样落成一条目录依赖边，造出一个代码里不存在的环；注释里指别的目录写裸路径，别写 import 语句形式
+- [155-cargo-never-hears-that-the-icon-changed](./155-cargo-never-hears-that-the-icon-changed.md) — 图标是编译期嵌进二进制的，`tauri_build::build()` 的 rerun-if-changed 名单里没有 `src-tauri/icons/`，`generate_context!` 又只 `include_bytes!` 一份 `OUT_DIR` 里按校验和命名的副本；换了图片 cargo 认为没东西变，dev 起来还是旧图标。`touch src-tauri/tauri.conf.json` 再起。桌面用的是 `bundle.icon` 里第一个 `.png`（`icons/32x32.png`），不是 `icon.png`
 - [151-a-dev-build-registers-the-dev-binary-for-login](./151-a-dev-build-registers-the-dev-binary-for-login.md) — dev 下打开开机启动写进登录项的是 `target/debug` 那个二进制，它的 devUrl 指着 vite dev server，开机起来只有一张 connection refused 错误页；手删还会被下次启动的对齐写回去。dev 构建里开机启动整个当作不可用，启动时的对齐无条件 `disable()`，`device.json` 里的意愿留着等打包版
 
 ## 历史（zotero/reader 引擎时代）
