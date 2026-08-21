@@ -17,9 +17,10 @@
 // position to a store that outlives the binding (common/scroll-memory.ts), so a
 // transcript that unmounts and comes back opens where the reader left it. A
 // restored place is re-applied on every growth until it lands, because at the
-// first paint the list is still shorter than the place it is going back to; a
-// list that comes back shorter than that place gives up once the content stops
-// growing, since the place no longer exists. Without the two seams this module
+// first paint the list is still shorter than the place it is going back to. The
+// attempt is bounded by a window of a couple of seconds: a list that comes back
+// with rows missing never reaches that place, and elapsed time is what separates
+// it from content that is still settling. Without the three seams this module
 // behaves as it did before them.
 
 /** The part of a scroll container this needs. An Element satisfies it. */
@@ -46,6 +47,8 @@ export interface StickOptions {
 	resolveHost?(list: Element): ScrollHost | null;
 	/** Subscribes to whatever changes the rendered height. Injected by the tests. */
 	observeContent?(list: Element, onChange: () => void): () => void;
+	/** The clock the restore's window is measured on. Injected by the tests. */
+	now?(): number;
 	/** Where this list was left, if it is one that is remembered. Null = the bottom. */
 	restore?(): StickPosition | null;
 	/** Records where the reader is. Called on every scroll of theirs. */
@@ -53,6 +56,11 @@ export interface StickOptions {
 }
 
 const DEFAULT_THRESHOLD = 40;
+
+// How long a restore keeps trying before the place is treated as gone. Settling
+// after the first paint takes a few hundred milliseconds; a transcript that came
+// back shorter than the place it is going to stays short for good.
+const RESTORE_WINDOW_MS = 2000;
 
 // How far off the echo of a write may land and still be recognised as this
 // module's own. The marker is the position read back immediately after the
@@ -113,6 +121,7 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 	const threshold = options.threshold ?? DEFAULT_THRESHOLD;
 	const resolveHost = options.resolveHost ?? ((el: Element) => scrollableAncestor(el) as ScrollHost | null);
 	const observeContent = options.observeContent ?? observeContentDefault;
+	const now = options.now ?? Date.now;
 
 	const saved = options.restore?.() ?? null;
 	let host: ScrollHost | null = null;
@@ -120,6 +129,11 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 	// Where to go back to, while it is still out of reach. Null once it lands,
 	// once the reader takes over, and whenever the memory says the bottom.
 	let pending = saved && !saved.stuck ? saved.top : null;
+	// When the restore stops trying. Armed from the bind rather than counted in
+	// attempts: the height watcher reports every target it is given once, right
+	// after the bind and all at the same height, so a count cannot tell a list
+	// that is still settling from one that will never reach the place.
+	const restoreUntil = now() + RESTORE_WINDOW_MS;
 	// The height the last scroll event was measured against. A scroll that comes
 	// with a changed height came from the content, not from the reader.
 	let seenHeight = 0;
@@ -128,9 +142,6 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 	// assignment that changes nothing fires no event, and a flag left armed would
 	// swallow the reader's next real scroll.
 	let selfTop: number | null = null;
-	// The height the last restore attempt was made at. A second attempt with no
-	// more content than the first is as close as this list is going to get.
-	let attemptHeight = -1;
 
 	function applyRestore() {
 		if (!host || pending === null) return;
@@ -140,26 +151,15 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 		// as the reader taking over, which drops the place for good.
 		host.scrollTop = pending;
 		const landed = host.scrollTop;
-		const height = host.scrollHeight;
 		selfTop = landed;
-		seenHeight = height;
-		if (landed >= pending) {
-			pending = null;
-			return;
-		}
-		// Short of the target twice over at the same height: the list came back
-		// shorter than the place it is going back to — rows do disappear, a streamed
-		// preamble is blanked on tool-start and finished tool chips go on answer —
-		// and no growth is coming to reach it. Stay where it landed, and take the
-		// pin back when that place is the bottom so new content is followed instead
-		// of sat just above.
-		if (height <= attemptHeight) {
-			pending = null;
-			stuck = height - host.clientHeight - landed <= threshold;
-			return;
-		}
-		// Still settling: stay pending and try again on the next growth.
-		attemptHeight = height;
+		seenHeight = host.scrollHeight;
+		// Short of the place with time left: the content is still settling, so stay
+		// pending and try again on the next growth.
+		if (landed < pending && now() < restoreUntil) return;
+		// Done with it, landed or timed out. Where the list ended up is the reader's
+		// place now, and the pin follows from its distance to the bottom.
+		pending = null;
+		stuck = host.scrollHeight - host.clientHeight - landed <= threshold;
 	}
 
 	const onScroll = () => {

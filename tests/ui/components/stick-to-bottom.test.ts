@@ -21,8 +21,10 @@
 //   own scroll counts as its own even when the browser clamps it to a fraction
 //   the rounded metrics do not name.
 // - A remembered place the list has become too short to reach must be given up
-//   on once the content stops growing, or every later growth yanks the reader
-//   back to a place that is not there any more.
+//   on when the restore's window runs out, or every later growth yanks the
+//   reader back to a place that is not there any more. It must survive the
+//   height watcher's first delivery, which reports every target it observes once
+//   at the height the bind already saw.
 //
 // The host and the height watcher are stand-ins: there is no layout in this
 // runner, so a real element reports 0 for every metric. scrollableAncestor is
@@ -215,7 +217,24 @@ function makeMemory() {
 	return { seams, saved: () => saved };
 }
 
-function bindRemembered(host: ReturnType<typeof makeHost>, memory: ReturnType<typeof makeMemory>) {
+// The clock the restore's window is measured on, moved by hand: the window is
+// what tells a list that is still settling from one that will never reach the
+// place, and nothing in this runner takes any time at all.
+function makeClock() {
+	let ms = 0;
+	return {
+		now: () => ms,
+		advance: (by: number) => {
+			ms += by;
+		},
+	};
+}
+
+function bindRemembered(
+	host: ReturnType<typeof makeHost>,
+	memory: ReturnType<typeof makeMemory>,
+	clock?: ReturnType<typeof makeClock>,
+) {
 	let notify = () => {};
 	const stop = stickToBottom(LIST, {
 		resolveHost: () => host as unknown as ScrollHost,
@@ -223,6 +242,7 @@ function bindRemembered(host: ReturnType<typeof makeHost>, memory: ReturnType<ty
 			notify = onChange;
 			return () => {};
 		},
+		now: clock?.now,
 		...memory.seams,
 	});
 	return { stop, contentChanged: () => notify() };
@@ -299,6 +319,26 @@ test("a place off the end of a list that is still short is re-applied until it f
 	stop();
 });
 
+test("the restore outlives the height watcher's first delivery", () => {
+	const memory = makeMemory();
+	leaveAt(memory, 200);
+	const back = makeHost(400, 300);
+	const { stop, contentChanged } = bindRemembered(back, memory);
+	// What a ResizeObserver does right after the bind: one callback per target it
+	// was given, every one of them at the height the bind already measured.
+	contentChanged();
+	contentChanged();
+	// Then the content settles in two waves, and only the second brings the place
+	// within reach.
+	back.grow(50);
+	contentChanged();
+	expect(back.scrollTop).toBe(bottomOf(back));
+	back.grow(300);
+	contentChanged();
+	expect(back.scrollTop).toBe(200);
+	stop();
+});
+
 test("the restore's own scroll does not read as the reader taking over", () => {
 	const memory = makeMemory();
 	leaveAt(memory, 200);
@@ -358,15 +398,17 @@ test("the restore survives its own write landing short of the rounded bottom", (
 	stop();
 });
 
-test("a place the list is too short to reach is given up on, not chased", () => {
+test("a place the list is too short to reach is given up on when the window runs out", () => {
 	const memory = makeMemory();
 	leaveAt(memory, 600);
+	const clock = makeClock();
 	// Coming back to a transcript with rows missing — a preamble blanked, tool
 	// chips dropped — so the remembered offset is past its end for good.
 	const back = makeHost(700, 300);
-	const { stop, contentChanged } = bindRemembered(back, memory);
+	const { stop, contentChanged } = bindRemembered(back, memory, clock);
 	expect(back.scrollTop).toBe(bottomOf(back));
-	// The content stops growing: nothing more is coming to reach 600.
+	// Long enough that anything that was going to settle has.
+	clock.advance(2500);
 	contentChanged();
 	// The reply that streams in afterwards must be followed, not answered with
 	// another yank back to a place that is not there.
