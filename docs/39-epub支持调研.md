@@ -186,7 +186,7 @@ zip 解压用 fflate（MIT，0.8.3，无依赖）。XHTML 用 DOMParser，测试
 
 - iOS WKWebView 自定义协议下能不能建 `blob:` iframe。坑 99 记的是桌面 WebKitGTK 的 `on_navigation` 行为，iOS 侧没测过。
 - COEP `require-corp` 下 blob iframe 和 blob 资源是否放行。坑 33 记着 iOS 自定义协议下没有跨源隔离。
-- 长章节上 CSS multi-column 的分页耗时和内存。docs/07 记过 WKWebView 有页面进程内存上限，PDFium 的堆已经占了一份。
+- 长章节上 CSS multi-column 的分页耗时和内存。docs/08 记过 WKWebView 有页面进程内存上限，PDFium 的堆已经占了一份。
 - iframe 里的文本选择手柄和系统 callout。坑 49 是在阅读区根节点关掉 `user-select` 解决的，这次要在 iframe 里重新面对。
 - 笔手路由。坑 37/38/117 那套是给 EmbedPDF 的页 div 写的，iframe 里要重来，且坑 117 记着 iOS 和桌面的触摸抢占参数完全不同。
 - Web Crypto 的 SHA-1 在自定义协议下可用（字体解混淆），`Intl.Segmenter` 可用（搜索分词）。

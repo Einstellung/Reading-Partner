@@ -2,9 +2,19 @@
 
 > historical：spike 已执行并落地，EmbedPDF 是唯一引擎。文中路径已搬家：`src/reader-embedpdf/` → `src/reading/engine/`，`tests/reader-embedpdf-convert.test.ts` → `tests/reading/engine/convert.test.ts`；`VITE_ENGINE` 开关和 zotero 那条路径都已删除。worker 引擎已是默认，直连降级成 15s 探针超时后的兜底；wasm URL 必须是绝对地址，跨源隔离不是必需条件（pitfall 21）。
 
+## 为什么换引擎
+
+2026-07-16 定稿。zotero/reader 的 AGPL 与 App Store 冲突（见 `11-iOS-TestFlight发布.md`），issue zotero/reader#231 已发出但无回音；EmbedPDF core 与全部标准插件 MIT，PDFium 走 Apache-2.0（repo LICENSE + LICENSE.pdfium: https://github.com/embedpdf/embed-pdf-viewer），还顺带解除对 CDS 授权的长期依赖、不挡商业化。决定不等 CDS 回复，直接换。只考虑 PDF，不管 EPUB/snapshot。
+
+插件矩阵覆盖我们对引擎的全部真实依赖，headless/vanilla 接入成熟，支持从内存字节加载、host 独立持久化、批注挂任意自定义字段——有条件可行。代价在适配层形态变了：原来是在 iframe 里调一个 `window.createView`，拿回封装好的 view 实例；换 EmbedPDF 后要自己装配 PdfiumEngine + PDFCore + 约十二个 plugin，并把 zotero 那套聚合好的回调（`onChangeViewStats`、`onSetAnnotationPopup` 的视口 rect 等）从各插件 state 里自己拼出来。不是难，是工作量前移到自己身上。
+
+## WASM 与重计算的边界(2026-07-16 讨论补充)
+
+EmbedPDF 的 WASM 是 PDFium(C++)编译产物,渲染是黑盒调用,我们不写渲染代码。将来的重计算(如向量检索)放 Tauri Rust 侧走 command,不放 webview 内 WASM:WKWebView 有页面进程内存上限,PDFium 堆已占一份。用 Rust 写保留"将来编译成 WASM 上纯网页版"的退路。
+
 2026-07-16。分支 `spike/embedpdf`。只做 PDF。桌面 + headless Chromium 实测，未测 iOS/WKWebView、未测 WebKitGTK 拖选延迟。
 
-对应 `docs/07-EmbedPDF替换调研.md` 的存疑项 3-8，逐条给实测结论。验证靠 `embedpdf-spike.html` + `src/reader-embedpdf/spike-harness.tsx`（Vite dev 起，Playwright 驱动），批注转换器另有纯函数单测 `tests/reader-embedpdf-convert.test.ts`（`bun test`，9 pass）。
+以下逐条给 spike 前那批存疑项（编号 3-8）的实测结论。验证靠 `embedpdf-spike.html` + `src/reader-embedpdf/spike-harness.tsx`（Vite dev 起，Playwright 驱动），批注转换器另有纯函数单测 `tests/reader-embedpdf-convert.test.ts`（`bun test`，9 pass）。
 
 ## 存疑项结论
 
