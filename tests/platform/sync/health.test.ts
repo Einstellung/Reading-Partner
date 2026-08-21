@@ -5,6 +5,7 @@
 
 import { expect, test } from "bun:test";
 import {
+  nextGraceSince,
   syncHealth,
   syncStartAction,
   SYNC_GRACE_MS,
@@ -15,7 +16,7 @@ import {
 const NOW = 1_800_000_000_000;
 const MINUTE = 60_000;
 
-// A healthy signed-in device with auto-sync on, started an hour ago and synced
+// A healthy signed-in device with auto-sync on, running for an hour and synced
 // a minute ago. Every case below is this with a field or two changed.
 function input(over: Partial<SyncHealthInput> = {}): SyncHealthInput {
   return {
@@ -25,14 +26,14 @@ function input(over: Partial<SyncHealthInput> = {}): SyncHealthInput {
     engineStarted: true,
     lastSyncAt: NOW - MINUTE,
     lastError: null,
-    startedAt: NOW - 60 * MINUTE,
+    graceSince: NOW - 60 * MINUTE,
     now: NOW,
     ...over,
   };
 }
 
 test("before initSync has run nothing is known and nothing is said", () => {
-  expect(syncHealth(input({ startedAt: null, signedIn: false, autoSync: false }))).toEqual({
+  expect(syncHealth(input({ graceSince: null, signedIn: false, autoSync: false }))).toEqual({
     health: "unknown",
     alert: "none",
     message: null,
@@ -86,7 +87,7 @@ test("auto-sync on with no credentials after a successful history is an alert", 
       engineStarted: false,
       lastSyncAt: NOW - fourDays,
       lastError: null,
-      startedAt: NOW - MINUTE,
+      graceSince: NOW - MINUTE,
     }),
   );
   expect(r.health).toBe("credentials-missing");
@@ -98,7 +99,7 @@ test("the credentials alert does not wait out the grace window", () => {
   // Nothing is running, so waiting proves nothing; it fires on the first
   // evaluation after startup.
   const r = syncHealth(
-    input({ signedIn: false, engineStarted: false, lastSyncAt: NOW - MINUTE, startedAt: NOW }),
+    input({ signedIn: false, engineStarted: false, lastSyncAt: NOW - MINUTE, graceSince: NOW }),
   );
   expect(r.health).toBe("credentials-missing");
   expect(r.alert).toBe("alert");
@@ -112,7 +113,7 @@ test("signed in with auto-sync on but no engine running is an alert", () => {
 });
 
 test("a first pass that has not finished yet is not a failure", () => {
-  const r = syncHealth(input({ lastSyncAt: null, startedAt: NOW - MINUTE }));
+  const r = syncHealth(input({ lastSyncAt: null, graceSince: NOW - MINUTE }));
   expect(r.health).toBe("pending");
   expect(r.alert).toBe("none");
 });
@@ -120,8 +121,18 @@ test("a first pass that has not finished yet is not a failure", () => {
 // The iPad case: signed in, auto-sync on, every pass dying on one file. Saying
 // "no sync has succeeded for over a day" here would be a fabricated duration —
 // the same state exists eleven minutes after signing in.
+// Signing out clears lastSyncAt (that is how a deliberate sign-out is told from
+// a lost credential), so a device that signs back in after hours of uptime has
+// the null lastSyncAt of a device that never synced. The anchor is what keeps
+// the alert off: it moves to the moment the engine started again.
+test("signing in again starts a fresh grace window, however long the app has been open", () => {
+  const r = syncHealth(input({ lastSyncAt: null, graceSince: NOW - MINUTE }));
+  expect(r.health).toBe("pending");
+  expect(r.alert).toBe("none");
+});
+
 test("a device that has never completed a pass says so, without inventing a duration", () => {
-  const r = syncHealth(input({ lastSyncAt: null, startedAt: NOW - SYNC_GRACE_MS - MINUTE }));
+  const r = syncHealth(input({ lastSyncAt: null, graceSince: NOW - SYNC_GRACE_MS - MINUTE }));
   expect(r.health).toBe("never-synced");
   expect(r.alert).toBe("alert");
   expect(r.message).toBe("This device has never completed a sync.");
@@ -131,7 +142,7 @@ test("never-synced carries the last error when there is one", () => {
   const r = syncHealth(
     input({
       lastSyncAt: null,
-      startedAt: NOW - SYNC_GRACE_MS - MINUTE,
+      graceSince: NOW - SYNC_GRACE_MS - MINUTE,
       lastError: "download annotations-a1.json failed: error sending request",
     }),
   );
@@ -142,7 +153,7 @@ test("never-synced carries the last error when there is one", () => {
 });
 
 test("the over-a-day wording is only used when there is a last sync to measure from", () => {
-  const never = syncHealth(input({ lastSyncAt: null, startedAt: NOW - SYNC_GRACE_MS - MINUTE }));
+  const never = syncHealth(input({ lastSyncAt: null, graceSince: NOW - SYNC_GRACE_MS - MINUTE }));
   expect(never.message).not.toContain("over a day");
 });
 
@@ -170,7 +181,7 @@ test("no successful pass for over a day with no error at all is an alert", () =>
 test("an old lastSyncAt right after startup is the app having been closed, not a fault", () => {
   // Reopened after a week away: the first pass has not landed yet, and calling
   // that a failure would fire on every launch.
-  const r = syncHealth(input({ lastSyncAt: NOW - 7 * 24 * 60 * MINUTE, startedAt: NOW - MINUTE }));
+  const r = syncHealth(input({ lastSyncAt: NOW - 7 * 24 * 60 * MINUTE, graceSince: NOW - MINUTE }));
   expect(r.health).toBe("ok");
   expect(r.alert).toBe("none");
 });
@@ -179,7 +190,7 @@ test("the same old lastSyncAt once the grace window has passed is stalled", () =
   const r = syncHealth(
     input({
       lastSyncAt: NOW - 7 * 24 * 60 * MINUTE,
-      startedAt: NOW - SYNC_GRACE_MS - MINUTE,
+      graceSince: NOW - SYNC_GRACE_MS - MINUTE,
     }),
   );
   expect(r.health).toBe("stalled");
@@ -191,6 +202,22 @@ test("a healthy device says nothing", () => {
   expect(r.health).toBe("ok");
   expect(r.alert).toBe("none");
   expect(r.message).toBeNull();
+});
+
+// --- where the grace window is anchored ---------------------------------------
+
+test("starting a stopped engine anchors the grace window at that moment", () => {
+  expect(nextGraceSince(NOW - 60 * MINUTE, false, NOW)).toBe(NOW);
+});
+
+test("starting an already ticking engine keeps the anchor it has", () => {
+  // Sync now and a second auto-sync toggle both land here. Re-anchoring would
+  // let a device that never completes a pass postpone the alert forever.
+  expect(nextGraceSince(NOW - 60 * MINUTE, true, NOW)).toBe(NOW - 60 * MINUTE);
+});
+
+test("an engine started before there was an anchor gets one", () => {
+  expect(nextGraceSince(null, true, NOW)).toBe(NOW);
 });
 
 // --- what startup does with the engine ---------------------------------------
@@ -226,14 +253,14 @@ test("startup stays idle with auto-sync off or no Google client", () => {
 
 test("every quiet state carries no message and every loud one does", () => {
   const cases: SyncHealthInput[] = [
-    input({ startedAt: null }),
+    input({ graceSince: null }),
     input({ configured: false }),
     input({ signedIn: false, lastSyncAt: null }),
     input({ autoSync: false }),
-    input({ lastSyncAt: null, startedAt: NOW - MINUTE }),
+    input({ lastSyncAt: null, graceSince: NOW - MINUTE }),
     input(),
     input({ lastError: "fetch failed" }),
-    input({ lastSyncAt: null, startedAt: NOW - SYNC_GRACE_MS - MINUTE }),
+    input({ lastSyncAt: null, graceSince: NOW - SYNC_GRACE_MS - MINUTE }),
     input({ lastSyncAt: NOW - SYNC_STALE_MS - 1 }),
     input({ signedIn: false, engineStarted: false }),
     input({ engineStarted: false }),

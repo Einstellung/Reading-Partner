@@ -27,7 +27,7 @@ import {
   signIn,
   signOut,
 } from "./auth";
-import { syncStartAction } from "./health";
+import { nextGraceSince, syncStartAction } from "./health";
 import {
   emptyState,
   loadState,
@@ -63,8 +63,9 @@ export interface SyncStatus {
   running: boolean;
   lastSyncAt: number | null;
   lastError: string | null;
-  // When initSync ran, or null before it did.
-  startedAt: number | null;
+  // When the current sync setup started running (health.ts), or null before
+  // initSync has run.
+  graceSince: number | null;
 }
 
 let state: SyncState = emptyState();
@@ -73,7 +74,7 @@ let initialized = false;
 let signedIn = false;
 let email: string | null = null;
 let engineStarted = false;
-let startedAt: number | null = null;
+let graceSince: number | null = null;
 // Which shell mounted us, as the shell itself reports it in initSync. Not
 // re-detected here: the form factor was decided once at mount (docs/22), and
 // asking the window a second time could answer differently. Desktop until told
@@ -95,7 +96,7 @@ function buildStatus(): SyncStatus {
     running: s?.running ?? false,
     lastSyncAt: s?.lastSyncAt ?? state.lastSyncAt,
     lastError: s?.lastError ?? state.lastError,
-    startedAt,
+    graceSince,
   };
 }
 
@@ -157,6 +158,10 @@ function ensureEngine(): SyncEngine {
 // keep syncing a device that asked not to be synced. They read `engine` at call
 // time — a signed-out engine is replaced, not reused.
 function startEngine(): void {
+  // A setup that starts now gets the whole grace window before its missing
+  // first pass is called a fault; a start on an already ticking engine leaves
+  // the anchor where it is (health.ts).
+  graceSince = nextGraceSince(graceSince, engineStarted, Date.now());
   ensureEngine().start();
   engineStarted = true;
   unobserveLifecycle ??= observeAppLifecycle(window, {
@@ -202,7 +207,8 @@ export async function initSync(mounted: Shell): Promise<void> {
   }
   signedIn = await isSignedIn();
   email = await currentEmail();
-  startedAt = Date.now();
+  // Covers the paths that start no engine; startEngine sets its own anchor.
+  graceSince = Date.now();
   const action = syncStartAction({
     configured: isGoogleConfigured(),
     signedIn,

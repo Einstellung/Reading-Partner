@@ -51,8 +51,13 @@ export interface SyncHealthInput {
   engineStarted: boolean;
   lastSyncAt: number | null;
   lastError: string | null;
-  // When initSync ran, or null before it did.
-  startedAt: number | null;
+  // When the current sync setup started running: the moment the engine last
+  // went from stopped to started, or when initSync settled on not starting it.
+  // Null before initSync has run. The grace window below is measured from here,
+  // not from process start — signing in again after a sign-out, or switching
+  // auto-sync back on, begins a fresh first pass however long the app has been
+  // open (docs/pitfall/51).
+  graceSince: number | null;
   now: number;
 }
 
@@ -63,10 +68,10 @@ export interface SyncHealthReport {
   message: string | null;
 }
 
-// How long after startup before a stale lastSyncAt counts as a fault. The app
-// may have been closed for a week, which makes lastSyncAt old through no fault
-// of the engine; the first pass runs immediately on start, so anything still
-// unsynced this long after startup is a real failure.
+// How long a sync setup gets before a stale lastSyncAt counts as a fault. The
+// app may have been closed for a week, which makes lastSyncAt old through no
+// fault of the engine; the first pass runs immediately on start, so anything
+// still unsynced this long after the setup began running is a real failure.
 export const SYNC_GRACE_MS = 10 * 60_000;
 
 // How long without a successful pass counts as stalled. Well past a closed lid
@@ -79,10 +84,10 @@ function quiet(health: SyncHealth): SyncHealthReport {
 }
 
 export function syncHealth(input: SyncHealthInput): SyncHealthReport {
-  const { configured, signedIn, autoSync, engineStarted, lastSyncAt, lastError, startedAt, now } =
+  const { configured, signedIn, autoSync, engineStarted, lastSyncAt, lastError, graceSince, now } =
     input;
 
-  if (startedAt === null) return quiet("unknown");
+  if (graceSince === null) return quiet("unknown");
   if (!configured) return quiet("not-configured");
 
   if (!signedIn) {
@@ -108,7 +113,7 @@ export function syncHealth(input: SyncHealthInput): SyncHealthReport {
     };
   }
 
-  const settled = now - startedAt >= SYNC_GRACE_MS;
+  const settled = now - graceSince >= SYNC_GRACE_MS;
 
   if (settled && lastSyncAt === null) {
     return {
@@ -158,4 +163,16 @@ export function syncStartAction(state: {
   if (!state.configured || !state.autoSync) return "idle";
   if (state.signedIn) return "start";
   return state.lastSyncAt === null ? "idle" : "record-stopped";
+}
+
+// The anchor the grace window is measured from, folded forward one engine start
+// at a time. Only the stopped -> started edge moves it: an engine that is
+// already ticking keeps the anchor it was given, so pressing Sync now on a
+// device that never completes a pass cannot push the alert out forever.
+export function nextGraceSince(
+  current: number | null,
+  engineStarted: boolean,
+  now: number,
+): number {
+  return engineStarted && current !== null ? current : now;
 }
