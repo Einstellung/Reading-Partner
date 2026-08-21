@@ -44,18 +44,6 @@
 
 迁完之后这份清单没有变，最终还剩下什么、为什么留，见「最终还剩的手写控件」。
 
-## 分版
-
-一、基座。引 Tailwind 完整 preflight，定 token 映射，上 Button、Input、Textarea、Label、Switch、Separator。全是叶子，逐项肉眼对比即可验收。
-
-二、反馈类。`Toast` 换掉自写的那个，`DeleteThreadButton` 的两步确认换 AlertDialog。
-
-三、菜单。`MoreMenu` 换 DropdownMenu，速读的 Filtered 折叠换 Collapsible。Popover 只用在新地方。
-
-四、对话框。`SettingsView` 的全屏和 `SlidesDialog` 换 Dialog。风险最高，单独发一版：它同时碰到安全区、软键盘和滚动锁。`SettingsView` 也换，走一个新的全屏 content 变体。
-
-五、收尾。Select、Checkbox、Badge，删掉过渡期留下的常量，全项目触摸目标复核。
-
 ## 必须守住的
 
 44px。shadcn 的按钮默认高 36/40px，触摸下不够。`coarse:` 变体要加到迁过去的组件上，不能因为换库丢掉这条线。`can-hover:` 同理——hover 才出现的控件在触摸上必须常驻可见。
@@ -280,7 +268,9 @@ shadcn 生成的组件是照 React 19 写的（那里 `ref` 是普通 prop），
 
 这份清单说的是组件：这几个组件仍然自己写，不套 Radix。它们内部的按钮在「阅读区的收敛」里换成了 `<Button variant="ghost">`（同一个原生 `<button>`，样式来自变体表），侧栏标签行同理。裸 `<button>` 从 37 处降到 27 处：列表行、聊天输入区的三个键、`ReadingPipCard`、`FigureCard` 的卡片本体。
 
-`SourcesPage` 的输入框和 `AnnotationPopup` 的 `<textarea>` 不是漏换，是判断过留下的：`SourcesPage` 的输入框走 info 侧自己那套圆角和描边，coarse 下本来就是 44px / 16px，套 `ui/input.tsx` 的字段外衣买不到东西；`AnnotationPopup` 的 `<textarea>` 是标注气泡内部的一块，气泡整体在「不迁的」清单里（锚定定位靠 `panel-position.ts`，已经按实测结论调过），单把这一块换成 `Textarea` 会让它和气泡剩下的手写部分（色板、按钮几何）不一致。
+`SourcesPage` 的输入框和 `AnnotationPopup` 的 `<textarea>` 都没有跟着换。`SourcesPage` 的输入框走 info 侧自己那套圆角和描边，coarse 下本来就是 44px / 16px；`AnnotationPopup` 整体在上面「不迁的」清单里，理由是没有对应的 Radix 原语、或已经按实测结论调过（坑 67、`panel-position.ts`）。
+
+2026-08-21 补记，据这两条推断，不是当初原文：换成 `ui/input.tsx` / `Textarea` 买不到东西——前者已经有的字段外衣解决不了任何问题，后者会让气泡内部这一块和剩下的手写部分（色板、按钮几何）不一致。两处代码本身没有注释说明这一点，动之前先看 `git status`：`shadcn add input` / `add textarea` 不会主动碰它们，但顺手重构容易忘。
 
 ## 验证方法
 
