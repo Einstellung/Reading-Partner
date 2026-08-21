@@ -17,8 +17,10 @@
 // position to a store that outlives the binding (common/scroll-memory.ts), so a
 // transcript that unmounts and comes back opens where the reader left it. A
 // restored place is re-applied on every growth until it lands, because at the
-// first paint the list is still shorter than the place it is going back to.
-// Without the two seams this module behaves as it did before them.
+// first paint the list is still shorter than the place it is going back to; a
+// list that comes back shorter than that place gives up once the content stops
+// growing, since the place no longer exists. Without the two seams this module
+// behaves as it did before them.
 
 /** The part of a scroll container this needs. An Element satisfies it. */
 export interface ScrollHost {
@@ -51,6 +53,12 @@ export interface StickOptions {
 }
 
 const DEFAULT_THRESHOLD = 40;
+
+// How far off a write may land and still be recognised as this module's own.
+// scrollHeight and clientHeight come back as rounded integers while scrollTop
+// does not, so a write at the bottom of a real list settles a fraction below the
+// value that was written and an exact comparison never matches.
+const SELF_WRITE_SLACK = 1;
 
 const SCROLLABLE = new Set(["auto", "scroll", "overlay"]);
 
@@ -116,24 +124,42 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 	// with a changed height came from the content, not from the reader.
 	let seenHeight = 0;
 	// The position this module last wrote itself, kept until the browser echoes
-	// it back. Compared by value, not armed as a flag: an assignment that changes
-	// nothing fires no event, and a flag left armed would swallow the reader's
-	// next real scroll.
+	// it back. Compared by value within a pixel, not armed as a flag: an
+	// assignment that changes nothing fires no event, and a flag left armed would
+	// swallow the reader's next real scroll.
 	let selfTop: number | null = null;
+	// The height the last restore attempt was made at. A second attempt with no
+	// more content than the first is as close as this list is going to get.
+	let attemptHeight = -1;
 
 	function applyRestore() {
 		if (!host || pending === null) return;
-		// Clamped here rather than by the browser: at first paint the list is
-		// shorter than the place it is going back to, the write would land at the
-		// bottom, and reading scrollTop back gives no way to tell that it did.
-		const max = Math.max(0, host.scrollHeight - host.clientHeight);
-		const top = Math.min(pending, max);
-		host.scrollTop = top;
-		selfTop = top;
-		seenHeight = host.scrollHeight;
-		// Short of the target means the content is still settling; stay pending and
-		// try again on the next growth.
-		if (top >= pending) pending = null;
+		// Written whole and read back rather than clamped here: the browser has
+		// already clamped it, and a maximum computed from the rounded metrics misses
+		// where the write really landed by a fraction — enough for the echo to read
+		// as the reader taking over, which drops the place for good.
+		host.scrollTop = pending;
+		const landed = host.scrollTop;
+		const height = host.scrollHeight;
+		selfTop = landed;
+		seenHeight = height;
+		if (landed >= pending) {
+			pending = null;
+			return;
+		}
+		// Short of the target twice over at the same height: the list came back
+		// shorter than the place it is going back to — rows do disappear, a streamed
+		// preamble is blanked on tool-start and finished tool chips go on answer —
+		// and no growth is coming to reach it. Stay where it landed, and take the
+		// pin back when that place is the bottom so new content is followed instead
+		// of sat just above.
+		if (height <= attemptHeight) {
+			pending = null;
+			stuck = height - host.clientHeight - landed <= threshold;
+			return;
+		}
+		// Still settling: stay pending and try again on the next growth.
+		attemptHeight = height;
 	}
 
 	const onScroll = () => {
@@ -142,7 +168,7 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 		const grew = height !== seenHeight;
 		seenHeight = height;
 		// The browser echoing back a scroll this module performed.
-		if (selfTop !== null && host.scrollTop === selfTop) {
+		if (selfTop !== null && Math.abs(host.scrollTop - selfTop) <= SELF_WRITE_SLACK) {
 			selfTop = null;
 			return;
 		}

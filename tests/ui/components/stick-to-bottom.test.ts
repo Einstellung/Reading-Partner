@@ -16,7 +16,12 @@
 //   back there while the content settles under it — a one-shot restore lands in
 //   the middle of the history for the same reason a one-shot pin does.
 // - The reader scrolling during a restore must take it over, while the restore's
-//   own scroll and a height change reported as a scroll must not.
+//   own scroll and a height change reported as a scroll must not. The restore's
+//   own scroll counts as its own even when the browser clamps it to a fraction
+//   the rounded metrics do not name.
+// - A remembered place the list has become too short to reach must be given up
+//   on once the content stops growing, or every later growth yanks the reader
+//   back to a place that is not there any more.
 //
 // The host and the height watcher are stand-ins: there is no layout in this
 // runner, so a real element reports 0 for every metric. scrollableAncestor is
@@ -35,10 +40,21 @@ await useDom();
 
 // A scroll container that records its listeners and lets a test move its
 // numbers around. Scrolling it by hand fires the event a browser would.
-function makeHost(scrollHeight: number, clientHeight: number) {
+//
+// The position clamps the way a browser's does, and `slack` puts the maximum a
+// fraction below the one the metrics describe: scrollHeight and clientHeight are
+// rounded and scrollTop is not, so on a real list a write at the computed bottom
+// lands just short of it.
+function makeHost(scrollHeight: number, clientHeight: number, slack = 0) {
 	const listeners = new Set<() => void>();
+	let position = 0;
 	return {
-		scrollTop: 0,
+		get scrollTop() {
+			return position;
+		},
+		set scrollTop(next: number) {
+			position = Math.max(0, Math.min(next, this.scrollHeight - this.clientHeight - slack));
+		},
 		scrollHeight,
 		clientHeight,
 		addEventListener(_type: "scroll", fn: () => void) {
@@ -301,6 +317,55 @@ test("the reader scrolling during the restore takes it over", () => {
 	const { stop, contentChanged } = bindRemembered(back, memory);
 	back.scrollTo(50);
 	back.grow(600);
+	contentChanged();
+	expect(back.scrollTop).toBe(50);
+	stop();
+});
+
+test("the restore survives its own write landing short of the rounded bottom", () => {
+	const memory = makeMemory();
+	leaveAt(memory, 200);
+	// A list whose maximum offset is 199.5: the restore asks for 200, the browser
+	// puts it at 199.5, and the echo of that write must still read as this
+	// module's own rather than as the reader taking the place over.
+	const back = makeHost(500, 300, 0.5);
+	const { stop, contentChanged } = bindRemembered(back, memory);
+	back.emit();
+	back.grow(600);
+	contentChanged();
+	expect(back.scrollTop).toBe(200);
+	// The place the reader left is still theirs; the echo must not have written
+	// the bottom over it.
+	expect(memory.saved()).toEqual({ top: 200, stuck: false });
+	stop();
+});
+
+test("a place the list is too short to reach is given up on, not chased", () => {
+	const memory = makeMemory();
+	leaveAt(memory, 600);
+	// Coming back to a transcript with rows missing — a preamble blanked, tool
+	// chips dropped — so the remembered offset is past its end for good.
+	const back = makeHost(700, 300);
+	const { stop, contentChanged } = bindRemembered(back, memory);
+	expect(back.scrollTop).toBe(bottomOf(back));
+	// The content stops growing: nothing more is coming to reach 600.
+	contentChanged();
+	// The reply that streams in afterwards must be followed, not answered with
+	// another yank back to a place that is not there.
+	back.grow(500);
+	contentChanged();
+	expect(back.scrollTop).toBe(bottomOf(back));
+	stop();
+});
+
+test("giving up hands the list back to the reader", () => {
+	const memory = makeMemory();
+	leaveAt(memory, 600);
+	const back = makeHost(700, 300);
+	const { stop, contentChanged } = bindRemembered(back, memory);
+	contentChanged();
+	back.scrollTo(50);
+	back.grow(500);
 	contentChanged();
 	expect(back.scrollTop).toBe(50);
 	stop();
