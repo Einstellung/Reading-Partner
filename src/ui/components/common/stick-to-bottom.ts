@@ -12,6 +12,13 @@
 // itself. Hence the walk for the scrolling element starts at the list and
 // includes it, and a growth of a capped list shows up on its children, not on
 // itself — so the children are observed too.
+//
+// A list can also be one that is remembered: `restore`/`remember` hand the
+// position to a store that outlives the binding (common/scroll-memory.ts), so a
+// transcript that unmounts and comes back opens where the reader left it. A
+// restored place is re-applied on every growth until it lands, because at the
+// first paint the list is still shorter than the place it is going back to.
+// Without the two seams this module behaves as it did before them.
 
 /** The part of a scroll container this needs. An Element satisfies it. */
 export interface ScrollHost {
@@ -22,6 +29,14 @@ export interface ScrollHost {
 	removeEventListener(type: "scroll", handler: () => void): void;
 }
 
+/** A place in the list, as the pin thinks of it. */
+export interface StickPosition {
+	top: number;
+	// At the bottom is a state, not a place: it comes back as the pin, so a reply
+	// that streamed while the reader was away is visible.
+	stuck: boolean;
+}
+
 export interface StickOptions {
 	/** How far above the bottom still counts as being at the bottom, in px. */
 	threshold?: number;
@@ -29,6 +44,10 @@ export interface StickOptions {
 	resolveHost?(list: Element): ScrollHost | null;
 	/** Subscribes to whatever changes the rendered height. Injected by the tests. */
 	observeContent?(list: Element, onChange: () => void): () => void;
+	/** Where this list was left, if it is one that is remembered. Null = the bottom. */
+	restore?(): StickPosition | null;
+	/** Records where the reader is. Called on every scroll of theirs. */
+	remember?(at: StickPosition): void;
 }
 
 const DEFAULT_THRESHOLD = 40;
@@ -87,17 +106,54 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 	const resolveHost = options.resolveHost ?? ((el: Element) => scrollableAncestor(el) as ScrollHost | null);
 	const observeContent = options.observeContent ?? observeContentDefault;
 
+	const saved = options.restore?.() ?? null;
 	let host: ScrollHost | null = null;
-	let stuck = true;
+	let stuck = saved ? saved.stuck : true;
+	// Where to go back to, while it is still out of reach. Null once it lands,
+	// once the reader takes over, and whenever the memory says the bottom.
+	let pending = saved && !saved.stuck ? saved.top : null;
 	// The height the last scroll event was measured against. A scroll that comes
 	// with a changed height came from the content, not from the reader.
 	let seenHeight = 0;
+	// The position this module last wrote itself, kept until the browser echoes
+	// it back. Compared by value, not armed as a flag: an assignment that changes
+	// nothing fires no event, and a flag left armed would swallow the reader's
+	// next real scroll.
+	let selfTop: number | null = null;
+
+	function applyRestore() {
+		if (!host || pending === null) return;
+		// Clamped here rather than by the browser: at first paint the list is
+		// shorter than the place it is going back to, the write would land at the
+		// bottom, and reading scrollTop back gives no way to tell that it did.
+		const max = Math.max(0, host.scrollHeight - host.clientHeight);
+		const top = Math.min(pending, max);
+		host.scrollTop = top;
+		selfTop = top;
+		seenHeight = host.scrollHeight;
+		// Short of the target means the content is still settling; stay pending and
+		// try again on the next growth.
+		if (top >= pending) pending = null;
+	}
 
 	const onScroll = () => {
 		if (!host) return;
 		const height = host.scrollHeight;
 		const grew = height !== seenHeight;
 		seenHeight = height;
+		// The browser echoing back a scroll this module performed.
+		if (selfTop !== null && host.scrollTop === selfTop) {
+			selfTop = null;
+			return;
+		}
+		if (pending !== null) {
+			// A restore that has not landed yet, and the content moving under it: the
+			// same rule the rest of this file runs on — a scroll that comes with a
+			// changed height came from the content, not from the reader.
+			if (grew) return;
+			// A scroll at an unchanged height is the reader taking over.
+			pending = null;
+		}
 		// A pinned list whose height moved under it: the browser may report that as
 		// a scroll (anchoring), and reading the distance then would unpin it.
 		if (grew && stuck) {
@@ -105,6 +161,10 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 			return;
 		}
 		stuck = host.scrollHeight - host.clientHeight - host.scrollTop <= threshold;
+		// The one place the position is both the reader's and known to belong to
+		// the key this binding was made with. Teardown cannot do it: React runs the
+		// old cleanup after the next conversation's rows are already in the DOM.
+		options.remember?.({ top: host.scrollTop, stuck });
 	};
 
 	const bind = (next: ScrollHost | null) => {
@@ -113,6 +173,7 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 		host = next;
 		host?.addEventListener("scroll", onScroll);
 		seenHeight = host?.scrollHeight ?? 0;
+		selfTop = null;
 	};
 
 	function toBottom() {
@@ -134,7 +195,8 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 
 	const onContentChange = () => {
 		settleHost();
-		if (stuck) toBottom();
+		if (pending !== null) applyRestore();
+		else if (stuck) toBottom();
 	};
 
 	onContentChange();

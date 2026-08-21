@@ -12,13 +12,23 @@
 //   away, or the first growth would unpin the list forever.
 // - Teardown must release the container it bound to, so a re-pin (a new thread)
 //   does not leave the old listener running.
+// - A remembered list must come back where the reader was, and must keep coming
+//   back there while the content settles under it — a one-shot restore lands in
+//   the middle of the history for the same reason a one-shot pin does.
+// - The reader scrolling during a restore must take it over, while the restore's
+//   own scroll and a height change reported as a scroll must not.
 //
 // The host and the height watcher are stand-ins: there is no layout in this
 // runner, so a real element reports 0 for every metric. scrollableAncestor is
 // the one part that needs a document, and it gets one.
 
 import { expect, test } from "bun:test";
-import { scrollableAncestor, stickToBottom, type ScrollHost } from "../../../src/ui/components/common/stick-to-bottom";
+import {
+	scrollableAncestor,
+	stickToBottom,
+	type ScrollHost,
+	type StickPosition,
+} from "../../../src/ui/components/common/stick-to-bottom";
 import { useDom } from "../../support/dom";
 
 await useDom();
@@ -160,6 +170,159 @@ test("teardown releases the container and the height watcher", () => {
 	stop();
 	expect(host.listenerCount()).toBe(0);
 	expect(isObserving()).toBe(false);
+});
+
+// The store behind the two seams, in one variable. One memory across two binds
+// is the transcript unmounting when the reader clicks a citation and coming back
+// when they tap the corner card.
+function makeMemory() {
+	let saved: StickPosition | null = null;
+	const seams = {
+		restore: () => saved,
+		remember: (at: StickPosition) => {
+			saved = at;
+		},
+	};
+	return { seams, saved: () => saved };
+}
+
+function bindRemembered(host: ReturnType<typeof makeHost>, memory: ReturnType<typeof makeMemory>) {
+	let notify = () => {};
+	const stop = stickToBottom(LIST, {
+		resolveHost: () => host as unknown as ScrollHost,
+		observeContent: (_list, onChange) => {
+			notify = onChange;
+			return () => {};
+		},
+		...memory.seams,
+	});
+	return { stop, contentChanged: () => notify() };
+}
+
+// Leaves a mid-history position in `memory`: what the reader did before they
+// clicked the citation chip.
+function leaveAt(memory: ReturnType<typeof makeMemory>, top: number) {
+	const host = makeHost(1000, 300);
+	const { stop, contentChanged } = bindRemembered(host, memory);
+	host.scrollTo(top);
+	host.grow(200);
+	contentChanged();
+	stop();
+	return host;
+}
+
+test("a reader who left mid-history comes back where they were", () => {
+	const memory = makeMemory();
+	leaveAt(memory, 200);
+	const back = makeHost(1200, 300);
+	const { stop } = bindRemembered(back, memory);
+	expect(back.scrollTop).toBe(200);
+	stop();
+});
+
+test("the restored place survives the content settling under it", () => {
+	const memory = makeMemory();
+	leaveAt(memory, 200);
+	const back = makeHost(1200, 300);
+	const { stop, contentChanged } = bindRemembered(back, memory);
+	// KaTeX, then a figure card inflating: a one-shot restore is somewhere else
+	// by now.
+	for (const by of [300, 180]) {
+		back.grow(by);
+		contentChanged();
+		expect(back.scrollTop).toBe(200);
+	}
+	stop();
+});
+
+test("a reader who left at the bottom comes back pinned, not frozen", () => {
+	const memory = makeMemory();
+	const left = makeHost(1000, 300);
+	const first = bindRemembered(left, memory);
+	left.scrollTo(bottomOf(left));
+	first.stop();
+
+	const back = makeHost(1000, 300);
+	const { stop, contentChanged } = bindRemembered(back, memory);
+	expect(back.scrollTop).toBe(bottomOf(back));
+	// The reply that streamed while the reader was on the page.
+	back.grow(400);
+	contentChanged();
+	expect(back.scrollTop).toBe(bottomOf(back));
+	stop();
+});
+
+test("a place off the end of a list that is still short is re-applied until it fits", () => {
+	const memory = makeMemory();
+	leaveAt(memory, 200);
+	// The first paint: the rows are in, nothing inside them has settled yet.
+	const back = makeHost(400, 300);
+	const { stop, contentChanged } = bindRemembered(back, memory);
+	expect(back.scrollTop).toBe(bottomOf(back));
+	back.grow(600);
+	contentChanged();
+	expect(back.scrollTop).toBe(200);
+	stop();
+});
+
+test("the restore's own scroll does not read as the reader taking over", () => {
+	const memory = makeMemory();
+	leaveAt(memory, 200);
+	const back = makeHost(400, 300);
+	const { stop, contentChanged } = bindRemembered(back, memory);
+	// The browser reports the clamped write one turn later.
+	back.emit();
+	back.grow(600);
+	contentChanged();
+	expect(back.scrollTop).toBe(200);
+	stop();
+});
+
+test("a height change reported as a scroll does not cancel the restore", () => {
+	const memory = makeMemory();
+	leaveAt(memory, 200);
+	const back = makeHost(400, 300);
+	const { stop, contentChanged } = bindRemembered(back, memory);
+	back.emit();
+	// Scroll anchoring during the settle: taller content, and the browser moved
+	// the position itself.
+	back.scrollHeight += 600;
+	back.scrollTop = 150;
+	back.emit();
+	contentChanged();
+	expect(back.scrollTop).toBe(200);
+	stop();
+});
+
+test("the reader scrolling during the restore takes it over", () => {
+	const memory = makeMemory();
+	leaveAt(memory, 200);
+	const back = makeHost(400, 300);
+	const { stop, contentChanged } = bindRemembered(back, memory);
+	back.scrollTo(50);
+	back.grow(600);
+	contentChanged();
+	expect(back.scrollTop).toBe(50);
+	stop();
+});
+
+test("a reader who never scrolled records nothing", () => {
+	const memory = makeMemory();
+	const host = makeHost(1000, 300);
+	const { stop, contentChanged } = bindRemembered(host, memory);
+	host.grow(400);
+	contentChanged();
+	stop();
+	expect(memory.saved()).toBe(null);
+});
+
+test("without the seams nothing is remembered", () => {
+	const memory = makeMemory();
+	leaveAt(memory, 200);
+	const back = makeHost(1200, 300);
+	const { stop } = bind(back);
+	expect(back.scrollTop).toBe(bottomOf(back));
+	stop();
 });
 
 // A stand-in for layout: happy-dom reports 0 for both metrics, and what the walk

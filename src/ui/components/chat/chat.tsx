@@ -23,6 +23,7 @@ import { IconCheck, IconCopy, IconSend, IconStop } from '../base/icons';
 import { Markdown } from '../markdown/Markdown';
 import { MicButton } from './MicButton';
 import { useFlickerProbe } from '../common/useFlickerProbe';
+import { scrollMemory } from '../common/scroll-memory';
 import { stickToBottom } from '../common/stick-to-bottom';
 import type { PendingImage, ThreadMessage } from './types';
 import type { CompressedImage } from '../../../ai/image-utils';
@@ -666,7 +667,9 @@ export function MessageList({
 	onCardAction?: CardActionHandler;
 	// Identifies the conversation on display. Changing it pins the list back to
 	// the bottom, so switching threads starts at the newest message rather than
-	// wherever the previous one had been scrolled to.
+	// wherever the previous one had been scrolled to. A keyed list is also
+	// remembered (common/scroll-memory.ts): leaving it and coming back lands where
+	// the reader was rather than at the newest.
 	stickKey?: string | number;
 	// The two pens on these replies (docs/09). Absent on every chat that is not
 	// the open book's — the info chat, the talk — where a reply is not the book
@@ -676,7 +679,7 @@ export function MessageList({
 	const listRef = useRef<HTMLDivElement>(null);
 	useLayoutEffect(() => {
 		const list = listRef.current;
-		return list ? stickToBottom(list) : undefined;
+		return list ? stickToBottom(list, scrollMemory(stickKey)) : undefined;
 	}, [stickKey]);
 
 	const host = marks ?? null;

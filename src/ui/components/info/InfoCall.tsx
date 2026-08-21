@@ -21,11 +21,13 @@
 // Rendering and event binding only: the conversation, the briefing job and the
 // card gestures are in use-info-call.ts.
 
+import { useEffect } from "react";
 import { Badge } from "../ui/badge";
 import CallView from "../chat/CallView";
 import ChatPipCard from "../chat/ChatPipCard";
 import { callLayout } from "../chat/call-layout";
 import ReadingPipCard from "../chat/ReadingPipCard";
+import { forgetScroll } from "../common/scroll-memory";
 import { useInfoCall } from "./use-info-call";
 import type { ComposerVoice } from "../chat/chat";
 import { chatGlance } from "../chat/chatParts";
@@ -79,6 +81,13 @@ export function InfoCall({
   const layout = callLayout(pipCards, call.swapped);
   const { position } = anchor;
   const lastMessage = chatGlance(call.messages);
+  // The briefing thread's id is the constant "briefing", so the date has to be
+  // in the key or two days would share one slot. The prefix keeps info out of
+  // the reading thread-id space.
+  const stickKey = `info:${dateKey}:${anchor.threadId}`;
+  // An info call ends by this component unmounting, where a reading call ends at
+  // call === null and App clears the whole store.
+  useEffect(() => () => forgetScroll(stickKey), [stickKey]);
 
   if (layout === "chat-pip") {
     return (
@@ -102,6 +111,7 @@ export function InfoCall({
           voice={voice}
           onCardAction={call.onCardAction}
           scalable={false}
+          stickKey={stickKey}
         />
       </div>
       {pipCards && (
