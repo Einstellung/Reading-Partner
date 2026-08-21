@@ -31,7 +31,16 @@ impl<R: Runtime> Voice<R> {
         &self,
         _locale: Option<String>,
         _contextual_strings: Option<Vec<String>>,
+        _audio_profile: Option<String>,
     ) -> crate::Result<()> {
+        Err(Error::Unsupported(UNSUPPORTED.to_string()))
+    }
+
+    /// Rejecting, like the start above: the bench shows whatever comes back as
+    /// the state the probe reached, and an answer saying "off" would read as a
+    /// stage that had been entered and left rather than as a host with no
+    /// microphone stack to park.
+    pub async fn set_indicator_probe(&self, _stage: String) -> crate::Result<IndicatorProbe> {
         Err(Error::Unsupported(UNSUPPORTED.to_string()))
     }
 

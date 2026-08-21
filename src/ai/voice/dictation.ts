@@ -17,6 +17,7 @@
 
 import { addPluginListener, invoke } from "@tauri-apps/api/core";
 import { hasOnDeviceDictation } from "../../platform/app/platform";
+import { chosenAudioProfile, type AudioProfile } from "./audio-profile";
 
 export type DictationEvent =
   // The tail that is not settled yet. Each one replaces the last in full — it is
@@ -43,6 +44,10 @@ export interface DictationOptions {
   // Proper names to bias recognition towards — the book's title and outline,
   // same glossary the desktop cleanup pass gets.
   contextualStrings?: string[];
+  // Which audio front end to open the microphone on (audio-profile.ts). Absent
+  // on every path but the bench; the native side reads an absent or unknown one
+  // as `current`, which is what the app did before the knob existed.
+  audioProfile?: AudioProfile;
 }
 
 export { hasOnDeviceDictation };
@@ -153,6 +158,7 @@ class NativeDictation implements DictationSource {
       await this.bridge.invoke<void>("plugin:voice|start_dictation", {
         locale: this.options.locale,
         contextualStrings: this.options.contextualStrings,
+        audioProfile: this.options.audioProfile,
       });
     } catch (e) {
       this.drop();
@@ -196,7 +202,15 @@ const tauriBridge: DictationBridge = {
 };
 
 // The host's dictation, or null where there is none.
+// The profile is filled in here rather than in the class: a caller that named
+// one keeps it, and a caller that named none gets whatever the bench has
+// selected — which off the bench is always the baseline. createNativeDictation()
+// stays literal about its options, so the wire tests can still assert an empty
+// payload.
 export function nativeDictation(options: DictationOptions = {}): DictationSource | null {
   if (!hasOnDeviceDictation()) return null;
-  return new NativeDictation(options, tauriBridge);
+  return new NativeDictation(
+    { ...options, audioProfile: options.audioProfile ?? chosenAudioProfile() },
+    tauriBridge,
+  );
 }

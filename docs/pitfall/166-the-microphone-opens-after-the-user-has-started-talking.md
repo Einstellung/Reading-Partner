@@ -29,17 +29,40 @@ RP-DICT firstBuffer +743ms frames=4800 rate=48000
 
 ## 解法
 
-`start()` 切成两半，中间垫一段 pre-roll。第一半只做打开麦克风需要的事（权限、session、
-VPIO、tap、`engine.start()`），第二半才是识别器。两半之间 tap 已经在跑，音频进一个队列；
-`analyzer.start()` 之后按顺序补喂进去，喂空了再切实时流——交接在锁里翻标志位，队列空了
-才翻，所以既不重叠也不留洞。
+先说一条已经证伪的：**pre-roll 不解决这个坑**。
 
-缓冲的是 tap 原格式的原始 buffer，不是转换过的：转换器的目标格式来自
-`bestAvailableAudioFormat`，那一问排在模型安装后面，而模型安装正是最长的一步。tap 交出来
-的 buffer 归 audio unit 所有、回调一返回就被复用，留下来必须逐个拷贝。
+`start()` 切成两半、中间垫一段 pre-roll 队列（第一半开麦克风，第二半备识别器，交接时把
+队列按序补喂进去）确实做了，也确实留着——但它只能救识别器那一半的等待，而识别器那一半
+实测只占 80-180ms。真正的一秒在它前面，那时候麦克风还没开，队列缓冲到 0 个 buffer。
+iPhone 16 / iOS 26.6 上按住五次，press 到第一个 buffer 稳定在 1028-1255ms：
 
-上限 5 秒，超了丢最旧的。模型没装那次是分钟级的下载（坑 158），任何上限都救不了那一次，
-而把几分钟前说的那个字接到用户后来说的话前面比丢掉更糟。
+```
+permission                                   +0ms
+session（AVAudioSession 配置并激活）          +75ms
+voiceProcessing / microphoneFormat            +769ms   ← 约 690ms
+capturing（installTap + engine.start）        +950ms
+firstBuffer                                   +1063ms
+```
 
-剩下的头损失就是 press 到第一个 buffer 那一段，`RP-DICT firstBuffer` 这条日志现在量的
-正是它。
+那 690ms 是 `setVoiceProcessingEnabled(true)` 重建整个 IO 单元、再读硬件格式。**第 2 到
+第 5 次按住和第 1 次一样慢**，说明引擎每次按住都被拆掉重建了。
+
+所以真正要动的是麦克风的生命周期，不是它和识别器的先后。有两条路，互相独立：
+
+- 引擎和 VPIO 建一次留着，按住之间用 `pause()` 而不是 `stop()`——Apple 文档写明
+  `stop()` 释放 `prepare()` 分配的资源、`pause()` 不释放。代价是会话不注销，麦克风指示
+  灯在两次按住之间是什么状态就是什么状态。
+- 不用 VPIO，改 `AVAudioSession.setPrefersEchoCancelledInput(true)`（iOS 18.2+，2024 年
+  后的 iPhone），Apple 说它 "does not require explicit voice processing configuration"。
+  硬约束：category 必须 `.playAndRecord`、mode 必须 `.default`；`isEchoCancelledInputAvailable`
+  查支持，激活之后 `isEchoCancelledInputEnabled` 才是系统真给了没有，路由换成耳机还会
+  再变回去。
+
+两条都做成了运行期可切的档位（`plugins/voice/ios/Sources/AudioFront.swift` 的
+`AudioProfile`：`current` / `reuse` / `echoCancelledInput` / `reuseEchoCancelledInput`），
+一个包能把四档测完，`current` 是上面那组数字的基线。哪一档留下来还没定，等实测数据。
+
+pre-roll 留着，理由变了：`reuse` 档下麦克风在两次按住之间常开，第一半的等待被压掉之后，
+剩下的那点交接窗口才是它真正能救的东西。缓冲的是 tap 原格式的原始 buffer，上限 5 秒丢最
+旧；模型没装那次是分钟级下载（坑 158），任何上限都救不了，而把几分钟前说的那个字接到
+用户后来说的话前面比丢掉更糟。

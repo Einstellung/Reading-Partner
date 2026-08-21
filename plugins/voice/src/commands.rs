@@ -30,8 +30,15 @@ pub(crate) async fn start_dictation<R: Runtime>(
     // Proper nouns to bias recognition towards. Capped and truncated natively;
     // the composer sends an uncapped `glossary.split('\n')`.
     contextual_strings: Option<Vec<String>>,
+    // Which audio front end to open the microphone on: `current`, `reuse`,
+    // `echoCancelledInput` or `reuseEchoCancelledInput`. Absent everywhere but
+    // the bench, and an unknown name is `current`, so this argument can only
+    // change a hold that asked for something.
+    audio_profile: Option<String>,
 ) -> Result<()> {
-    app.voice().start_dictation(locale, contextual_strings).await
+    app.voice()
+        .start_dictation(locale, contextual_strings, audio_profile)
+        .await
 }
 
 /// Finish, flush what the recogniser was still holding, and hand back
@@ -47,6 +54,19 @@ pub(crate) async fn stop_dictation<R: Runtime>(app: AppHandle<R>) -> Result<Stop
 #[command]
 pub(crate) async fn cancel_dictation<R: Runtime>(app: AppHandle<R>) -> Result<()> {
     app.voice().cancel_dictation().await
+}
+
+/// Leave the audio stack standing at one step — session active, engine running,
+/// tap installed, buffers read — and answer with where it stopped. Nothing is
+/// transcribed and no audio is kept; the question it exists for is which of
+/// those four lights the orange microphone indicator, which Apple documents
+/// nowhere and only a phone in someone's hand can answer.
+#[command]
+pub(crate) async fn set_indicator_probe<R: Runtime>(
+    app: AppHandle<R>,
+    stage: String,
+) -> Result<IndicatorProbe> {
+    app.voice().set_indicator_probe(stage).await
 }
 
 // The two below are the machinery behind `addPluginListener('voice', …)`. The

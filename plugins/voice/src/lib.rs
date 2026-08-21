@@ -55,6 +55,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::start_dictation,
             commands::stop_dictation,
             commands::cancel_dictation,
+            commands::set_indicator_probe,
             commands::register_listener,
             commands::remove_listener
         ])

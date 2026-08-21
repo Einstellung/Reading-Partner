@@ -34,6 +34,13 @@ pub struct Voice<R: Runtime>(PluginHandle<R>);
 struct StartDictationArgs {
     locale: Option<String>,
     contextual_strings: Option<Vec<String>>,
+    audio_profile: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct IndicatorProbeArgs {
+    stage: String,
 }
 
 #[derive(serde::Serialize)]
@@ -57,6 +64,7 @@ impl<R: Runtime> Voice<R> {
         &self,
         locale: Option<String>,
         contextual_strings: Option<Vec<String>>,
+        audio_profile: Option<String>,
     ) -> crate::Result<()> {
         self.0
             .run_mobile_plugin_async(
@@ -64,8 +72,16 @@ impl<R: Runtime> Voice<R> {
                 StartDictationArgs {
                     locale,
                     contextual_strings,
+                    audio_profile,
                 },
             )
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn set_indicator_probe(&self, stage: String) -> crate::Result<IndicatorProbe> {
+        self.0
+            .run_mobile_plugin_async("set_indicator_probe", IndicatorProbeArgs { stage })
             .await
             .map_err(Into::into)
     }

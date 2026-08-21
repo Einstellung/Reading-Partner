@@ -331,6 +331,18 @@
           "markdownDescription": "Denies the remove_listener command without any pre-configured scope."
         },
         {
+          "description": "Enables the set_indicator_probe command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-indicator-probe",
+          "markdownDescription": "Enables the set_indicator_probe command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_indicator_probe command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-indicator-probe",
+          "markdownDescription": "Denies the set_indicator_probe command without any pre-configured scope."
+        },
+        {
           "description": "Enables the start_dictation command without any pre-configured scope.",
           "type": "string",
           "const": "allow-start-dictation",
@@ -355,10 +367,10 @@
           "markdownDescription": "Denies the stop_dictation command without any pre-configured scope."
         },
         {
-          "description": "Dictate on the device: start, stop and cancel a hold, and subscribe to the dictation event.\n#### This default permission set includes:\n\n- `allow-start-dictation`\n- `allow-stop-dictation`\n- `allow-cancel-dictation`\n- `allow-register-listener`\n- `allow-remove-listener`",
+          "description": "Dictate on the device: start, stop and cancel a hold, subscribe to the dictation event, and park the audio stack for the indicator probe.\n#### This default permission set includes:\n\n- `allow-start-dictation`\n- `allow-stop-dictation`\n- `allow-cancel-dictation`\n- `allow-set-indicator-probe`\n- `allow-register-listener`\n- `allow-remove-listener`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Dictate on the device: start, stop and cancel a hold, and subscribe to the dictation event.\n#### This default permission set includes:\n\n- `allow-start-dictation`\n- `allow-stop-dictation`\n- `allow-cancel-dictation`\n- `allow-register-listener`\n- `allow-remove-listener`"
+          "markdownDescription": "Dictate on the device: start, stop and cancel a hold, subscribe to the dictation event, and park the audio stack for the indicator probe.\n#### This default permission set includes:\n\n- `allow-start-dictation`\n- `allow-stop-dictation`\n- `allow-cancel-dictation`\n- `allow-set-indicator-probe`\n- `allow-register-listener`\n- `allow-remove-listener`"
         }
       ]
     }

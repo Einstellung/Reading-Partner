@@ -1,9 +1,10 @@
 [default]
-description = "Dictate on the device: start, stop and cancel a hold, and subscribe to the dictation event."
+description = "Dictate on the device: start, stop and cancel a hold, subscribe to the dictation event, and park the audio stack for the indicator probe."
 permissions = [
   "allow-start-dictation",
   "allow-stop-dictation",
   "allow-cancel-dictation",
+  "allow-set-indicator-probe",
   "allow-register-listener",
   "allow-remove-listener",
 ]

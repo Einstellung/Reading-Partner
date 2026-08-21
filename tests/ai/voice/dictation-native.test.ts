@@ -90,7 +90,21 @@ test("both start arguments are undefined when the composer omits them", async ()
   const args = b.calls[0].args as Record<string, unknown>;
   expect(args.locale).toBeUndefined();
   expect(args.contextualStrings).toBeUndefined();
+  expect(args.audioProfile).toBeUndefined();
   expect(JSON.stringify(args)).toBe("{}");
+});
+
+// The audio profile is a measurement knob the bench sets and nothing else
+// touches. It reaches the plugin the same way the locale does and under a key
+// that no compiler compares against the Swift property it is decoded into.
+test("the chosen audio profile is what the start command carries", async () => {
+  const b = bridge();
+  const source = createNativeDictation({ audioProfile: "reuseEchoCancelledInput" }, b.it);
+  await source.start(() => {});
+
+  expect((b.calls[0].args as Record<string, unknown>).audioProfile).toBe(
+    "reuseEchoCancelledInput",
+  );
 });
 
 test("events reach the callback as the payload itself", async () => {

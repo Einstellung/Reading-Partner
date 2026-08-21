@@ -146,7 +146,7 @@
 - [162-a-locked-screen-takes-the-microphone-without-an-interruption](./162-a-locked-screen-takes-the-microphone-without-an-interruption.md) — 自动锁屏把 app 切后台，输入路由变成 `in=[]`，麦克风再无一个 buffer，但 `interruptionNotification` 一条都不来、`isRunning` 还是 true；真手指按着屏幕不会锁，只有合成 pointer 事件的无人值守脚本会撞上
 - [164-the-wrong-dictation-locale-invents-rather-than-degrades](./164-the-wrong-dictation-locale-invents-rather-than-degrades.md) — 送错语种的模型不会「识别得差一点」，会按音节猜出一串语法通顺的目标语言词：中文「注意力机制取代了循环结构」按 en-US 出来是 `2 E D, teacher, Chidalo, Shun.`，十五秒的长句只剩一串逗号。看起来像正常输出，所以比空转写更难发现。不跟随设备语言，做成设置项（`settings.dictationLocale`，默认 zh-CN）
 - [165-a-harness-that-buffers-cannot-report-the-crash-it-watches-for](./165-a-harness-that-buffers-cannot-report-the-crash-it-watches-for.md) — 探针把记录攒在内存里、跑完才落盘，就报不了它自己要抓的那种死法：jetsam、看门狗、锁屏挂起定时器都不给收尾机会，死在第十八分钟和从没开始过取回来是同一个空文件。按事件 `append` 一行 JSON，每条带墙钟时间戳；高频事件只计数不入账。有了它，跑多久就没那么要紧——死在第四分钟就是四分钟的数据
-- [166-the-microphone-opens-after-the-user-has-started-talking](./166-the-microphone-opens-after-the-user-has-started-talking.md) — 按住说话丢头字：`start()` 先把识别器整条备好才 `installTap`，按下到第一个 buffer 实测 743ms，这段音频从来没被采集过。2.6 秒的句子全对、2.4 秒的丢头，峰值电平 86-99%，看着像识别质量问题。切成"先开麦克风、后备识别器"两半，中间的音频进 pre-roll 队列，`analyzer.start()` 之后按序补喂再转实时流；缓存 tap 原格式的拷贝（转换器的目标格式要等模型装完才问得到），上限 5 秒丢最旧
+- [166-the-microphone-opens-after-the-user-has-started-talking](./166-the-microphone-opens-after-the-user-has-started-talking.md) — 按住说话丢头字：按下到第一个 buffer 实测 1028-1255ms，这段音频从来没被采集过。2.6 秒的句子全对、2.4 秒的丢头，看着像识别质量问题。pre-roll 不解决它（识别器那半只占 80-180ms，前面那一秒里麦克风还没开，缓冲到 0 个 buffer）；690ms 在 `setVoiceProcessingEnabled(true)` 重建 IO 单元加读硬件格式，且每次按住都重建一遍。两条独立的路做成运行期档位：`pause()` 不 `stop()` 把引擎留着，和用 `setPrefersEchoCancelledInput` 绕开 VPIO（要 `.playAndRecord` + `.default`，激活后查 `isEchoCancelledInputEnabled`）
 
 ## WebKit / webview
 

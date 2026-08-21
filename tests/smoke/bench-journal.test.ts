@@ -8,6 +8,8 @@
 import { expect, test } from "bun:test";
 import {
   benchHoldLine,
+  benchProbeLine,
+  benchProfileLine,
   benchSessionLine,
   createBenchJournal,
   type BenchEntry,
@@ -22,6 +24,7 @@ const hold = (over: Partial<BenchEntry> = {}): BenchEntry => ({
   text: "你好",
   heard: spoke,
   locale: "zh-CN",
+  profile: "current",
   ...over,
 });
 
@@ -51,6 +54,7 @@ test("a line carries everything needed to place the hold afterwards", () => {
   expect(parsed.index).toBe(1);
   expect(parsed.outcome).toBe("sent");
   expect(parsed.locale).toBe("zh-CN");
+  expect(parsed.profile).toBe("current");
   expect(parsed.chars).toBe(2);
   expect(parsed.text).toBe("你好");
   expect(parsed.heard).toEqual(spoke);
@@ -143,4 +147,47 @@ test("a write that fails does not take the next one with it", async () => {
   journal.hold(hold({ index: 2 }));
   await journal.idle();
   expect(fs.lines.map((l) => JSON.parse(l).index)).toEqual([2]);
+});
+
+// The file is read afterwards as several runs of holds on different audio
+// settings. A timing without its setting is not a measurement, and the setting
+// is native state the row on screen has no other way of knowing.
+test("every hold carries the audio profile it ran on", () => {
+  const parsed = JSON.parse(benchHoldLine(hold({ profile: "reuse" }), 1));
+  expect(parsed.profile).toBe("reuse");
+});
+
+test("a switch is a line of its own, so a run of holds reads as a group", () => {
+  const parsed = JSON.parse(benchProfileLine("echoCancelledInput", 1_700_000_000_000));
+  expect(parsed.kind).toBe("profile");
+  expect(parsed.profile).toBe("echoCancelledInput");
+  expect(parsed.at).toBe(new Date(1_700_000_000_000).toISOString());
+});
+
+// The probe takes the microphone away from dictation. A hold that behaves
+// strangely right after one is explained by the line above it, which is the
+// only reason these are in the same file.
+test("a probe stage is recorded with whatever the native side answered", () => {
+  const state = { stage: "tap", engineRunning: true, tapInstalled: true, buffers: 12 };
+  const parsed = JSON.parse(benchProbeLine("tap", state, 1));
+  expect(parsed.kind).toBe("probe");
+  expect(parsed.stage).toBe("tap");
+  expect(parsed.state).toEqual(state);
+});
+
+test("a probe that was refused still gets a line, with null for the state", () => {
+  const parsed = JSON.parse(benchProbeLine("engine", undefined, 1));
+  expect(parsed.stage).toBe("engine");
+  expect(parsed.state).toBeNull();
+});
+
+test("switches and probes queue behind the holds in the order they happened", async () => {
+  const fs = recorder();
+  const journal = createBenchJournal(fs.append, () => 0);
+  journal.session();
+  journal.profile("reuse");
+  journal.hold(hold({ profile: "reuse" }));
+  journal.probe("session", { stage: "session" });
+  await journal.idle();
+  expect(fs.lines.map((l) => JSON.parse(l).kind)).toEqual(["session", "profile", "hold", "probe"]);
 });

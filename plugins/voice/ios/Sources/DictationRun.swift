@@ -3,13 +3,11 @@
 //
 // The chain, in the order start() builds it (docs/33, ASR and AEC 与音频路由):
 //
-//   AVAudioSession(.playAndRecord, .voiceChat)   the mode the voice-processing
-//                                                IO unit requires
-//   AVAudioEngine.inputNode                      with setVoiceProcessingEnabled,
-//                                                so the echo canceller's
-//                                                reference signal is by
-//                                                construction whatever this app
-//                                                plays
+//   AudioFront                                   the session, the engine and the
+//                                                tap, which outlive this object
+//                                                on the profiles that reuse
+//                                                them; it is also where the
+//                                                echo canceller is chosen
 //   tap -> AVAudioConverter                      SpeechAnalyzer does no audio
 //                                                conversion of its own; the
 //                                                format it wants comes from
@@ -20,12 +18,13 @@
 //   SpeechTranscriber.results                    an AsyncSequence of
 //                                                AttributedString results
 //
-// Order matters more than the drawing suggests. setVoiceProcessingEnabled
-// rebuilds the IO unit, and a rebuilt unit answers questions about the hardware
-// with AVAudioEngine's defaults — 44100 Hz stereo — until the engine has been
-// prepared. Every format used here is one the engine reported, never one this
-// file chose, and the format the tap is installed with is checked again before
-// a converter is built from it.
+// Order matters more than the drawing suggests, and the ordering that matters
+// most is in AudioFront.swift: setVoiceProcessingEnabled rebuilds the IO unit,
+// and a rebuilt unit answers questions about the hardware with AVAudioEngine's
+// defaults — 44100 Hz stereo — until the engine has been prepared. Every format
+// used here is one the engine reported, never one this file chose, and the
+// format the tap is installed with is checked again before a converter is built
+// from it.
 //
 // start() builds that chain in two halves, and the split is the point of the
 // ordering. The first half is only what an open microphone needs — permission,
@@ -120,7 +119,11 @@ final class DictationRun {
     typealias Emit = (JSObject) -> Void
 
     private let emit: Emit
-    private let engine = AVAudioEngine()
+
+    /// Which front end this hold runs on. Chosen per press by the caller and
+    /// carried here only to be handed to AudioFront and logged; `current` is
+    /// what everything that does not ask gets.
+    private let profile: AudioProfile
 
     private var transcriber: SpeechTranscriber?
     private var analyzer: SpeechAnalyzer?
@@ -134,7 +137,11 @@ final class DictationRun {
     private var inputContinuation: AsyncStream<AnalyzerInput>.Continuation?
 
     private var notificationObservers: [NSObjectProtocol] = []
-    private var tapInstalled = false
+
+    /// True from the moment the tap is running until the teardown. The route
+    /// changes on the way in too, while the session is being configured, and
+    /// empty inputs are legitimate for part of that.
+    private var capturing = false
 
     // MARK: - Pre-roll
 
@@ -193,6 +200,10 @@ final class DictationRun {
     private static let prerollSeconds: Double = 5
 
     private var stopping = false
+    /// Set when the session was interrupted, the route went away, or the front
+    /// end never came up. A hold that ends this way never lets the front end
+    /// keep anything for the next one: what would be kept is what just broke.
+    private var sessionBroken = false
     private let stopLock = NSLock()
 
     // MARK: - Transcript
@@ -256,6 +267,13 @@ final class DictationRun {
     /// and it is not the arm moving: the Chinese holds are the loud end
     /// (peaks -11 to -15) and the English ones the quiet end (-15 to -18)
     /// throughout. -10 is set against the loud end deliberately.
+    ///
+    /// All of it was measured with voice processing on, whose automatic gain is
+    /// worth 18 dB on near-voice (docs/33). The profiles that run without it
+    /// (AudioProfile.echoCancelledInput) therefore read low through this window
+    /// — the same speech at the same distance came back 17 dB quieter with VPIO
+    /// off — so a peak from one profile and a peak from another are not
+    /// comparable, and the bench's peak column is a within-profile number.
     private static let quietDb: Float = -50
     private static let loudDb: Float = -10
 
@@ -309,7 +327,8 @@ final class DictationRun {
     /// stop_dictation arrives.
     private static let finalizeGraceMs: UInt64 = 2000
 
-    init(emit: @escaping Emit) {
+    init(profile: AudioProfile, emit: @escaping Emit) {
+        self.profile = profile
         self.emit = emit
     }
 
@@ -342,64 +361,34 @@ final class DictationRun {
         // left: audio older than the first buffer predates the microphone and
         // the pre-roll cannot hold what was never captured.
 
-        try configureSession()
+        // Subscribed before the microphone opens, not after: an interruption
+        // that lands while the session is being configured is one this run has
+        // to hear, and the handlers guard on `capturing` for the part of that
+        // window where an empty input route is normal.
         observeSessionNotifications()
-        mark("session", since: t0)
 
-        // Before any format is read anywhere: enabling it on the input node
-        // turns the whole IO unit into a voice-processing one and rebuilds it.
-        let input = engine.inputNode
+        let opened: AudioFront.Opened
         do {
-            try input.setVoiceProcessingEnabled(true)
+            opened = try AudioFront.shared.open(profile: profile, pressedAt: t0) {
+                [weak self] buffer in
+                self?.consume(buffer)
+            }
         } catch {
-            throw DictationError(
-                "The microphone could not be prepared: \(DictationError.describe(error))")
+            // Half a front end is not something the next hold may inherit.
+            markSessionBroken()
+            throw error
         }
+        // The engine belongs to the front end, which on a reusing profile keeps
+        // it after this run is gone. What this run needs it for is two reads:
+        // the input node's format, once the recogniser is up, and the
+        // reconfiguration notice.
+        let input = opened.engine.inputNode
+        let hardwareFormat = opened.format
+        observeEngineNotifications(opened.engine)
 
-        // Read after the session is active and voice processing is decided:
-        // both change what the input node reports. This one read is the format
-        // the tap is installed with, the format the pre-roll holds, and later
-        // the converter's input side.
-        let hardwareFormat = input.outputFormat(forBus: 0)
-        NSLog("RP-DICT microphone=%@", Self.describe(hardwareFormat))
-        guard hardwareFormat.sampleRate > 0 else {
-            throw DictationError(
-                "The microphone did not open. The audio session never became active.")
-        }
         tapSampleRate = hardwareFormat.sampleRate
         prerollCapFrames = AVAudioFrameCount(hardwareFormat.sampleRate * Self.prerollSeconds)
-
-        input.installTap(onBus: 0, bufferSize: 4096, format: hardwareFormat) {
-            [weak self] buffer, _ in
-            self?.consume(buffer)
-        }
-        tapInstalled = true
-
-        engine.prepare()
-        do {
-            try engine.start()
-        } catch {
-            // 561145187 is '!rec': iOS has refused to start recording since 12.4
-            // unless the app is in the foreground (docs/33).
-            let ns = error as NSError
-            let hint =
-                ns.code == 561145187
-                ? " Reading Partner has to be on screen to dictate." : ""
-            throw DictationError(
-                "The microphone would not start: \(DictationError.describe(error)).\(hint)")
-        }
-
-        // start() can return without an error and leave the engine stopped: a
-        // graph whose formats disagree with the hardware is reconfigured out
-        // from under it on the way up. That silence was once reported as a
-        // healthy 45-second run (docs/pitfall/132).
-        guard engine.isRunning else {
-            throw DictationError(
-                "The microphone stopped as it started. The output chain accepts "
-                    + "\(Self.describe(engine.outputNode.inputFormat(forBus: 0))) while its "
-                    + "hardware is \(Self.describe(engine.outputNode.outputFormat(forBus: 0))) and "
-                    + "the session runs at \(AVAudioSession.sharedInstance().sampleRate) Hz.")
-        }
+        capturing = true
 
         // Armed here rather than at the end: from this line on there is an open
         // microphone, and a recogniser that never comes up would otherwise leave
@@ -533,13 +522,14 @@ final class DictationRun {
         backstopTask?.cancel()
         backstopTask = nil
 
-        if tapInstalled {
-            engine.inputNode.removeTap(onBus: 0)
-            tapInstalled = false
-        }
-        if engine.isRunning {
-            engine.stop()
-        }
+        // Back to the front end, which decides between pausing and tearing
+        // down. This run only says whether what it had is worth keeping.
+        capturing = false
+        AudioFront.shared.release(profile: profile, keep: !sessionIsBroken())
+        // Measured from the release, not from the press: what this one says is
+        // whether letting go is cheaper than tearing down, which is the other
+        // half of the question `reuse` is asking.
+        mark("released", since: t0)
 
         dropPreroll()
 
@@ -575,13 +565,6 @@ final class DictationRun {
         resultsTask?.cancel()
         resultsTask = nil
         mark("results", since: t0)
-
-        do {
-            try AVAudioSession.sharedInstance().setActive(
-                false, options: [.notifyOthersOnDeactivation])
-        } catch {
-            NSLog("RP-DICT deactivate failed: %@", DictationError.describe(error))
-        }
         mark("stopped", since: t0)
     }
 
@@ -606,6 +589,21 @@ final class DictationRun {
         if stopping { return false }
         stopping = true
         return true
+    }
+
+    /// Same reason `claimStop()` is synchronous: the flag is written from the
+    /// notification handlers on the main queue and read once by the teardown on
+    /// the plugin's serial chain, which are different threads.
+    private func markSessionBroken() {
+        stopLock.lock()
+        sessionBroken = true
+        stopLock.unlock()
+    }
+
+    private func sessionIsBroken() -> Bool {
+        stopLock.lock()
+        defer { stopLock.unlock() }
+        return sessionBroken
     }
 
     // MARK: - Transcript
@@ -756,19 +754,6 @@ final class DictationRun {
 
     // MARK: - Audio session and formats
 
-    private func configureSession() throws {
-        let session = AVAudioSession.sharedInstance()
-        do {
-            // .voiceChat is the mode the voice-processing unit wants, and it
-            // sets HFP itself, so no Bluetooth option here.
-            try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker])
-            try session.setActive(true)
-        } catch {
-            throw DictationError(
-                "The microphone is in use by something else: \(DictationError.describe(error))")
-        }
-    }
-
     private func resolveAnalyzerFormat(for transcriber: SpeechTranscriber) async throws
         -> AVAudioFormat
     {
@@ -779,14 +764,16 @@ final class DictationRun {
         return best
     }
 
+    /// The same line AudioFront prints, so a format quoted in an error and a
+    /// format quoted in the log can be compared character for character.
     private static func describe(_ format: AVAudioFormat) -> String {
-        "\(Int(format.sampleRate))Hz \(format.channelCount)ch "
-            + "\(format.isInterleaved ? "interleaved" : "deinterleaved") "
-            + "fmt=\(format.commonFormat.rawValue)"
+        describeFormat(format)
     }
 
     // MARK: - Notifications
 
+    /// The session's own notifications. Registered before the microphone opens,
+    /// so the window in which the session is being configured is covered too.
     private func observeSessionNotifications() {
         let center = NotificationCenter.default
         let session = AVAudioSession.sharedInstance()
@@ -819,25 +806,30 @@ final class DictationRun {
                 // Only once capture is really up: the route changes on the way
                 // in too, while the session is being configured, and inputs are
                 // legitimately empty for part of that.
-                guard self.tapInstalled, route.inputs.isEmpty else { return }
+                guard self.capturing, route.inputs.isEmpty else { return }
                 NSLog("RP-DICT the microphone went away mid-hold")
+                self.markSessionBroken()
                 self.recordFailure(
                     "The microphone became unavailable. Hold again to keep going.")
                 self.endEmitting()
                 Task { [weak self] in await self?.stop() }
             })
+    }
 
-        // The engine posts this when the hardware format changes under it, and
-        // it stops itself on the way. It is the one event that explains a hold
-        // that started without an error and captured nothing.
+    /// The engine's own notification, which can only be subscribed once there is
+    /// an engine. It posts this when the hardware format changes under it, and
+    /// it stops itself on the way — the one event that explains a hold which
+    /// started without an error and captured nothing. A reused engine is a
+    /// reconfiguration risk between holds as well, which is why the front end
+    /// re-reads the input format before handing one back.
+    private func observeEngineNotifications(_ engine: AVAudioEngine) {
         notificationObservers.append(
-            center.addObserver(
+            NotificationCenter.default.addObserver(
                 forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
-            ) { [weak self] _ in
-                guard let self = self else { return }
+            ) { [weak engine] _ in
                 NSLog(
                     "RP-DICT the engine reconfigured itself; running=%d",
-                    self.engine.isRunning ? 1 : 0)
+                    (engine?.isRunning ?? false) ? 1 : 0)
             })
     }
 
@@ -854,6 +846,7 @@ final class DictationRun {
             // 锁屏). The words captured so far are still the user's, so the
             // teardown keeps them and stop_dictation answers with them.
             NSLog("RP-DICT interrupted")
+            markSessionBroken()
             endEmitting()
             Task { [weak self] in await self?.stop() }
         case .ended:
@@ -1143,6 +1136,6 @@ final class DictationRun {
     // MARK: - Timing
 
     private func mark(_ step: String, since start: CFAbsoluteTime) {
-        NSLog("RP-DICT %@ +%.0fms", step, (CFAbsoluteTimeGetCurrent() - start) * 1000)
+        markStep(step, since: start)
     }
 }

@@ -1,12 +1,13 @@
 ## Default Permission
 
-Dictate on the device: start, stop and cancel a hold, and subscribe to the dictation event.
+Dictate on the device: start, stop and cancel a hold, subscribe to the dictation event, and park the audio stack for the indicator probe.
 
 #### This default permission set includes the following:
 
 - `allow-start-dictation`
 - `allow-stop-dictation`
 - `allow-cancel-dictation`
+- `allow-set-indicator-probe`
 - `allow-register-listener`
 - `allow-remove-listener`
 
@@ -93,6 +94,32 @@ Enables the remove_listener command without any pre-configured scope.
 <td>
 
 Denies the remove_listener command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:allow-set-indicator-probe`
+
+</td>
+<td>
+
+Enables the set_indicator_probe command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:deny-set-indicator-probe`
+
+</td>
+<td>
+
+Denies the set_indicator_probe command without any pre-configured scope.
 
 </td>
 </tr>

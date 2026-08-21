@@ -14,13 +14,15 @@
 // line, so a truncated tail costs the last line and nothing before it.
 //
 // It carries more than the screen does. The row says what happened; the line
-// says when, in what order, in which language, and what the plugin streamed
-// while the finger was down — which is what it takes to line the file up
+// says when, in what order, in which language, on which audio profile, and what
+// the plugin streamed while the finger was down — which is what it takes to line the file up
 // afterwards against a console log, a syslog, or someone's memory of what they
 // said. The index and the session line are what keep that readable across
 // relaunches: the file outlives the process, the numbering does not.
 
 import { mkdir, writeTextFile, BaseDirectory } from "@tauri-apps/plugin-fs";
+import type { AudioProfile } from "../ai/voice/audio-profile";
+import type { IndicatorStage } from "./indicator-probe";
 import type { HoldOutcome, Heard } from "./hold-outcome";
 
 export const BENCH_JOURNAL_DIR = "smoke";
@@ -42,6 +44,11 @@ export interface BenchEntry {
   /// no hold.
   heard: Heard | null;
   locale: string;
+  /// Which audio front end the hold opened the microphone on. Every line
+  /// carries it, because the file is read afterwards as several runs of holds
+  /// on different settings and a timing without its setting is not a
+  /// measurement.
+  profile: AudioProfile;
 }
 
 /// A wall clock on every line, so a gap in the file reads as a gap rather than
@@ -65,6 +72,7 @@ export function benchHoldLine(entry: BenchEntry, wall: number): string {
       index: entry.index,
       outcome: entry.outcome,
       locale: entry.locale,
+      profile: entry.profile,
       // Both, deliberately: the count is what a scan of the file is read for,
       // the text is what a disagreement about a transcript is settled with.
       chars: entry.text.length,
@@ -74,11 +82,35 @@ export function benchHoldLine(entry: BenchEntry, wall: number): string {
   );
 }
 
+/** The switch itself, so the file says when the setting changed and not only
+ * what each hold ran on. A run of holds on one profile with the switch in front
+ * of it reads as a deliberate group; the same holds with no line between them
+ * read as a mystery. */
+export function benchProfileLine(profile: AudioProfile, wall: number): string {
+  return JSON.stringify({ kind: "profile", ...stamp(wall), profile }) + "\n";
+}
+
+/** One indicator-probe stage, entered. It takes the microphone away from
+ * dictation, so a hold that behaves strangely right after one is explained by
+ * the line above it. `state` is whatever the native side answered, or null when
+ * it refused. */
+export function benchProbeLine(
+  stage: IndicatorStage,
+  state: unknown,
+  wall: number,
+): string {
+  return JSON.stringify({ kind: "probe", ...stamp(wall), stage, state: state ?? null }) + "\n";
+}
+
 export interface BenchJournal {
   /** Open the file for this process. */
   session(): void;
   /** Put one row in the file. Returns immediately; the write is queued. */
   hold(entry: BenchEntry): void;
+  /** Note that the audio profile was switched. */
+  profile(profile: AudioProfile): void;
+  /** Note that an indicator-probe stage was entered. */
+  probe(stage: IndicatorStage, state: unknown): void;
   /** Resolves when everything handed over so far has been written. Tests. */
   idle(): Promise<void>;
 }
@@ -106,6 +138,8 @@ export function createBenchJournal(
   return {
     session: () => queue(benchSessionLine(now())),
     hold: (entry) => queue(benchHoldLine(entry, now())),
+    profile: (profile) => queue(benchProfileLine(profile, now())),
+    probe: (stage, state) => queue(benchProbeLine(stage, state, now())),
     idle: () => tail,
   };
 }

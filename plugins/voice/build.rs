@@ -13,6 +13,7 @@ const COMMANDS: &[&str] = &[
     "start_dictation",
     "stop_dictation",
     "cancel_dictation",
+    "set_indicator_probe",
     "register_listener",
     "remove_listener",
 ];

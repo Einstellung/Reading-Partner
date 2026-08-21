@@ -30,6 +30,13 @@
 //      (docs/pitfall/164) — so without a switch only half the thing can be
 //      tried. It writes the same `dictationLocale` setting the settings card
 //      writes and the composer reads.
+//   4. An audio-profile switch and an indicator probe, which are measurement
+//      rather than product. The profile decides what the next press does to the
+//      microphone (audio-profile.ts) and applies without a remount, because
+//      nativeDictation() reads it as the hold begins; the probe parks the audio
+//      stack at one step and leaves it there so the status bar can be read
+//      (indicator-probe.ts). Both go into the file: every hold line carries its
+//      profile, and a switch or a probe is a line of its own.
 //
 // Every row also goes into a file as it is made, one appended line each
 // (bench-journal.ts). The list on screen is state, and state is gone with the
@@ -58,6 +65,12 @@ import { addPluginListener } from "@tauri-apps/api/core";
 
 import { Composer } from "../ui/components/chat/chat";
 import {
+  AUDIO_PROFILE_OPTIONS,
+  DEFAULT_AUDIO_PROFILE,
+  chooseAudioProfile,
+  type AudioProfile,
+} from "../ai/voice/audio-profile";
+import {
   DICTATION_EVENT,
   VOICE_PLUGIN,
   hasOnDeviceDictation,
@@ -71,6 +84,12 @@ import {
   type DictationLocale,
 } from "../platform/app/settings";
 import { benchJournal, type BenchOutcome } from "./bench-journal";
+import {
+  INDICATOR_STAGE_OPTIONS,
+  setIndicatorProbe,
+  type IndicatorProbeState,
+  type IndicatorStage,
+} from "./indicator-probe";
 import { NO_HEARD, RESOLVE_MS, classifyHold, type Heard } from "./hold-outcome";
 import { holdTheScreen } from "./wake-lock";
 
@@ -80,6 +99,7 @@ interface Entry {
   text: string;
   heard: Heard | null;
   locale: DictationLocale;
+  profile: AudioProfile;
 }
 
 const OUTCOME: Record<BenchOutcome, { label: string; note: string; tint: string; rule: string }> = {
@@ -181,6 +201,7 @@ function useDictationTap(): {
 function Bench() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [locale, setLocale] = useState<DictationLocale | null>(null);
+  const [profile, setProfile] = useState<AudioProfile>(DEFAULT_AUDIO_PROFILE);
   const [switching, setSwitching] = useState(false);
   const [holding, setHolding] = useState(false);
   const { level, reset, tally, error } = useDictationTap();
@@ -190,6 +211,8 @@ function Bench() {
   const nextId = useRef(1);
   const localeRef = useRef<DictationLocale>("zh-CN");
   localeRef.current = locale ?? "zh-CN";
+  const profileRef = useRef<AudioProfile>(DEFAULT_AUDIO_PROFILE);
+  profileRef.current = profile;
 
   // The hold being watched: when it went down, when it came up, and the timer
   // that closes it if nothing else does.
@@ -205,6 +228,7 @@ function Bench() {
       text,
       heard,
       locale: localeRef.current,
+      profile: profileRef.current,
     };
     setEntries((list) => [...list, entry]);
     benchJournal.hold({
@@ -213,6 +237,7 @@ function Bench() {
       text: entry.text,
       heard: entry.heard,
       locale: entry.locale,
+      profile: entry.profile,
     });
   }, []);
 
@@ -303,6 +328,16 @@ function Bench() {
     [locale, switching],
   );
 
+  // The audio front end the next press opens the microphone on. No await and no
+  // remount: nativeDictation() reads the choice as the hold begins, so the
+  // switch lands on the next press and the composer under it never notices.
+  const pickProfile = useCallback((next: AudioProfile) => {
+    if (next === profileRef.current) return;
+    chooseAudioProfile(next);
+    setProfile(next);
+    benchJournal.profile(next);
+  }, []);
+
   // Open the file before anything can be written to it, so the rows below it
   // are known to belong to this launch and not to the one before.
   useEffect(() => {
@@ -363,6 +398,10 @@ function Bench() {
       </header>
 
       <LiveStrip holding={holding} level={level} error={error} />
+
+      <ProfileSwitch profile={profile} onPick={pickProfile} />
+
+      <IndicatorProbe />
 
       <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-1 py-2">
         {entries.length === 0 ? (
@@ -427,6 +466,115 @@ function LiveStrip({
   );
 }
 
+// The audio front end the next press will open the microphone on. Four
+// settings, one build: `current` reproduces what the app did before any of this
+// existed, and the other three are the two things that could take back the
+// second between the press and the first buffer, separately and together.
+function ProfileSwitch({
+  profile,
+  onPick,
+}: {
+  profile: AudioProfile;
+  onPick: (next: AudioProfile) => void;
+}) {
+  const note = AUDIO_PROFILE_OPTIONS.find((o) => o.value === profile)?.note ?? "";
+  return (
+    <div className="shrink-0 pt-2">
+      <div className="flex rounded-full bg-neutral-100 p-1">
+        {AUDIO_PROFILE_OPTIONS.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => onPick(o.value)}
+            className={
+              "min-h-11 min-w-0 flex-1 rounded-full px-2 text-[13px] font-medium transition-colors " +
+              (profile === o.value ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500")
+            }
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+      <div className="px-2 pt-1 text-[11px] leading-snug text-neutral-500">{note}</div>
+    </div>
+  );
+}
+
+// The orange indicator, one step at a time. Each button parks the audio stack
+// somewhere and leaves it there until another is pressed, so the question is
+// answered by looking at the status bar rather than by anything on this screen.
+// What this screen shows is which step it is standing on and enough of the
+// native state to prove it — a stage that says it installed a tap and reports no
+// buffers is a stage that did not do what it says.
+function IndicatorProbe() {
+  const [stage, setStage] = useState<IndicatorStage>("off");
+  const [state, setState] = useState<IndicatorProbeState | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const pick = useCallback(async (wanted: IndicatorStage) => {
+    setBusy(true);
+    try {
+      const answer = await setIndicatorProbe(wanted);
+      setStage(answer.stage);
+      setState(answer);
+      setFailure(null);
+      benchJournal.probe(wanted, answer);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      // The native side tears the probe down before it throws, so the stack is
+      // at rest whatever went wrong.
+      setStage("off");
+      setState(null);
+      setFailure(message);
+      benchJournal.probe(wanted, { error: message });
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  const note = INDICATOR_STAGE_OPTIONS.find((o) => o.value === stage)?.note ?? "";
+  return (
+    <div className="shrink-0 pt-2">
+      <div className="flex gap-1">
+        {INDICATOR_STAGE_OPTIONS.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            disabled={busy}
+            onClick={() => void pick(o.value)}
+            className={
+              "min-h-11 min-w-0 flex-1 rounded-lg px-1 text-[12px] font-medium transition-colors " +
+              (stage === o.value
+                ? "bg-neutral-900 text-white"
+                : "bg-neutral-100 text-neutral-500")
+            }
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+      <div className="px-2 pt-1 text-[11px] leading-snug text-neutral-500">
+        {failure ? (
+          <span className="text-red-700">{failure}</span>
+        ) : (
+          <>
+            {note}
+            {state && stage !== "off" && (
+              <span className="tabular-nums">
+                {" · "}
+                {state.engineRunning ? "engine" : "no engine"} ·{" "}
+                {state.tapInstalled ? "tap" : "no tap"} · {state.buffers} buffers · in [
+                {state.inputs}]
+              </span>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Row({ entry }: { entry: Entry }) {
   const style = OUTCOME[entry.outcome];
   const h = entry.heard;
@@ -435,6 +583,7 @@ function Row({ entry }: { entry: Entry }) {
       <div className="flex flex-wrap items-baseline gap-x-2">
         <span className={"text-[13px] font-semibold " + style.tint}>{style.label}</span>
         <span className="text-[11px] text-neutral-400">{entry.locale}</span>
+        <span className="text-[11px] text-neutral-400">{entry.profile}</span>
         {h && (
           <span className="text-[11px] tabular-nums text-neutral-400">
             {(h.ms / 1000).toFixed(1)}s · peak {Math.round(h.peak * 100)}% · {h.finals} settled ·{" "}
@@ -467,6 +616,16 @@ function Instructions() {
         The switch at the top is the dictation language. It is the same setting the app keeps, and
         speaking the other language into it produces a confident wrong transcript rather than a
         rough one, so set it to what you are about to speak.
+      </p>
+      <p className="m-0">
+        Under it is the audio setting the next press uses. Hold five times on one before moving to
+        the next; the second and later presses are the interesting ones, because that is where
+        keeping the engine can show. Every line here and in the file says which one it ran on.
+      </p>
+      <p className="m-0">
+        The dark row is the indicator probe. It takes the microphone away from dictation and holds
+        it at one step until another step is chosen, so the orange dot in the status bar can be read
+        without guessing what turned it on. Put it back on <b>Off</b> before holding again.
       </p>
     </div>
   );

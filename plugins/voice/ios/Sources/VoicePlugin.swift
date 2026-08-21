@@ -25,6 +25,18 @@ import Tauri
 class StartDictationArgs: Decodable {
     let locale: String?
     let contextualStrings: [String]?
+    /// Which audio front end to open this hold on (AudioFront.swift). Absent on
+    /// every path but the bench, and an unknown name is the shipping one, so
+    /// nothing that does not know about this argument is affected by it.
+    let audioProfile: String?
+}
+
+/// Arguments of `set_indicator_probe`. One name from IndicatorStage; anything
+/// else is refused rather than silently rounded to a stage, because the whole
+/// answer here is "which step lights the indicator" and a probe that quietly
+/// stopped somewhere else would answer the wrong question.
+class IndicatorProbeArgs: Decodable {
+    let stage: String
 }
 
 class VoicePlugin: Plugin {
@@ -57,6 +69,7 @@ class VoicePlugin: Plugin {
         let args = try? invoke.parseArgs(StartDictationArgs.self)
         let locale = args?.locale
         let hints = args?.contextualStrings ?? []
+        let profile = AudioProfile.parse(args?.audioProfile)
 
         serial { [weak self] in
             guard let self = self else {
@@ -72,7 +85,7 @@ class VoicePlugin: Plugin {
                 await previous.stop()
             }
 
-            let run = DictationRun { [weak self] payload in
+            let run = DictationRun(profile: profile) { [weak self] payload in
                 self?.emit(payload)
             }
             do {
@@ -119,6 +132,41 @@ class VoicePlugin: Plugin {
             }
             NSLog("RP-DICT stop transcript=%d chars", transcript.count)
             invoke.resolve(["transcript": transcript])
+        }
+    }
+
+    /// Park the audio stack at one step and leave it there, so that a person
+    /// holding the phone can read the answer off the status bar. Nothing is
+    /// transcribed and no audio is kept (AudioFront.setIndicatorProbe).
+    ///
+    /// On the same serial chain as the three above, because it takes the same
+    /// microphone: a probe that came up beside a live hold would measure the
+    /// hold.
+    @objc(set_indicator_probe:)
+    public func setIndicatorProbe(_ invoke: Invoke) {
+        let args = try? invoke.parseArgs(IndicatorProbeArgs.self)
+        guard let raw = args?.stage, let stage = IndicatorStage(rawValue: raw) else {
+            invoke.reject("Unknown indicator stage.")
+            return
+        }
+
+        serial { [weak self] in
+            guard let self = self else {
+                invoke.reject("Dictation is not available.")
+                return
+            }
+            // A probe replaces whatever the microphone was doing, including a
+            // hold nobody released.
+            if let previous = self.takeRun() {
+                NSLog("RP-DICT indicator probe while a run was live; stopping the old one")
+                await previous.stop()
+            }
+            do {
+                let state = try AudioFront.shared.setIndicatorProbe(stage)
+                invoke.resolve(state)
+            } catch {
+                invoke.reject(DictationError.describe(error))
+            }
         }
     }
 
