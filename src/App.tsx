@@ -1473,7 +1473,7 @@ export default function App() {
   const verifyQuote = useMemo<QuoteCheck>(() => {
     const cache = new Map<string, boolean>();
     return (page, quote) => {
-      const key = `${page} ${quote}`;
+      const key = `${page}\u0000${quote}`;
       const seen = cache.get(key);
       if (seen !== undefined) return seen;
       // No text for that page — extraction still running, an unreadable scan, a
