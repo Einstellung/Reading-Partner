@@ -9,7 +9,7 @@
 // chunk is cached.
 //
 // Citation anchors: [p.12] / [paper-slug p.3] in the text become clickable
-// links when an onCitation handler is provided (classroom mode, docs/09). The
+// links when an onCitation handler is provided (the book's chat, docs/09). The
 // handler flows through React context rather than a prop on every message row
 // so MessageBubble's memoization is undisturbed.
 
