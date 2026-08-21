@@ -3,6 +3,7 @@
 // cite them as [fig:N] without spending tokens on full captions. Capped; for a
 // long survey the cap keeps the figures nearest the reader's current page. Pure.
 
+import { compareFigureIds } from "./lookup";
 import type { Figure } from "./types";
 
 const DEFAULT_MAX = 40;
@@ -17,6 +18,11 @@ export interface CatalogOptions {
   max?: number;
   // When the catalog is capped, keep the figures nearest this 1-based page.
   currentPage?: number | null;
+  // The line above the list. Overridden by the visual-aid block in
+  // reading/figures/prompt.ts, which states when to cite a figure and when to
+  // answer in words instead — so that judgement is written in one place and this
+  // file does not repeat half of it.
+  heading?: string;
 }
 
 // Select at most `max` figures, preferring those near `currentPage` when capping,
@@ -24,20 +30,22 @@ export interface CatalogOptions {
 export function selectCatalogFigures(figures: Figure[], opts: CatalogOptions = {}): Figure[] {
   const max = opts.max ?? DEFAULT_MAX;
   if (figures.length <= max) {
-    return [...figures].sort((a, b) => a.page - b.page || a.id.localeCompare(b.id));
+    return [...figures].sort((a, b) => a.page - b.page || compareFigureIds(a.id, b.id));
   }
   const anchor = opts.currentPage ?? figures[0]?.page ?? 1;
   const nearest = [...figures]
     .sort((a, b) => Math.abs(a.page - anchor) - Math.abs(b.page - anchor))
     .slice(0, max);
-  return nearest.sort((a, b) => a.page - b.page || a.id.localeCompare(b.id));
+  return nearest.sort((a, b) => a.page - b.page || compareFigureIds(a.id, b.id));
 }
 
 // The catalog block for a system prompt, or "" when there are no figures.
 export function buildFigureCatalog(figures: Figure[], opts: CatalogOptions = {}): string {
   if (figures.length === 0) return "";
   const chosen = selectCatalogFigures(figures, opts);
-  const lines = ["Figures in this document (cite one as [fig:N] when it shows what you explain):"];
+  const lines = [
+    opts.heading ?? "Figures in this document (cite one as [fig:N] when it shows what you explain):",
+  ];
   for (const f of chosen) {
     lines.push(`- [fig:${f.id}] p.${f.page} — ${clip(f.caption, CAPTION_CHARS)}`);
   }

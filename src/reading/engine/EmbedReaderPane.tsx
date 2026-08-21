@@ -68,7 +68,11 @@ function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
   const initialViewState: EmbedViewState | null = props.viewState
     ? {
         pageIndex: props.viewState.pageIndex,
-        zoom: typeof props.viewState.scale === "number" ? props.viewState.scale : 1,
+        // Only a scale that was measured and saved. Anything else is the "no
+        // reading position yet" sentinel ("auto") that a book which has never
+        // been opened is mounted with, and it stays absent so the reader opens
+        // at the layout's fit instead of at whatever number stood in for it.
+        ...(typeof props.viewState.scale === "number" ? { zoom: props.viewState.scale } : {}),
         // In-page offset (only present in states saved by this engine; legacy
         // files restore to the page top).
         ...(typeof props.viewState.pageY === "number"
@@ -211,7 +215,9 @@ function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
         onViewState={(s: EmbedViewState) =>
           props.onChangeViewState({
             pageIndex: s.pageIndex,
-            scale: s.zoom,
+            // The reader always emits a scale; "auto" is the same sentinel the
+            // way in reads, so a state without one round-trips as "none saved".
+            scale: s.zoom ?? "auto",
             scrollMode: 0,
             ...(typeof s.pageY === "number" ? { pageX: s.pageX, pageY: s.pageY } : {}),
             ...(s.layout ? { layout: s.layout } : {}),

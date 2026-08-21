@@ -154,7 +154,7 @@ export default function LibraryScreen(props: {
   // instead of being covered and nothing has to be dismissed to reach a card.
   if (activeTopic) {
     return (
-      <div className="absolute inset-0 flex items-stretch bg-white">
+      <div className="absolute inset-0 flex items-stretch bg-background">
         <TopicNav
           section={section}
           onSelect={(next) => {
@@ -207,7 +207,7 @@ export default function LibraryScreen(props: {
   }
 
   return (
-    <div className="absolute inset-0 flex flex-col items-stretch justify-start gap-6 bg-white overflow-y-auto">
+    <div className="absolute inset-0 flex flex-col items-stretch justify-start gap-6 bg-background overflow-y-auto">
       <TopicLibrary
         topics={props.topics}
         onCreate={async (name) => {

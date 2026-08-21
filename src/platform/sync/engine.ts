@@ -15,6 +15,11 @@
 // the merge dropped are journalled locally (sync-trash.jsonl) so a propagated
 // delete stays recoverable.
 //
+// A pass also drains the purge queue first (state.ts): the paths a shipped
+// build named as no longer being data at all. That is the one deletion sync
+// performs, and it is not the loop's own conclusion about two sides of a file —
+// nothing compared decides it.
+//
 // A pass is per-item, not all-or-nothing (docs/pitfall/52). One file that will
 // not transfer must not cost the other fifty or the books channel: on a link
 // where every request has a real chance of failing, a pass needing fifty of
@@ -88,6 +93,11 @@ export interface EngineDeps {
   // recoverable. Local only; never synced.
   trash: TrashJournal;
   snapshot: Snapshot;
+  // Paths a build has decided must not exist in the remote any more (state.ts).
+  // Held by reference like the snapshot, and emptied entry by entry as the
+  // deletes land, so a pass that gets through half the list and loses the link
+  // comes back for the rest.
+  purge?: string[];
   // How two changed copies of a file become one (../merge). Injected like
   // everything else the pass touches, so what the engine does with a merge's
   // copies and dropped records can be pinned without depending on which
@@ -379,6 +389,35 @@ export class SyncEngine {
     }
   }
 
+  // Delete what a build has decided is not data any more, and forget everything
+  // this device remembered about it. The queue is the only record that the
+  // decision was made, so an entry comes off it exactly when its delete has
+  // landed — a failure leaves the entry where it is for the next pass.
+  //
+  // This is not the reconcile loop reaching a new conclusion: no comparison
+  // decides anything here, and a file only ever gets here because code that
+  // shipped said so by name (docs/13 — a sync still never destroys a file on its
+  // own reading of the two sides).
+  private async drainPurge(failures: PassFailures): Promise<void> {
+    const queue = this.d.purge;
+    if (!queue || queue.length === 0) return;
+    for (const path of [...queue]) {
+      if (failures.halted()) return;
+      try {
+        await this.d.backend.remove(path);
+      } catch (e) {
+        if (isAuthFailure(e)) throw e;
+        failures.record(`delete ${path}`, e);
+        continue;
+      }
+      failures.succeeded();
+      const at = queue.indexOf(path);
+      if (at !== -1) queue.splice(at, 1);
+      delete this.snapshot[path];
+      await this.d.base.remove(path).catch(() => {});
+    }
+  }
+
   private async runPass(): Promise<void> {
     if (this.running) return;
     this.running = true;
@@ -390,6 +429,10 @@ export class SyncEngine {
       // on: without them there is nothing to reconcile, so these two still stop
       // it.
       await this.d.backend.ensureLayout();
+      // Before the listing: a path still in the remote when it is listed would
+      // be reconciled against, and a path this pass is about to delete has no
+      // business in a plan.
+      await this.drainPurge(failures);
       const remote = await this.d.backend.listRemote();
       const local = await this.hashLocal(await this.d.fs.list());
       const plan = reconcile(local, remote, this.snapshot);

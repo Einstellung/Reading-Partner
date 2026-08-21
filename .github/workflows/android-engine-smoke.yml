@@ -40,9 +40,9 @@ jobs:
       # app. tauri's beforeBuildCommand (bun run build) inherits this env.
       VITE_SMOKE: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -58,7 +58,7 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
 
       - name: Install Android NDK
         run: |
@@ -96,7 +96,7 @@ jobs:
       # Upload the smoke APK now, before the emulator runs, so a real-device
       # fallback exists even if the emulator step never reaches upload.
       - name: Upload the smoke APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: android-smoke-apk
           path: ${{ env.SMOKE_APK }}
@@ -128,7 +128,7 @@ jobs:
 
       - name: Upload smoke verdict and screenshot
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: android-smoke-verdict
           path: |

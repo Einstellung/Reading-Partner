@@ -15,7 +15,10 @@ export type EventType =
   | "talk-open" // { talkId } — a talk was opened from the topic's list
   | "citation-click" // { kind: "page", page } | { kind: "paper", slug }
   | "page-nav" // { from, to, dwellMs } — dwell is time spent on the previous page
-  | "call-start" // { threadId }
+  // { threadId, book, aside? } — a conversation opened. `book` is the top-bar
+  // entry's one per-book thread; `aside` is on a side conversation only, and
+  // says which door its span came in by ("chat" | "mark", docs/03).
+  | "call-start"
   | "call-end" // { threadId } — hangup
   | "thread-delete" // { threadId, book } — conversation deleted (and its mark, if any)
   // A pass that finished. `trigger` is what set it going (hangup, trim, timer,
@@ -52,7 +55,9 @@ export type EventType =
   | "prep-status" // { slug, status }
   | "notes-run" // { phase: "start" | "done" | "failed" }
   | "notes-chapter-regenerate" // { index }
-  | "notes-tab-open" // {}
+  // The reader opened the Prep tab. Its old name was "notes-tab-open", from
+  // when the two kinds of prep material had a tab each.
+  | "prep-tab-open" // {}
   // The reader opened a topic's AI observations. The one face of the observation
   // machinery they can look at, and until this line nothing said whether they
   // ever did.
@@ -65,7 +70,14 @@ export type EventType =
   // reason: a turn belongs to a face of the app, not to a book. See
   // cache-telemetry.ts for the fields and for why the gap to the previous turn
   // on the same thread is one of them.
-  | "prompt-cache";
+  | "prompt-cache"
+  // A reading turn that rendered the pages around the reader's highlight and
+  // sent them as images (reading/figures/page-window.ts), in events-ai.jsonl
+  // beside the cache line. `tokens` is what the pictures cost the request, which
+  // is the number that decides whether the gate is drawn in the right place;
+  // `sent` is false when the budget ladder took the window back off the call
+  // after it was rendered.
+  | "page-window"; // { thread, gate, anchor, from, to, pages, tokens, px, sent }
 
 // The reserved topic id the briefing's timing lines are filed under:
 // events-info.jsonl. Topic ids are UUIDs, so this cannot collide with one —

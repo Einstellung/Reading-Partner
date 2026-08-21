@@ -27,7 +27,7 @@
 //
 // The first tap is load-bearing beyond starting the run: the screen wake lock
 // is refused without user activation, and without it the phone locks two
-// minutes in and takes the rest of the script with it (docs/pitfall/141).
+// minutes in and takes the rest of the script with it (docs/pitfall/162).
 
 import { mkdir, BaseDirectory } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../platform/app/atomic-fs";

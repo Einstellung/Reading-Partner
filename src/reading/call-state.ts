@@ -9,6 +9,7 @@
 // pinned here is only what the session itself reads and writes.
 
 import type { CompressedImage } from "../ai/image-utils";
+import type { AsideAnchor } from "../platform/app/threads";
 import {
   appendRunningTool,
   relabelRunningTool,
@@ -43,9 +44,30 @@ export interface CallRow {
 export interface CallState<M extends CallRow> {
   threadId: string;
   // The AI-pen mark hosting this call. Empty string for the book-level thread
-  // (docs/03: top-bar AI button), flagged by `isBook`.
+  // (docs/03: top-bar AI button), flagged by `isBook`, and for a side
+  // conversation pulled out of a chat message.
   annotationId: string;
   isBook?: boolean;
+  // This conversation is a side one off another (docs/03), which the slot below
+  // holds instead of it: what it was opened on, and where going back leads.
+  // Never set together with `isBook` — an aside is never the lesson — and its
+  // presence is what says the affordance that opens one must not be offered
+  // again, which is how one level deep is enforced.
+  aside?: {
+    parentThreadId: string;
+    // "chat" is a span pulled out of a reply, "mark" one drawn on the page while
+    // the lesson ran (reading/aside.ts).
+    from: "chat" | "mark";
+    span: string;
+    // The reply the span came out of. Held here rather than read back off the
+    // record because a chat-span aside has no record until the reader asks
+    // something in it — opening one has to cost nothing.
+    anchor?: AsideAnchor;
+    // The view the conversation this came off was in. Going back restores it: a
+    // lesson left as the corner card while the reader read the page must not
+    // come back as chat over that page.
+    parentView?: CallView;
+  };
   view: CallView;
   anchor: { x: number; y: number };
   messages: M[];
@@ -228,4 +250,83 @@ export function callReducer<M extends CallRow>(
         messages: state.messages.filter((m) => !(m.ts === action.ts && m.role === "ai")),
       };
   }
+}
+
+// --- what the open call leaves open ---------------------------------------
+
+// Two levels, and the door decides which one is open, not how deep the reader
+// feels they are (docs/03): the top bar's blackboard opens the book's
+// conversation, a pen stroke inside it — on the page or on a reply — opens a
+// side conversation off it, and a side conversation opens nothing. A thread
+// opened by marking the page with no conversation running is a first level too,
+// so it opens nothing either.
+//
+// The controls that would open a level that is not there are drawn dim rather
+// than dropped: a rule the reader can see is a rule they can learn.
+
+// As much of the open call as the answers below read. Null is no call at all,
+// which is not the same as a side conversation: with nothing open, a stroke on
+// the page opens the first level itself.
+export interface OpenLevel {
+  isBook?: boolean;
+  aside?: { parentThreadId: string };
+}
+
+const AI_PEN_DIM = "Only the book's conversation can open a side one.";
+const BOOK_THREAD_OPEN = "This book's conversation is already open.";
+const BOOK_THREAD_BEHIND = "The book's conversation is behind this side one.";
+
+// The AI pen opens a level, so it is live only where there is one left to open.
+export function mayOpenAside(call: OpenLevel | null | undefined): boolean {
+  return !call || call.isBook === true;
+}
+
+// The blackboard is live only where the book's conversation is not already on
+// screen or one step behind. While it is up, the corner card is the way back to
+// it; two doors onto the same room is one too many.
+//
+// `hasParent` is the caller's lookup for the room a side conversation came out
+// of. A parent that was deleted on another device leaves the aside with no Back
+// (App.tsx: asideReturnable), and nothing is behind it any more, so the
+// blackboard is the door into the classroom rather than a second one onto it.
+// Dim it there and hanging up is the only way out.
+export function mayOpenBookThread(
+  call: OpenLevel | null | undefined,
+  hasParent: (parentThreadId: string) => boolean,
+): boolean {
+  if (!call) return true;
+  if (call.isBook) return false;
+  if (!call.aside) return true;
+  return !hasParent(call.aside.parentThreadId);
+}
+
+// The pen the rack acts with. A dim AI pen is held rather than cleared: the
+// reader who steps into a side conversation and back gets the pen they were
+// holding back, and nothing they drew in between opened anything.
+export function toolInCall<T extends string>(
+  tool: T,
+  call: OpenLevel | null | undefined,
+): T | "none" {
+  return tool === "ai" && !mayOpenAside(call) ? "none" : tool;
+}
+
+// Why each of the two is dim, or null while it is live. The sentence is what the
+// control says about itself when it will not open.
+export interface LevelGate {
+  aiPen: string | null;
+  bookThread: string | null;
+}
+
+export function levelGate(
+  call: OpenLevel | null | undefined,
+  hasParent: (parentThreadId: string) => boolean,
+): LevelGate {
+  return {
+    aiPen: mayOpenAside(call) ? null : AI_PEN_DIM,
+    bookThread: mayOpenBookThread(call, hasParent)
+      ? null
+      : call?.aside
+        ? BOOK_THREAD_BEHIND
+        : BOOK_THREAD_OPEN,
+  };
 }

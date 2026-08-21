@@ -6,13 +6,10 @@
 
 ## 为什么现在不做
 
-核心场景是论文,以 PDF 为主。EPUB 的位置体系是 CFI 字符串,和 PDF 的页码体系全面分叉:阅读状态、痕迹列表显示、跳转都要分两套处理。现阶段做会拖慢基本盘。
+核心场景是论文,以 PDF 为主,EPUB 不影响当前里程碑。方案本身已经想清楚——引擎、位置体系、迁移代价、分阶段工期,见 [39](../39-epub支持调研.md)。
 
 ## 将来做时已知的事实
 
-> 下面几条记于 zotero/reader 时代，引擎已换成 EmbedPDF，只做 PDF——"引擎原生支持 epub"这个前提没了，vendor/reader 和 docs/04 的接法也都不适用。EPUB 要另找渲染方案，这几条只当历史读。
+见 [39](../39-epub支持调研.md):引擎选 foliate-js;页码不用废掉(EPUB 3 自带 `page-list`,没有的按固定字符数切),只新增一层精确位置(`Locator`),`Fulltext.pages[]` 等派生数据原样保留;分五个阶段,量级从 1-2 天到 1-2 周不等;第七节列了只有真机才能验的未知数。
 
-- 引擎原生支持 `type: 'epub'`(docs/04 对接备忘)。
-- 跨 realm ArrayBuffer 有已知修法:`vendor/reader/src/index.web.js` 里 `window.ArrayBuffer = window.top.ArrayBuffer` 那段,以及 pitfall 10。
-- annotations 的 EPUB 更新分支未实测(docs/04 有注,合并逻辑是顶层 spread,同源但没跑过)。
-- EPUB 样式内联在 view.js 里,不在 view.css(docs/04 产物清单有注)。
+> 下面四条记于 zotero/reader 时代,已被 39 取代("引擎原生支持 epub"这个前提随 EmbedPDF 换引擎没了,vendor/reader 和 docs/04 的接法也不适用),只当历史读:引擎原生支持 `type: 'epub'`(docs/04);跨 realm ArrayBuffer 的修法(`vendor/reader/src/index.web.js`,pitfall 10);annotations 的 EPUB 更新分支未实测(docs/04);EPUB 样式内联在 view.js 不在 view.css(docs/04)。

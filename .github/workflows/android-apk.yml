@@ -4,7 +4,7 @@
 # the smoke build: VITE_SMOKE is unset, so main.tsx mounts the app.
 #
 # Reusable: release.yml calls it with the tag name so the same build also lands
-# on the draft GitHub release next to the desktop bundles. Called with no tag
+# on the GitHub release next to the desktop bundles. Called with no tag
 # (or dispatched by hand) the APK is a workflow artifact only.
 #
 # Signing: the release APK is built UNSIGNED, then signed out-of-band with
@@ -68,9 +68,9 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -88,7 +88,7 @@ jobs:
           workspaces: src-tauri
 
       # Put the SDK command-line tools (sdkmanager) on PATH.
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
 
       # Add the pinned NDK and build-tools (apksigner/zipalign live in build-tools).
       - name: Install Android NDK and build-tools
@@ -211,13 +211,13 @@ jobs:
           echo "APK_NAME=$OUT" >> "$GITHUB_ENV"
 
       - name: Upload the signed APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: android-apk
           path: ${{ env.APK_NAME }}
           if-no-files-found: error
 
-      # Only when release.yml called us with a tag. The release is the draft
+      # Only when release.yml called us with a tag. The release is the one
       # tauri-action created for the desktop bundles, so this job must run after
       # it; --clobber keeps a re-run idempotent.
       - name: Attach the APK to the release

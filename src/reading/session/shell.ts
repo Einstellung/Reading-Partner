@@ -49,13 +49,14 @@ export interface ReaderShell {
   releaseBook(): void;
 
   // The two panels attached to the open book (docs/09, docs/14).
-  resetPrep(classroom: boolean): void;
-  resumePrep(bookId: string, name: string, ft: Fulltext, classroom: boolean): Promise<void>;
-  resetNotes(): void;
-  resumeNotes(bookId: string, name: string, ft: Fulltext): Promise<void>;
-  // The last chapter cannot be reached by a "next chapter" highlight, so the
-  // frontier is evaluated once on the way out (docs/14).
-  finalPassNotes(): void;
+  resetPrep(): void;
+  resumePrep(bookId: string, name: string, ft: Fulltext): Promise<void>;
+  resetChapterSpine(): void;
+  resumeChapterSpine(bookId: string, name: string, ft: Fulltext): Promise<void>;
+  // Closing is the last moment this session's marks are all in, and the mark
+  // trigger is debounced, so preparation gets one more chance on the way out
+  // (reading/session/use-prep-trigger.ts).
+  finalPassPrep(): void;
 
   // The background extractions, handed over as promises so a turn being
   // assembled can await whichever is still running.

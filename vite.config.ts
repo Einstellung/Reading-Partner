@@ -4,9 +4,10 @@ import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath } from "node:url";
 import { simBridge } from "./scripts/sim-bridge";
 
-// The PDFium wasm is a pthread build: it needs SharedArrayBuffer, which the
-// browser grants only to a cross-origin-isolated page (pitfall 18). Production
-// gets the same headers from tauri.conf.json (app.security.headers).
+// Cross-origin isolation, kept but not for the reason it was added. The wasm was
+// believed to be a pthread build needing SharedArrayBuffer; it is not, and the
+// reader runs with crossOriginIsolated false in the packaged app (pitfall 18).
+// Production gets the same headers from tauri.conf.json (app.security.headers).
 const isolationHeaders = {
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Embedder-Policy": "require-corp",
@@ -57,6 +58,7 @@ export default defineConfig({
     },
   },
   preview: { port: 1421, strictPort: true, headers: isolationHeaders },
-  // The engine test harness (embedpdf-spike.html) is dev-only: Vite serves it
-  // on demand, but it is not built into the production bundle.
+  // The test harnesses (embedpdf-spike.html for the engine, chat-aside-spike.html
+  // for the pens on a reply) are dev-only: Vite serves them on demand, but only
+  // index.html is an entry, so neither is built into the production bundle.
 });

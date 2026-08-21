@@ -50,7 +50,7 @@ export function HoldToTalk({
 	// preferred language, which is only right when the two agree — the reader
 	// this was built for has an en-US phone and speaks Chinese to the AI, and
 	// docs/33 measured that the wrong model does not degrade, it invents
-	// (docs/pitfall/143).
+	// (docs/pitfall/164).
 	locale?: DictationLocale;
 	disabled?: boolean;
 }) {

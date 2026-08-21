@@ -4,7 +4,7 @@
 //
 // Two things the iOS webview does that the spec does not lead you to expect:
 // the request is refused with "Permission was denied" until something on the
-// page has been touched (docs/pitfall/141), so it has to be asked for after a
+// page has been touched (docs/pitfall/162), so it has to be asked for after a
 // real tap rather than at boot; and the lock is dropped when the page is
 // backgrounded and is not restored on the way back, hence the visibilitychange
 // re-request.

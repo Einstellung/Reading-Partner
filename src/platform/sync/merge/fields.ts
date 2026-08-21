@@ -1,5 +1,6 @@
-// The fields strategy: settings.json, prep-<hash>/state.json,
-// notes-<bookId>/state.json. One three-way decision per key, recursing into
+// The fields strategy: settings.json and both of a document's prep states,
+// prep-<hash>/state.json and prep-<hash>/chapters/state.json. One three-way
+// decision per key, recursing into
 // nested objects. An array value is a scalar — the elements of these arrays
 // (a chapter list, a paper list) are positional, and merging them elementwise
 // would produce a list neither device ever had.

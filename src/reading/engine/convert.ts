@@ -3,7 +3,7 @@
 // access — every transform is a function of the annotation plus the page height,
 // so it is unit-testable under `bun test` the same way src/fulltext is.
 //
-// Coordinate systems (spike item 3, verified — see docs/07 and the harness):
+// Coordinate systems (spike item 3, verified — see docs/08 and the harness):
 //   - zotero  position.rects: [left, yBottom, right, yTop] in PDF points,
 //     bottom-left origin, yBottom < yTop.
 //   - EmbedPDF Rect: { origin:{x,y}, size:{w,h} } in page space, TOP-LEFT origin

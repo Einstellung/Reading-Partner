@@ -36,7 +36,11 @@ export interface QuoteRequest {
 
 export interface EmbedViewState {
   pageIndex: number;
-  zoom: number;
+  // The scale. Every state the reader emits carries it. Absent only on the way
+  // in, in the state a book that has never been opened is mounted with: there is
+  // no scale to restore and the layout's own fit is what it opens at
+  // (layout-modes.openingZoom).
+  zoom?: number;
   // Top-left of the visible region within the current page, in unscaled page
   // coordinates (top-left origin) — enables exact in-page position restore.
   pageX?: number;

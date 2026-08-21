@@ -30,7 +30,7 @@ export function clip(text: string, max: number): string {
 // The whole-book outline from the reader's notes (docs/14), as a labeled block
 // for the opening context, or "" when there is no overview. Truncated to ~max
 // chars at a paragraph boundary so a long framework can't crowd out the prompt.
-export function notesOverviewSection(overview: string | null | undefined, max = 1500): string {
+export function spineOverviewSection(overview: string | null | undefined, max = 1500): string {
   const body = (overview ?? "").trim();
   if (!body) return "";
   let text = body;

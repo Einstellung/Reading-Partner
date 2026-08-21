@@ -33,7 +33,7 @@ import { buildFigureCatalog } from "../figures/catalog";
 import { buildFigureTools } from "../figures/tools";
 import { renderFigure } from "../figures/render";
 import type { Figure } from "../figures/types";
-import { readChapterNote } from "../notes/store";
+import { readChapterSpine } from "../prep/chapters/store";
 import {
   buildRehearsalSystemPrompt,
   buildRehearsalTools,
@@ -246,7 +246,7 @@ export async function buildTalkTurn(input: TalkTurnInput): Promise<TalkTurn> {
   const noteFor = async (index: number): Promise<string | null> => {
     const slot = slotAt(slots, index);
     if (!slot) return null;
-    return readChapterNote(slot.bookId, slot.chapter).catch(() => null);
+    return readChapterSpine(slot.bookId, slot.chapter).catch(() => null);
   };
   let notes: RehearsalNote[] = [];
   const upcoming = nextChapter(chapters, plan) ?? chapters[0]?.index;

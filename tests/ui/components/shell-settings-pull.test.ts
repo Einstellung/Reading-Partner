@@ -237,14 +237,14 @@ test("a pulled field survives this shell's next save", async () => {
   // The Settings panel changing one field: it hands back the whole object it was
   // given, with that one field replaced.
   await act(async () => {
-    shell.current().applySettings({ ...shell.current().settings, autoNotes: false });
+    shell.current().applySettings({ ...shell.current().settings, sttModel: "sense" });
     await settle();
   });
 
   // The real 500ms debounce, waited out rather than flushed: the write under
   // test is the one the app makes on its own.
   await act(async () => {
-    await waitFor(() => onDisk().autoNotes === false);
+    await waitFor(() => onDisk().sttModel === "sense");
   });
   expect(onDisk().aiLanguage).toBe("ja");
 });

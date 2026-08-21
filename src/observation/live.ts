@@ -39,6 +39,8 @@ import { FileObservationAdapter, type ObservationAdapter } from "./record/adapte
 import {
   SWEEP_INTERVAL_MS,
   MIN_NEW_MARKS,
+  distillUnits,
+  pagelessMarkIds,
   threadArrears,
   toDistillAnnotations,
   countNewMarks,
@@ -61,6 +63,7 @@ import {
   runMarksDistillPass,
   type DistillAnnotation,
   type DistillMessage,
+  type DistillUnitPart,
 } from "./distill/distill";
 import { runRehearsalDistillPass } from "./distill/rehearsal";
 import {
@@ -158,6 +161,10 @@ export interface DistillThreadOptions {
   page: number | null;
   markedText: string;
   messages: DistillMessage[];
+  // The threads `messages` was merged from, when it was merged from more than
+  // one (observation/distill/arrears.ts). Each carries a cursor over its own
+  // messages and the pass moves all of them. Absent is the single-thread pass.
+  parts?: readonly DistillUnitPart[];
   // The book's annotations, so distillation can fold in silent marks made since
   // the last pass (docs/02 part 2). Absent/empty is fine.
   annotations?: DistillAnnotation[];
@@ -218,6 +225,7 @@ export function distillThread(
           page: opts.page,
           markedText: opts.markedText,
           messages,
+          ...(opts.parts ? { parts: opts.parts } : {}),
           annotations: opts.annotations,
           minNewMessages,
         },
@@ -377,22 +385,33 @@ async function collectArrears(
       seen.add(bookId);
       const marks = toDistillAnnotations(await peekAnnotations(bookId));
       const byId = new Map(marks.map((m) => [m.id, m]));
+      // By unit, not by thread: a chat-span aside's transcript is part of its
+      // parent's (distillUnits), so it is neither offered as a pass of its own
+      // nor left out of what the parent owes.
+      const stored = await peekThreads(bookId);
+      const busy = new Set(stored.filter((t) => threadBusy(t.id)).map((t) => t.id));
       const threads: ThreadArrears[] = [];
-      for (const thread of await peekThreads(bookId)) {
-        if (threadBusy(thread.id)) continue;
-        const anchor = byId.get(thread.annotationId);
+      for (const unit of distillUnits(stored, pagelessMarkIds(marks))) {
+        // A thread with a reply still being written is left out, and so is the
+        // unit it is part of: a pass over half a sentence is a pass over the
+        // wrong transcript, and the next sweep picks it up. Only threads whose
+        // messages are actually in this transcript — a mark-anchored aside is a
+        // unit of its own and holds up nothing.
+        if (unit.parts.some((p) => busy.has(p.threadId))) continue;
+        const anchor = byId.get(unit.annotationId);
         threads.push(
           threadArrears(
             {
-              threadId: thread.id,
-              annotationId: thread.annotationId,
+              threadId: unit.threadId,
+              annotationId: unit.annotationId,
               // The book-level thread has no mark and so no page of its own; the
               // sweep has no current page to stand in for it either.
               page: anchor?.page ?? null,
               markedText: anchor?.text ?? "",
-              messages: thread.messages.map(({ role, text, ts }) => ({ role, text, ts })),
+              messages: unit.messages,
+              parts: unit.parts,
             },
-            messageCursor(meta, thread.id),
+            (threadId) => messageCursor(meta, threadId),
           ),
         );
       }
@@ -428,6 +447,7 @@ function runDistillJob(job: DistillJob, trigger: DistillTrigger): Promise<void> 
       page: job.thread.page,
       markedText: job.thread.markedText,
       messages: job.thread.messages,
+      ...(job.thread.parts ? { parts: job.thread.parts } : {}),
       annotations: job.book.marks,
       trigger,
     });

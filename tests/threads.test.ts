@@ -5,12 +5,16 @@
 import { expect, test } from "bun:test";
 import {
   appendMessage,
+  createAsideThread,
   createBookThread,
   createThread,
   deleteThread,
+  deleteThreadTree,
   getBookThread,
   getThread,
+  getThreadAsides,
   patchThreadMessage,
+  threadKind,
   type PersistedPart,
   type Thread,
   type ThreadMessage,
@@ -93,6 +97,65 @@ test("deleteThread is a no-op (returns false) on an unknown thread or unloaded f
   expect(deleteThread("/books/never-loaded.pdf", "th-1")).toBe(false);
   // The real thread survives the misses.
   expect(getThread(path, "th-1")).toBeDefined();
+});
+
+// --- the three kinds (docs/03) ----------------------------------------------
+
+// `annotationId === ""` and `book === true` were one binary between them, and it
+// cannot say which of three a record is. Every reader of it asks threadKind now,
+// so what matters is that nothing an aside can carry answers "book".
+test("threadKind names the door a conversation came in by", () => {
+  expect(threadKind({ annotationId: "", book: true })).toBe("book");
+  // The pre-`book` shape: the empty anchor was the whole marker.
+  expect(threadKind({ annotationId: "" })).toBe("book");
+  expect(threadKind({ annotationId: "ann-1" })).toBe("mark");
+
+  expect(threadKind({ annotationId: "", parentThreadId: "bt" })).toBe("aside");
+  expect(threadKind({ annotationId: "ann-1", parentThreadId: "bt" })).toBe("aside");
+  // The parent link outranks a marker a past version could have written.
+  expect(threadKind({ annotationId: "", book: true, parentThreadId: "bt" })).toBe("aside");
+  // And so does the span, if the link is what went missing.
+  expect(threadKind({ annotationId: "", asideAnchor: { messageTs: 1, text: "x" } })).toBe("aside");
+});
+
+test("createAsideThread links to its parent and is never the book thread", () => {
+  const path = "/books/aside-a.pdf";
+  const lesson = createBookThread(path, "bt-a");
+  const aside = createAsideThread(path, "as-a", {
+    parentThreadId: "bt-a",
+    asideAnchor: { messageTs: 4, text: "the sentence they pulled out" },
+  });
+
+  expect(aside.parentThreadId).toBe("bt-a");
+  expect(aside.book).toBeUndefined();
+  expect(aside.annotationId).toBe("");
+  expect(threadKind(aside)).toBe("aside");
+  // The top-bar button still finds the lesson.
+  expect(getBookThread(path)).toBe(lesson);
+  expect(getThreadAsides(path, "bt-a").map((t) => t.id)).toEqual(["as-a"]);
+});
+
+test("deleteThreadTree takes a conversation's asides with it and names them all", () => {
+  const path = "/books/aside-b.pdf";
+  createBookThread(path, "bt-b");
+  createAsideThread(path, "as-1", { parentThreadId: "bt-b" });
+  createAsideThread(path, "as-2", { parentThreadId: "bt-b", annotationId: "ann-drawn" });
+  createThread(path, "ann-other", "th-other");
+
+  expect(deleteThreadTree(path, "bt-b").sort()).toEqual(["as-1", "as-2", "bt-b"]);
+  expect(getThread(path, "as-1")).toBeUndefined();
+  expect(getThread(path, "as-2")).toBeUndefined();
+  expect(getThread(path, "th-other")).toBeDefined();
+});
+
+test("deleting an aside leaves the conversation it hangs off alone", () => {
+  const path = "/books/aside-c.pdf";
+  const lesson = createBookThread(path, "bt-c");
+  createAsideThread(path, "as-c", { parentThreadId: "bt-c" });
+
+  expect(deleteThreadTree(path, "as-c")).toEqual(["as-c"]);
+  expect(getThread(path, "bt-c")).toBe(lesson);
+  expect(getThreadAsides(path, "bt-c")).toEqual([]);
 });
 
 // --- parts format (new) vs the plain { role, text, ts } shape (old) ---------

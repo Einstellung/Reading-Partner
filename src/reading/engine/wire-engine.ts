@@ -30,7 +30,13 @@ import {
 } from "./convert";
 import { selectionChanged } from "./annotation-selection";
 import { pageCenterAlign } from "./gesture/paged-gesture";
-import { LAYOUT_SETTINGS, readingPosition, type VisiblePage, type ZoomLock } from "./layout-modes";
+import {
+  LAYOUT_SETTINGS,
+  openingZoom,
+  readingPosition,
+  type VisiblePage,
+  type ZoomLock,
+} from "./layout-modes";
 import {
   centeredScrollX,
   geometrySettled,
@@ -119,7 +125,7 @@ export async function wireEngine(
         documentId?: string;
         name: string;
         autoActivate?: boolean;
-      }): { toPromise(): Promise<unknown> };
+      }): { toPromise(): Promise<{ documentId: string; task: { toPromise(): Promise<unknown> } }> };
       onDocumentError(handler: (ev: { documentId: string; message: string }) => void): () => void;
     };
   } | null;
@@ -141,7 +147,18 @@ export async function wireEngine(
   const buf = propsRef.current.buffer;
   const copy = buf.slice(0);
   perfMark("docOpenStart");
-  await dm?.openDocumentBuffer({ buffer: copy, documentId: DOC_ID, name: "document.pdf", autoActivate: true }).toPromise();
+  // Two tasks, not one. The doc-manager's own task resolves the moment the load
+  // is issued and carries the engine's task inside it; the document only reaches
+  // its store when that inner task settles. With PDFium on the main thread the
+  // inner one finished in the same microtask, so awaiting the outer task alone
+  // was indistinguishable from awaiting both — with the engine in a worker it is
+  // a message round trip later, and the getDocument below read an empty store.
+  // A failure is left to onDocumentError above, which carries the engine's own
+  // message; the !doc() check below is what acts on it either way.
+  const issued = await dm
+    ?.openDocumentBuffer({ buffer: copy, documentId: DOC_ID, name: "document.pdf", autoActivate: true })
+    .toPromise();
+  await issued?.task.toPromise().catch(() => {});
   perfMark("docOpenEnd");
 
   const doc = () => dm?.getDocument(DOC_ID) ?? null;
@@ -617,9 +634,25 @@ export async function wireEngine(
 
   // Map annotation id -> pageIndex, so host-side ops can address the right page.
   const pageOf = new Map<string, number>();
-  // When we mutate the engine ourselves (import / host edit), don't echo the
-  // resulting events back to the host as if the user did it.
-  let suppress = false;
+  // Writes this adapter made itself — an import, a host edit, a host delete —
+  // waiting for the engine to confirm them. The confirmation arrives as an
+  // ordinary annotation event, and the host was already told about these writes
+  // by the call that made them, so each confirmation is swallowed once.
+  //
+  // Ids and not a flag raised around the call, because the confirmation is
+  // asynchronous: with PDFium in a worker the flag is long down by the time the
+  // event arrives, and every one of these writes was echoed back to the host —
+  // an open re-saved every annotation it had just imported. Counted rather than
+  // a set so the same id written twice in one batch is swallowed twice.
+  const selfWrites = new Map<string, number>();
+  const expectEcho = (id: string) => selfWrites.set(id, (selfWrites.get(id) ?? 0) + 1);
+  const takeEcho = (id: string): boolean => {
+    const left = selfWrites.get(id);
+    if (!left) return false;
+    if (left === 1) selfWrites.delete(id);
+    else selfWrites.set(id, left - 1);
+    return true;
+  };
   // Latest selected text, captured as the selection changes, so a highlight
   // create can attach the underlying text (EmbedPDF highlights store no text —
   // spike item 6).
@@ -651,27 +684,27 @@ export async function wireEngine(
       })
       .filter((x): x is { annotation: PdfAnnotationObject } => x !== null);
     if (items.length === 0) return;
-    suppress = true;
-    try {
-      annScope.importAnnotations(items);
-    } finally {
-      suppress = false;
-    }
+    for (const item of items) expectEcho(item.annotation.id);
+    annScope.importAnnotations(items);
   };
 
   // Engine -> host: create / update / delete.
   annotation.onAnnotationEvent((ev) => {
-    if (suppress) return;
+    if (ev.type !== "create" && ev.type !== "update" && ev.type !== "delete") return;
+    // Every write fires twice: an optimistic event, then the committed one once
+    // the engine has it. Only the committed pass reaches the host, so it
+    // persists once, and only the committed pass consumes a self-write — the
+    // optimistic event is not the confirmation being waited for.
+    if (ev.committed === false) return;
     if (ev.type === "delete") {
+      if (takeEcho(ev.annotation.id)) return;
       pageOf.delete(ev.annotation.id);
       propsRef.current.onDeleteAnnotations?.([ev.annotation.id]);
       return;
     }
     if (ev.type === "create" || ev.type === "update") {
-      // Each edit fires twice: an optimistic event then the committed one. Emit
-      // only the committed pass so the host persists once.
-      if (ev.committed === false) return;
       const obj = ev.annotation as PdfAnnotationObject;
+      if (takeEcho(obj.id)) return;
       pageOf.set(obj.id, ev.pageIndex);
       const zot = embedToZotero(obj, pageHeight(ev.pageIndex), propsRef.current.authorName);
       if (!zot) return;
@@ -768,6 +801,12 @@ export async function wireEngine(
     refreshViewportMetrics();
     importAll(propsRef.current.annotations ?? []);
     const iv = propsRef.current.initialViewState;
+    // The scale, before either branch places a page: whatever it ends up being
+    // is what the placement below is measured against. Null is the answer for a
+    // book with nothing saved and for paged either way, and it means the plugin
+    // keeps the fit it was registered with (layout-modes.openingZoom).
+    const restoreZoom = iv ? openingZoom(layout, iv.zoom) : null;
+    if (restoreZoom !== null) zoomScope.requestZoom(restoreZoom);
     if (iv && layout === "paged") {
       // Of a saved state, paged mode restores the page and nothing else. The
       // scale and the in-page offset are one window's presentation of it — the
@@ -792,15 +831,20 @@ export async function wireEngine(
       const target = Math.min(Math.max(iv.pageIndex + 1, 1), scrollScope.getTotalPages() || 1);
       settleLayout("paged", target, "instant", true);
     } else if (iv) {
-      zoomScope.requestZoom(iv.zoom);
       // Restore the exact in-page position when the saved state carries one
       // (unscaled page coordinates; the plugin scales them at scroll time).
       // scrollToPage adds the viewport gap on top of the target point, while the
       // captured pageX/pageY (visibility metrics) measure the actual visible
       // offset — subtract the gap (unscaled) so the round trip is exact.
+      //
+      // The scale that converts the gap is the one in force, read back after the
+      // request above rather than taken from the saved state: with nothing to
+      // restore there is no saved number to divide by, and the fit the plugin
+      // resolved is the scale the offset will actually be applied at.
       let pageCoordinates: { x: number; y: number } | undefined;
       if (typeof iv.pageY === "number") {
-        const gap = cap<ViewportCapability>(registry, "viewport").getViewportGap() / iv.zoom;
+        const scale = zoomScope.getState().currentZoomLevel || 1;
+        const gap = cap<ViewportCapability>(registry, "viewport").getViewportGap() / scale;
         pageCoordinates = {
           x: Math.max(0, (iv.pageX ?? 0) - gap),
           y: Math.max(0, iv.pageY - gap),
@@ -946,12 +990,8 @@ export async function wireEngine(
         const cur = annScope.getAnnotationById(id)?.object.custom ?? {};
         p.custom = { ...cur, starred: patch.starred };
       }
-      suppress = true;
-      try {
-        annScope.updateAnnotation(pageIndex, id, p);
-      } finally {
-        suppress = false;
-      }
+      expectEcho(id);
+      annScope.updateAnnotation(pageIndex, id, p);
       // Echo the host-side edit back so the trace list / persistence update.
       const ta = annScope.getAnnotationById(id);
       if (ta) {
@@ -960,36 +1000,28 @@ export async function wireEngine(
       }
     },
     upsertAnnotations(anns) {
-      suppress = true;
-      try {
-        for (const a of anns) {
-          const h = pageHeight(a.position?.pageIndex ?? 0);
-          const obj = zoteroToEmbed(a, h);
-          if (!obj) continue;
-          if (pageOf.has(obj.id)) {
-            const patch: Record<string, unknown> = { custom: obj.custom };
-            const c = (obj as { color?: string }).color;
-            if (c !== undefined) Object.assign(patch, markupColorPatch(c));
-            if (typeof obj.contents === "string") patch.contents = obj.contents;
-            annScope.updateAnnotation(pageOf.get(obj.id)!, obj.id, patch);
-          } else {
-            pageOf.set(obj.id, obj.pageIndex);
-            annScope.importAnnotations([{ annotation: obj }]);
-          }
+      for (const a of anns) {
+        const h = pageHeight(a.position?.pageIndex ?? 0);
+        const obj = zoteroToEmbed(a, h);
+        if (!obj) continue;
+        expectEcho(obj.id);
+        if (pageOf.has(obj.id)) {
+          const patch: Record<string, unknown> = { custom: obj.custom };
+          const c = (obj as { color?: string }).color;
+          if (c !== undefined) Object.assign(patch, markupColorPatch(c));
+          if (typeof obj.contents === "string") patch.contents = obj.contents;
+          annScope.updateAnnotation(pageOf.get(obj.id)!, obj.id, patch);
+        } else {
+          pageOf.set(obj.id, obj.pageIndex);
+          annScope.importAnnotations([{ annotation: obj }]);
         }
-      } finally {
-        suppress = false;
       }
     },
     deleteAnnotation(id) {
       const pageIndex = pageOf.get(id);
       if (pageIndex === undefined) return;
-      suppress = true;
-      try {
-        annScope.deleteAnnotation(pageIndex, id);
-      } finally {
-        suppress = false;
-      }
+      expectEcho(id);
+      annScope.deleteAnnotation(pageIndex, id);
       pageOf.delete(id);
       propsRef.current.onDeleteAnnotations?.([id]);
     },

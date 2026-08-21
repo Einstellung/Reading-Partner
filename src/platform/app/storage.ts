@@ -26,23 +26,6 @@ interface Store {
   states: Record<string, ViewState>;
 }
 
-// Base used only when persisting the sticky mode flags on a book with no saved
-// reading position yet; the reader overwrites the position fields as soon as it
-// emits one.
-const DEFAULT_VIEW_STATE: ViewState = {
-  pageIndex: 0,
-  scale: "auto",
-  scrollMode: 0,
-};
-
-// Pure: merge the sticky mode flags into a view state (or a default base when
-// the book has none yet). Kept pure so the persistence logic is testable. The
-// parameter is structural rather than a domain type because platform/app imports
-// nothing.
-export function withModes(state: ViewState | null, modes: { classroom: boolean }): ViewState {
-  return { ...(state ?? DEFAULT_VIEW_STATE), classroom: modes.classroom };
-}
-
 // One file holds every book's position, and every save rewrites all of it. So a
 // read that failed must not be answered with an empty map: the next scroll would
 // write it back and reading-state.json would hold the book that happens to be

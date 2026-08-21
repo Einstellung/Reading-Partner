@@ -1,6 +1,6 @@
 # iframe 跨 realm 的 Uint8Array instanceof
 
-> zotero 引擎时代的坑，app 里已经没有 iframe。跨 realm 构造器本身是通用浏览器事实，north-star/webview-pipe 那类跨上下文传字节的活会再撞上。
+> zotero 引擎时代的坑。app 里的 iframe 回来了（deck 的 srcdoc，见坑 152），但宿主桥走 postMessage、不跨 realm 传字节，这条不会在那撞上；跨 realm 构造器本身仍是通用浏览器事实，真把二进制/对象直接塞过 iframe 边界的代码要留意。
 
 现象：父窗口把文件字节直接传给 iframe 里的 createView，引擎内部 instanceof 检查失败，加载不了。
 

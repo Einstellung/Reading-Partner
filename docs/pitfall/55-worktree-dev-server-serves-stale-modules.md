@@ -4,4 +4,6 @@
 
 原因：`vite.config.ts` 的 `server.watch.ignored` 里有 `**/.claude/**`——那是为了 agent 改文件不要热重载用户主 checkout 的 dev 会话。worktree 自己的路径正好在 `.claude/` 下面，于是这台 dev server 看不见**自己项目**的任何改动：模块图不失效，刷新页面拿到的是 304 和缓存过的转换结果。
 
-解法：worktree 里每次改完源码要重启 dev server（`--force` 顺带清依赖预构建缓存），别指望刷新页面。要连着量多轮，就把「重启 → 导航 → 装探针」写成一个脚本一次跑完。
+解法：worktree 里每次改完源码要重启 dev server，别指望刷新页面。要连着量多轮，就把「重启 → 导航 → 装探针」写成一个脚本一次跑完。
+
+别用 `--force`：worktree 的 `node_modules` 是主 checkout 的软链，它清的是用户那台 dev server 的依赖预构建缓存。要连 watch 一起治，用私有 config 覆盖 `watch.ignored` 并给一个私有 `cacheDir`，见坑 142。

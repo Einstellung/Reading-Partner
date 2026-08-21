@@ -3,9 +3,9 @@
 // render the first page, close it again.
 //
 // It lives beside the engine so nothing outside src/reading/engine/ has to
-// import @embedpdf — the quirks this project has paid for (a direct engine that
-// can hang, pitfall 21; a render quality option read under another name,
-// pitfall 102) are then all recorded in one directory.
+// import @embedpdf — the quirks this project has paid for (an engine that can
+// hang instead of failing, pitfall 21; a render quality option read under
+// another name, pitfall 102) are then all recorded in one directory.
 //
 // What each outcome means is the caller's business: this reports it as a
 // discriminated union and writes nothing down.
@@ -13,8 +13,8 @@
 import type { PdfDocumentObject, PdfEngine, PdfRenderPageOptions } from "@embedpdf/models";
 import { getPdfiumEngine } from "./engine-singleton";
 
-// The direct engine has hung on a document before (pitfall 21); a hang here
-// would leave whoever asked waiting forever.
+// PDFium has hung on a document before rather than failing (pitfall 21); a hang
+// here would leave whoever asked waiting forever.
 const OPEN_TIMEOUT_MS = 20_000;
 const RENDER_TIMEOUT_MS = 20_000;
 

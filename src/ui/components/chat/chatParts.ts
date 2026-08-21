@@ -13,6 +13,7 @@
 
 import type { FC } from "react";
 import type { InfoCard } from "../../../info/briefing/cards";
+import type { AsideCard } from "../../../reading/aside";
 import type { ReadingCard } from "../../../reading/rehearsal/cards";
 import type {
   PersistedCardPayload,
@@ -23,12 +24,14 @@ import type { ThreadMessage } from "./types";
 import type { ToolStatus } from "../../../ai/tool-status";
 
 // The domain payload a card renders. Payload types stay in the domain layer
-// (info/briefing/cards.ts, reading/rehearsal/cards.ts); this protocol only
-// references the union, so the dependency direction stays components -> domain
-// and never the reverse. Each domain contributes its own union member, and the
+// (info/briefing/cards.ts, reading/rehearsal/cards.ts, reading/aside.ts); this
+// protocol only references the union, so the dependency direction stays
+// components -> domain and never the reverse. Each unit contributes its own
+// member — a unit, not a whole domain: reading/aside contributes separately from
+// reading/rehearsal so neither has to import the other to be in the union. The
 // registry (ui/components/cardRegistry.ts, one level above chat/) is where the
 // components are gathered.
-export type CardPayload = InfoCard | ReadingCard;
+export type CardPayload = InfoCard | ReadingCard | AsideCard;
 export type CardKind = CardPayload["kind"];
 
 // The component table the render layer looks a card up in, by kind. The mapped
@@ -101,6 +104,26 @@ export function messageToParts(m: ThreadMessage): ChatPart[] {
   if (m.card) parts.push({ type: "card", id: String(m.ts), card: m.card });
   if (m.text) parts.push({ type: "text", text: m.text });
   return parts;
+}
+
+// What a one-line glance at a conversation shows (the corner chat card, docs/03):
+// the newest row that has prose in it.
+//
+// A row carrying a card part renders as the card and nothing else
+// (MessageBubble short-circuits it), so that row's `text` is not something the
+// reader has ever been shown. On an aside's receipt it is the sentence written
+// for the model to read on the lesson's next turn, and the glance was printing
+// that to the reader verbatim, as the newest row, immediately after every
+// return. Card rows are skipped and the prose above them answers instead — for
+// any kind of card, including one this version has no component for.
+export function chatGlance(messages: readonly ThreadMessage[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (messageToParts(m).some((p) => p.type === "card")) continue;
+    const text = m.text.trim();
+    if (text) return text;
+  }
+  return null;
 }
 
 // --- card-part locators / updaters (the patchPart channel) -----------------
@@ -207,7 +230,12 @@ export function isPersistableCardKind(kind: CardKind): boolean {
     kind === "probe-confirm" ||
     kind === "briefing-ready" ||
     kind === "profile-update" ||
-    kind === "rehearsal-decision"
+    kind === "rehearsal-decision" ||
+    // An aside's receipt is the only door back into a side conversation pulled
+    // out of a reply (reading/aside.ts): it carries no mark and no page, so the
+    // chip in the lesson's transcript is where it is reached from. Losing the
+    // chip on reopen would lose the conversation.
+    kind === "aside"
   );
 }
 

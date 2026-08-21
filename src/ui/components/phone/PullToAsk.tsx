@@ -39,7 +39,7 @@ export function PullToAsk({
         aria-hidden="true"
         className="group pointer-events-none absolute inset-x-0 top-0 flex h-0 items-end justify-center overflow-hidden bg-[#f4f2fc]"
       >
-        <span className="mb-3 flex items-center gap-1.5 whitespace-nowrap rounded-full border border-[#c9c2e8] bg-white px-3 py-1.5 text-[13px] text-[#4a3a9e] group-data-[armed=true]:border-primary group-data-[armed=true]:bg-primary group-data-[armed=true]:text-white">
+        <span className="mb-3 flex items-center gap-1.5 whitespace-nowrap rounded-full border border-[#c9c2e8] bg-card px-3 py-1.5 text-[13px] text-[#4a3a9e] group-data-[armed=true]:border-primary group-data-[armed=true]:bg-primary group-data-[armed=true]:text-white">
           <IconSparkle size={14} />
           <span className="group-data-[armed=true]:hidden">{label}</span>
           <span className="hidden group-data-[armed=true]:inline">Release to ask</span>

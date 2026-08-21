@@ -1,5 +1,5 @@
-// The saved-article chat tools (docs/21, the AI path the store was landed for):
-// the reader keeps articles on the info side, and in classroom mode the model can
+// The saved-article chat tools (docs/21, the AI path the store was landed for): the
+// reader keeps articles on the info side, and from the open book's chat the model can
 // list what is there and put the one they name into the current book's prep list,
 // then read it with the existing read_paper.
 //
@@ -24,10 +24,10 @@
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../ai/agent";
 import { FULLTEXT_VERSION, type Fulltext } from "../fulltext/types";
-import type { FetchOutcome } from "./prep/pipeline";
-import { uniqueSlug } from "./prep/plan";
-import type { IngestResult } from "./prep/source-tool";
-import type { PrepPaper } from "./prep/types";
+import type { FetchOutcome } from "./prep/papers/pipeline";
+import { uniqueSlug } from "./prep/papers/plan";
+import type { IngestResult } from "./prep/papers/source-tool";
+import type { PrepPaper } from "./prep/papers/types";
 import type { SavedArticle } from "./saved-articles";
 
 // Rows the list answers with at most. A kept list is a queue, meant to be

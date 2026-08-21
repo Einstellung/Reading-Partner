@@ -16,17 +16,23 @@ test("core user-data files are in range", () => {
     "memory-topic1/m-ab12cd34.md",
     "memory-topic1/index.md",
     "memory-topic1/meta.json",
+    // A document's prep material (docs/09). Whichever kind it turns out to need
+    // sits under the one prep-<hash>/ directory: paper notes at the top, chapter
+    // spines a level down.
     "prep-deadbeef/state.json",
     "prep-deadbeef/attention-is-all-you-need.md",
-    "notes-deadbeef/state.json",
-    "notes-deadbeef/overview.md",
-    "notes-deadbeef/chapter-01.md",
+    "prep-deadbeef/chapters/state.json",
+    "prep-deadbeef/chapters/overview.md",
+    "prep-deadbeef/chapters/chapter-01.md",
     // A talk (docs/31): its materials and the outline its rehearsal settled.
     // Nothing rebuilds it from the books, so it travels like marks and threads
     // rather than like the caches below — and so does its conversation, which is
     // a thread file keyed by the talk.
     "talk-1754400000000.json",
     "threads-talk-1754400000000.json",
+    // Every time that talk was given against its deck (docs/31): the pages and
+    // what was said to them. A trace of the reader, so it travels.
+    "runthrough-1754400000000.json",
     // The cross-scenario user profile and the info feedback log are the user's
     // data (docs/16); info-profile.md is the profile's old name, kept in range
     // through the transition.
@@ -64,18 +70,25 @@ test("caches, logs, sync internals, and book blobs are out of range", () => {
     // under it would come back as a second copy of the file it mirrors.
     "sync-base/library.json",
     "sync-base/memory-topic1/m-ab12cd34.md",
-    "sync-base/notes-deadbeef/state.json",
+    "sync-base/prep-deadbeef/chapters/state.json",
     "credentials.json",
     "prep-deadbeef/pdf/some-paper.pdf",
-    "notes-deadbeef/cache/raster.png",
+    "prep-deadbeef/cache/raster.png",
+    // One level down, chapters/ is the only nested directory in range; a cache
+    // beside it is not, and neither is anything deeper.
+    "prep-deadbeef/chapters/figures/fig-01.png",
+    "prep-deadbeef/drafts/chapter-01.md",
     "slides/talks.json",
     "slides/1737000000000-my-talk.html",
-    // A talk's own state and products stay out too, unlike notes-*/state.json:
+    // A talk's own state and products stay out too, unlike prep-*/state.json:
     // the index alone rebuilds nothing, and what it indexes is megabytes of
     // slide bodies and base64 images (src/reading/slides/store.ts).
     "slides/1737000000000/state.json",
     "slides/1737000000000/slide-01.html",
     "slides/1737000000000/asset-03.txt",
+    // The rescue copy a run-through log that would not parse is moved to. It is
+    // there for a person to look at, not to be pushed at the other device.
+    "runthrough-1754400000000.json.bad",
     "library/abc123.pdf",
     "images/threads/t1/photo.png",
     // Info triage: the daily briefing and article cache are derived, not synced.

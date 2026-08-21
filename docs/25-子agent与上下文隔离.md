@@ -50,7 +50,7 @@ brief 的形状写死在提示词里：最多五条，每条标题（作者、�
 
 ## 第二个调用方：AI observations 蒸馏
 
-`src/observation/distill.ts`。它比这个 capability 更早写，形状一样：一次静默运行、自己的 prompt、自己的工具、注入式的 runner，所有流式回调接空。现在长在 `runSubagent` 上。
+`src/observation/distill/distill.ts`。它比这个 capability 更早写，形状一样：一次静默运行、自己的 prompt、自己的工具、注入式的 runner，所有流式回调接空。现在长在 `runSubagent` 上。
 
 `evidence: "optional"`，这是这里唯一一个用错默认值就有害的字段。挂了工具就默认 `"required"`，因为查找型子 agent 存在的前提是答案不在模型记忆里。蒸馏不是查找：prompt 明说浅对话可以什么都不记、一次工具都不调是正常结局，那么一次正确的空运行在 `"required"` 下就是 `no-evidence`，会被记成失败、时间戳永不推进，下一次触发再蒸馏同一份 transcript，无穷循环。
 
@@ -69,3 +69,13 @@ brief 的文本只在失败时有用（那句诚实失败的句子进日志）�
 蒸馏的 `signal` 等一个真正有资格取消它的调用方：删除对话时，一次正在给已经不存在的消息写观察的 pass 该停。
 
 简报生成也还没挂上来。
+
+## 分层思考
+
+对话跑在快模型上；真需要思考的问题委派给一个开高 effort 的子 agent，对话继续往下走。隔离那一半已经建好（上面几节）：子 agent 有自己的 message 列表、自己的工具集、自己的轮数上限，中间产物出不来，只交回一份 brief。
+
+缺的是 effort 还不是一等维度。今天 effort 只有两个全局设置，`chatThinking` 和 `prepThinking`，由 `resolveModel("chat" | "prep")` 解析，子 agent 一律按 `prep` 跑。`SubagentDefinition.model` 里有 `reasoning`，但它和 `providerId`/`modelId` 同在一个对象里，要抬 effort 就得同时钉死一个具体模型——`research-agent.ts` 因此没设，钉一个模型会点到读者没配的 provider。`runSubagent` 的入参里没有 effort：父模型只决定要不要委派，不决定用多大力气。
+
+## 载体
+
+一个建模某个人的助手只能长在这个人真正花时间的地方。这个应用同时握着用户读的东西和用户被简报的东西，是那个地方。

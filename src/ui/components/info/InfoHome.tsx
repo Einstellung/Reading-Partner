@@ -121,7 +121,7 @@ export default function InfoHome(props: {
   return (
     <>
       {screen === "vestibule" && (
-        <div className="absolute inset-0 overflow-y-auto bg-white">
+        <div className="absolute inset-0 overflow-y-auto bg-background">
           {props.renderLaunch ? (
             props.renderLaunch({
               snap: info.snap,
@@ -159,7 +159,7 @@ export default function InfoHome(props: {
 
       {screen === "briefing" && info.snap?.briefing && (() => {
         const page = (
-          <div className="absolute inset-0 overflow-y-auto bg-white">
+          <div className="absolute inset-0 overflow-y-auto bg-background">
             <BriefingPage
               briefing={info.snap.briefing}
               openedIds={info.openedItemIds}
@@ -180,7 +180,7 @@ export default function InfoHome(props: {
       })()}
 
       {screen === "sources" && (
-        <div className="absolute inset-0 overflow-y-auto bg-white">
+        <div className="absolute inset-0 overflow-y-auto bg-background">
           <SourcesPage
             sources={info.sources}
             health={info.sourceHealth}

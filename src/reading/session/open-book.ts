@@ -5,13 +5,12 @@
 //
 // It runs against ReaderShell rather than against App's state, so the sequence
 // can be read and tested on its own — a book switch that abandons a stale
-// extraction, or a classroom flag restored from disk, is a fact about this
-// function, not about a component.
+// extraction is a fact about this function, not about a component.
 
 import { getViewState } from "../../platform/app/storage";
 import { loadAnnotations } from "../../platform/app/annotations";
 import { loadThreads } from "../../platform/app/threads";
-import type { Annotation, ViewState } from "../../platform/app/reader-contract";
+import { pageMarks, type Annotation, type ViewState } from "../../platform/app/reader-contract";
 import { ensureFulltext, type Fulltext } from "../../fulltext";
 import { sweepDistillation } from "../../observation";
 import { clearFigureCache, ensureFigures, type FiguresIndex } from "../figures";
@@ -101,19 +100,17 @@ export async function openBook(
   // five 26 MB allocations at book-open where one does.
   const buffer = bytes.slice().buffer as ArrayBuffer;
   shell.takeBook(bookId, name, buffer);
-  // Seed the persist base with the loaded state so an early mode press (before
-  // the reader emits a position) merges onto the right book.
+  // Seed the persist base with the loaded state so the first write for this book
+  // lands on the position it opened at.
   io.seedReadingPosition(bookId, state);
   shell.restartDwell();
 
-  // A restored classroom "on" attaches the pipeline below once the fulltext is
-  // ready, degrading exactly like a manual toggle-on when the book has no
-  // readable text. The flag is per book and sticky (docs/09); detach the previous
-  // book's prep panel first (the pipeline itself keeps running in the background
-  // as a module singleton). Notes are per book too.
-  const restoreClassroom = !!state?.classroom;
-  shell.resetPrep(restoreClassroom);
-  shell.resetNotes();
+  // Detach the previous book's prep panel (the pipeline itself keeps running in
+  // the background as a module singleton). The spine is per book too. Prep for this
+  // book re-attaches below only if it has been prepped before; starting a fresh
+  // run is the trigger's (reading/session/use-prep-trigger.ts), not the open's.
+  shell.resetPrep();
+  shell.resetChapterSpine();
 
   // Extract the full text and the figure index in the background so the AI can
   // see the book (M6, M9). Fire-and-forget: neither blocks rendering, and a book
@@ -141,14 +138,23 @@ export async function openBook(
     if (shell.currentBookId() !== bookId) return; // stale: the user switched books
     shell.showFulltext(ft, false);
     if (ft && ft.status === "ok") {
-      await shell.resumePrep(bookId, name, ft, restoreClassroom);
-      await shell.resumeNotes(bookId, name, ft);
+      await shell.resumePrep(bookId, name, ft);
+      await shell.resumeChapterSpine(bookId, name, ft);
     }
   });
 
   // Mount the reader pane with the bytes. It calls back onView and onInitialized
   // once ready. It slices its own copy for PDFium and never detaches this one, so
   // it reads the shared buffer.
-  shell.mountReader({ bookId, name, buffer, annotations: saved, viewState: openingViewState(state) });
+  // The engine gets the page-anchored half only. The other half was drawn on
+  // the classroom's replies and has no page for EmbedPDF to put it on; the shell
+  // keeps the whole set (showMarks above), which is what is written back.
+  shell.mountReader({
+    bookId,
+    name,
+    buffer,
+    annotations: pageMarks(saved),
+    viewState: openingViewState(state),
+  });
   shell.showTitle(name);
 }

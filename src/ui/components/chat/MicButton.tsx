@@ -154,7 +154,7 @@ export function MicButton({
 		' ' +
 		(status === 'recording'
 			? cancelArmed
-				? 'bg-neutral-200 text-neutral-500'
+				? 'bg-muted-strong text-neutral-500'
 				: 'bg-red-50 text-red-600'
 			: 'text-neutral-400 can-hover:hover:bg-accent can-hover:hover:text-neutral-600 disabled:opacity-40');
 

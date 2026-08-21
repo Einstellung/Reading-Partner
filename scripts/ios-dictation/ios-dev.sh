@@ -123,7 +123,7 @@ step "kill any stale instance"
 # relaunches an app that is already up and you cannot tell a fresh run from the
 # last one's leftovers.
 #
-# The two-instance state pitfall 138 describes is reachable from here in theory
+# The two-instance state pitfall 159 describes is reachable from here in theory
 # — the losing instance's configureSession() throws "The microphone is in use by
 # something else" — but it has never been observed in the wild. A sighting of
 # two pids on 2026-08-17 turned out to be the normal transient during install.

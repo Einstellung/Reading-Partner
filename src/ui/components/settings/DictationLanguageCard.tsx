@@ -18,7 +18,7 @@ import { ChoiceField, FieldGrid } from "./ChoiceField";
 // There is no "follow the device". docs/33 measured that cross-language decoding
 // is total rather than degraded, and the reader this was built for has an en-US
 // phone and speaks Chinese to the AI: following the device gave eleven holds of
-// Chinese transcribed as plausible English (docs/pitfall/143). A wrong answer
+// Chinese transcribed as plausible English (docs/pitfall/164). A wrong answer
 // here is confident, not obviously broken, so it is worth a setting.
 export default function DictationLanguageCard({
   settings,

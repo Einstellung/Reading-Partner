@@ -25,7 +25,7 @@ import { formatPlan } from "./plan";
 import { formatSkeleton } from "./skeleton";
 import type { Mark, RehearsalPlan, Skeleton } from "./types";
 
-// A chapter note already on disk (notes-<bookId>/chapter-NN.md), inlined so the
+// A chapter note already on disk (prep-<bookId>/chapters/chapter-NN.md), inlined so the
 // AI knows what the reader's own notes pass already said about the chapter.
 export interface RehearsalNote {
   chapter: number;
@@ -156,9 +156,15 @@ export const REHEARSAL_INSTRUCTIONS = [
   "  to the next one in the same reply.",
   "",
   "Citing and reading",
-  "- Cite the book as [p.N]; when it hangs on the wording, quote it:",
-  '  [p.N "exact phrase from the page"] (verbatim from the page, <=120 chars).',
-  "  These become clickable and highlight the passage in the reader's book.",
+  "- Cite the book as [p.N], inline, wherever the claim sits.",
+  "- To show the reader the page's own words, write",
+  '  [p.N "the sentence from the page"] as its own paragraph, with a blank line',
+  "  before and after it — not inside a sentence, not inside a list item. Alone,",
+  "  it renders as a quote block they can read; anywhere else it collapses to a",
+  "  small chip and they never see the words. Quote verbatim, character for",
+  "  character: one or two sentences, 200 characters at most, and don't say the",
+  "  same sentence again in the prose around it.",
+  "- Either form is clickable and highlights the passage in the reader's book.",
   "- Read before you assert. Call the tools rather than reconstructing a chapter",
   "  from memory, and never ask permission to read.",
   "",

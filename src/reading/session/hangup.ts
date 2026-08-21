@@ -1,10 +1,17 @@
-// What a hangup hands to distillation (docs/02, docs/03). Which page the talk
-// belongs to and what it was marked on are two rules with two cases each, and a
-// call ending is the only place they are decided — so they sit here, out of the
-// hook, where they can be read and tested.
+// What a hangup hands to distillation (docs/02, docs/03). Which conversation the
+// talk belongs to, which page, and what it was marked on are decided nowhere
+// else, so they sit here, out of the hook, where they can be read and tested.
 
 import { annotationPage, type Annotation } from "../../platform/app/reader-contract";
-import type { DistillAnnotation, DistillMessage } from "../../observation";
+import { listThreads } from "../../platform/app/threads";
+import {
+  distillUnitOf,
+  pagelessMarkIds,
+  type DistillAnnotation,
+  type DistillMessage,
+  type DistillUnitPart,
+  type UnitThread,
+} from "../../observation";
 
 export interface HangupCall {
   threadId: string;
@@ -42,6 +49,9 @@ export interface HangupPass {
   page: number | null;
   markedText: string;
   messages: DistillMessage[];
+  // The threads this transcript was merged from, so the pass moves a cursor per
+  // thread (observation/distill/arrears.ts).
+  parts: DistillUnitPart[];
   annotations: DistillAnnotation[];
 }
 
@@ -54,24 +64,56 @@ export function hangupPass(input: {
   // The thread as the file holds it.
   stored: HangupMessage[];
   annotations: DistillAnnotation[];
+  // The book's threads, so the pass runs over the whole conversation rather than
+  // one branch of it. A chat-span aside is not a unit of its own — it folds into
+  // the thread it was pulled out of (observation/distill/arrears.ts) — and a
+  // lesson that had asides open owes their transcripts too. Absent leaves every
+  // line below exactly as it was before asides existed.
+  threads?: readonly UnitThread[];
 }): HangupPass {
   const { call, context, annotation, stored, annotations } = input;
+  const own = stored.map(({ role, text, ts }) => ({ role, text, ts }));
+  // The open thread's messages are the live ones, not the file's: hanging up
+  // mid-answer waited for the reply and the file may be a debounce behind.
+  const records: UnitThread[] = (input.threads ?? []).map((t) =>
+    t.id === call.threadId ? { ...t, messages: own } : t,
+  );
+  if (!records.some((t) => t.id === call.threadId)) {
+    records.push({ id: call.threadId, annotationId: call.annotationId, messages: own });
+  }
+  const unit = distillUnitOf(records, call.threadId, pagelessMarkIds(annotations)) ?? {
+    threadId: call.threadId,
+    annotationId: call.annotationId,
+    messages: own,
+    parts: [{ threadId: call.threadId, messages: own }],
+  };
+  // Where the pass says it happened follows the unit, not the call. Hanging up
+  // inside an aside distils the lesson it belongs to, and the lesson's position
+  // is where the reader is — the same answer the lesson gives when it hangs up
+  // itself. A parent that turns out to carry a mark is not resolvable from here
+  // (the annotation in hand is the call's), so it gets neither.
+  const currentPage = context.pageIndex !== null ? context.pageIndex + 1 : null;
+  const isSelf = unit.threadId === call.threadId;
   return {
     topicId: context.topicId,
     topicName: context.topicName,
     bookId: context.bookId,
     bookName: context.bookName,
-    threadId: call.threadId,
+    threadId: unit.threadId,
     trigger: "hangup",
-    annotationId: call.annotationId,
+    annotationId: unit.annotationId,
     // The book-level thread has no mark: pin its position to the current page.
-    page: call.isBook
-      ? context.pageIndex !== null
-        ? context.pageIndex + 1
-        : null
-      : annotationPage(annotation as { position?: { pageIndex?: number } } | undefined),
-    markedText: call.isBook ? "" : typeof annotation?.text === "string" ? annotation.text : "",
-    messages: stored.map(({ role, text, ts }) => ({ role, text, ts })),
+    page: isSelf
+      ? call.isBook
+        ? currentPage
+        : annotationPage(annotation as { position?: { pageIndex?: number } } | undefined)
+      : unit.annotationId === ""
+        ? currentPage
+        : null,
+    markedText:
+      isSelf && !call.isBook && typeof annotation?.text === "string" ? annotation.text : "",
+    messages: unit.messages,
+    parts: unit.parts,
     annotations,
   };
 }
@@ -93,6 +135,10 @@ export interface HangupIo {
   annotations: DistillAnnotation[];
   // The thread as the file holds it now — called when the pass is built.
   readStored(): HangupMessage[];
+  // The book's threads, read at the same moment and for the same reason: which
+  // conversation this hangup belongs to is a fact about the thread's neighbours
+  // (hangupPass). Defaults to the live store, so no caller has to remember it.
+  readBookThreads?(): readonly UnitThread[];
   // Hand the pass to the turn still writing on that thread; false when nothing
   // is in flight and it can be built at once.
   whenSettled(threadId: string, run: () => void): boolean;
@@ -108,6 +154,7 @@ export function deferHangup(io: HangupIo): void {
         annotation: io.annotation,
         stored: io.readStored(),
         annotations: io.annotations,
+        threads: (io.readBookThreads ?? (() => listThreads(io.context.bookId)))(),
       }),
     );
   if (!io.whenSettled(io.call.threadId, run)) run();

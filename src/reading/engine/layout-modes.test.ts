@@ -3,6 +3,7 @@ import {
   applyJump,
   applyLayout,
   LAYOUT_SETTINGS,
+  openingZoom,
   otherLayout,
   readingPosition,
   restingState,
@@ -236,4 +237,31 @@ test("a page number below one never becomes a negative index", () => {
     expect(readingPosition(layout, 0, []).pageIndex).toBe(0);
     expect(readingPosition(layout, 1, [{ pageNumber: 0, pageX: 0, pageY: 0 }]).pageIndex).toBe(0);
   }
+});
+
+test("a book with nothing saved opens at the layout's fit, not at a scale", () => {
+  // The shell mounts every book with a state, so "never opened before" arrives
+  // as a state whose scale is missing rather than as no state at all. Answering
+  // that with a number overrides the fit the zoom plugin was registered with,
+  // which is how a fresh book opened at 100% on a screen that fits 233%.
+  for (const layout of layouts) expect(openingZoom(layout, undefined)).toBeNull();
+});
+
+test("a book that was read before comes back at the scale it was left at", () => {
+  expect(openingZoom("vertical", 2.328)).toBe(2.328);
+  expect(openingZoom("vertical", 0.4)).toBe(0.4);
+});
+
+test("paged restores no scale at all", () => {
+  // One whole page is the fit for the screen in front of the reader and not the
+  // one that last saved — the same rule that keeps paged's saved position free
+  // of an in-page offset.
+  expect(openingZoom("paged", 2.328)).toBeNull();
+});
+
+test("a scale that cannot be a scale is not restored", () => {
+  // Zero or negative resolves to a page of no size. An older file or a botched
+  // merge is not worth opening a book wrong for.
+  expect(openingZoom("vertical", 0)).toBeNull();
+  expect(openingZoom("vertical", -1)).toBeNull();
 });

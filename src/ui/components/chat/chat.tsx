@@ -6,7 +6,17 @@
 // expression: a rem line height or gap is measured against the root font size
 // and would sit still while the type grew.
 
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+	createContext,
+	memo,
+	useCallback,
+	useContext,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+	type RefObject,
+} from 'react';
 import { HIT_44 } from '../base/buttons';
 import { Button } from '../ui/button';
 import { IconCheck, IconCopy, IconKeyboard, IconMic, IconSend, IconStop } from '../base/icons';
@@ -14,10 +24,30 @@ import { Markdown } from '../markdown/Markdown';
 import { MicButton } from './MicButton';
 import { HoldToTalk } from './HoldToTalk';
 import { useFlickerProbe } from '../common/useFlickerProbe';
+import { scrollMemory } from '../common/scroll-memory';
 import { stickToBottom } from '../common/stick-to-bottom';
 import type { PendingImage, ThreadMessage } from './types';
 import type { CompressedImage } from '../../../ai/image-utils';
 import type { ToolStatus } from '../../../ai/tool-status';
+import {
+	createStrokeGate,
+	locateChatMarks,
+	mayMarkReply,
+	occurrenceAt,
+	type ChatMarkDraw,
+} from '../../../reading/chat-marks';
+import type { Annotation, MarkPen } from '../../../platform/app/reader-contract';
+import {
+	boxesHold,
+	indexRendered,
+	markFill,
+	offsetOf,
+	paintBoxes,
+	rangeOfSpan,
+	spacedSlice,
+	toBoxes,
+	type MarkBox,
+} from './chat-mark-dom';
 import { messageToParts, type CardActionHandler, type CardSurface } from './chatParts';
 import { useCardRegistry } from './cardRegistryContext';
 import type { CleanupModel } from '../../../ai/voice';
@@ -161,6 +191,255 @@ function CopyButton({ text }: { text: string }) {
 	);
 }
 
+// --- the two pens on a reply (docs/09) -------------------------------------
+
+// What a conversation needs to carry marks: the pen the top bar has selected,
+// the book's marks so the ones on these replies can be drawn back, and the two
+// things a reader does with them. Absent = this chat is not the book's, so no
+// pen acts on it and nothing is drawn.
+export interface ChatMarkHost {
+	// The conversation these rows belong to — half of a mark's anchor
+	// (platform/app/reader-contract.ts: ChatAnchor).
+	threadId: string;
+	// Resolved for this surface: null for the pointer and the navigation lock,
+	// and null for the AI pen anywhere a third level would be opened.
+	pen: MarkPen | null;
+	color: string;
+	// Every mark of the open book. A row picks its own out of it.
+	marks: readonly Annotation[];
+	onDraw(draw: ChatMarkDraw): void;
+	// A press on a mark, with where it landed in viewport coordinates.
+	onOpen(annotation: Annotation, at: { x: number; y: number }): void;
+}
+
+// One gesture at a time, one document: the pen that takes a stroke and the layer
+// that answers a press are two components and the same finger, so the gate they
+// agree through is module scope rather than a prop threaded between them.
+const strokes = createStrokeGate();
+
+// In context rather than a prop on every row: a mark drawn on one reply must
+// not re-render the Markdown of all the others, and a row is memoized on its
+// message (MessageBubble). Only the layer inside a row subscribes.
+const ChatMarksContext = createContext<ChatMarkHost | null>(null);
+
+// One mark as it is drawn: the pieces it paints as, the line boxes it is
+// pressed on (a 2px rule is not a target — the words above it are), and the
+// entry both came from.
+interface PaintedMark {
+	annotation: Annotation;
+	pen: MarkPen;
+	color: string;
+	paint: MarkBox[];
+	hit: MarkBox[];
+}
+
+// Every mark on one reply, measured against the reply as it stands now. One
+// whose words are no longer there is not drawn and not an error: the entry
+// stays in the file, it just has nothing to sit on (reading/chat-marks.ts).
+function measureMarks(body: HTMLElement, host: ChatMarkHost, messageTs: number): PaintedMark[] {
+	const index = indexRendered(body);
+	if (index.text === '') return [];
+	const origin = body.getBoundingClientRect();
+	const out: PaintedMark[] = [];
+	for (const found of locateChatMarks(index.text, host.marks, host.threadId, messageTs)) {
+		const range = rangeOfSpan(index, found.span, body.ownerDocument);
+		if (!range) continue;
+		const hit = toBoxes(Array.from(range.getClientRects()), origin);
+		if (hit.length === 0) continue;
+		const color = typeof found.annotation.color === 'string' && found.annotation.color
+			? found.annotation.color
+			: host.color;
+		out.push({
+			annotation: found.annotation,
+			pen: found.anchor.pen,
+			color,
+			paint: paintBoxes(hit, found.anchor.pen),
+			hit,
+		});
+	}
+	return out;
+}
+
+// The marks on one reply, painted under its words, and the press that opens
+// one. The layer wraps the reply's body so the two always read the same
+// rendering — the words a mark is anchored against are the words this element
+// holds — and so the overlay it paints is a sibling of what it observes rather
+// than a child of it, which would have painting feed itself.
+function ChatMarkLayer({
+	messageTs,
+	markable,
+	children,
+}: {
+	messageTs: number;
+	markable: boolean;
+	children: React.ReactNode;
+}) {
+	const host = useContext(ChatMarksContext);
+	const body = useRef<HTMLDivElement>(null);
+	const [marks, setMarks] = useState<PaintedMark[]>([]);
+	// Read by the press handler, which is bound once and must not see a stale
+	// closure over the measurements.
+	const latest = useRef<PaintedMark[]>(marks);
+	latest.current = marks;
+	const live = markable && !!host;
+
+	useLayoutEffect(() => {
+		const el = body.current;
+		if (!live || !el || !host) {
+			setMarks((prev) => (prev.length === 0 ? prev : []));
+			return;
+		}
+		const measure = () => setMarks(measureMarks(el, host, messageTs));
+		measure();
+		// The reply reflows when the window or the chat zoom changes, and its
+		// contents change under React more than once: the Markdown renderer is a
+		// lazy chunk that swaps in after the first paint, and KaTeX and the
+		// highlighter rewrite what it produced.
+		const observers: { disconnect(): void }[] = [];
+		if (typeof ResizeObserver === 'function') {
+			const ro = new ResizeObserver(measure);
+			ro.observe(el);
+			observers.push(ro);
+		}
+		if (typeof MutationObserver === 'function') {
+			const mo = new MutationObserver(measure);
+			mo.observe(el, { childList: true, subtree: true, characterData: true });
+			observers.push(mo);
+		}
+		return () => {
+			for (const o of observers) o.disconnect();
+		};
+	}, [live, host, messageTs]);
+
+	useEffect(() => {
+		const el = body.current;
+		if (!live || !el || !host) return;
+		const onClick = (e: MouseEvent) => {
+			// The press that ended a drag belongs to the selection it made — or, when
+			// a pen took that drag as a stroke, to the stroke, which has dropped the
+			// selection by now and so cannot be recognised by it. One on a citation
+			// chip belongs to the chip.
+			if (strokes.closesAStroke()) return;
+			const sel = el.ownerDocument.getSelection();
+			if (sel && !sel.isCollapsed) return;
+			if ((e.target as Element | null)?.closest?.('a')) return;
+			const origin = el.getBoundingClientRect();
+			const on = latest.current.find((m) =>
+				boxesHold(m.hit, e.clientX - origin.left, e.clientY - origin.top),
+			);
+			if (!on) return;
+			e.preventDefault();
+			host.onOpen(on.annotation, { x: e.clientX, y: e.clientY });
+		};
+		el.addEventListener('click', onClick);
+		return () => el.removeEventListener('click', onClick);
+	}, [live, host]);
+
+	return (
+		<>
+			{marks.length > 0 && (
+				<div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
+					{marks.map((m) =>
+						m.paint.map((b, i) => (
+							<span
+								key={`${m.annotation.id}:${i}`}
+								data-chat-mark={m.annotation.id}
+								className="absolute rounded-[1px]"
+								style={{
+									left: b.left,
+									top: b.top,
+									width: b.width,
+									height: b.height,
+									backgroundColor: markFill(m.color, m.pen),
+								}}
+							/>
+						)),
+					)}
+				</div>
+			)}
+			<div ref={body} data-reply-body="">
+				{children}
+			</div>
+		</>
+	);
+}
+
+// The stroke a pen leaves on a reply, taken when the finger comes off.
+//
+// Not on selectionchange: a drag changes the selection continuously and a mark
+// is one thing, made once. Pointer-up is also when a long press has finished
+// producing its selection and when a double click has made its word.
+//
+// The words and the copy of them are read out of the same walk that draws marks
+// back (chat-mark-dom.ts), never off Selection.toString(), which puts a newline
+// between block elements and so describes a string no rendering holds.
+//
+// The selection is dropped afterwards: the words are marked now, and leaving
+// them blue leaves WebKit's callout bar sitting over them (docs/pitfall/49).
+// Which is why the stroke also has to say it happened: the click the browser
+// sends next lands on words that now carry a mark, with nothing in the selection
+// left to tell it from a press on one (reading/chat-marks.ts: StrokeGate).
+function usePenStrokes(list: RefObject<HTMLElement>, host: ChatMarkHost | null): void {
+	const pen = host?.pen ?? null;
+	useEffect(() => {
+		if (!host || !pen) return;
+		const doc = list.current?.ownerDocument ?? document;
+		const commit = () => {
+			const sel = doc.getSelection();
+			if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
+			const range = sel.getRangeAt(0);
+			const node = range.commonAncestorContainer;
+			const el = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
+			// Outside a settled reply, spanning two of them, or overshooting into
+			// the app's own words about the turn: the common ancestor is then the
+			// row or the list, and neither carries the marker.
+			const row = el?.closest('[data-reply-ts]') ?? null;
+			if (!row || !list.current?.contains(row)) return;
+			const index = indexRendered(row.querySelector('[data-reply-body]'));
+			const start = offsetOf(index, range.startContainer, range.startOffset);
+			const end = offsetOf(index, range.endContainer, range.endOffset);
+			if (start === null || end === null || end <= start) return;
+			const text = index.text.slice(start, end);
+			if (text.trim() === '') return;
+			const occurrence = occurrenceAt(index.text, text, start);
+			if (occurrence < 0) return;
+			// Two strings when the stroke crossed a block: the verbatim one it is
+			// found again by, and the one a person reads. Only when they differ,
+			// which is the minority of strokes.
+			const display = spacedSlice(index, start, end);
+			host.onDraw({
+				messageTs: Number(row.getAttribute('data-reply-ts')),
+				text,
+				...(display === text ? {} : { display }),
+				occurrence,
+				pen,
+			});
+			strokes.drew();
+			sel.removeAllRanges();
+		};
+		doc.addEventListener('pointerup', commit);
+		return () => doc.removeEventListener('pointerup', commit);
+	}, [host, pen, list]);
+	// A gesture begins whether or not a pen is in hand — which is why this is not
+	// in the effect above, whose deps carry the pen and the host, and whose host
+	// is a new object every time a mark is saved. A stroke that never produced a
+	// click (a finger on a touch screen usually does not) or produced one
+	// nowhere near a reply (it came up over the composer) leaves the gate armed;
+	// if the reader then puts the pen back, nothing here would be listening, and
+	// their next press on an existing mark is spent on a stroke they finished
+	// minutes ago. The ref is stable, so this binds once per surface and the
+	// unmount clears whatever the last stroke left owed.
+	useEffect(() => {
+		const doc = list.current?.ownerDocument ?? document;
+		const begin = () => strokes.began();
+		doc.addEventListener('pointerdown', begin);
+		return () => {
+			doc.removeEventListener('pointerdown', begin);
+			strokes.began();
+		};
+	}, [list]);
+}
+
 // Attached images, right-aligned above a user message. Constrained height so a
 // tall screenshot doesn't blow out the column; no lightbox in v1 (docs:
 // original-size, bounded).
@@ -302,7 +581,7 @@ const MessageBubble = memo(function MessageBubble({
 				{message.text && (
 					<div
 						className={
-							'box-border max-w-[75%] whitespace-pre-wrap break-words rounded-2xl bg-[var(--chat-bubble-bg,var(--color-neutral-100))] text-neutral-900 ' +
+							'box-border max-w-[75%] whitespace-pre-wrap break-words rounded-2xl bg-[var(--chat-bubble-bg,var(--color-muted-soft))] text-neutral-900 ' +
 							(lg
 								? 'px-4 py-2.5 text-[calc(1rem*var(--chat-scale,1))] leading-[1.75]'
 								: 'px-3 py-1.5 text-[13px] leading-relaxed')
@@ -372,8 +651,27 @@ const MessageBubble = memo(function MessageBubble({
 	return (
 		<div ref={rowRef} className="group flex flex-col gap-2">
 			{trace}
-			<div className={'text-neutral-800 ' + (lg ? 'text-[calc(1rem*var(--chat-scale,1))]' : 'text-[13px]')}>
-				<Markdown text={textPart.text} />
+			{/* data-reply-ts is the marker a pen stroke resolves against — the
+			    predicate (mayMarkReply), written where it can be read back off the
+			    DOM. On the prose element and not on the row: the row also holds the
+			    tool trace kept for a failed call and the budget notice, which are
+			    the app's words about the turn, and a selection that started in the
+			    reply and overshot into one of them has its common ancestor on the
+			    row. Marked there it would be accepted, and the app's sentence about
+			    the turn would end up marked as if the model had written it.
+
+			    `isolate` so the mark layer's negative z-index lands behind these
+			    words and not behind the surface they are drawn on. */}
+			<div
+				data-reply-ts={mayMarkReply(message) ? message.ts : undefined}
+				className={
+					'relative isolate text-neutral-800 ' +
+					(lg ? 'text-[calc(1rem*var(--chat-scale,1))]' : 'text-[13px]')
+				}
+			>
+				<ChatMarkLayer messageTs={message.ts} markable={mayMarkReply(message)}>
+					<Markdown text={textPart.text} />
+				</ChatMarkLayer>
 			</div>
 			{/* After the answer, before the copy affordance: the notice belongs to the
 			    reply, but Copy takes the model's words only. */}
@@ -390,6 +688,7 @@ export function MessageList({
 	surface = 'call',
 	onCardAction,
 	stickKey,
+	marks,
 }: {
 	messages: ThreadMessage[];
 	size?: 'sm' | 'lg';
@@ -401,29 +700,56 @@ export function MessageList({
 	onCardAction?: CardActionHandler;
 	// Identifies the conversation on display. Changing it pins the list back to
 	// the bottom, so switching threads starts at the newest message rather than
-	// wherever the previous one had been scrolled to.
+	// wherever the previous one had been scrolled to. A keyed list is also
+	// remembered (common/scroll-memory.ts): leaving it and coming back lands where
+	// the reader was rather than at the newest.
 	stickKey?: string | number;
+	// The two pens on these replies (docs/09). Absent on every chat that is not
+	// the open book's — the info chat, the talk — where a reply is not the book
+	// continued and nothing is drawn on it.
+	marks?: ChatMarkHost | null;
 }) {
 	const listRef = useRef<HTMLDivElement>(null);
 	useLayoutEffect(() => {
 		const list = listRef.current;
-		return list ? stickToBottom(list) : undefined;
+		return list ? stickToBottom(list, scrollMemory(stickKey)) : undefined;
 	}, [stickKey]);
 
+	const host = marks ?? null;
+	usePenStrokes(listRef, host);
+
 	return (
-		<div
-			ref={listRef}
-			className={
-				'flex flex-col ' +
-				(size === 'lg' ? 'gap-[calc(1.5rem*var(--chat-scale,1))] ' : 'gap-3 ') +
-				'overflow-y-auto ' +
-				className
-			}
-		>
-			{messages.map((m, i) => (
-				<MessageBubble key={i} message={m} size={size} surface={surface} onCardAction={onCardAction} />
-			))}
-		</div>
+		<ChatMarksContext.Provider value={host}>
+			<div
+				ref={listRef}
+				className={
+					'flex flex-col ' +
+					(size === 'lg' ? 'gap-[calc(1.5rem*var(--chat-scale,1))] ' : 'gap-3 ') +
+					'overflow-y-auto ' +
+					className
+				}
+			>
+				{/* Keyed by position, not by ts: a reader's message and the reply to it
+				    are written in the same millisecond often enough that the reducer
+				    already has to disambiguate them by role (reading/call-state.ts), so
+				    ts is not unique and a duplicate key corrupts silently. What position
+				    costs is that a row added or dropped above another re-keys it, and
+				    both of those happen at the end of the list — a card goes in before
+				    the row a turn is writing, and a turn starting drops the rows that
+				    hold no answer, which is the last turn's failure. A settled reply
+				    further up keeps its key, its memoized component and its DOM, so a
+				    Range into it survives. */}
+				{messages.map((m, i) => (
+					<MessageBubble
+						key={i}
+						message={m}
+						size={size}
+						surface={surface}
+						onCardAction={onCardAction}
+					/>
+				))}
+			</div>
+		</ChatMarksContext.Provider>
 	);
 }
 
@@ -565,8 +891,8 @@ export function Composer({
 
 	const cardSize = pill ? 96 : 72;
 	const container = pill
-		? 'box-border rounded-3xl border border-black/10 bg-white px-2 py-2 shadow-sm'
-		: 'box-border rounded-xl border border-black/10 bg-white p-2 focus-within:border-primary';
+		? 'box-border rounded-3xl border border-black/10 bg-background px-2 py-2 shadow-sm'
+		: 'box-border rounded-xl border border-black/10 bg-background p-2 focus-within:border-primary';
 	// box-border: the auto-grow sets height from scrollHeight, which includes the
 	// padding. Hidden scrollbar: an appearing gutter would reflow the text mid-typing.
 	// 16px floor: WKWebView zooms the whole page in when a field smaller than that

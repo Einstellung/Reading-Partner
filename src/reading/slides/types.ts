@@ -133,7 +133,7 @@ export function createSlidesState(init: SlidesInit): SlidesState {
 // goes back to "pending" so a restart resumes it instead of hanging, and a run
 // that was in flight when the app died is no longer claimed to be running. Done,
 // failed, missing and stale are left alone — they are decisions, not accidents.
-// (Same rule as normalizeNotesOnLoad in ../notes/types.ts.)
+// (Same rule as normalizeChapterSpineOnLoad in ../notes/types.ts.)
 export function normalizeSlidesOnLoad(state: SlidesState): SlidesState {
   return {
     ...state,

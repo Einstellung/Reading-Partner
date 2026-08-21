@@ -46,7 +46,7 @@ jobs:
       VITE_GOOGLE_IOS_CLIENT_ID: 379091688229-esc23unqq02igufrjr9jjvtsug49j097.apps.googleusercontent.com
       BUNDLE_ID: com.xinyuan.readingpartner
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Pin Xcode so an image default bump can't change the toolchain under us.
       - name: Pin Xcode
@@ -108,6 +108,18 @@ jobs:
             grep -r 'TARGETED_DEVICE_FAMILY' src-tauri/gen/apple/*.xcodeproj/project.pbxproj || true
             exit 1
           }
+
+      # Register the Google OAuth deep-link schemes in the generated
+      # Info.plist. tauri-plugin-deep-link writes CFBundleURLTypes from its
+      # build.rs, as a side effect of *compiling that crate*: the rust-cache
+      # above skips that compile, gen/apple is regenerated every run, and the
+      # key silently vanished from the TestFlight line's builds 48 and 53. The
+      # script reads the schemes from tauri.conf.json (the same source the
+      # build script reads) and is idempotent, so a cold cache that does run
+      # the build script is fine. See
+      # docs/pitfall/157-a-cached-crate-never-replays-its-build-script.md.
+      - name: Register the deep-link schemes in Info.plist
+        run: bun scripts/ios-deep-link-plist.ts inject
 
       # Archive the arm64 device build unsigned and zip it into a standard ipa.
       # --target aarch64 selects the physical-device slice (arch label arm64);
@@ -188,14 +200,12 @@ jobs:
           [ "$BID" = "$BUNDLE_ID" ] || { echo "::error::bundle id is '$BID', expected $BUNDLE_ID"; exit 1; }
           [ -n "$SHORTVER" ] || { echo "::error::CFBundleShortVersionString empty"; exit 1; }
 
-          # The deep-link scheme (reversed iOS client id) must be present or
-          # Google OAuth's callback is lost on device. Its presence also shows
-          # tauri-plugin-deep-link's build.rs injected CFBundleURLTypes.
-          SCHEMES=$(/usr/libexec/PlistBuddy -c "Print :CFBundleURLTypes" "$PLIST" 2>/dev/null || true)
-          echo "$SCHEMES" | grep -q 'com.googleusercontent.apps.379091688229-esc23unqq02igufrjr9jjvtsug49j097' || {
-            echo "::error::Google deep-link scheme missing from CFBundleURLTypes"; echo "$SCHEMES"; exit 1
-          }
-          echo "deep-link scheme present in CFBundleURLTypes"
+          # Every deep-link scheme in tauri.conf.json must be in CFBundleURLTypes
+          # or Google OAuth's callback is lost on device — a failure that only
+          # shows up after the build is installed. The archive is Xcode's and
+          # its plist is the binary form, so this reads the artifact rather than
+          # trusting the injection step above.
+          bun scripts/ios-deep-link-plist.ts verify "$PLIST"
 
           BIN="$APP/$EXE"
           [ -f "$BIN" ] || { echo "::error::executable $EXE not found in app bundle"; ls -la "$APP"; exit 1; }
@@ -252,7 +262,7 @@ jobs:
           echo "IPA_NAME=$OUT" >> "$GITHUB_ENV"
 
       - name: Upload the unsigned ipa
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ios-sideload-ipa
           path: ${{ env.IPA_NAME }}

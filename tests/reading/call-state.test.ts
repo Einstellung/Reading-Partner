@@ -6,6 +6,9 @@ import { expect, test } from "bun:test";
 import {
   applyRowChange,
   callReducer,
+  levelGate,
+  mayOpenBookThread,
+  toolInCall,
   type CallRow,
   type CallState,
   type RowChange,
@@ -392,4 +395,98 @@ test("a change nothing matches hands the row back untouched", () => {
 
   expect(applyRowChange(row, { kind: "tool-end", name: "other", isError: false })).toBe(row);
   expect(applyRowChange(row, { kind: "tool-label", name: "other", label: "x" })).toBe(row);
+});
+
+// --- what the open call leaves open ---------------------------------------
+//
+// Two levels, decided by the door (docs/09). These are the answers the top bar
+// draws its two dim buttons from.
+
+const LESSON = { isBook: true };
+const ASIDE = { aside: { parentThreadId: "lesson" } };
+// A page mark's own conversation, opened with no lesson running. Not a side
+// conversation, and still a first level.
+const MARK_THREAD = {};
+// Whether the room a side conversation came out of is still on this device.
+const PARENT_THERE = () => true;
+const PARENT_GONE = () => false;
+
+test("with nothing open, both doors are live", () => {
+  expect(levelGate(null, PARENT_THERE)).toEqual({ aiPen: null, bookThread: null });
+  expect(levelGate(undefined, PARENT_THERE)).toEqual({ aiPen: null, bookThread: null });
+});
+
+test("in the book's conversation the AI pen is live and the blackboard is not", () => {
+  const gate = levelGate(LESSON, PARENT_THERE);
+
+  expect(gate.aiPen).toBeNull();
+  expect(gate.bookThread).not.toBeNull();
+});
+
+test("in a side conversation neither door opens, and each says a different why", () => {
+  const gate = levelGate(ASIDE, PARENT_THERE);
+
+  expect(gate.aiPen).not.toBeNull();
+  expect(gate.bookThread).not.toBeNull();
+  // The book's conversation is already open behind this one, which is not the
+  // same thing as it being on screen.
+  expect(gate.bookThread).not.toBe(levelGate(LESSON, PARENT_THERE).bookThread);
+});
+
+// The parent is deleted on another device while the aside is open. There is
+// then no Back (App.tsx: asideReturnable) and nothing behind this conversation
+// for the sentence to be about, so the blackboard is the way into the classroom
+// rather than a second door onto it. Dim it too and hanging up is the only way
+// out, under a line that names a room that is gone.
+test("a side conversation whose parent is gone gets the blackboard back", () => {
+  expect(mayOpenBookThread(ASIDE, PARENT_THERE)).toBe(false);
+  expect(mayOpenBookThread(ASIDE, PARENT_GONE)).toBe(true);
+  expect(levelGate(ASIDE, PARENT_GONE).bookThread).toBeNull();
+  // The AI pen is not what changed: a side conversation is still the second
+  // level, whether or not the first one is still on this device.
+  expect(levelGate(ASIDE, PARENT_GONE).aiPen).toBe(levelGate(ASIDE, PARENT_THERE).aiPen);
+  // And the two rules the parent has nothing to do with are untouched.
+  expect(mayOpenBookThread(LESSON, PARENT_GONE)).toBe(false);
+  expect(mayOpenBookThread(MARK_THREAD, PARENT_GONE)).toBe(true);
+  expect(mayOpenBookThread(null, PARENT_GONE)).toBe(true);
+});
+
+test("a page mark's own conversation opens no side one, but the blackboard still opens", () => {
+  const gate = levelGate(MARK_THREAD, PARENT_THERE);
+
+  expect(gate.aiPen).toBe(levelGate(ASIDE, PARENT_THERE).aiPen);
+  expect(gate.bookThread).toBeNull();
+});
+
+test("every dim button says why in a sentence of its own", () => {
+  const lines = [
+    levelGate(ASIDE, PARENT_THERE).aiPen,
+    levelGate(ASIDE, PARENT_THERE).bookThread,
+    levelGate(LESSON, PARENT_THERE).bookThread,
+  ];
+
+  for (const line of lines) {
+    expect(line).toMatch(/^[A-Z].*\.$/);
+  }
+  expect(new Set(lines).size).toBe(3);
+});
+
+test("the rack acts with no pen where the AI pen is dim, and with it where it is not", () => {
+  expect(toolInCall("ai", LESSON)).toBe("ai");
+  expect(toolInCall("ai", null)).toBe("ai");
+  expect(toolInCall("ai", ASIDE)).toBe("none");
+  expect(toolInCall("ai", MARK_THREAD)).toBe("none");
+});
+
+// Held, not cleared: the reader who steps into a side conversation and back gets
+// the pen they were holding, and the other two are never taken off them.
+test("the AI pen comes back on the way out, and the other tools are never touched", () => {
+  // One pick, read twice: nothing wrote it back to "none" on the way in.
+  const picked = "ai";
+  expect(toolInCall(picked, ASIDE)).toBe("none");
+  expect(toolInCall(picked, LESSON)).toBe("ai");
+  for (const tool of ["none", "navlock", "highlight", "underline"] as const) {
+    expect(toolInCall(tool, ASIDE)).toBe(tool);
+    expect(toolInCall(tool, LESSON)).toBe(tool);
+  }
 });

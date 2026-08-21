@@ -45,18 +45,18 @@ const ROUTES: PullMatcher[] = [
   ASK_PULL_ROUTE,
 ];
 
-// Synced files that no route needs, and why. Nothing here is held in memory
-// across a pull: each is read when the screen or the pass that wants it starts,
-// so the newer bytes are picked up by the next reader of the file.
+// Synced files that no route needs, and why. Each is read when the screen or the
+// pass that wants it starts and nothing outlives that, so a pull's newer bytes
+// are picked up the next time one starts.
 const NO_IN_MEMORY_STATE: Record<string, string> = {
   "user-profile.md": "loadProfile reads the file each time it is wanted",
   "info-profile.md": "the profile's old name, read the same way",
   "info-feedback.jsonl": "append-only, and read in full when it is read at all",
   "info-pool-marks.json": "read at the start of a collection run, not held between them",
   "talk-": "a talk is read from disk when it is opened",
+  "runthrough-": "a talk's run-throughs are read with the talk, when that talk is opened",
   "memory-": "the observation store reads its entries per query",
-  "prep-": "lesson prep is read when the book it belongs to opens",
-  "notes-": "book notes are read when the book they belong to opens",
+  "prep-": "a document's prep material is read when the document it belongs to opens",
 };
 
 const SRC = fileURLToPath(new URL("../../../src/platform/sync/syncFs.ts", import.meta.url));
@@ -83,8 +83,12 @@ function sampleForRegex(literal: string): string {
 // the prefix cannot say, so it is said here.
 const DIRECTORY_SAMPLES: Record<string, string[]> = {
   "memory-": ["memory-topic1/entries.jsonl", "memory-topic1/index.json"],
-  "prep-": ["prep-book1/state.json", "prep-book1/attention-is-all-you-need.md"],
-  "notes-": ["notes-book1/state.json", "notes-book1/chapter-3.md"],
+  "prep-": [
+    "prep-book1/state.json",
+    "prep-book1/attention-is-all-you-need.md",
+    "prep-book1/chapters/state.json",
+    "prep-book1/chapters/chapter-03.md",
+  ],
 };
 
 function perKeySamples(): { pattern: string; paths: string[] }[] {
@@ -113,7 +117,7 @@ test("the samples this test is built from are all in sync range", () => {
   for (const file of ROOT_FILES) expect(inSyncRange(file)).toBe(true);
 
   const patterns = perKeySamples();
-  // Five filename patterns and three directory prefixes, as of this writing;
+  // Six filename patterns and two directory prefixes, as of this writing;
   // the count is asserted so a pattern that stops being found by the scan is
   // noticed rather than quietly dropping its files from the check.
   expect(patterns.length).toBe(8);

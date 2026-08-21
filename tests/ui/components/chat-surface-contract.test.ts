@@ -46,15 +46,21 @@ test("the window takes the tint and hands the other two down", () => {
   expect(callView).toContain("[--chat-code-bg:var(--chat-code)]");
 });
 
-test("the bubble and the code block read the variable, with the grey as default", () => {
-  expect(chat).toContain("bg-[var(--chat-bubble-bg,var(--color-neutral-100))]");
-  expect(markdown).toContain("[&_pre]:bg-[var(--chat-code-bg,var(--color-neutral-50))]");
+test("the bubble and the code block read the variable, with a palette fill as default", () => {
+  // The default is a token rather than a Tailwind neutral: the fallback is what
+  // paints the corner bubble and the reader panels, and a fixed grey there is a
+  // cold patch on the paper tint.
+  expect(chat).toContain("bg-[var(--chat-bubble-bg,var(--color-muted-soft))]");
+  expect(markdown).toContain("[&_pre]:bg-[var(--chat-code-bg,var(--color-muted-faint))]");
   // A bare token class here would repaint the corner bubble, TalkView and the
   // reader panels along with the call window.
   expect(chat).not.toContain("bg-chat-bubble ");
   expect(markdown).not.toContain("bg-chat-code");
 });
 
-test("the composer stays white so it lifts off the window", () => {
-  expect(chat).toContain("rounded-3xl border border-black/10 bg-white");
+test("the composer stays on the page colour so it lifts off the window", () => {
+  // --background, not white: on the paper tint the page colour is cream and a
+  // white composer would be the one white rectangle left on the screen. The
+  // step it needs is off --chat-surface, which moves with it.
+  expect(chat).toContain("rounded-3xl border border-black/10 bg-background");
 });

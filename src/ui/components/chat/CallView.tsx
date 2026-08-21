@@ -5,12 +5,15 @@
 // Tailwind-only.
 //
 // The conversation is a ChatScaleScope and its column width follows the zoom;
-// the hang-up button and the mode pills stay outside it.
+// the hang-up button and the chapter-focus line stay outside it.
 
 import type { ReactNode } from 'react';
+import type { ReadingIntent } from '../../../reading/intents';
 import ChatScaleScope from '../base/ChatScaleScope';
 import { IconClose } from '../base/icons';
-import { Composer, MessageList, type ComposerVoice } from './chat';
+import ChapterFocusBar, { type ChapterFocusBarProps } from './ChapterFocusBar';
+import { Composer, MessageList, type ChatMarkHost, type ComposerVoice } from './chat';
+import IntentChips from './IntentChips';
 import DeleteThreadButton from './DeleteThreadButton';
 import { useKeyboardInset } from '../common/useKeyboardInset';
 import type { PendingImage, ThreadMessage } from './types';
@@ -29,27 +32,39 @@ interface CallViewProps {
 	hint?: string;
 	streaming?: boolean;
 	onStop?(): void;
-	// Classroom mode (docs/09): the toggle lives at the top of the chat window.
-	// Absent handler = no button (e.g. no book open).
-	classroomOn?: boolean;
-	onToggleClassroom?(): void;
-	// One-line prep status shown beside the toggle while classroom is on.
-	classroomStatus?: string | null;
-	// Rehearsal mode (docs/31), the third posture, beside the classroom toggle.
-	// The two are mutually exclusive; the host owns that, not this row.
-	rehearsalOn?: boolean;
-	onToggleRehearsal?(): void;
+	// The chapter this conversation is focused on (docs/09), stated at the top of
+	// the window. Null, or an absent chapter, = no focus and no line.
+	chapterFocus?: ChapterFocusBarProps | null;
 	// The empty-state heading and composer placeholder. Default to the passage
-	// wording; the book-level thread (docs/03: top-bar AI button) passes the book
-	// title and "Ask about this book…".
+	// wording; the book-level thread (docs/03: the blackboard button) passes the
+	// book's title and the ask that opens a lesson.
 	emptyTitle?: string;
 	placeholder?: string;
+	// What an empty conversation offers under the composer (reading/intents.ts).
+	// Absent on a surface that has no opening intents — info's chat is one, and
+	// so is the book-level thread, where the reader types (docs/09).
+	intents?: readonly ReadingIntent[];
+	// One line under the composer saying why the book cannot be answered from yet
+	// (reading/intents.ts bookTextNotice).
+	// Absent = there is nothing to explain.
+	emptyNote?: string | null;
 	voice?: ComposerVoice | false;
 	// Dispatches a card's actions (add-source flow). Absent = a chat with no cards.
 	onCardAction?: CardActionHandler;
+	// The two pens on these replies (docs/09). Passed on the open book's
+	// conversations and nowhere else — a reply is the book continued, and the
+	// info chat's is not.
+	marks?: ChatMarkHost | null;
+	// This conversation is itself an aside: the way back to the one it came off.
+	// Absent = it is not one; a present `aside` with no `onBack` is one whose
+	// parent is gone, and that one keeps the hang-up so the view still has a door.
+	aside?: { onBack?(): void };
 	// Whether this call takes the chat zoom. The phone reaches this view too, and
 	// has neither of the gestures that drive it.
 	scalable?: boolean;
+	// Identifies the conversation for the transcript's scroll memory. Absent =
+	// the list is not remembered and opens at the newest message.
+	stickKey?: string;
 }
 
 // The scope's box without the zoom, so the tree is the same shape either way.
@@ -67,19 +82,34 @@ export default function CallView({
 	hint,
 	streaming,
 	onStop,
-	classroomOn = false,
-	onToggleClassroom,
-	classroomStatus,
-	rehearsalOn = false,
-	onToggleRehearsal,
+	chapterFocus,
 	emptyTitle = 'Ask about this passage',
 	placeholder = 'Ask about this passage…',
+	intents,
+	emptyNote,
 	voice,
 	onCardAction,
+	marks,
+	aside,
 	scalable = true,
+	stickKey,
 }: CallViewProps) {
 	const empty = messages.length === 0;
 	const Scope = scalable ? ChatScaleScope : PlainScope;
+	// Held in a variable because two of the three headers below use it.
+	const hangUp = (
+		<Button
+			type="button"
+			variant="ghost"
+			size="icon"
+			title="Hang up"
+			aria-label="Hang up"
+			onClick={onHangUp}
+			className="h-9 w-9 rounded-full text-neutral-500"
+		>
+			<IconClose size={18} />
+		</Button>
+	);
 	const composerProps = { pendingImages, onRemoveImage, hint, streaming, onStop, voice };
 	// Reserve space for the soft keyboard so the bottom composer stays above it
 	// (iPad). box-sizing:border-box shrinks the flex column by this padding, so the
@@ -92,53 +122,38 @@ export default function CallView({
 			style={{ paddingBottom: keyboardInset || undefined }}
 		>
 			<div className="absolute left-4 top-4 z-10 flex items-center gap-1">
-				<Button
-					type="button"
-					variant="ghost"
-					size="icon"
-					title="Hang up"
-					aria-label="Hang up"
-					onClick={onHangUp}
-					className="h-9 w-9 rounded-full text-neutral-500"
-				>
-					<IconClose size={18} />
-				</Button>
-				{onDelete && <DeleteThreadButton onDelete={onDelete} />}
+				{/* An aside's one control is the way back to the lesson it came out
+				    of. What it was opened on is not quoted beside it: a reader can
+				    mark a long stretch of a reply, and the reply is one press away
+				    anyway. One whose parent is gone has no way back, so it keeps the
+				    hang-up — the second door out of the view, the lit top-bar
+				    blackboard being the other (reading/call-state.ts
+				    mayOpenBookThread). */}
+				{aside ? (
+					aside.onBack ? (
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							onClick={aside.onBack}
+							className="h-9 whitespace-nowrap rounded-full px-3 text-neutral-500"
+						>
+							‹ Back to the lesson
+						</Button>
+					) : (
+						hangUp
+					)
+				) : (
+					<>
+						{hangUp}
+						{onDelete && <DeleteThreadButton onDelete={onDelete} />}
+					</>
+				)}
 			</div>
 
-			{(onToggleClassroom || onToggleRehearsal) && (
-				<div className="absolute left-1/2 top-4 z-10 flex -translate-x-1/2 items-center gap-2">
-					{onToggleClassroom && (
-						<Button
-							type="button"
-							variant={classroomOn ? 'secondary' : 'outline'}
-							aria-pressed={classroomOn}
-							onClick={onToggleClassroom}
-							className={
-								'rounded-full coarse:py-2.5 ' + (classroomOn ? '' : 'text-neutral-600')
-							}
-						>
-							Classroom
-						</Button>
-					)}
-					{onToggleRehearsal && (
-						<Button
-							type="button"
-							variant={rehearsalOn ? 'secondary' : 'outline'}
-							aria-pressed={rehearsalOn}
-							onClick={onToggleRehearsal}
-							className={
-								'rounded-full coarse:py-2.5 ' + (rehearsalOn ? '' : 'text-neutral-600')
-							}
-						>
-							Rehearsal
-						</Button>
-					)}
-					{classroomOn && classroomStatus && (
-						<span className="text-xs text-neutral-400">{classroomStatus}</span>
-					)}
-				</div>
-			)}
+			{/* An aside never carries a chapter focus of its own — it reads its
+			    parent's — so this slot is the non-aside's alone. */}
+			{!aside && chapterFocus && <ChapterFocusBar {...chapterFocus} />}
 
 			{empty ? (
 				<Scope className="flex min-h-0 flex-1 flex-col items-center justify-center px-4">
@@ -147,6 +162,12 @@ export default function CallView({
 					</h1>
 					<div className="w-full max-w-[calc(48rem*var(--chat-scale,1))]">
 						<Composer onSend={onSend} placeholder={placeholder} pill {...composerProps} />
+						{intents && intents.length > 0 && (
+							<IntentChips intents={intents} onPick={onSend} className="mt-3 justify-center" />
+						)}
+						{emptyNote && (
+							<p className="m-0 mt-3 text-center text-xs text-neutral-400">{emptyNote}</p>
+						)}
 					</div>
 				</Scope>
 			) : (
@@ -160,6 +181,8 @@ export default function CallView({
 							size="lg"
 							className="mx-auto max-w-[calc(48rem*var(--chat-scale,1))] pb-6"
 							onCardAction={onCardAction}
+							marks={marks}
+							stickKey={stickKey}
 						/>
 					</div>
 					<div className="px-4 pb-6">

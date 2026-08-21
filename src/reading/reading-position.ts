@@ -5,9 +5,8 @@
 // toast when the write failed, the one on the way out swallowed the failure
 // whole. Both report now, through the one channel every store reports on.
 //
-// The sticky mode flags (docs/09) are merged in here rather than by the reader,
-// which never carries them: what the engine emits is a position, and what is
-// stored is that position plus what the user turned on for this book.
+// It stores a position and nothing else. The sticky classroom flag it used to
+// merge in went with the mode (docs/09).
 
 import {
   createDebouncedWriter,
@@ -15,11 +14,7 @@ import {
 } from "../platform/app/debounced-writer";
 import type { ViewState } from "../platform/app/reader-contract";
 import { reportStoreError } from "../platform/app/store-errors";
-import { saveViewState, saveViewStateOnExit, withModes } from "../platform/app/storage";
-
-export interface ReadingModes {
-  classroom: boolean;
-}
+import { saveViewState, saveViewStateOnExit } from "../platform/app/storage";
 
 export interface ReadingPositionIo {
   write: (bookId: string, state: ViewState) => Promise<void>;
@@ -35,23 +30,20 @@ export interface ReadingPositionIo {
 }
 
 export interface ReadingPositions {
-  // The position a book opened on. Seeded so an early mode press merges onto
-  // the right book rather than onto the default state of no book at all.
+  // The position a book opened on, so a write before the reader has emitted
+  // anything lands on that rather than on the default state of no book at all.
   seed: (bookId: string, state: ViewState | null) => void;
   // The reader moved.
-  keep: (bookId: string, state: ViewState, modes: ReadingModes) => void;
-  // A mode was pressed. Written now rather than on the debounce, so the mode
-  // survives a book that is closed without the reader scrolling again.
-  setModes: (bookId: string, modes: ReadingModes) => void;
-  // What is on its way to disk for a book, mode flags and all.
+  keep: (bookId: string, state: ViewState) => void;
+  // What is on its way to disk for a book.
   last: (bookId: string) => ViewState | null;
   flush: () => Promise<void>;
 }
 
 export function createReadingPositions(io: ReadingPositionIo): ReadingPositions {
   // What each book's file should say. Read at write time and not at schedule
-  // time, so a mode pressed while a position is still on the debounce is part
-  // of the write that lands rather than being overtaken by it.
+  // time, so the write that lands carries the newest state rather than the one
+  // that happened to start the timer.
   const latest = new Map<string, ViewState>();
 
   // Both paths send the same thing — whatever `latest` holds at write time —
@@ -76,14 +68,9 @@ export function createReadingPositions(io: ReadingPositionIo): ReadingPositions 
       if (state) latest.set(bookId, state);
       else latest.delete(bookId);
     },
-    keep: (bookId, state, modes) => {
-      latest.set(bookId, withModes(state, modes));
+    keep: (bookId, state) => {
+      latest.set(bookId, state);
       writer.schedule(bookId);
-    },
-    setModes: (bookId, modes) => {
-      latest.set(bookId, withModes(latest.get(bookId) ?? null, modes));
-      writer.schedule(bookId);
-      void writer.flush();
     },
     last: (bookId) => latest.get(bookId) ?? null,
     flush: writer.flush,
@@ -98,11 +85,6 @@ const positions = createReadingPositions({
 
 export const seedReadingPosition = (bookId: string, state: ViewState | null): void =>
   positions.seed(bookId, state);
-export const keepReadingPosition = (
-  bookId: string,
-  state: ViewState,
-  modes: ReadingModes,
-): void => positions.keep(bookId, state, modes);
-export const setReadingModes = (bookId: string, modes: ReadingModes): void =>
-  positions.setModes(bookId, modes);
+export const keepReadingPosition = (bookId: string, state: ViewState): void =>
+  positions.keep(bookId, state);
 export const lastReadingPosition = (bookId: string): ViewState | null => positions.last(bookId);

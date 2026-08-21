@@ -27,7 +27,7 @@
 //      numbers beside it.
 //   3. A language switch. The real one is in Settings, behind the shell, and
 //      one recognizer decodes one language totally rather than partially
-//      (docs/pitfall/143) — so without a switch only half the thing can be
+//      (docs/pitfall/164) — so without a switch only half the thing can be
 //      tried. It writes the same `dictationLocale` setting the settings card
 //      writes and the composer reads.
 //
@@ -249,7 +249,7 @@ function Bench() {
       reset();
       gesture.current = { at: Date.now(), releasedAt: 0, timer: 0 };
       setHolding(true);
-      // The screen lock is refused without user activation (docs/pitfall/141),
+      // The screen lock is refused without user activation (docs/pitfall/162),
       // so the first real touch is where it can be asked for. Repeat requests
       // are harmless and the phone auto-locks in two minutes without one.
       void holdTheScreen();

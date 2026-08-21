@@ -49,9 +49,9 @@ in (docs/pitfall/31).
   `< /dev/null` or it is reaped a second in and looks like a device fault.
 - `devicectl device install app` does not stop the running instance. Two
   instances fight over the audio session and one of them hangs for a minute and
-  a half (docs/pitfall/138), so the stale pids are killed by signal first.
+  a half (docs/pitfall/159), so the stale pids are killed by signal first.
 - An unfiltered `idevicesyslog` drops most of what you want
-  (docs/pitfall/142); `-m RP-DICT` fixes it.
+  (docs/pitfall/163); `-m RP-DICT` fixes it.
 - The phone must be unlocked to launch anything at all, and it auto-locks about
   two minutes later. `navigator.wakeLock` exists in the webview but is refused
   (`Permission was denied`) without user activation, so a run longer than one

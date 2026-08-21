@@ -12,7 +12,12 @@
 
 import type { Annotation } from "../../platform/app/reader-contract";
 import { annotationPage } from "../../platform/app/reader-contract";
-import { countNewReaderMessages, type DistillAnnotation, type DistillMessage } from "./distill";
+import {
+  countNewUnitMessages,
+  type DistillAnnotation,
+  type DistillMessage,
+  type DistillUnitPart,
+} from "./distill";
 
 // How often the app looks, while it is open.
 export const SWEEP_INTERVAL_MS = 30 * 60_000;
@@ -26,6 +31,113 @@ export const MIN_NEW_MARKS = 5;
 // enough: something the reader said is the scarce thing.
 export const MIN_NEW_MESSAGES = 1;
 
+// --- what counts as one conversation ---
+
+// A thread as the unit rule sees it. Structural, so the rule can be applied to
+// the live store's records and to the sweep's on-disk ones without either side
+// importing the other's shape.
+export interface UnitThread {
+  id: string;
+  annotationId: string;
+  parentThreadId?: string;
+  messages: readonly DistillMessage[];
+}
+
+// One conversation's worth of transcript: the merged view that goes to the
+// model, the thread the pass is named for, and the threads whose cursors the
+// pass moves.
+export interface DistillUnit {
+  threadId: string;
+  annotationId: string;
+  messages: DistillMessage[];
+  parts: DistillUnitPart[];
+}
+
+// Whether a thread's transcript is folded into another's, and whose.
+//
+// An aside with no page resolves to page null and markedText "" — it would spend
+// a sub-agent run on a pass that cannot say where in the book it happened. It is
+// not a conversation of its own anyway: the reader pulled a sentence out of the
+// lesson and went back to it. So it joins its parent, whose cursor then advances
+// over both, and one learn session distils once.
+//
+// An aside drawn on a page has a mark and a page, so it stays a unit, exactly
+// like the mark thread it is drawn beside. "Is there a page" is the whole test.
+// It used to be "is there an annotation", which said the same thing until a pen
+// could mark an AI reply (docs/09): those marks are annotations too, and the
+// aside one of them opens has no page either.
+//
+// `pageless` is the annotation ids that sit on no page, which only the caller
+// can know — the rule is applied to the live store's records and to the sweep's
+// on-disk ones and neither carries the annotations. It names the exception
+// rather than the norm on purpose: an id that is not in it, including one that
+// is in no list the caller had, is treated as a page mark and keeps its own
+// unit, which is what every record written before chat marks existed is.
+//
+// An aside whose parent is not here is a unit of its own rather than nothing.
+// Deleting a parent cascades, but sync can leave one behind
+// (platform/app/threads.ts), and folding into a thread that does not exist is
+// how the reader's best material would go quietly missing.
+function foldsInto(
+  t: UnitThread,
+  present: ReadonlySet<string>,
+  pageless?: ReadonlySet<string>,
+): string | null {
+  const onPage = t.annotationId !== "" && !pageless?.has(t.annotationId);
+  if (onPage || !t.parentThreadId) return null;
+  return present.has(t.parentThreadId) ? t.parentThreadId : null;
+}
+
+// Only the three fields a transcript is made of, the same narrowing the hangup
+// path has always done: a stored message also carries image filenames and the
+// display row's parts, and neither is the talk.
+function plain(messages: readonly DistillMessage[]): DistillMessage[] {
+  return messages.map(({ role, text, ts }) => ({ role, text, ts }));
+}
+
+// Every thread of one book reduced to the passes that should run over it.
+//
+// A folded transcript is merged into its parent's by timestamp. An aside opens
+// mid-lesson and the reader goes back to the lesson after, so a merge by ts is
+// append-only in time — which is what lets one cursor, counted in messages,
+// index the lot across restarts.
+export function distillUnits(
+  threads: readonly UnitThread[],
+  pageless?: ReadonlySet<string>,
+): DistillUnit[] {
+  const present = new Set(threads.map((t) => t.id));
+  const folded = new Map<string, DistillUnitPart[]>();
+  for (const t of threads) {
+    const into = foldsInto(t, present, pageless);
+    if (into === null) continue;
+    folded.set(into, [...(folded.get(into) ?? []), { threadId: t.id, messages: plain(t.messages) }]);
+  }
+  const units: DistillUnit[] = [];
+  for (const t of threads) {
+    if (foldsInto(t, present, pageless) !== null) continue;
+    const own: DistillUnitPart = { threadId: t.id, messages: plain(t.messages) };
+    const joined = folded.get(t.id);
+    const parts = joined ? [own, ...joined] : [own];
+    const messages = parts.flatMap((p) => p.messages);
+    if (joined) messages.sort((a, b) => a.ts - b.ts);
+    units.push({ threadId: t.id, annotationId: t.annotationId, messages, parts });
+  }
+  return units;
+}
+
+// The unit one thread belongs to — the parent's when it folds in, its own
+// otherwise. Null when the thread is not among the ones given.
+export function distillUnitOf(
+  threads: readonly UnitThread[],
+  threadId: string,
+  pageless?: ReadonlySet<string>,
+): DistillUnit | null {
+  const self = threads.find((t) => t.id === threadId);
+  if (!self) return null;
+  const into = foldsInto(self, new Set(threads.map((t) => t.id)), pageless) ?? threadId;
+  return distillUnits(threads, pageless).find((u) => u.threadId === into) ?? null;
+}
+
 export interface ThreadArrears {
   threadId: string;
   annotationId: string;
@@ -34,6 +146,9 @@ export interface ThreadArrears {
   // The whole thread, oldest first. A conversation about one passage is the
   // unit; the cursor only decides whether to run.
   messages: DistillMessage[];
+  // The threads this unit is made of, when it is made of more than one. Absent
+  // is the ordinary case and means the thread itself (distillUnits).
+  parts?: DistillUnitPart[];
   newMessages: number;
 }
 
@@ -77,6 +192,13 @@ export function toDistillAnnotations(
   });
 }
 
+// The marks that sit on no page — the ones drawn on an AI reply — for the unit
+// rule above. Built from the same DistillAnnotation list the sweep already has,
+// so no caller needs the engine shapes to answer it.
+export function pagelessMarkIds(marks: readonly DistillAnnotation[]): Set<string> {
+  return new Set(marks.filter((m) => m.page === null).map((m) => m.id));
+}
+
 // Marks created strictly after the book's cursor. Marks with neither a passage
 // nor a note are dropped, matching what a pass would actually be shown
 // (selectSilentMarks).
@@ -93,12 +215,16 @@ export function countNewMarks(
   return n;
 }
 
-// The arrears of one thread, given how many of its messages are already folded in.
+// The arrears of one unit, given how much of it is already folded in. A number
+// is where this thread's own cursor stands; a unit made of more than one thread
+// needs the lookup, because each of them carries a cursor of its own.
 export function threadArrears(
   thread: Omit<ThreadArrears, "newMessages">,
-  cursor: number,
+  cursor: number | ((threadId: string) => number),
 ): ThreadArrears {
-  return { ...thread, newMessages: countNewReaderMessages(thread.messages, cursor) };
+  const at = typeof cursor === "number" ? () => cursor : cursor;
+  const parts = thread.parts ?? [{ threadId: thread.threadId, messages: thread.messages }];
+  return { ...thread, newMessages: countNewUnitMessages(parts, at) };
 }
 
 export function topicDebt(topic: TopicArrears): { marks: number; messages: number } {

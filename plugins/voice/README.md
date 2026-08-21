@@ -25,7 +25,7 @@ Without one the native side walks `Locale.preferredLanguages` and takes the
 first in `SpeechTranscriber.supportedLocales`, falling back to `en-US` —
 a fallback for the window before settings load, not a mode to rely on. Following
 the device is what transcribes Chinese speech as confident English
-(docs/pitfall/143), because cross-language decoding is total rather than
+(docs/pitfall/164), because cross-language decoding is total rather than
 degraded. `Locale.current` is not usable for any of this (docs/33).
 
 One event, subscribed with `addPluginListener('voice', 'dictation', cb)`:

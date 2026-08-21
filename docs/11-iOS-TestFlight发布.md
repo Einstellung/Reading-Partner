@@ -50,6 +50,7 @@ Actions → iOS TestFlight → Run workflow(main 分支)。20-40 分钟。
 - 首跑时云签名会自动创建 Apple Distribution 证书和 provisioning profile,不用手动建。
 - 失败看对应 step 日志;只要 ipa 已产出,即使上传失败也会留成 artifact。
 - 日志里的 `No code signing certificates found` 警告和 `Apple Distribution: Tauri (unset)` 证书都是 Tauri 自己的噪音,不是配置错(见 docs/pitfall/48)。签名成没成看 export 阶段。
+- Run workflow 的 `inspectable` 输入默认 false,保持不动;只有自己调真机那一次才勾,勾了的包不发给别人。
 
 ## 6. TestFlight 配置(一次性)
 
@@ -78,8 +79,15 @@ Actions → iOS TestFlight → Run workflow(main 分支)。20-40 分钟。
 
 改完代码合进 main,回到第 5 步再点一次 Run workflow。改版本号(如 0.2.0 → 0.3.0)时同步改 `tauri.conf.json`、`package.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock` 四处;不改版本号只发新 build 也行,build number 自增保证可上传。
 
+## 上架前的条款
+
+- 3.1.1(强制内购)不适用:BYOK 不卖数字内容,用户用的是自己在第三方已有的服务。
+- 5.1.2(隐私披露):App 隐私清单和界面里要明示"内容会发送给用户自己配置的 AI 提供商"。
+- 中国区:境外注册开发者目前不被要求 ICP 备案(2024-04 起大陆商店本要求备案,但备案前置条件是境内服务器+域名,与零后端矛盾)。先上美区,国内用户用外区 Apple ID 下载;有真实需求再补备案。
+- 个人开发者账号 $99/年,覆盖全球全部地区,不按地区加钱。
+
 ## 已知限制
 
-- 没有 Mac:不能 `tauri ios dev` 真机调试,不能用 Safari 远程 inspector,一切问题只能靠 CI 日志和(模拟器/TestFlight)包内表现定位。
+- 模拟器上能跑 `tauri ios dev` + idb 真触摸 + sim-bridge 取值(`scripts/ios-sim.sh`,基线见 `scripts/ios-sim/baseline.md`);真机远程 inspector 靠 `inspectable` feature 开(`src-tauri/Cargo.toml`,默认关,只能通过 workflow 的 dispatch 输入开)。没有 Mac 意味着没有 Xcode/开发者中心网页之外的真机调试:签名、账号这类环节仍然只能靠 CI 日志和(模拟器/TestFlight)包内表现定位。
 - iOS 引擎闸门(EmbedPDF 的 PDFium WASM 在 WKWebView 里能不能渲染)已在模拟器上无签名验证通过:`.github/workflows/ios-simulator-smoke.yml`(推 ios-spike 触发)。实测结论:iOS 自定义协议下 `crossOriginIsolated` 为假、`SharedArrayBuffer` 不存在,但直连引擎单线程照样渲染出页面(见 docs/pitfall/33)。不需要第一个 TestFlight 包来验证闸门。
-- Claude 订阅 OAuth 的 loopback 回调在 iOS 不可用,走手动粘贴 code;BYOK 不受影响(见 docs/06)。
+- Claude 订阅 OAuth 的 loopback 回调在 iOS 不可用,走手动粘贴 code;BYOK 不受影响。

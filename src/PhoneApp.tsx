@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bindSystemBack } from "./platform/app/back-button";
 import { BRIEF_TOPIC_ID } from "./platform/app/topics";
 import { initSync } from "./platform/sync";
+import { purgeLegacyChapterNotes } from "./reading/prep/chapters/purge";
 import { registerPullRoute } from "./platform/sync/pull-routes";
 import { KEPT_ARTICLES_PULL_ROUTE } from "./reading/pull-routes";
 import {
@@ -139,7 +140,13 @@ export default function PhoneApp() {
   useEffect(() => {
     // "phone": the books channel stays off here, since nothing on this shell
     // can open a PDF (docs/22).
-    void initSync("phone").catch((e) => console.warn("sync init failed", e));
+    // Once, on the way up: the chapter notes written before this was a
+    // chapter-spine pass are deleted from here and queued for deletion from
+    // Drive. After initSync, so the queue is written to the state file that was
+    // just read rather than to the placeholder it replaced.
+    void initSync("phone")
+      .catch((e) => console.warn("sync init failed", e))
+      .finally(() => void purgeLegacyChapterNotes());
     return registerPullRoute({
       ...KEPT_ARTICLES_PULL_ROUTE,
       onPulled: () => void refreshSavedArticles(),
@@ -175,10 +182,10 @@ export default function PhoneApp() {
   return (
     // The backdrop the swipe reveals, and the clip that hides whatever has left
     // the screen. Only ever visible while a gesture or its animation is running.
-    <div className="relative h-full overflow-hidden bg-[#f1f3f5]">
+    <div className="relative h-full overflow-hidden bg-muted-soft">
       {/* p-safe: the notch and the home indicator (viewport-fit=cover). Fixed
           overlays are not covered by it and pad themselves — docs/pitfall/74. */}
-      <div ref={surfaceRef} className="flex h-full flex-col bg-white p-safe">
+      <div ref={surfaceRef} className="flex h-full flex-col bg-background p-safe">
         {/* No shell header: every screen carries its own top bar, and a second
             one above them would cost a phone a line of reading height for
             nothing. */}

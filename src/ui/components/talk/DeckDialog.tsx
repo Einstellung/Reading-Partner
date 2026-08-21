@@ -57,7 +57,7 @@ function LivenessHint({ activity }: { activity: SlidesActivity }) {
 }
 
 const STATUS_STYLE: Record<string, string> = {
-  pending: "bg-neutral-100 text-neutral-500",
+  pending: "bg-muted-soft text-neutral-500",
   running: "bg-amber-100 text-amber-700",
   done: "bg-green-100 text-green-700",
   failed: "bg-red-100 text-red-700",
@@ -91,7 +91,7 @@ function SlideRow({
   };
 
   return (
-    <div className="border-b border-[#f6f6f6] py-1 last:border-0">
+    <div className="border-b border-border-faint py-1 last:border-0">
       <div className="flex items-center gap-2 text-[12px]">
         <span className="w-5 shrink-0 text-right text-neutral-400">{slide.index}</span>
         <span className="min-w-0 flex-1 truncate text-neutral-700">{slide.title}</span>
@@ -171,7 +171,7 @@ function RunView({
   const running = snap.running;
   const bodiesReady = st.slides.length > 0 && st.slides.every((s) => s.contentStatus === "done");
   return (
-    <div className="rounded-lg border border-[#eee] p-3">
+    <div className="rounded-lg border border-border-subtle p-3">
       <div className="flex items-center justify-between gap-2">
         <div className="text-[13px] font-semibold text-[#1b1b1b]">{st.title}</div>
         <div className="flex items-center gap-2">
@@ -221,7 +221,7 @@ function RunView({
       )}
 
       {st.slides.length > 0 && (
-        <div className="mt-2 max-h-72 overflow-y-auto border-t border-[#f0f0f0] pt-1">
+        <div className="mt-2 max-h-72 overflow-y-auto border-t border-border-subtle pt-1">
           {st.slides.map((s) => (
             <SlideRow
               key={s.index}
@@ -340,7 +340,7 @@ export default function DeckDialog({
           "flex w-[min(35rem,100%)] flex-col gap-0 rounded-xl border-0 p-0 shadow-2xl",
         )}
       >
-        <div className="flex items-center justify-between border-b border-[#eee] px-4 py-3">
+        <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
           <DialogTitle className="min-w-0 truncate text-[15px] font-semibold leading-normal text-[#1b1b1b]">
             The deck for “{talkName}”
           </DialogTitle>
@@ -387,7 +387,7 @@ export default function DeckDialog({
           {snap && pipeline && <RunView snap={snap} pipeline={pipeline} onStop={() => pipeline.stop()} />}
 
           {deck && (
-            <div className="flex items-center justify-between gap-2 rounded-md border border-[#eee] px-2.5 py-1.5">
+            <div className="flex items-center justify-between gap-2 rounded-md border border-border-subtle px-2.5 py-1.5">
               <div className="min-w-0">
                 <div className="truncate text-[13px] text-neutral-700">{deck.title}</div>
                 <div className="truncate text-[11px] text-neutral-400">{deck.file}</div>

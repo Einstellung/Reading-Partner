@@ -98,7 +98,10 @@ function Harness() {
     const initial: EmbedViewState | null = q.has("page")
       ? {
           pageIndex: Number(q.get("page")),
-          zoom: Number(q.get("zoom") ?? "1"),
+          // Omitted when the query has none, so ?page= alone reproduces what the
+          // shell mounts a book it has no saved scale for: a state with no zoom,
+          // which opens at the layout's fit. Passing ?zoom= is the restore.
+          ...(q.has("zoom") ? { zoom: Number(q.get("zoom")) } : {}),
           ...(q.has("py") ? { pageX: Number(q.get("px") ?? "0"), pageY: Number(q.get("py")) } : {}),
           // A restored paged layout is the open path the switch's settle does
           // not cover: ?layout=paged reproduces it without the shell.

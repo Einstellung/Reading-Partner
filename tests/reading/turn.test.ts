@@ -1,6 +1,6 @@
 // Turn assembly for the reading companion (src/reading/turn). The branching
 // that used to live inside App's runTurn closure: which tools get mounted in
-// companion vs classroom mode, the figure/link-ingestion gates, and the history
+// the figure/link-ingestion gates, what each turn inlines, and the history
 // trim. Run: bun test.
 
 import { beforeEach, expect, mock, test } from "bun:test";
@@ -8,7 +8,7 @@ import type { Annotation } from "../../src/platform/app/reader-contract";
 import { DEFAULT_SETTINGS, type Settings } from "../../src/platform/app/settings";
 import type { Fulltext } from "../../src/fulltext/types";
 import type { Figure } from "../../src/reading/figures/types";
-import type { PrepPaper, PrepState } from "../../src/reading/prep/types";
+import type { PrepPaper, PrepState } from "../../src/reading/prep/papers/types";
 import type { SavedArticle } from "../../src/reading/saved-articles";
 import type { SubagentTurnFn } from "../../src/ai/subagent";
 import { makeAppData } from "../support/appdata";
@@ -29,15 +29,23 @@ mock.module("../../src/platform/app/atomic-fs", () => app.atomicFs);
 const { backgroundFailureToast, buildReadingTurn, turnFailureView, EXPLAIN_KICKOFF, HISTORY_KEEP } =
   await import("../../src/reading/turn");
 const { getFulltext } = await import("../../src/fulltext/store");
-const { paperFulltextHash, writePrepNote } = await import("../../src/reading/prep/store");
-const { CLASSROOM_NOTE_BUDGET } = await import("../../src/reading/prep/classroom");
+const { paperFulltextHash, writePrepNote } = await import("../../src/reading/prep/papers/store");
+const { CLASSROOM_NOTE_BUDGET } = await import("../../src/reading/prep/papers/classroom");
 const { estimateTextTokens } = await import("../../src/budget");
 const { REFUSE_MIDTURN, REFUSE_ROUNDS } = await import("../../src/ai/agent");
 const { StoppedError } = await import("../../src/ai/watchdog");
 const { RESEARCH_TOOL_NAME, RESEARCH_TURN_ROUNDS } = await import(
   "../../src/reading/papers/research-agent"
 );
-const { appendMessage, createThread, dropThreadCache } = await import("../../src/platform/app/threads");
+const {
+  appendMessage,
+  createAsideThread,
+  createBookThread,
+  createThread,
+  dropThreadCache,
+  getThread,
+  setThreadFocusChapter,
+} = await import("../../src/platform/app/threads");
 
 const BOOK = "book-hash";
 
@@ -141,7 +149,6 @@ function input(over: Partial<Parameters<typeof buildReadingTurn>[0]> = {}) {
       pageIndex: 1,
       files: [{ path: "/books/survey.pdf", name: "survey.pdf", hash: BOOK }],
     },
-    classroom: false,
     settings,
     getPipeline: () => null,
     distillAnnotations: () => [],
@@ -160,6 +167,7 @@ test("companion turn: reading tools only, kickoff as the first message", async (
   expect(turn).not.toBeNull();
   expect(names(turn!.tools)).toEqual([
     "find_paper",
+    "read_chapter",
     "read_pages",
     "research_literature",
     "search_topic",
@@ -184,6 +192,7 @@ test("a topic id mounts the observation tools", async () => {
     "observation_read",
     "observation_search",
     "observation_update",
+    "read_chapter",
     "read_pages",
     "research_literature",
     "search_topic",
@@ -195,6 +204,7 @@ test("a figure index mounts view_figure and the catalog", async () => {
   const turn = await buildReadingTurn(input({ figures }));
   expect(names(turn!.tools)).toEqual([
     "find_paper",
+    "read_chapter",
     "read_pages",
     "research_literature",
     "search_topic",
@@ -203,13 +213,15 @@ test("a figure index mounts view_figure and the catalog", async () => {
   expect(turn!.systemPrompt).toContain("[fig:1]");
 });
 
-// The two buildClassroomTools call sites are guarded by opposite sides of the
-// same flag, so the paper tools mount exactly once in either mode.
-test("companion mode with a live pipeline: source + paper tools, mounted once", async () => {
+// The paper tools used to be mounted from two call sites guarded by opposite
+// sides of the mode flag. There is one call site now, and it follows the data:
+// a prep state exists, so read_paper and read_note have something to read.
+test("a live pipeline mounts the source and paper tools, once", async () => {
   const turn = await buildReadingTurn(input({ getPipeline: () => pipeline(prepState()) }));
   expect(names(turn!.tools)).toEqual([
     "add_source",
     "find_paper",
+    "read_chapter",
     "read_note",
     "read_pages",
     "read_paper",
@@ -219,41 +231,25 @@ test("companion mode with a live pipeline: source + paper tools, mounted once", 
   expect(turn!.systemPrompt).toContain("add_source");
 });
 
-test("classroom mode with a live pipeline: source + paper tools, mounted once", async () => {
+test("a pipeline with no plan yet mounts no paper tools", async () => {
   const turn = await buildReadingTurn(
-    input({ classroom: true, getPipeline: () => pipeline(prepState()) }),
+    input({ getPipeline: () => pipeline(null) }),
   );
   expect(names(turn!.tools)).toEqual([
     "add_source",
     "find_paper",
-    "read_note",
-    "read_pages",
-    "read_paper",
-    "research_literature",
-    "search_topic",
-  ]);
-});
-
-test("classroom mode without a plan yet mounts no paper tools", async () => {
-  const turn = await buildReadingTurn(
-    input({ classroom: true, getPipeline: () => pipeline(null) }),
-  );
-  expect(names(turn!.tools)).toEqual([
-    "add_source",
-    "find_paper",
+    "read_chapter",
     "read_pages",
     "research_literature",
     "search_topic",
   ]);
 });
 
-// Kept info articles (docs/21). Three conditions, all of them necessary: the
-// classroom is where a prep list exists to put one on, the pipeline is what puts
-// it there, and a reader who has kept nothing gets no tool at all.
-test("classroom mode with kept articles mounts the saved-article tools and their prompt line", async () => {
+// Kept info articles (docs/21). Two conditions, both necessary: a prep list to
+// put one on, and a reader who has kept something.
+test("kept articles mount the saved-article tools and their prompt line", async () => {
   const turn = await buildReadingTurn(
     input({
-      classroom: true,
       getPipeline: () => pipeline(prepState()),
       savedArticles: savedStore([savedArticle()]),
     }),
@@ -263,6 +259,7 @@ test("classroom mode with kept articles mounts the saved-article tools and their
     "add_source",
     "find_paper",
     "list_saved_articles",
+    "read_chapter",
     "read_note",
     "read_pages",
     "read_paper",
@@ -273,14 +270,14 @@ test("classroom mode with kept articles mounts the saved-article tools and their
   expect(turn!.systemPrompt).toContain("and only then");
 });
 
-test("no kept articles, or no classroom, means no saved-article tools", async () => {
+test("no kept articles, or no prep list, means no saved-article tools", async () => {
   const cases = [
-    // Classroom, pipeline, nothing kept.
-    input({ classroom: true, getPipeline: () => pipeline(prepState()) }),
-    // Kept articles, but companion mode: the prep list is the classroom's list.
-    input({ getPipeline: () => pipeline(prepState()), savedArticles: savedStore([savedArticle()]) }),
-    // Classroom and kept articles, but no pipeline to put one on.
-    input({ classroom: true, savedArticles: savedStore([savedArticle()]) }),
+    // A prep list, nothing kept.
+    input({ getPipeline: () => pipeline(prepState()) }),
+    // Kept articles, but no prep list to put one on.
+    input({ savedArticles: savedStore([savedArticle()]) }),
+    // Kept articles and a pipeline, but no plan yet.
+    input({ getPipeline: () => pipeline(null), savedArticles: savedStore([savedArticle()]) }),
   ];
   for (const c of cases) {
     const turn = await buildReadingTurn(c);
@@ -297,7 +294,6 @@ test("the mount gate does not read the records; a tool call reads them once", as
   let reads = 0;
   const turn = await buildReadingTurn(
     input({
-      classroom: true,
       getPipeline: () => pipeline(prepState()),
       savedArticles: {
         any: async () => {
@@ -326,7 +322,6 @@ test("add_saved_article queues the kept text and caches it under the slug it got
   const handed: { fulltext?: Fulltext | null }[] = [];
   const turn = await buildReadingTurn(
     input({
-      classroom: true,
       getPipeline: () =>
         pipeline(prepState(), (paper, fetched) => {
           queued.push(paper);
@@ -355,9 +350,10 @@ test("add_saved_article queues the kept text and caches it under the slug it got
 });
 
 test("no pipeline means no link ingestion", async () => {
-  const turn = await buildReadingTurn(input({ classroom: true }));
+  const turn = await buildReadingTurn(input());
   expect(names(turn!.tools)).toEqual([
     "find_paper",
+    "read_chapter",
     "read_pages",
     "research_literature",
     "search_topic",
@@ -366,12 +362,12 @@ test("no pipeline means no link ingestion", async () => {
 });
 
 // docs/24: the literature question can arrive on any page of any book, so the two
-// literature tools are not gated on classroom mode, on a prep pipeline, or on the
+// literature tools are not gated on a prep pipeline or on the
 // book having a text layer — unlike everything else here.
 test("the literature tools are mounted on every reading turn, with their prompt lines", async () => {
   const cases = [
     input(),
-    input({ classroom: true }),
+    input(),
     input({ fulltext: fulltext("no-text-layer") }),
     input({ getPipeline: () => pipeline(prepState()) }),
     input({ annotationId: "" }),
@@ -391,7 +387,7 @@ test("the literature tools are mounted on every reading turn, with their prompt 
 test("topic search and the citation walk are not reachable from the reader's turn", async () => {
   const cases = [
     input(),
-    input({ classroom: true, getPipeline: () => pipeline(prepState()) }),
+    input({ getPipeline: () => pipeline(prepState()) }),
     input({ context: { ...input().context, topicId: "topic-1" } }),
   ];
   for (const c of cases) {
@@ -409,15 +405,7 @@ test("the prompt points from the book's own citations into the recent literature
   expect(turn!.systemPrompt).toContain("older than itself");
 });
 
-test("classroom mode swaps the system prompt", async () => {
-  const companion = await buildReadingTurn(input());
-  const classroom = await buildReadingTurn(
-    input({ classroom: true, getPipeline: () => pipeline(prepState()) }),
-  );
-  expect(classroom!.systemPrompt).not.toBe(companion!.systemPrompt);
-});
-
-// --- what a classroom turn carries (docs/09) ---
+// --- what a turn on a prepped book carries (docs/09) ---
 
 function notePaper(slug: string, chapters: number[]): PrepPaper {
   return {
@@ -454,7 +442,7 @@ test("every prep note rides along, whatever chapter the reader is parked in", as
   const papers = [notePaper("all-a", [1]), notePaper("all-b", [4]), notePaper("all-c", [7])];
   for (const p of papers) await writePrepNote(BOOK, p.slug, `body of ${p.slug}`);
   const turn = await buildReadingTurn(
-    input({ classroom: true, getPipeline: () => pipeline(chaptered(papers)) }),
+    input({ getPipeline: () => pipeline(chaptered(papers)) }),
   );
   for (const p of papers) {
     expect(turn!.systemPrompt).toContain(`body of ${p.slug}`);
@@ -472,7 +460,7 @@ test("the cap cuts the far end of the queue, and the prep list names who was cut
   for (const p of papers) await writePrepNote(BOOK, p.slug, "书".repeat(5_000));
 
   const turn = await buildReadingTurn(
-    input({ classroom: true, getPipeline: () => pipeline(chaptered(papers)) }),
+    input({ getPipeline: () => pipeline(chaptered(papers)) }),
   );
   const carried = papers.filter((p) => turn!.systemPrompt.includes(`--- ${p.slug}:`));
   expect(carried.length).toBeGreaterThan(0);
@@ -501,7 +489,7 @@ test("the prep list separates carried from on-disk from never fetched", async ()
   ];
   await writePrepNote(BOOK, "state-carried", "the carried body");
   const turn = await buildReadingTurn(
-    input({ classroom: true, getPipeline: () => pipeline(chaptered(papers)) }),
+    input({ getPipeline: () => pipeline(chaptered(papers)) }),
   );
   expect(turn!.systemPrompt).toContain("- state-carried — state-carried [note below]");
   expect(turn!.systemPrompt).toContain("[no full text: Connection error.]");
@@ -528,13 +516,13 @@ test("the tools paragraph names read_annotations only when a mark exists", async
   expect(marked!.systemPrompt).toContain("read_annotations(material)");
 });
 
-test("a classroom turn announces the paper tools only once a prep run exists", async () => {
-  const none = await buildReadingTurn(input({ classroom: true }));
+test("the paper tools are announced only once a prep run exists", async () => {
+  const none = await buildReadingTurn(input());
   expect(none!.systemPrompt).not.toContain("read_paper");
   expect(none!.systemPrompt).not.toContain("read_note");
 
   const prepped = await buildReadingTurn(
-    input({ classroom: true, getPipeline: () => pipeline(prepState()) }),
+    input({ getPipeline: () => pipeline(prepState()) }),
   );
   expect(prepped!.systemPrompt).toContain("read_paper(slug, from, to)");
   expect(prepped!.systemPrompt).toContain("read_note(slug)");
@@ -552,6 +540,51 @@ test("history is replayed after the kickoff and trimmed to the cap", async () =>
   expect(turn!.messages[turn!.messages.length - 1].text).toBe(`m${HISTORY_KEEP + 4}`);
 });
 
+// The chips (reading/intents.ts) mean a thread now opens on whatever the reader
+// picked, and that line is already a user message. Prefixing the explain kickoff
+// in front of it would tell the model to explain the passage when the reader
+// asked for an example.
+// A mark drawn on a reply (src/reading/chat-marks.ts). Anchored on the message,
+// so it has no page and never goes near the engine.
+function chatMark(threadId: string, messageTs: number, text: string): Annotation {
+  return {
+    id: `chat-${threadId}-${messageTs}`,
+    type: "underline",
+    text,
+    chatAnchor: { threadId, messageTs, text, occurrence: 0, pen: "ai" },
+  } as unknown as Annotation;
+}
+
+// docs/09: the AI's answers are the book continued, so a reply the reader drew
+// on comes back saying which words those were. The note rides the message, so it
+// falls out of context with it and it never enters the prompt's stable half —
+// the provider's cache prefix — where one new mark would rewrite the chapter.
+test("a reply the reader marked replays with the marked words named after it", async () => {
+  createThread(BOOK, "ann-1", "thread-1");
+  appendMessage(BOOK, "thread-1", { role: "user", text: "why three matrices", ts: 1 });
+  appendMessage(BOOK, "thread-1", { role: "ai", text: "Query, key and value.", ts: 2 });
+  const marked = chatMark("thread-1", 2, "key and value");
+
+  const plain = await buildReadingTurn(input());
+  const turn = await buildReadingTurn(input({ annotations: [marked] }));
+
+  expect(plain!.messages.map((m) => m.text)).toEqual(["why three matrices", "Query, key and value."]);
+  expect(turn!.messages[1].text).toBe(
+    'Query, key and value.\n\n[marked by the reader in this reply: “key and value”]',
+  );
+  // The reader's own message is left alone, and so is the prompt.
+  expect(turn!.messages[0].text).toBe("why three matrices");
+  expect(turn!.systemPrompt).not.toContain("marked by the reader");
+});
+
+test("a thread that opens on the reader's own ask replays it, with no kickoff in front", async () => {
+  createThread(BOOK, "ann-1", "thread-1");
+  appendMessage(BOOK, "thread-1", { role: "user", text: "Can you give me an example?", ts: 1 });
+  appendMessage(BOOK, "thread-1", { role: "ai", text: "Here is one.", ts: 2 });
+  const turn = await buildReadingTurn(input());
+  expect(turn!.messages.map((m) => m.text)).toEqual(["Can you give me an example?", "Here is one."]);
+});
+
 test("an aborted signal drops the turn", async () => {
   const controller = new AbortController();
   controller.abort();
@@ -560,7 +593,8 @@ test("an aborted signal drops the turn", async () => {
 
 test("the book-level thread carries no marked passage", async () => {
   const turn = await buildReadingTurn(input({ annotationId: "", annotation: undefined }));
-  expect(turn!.systemPrompt).not.toContain("inline caches");
+  expect(turn!.systemPrompt).not.toContain("Marked passage");
+  expect(turn!.systemPrompt).not.toContain("Text around the marked passage");
 });
 
 // --- fitting the turn to the model's context window (src/budget) ---
@@ -596,73 +630,32 @@ test("a turn that fits keeps everything and says nothing", async () => {
   expect(turn!.systemPrompt).toContain("[fig:1]");
 });
 
-test("a survey too long for the window stops being inlined, and the user is told", async () => {
-  const fulltext = cjkSurvey(300);
-  const figures: Figure[] = [{ id: "1", page: 2, caption: "内联缓存布局", bbox: null }];
-  const turn = await buildReadingTurn(
-    input({ classroom: true, fulltext, figures, settings: small }),
-  );
+// --- the three loads (docs/09) ---
 
-  expect(turn!.refusal).toBe("");
-  expect(turn!.notice).toBe(
-    "Note: the book didn't fit in context, so I read the pages I needed instead of having all of it in view.",
-  );
-  // The body is gone and every claim that it is there went with it.
-  expect(turn!.systemPrompt).not.toContain("=== Page 2 ===");
-  expect(turn!.systemPrompt).not.toContain("already fully in your context");
-  expect(turn!.systemPrompt).toContain("read it with read_pages");
-  // The cheaper rung above it was taken first, so the catalog went too.
-  expect(turn!.systemPrompt).not.toContain("[fig:1]");
-  // The tool that replaces the inline body is still mounted.
-  expect(names(turn!.tools)).toContain("read_pages");
-});
+// A book that lands in the whole-book tier: 30 pages of CJK is 30k on the raw
+// estimate, 45k once the measured shortfall is added back, which is exactly the
+// bar. The tier is what bounds an inlined book now, so the budget ladder below
+// is not what keeps a 400-page textbook out of the prompt — this is.
+const INLINE_BOOK = cjkSurvey(30);
 
-// The prep notes are on the ladder above the inlined book: a window that cannot
-// hold both gives up the shelf before the textbook, and says so. The trim is a
-// quarter of the cap walked in the same order, so what survives is a prefix of
-// what a roomy window carried — not a differently-chosen set.
-test("a window that cannot hold every note keeps the front of the queue, and says so", async () => {
-  const here = [1, 2, 3, 4].map((i) => notePaper(`rung-here-${i}`, [2]));
-  const far = [1, 2, 3, 4, 5, 6, 7, 8].map((i) => notePaper(`rung-far-${i}`, [7]));
-  const papers = [...here, ...far];
-  for (const p of papers) await writePrepNote(BOOK, p.slug, "书".repeat(5_000));
-  const carried = (turn: { systemPrompt: string }) =>
-    papers.filter((p) => turn.systemPrompt.includes(`--- ${p.slug}:`)).map((p) => p.slug);
-
-  const roomy = await buildReadingTurn(
-    input({
-      classroom: true,
-      fulltext: cjkSurvey(160),
-      getPipeline: () => pipeline(chaptered(papers)),
-    }),
-  );
-  const tight = await buildReadingTurn(
-    input({
-      classroom: true,
-      fulltext: cjkSurvey(160),
-      settings: small,
-      getPipeline: () => pipeline(chaptered(papers)),
-    }),
-  );
-
-  expect(roomy!.notice).toBe("");
-  expect(tight!.refusal).toBe("");
-  expect(tight!.notice).toBe(
-    "Note: some of my notes on the reference papers were left out to make room.",
-  );
-  // The book is below the notes on the ladder, so it is still here whole.
-  expect(tight!.systemPrompt).toContain("=== Page 2 ===");
-  const kept = carried(tight!);
-  expect(kept.length).toBeGreaterThan(0);
-  expect(carried(roomy!).slice(0, kept.length)).toEqual(kept);
-  expect(kept.length).toBeLessThan(carried(roomy!).length);
-});
-
-test("the same survey inside a 1M window is left alone", async () => {
-  const turn = await buildReadingTurn(input({ classroom: true, fulltext: cjkSurvey(300) }));
+test("a book inside the whole-book tier is inlined page by page, under its anchors", async () => {
+  const turn = await buildReadingTurn(input({ fulltext: INLINE_BOOK }));
+  expect(turn!.inline).toBe("whole");
+  expect(turn!.systemPrompt).toContain("=== Page 2 === [p.2]");
+  expect(turn!.systemPrompt).toContain("the full text of");
   expect(turn!.notice).toBe("");
-  expect(turn!.systemPrompt).toContain("=== Page 2 ===");
-  expect(turn!.systemPrompt).toContain("already fully in your context");
+});
+
+// The 401-page textbook: nothing is inlined, and the prompt says so rather than
+// leaving the model to infer it from an absence.
+test("a book past the tier is not inlined at all, and the prompt says what it has", async () => {
+  const turn = await buildReadingTurn(input({ fulltext: cjkSurvey(300) }));
+  expect(turn!.inline).toBe("none");
+  expect(turn!.systemPrompt).not.toContain("=== Page 2 ===");
+  expect(turn!.systemPrompt).toContain("What you have in this turn's prompt");
+  expect(turn!.systemPrompt).toContain("No text from");
+  expect(names(turn!.tools)).toContain("read_pages");
+  expect(names(turn!.tools)).toContain("read_chapter");
 });
 
 // Nothing on the ladder can help when the thing that overflows is the passage
@@ -693,16 +686,35 @@ test("the narrowest window in the catalog still assembles an ordinary turn", asy
   expect(turn!.systemPrompt).toContain("inline caches");
 });
 
-test("the narrowest window gives up the book and says so, rather than overflowing", async () => {
+// The tier decides what is inlined; the ladder is what happens when even that
+// does not fit beside the notes and the conversation. Both rungs fire here, in
+// the ladder's order, and the reader is told about both.
+test("the narrowest window gives up the notes and then the book, and says so", async () => {
+  const papers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => notePaper(`tight-${i}`, [1]));
+  for (const p of papers) await writePrepNote(BOOK, p.slug, "书".repeat(5_000));
+  createThread(BOOK, "ann-1", "thread-1");
+  for (let i = 0; i < HISTORY_KEEP; i++) {
+    appendMessage(BOOK, "thread-1", {
+      role: i % 2 === 0 ? "user" : "ai",
+      text: "编译器内联缓存".repeat(300),
+      ts: i + 1,
+    });
+  }
   const turn = await buildReadingTurn(
-    input({ classroom: true, fulltext: cjkSurvey(300), settings: tiny }),
+    input({
+      fulltext: INLINE_BOOK,
+      settings: tiny,
+      getPipeline: () => pipeline(chaptered(papers)),
+    }),
   );
   expect(turn!.refusal).toBe("");
   expect(turn!.notice).toBe(
-    "Note: the book didn't fit in context, so I read the pages I needed instead of having all of it in view.",
+    "Note: some of my notes on the reference papers were left out to make room; this didn't " +
+      "fit in context, so I read the pages I needed instead of having it all in view.",
   );
-  expect(turn!.systemPrompt).not.toContain("=== Page 2 ===");
+  expect(turn!.systemPrompt).not.toContain("=== Page 2 === [p.2]");
   expect(names(turn!.tools)).toContain("read_pages");
+  expect(names(turn!.tools)).toContain("read_chapter");
 });
 
 // The order the ladder gives things up in, seen from the path that uses it
@@ -713,33 +725,40 @@ test("the narrowest window gives up the book and says so, rather than overflowin
 test("the reading ladder drops the catalog, then the book, and leaves the conversation whole", async () => {
   createThread(BOOK, "ann-1", "thread-1");
   for (let i = 0; i < HISTORY_KEEP + 10; i++) {
-    appendMessage(BOOK, "thread-1", { role: i % 2 === 0 ? "user" : "ai", text: `m${i}`, ts: i });
+    appendMessage(BOOK, "thread-1", {
+      role: i % 2 === 0 ? "user" : "ai",
+      text: `m${i} ${"编译器内联缓存".repeat(380)}`,
+      ts: i,
+    });
   }
   const figures: Figure[] = [{ id: "1", page: 2, caption: "内联缓存布局", bbox: null }];
   const turn = await buildReadingTurn(
-    input({ classroom: true, fulltext: cjkSurvey(300), figures, settings: small }),
+    input({ fulltext: INLINE_BOOK, figures, settings: tiny }),
   );
   expect(turn!.refusal).toBe("");
   // Silent rung: gone from the prompt, absent from the notice.
   expect(turn!.systemPrompt).not.toContain("[fig:1]");
   // Evidence rung: gone, and the notice says exactly this and nothing else.
-  expect(turn!.systemPrompt).not.toContain("=== Page 2 ===");
+  expect(turn!.systemPrompt).not.toContain("=== Page 2 === [p.2]");
   expect(turn!.notice).toBe(
-    "Note: the book didn't fit in context, so I read the pages I needed instead of having all of it in view.",
+    "Note: this didn't fit in context, so I read the pages I needed instead of having it all in view.",
   );
   // Below the book on the ladder, so it was never reached: the full replay tail
-  // is still here, ending on the most recent turn.
-  expect(turn!.messages.length).toBe(HISTORY_KEEP + 1);
-  expect(turn!.messages[turn!.messages.length - 1].text).toBe(`m${HISTORY_KEEP + 9}`);
+  // is still here, ending on the most recent turn. No kickoff in front of it —
+  // this tail happens to start on a user message, so it needs no stand-in.
+  expect(turn!.messages.length).toBe(HISTORY_KEEP);
+  expect(turn!.messages[turn!.messages.length - 1].text.startsWith(`m${HISTORY_KEEP + 9} `)).toBe(
+    true,
+  );
 });
 
 test("a model the catalog doesn't know skips the budget rather than blocking the turn", async () => {
   const turn = await buildReadingTurn(
-    input({ classroom: true, fulltext: cjkSurvey(300), settings: { ...settings, defaultModelId: "no-such-model" } }),
+    input({ fulltext: INLINE_BOOK, settings: { ...settings, defaultModelId: "no-such-model" } }),
   );
   expect(turn!.notice).toBe("");
   expect(turn!.refusal).toBe("");
-  expect(turn!.systemPrompt).toContain("=== Page 2 ===");
+  expect(turn!.systemPrompt).toContain("=== Page 2 === [p.2]");
 });
 
 test("a figure the conversation has already cited keeps its catalog", async () => {
@@ -747,7 +766,7 @@ test("a figure the conversation has already cited keeps its catalog", async () =
   appendMessage(BOOK, "thread-1", { role: "ai", text: "see [fig:1] for the layout", ts: 1 });
   const figures: Figure[] = [{ id: "1", page: 2, caption: "内联缓存布局", bbox: null }];
   const turn = await buildReadingTurn(
-    input({ classroom: true, fulltext: cjkSurvey(300), figures, settings: small }),
+    input({ fulltext: cjkSurvey(300), figures, settings: small }),
   );
   expect(turn!.systemPrompt).toContain("[fig:1]");
   expect(turn!.systemPrompt).not.toContain("=== Page 2 ===");
@@ -914,4 +933,445 @@ test("the reader's abort signal is the one the sub-agent runs under", async () =
   seen = undefined;
   await expect(research.execute({ task: "recent work" })).rejects.toBeInstanceOf(StoppedError);
   expect(seen).toBeUndefined();
+});
+
+// --- the visual window around a highlight (figures/page-window.ts) ---
+
+// Four pages of ordinary typeset prose, so the sparse-text arm of the gate stays
+// shut and a test can say which arm it is exercising.
+function dense(): Fulltext {
+  return {
+    version: 1,
+    status: "ok",
+    pages: Array.from({ length: 4 }, (_, i) => `Page ${i + 1}. `.repeat(120)),
+    outline: [],
+  };
+}
+
+// The rasterizer as the assembly sees it: records what it was asked for and
+// hands back a page-shaped picture.
+function pageRenderer() {
+  const asked: { page: number; widthPx: number }[] = [];
+  return {
+    asked,
+    render: async (page: number, widthPx: number) => {
+      asked.push({ page, widthPx });
+      return {
+        data: `page-${page}`,
+        mediaType: "image/jpeg",
+        width: widthPx,
+        height: Math.round(widthPx * 1.29),
+      };
+    },
+  };
+}
+
+// A fresh thread id per test: the fake disk outlives dropThreadCache, so a test
+// sharing "thread-1" inherits the forty messages an earlier one appended to it.
+const withWindow = (
+  threadId: string,
+  renderPage: (p: number, w: number) => Promise<any>,
+  over: Partial<Parameters<typeof buildReadingTurn>[0]> = {},
+) =>
+  input({
+    threadId,
+    fulltext: dense(),
+    figures: [{ id: "1", page: 2, caption: "Inline cache layout", bbox: null }] as Figure[],
+    renderPage,
+    ...over,
+  });
+
+test("a marked page with a figure near it carries page images and says what they are", async () => {
+  const r = pageRenderer();
+  const turn = await buildReadingTurn(withWindow("win-1", r.render));
+  // The marked page at full size, its neighbours smaller. Page 3 is off the end
+  // of this four-page fixture's window only if the anchor is at the edge; here
+  // the anchor is page 2, so the window is 1-3.
+  expect(r.asked.map((a) => a.page)).toEqual([1, 2, 3]);
+  expect(r.asked[1].widthPx).toBeGreaterThan(r.asked[0].widthPx);
+  expect(r.asked[0].widthPx).toBe(r.asked[2].widthPx);
+  const last = turn!.messages[turn!.messages.length - 1];
+  expect(last.images?.map((i) => i.data)).toEqual(["page-1", "page-2", "page-3"]);
+  expect(turn!.systemPrompt).toContain("p.2, the page their highlight is on");
+});
+
+test("a page of plain prose with no figures near it sends no images", async () => {
+  const r = pageRenderer();
+  const turn = await buildReadingTurn(
+    input({ threadId: "win-2", fulltext: dense(), figures: [], renderPage: r.render }),
+  );
+  expect(r.asked).toEqual([]);
+  expect(turn!.messages.some((m) => m.images?.length)).toBe(false);
+  expect(turn!.systemPrompt).not.toContain("highlight is on");
+});
+
+// A scan has no text layer, so figure detection (caption-anchored) finds nothing
+// on it. It is also the document that needs the pictures most.
+test("a document with no text layer sends the pages anyway", async () => {
+  const r = pageRenderer();
+  const turn = await buildReadingTurn(
+    input({ threadId: "win-3", fulltext: fulltext("no-text-layer"), figures: [], renderPage: r.render }),
+  );
+  expect(r.asked.map((a) => a.page)).toEqual([1, 2]);
+  expect(turn!.messages[turn!.messages.length - 1].images).toHaveLength(2);
+});
+
+test("a text-only model is sent no page images and told about none", async () => {
+  const r = pageRenderer();
+  const turn = await buildReadingTurn(withWindow("win-4", r.render, { settings: tiny }));
+  expect(r.asked).toEqual([]);
+  expect(turn!.messages.some((m) => m.images?.length)).toBe(false);
+  expect(turn!.systemPrompt).not.toContain("highlight is on");
+});
+
+// The book-level thread follows the reader's scrolling, so what an earlier turn
+// of it showed cannot be reconstructed and the degraded line would be a guess.
+test("the book-level thread sends no page images", async () => {
+  const r = pageRenderer();
+  const turn = await buildReadingTurn(
+    withWindow("win-5", r.render, { annotationId: "", annotation: undefined }),
+  );
+  expect(r.asked).toEqual([]);
+  expect(turn!.messages.some((m) => m.images?.length)).toBe(false);
+});
+
+// The hard one: however long the conversation runs, one window is in context.
+test("only the turn being answered carries the pictures; older turns carry a line", async () => {
+  createThread(BOOK, "ann-1", "win-6");
+  appendMessage(BOOK, "win-6", { role: "ai", text: "a1", ts: 1 });
+  appendMessage(BOOK, "win-6", { role: "user", text: "and the arrow?", ts: 2 });
+  appendMessage(BOOK, "win-6", { role: "ai", text: "a2", ts: 3 });
+  appendMessage(BOOK, "win-6", { role: "user", text: "and the axis?", ts: 4 });
+  const r = pageRenderer();
+  const turn = await buildReadingTurn(withWindow("win-6", r.render));
+  const withImages = turn!.messages.filter((m) => m.images?.length);
+  expect(withImages).toHaveLength(1);
+  expect(withImages[0].text).toBe("and the axis?");
+  // Every earlier user turn — the kickoff included, since it was the current
+  // message when the thread opened — says what it was shown.
+  const marker = "[page images of pp.1–3 were attached here]";
+  expect(turn!.messages[0].text.endsWith(marker)).toBe(true);
+  expect(turn!.messages[2].text).toBe(`and the arrow?\n\n${marker}`);
+  // Assistant turns are left exactly as they were written.
+  expect(turn!.messages[1].text).toBe("a1");
+  expect(turn!.messages[3].text).toBe("a2");
+});
+
+// A render that fails is one image fewer, not a broken turn — and if every page
+// fails there is nothing to announce.
+test("a failing rasterizer leaves the turn without images and without the prompt line", async () => {
+  const turn = await buildReadingTurn(withWindow("win-7", async () => null));
+  expect(turn!.messages.some((m) => m.images?.length)).toBe(false);
+  expect(turn!.systemPrompt).not.toContain("highlight is on");
+});
+
+// --- the chapter in focus (docs/09) ---
+
+// A book with a usable chapter table: three chapters, each with body text behind
+// it, and a title carrying the number the reader would say.
+function chaptersBook(): Fulltext {
+  return {
+    version: 1,
+    status: "ok",
+    pages: Array.from({ length: 90 }, (_, i) => `page ${i + 1} ${"编译器内联缓存".repeat(120)}`),
+    outline: [
+      { title: "第 1 章 一", page: 1, level: 0 },
+      { title: "第 2 章 二", page: 31, level: 0 },
+      { title: "第 3 章 编码注意力机制", page: 61, level: 0 },
+    ],
+  };
+}
+
+test("a usable chapter table reaches the prompt and read_chapter takes a number", async () => {
+  const turn = await buildReadingTurn(
+    input({ annotationId: "", annotation: undefined, fulltext: chaptersBook() }),
+  );
+  expect(turn!.systemPrompt).toContain("This book's chapters, with the pages each one spans:");
+  expect(turn!.systemPrompt).toContain("[ch.3] 第 3 章 编码注意力机制 — p.61-90");
+  const tool = turn!.tools.find((t) => t.name === "read_chapter")!;
+  expect(Object.keys((tool.parameters as { properties: object }).properties)).toEqual(["chapter"]);
+});
+
+// The 67-page bilingual survey: no usable outline, and past the first tier.
+// Without the page-range form the only thing left on it is ten pages at a time.
+test("no usable chapter table leaves read_chapter taking a page range", async () => {
+  const turn = await buildReadingTurn(
+    input({ annotationId: "", annotation: undefined, fulltext: cjkSurvey(300) }),
+  );
+  expect(turn!.systemPrompt).not.toContain("This book's chapters");
+  const tool = turn!.tools.find((t) => t.name === "read_chapter")!;
+  expect(Object.keys((tool.parameters as { properties: object }).properties)).toEqual([
+    "from",
+    "to",
+  ]);
+});
+
+test("a chapter in focus is the chapter that gets inlined, every turn", async () => {
+  createBookThread(BOOK, "book-thread");
+  setThreadFocusChapter(BOOK, "book-thread", 3);
+  const turn = await buildReadingTurn(
+    input({
+      threadId: "book-thread",
+      annotationId: "",
+      annotation: undefined,
+      fulltext: chaptersBook(),
+    }),
+  );
+  expect(turn!.inline).toBe("chapter");
+  expect(turn!.systemPrompt).toContain("=== Page 61 === [p.61]");
+  expect(turn!.systemPrompt).not.toContain("=== Page 60 === [p.60]");
+  expect(turn!.systemPrompt).toContain("This conversation is on chapter 3");
+  expect(turn!.systemPrompt).toContain('the full text of chapter 3 ("第 3 章 编码注意力机制")');
+});
+
+// The book-level thread is the one that keeps a chapter. A marked passage's
+// conversation may be asked to teach chapter 3 and gets it, but it stays a
+// conversation about the mark: no focus written, nothing on a status row.
+test("read_chapter parks the book-level thread on a chapter, and a mark's thread on nothing", async () => {
+  createBookThread(BOOK, "book-thread");
+  const book = await buildReadingTurn(
+    input({
+      threadId: "book-thread",
+      annotationId: "",
+      annotation: undefined,
+      fulltext: chaptersBook(),
+    }),
+  );
+  await book!.tools.find((t) => t.name === "read_chapter")!.execute({ chapter: 2 });
+  expect(getThread(BOOK, "book-thread")?.focusChapter).toBe(2);
+
+  createThread(BOOK, "ann-1", "mark-thread");
+  const mark = await buildReadingTurn(input({ threadId: "mark-thread", fulltext: chaptersBook() }));
+  const out = (await mark!.tools
+    .find((t) => t.name === "read_chapter")!
+    .execute({ chapter: 2 })) as string;
+  // It answered with the chapter all the same.
+  expect(out).toContain("=== Page 31 === [p.31]");
+  expect(getThread(BOOK, "mark-thread")?.focusChapter).toBeUndefined();
+});
+
+// --- asides (docs/03) ---
+
+// The lesson and an aside off it, on a book with a chapter table and a focus.
+function lessonWithAside(suffix: string, anchorTs: number | null): { lesson: string; aside: string } {
+  const lesson = `lesson-${suffix}`;
+  const aside = `aside-${suffix}`;
+  createBookThread(BOOK, lesson);
+  setThreadFocusChapter(BOOK, lesson, 3);
+  createAsideThread(BOOK, aside, {
+    parentThreadId: lesson,
+    ...(anchorTs === null
+      ? {}
+      : { asideAnchor: { messageTs: anchorTs, text: "编码注意力机制 as a routing problem" } }),
+  });
+  return { lesson, aside };
+}
+
+function bookTurn(threadId: string) {
+  return input({
+    threadId,
+    annotationId: "",
+    annotation: undefined,
+    fulltext: chaptersBook(),
+  });
+}
+
+// The single most important property of the whole feature. A provider's prompt
+// cache matches on a prefix, so an aside whose stable half differs anywhere
+// rewrites the inlined chapter — ~82k tokens on a measured turn — instead of
+// reading it back.
+test("an aside's prompt is the lesson's up to the position, byte for byte", async () => {
+  const { lesson, aside } = lessonWithAside("cache", 4);
+  const lessonTurn = await buildReadingTurn(bookTurn(lesson));
+  const asideTurn = await buildReadingTurn(bookTurn(aside));
+
+  const stable = (out: string): string => out.slice(0, out.indexOf("Current reading context:"));
+  expect(stable(asideTurn!.systemPrompt)).toBe(stable(lessonTurn!.systemPrompt));
+  // And it is the expensive half that matched, not an empty prefix.
+  expect(stable(asideTurn!.systemPrompt)).toContain("=== Page 61 === [p.61]");
+});
+
+// The same property for the flavour that has a page of its own, on a lesson
+// with no chapter in focus — where the prep notes are ordered by where the
+// reader is. A mark two chapters away re-sorts them, and that block sits in the
+// stable half above the spine and the overview, so the prefix would end there
+// and everything under it would be written again.
+test("an aside drawn far from the reader's page still matches the lesson's prompt", async () => {
+  const papers = [
+    notePaper("near-a", [2]),
+    notePaper("near-b", [2]),
+    notePaper("far-a", [7]),
+    notePaper("far-b", [7]),
+  ];
+  for (const p of papers) await writePrepNote(BOOK, p.slug, `body of ${p.slug}`);
+  // The reader is on page 2; the mark the aside was drawn on is on page 7.
+  const far = { id: "ann-far", text: "a sentence on page seven", position: { pageIndex: 6 } } as unknown as Annotation;
+  const withPrep = {
+    getPipeline: () => pipeline(chaptered(papers)),
+    annotations: [far],
+    fulltext: chaptersBook(),
+  };
+
+  createBookThread(BOOK, "lesson-far");
+  createAsideThread(BOOK, "aside-far", { parentThreadId: "lesson-far", annotationId: "ann-far" });
+
+  const lessonTurn = await buildReadingTurn(
+    input({ ...withPrep, threadId: "lesson-far", annotationId: "", annotation: undefined }),
+  );
+  const asideTurn = await buildReadingTurn(
+    input({ ...withPrep, threadId: "aside-far", annotationId: "ann-far", annotation: far }),
+  );
+
+  const stable = (out: string): string => out.slice(0, out.indexOf("Current reading context:"));
+  expect(stable(asideTurn!.systemPrompt)).toBe(stable(lessonTurn!.systemPrompt));
+  expect(stable(asideTurn!.systemPrompt)).toContain("body of near-a");
+});
+
+// The focus is what puts the chapter's body in the prompt, overrides the
+// position line, picks the observation window and orders the prep notes. An
+// aside that lost it would be answering about a sentence from a chapter it can
+// no longer see.
+test("an aside inherits the chapter its parent is parked on", async () => {
+  const { aside } = lessonWithAside("focus", 4);
+  const turn = await buildReadingTurn(bookTurn(aside));
+
+  expect(turn!.inline).toBe("chapter");
+  expect(turn!.systemPrompt).toContain("=== Page 61 === [p.61]");
+  expect(turn!.systemPrompt).toContain("The lesson this came out of is on chapter 3");
+  expect(turn!.systemPrompt).toContain('the full text of chapter 3 ("第 3 章 编码注意力机制")');
+});
+
+// The span goes where a marked passage goes — tier 0 on the ladder, never
+// dropped — and is stored as text, so this is the string the reader selected.
+test("a chat-span aside carries its span and says where it came from", async () => {
+  const { aside } = lessonWithAside("span", 4);
+  const turn = await buildReadingTurn(bookTurn(aside));
+
+  expect(turn!.systemPrompt).toContain(
+    'wrote earlier in the lesson: "编码注意力机制 as a routing problem"',
+  );
+  expect(turn!.systemPrompt).toContain("This turn is a side conversation");
+  expect(turn!.systemPrompt).toContain("pulled one\nsentence out of the lesson");
+  // Page-anchored blocks have no meaning for words out of a reply.
+  expect(turn!.systemPrompt).not.toContain("Text around the marked passage");
+  expect(turn!.messages.some((m) => m.images?.length)).toBe(false);
+});
+
+// The tail the aside opens on: the message the span came from, back through
+// three of the reader's questions, then this conversation's own messages.
+test("an aside replays the stretch of the lesson its span came out of", async () => {
+  const { lesson, aside } = lessonWithAside("history", 4);
+  const said = [
+    { role: "user" as const, text: "u1", ts: 1 },
+    { role: "ai" as const, text: "a1", ts: 2 },
+    { role: "user" as const, text: "u2", ts: 3 },
+    { role: "ai" as const, text: "a2", ts: 4 },
+    { role: "user" as const, text: "u3", ts: 5 },
+    { role: "ai" as const, text: "a3", ts: 6 },
+  ];
+  for (const m of said) appendMessage(BOOK, lesson, m);
+  appendMessage(BOOK, aside, { role: "user", text: "what does routing mean here", ts: 7 });
+
+  const turn = await buildReadingTurn(bookTurn(aside));
+  expect(turn!.messages.map((m) => m.text)).toEqual([
+    "u1",
+    "a1",
+    "u2",
+    "a2",
+    "what does routing mean here",
+  ]);
+  // Nothing is copied onto the aside's own record.
+  expect(getThread(BOOK, aside)?.messages.map((m) => m.text)).toEqual([
+    "what does routing mean here",
+  ]);
+});
+
+// Whether the lesson's stretch is there is a fact about the assembled turn, and
+// the prompt has to follow it: an aside whose parent is gone replays nothing of
+// it, and one long enough to fill the history on its own trims it off the front.
+test("an aside with no lesson replayed does not claim to open on one", async () => {
+  createAsideThread(BOOK, "aside-orphan", { parentThreadId: "no-such-lesson" });
+  appendMessage(BOOK, "aside-orphan", { role: "user", text: "about that", ts: 1 });
+  const orphan = await buildReadingTurn(bookTurn("aside-orphan"));
+
+  expect(orphan!.systemPrompt).toContain("None of the lesson itself is replayed");
+  expect(orphan!.systemPrompt).not.toContain("open on the stretch of the lesson");
+  expect(orphan!.messages.map((m) => m.text)).toEqual(["about that"]);
+
+  // And the same when it is the length of this conversation that pushed it out.
+  const { lesson, aside } = lessonWithAside("crowded", 2);
+  appendMessage(BOOK, lesson, { role: "user", text: "u1", ts: 1 });
+  appendMessage(BOOK, lesson, { role: "ai", text: "a1", ts: 2 });
+  for (let i = 0; i < HISTORY_KEEP; i++) {
+    appendMessage(BOOK, aside, { role: i % 2 === 0 ? "user" : "ai", text: `s${i}`, ts: 100 + i });
+  }
+  const crowded = await buildReadingTurn(bookTurn(aside));
+  expect(crowded!.messages).toHaveLength(HISTORY_KEEP);
+  expect(crowded!.systemPrompt).toContain("None of the lesson itself is replayed");
+});
+
+// The lesson's stretch is replayed history too, so a reply marked in the lesson
+// says so inside the aside as well — including the very passage the aside was
+// pulled out of.
+test("the lesson's replayed stretch carries what was marked on it", async () => {
+  const { lesson, aside } = lessonWithAside("marked", 2);
+  appendMessage(BOOK, lesson, { role: "user", text: "u1", ts: 1 });
+  appendMessage(BOOK, lesson, { role: "ai", text: "a1", ts: 2 });
+  appendMessage(BOOK, aside, { role: "user", text: "about that", ts: 3 });
+
+  const turn = await buildReadingTurn({
+    ...bookTurn(aside),
+    annotations: [chatMark(lesson, 2, "a1")],
+  });
+  expect(turn!.messages.map((m) => m.text)).toEqual([
+    "u1",
+    "a1\n\n[marked by the reader in this reply: “a1”]",
+    "about that",
+  ]);
+});
+
+// Every provider wants the exchange to open on a user turn, and an aside's tail
+// legitimately opens on a reply. The mark thread's stand-in would send the model
+// looking for a passage the prompt does not carry.
+test("a tail that opens on a reply gets the aside's own stand-in, not the mark's", async () => {
+  const { lesson, aside } = lessonWithAside("kickoff", 1);
+  appendMessage(BOOK, lesson, { role: "ai", text: "a0", ts: 1 });
+  appendMessage(BOOK, aside, { role: "user", text: "about that", ts: 2 });
+
+  const turn = await buildReadingTurn(bookTurn(aside));
+  expect(turn!.messages[0].role).toBe("user");
+  expect(turn!.messages[0].text).not.toBe(EXPLAIN_KICKOFF);
+  expect(turn!.messages.map((m) => m.text).slice(1)).toEqual(["a0", "about that"]);
+});
+
+// An aside drawn on the page has a mark and a page, so it is a marked passage
+// like any other and gets the blocks that go with one.
+test("an aside drawn on the page keeps the mark-anchored blocks", async () => {
+  createBookThread(BOOK, "lesson-drawn");
+  createAsideThread(BOOK, "aside-drawn", {
+    parentThreadId: "lesson-drawn",
+    annotationId: "ann-1",
+  });
+  const turn = await buildReadingTurn(
+    input({ threadId: "aside-drawn", fulltext: chaptersBook() }),
+  );
+
+  expect(turn!.systemPrompt).toContain('- Marked passage: "inline caches"');
+  expect(turn!.systemPrompt).toContain("marked a\npassage on the page mid-lesson");
+  expect(turn!.systemPrompt).not.toContain("taken by the reader out of something you");
+});
+
+// Writing a focus on itself would be dead — the focus it reads is the parent's —
+// and writing one on the parent would let a side conversation move the lesson
+// the reader is going back to.
+test("read_chapter on an aside parks nothing, on either end", async () => {
+  const { lesson, aside } = lessonWithAside("park", 4);
+  const turn = await buildReadingTurn(bookTurn(aside));
+  const out = (await turn!.tools
+    .find((t) => t.name === "read_chapter")!
+    .execute({ chapter: 2 })) as string;
+
+  expect(out).toContain("=== Page 31 === [p.31]");
+  expect(getThread(BOOK, aside)?.focusChapter).toBeUndefined();
+  expect(getThread(BOOK, lesson)?.focusChapter).toBe(3);
 });

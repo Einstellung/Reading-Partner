@@ -40,7 +40,7 @@ const lands =
 function fakeShell(log: Call[], over: Partial<Record<keyof ReaderShell, (...a: any[]) => unknown>> = {}) {
   const async: Partial<Record<keyof ReaderShell, (...a: any[]) => unknown>> = {
     resumePrep: lands(log, "resumePrep"),
-    resumeNotes: lands(log, "resumeNotes"),
+    resumeChapterSpine: lands(log, "resumeChapterSpine"),
   };
   return new Proxy(
     {},
@@ -150,13 +150,23 @@ test("conversations that cannot be read say so in their own words", async () => 
   expect(names(log)).toContain("mountReader");
 });
 
+// The shell is shown every mark; the engine is shown the ones that have a page.
+// A mark drawn on an AI reply has none, and handing it to EmbedPDF is drawing it
+// somewhere it does not belong.
 test("the marks that were read are what the pane is mounted with", async () => {
   const log: Call[] = [];
-  const marks = [{ id: "a" } as unknown as Annotation];
+  const marks = [
+    { id: "a", position: { pageIndex: 0 } } as unknown as Annotation,
+    {
+      id: "c",
+      chatAnchor: { threadId: "t", messageTs: 1, text: "x", occurrence: 0, pen: "ai" },
+    } as unknown as Annotation,
+  ];
   await openBook(fakeShell(log), book, fakeIo(log, { loadAnnotations: async () => marks }));
 
   expect(argsOf(log, "showMarks")).toEqual([marks]);
-  expect((argsOf(log, "mountReader")[0] as { annotations: Annotation[] }).annotations).toBe(marks);
+  const mounted = (argsOf(log, "mountReader")[0] as { annotations: Annotation[] }).annotations;
+  expect(mounted.map((a) => a.id)).toEqual(["a"]);
 });
 
 test("a book that never chose a layout opens scrolling", () => {
@@ -172,6 +182,15 @@ test("a book that never chose a layout opens scrolling", () => {
   ).toBe("paged");
 });
 
+test("a book that was never opened is mounted with no scale, so it opens at page width", () => {
+  // The reader restores a numeric scale and leaves anything else to the layout's
+  // fit (engine/layout-modes.openingZoom). A number here would be a measurement
+  // of a window nobody ever opened this book in, and the book would open at it.
+  expect(typeof openingViewState(null).scale).not.toBe("number");
+  // A saved scale is the reader's own and carries across untouched.
+  expect(openingViewState({ pageIndex: 4, scale: 2.328, scrollMode: 0 } as ViewState).scale).toBe(2.328);
+});
+
 test("the position the reader will move from is seeded before the pane is mounted", async () => {
   const log: Call[] = [];
   const state = { pageIndex: 12, scale: "auto", scrollMode: 0, layout: "paged" } as ViewState;
@@ -182,31 +201,24 @@ test("the position the reader will move from is seeded before the pane is mounte
   expect((argsOf(log, "mountReader")[0] as { viewState: ViewState }).viewState.pageIndex).toBe(12);
 });
 
-test("a classroom flag stored with the position comes back on", async () => {
+// A legacy classroom flag in the stored position is inert: classroom stopped
+// being a mode (docs/09), so opening a book never carries one into prep.
+test("a book opens with its prep detached, legacy classroom flag or not", async () => {
   const log: Call[] = [];
   const state = { pageIndex: 0, scale: "auto", scrollMode: 0, classroom: true } as ViewState;
   const shell = fakeShell(log, { currentBookId: () => "book-1" });
   await openBook(shell, book, fakeIo(log, { getViewState: async () => state }));
   await settle();
 
-  expect(argsOf(log, "resetPrep")).toEqual([true]);
-  expect(argsOf(log, "resumePrep")).toEqual(["book-1", "A Book.pdf", FULLTEXT, true]);
+  expect(argsOf(log, "resetPrep")).toEqual([]);
+  expect(argsOf(log, "resumePrep")).toEqual(["book-1", "A Book.pdf", FULLTEXT]);
+  expect(argsOf(log, "resumeChapterSpine")).toEqual(["book-1", "A Book.pdf", FULLTEXT]);
 });
 
-test("a book opened without the flag starts its prep detached", async () => {
-  const log: Call[] = [];
-  await openBook(fakeShell(log, { currentBookId: () => "book-1" }), book, fakeIo(log));
-  await settle();
-
-  expect(argsOf(log, "resetPrep")).toEqual([false]);
-  expect(argsOf(log, "resumePrep")).toEqual(["book-1", "A Book.pdf", FULLTEXT, false]);
-  expect(argsOf(log, "resumeNotes")).toEqual(["book-1", "A Book.pdf", FULLTEXT]);
-});
-
-// The two panels are resumed one after the other, not both at once: prep runs
-// the chapter pass the notes panel then reads. `resumePrep:landed` between the
+// The two passes are resumed one after the other, not both at once: prep runs,
+// the chapter pass then reads. `resumePrep:landed` between the
 // two calls is the whole of it — without it, both would be in flight together.
-test("the notes panel is resumed only after the prep panel has finished", async () => {
+test("the chapter pass is resumed only after the prep panel has finished", async () => {
   const log: Call[] = [];
   await openBook(fakeShell(log, { currentBookId: () => "book-1" }), book, fakeIo(log));
   await settle();
@@ -214,8 +226,8 @@ test("the notes panel is resumed only after the prep panel has finished", async 
   expect(names(log).filter((n) => n.startsWith("resume"))).toEqual([
     "resumePrep",
     "resumePrep:landed",
-    "resumeNotes",
-    "resumeNotes:landed",
+    "resumeChapterSpine",
+    "resumeChapterSpine:landed",
   ]);
 });
 
@@ -241,7 +253,7 @@ test("a book with no text layer resumes neither panel", async () => {
   expect(argsOf(log, "showFulltext")).toEqual([null, true]);
   expect(last(log, "showFulltext")?.args).toEqual([NO_TEXT, false]);
   expect(names(log)).not.toContain("resumePrep");
-  expect(names(log)).not.toContain("resumeNotes");
+  expect(names(log)).not.toContain("resumeChapterSpine");
 });
 
 test("an extraction that lands after the reader moved on is thrown away", async () => {

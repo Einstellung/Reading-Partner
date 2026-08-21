@@ -5,7 +5,7 @@
 //   slides/<talkId>/asset-NN.txt       — that slide's resolved asset (data: URL)
 //   slides/<talkId>-<slug>.html        — the assembled deck
 //
-// One directory per talk, same shape as notes-<bookId>/: the bodies and assets
+// One directory per talk, same shape as prep-<bookId>/chapters/: the bodies and assets
 // are the expensive part, so they live on disk and assemble is pure assembly —
 // read what is there, write a deck — which is what makes re-running one page
 // (or just re-assembling) possible.
@@ -75,7 +75,7 @@ async function readIfExists(path: string): Promise<string | null> {
 
 // Missing state is normal (this talk was never started); a corrupt or
 // stale-version state reads as null so the caller starts a fresh talk instead of
-// crashing. Same posture as loadNotesState.
+// crashing. Same posture as loadChapterSpineState.
 export async function loadSlidesState(talkId: string): Promise<SlidesState | null> {
   const text = await readIfExists(stateFile(talkId));
   if (text === null) return null;
@@ -173,6 +173,15 @@ export async function recordTalk(entry: TalkEntry): Promise<void> {
   await ensureDir(SLIDES_DIR);
   const talks = upsertTalk(await loadTalks(), entry);
   await writeTextAtomic(TALKS_FILE, JSON.stringify(talks, null, 2));
+}
+
+// Read a built deck back as text, by the AppData-relative path the registry
+// holds. This is what the in-app run-through embeds (docs/31): the deck is
+// self-contained, so the whole file is the whole thing to show — several
+// megabytes of it, most of that base64 images. Missing or unreadable reads as
+// null, the same as every other read here.
+export function readDeckHtml(file: string): Promise<string | null> {
+  return readIfExists(file);
 }
 
 // Hand a built deck to the system's default handler. Not live.ts's openDeck,

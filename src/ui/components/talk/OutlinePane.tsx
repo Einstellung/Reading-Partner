@@ -17,9 +17,14 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import type { OutlineRow } from "../../../reading/talks";
+import type { RunthroughRun } from "../../../reading/runthrough";
+import RunthroughList from "./RunthroughList";
 
 export interface OutlinePaneProps {
   rows: OutlineRow[];
+  // The passes through this talk so far, newest first. Optional because the pane
+  // is the outline first: a talk that has never been given still shows one.
+  runs?: RunthroughRun[];
   onMove(index: number, delta: number): void;
   onSetIncluded(bookId: string, chapter: number, include: boolean): void;
   onRemove(bookId: string, chapter: number): void;
@@ -28,13 +33,14 @@ export interface OutlinePaneProps {
 
 export default function OutlinePane({
   rows,
+  runs = [],
   onMove,
   onSetIncluded,
   onRemove,
   onClose,
 }: OutlinePaneProps) {
   return (
-    <aside className="flex h-full w-[300px] flex-none flex-col border-l border-border bg-white">
+    <aside className="flex h-full w-[300px] flex-none flex-col border-l border-border bg-background">
       <div className="flex flex-none items-center gap-2 border-b border-border px-3 py-2">
         <span className="flex-1 text-[13px] font-medium">The talk so far</span>
         <Button
@@ -162,6 +168,8 @@ export default function OutlinePane({
           </ol>
         )}
       </div>
+
+      <RunthroughList runs={runs} />
     </aside>
   );
 }

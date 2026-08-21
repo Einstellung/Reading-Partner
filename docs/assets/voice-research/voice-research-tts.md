@@ -4,6 +4,8 @@
 
 ## 结论
 
+作废 2026-08-21：播放形态和离线兜底已改——docs/33 定的是全原生，TTS 请求走 Rust 侧、`AVAudioPlayerNode` 原生播放（不经过 webview），离线兜底是 `AVSpeechSynthesizer`（不是 `window.speechSynthesis`），见 33「TTS」。供应商选型（CosyVoice2-0.5B 主选、MiniMax 备选）和文本规范化设计不变。
+
 主选硅基流动 CosyVoice2-0.5B，备选 MiniMax，离线兜底 webview 里的 `window.speechSynthesis`。播放形态是全 webview、按句合成、多个 `<audio>` + Blob URL 接力，不用 MSE 也不用 AudioContext。理由见第 6 节。
 
 第 5 节是后台约束补充后加的，它推翻了两条原本的判断：端上模型在后台场景出局（第 3 节已改），以及 iPhone webview 上拿不到真正的边下边播，所以"流式协议"在选型里的权重要下调，备选从火山换成 MiniMax。

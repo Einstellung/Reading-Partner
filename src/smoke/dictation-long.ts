@@ -11,7 +11,7 @@
 //
 // The tap gate is the wake lock's user activation, same as dictation-guided:
 // without it the phone locks two minutes in and the run dies backgrounded with
-// no interruption notification (docs/pitfall/141).
+// no interruption notification (docs/pitfall/162).
 //
 // Memory, thermal state and the native accumulator's size come from the
 // plugin's own console lines, which exist only in the measurement build.
@@ -198,7 +198,7 @@ export async function runLongDictation(): Promise<void> {
       const record = { atMs: +lastFinalAt.toFixed(0), chars: text.length };
       result.finalsTimeline.push(record);
       // Character counts, not words, for the same reason the plugin logs counts
-      // (docs/pitfall/144): this file is fetched off the phone and the question
+      // (docs/pitfall/165): this file is fetched off the phone and the question
       // is whether finals keep arriving, which a count answers.
       void journal({ kind: "final", index: finals, ...record });
     } else {

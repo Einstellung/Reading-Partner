@@ -40,9 +40,14 @@ export interface WatchdogTimers {
 
 // Lifecycle hooks the caller wires to its own liveness/activity state: onAttempt
 // fires as each attempt starts (attempt is 1-based), onProgress on every delta.
+// beforeRetry fires after a failed attempt that will be repeated, before the flat
+// retry delay, and is awaited: it is where a caller running several calls at once
+// makes the group sit out a rate limit rather than letting this one call retry
+// straight into the same minute (src/ai/limiter).
 export interface WatchdogHooks {
   onAttempt(info: { attempt: number; attempts: number; startedAt: number }): void;
   onProgress(chars: number): void;
+  beforeRetry?(err: unknown, attempt: number): Promise<void> | void;
 }
 
 // Thrown when stopSignal aborts, to distinguish a deliberate stop from a failure.
@@ -142,7 +147,10 @@ export async function runWithWatchdog<T>(
       // has to come before the classifier: the unattended pipelines are exactly
       // where a stall happens and exactly where it can't be reproduced locally.
       if (!controller.signal.aborted && !isRetryableAiFailure(e)) break;
-      if (attempt < maxAttempts) await timers.sleep(retryDelayMs);
+      if (attempt < maxAttempts) {
+        await hooks.beforeRetry?.(e, attempt);
+        await timers.sleep(retryDelayMs);
+      }
     } finally {
       cancelTimer();
       if (stopSignal) stopSignal.removeEventListener("abort", onStop);

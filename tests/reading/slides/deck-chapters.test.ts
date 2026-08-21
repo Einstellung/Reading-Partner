@@ -13,6 +13,7 @@
 
 import { beforeEach, expect, mock, test } from "bun:test";
 import { FIGURES_VERSION } from "../../../src/reading/figures/types";
+import { CHAPTER_SPINE_VERSION } from "../../../src/reading/prep/chapters/types";
 
 const files = new Map<string, string>();
 const blobs = new Map<string, Uint8Array>();
@@ -101,9 +102,9 @@ function putFulltext(bookId: string) {
 
 function putNotes(bookId: string) {
   files.set(
-    `notes-${bookId}/state.json`,
+    `prep-${bookId}/chapters/state.json`,
     JSON.stringify({
-      version: 1,
+      version: CHAPTER_SPINE_VERSION,
       bookId,
       bookName: "Eye and Brain",
       createdAt: 1,
@@ -115,8 +116,8 @@ function putNotes(bookId: string) {
       overviewStatus: "done",
     }),
   );
-  files.set(`notes-${bookId}/chapter-01.md`, "The first chapter argues that seeing is inference.");
-  files.set(`notes-${bookId}/chapter-02.md`, "The second chapter argues that belief follows.");
+  files.set(`prep-${bookId}/chapters/chapter-01.md`, "The first chapter argues that seeing is inference.");
+  files.set(`prep-${bookId}/chapters/chapter-02.md`, "The second chapter argues that belief follows.");
 }
 
 beforeEach(() => {
@@ -152,7 +153,7 @@ test("a book with no notes is planned against the same chapters the rehearsal wa
   putFulltext(NO_NOTES);
   const fulltext = JSON.parse(files.get(`fulltext-${NO_NOTES}.json`)!);
   const skeleton = buildSkeleton({
-    notesChapters: null,
+    spineChapters: null,
     outline: fulltext.outline,
     pageCount: fulltext.pages.length,
   });

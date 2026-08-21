@@ -46,6 +46,20 @@ test("an old file's per-device keys are carried through untouched", async () => 
   expect(s.backgroundCollect).toBe(false);
 });
 
+// autoNotes was deleted (docs/09): preparation is started by the entries that
+// mean it, not by a switch. An old settings.json still carrying the key must
+// load — the parse is a merge over the defaults, so an unknown key is data, not
+// an error — and every real setting beside it has to survive.
+test("an old file carrying the deleted autoNotes key still loads", async () => {
+  expect("autoNotes" in DEFAULT_SETTINGS).toBe(false);
+  fileContent = JSON.stringify({ autoNotes: false, defaultProviderId: "openai", aiLanguage: "zh-CN" });
+  const s = await loadSettings();
+  expect(s.defaultProviderId).toBe("openai");
+  expect(s.aiLanguage).toBe("zh-CN");
+  expect(s.chatThinking).toBe("low");
+  expect((s as unknown as Record<string, unknown>).autoNotes).toBe(false);
+});
+
 test("toReasoning maps off -> undefined and passes the levels through", () => {
   expect(toReasoning("off")).toBeUndefined();
   expect(toReasoning("low")).toBe("low");
@@ -71,7 +85,6 @@ test("loadSettings round-trips a fully persisted object", async () => {
     sttApiBase: "https://stt.test",
     sttModel: "sense",
     dictationLocale: "en-US",
-    autoNotes: false,
     aiLanguage: "zh-CN",
   };
   fileContent = JSON.stringify(saved);

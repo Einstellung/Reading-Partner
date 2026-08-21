@@ -27,6 +27,9 @@
 # Setup this expects (see docs/pitfall/117):
 #   brew trust facebook/fb && brew install idb-companion
 #   python3 -m venv /tmp/idbvenv && /tmp/idbvenv/bin/pip install fb-idb
+# pip takes the macOS system proxy from System Configuration, so a proxy that
+# is configured but not running turns the install into a connection refused:
+#   no_proxy='*' /tmp/idbvenv/bin/pip install fb-idb
 #
 # Usage:
 #   scripts/ios-sim.sh up [device-name]     boot the simulator and start the app
@@ -35,9 +38,12 @@
 #   scripts/ios-sim.sh eval -f <file.js>    ... from a file
 #   scripts/ios-sim.sh open <path>          navigate the webview (/, /embedpdf-spike.html)
 #   scripts/ios-sim.sh reader               open the engine harness on demo.pdf and wait for it
+#   scripts/ios-sim.sh chat                 open the reply-pen harness and wait for it
 #   scripts/ios-sim.sh shot <out.png>       screenshot
 #   scripts/ios-sim.sh tap <x> <y>
+#   scripts/ios-sim.sh press <x> <y> [seconds]   a held tap (long press)
 #   scripts/ios-sim.sh swipe <x1> <y1> <x2> <y2> [seconds] [px-per-step]
+#   scripts/ios-sim.sh native [name-filter]  the UIKit accessibility tree, with frames
 #   scripts/ios-sim.sh pinch out|in [scale]  two real contacts, via XCUITest
 #   scripts/ios-sim.sh gesture <name> [args...]   a recorded scenario (below)
 #   scripts/ios-sim.sh scenarios            list them
@@ -194,6 +200,45 @@ cmd_shot() {
 
 cmd_tap() { "$IDB" ui tap --udid "$UDID" "$1" "$2"; }
 
+# The same finger, held. A long press is what raises WebKit's loupe and, with
+# it, the native Copy | Look Up | Translate bar; a selection made from JS raises
+# neither (docs/pitfall/04), so anything measured against that bar has to start
+# here. 0.5s is already past the gesture's threshold; the default leaves room.
+cmd_press() { "$IDB" ui tap --udid "$UDID" --duration "${3:-1.0}" "$1" "$2"; }
+
+# What the page cannot see. The selection callout, the share sheet and the
+# keyboard are UIKit views over the webview: `eval` has no handle on them and a
+# screenshot only shows them. The accessibility tree carries each one's label
+# and frame in points, which is the coordinate space `tap`, `press` and `swipe`
+# already take, so a native overlay becomes a rect that can be compared with a
+# DOM one. The optional argument greps the labels.
+cmd_native() {
+  local out
+  out=$("$IDB" ui describe-all --udid "$UDID" --json) || die "could not read the accessibility tree"
+  printf '%s' "$out" | python3 -c '
+import json, sys
+want = (sys.argv[1] if len(sys.argv) > 1 else "").lower()
+raw = sys.stdin.read().strip()
+# One JSON array on a line today, one object per line on other idb versions.
+try:
+    items = json.loads(raw)
+    if isinstance(items, dict):
+        items = [items]
+except json.JSONDecodeError:
+    items = [json.loads(l) for l in raw.splitlines() if l.strip()]
+for e in items:
+    label = e.get("AXLabel") or e.get("AXValue") or ""
+    if want and want not in str(label).lower():
+        continue
+    f = e.get("frame") or {}
+    print(json.dumps({
+        "label": label,
+        "type": e.get("type"),
+        "x": f.get("x"), "y": f.get("y"), "w": f.get("width"), "h": f.get("height"),
+    }))
+' "${1:-}"
+}
+
 # Two contacts at once. idb's HID channel carries a single contact — two
 # concurrent `idb ui swipe` calls collapse into one finger — so anything with a
 # second finger goes through a UI-test bundle instead (scripts/ios-sim/
@@ -254,6 +299,28 @@ cmd_reader() {
       echo " — ready"
       cmd_rec_install >/dev/null
       printf 'JSON.stringify(window.__spike.lastStats)' | sim_eval
+      return 0
+    fi
+    echo -n "."
+    sleep 1
+  done
+  echo
+  die "the harness never became ready (see the page log: $0 logs)"
+}
+
+# The chat harness (chat-aside-spike.html) mounts the real MessageList as a
+# book-level conversation with canned settled replies, with a pen in hand, and
+# hands the rects and the strokes it took to window.__aside — which is what makes
+# "did that drag leave a mark on the words it crossed" a number. Pair it with
+# `press` to raise a selection and `native` to read the UIKit views floating over
+# the page (docs/pitfall/143).
+cmd_chat() {
+  cmd_open /chat-aside-spike.html >/dev/null
+  echo -n "waiting for the harness"
+  for _ in $(seq 1 60); do
+    if printf 'window.__aside && window.__aside.ready ? 1 : 0' | sim_eval 2>/dev/null | grep -q 1; then
+      echo " — ready"
+      printf 'JSON.stringify(window.__aside.viewport())' | sim_eval
       return 0
     fi
     echo -n "."
@@ -389,12 +456,15 @@ case "${1:-}" in
   logs) sim_logs ;;
   open) shift; cmd_open "$@" ;;
   reader) cmd_reader ;;
+  chat) cmd_chat ;;
   rec-install) cmd_rec_install ;;
   shot) shift; cmd_shot "$@" ;;
   tap) shift; cmd_tap "$@" ;;
+  press) shift; cmd_press "$@" ;;
+  native) shift; cmd_native "$@" ;;
   swipe) shift; cmd_swipe "$@" ;;
   pinch) shift; cmd_pinch "$@" ;;
   gesture) shift; cmd_gesture "$@" ;;
   scenarios) cmd_scenarios ;;
-  *) sed -n '2,41p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) sed -n '2,47p' "$0" | sed 's/^# \{0,1\}//' ;;
 esac

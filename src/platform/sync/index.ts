@@ -27,7 +27,7 @@ import {
   signIn,
   signOut,
 } from "./auth";
-import { syncStartAction } from "./health";
+import { nextGraceSince, syncStartAction } from "./health";
 import {
   emptyState,
   loadState,
@@ -63,8 +63,9 @@ export interface SyncStatus {
   running: boolean;
   lastSyncAt: number | null;
   lastError: string | null;
-  // When initSync ran, or null before it did.
-  startedAt: number | null;
+  // When the current sync setup started running (health.ts), or null before
+  // initSync has run.
+  graceSince: number | null;
 }
 
 let state: SyncState = emptyState();
@@ -73,7 +74,7 @@ let initialized = false;
 let signedIn = false;
 let email: string | null = null;
 let engineStarted = false;
-let startedAt: number | null = null;
+let graceSince: number | null = null;
 // Which shell mounted us, as the shell itself reports it in initSync. Not
 // re-detected here: the form factor was decided once at mount (docs/22), and
 // asking the window a second time could answer differently. Desktop until told
@@ -95,7 +96,7 @@ function buildStatus(): SyncStatus {
     running: s?.running ?? false,
     lastSyncAt: s?.lastSyncAt ?? state.lastSyncAt,
     lastError: s?.lastError ?? state.lastError,
-    startedAt,
+    graceSince,
   };
 }
 
@@ -131,6 +132,7 @@ export function engineDeps(forShell: Shell): EngineDeps {
     base: tauriBaseStore,
     trash: tauriTrashJournal,
     snapshot: state.snapshot,
+    purge: state.purge,
     restoredLastSyncAt: state.lastSyncAt,
     onPulled: (paths) => dispatchPull(paths),
     onStatus: (r) => {
@@ -156,6 +158,10 @@ function ensureEngine(): SyncEngine {
 // keep syncing a device that asked not to be synced. They read `engine` at call
 // time — a signed-out engine is replaced, not reused.
 function startEngine(): void {
+  // A setup that starts now gets the whole grace window before its missing
+  // first pass is called a fault; a start on an already ticking engine leaves
+  // the anchor where it is (health.ts).
+  graceSince = nextGraceSince(graceSince, engineStarted, Date.now());
   ensureEngine().start();
   engineStarted = true;
   unobserveLifecycle ??= observeAppLifecycle(window, {
@@ -189,10 +195,20 @@ export async function initSync(mounted: Shell): Promise<void> {
   if (initialized) return;
   initialized = true;
   shell = mounted;
+  const queued = state.purge;
   state = await loadState();
+  // A purge requested before the file was read (the shells kick both off on the
+  // way up and neither waits for the other) is merged in rather than dropped:
+  // the module's own state object is replaced here, and whatever was queued on
+  // the old one is the only record that the request was ever made.
+  if (queued.length > 0) {
+    state.purge = [...new Set([...state.purge, ...queued])];
+    await saveState(state);
+  }
   signedIn = await isSignedIn();
   email = await currentEmail();
-  startedAt = Date.now();
+  // Covers the paths that start no engine; startEngine sets its own anchor.
+  graceSince = Date.now();
   const action = syncStartAction({
     configured: isGoogleConfigured(),
     signedIn,
@@ -238,6 +254,10 @@ export async function signOutOfGoogle(): Promise<void> {
   // later starts clean; local data is untouched.
   state.drive = emptyState().drive;
   state.snapshot = {};
+  // The queue names files in the Drive this device is signing out of. Another
+  // account's Drive never held them, and a delete aimed at it would be this
+  // build deleting a file it knows nothing about.
+  state.purge = [];
   state.lastSyncAt = null;
   state.lastError = null;
   await saveState(state);
@@ -253,6 +273,29 @@ export async function setAutoSyncEnabled(on: boolean): Promise<void> {
   if (on && signedIn && isGoogleConfigured()) startEngine();
   else stopEngine();
   notify();
+}
+
+// Say that these paths must not exist in the remote any more, and let the next
+// pass take them out (engine.ts). For a build that has retired a file format
+// outright: the local copies are the caller's to delete, and this is the half a
+// device cannot do by deleting anything, because a sync propagates no file
+// deletion of its own (reconcile.ts, docs/13) — a file dropped locally is simply
+// left alone in Drive, where it outlives the code that could read it and comes
+// back down onto any device whose snapshot does not cover it.
+//
+// Queued rather than done here: the request arrives when the app starts, which
+// says nothing about whether this device is online, signed in, or syncing at
+// all. It survives on disk until a pass gets to it, and costs nothing on a
+// device that never signs in.
+export async function requestRemotePurge(paths: readonly string[]): Promise<void> {
+  const next = paths.filter((p) => !state.purge.includes(p));
+  if (next.length === 0) return;
+  state.purge.push(...next);
+  // Before init the module's state is a placeholder that loadState is about to
+  // replace; writing it out would put an empty snapshot and autoSync:false over
+  // the real file. initSync merges the queue forward instead.
+  if (initialized) await saveState(state);
+  if (engineStarted) void engine?.syncNow().catch(() => {});
 }
 
 export async function syncNow(): Promise<void> {

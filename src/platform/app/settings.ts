@@ -132,12 +132,15 @@ export interface Settings {
   // records a WAV and ships it to an STT host, which detects the language
   // itself.
   dictationLocale: DictationLocale;
-  // Generate chapter notes automatically from the reader's highlights (docs/14).
-  // The manual "Generate notes" button and per-chapter Regenerate work regardless.
-  autoNotes: boolean;
   // Language the AI writes its user-facing output in. "auto" mirrors the user's
   // own language; every other value pins output to that language.
   aiLanguage: AiLanguage;
+  // autoNotes used to be here (docs/09): a switch for "I don't want to spend
+  // this". Deleted 2026-08-19 — money is not the constraint, and preparation is
+  // now started by the two entries that mean it (reading/prep/trigger.ts), the
+  // same reasoning that deleted the classroom switch. An old file still carrying
+  // the key rides through load/save as an unknown key, like the two below.
+  //
   // backgroundCollect and fingerDraw used to be here and moved to device.json
   // (docs/36): one is "does this machine collect", the other "does this machine
   // have a stylus", and neither is an answer the account can give for every
@@ -159,7 +162,6 @@ export const DEFAULT_SETTINGS: Settings = {
   sttApiBase: null,
   sttModel: null,
   dictationLocale: "zh-CN",
-  autoNotes: true,
   aiLanguage: "auto",
 };
 

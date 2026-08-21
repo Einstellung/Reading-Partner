@@ -12,6 +12,18 @@
 // itself. Hence the walk for the scrolling element starts at the list and
 // includes it, and a growth of a capped list shows up on its children, not on
 // itself — so the children are observed too.
+//
+// A list can also be one that is remembered: `restore`/`remember` hand the
+// position to a store that outlives the binding (common/scroll-memory.ts), so a
+// transcript that unmounts and comes back opens where the reader left it. The
+// place is read once at the bind and written once, in the same first pass that
+// pins a list with nothing remembered, and the pin starts from the remembered
+// state so that first growth does not drag the reader off the place. The browser
+// echoes that write back as a scroll like any other: a write that landed whole
+// records the place that was already stored, and a write clamped short — the
+// list has not settled to its full height yet — records the bottom over it and
+// leaves the reader on the newest message, where a list with no memory leaves
+// them. Without the two seams this module is the pin it was before them.
 
 /** The part of a scroll container this needs. An Element satisfies it. */
 export interface ScrollHost {
@@ -22,6 +34,14 @@ export interface ScrollHost {
 	removeEventListener(type: "scroll", handler: () => void): void;
 }
 
+/** A place in the list, as the pin thinks of it. */
+export interface StickPosition {
+	top: number;
+	// At the bottom is a state, not a place: it comes back as the pin, so a reply
+	// that streamed while the reader was away is visible.
+	stuck: boolean;
+}
+
 export interface StickOptions {
 	/** How far above the bottom still counts as being at the bottom, in px. */
 	threshold?: number;
@@ -29,6 +49,10 @@ export interface StickOptions {
 	resolveHost?(list: Element): ScrollHost | null;
 	/** Subscribes to whatever changes the rendered height. Injected by the tests. */
 	observeContent?(list: Element, onChange: () => void): () => void;
+	/** Where this list was left, if it is one that is remembered. Null = the bottom. */
+	restore?(): StickPosition | null;
+	/** Records where the reader is. Called on every scroll of theirs. */
+	remember?(at: StickPosition): void;
 }
 
 const DEFAULT_THRESHOLD = 40;
@@ -87,8 +111,15 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 	const resolveHost = options.resolveHost ?? ((el: Element) => scrollableAncestor(el) as ScrollHost | null);
 	const observeContent = options.observeContent ?? observeContentDefault;
 
+	const saved = options.restore?.() ?? null;
 	let host: ScrollHost | null = null;
-	let stuck = true;
+	// Whether the list follows its newest content. Seeded from the memory: started
+	// at true it would drag a reader who left mid-history to the newest message on
+	// the first growth after the place was written.
+	let stuck = saved ? saved.stuck : true;
+	// The place to go back to, until the first pass writes it. Null for a list left
+	// at the bottom: that comes back as the pin, not as an offset.
+	let place = saved && !saved.stuck ? saved.top : null;
 	// The height the last scroll event was measured against. A scroll that comes
 	// with a changed height came from the content, not from the reader.
 	let seenHeight = 0;
@@ -105,6 +136,10 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 			return;
 		}
 		stuck = host.scrollHeight - host.clientHeight - host.scrollTop <= threshold;
+		// The one place the position is both the reader's and known to belong to
+		// the key this binding was made with. Teardown cannot do it: React runs the
+		// old cleanup after the next conversation's rows are already in the DOM.
+		options.remember?.({ top: host.scrollTop, stuck });
 	};
 
 	const bind = (next: ScrollHost | null) => {
@@ -134,6 +169,19 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 
 	const onContentChange = () => {
 		settleHost();
+		// The place is written on the pass that pins a list with nothing remembered,
+		// and let go of there. The pin is off from here, so the settling that
+		// follows leaves the reader on the place.
+		//
+		// Never on the page the walk falls back to while nothing has been laid out
+		// (settleHost above): spending the place there scrolls something that is not
+		// the transcript, and the transcript opens at its oldest message. The next
+		// pass, once the real container overflows, is the one that writes it.
+		if (place !== null && host && host !== list.ownerDocument?.scrollingElement) {
+			host.scrollTop = place;
+			place = null;
+			return;
+		}
 		if (stuck) toBottom();
 	};
 

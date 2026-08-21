@@ -37,6 +37,13 @@ export interface SyncState {
   drive: DriveIds;
   lastSyncAt: number | null;
   lastError: string | null;
+  // Paths this build has decided must not exist in the remote any more, waiting
+  // for a pass to delete them. Persisted rather than done on the spot because
+  // the decision is made when the app starts and the network is whatever it is:
+  // a one-shot that fires while the device is offline would leave the files in
+  // Drive with nothing left that remembers to go back for them. Drained by the
+  // engine, one entry dropped per delete that lands.
+  purge: string[];
 }
 
 export function emptyState(): SyncState {
@@ -46,6 +53,7 @@ export function emptyState(): SyncState {
     drive: { fileIds: {}, bookIds: {} },
     lastSyncAt: null,
     lastError: null,
+    purge: [],
   };
 }
 
@@ -80,6 +88,7 @@ export async function loadState(): Promise<SyncState> {
       ...base,
       ...parsed,
       snapshot: parsed.snapshot ?? base.snapshot,
+      purge: parsed.purge ?? base.purge,
       drive: {
         ...base.drive,
         ...parsed.drive,

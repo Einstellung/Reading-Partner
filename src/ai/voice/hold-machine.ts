@@ -133,7 +133,7 @@ export const FINISH_TIMEOUT_MS = 1500;
 // Nothing bounds start_dictation on the native side and one step inside it is
 // genuinely unbounded: the first hold in a language downloads the model, which
 // is minutes on a slow network, and AssetInventory hands back a request on every
-// single run so the branch is always entered (docs/pitfall/137). Asking for the
+// single run so the branch is always entered (docs/pitfall/158). Asking for the
 // microphone the first time is the same shape.
 //
 // Without a bound the bar reads "Listening…" with a live-looking meter over a

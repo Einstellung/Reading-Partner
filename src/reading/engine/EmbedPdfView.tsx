@@ -21,7 +21,12 @@ import { ScrollPluginPackage, Scroller } from "@embedpdf/plugin-scroll/react";
 import { ScrollStrategy } from "@embedpdf/plugin-scroll";
 import { RenderPluginPackage, RenderLayer } from "@embedpdf/plugin-render/react";
 import { TilingPluginPackage, TilingLayer } from "@embedpdf/plugin-tiling/react";
-import { ZoomPluginPackage, ZoomMode, ZoomGestureWrapper } from "@embedpdf/plugin-zoom/react";
+import {
+  ZoomPluginPackage,
+  ZoomMode,
+  ZoomGestureWrapper,
+  useZoomCapability,
+} from "@embedpdf/plugin-zoom/react";
 import { InteractionManagerPluginPackage, PagePointerProvider } from "@embedpdf/plugin-interaction-manager/react";
 import { SelectionPluginPackage, SelectionLayer } from "@embedpdf/plugin-selection/react";
 import { HistoryPluginPackage } from "@embedpdf/plugin-history/react";
@@ -30,8 +35,10 @@ import { AnnotationPluginPackage, AnnotationLayer } from "@embedpdf/plugin-annot
 import { MARKUP_TOOL_OVERRIDES } from "./convert";
 import { SELECT_AFTER_CREATE } from "./annotation-selection";
 import { PAGE_FRAME } from "./page-frame";
+import { PAGE_WASH_GROUP_STYLE, PAGE_WASH_STYLE } from "./page-wash";
 import { TouchDebugOverlay } from "./gesture/touch-debug";
 import { attachTouchRouter } from "./gesture/attach-touch";
+import { attachWheelZoom } from "./gesture/wheel-zoom";
 import { perfMark, wireEngine } from "./wire-engine";
 import type {
   AnnotationAnchor,
@@ -186,10 +193,41 @@ function TouchInputRouter({
   return null;
 }
 
+// Ctrl/Cmd + wheel zoom, on the same container and behind the same wait-for-it
+// as the touch router. The zoom plugin's own wheel path is off (see the
+// ZoomGestureWrapper below); the step lives in gesture/wheel-zoom.ts.
+function WheelZoomInput({ documentId }: { documentId: string }): ReactNode {
+  const vpRef = useViewportElement();
+  const { provides: zoom } = useZoomCapability();
+  useEffect(() => {
+    if (!zoom) return;
+    const scope = zoom.forDocument(documentId);
+    let raf = 0;
+    let detach: (() => void) | null = null;
+    const waitForViewport = () => {
+      const el = vpRef?.current;
+      if (el) {
+        detach = attachWheelZoom(el, {
+          currentZoom: () => scope.getState().currentZoomLevel,
+          requestZoom: (level, center) => scope.requestZoom(level, center),
+        });
+        return;
+      }
+      raf = requestAnimationFrame(waitForViewport);
+    };
+
+    waitForViewport();
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      detach?.();
+    };
+  }, [documentId, vpRef, zoom]);
+  return null;
+}
+
 export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
-  // The direct engine runs PDFium on the main thread; the worker engine hangs
-  // on openDocument (pitfall 21). iOS/WKWebView will need its own engine-mode
-  // decision when that platform lands.
+  // PDFium rasterises in a worker, with the main-thread engine as the fallback
+  // when the worker cannot start. Which one this is, and why, is engine-singleton.ts.
   perfMark("mount");
   const { engine, isLoading, error } = useSharedEngine();
   if (engine) perfMark("engineReady");
@@ -365,36 +403,49 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
               documentId={activeDocumentId}
               style={{ height: "100%", width: "100%", backgroundColor: PAGE_FRAME.background }}
             >
-              {/* enableWheel:false keeps the desktop scroll-wheel scrolling (not
-                  zooming); pinch only fires on a two-finger touch, so mouse and
-                  keyboard paths are untouched. */}
+              {/* enableWheel is the ctrl/meta+wheel path only (a bare wheel
+                  returns on that handler's first line and scrolls as always),
+                  and its step is a whole doubling per mouse notch with no knob
+                  for it — so that path stays off and WheelZoomInput above owns
+                  it instead (docs/pitfall/137). enablePinch, the touch path,
+                  stays on: the two never see the same event. */}
               <ZoomGestureWrapper documentId={activeDocumentId} enableWheel={false}>
               <Scroller
                 documentId={activeDocumentId}
                 renderPage={({ pageIndex, width, height }) => (
                   <PagePointerProvider documentId={activeDocumentId} pageIndex={pageIndex}>
-                    {/* The sheet: the paper under the raster and the edge that
-                        separates it from the next one. Its box is the page box
-                        (inset:0), so it cannot move a tile, a selection rect or
-                        an annotation relative to the page; the edge is a
-                        box-shadow, which paints outside that box and does not
-                        enter the scrollable area. */}
-                    <div
-                      aria-hidden
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        backgroundColor: PAGE_FRAME.pageBackground,
-                        boxShadow: PAGE_FRAME.pageEdge,
-                        pointerEvents: "none",
-                      }}
-                    />
-                    {/* Base raster fixed at scale 1 (CSS-scaled by the page box);
-                        tiles carry the crisp high-res for the visible area only.
-                        Both are non-interactive so pointer events reach selection. */}
-                    <div style={{ position: "absolute", inset: 0, width, height, pointerEvents: "none" }}>
-                      <RenderLayer documentId={activeDocumentId} pageIndex={pageIndex} scale={1} />
-                      <TilingLayer documentId={activeDocumentId} pageIndex={pageIndex} />
+                    {/* The paper: the sheet, the raster on it, and the tint over
+                        both, blended as one group and finished before anything
+                        the reader put on the page is drawn. Ordering the layers
+                        this way is what keeps a selection yellow, an annotation
+                        purple and a quote band the colours they were picked as —
+                        they sit outside the group, so the tint never multiplies
+                        them (page-wash.ts). */}
+                    <div style={PAGE_WASH_GROUP_STYLE}>
+                      {/* The sheet: the paper under the raster and the edge that
+                          separates it from the next one. Its box is the page box
+                          (inset:0), so it cannot move a tile, a selection rect or
+                          an annotation relative to the page; the edge is a
+                          box-shadow, which paints outside that box and does not
+                          enter the scrollable area. */}
+                      <div
+                        aria-hidden
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          backgroundColor: PAGE_FRAME.pageBackground,
+                          boxShadow: PAGE_FRAME.pageEdge,
+                          pointerEvents: "none",
+                        }}
+                      />
+                      {/* Base raster fixed at scale 1 (CSS-scaled by the page box);
+                          tiles carry the crisp high-res for the visible area only.
+                          Both are non-interactive so pointer events reach selection. */}
+                      <div style={{ position: "absolute", inset: 0, width, height, pointerEvents: "none" }}>
+                        <RenderLayer documentId={activeDocumentId} pageIndex={pageIndex} scale={1} />
+                        <TilingLayer documentId={activeDocumentId} pageIndex={pageIndex} />
+                      </div>
+                      <div aria-hidden style={PAGE_WASH_STYLE} />
                     </div>
                     <SelectionLayer documentId={activeDocumentId} pageIndex={pageIndex} />
                     <AnnotationLayer
@@ -413,6 +464,7 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
               />
               </ZoomGestureWrapper>
               <TouchInputRouter documentId={activeDocumentId} ctx={pagedRef} />
+              <WheelZoomInput documentId={activeDocumentId} />
               <TouchDebugOverlay />
             </Viewport>
           )

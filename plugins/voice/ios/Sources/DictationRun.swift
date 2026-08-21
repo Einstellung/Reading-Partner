@@ -164,7 +164,7 @@ final class DictationRun {
     /// below would be 85 ms and 11.7 Hz, and 4800 (100 ms, exactly 10 Hz) fits
     /// every hold length better. bufferSize is a request, not a contract, so
     /// consume() logs the delivered frame count on the first buffer rather than
-    /// arguing from the requested one (docs/pitfall/140).
+    /// arguing from the requested one (docs/pitfall/161).
     private static let levelInterval: CFAbsoluteTime = 1.0 / 15.0
     private var lastLevelAt: CFAbsoluteTime = 0
     /// Linear RMS mapped to 0..1 across this window. VPIO's AGC moves near-voice
@@ -699,7 +699,7 @@ final class DictationRun {
                 // An empty input route is the end of the capture, and it is the
                 // only notice given: no interruption fires, the engine still
                 // says isRunning, and the tap simply stops being called
-                // (docs/pitfall/141). Left unhandled it reads as a hold that
+                // (docs/pitfall/162). Left unhandled it reads as a hold that
                 // heard nothing, which is exactly how a fourteen-second run died
                 // on 2026-08-17 with no reason recorded anywhere.
                 //
@@ -767,7 +767,7 @@ final class DictationRun {
     private func consume(_ buffer: AVAudioPCMBuffer) {
         if firstBufferAt == 0 {
             firstBufferAt = CFAbsoluteTimeGetCurrent()
-            // The frame count is here because pitfall 140 argued from 4096 and
+            // The frame count is here because pitfall 161 argued from 4096 and
             // the arithmetic did not match the measurement: 4096 at 48 kHz
             // predicts 11.7 Hz and twelve holds read 9.6-10.0. installTap's
             // bufferSize is a request, not a contract, and nothing had ever

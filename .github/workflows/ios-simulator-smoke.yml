@@ -34,7 +34,7 @@ jobs:
       VITE_SMOKE: "1"
       BUNDLE_ID: com.xinyuan.readingpartner
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Pin Xcode so an image default bump can't change the toolchain under us.
       - name: Pin Xcode
@@ -153,7 +153,7 @@ jobs:
 
       - name: Upload smoke artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ios-smoke
           path: |

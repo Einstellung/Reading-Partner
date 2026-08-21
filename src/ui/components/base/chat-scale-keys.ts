@@ -1,23 +1,10 @@
-// The keyboard half of the chat zoom: what a key press means, and one listener
-// however many scopes are mounted — two would take two steps per press.
+// The keyboard half of the chat zoom: one listener however many scopes are
+// mounted — two would take two steps per press. Which presses count is
+// zoom-keys.ts, shared with the reader's own binding.
 
-export type ZoomAction = 'in' | 'out' | 'reset';
+import { zoomKeyAction, type ZoomAction } from './zoom-keys';
 
-// The zoom keys, or null for every other press. AltGr is a modifier some
-// non-US layouts type ordinary characters with, and it arrives with ctrlKey
-// set: without this the layout that puts a bracket on AltGr+0 could not type it.
-export function zoomKeyAction(e: {
-	key: string;
-	ctrlKey: boolean;
-	metaKey: boolean;
-	altKey: boolean;
-}): ZoomAction | null {
-	if (e.altKey || (!e.ctrlKey && !e.metaKey)) return null;
-	if (e.key === '=' || e.key === '+') return 'in';
-	if (e.key === '-' || e.key === '_') return 'out';
-	if (e.key === '0') return 'reset';
-	return null;
-}
+export type { ZoomAction };
 
 let hosts = 0;
 let apply: ((action: ZoomAction) => void) | null = null;

@@ -65,6 +65,19 @@
     --accent: #f0f0f0;
     --accent-foreground: #1b1b1b;
 
+    /* The neutral fills either side of --muted, named by weight and ordered
+       lightest first. faint is the shallowest step off --background (a note
+       body inset into a panel, a row hover, a code block outside the chat
+       window); soft is the fill that has to read as a shape of its own (a
+       status chip, a loading placeholder, the user bubble outside the chat
+       window); strong is the one that has to read as pressed. Each value is
+       the grey that was already written at those places, so the default
+       palette is unchanged — they are tokens because a neutral grey is the one
+       thing that cannot follow the ground when the ground turns warm. */
+    --muted-faint: #fafafa;
+    --muted-soft: #f5f5f5;
+    --muted-strong: #e5e5e5;
+
     --destructive: #b91c1c;
     --destructive-foreground: #ffffff;
     --destructive-border: #f0c8c8;
@@ -73,6 +86,17 @@
     --border: #dcdcdc;
     --input: #dcdcdc;
     --ring: #6c4fd0;
+
+    /* Rules lighter than --border, same weight names and again lightest first.
+       faint separates the rows of a dense list and only works while it stays
+       lighter than the rule that opens the list; subtle is that rule — under a
+       sticky header, between the sections of a panel; soft outlines a card in
+       the info and library screens, where a full --border reads as a box
+       drawn around it. Three steps rather than one because collapsing them
+       flattens relations the components are built on. */
+    --border-soft: #e6e6e6;
+    --border-subtle: #ececec;
+    --border-faint: #f6f6f6;
 
     /* The chat reading surface, three layers stepped down from white: the
        window, the user bubble on it, a code block inside either. Warm rather
@@ -83,16 +107,77 @@
        shared with the corner bubble, TalkView and the reader panels, all of
        which stay on white, so those two reach their elements through
        --chat-bubble-bg / --chat-code-bg, set on the CallView root and defaulted
-       back to the neutral greys everywhere else. */
+       to --muted-soft / --muted-faint everywhere else. */
     --chat-surface: #fcfcfb;
     --chat-bubble: #f2f0ec;
     --chat-code: #f7f5f1;
+
+    /* The colour the reader multiplies over a rasterized page. Nothing on the
+       default palette: a PDF page is already paper-white, and multiplying any
+       other colour onto it would shift the ink with it. Declared here and not
+       only under the tint so the default is written down where the rest of the
+       palette is; the reader reads it as `var(--page-wash, transparent)`, and
+       the two answers have to be the same one. */
+    --page-wash: transparent;
 
     /* 8px. The three radii in use fall straight out of it: rounded-sm 4px on
        the reader's small buttons, rounded-md 6px on the shell buttons and
        fields, rounded-lg 8px on the info chips. The arithmetic below reproduces
        Tailwind's own defaults exactly at this value, so nothing moves. */
     --radius: 0.5rem;
+  }
+
+  /* The paper tint: one switch, one step, no second one. It is the same palette
+     with the white pulled towards an unbleached paper, so nothing here is a
+     second design — every value below replaces a white or a neutral grey with
+     the warm colour at the same place on the same ladder, and the order of that
+     ladder is what the chat surface is made of (--background above
+     --chat-surface above --chat-code above --chat-bubble). Reorder any two and
+     the chat window stops reading as three stacked layers.
+
+     The attribute is set on <html> by ui/components/base/paper-tint.ts, and the
+     off state is the attribute being absent rather than carrying another value,
+     so a stylesheet only ever has one selector to write. Same layer and same
+     specificity as the :root above (`[data-tint="paper"]` and `:root` are both
+     0,1,0), so this wins on source order alone — it has to stay below.
+
+     Not redefined: the purples (--primary, --secondary, --ring) and every text
+     colour. Violet sits on cream as happily as it does on white, and a second
+     purple ramp would have to be re-derived against the new ground for no gain.
+     --muted and --accent are redefined even though they are neutral greys,
+     because a neutral grey on a warm ground is what reads as cold.
+
+     What is deliberately not here: a dark mode. This is one step off white for
+     reading in daylight; inverting the app is a different design with different
+     text colours, and pretending this switch is halfway there would leave the
+     app with a palette that is neither. */
+  [data-tint="paper"] {
+    --background: #faf6ec;
+    --card: #faf6ec;
+    --popover: #faf6ec;
+
+    --muted: #efe8d9;
+    --accent: #efe8d9;
+    --muted-faint: #f7f2e5;
+    --muted-soft: #f2ebdd;
+    --muted-strong: #e7decb;
+
+    --border: #ded5c2;
+    --input: #ded5c2;
+    --border-soft: #e9e0cd;
+    --border-subtle: #eee6d5;
+    --border-faint: #f3eee0;
+
+    --chat-surface: #f8f3e8;
+    --chat-bubble: #f0e9da;
+    --chat-code: #f5eee0;
+
+    /* Multiplied over the page raster: white paper comes out exactly this
+       colour and black ink stays black, which is why the reader can tint a
+       bitmap it never re-renders. One step deeper than the chrome around it, so
+       a page still reads as a sheet lying on a panel rather than as a hole cut
+       in it. */
+    --page-wash: #f6efdc;
   }
 }
 
@@ -112,6 +197,9 @@
   --color-secondary-hover: var(--secondary-hover);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  --color-muted-faint: var(--muted-faint);
+  --color-muted-soft: var(--muted-soft);
+  --color-muted-strong: var(--muted-strong);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
@@ -119,6 +207,9 @@
   --color-destructive-border: var(--destructive-border);
   --color-destructive-hover: var(--destructive-hover);
   --color-border: var(--border);
+  --color-border-soft: var(--border-soft);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-faint: var(--border-faint);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-chat-surface: var(--chat-surface);
@@ -246,7 +337,13 @@ html {
    preflight gives them `font: inherit`. */
 body {
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  color: #1b1b1b;
+  color: var(--foreground);
+  /* The ground under everything, and the only thing showing wherever a shell
+     has not painted yet: the first frame before a lazily imported shell mounts,
+     and the strip an iOS rubber-band scroll pulls into view. Leaving it as the
+     browser's white is a flash of white at both, which is the one thing the
+     tint exists to remove. */
+  background-color: var(--background);
 }
 
 /* preflight does not touch user-select, so this one stays hand-written

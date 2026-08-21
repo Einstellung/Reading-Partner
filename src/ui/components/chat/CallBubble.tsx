@@ -1,11 +1,15 @@
 // CallBubble: the bubble state of a reading call (docs/03). Anchored beside the
-// mark, the AI starts answering; the reader can follow up, expand, or click away
-// to keep reading (close, not hang up). Closing at any time is safe, mid-answer
-// included: the turn goes on writing into the thread. Tailwind-only.
+// mark, it opens with a row of intent chips rather than an answer; the reader
+// can pick one, type, expand, or click away to keep reading (close, not hang
+// up). Closing at any time is safe, mid-answer included: the turn goes on
+// writing into the thread. Tailwind-only.
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { ReadingIntent } from '../../../reading/intents';
 import { IconExpand } from '../base/icons';
 import { Composer, MessageList, type ComposerVoice } from './chat';
+import IntentChips from './IntentChips';
+import type { CardActionHandler } from './chatParts';
 import { Button } from '../ui/button';
 import { cn } from '../lib/utils';
 import { OVERLAY_Z, useOverlaySafePadding } from '../ui/overlay';
@@ -29,6 +33,18 @@ interface CallBubbleProps {
 	streaming?: boolean;
 	onStop?(): void;
 	voice?: ComposerVoice | false;
+	// What a card in this conversation raises. The bubble carries cards too — an
+	// aside's receipt lands here when the reader never expanded to chat-main — so
+	// it forwards the dispatcher the same way CallView does.
+	onCardAction?: CardActionHandler;
+	// What an empty conversation offers instead of an unprompted answer
+	// (reading/intents.ts). Shown only while the thread has nothing in it.
+	intents?: readonly ReadingIntent[];
+	// This conversation is a side one off a live lesson (docs/03), drawn on the
+	// page while it ran: the way back. Absent = it is not one, and the header says
+	// what it says today. What this bubble is about is the mark it is pinned
+	// beside, so there is nothing here to restate the span with.
+	onBackToLesson?(): void;
 }
 
 const WIDTH = 360;
@@ -47,6 +63,9 @@ export default function CallBubble({
 	streaming,
 	onStop,
 	voice,
+	onCardAction,
+	intents,
+	onBackToLesson,
 }: CallBubbleProps) {
 	const ref = useRef<HTMLDivElement>(null);
 	const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
@@ -101,12 +120,24 @@ export default function CallBubble({
 			aria-label="AI conversation"
 			style={{ width, left: pos?.left, top: pos?.top, visibility: pos ? 'visible' : 'hidden' }}
 			className={cn(
-				'fixed box-border flex flex-col gap-2 rounded-xl border border-black/10 bg-white p-3 shadow-[0_8px_40px_rgba(0,0,0,0.18)]',
+				'fixed box-border flex flex-col gap-2 rounded-xl border border-black/10 bg-popover p-3 shadow-[0_8px_40px_rgba(0,0,0,0.18)]',
 				OVERLAY_Z.floating,
 			)}
 		>
 			<div className="flex items-center justify-between">
-				<span className="text-[11px] font-medium uppercase tracking-wide text-neutral-400">Reading with AI</span>
+				{onBackToLesson ? (
+					<Button
+						type="button"
+						variant="ghost"
+						size={null}
+						onClick={onBackToLesson}
+						className="rounded-md px-1.5 py-1 text-[11px] font-medium uppercase tracking-wide text-neutral-400 can-hover:hover:text-neutral-600 coarse:px-2.5 coarse:py-2"
+					>
+						‹ Back to the lesson
+					</Button>
+				) : (
+					<span className="text-[11px] font-medium uppercase tracking-wide text-neutral-400">Reading with AI</span>
+				)}
 				<div className="flex items-center gap-0.5">
 					{onDelete && <DeleteThreadButton onDelete={onDelete} />}
 					<Button
@@ -123,7 +154,16 @@ export default function CallBubble({
 				</div>
 			</div>
 
-			{messages.length > 0 && <MessageList messages={messages} surface="bubble" className="max-h-64 pr-0.5" />}
+			{messages.length > 0 ? (
+				<MessageList
+					messages={messages}
+					surface="bubble"
+					className="max-h-64 pr-0.5"
+					onCardAction={onCardAction}
+				/>
+			) : (
+				intents && intents.length > 0 && <IntentChips intents={intents} onPick={onSend} />
+			)}
 
 			<Composer
 				onSend={onSend}

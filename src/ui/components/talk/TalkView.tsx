@@ -26,6 +26,9 @@ import { outlineRows, type Talk } from "../../../reading/talks";
 import { defaultNavOpen, readNavEnv } from "../base/topic-nav";
 import DeckDialog from "./DeckDialog";
 import OutlinePane from "./OutlinePane";
+import RunthroughView from "./RunthroughView";
+import { rehearsalReadiness } from "./runthrough";
+import { useRunthroughs, useTalkDeckFile } from "./useRunthrough";
 import { useTalk } from "./useTalk";
 
 // The line under the talk's name: what it is being prepared from.
@@ -49,9 +52,25 @@ export default function TalkView(props: {
   const [deckOpen, setDeckOpen] = useState(false);
   const rows = useMemo(() => (talk.talk ? outlineRows(talk.talk) : []), [talk.talk]);
 
+  // Giving the talk covers this view rather than replacing it: no route, and
+  // leaving it puts the talk back exactly as it was. Covering rather than
+  // swapping is not cosmetic — unmounting the conversation is what distils it
+  // (useTalk's cleanup), and stepping over to the deck for ten minutes is not
+  // leaving the talk.
+  const [rehearsing, setRehearsing] = useState(false);
+  // Bumped when the deck dialog closes: a deck generated in this sitting has to
+  // turn Rehearse on in this sitting.
+  const [deckKey, setDeckKey] = useState(0);
+  const deck = useTalkDeckFile(props.talkId, deckKey);
+  const readiness = rehearsalReadiness({ deckFile: deck.file, loading: deck.loading });
+  // Bumped when a run ends: the only moment this device changes the history (a
+  // pull can too, and useRunthroughs says why it does not follow that).
+  const [runsKey, setRunsKey] = useState(0);
+  const runs = useRunthroughs(props.talkId, runsKey);
+
   return (
     <CitationContext.Provider value={null}>
-      <div className="absolute inset-0 flex flex-col bg-white">
+      <div className="absolute inset-0 flex flex-col bg-background">
         <div className="flex flex-none items-center gap-2 border-b border-border px-3 py-2">
           <Button
             type="button"
@@ -104,6 +123,19 @@ export default function TalkView(props: {
           >
             Deck
           </Button>
+          {/* The deck is only half of the last step: docs/31's judgement is
+              whether the reader can give the talk, so the deck has a Rehearse
+              beside it and the pass is recorded. */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!talk.talk || !readiness.ok}
+            title={readiness.title}
+            onClick={() => setRehearsing(true)}
+          >
+            Rehearse
+          </Button>
         </div>
 
         <div className="flex min-h-0 flex-1">
@@ -140,6 +172,7 @@ export default function TalkView(props: {
           {outlineOpen && (
             <OutlinePane
               rows={rows}
+              runs={runs}
               onMove={talk.moveEntry}
               onSetIncluded={talk.cutEntry}
               onRemove={talk.removeEntry}
@@ -148,11 +181,26 @@ export default function TalkView(props: {
           )}
         </div>
 
+        {rehearsing && talk.talk && deck.file && (
+          <RunthroughView
+            talkId={talk.talk.id}
+            talkName={talk.talk.name}
+            deckFile={deck.file}
+            onExit={() => {
+              setRehearsing(false);
+              setRunsKey((n) => n + 1);
+            }}
+          />
+        )}
+
         {deckOpen && talk.talk && (
           <DeckDialog
             talkId={talk.talk.id}
             talkName={talk.talk.name}
-            onClose={() => setDeckOpen(false)}
+            onClose={() => {
+              setDeckOpen(false);
+              setDeckKey((n) => n + 1);
+            }}
           />
         )}
 

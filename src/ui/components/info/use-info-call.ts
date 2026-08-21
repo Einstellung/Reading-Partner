@@ -32,6 +32,7 @@ import {
 import { addSourceFromCard, applyProfileUpdate } from "../../../info/companion/card-actions";
 import type { InfoCallAnchor } from "../../../info/companion/anchors";
 import { addSource, hasSources } from "../../../info/sources/source-store";
+import { forgetScroll } from "../common/scroll-memory";
 import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
 import type { AgentTool } from "../../../ai/agent";
 import { navigateAway } from "../chat/call-layout";
@@ -67,6 +68,9 @@ export interface InfoCallOptions {
 
 export interface InfoCallController {
   messages: UiMessage[];
+  // Identifies this conversation to the transcript's scroll memory
+  // (ui/components/common/scroll-memory.ts).
+  stickKey: string;
   streaming: boolean;
   // Whether the reader has tapped the call out of the way.
   swapped: boolean;
@@ -76,6 +80,16 @@ export interface InfoCallController {
   onCardAction: (cardId: string, action: CardAction) => void;
 }
 
+/**
+ * The key this conversation's scroll position is stored under. The briefing
+ * thread's id is the constant "briefing", so the date has to be in the key or
+ * two days would share one slot; the prefix keeps info out of the reading
+ * thread-id space.
+ */
+export function infoStickKey(dateKey: string, threadId: string): string {
+  return `info:${dateKey}:${threadId}`;
+}
+
 export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   const { anchor, dateKey, view, collecting, pipCards, onHangUp, onSourcesChanged, onOpenBriefing } = opts;
   const [swapped, setSwapped] = useState(false);
@@ -83,6 +97,11 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const bookId = infoBookId(dateKey);
+  const stickKey = infoStickKey(dateKey, anchor.threadId);
+
+  // An info call ends by its component unmounting, where a reading call ends at
+  // call === null and App clears the whole store.
+  useEffect(() => () => forgetScroll(stickKey), [stickKey]);
 
   // Latest messages, mirrored to a ref so the (id-keyed) card dispatcher can look
   // up a card's payload without being torn down and rebuilt on every delta.
@@ -428,5 +447,5 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     abortRef.current?.abort();
   }
 
-  return { messages, streaming, swapped, setSwapped, send, stop, onCardAction };
+  return { messages, stickKey, streaming, swapped, setSwapped, send, stop, onCardAction };
 }

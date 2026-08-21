@@ -15,4 +15,5 @@ iOS 上 Google OAuth 用反向 client id 自定义 scheme 收回调。想当然�
 - scheme 写死进 `tauri.conf.json` → `plugins.deep-link.mobile[0]`:`{ "scheme": ["com.googleusercontent.apps.<id>"], "appLink": false }`。反向形式 = 完整 client id 去掉 `.apps.googleusercontent.com` 后缀,前面拼 `com.googleusercontent.apps.`。
 - 同步设 `.env` 的 `VITE_GOOGLE_IOS_CLIENT_ID` 为完整 client id,和上面同一个 client。
 - CI 的前端构建步骤要能拿到 `VITE_GOOGLE_IOS_CLIENT_ID`,否则包里 client id 为空。
-- 别手改 `gen/apple/Info.plist`——会被下次 `tauri ios init` 覆盖。配置源头永远是 `tauri.conf.json`,插件构建期自动注入。
+- 别手改 `gen/apple/Info.plist`——会被下次 `tauri ios init` 覆盖。配置源头永远是 `tauri.conf.json`。
+- 「插件构建期自动注入」在 CI 里靠不住：依赖 crate 命中缓存就不再跑 build script,而 `gen/apple` 每次现生成,那个键会整个消失(坑 [157](./157-a-cached-crate-never-replays-its-build-script.md))。iOS 两条 workflow 现在自己从 `tauri.conf.json` 注入,并在 ipa 上断言。

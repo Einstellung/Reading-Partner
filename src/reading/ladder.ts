@@ -21,9 +21,10 @@ export type ReadingReductionId =
   | "notes-overview"
   | "booklist-thin"
   | "observation-trim"
+  | "page-window"
   | "tool-result-stubs"
   | "prep-notes-trim"
-  | "classroom-inline"
+  | "chapter-inline"
   | "history-trim";
 
 // The order things are given up in. First to go is the cheapest to lose.
@@ -31,9 +32,20 @@ export const READING_LADDER: readonly Rung<ReadingReductionId>[] = [
   // tier 1: redundancy.
   { id: "figure-catalog" },
   { id: "reader-profile" },
+  // Both products of the notes pass: the reader's whole-book outline and the
+  // chapter spine (docs/09). They go together because they are the same
+  // material at two grains, and because what they are for — orientation and
+  // route questions — is what a turn tight enough to be here is not doing.
   { id: "notes-overview" },
   { id: "booklist-thin" },
   { id: "observation-trim" },
+  // The page images around the highlight (reading/figures/page-window.ts). Last
+  // of the silent rungs and priced against the messages, because it is the one
+  // thing here big enough to be worth several of the rungs above it. It goes
+  // without a notice for the same reason they do: the figure catalog names what
+  // is on those pages and view_figure fetches any of it back, so what is lost is
+  // a look the model can ask for again rather than material it cannot reach.
+  { id: "page-window", price: "messages" },
   // tier 2: gone from the prompt, still reachable by a tool, and the stub says
   // so. Applied inside the agent loop rather than here, since this assembly has
   // no tool results yet; it stays on the ladder because its position is the
@@ -54,10 +66,14 @@ export const READING_LADDER: readonly Rung<ReadingReductionId>[] = [
     price: "bulk",
     notice: "some of my notes on the reference papers were left out to make room",
   },
+  // The book's text, or the chapter in focus (docs/09: whichever of the two this
+  // turn inlined). Giving it up does not take the material away — read_chapter
+  // and read_pages still reach every page of it — but it turns a turn that had
+  // the chapter in view into one that has to fetch what it needs, so it says so.
   {
-    id: "classroom-inline",
+    id: "chapter-inline",
     price: "bulk",
-    notice: "the book didn't fit in context, so I read the pages I needed instead of having all of it in view",
+    notice: "this didn't fit in context, so I read the pages I needed instead of having it all in view",
   },
   // Last, below even the inlined book, because of what it costs: the fallback
   // distillation meant to capture an older stretch of a thread before it falls

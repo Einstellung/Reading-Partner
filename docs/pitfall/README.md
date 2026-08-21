@@ -12,11 +12,13 @@
 | 手机上的手势、页面导航 | 触摸与手势 |
 | 鼠标滚轮、触控板 pinch | 触摸与手势 |
 | 发请求、外链资源、CSP | 网络与 CSP |
+| 改 deck / 幻灯片的宿主桥、iframe srcdoc | 网络与 CSP |
 | 读写 AppData | 存储与数据目录 |
 | 导入外部文件、拿文件选择器给的路径 | 存储与数据目录 |
 | 同步引擎、Drive 后端 | 存储与数据目录 + 网络与 CSP + WebKit / webview |
 | 全文/图片提取、裁图 | 提取（壳侧 pdf.js） |
-| 出 iOS 包、签名、图标、深链接 | iOS 构建与签名 |
+| 出 iOS 包、签名、图标、深链接 | iOS 构建与签名 + 开发环境 |
+| 动 CI 的构建缓存、靠 build script 生成的东西 | iOS 构建与签名 |
 | 原生录音、回声消除、后台识别 | 原生音频与语音 |
 | 出 Android 包、签名、对齐 | Android 构建与签名 |
 | 桌面 webview 行为异常 | WebKit / webview |
@@ -25,18 +27,26 @@
 | 清洗第三方 HTML、往 innerHTML 里塞正文 | WebKit / webview |
 | 确认框、删除之类的破坏性操作 | WebKit / webview |
 | 调模型、改 provider 层、组装提示词、加长上下文 | AI 调用与上下文窗口 |
-| 顶栏、工具条、下拉浮层的定位 | 界面与布局 |
-| 全局样式、Tailwind layer、字体与行高 | 界面与布局 + EmbedPDF 引擎 |
+| 顶栏、工具条、下拉浮层的定位 | 浮层与 shadcn 原语 |
+| 全局样式、Tailwind layer、字体与行高 | 排版基线与 Tailwind + EmbedPDF 引擎 |
 | 加测试文件、给 store 写单测 | 开发环境 |
+| 搬目录、切子域、动分层表 | 开发环境 |
+| 在 worktree 里起 dev server 做实验 | 开发环境 |
+| 查滚动卡顿、主线程占用 | WebKit / webview + EmbedPDF 引擎 |
+| 渲染 AI 回复的 markdown、加 remark/rehype 插件 | markdown 渲染 |
+| 无头截图核对渲染 | 开发环境 |
+| 开机自启、托盘、常驻 | 开发环境 |
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 158）。
+
 ## EmbedPDF 引擎
 
-- [18-embedpdf-load-hangs-progress-zero](./18-embedpdf-load-hangs-progress-zero.md) — 文档加载静默卡 progress 0，需跨源隔离头 + 直连引擎（worker:false）
+- [18-embedpdf-load-hangs-progress-zero](./18-embedpdf-load-hangs-progress-zero.md) — 文档加载静默卡 progress 0，解法是跨源隔离头 + 直连引擎（worker:false）；归因是错的：pdfium.wasm 不是 pthread 构建，不需要 SharedArrayBuffer，worker 那次挂在根相对 wasmUrl（坑 21）
 - [19-embedpdf-initialdocuments-hang](./19-embedpdf-initialdocuments-hang.md) — initialDocuments 卡 loading，改成 init 后显式 openDocumentBuffer
 - [20-embedpdf-renderlayer-eats-pointer](./20-embedpdf-renderlayer-eats-pointer.md) — RenderLayer 的 img 吃指针事件，划词失效，需 pointerEvents:none
-- [21-embedpdf-worker-engine-hangs](./21-embedpdf-worker-engine-hangs.md) — worker 引擎 openDocument 永久挂起（blob worker 里解析不了 pthread 辅助 worker），走直连引擎 + tiling
+- [21-embedpdf-worker-engine-hangs](./21-embedpdf-worker-engine-hangs.md) — worker 引擎拿根相对 wasmUrl 会永久挂起（blob: 基址解不了根相对路径，错误 post 成主线程不认的消息类型），wasmUrl 要用 `location.href` 拼绝对地址；旧文档归因到 pthread 辅助 worker，是错的
 - [22-embedpdf-scrolltopage-viewport-gap](./22-embedpdf-scrolltopage-viewport-gap.md) — scrollToPage 的 pageCoordinates 多加 viewport gap，页内位置还原要减掉
 - [23-embedpdf-current-page-metrics-zero](./23-embedpdf-current-page-metrics-zero.md) — "当前页"的可见区 origin 常是 0，持久化锚点要用最顶上的可见页
 - [27-embedpdf-searchinpage-not-on-engine](./27-embedpdf-searchinpage-not-on-engine.md) — searchInPage 在 IPdfiumExecutor 不在 PdfEngine，定点搜索改用 searchAllPages 按页过滤
@@ -58,6 +68,10 @@
 - [101-page-coordinates-are-a-scroll-offset-on-both-axes](./101-page-coordinates-are-a-scroll-offset-on-both-axes.md) — `scrollToPage` 的 `pageCoordinates.x` 会原样加进水平滚动位置，`alignX` 不传就没人减回去；跳到标注时页面被拉走"标注离页左边缘多远"那么多（实测 60px），左边距的标注偏一点、右半页的标注偏半屏。跳到页内某点一律显式补 `alignX`：页面放得下就居中页面（`x` 传 0），放大到超出视口就居中标注（`x` 传标注 x、`alignX` 传 50）
 - [102-render-quality-option-is-read-under-another-name](./102-render-quality-option-is-read-under-another-name.md) — `renderPage` 的 `imageQuality` 调 0.01 和 1.0 出来一样大：编码器读的是 `options.quality`（类型里没有这个字段），质量永远落在 canvas 默认；两个名字都传
 - [105-markup-is-drawn-from-strokecolor-and-tool-opacity](./105-markup-is-drawn-from-strokecolor-and-tool-opacity.md) — 高亮/下划线渲染读的是 `strokeColor`（`color` 是 deprecated 别名），只写 `color` 就画成兜底黄；不透明度又分两处（导入写死 0.4、创建取工具默认值 1），于是刚划的那一下深、重开变浅，两次都不是选的那个颜色。颜色两个字段一起写，不透明度收成一个数、注册期用 `tools` 覆盖工具默认值
+- [138-the-open-task-resolves-before-the-document-lands](./138-the-open-task-resolves-before-the-document-lands.md) — `openDocumentBuffer` 的外层 task 在 dispatch 完就 resolve，文档要等内层引擎 task 才进 store；直连引擎同微任务内完成看不出来，worker 下 `getDocument` 读到 null，宿主整半边接线被跳过（页面照画、顶栏说打不开）。两层都 await，不用轮询
+- [139-encoderpoolsize-is-only-read-by-the-worker-engine](./139-encoderpoolsize-is-only-read-by-the-worker-engine.md) — 两个引擎共用同一份选项类型，但直连版写死主线程 canvas 编码、从不读 `encoderPoolSize`，传了等于没传；要编码池只能用 worker 引擎（`ImageEncoderWorkerPool` 不在包的 exports 里，拼不出来）
+- [140-buffersize-widens-the-window-it-does-not-move-it](./140-buffersize-widens-the-window-it-does-not-move-it.md) — `bufferSize` 只决定预取窗口多宽，`endIndex + bufferSize - 1` 在 1 时已经提前一页；调大只多常驻几张光栅，停顿时刻分毫不动。小 fixture 上调到 ≥ 页数会整本预渲染完，量出一组假数字
+- [150-restoring-a-scale-nobody-saved-overrides-fit-width](./150-restoring-a-scale-nobody-saved-overrides-fit-width.md) — 没开过的书也带着一个合成的 viewState 进来，`scale: "auto"` 这个哨兵在壳里被折成数字 1，`requestZoom(1)` 当场作废注册时的 `FitWidth`，第一次开书停在 100%、改窗口也不再重新适配；"没存过的缩放"要一路保持"没有"，还原判据收进纯函数 `openingZoom`
 
 ## 触摸与手势
 
@@ -76,6 +90,8 @@
 - [117-webkit-takes-the-scroll-later-and-only-on-a-scrollable-axis](./117-webkit-takes-the-scroll-later-and-only-on-a-scrollable-axis.md) — 坑 70、71 的四个数在 iOS WKWebView 上一个都不成立：`touchmove` 从第一个像素就发、约 16px 才判滚动（其间每个 move 都 cancelable）、只 prevent 第一个 move 就够、而且只抢它真能滚的那个轴；3px 和「每个 move 都 prevent」是两个引擎的交集，不用改
 - [128-react-onwheel-is-passive](./128-react-onwheel-is-passive.md) — React 18 把 `wheel`/`touchstart`/`touchmove` 按 passive 挂在 root 上，`onWheel` 里的 `preventDefault()` 被忽略，自己的缩放和浏览器的页面缩放同时跑；要手挂原生监听并显式 `{ passive: false }`
 - [129-wheel-delta-comes-in-three-units](./129-wheel-delta-comes-in-three-units.md) — `deltaY` 的单位由 `deltaMode` 说了算（像素/行/页），行模式一格约 3，只按像素累计的手势在那种引擎上要拨十几下才动一格；累加前先归一到像素
+- [137-zoom-plugin-wheel-is-ctrl-only-and-doubles-per-notch](./137-zoom-plugin-wheel-is-ctrl-only-and-doubles-per-notch.md) — 缩放插件的 `enableWheel` 只是 ctrl/meta+滚轮的开关（裸滚轮在 handler 第一行就返回，从来不归它管），关掉它等于白白没有桌面缩放；步长是 `1 - deltaY*0.01` 且没有灵敏度选项，Chromium 一格 100px 就翻倍，只能自己接管，用 `exp(-px/800)` 一条指数曲线同时喂鼠标和触控板
+- [143-ios-puts-its-selection-callout-below-the-selection](./143-ios-puts-its-selection-callout-below-the-selection.md) — iPad 上系统的 `Copy | Look Up | Translate` 条不是固定在选区上方：选区中心在安全区竖向中点以上时它在下方，以下时在上方，两边都是离选区 15px、高 44px，横向对着选区中心夹进屏幕。它是浮在 WKWebView 上的 UIKit 视图，DOM 里没有、`elementFromPoint` 看不见、落在它上面的触摸网页收不到；贴着选区放的浮动控件被盖掉 37px 只剩 7px 可点。那个控件已删（作废 2026-08-20），再往选区旁边放东西要按这条带子两边都让并重新量
 
 ## 网络与 CSP
 
@@ -87,6 +103,7 @@
 - [54-plugin-http-body-json-per-byte](./54-plugin-http-body-json-per-byte.md) — 交给 http 插件的 body 被逐字节 JSON 化（实测 3.54 字符/字节，一次请求 ~20 倍自身大小），26 MB 的书上传峰值 400 MB 触发 iPad jetsam；大 blob 必须分块 PUT
 - [72-arxiv-sortby-submitteddate-hangs](./72-arxiv-sortby-submitteddate-hangs.md) — arXiv 加 `sortBy=submittedDate` 25 秒不返回或 429，六个请求就把 IP 限流几分钟；"最新"要用 `submittedDate` 区间过滤，四个文献库一律"新是过滤、排序留给相关性"（OpenAlex 按日期排序会把管理学论文排到神经科学查询第一位）
 - [73-s2-citation-edges-null-and-ignored-year](./73-s2-citation-edges-null-and-ignored-year.md) — S2 的 `/references`、`/citations` 会回 `data: null`（出版商抽掉字段，照文档写就抛 TypeError），`year=` 参数静默忽略；引用图往后由 S2 领跑、往前只有 OpenAlex 能服务端过滤加排序，空结果必须能降级到下一个库
+- [152-srcdoc-iframe-inherits-the-parent-csp](./152-srcdoc-iframe-inherits-the-parent-csp.md) — `srcdoc`（和 `blob:`）iframe 不过 `frame-src`，CSP 从父页继承：deck 的内联脚本是靠 app 自己的 `script-src 'unsafe-inline'` 在跑；22 MB 的 srcdoc load 415 ms，CSP 一个字不用改
 
 ## 存储与数据目录
 
@@ -105,13 +122,14 @@
 ## iOS 构建与签名
 
 - [31-ios-deep-link-scheme-build-time](./31-ios-deep-link-scheme-build-time.md) — 自定义 scheme 只能构建期静态注册进 tauri.conf，不能靠 env，且要和 env client id 手工对齐
-- [33-ios-no-cross-origin-isolation-still-renders](./33-ios-no-cross-origin-isolation-still-renders.md) — iOS WKWebView 自定义协议下没有跨源隔离/SAB，但 PDFium 直连引擎单线程照样渲染；闸门可在模拟器无签名验证
+- [157-a-cached-crate-never-replays-its-build-script](./157-a-cached-crate-never-replays-its-build-script.md) — 依赖 crate 命中 rust-cache 就不重新编译，它 build script 写进 `gen/apple/Info.plist` 的 `CFBundleURLTypes` 也就没人写；`gen/apple` 每次现生成，于是 build 48/53 发出去才发现 Google 回调回不来。CI 自己从 tauri.conf 注入（幂等），并在 ipa 的 binary plist 上断言，缺 scheme 就红
+- [33-ios-no-cross-origin-isolation-still-renders](./33-ios-no-cross-origin-isolation-still-renders.md) — iOS WKWebView 自定义协议下没有跨源隔离/SAB，PDFium 照样渲染（wasm 本就不是 pthread 构建，worker 引擎也不需要 SAB）；闸门可在模拟器无签名验证
 - [34-ios-init-default-icon-alpha](./34-ios-init-default-icon-alpha.md) — tauri ios init 用内置默认图标模板，CI init 后要覆盖 appiconset；iOS 图标 strip alpha，CFBundleIconName 兜底
 - [35-ios-unsigned-linkedit-vmsize](./35-ios-unsigned-linkedit-vmsize.md) — 完全无签名 Mach-O 过第三方重签名器时 __LINKEDIT vmsize 不更新，真机秒崩；产线预 ad-hoc 签名规避
 - [47-asc-key-role-cloud-signing](./47-asc-key-role-cloud-signing.md) — CI 云签名要 Admin 权限的 App Store Connect API key，App Manager 在 export 阶段被拒；试探权限不能用坏 payload
 - [48-tauri-ios-signing-log-noise](./48-tauri-ios-signing-log-noise.md) — "找不到证书"警告和 `Apple Distribution: Tauri (unset)` 证书都是 Tauri 自己的噪音，签名成没成看 export 阶段
 - [107-testflight-upload-is-not-distribution](./107-testflight-upload-is-not-distribution.md) — altool 上传成功只是 ingest，build 不 link 到 beta 组就谁也装不到（内测组没开自动分发要逐个加，外测组还要 What's New 和 beta 审核）；上传后必须跑分发脚本。外测加组 404 说 build 不存在：端点要用 builds 那一侧、审核提交要排在加组前面、先查 `buildAudienceType` 和 `externalBuildState`。`fields[builds]` 漏列 relationship 会把 `include` 的数据一起吞掉。上传返回时 build 资源还没建出来，要等它出现和等它 VALID 两段轮询，且不许猜「最新那个」
-- [142-idevicesyslog-drops-lines-when-it-is-not-filtered](./142-idevicesyslog-drops-lines-when-it-is-not-filtered.md) — 不加过滤的 `idevicesyslog` 四分钟落盘 127MB，里面自己 app 的 NSLog 只有 13 行：设备日志本身 0.5MB/s，中继跟不上就丢，丢哪段不挑。用 `-m/--match` 在中继侧过滤，判据是行数不是文件大小
+- [163-idevicesyslog-drops-lines-when-it-is-not-filtered](./163-idevicesyslog-drops-lines-when-it-is-not-filtered.md) — 不加过滤的 `idevicesyslog` 四分钟落盘 127MB，里面自己 app 的 NSLog 只有 13 行：设备日志本身 0.5MB/s，中继跟不上就丢，丢哪段不挑。用 `-m/--match` 在中继侧过滤，判据是行数不是文件大小
 
 ## Android 构建与签名
 
@@ -121,13 +139,13 @@
 
 - [132-audio-engine-start-returns-without-running](./132-audio-engine-start-returns-without-running.md) — `AVAudioEngine.start()` 不 throw 也照样没起来，`isRunning` 是 false、tap 一个回调都不触发，采集全程静默且零报错；`start()` 之后自己断言 `isRunning`，错误信息里带输出链接受的格式、输出节点的硬件格式和会话 `sampleRate`
 - [133-a-rebuilt-vpio-unit-answers-with-a-default-output-format](./133-a-rebuilt-vpio-unit-answers-with-a-default-output-format.md) — `setVoiceProcessingEnabled(true)` 重建 IO 单元之后、`prepare()` 之前，输出侧对硬件的回答是 44100Hz 2ch 默认值；`mainMixerNode` 第一次被读到就会建出来并接上输出节点，接在 `prepare()` 之前整条输出链按默认值定死，引擎起不来（表现即坑 132）。`prepare()` 排在第一次访问 `mainMixerNode` 之前，硬件格式读 `outputNode.outputFormat(forBus:)`
-- [137-asset-installation-request-is-never-nil](./137-asset-installation-request-is-never-nil.md) — 模型已装，`AssetInventory.assetInstallationRequest(supporting:)` 照样每次返回非 nil；`downloadAndInstall()` 对已装 locale 是 4-40ms 的空操作，真下载是分钟级。别把「非 nil」当成「要下载」去给用户看进度
-- [138-finalize-hangs-when-another-instance-holds-the-session](./138-finalize-hangs-when-another-instance-holds-the-session.md) — 健康会话上 `finalizeAndFinishThroughEndOfInput()` 是 70-330ms，另一个 app 实例占着会话时实测挂了 89 秒；三个命令共用一条串行链，链头挂住后面每一次按住说话都排队干等。给 finalize 设 2 秒上限（用一次性闩，不能用 task group：Swift 放弃不了「等另一个 Task 结束」的 await），装包前先按 pid 杀掉旧实例
-- [139-volatile-results-arrive-in-bursts](./139-volatile-results-arrive-in-bursts.md) — 开了 `fastResults` 之后 volatile 成串到达，同一毫秒六条、每条比上一条多几个字符，每条都是一次 IPC 加一次整棵重渲染；按住说话本来就不显示实时文字，所以累加器全收、往外发的节流到 10Hz，final 不许节流。顺带实测：volatile 只覆盖未定稿的尾巴，不是累计整句
-- [140-the-tap-buffer-decides-the-level-rate](./140-the-tap-buffer-decides-the-level-rate.md) — 电平事件按 15Hz 节流，实测 9.6-10.0Hz：节流阈值比 tap 回调的到达间隔还短，一次都没生效，真正定频率的是 `installTap` 的缓冲区。要改频率去改 `bufferSize`。具体多大还没实测——请求的 4096 帧算出来是 11.7Hz，对不上，4800 帧才对得上；`bufferSize` 是请求不是契约，`consume()` 现在把实际帧数打进第一条日志
-- [141-a-locked-screen-takes-the-microphone-without-an-interruption](./141-a-locked-screen-takes-the-microphone-without-an-interruption.md) — 自动锁屏把 app 切后台，输入路由变成 `in=[]`，麦克风再无一个 buffer，但 `interruptionNotification` 一条都不来、`isRunning` 还是 true；真手指按着屏幕不会锁，只有合成 pointer 事件的无人值守脚本会撞上
-- [143-the-wrong-dictation-locale-invents-rather-than-degrades](./143-the-wrong-dictation-locale-invents-rather-than-degrades.md) — 送错语种的模型不会「识别得差一点」，会按音节猜出一串语法通顺的目标语言词：中文「注意力机制取代了循环结构」按 en-US 出来是 `2 E D, teacher, Chidalo, Shun.`，十五秒的长句只剩一串逗号。看起来像正常输出，所以比空转写更难发现。不跟随设备语言，做成设置项（`settings.dictationLocale`，默认 zh-CN）
-- [144-a-harness-that-buffers-cannot-report-the-crash-it-watches-for](./144-a-harness-that-buffers-cannot-report-the-crash-it-watches-for.md) — 探针把记录攒在内存里、跑完才落盘，就报不了它自己要抓的那种死法：jetsam、看门狗、锁屏挂起定时器都不给收尾机会，死在第十八分钟和从没开始过取回来是同一个空文件。按事件 `append` 一行 JSON，每条带墙钟时间戳；高频事件只计数不入账。有了它，跑多久就没那么要紧——死在第四分钟就是四分钟的数据
+- [158-asset-installation-request-is-never-nil](./158-asset-installation-request-is-never-nil.md) — 模型已装，`AssetInventory.assetInstallationRequest(supporting:)` 照样每次返回非 nil；`downloadAndInstall()` 对已装 locale 是 4-40ms 的空操作，真下载是分钟级。别把「非 nil」当成「要下载」去给用户看进度
+- [159-finalize-hangs-when-another-instance-holds-the-session](./159-finalize-hangs-when-another-instance-holds-the-session.md) — 健康会话上 `finalizeAndFinishThroughEndOfInput()` 是 70-330ms，另一个 app 实例占着会话时实测挂了 89 秒；三个命令共用一条串行链，链头挂住后面每一次按住说话都排队干等。给 finalize 设 2 秒上限（用一次性闩，不能用 task group：Swift 放弃不了「等另一个 Task 结束」的 await），装包前先按 pid 杀掉旧实例
+- [160-volatile-results-arrive-in-bursts](./160-volatile-results-arrive-in-bursts.md) — 开了 `fastResults` 之后 volatile 成串到达，同一毫秒六条、每条比上一条多几个字符，每条都是一次 IPC 加一次整棵重渲染；按住说话本来就不显示实时文字，所以累加器全收、往外发的节流到 10Hz，final 不许节流。顺带实测：volatile 只覆盖未定稿的尾巴，不是累计整句
+- [161-the-tap-buffer-decides-the-level-rate](./161-the-tap-buffer-decides-the-level-rate.md) — 电平事件按 15Hz 节流，实测 9.6-10.0Hz：节流阈值比 tap 回调的到达间隔还短，一次都没生效，真正定频率的是 `installTap` 的缓冲区。要改频率去改 `bufferSize`。具体多大还没实测——请求的 4096 帧算出来是 11.7Hz，对不上，4800 帧才对得上；`bufferSize` 是请求不是契约，`consume()` 现在把实际帧数打进第一条日志
+- [162-a-locked-screen-takes-the-microphone-without-an-interruption](./162-a-locked-screen-takes-the-microphone-without-an-interruption.md) — 自动锁屏把 app 切后台，输入路由变成 `in=[]`，麦克风再无一个 buffer，但 `interruptionNotification` 一条都不来、`isRunning` 还是 true；真手指按着屏幕不会锁，只有合成 pointer 事件的无人值守脚本会撞上
+- [164-the-wrong-dictation-locale-invents-rather-than-degrades](./164-the-wrong-dictation-locale-invents-rather-than-degrades.md) — 送错语种的模型不会「识别得差一点」，会按音节猜出一串语法通顺的目标语言词：中文「注意力机制取代了循环结构」按 en-US 出来是 `2 E D, teacher, Chidalo, Shun.`，十五秒的长句只剩一串逗号。看起来像正常输出，所以比空转写更难发现。不跟随设备语言，做成设置项（`settings.dictationLocale`，默认 zh-CN）
+- [165-a-harness-that-buffers-cannot-report-the-crash-it-watches-for](./165-a-harness-that-buffers-cannot-report-the-crash-it-watches-for.md) — 探针把记录攒在内存里、跑完才落盘，就报不了它自己要抓的那种死法：jetsam、看门狗、锁屏挂起定时器都不给收尾机会，死在第十八分钟和从没开始过取回来是同一个空文件。按事件 `append` 一行 JSON，每条带墙钟时间戳；高频事件只计数不入账。有了它，跑多久就没那么要紧——死在第四分钟就是四分钟的数据
 
 ## WebKit / webview
 
@@ -151,31 +169,42 @@
 - [114-httponly-bot-cookies-land-before-load-finished](./114-httponly-bot-cookies-land-before-load-finished.md) — 预热睡 15 秒的理由是「PX 的 cookie 是 httpOnly 没东西可 poll」，但看不见的只是注入的 JS：WebKitGTK 边跑边把 jar 写到 `<profile>/cookies`，实测 `_px3` 在 +6.5s 就落盘，而那次 `finished` 60 秒没来。预热改成和取正文同一条判据（不再变化且不是拦截页，1.5 秒）
 - [115-the-cookie-count-does-not-say-the-warm-up-worked](./115-the-cookie-count-does-not-say-the-warm-up-worked.md) — 预热改看 jar 之后，"该站 cookie 条数不再增长"两头都不成立：停在服务端那几条上的加载会被判成功（`_px3` 根本没来），热 profile 上重写 13 行而条数不变的加载会被判成什么都没发生；判据要看与顺序无关的行内容指纹变了几次，安静 6 秒（实测一次加载内部最宽间隔 3.25s，写完之后下一件事在 30 秒开外）
 - [116-no-sign-in-control-is-not-a-session](./116-no-sign-in-control-is-not-a-session.md) — 「页面上还有没有登录入口」在登录窗口里两头不成立：彭博登录页上一个可点标签都不匹配（写的是 Continue），按这个信号读出来用户正在输密码的那页是"已登录"；未登录首页的登录入口第 2 次 poll（约 6 秒）才渲染出来，而 readyState 到 21 秒才 complete。要同站、非登录路径、字符数 ≥2000、且字符数不再变化连续两次才认
+- [141-a-blocked-main-thread-stops-the-scroll-outright](./141-a-blocked-main-thread-stops-the-scroll-outright.md) — 主线程占多久屏幕就冻多久（90ms 阻塞冻 82-119ms），和挂不挂 wheel 监听、passive 与否无关，Chromium 同样冻；滚动路径上别占主线程，判据用屏幕像素不用页内计数
 
-## 界面与布局
+## 浮层与 shadcn 原语
 
 - [68-overflow-x-auto-clips-the-other-axis](./68-overflow-x-auto-clips-the-other-axis.md) — 手机上让工具条横滑的那条 `overflow-x-auto` 把 `overflow-y` 也变成裁剪，带子里的下拉浮层整个看不见，z-index 救不了；浮层改 `fixed` + 开面板时量锚点矩形
-- [75-split-tailwind-import-sorts-base-last](./75-split-tailwind-import-sorts-base-last.md) — 拆开 import 的 Tailwind 少了 `@layer theme, base, components, utilities;` 那行声明，layer 顺序按物理位置排，preflight 落到 utilities 后面，反过来压过每一个 utility class；验收看产物里 `@layer` 的首次出现顺序
-- [76-paged-strip-rides-the-line-box-strut](./76-paged-strip-rides-the-line-box-strut.md) — 翻页模式的页带是 inline-block，竖向落点被继承来的 `line-height` 拉动；preflight 的 1.5 把整页挪了 1px（竖排模式逐字节不变）。以后动全局排版要单独复测翻页
-- [77-abspos-in-a-button-starts-from-its-centre](./77-abspos-in-a-button-starts-from-its-centre.md) — 只写 `top` 不写 `left` 的绝对定位子元素放在 `<button>` 里，静态位置在按钮水平中心（Chrome 给按钮内容包了匿名居中盒），开关圆点偏了半个轨道宽；给按钮显式 `display` 或给子元素显式 `left`
-- [78-tailwind-merge-only-dedupes-identical-modifier-chains](./78-tailwind-merge-only-dedupes-identical-modifier-chains.md) — `cn()` 只在修饰符串一模一样时才去重，`can-hover:hover:` 覆盖不掉 `can-hover:enabled:hover:`，两条都留下按特异性决胜；`data-[orientation=vertical]:h-full` 同理压过 `h-5`
-- [79-entry-chunk-reinjects-its-own-stylesheet](./79-entry-chunk-reinjects-its-own-stylesheet.md) — Vite 入口 chunk 运行期再插一遍原始样式表，改 HTML 里的 `<link>` 指向改造过的副本无效；要整份 dist 复制后原地改 CSS
-- [74-fixed-overlay-misses-shell-safe-area](./74-fixed-overlay-misses-shell-safe-area.md) — `position: fixed` 的包含块是视口，外壳按 `env(safe-area-inset-*)` 加的 padding 对它不存在，设置页被灵动岛压住、toast 落在 home indicator 上；`env()` 收进 `src/styles.css` 一组 `@utility`（`p-safe` / `pt-safe-*` / `bottom-safe-*` / `anchor-safe`），取 max(原有间距, inset) 而不是相加
 - [80-portalled-overlay-trips-the-host-outside-press](./80-portalled-overlay-trips-the-host-outside-press.md) — Radix 浮层 Portal 到 `<body>`，宿主那条「点外面就关」的 `pointerdown` 把落在对话框按钮上的第一按判成点外面，气泡先关、按钮收不到 click；改成全局层级计数 `overlayLayerOpen()`，有层开着就整条让路
 - [81-shadcn-add-rewrites-the-components-it-depends-on](./81-shadcn-add-rewrites-the-components-it-depends-on.md) — `shadcn add alert-dialog` 顺手把手写过的 `button.tsx` 换成默认那份（紫色、44px、`can-hover:` 全没），输出里只有一行 "Updated"；add 完先看 `git status`
-- [82-duration-200-alone-transitions-every-property](./82-duration-200-alone-transitions-every-property.md) — `duration-*` 不设 `transition-property`，初始值 `all` 让这个元素每个属性都走 200ms 过渡；量计算样式要等满动画时长，否则读到过程值
-- [84-js-cannot-read-env-safe-area-inset](./84-js-cannot-read-env-safe-area-inset.md) — 自定义属性里的 `env(safe-area-inset-*)` 从 `getComputedStyle` 拿回来还是那串原文，`parseFloat` 得 NaN；要读数字得让真属性吃掉它（隐藏探针元素的 padding），只有夹取在 JS 里的浮层才需要
 - [85-collision-padding-does-not-save-an-anchor-inside-the-inset](./85-collision-padding-does-not-save-an-anchor-inside-the-inset.md) — `limitShift()` 不让浮层脱离锚点，锚点贴着视口边缘时菜单只能退到锚点边缘；锚定型浮层最多和它的锚点一样安全，外壳的 `p-safe` 才是根
 - [86-transformed-popper-drops-subpixel-text](./86-transformed-popper-drops-subpixel-text.md) — popper 的 `transform` 让浮层成为合成层，字从次像素抗锯齿变灰度，逐像素对比每一行文字都在差异图上发亮；两边都加 `--disable-lcd-text` 再比
 - [87-aschild-concatenates-classnames](./87-aschild-concatenates-classnames.md) — `asChild` 把包装组件和子元素的 className 拼成一串而不是过 `cn()`，写在子元素上的 `font-bold` 压不掉默认的 `font-semibold`，谁赢看 Tailwind 的排序；样式一律写在包装组件上
 - [88-radix-dialog-keeps-the-scroll-lock-on-the-overlay](./88-radix-dialog-keeps-the-scroll-lock-on-the-overlay.md) — `RemoveScroll` 包在 `DialogOverlay` 里，不渲染 Overlay 就没有滚动锁，`modal={true}` 也没用（它只管焦点陷阱、`aria-hidden` 和外部指针）；全屏页正好不需要那把锁
 - [89-portalled-overlay-leaves-the-phone-sliding-surface](./89-portalled-overlay-leaves-the-phone-sliding-surface.md) — Portal 出去的全屏页既不跟着手机壳的 `transform` 平移（`fixed` 的包含块回到视口），也接不到挂在那个元素上的手势监听；全屏那种 content 渲染在原地，`Dialog.Portal` 本来就是可选的
-- [90-leading-normal-is-not-the-inherited-line-height](./90-leading-normal-is-not-the-inherited-line-height.md) — shadcn 的文本原语自带 `leading-none`，还原原来的行高要写 `leading-normal`（1.5，preflight 给 `html` 的那个），`leading-[normal]` 是字体建议行距、少 3px
 - [91-select-item-aligned-ignores-the-safe-area-recipe](./91-select-item-aligned-ignores-the-safe-area-recipe.md) — shadcn 生成的 `SelectContent` 是 `position="item-aligned"`，不发布 `--radix-popper-available-*` 也不收 `collisionPadding`，`OVERLAY_SAFE.anchored` 和安全区那半全部静默失效；写死 `position="popper"`
 - [93-a-select-trigger-is-as-wide-as-the-chosen-value](./93-a-select-trigger-is-as-wide-as-the-chosen-value.md) — 原生 `<select>` 按最宽的 option 定宽，Radix 的 trigger 只装选中那一行，换值就跳宽；把所有选项零高 `invisible` 叠进同一个 grid 单元格占住列宽
 - [95-button-swallows-the-ref](./95-button-swallows-the-ref.md) — shadcn 生成的是 React 19 风格的函数组件，React 18 下 `<Button ref>` 恒为 `null`，类型全绿、生产构建无警告；已全部改成 `forwardRef`，护栏是 `tests/ui/components/forward-ref-contract.test.ts`，一次 `shadcn add` 就会写回来
 - [103-anchored-overlay-paints-under-the-surface-that-opened-it](./103-anchored-overlay-paints-under-the-surface-that-opened-it.md) — 全屏设置页是 `z-[70]` 的不透明白底，锚定浮层停在生成的 `z-50`，下拉全部画在开它的页面底下；Select 开着时页面外一切 `pointer-events: none`，手指照样落在看不见的列表上，于是报成「点不动」。`elementFromPoint` 打得中而屏幕上没有 = 画的顺序不对。一条命名 z 阶梯收进 `ui/overlay.tsx` 的 `OVERLAY_Z`，锚定层排在整条阶梯之上
+
+## 排版基线与 Tailwind
+
+- [74-fixed-overlay-misses-shell-safe-area](./74-fixed-overlay-misses-shell-safe-area.md) — `position: fixed` 的包含块是视口，外壳按 `env(safe-area-inset-*)` 加的 padding 对它不存在，设置页被灵动岛压住、toast 落在 home indicator 上；`env()` 收进 `src/styles.css` 一组 `@utility`（`p-safe` / `pt-safe-*` / `bottom-safe-*` / `anchor-safe`），取 max(原有间距, inset) 而不是相加
+- [75-split-tailwind-import-sorts-base-last](./75-split-tailwind-import-sorts-base-last.md) — 拆开 import 的 Tailwind 少了 `@layer theme, base, components, utilities;` 那行声明，layer 顺序按物理位置排，preflight 落到 utilities 后面，反过来压过每一个 utility class；验收看产物里 `@layer` 的首次出现顺序
+- [76-paged-strip-rides-the-line-box-strut](./76-paged-strip-rides-the-line-box-strut.md) — 翻页模式的页带是 inline-block，竖向落点被继承来的 `line-height` 拉动；preflight 的 1.5 把整页挪了 1px（竖排模式逐字节不变）。以后动全局排版要单独复测翻页
+- [77-abspos-in-a-button-starts-from-its-centre](./77-abspos-in-a-button-starts-from-its-centre.md) — 只写 `top` 不写 `left` 的绝对定位子元素放在 `<button>` 里，静态位置在按钮水平中心（Chrome 给按钮内容包了匿名居中盒），开关圆点偏了半个轨道宽；给按钮显式 `display` 或给子元素显式 `left`
+- [78-tailwind-merge-only-dedupes-identical-modifier-chains](./78-tailwind-merge-only-dedupes-identical-modifier-chains.md) — `cn()` 只在修饰符串一模一样时才去重，`can-hover:hover:` 覆盖不掉 `can-hover:enabled:hover:`，两条都留下按特异性决胜；`data-[orientation=vertical]:h-full` 同理压过 `h-5`
+- [79-entry-chunk-reinjects-its-own-stylesheet](./79-entry-chunk-reinjects-its-own-stylesheet.md) — Vite 入口 chunk 运行期再插一遍原始样式表，改 HTML 里的 `<link>` 指向改造过的副本无效；要整份 dist 复制后原地改 CSS
+- [82-duration-200-alone-transitions-every-property](./82-duration-200-alone-transitions-every-property.md) — `duration-*` 不设 `transition-property`，初始值 `all` 让这个元素每个属性都走 200ms 过渡；量计算样式要等满动画时长，否则读到过程值
+- [84-js-cannot-read-env-safe-area-inset](./84-js-cannot-read-env-safe-area-inset.md) — 自定义属性里的 `env(safe-area-inset-*)` 从 `getComputedStyle` 拿回来还是那串原文，`parseFloat` 得 NaN；要读数字得让真属性吃掉它（隐藏探针元素的 padding），只有夹取在 JS 里的浮层才需要
+- [90-leading-normal-is-not-the-inherited-line-height](./90-leading-normal-is-not-the-inherited-line-height.md) — shadcn 的文本原语自带 `leading-none`，还原原来的行高要写 `leading-normal`（1.5，preflight 给 `html` 的那个），`leading-[normal]` 是字体建议行距、少 3px
 - [130-an-arbitrary-font-size-brings-no-line-height](./130-an-arbitrary-font-size-brings-no-line-height.md) — `text-sm` 编出 `font-size` 加 `line-height` 两条，`text-[任意值]` 只有 `font-size`，行距悄悄退回继承值；补的那条要无单位，`leading-5` 这种 rem 值不跟着字号走
+
+## markdown 渲染
+
+- [136-react-18-warns-on-every-hyphenated-svg-attribute](./136-react-18-warns-on-every-hyphenated-svg-attribute.md) — React 18 把 `stroke-width` 这类连字符 SVG 属性照写进 DOM，但每个都报一次 `Invalid DOM property`，一张图刷几十条；元素树保留真名，交给 React 前驼峰化，`aria-*`/`data-*` 除外。文里的图表卡和 `SvgFigure` 已删（作废 2026-08-20，见 [40](../40-聊天里画结构图.md)），React 18 的这个行为本身仍成立，再手写 SVG 元素树按这条办
+- [153-a-cjk-full-stop-keeps-bold-from-closing](./153-a-cjk-full-stop-keeps-bold-from-closing.md) — CommonMark 的 flanking 规则不让 `**` 在中文标点和汉字之间收尾，`**结论：**这样不行` 整句连星号一起显示，而模型写中文时几乎每段都这么写；加 `remark-cjk-friendly` 和 `remark-cjk-friendly-gfm-strikethrough`（后者必须排在 `remarkGfm` 之后），插件表单独一个模块以免把 lazy chunk 拖进主包
+- [154-react-markdown-hands-every-override-a-node-prop](./154-react-markdown-hands-every-override-a-node-prop.md) — react-markdown v10 给每个换成组件的元素多传一个 `node`（hast 节点），`AnchorHTMLAttributes` 里没有这个字段，它跟着 `...rest` 铺到 `<a>` 上渲染成 `node="[object Object]"`；类型全绿、React 18 也不警告。签名交叉上包里的 `ExtraProps` 再把 `node` 解构出来丢掉
+- [156-a-display-fence-must-be-alone-on-its-line](./156-a-display-fence-must-be-alone-on-its-line.md) — remark-math 只认独占一行的 `$$`：开头行 `$$` 后面的内容变成 `meta` 被丢掉，`\end{bmatrix}$$` 不算收尾，没收上的块把后面的正文一起吃进同一个 math 节点渲染成红色原文；模型写的多行公式全是这个形状，一处规范形式都没有。解析前逐行走一遍，把这个形状的开头行和收尾行各切一刀（`mathFences.ts`），行中间的 `$$`、单行成对的、代码里的都不动；只有被切开又等不到收尾的开头行（流式写到一半）转义成 `&#36;&#36;`
 
 ## AI 调用与上下文窗口
 
@@ -189,12 +218,19 @@
 - [14-dev-build-oomd-session-kill](./14-dev-build-oomd-session-kill.md) — 全量 Rust 编译触发 systemd-oomd 杀整个桌面会话；日常用 `bun run dev:capped`
 - [55-worktree-dev-server-serves-stale-modules](./55-worktree-dev-server-serves-stale-modules.md) — worktree 在 `.claude/` 下，正好被 Vite 的 watch ignore 命中，dev server 看不见自己的改动；每次改完要重启
 - [118-the-simulator-is-the-same-webkit-with-a-different-finger](./118-the-simulator-is-the-same-webkit-with-a-different-finger.md) — iPad 模拟器跑的是真 WKWebView + 真 PDFium + 经 HID 注入的真触摸，橡皮筋、笔手路由、双指缩放都能量出数；但没有笔（`pointerType` 恒为 touch）、没有接触面积（恒 40×40）、idb 一次只有一根手指（双指只能走 XCUITest 的 pinch，三指以上无解）。跑法在 `scripts/ios-sim.sh`
-- [119-mock-module-rewrites-the-registry-for-the-whole-worker](./119-mock-module-rewrites-the-registry-for-the-whole-worker.md) — `mock.module` 改的是整个 worker 的模块表且不回滚，两个测试文件分到同一 worker 就互相污染（只跑了 33 个用例里的 7 个）；被测模块把依赖当参数收，别换模块表
+- [119-mock-module-rewrites-the-registry-for-the-whole-worker](./119-mock-module-rewrites-the-registry-for-the-whole-worker.md) — `mock.module` 改的是整个进程的模块表且不回滚，两个测试文件加载顺序一前一后就互相污染（只跑了 33 个用例里的 7 个）；归因是错的：`bun test` 全场一个进程没有 worker，胜负由加载顺序决定（坑 120）。被测模块把依赖当参数收，别换模块表
 - [120-a-registered-dom-outlives-the-file-that-registered-it](./120-a-registered-dom-outlives-the-file-that-registered-it.md) — `bun test` 全场一个进程，注册一次 DOM 之后每个文件都有 `window`，`isTauri()`/settings 退出 flush/debounced-writer/overlay 全被推到浏览器分支；窗口按文件搭按文件拆（`tests/support/dom.ts` 的 `useDom()`），拆在 `afterAll`，要趁 DOM 还在做的事放 `afterEach`；跑过一次真 DOM 全场一次性慢 0.11s，不随文件数涨
 - [121-react-dom-decides-once-whether-it-is-in-a-browser](./121-react-dom-decides-once-whether-it-is-in-a-browser.md) — react-dom 在模块求值时算一次 `canUseDOM`，晚了就永久不监听 `input`，受控 input 的 `onChange` 静默不响；bun 先求值 node_modules 再求值本地依赖，调 import 顺序没用，只能让 `useDom()` 注册完窗口再动态 import 并返回 `@testing-library/react`
 - [122-spyon-swaps-an-esm-export-and-puts-it-back](./122-spyon-swaps-an-esm-export-and-puts-it-back.md) — bun 的 ESM 命名空间可写：`spyOn(ns, "导出名")` 导入方看得见，`mockRestore()` 能还原，命名导出/默认导出/再导出链都成立；这是 119 之外替换模块导出的另一条路，还原写在 finally 里
+- [135-headless-chrome-window-size-is-not-the-viewport](./135-headless-chrome-window-size-is-not-the-viewport.md) — 无头截图核对渲染时 `--window-size` 给的是外窗，视口矮 87px、宽度还有 500px 下限，图底部被裁掉一截还容易误判成布局出界；窗口开大 + `--force-device-scale-factor=1` + 零边距包装页
 - [123-vite-serves-node-modules-over-http](./123-vite-serves-node-modules-over-http.md) — `node_modules` 在 `server.fs.allow` 默认的根下面，dev server 照样按 HTTP 发出去（还给套一层明文 sourcemap）；秘密要写在服务的树之外，`.gitignore` 和 0600 都拦不住
 - [124-fs-deny-replaces-the-defaults](./124-fs-deny-replaces-the-defaults.md) — vite 解析 `server.fs?.deny || ['.env', '.env.*', '*.{crt,pem}']`，插件从 `config()` 返回一份 deny 就把这三条默认值整个顶掉，dev server 当场 200 发出 `.env` 正文外加明文 sourcemap；要加只能在 `configResolved` 里往已解析的数组 push。凡是 `x || 默认值` 解析的 vite 字段都是提供即替换
+- [134-dropthreadcache-reloads-instead-of-dropping](./134-dropthreadcache-reloads-instead-of-dropping.md) — `dropThreadCache` 不删缓存条目，它从文件重读一遍再合进去；`beforeEach` 里调它不隔离用例，同一个 `threadId` 会继承上一个用例追加的整段历史，用例之间要换 id
+- [142-a-worktree-vite-writes-the-main-checkouts-dep-cache](./142-a-worktree-vite-writes-the-main-checkouts-dep-cache.md) — worktree 的 `node_modules` 是主 checkout 的软链，vite 默认把依赖预构建缓存写进 `node_modules/.vite`，打断用户的 `tauri dev`（`--force` 更是直接清掉）；实验用私有 config 覆盖 `cacheDir` 和 `watch.ignored`，每轮 curl 确认吐的是新代码
+- [144-the-layering-test-reads-imports-inside-comments](./144-the-layering-test-reads-imports-inside-comments.md) — `tests/layering.test.ts` 不剥注释，注释里写成 `from "../lecture"` 形式的一行照样落成一条目录依赖边，造出一个代码里不存在的环；注释里指别的目录写裸路径，别写 import 语句形式
+- [155-cargo-never-hears-that-the-icon-changed](./155-cargo-never-hears-that-the-icon-changed.md) — 图标是编译期嵌进二进制的，`tauri_build::build()` 的 rerun-if-changed 名单里没有 `src-tauri/icons/`，`generate_context!` 又只 `include_bytes!` 一份 `OUT_DIR` 里按校验和命名的副本；换了图片 cargo 认为没东西变，dev 起来还是旧图标。`touch src-tauri/tauri.conf.json` 再起。桌面用的是 `bundle.icon` 里第一个 `.png`（`icons/32x32.png`），不是 `icon.png`
+- [151-a-dev-build-registers-the-dev-binary-for-login](./151-a-dev-build-registers-the-dev-binary-for-login.md) — dev 下打开开机启动写进登录项的是 `target/debug` 那个二进制，它的 devUrl 指着 vite dev server，开机起来只有一张 connection refused 错误页；手删还会被下次启动的对齐写回去。dev 构建里开机启动整个当作不可用，启动时的对齐无条件 `disable()`，`device.json` 里的意愿留着等打包版
+
 ## 历史（zotero/reader 引擎时代）
 
 引擎已换成 EmbedPDF，这几篇留着是因为还有东西没随引擎一起死。每篇开头一行写明哪部分还成立。
@@ -202,5 +238,5 @@
 - [02-math-sumprecise-polyfill](./02-math-sumprecise-polyfill.md) — mobile pdf.js 裸调 Math.sumPrecise；WebKitGTK 落后于新内建这条仍在，现在体现为加载 pdf.js 前要补 `Promise.withResolvers`
 - [04-programmatic-select-no-popup](./04-programmatic-select-no-popup.md) — 程序化选中不弹浮窗；EmbedPDF 下结论反过来了，弹窗照开
 - [07-image-annotation-base64](./07-image-annotation-base64.md) — image 标注内联截图导致 JSON 膨胀；区域框选已移除，但"大字段拆出 JSON 单独落盘"被 threads 沿用
-- [10-cross-realm-uint8array](./10-cross-realm-uint8array.md) — iframe 跨 realm 的 Uint8Array instanceof；app 里已无 iframe，webview-pipe 会再撞上
+- [10-cross-realm-uint8array](./10-cross-realm-uint8array.md) — iframe 跨 realm 的 Uint8Array instanceof；app 里的 iframe 回来了（deck 的 srcdoc，见坑 152），但走 postMessage 不传字节，撞不上
 - [11-engine-calls-before-init](./11-engine-calls-before-init.md) — 引擎方法必须等就绪信号之后调；PDFViewerApplication 没了，规矩还在

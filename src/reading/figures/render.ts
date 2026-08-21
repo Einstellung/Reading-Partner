@@ -43,10 +43,21 @@ export function cardDisplayWidth(naturalWidthPx: number, devicePixelRatio: numbe
   return naturalWidthPx / Math.max(1, devicePixelRatio || 1);
 }
 
+// A whole page is rendered at a lower JPEG quality than a figure crop: the
+// visual window sends up to three of them every turn and the artefacts that
+// would matter on a 200px-wide plot are invisible across a full page.
+const PAGE_JPEG_QUALITY = 0.72;
+
 const cache = new Map<string, RenderedFigure>();
 
 function key(hash: string, figureId: string, tier: FigureTier): string {
   return `${hash}:${figureId}:${tier}`;
+}
+
+// Cache key for a whole-page render. "@" cannot appear in a figure id, so page
+// renders and figure crops share the map without colliding.
+function pageKey(hash: string, page: number, widthPx: number): string {
+  return `${hash}:page-${page}@${widthPx}`;
 }
 
 // Drop cached crops. Called on book close/switch so only the open book's figures
@@ -133,6 +144,52 @@ export async function renderFigure(
     return out;
   } catch (e) {
     console.warn("failed to render figure", figure.id, e);
+    return null;
+  }
+}
+
+// Render one whole page to a target pixel width, for the visual window around a
+// highlight (page-window.ts). Same document cache and same memo as the figure
+// crops, so a follow-up question on the same mark re-uses the pixels rather than
+// re-rasterizing three pages. Resolves null when the page cannot be produced —
+// off the end of the document, no canvas, a render failure — and the caller
+// simply sends one image fewer.
+export async function renderPageImage(
+  hash: string,
+  buffer: ArrayBuffer,
+  page: number,
+  widthPx: number,
+): Promise<RenderedFigure | null> {
+  const k = pageKey(hash, page, widthPx);
+  const hit = cache.get(k);
+  if (hit) return hit;
+  try {
+    const doc = await getDoc(hash, buffer);
+    if (page < 1 || page > doc.numPages) return null;
+    const pdfPage = await doc.getPage(page);
+    const base = pdfPage.getViewport({ scale: 1 });
+    const scale = widthPx / Math.max(1, base.width);
+    const viewport = pdfPage.getViewport({ scale });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(viewport.width));
+    canvas.height = Math.max(1, Math.round(viewport.height));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await pdfPage.render({ canvasContext: ctx, viewport }).promise;
+    const dataUrl = canvas.toDataURL("image/jpeg", PAGE_JPEG_QUALITY);
+    const out: RenderedFigure = {
+      dataUrl,
+      base64: dataUrl.slice(dataUrl.indexOf(",") + 1),
+      mimeType: "image/jpeg",
+      width: canvas.width,
+      height: canvas.height,
+    };
+    cache.set(k, out);
+    return out;
+  } catch (e) {
+    console.warn("failed to render page", page, e);
     return null;
   }
 }

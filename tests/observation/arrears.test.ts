@@ -5,6 +5,9 @@
 import { expect, test } from "bun:test";
 import {
   countNewMarks,
+  distillUnitOf,
+  distillUnits,
+  pagelessMarkIds,
   isTopicDue,
   maxBookMarks,
   selectDistillJob,
@@ -16,6 +19,7 @@ import {
   type BookArrears,
   type ThreadArrears,
   type TopicArrears,
+  type UnitThread,
 } from "../../src/observation/distill/arrears";
 import type { DistillAnnotation, DistillMessage } from "../../src/observation/distill/distill";
 
@@ -245,4 +249,97 @@ test("ties between topics resolve the same way every sweep", () => {
   const b = topic({ topicId: "bbb", books: [book({ marks: marks(6), newMarks: 6 })] });
   expect(selectDistillJob([a, b], NOW)?.topicId).toBe("aaa");
   expect(selectDistillJob([b, a], NOW)?.topicId).toBe("aaa");
+});
+
+// --- what counts as one conversation (docs/03: asides) ---
+
+function said1(id: string, ts: number, role: "user" | "ai" = "user"): DistillMessage {
+  return { role, text: id, ts };
+}
+
+function unit(over: Partial<UnitThread> & { id: string }): UnitThread {
+  return { annotationId: "", messages: [], ...over };
+}
+
+// The lesson at ts 1-2 and 7-8, the aside it was interrupted by at 4-5. One
+// cursor, counted in messages, has to index the lot — so the merge is by time.
+test("a chat-span aside joins its parent's transcript, in the order it happened", () => {
+  const threads: UnitThread[] = [
+    unit({
+      id: "bt",
+      messages: [said1("l1", 1), said1("l2", 2, "ai"), said1("l3", 7), said1("l4", 8, "ai")],
+    }),
+    unit({ id: "as", parentThreadId: "bt", messages: [said1("a1", 4), said1("a2", 5, "ai")] }),
+  ];
+  const units = distillUnits(threads);
+  expect(units).toHaveLength(1);
+  expect(units[0].threadId).toBe("bt");
+  expect(units[0].messages.map((m) => m.text)).toEqual(["l1", "l2", "a1", "a2", "l3", "l4"]);
+  // Asking about the aside answers with the conversation it belongs to.
+  expect(distillUnitOf(threads, "as")?.threadId).toBe("bt");
+  expect(distillUnitOf(threads, "bt")?.threadId).toBe("bt");
+});
+
+// An aside drawn on a page has a mark and a page, so the pass can say where in
+// the book it happened. It stays its own unit, exactly like the mark thread it
+// is drawn beside.
+test("a page-anchored aside keeps a unit of its own", () => {
+  const threads: UnitThread[] = [
+    unit({ id: "bt", messages: [said1("l1", 1)] }),
+    unit({ id: "as", annotationId: "ann-drawn", parentThreadId: "bt", messages: [said1("a1", 2)] }),
+  ];
+  const units = distillUnits(threads).map((u) => u.threadId).sort();
+  expect(units).toEqual(["as", "bt"]);
+  expect(distillUnitOf(threads, "as")?.messages.map((m) => m.text)).toEqual(["a1"]);
+  expect(distillUnitOf(threads, "bt")?.messages.map((m) => m.text)).toEqual(["l1"]);
+});
+
+// Sync can leave an aside whose parent was deleted elsewhere. Folding it into a
+// thread that is not there is how the reader's best material goes quietly
+// missing, so it becomes a unit and gets its own pass.
+test("an aside with no parent left is distilled on its own rather than dropped", () => {
+  const threads: UnitThread[] = [
+    unit({ id: "as", parentThreadId: "gone", messages: [said1("a1", 2)] }),
+  ];
+  expect(distillUnits(threads).map((u) => u.threadId)).toEqual(["as"]);
+  expect(distillUnitOf(threads, "as")?.messages.map((m) => m.text)).toEqual(["a1"]);
+});
+
+// A pen can mark an AI reply too (docs/09), and the aside that opens off one is
+// an annotation with no page. It folds into the lesson like a chat-span aside:
+// a pass over it could not say where in the book it happened.
+test("an aside drawn on a reply folds into its parent", () => {
+  const threads: UnitThread[] = [
+    unit({ id: "bt", messages: [said1("l1", 1)] }),
+    unit({ id: "as", annotationId: "ann-chat", parentThreadId: "bt", messages: [said1("a1", 2)] }),
+  ];
+  const pageless = pagelessMarkIds([
+    { id: "ann-page", page: 4, text: "x", createdAt: 1 },
+    { id: "ann-chat", page: null, text: "y", createdAt: 2 },
+  ]);
+  expect(distillUnits(threads, pageless).map((u) => u.threadId)).toEqual(["bt"]);
+  expect(distillUnitOf(threads, "as", pageless)?.threadId).toBe("bt");
+  // A mark the caller could not look up is left where it was: its own unit, the
+  // answer every record written before chat marks existed gets.
+  expect(distillUnits(threads, new Set()).map((u) => u.threadId).sort()).toEqual(["as", "bt"]);
+  expect(distillUnits(threads).map((u) => u.threadId).sort()).toEqual(["as", "bt"]);
+});
+
+test("a book with no asides is one unit per thread, unchanged", () => {
+  const threads: UnitThread[] = [
+    unit({ id: "bt", messages: [said1("l1", 1)] }),
+    unit({ id: "t1", annotationId: "ann-1", messages: [said1("m1", 2)] }),
+  ];
+  expect(distillUnits(threads).map((u) => u.threadId)).toEqual(["bt", "t1"]);
+  expect(distillUnitOf(threads, "missing")).toBeNull();
+});
+
+// Only the three fields a transcript is made of: a stored message also carries
+// image filenames and the display row's parts, and neither is the talk.
+test("a folded transcript carries no more than role, text and ts", () => {
+  const threads = [
+    unit({ id: "bt", messages: [{ ...said1("l1", 1), images: ["a.png"] } as DistillMessage] }),
+    unit({ id: "as", parentThreadId: "bt", messages: [said1("a1", 2)] }),
+  ];
+  expect(distillUnits(threads)[0].messages[0]).toEqual({ role: "user", text: "l1", ts: 1 });
 });

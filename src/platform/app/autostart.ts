@@ -16,13 +16,27 @@ import { platform } from "@tauri-apps/plugin-os";
 // choose to be running — so the setting does not appear there at all.
 const AUTOSTART_PLATFORMS = new Set(["linux", "macos", "windows"]);
 
-export function hasAutostart(): boolean {
+function hasLoginSequence(): boolean {
   try {
     return AUTOSTART_PLATFORMS.has(platform());
   } catch {
     // Not running under Tauri (unit tests, plain-browser dev).
     return false;
   }
+}
+
+// What a dev build would register is the binary it is running, and that binary
+// loads the vite dev server (devUrl in tauri.conf.json). Started at login there
+// is no server to load and the window comes up on a connection-refused page, so
+// this build stays out of the login sequence whatever the platform can do.
+function isDevBuild(): boolean {
+  return import.meta.env.DEV === true;
+}
+
+// Whether the switch exists here at all. False hides the card in settings and
+// makes setAutostart a no-op.
+export function hasAutostart(): boolean {
+  return hasLoginSequence() && !isDevBuild();
 }
 
 // What to do to the OS to make it agree with the stored intent, or null when it
@@ -33,13 +47,26 @@ export function autostartAction(desired: boolean, registered: boolean): "enable"
   return desired ? "enable" : "disable";
 }
 
+// The same decision at startup, where a dev build is its own case: it disables
+// every time, which clears the registration an earlier dev run left behind. The
+// stored intent is read and not acted on — the user asked for this machine to
+// start the app, and that answer keeps waiting for a packaged build to honour.
+export function startupAutostartAction(
+  dev: boolean,
+  desired: boolean,
+  registered: boolean,
+): "enable" | "disable" | null {
+  if (dev) return "disable";
+  return autostartAction(desired, registered);
+}
+
 // Make the OS agree with device.json. Called once at startup. Failures are
 // logged and swallowed: an app that cannot register itself for login still runs.
 export async function applyStoredAutostart(): Promise<void> {
-  if (!hasAutostart()) return;
+  if (!hasLoginSequence()) return;
   try {
     const { autostart } = await loadDeviceSettings();
-    const action = autostartAction(autostart, await isEnabled());
+    const action = startupAutostartAction(isDevBuild(), autostart, await isEnabled());
     if (action === "enable") await enable();
     else if (action === "disable") await disable();
   } catch (e) {

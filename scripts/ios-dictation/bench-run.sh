@@ -59,7 +59,7 @@ echo "ipa: $IPA"
 
 step "kill any stale instance"
 # install does not stop a running instance, and two of them fight over the audio
-# session (docs/pitfall/138).
+# session (docs/pitfall/159).
 for pid in $(xcrun devicectl device info processes --device "$DEVICE" 2>/dev/null \
              | grep "$DEV_NAME.app" | awk '{print $1}'); do
   echo "terminating stale pid $pid"

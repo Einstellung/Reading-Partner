@@ -15,8 +15,8 @@ import {
   type ParseSite,
 } from "../src/platform/app/structured-output";
 import type { EventPayload, EventType } from "../src/platform/app/events";
-import { parsePlan } from "../src/reading/prep/plan";
-import { parseNotesPlan } from "../src/reading/notes/plan";
+import { parsePlan } from "../src/reading/prep/papers/plan";
+import { parseChapterSpinePlan } from "../src/reading/prep/chapters/plan";
 import { parseSlidePlan } from "../src/reading/slides/plan";
 import { parseTriageResult } from "../src/info/briefing/triage";
 
@@ -100,7 +100,7 @@ test("replyShape counts the fence and the prose around the object", () => {
 test("a successful parse logs ok with the tally and no text", () => {
   const { r, lines } = reporter();
   const text = '{"chapters": [{"title": "Intro", "startPage": 1}]}';
-  const out = r.recordParse("notes-plan", MODEL, text, (tally) => parseNotesPlan(text, 10, tally));
+  const out = r.recordParse("notes-plan", MODEL, text, (tally) => parseChapterSpinePlan(text, 10, tally));
 
   expect(out).toHaveLength(1);
   expect(lines).toHaveLength(1);
@@ -257,7 +257,7 @@ test("attempt counts a site's failure streak, so an ok above 1 is a retry that w
   const good = '{"chapters": [{"title": "Intro", "startPage": 1}]}';
   const run = (text: string): void => {
     try {
-      r.recordParse("notes-plan", MODEL, text, (t) => parseNotesPlan(text, 10, t));
+      r.recordParse("notes-plan", MODEL, text, (t) => parseChapterSpinePlan(text, 10, t));
     } catch {
       // The failure is the point.
     }
@@ -281,7 +281,7 @@ test("each site keeps its own streak", () => {
   const bad = "no json here";
   const fail = (site: ParseSite): void => {
     try {
-      r.recordParse(site, MODEL, bad, (t) => parseNotesPlan(bad, 10, t));
+      r.recordParse(site, MODEL, bad, (t) => parseChapterSpinePlan(bad, 10, t));
     } catch {
       // The failure is the point.
     }

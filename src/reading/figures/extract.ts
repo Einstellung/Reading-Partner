@@ -2,7 +2,9 @@
 // pinned pdf.js: for each page it walks the operator list to find where the
 // figure art lands (raster image objects AND vector drawing — academic figures
 // are mostly paths + text, so raster alone yields a sliver) and pairs each
-// figure region with the nearest caption line matching /^(Figure|Fig.?)\s*N/.
+// figure region with the nearest caption line (figureCaptionId below: an English
+// or Chinese label, the number as printed, and a test that the line is a caption
+// rather than a sentence that opens with a figure reference).
 // The pure functions take plain operator/text data so they run headless under
 // `bun test`; getOperatorList itself needs a DOM (DOMMatrix) and only runs in
 // the webview, so extractFiguresFromDocument is exercised by the app, not tests.
@@ -11,6 +13,7 @@
 // points). Pairing happens in that space; the final bbox is flipped to top-left
 // page space (see types.ts) for the renderer.
 
+import { canonicalFigureId, compareFigureIds, FIGURE_ID_PATTERN } from "./lookup";
 import { FIGURES_VERSION, type Figure, type FigureBBox, type FiguresIndex } from "./types";
 
 // Sub-op codes inside a constructPath op, needed to decode its flat argument
@@ -230,7 +233,60 @@ export interface CaptionLine {
   yTop: number; // approximate top of the line
 }
 
-const FIG_RE = /^(?:figure|fig\.?)\s*(\d+[a-z]?)\b/i;
+// A caption opens with a label and the figure's printed number. Both languages
+// are read, and the number keeps every section it was printed with — capturing
+// only the leading digits filed every "Figure 3-1", "Figure 3-2" … under the id
+// "3", and assembleIndex's de-duplication then kept one figure per chapter.
+const CAPTION_HEAD = new RegExp(`^(?:figure|fig\\.?|图表|插图|图)[ \\t\\u00a0　]*(${FIGURE_ID_PATTERN})`, "i");
+
+// What may sit between the number and the caption's own words.
+const CAPTION_PUNCT = /[.:：。、|\-‐-―]/;
+// A letter, digit or Han character flush against the number means the number ran
+// straight into prose ("图3.7显示了一个输入序列"), not that a caption started.
+const WORD_CHAR = /[0-9A-Za-z㐀-䶿一-鿿]/;
+// Chinese prose in which the figure is the subject of the sentence: what follows
+// the number is a predicate, so the line is a cross-reference ("图 3.23 总结了
+// 我们迄今为止所完成的工作"), not the caption. A caption puts its own subject
+// there instead ("图 1.1 这个层次结构描绘了…").
+const CN_PREDICATE =
+  /^(?:显示|展示|展现|呈现|描绘|描述|说明|总结|概述|演示|给出|列出|提供|所示|中的|则|所)/;
+const SPACE = /[\s　]/;
+
+// The figure id a line opens a caption for, or null when the line is not a
+// caption. The label and number are only half the test: a body sentence starts
+// with a figure reference just as often as a caption does, and one that gets in
+// puts a figure on the wrong page under a sentence that is not its caption.
+// What separates them is what comes after the number — a caption starts a new
+// phrase there, prose carries the sentence on:
+//
+//   flush against the number   prose      图3.7显示了…
+//   "," / "，"                 prose      As shown in Figure 1-19, this process…
+//   a lowercase Latin word     prose      Figure 11 shows the performance…
+//   a Chinese predicate        prose      图 3.23 总结了…
+//   punctuation, or anything else         Figure 3.1: Smooth scaling / 图 1-1. 语言…
+//
+// Residual: "Figure 1-21. This means that…" is a wrapped sentence that reads
+// exactly like a caption. It survives, and assembleIndex absorbs it — the real
+// caption carries the same id and is the one paired with artwork.
+export function figureCaptionId(line: string): string | null {
+  const m = CAPTION_HEAD.exec(line);
+  if (!m) return null;
+  const id = m[1].toLowerCase();
+  const rest = line.slice(m[0].length);
+  if (rest === "") return id;
+  const head = rest[0];
+  if (WORD_CHAR.test(head)) return null;
+  if (head === "," || head === "，") return null;
+  // Punctuation, a bracket, a quote: the caption's own words start here.
+  if (!SPACE.test(head)) return id;
+  const body = rest.replace(/^[\s　]+/, "");
+  if (body === "") return id;
+  if (CAPTION_PUNCT.test(body[0])) return id;
+  if (body[0] >= "a" && body[0] <= "z") return null;
+  if (CN_PREDICATE.test(body)) return null;
+  return id;
+}
+
 // Group text items whose baselines fall within this many points into one line.
 const LINE_Y_TOL = 3;
 const DEFAULT_LINE_H = 10;
@@ -264,10 +320,10 @@ export function captionLinesFromText(items: TextItem[]): CaptionLine[] {
   const out: CaptionLine[] = [];
   for (const ln of lines) {
     const text = ln.text.trim();
-    const m = FIG_RE.exec(text);
-    if (!m) continue;
+    const id = figureCaptionId(text);
+    if (!id) continue;
     out.push({
-      id: m[1].toLowerCase(),
+      id,
       caption: text,
       x: ln.x,
       width: Math.max(0, ln.xRight - ln.x),
@@ -531,18 +587,25 @@ export function figuresForPage(input: PageInput, codes: OpCodes): Figure[] {
 }
 
 // Assemble the whole index from per-page results, de-duplicating repeated figure
-// ids (a figure spanning a page break, or a caption echoed in a running header):
-// the first occurrence with a bbox wins, otherwise the first occurrence.
+// ids (a figure spanning a page break, a caption echoed in a running header, a
+// translated book printing an English and a Chinese caption over one picture, or
+// a body sentence that reads like a caption): the first occurrence with a bbox
+// wins, otherwise the first occurrence. De-duplication is on the canonical id,
+// so a document that writes the separator both ways still yields one entry per
+// figure. Ordered by page, then by printed number — 3.8 before 3.10.
 export function assembleIndex(perPage: Figure[][]): FiguresIndex {
   const byId = new Map<string, Figure>();
   for (const page of perPage) {
     for (const fig of page) {
-      const prev = byId.get(fig.id);
-      if (!prev) byId.set(fig.id, fig);
-      else if (!prev.bbox && fig.bbox) byId.set(fig.id, fig);
+      const key = canonicalFigureId(fig.id);
+      const prev = byId.get(key);
+      if (!prev) byId.set(key, fig);
+      else if (!prev.bbox && fig.bbox) byId.set(key, fig);
     }
   }
-  const figures = [...byId.values()].sort((a, b) => a.page - b.page || a.id.localeCompare(b.id));
+  const figures = [...byId.values()].sort(
+    (a, b) => a.page - b.page || compareFigureIds(a.id, b.id),
+  );
   return { version: FIGURES_VERSION, status: "ok", figures };
 }
 

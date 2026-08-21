@@ -10,7 +10,14 @@ export type {
   RetainInput,
 } from "./record/types";
 export { OBSERVATION_TYPES, isObservationType } from "./record/types";
-export { isoDate, localDate, parseIndex, parseObservation, serializeObservation } from "./record/files";
+export {
+  isoDate,
+  localDate,
+  parseIndex,
+  parseObservation,
+  serializeIndexLine,
+  serializeObservation,
+} from "./record/files";
 export {
   ObservationFileStore,
   type ObservationConflict,
@@ -36,6 +43,7 @@ export {
   buildMarksDistillUserMessage,
   classifyDistillFailure,
   countNewReaderMessages,
+  countNewUnitMessages,
   datingRule,
   distillCoverage,
   distillFailurePayload,
@@ -67,6 +75,7 @@ export {
   type DistillPassStore,
   type DistillResult,
   type DistillSkip,
+  type DistillUnitPart,
   type EvidenceDates,
   type MarksDistillInput,
   type MarksPassInput,
@@ -74,8 +83,11 @@ export {
 } from "./distill/distill";
 export {
   countNewMarks,
+  distillUnitOf,
+  distillUnits,
   isTopicDue,
   maxBookMarks,
+  pagelessMarkIds,
   selectDistillJob,
   threadArrears,
   toDistillAnnotations,
@@ -86,8 +98,10 @@ export {
   SWEEP_INTERVAL_MS,
   type BookArrears,
   type DistillJob,
+  type DistillUnit,
   type ThreadArrears,
   type TopicArrears,
+  type UnitThread,
 } from "./distill/arrears";
 export {
   buildGuessAgent,

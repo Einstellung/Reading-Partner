@@ -11,7 +11,7 @@ import {
   clip,
   findMaterial,
   formatAnnotations,
-  notesOverviewSection,
+  spineOverviewSection,
   surroundingText,
   toolStatusLabel,
 } from "../../src/reading/context";
@@ -155,23 +155,23 @@ test("buildReadingTools includes only tools with usable data", async () => {
   ).toEqual([]);
 });
 
-test("notesOverviewSection: empty for no overview", () => {
-  expect(notesOverviewSection(null)).toBe("");
-  expect(notesOverviewSection("")).toBe("");
-  expect(notesOverviewSection("   \n  ")).toBe("");
+test("spineOverviewSection: empty for no overview", () => {
+  expect(spineOverviewSection(null)).toBe("");
+  expect(spineOverviewSection("")).toBe("");
+  expect(spineOverviewSection("   \n  ")).toBe("");
 });
 
-test("notesOverviewSection: labels and wraps a short overview whole", () => {
-  const block = notesOverviewSection("# Framework\n\nThe book argues X then Y.");
+test("spineOverviewSection: labels and wraps a short overview whole", () => {
+  const block = spineOverviewSection("# Framework\n\nThe book argues X then Y.");
   expect(block).toContain("The whole-book outline from the reader's notes");
   expect(block).toContain("The book argues X then Y.");
   expect(block).not.toContain("…"); // short: not truncated
 });
 
-test("notesOverviewSection: truncates long text at a paragraph boundary", () => {
+test("spineOverviewSection: truncates long text at a paragraph boundary", () => {
   const para = (n: number) => `Paragraph ${n} ` + "x".repeat(400);
   const body = [para(1), para(2), para(3), para(4)].join("\n\n");
-  const block = notesOverviewSection(body, 900);
+  const block = spineOverviewSection(body, 900);
   expect(block).toContain("…");
   expect(block).toContain("Paragraph 1");
   expect(block).toContain("Paragraph 2"); // ~832 chars fits under 900 at the \n\n

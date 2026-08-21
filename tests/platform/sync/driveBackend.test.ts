@@ -203,6 +203,11 @@ function makeDrive() {
           : {}),
       });
     }
+    if (method === "DELETE" && url.startsWith(`${DRIVE}/files/`)) {
+      const id = url.slice(`${DRIVE}/files/`.length).split("?")[0];
+      if (!files.delete(id)) return new Response("not found", { status: 404 });
+      return new Response(null, { status: 204 });
+    }
     throw new Error(`unexpected ${method} ${url}`);
   };
 
@@ -937,4 +942,51 @@ test("a book upload is retried at most once: a repeat costs the whole blob again
 
   await expect(backend.uploadBook("h", enc("PDF"))).rejects.toThrow(SyncTransportError);
   expect(drive.count((u) => u.includes("uploadType=multipart"))).toBe(2);
+});
+
+test("remove deletes the data file outright, not into the user's Drive bin", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  drive.add({ name: "notes-b1/chapter-01.md", parents: [seeded.dataFolderId], body: "old" });
+  const { backend, ids } = makeBackend(drive, seeded);
+
+  await backend.remove("notes-b1/chapter-01.md");
+
+  expect(drive.byName("notes-b1/chapter-01.md")).toEqual([]);
+  // No PATCH marking it trashed: a file in the app's own folder is not the
+  // user's to find in the bin thirty days later.
+  expect(drive.requests.some((r) => r.method === "PATCH")).toBe(false);
+  expect(ids.fileIds["notes-b1/chapter-01.md"]).toBeUndefined();
+});
+
+test("remove finds the file by name when the cached id is stale", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  drive.add({ name: "notes-b1/state.json", parents: [seeded.dataFolderId], body: "{}" });
+  const { backend } = makeBackend(drive, { ...seeded, fileIds: { "notes-b1/state.json": "id-gone" } });
+
+  await backend.remove("notes-b1/state.json");
+
+  expect(drive.byName("notes-b1/state.json")).toEqual([]);
+});
+
+test("removing what is not in Drive is success, since that is the state asked for", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  const { backend } = makeBackend(drive, seeded);
+
+  await backend.remove("notes-b1/overview.md");
+
+  expect(drive.byName("notes-b1/overview.md")).toEqual([]);
+});
+
+test("a remove that fails for any other reason is reported, so the queue keeps the entry", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  drive.add({ name: "notes-b1/chapter-02.md", parents: [seeded.dataFolderId], body: "old" });
+  const { backend } = makeBackend(drive, seeded);
+  drive.failOn((method) => method === "DELETE");
+
+  await expect(backend.remove("notes-b1/chapter-02.md")).rejects.toThrow();
+  expect(drive.byName("notes-b1/chapter-02.md").length).toBe(1);
 });

@@ -66,7 +66,7 @@ jobs:
       VITE_GOOGLE_CLIENT_SECRET: ${{ secrets.VITE_GOOGLE_CLIENT_SECRET }}
       VITE_GOOGLE_IOS_CLIENT_ID: 379091688229-esc23unqq02igufrjr9jjvtsug49j097.apps.googleusercontent.com
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Pin Xcode so image default bumps don't change the toolchain under us.
       # If the image drops this version, the step fails and lists what exists.
@@ -139,6 +139,18 @@ jobs:
             exit 1
           }
 
+      # Register the Google OAuth deep-link schemes in the generated
+      # Info.plist. tauri-plugin-deep-link writes CFBundleURLTypes from its
+      # build.rs, i.e. as a side effect of *compiling that crate*: the cache
+      # above skips that compile, gen/apple is regenerated every run, and the
+      # key silently vanished from builds 48 and 53 — sign-in was dead in
+      # TestFlight with nothing red anywhere. The script reads the schemes from
+      # tauri.conf.json (the same source the build script reads) and is
+      # idempotent, so a cold cache that does run the build script is fine.
+      # See docs/pitfall/157-a-cached-crate-never-replays-its-build-script.md.
+      - name: Register the deep-link schemes in Info.plist
+        run: bun scripts/ios-deep-link-plist.ts inject
+
       # Builds the frontend (beforeBuildCommand), compiles the Rust lib for
       # aarch64-apple-ios, archives, signs with cloud-managed signing, and
       # exports an App Store Connect ipa. The --config override stamps the
@@ -149,6 +161,17 @@ jobs:
           --export-method app-store-connect
           ${{ inputs.inspectable && '--features inspectable' || '' }}
           --config '{"bundle":{"iOS":{"bundleVersion":"${{ github.run_number }}"}}}'
+
+      # The step above is a merge of several plist sources and the archive is
+      # Xcode's; assert on the artifact itself, not on what we wrote. Without
+      # the schemes here, Google's callback lands on a scheme no app claims and
+      # sign-in is dead in a build nothing else would flag.
+      - name: Assert the deep-link schemes are in the ipa
+        run: |
+          set -euo pipefail
+          IPA=$(find src-tauri/gen/apple/build -name '*.ipa' -print -quit)
+          [ -n "$IPA" ] || { echo "::error::no ipa produced"; exit 1; }
+          bun scripts/ios-deep-link-plist.ts verify "$IPA"
 
       # altool is still the supported CLI for App Store uploads (it was
       # deprecated for notarization only). A successful run here means the
@@ -171,7 +194,7 @@ jobs:
       # Keep the ipa for post-mortems even when the upload step fails.
       - name: Archive the ipa
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ios-ipa
           path: src-tauri/gen/apple/build/**/*.ipa

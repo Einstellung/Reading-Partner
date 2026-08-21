@@ -2,8 +2,10 @@
 // injected into the engine so the reconcile loop runs headless in tests.
 //
 // Sync range (docs/13): the user's own data — reading position, marks, AI
-// threads, topics, per-topic AI observations, lesson-prep plans and notes, book notes
-// (docs/14), talks and what their rehearsal settled (docs/31), the cross-scenario user profile and
+// threads, topics, per-topic AI observations, a document's prep material of
+// either kind (docs/09 — paper notes and chapter spines both live under
+// prep-<hash>/), talks and what their rehearsal settled plus the record of each
+// time one was given (docs/31), the cross-scenario user profile and
 // info feedback log (docs/16), and app settings. Book PDFs travel the separate books channel
 // (content-addressed blobs), never the data channel. Excluded: derived caches
 // (fulltext-*, figures-*, prep-*/pdf and its caches), generated slide decks
@@ -102,6 +104,11 @@ export function inSyncRange(path: string): boolean {
       // travels like marks and threads rather than like a cache. The deck it
       // produces (slides/**) stays out: that is a build output.
       /^talk-.+\.json$/.test(top) ||
+      // What the reader left behind giving that talk against its deck
+      // (docs/31): which page was up when, and what was said to it. A trace,
+      // not a derivation — no deck and no book rebuilds it. The .bad copy a
+      // failed parse leaves beside it is deliberately not matched.
+      /^runthrough-.+\.json$/.test(top) ||
       // The two files devices leave for each other (docs/36). One per device and
       // written by that device alone, so there is never a merge to do: a
       // collector says who it is and when it was last alive, and a reader asks
@@ -115,18 +122,35 @@ export function inSyncRange(path: string): boolean {
   // unchanged: the feature was renamed on 2026-08-06, the directories on disk and
   // in the user's Drive were not, and this matcher goes by file name.
   if (top.startsWith("memory-")) return true;
-  // Lesson prep: the plan state and the per-paper notes, but not the downloaded
-  // PDFs (prep-*/pdf/**) or any other nested cache.
-  if (top.startsWith("prep-") && parts.length === 2) {
-    const name = parts[1];
-    return name === "state.json" || name.endsWith(".md");
-  }
-  // Book notes (docs/14): the plan state and the per-chapter / overview notes.
-  if (top.startsWith("notes-") && parts.length === 2) {
-    const name = parts[1];
-    return name === "state.json" || name.endsWith(".md");
+  // A document's prep (docs/09). Two kinds of material live under one directory
+  // and only one of them is ever filled in: the paper notes sit at the top with
+  // the plan state, the chapter spines sit one level down under chapters/ with a
+  // state of their own. Everything else nested there is cache and stays out —
+  // the downloaded PDFs (prep-*/pdf/**) above all, which are megabytes and
+  // re-fetchable.
+  if (top.startsWith("prep-")) {
+    if (parts.length === 2) return isPrepFile(parts[1]);
+    if (parts.length === 3 && parts[1] === "chapters") return isPrepFile(parts[2]);
+    return false;
   }
   return false;
+}
+
+// The two file names prep material comes in, at either level: the state that
+// makes a run resumable, and the notes themselves.
+function isPrepFile(name: string): boolean {
+  return name === "state.json" || name.endsWith(".md");
+}
+
+// Whether a directory can hold an in-range file, so the walk descends into it.
+// Spelled out rather than left at "anything under prep-", which would open every
+// prep-<hash>/pdf/ to a readDir that can only ever return files inSyncRange
+// rejects. "memory-" is the observation directories' historical name; see above.
+function worthDescending(rel: string): boolean {
+  if (rel.startsWith("memory-")) return true;
+  if (!rel.startsWith("prep-")) return false;
+  const parts = rel.split("/");
+  return parts.length === 1 || (parts.length === 2 && parts[1] === "chapters");
 }
 
 // --- Tauri implementation --------------------------------------------------
@@ -142,10 +166,7 @@ async function walk(dir: string, out: ScannedFile[]): Promise<void> {
     const rel = dir ? `${dir}/${e.name}` : e.name;
     if (e.isDirectory) {
       // Only descend into directories that can hold in-range files.
-      // "memory-" is the observation directories' historical name; see above.
-      if (rel.startsWith("memory-") || rel.startsWith("prep-") || rel.startsWith("notes-")) {
-        await walk(rel, out);
-      }
+      if (worthDescending(rel)) await walk(rel, out);
       continue;
     }
     if (!e.isFile || !inSyncRange(rel)) continue;
