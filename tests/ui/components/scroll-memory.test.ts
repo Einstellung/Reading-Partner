@@ -61,6 +61,17 @@ test("writing a key again makes it the most recent", () => {
 	expect(recallScroll("t1")).toBe(null);
 });
 
+test("a key that is only ever read outlives the cap", () => {
+	// The lesson: written once when the reader left it, restored on every return
+	// from a citation, while the marks and asides of a session are written past it.
+	rememberScroll("lesson", AT);
+	for (let i = 0; i < 8; i++) rememberScroll(`t${i}`, { top: i, stuck: false });
+	expect(recallScroll("lesson")).toEqual(AT);
+	for (let i = 8; i < 16; i++) rememberScroll(`t${i}`, { top: i, stuck: false });
+	expect(recallScroll("lesson")).toEqual(AT);
+	expect(recallScroll("t0")).toBe(null);
+});
+
 test("a list with no key gets no seams, so the pin is untouched", () => {
 	expect(scrollMemory(undefined)).toEqual({});
 });

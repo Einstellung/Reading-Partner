@@ -15,8 +15,9 @@ import type { StickOptions, StickPosition } from "./stick-to-bottom";
 // keeps the store from being a leak rather than what keeps it small.
 const MAX_ENTRIES = 16;
 
-// Insertion order is recency: a write deletes the key before setting it, and an
-// eviction takes whichever key the iterator yields first.
+// Map iteration order is recency: every read and every write deletes the key
+// before setting it, so an eviction takes whichever key the iterator yields
+// first.
 const positions = new Map<string, StickPosition>();
 
 export function rememberScroll(key: string, at: StickPosition): void {
@@ -29,9 +30,15 @@ export function rememberScroll(key: string, at: StickPosition): void {
 }
 
 // Read, not taken: the reader may swap out to the page and back any number of
-// times within one call.
+// times within one call. The read counts as use, or the lesson — written once
+// when the reader left it and restored on every return — would be the first
+// entry the cap takes while it is the one thread still in play.
 export function recallScroll(key: string): StickPosition | null {
-	return positions.get(key) ?? null;
+	const at = positions.get(key);
+	if (at === undefined) return null;
+	positions.delete(key);
+	positions.set(key, at);
+	return at;
 }
 
 export function forgetScroll(key: string): void {
