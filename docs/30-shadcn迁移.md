@@ -14,7 +14,7 @@
 >
 > 五：四个 `<select>` 换 Select，四个原生复选框换 Checkbox，紫底 chip 换 Badge，过渡期的常量清干净。Tabs / Tooltip 没引，理由见「没引的」。
 >
-> `src/ui/components/ui/` 五版之后一共 15 个文件：alert-dialog、badge、button、checkbox、collapsible、dialog、dropdown-menu、input、label、overlay、select、separator、switch、textarea、toast。之后设置页重组时加了 tabs，共 16 个（见「设置页的三块」）。
+> `src/ui/components/ui/` 五版之后一共 15 个文件：alert-dialog、badge、button、checkbox、collapsible、dialog、dropdown-menu、input、label、overlay、select、separator、switch、textarea、toast。之后设置页重组时加了 tabs，共 16 个（见「各版改了什么」）。
 
 ---
 
@@ -157,7 +157,7 @@ className={cn(OVERLAY_SAFE.centered, "fixed top-[50%] left-[50%] ...", className
 - `bottom`（toast viewport）= `bottom-safe-6`。贴边的浮层只需要它贴的那根轴，横向由自己的 `max-w` 管。
 - `anchored`（DropdownMenu，以后的 Popover / Select）分两半，两半都要。位置那半是 Radix 的：content 上传 `collisionPadding={useOverlaySafePadding()}`，每边取 max(inset, 8px)。JS 读不到 `env()`（坑 84），所以 inset 是从一个隐藏探针元素的计算 padding 量来的（`base/safe-area.ts` + `styles.css` 的 `safe-probe`），在挂载和 resize 时量。尺寸那半是 CSS 的：`max-w-(--radix-popper-available-width) max-h-(--radix-popper-available-height)`，这两个变量是 Radix 按同一份 collisionPadding 算出来的剩余空间，配 content 自带的 `overflow-y: auto`，把「比它能待的地方还大」变成盒子内部滚动。用 popper 级的变量而不是每个组件自己的别名，同一串对每个 popper 浮层都成立。
 
-  锚定型不写 `overlay-safe`：那条夹的是居中盒，锚定盒是移动而不是收缩。也不写 `anchor-safe`：那个 `@utility` 是给自己算坐标的 `position: fixed` 浮层用的（`CallBubble`），Radix 的坐标写在 popper 包装节点的 transform 上，`left`/`top` 夹取碰不到它。
+  锚定型不写 `overlay-safe`：那条夹的是居中盒，锚定盒是移动而不是收缩。也不写 `anchor-safe`：那个 `@utility` 是给自己算坐标的 `position: fixed` 浮层用的，Radix 的坐标写在 popper 包装节点的 transform 上，`left`/`top` 夹取碰不到它。
 
   能保证的上限是锚点本身：`limitShift()` 不让浮层脱离锚点，所以锚点贴在视口边缘时浮层只能退到锚点边缘（坑 85）。外壳的 `p-safe` 把锚点推进安全区，这条才成立。
 
@@ -181,194 +181,16 @@ className={cn(OVERLAY_SAFE.centered, "fixed top-[50%] left-[50%] ...", className
 
 **层级**。`ui/overlay.tsx` 的 `OVERLAY_Z` 是全 app 唯一一条 z 阶梯，每层的数字只在那里写一次：toast 30、dialog 50、page 70、pageDialog 80、floating 1000、floatingTop 1001、anchored 1100。要守的不变量是「锚定浮层画在它触发器所在的那层之上」，而触发器可以坐在阶梯的任何一层，所以 anchored 排在整条阶梯之上。调用点不写数字，`className` 里取 `OVERLAY_Z.<层名>`；全屏页那层归 `DialogFullScreenContent` 自己。这条阶梯是坑 103 立起来的。
 
-## 第二版：Toast 与 AlertDialog
-
-**Toast 选 Radix Toast，不是 Sonner。** 硬要求是调用点 API 不变、种类和自动消失语义不变、视觉不变。Sonner 自带 store、自带注进 `<head>` 的样式表、自带堆叠几何（默认折叠成一摞，每条用 transform 绝对定位），要还原现在这个「amber/red 描边盒子、竖排、gap-2」得逐条盖它的内部结构，而且 `useToasts` 的列表会和它的 store 变成两份状态。Radix Toast 无样式，DOM 是自己的，所以盒子、堆叠和 44px 关闭按钮都还是现在这套。
-
-分工：列表还是 `common/Toast.tsx` 的 `useToasts`（`push` / `dismiss` 签名一个字没动），盒子和倒计时是 `ui/toast.tsx`。原来的 `window.setTimeout` 删掉，`duration` 交给 Radix。
-
-Radix 带进来三件行为上的变化：倒计时在指针停在浮层上时暂停，在窗口失焦时也暂停（`window.addEventListener("blur")`），焦点回来才续；Escape 关掉整摞；向右滑可以划掉一条。前两条是好的——用户没看见的 toast 不该过期——但要知道它在：Tauri 里弹原生文件对话框会让窗口失焦，那期间的 toast 不会自己走。
-
-**AlertDialog 替两步确认。** 原来是按一下变红「Confirm delete」、再按一下才删。换成 trigger + AlertDialog，语义等价（仍是一次明确确认），多了标题、说明和 Cancel，也多了背板。坑 67 那套 document 级 `pointerdown` 监听在 `DeleteThreadButton` 里整个删掉了：不再有任何东西挂在焦点上，Radix 自己管焦点陷阱。
-
-**视觉变化清单**。除下面这些之外，23 个节区逐节点相同、逐像素相同（`home-cards` 里 60 个像素差是那个转圈动画的取帧，base 自己跟自己比也差，`opacity` 0.818 / 0.669 / 0.656）：
-
-- toast 关闭按钮拿到 `cursor: pointer`，hover 变透明度移到 `can-hover:` 后面。
-- 删除按钮从裸 `<button>` 换成 `Button variant="ghost" size="icon"`，带来 `display: flex → inline-flex`、`gap: normal → 6px`、图标 `flex-shrink: 1 → 0`、`cursor: pointer`，几何不变；hover 底色跟着第一版的规矩挪到 `can-hover:` 后面。
-- toast 的 DOM 结构变了（Radix 加了一个 `role="region"` 的包装 div、一个 `<ol>`，每条从 `<div>` 变 `<li>`，另有一个只活 1 秒的朗读节点 portal 到 body），但两条 toast 的盒子位置、尺寸和每一条计算样式都逐字节相同。
-- 确认从行内红药丸变成对话框，红色取 `--destructive`（`#b91c1c`），不再是 `red-600`。
-
-**44px**（coarse 下）：toast 关闭 44×44，删除 trigger 44×44，Cancel 69.6×44，Delete 68.6×44。细指针下分别是 24×24 / 24×24 / 69.6×28 / 68.6×28，桌面密度没被撑大。全项目的触摸目标普查（143 个可点元素，36 个低于 44px）前后逐行相同。
-
-**Radix 模态副作用**，开→关一轮实测（Chromium，鼠标与触摸各一遍）：`body` 上的 `pointer-events: none`、`data-scroll-locked`、`overflow: hidden`、`<head>` 里那个 `<style>`、兄弟节点的 `aria-hidden` / `data-aria-hidden` 全部干净撤销，`window.scrollY` 一格没动（9876 → 9876 → 9876），`padding-right` 补偿始终是 0（这个 app 的 body 本来就不滚）。唯一残留是 `body` 上留下一个空的 `style=""` 属性。阅读区的 `user-select`（坑 49）不受影响：Radix 只碰 body 和它自己的 portal 根。
-
-单独验了最容易脏的那条路：删除本身会把整个通话关掉，宿主连着开着的对话框一起 unmount，对话框不是「关闭」而是「消失」。这一路同样干净——`pointer-events` 回 `auto`、滚动锁和注进去的 `<style>` 都没了，事后在页面中心做 `elementFromPoint` 命中的元素 `pointer-events: auto`。
-
-**WebKit 上的 tap**：无头 WebKit 跑不起来（本机 webkit-2215 缺 `libavif16`，装不了），只在 Chromium 的 `hasTouch` 上下文里验了——开对话框一按、Delete 一按就生效，不需要按两次。真机上还没验的是 iOS 的幽灵点击：从 tap 打开一个正好落在手指下方的浮层，touchend 合成的 click 可能直接打到刚挂上来的按钮。这里的对话框居中、trigger 在气泡右上角，两者不重叠，但第四版的全屏 Dialog 要留意。
-
-## 第三版：菜单与折叠
-
-**`MoreMenu`**。`MoreItem` 那个类型和 `ReaderTopBar` 的调用点一个字没动。trigger 是原来那个按钮加 `asChild`（`aria-haspopup` / `aria-expanded` 交给 Radix，开着的样子改用 `data-[state=open]:`），action 行是 `DropdownMenuItem`，toggle 行是 `DropdownMenuCheckboxItem` 加 `onSelect` 里 `preventDefault()` 再调 `onClick`——不 prevent 就会关掉菜单，而 toggle 要留着连续翻。
-
-行的几何在原语的 `ITEM_BASE` 里：13px、`min-h-[36px] coarse:min-h-[44px]`、`py-0`。菜单默认的 `[&_svg:not([class*='size-'])]:size-4` 和 `[&_svg:not([class*='text-'])]:text-muted-foreground` 是给 lucide 画的，会把本项目 18px 的自绘图标压成 16px 并改色，用一模一样的修饰符链覆盖成 `size-auto` / `text-current`（坑 78）。悬停底色不再自己写：Radix 在鼠标下会给行真正的焦点，`focus:bg-accent` 就是原来那个 `#f0f0f0`，而手指不会触发（Radix 的 `onPointerMove` 只认 mouse），比原来的 `hover:` 干净。
-
-原来那条 document 上的 `pointerdown` 和 Escape 监听整个删掉，Radix 自己有。换来的是键盘可达：ArrowDown / Enter 开、方向键走、首字母跳、Escape 关，原来一样都没有。
-
-**`modal={false}`**。默认的 `true` 会锁 body 滚动、给兄弟节点加 `aria-hidden`、用 `disableOutsidePointerEvents` 吞掉外面的第一按。阅读区不能接受这三条中的任何一条：书要能继续滚，屏幕阅读器不该在开着一个五行菜单时看不见整本书，点回书上应该直接生效。实测（开→关一轮，鼠标与触摸各一遍）`pointer-events`、`overflow`、`data-scroll-locked`、兄弟节点的 `aria-hidden` 全程没出现过，`window.scrollY` 三次读数相同，关闭后 body 上连空的 `style=""` 都没留下（第二版的模态对话框会留一个）。
-
-**触摸**。trigger 改成在 click 上开，理由和做法见坑 83。无头 WebKit 在这台机器上仍然起不来，所以在 Chromium 的触摸上下文（`hasTouch` 加 `isMobile`，后者让 `(hover: none)` 和 `(pointer: coarse)` 真的成立）里验：一按开、再按关、按外面关、按行选中一次、toggle 不关，全部一次到位，不需要按两次。真机上没验的是 iOS 的幽灵点击本身，验的是它的前提——pointerup 那一刻 DOM 里有没有菜单。
-
-**层级登记**。`DropdownMenuContent` 的 children 里挂 `<OverlayLayer />`。对 `MoreMenu` 这一处买到的是：菜单开着时按菜单里的行，不再被 `CallBubble` / `AnnotationPopup` 读成"按在外面"。用键盘开菜单（这样开菜单的那一按不参与）再按一行，对照两份产物：
-
-| | 按菜单里的一行 |
-|---|---|
-| 有 `<OverlayLayer />` | 气泡还在，行触发一次 |
-| 没有 | 气泡关闭并卸载，行照样触发一次 |
-
-用指针按 trigger 打开菜单时气泡仍然会关——那一按发生在还没有任何层的时候，属于气泡，新旧一致。`App.tsx` 那条挂在阅读区 pane 上的 `onPointerDownCapture` 不受影响：Portal 出去的节点在 React 树里的父级是顶栏，事件不经过 pane。`PenToolbar` 的色板和 `SourcesPage` 的 HealthDot 不会和这个菜单同时开着，没动。
-
-**Collapsible**。`Collapsible asChild` 套在原来的 `<section>` 上，头换 `CollapsibleTrigger`，列表包进 `CollapsibleContent`。`open` 仍然受控，因为箭头是 `▾`/`▸` 字形切换而不是旋转。`can-hover:opacity-0` 的 "Show anyway" 一个字没改，在触摸档位下量到 opacity 1、92.1×44。关闭态多一个空的隐藏 `div`（Radix 的 content 包装节点即使关着也渲染，子树仍然不挂载）。
-
-**视觉变化**：两处，都是"亮起来的状态原来没亮"。lit 的 toggle 行的文字从 `#333` 变成 `#4a3a9e`，开着的 trigger 的箭头从 `#555` 变成 `#1b1b1b`。原来两处都是把两个 `text-*` 直接拼在一个 className 里，谁赢由 Tailwind 把它们排在哪决定，赢的都是不该赢的那个；现在一个走 `cn()`，一个走 `data-[state=open]:` 修饰符。除此之外菜单打开态逐行逐属性相同，面板相对触发器的位置 `[-192, 36, 224×220]` 两边一致。
-
-**依赖**：`dropdown-menu` 和 `collapsible` 的 registry 版本都不带新 npm 包（`radix-ui` 伞包已经在）。生成的 `dropdown-menu.tsx` 删掉了 Sub / RadioGroup / RadioItem / Shortcut 和 CheckboxItem 的对勾指示器——只有它们要 `lucide-react`，本项目不装。行的几何也换掉了：生成的 `px-2 py-1.5 text-sm` 是 32px 的行，手指够不着，`ITEM_BASE` 换成上面那组值，`Item` 和 `CheckboxItem` 共用。触摸目标归原语管，和按钮、字段一处，`CardMenu` / `OutlinePane` / `MoreMenu` 不再各自写一遍（`tests/ui/components/primitive-contract.test.ts` 盯着）。这次 `add` 没有覆盖 `button.tsx`（坑 81 仍然要每次 `git status`）。`collapsible.tsx` 生成时用了 `React.ComponentProps` 却没 import React，补上。产物：App chunk 637.6 → 682.4 KB（gzip 182.7 → 198.7），CSS 62.7 → 65.8 KB，涨的是 popper 那一套和 `tw-animate-css` 里菜单用到的进出场。
-
-## 第四版：两个对话框
-
-**都不用 `DialogTrigger`。** 两处的宿主（`App` / `PhoneApp` 的 `showSettings`、`NotesPanel` 的 `showSlides`）本来就挂载卸载这两个组件，保持原样：`open` 常真，`onOpenChange` 只用来接 Radix 自己决定的关闭。调用点一个字没改。顺带绕开了坑 83——Radix 的 Dialog trigger 开在 click 上，但根本没有 trigger 就不必论证。
-
-**`SlidesDialog`** 换居中的 `DialogContent`，`modal` 保持默认的 `true`：底下是阅读区，模态期间它不该滚也不该被点到。外壳那个手写的 `fixed inset-0 bg-black/40` 背板连同 `onClick={onClose}` 和内层的 `stopPropagation` 一起删掉，改由 Radix 的 Overlay 和 DismissableLayer 负责。盒子里的分工没动：头固定、`flex-1 min-h-0 overflow-y-auto` 的身子滚动，所以 `overlay-safe` 带来的那个 `overflow-y: auto` 在 content 上永远没事可做。
-
-**`SettingsView`** 换全屏变体，做法见「浮层的规矩」。原来写在内容列上的 `pt-safe-10` 那一组换成 `OVERLAY_SAFE.fullscreen`，值不变。
-
-**滚动锁**，开→关一轮实测（Chromium，鼠标与触摸各一遍，页面本身可滚且里面另有一个滚动容器）：
-
-| | `SlidesDialog` 开着 | 全屏设置页开着 |
-|---|---|---|
-| `body` `overflow` | hidden | visible |
-| `data-scroll-locked` | 在 | 无 |
-| `<head>` 里注进去的 `<style>` | 1 | 0 |
-| `body` `pointer-events` | none | none |
-| 兄弟节点 `aria-hidden` | 全部 true | 全部 true |
-| `padding-right` 补偿 | 0 | 0 |
-
-关闭之后两条路都逐项还原，`window.scrollY` 三次读数都是 500，里层滚动容器的 `scrollTop` 三次都是 300，页面中心 `elementFromPoint` 命中的元素 `pointer-events: auto`。唯一残留仍是 `body` 上一个空的 `style=""`（第二版同样）。
-
-**幽灵点击**。量的是它的前提：打开对话框的那一按抬手时，对话框在不在 DOM 里。Chromium 的触摸上下文（`hasTouch` + `isMobile`）里跑，三份产物同一段脚本：
-
-| | pointerup 时对话框已存在 | 同一按顺手触发了里面的控件 |
-|---|---|---|
-| 旧版 | 否 | 否 |
-| 新版 | 否 | 否 |
-
-Radix 的 Dialog trigger 开在 click 上，而且这里连 trigger 都没有，宿主的 `onClick` 就是原来那个。无头 WebKit 在这台机器上仍然起不来（缺 `libavif16`，没有 sudo），iOS 上的幽灵点击本身还是没有实机验证。
-
-**返回导航**。手机壳的 `goBack` 走 `resolveBack` → `pop`，Escape 走 Radix 的 `onOpenChange` → `onClose` → 同一个 `goBack`，两条路不交叉：Escape 那条不改栈以外的任何东西，系统返回键和左缘手势那条根本不经过 Radix。实测 Escape 关掉两个对话框各一次（旧版两个都关不掉，本来就没有 Escape）。左缘手势那条靠"不 Portal"成立，见上。
-
-**软键盘不做避让。** 两个对话框都是 `position: fixed` 贴在 layout viewport 上，`overlay-safe` 夹的是 `dvh`——iOS 的键盘只改 visual viewport，这两样都不动，所以键盘弹起时对话框一寸没移，WebKit 自己把 visual viewport 平移到聚焦的字段上，和换之前完全一样。加一个 `useKeyboardInset` 的偏移反而会和那次平移叠加。`CallView` 需要它是因为它的输入条钉在底边，必须在键盘上方待着而不是被滚动到。
-
-能量的部分（视口 900×800，模拟 336px 键盘，逐个字段 `focus()` 后取几何）两份产物逐字节相同：居中盒 `[162, 638]`、被盖住 174px、textarea `[362, 426]` 未被盖住；设置页四个字段的位置和"是否被盖"四项相同。量不到的是 WebKit 那次平移本身——桌面 Chromium 造不出真的软键盘，CDP 也没有对应的开关。
-
-**视觉变化清单**。除下面这些之外，23 个节区逐节点相同（`home-cards` 里那个转圈动画的取帧仍然是唯一噪声），两个对话框打开态各自 35 / 93 个节点的几何与计算样式逐字节相同：
-
-- 背板从 `bg-black/40` 变成 `bg-black/50`，和第二版的 AlertDialog 统一。居中盒的逐像素对比里 11134 个差异像素全部是这一条：超过 20 的 2052 个都在盒子边缘和圆角，白底透出来的灰从 152 变成 126。
-- 居中盒的高度上限从 `max-h-[85vh]` 变成 `overlay-safe`（`100dvh - 2 * max(inset, 16px)`），横向从"背板 `p-6` 撑出的 24px 边距"变成 16px 槽宽。这是「浮层的规矩」要求的：高度只能有一条。实际内容撑不到上限，桌面上盒子仍是 560×476。
-- 对话框标题从 `<div>` 变成 `DialogTitle`（`<h2>` / `<h1 asChild>`），行高显式写成 `leading-normal`（坑 90）。
-- 打开时 Radix 把焦点放到第一个可聚焦元素（Done / Close）。用指针打开时 `:focus-visible` 不成立，看不见焦点环——探针页里那 358 个差异像素是因为它从加载起就没有过任何交互，实测点击打开后 `focusVisible: false`。
-- Escape 现在能关掉两个对话框，原来都不能。
-
-**安全区**（`-safe` 改造产物，三组 inset）：
-
-| | 无 inset | 竖屏 59/34 | 横屏 50/50 |
-|---|---|---|---|
-| 全屏页盒子 | 900×800 | 900×800 | 900×800 |
-| 内容列 padding | 40/24/40/24 | 59/24/40/24 | 40/50/40/50 |
-| 居中盒 `max-w`/`max-h` | 868/768 | 868/682 | 800/758 |
-
-页面盒子在任何一组 inset 下都铺满，底色到边；内容列吃掉 inset。居中盒原来完全不跟 inset 走（`max-h` 恒为 680），现在跟。
-
-**层级登记**的对照（拆掉 `<OverlayLayer />` 单独构建一份 `dist-probe-noguard`，键盘打开对话框，再用指针按里面的一个按钮）：
-
-| | 气泡 | 按钮 |
-|---|---|---|
-| 有 `<OverlayLayer />` | 还在 | 触发一次 |
-| 没有 | 关闭并卸载 | 照样触发一次 |
-| 旧版 | 关闭并卸载 | 照样触发一次 |
-
-两个对话框各跑一遍，结果相同。
-
-**44px 与字号**（coarse 档位）：全项目 143 个可点元素、36 个低于 44px、2 个字段低于 16px，逐行和旧版相同（那 2 个是原生复选框，13×13）。对话框内部单独量：`SlidesDialog` 8 个可点元素、3 个低于 44px（三个原生复选框），Close / Generate / Open 都是 44 高，textarea 16px；设置页 21 个、9 个低于 44px（两个原生复选框和七个 42px 高的字段行，和旧版同数），所有文本字段与 select 都是 16px。
-
-**依赖**：`dialog` 的 registry 版本不带新 npm 包，这次 `add` 也没有覆盖 `button.tsx`（坑 81 仍然要每次 `git status`）。生成的文件删掉了右上角那个关闭按钮——全文件只有它要 `lucide-react`，而且两个对话框各自都有 Done / Close。`ui/dialog.tsx` 的这些约定由 `tests/ui/components/dialog-contract.test.ts` 盯着，因为一次 `shadcn add dialog` 就能把它们全部换回默认那份。产物：App chunk 682.38 → 682.34 KB，CSS 65.75 → 65.96 KB。Dialog 和 AlertDialog 共用同一批内部件，JS 一点没涨（换掉的手写背板和外壳正好抵掉）。
-
-## 第五版：Select、Checkbox、Badge
-
-**四个 `<select>` 换 Select**，都走同一个 `settings/ChoiceField.tsx`：`<Label>` 包 trigger，选项从一个 `{value,label}[]` 来。原来四处各写一遍 `<option>` 循环。
-
-`position="popper"`，不是生成的 `item-aligned`——只有 popper 发布 `--radix-popper-available-*` 也只有它收 `collisionPadding`，item-aligned 下「浮层的规矩」那两半一句都不生效（坑 91）。安全区照 `OVERLAY_SAFE.anchored` 加 `useOverlaySafePadding()`，`<OverlayLayer />` 在 content 的 children 里。
-
-trigger 穿 `ui/input.tsx` 导出的字段外衣（`fieldClassName`），所以它和旁边的文本框同宽同边框同圆角；行的几何抄第三版的菜单行（36px，coarse 下 44px）。
-
-trigger 的宽度要自己占住：原生 `<select>` 按最宽的 option 定宽，Radix 的只装选中那一行（坑 93）。
-
-`modal` 保持默认的 `true`。开→关一轮实测（页面预先滚到 500，按坐标点击以免 playwright 自己滚页）：开着时 `body` 是 `pointer-events: none` / `overflow: hidden` / `data-scroll-locked` / `<head>` 里一个注进去的 `<style>` / 兄弟节点 `aria-hidden`，`padding-right` 补偿 0；关掉之后逐项还原，`window.scrollY` 三次都是 300，事后页面中心 `elementFromPoint` 命中的元素 `pointer-events: auto`。残留仍是 `body` 上一个空的 `style=""`。
-
-**触摸不用绕**。坑 83 那套是给 DropdownMenu 写的，Select 自己就按指针类型分路（坑 92），照抄反而双开。
-
-**四个原生复选框换 Checkbox**（`SettingsView` 两个、`SlidesDialog` 三个里的那一批、`SyncCard` 一个）。方块从 13×13 的 UA 控件变成 16×16 的紫色方块，触摸目标由 `HIT_44` 的居中伪元素扛，和 Switch 同一套。`<Label>` 仍然包着它：`<label>` 会把点在文字上的那一下转给里面的 `<button role="checkbox">`，实测点方块 toggle 一次、点文字再 toggle 一次，没有重复触发。
-
-**紫底 chip 换 Badge**。同一串 className 在六个文件里出现过，其中两处还停在 `#6d5ae0`。变体两个：`source`（来源名）和 `aside`（"Out of your lane"）。是 `<span>` 不是 shadcn 的 `inline-flex`——这些 chip 只装一行字，改成 inline-flex 会动它在行内的落位。
-
-**顺手收掉的紫**。第一版说 `#6d5ae0` 全部改掉，其实还剩 7 处：速读正文的链接色（`proseCss.ts`）、`PhoneHome` 的 "Open →"、`InfoCards` 的活动圆点、`PullToAsk` armed 态的药丸边和底、以及 Badge 收进来的两处。现在 `src/` 里除 `styles.css` 的注释外不再出现这个值。
-
-**删掉的过渡期东西**：`ui/input.tsx` 的 `inputClassName` 改名 `fieldClassName`（它现在是两个原语共用的字段外衣，不再是"给还没有原语的 `<select>` 顶着"）、`InfoCards` 的 `PIPE_BADGE` 常量、`settings/cardStyles.ts` 和 `base/buttons.ts` 里已经过时的注释。`base/buttons.ts` 只剩 `HIT_44`；`cardStyles.ts` 只剩 `CARD`，六个设置卡片在用，留着。
-
-**新增的护栏**：`tests/ui/components/primitive-contract.test.ts`，盯 select / checkbox / badge 里一次 `shadcn add` 就会消失的那些约定（`position="popper"`、`collisionPadding`、`<OverlayLayer />`、44px、`HIT_44`、不 import lucide、Badge 的两个变体）。`dialog-contract` 是它的第四版同类。
-
-**视觉变化清单**。23 个节区里 18 个逐节点、逐像素完全相同，其余五处：
-
-- 速读正文的链接、`article-saved` 的链接、`InfoCards` 的 RSS chip：`#6d5ae0 → #6c4fd0`。逐像素分别 258 / 258 / 119 个像素，最大差 16。
-- 设置页：Language 字段 524.5×39 → 524.5×38，Thinking 字段 97×39 → 100.6×38（`line-height: normal` 变成 20px 少 1px；宽度见坑 93），两个复选框 13×13 → 16×16。整页因此矮 2px。把这 1/2px 的整体上移抵掉之后，页面上其余每一个像素都相同——四个控件之外没有任何东西动过。
-- `SlidesDialog`：盒子仍是 560×476，差异像素 5080 个全部落在三个复选框那一小块 (15,95)–(431,159) 里，书名文字因方块变宽右移 3px。
-- 三处 chip 的盒子、字号、内边距一个字节没变（Badge 的基串和原来那串完全相同）。
-- 设置页的文本字段在 coarse 下从 42px 长到 44px（`fieldClassName` 加了 `coarse:min-h-[44px]`），细指针下不变。
-
-**安全区**（`-safe` 改造产物，trigger 贴视口右缘）：
-
-| | 列表右侧余量 | `max-width` | `max-height` |
-|---|---|---|---|
-| 无 inset | 8 | 884 | 742 |
-| 竖屏 59/34 | 8 | 884 | 657 |
-| 横屏 50/50 | 50 | 800 | 729 |
-
-贴着底边的那个 trigger 上方开（`data-side: top`），列表整体在 trigger 之上。
-
-**层级登记的对照**（拆掉 `<OverlayLayer />` 单独构建一份 `dist-probe-noguard`，键盘开列表，再用指针按一行）：
-
-| | 气泡 | 那一行 |
-|---|---|---|
-| 有 `<OverlayLayer />` | 还在 | 选中一次 |
-| 没有 | 关闭并卸载 | 照样选中一次 |
-
-旧版没有这一栏：原生 `<select>` 的列表是浏览器画的，不是 DOM，压根没有"按在外面"这个问题。
-
-**触摸目标的最终数字**（coarse 档位，全项目探针 23 个节区）：
-
-| | 可点元素 | 低于 44px | 字段小于 16px |
-|---|---|---|---|
-| 第一版之前 | — | 52 | — |
-| 第四版之后 | 143 | 36 | 2 |
-| 第五版之后 | 143 | 27 | 0 |
-
-清掉的 9 个都在设置页：两个 select（42→44）、两个复选框（13→44）、五个文本字段（42→44）。两个对话框内部单独量，`SlidesDialog` 8 个可点元素和设置页 21 个，现在低于 44px 的都是 0。
-
-剩下的 27 个，逐项：
-
-- 正文和聊天里的行内链接 6 个（`<a>`，21.7×18 到 28.4×23）。加 padding 会在句子里断行。引用 chip 当时也归在这一条里，归错了，见「真机之后：引用 chip」。
-- 聊天/通话的输入框 4 个（textarea，高 32–36）和它们旁边的 Copy 按钮 3 个（34×30）。`docs/30` 不迁聊天输入区。
-- `AnnotationPopup` 的色板和按钮 7 个（36×36、79.5×36）。不迁清单里。
-- 列表行 6 个：prep 的三条论文行（335×35.5–38）、库的两条主题行和一条文件行（489×38.5）。行高由内容定，撑到 44 会把列表拉散；整行都是命中区，宽度有几百像素。
-- prep 的 Add 按钮 1 个，42.6×44——差的是宽度，1.4px。给按钮尺寸表加一条 `coarse:min-w-[44px]` 会动到全项目每一个窄按钮，为这一个不划算。
+## 各版改了什么
+
+- 一（基座）：preflight、token 映射，Button / Input / Textarea / Label / Switch / Separator 六个原语，`BTN` 系列常量全部调用点。视觉变化都是收敛（三套紫、两套 hover 灰合一，`SourcesPage` 开关圆点归位，坑 77），探针里低于 44px 的可点元素从 52 个降到 33 个。
+- 二（反馈类）：Toast 换 Radix Toast，`DeleteThreadButton` 的两步确认换 AlertDialog；浮层安全区（`ui/overlay.tsx`）和层级登记（`base/overlay-layer.ts`）在这版立起来，之后每版都靠它。
+- 三（菜单）：`MoreMenu` 换 DropdownMenu，速读的 Filtered 折叠换 Collapsible。Popover 没用上。
+- 四（对话框）：`SlidesDialog`（现在叫 `talk/DeckDialog.tsx`，宿主从 `NotesPanel` 换成了 `TalkView`）换居中 Dialog，`SettingsView` 换全屏 content 变体。风险最高，单独发一版。
+- 五（收尾）：四个 `<select>` 换 Select，四个原生复选框换 Checkbox，紫底 chip 换 Badge，过渡期常量清干净。
+- 之后：设置页从一个弹窗堆九组改成账号/功能/可选三个 Tabs，`SettingsView.tsx` 只剩壳，三个面板拆进 `settings/AccountPanel.tsx` / `FeaturesPanel.tsx` / `OptionalPanel.tsx`；Tabs 是这时候引的。
+
+真机：五版都靠两份产物在 Chromium 里逐节点 diff 加逐像素对比核对几何与行为等价，一版一验、每版发 TestFlight 对比，但 iOS 幽灵点击本身当时都没有真机验证。第一次 iPad 真机驱动是在五版之后：改了两处——引用 chip 的命中区太小（换成 `relative` + `HIT_44`）、`DeleteTopicButton` 的 `window.confirm` 在 Tauri 下是同步的因此一按就删（换 AlertDialog，坑 98）。
 
 ## 阅读区的收敛
 
@@ -439,7 +261,7 @@ shadcn 生成的组件是照 React 19 写的（那里 `ref` 是普通 prop），
 
 ## 没引的
 
-**Tabs** 后来引了，见「设置页的三块」。侧栏那五个标签（`reader/Sidebar.tsx`）仍未换：它们已经是 `h-11` 的 44px 按钮，换过去买到的是方向键漫游和 `role="tablist"` 语义，代价是把抽屉的高度链（`min-h-0 flex-1` 那条）拆开重接。这条是真未决，哪天侧栏因为别的原因动的时候顺手做。
+**Tabs** 后来在设置页重组时引了（见「各版改了什么」）。侧栏那三个标签（`reader/Sidebar.tsx`）仍未换：它们已经是 `h-11` 的 44px 按钮，换过去买到的是方向键漫游和 `role="tablist"` 语义，代价是把抽屉的高度链（`min-h-0 flex-1` 那条）拆开重接。这条是真未决，哪天侧栏因为别的原因动的时候顺手做。
 
 **Tooltip**。全项目 32 个 `title=`，都是图标按钮的悬停提示。触摸上不触发，所以每个需要说明的控件本来就有 `aria-label`，激活态还会把文字显出来（侧栏标签、MoreMenu 的行）。加一层 Radix Tooltip 只对鼠标有用，且要处理它自己的 Portal 和安全区。
 
@@ -454,74 +276,11 @@ shadcn 生成的组件是照 React 19 写的（那里 `ref` 是普通 prop），
 - 侧栏标签行、`Sidebar` 的抽屉和背板、`LibraryScreen` / `BriefingPage` / `PrepPanel` 的列表行：`<button>` 就是它们该有的样子，包一层组件不会少写一行。
 - `HomeCard` / `InfoCards` 的卡片外壳、`settings/cardStyles.ts` 的 `CARD`：shadcn 的 Card 是 header/content/footer 三段式，这里的卡片没有那个结构。
 
-`src/` 里现在没有 `<select>`、没有原生复选框；`<input>` 只剩 `ui/input.tsx` 里那一个和 `SourcesPage` 的 URL 输入框（info 侧的圆角和描边是另一套，coarse 下本来就是 44px / 16px）；`<textarea>` 只剩 `ui/textarea.tsx`、`AnnotationPopup` 和聊天输入区。
+`src/` 里现在没有 `<select>`。原生复选框回来了一处：`NewTalkDialog`（后加的，晚于五版）的多选列表用裸 `<input type="checkbox">`，没走 `ui/checkbox.tsx`（现在只有 `FeaturesPanel`、`SyncCard`、`AutostartCard` 三处调用它）。`<input>` 因此是三处：`ui/input.tsx`、`SourcesPage` 的 URL 输入框、`NewTalkDialog` 那个复选框；`<textarea>` 仍是三处：`ui/textarea.tsx`、`AnnotationPopup`、聊天输入区。
 
 这份清单说的是组件：这几个组件仍然自己写，不套 Radix。它们内部的按钮在「阅读区的收敛」里换成了 `<Button variant="ghost">`（同一个原生 `<button>`，样式来自变体表），侧栏标签行同理。裸 `<button>` 从 37 处降到 27 处：列表行、聊天输入区的三个键、`ReadingPipCard`、`FigureCard` 的卡片本体。
 
-## 第一版的视觉变化
-
-逐屏对比的做法在下一节。除下面这些之外，22 个屏的每个节点的几何和计算样式逐字节相同。
-
-有意的：
-
-- 紫色收敛（见上）。受影响：vestibule、home cards、InfoCards、SourcesPage、briefing / article / saved 的来源标签。settings 一个像素没动，那里本来就是 `#6c4fd0`。
-- `LibraryScreen` 的两个输入框从 16px 变 14px。它们是全项目唯一没写字号的字段，靠 UA 继承到 16px，和别处 `text-sm` 的字段不一致；一起补上了 `min-w-0`（长标题原来会把行撑宽）。行高 42 → 38，下面的列表整体上移 4px。
-- `SourcesPage` 的开关圆点回到正确位置。原来的手写 toggle 把圆点画在轨道外面，见坑 77。
-- info 侧的按钮拿到 `cursor: pointer`。它们原来没写，鼠标停上去是箭头。
-- 触摸目标：阅读侧面板的 11px 按钮（11 处）、纯文字链（8 处）、InfoCards 的 CTA（3 处）、CallView 的 Classroom、`ArticleView` 的 Keep 从 28–36px 提到 44px。探针里可点元素低于 44px 的从 52 个降到 33 个。
-
-无视觉后果但会出现在样式 diff 里：`display: block → flex`（基类是 `inline-flex`，单子元素时几何不变）、`gap: normal → 6px`（同上）、`[&_svg]:shrink-0`、`size="link"` 带来的 `position: relative`。
-
-剩下的 33 个低于 44px 的可点元素，都不在这一版的范围里：正文和聊天里的行内链接（`<a>`，加了 padding 就断行；引用 chip 后来从这一类里拆了出去，见「真机之后：引用 chip」）、聊天输入区（`docs/30` 不迁）、标注气泡（不迁）、设置页的原生复选框（Checkbox 不在这六个原语里）、库和 prep 的列表行（行高由内容定）。设置页所有真正的文本字段在 `coarse:` 下都是 16px。
-
-## 真机之后：引用 chip
-
-iPad 上驱动一轮之后回来改的两处。
-
-引用 chip（`MarkdownRenderer` 把 `[p.12]` / `[fig:3]` 渲染成的那个 `<a>`）当时和「句子里的一段文字」归在一起，判为加 padding 就断行、有意留下。归错了：它有底色、圆角和自己的 `px-1 py-0.5`，是画出来的控件；`buttons.ts` 里 `HIT_44` 的注释列的适用对象正好包含它。真机上它是 31–36×18（笔记面板）和 29–80×22（聊天），而笔记面板里约 260 个、聊天里约 100 个，是从笔记跳回原文的主要入口。改成 `relative` + `HIT_44`：伪元素扛命中区，盒子、行高、断行位置一个都不动。真正留在原分类里的是模型写的普通外链，它们没有自己的盒子。
-
-同一轮里书库删主题被换成 `AlertDialog`（`library/DeleteTopicButton.tsx`）。原来那条 `window.confirm` 在 Tauri 下点一下就删，原因和结论在坑 98。
-
-**量出来的**（探针加一个 `citation-prose` 节区：两列正文，320px/12px 和 420px/16px，句中、连着两个、跨行折断、行尾各一个 chip）：
-
-| | 前 | 后 |
-|---|---|---|
-| 33 个节区逐节点几何和计算样式 | — | 全同（唯一一条差异是 home cards 那个呼吸动画的 opacity 采样） |
-| 两列段落高度 | 195 / 260 | 195 / 260 |
-| 每个 chip 的盒子 | 29.9×19 … 67.1×23 | 一个像素没动 |
-| coarse 下的命中区 | 19 / 23 高 | 15 个 chip 全部 ≥44×44 |
-| 探针里低于 44px 的可点元素 | 60 | 45 |
-| 逐像素（`--disable-lcd-text`） | — | 33 个节区全同 |
-
-驱动删除（探针的 `library-delete` 节区，删除失败的那次 rejection 当计数器）：
-
-| | 结果 |
-|---|---|
-| 旧版 + Tauri 注入的 async `confirm` | 一按就删，0 个确认框 |
-| 旧版 + 浏览器的同步 `confirm` | 弹原生确认框，0 次删除（所以浏览器里一直看不出问题） |
-| 新版 按 Delete | 1 个 `alertdialog`，0 次删除 |
-| 新版 Cancel / Escape | 0 次删除 |
-| 新版 在对话框里按 Delete | 正好 1 次 |
-
-834px 宽、`coarse` + `isMobile` 下再量一次对话框：触发按钮 54.5×44，Cancel 和 Delete 各 69.6×44 和 68.6×44，content 带 `overlay-safe`，`max-height` 被夹到 1080px 且 `overflow-y: auto`，`body` 拿到 `overflow: hidden` 和 `pointer-events: none`。
-
-## 设置页的三块
-
-设置从一个弹窗里竖着堆九组改成三个标签，Tabs 是这时候引的。
-
-- 账号：三张供应商卡、默认对话的供应商与模型、两个思考档位（chat / prep）、Google 同步。登录完当场要选模型，不跨块跳。
-- 功能：通用（AI 输出语言）、阅读（自动笔记、笔手输入）。简报现在没有开关，不占位，等后台采集开关进来再加一段。
-- 可选：Semantic Scholar key、语音输入、插图生成。页首一句说明只覆盖语音和插图那两把 key——它们在 `credentials.json`、不同步、每台设备各配一次；Semantic Scholar 是普通设置，跟着 `settings.json` 同步。
-
-`SettingsView.tsx` 只剩壳：标题行、标签条、底部一行版本与许可证。三个面板是 `settings/AccountPanel.tsx`、`FeaturesPanel.tsx`、`OptionalPanel.tsx`，小标题走 `settings/SettingsSection.tsx`。设置项的语义、默认值和存储字段一个没动。
-
-高度链：页面盒仍是 `fixed inset-0`，里面那列改成 `h-full` 的 flex 列，标题行和版本行 `shrink-0`，`Tabs` 是 `min-h-0 flex-1`，只有 `TabsContent` 带 `overflow-y-auto`。标签条因此不跟着滚。链上任何一处丢掉 `min-h-0`，flex 项就不肯缩到内容以下，滚动退回外层，标签条随面板一起滚走。
-
-布局按断点，不分叉组件：`sm` 以上标签条竖排在左（`sm:w-40 sm:flex-col sm:self-start`），以下横排在顶。Radix 的 `orientation` 是 prop 不是媒体查询，固定 `vertical`——它决定的是哪一组方向键走标签，而有键盘的是宽的那一形。
-
-生成的 `tabs.tsx` 改了四处：触发器补 `coarse:min-h-[44px]`（生成的是 `h-9` 列里的 `h-[calc(100%-1px)]`，36px 且长不了）、hover 挪到 `can-hover:` 后面、删掉全部 `dark:` 和 `line` 变体连同 `group-data-[orientation=*]` 那套、四个组件都改成 `forwardRef`。这次 `add` 没有覆盖任何已有文件，`git status` 只多一个 `tabs.tsx`（坑 81 仍然要每次看）。护栏加在 `primitive-contract`（44px、`can-hover:`、无 `dark:`、无 `data-[orientation=`）和 `forward-ref-contract` 的表里。
-
-版本号从 `platform/app/version.ts` 来：`getVersion()` 读的是安装的那个包的 `tauri.conf.json` 版本，非 Tauri 下（浏览器 dev、单测）没有 IPC，退回 `dev`。许可证名写在同一处。
+`SourcesPage` 的输入框和 `AnnotationPopup` 的 `<textarea>` 不是漏换，是判断过留下的：`SourcesPage` 的输入框走 info 侧自己那套圆角和描边，coarse 下本来就是 44px / 16px，套 `ui/input.tsx` 的字段外衣买不到东西；`AnnotationPopup` 的 `<textarea>` 是标注气泡内部的一块，气泡整体在「不迁的」清单里（锚定定位靠 `panel-position.ts`，已经按实测结论调过），单把这一块换成 `Textarea` 会让它和气泡剩下的手写部分（色板、按钮几何）不一致。
 
 ## 验证方法
 
