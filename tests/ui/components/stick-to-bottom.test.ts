@@ -382,3 +382,30 @@ test("nothing scrolling means the page does", () => {
 	expect(scrollableAncestor(list)).toBe(document.scrollingElement as Element);
 	outer.remove();
 });
+
+test("the place is not spent on the page the walk falls back to", () => {
+	// On mount nothing has been laid out, so no element overflows and the walk
+	// finds only the document. Writing the place there scrolls the page and leaves
+	// the transcript at its oldest message.
+	const { outer, list } = column();
+	const memory = makeMemory();
+	leaveAt(memory, 200);
+	const back = makeHost(1000, 300);
+	const page = list.ownerDocument.scrollingElement as unknown as ScrollHost;
+	let settled = false;
+	let notify = () => {};
+	const stop = stickToBottom(list, {
+		resolveHost: () => (settled ? (back as unknown as ScrollHost) : page),
+		observeContent: (_list, onChange) => {
+			notify = onChange;
+			return () => {};
+		},
+		...memory.seams,
+	});
+	expect(back.scrollTop).toBe(0);
+	settled = true;
+	notify();
+	expect(back.scrollTop).toBe(200);
+	stop();
+	outer.remove();
+});

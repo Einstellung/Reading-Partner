@@ -172,7 +172,12 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 		// The place is written on the pass that pins a list with nothing remembered,
 		// and let go of there. The pin is off from here, so the settling that
 		// follows leaves the reader on the place.
-		if (place !== null && host) {
+		//
+		// Never on the page the walk falls back to while nothing has been laid out
+		// (settleHost above): spending the place there scrolls something that is not
+		// the transcript, and the transcript opens at its oldest message. The next
+		// pass, once the real container overflows, is the one that writes it.
+		if (place !== null && host && host !== list.ownerDocument?.scrollingElement) {
 			host.scrollTop = place;
 			place = null;
 			return;
