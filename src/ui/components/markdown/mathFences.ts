@@ -36,17 +36,35 @@
 // comes after it: blockquote markers, one list marker, and up to three spaces at
 // each step, which is remark's own threshold for letting a flow construct open.
 // A fourth space opens an indented code block, so a run behind that much
-// whitespace never starts a line as far as this pass is concerned.
-const PREFIX = /^((?: {0,3}>[ \t]?)*)(?:( {0,3})((?:[-*+]|\d{1,9}[.)])[ \t]+))?( {0,3})/;
+// whitespace never starts a line as far as this pass is concerned. The same
+// threshold applies after a list marker, one space later: five spaces there put
+// the content in an indented code block inside the item, and the lookahead makes
+// the marker fail to match rather than swallow four of them and call the rest a
+// line start.
+const PREFIX = /^((?: {0,3}>[ \t]?)*)(?:( {0,3})((?:[-*+]|\d{1,9}[.)])[ \t]{1,4}(?![ \t])))?( {0,3})/;
+// The same prefix without the list marker, for a marker that turns out to be
+// prose.
+const QUOTES = /^((?: {0,3}>[ \t]?)*)( {0,3})/;
+// An ordered marker that cannot interrupt a paragraph: CommonMark lets only `1.`
+// and `1)` do that.
+const LATER_ITEM = /^(?!1[.)])\d/;
 const FENCE = /^(`{3,}|~{3,})/;
+// A raw HTML block reaches the reader as written, so a cut or an escape inside
+// one is visible. `<script>`, `<pre>`, `<style>` and `<textarea>` run to their
+// closing tag; every other kind ends at a blank line.
+const HTML = /^</;
+const HTML_RAW = /^<(script|pre|style|textarea)\b/i;
 const RUN = /^\$\$+/;
 const LEADING_SPACE = /^[ \t]*/;
 
 interface Line {
-	// The line without its terminator, and the terminator it had. Splitting on
-	// `\n` and carrying the `\r` separately is what keeps a CRLF document CRLF.
+	// The line without its terminator, the terminator it had, and the terminator
+	// an inserted line break repeats. Per line rather than per document: a CRLF
+	// pushed into an LF-only part of a mixed reply is a byte the model never
+	// wrote. The last line has no terminator and borrows the one above it.
 	text: string;
 	eol: string;
+	nl: string;
 	// The container matter as written, and the form an inserted line repeats:
 	// the list marker becomes spaces, so a new line continues the item instead of
 	// opening a second one. Fences prefixed but body lines left lazy would split
@@ -61,26 +79,48 @@ interface Line {
 	// one opens. Plain indentation is not a container, so a line without a marker
 	// sets no column and anything after it is still in the same container.
 	column: number;
+	// The column a paragraph opened on this line would live at: the item's column
+	// where the line carries a marker, the container's own otherwise. Indentation
+	// alone opens no container, so an indented line raises no barrier.
+	body: number;
 	content: string;
 }
 
-function parseLine(raw: string, last: boolean): Line {
-	const crlf = raw.endsWith('\r');
-	const text = crlf ? raw.slice(0, -1) : raw;
+// Whether a list marker really opens an item here. Only `1.` and `1)` may
+// interrupt a paragraph, so `公式如下：\n2. $$x=\n   1$$` is one paragraph whose
+// `$$` is working inline math; read as a list it would be cut into literal text
+// beside an empty display block. `para` is the column of the open paragraph, or
+// null where none is open.
+function opensItem(marker: string, start: number, para: number | null): boolean {
+	return !LATER_ITEM.test(marker) || para === null || start < para;
+}
+
+// A line's container matter, read against whatever paragraph is open above it.
+// A marker that paragraph swallows is re-read as prose, which is what QUOTES is
+// for: the line then carries no container and starts nothing.
+function parseLine(text: string, eol: string, nl: string, para: number | null): Line {
 	const m = PREFIX.exec(text) as RegExpExecArray;
 	const quotes = m[1];
-	const marker = m[3] ?? '';
-	const indent =
-		marker === '' ? (LEADING_SPACE.exec(text.slice(quotes.length)) as RegExpExecArray)[0].length : (m[2] ?? '').length;
+	const item = m[3] !== undefined && opensItem(m[3], quotes.length + (m[2] as string).length, para);
+	const plain = item ? null : (QUOTES.exec(text) as RegExpExecArray);
+	const marker = item ? (m[3] as string) : '';
+	const before = item ? (m[2] as string) : '';
+	const after = plain === null ? m[4] : plain[2];
+	const prefix = plain === null ? m[0] : plain[0];
+	const indent = item
+		? before.length
+		: (LEADING_SPACE.exec(text.slice(quotes.length)) as RegExpExecArray)[0].length;
 	return {
 		text,
-		eol: last ? '' : crlf ? '\r\n' : '\n',
-		prefix: m[0],
-		cont: quotes + (m[2] ?? '') + ' '.repeat(marker.length) + m[4],
+		eol,
+		nl,
+		prefix,
+		cont: quotes + before + ' '.repeat(marker.length) + after,
 		depth: (quotes.match(/>/g) ?? []).length,
 		indent,
-		column: marker === '' ? 0 : indent + marker.length + m[4].length,
-		content: text.slice(m[0].length),
+		column: item ? indent + marker.length + after.length : 0,
+		body: item ? prefix.length : quotes.length,
+		content: text.slice(prefix.length),
 	};
 }
 
@@ -146,13 +186,16 @@ function holds(line: Line, open: Open): boolean {
 }
 
 // Where the display blocks are, reading the lines the way remark does: a code
-// fence and a math block each swallow lines until their own closer, and neither
-// can open inside the other. Lines named in `escaped` open nothing, because the
-// emit pass is about to turn their run into a literal.
+// fence, a raw HTML block and a math block each swallow lines until their own
+// end, and none can open inside another. Lines named in `escaped` open nothing,
+// because the emit pass is about to turn their run into a literal.
 function scan(lines: Line[], escaped: ReadonlySet<number>): { blocks: Block[]; escapes: number[] } {
 	const blocks: Block[] = [];
 	const escapes: number[] = [];
 	let fence: { char: string; len: number } | null = null;
+	// The closing tag an open HTML block waits for, or '' for one that ends at
+	// the next blank line.
+	let html: string | null = null;
 	let open: Open | null = null;
 	for (let i = 0; i < lines.length; i += 1) {
 		const line = lines[i];
@@ -160,6 +203,10 @@ function scan(lines: Line[], escaped: ReadonlySet<number>): { blocks: Block[]; e
 			const f = FENCE.exec(line.content);
 			if (f && f[1][0] === fence.char && f[1].length >= fence.len && line.content.slice(f[0].length).trim() === '')
 				fence = null;
+			continue;
+		}
+		if (html !== null) {
+			if (html === '' ? line.text.trim() === '' : line.content.toLowerCase().includes(html)) html = null;
 			continue;
 		}
 		if (open) {
@@ -184,6 +231,12 @@ function scan(lines: Line[], escaped: ReadonlySet<number>): { blocks: Block[]; e
 		const f = FENCE.exec(line.content);
 		if (f) {
 			fence = { char: f[1][0], len: f[1].length };
+			continue;
+		}
+		if (HTML.test(line.content)) {
+			const raw = HTML_RAW.exec(line.content);
+			html = raw ? `</${raw[1].toLowerCase()}` : '';
+			if (html !== '' && line.content.toLowerCase().includes(html)) html = null;
 			continue;
 		}
 		if (escaped.has(i)) {
@@ -214,8 +267,22 @@ function scan(lines: Line[], escaped: ReadonlySet<number>): { blocks: Block[]; e
 // differently, so canonicalizeMathFences repeats this until it settles.
 function pass(text: string): string {
 	if (!text.includes('$$')) return text;
-	const raw = text.split('\n');
-	const lines = raw.map((line, i) => parseLine(line, i === raw.length - 1));
+	// CommonMark ends a line on CRLF, LF or a lone CR alike, and reading a lone CR
+	// as text would make the pass see a `$$` mid-line where remark sees one at the
+	// start of a line. The capture group keeps each terminator with its own line.
+	const raw = text.split(/(\r\n|\n|\r)/);
+	// A paragraph is open from the first non-blank line until the next blank one,
+	// and where it sits decides whether a later ordered marker is a marker at all.
+	const lines: Line[] = [];
+	let para: number | null = null;
+	let nl = '\n';
+	for (let i = 0; i < raw.length; i += 2) {
+		const eol = raw[i + 1] ?? '';
+		if (eol !== '') nl = eol;
+		const line = parseLine(raw[i], eol, nl, para);
+		lines.push(line);
+		para = line.text.trim() === '' ? null : (para ?? line.body);
+	}
 
 	// Escaping an opener takes its block away, which changes what the lines after
 	// it belong to, so the scan is repeated until no cut opener is left hanging.
@@ -266,11 +333,10 @@ function pass(text: string): string {
 	}
 	if (rewritten.size === 0) return text;
 
-	const nl = text.includes('\r\n') ? '\r\n' : '\n';
 	let out = '';
 	for (let i = 0; i < lines.length; i += 1) {
 		const pieces = rewritten.get(i);
-		out += (pieces === undefined ? lines[i].text : pieces.join(nl)) + lines[i].eol;
+		out += (pieces === undefined ? lines[i].text : pieces.join(lines[i].nl)) + lines[i].eol;
 	}
 	return out;
 }

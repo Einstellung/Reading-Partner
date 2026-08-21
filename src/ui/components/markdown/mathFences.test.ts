@@ -24,7 +24,7 @@ function tree(markdown: string): string[] {
 	const out: string[] = [];
 	(function walk(node: any) {
 		if (node.type === 'math') out.push(`math(${node.meta ?? ''}):${node.value}`);
-		else if (node.type === 'inlineMath' || node.type === 'code' || node.type === 'text')
+		else if (node.type === 'inlineMath' || node.type === 'code' || node.type === 'text' || node.type === 'html')
 			out.push(`${node.type}:${node.value}`);
 		else if (node.type === 'paragraph') out.push('p');
 		for (const child of node.children ?? []) walk(child);
@@ -364,6 +364,68 @@ test('a line-start run inside a block is content, not a closer', () => {
 
 test('CRLF text stays CRLF', () => {
 	expect(canonicalizeMathFences(c('$$x=\r\n1$$\r\n后文。'))).toBe('$$\r\nx=\r\n1\r\n$$\r\n后文。');
+	// Per line, not per document: a CRLF terminator pushed into an LF-only part of
+	// a mixed reply is a byte the model never wrote.
+	expect(canonicalizeMathFences(c('$$x=\n1$$\r\n$$y=\n2$$'))).toBe('$$\nx=\n1\r\n$$\r\n$$\ny=\n2\n$$');
+	// A lone `\r` is a line ending to CommonMark, so the pass keeps it, on the last
+	// line and in the break it inserts there.
+	expect(canonicalizeMathFences(c('$$x=\r\n1$$\r'))).toBe('$$\r\nx=\r\n1\r$$\r');
+	// And reads it as one: this `$$` is alone on its line, so it opens a block
+	// that is already canonical and stays untouched.
+	const cr = c('价 $9\n$$\r- ');
+	expect(tree(cr)).toEqual(['p', 'text:价 $9', 'math():- ']);
+	expect(canonicalizeMathFences(cr)).toBe(cr);
+});
+
+test('an ordered marker other than 1. does not interrupt a paragraph', () => {
+	// CommonMark lets only `1.` and `1)` open a list inside a paragraph, so this
+	// is one paragraph whose formula is working inline math. Read as a list item
+	// it would be cut into literal text beside an empty display block.
+	const prose = c('公式如下：\n2. $$x=\n   1$$');
+	expect(tree(prose)).toEqual(['p', 'text:公式如下：\n2. ', 'inlineMath:x=\n   1']);
+	expect(canonicalizeMathFences(prose)).toBe(prose);
+	// `1.` in the same place is a list, and it is broken.
+	const first = c('公式如下：\n1. $$x=\n   1$$');
+	expect(tree(first)).toEqual(['p', 'text:公式如下：', 'math(x=):1$$']);
+	expect(canonicalizeMathFences(first)).toBe('公式如下：\n1. $$\n   x=\n   1\n   $$');
+	expect(tree(canonicalizeMathFences(first))).toEqual(['p', 'text:公式如下：', 'math():x=\n1']);
+	// So is `2.` where no paragraph is in the way: after a blank line, or beside
+	// an item that is already open.
+	const blank = c('公式如下：\n\n2. $$x=\n   1$$');
+	expect(canonicalizeMathFences(blank)).toBe('公式如下：\n\n2. $$\n   x=\n   1\n   $$');
+	expect(tree(canonicalizeMathFences(blank))).toEqual(['p', 'text:公式如下：', 'math():x=\n1']);
+	const sibling = c('1. a\n2. $$x=\n   1$$');
+	expect(canonicalizeMathFences(sibling)).toBe('1. a\n2. $$\n   x=\n   1\n   $$');
+	expect(tree(canonicalizeMathFences(sibling))).toEqual(['p', 'text:a', 'math():x=\n1']);
+});
+
+test('five spaces after a list marker are an indented code block', () => {
+	// Four is the most a marker may be followed by. The fifth space puts the
+	// content in a code block inside the item, where a cut or an escape shows.
+	const text = c('-' + ' '.repeat(5) + '$$x=\n' + ' '.repeat(7) + '1$$');
+	expect(tree(text)).toEqual(['code:$$x=\n 1$$']);
+	expect(canonicalizeMathFences(text)).toBe(text);
+	// Four still opens the item, at its own column.
+	expect(canonicalizeMathFences(c('-    $$x=\n     1$$'))).toBe('-    $$\n     x=\n     1\n     $$');
+});
+
+test('a raw HTML block is left as it is', () => {
+	// Its content reaches the reader as written, so both the cut and the escape
+	// would show. `<pre>` runs to its closing tag, everything else to a blank line.
+	for (const text of [c('<div>\n$$S=a\nb'), c('<div>\n$$S=a\nb$$\n</div>'), c('<pre>\n\n$$S=a\nb$$\n</pre>')]) {
+		expect(tree(text)).toEqual([`html:${text}`]);
+		expect(canonicalizeMathFences(text)).toBe(text);
+	}
+	// The block ends at the blank line, and the formula after it is still cut.
+	expect(canonicalizeMathFences(c('<div>\nx\n\n$$S=a\nb$$'))).toBe('<div>\nx\n\n$$\nS=a\nb\n$$');
+});
+
+test('a blockquote inside a list item is not repaired', () => {
+	// The prefix reads quote markers before a list marker, not after one, so this
+	// block is left exactly as the model wrote it: a missed repair, not a wrong cut.
+	const text = c('- > $$S=a\n>   b$$');
+	expect(tree(text)).toEqual(['math(S=a):', 'p', 'text:b$$']);
+	expect(canonicalizeMathFences(text)).toBe(text);
 });
 
 // Whitespace-stripped and with the escape resolved, for the "nothing was
