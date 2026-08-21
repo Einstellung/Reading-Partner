@@ -24,8 +24,18 @@
 // rebuilds the IO unit, and a rebuilt unit answers questions about the hardware
 // with AVAudioEngine's defaults — 44100 Hz stereo — until the engine has been
 // prepared. Every format used here is one the engine reported, never one this
-// file chose, and the two reads of the microphone format are compared before a
-// tap is installed with either of them.
+// file chose, and the format the tap is installed with is checked again before
+// a converter is built from it.
+//
+// start() builds that chain in two halves, and the split is the point of the
+// ordering. The first half is only what an open microphone needs — permission,
+// session, voice processing, tap, engine — and it is short. The second half is
+// the recogniser: the locale, its model, the format it accepts, the analyzer.
+// Audio arriving between the two goes into the pre-roll and is handed over in
+// order once the analyzer is consuming, so the stream the recogniser sees
+// starts at the press rather than at its own readiness. Two holds in eleven
+// lost their first syllable before this, and both were short ones: the same
+// Chinese sentence came back whole at 2.6 seconds and headless at 2.4.
 //
 // A run is single-use. Once stopped, or once the audio session is interrupted,
 // it is dead: iOS refuses to restart recording from the background (docs/33),
@@ -34,6 +44,9 @@
 // so the stop_dictation that follows still has something to answer with.
 
 import AVFoundation
+// UnsafeMutableAudioBufferListPointer, which the pre-roll's copy walks: it
+// belongs to the CoreAudio overlay, not to AVFoundation.
+import CoreAudio
 import CoreMedia
 import Foundation
 import Speech
@@ -123,6 +136,62 @@ final class DictationRun {
     private var notificationObservers: [NSObjectProtocol] = []
     private var tapInstalled = false
 
+    // MARK: - Pre-roll
+
+    /// The audio the microphone heard before the recogniser could take it.
+    ///
+    /// Raw tap buffers in the microphone's own format, not converted ones.
+    /// Buffering converted audio would need the converter before the recogniser
+    /// is ready, and the converter's output format comes from
+    /// `bestAvailableAudioFormat` — asked after the model install, which is the
+    /// longest step there is. Whether that ask survives being moved in front of
+    /// the install is untested, and it is untested in exactly the case where the
+    /// pre-roll matters most. Raw costs a copy per buffer and 48 kHz instead of
+    /// 16 kHz in memory; the cap keeps both small.
+    ///
+    /// A release that lands before start() returns is unchanged by any of this.
+    /// The composer's machine goes arming -> aborting and sends
+    /// cancel_dictation; the run is torn down and the queue is dropped unread.
+    /// start() still returns at the same point it always did, so that window is
+    /// neither longer nor shorter than before and the bench's "released before
+    /// the recognizer came up" still means the words were never transcribed.
+    /// What changed is why: the microphone was open and did hear them. They are
+    /// discarded here, having reached neither the analyzer nor anything that
+    /// leaves the device.
+    private let prerollLock = NSLock()
+    private var preroll: [AVAudioPCMBuffer] = []
+    private var prerollFrames: AVAudioFrameCount = 0
+    private var prerollDropped: AVAudioFrameCount = 0
+    private var prerollCapFrames: AVAudioFrameCount = 0
+    private var tapSampleRate: Double = 0
+    /// A copy that failed repeats on every buffer; one line says it.
+    private var loggedPrerollCopyFailure = false
+
+    /// True from the tap's first callback until the hand-over has emptied the
+    /// queue. While it is true every buffer goes to the queue, so a live buffer
+    /// cannot overtake the ones still queued ahead of it; it is cleared only
+    /// with the queue empty and the lock held. That is what makes the handover
+    /// free of both gaps and overlap, and it is also what keeps `feed` single-
+    /// threaded: the tap does not reach it while a hand-over is in progress, and
+    /// AVAudioConverter carries resampler state a second caller would corrupt.
+    private var buffering = true
+
+    /// How much audio the pre-roll keeps. Five seconds is about ten times the
+    /// gap it exists for, and the drop is from the front, so a longer wait keeps
+    /// the five seconds next to the moment recognition actually begins rather
+    /// than the five oldest.
+    ///
+    /// It is deliberately not sized for the other wait. A language whose model
+    /// is not on the device yet stalls in a download measured in minutes, not
+    /// seconds (docs/pitfall/158): no cap rescues that hold, and splicing the
+    /// syllable someone said minutes ago onto what they say once a recogniser
+    /// finally exists would be worse than losing it. Dropping the oldest leaves
+    /// that case exactly where it was.
+    ///
+    /// Five seconds of 48 kHz mono float32 is 960 KB, and it is freed with the
+    /// run.
+    private static let prerollSeconds: Double = 5
+
     private var stopping = false
     private let stopLock = NSLock()
 
@@ -194,7 +263,10 @@ final class DictationRun {
     /// A conversion failure repeats on every buffer; one line says it.
     private var loggedConversionFailure = false
     /// Press-to-first-buffer is the number hold-to-talk lives or dies on, and
-    /// the tap is the only place that knows it happened.
+    /// the tap is the only place that knows it happened. With the pre-roll in
+    /// front of the recogniser this is now the whole of the head loss: audio
+    /// older than the first buffer predates the microphone and no buffer can
+    /// hold it.
     private var firstBufferAt: CFAbsoluteTime = 0
     private var pressedAt: CFAbsoluteTime = 0
 
@@ -263,17 +335,12 @@ final class DictationRun {
         try await ensureMicrophonePermission()
         mark("permission", since: t0)
 
-        let locale = try await resolveLocale(requested)
-        mark("locale", since: t0)
-
-        let transcriber = makeTranscriber(locale: locale)
-        self.transcriber = transcriber
-
-        // The model lives in system storage, outside the app, and the system
-        // drops it again after long disuse — so this asks every run rather than
-        // assuming (docs/33). A first-ever hold pays a download here.
-        try await installModelIfNeeded(for: transcriber, locale: locale)
-        mark("model", since: t0)
+        // --- the microphone half ---------------------------------------------
+        //
+        // Nothing here asks the recogniser anything. The whole point is to get
+        // the tap running, because head loss inside this half is the only kind
+        // left: audio older than the first buffer predates the microphone and
+        // the pre-roll cannot hold what was never captured.
 
         try configureSession()
         observeSessionNotifications()
@@ -289,19 +356,91 @@ final class DictationRun {
                 "The microphone could not be prepared: \(DictationError.describe(error))")
         }
 
-        let analyzerFormat = try await resolveAnalyzerFormat(for: transcriber)
-        self.analyzerFormat = analyzerFormat
-        mark("analyzerFormat", since: t0)
-
         // Read after the session is active and voice processing is decided:
-        // both change what the input node reports.
+        // both change what the input node reports. This one read is the format
+        // the tap is installed with, the format the pre-roll holds, and later
+        // the converter's input side.
         let hardwareFormat = input.outputFormat(forBus: 0)
-        NSLog(
-            "RP-DICT formats analyzer=%@ microphone=%@",
-            Self.describe(analyzerFormat), Self.describe(hardwareFormat))
+        NSLog("RP-DICT microphone=%@", Self.describe(hardwareFormat))
         guard hardwareFormat.sampleRate > 0 else {
             throw DictationError(
                 "The microphone did not open. The audio session never became active.")
+        }
+        tapSampleRate = hardwareFormat.sampleRate
+        prerollCapFrames = AVAudioFrameCount(hardwareFormat.sampleRate * Self.prerollSeconds)
+
+        input.installTap(onBus: 0, bufferSize: 4096, format: hardwareFormat) {
+            [weak self] buffer, _ in
+            self?.consume(buffer)
+        }
+        tapInstalled = true
+
+        engine.prepare()
+        do {
+            try engine.start()
+        } catch {
+            // 561145187 is '!rec': iOS has refused to start recording since 12.4
+            // unless the app is in the foreground (docs/33).
+            let ns = error as NSError
+            let hint =
+                ns.code == 561145187
+                ? " Reading Partner has to be on screen to dictate." : ""
+            throw DictationError(
+                "The microphone would not start: \(DictationError.describe(error)).\(hint)")
+        }
+
+        // start() can return without an error and leave the engine stopped: a
+        // graph whose formats disagree with the hardware is reconfigured out
+        // from under it on the way up. That silence was once reported as a
+        // healthy 45-second run (docs/pitfall/132).
+        guard engine.isRunning else {
+            throw DictationError(
+                "The microphone stopped as it started. The output chain accepts "
+                    + "\(Self.describe(engine.outputNode.inputFormat(forBus: 0))) while its "
+                    + "hardware is \(Self.describe(engine.outputNode.outputFormat(forBus: 0))) and "
+                    + "the session runs at \(AVAudioSession.sharedInstance().sampleRate) Hz.")
+        }
+
+        // Armed here rather than at the end: from this line on there is an open
+        // microphone, and a recogniser that never comes up would otherwise leave
+        // it open with nobody to close it.
+        startBackstop()
+        mark("capturing", since: t0)
+
+        // --- the recogniser half ---------------------------------------------
+        //
+        // Everything below runs with the tap already filling the pre-roll, so
+        // its cost is paid in buffered audio rather than in lost syllables.
+
+        let locale = try await resolveLocale(requested)
+        mark("locale", since: t0)
+
+        let transcriber = makeTranscriber(locale: locale)
+        self.transcriber = transcriber
+
+        // The model lives in system storage, outside the app, and the system
+        // drops it again after long disuse — so this asks every run rather than
+        // assuming (docs/33). A first-ever hold pays a download here, which is
+        // the one wait the pre-roll cap does not try to cover.
+        try await installModelIfNeeded(for: transcriber, locale: locale)
+        mark("model", since: t0)
+
+        let analyzerFormat = try await resolveAnalyzerFormat(for: transcriber)
+        self.analyzerFormat = analyzerFormat
+        NSLog("RP-DICT analyzer=%@", Self.describe(analyzerFormat))
+        mark("analyzerFormat", since: t0)
+
+        // The graph can move while the recogniser comes up. If it did, the tap
+        // installed above is no longer being called — a tap whose format
+        // disagrees with the node it sits on does not fail, it is simply never
+        // called — and the pre-roll holds a format the microphone has stopped
+        // speaking. Refuse: a hold that captures nothing is worse than one that
+        // never starts.
+        let currentFormat = input.outputFormat(forBus: 0)
+        guard currentFormat.isEqual(hardwareFormat) else {
+            throw DictationError(
+                "The microphone changed format while it was being opened, from "
+                    + "\(Self.describe(hardwareFormat)) to \(Self.describe(currentFormat)).")
         }
         guard let converter = AVAudioConverter(from: hardwareFormat, to: analyzerFormat) else {
             throw DictationError(
@@ -342,50 +481,10 @@ final class DictationRun {
             throw DictationError("The recognizer would not start: \(DictationError.describe(error))")
         }
 
-        // Last read of the microphone format, and the one the tap is installed
-        // with. A tap whose format disagrees with the node it sits on does not
-        // fail: it is simply never called. If the graph moved between the two
-        // reads, refuse — a hold that captures nothing is worse than one that
-        // never starts.
-        let tapFormat = input.outputFormat(forBus: 0)
-        guard tapFormat.isEqual(hardwareFormat) else {
-            throw DictationError(
-                "The microphone changed format while it was being opened, from "
-                    + "\(Self.describe(hardwareFormat)) to \(Self.describe(tapFormat)).")
-        }
-        input.installTap(onBus: 0, bufferSize: 4096, format: tapFormat) {
-            [weak self] buffer, _ in
-            self?.consume(buffer)
-        }
-        tapInstalled = true
-
-        engine.prepare()
-        do {
-            try engine.start()
-        } catch {
-            // 561145187 is '!rec': iOS has refused to start recording since 12.4
-            // unless the app is in the foreground (docs/33).
-            let ns = error as NSError
-            let hint =
-                ns.code == 561145187
-                ? " Reading Partner has to be on screen to dictate." : ""
-            throw DictationError(
-                "The microphone would not start: \(DictationError.describe(error)).\(hint)")
-        }
-
-        // start() can return without an error and leave the engine stopped: a
-        // graph whose formats disagree with the hardware is reconfigured out
-        // from under it on the way up. That silence was once reported as a
-        // healthy 45-second run (docs/pitfall/132).
-        guard engine.isRunning else {
-            throw DictationError(
-                "The microphone stopped as it started. The output chain accepts "
-                    + "\(Self.describe(engine.outputNode.inputFormat(forBus: 0))) while its "
-                    + "hardware is \(Self.describe(engine.outputNode.outputFormat(forBus: 0))) and "
-                    + "the session runs at \(AVAudioSession.sharedInstance().sampleRate) Hz.")
-        }
-
-        startBackstop()
+        // Last, and only once the analyzer is consuming: everything the
+        // microphone heard since the press goes in, in order, and the tap goes
+        // live behind it.
+        handOverPreroll()
         mark("running", since: t0)
     }
 
@@ -442,6 +541,8 @@ final class DictationRun {
             engine.stop()
         }
 
+        dropPreroll()
+
         // Ending the input sequence is what lets the analyzer finish; finalize
         // then flushes whatever it was still holding as volatile.
         inputContinuation?.finish()
@@ -482,6 +583,18 @@ final class DictationRun {
             NSLog("RP-DICT deactivate failed: %@", DictationError.describe(error))
         }
         mark("stopped", since: t0)
+    }
+
+    /// Drops whatever the pre-roll is still holding: it is the user's voice and
+    /// after a teardown nothing is going to read it. Not left to the release —
+    /// a run torn down by the backstop stays in the plugin until the next
+    /// stop_dictation arrives, which may be a long time. Synchronous for the
+    /// same reason claimStop() is.
+    private func dropPreroll() {
+        prerollLock.lock()
+        preroll = []
+        prerollFrames = 0
+        prerollLock.unlock()
     }
 
     /// True for the first caller only. The app's stop, the interruption handler
@@ -780,6 +893,103 @@ final class DictationRun {
         }
         emitLevel(buffer)
 
+        prerollLock.lock()
+        if buffering {
+            enqueuePreroll(buffer)
+            prerollLock.unlock()
+            return
+        }
+        prerollLock.unlock()
+        feed(buffer)
+    }
+
+    /// Queues one tap buffer, oldest first out when the cap is reached. Called
+    /// with `prerollLock` held.
+    private func enqueuePreroll(_ buffer: AVAudioPCMBuffer) {
+        guard let copy = Self.copyBuffer(buffer) else {
+            if !loggedPrerollCopyFailure {
+                loggedPrerollCopyFailure = true
+                NSLog("RP-DICT the pre-roll could not copy a buffer")
+            }
+            return
+        }
+        preroll.append(copy)
+        prerollFrames += copy.frameLength
+        while prerollFrames > prerollCapFrames, !preroll.isEmpty {
+            let oldest = preroll.removeFirst()
+            prerollFrames -= oldest.frameLength
+            prerollDropped += oldest.frameLength
+        }
+    }
+
+    /// Hands the queue to the analyzer and puts the tap on the live path. Runs
+    /// on the start task, once the analyzer is consuming.
+    ///
+    /// The loop re-takes the lock every time instead of draining under one hold
+    /// of it, so the tap is never blocked for the length of the hand-over; the
+    /// buffers it delivers meanwhile join the back of the same queue and go in
+    /// behind the ones already there. It terminates because the tap adds one
+    /// buffer per ~100 ms and a conversion is microseconds.
+    private func handOverPreroll() {
+        let began = CFAbsoluteTimeGetCurrent()
+        var handed: AVAudioFrameCount = 0
+        var buffers = 0
+        while true {
+            prerollLock.lock()
+            guard !preroll.isEmpty else {
+                buffering = false
+                let dropped = prerollDropped
+                prerollLock.unlock()
+                let rate = tapSampleRate > 0 ? tapSampleRate : 1
+                NSLog(
+                    "RP-DICT preroll %d buffers %.0fms dropped=%.0fms in %.0fms",
+                    buffers, Double(handed) / rate * 1000, Double(dropped) / rate * 1000,
+                    (CFAbsoluteTimeGetCurrent() - began) * 1000)
+                return
+            }
+            let next = preroll.removeFirst()
+            prerollFrames -= next.frameLength
+            prerollLock.unlock()
+            handed += next.frameLength
+            buffers += 1
+            feed(next)
+        }
+    }
+
+    /// The tap hands out a buffer the audio unit reuses the moment the callback
+    /// returns, so anything kept has to be copied. Copied through the buffer
+    /// list rather than `floatChannelData`: that accessor is nil for any sample
+    /// type but float and reports a single channel for an interleaved format,
+    /// and the tap format here is whatever the engine reported, not one this
+    /// file chose.
+    private static func copyBuffer(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+        guard
+            buffer.frameLength > 0,
+            let copy = AVAudioPCMBuffer(pcmFormat: buffer.format, frameCapacity: buffer.frameLength)
+        else { return nil }
+        copy.frameLength = buffer.frameLength
+
+        let source = UnsafeMutableAudioBufferListPointer(buffer.mutableAudioBufferList)
+        let destination = UnsafeMutableAudioBufferListPointer(copy.mutableAudioBufferList)
+        guard source.count == destination.count else { return nil }
+        for index in 0..<source.count {
+            let from = source[index]
+            let to = destination[index]
+            guard
+                let bytes = from.mData,
+                let room = to.mData,
+                to.mDataByteSize >= from.mDataByteSize
+            else { return nil }
+            memcpy(room, bytes, Int(from.mDataByteSize))
+        }
+        return copy
+    }
+
+    /// One microphone buffer into the analyzer, in the format it named.
+    ///
+    /// Called from the tap on the audio thread and from the hand-over on the
+    /// start task, never from both at once — see `buffering`.
+    private func feed(_ buffer: AVAudioPCMBuffer) {
         guard
             let converter = converter,
             let format = analyzerFormat,
