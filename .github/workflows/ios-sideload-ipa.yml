@@ -46,7 +46,7 @@ jobs:
       VITE_GOOGLE_IOS_CLIENT_ID: 379091688229-esc23unqq02igufrjr9jjvtsug49j097.apps.googleusercontent.com
       BUNDLE_ID: com.xinyuan.readingpartner
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Pin Xcode so an image default bump can't change the toolchain under us.
       - name: Pin Xcode
@@ -262,7 +262,7 @@ jobs:
           echo "IPA_NAME=$OUT" >> "$GITHUB_ENV"
 
       - name: Upload the unsigned ipa
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ios-sideload-ipa
           path: ${{ env.IPA_NAME }}

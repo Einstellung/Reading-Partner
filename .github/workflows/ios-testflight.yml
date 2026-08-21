@@ -66,7 +66,7 @@ jobs:
       VITE_GOOGLE_CLIENT_SECRET: ${{ secrets.VITE_GOOGLE_CLIENT_SECRET }}
       VITE_GOOGLE_IOS_CLIENT_ID: 379091688229-esc23unqq02igufrjr9jjvtsug49j097.apps.googleusercontent.com
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Pin Xcode so image default bumps don't change the toolchain under us.
       # If the image drops this version, the step fails and lists what exists.
@@ -194,7 +194,7 @@ jobs:
       # Keep the ipa for post-mortems even when the upload step fails.
       - name: Archive the ipa
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ios-ipa
           path: src-tauri/gen/apple/build/**/*.ipa
