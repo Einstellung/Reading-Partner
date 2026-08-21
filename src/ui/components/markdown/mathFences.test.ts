@@ -45,7 +45,7 @@ function c(text: string): string {
 }
 
 // The two replies in the stored threads that this module exists for: the only
-// two of 516 messages it changes a byte of.
+// two of 521 messages it changes a byte of.
 const REAL =
 	'用书里 p.78 那个真实矩阵：\n\n$$S=\\begin{bmatrix}\n0.9995&0.9544\\\\\n0.9544&1.4950\n\\end{bmatrix}$$\n\n现在把 x₃ 和 x₄ 对调。';
 
@@ -534,10 +534,16 @@ test('a fixed point over random markdown too', () => {
 		'\t',
 		'x=1',
 	];
+	// mulberry32. The obvious `seed * 1103515245` overflows 2^53 and rounds, which
+	// collapsed 20 000 draws onto 1 812 distinct strings; this one keeps every bit
+	// in 32 and draws 17 557.
 	let seed = 12345;
 	const next = () => {
-		seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-		return seed / 0x7fffffff;
+		seed = (seed + 0x6d2b79f5) >>> 0;
+		let t = seed;
+		t = Math.imul(t ^ (t >>> 15), t | 1);
+		t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 	};
 	for (let n = 0; n < 20000; n += 1) {
 		let text = '';
