@@ -14,7 +14,7 @@
 
 重心在 reading。topic 是引力中心，info 是补给线，不是反过来。
 
-不引入第三套状态机。info 侧现有的 `opened` / `dismissed` / `appealed`（`src/observation/feedback.ts` 的 `FeedbackAction`）只喂 info 自己的筛选，一条都不进 reading，这条边界写死在代码里。收藏只有一个动作：收下。其余状态都是推导的。
+不引入第三套状态机。info 侧现有的 `opened` / `dismissed` / `appealed`（`src/observation/profile/feedback.ts` 的 `FeedbackAction`）只喂 info 自己的筛选，一条都不进 reading，这条边界写死在代码里。收藏只有一个动作：收下。其余状态都是推导的。
 
 ## 入口
 
@@ -74,11 +74,11 @@ AI 这次用了哪几条外部材料，用户要看得见。可见性是闸的�
 
 - 收下的存储。一份新的 records 文件（进同步范围 + 两处合并登记），加一条内容寻址的正文快照通道。现在的 blob 通道只认书：接口方法叫 `hasBook` / `uploadBook` / `downloadBook`，Drive 侧写死 `books/` 文件夹和 `.pdf` 后缀（`src/platform/sync/driveBackend.ts`），驱动它的是 `library.json` 的 hash 列表。要么泛化成按 kind 分文件夹的 blob 通道，要么另开一条。
 
-- Topic 装得下文章。`Topic = { id, name, createdAt, files: FileRef[] }`，`FileRef` 的身份是本地 PDF 路径，`hash` 是打开时回填的书 id，下游全按 hash 读 `reading-state` / `fulltext` / `annotations`；UI 只有一个 "Add PDF" 按钮，`addFileToTopic` 只有文件选择器一个调用者。文章没有 path、没有页码、没有批注，塞进 `files` 会污染整条链路——要给 topic 加一类成员，不是往 `FileRef` 上挂可选字段。默认 topic 已经有了：固定 id 的 Brief topic，首次收下时创建，按 id 幂等（`ensureBriefTopic`，`src/platform/app/topics.ts`）；清空还要新加。prep 抓来的论文是同一个坑的既有案例，它至今没进 topic，住在 `prep-<bookHash>/` 里。
+- Topic 装得下文章。已做：没有往 `FileRef` 上挂可选字段，也没有塞进 `Topic.files`——`SavedArticle` 自带 `topicId`（`src/reading/saved-articles.ts`），`savedArticlesForTopic` 按 topic 过滤，topic 屏另列一段展示（`LibraryScreen.tsx`、手机端 `PhoneApp.tsx` 经 `SavedArticleView`）。默认 topic 也已经有了：固定 id 的 Brief topic，首次收下时创建，按 id 幂等（`ensureBriefTopic`，`src/platform/app/topics.ts`）；清空还要新加。prep 抓来的论文是同一个坑的既有案例，它至今没进 topic，住在 `prep-<bookHash>/` 里。
 
-- 保存那一刻的编排。工具形状现成（`AgentTool`：name / description / TypeBox schema / execute），`src/ai/` 只有机器、零领域工具，收藏工具属于领域。卡片这边三处要动：联合类型 `CardPayload = InfoCard` 指向 `src/info/briefing/cards.ts`，收藏卡是 reading 的概念，联合要拆成两半；`isPersistableCardKind` 的白名单要加一项；reading 侧的聊天还在老字段上（`messageToParts` 兼容），卡片协议对它可用但一张 reading 侧的卡都还没有。工具名要避开 `add_source`——info 的"订阅源"和 prep 的"摄入 URL"已经各占一次。
+- 保存那一刻的编排。工具形状现成（`AgentTool`：name / description / TypeBox schema / execute），`src/ai/` 只有机器、零领域工具，收藏工具属于领域。卡片这边已经动过：联合类型已拆成 `CardPayload = InfoCard | ReadingCard | AsideCard`（`src/ui/components/chat/chatParts.ts`），白名单里也已经有 reading 侧的项（`rehearsal-decision`、`aside`），reading 侧的聊天现在会落卡片（`src/reading/session/use-call.ts` 写 `PersistedCardPayload`）。只剩收藏卡这一种还没做。工具名要避开 `add_source`——info 的"订阅源"和 prep 的"摄入 URL"已经各占一次。
 
-  分层上这件事落在 reading：材料进的是 reading 的上下文，编排代码放 `src/reading/` 下。今天 `info` 和 `reading` 之间一条 import 都没有；星标在 info 的卡片上、写路径在 reading，由 `App.tsx` 接线就不必新增领域边，聊天里的保存工具由 `ui/components/info` 装配（ui 可以 import 任何领域）。另外 `info` 在 `tests/layering.test.ts` 的 LAYER 表里是单个节点，它的四个子目录之间已经有环，短期内别想把 info 升成分组目录。
+  分层上这件事落在 reading：材料进的是 reading 的上下文，编排代码放 `src/reading/` 下。现在已有两条 reading → info 的边（`src/reading/saved-articles.ts`、`src/reading/sources/article.ts`，都只 import `info/extract/sanitize` 这个纯函数模块）；星标在 info 的卡片上、写路径在 reading，由 `App.tsx` 接线，聊天里的保存工具由 `ui/components/info` 装配（ui 可以 import 任何领域）。`info` 的四个子目录（`briefing`、`briefing/speech`、`companion`、`extract`、`sources`）在 `tests/layering.test.ts` 的 LAYER 表里已按真实粒度登记，全图无环，不必再顾虑升级到分组目录。
 
 - reading 的根聊天。现在没有。所有阅读对话都在 `threads-<bookId>.json` 里，只能从打开的书里进（划线气泡、标记列表、顶栏 AI 按钮的书级 thread）；`LibraryScreen` 一个聊天入口都没有。要新加一个不属于任何书的 thread key 和一个进得去的屏，新收下的材料在那儿浮现。
 
@@ -86,7 +86,7 @@ AI 这次用了哪几条外部材料，用户要看得见。可见性是闸的�
 
 - 共用的记忆作用域。AI observations 只有按 topic 一种形态：`ObservationFileStore` 的构造参数就是 topicId，目录是 `memory-<topicId>/`（历史名）。info 侧一条观察也不写，只读画像和反馈日志。跨场景共用的今天只有 `user-profile.md` 一份文件。两个根共用记忆要一个不属于任何 topic 的记忆作用域，且从第一天就是它——先按 topic 建再合并就是那次要避免的迁移。
 
-- 引用时的三件事。时效（`publishedAt` 已存，要进引用路径）、证据不全（`summaryOnly` 已存，要跟着材料进 reading 的 prompt）、用了哪几条材料的可见性。第三条现在没有落点：工具痕迹是瞬时的，成功即从行里消失，从不落盘（`src/ai/tool-status.ts`）。可见性既然是闸的一部分，就不能靠一个成功就消失的东西。
+- 引用时的三件事。时效、证据不全两条已落地，见 `src/reading/saved-article-tools.ts`：`publishedAt` 进了引用路径（`publishedDay`），`summaryOnly` 跟着材料进了 reading 的 prompt，工具由 `src/reading/turn.ts` 装配（`buildSavedArticleTools`、`SAVED_ARTICLES_PROMPT`）。只剩第三条：用了哪几条材料的可见性。现在没有落点：工具痕迹是瞬时的，成功即从行里消失，从不落盘（`src/ai/tool-status.ts`）。可见性既然是闸的一部分，就不能靠一个成功就消失的东西。
 
 反向的边已经有一条：`assembleReadingContext()` 把各 topic 的 observation 索引拼成一段 READER'S CURRENT CONTEXT 喂给 triage（`src/observation/assemble.ts` → `src/info/briefing/live.ts`）。reading→info 通了，info→reading 一条都没有。
 
