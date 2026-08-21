@@ -123,7 +123,7 @@ export function IconClose({ size = 16 }: IconProps) {
 	);
 }
 
-// Sparkle for the AI pen and the AI-thread marker.
+// Sparkle for the AI-thread marker.
 export function IconSparkle({ size = 20 }: IconProps) {
 	return (
 		<svg {...svgProps(size)}>
@@ -132,6 +132,28 @@ export function IconSparkle({ size = 20 }: IconProps) {
 				fill="currentColor"
 			/>
 			<path d="M15.75 2.5L16.3 4.2L18 4.75L16.3 5.3L15.75 7L15.2 5.3L13.5 4.75L15.2 4.2L15.75 2.5Z" fill="currentColor" />
+		</svg>
+	);
+}
+
+// Speech bubble with a tail pointing down at the marked line, over a heavier
+// underline: the AI pen, which asks about the one passage it just marked.
+export function IconAskHere({ size = 20 }: IconProps) {
+	return (
+		<svg
+			width={size}
+			height={size}
+			viewBox="0 0 20 20"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			xmlns="http://www.w3.org/2000/svg"
+		>
+			<rect x="3.4" y="2.8" width="13.2" height="8.8" rx="2.6" />
+			<path d="M7.6 11.6L8.3 14.7L11 11.6" />
+			<path d="M4.6 17.6H15.4" strokeWidth="1.9" />
 		</svg>
 	);
 }
@@ -484,20 +506,20 @@ export function IconBooks({ size = 20 }: IconProps) {
 	);
 }
 
-// The reader's book-level AI entry (docs/09): one spread, the book's own text on
-// one page and the conversation about it on the other. That pairing is what the
-// button opens, and it is the one thing in the tray that is not a tool.
+// The reader's book-level AI entry (docs/09): a start point on the left page, a
+// line that crosses the spine, and a filled arrowhead landing on the right page
+// — the lesson path the AI carries you through, start to finish, in the order
+// it picked. That is what the button opens, and it is the one thing in the tray
+// that is not a tool.
 //
 // It is also the only icon here that is not currentColor, and deliberately so —
 // three glyphs were drawn in the house system first and all three failed for the
 // same reason. A board on an easel read as a television; a mortarboard read as
 // graduation; the app's own two mascots over a book turned to mush at 18px,
 // because a scene cannot survive at the size a stroke glyph has to work at.
-// Colour does the work strokes could not: the pale spread reads as paper and the
-// dark bubble reads as speech with no interior detail to lose. The bubble is
-// left empty on purpose: two light dots inside it turned the whole thing into a
-// small face, which is the mascot problem again in one more disguise. The
-// palette is the app's own (src-tauri/icons).
+// Colour does the work strokes could not: the pale page reads as paper and the
+// deep-green line reads as a single path, legible with no interior detail to
+// lose. The palette is the app's own (src-tauri/icons).
 //
 // Sized against its neighbours rather than against its own viewBox: the drawn
 // mark fills 73% of the box's height, which is what IconSparkle and
@@ -509,15 +531,14 @@ const MARK = {
 	pale: '#E7F0D8',
 } as const;
 
-export function IconReadTogether({ size = 20 }: IconProps) {
+export function IconLessonPath({ size = 20 }: IconProps) {
 	return (
 		<svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 			<rect x="3" y="3.2" width="18" height="17.6" rx="3.2" fill={MARK.pale} stroke={MARK.mid} strokeWidth="1.6" />
 			<path d="M12 3.9V20.1" stroke={MARK.mid} strokeWidth="1.3" strokeLinecap="round" />
-			<path d="M6.4 9.2H10.4" stroke={MARK.mid} strokeWidth="2" strokeLinecap="round" />
-			<path d="M6.4 13.4H9.2" stroke={MARK.mid} strokeWidth="2" strokeLinecap="round" />
-			<path d="M15.2 14.2L15.5 18L18.5 14.2Z" fill={MARK.deep} />
-			<rect x="13.6" y="7.4" width="6.9" height="7" rx="2.6" fill={MARK.deep} />
+			<path d="M7.2 8C7.2 12.2 16.6 11.4 16.6 15.4" stroke={MARK.deep} strokeWidth="1.7" strokeLinecap="round" />
+			<circle cx="7.2" cy="8" r="1.7" fill={MARK.deep} />
+			<path d="M14.75 15.5L16.6 19L18.45 15.5Z" fill={MARK.deep} />
 		</svg>
 	);
 }

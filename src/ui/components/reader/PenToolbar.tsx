@@ -3,7 +3,7 @@
 // changes. Styled with Tailwind utilities.
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { IconColorSwatch, IconHighlight, IconPointer, IconSparkle, IconUnderline } from '../base/icons';
+import { IconAskHere, IconColorSwatch, IconHighlight, IconPointer, IconUnderline } from '../base/icons';
 import { placePanel } from '../common/panel-position';
 import { useViewportSize } from '../common/useViewportSize';
 import { Button } from '../ui/button';
@@ -30,7 +30,7 @@ const TOOLS: { type: ToolType; label: string; Icon: (p: { size?: number }) => JS
 	{ type: 'navlock', label: 'Navigate only', Icon: IconPointer },
 	{ type: 'highlight', label: 'Highlight', Icon: IconHighlight },
 	{ type: 'underline', label: 'Underline', Icon: IconUnderline },
-	{ type: 'ai', label: 'AI pen', Icon: IconSparkle },
+	{ type: 'ai', label: 'AI pen', Icon: IconAskHere },
 ];
 
 // The two tools that paint in a color.

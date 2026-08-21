@@ -10,7 +10,7 @@ import { ANNOTATION_COLORS } from "../../../platform/app/annotations";
 import { setTouchDebugEnabled } from "../../../reading/engine/gesture/touch-debug";
 import type { ToolType } from "./types";
 import {
-  IconReadTogether,
+  IconLessonPath,
   IconFitWidth,
   IconGear,
   IconPagedLayout,
@@ -178,7 +178,7 @@ export default function ReaderTopBar(props: {
           aria-label={gate.bookThread === null ? BOOK_THREAD : `${BOOK_THREAD}: ${gate.bookThread}`}
           onClick={props.onOpenBookThread}
         >
-          <IconReadTogether size={18} />
+          <IconLessonPath size={18} />
         </Button>
         <MoreMenu items={moreItems} alert={props.settingsAlert} />
       </div>
