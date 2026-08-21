@@ -3,9 +3,9 @@
 // and reading have no import between them, and ui is the layer allowed to touch
 // both.
 //
-// What is written here is read back by more than the saved list now: in classroom
-// mode the reader can have an article put on the open book's prep list, where its
-// `text` becomes the material and its `summaryOnly` becomes the caveat that rides
+// What is written here is read back by more than the saved list now: from the open
+// book's chat the reader can have an article put on the open book's prep list, where
+// its `text` becomes the material and its `summaryOnly` becomes the caveat that rides
 // with every quote (reading/saved-article-tools.ts). Nothing here proposes a
 // topic — that is still a later slice.
 //

@@ -1,7 +1,7 @@
-// Saved articles (docs/21): an info article the reader kept, filed under a topic.
-// The store — reading it, writing it, keeping it mergeable. What reaches the AI is
-// one step further out: in classroom mode the model can list these records and put
-// one of them on the open book's prep list (saved-article-tools.ts). No
+// Saved articles (docs/21): an info article the reader kept, filed under a topic. The
+// store — reading it, writing it, keeping it mergeable. What reaches the AI is one
+// step further out: from the open book's chat the model can list these records and
+// put one of them on the open book's prep list (saved-article-tools.ts). No
 // TopicMaterial is involved either way; a kept article is not a book.
 //
 // Read through readGuardedJson, for the reason the shelf and settings are: the

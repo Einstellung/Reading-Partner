@@ -3,7 +3,7 @@
 // after the fetch), and sniffs a fetched response's content type. Nothing here
 // knows the prep model: turning a read link into the record a pipeline stores is
 // that pipeline's job (prep/papers/plan.ts's resolveUrlAddition). No IO either —
-// prep/live.ts wires these to the http plugin; tests drive them directly.
+// prep/papers/live.ts wires these to the http plugin; tests drive them directly.
 
 export function looksLikeHttpUrl(s: string): boolean {
   return /^https?:\/\//i.test(s.trim());

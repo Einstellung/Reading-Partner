@@ -1,6 +1,7 @@
-// Unit tests for the chapter-spine prompt builders (src/reading/notes/chapter.ts):
-// the chat thread block (in-range filtering, roles, clipping, caps, empty case)
-// and the system prompt it goes into. Run: bun test.
+// Unit tests for the chapter-spine prompt builders
+// (src/reading/prep/chapters/chapter.ts): the chat thread block (in-range
+// filtering, roles, clipping, caps, empty case) and the system prompt it goes
+// into. Run: bun test.
 
 import { expect, test } from "bun:test";
 import {

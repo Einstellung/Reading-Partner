@@ -1,7 +1,7 @@
 // Unit tests for the chapter-spine pipeline state machine
-// (src/reading/notes/pipeline.ts), driven entirely by fake deps — no Tauri, no
-// network, no AI spend. Covers the two passes, the parallel first pass and its
-// pacing, the serialized state file, and stop. Run: bun test.
+// (src/reading/prep/chapters/pipeline.ts), driven entirely by fake deps — no
+// Tauri, no network, no AI spend. Covers the two passes, the parallel first
+// pass and its pacing, the serialized state file, and stop. Run: bun test.
 
 import { expect, test } from "bun:test";
 import {

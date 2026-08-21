@@ -380,7 +380,7 @@ test("thinking deltas keep the watchdog alive: a long think before any text does
   };
   const { deps } = makeFakes(
     {
-      // Mirrors prep/live.ts callModel: both text and thinking bump onProgress,
+      // Mirrors prep/papers/live.ts callModel: both text and thinking bump onProgress,
       // so a thinking-only stretch counts as liveness for the stall watchdog.
       plan: (opts) =>
         new Promise<PlanOutcome>((resolve, reject) => {
@@ -684,7 +684,7 @@ test("a requeued captured source is still served from the text at hand", async (
   expect(fetches).toBe(0);
 });
 
-// What the live deps do for a captured paper on a resumed run (prep/live.ts).
+// What the live deps do for a captured paper on a resumed run (prep/papers/live.ts).
 // The rule is the whole point of the branch: a cached text is used, and a missing
 // one is an error rather than a quiet fall through to fetching the page.
 test("capturedFetch serves the cached text and refuses to go on without it", () => {

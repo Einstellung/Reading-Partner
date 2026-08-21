@@ -674,10 +674,10 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     }
   }
 
-  // Academic literature (docs/24, docs/25), mounted on every reading turn. Not
-  // gated on the prep pipeline or on classroom mode: "what is the latest research
-  // on this" is a question the reader can have on any page of any book, and a tool
-  // that is only sometimes there is one the model cannot learn to reach for.
+  // Academic literature (docs/24, docs/25), mounted on every reading turn. Not gated on
+  // the prep pipeline or on the turn being in the book's own thread: "what is the
+  // latest research on this" is a question the reader can have on any page of any book,
+  // and a tool that is only sometimes there is one the model cannot learn to reach for.
   const literatureDeps = {
     fetchFn: readingFetch,
     s2ApiKey: s.semanticScholarApiKey ?? undefined,

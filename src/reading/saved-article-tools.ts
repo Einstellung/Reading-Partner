@@ -1,5 +1,5 @@
-// The saved-article chat tools (docs/21, the AI path the store was landed for):
-// the reader keeps articles on the info side, and in classroom mode the model can
+// The saved-article chat tools (docs/21, the AI path the store was landed for): the
+// reader keeps articles on the info side, and from the open book's chat the model can
 // list what is there and put the one they name into the current book's prep list,
 // then read it with the existing read_paper.
 //
