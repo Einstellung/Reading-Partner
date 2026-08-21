@@ -409,6 +409,35 @@ test('five spaces after a list marker are an indented code block', () => {
 	expect(canonicalizeMathFences(c('-    $$x=\n     1$$'))).toBe('-    $$\n     x=\n     1\n     $$');
 });
 
+test('indentation is columns, not characters', () => {
+	// A tab advances to the next multiple of four. After `1.` and two spaces the
+	// cursor is on column four, so the tab there lands on column eight: six columns
+	// past the marker, which is an indented code block inside the item and not a
+	// line start. Counting characters reads it as one and writes `&#36;&#36;` where
+	// the reader sees it.
+	const code = c('1.  \t$$x=1');
+	expect(tree(code)).toEqual(['code: $$x=1']);
+	expect(canonicalizeMathFences(code)).toBe(code);
+	// Four columns or fewer and the marker does open an item, however the gap is
+	// written. Each of these is a broken opener with no closer, so it is escaped.
+	for (const text of ['-\t$$x=1', '- \t$$x=1', '-  \t$$x=1', '1.\t$$x=1', '1. \t$$x=1', '>\t$$x=1']) {
+		expect(tree(c(text))).toEqual(['math(x=1):']);
+		const fixed = canonicalizeMathFences(text);
+		expect(fixed).toBe(text.replace('$$', () => '&#36;&#36;'));
+		expect(tree(fixed)).toEqual(['p', 'text:$$x=1']);
+	}
+});
+
+test('a raw HTML block opens behind a tab', () => {
+	// The tab is three columns here, under the four that would make it code, so
+	// the `<div>` starts its line and everything to the blank line is raw HTML.
+	// react-markdown installs no rehype-raw, so an escape written in here reaches
+	// the reader as `&#36;`.
+	const text = c('   > \t<div>\n   >  $$x=1');
+	expect(tree(text)).toEqual(['html:\t<div>\n $$x=1']);
+	expect(canonicalizeMathFences(text)).toBe(text);
+});
+
 test('a raw HTML block is left as it is', () => {
 	// Its content reaches the reader as written, so both the cut and the escape
 	// would show. `<pre>` runs to its closing tag, everything else to a blank line.
