@@ -31,6 +31,12 @@
 //      tried. It writes the same `dictationLocale` setting the settings card
 //      writes and the composer reads.
 //
+// Every row also goes into a file as it is made, one appended line each
+// (bench-journal.ts). The list on screen is state, and state is gone with the
+// process; a bench is held for as long as someone keeps trying things, which is
+// long enough for a reload, a backgrounding or the fault under investigation to
+// take the page down with the record of it.
+//
 // The gesture's outcome is read from outside the composer rather than by
 // threading a callback through it, because the callback would be production
 // surface that only this file wants. Three signals, none of them guesswork: a
@@ -64,21 +70,19 @@ import {
   saveSettings,
   type DictationLocale,
 } from "../platform/app/settings";
+import { benchJournal, type BenchOutcome } from "./bench-journal";
 import { NO_HEARD, RESOLVE_MS, classifyHold, type Heard } from "./hold-outcome";
 import { holdTheScreen } from "./wake-lock";
 
-// The five a hold can end in, plus the one that is not a hold at all.
-type Outcome = "sent" | "edit" | "cancel" | "short" | "silent" | "typed";
-
 interface Entry {
   id: number;
-  outcome: Outcome;
+  outcome: BenchOutcome;
   text: string;
   heard: Heard | null;
   locale: DictationLocale;
 }
 
-const OUTCOME: Record<Outcome, { label: string; note: string; tint: string; rule: string }> = {
+const OUTCOME: Record<BenchOutcome, { label: string; note: string; tint: string; rule: string }> = {
   sent: {
     label: "Sent",
     note: "released on the bar",
@@ -191,11 +195,25 @@ function Bench() {
   // that closes it if nothing else does.
   const gesture = useRef<{ at: number; releasedAt: number; timer: number } | null>(null);
 
-  const append = useCallback((outcome: Outcome, text: string, heard: Heard | null) => {
-    setEntries((list) => [
-      ...list,
-      { id: nextId.current++, outcome, text, heard, locale: localeRef.current },
-    ]);
+  // Every row goes two places: the list on screen, and the file. The id is
+  // taken here rather than inside the updater so the row and its line carry the
+  // same number.
+  const append = useCallback((outcome: BenchOutcome, text: string, heard: Heard | null) => {
+    const entry: Entry = {
+      id: nextId.current++,
+      outcome,
+      text,
+      heard,
+      locale: localeRef.current,
+    };
+    setEntries((list) => [...list, entry]);
+    benchJournal.hold({
+      index: entry.id,
+      outcome: entry.outcome,
+      text: entry.text,
+      heard: entry.heard,
+      locale: entry.locale,
+    });
   }, []);
 
   // Close the hold being watched, reading its outcome off the three signals in
@@ -284,6 +302,12 @@ function Bench() {
     },
     [locale, switching],
   );
+
+  // Open the file before anything can be written to it, so the rows below it
+  // are known to belong to this launch and not to the one before.
+  useEffect(() => {
+    benchJournal.session();
+  }, []);
 
   useEffect(() => {
     loadSettings()
