@@ -45,7 +45,7 @@ function c(text: string): string {
 }
 
 // The two replies in the stored threads that this module exists for: the only
-// two of 516 messages it changes a byte of.
+// two of 521 messages it changes a byte of.
 const REAL =
 	'用书里 p.78 那个真实矩阵：\n\n$$S=\\begin{bmatrix}\n0.9995&0.9544\\\\\n0.9544&1.4950\n\\end{bmatrix}$$\n\n现在把 x₃ 和 x₄ 对调。';
 
@@ -409,6 +409,60 @@ test('five spaces after a list marker are an indented code block', () => {
 	expect(canonicalizeMathFences(c('-    $$x=\n     1$$'))).toBe('-    $$\n     x=\n     1\n     $$');
 });
 
+test('indentation is columns, not characters', () => {
+	// A tab advances to the next multiple of four. After `1.` and two spaces the
+	// cursor is on column four, so the tab there lands on column eight: six columns
+	// past the marker, which is an indented code block inside the item and not a
+	// line start. Counting characters reads it as one and writes `&#36;&#36;` where
+	// the reader sees it.
+	const code = c('1.  \t$$x=1');
+	expect(tree(code)).toEqual(['code: $$x=1']);
+	expect(canonicalizeMathFences(code)).toBe(code);
+	// Four columns or fewer and the marker does open an item, however the gap is
+	// written. Each of these is a broken opener with no closer, so it is escaped.
+	for (const text of ['-\t$$x=1', '- \t$$x=1', '-  \t$$x=1', '1.\t$$x=1', '1. \t$$x=1', '>\t$$x=1']) {
+		expect(tree(c(text))).toEqual(['math(x=1):']);
+		const fixed = canonicalizeMathFences(text);
+		expect(fixed).toBe(text.replace('$$', () => '&#36;&#36;'));
+		expect(tree(fixed)).toEqual(['p', 'text:$$x=1']);
+	}
+});
+
+test('a raw HTML block opens behind a tab', () => {
+	// The tab is three columns here, under the four that would make it code, so
+	// the `<div>` starts its line and everything to the blank line is raw HTML.
+	// react-markdown installs no rehype-raw, so an escape written in here reaches
+	// the reader as `&#36;`.
+	const text = c('   > \t<div>\n   >  $$x=1');
+	expect(tree(text)).toEqual(['html:\t<div>\n $$x=1']);
+	expect(canonicalizeMathFences(text)).toBe(text);
+});
+
+test('a comment, a declaration, an instruction and CDATA end at their own terminator', () => {
+	// Only `<script>`, `<pre>`, `<style>`, `<textarea>` and the tag-shaped blocks
+	// run to a blank line. Reading these four the same way keeps the block open
+	// past its end and declines a repair that was there to make.
+	for (const head of ['<!-- c -->', '<!DOCTYPE html>', '<![CDATA[a]]>', '<?php echo 1; ?>']) {
+		const text = c(`${head}\n$$x=\nb$$`);
+		expect(tree(text)).toEqual([`html:${head}`, 'math(x=):b$$']);
+		expect(canonicalizeMathFences(text)).toBe(`${head}\n$$\nx=\nb\n$$`);
+		expect(tree(canonicalizeMathFences(text))).toEqual([`html:${head}`, 'math():x=\nb']);
+	}
+	// A comment that has not closed yet still swallows the lines under it.
+	const open = c('<!-- c\n$$x=\nb$$');
+	expect(tree(open)).toEqual([`html:${open}`]);
+	expect(canonicalizeMathFences(open)).toBe(open);
+});
+
+test('a backtick fence may not carry a backtick in its info string', () => {
+	// So the first line is a paragraph, the `~~~` opens the only code block here,
+	// and the run inside it is code. Reading the first line as a fence opens one
+	// that the ``` below closes, and the run then looks like a line start.
+	const text = c('```a`b\n\n~~~\n```\n$$x=1\n~~~');
+	expect(tree(text)).toEqual(['p', 'text:```a`b', 'code:```\n$$x=1']);
+	expect(canonicalizeMathFences(text)).toBe(text);
+});
+
 test('a raw HTML block is left as it is', () => {
 	// Its content reaches the reader as written, so both the cut and the escape
 	// would show. `<pre>` runs to its closing tag, everything else to a blank line.
@@ -480,10 +534,16 @@ test('a fixed point over random markdown too', () => {
 		'\t',
 		'x=1',
 	];
+	// mulberry32. The obvious `seed * 1103515245` overflows 2^53 and rounds, which
+	// collapsed 20 000 draws onto 1 812 distinct strings; this one keeps every bit
+	// in 32 and draws 17 557.
 	let seed = 12345;
 	const next = () => {
-		seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-		return seed / 0x7fffffff;
+		seed = (seed + 0x6d2b79f5) >>> 0;
+		let t = seed;
+		t = Math.imul(t ^ (t >>> 15), t | 1);
+		t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 	};
 	for (let n = 0; n < 20000; n += 1) {
 		let text = '';

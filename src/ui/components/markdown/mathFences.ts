@@ -33,29 +33,65 @@
 // left open paints the rest of the reply red until the model finishes typing.
 
 // The container matter a line may carry and still count as starting with what
-// comes after it: blockquote markers, one list marker, and up to three spaces at
-// each step, which is remark's own threshold for letting a flow construct open.
-// A fourth space opens an indented code block, so a run behind that much
-// whitespace never starts a line as far as this pass is concerned. The same
-// threshold applies after a list marker, one space later: five spaces there put
-// the content in an indented code block inside the item, and the lookahead makes
-// the marker fail to match rather than swallow four of them and call the rest a
-// line start.
-const PREFIX = /^((?: {0,3}>[ \t]?)*)(?:( {0,3})((?:[-*+]|\d{1,9}[.)])[ \t]{1,4}(?![ \t])))?( {0,3})/;
-// The same prefix without the list marker, for a marker that turns out to be
-// prose.
-const QUOTES = /^((?: {0,3}>[ \t]?)*)( {0,3})/;
+// comes after it: blockquote markers, one list marker, and up to three columns
+// of whitespace at each step, which is remark's own threshold for letting a flow
+// construct open. A fourth column opens an indented code block, so a run behind
+// that much whitespace never starts a line as far as this pass is concerned. The
+// same threshold applies after a list marker, one column later: five columns
+// there put the content in an indented code block inside the item, and the
+// marker then fails to open one rather than swallowing four of them and calling
+// the rest a line start.
+const MARKER = /^(?:[-*+]|\d{1,9}[.)])/;
 // An ordered marker that cannot interrupt a paragraph: CommonMark lets only `1.`
 // and `1)` do that.
 const LATER_ITEM = /^(?!1[.)])\d/;
-const FENCE = /^(`{3,}|~{3,})/;
+// A code fence and the info string it may carry. A backtick fence's info string
+// may hold no backtick, so ``` ```a`b``` ``` is a code span in a paragraph and
+// not a fence; reading it as one opens a block that closes on some later line
+// and takes the lines between out of the pass's hands.
+const FENCE = /^(`{3,}|~{3,})(.*)$/;
 // A raw HTML block reaches the reader as written, so a cut or an escape inside
-// one is visible. `<script>`, `<pre>`, `<style>` and `<textarea>` run to their
-// closing tag; every other kind ends at a blank line.
+// one is visible. Each kind runs to its own end: `<script>`, `<pre>`, `<style>`
+// and `<textarea>` to their closing tag, a comment to `-->`, a processing
+// instruction to `?>`, a declaration to `>`, CDATA to `]]>`, and the tag-shaped
+// kinds to a blank line.
 const HTML = /^</;
 const HTML_RAW = /^<(script|pre|style|textarea)\b/i;
+const HTML_DECLARATION = /^<![A-Za-z]/;
 const RUN = /^\$\$+/;
 const LEADING_SPACE = /^[ \t]*/;
+
+// Every indentation threshold above is columns, not characters: a tab advances
+// to the next multiple of four. Counting characters reads `1.  \t$$x=1` as a
+// list item when it is an indented code block, and writes the escape where the
+// reader sees `&#36;&#36;`.
+const TAB_STOP = 4;
+
+// The whitespace run at `i`, as the index past it and the columns it spans.
+// `carry` is columns of an already-consumed tab that the marker eating it had no
+// use for: they belong to whatever indentation comes next.
+function whitespace(text: string, i: number, col: number, carry: number): { i: number; col: number; width: number } {
+	let width = carry;
+	while (text[i] === ' ' || text[i] === '\t') {
+		const next = text[i] === '\t' ? col + TAB_STOP - (col % TAB_STOP) : col + 1;
+		width += next - col;
+		col = next;
+		i += 1;
+	}
+	return { i, col, width };
+}
+
+// Where a raw HTML block opened by this line ends: the string that closes it, or
+// '' for the kinds that run to the next blank line.
+function htmlEnd(content: string): string {
+	const raw = HTML_RAW.exec(content);
+	if (raw) return `</${raw[1].toLowerCase()}`;
+	if (content.startsWith('<!--')) return '-->';
+	if (content.startsWith('<?')) return '?>';
+	if (content.startsWith('<![CDATA[')) return ']]>';
+	if (HTML_DECLARATION.test(content)) return '>';
+	return '';
+}
 
 interface Line {
 	// The line without its terminator, the terminator it had, and the terminator
@@ -72,16 +108,17 @@ interface Line {
 	prefix: string;
 	cont: string;
 	depth: number;
-	// Leading whitespace, uncapped — for a line carrying a marker, the whitespace
-	// before the marker.
+	// Leading whitespace in columns, uncapped, counted from the end of the quote
+	// markers — for a line carrying a marker, the whitespace before the marker.
 	indent: number;
 	// The column a later line has to reach to still be inside the list item this
-	// one opens. Plain indentation is not a container, so a line without a marker
-	// sets no column and anything after it is still in the same container.
+	// one opens, on the same scale as `indent`. Plain indentation is not a
+	// container, so a line without a marker sets no column and anything after it is
+	// still in the same container.
 	column: number;
-	// The column a paragraph opened on this line would live at: the item's column
-	// where the line carries a marker, the container's own otherwise. Indentation
-	// alone opens no container, so an indented line raises no barrier.
+	// The absolute column a paragraph opened on this line would live at: the item's
+	// column where the line carries a marker, the container's own otherwise.
+	// Indentation alone opens no container, so an indented line raises no barrier.
 	body: number;
 	content: string;
 }
@@ -96,31 +133,73 @@ function opensItem(marker: string, start: number, para: number | null): boolean 
 }
 
 // A line's container matter, read against whatever paragraph is open above it.
-// A marker that paragraph swallows is re-read as prose, which is what QUOTES is
-// for: the line then carries no container and starts nothing.
+// A marker that paragraph swallows is re-read as prose: the line then carries no
+// container and starts nothing.
 function parseLine(text: string, eol: string, nl: string, para: number | null): Line {
-	const m = PREFIX.exec(text) as RegExpExecArray;
-	const quotes = m[1];
-	const item = m[3] !== undefined && opensItem(m[3], quotes.length + (m[2] as string).length, para);
-	const plain = item ? null : (QUOTES.exec(text) as RegExpExecArray);
-	const marker = item ? (m[3] as string) : '';
-	const before = item ? (m[2] as string) : '';
-	const after = plain === null ? m[4] : plain[2];
-	const prefix = plain === null ? m[0] : plain[0];
-	const indent = item
-		? before.length
-		: (LEADING_SPACE.exec(text.slice(quotes.length)) as RegExpExecArray)[0].length;
+	// Blockquote markers first. The one optional space after `>` may be a tab, of
+	// which the marker takes a single column and the rest carries over.
+	let i = 0;
+	let col = 0;
+	let carry = 0;
+	let depth = 0;
+	for (;;) {
+		const ws = whitespace(text, i, col, carry);
+		if (ws.width > 3 || text[ws.i] !== '>') break;
+		i = ws.i + 1;
+		col = ws.col + 1;
+		carry = 0;
+		depth += 1;
+		if (text[i] === ' ') {
+			i += 1;
+			col += 1;
+		} else if (text[i] === '\t') {
+			const stop = col + TAB_STOP - (col % TAB_STOP);
+			carry = stop - col - 1;
+			col = stop;
+			i += 1;
+		}
+	}
+	const quotes = text.slice(0, i);
+	// Columns are measured from here, so a quoted line and a bare one compare on
+	// the same scale.
+	const quotesCol = col - carry;
+	const before = whitespace(text, i, col, carry);
+	const m = before.width <= 3 ? MARKER.exec(text.slice(before.i)) : null;
+	const after =
+		m !== null && opensItem(m[0], before.col, para)
+			? whitespace(text, before.i + m[0].length, before.col + m[0].length, 0)
+			: null;
+	if (after !== null && after.width >= 1 && after.width <= 4) {
+		const column = after.col - quotesCol;
+		return {
+			text,
+			eol,
+			nl,
+			prefix: text.slice(0, after.i),
+			// Spaces to the item's column, however the original wrote the gap: a tab
+			// repeated after a shorter quote prefix would land on a different stop.
+			cont: quotes + ' '.repeat(column),
+			depth,
+			indent: before.width,
+			column,
+			body: after.col,
+			content: text.slice(after.i),
+		};
+	}
+	// No marker. More than three columns of indentation is an indented code block,
+	// left in the content so that nothing matches at its start.
+	const start = before.width <= 3 ? before.i : i;
 	return {
 		text,
 		eol,
 		nl,
-		prefix,
-		cont: quotes + before + ' '.repeat(marker.length) + after,
-		depth: (quotes.match(/>/g) ?? []).length,
-		indent,
-		column: item ? indent + marker.length + after.length : 0,
-		body: item ? prefix.length : quotes.length,
-		content: text.slice(prefix.length),
+		prefix: text.slice(0, start),
+		cont: text.slice(0, start),
+		depth,
+		indent: before.width,
+		column: 0,
+		body: quotesCol,
+		content: text.slice(start),
 	};
 }
 
@@ -201,8 +280,7 @@ function scan(lines: Line[], escaped: ReadonlySet<number>): { blocks: Block[]; e
 		const line = lines[i];
 		if (fence) {
 			const f = FENCE.exec(line.content);
-			if (f && f[1][0] === fence.char && f[1].length >= fence.len && line.content.slice(f[0].length).trim() === '')
-				fence = null;
+			if (f && f[1][0] === fence.char && f[1].length >= fence.len && f[2].trim() === '') fence = null;
 			continue;
 		}
 		if (html !== null) {
@@ -229,13 +307,12 @@ function scan(lines: Line[], escaped: ReadonlySet<number>): { blocks: Block[]; e
 			open = null;
 		}
 		const f = FENCE.exec(line.content);
-		if (f) {
+		if (f && !(f[1][0] === '`' && f[2].includes('`'))) {
 			fence = { char: f[1][0], len: f[1].length };
 			continue;
 		}
 		if (HTML.test(line.content)) {
-			const raw = HTML_RAW.exec(line.content);
-			html = raw ? `</${raw[1].toLowerCase()}` : '';
+			html = htmlEnd(line.content);
 			if (html !== '' && line.content.toLowerCase().includes(html)) html = null;
 			continue;
 		}
