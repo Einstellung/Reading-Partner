@@ -45,12 +45,19 @@ const MARKER = /^(?:[-*+]|\d{1,9}[.)])/;
 // An ordered marker that cannot interrupt a paragraph: CommonMark lets only `1.`
 // and `1)` do that.
 const LATER_ITEM = /^(?!1[.)])\d/;
-const FENCE = /^(`{3,}|~{3,})/;
+// A code fence and the info string it may carry. A backtick fence's info string
+// may hold no backtick, so ``` ```a`b``` ``` is a code span in a paragraph and
+// not a fence; reading it as one opens a block that closes on some later line
+// and takes the lines between out of the pass's hands.
+const FENCE = /^(`{3,}|~{3,})(.*)$/;
 // A raw HTML block reaches the reader as written, so a cut or an escape inside
-// one is visible. `<script>`, `<pre>`, `<style>` and `<textarea>` run to their
-// closing tag; every other kind ends at a blank line.
+// one is visible. Each kind runs to its own end: `<script>`, `<pre>`, `<style>`
+// and `<textarea>` to their closing tag, a comment to `-->`, a processing
+// instruction to `?>`, a declaration to `>`, CDATA to `]]>`, and the tag-shaped
+// kinds to a blank line.
 const HTML = /^</;
 const HTML_RAW = /^<(script|pre|style|textarea)\b/i;
+const HTML_DECLARATION = /^<![A-Za-z]/;
 const RUN = /^\$\$+/;
 const LEADING_SPACE = /^[ \t]*/;
 
@@ -72,6 +79,18 @@ function whitespace(text: string, i: number, col: number, carry: number): { i: n
 		i += 1;
 	}
 	return { i, col, width };
+}
+
+// Where a raw HTML block opened by this line ends: the string that closes it, or
+// '' for the kinds that run to the next blank line.
+function htmlEnd(content: string): string {
+	const raw = HTML_RAW.exec(content);
+	if (raw) return `</${raw[1].toLowerCase()}`;
+	if (content.startsWith('<!--')) return '-->';
+	if (content.startsWith('<?')) return '?>';
+	if (content.startsWith('<![CDATA[')) return ']]>';
+	if (HTML_DECLARATION.test(content)) return '>';
+	return '';
 }
 
 interface Line {
@@ -261,8 +280,7 @@ function scan(lines: Line[], escaped: ReadonlySet<number>): { blocks: Block[]; e
 		const line = lines[i];
 		if (fence) {
 			const f = FENCE.exec(line.content);
-			if (f && f[1][0] === fence.char && f[1].length >= fence.len && line.content.slice(f[0].length).trim() === '')
-				fence = null;
+			if (f && f[1][0] === fence.char && f[1].length >= fence.len && f[2].trim() === '') fence = null;
 			continue;
 		}
 		if (html !== null) {
@@ -289,13 +307,12 @@ function scan(lines: Line[], escaped: ReadonlySet<number>): { blocks: Block[]; e
 			open = null;
 		}
 		const f = FENCE.exec(line.content);
-		if (f) {
+		if (f && !(f[1][0] === '`' && f[2].includes('`'))) {
 			fence = { char: f[1][0], len: f[1].length };
 			continue;
 		}
 		if (HTML.test(line.content)) {
-			const raw = HTML_RAW.exec(line.content);
-			html = raw ? `</${raw[1].toLowerCase()}` : '';
+			html = htmlEnd(line.content);
 			if (html !== '' && line.content.toLowerCase().includes(html)) html = null;
 			continue;
 		}

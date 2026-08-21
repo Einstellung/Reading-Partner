@@ -438,6 +438,31 @@ test('a raw HTML block opens behind a tab', () => {
 	expect(canonicalizeMathFences(text)).toBe(text);
 });
 
+test('a comment, a declaration, an instruction and CDATA end at their own terminator', () => {
+	// Only `<script>`, `<pre>`, `<style>`, `<textarea>` and the tag-shaped blocks
+	// run to a blank line. Reading these four the same way keeps the block open
+	// past its end and declines a repair that was there to make.
+	for (const head of ['<!-- c -->', '<!DOCTYPE html>', '<![CDATA[a]]>', '<?php echo 1; ?>']) {
+		const text = c(`${head}\n$$x=\nb$$`);
+		expect(tree(text)).toEqual([`html:${head}`, 'math(x=):b$$']);
+		expect(canonicalizeMathFences(text)).toBe(`${head}\n$$\nx=\nb\n$$`);
+		expect(tree(canonicalizeMathFences(text))).toEqual([`html:${head}`, 'math():x=\nb']);
+	}
+	// A comment that has not closed yet still swallows the lines under it.
+	const open = c('<!-- c\n$$x=\nb$$');
+	expect(tree(open)).toEqual([`html:${open}`]);
+	expect(canonicalizeMathFences(open)).toBe(open);
+});
+
+test('a backtick fence may not carry a backtick in its info string', () => {
+	// So the first line is a paragraph, the `~~~` opens the only code block here,
+	// and the run inside it is code. Reading the first line as a fence opens one
+	// that the ``` below closes, and the run then looks like a line start.
+	const text = c('```a`b\n\n~~~\n```\n$$x=1\n~~~');
+	expect(tree(text)).toEqual(['p', 'text:```a`b', 'code:```\n$$x=1']);
+	expect(canonicalizeMathFences(text)).toBe(text);
+});
+
 test('a raw HTML block is left as it is', () => {
 	// Its content reaches the reader as written, so both the cut and the escape
 	// would show. `<pre>` runs to its closing tag, everything else to a blank line.
