@@ -28,6 +28,7 @@ import {
 } from './Markdown';
 import { quotedCitationParagraph, type QuotedCitation } from './citationBlock';
 import { remarkPlugins } from './remarkPlugins';
+import { canonicalizeMathFences } from './mathFences';
 import FigureCard from './FigureCard';
 import { HIT_44 } from '../base/buttons';
 
@@ -201,10 +202,15 @@ const MD = [
 export default function MarkdownRenderer({ text }: { text: string }) {
 	const onCitation = useContext(CitationContext);
 	const prepSlugs = useContext(PrepSlugContext);
-	const source = useMemo(
-		() => (onCitation ? linkifyCitations(text, prepSlugs) : text),
-		[text, onCitation, prepSlugs],
-	);
+	// The fences are canonicalized whether or not there is a citation host, and
+	// before linkify: the scanner should see the model's own bytes. The order is
+	// free either way — linkify inserts no `$`, no backtick and no newline, and
+	// the newlines this inserts cannot split a citation bracket, since a bracket
+	// holding a newline was never a candidate.
+	const source = useMemo(() => {
+		const math = canonicalizeMathFences(text);
+		return onCitation ? linkifyCitations(math, prepSlugs) : math;
+	}, [text, onCitation, prepSlugs]);
 	// The anchor override is installed whether or not there is a citation host:
 	// without it, a plain link in a reply navigates the webview away from the app.
 	const components = useMemo<Components>(
