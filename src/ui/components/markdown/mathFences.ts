@@ -13,7 +13,9 @@
 // So the source is canonicalized here instead: the fences move onto their own
 // lines and everything else stays byte for byte. Single-line `$$x$$` pairs are
 // left alone — remark reads those as inline math and they render today, and
-// promoting them to display blocks would restyle every stored formula.
+// promoting them to display blocks would restyle every stored formula. An
+// opening run whose closer has not arrived is escaped instead, which is what
+// keeps a formula from painting the reply red for as long as it streams.
 //
 // Self-contained rather than sharing anchors.ts's codeRanges: this needs one
 // left-to-right pass that interleaves escapes, backtick spans and dollar runs
@@ -35,6 +37,7 @@ interface Pair {
 }
 
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
+const MATH_LINE = /^ {0,3}(\$\$+)[ \t\r]*$/;
 const CONTAINER = /^(?:[ \t]*>[ \t]?)*[ \t]*/;
 const LIST_MARKER = /^(?:[-*+]|\d{1,9}[.)])[ \t]+/;
 const BLANK_LINE = /\n[ \t]*\n/;
@@ -52,20 +55,39 @@ const LEADING_SPACE = /^[ \t]*/;
 // list continuation needs container context this pass does not have. The failure
 // is bounded: a rewrite inside one only inserts newlines carrying the line's own
 // indentation, so the block stays a code block.
+//
+// A display block already in canonical form is the one thing that can hold a
+// fence line without opening a code block, exactly as remark reads it: `$$`
+// alone opens a flow block whose lines are all content until a line of nothing
+// but `$$`. Without that state, running this function over its own output would
+// find a code fence in a formula and reach a different pairing than the pass
+// that wrote it.
 function fencedLines(text: string): boolean[] {
 	const flags: boolean[] = [];
 	let open: { char: string; len: number } | null = null;
+	let math: number | null = null;
 	for (const line of text.split('\n')) {
 		const m = FENCE.exec(line);
-		if (!open) {
-			if (m) open = { char: m[1][0], len: m[1].length };
-			flags.push(m !== null);
+		if (open) {
+			flags.push(true);
+			const closes =
+				m !== null && m[1][0] === open.char && m[1].length >= open.len && line.slice(m[0].length).trim() === '';
+			if (closes) open = null;
 			continue;
 		}
-		flags.push(true);
-		const closes =
-			m !== null && m[1][0] === open.char && m[1].length >= open.len && line.slice(m[0].length).trim() === '';
-		if (closes) open = null;
+		const alone = MATH_LINE.exec(line);
+		if (math !== null) {
+			flags.push(false);
+			if (alone && alone[1].length >= math) math = null;
+			continue;
+		}
+		if (alone) {
+			math = alone[1].length;
+			flags.push(false);
+			continue;
+		}
+		if (m) open = { char: m[1][0], len: m[1].length };
+		flags.push(m !== null);
 	}
 	return flags;
 }
@@ -238,10 +260,13 @@ function fencedBetween(fenced: boolean[], from: number, to: number): boolean {
 	return false;
 }
 
+// One rewrite the output pass has to make, in the order the offsets come.
+type Edit = { at: number; kind: 'block'; block: Pair } | { at: number; kind: 'escape'; run: Run };
+
 export function canonicalizeMathFences(text: string): string {
 	if (!text.includes('$$')) return text;
 	const fenced = fencedLines(text);
-	const { pairs } = pairRuns(text, scanRuns(text, fenced));
+	const { pairs, unpaired } = pairRuns(text, scanRuns(text, fenced));
 	// Only a pair whose content crosses a newline is ours, and only when no line
 	// of it is inside a fenced code block — a pair straddling a fence has one
 	// end in code and is left byte-identical.
@@ -250,11 +275,28 @@ export function canonicalizeMathFences(text: string): string {
 			text.slice(p.open.end, p.close.start).includes('\n') &&
 			!fencedBetween(fenced, p.open.line, p.close.line),
 	);
-	if (blocks.length === 0) return text;
+	if (blocks.length === 0 && unpaired.length === 0) return text;
 	const nl = text.includes('\r\n') ? '\r\n' : '\n';
+	const edits: Edit[] = [
+		...blocks.map((block) => ({ at: block.open.start, kind: 'block' as const, block })),
+		...unpaired.map((run) => ({ at: run.start, kind: 'escape' as const, run })),
+	].sort((a, b) => a.at - b.at);
 	let out = '';
 	let last = 0;
-	for (const block of blocks) {
+	for (const edit of edits) {
+		if (edit.kind === 'escape') {
+			// A `$$` whose closer has not arrived yet. Left as it is, it opens a
+			// flow block that eats its own opening line and paints everything after
+			// it red for as long as the formula streams; escaped, the half-written
+			// formula shows as the source the model is writing. The escape is
+			// invisible (markdown eats the backslash) and self-cancelling: every
+			// render recomputes from the model's text, so it is gone the moment the
+			// closing run arrives.
+			out += text.slice(last, edit.run.start) + '\\$'.repeat(edit.run.len);
+			last = edit.run.end;
+			continue;
+		}
+		const block = edit.block;
 		out += text.slice(last, block.open.start);
 		// The line as it stands in the output, not in the input: a pair earlier on
 		// the same line may already have been rewritten.

@@ -111,9 +111,21 @@ test('a $$ enclosed by inline math is left where it is', () => {
 });
 
 test('a run of three never closes on a run of two', () => {
-	// remark refuses this pairing, so there is no block here to canonicalize.
-	const text = c('$$$x=\n1$$');
-	expect(canonicalizeMathFences(text)).toBe(text);
+	// remark refuses this pairing, so neither run is a delimiter and both are
+	// neutralized rather than opening a block.
+	expect(canonicalizeMathFences(c('$$$x=\n1$$'))).toBe('\\$\\$\\$x=\n1\\$\\$');
+});
+
+test('a run whose closer has not arrived yet is escaped', () => {
+	// Mid-stream. Left alone it opens a flow block that swallows the rest of the
+	// reply; escaped, the half-written formula shows as the source it is.
+	expect(canonicalizeMathFences(c('矩阵：\n$$S=\\begin{bmatrix}\n0.99'))).toBe(
+		'矩阵：\n\\$\\$S=\\begin{bmatrix}\n0.99',
+	);
+	// A lone `$` is a dollar sign in prose, not a half-written delimiter.
+	expect(canonicalizeMathFences(c('成本 $5 到 $$8'))).toBe('成本 $5 到 \\$\\$8');
+	// And the escape is gone as soon as the closing run arrives.
+	expect(canonicalizeMathFences(c('矩阵：\n$$S=1\n$$'))).toBe('矩阵：\n$$\nS=1\n$$');
 });
 
 test('CRLF text stays CRLF', () => {
