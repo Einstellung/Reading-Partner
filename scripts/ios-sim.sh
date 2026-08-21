@@ -313,7 +313,7 @@ cmd_reader() {
 # hands the rects and the strokes it took to window.__aside — which is what makes
 # "did that drag leave a mark on the words it crossed" a number. Pair it with
 # `press` to raise a selection and `native` to read the UIKit views floating over
-# the page (docs/pitfall/119).
+# the page (docs/pitfall/143).
 cmd_chat() {
   cmd_open /chat-aside-spike.html >/dev/null
   echo -n "waiting for the harness"
