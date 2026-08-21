@@ -21,13 +21,18 @@
 //   growth that first passes the place that offset is the bottom — where a pin
 //   read off it comes back true and every growth after it drags the reader to the
 //   newest message.
-// - A landing must not turn the pin on, however close to the bottom it lands. The
-//   pin comes from the memory, from a scroll of the reader's and from the give-up,
-//   and from nowhere else.
+// - While the place is out of reach the list must be one with no memory: at the
+//   bottom, following every growth. A transcript that comes back too short for
+//   the place ends there and stays there, without waiting for any clock.
+// - A landing must turn the pin off, however close to the bottom it lands. The
+//   wait ran pinned, and a pin left standing on the place drags the reader to the
+//   newest message on the next growth.
 // - The reader scrolling during a restore must take it over, while the restore's
-//   own scroll and a height change reported as a scroll must not. The restore's
-//   own scroll counts as its own even when the browser clamps it to a fraction
-//   the rounded metrics do not name.
+//   own scroll and a height change reported as a scroll must not. That holds for
+//   the first scroll after a wave of settling too: the wait's own pin measures
+//   every wave, so a growth two waves ago is not what the reader's scroll came
+//   with. The restore's own scroll counts as its own even when the browser clamps
+//   it to a fraction the rounded metrics do not name.
 // - A place the list never becomes tall enough to reach must be given up on when
 //   the restore's window runs out, however late the growth that would have
 //   reached it arrives. It must survive the height watcher's first delivery,
@@ -339,10 +344,11 @@ test("a place off the end of a list that is still short is not written at all", 
 	const memory = makeMemory();
 	leaveAt(memory, 200);
 	// The first paint: the rows are in, nothing inside them has settled yet, and
-	// the whole list is shorter than the offset it is going back to.
+	// the whole list is shorter than the offset it is going back to. Nothing of
+	// the place is written; the list waits at the bottom.
 	const back = makeHost(400, 300);
 	const { stop, contentChanged } = bindRemembered(back, memory);
-	expect(back.scrollTop).toBe(0);
+	expect(back.scrollTop).toBe(bottomOf(back));
 	back.grow(600);
 	contentChanged();
 	expect(back.scrollTop).toBe(200);
@@ -399,16 +405,16 @@ test("nothing but the memory and the reader's own scroll turns the pin on", () =
 	const back = makeHost(400, 300);
 	const { stop, contentChanged } = bindRemembered(back, memory);
 	// A settle that crosses the place, then a stream of replies, with the browser
-	// reporting every move this module made. The memory said the reader was not at
-	// the bottom and nothing here is the reader, so the list is never at the bottom
-	// and nothing along the way is recorded.
+	// reporting every move this module made. Nothing here is the reader, so the
+	// list ends on the place and a long way above the bottom, and nothing along the
+	// way is recorded.
 	for (let i = 0; i < 12; i++) {
 		back.grow(60);
 		contentChanged();
 		back.flush();
-		expect(back.scrollTop).not.toBe(bottomOf(back));
 	}
 	expect(back.scrollTop).toBe(200);
+	expect(bottomOf(back)).toBe(820);
 	expect(memory.writes().slice(written)).toEqual([]);
 	// The reader's own scroll is the one thing left that can turn the pin on.
 	back.scrollTo(bottomOf(back));
@@ -433,7 +439,7 @@ test("the restore outlives the height watcher's first delivery", () => {
 	// within reach.
 	back.grow(50);
 	contentChanged();
-	expect(back.scrollTop).toBe(0);
+	expect(back.scrollTop).toBe(bottomOf(back));
 	back.grow(300);
 	contentChanged();
 	expect(back.scrollTop).toBe(200);
@@ -530,7 +536,7 @@ test("a place the list never reaches is given up on and opened at the bottom", (
 	// chips dropped — so the remembered offset is past its end for good.
 	const back = makeHost(700, 300);
 	const { stop, contentChanged } = bindRemembered(back, memory, clock);
-	expect(back.scrollTop).toBe(0);
+	expect(back.scrollTop).toBe(bottomOf(back));
 	// Long enough that anything that was going to settle has.
 	clock.advance(2500);
 	contentChanged();
@@ -553,7 +559,7 @@ test("a restore that ran out of time gives up on it, however late the growth", (
 	const clock = makeClock();
 	const back = makeHost(700, 300);
 	const { stop, contentChanged } = bindRemembered(back, memory, clock);
-	expect(back.scrollTop).toBe(0);
+	expect(back.scrollTop).toBe(bottomOf(back));
 	// Ten seconds of reading what did come back, and then a last row settles and
 	// the list is finally tall enough for the old offset. The window closed eight
 	// seconds ago, so the place is gone and the newest message is where this opens.
@@ -581,6 +587,83 @@ test("a list the restore gave up on is still the reader's to scroll away from", 
 	}
 	expect(back.scrollTop).toBe(120);
 	expect(memory.saved()).toEqual({ top: 120, stuck: false });
+	stop();
+});
+
+test("a place that never fits leaves the list where one with no memory leaves it", () => {
+	const memory = makeMemory();
+	leaveAt(memory, 600);
+	const clock = makeClock();
+	// A transcript that comes back smaller: fewer rows, a draft in the composer,
+	// the on-screen keyboard gone. It settles wave by wave and never becomes tall
+	// enough for the old place, and the list follows the newest message the whole
+	// way there, the way it would with nothing remembered at all.
+	const back = makeHost(400, 300);
+	const { stop, contentChanged } = bindRemembered(back, memory, clock);
+	for (let i = 0; i < 20; i++) {
+		back.grow(20);
+		clock.advance(16);
+		contentChanged();
+		back.flush();
+		expect(back.scrollTop).toBe(bottomOf(back));
+	}
+	// The settling stopped well inside the window, so no wave is left to find the
+	// clock with; the list is already where the give-up would have put it.
+	expect(back.scrollTop).toBe(500);
+	expect(memory.writes()).toHaveLength(1);
+	// The reply that arrives after the window is followed too, and it is what
+	// finally writes the unreachable place out of the memory.
+	clock.advance(2000);
+	back.grow(300);
+	contentChanged();
+	expect(back.scrollTop).toBe(bottomOf(back));
+	expect(memory.saved()).toEqual({ top: bottomOf(back), stuck: true });
+	stop();
+});
+
+test("a place that fits only after several waves is pinned until it does", () => {
+	const memory = makeMemory();
+	leaveAt(memory, 600);
+	const back = makeHost(400, 300);
+	const { stop, contentChanged } = bindRemembered(back, memory);
+	// Four waves short of the place, each one followed to the bottom.
+	for (let i = 0; i < 4; i++) {
+		back.grow(100);
+		contentChanged();
+		back.flush();
+		expect(back.scrollTop).toBe(bottomOf(back));
+	}
+	// The wave that first fits the place lands on it, and the pin is off from
+	// there: the replies that stream in afterwards stay below the fold.
+	back.grow(200);
+	contentChanged();
+	expect(back.scrollTop).toBe(600);
+	back.flush();
+	for (const by of [300, 300]) {
+		back.grow(by);
+		contentChanged();
+		expect(back.scrollTop).toBe(600);
+	}
+	expect(memory.writes()).toHaveLength(1);
+	stop();
+});
+
+test("the reader's first scroll after a wave of the wait is theirs", () => {
+	const memory = makeMemory();
+	leaveAt(memory, 600);
+	const back = makeHost(400, 300);
+	const { stop, contentChanged } = bindRemembered(back, memory);
+	// A wave of settling, still short of the place, and the reader pushes the list
+	// up before the browser has reported the pin's move. The growth belonged to the
+	// pin; the scroll that comes after it does not.
+	back.grow(300);
+	contentChanged();
+	back.scrollTo(80);
+	expect(memory.saved()).toEqual({ top: 80, stuck: false });
+	// The restore is over, so the place is not written when the list finally fits.
+	back.grow(600);
+	contentChanged();
+	expect(back.scrollTop).toBe(80);
 	stop();
 });
 
