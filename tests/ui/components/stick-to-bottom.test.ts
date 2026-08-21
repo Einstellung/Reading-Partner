@@ -10,7 +10,9 @@
 //   streams underneath. Coming back to the bottom must hand the pin back.
 // - The scroll the pin performs itself must not read as the reader scrolling
 //   away, or the first growth would unpin the list forever, and must not be
-//   recorded as a place the reader chose.
+//   recorded as a place the reader chose. A write that moved nothing is owed no
+//   such scroll, and the marker it would leave standing swallows the reader's
+//   return to the bottom — the list then stops following the stream for good.
 // - Teardown must release the container it bound to, so a re-pin (a new thread)
 //   does not leave the old listener running.
 // - A remembered list must come back where the reader was, and must keep coming
@@ -178,6 +180,20 @@ test("scrolling back to the bottom takes the pin again", () => {
 
 	host.scrollTo(bottomOf(host));
 	host.grow(300);
+	contentChanged();
+	expect(host.scrollTop).toBe(bottomOf(host));
+	stop();
+});
+
+test("coming back to the bottom takes the pin again after a settle that moved nothing", () => {
+	const host = makeHost(1000, 300);
+	const { stop, contentChanged } = bind(host);
+	// The height watcher's first delivery, at the height the bind already pinned
+	// to: the write moves nothing, so the browser owes it no scroll event.
+	contentChanged();
+	host.scrollTo(200);
+	host.scrollTo(700);
+	host.grow(500);
 	contentChanged();
 	expect(host.scrollTop).toBe(bottomOf(host));
 	stop();
@@ -395,6 +411,23 @@ test("the restore survives its own write landing short of the rounded bottom", (
 	// The place the reader left is still theirs; the echo must not have written
 	// the bottom over it.
 	expect(memory.saved()).toEqual({ top: 200, stuck: false });
+	stop();
+});
+
+test("a write that moved nothing leaves no marker behind", () => {
+	const memory = makeMemory();
+	leaveAt(memory, 600);
+	// Too short for the place, so the restore's write clamps at the bottom and the
+	// delivery after it writes the same number again.
+	const back = makeHost(700, 300);
+	const { stop, contentChanged } = bindRemembered(back, memory);
+	expect(back.scrollTop).toBe(bottomOf(back));
+	contentChanged();
+	// The reader takes the list over, then comes back to exactly where that write
+	// landed, which is a place of theirs like any other.
+	back.scrollTo(100);
+	back.scrollTo(400);
+	expect(memory.saved()).toEqual({ top: 400, stuck: true });
 	stop();
 });
 

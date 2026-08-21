@@ -137,10 +137,12 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 	// The height the last scroll event was measured against. A scroll that comes
 	// with a changed height came from the content, not from the reader.
 	let seenHeight = 0;
-	// The position this module last wrote itself, kept until the browser echoes
-	// it back. Compared by value within a pixel, not armed as a flag: an
-	// assignment that changes nothing fires no event, and a flag left armed would
-	// swallow the reader's next real scroll.
+	// The position this module last wrote itself, kept until the browser echoes it
+	// back, and compared by value within a pixel rather than armed as a flag. Two
+	// rules keep it from swallowing a scroll of the reader's: only a write that
+	// actually moved the list arms it, because a write that changes nothing fires
+	// no event and would leave the marker standing at that position for good; and
+	// whatever event arrives next spends it, matched or not.
 	let selfTop: number | null = null;
 
 	function applyRestore() {
@@ -149,9 +151,10 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 		// already clamped it, and a maximum computed from the rounded metrics misses
 		// where the write really landed by a fraction — enough for the echo to read
 		// as the reader taking over, which drops the place for good.
+		const before = host.scrollTop;
 		host.scrollTop = pending;
 		const landed = host.scrollTop;
-		selfTop = landed;
+		selfTop = landed === before ? null : landed;
 		seenHeight = host.scrollHeight;
 		// Short of the place with time left: the content is still settling, so stay
 		// pending and try again on the next growth.
@@ -173,11 +176,13 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 			toBottom();
 			return;
 		}
-		// The browser echoing back a scroll this module performed.
-		if (selfTop !== null && Math.abs(host.scrollTop - selfTop) <= SELF_WRITE_SLACK) {
-			selfTop = null;
-			return;
-		}
+		// The browser echoing back a scroll this module performed. Events are
+		// ordered, so the echo of a move is the next one to arrive; a scroll of the
+		// reader's coalesced into the same frame arrives at their position instead,
+		// does not match, and is read as theirs. Either way the marker is spent.
+		const echo = selfTop !== null && Math.abs(host.scrollTop - selfTop) <= SELF_WRITE_SLACK;
+		selfTop = null;
+		if (echo) return;
 		if (pending !== null) {
 			// A restore that has not landed yet, and the content moving under it: the
 			// same rule the rest of this file runs on — a scroll that comes with a
@@ -204,13 +209,15 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 
 	function toBottom() {
 		if (!host) return;
+		const before = host.scrollTop;
 		// Assigning scrollTop is the instant scroll; scrollIntoView would animate
 		// under `scroll-behavior: smooth` and never catch a list that keeps growing.
 		host.scrollTop = host.scrollHeight - host.clientHeight;
+		const landed = host.scrollTop;
 		// Read back and kept for the same reason the restore does it: the echo of
 		// this write is a scroll event like any other, and without the marker it is
 		// recorded as a place the reader chose.
-		selfTop = host.scrollTop;
+		selfTop = landed === before ? null : landed;
 		seenHeight = host.scrollHeight;
 	}
 
