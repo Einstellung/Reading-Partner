@@ -23,9 +23,9 @@
 // bottom, following every growth. The reader sees the newest message for the
 // frames the settling takes and is then moved to their place; a transcript that
 // comes back too short for the place never moves them at all, which is where a
-// list with no memory leaves them anyway. A window of a couple of seconds still
-// ends the wait: past it the place is dropped and the bottom recorded in its
-// stead. Without the three seams this module behaves as it did before them.
+// list with no memory leaves them anyway. A window of a couple of seconds after
+// the last growth still ends the wait: past it the place is dropped and the
+// bottom recorded in its stead. Without the three seams this module behaves as it did before them.
 
 /** The part of a scroll container this needs. An Element satisfies it. */
 export interface ScrollHost {
@@ -61,9 +61,10 @@ export interface StickOptions {
 
 const DEFAULT_THRESHOLD = 40;
 
-// How long a restore keeps trying before the place is treated as gone. Settling
-// after the first paint takes a few hundred milliseconds; a transcript that came
-// back shorter than the place it is going to stays short for good.
+// How long after the last growth a restore keeps trying before the place is
+// treated as gone. Settling arrives in waves and a long transcript spends longer
+// than this settling in total; a transcript that came back shorter than the place
+// it is going to stops growing and stays short for good.
 const RESTORE_WINDOW_MS = 2000;
 
 // How far off the echo of a write may land and still be recognised as this
@@ -146,11 +147,16 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 	// it lands, once the reader takes over, once the window runs out, and whenever
 	// the memory says the bottom.
 	let pending = saved && !saved.stuck ? saved.top : null;
-	// When the restore stops trying. Armed from the bind rather than counted in
-	// attempts: the height watcher reports every target it is given once, right
-	// after the bind and all at the same height, so a count cannot tell a list
-	// that is still settling from one that will never reach the place.
-	const restoreUntil = now() + RESTORE_WINDOW_MS;
+	// The tallest the list has been, and when the restore stops trying. The window
+	// runs from the last growth rather than from the bind: a long transcript
+	// settling in fine waves spends more than a window still settling, and dropping
+	// the place then has nothing to do with the place being gone. A reply that lands
+	// minutes later arrives long after the last growth and finds the window closed.
+	// Time rather than a count of attempts: the height watcher reports every target
+	// it is given once, right after the bind and all at the same height, so a count
+	// cannot tell a list still settling from one that will never reach the place.
+	let tallest = 0;
+	let restoreUntil = now() + RESTORE_WINDOW_MS;
 	// The height the last event or write of this module's own measured against. A
 	// scroll that comes with a changed height came from the content, not from the
 	// reader, so every write refreshes it: left stale across one, the reader's
@@ -169,7 +175,9 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 		if (!host || pending === null) return;
 		// The window is tested before the host is touched, or it bounds nothing: a
 		// growth that arrives long after the place is gone would still yank the
-		// reader to it and only then find the clock.
+		// reader to it and only then find the clock. Tested before this growth is
+		// counted, too, so a growth that arrives late is measured against the last
+		// one rather than against itself.
 		if (now() >= restoreUntil) {
 			// A place that cannot be reached in time is gone, so the list opens the
 			// way one with no memory opens: pinned to the newest message. That is also
@@ -180,6 +188,10 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 			toBottom();
 			options.remember?.({ top: host.scrollTop, stuck });
 			return;
+		}
+		if (host.scrollHeight > tallest) {
+			tallest = host.scrollHeight;
+			restoreUntil = now() + RESTORE_WINDOW_MS;
 		}
 		// The place is not written while the list is too short to hold it: a write
 		// clamped to the current height leaves the reader at an offset nobody chose,

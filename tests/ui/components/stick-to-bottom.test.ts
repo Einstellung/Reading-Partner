@@ -38,9 +38,10 @@
 //   it to a fraction the rounded metrics do not name.
 // - A place the list never becomes tall enough to reach must be given up on when
 //   the restore's window runs out, however late the growth that would have
-//   reached it arrives. It must survive the height watcher's first delivery,
-//   which reports every target it observes once at the height the bind already
-//   saw. Giving up opens the list the way one with no memory opens, pinned to the
+//   reached it arrives. The window runs from the last growth, so a transcript
+//   still settling in fine waves keeps its place however long the settling takes.
+//   It must survive the height watcher's first delivery, which reports every
+//   target it observes once at the height the bind already saw. Giving up opens the list the way one with no memory opens, pinned to the
 //   newest message, and records that as the new place — otherwise the reader pays
 //   the same failed restore every time they swap out to the page and back.
 //
@@ -590,6 +591,32 @@ test("a restore that ran out of time gives up on it, however late the growth", (
 	back.grow(500);
 	contentChanged();
 	expect(back.scrollTop).toBe(bottomOf(back));
+	stop();
+});
+
+test("a transcript still settling keeps its place past the length of the window", () => {
+	const memory = makeMemory();
+	leaveAt(memory, 600);
+	const clock = makeClock();
+	// A long transcript settling row by row on a slow frame budget: four seconds of
+	// waves, every one of them the list still growing towards the place.
+	const back = makeHost(400, 300);
+	const { stop, contentChanged } = bindRemembered(back, memory, clock);
+	for (let i = 0; i < 120; i++) {
+		back.grow(3);
+		clock.advance(33);
+		contentChanged();
+		back.flush();
+	}
+	expect(clock.now()).toBe(3960);
+	expect(back.scrollTop).toBe(bottomOf(back));
+	// The wave that first fits the place still lands on it, and nothing along the
+	// way was recorded.
+	back.grow(400);
+	clock.advance(33);
+	contentChanged();
+	expect(back.scrollTop).toBe(600);
+	expect(memory.writes()).toHaveLength(1);
 	stop();
 });
 
