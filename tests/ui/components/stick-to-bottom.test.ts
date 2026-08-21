@@ -15,21 +15,26 @@
 //   return to the bottom — the list then stops following the stream for good.
 // - Teardown must release the container it bound to, so a re-pin (a new thread)
 //   does not leave the old listener running.
-// - A remembered list must come back where the reader was, and must keep coming
-//   back there while the content settles under it — a one-shot restore lands in
-//   the middle of the history for the same reason a one-shot pin does.
+// - A remembered list must come back where the reader was, and must write that
+//   place only once the list is tall enough to hold it. A write clamped to a list
+//   that is still settling parks the reader at an offset nobody chose, and on the
+//   growth that first passes the place that offset is the bottom — where a pin
+//   read off it comes back true and every growth after it drags the reader to the
+//   newest message.
+// - A landing must not turn the pin on, however close to the bottom it lands. The
+//   pin comes from the memory, from a scroll of the reader's and from the give-up,
+//   and from nowhere else.
 // - The reader scrolling during a restore must take it over, while the restore's
 //   own scroll and a height change reported as a scroll must not. The restore's
 //   own scroll counts as its own even when the browser clamps it to a fraction
 //   the rounded metrics do not name.
-// - A remembered place the list has become too short to reach must be given up
-//   on when the restore's window runs out, or every later growth yanks the
-//   reader back to a place that is not there any more, however late the growth
-//   arrives. It must survive the height watcher's first delivery, which reports
-//   every target it observes once at the height the bind already saw. Giving up
-//   writes nothing and leaves the pin off: the reader is at the bottom of a short
-//   transcript because this module's clamped write put them there, not because
-//   they chose to follow the newest message.
+// - A place the list never becomes tall enough to reach must be given up on when
+//   the restore's window runs out, however late the growth that would have
+//   reached it arrives. It must survive the height watcher's first delivery,
+//   which reports every target it observes once at the height the bind already
+//   saw. Giving up opens the list the way one with no memory opens, pinned to the
+//   newest message, and records that as the new place — otherwise the reader pays
+//   the same failed restore every time they swap out to the page and back.
 //
 // The host and the height watcher are stand-ins: there is no layout in this
 // runner, so a real element reports 0 for every metric. scrollableAncestor is
@@ -227,13 +232,18 @@ test("teardown releases the container and the height watcher", () => {
 // when they tap the corner card.
 function makeMemory() {
 	let saved: StickPosition | null = null;
+	// Every write, not just the last one: a scroll of this module's own being
+	// recorded at all is the defect, and the value it would record is usually the
+	// one already saved.
+	const writes: StickPosition[] = [];
 	const seams = {
 		restore: () => saved,
 		remember: (at: StickPosition) => {
 			saved = at;
+			writes.push({ ...at });
 		},
 	};
-	return { seams, saved: () => saved };
+	return { seams, saved: () => saved, writes: () => writes };
 }
 
 // The clock the restore's window is measured on, moved by hand: the window is
@@ -325,16 +335,88 @@ test("a reader who left at the bottom comes back pinned, not frozen", () => {
 	stop();
 });
 
-test("a place off the end of a list that is still short is re-applied until it fits", () => {
+test("a place off the end of a list that is still short is not written at all", () => {
 	const memory = makeMemory();
 	leaveAt(memory, 200);
-	// The first paint: the rows are in, nothing inside them has settled yet.
+	// The first paint: the rows are in, nothing inside them has settled yet, and
+	// the whole list is shorter than the offset it is going back to.
 	const back = makeHost(400, 300);
 	const { stop, contentChanged } = bindRemembered(back, memory);
-	expect(back.scrollTop).toBe(bottomOf(back));
+	expect(back.scrollTop).toBe(0);
 	back.grow(600);
 	contentChanged();
 	expect(back.scrollTop).toBe(200);
+	stop();
+});
+
+test("a place reached only after many small growths lands there once and stays", () => {
+	// The transcript settling row by row rather than in two waves: every step is
+	// small enough that the height first passes the place while the place is still
+	// within a threshold of the bottom.
+	for (const step of [20, 40]) {
+		const memory = makeMemory();
+		leaveAt(memory, 200);
+		const back = makeHost(400, 300);
+		const { stop, contentChanged } = bindRemembered(back, memory);
+		for (let grown = 0; grown < 600; grown += step) {
+			back.grow(step);
+			contentChanged();
+			back.flush();
+		}
+		expect(back.scrollTop).toBe(200);
+		// And the bottom is a long way below it by now, so staying is a choice the
+		// list made and not a place it ran out of room to leave.
+		expect(bottomOf(back)).toBe(700);
+		stop();
+	}
+});
+
+test("a landing that is also the bottom does not turn the pin on", () => {
+	const memory = makeMemory();
+	leaveAt(memory, 200);
+	// The growth that first brings the place within reach makes it the bottom too:
+	// the place is 200 and the list settles at a maximum of exactly 200.
+	const back = makeHost(400, 300);
+	const { stop, contentChanged } = bindRemembered(back, memory);
+	back.grow(100);
+	contentChanged();
+	expect(back.scrollTop).toBe(200);
+	expect(bottomOf(back)).toBe(200);
+	back.flush();
+	// The reply that streams in next belongs below the fold, not in front of the
+	// reader.
+	back.grow(400);
+	contentChanged();
+	expect(back.scrollTop).toBe(200);
+	expect(memory.saved()).toEqual({ top: 200, stuck: false });
+	stop();
+});
+
+test("nothing but the memory and the reader's own scroll turns the pin on", () => {
+	const memory = makeMemory();
+	leaveAt(memory, 200);
+	const written = memory.writes().length;
+	const back = makeHost(400, 300);
+	const { stop, contentChanged } = bindRemembered(back, memory);
+	// A settle that crosses the place, then a stream of replies, with the browser
+	// reporting every move this module made. The memory said the reader was not at
+	// the bottom and nothing here is the reader, so the list is never at the bottom
+	// and nothing along the way is recorded.
+	for (let i = 0; i < 12; i++) {
+		back.grow(60);
+		contentChanged();
+		back.flush();
+		expect(back.scrollTop).not.toBe(bottomOf(back));
+	}
+	expect(back.scrollTop).toBe(200);
+	expect(memory.writes().slice(written)).toEqual([]);
+	// The reader's own scroll is the one thing left that can turn the pin on.
+	back.scrollTo(bottomOf(back));
+	back.grow(200);
+	contentChanged();
+	expect(back.scrollTop).toBe(bottomOf(back));
+	const recorded = memory.writes().slice(written);
+	expect(recorded[recorded.length - 1]?.stuck).toBe(true);
 	stop();
 });
 
@@ -351,23 +433,25 @@ test("the restore outlives the height watcher's first delivery", () => {
 	// within reach.
 	back.grow(50);
 	contentChanged();
-	expect(back.scrollTop).toBe(bottomOf(back));
+	expect(back.scrollTop).toBe(0);
 	back.grow(300);
 	contentChanged();
 	expect(back.scrollTop).toBe(200);
 	stop();
 });
 
-test("the restore's own scroll does not read as the reader taking over", () => {
+test("the echo of the restore's landing is not a place the reader chose", () => {
 	const memory = makeMemory();
 	leaveAt(memory, 200);
+	const written = memory.writes().length;
 	const back = makeHost(400, 300);
 	const { stop, contentChanged } = bindRemembered(back, memory);
-	// The browser reports the clamped write one turn later.
-	back.flush();
 	back.grow(600);
 	contentChanged();
 	expect(back.scrollTop).toBe(200);
+	// The browser reports the restore's own write one turn later.
+	back.flush();
+	expect(memory.writes().slice(written)).toEqual([]);
 	stop();
 });
 
@@ -410,7 +494,7 @@ test("the restore survives its own write landing short of the rounded bottom", (
 	back.flush();
 	back.grow(600);
 	contentChanged();
-	expect(back.scrollTop).toBe(200);
+	expect(back.scrollTop).toBe(199.5);
 	// The place the reader left is still theirs; the echo must not have written
 	// the bottom over it.
 	expect(memory.saved()).toEqual({ top: 200, stuck: false });
@@ -419,9 +503,13 @@ test("the restore survives its own write landing short of the rounded bottom", (
 
 test("a write that moved nothing leaves no marker behind", () => {
 	const memory = makeMemory();
-	leaveAt(memory, 600);
-	// Too short for the place, so the restore's write clamps at the bottom and the
-	// delivery after it writes the same number again.
+	const left = makeHost(1000, 300);
+	const first = bindRemembered(left, memory);
+	left.scrollTo(200);
+	left.scrollTo(bottomOf(left));
+	first.stop();
+	// Back to the bottom of a shorter transcript: the bind's write moves the list,
+	// and the height watcher's delivery after it writes the same number again.
 	const back = makeHost(700, 300);
 	const { stop, contentChanged } = bindRemembered(back, memory);
 	expect(back.scrollTop).toBe(bottomOf(back));
@@ -434,7 +522,7 @@ test("a write that moved nothing leaves no marker behind", () => {
 	stop();
 });
 
-test("a place the list is too short to reach is given up on when the window runs out", () => {
+test("a place the list never reaches is given up on and opened at the bottom", () => {
 	const memory = makeMemory();
 	leaveAt(memory, 600);
 	const clock = makeClock();
@@ -442,36 +530,41 @@ test("a place the list is too short to reach is given up on when the window runs
 	// chips dropped — so the remembered offset is past its end for good.
 	const back = makeHost(700, 300);
 	const { stop, contentChanged } = bindRemembered(back, memory, clock);
-	expect(back.scrollTop).toBe(bottomOf(back));
+	expect(back.scrollTop).toBe(0);
 	// Long enough that anything that was going to settle has.
 	clock.advance(2500);
 	contentChanged();
-	// The reply that streams in afterwards must not be answered with another yank
-	// back to a place that is not there.
+	expect(back.scrollTop).toBe(bottomOf(back));
+	// From there the list is one with no memory: the reply that streams in next is
+	// followed.
+	back.flush();
 	back.grow(500);
 	contentChanged();
-	expect(back.scrollTop).toBe(400);
+	expect(back.scrollTop).toBe(bottomOf(back));
+	// And the place that could not be reached is not tried again on the next
+	// return; the bottom the reader was left at is what the memory holds now.
+	expect(memory.saved()).toEqual({ top: 400, stuck: true });
 	stop();
 });
 
-test("a restore that ran out of time writes nothing, however late the growth", () => {
+test("a restore that ran out of time gives up on it, however late the growth", () => {
 	const memory = makeMemory();
 	leaveAt(memory, 600);
 	const clock = makeClock();
 	const back = makeHost(700, 300);
 	const { stop, contentChanged } = bindRemembered(back, memory, clock);
-	expect(back.scrollTop).toBe(bottomOf(back));
+	expect(back.scrollTop).toBe(0);
 	// Ten seconds of reading what did come back, and then a last row settles and
 	// the list is finally tall enough for the old offset. The window closed eight
-	// seconds ago.
+	// seconds ago, so the place is gone and the newest message is where this opens.
 	clock.advance(10000);
 	back.grow(500);
 	contentChanged();
-	expect(back.scrollTop).toBe(400);
+	expect(back.scrollTop).toBe(bottomOf(back));
 	stop();
 });
 
-test("a restore that was given up on does not turn the reader into a bottom-follower", () => {
+test("a list the restore gave up on is still the reader's to scroll away from", () => {
 	const memory = makeMemory();
 	leaveAt(memory, 600);
 	const clock = makeClock();
@@ -479,22 +572,19 @@ test("a restore that was given up on does not turn the reader into a bottom-foll
 	const { stop, contentChanged } = bindRemembered(back, memory, clock);
 	clock.advance(2500);
 	contentChanged();
-	// Three replies stream in. The reader is at the bottom of this short
-	// transcript because the clamped write left them there, so nothing follows.
+	back.flush();
+	// Up the history, and the replies that stream in stay below the fold.
+	back.scrollTo(120);
 	for (const by of [200, 200, 200]) {
 		back.grow(by);
 		contentChanged();
 	}
-	expect(back.scrollTop).toBe(400);
-	// Their own scroll down still hands the pin back.
-	back.scrollTo(bottomOf(back));
-	back.grow(300);
-	contentChanged();
-	expect(back.scrollTop).toBe(bottomOf(back));
+	expect(back.scrollTop).toBe(120);
+	expect(memory.saved()).toEqual({ top: 120, stuck: false });
 	stop();
 });
 
-test("giving up hands the list back to the reader", () => {
+test("a reader who takes over before the window runs out leaves nothing to give up", () => {
 	const memory = makeMemory();
 	leaveAt(memory, 600);
 	const back = makeHost(700, 300);

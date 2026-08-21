@@ -15,13 +15,16 @@
 //
 // A list can also be one that is remembered: `restore`/`remember` hand the
 // position to a store that outlives the binding (common/scroll-memory.ts), so a
-// transcript that unmounts and comes back opens where the reader left it. A
-// restored place is re-applied on every growth until it lands, because at the
-// first paint the list is still shorter than the place it is going back to. The
-// attempt is bounded by a window of a couple of seconds: a list that comes back
-// with rows missing never reaches that place, and elapsed time is what separates
-// it from content that is still settling. Without the three seams this module
-// behaves as it did before them.
+// transcript that unmounts and comes back opens where the reader left it. The
+// place is written only once the list is tall enough to hold it: at the first
+// paint it is still shorter, and a write clamped to that height parks the reader
+// at a position nobody chose. So the restore waits through the settling and
+// lands whole. The wait is bounded by a window of a couple of seconds: a list
+// that comes back with rows missing never reaches that place, and elapsed time
+// is what separates it from content that is still settling. Out of time, the
+// place is gone, and the list opens the way one with no memory opens — at the
+// bottom, recorded as the new place. Without the three seams this module behaves
+// as it did before them.
 
 /** The part of a scroll container this needs. An Element satisfies it. */
 export interface ScrollHost {
@@ -67,6 +70,12 @@ const RESTORE_WINDOW_MS = 2000;
 // write, so it matches exactly unless something moved the list in between, and a
 // pixel of slack is what covers that.
 const SELF_WRITE_SLACK = 1;
+
+// How far the metrics may fall short of a remembered place and still count as
+// tall enough to hold it. scrollHeight and clientHeight are rounded and
+// scrollTop is not, so a list that does hold the place can report a maximum a
+// fraction below it.
+const REACH_SLACK = 1;
 
 const SCROLLABLE = new Set(["auto", "scroll", "overlay"]);
 
@@ -125,9 +134,16 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 
 	const saved = options.restore?.() ?? null;
 	let host: ScrollHost | null = null;
+	// Whether the list follows its newest content. Written in three places and
+	// nowhere else: here from the memory, in onScroll from a scroll of the
+	// reader's, and in the give-up, which pins a list whose place is gone. A
+	// restore that lands leaves it alone — the offset it lands on is the reader's
+	// place, not a pin they chose, and a pin read back from it turns every later
+	// growth into a yank to the newest message.
 	let stuck = saved ? saved.stuck : true;
-	// Where to go back to, while it is still out of reach. Null once it lands,
-	// once the reader takes over, and whenever the memory says the bottom.
+	// Where to go back to, while the list is still too short to hold it. Null once
+	// it lands, once the reader takes over, once the window runs out, and whenever
+	// the memory says the bottom.
 	let pending = saved && !saved.stuck ? saved.top : null;
 	// When the restore stops trying. Armed from the bind rather than counted in
 	// attempts: the height watcher reports every target it is given once, right
@@ -149,14 +165,22 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 		if (!host || pending === null) return;
 		// The window is tested before the host is touched, or it bounds nothing: a
 		// growth that arrives long after the place is gone would still yank the
-		// reader to it and only then find the clock. Giving up decides nothing about
-		// the pin either — it was false when the restore was armed, since a restore
-		// only exists for a reader who was not at the bottom, and it stays false
-		// until a scroll of theirs recomputes it.
+		// reader to it and only then find the clock.
 		if (now() >= restoreUntil) {
+			// A place that cannot be reached in time is gone, so the list opens the
+			// way one with no memory opens: pinned to the newest message. That is also
+			// recorded as the place, or a reader who swaps out to the page and back
+			// pays the same failed restore every time.
 			pending = null;
+			stuck = true;
+			toBottom();
+			options.remember?.({ top: host.scrollTop, stuck });
 			return;
 		}
+		// Nothing is written while the list is too short to hold the place: a write
+		// clamped to the current height leaves the reader at an offset nobody chose,
+		// and moves them again on every growth until the place fits.
+		if (host.scrollHeight - host.clientHeight < pending - REACH_SLACK) return;
 		const before = host.scrollTop;
 		// Written whole and read back rather than clamped here: the browser has
 		// already clamped it, and a maximum computed from the rounded metrics misses
@@ -166,13 +190,7 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 		const landed = host.scrollTop;
 		selfTop = landed === before ? null : landed;
 		seenHeight = host.scrollHeight;
-		// Short of the place, with time left: the content is still settling, so stay
-		// pending and try again on the next growth.
-		if (landed < pending) return;
-		// Landed. Where the list ended up is the reader's place now, and the pin
-		// follows from its distance to the bottom.
 		pending = null;
-		stuck = host.scrollHeight - host.clientHeight - landed <= threshold;
 	}
 
 	const onScroll = () => {
