@@ -12,6 +12,7 @@
 | 手机上的手势、页面导航 | 触摸与手势 |
 | 鼠标滚轮、触控板 pinch | 触摸与手势 |
 | 发请求、外链资源、CSP | 网络与 CSP |
+| 改 deck / 幻灯片的宿主桥、iframe srcdoc | 网络与 CSP |
 | 读写 AppData | 存储与数据目录 |
 | 导入外部文件、拿文件选择器给的路径 | 存储与数据目录 |
 | 同步引擎、Drive 后端 | 存储与数据目录 + 网络与 CSP + WebKit / webview |
@@ -25,15 +26,13 @@
 | 清洗第三方 HTML、往 innerHTML 里塞正文 | WebKit / webview |
 | 确认框、删除之类的破坏性操作 | WebKit / webview |
 | 调模型、改 provider 层、组装提示词、加长上下文 | AI 调用与上下文窗口 |
-| 顶栏、工具条、下拉浮层的定位 | 界面与布局 |
-| 选中文字后浮出来的控件 | 界面与布局 + 触摸与手势 |
-| 全局样式、Tailwind layer、字体与行高 | 界面与布局 + EmbedPDF 引擎 |
+| 顶栏、工具条、下拉浮层的定位 | 浮层与 shadcn 原语 |
+| 全局样式、Tailwind layer、字体与行高 | 排版基线与 Tailwind + EmbedPDF 引擎 |
 | 加测试文件、给 store 写单测 | 开发环境 |
 | 搬目录、切子域、动分层表 | 开发环境 |
 | 在 worktree 里起 dev server 做实验 | 开发环境 |
 | 查滚动卡顿、主线程占用 | WebKit / webview + EmbedPDF 引擎 |
-| 画 SVG、聊天里的图表卡 | 界面与布局 |
-| 渲染 AI 回复的 markdown、加 remark/rehype 插件 | 界面与布局 |
+| 渲染 AI 回复的 markdown、加 remark/rehype 插件 | markdown 渲染 |
 | 无头截图核对渲染 | 开发环境 |
 | 开机自启、托盘、常驻 | 开发环境 |
 
@@ -162,34 +161,39 @@
 - [116-no-sign-in-control-is-not-a-session](./116-no-sign-in-control-is-not-a-session.md) — 「页面上还有没有登录入口」在登录窗口里两头不成立：彭博登录页上一个可点标签都不匹配（写的是 Continue），按这个信号读出来用户正在输密码的那页是"已登录"；未登录首页的登录入口第 2 次 poll（约 6 秒）才渲染出来，而 readyState 到 21 秒才 complete。要同站、非登录路径、字符数 ≥2000、且字符数不再变化连续两次才认
 - [141-a-blocked-main-thread-stops-the-scroll-outright](./141-a-blocked-main-thread-stops-the-scroll-outright.md) — 主线程占多久屏幕就冻多久（90ms 阻塞冻 82-119ms），和挂不挂 wheel 监听、passive 与否无关，Chromium 同样冻；滚动路径上别占主线程，判据用屏幕像素不用页内计数
 
-## 界面与布局
+## 浮层与 shadcn 原语
 
 - [68-overflow-x-auto-clips-the-other-axis](./68-overflow-x-auto-clips-the-other-axis.md) — 手机上让工具条横滑的那条 `overflow-x-auto` 把 `overflow-y` 也变成裁剪，带子里的下拉浮层整个看不见，z-index 救不了；浮层改 `fixed` + 开面板时量锚点矩形
-- [75-split-tailwind-import-sorts-base-last](./75-split-tailwind-import-sorts-base-last.md) — 拆开 import 的 Tailwind 少了 `@layer theme, base, components, utilities;` 那行声明，layer 顺序按物理位置排，preflight 落到 utilities 后面，反过来压过每一个 utility class；验收看产物里 `@layer` 的首次出现顺序
-- [76-paged-strip-rides-the-line-box-strut](./76-paged-strip-rides-the-line-box-strut.md) — 翻页模式的页带是 inline-block，竖向落点被继承来的 `line-height` 拉动；preflight 的 1.5 把整页挪了 1px（竖排模式逐字节不变）。以后动全局排版要单独复测翻页
-- [77-abspos-in-a-button-starts-from-its-centre](./77-abspos-in-a-button-starts-from-its-centre.md) — 只写 `top` 不写 `left` 的绝对定位子元素放在 `<button>` 里，静态位置在按钮水平中心（Chrome 给按钮内容包了匿名居中盒），开关圆点偏了半个轨道宽；给按钮显式 `display` 或给子元素显式 `left`
-- [78-tailwind-merge-only-dedupes-identical-modifier-chains](./78-tailwind-merge-only-dedupes-identical-modifier-chains.md) — `cn()` 只在修饰符串一模一样时才去重，`can-hover:hover:` 覆盖不掉 `can-hover:enabled:hover:`，两条都留下按特异性决胜；`data-[orientation=vertical]:h-full` 同理压过 `h-5`
-- [79-entry-chunk-reinjects-its-own-stylesheet](./79-entry-chunk-reinjects-its-own-stylesheet.md) — Vite 入口 chunk 运行期再插一遍原始样式表，改 HTML 里的 `<link>` 指向改造过的副本无效；要整份 dist 复制后原地改 CSS
-- [74-fixed-overlay-misses-shell-safe-area](./74-fixed-overlay-misses-shell-safe-area.md) — `position: fixed` 的包含块是视口，外壳按 `env(safe-area-inset-*)` 加的 padding 对它不存在，设置页被灵动岛压住、toast 落在 home indicator 上；`env()` 收进 `src/styles.css` 一组 `@utility`（`p-safe` / `pt-safe-*` / `bottom-safe-*` / `anchor-safe`），取 max(原有间距, inset) 而不是相加
 - [80-portalled-overlay-trips-the-host-outside-press](./80-portalled-overlay-trips-the-host-outside-press.md) — Radix 浮层 Portal 到 `<body>`，宿主那条「点外面就关」的 `pointerdown` 把落在对话框按钮上的第一按判成点外面，气泡先关、按钮收不到 click；改成全局层级计数 `overlayLayerOpen()`，有层开着就整条让路
 - [81-shadcn-add-rewrites-the-components-it-depends-on](./81-shadcn-add-rewrites-the-components-it-depends-on.md) — `shadcn add alert-dialog` 顺手把手写过的 `button.tsx` 换成默认那份（紫色、44px、`can-hover:` 全没），输出里只有一行 "Updated"；add 完先看 `git status`
-- [82-duration-200-alone-transitions-every-property](./82-duration-200-alone-transitions-every-property.md) — `duration-*` 不设 `transition-property`，初始值 `all` 让这个元素每个属性都走 200ms 过渡；量计算样式要等满动画时长，否则读到过程值
-- [84-js-cannot-read-env-safe-area-inset](./84-js-cannot-read-env-safe-area-inset.md) — 自定义属性里的 `env(safe-area-inset-*)` 从 `getComputedStyle` 拿回来还是那串原文，`parseFloat` 得 NaN；要读数字得让真属性吃掉它（隐藏探针元素的 padding），只有夹取在 JS 里的浮层才需要
 - [85-collision-padding-does-not-save-an-anchor-inside-the-inset](./85-collision-padding-does-not-save-an-anchor-inside-the-inset.md) — `limitShift()` 不让浮层脱离锚点，锚点贴着视口边缘时菜单只能退到锚点边缘；锚定型浮层最多和它的锚点一样安全，外壳的 `p-safe` 才是根
 - [86-transformed-popper-drops-subpixel-text](./86-transformed-popper-drops-subpixel-text.md) — popper 的 `transform` 让浮层成为合成层，字从次像素抗锯齿变灰度，逐像素对比每一行文字都在差异图上发亮；两边都加 `--disable-lcd-text` 再比
 - [87-aschild-concatenates-classnames](./87-aschild-concatenates-classnames.md) — `asChild` 把包装组件和子元素的 className 拼成一串而不是过 `cn()`，写在子元素上的 `font-bold` 压不掉默认的 `font-semibold`，谁赢看 Tailwind 的排序；样式一律写在包装组件上
 - [88-radix-dialog-keeps-the-scroll-lock-on-the-overlay](./88-radix-dialog-keeps-the-scroll-lock-on-the-overlay.md) — `RemoveScroll` 包在 `DialogOverlay` 里，不渲染 Overlay 就没有滚动锁，`modal={true}` 也没用（它只管焦点陷阱、`aria-hidden` 和外部指针）；全屏页正好不需要那把锁
 - [89-portalled-overlay-leaves-the-phone-sliding-surface](./89-portalled-overlay-leaves-the-phone-sliding-surface.md) — Portal 出去的全屏页既不跟着手机壳的 `transform` 平移（`fixed` 的包含块回到视口），也接不到挂在那个元素上的手势监听；全屏那种 content 渲染在原地，`Dialog.Portal` 本来就是可选的
-- [90-leading-normal-is-not-the-inherited-line-height](./90-leading-normal-is-not-the-inherited-line-height.md) — shadcn 的文本原语自带 `leading-none`，还原原来的行高要写 `leading-normal`（1.5，preflight 给 `html` 的那个），`leading-[normal]` 是字体建议行距、少 3px
 - [91-select-item-aligned-ignores-the-safe-area-recipe](./91-select-item-aligned-ignores-the-safe-area-recipe.md) — shadcn 生成的 `SelectContent` 是 `position="item-aligned"`，不发布 `--radix-popper-available-*` 也不收 `collisionPadding`，`OVERLAY_SAFE.anchored` 和安全区那半全部静默失效；写死 `position="popper"`
 - [93-a-select-trigger-is-as-wide-as-the-chosen-value](./93-a-select-trigger-is-as-wide-as-the-chosen-value.md) — 原生 `<select>` 按最宽的 option 定宽，Radix 的 trigger 只装选中那一行，换值就跳宽；把所有选项零高 `invisible` 叠进同一个 grid 单元格占住列宽
-- [136-react-18-warns-on-every-hyphenated-svg-attribute](./136-react-18-warns-on-every-hyphenated-svg-attribute.md) — React 18 把 `stroke-width` 这类连字符 SVG 属性照写进 DOM，但每个都报一次 `Invalid DOM property`，一张图刷几十条；元素树保留真名，交给 React 前驼峰化，`aria-*`/`data-*` 除外。文里的图表卡和 `SvgFigure` 已删（作废 2026-08-20，见 [40](../40-聊天里画结构图.md)），React 18 的这个行为本身仍成立，再手写 SVG 元素树按这条办
 - [95-button-swallows-the-ref](./95-button-swallows-the-ref.md) — shadcn 生成的是 React 19 风格的函数组件，React 18 下 `<Button ref>` 恒为 `null`，类型全绿、生产构建无警告；已全部改成 `forwardRef`，护栏是 `tests/ui/components/forward-ref-contract.test.ts`，一次 `shadcn add` 就会写回来
 - [103-anchored-overlay-paints-under-the-surface-that-opened-it](./103-anchored-overlay-paints-under-the-surface-that-opened-it.md) — 全屏设置页是 `z-[70]` 的不透明白底，锚定浮层停在生成的 `z-50`，下拉全部画在开它的页面底下；Select 开着时页面外一切 `pointer-events: none`，手指照样落在看不见的列表上，于是报成「点不动」。`elementFromPoint` 打得中而屏幕上没有 = 画的顺序不对。一条命名 z 阶梯收进 `ui/overlay.tsx` 的 `OVERLAY_Z`，锚定层排在整条阶梯之上
+
+## 排版基线与 Tailwind
+
+- [74-fixed-overlay-misses-shell-safe-area](./74-fixed-overlay-misses-shell-safe-area.md) — `position: fixed` 的包含块是视口，外壳按 `env(safe-area-inset-*)` 加的 padding 对它不存在，设置页被灵动岛压住、toast 落在 home indicator 上；`env()` 收进 `src/styles.css` 一组 `@utility`（`p-safe` / `pt-safe-*` / `bottom-safe-*` / `anchor-safe`），取 max(原有间距, inset) 而不是相加
+- [75-split-tailwind-import-sorts-base-last](./75-split-tailwind-import-sorts-base-last.md) — 拆开 import 的 Tailwind 少了 `@layer theme, base, components, utilities;` 那行声明，layer 顺序按物理位置排，preflight 落到 utilities 后面，反过来压过每一个 utility class；验收看产物里 `@layer` 的首次出现顺序
+- [76-paged-strip-rides-the-line-box-strut](./76-paged-strip-rides-the-line-box-strut.md) — 翻页模式的页带是 inline-block，竖向落点被继承来的 `line-height` 拉动；preflight 的 1.5 把整页挪了 1px（竖排模式逐字节不变）。以后动全局排版要单独复测翻页
+- [77-abspos-in-a-button-starts-from-its-centre](./77-abspos-in-a-button-starts-from-its-centre.md) — 只写 `top` 不写 `left` 的绝对定位子元素放在 `<button>` 里，静态位置在按钮水平中心（Chrome 给按钮内容包了匿名居中盒），开关圆点偏了半个轨道宽；给按钮显式 `display` 或给子元素显式 `left`
+- [78-tailwind-merge-only-dedupes-identical-modifier-chains](./78-tailwind-merge-only-dedupes-identical-modifier-chains.md) — `cn()` 只在修饰符串一模一样时才去重，`can-hover:hover:` 覆盖不掉 `can-hover:enabled:hover:`，两条都留下按特异性决胜；`data-[orientation=vertical]:h-full` 同理压过 `h-5`
+- [79-entry-chunk-reinjects-its-own-stylesheet](./79-entry-chunk-reinjects-its-own-stylesheet.md) — Vite 入口 chunk 运行期再插一遍原始样式表，改 HTML 里的 `<link>` 指向改造过的副本无效；要整份 dist 复制后原地改 CSS
+- [82-duration-200-alone-transitions-every-property](./82-duration-200-alone-transitions-every-property.md) — `duration-*` 不设 `transition-property`，初始值 `all` 让这个元素每个属性都走 200ms 过渡；量计算样式要等满动画时长，否则读到过程值
+- [84-js-cannot-read-env-safe-area-inset](./84-js-cannot-read-env-safe-area-inset.md) — 自定义属性里的 `env(safe-area-inset-*)` 从 `getComputedStyle` 拿回来还是那串原文，`parseFloat` 得 NaN；要读数字得让真属性吃掉它（隐藏探针元素的 padding），只有夹取在 JS 里的浮层才需要
+- [90-leading-normal-is-not-the-inherited-line-height](./90-leading-normal-is-not-the-inherited-line-height.md) — shadcn 的文本原语自带 `leading-none`，还原原来的行高要写 `leading-normal`（1.5，preflight 给 `html` 的那个），`leading-[normal]` 是字体建议行距、少 3px
+- [130-an-arbitrary-font-size-brings-no-line-height](./130-an-arbitrary-font-size-brings-no-line-height.md) — `text-sm` 编出 `font-size` 加 `line-height` 两条，`text-[任意值]` 只有 `font-size`，行距悄悄退回继承值；补的那条要无单位，`leading-5` 这种 rem 值不跟着字号走
+
+## markdown 渲染
+
+- [136-react-18-warns-on-every-hyphenated-svg-attribute](./136-react-18-warns-on-every-hyphenated-svg-attribute.md) — React 18 把 `stroke-width` 这类连字符 SVG 属性照写进 DOM，但每个都报一次 `Invalid DOM property`，一张图刷几十条；元素树保留真名，交给 React 前驼峰化，`aria-*`/`data-*` 除外。文里的图表卡和 `SvgFigure` 已删（作废 2026-08-20，见 [40](../40-聊天里画结构图.md)），React 18 的这个行为本身仍成立，再手写 SVG 元素树按这条办
 - [153-a-cjk-full-stop-keeps-bold-from-closing](./153-a-cjk-full-stop-keeps-bold-from-closing.md) — CommonMark 的 flanking 规则不让 `**` 在中文标点和汉字之间收尾，`**结论：**这样不行` 整句连星号一起显示，而模型写中文时几乎每段都这么写；加 `remark-cjk-friendly` 和 `remark-cjk-friendly-gfm-strikethrough`（后者必须排在 `remarkGfm` 之后），插件表单独一个模块以免把 lazy chunk 拖进主包
 - [154-react-markdown-hands-every-override-a-node-prop](./154-react-markdown-hands-every-override-a-node-prop.md) — react-markdown v10 给每个换成组件的元素多传一个 `node`（hast 节点），`AnchorHTMLAttributes` 里没有这个字段，它跟着 `...rest` 铺到 `<a>` 上渲染成 `node="[object Object]"`；类型全绿、React 18 也不警告。签名交叉上包里的 `ExtraProps` 再把 `node` 解构出来丢掉
-- [130-an-arbitrary-font-size-brings-no-line-height](./130-an-arbitrary-font-size-brings-no-line-height.md) — `text-sm` 编出 `font-size` 加 `line-height` 两条，`text-[任意值]` 只有 `font-size`，行距悄悄退回继承值；补的那条要无单位，`leading-5` 这种 rem 值不跟着字号走
-- [119-ios-puts-its-selection-callout-below-the-selection](./119-ios-puts-its-selection-callout-below-the-selection.md) — iPad 上系统的 `Copy | Look Up | Translate` 条不是固定在选区上方：选区中心在安全区竖向中点以上时它在下方，以下时在上方，两边都是离选区 15px、高 44px，横向对着选区中心夹进屏幕。它是浮在 WKWebView 上的 UIKit 视图，DOM 里没有、`elementFromPoint` 看不见、落在它上面的触摸网页收不到；贴着选区放的浮动控件被盖掉 37px 只剩 7px 可点。那个控件已删（作废 2026-08-20），再往选区旁边放东西要按这条带子两边都让并重新量
 
 ## AI 调用与上下文窗口
 
