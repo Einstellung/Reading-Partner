@@ -1,6 +1,6 @@
 # info 收藏与 reading 打通
 
-> 本文记录"info 侧的材料怎么进 reading"的共识，是 [16](./16-知识图谱.md)、[17](./17-信息源系统.md) 的下游；落法依赖 [13](./13-账户同步.md) 的三方合并模型和 [02](./02-AI核心与memory设计.md) 的记忆设计。文中的现状按 2026-07-27 的代码查证。
+> 本文记录"info 侧的材料怎么进 reading"的共识，是 [16](./16-信息陪读与分诊.md)、[17](./17-信息源系统.md) 的下游；落法依赖 [13](./13-账户同步.md) 的三方合并模型和 [02](./02-AI核心与memory设计.md) 的记忆设计。文中的现状按 2026-07-27 的代码查证。
 
 > 落地状态（2026-07-30）：收下的存储已落地。`saved-articles.json`（`src/reading/saved-articles.ts`）在同步范围里（`src/platform/sync/syncFs.ts`），也登记进了合并契约的 `RECORD_FILES`（`src/platform/sync/merge/contract.ts`）。内容寻址的快照通道还没有：正文快照现在直接躺在记录里（`SavedArticle` 的 `text` / `html`）。
 
