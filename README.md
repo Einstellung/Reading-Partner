@@ -124,7 +124,9 @@ Leaving a talk distills it the way hanging up a conversation does, into which ch
 
 ## Voice input
 
-Every chat composer on the desktop has a push-to-talk mic. Hold to record, release to transcribe: recording runs in Rust (WebKitGTK's getUserMedia is unreliable on Linux), speech-to-text goes through any OpenAI-compatible endpoint, and an LLM pass cleans up the transcript. It defaults to SiliconFlow's free SenseVoice tier — add a SiliconFlow key in Settings. Phones dictate through their own keyboard instead.
+Every chat composer on the desktop has a push-to-talk mic. Hold to record, release to transcribe: recording runs in Rust (WebKitGTK's getUserMedia is unreliable on Linux), speech-to-text goes through any OpenAI-compatible endpoint, and an LLM pass cleans up the transcript. It defaults to SiliconFlow's free SenseVoice tier — add a SiliconFlow key in Settings.
+
+The iPhone takes a different path. Hold the composer's bar and speak: `SpeechAnalyzer` writes the transcript on the phone, so there is no key to add, no endpoint to reach and nothing uploaded. Release to send, slide left to cancel, slide right to edit the text first. The dictation language is a setting rather than a guess, because speaking the wrong one into it produces a confident wrong transcript rather than a rough one.
 
 ## Sync across devices
 

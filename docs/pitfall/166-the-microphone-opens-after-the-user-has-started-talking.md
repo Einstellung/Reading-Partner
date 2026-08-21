@@ -41,5 +41,35 @@ VPIO、tap、`engine.start()`），第二半才是识别器。两半之间 tap �
 上限 5 秒，超了丢最旧的。模型没装那次是分钟级的下载（坑 158），任何上限都救不了那一次，
 而把几分钟前说的那个字接到用户后来说的话前面比丢掉更糟。
 
-剩下的头损失就是 press 到第一个 buffer 那一段，`RP-DICT firstBuffer` 这条日志现在量的
-正是它。
+## 这个解法收益为零
+
+改完上真机，五次按住里四次 pre-roll 缓冲到 **0 个 buffer**，只有一次缓到 2 个 buffer /
+200ms。丢头字原样存在：四次中文里三次丢，"今天天气怎么样"转出"天气怎么样"（丢两个字）和
+"天天气怎么样"（丢一个字）。
+
+分段耗时说明了为什么。同一次按住，五次高度一致：
+
+```
+permission                                     +0ms
+AVAudioSession 配置并激活                       +75ms
+setVoiceProcessingEnabled(true) 之后读到硬件格式  +769ms
+installTap + engine.start() → capturing        +950ms
+第一个 buffer                                  +1063ms
+```
+
+press 到第一个 buffer 是 1028-1255ms，识别器那一半（locale、模型、
+`bestAvailableAudioFormat`、`prepareToAnalyze`、`analyzer.start`）只占 80-180ms。重排
+两半确实让识别器不再挡在麦克风前面，但它挡住的本来就只有一百毫秒；那一秒在打开音频通道
+这一段里，其中约 690ms 是 `setVoiceProcessingEnabled(true)` 重建 IO 单元。pre-roll 缓不到
+东西，因为那时候麦克风还没开。
+
+第 2 到第 5 次按住和第 1 次一样慢，说明引擎每次按住都被拆掉重建，这 690ms 每次都付。
+
+真正的头损失是 press 到第一个 buffer 的整整一秒，`RP-DICT firstBuffer` 量的正是它。
+pre-roll 留着：它要等麦克风常开之后才有用武之地。
+
+候选解法，都**还没验证**：引擎和 VPIO 建一次就留着，按住之间用 `pause()` 而不是 `stop()`
+（`stop()` 会释放 `prepare()` 分配的资源，`pause()` 不会）；或者改用
+`AVAudioSession.setPrefersEchoCancelledInput()` 绕开 VPIO 拿回声消除，它要求 category
+`.playAndRecord` 且 mode `.default`，只在 2024 年之后的 iPhone 上可用。两条都要实测，
+第二条的激活开销没有任何公开数字。
