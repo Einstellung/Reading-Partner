@@ -79,13 +79,24 @@ test('a run that does not start its line is inline math and spans newlines', () 
 	expect(canonicalizeMathFences(price)).toBe(price);
 });
 
-test('a line-start pair whose remainder holds another run falls back to inline math', () => {
-	// The `$` in what would be the meta makes remark refuse the flow block, and
-	// inline math renders. This is how most of the stored formulas are written.
+test('a line-start pair whose remainder holds any dollar falls back to inline math', () => {
+	// micromark rejects the meta on the first dollar it meets, whatever run that
+	// dollar belongs to, and inline math renders. This is how most of the stored
+	// formulas are written.
 	const text = c('$$S=\\begin{bmatrix}0.9&0.5\\end{bmatrix}$$');
 	expect(tree(text)).toEqual(['p', 'inlineMath:S=\\begin{bmatrix}0.9&0.5\\end{bmatrix}']);
 	expect(canonicalizeMathFences(text)).toBe(text);
-	for (const other of [c('$$Q = XW_q$$'), c('$$A$$\n$$B$$\n$$C$$'), c('$$x=1$$ 然后。')]) {
+	// A single `$` is enough, so a sentence naming both delimiters is prose and
+	// not a broken opener.
+	const naming = c('$$ 表示块公式，$ 表示行内公式。\nx=1\n$$');
+	expect(tree(naming)).toEqual(['p', 'text:$$ 表示块公式，$ 表示行内公式。\nx=1', 'math():']);
+	expect(canonicalizeMathFences(naming)).toBe(naming);
+	for (const other of [
+		c('$$Q = XW_q$$'),
+		c('$$A$$\n$$B$$\n$$C$$'),
+		c('$$x=1$$ 然后。'),
+		c('$$ 表示块公式，$ 表示行内公式。'),
+	]) {
 		expect(canonicalizeMathFences(other)).toBe(other);
 	}
 });

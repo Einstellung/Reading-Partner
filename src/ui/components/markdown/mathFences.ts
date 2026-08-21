@@ -13,11 +13,16 @@
 // That line is the only shape remark gets wrong, so it is the only one this pass
 // touches. A `$$` alone on its line already opens and closes a block; a run
 // anywhere but the start of a line is inline math, which spans newlines and
-// renders as written; and a line-start `$$…$$` whose remainder holds another run
-// is refused as flow and falls back to inline math, which renders too. Those, and
-// every dollar in prose, money or code, come back byte for byte. The only bytes
-// this module writes are the two cuts on a broken block's own fence lines, and
-// the escape below when such a block has no closer yet.
+// renders as written; and a line-start run whose remainder holds a dollar at all
+// is refused as flow and falls back to inline math, which renders too. Those
+// come back byte for byte, as does everything the pass reads as code, as raw
+// HTML, or as prose that only looks like a container. The bytes it does write
+// are the two cuts on a broken block's own fence lines, the container prefix on
+// the lines those cuts insert, and the escape below when such a block has no
+// closer yet. Not every other byte is untouchable — a line-start `$$100 元。` is
+// a block opener to remark and so to this pass — but a reply that already
+// rendered clean is: everything the pass rewrites was painting the error colour
+// before it.
 //
 // It is a line pass because remark's rules are container-relative: a flow block
 // ends where the blockquote or list item that opened it ends, and no scan of
@@ -77,24 +82,6 @@ function parseLine(raw: string, last: boolean): Line {
 		column: marker === '' ? 0 : indent + marker.length + m[4].length,
 		content: text.slice(m[0].length),
 	};
-}
-
-// Whether a run of at least `len` dollars appears anywhere in the rest of an
-// opening line. remark refuses flow for such a line and reads the pair as inline
-// math, which renders, so the line is not ours.
-function holdsRun(rest: string, len: number): boolean {
-	let i = 0;
-	while (i < rest.length) {
-		if (rest[i] !== '$') {
-			i += 1;
-			continue;
-		}
-		let end = i;
-		while (rest[end] === '$') end += 1;
-		if (end - i >= len) return true;
-		i = end;
-	}
-	return false;
 }
 
 interface Cut {
@@ -211,7 +198,11 @@ function scan(lines: Line[], escaped: ReadonlySet<number>): { blocks: Block[]; e
 			open = { line: i, split: false, len, depth: line.depth, column: line.column };
 			continue;
 		}
-		if (holdsRun(rest, len)) continue;
+		// micromark refuses the flow block on the first dollar it meets in the
+		// meta, whatever the run it belongs to, and reads the line as inline math
+		// instead — which renders, so the line is not ours. `$$ 表示块公式，$ 表示
+		// 行内公式。` is an ordinary sentence, not a broken opener.
+		if (rest.includes('$')) continue;
 		open = { line: i, split: true, len, depth: line.depth, column: line.column };
 	}
 	if (open) blocks.push({ open: open.line, split: open.split, close: null, cut: null, ended: 'eot' });
