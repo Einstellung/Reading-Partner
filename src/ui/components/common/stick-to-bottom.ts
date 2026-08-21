@@ -147,20 +147,30 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 
 	function applyRestore() {
 		if (!host || pending === null) return;
+		// The window is tested before the host is touched, or it bounds nothing: a
+		// growth that arrives long after the place is gone would still yank the
+		// reader to it and only then find the clock. Giving up decides nothing about
+		// the pin either — it was false when the restore was armed, since a restore
+		// only exists for a reader who was not at the bottom, and it stays false
+		// until a scroll of theirs recomputes it.
+		if (now() >= restoreUntil) {
+			pending = null;
+			return;
+		}
+		const before = host.scrollTop;
 		// Written whole and read back rather than clamped here: the browser has
 		// already clamped it, and a maximum computed from the rounded metrics misses
 		// where the write really landed by a fraction — enough for the echo to read
 		// as the reader taking over, which drops the place for good.
-		const before = host.scrollTop;
 		host.scrollTop = pending;
 		const landed = host.scrollTop;
 		selfTop = landed === before ? null : landed;
 		seenHeight = host.scrollHeight;
-		// Short of the place with time left: the content is still settling, so stay
+		// Short of the place, with time left: the content is still settling, so stay
 		// pending and try again on the next growth.
-		if (landed < pending && now() < restoreUntil) return;
-		// Done with it, landed or timed out. Where the list ended up is the reader's
-		// place now, and the pin follows from its distance to the bottom.
+		if (landed < pending) return;
+		// Landed. Where the list ended up is the reader's place now, and the pin
+		// follows from its distance to the bottom.
 		pending = null;
 		stuck = host.scrollHeight - host.clientHeight - landed <= threshold;
 	}

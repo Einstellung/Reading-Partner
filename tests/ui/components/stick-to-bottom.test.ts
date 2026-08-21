@@ -24,9 +24,12 @@
 //   the rounded metrics do not name.
 // - A remembered place the list has become too short to reach must be given up
 //   on when the restore's window runs out, or every later growth yanks the
-//   reader back to a place that is not there any more. It must survive the
-//   height watcher's first delivery, which reports every target it observes once
-//   at the height the bind already saw.
+//   reader back to a place that is not there any more, however late the growth
+//   arrives. It must survive the height watcher's first delivery, which reports
+//   every target it observes once at the height the bind already saw. Giving up
+//   writes nothing and leaves the pin off: the reader is at the bottom of a short
+//   transcript because this module's clamped write put them there, not because
+//   they chose to follow the newest message.
 //
 // The host and the height watcher are stand-ins: there is no layout in this
 // runner, so a real element reports 0 for every metric. scrollableAncestor is
@@ -443,9 +446,49 @@ test("a place the list is too short to reach is given up on when the window runs
 	// Long enough that anything that was going to settle has.
 	clock.advance(2500);
 	contentChanged();
-	// The reply that streams in afterwards must be followed, not answered with
-	// another yank back to a place that is not there.
+	// The reply that streams in afterwards must not be answered with another yank
+	// back to a place that is not there.
 	back.grow(500);
+	contentChanged();
+	expect(back.scrollTop).toBe(400);
+	stop();
+});
+
+test("a restore that ran out of time writes nothing, however late the growth", () => {
+	const memory = makeMemory();
+	leaveAt(memory, 600);
+	const clock = makeClock();
+	const back = makeHost(700, 300);
+	const { stop, contentChanged } = bindRemembered(back, memory, clock);
+	expect(back.scrollTop).toBe(bottomOf(back));
+	// Ten seconds of reading what did come back, and then a last row settles and
+	// the list is finally tall enough for the old offset. The window closed eight
+	// seconds ago.
+	clock.advance(10000);
+	back.grow(500);
+	contentChanged();
+	expect(back.scrollTop).toBe(400);
+	stop();
+});
+
+test("a restore that was given up on does not turn the reader into a bottom-follower", () => {
+	const memory = makeMemory();
+	leaveAt(memory, 600);
+	const clock = makeClock();
+	const back = makeHost(700, 300);
+	const { stop, contentChanged } = bindRemembered(back, memory, clock);
+	clock.advance(2500);
+	contentChanged();
+	// Three replies stream in. The reader is at the bottom of this short
+	// transcript because the clamped write left them there, so nothing follows.
+	for (const by of [200, 200, 200]) {
+		back.grow(by);
+		contentChanged();
+	}
+	expect(back.scrollTop).toBe(400);
+	// Their own scroll down still hands the pin back.
+	back.scrollTo(bottomOf(back));
+	back.grow(300);
 	contentChanged();
 	expect(back.scrollTop).toBe(bottomOf(back));
 	stop();
