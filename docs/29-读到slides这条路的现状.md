@@ -1,6 +1,6 @@
 # 读到 slides 这条路的现状
 
-> "开一本书或一篇论文，读它，出一份 slides" 这条路今天实际停在哪里。上游是 [14](./14-笔记与PPT.md)（笔记与 PPT 的设计共识）和 [09](./09-学习机模式.md)（备课管线）。缺陷与缺失的底账，不排期、不给方案。按 2026-07-31 的代码逐条核对，行号是核对过的。
+> "开一本书或一篇论文，读它，出一份 slides" 这条路今天实际停在哪里。上游是 [14](./14-PPT.md)（PPT 的设计共识）和 [09](./09-学习机模式.md)（备课管线）。缺陷与缺失的底账，不排期、不给方案。2026-07-31 逐条核对；2026-08 起大部分已修，逐条现状记在各小节标题下，仍未修的保留原有分析。
 
 ---
 
@@ -10,64 +10,50 @@
 
 ### slides 的 plan 拿不到章节清单
 
-`src/reading/slides/live.ts:80` 的 `planMaterial` 在有 overview 时只把 overview 喂进 plan 调用（:84），而 overview 的提示词明写它是 200-500 词的跨章综合、不是逐章摘要（`src/reading/notes/overview.ts:22`），里面没有章节编号。plan 的提示词却要求模型给出 `sourceChapters`（`src/reading/slides/plan.ts:39`、:53）。模型只能猜，`asChapters`（:110）只校验是正整数，不校验存在。猜错的章号让 `readChapterNote` 返回 null，`gatherSlideNotes`（live.ts:106）静默回落到该书 overview。结果是每张内容页蒸馏同一段框架，章节笔记一个字没用上。
-
-没有 overview 时反而更好：回落路径（live.ts:87）给的是章号、标题和每章前 40 词。
+已修 2026-08：plan 现在先读这场讲已经定下的决定（`readDeckOutline`／`applyTalkOutline`，`src/reading/slides/live.ts:260-280`），把决定排成页；`validateDeckPlan` 当场校验 `sourceChapters` 与 `figId` 存在，读不到就在该页 `planNotice` 上说清楚，不再静默回落到全书 overview。原来"整章号靠猜"的回落路径只在这场讲什么都还没定时才走。
 
 ### 图注识别与 bbox 判废
 
-都在 `src/reading/figures/extract.ts`，两处独立成因。两处都修好，deck 里才可能出现书内原图。
+都在 `src/reading/figures/extract.ts`，两处仍未修，行号已按当前代码更新；编号塌缩、中文图注、图比图注窄时的错误带状裁图三处已修（见下）。
 
-图注这一半有三个成因。`captionLinesFromText`（:240）按基线 y 分行，不看 x 距离；双栏论文里左栏正文和右栏图注共享基线会被并成一行，图注不在行首，`figureCaptionId` 的行首锚定失败，整条 caption 丢掉，索引里连条目都没有。编号塌缩和中文图注这两处 2026-08-19 已修（见 docs/12）：编号保留全部节号，标签认中英两种，罗马数字仍不识别。第三处是 :251 的排序比较器不满足传递性（基线差 ≤3 按 x 比、否则按 y 比），基线密集时排序结果未定义，邻行的一个 run 插进来就能把一条图注切成两半、两半都匹配不上。
+图注这一半有两个仍未修的成因。`captionLinesFromText`（`extract.ts:296`）按基线 y 分行，不看 x 距离；双栏论文里左栏正文和右栏图注共享基线会被并成一行，图注不在行首，`figureCaptionId` 的行首锚定失败，整条 caption 丢掉，索引里连条目都没有。排序比较器（`extract.ts:307`，基线差 ≤3 按 x 比、否则按 y 比）不满足传递性，基线密集时排序结果未定义，邻行的一个 run 插进来就能把一条图注切成两半、两半都匹配不上。编号塌缩和中文图注已修（2026-08-19，见 docs/12）：编号保留全部节号，标签认中英两种，罗马数字仍不识别。
 
-bbox 这一半：图注在图上方时 `pairFiguresOnPage` 拿不到任何区域（:465 把 caption 在 art 之上的配对排除），bbox 为 null，而 slides 的裁图路径见 null 直接返回 null（`src/reading/slides/live.ts:205`），槽位消失。图比图注窄时（:399 的 `wideEnough`）真实 bbox 被丢弃，但结果不是 null 而是 caption 锚定的回落区域——图注宽度乘上向上到最近正文行的一段（:412）。所以这一路给出的是一张按栏宽裁的带状图，不是那张图；正文行也没有时上界是页高的 0.6，裁出来的框会越过页顶。
+bbox 这一半：图注在图上方时 `pairFiguresOnPage`（`extract.ts:505`）拿不到任何区域（caption 必须在 art 下方才配对），bbox 为 null，而 slides 的裁图路径见 null 直接返回 null（`src/reading/slides/live.ts`），槽位消失——这条仍未修。图比图注窄时的回落已修：`wideEnough`（`extract.ts:455`）判定不够宽后，先试 caption 锚定的回落区域，回落区域仍不够宽就直接给 null，不再像原来那样拿一张按栏宽裁的带状图顶替。
 
 ### 论文与书用同一套假设，两边都不合身
 
-管线不作区分。书这一侧：`chaptersFromOutline`（`src/reading/notes/plan.ts:63`）只取 outline 的 level 0，很多书 level 0 是"第一部分/第二部分"，于是变成三个上百页的"章"；每章一篇 300-700 词的笔记（`src/reading/notes/chapter.ts:147`），而读页工具每次最多 10 页（:180，`src/fulltext/format.ts:48` 强制）、16 轮上限（:18），覆盖不了。加上图注按章节编号造成的 id 塌缩，书这侧的图基本全丢。
-
-论文这一侧：通常无 outline，落到 AI 兜底，而那个提示词开头写的是"给你一本书的前置部分，通常含目录"（plan.ts:75），对 12 页论文是错的框架；`toChapters`（:44）让最后一"章"延到末页，参考文献被当正文写进笔记；双栏图注丢失是论文侧的主要杀手。参考文献本身没被利用——`src/reading/papers/` 的引文解析只服务备课管线，`src/reading/notes/` 和 `src/reading/slides/` 不 import 它。
+已修／整合 2026-08：管线搬到 `src/reading/prep/chapters/`。论文侧的引用摘要现在是完全独立的一条管线 `src/reading/prep/papers/`（消化一篇文档引用的参考文献），不再和书共用同一套 outline／plan 假设。但两条管线都不进 slides：`src/reading/slides/` 与 `src/reading/talks/` 对 `prep/papers/` 零 import。这个缺口留在 [31](./31-读完之后的梳理与讲.md)「前提与缺口」，这里不重复。
 
 ### 一键全书不覆盖 skipped 章
 
-`planAutoNotes`（`src/reading/notes/auto.ts:78`）把前沿之后零划线的章标 `skipped`，`runChapters`（`src/reading/notes/pipeline.ts:305`）只跑 `pending`，面板的 Resume 走的是同一个 `ensureStarted`（:107，`NotesPanel.tsx:265`）。docs/14 第 32 行"手动一键按钮始终是最终兜底"与代码不符——同一份文档第 30 行的"面板留一个单章 Generate 兜底"才是实际行为（`NotesPanel.tsx:119`）。要覆盖只能逐章点 Generate。
-
-一本只在几章划过线的书，笔记天然是残的。逐章标了"No marks — skipped"（`NotesPanel.tsx:127`），但 overview 在 done 加 skipped 就算 settled（pipeline.ts:226）后照常写出，Slides 弹窗里也没有任何地方说这本书只覆盖了几分之几。
+已修 2026-08-19：`skipped` 状态和划线前沿驱动的逻辑一并删掉，改成全书全备，不再有"没覆盖到"的章（docs/09「触发：两条，没有开关」，docs/14 补记）。
 
 ### 产物三处丢人
 
-内容同质，见上。
+内容同质：见"slides 的 plan 拿不到章节清单"，已修。
 
-图槽普遍为空，而内容提示词允许模型在图下写一句话（`src/reading/slides/content.ts:22` 的 `takeaway`）；`injectAsset`（`template.ts:46`）会删掉占位符和空的 figwrap，但删不掉那句话，于是出现"如图所示"下面什么都没有。
+图槽空文字残留：`injectAsset`（`template.ts:172`）仍然只删占位符和空 `figwrap`，不删 `takeaway` 文字，但提示词已经改口——`contentSystemPrompt`（`content.ts`）明写"the shell...drops it if the asset is unavailable — so still write a slide that reads without the image"，要求模型写一句离开图片也能读的话，不再默认"如图所示"。
 
-溢出静默裁掉：`.slide`（template.ts:88）没有 overflow 处理，`.stage`（:84）是 `overflow:hidden`，bullet 写多了后几条看不见，生成时与放映时均无提示。
+溢出改成两头报：生成时按模板尺寸估算记在该页状态里（`overflow.ts`），放映时壳自己量 `scrollHeight` 出提示（`template.ts` 的 `.overflow-warn`）。
 
-测试只覆盖壳（`tests/reading/slides/template.test.ts`），没有任何测试碰真实内容。
+测试已覆盖内容：`tests/reading/slides/{content,pipeline,plan,outline,deck-chapters}.test.ts`，不再只测壳。
 
 ### 违反诚实失败
 
-最直接的一处：图没取到时仍无条件把 `assetStatus` 标成 `done`（`src/reading/slides/pipeline.ts:249`，上一行的 `if (asset)` 只挡了写入 assets 表这一步），弹窗里显示绿色的 figure 徽标而 deck 里没有那张图。
-
-其余：书单为空时 Generate 是静默 no-op（`SlidesDialog.tsx:157`，`selected` 初值含当前书 :119，所以按钮不 disabled，而 `books` 为空使 ids 为空直接 return）；`listBooksWithNotes` 在 `readDir` 抛错时静默返回空（`live.ts:63`）；图索引读失败被当成"这本书没有图"（`src/reading/figures/store.ts:45`，调用方一律 `?.figures ?? []`）；插图异常只 `console.warn`（pipeline.ts:256）；plan 编出的 `sourceChapters` 与 `figId`（plan.ts:144）都不做存在性校验，到 assets 阶段才发现然后标 done。抽取失败一律 `.catch(() => null)`（`src/App.tsx:1047`、`src/reading/prep/live.ts:202`），其中 fulltext 的失败在 Generate notes 时会弹提示（`src/reading/notes/use-notes.ts:212`），图索引失败对用户完全不可见。
+已修 2026-08：`assetStatus` 现在取到图才 `done`，取不到是 `missing` 并写 `assetError`（`pipeline.ts:376-378`）；plan 编出的 `sourceChapters`／`figId` 当场做存在性校验（`validateDeckPlan`）；旧的"书单为空 Generate 静默 no-op"入口（`SlidesDialog.tsx`）整个删掉，改成讲里的 Deck 按钮（`DeckDialog.tsx`），不再有选书这一步。图索引失败的可见性见下一节。
 
 ### 清不掉、退不回的状态
 
-图索引失败一次即永久为空：空索引被有意持久化以避免每次开书重试（`src/reading/figures/store.ts:84`、:87），而没有任何界面能清它，全仓没有删除 `figures-*.json` 的路径。
+图索引失败不再永久为空：`FIGURES_RETRY_AFTER_MS`（`src/reading/figures/store.ts:35`）24 小时后重试，`figuresCacheFresh`（:46）区分 failed 与空。生成中途退出已能续跑：`state.json` 是恢复点（docs/31「已解决」，`0d4acc6`），不再是"能重跑不能续跑"。
 
-`talks.json` 解析失败返回空数组（`src/reading/slides/store.ts:43`），下一次 `appendTalk`（:50）即以空数组为基础覆写整个文件，所有已生成的 deck 从界面永久消失而 HTML 仍在盘上。
-
-写盘成功但登记失败留下孤儿文件：`live.ts:228` 先 `writeDeck` 再 `appendTalk`，后者抛错时 run 报 assemble failed，HTML 已经在盘上了。
-
-生成中途退出无 state.json，能重跑不能续跑（docs/14 第 77 行已声明这是 v1 的已知限制）。对照记一句：笔记那一侧的恢复是好的，中断的 running 归回 pending（`src/reading/notes/types.ts:67`），plan、章节、overview 各有重试。
+以下两条仍未修：`talks.json` 解析失败仍返回空数组（`loadTalks`，`src/reading/slides/store.ts:159`），下一次 `recordTalk`（:172）即以这份空数组覆写整个文件——所有已生成的 deck 从界面永久消失，HTML 仍在盘上。`runthrough/store.ts` 吸取了这个教训（读不出时把坏文件挪开，见 `tests/reading/runthrough/store.test.ts` 的注释），但 `slides/store.ts` 本身没有照做。解法现成：改走 `platform/app/atomic-fs` 的 `readGuardedJson`，同 `saved-articles.ts`。写盘成功但登记失败仍留孤儿文件：`live.ts:362` 先 `writeDeck` 再 `recordTalk`（:373），后者抛错时 HTML 已经在盘上，登记没跟上。
 
 ## 缺失
 
-不是坏了，是没做。
-
-- deck 无重启恢复。
-- deck 没有独立入口：只能开一本有笔记的书、进 Notes tab，且该书至少一章 done 才出现 Slides 按钮（`NotesPanel.tsx:240`）。
-- 无 PDF 导出、演讲者备注、单页编辑、主题换肤（docs/14 第 82 行已列为待定）。
-- 备课管线的笔记（`prep-<hash>/`，docs/09 第 48 行）完全不进 notes 与 slides，学习机模式预读的论文在 deck 里用不上。
+- deck 无重启恢复。已修，见上「清不掉、退不回的状态」。
+- deck 没有独立入口。已修：入口在讲里（`DeckDialog.tsx`），Notes tab 已删（docs/14）。
+- 无 PDF 导出、演讲者备注、单页编辑、主题换肤。仍未做，见 [31](./31-读完之后的梳理与讲.md)「后续待定」，这里不重复。
+- 备课管线的论文材料不进 slides。仍未接，见 [31](./31-读完之后的梳理与讲.md)「前提与缺口」，这里不重复。
 
 ## 未验证
 
