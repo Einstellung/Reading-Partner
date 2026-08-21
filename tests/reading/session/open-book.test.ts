@@ -215,10 +215,10 @@ test("a book opens with its prep detached, legacy classroom flag or not", async 
   expect(argsOf(log, "resumeChapterSpine")).toEqual(["book-1", "A Book.pdf", FULLTEXT]);
 });
 
-// The two panels are resumed one after the other, not both at once: prep runs
-// the chapter pass the notes panel then reads. `resumePrep:landed` between the
+// The two passes are resumed one after the other, not both at once: prep runs,
+// the chapter pass then reads. `resumePrep:landed` between the
 // two calls is the whole of it — without it, both would be in flight together.
-test("the notes panel is resumed only after the prep panel has finished", async () => {
+test("the chapter pass is resumed only after the prep panel has finished", async () => {
   const log: Call[] = [];
   await openBook(fakeShell(log, { currentBookId: () => "book-1" }), book, fakeIo(log));
   await settle();

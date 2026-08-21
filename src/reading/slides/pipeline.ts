@@ -176,8 +176,9 @@ export class SlidesPipeline extends ObservableRun<SlidesState, SlidesActivity> {
   }
 
   // Re-run one slide's body, optionally steered by a one-line instruction (the
-  // same affordance as the notes panel's per-chapter Regenerate). The assembled
-  // deck is then out of date, so it is marked stale rather than rebuilt silently.
+  // same affordance as PrepPanel's chapter half's per-chapter Regenerate). The
+  // assembled deck is then out of date, so it is marked stale rather than
+  // rebuilt silently.
   regenerateSlide(index: number, instruction?: string): void {
     if (this.running) return;
     const slide = this.state.slides.find((s) => s.index === index);

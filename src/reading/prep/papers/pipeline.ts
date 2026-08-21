@@ -90,7 +90,7 @@ export interface PrepActivity {
 export type PrepSnapshot = RunSnapshot<PrepState | null, PrepActivity>;
 
 // The fetch stage's outcome for a captured source on a resumed run: the text is
-// read back out of the fulltext cache the ingest wrote (prep/live.ts). Here
+// read back out of the fulltext cache the ingest wrote (prep/papers/live.ts). Here
 // rather than inline in the live deps so the one rule it carries is testable —
 // a cached text is used as it stands, and a missing or unusable one is an error
 // rather than a fall through to the network. Falling through would fetch the
@@ -118,7 +118,7 @@ export class PrepPipeline extends ObservableRun<PrepState | null, PrepActivity> 
   // fetch. Entries are kept rather than consumed, so a requeue after a failed
   // digest is served from the copy at hand too; the map lives and dies with the
   // pipeline instance, and a run resumed in a later session reads the text back
-  // out of the fulltext cache instead (prep/live.ts, PrepPaper.captured).
+  // out of the fulltext cache instead (prep/papers/live.ts, PrepPaper.captured).
   private readonly captured = new Map<string, FetchOutcome>();
 
   constructor(
