@@ -24,9 +24,13 @@ SyntaxError: Export named 'writeTextFile' not found in module
 
 `mock.module` 只在没有别的办法时用，用了就得让那份假货是完整的模块表面。
 
+## 归因更正：跑的是同一个进程，不是不同 worker
+
+"两个文件分到不同 worker 才各自绿"是错的。`bun test` 全场只有一个进程，没有子进程；`mock.module` 换的是这一个进程的模块表，两份表面谁生效看文件加载顺序，不是 worker 分配（坑 120）。
+
 ## 还没修的
 
-`tests/reading/turn.test.ts` 和 `tests/settings.test.ts` 都 `mock.module` 了 `@tauri-apps/plugin-fs`，两份表面不一样，同 worker 相遇一样炸（`Export named 'readFile' not found`）。现在靠 worker 分配躲着。
+`tests/reading/turn.test.ts` 已经改用 `tests/support/appdata.ts` 的 `makeAppData()`，给 `@tauri-apps/plugin-fs` 一份完整表面。`tests/settings.test.ts` 还是自己 `mock.module` 了一份只有 5 个导出的桩（没有 `readFile`），和别的文件的完整表面撞在同一个进程里，后加载的覆盖先加载的，谁赢看加载顺序。现在靠加载顺序躲着；挪测试文件位置会改变顺序（同族的推论见下）。
 
 ## 推论：测试树不能镜像 src 的目录结构
 
