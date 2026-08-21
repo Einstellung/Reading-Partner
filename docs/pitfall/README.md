@@ -39,6 +39,8 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 156）。
+
 ## EmbedPDF 引擎
 
 - [18-embedpdf-load-hangs-progress-zero](./18-embedpdf-load-hangs-progress-zero.md) — 文档加载静默卡 progress 0，解法是跨源隔离头 + 直连引擎（worker:false）；归因是错的：pdfium.wasm 不是 pthread 构建，不需要 SharedArrayBuffer，worker 那次挂在根相对 wasmUrl（坑 21）
@@ -89,6 +91,7 @@
 - [128-react-onwheel-is-passive](./128-react-onwheel-is-passive.md) — React 18 把 `wheel`/`touchstart`/`touchmove` 按 passive 挂在 root 上，`onWheel` 里的 `preventDefault()` 被忽略，自己的缩放和浏览器的页面缩放同时跑；要手挂原生监听并显式 `{ passive: false }`
 - [129-wheel-delta-comes-in-three-units](./129-wheel-delta-comes-in-three-units.md) — `deltaY` 的单位由 `deltaMode` 说了算（像素/行/页），行模式一格约 3，只按像素累计的手势在那种引擎上要拨十几下才动一格；累加前先归一到像素
 - [137-zoom-plugin-wheel-is-ctrl-only-and-doubles-per-notch](./137-zoom-plugin-wheel-is-ctrl-only-and-doubles-per-notch.md) — 缩放插件的 `enableWheel` 只是 ctrl/meta+滚轮的开关（裸滚轮在 handler 第一行就返回，从来不归它管），关掉它等于白白没有桌面缩放；步长是 `1 - deltaY*0.01` 且没有灵敏度选项，Chromium 一格 100px 就翻倍，只能自己接管，用 `exp(-px/800)` 一条指数曲线同时喂鼠标和触控板
+- [143-ios-puts-its-selection-callout-below-the-selection](./143-ios-puts-its-selection-callout-below-the-selection.md) — iPad 上系统的 `Copy | Look Up | Translate` 条不是固定在选区上方：选区中心在安全区竖向中点以上时它在下方，以下时在上方，两边都是离选区 15px、高 44px，横向对着选区中心夹进屏幕。它是浮在 WKWebView 上的 UIKit 视图，DOM 里没有、`elementFromPoint` 看不见、落在它上面的触摸网页收不到；贴着选区放的浮动控件被盖掉 37px 只剩 7px 可点。那个控件已删（作废 2026-08-20），再往选区旁边放东西要按这条带子两边都让并重新量
 
 ## 网络与 CSP
 
@@ -209,7 +212,7 @@
 - [124-fs-deny-replaces-the-defaults](./124-fs-deny-replaces-the-defaults.md) — vite 解析 `server.fs?.deny || ['.env', '.env.*', '*.{crt,pem}']`，插件从 `config()` 返回一份 deny 就把这三条默认值整个顶掉，dev server 当场 200 发出 `.env` 正文外加明文 sourcemap；要加只能在 `configResolved` 里往已解析的数组 push。凡是 `x || 默认值` 解析的 vite 字段都是提供即替换
 - [134-dropthreadcache-reloads-instead-of-dropping](./134-dropthreadcache-reloads-instead-of-dropping.md) — `dropThreadCache` 不删缓存条目，它从文件重读一遍再合进去；`beforeEach` 里调它不隔离用例，同一个 `threadId` 会继承上一个用例追加的整段历史，用例之间要换 id
 - [142-a-worktree-vite-writes-the-main-checkouts-dep-cache](./142-a-worktree-vite-writes-the-main-checkouts-dep-cache.md) — worktree 的 `node_modules` 是主 checkout 的软链，vite 默认把依赖预构建缓存写进 `node_modules/.vite`，打断用户的 `tauri dev`（`--force` 更是直接清掉）；实验用私有 config 覆盖 `cacheDir` 和 `watch.ignored`，每轮 curl 确认吐的是新代码
-- [152-the-layering-test-reads-imports-inside-comments](./152-the-layering-test-reads-imports-inside-comments.md) — `tests/layering.test.ts` 不剥注释，注释里写成 `from "../lecture"` 形式的一行照样落成一条目录依赖边，造出一个代码里不存在的环；注释里指别的目录写裸路径，别写 import 语句形式
+- [144-the-layering-test-reads-imports-inside-comments](./144-the-layering-test-reads-imports-inside-comments.md) — `tests/layering.test.ts` 不剥注释，注释里写成 `from "../lecture"` 形式的一行照样落成一条目录依赖边，造出一个代码里不存在的环；注释里指别的目录写裸路径，别写 import 语句形式
 - [155-cargo-never-hears-that-the-icon-changed](./155-cargo-never-hears-that-the-icon-changed.md) — 图标是编译期嵌进二进制的，`tauri_build::build()` 的 rerun-if-changed 名单里没有 `src-tauri/icons/`，`generate_context!` 又只 `include_bytes!` 一份 `OUT_DIR` 里按校验和命名的副本；换了图片 cargo 认为没东西变，dev 起来还是旧图标。`touch src-tauri/tauri.conf.json` 再起。桌面用的是 `bundle.icon` 里第一个 `.png`（`icons/32x32.png`），不是 `icon.png`
 - [151-a-dev-build-registers-the-dev-binary-for-login](./151-a-dev-build-registers-the-dev-binary-for-login.md) — dev 下打开开机启动写进登录项的是 `target/debug` 那个二进制，它的 devUrl 指着 vite dev server，开机起来只有一张 connection refused 错误页；手删还会被下次启动的对齐写回去。dev 构建里开机启动整个当作不可用，启动时的对齐无条件 `disable()`，`device.json` 里的意愿留着等打包版
 
