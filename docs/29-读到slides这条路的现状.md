@@ -46,7 +46,7 @@ bbox 这一半：图注在图上方时 `pairFiguresOnPage`（`extract.ts:505`）
 
 图索引失败不再永久为空：`FIGURES_RETRY_AFTER_MS`（`src/reading/figures/store.ts:35`）24 小时后重试，`figuresCacheFresh`（:46）区分 failed 与空。生成中途退出已能续跑：`state.json` 是恢复点（docs/31「已解决」，`0d4acc6`），不再是"能重跑不能续跑"。
 
-以下两条仍未修：`talks.json` 解析失败仍返回空数组（`loadTalks`，`src/reading/slides/store.ts:159`），下一次 `recordTalk`（:172）即以这份空数组覆写整个文件——所有已生成的 deck 从界面永久消失，HTML 仍在盘上。`runthrough/store.ts` 吸取了这个教训（读不出时把坏文件挪开，见 `tests/reading/runthrough/store.test.ts` 的注释），但 `slides/store.ts` 本身没有照做。写盘成功但登记失败仍留孤儿文件：`live.ts:362` 先 `writeDeck` 再 `recordTalk`（:373），后者抛错时 HTML 已经在盘上，登记没跟上。
+以下两条仍未修：`talks.json` 解析失败仍返回空数组（`loadTalks`，`src/reading/slides/store.ts:159`），下一次 `recordTalk`（:172）即以这份空数组覆写整个文件——所有已生成的 deck 从界面永久消失，HTML 仍在盘上。`runthrough/store.ts` 吸取了这个教训（读不出时把坏文件挪开，见 `tests/reading/runthrough/store.test.ts` 的注释），但 `slides/store.ts` 本身没有照做。解法现成：改走 `platform/app/atomic-fs` 的 `readGuardedJson`，同 `saved-articles.ts`。写盘成功但登记失败仍留孤儿文件：`live.ts:362` 先 `writeDeck` 再 `recordTalk`（:373），后者抛错时 HTML 已经在盘上，登记没跟上。
 
 ## 缺失
 
