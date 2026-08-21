@@ -9,7 +9,8 @@
 // - The reader scrolling up must win, and must keep winning while a reply
 //   streams underneath. Coming back to the bottom must hand the pin back.
 // - The scroll the pin performs itself must not read as the reader scrolling
-//   away, or the first growth would unpin the list forever.
+//   away, or the first growth would unpin the list forever, and must not be
+//   recorded as a place the reader chose.
 // - Teardown must release the container it bound to, so a re-pin (a new thread)
 //   does not leave the old listener running.
 // - A remembered list must come back where the reader was, and must keep coming
@@ -41,6 +42,11 @@ await useDom();
 // A scroll container that records its listeners and lets a test move its
 // numbers around. Scrolling it by hand fires the event a browser would.
 //
+// A write that moves the list owes a scroll event too, the way a browser reports
+// a programmatic scroll. There are no frames here to deliver it on, so the test
+// delivers it with `flush`, and one flush fires one event however many writes it
+// covers — a browser coalesces the moves within a frame the same way.
+//
 // The position clamps the way a browser's does, and `slack` puts the maximum a
 // fraction below the one the metrics describe: scrollHeight and clientHeight are
 // rounded and scrollTop is not, so on a real list a write at the computed bottom
@@ -48,12 +54,16 @@ await useDom();
 function makeHost(scrollHeight: number, clientHeight: number, slack = 0) {
 	const listeners = new Set<() => void>();
 	let position = 0;
+	let owed = false;
 	return {
 		get scrollTop() {
 			return position;
 		},
 		set scrollTop(next: number) {
-			position = Math.max(0, Math.min(next, this.scrollHeight - this.clientHeight - slack));
+			const clamped = Math.max(0, Math.min(next, this.scrollHeight - this.clientHeight - slack));
+			if (clamped === position) return;
+			position = clamped;
+			owed = true;
 		},
 		scrollHeight,
 		clientHeight,
@@ -66,13 +76,16 @@ function makeHost(scrollHeight: number, clientHeight: number, slack = 0) {
 		/** What the reader does: move the position, then the browser reports it. */
 		scrollTo(top: number) {
 			this.scrollTop = top;
-			this.emit();
+			this.flush();
 		},
 		/** What the content does: get taller, no scroll event of its own. */
 		grow(by: number) {
 			this.scrollHeight += by;
 		},
-		emit() {
+		/** The browser reporting the moves it owes an event for. */
+		flush() {
+			if (!owed) return;
+			owed = false;
 			for (const fn of Array.from(listeners)) fn();
 		},
 		listenerCount() {
@@ -124,7 +137,7 @@ test("its own scroll does not read as the reader scrolling away", () => {
 	const host = makeHost(1000, 300);
 	const { stop, contentChanged } = bind(host);
 	// The browser reports the pin's own move one turn later.
-	host.emit();
+	host.flush();
 	host.grow(500);
 	contentChanged();
 	expect(host.scrollTop).toBe(bottomOf(host));
@@ -174,7 +187,7 @@ test("a height change that arrives as a scroll event does not unpin", () => {
 	// Scroll anchoring: the content grew and the browser moved the position
 	// itself, reporting it as a scroll from a place that is no longer the bottom.
 	host.scrollHeight += 600;
-	host.emit();
+	host.flush();
 	expect(host.scrollTop).toBe(bottomOf(host));
 	stop();
 });
@@ -255,8 +268,13 @@ test("a reader who left at the bottom comes back pinned, not frozen", () => {
 	const memory = makeMemory();
 	const left = makeHost(1000, 300);
 	const first = bindRemembered(left, memory);
+	// Up the history and back down to the newest message, which is where the
+	// bottom counts as a state rather than the offset it happened to be at.
+	left.scrollTo(200);
+	left.grow(400);
 	left.scrollTo(bottomOf(left));
 	first.stop();
+	expect(memory.saved()).toEqual({ top: bottomOf(left), stuck: true });
 
 	const back = makeHost(1000, 300);
 	const { stop, contentChanged } = bindRemembered(back, memory);
@@ -287,7 +305,7 @@ test("the restore's own scroll does not read as the reader taking over", () => {
 	const back = makeHost(400, 300);
 	const { stop, contentChanged } = bindRemembered(back, memory);
 	// The browser reports the clamped write one turn later.
-	back.emit();
+	back.flush();
 	back.grow(600);
 	contentChanged();
 	expect(back.scrollTop).toBe(200);
@@ -299,12 +317,12 @@ test("a height change reported as a scroll does not cancel the restore", () => {
 	leaveAt(memory, 200);
 	const back = makeHost(400, 300);
 	const { stop, contentChanged } = bindRemembered(back, memory);
-	back.emit();
+	back.flush();
 	// Scroll anchoring during the settle: taller content, and the browser moved
 	// the position itself.
 	back.scrollHeight += 600;
 	back.scrollTop = 150;
-	back.emit();
+	back.flush();
 	contentChanged();
 	expect(back.scrollTop).toBe(200);
 	stop();
@@ -330,7 +348,7 @@ test("the restore survives its own write landing short of the rounded bottom", (
 	// module's own rather than as the reader taking the place over.
 	const back = makeHost(500, 300, 0.5);
 	const { stop, contentChanged } = bindRemembered(back, memory);
-	back.emit();
+	back.flush();
 	back.grow(600);
 	contentChanged();
 	expect(back.scrollTop).toBe(200);
@@ -377,8 +395,22 @@ test("a reader who never scrolled records nothing", () => {
 	const { stop, contentChanged } = bindRemembered(host, memory);
 	host.grow(400);
 	contentChanged();
+	host.flush();
 	stop();
 	expect(memory.saved()).toBe(null);
+});
+
+test("the pin's own write is not recorded, and the reader's next one is", () => {
+	const memory = makeMemory();
+	const host = makeHost(1000, 300);
+	const { stop } = bindRemembered(host, memory);
+	host.flush();
+	expect(memory.saved()).toBe(null);
+	// And the marker the pin left behind is spent, not a standing mute on the
+	// scrolls that follow.
+	host.scrollTo(120);
+	expect(memory.saved()).toEqual({ top: 120, stuck: false });
+	stop();
 });
 
 test("without the seams nothing is remembered", () => {

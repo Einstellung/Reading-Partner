@@ -54,10 +54,10 @@ export interface StickOptions {
 
 const DEFAULT_THRESHOLD = 40;
 
-// How far off a write may land and still be recognised as this module's own.
-// scrollHeight and clientHeight come back as rounded integers while scrollTop
-// does not, so a write at the bottom of a real list settles a fraction below the
-// value that was written and an exact comparison never matches.
+// How far off the echo of a write may land and still be recognised as this
+// module's own. The marker is the position read back immediately after the
+// write, so it matches exactly unless something moved the list in between, and a
+// pixel of slack is what covers that.
 const SELF_WRITE_SLACK = 1;
 
 const SCROLLABLE = new Set(["auto", "scroll", "overlay"]);
@@ -167,6 +167,12 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 		const height = host.scrollHeight;
 		const grew = height !== seenHeight;
 		seenHeight = height;
+		// A pinned list whose height moved under it: the browser may report that as
+		// a scroll (anchoring), and reading the distance then would unpin it.
+		if (grew && stuck) {
+			toBottom();
+			return;
+		}
 		// The browser echoing back a scroll this module performed.
 		if (selfTop !== null && Math.abs(host.scrollTop - selfTop) <= SELF_WRITE_SLACK) {
 			selfTop = null;
@@ -179,12 +185,6 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 			if (grew) return;
 			// A scroll at an unchanged height is the reader taking over.
 			pending = null;
-		}
-		// A pinned list whose height moved under it: the browser may report that as
-		// a scroll (anchoring), and reading the distance then would unpin it.
-		if (grew && stuck) {
-			toBottom();
-			return;
 		}
 		stuck = host.scrollHeight - host.clientHeight - host.scrollTop <= threshold;
 		// The one place the position is both the reader's and known to belong to
@@ -207,6 +207,10 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 		// Assigning scrollTop is the instant scroll; scrollIntoView would animate
 		// under `scroll-behavior: smooth` and never catch a list that keeps growing.
 		host.scrollTop = host.scrollHeight - host.clientHeight;
+		// Read back and kept for the same reason the restore does it: the echo of
+		// this write is a scroll event like any other, and without the marker it is
+		// recorded as a place the reader chose.
+		selfTop = host.scrollTop;
 		seenHeight = host.scrollHeight;
 	}
 
