@@ -1,6 +1,6 @@
 // What canonicalizeMathFences must move and what it must leave alone. The cases
-// are the shapes the model actually writes (docs/pitfall/156); the last test
-// parses one of them through the real plugin set, which is where the bug shows.
+// are the shapes the model actually writes (docs/pitfall/156); the last tests
+// parse them through the real plugin set, which is where the bug shows.
 
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
@@ -35,29 +35,59 @@ test('text with nothing to move comes back identical', () => {
 });
 
 test('single-line pairs are left alone, however many', () => {
-	// The shape 162 of the stored formulas are written in. remark reads them as
-	// inline math and they render; promoting them to display blocks would be a
-	// change of style, not of correctness.
+	// The shape most of the stored formulas are written in. remark reads them as
+	// inline math and they render.
 	const three = c('$$A$$\n$$B$$\n$$C$$');
 	expect(canonicalizeMathFences(three)).toBe(three);
 	const matrix = c('$$S=\\begin{bmatrix}0.99&0.95\\\\0.95&1.49\\end{bmatrix}$$');
 	expect(canonicalizeMathFences(matrix)).toBe(matrix);
 });
 
+test('a run that does not start its line is left where it is', () => {
+	// Anywhere but the start of a line, `$$` is inline math: it spans newlines,
+	// it stops at a blank line, and it renders as written. None of it is ours,
+	// paired or not.
+	for (const text of [
+		'用矩阵：$$S=\\begin{bmatrix}\n1&2\n\\end{bmatrix}$$ 然后。',
+		'定价 $$29.99。\n\n爱因斯坦 $$E=mc^2$$ 有名。',
+		'看这个：$$x=1\n$$',
+		'看这个：$$x=\n1$$ 然后呢。',
+		'- 见：$$x=\n1$$\n- 下一条',
+		'> 见：$$x=\n> 1$$ 继续',
+		'成本 $5 到 $$8',
+	]) {
+		expect(canonicalizeMathFences(c(text))).toBe(text);
+	}
+});
+
+test('four spaces of indentation are an indented code block, not an opener', () => {
+	// Three is the deepest a flow construct can open at, so the fourth space puts
+	// the run in code, where remark never reads it as a delimiter.
+	for (const text of ['    echo $$', '    $$x=\n    1$$']) {
+		expect(canonicalizeMathFences(c(text))).toBe(text);
+	}
+	expect(canonicalizeMathFences(c('   $$x=\n1$$'))).toBe('   $$\n   x=\n   1\n   $$');
+});
+
 test('content on the opening line, the closing line, or both', () => {
-	expect(canonicalizeMathFences(c('看这个：$$x=1\n$$'))).toBe('看这个：\n$$\nx=1\n$$');
 	expect(canonicalizeMathFences(c('$$\nx=1$$'))).toBe('$$\nx=1\n$$');
-	expect(canonicalizeMathFences(c('看这个：$$x=\n1$$'))).toBe('看这个：\n$$\nx=\n1\n$$');
+	expect(canonicalizeMathFences(c('$$x=\n1$$'))).toBe('$$\nx=\n1\n$$');
 });
 
 test('prose after the closing fence moves to its own line', () => {
 	// A closing line has to hold nothing but the run: `$$ 然后。` opens a second
 	// block instead of closing the first.
-	expect(canonicalizeMathFences(c('看这个：$$x=\n1$$ 然后呢。'))).toBe('看这个：\n$$\nx=\n1\n$$\n然后呢。');
+	expect(canonicalizeMathFences(c('$$x=\n1$$ 然后呢。'))).toBe('$$\nx=\n1\n$$\n然后呢。');
 });
 
 test('blank lines around the block are kept', () => {
 	expect(canonicalizeMathFences(c('前文。\n\n$$x=\n1$$\n\n后文。'))).toBe('前文。\n\n$$\nx=\n1\n$$\n\n后文。');
+});
+
+test('a block whose content crosses a blank line still moves', () => {
+	// The blank line does not close a flow block, so untransformed this one eats
+	// everything after it.
+	expect(canonicalizeMathFences(c('$$x=1\n\n还有 y$$ 完。'))).toBe('$$\nx=1\n\n还有 y\n$$\n完。');
 });
 
 test('already canonical text is byte-identical', () => {
@@ -67,19 +97,14 @@ test('already canonical text is byte-identical', () => {
 
 test('inserted lines carry their container', () => {
 	// Fences prefixed but body lines left lazy splits the item and lets the block
-	// escape the quote, so every line gets the prefix.
-	expect(canonicalizeMathFences(c('- 见：$$x=\n1$$\n- 下一条'))).toBe('- 见：\n  $$\n  x=\n  1\n  $$\n- 下一条');
-	expect(canonicalizeMathFences(c('- 一\n  - 二：$$x=\n  1$$\n- 三'))).toBe(
-		'- 一\n  - 二：\n    $$\n    x=\n    1\n    $$\n- 三',
-	);
-	expect(canonicalizeMathFences(c('1. 见：$$x=\n1$$'))).toBe('1. 见：\n   $$\n   x=\n   1\n   $$');
-	expect(canonicalizeMathFences(c('   1. 见：$$x=\n1$$'))).toBe('   1. 见：\n      $$\n      x=\n      1\n      $$');
-	// A run right after the marker keeps the marker on its line rather than
-	// growing a second bullet.
+	// escape the quote, so every line gets the prefix. The marker itself becomes
+	// spaces rather than growing a second bullet.
 	expect(canonicalizeMathFences(c('- $$x=\n  1$$'))).toBe('- $$\n  x=\n  1\n  $$');
-	expect(canonicalizeMathFences(c('> 见：$$x=\n> 1$$ 继续'))).toBe('> 见：\n> $$\n> x=\n> 1\n> $$\n> 继续');
-	expect(canonicalizeMathFences(c('> > 见：$$x=\n> > 1$$'))).toBe('> > 见：\n> > $$\n> > x=\n> > 1\n> > $$');
-	expect(canonicalizeMathFences(c('> - 见：$$x=\n> 1$$'))).toBe('> - 见：\n>   $$\n>   x=\n>   1\n>   $$');
+	expect(canonicalizeMathFences(c('1. $$x=\n   1$$'))).toBe('1. $$\n   x=\n   1\n   $$');
+	expect(canonicalizeMathFences(c('- 一\n  - $$x=\n    1$$\n- 三'))).toBe('- 一\n  - $$\n    x=\n    1\n    $$\n- 三');
+	expect(canonicalizeMathFences(c('> $$x=\n> 1$$ 继续'))).toBe('> $$\n> x=\n> 1\n> $$\n> 继续');
+	expect(canonicalizeMathFences(c('> > $$x=\n> > 1$$'))).toBe('> > $$\n> > x=\n> > 1\n> > $$');
+	expect(canonicalizeMathFences(c('> - $$x=\n>   1$$'))).toBe('> - $$\n>   x=\n>   1\n>   $$');
 });
 
 test('code and escapes are byte-identical', () => {
@@ -91,18 +116,30 @@ test('code and escapes are byte-identical', () => {
 		'a \\$\\$x\n y\\$\\$ b',
 		// One end of the pair is inside a fenced block, so neither end moves.
 		'$$a\n```\n$$\n```\nb$$',
+		// A fence opened after a list marker still opens a code block; missing it
+		// leaves an unterminated fence that swallows the rest of the message.
+		'1. ```python\n   x = "$$a"\n   ```',
 	]) {
 		expect(canonicalizeMathFences(c(text))).toBe(text);
 	}
 });
 
-test('a $$ inside a code span is not a delimiter', () => {
-	// The run in the span is invisible, so the one after it opens the block.
-	expect(canonicalizeMathFences(c('see `$$` then $$x=1\ny=2\n$$ tail'))).toBe('see `$$` then\n$$\nx=1\ny=2\n$$\ntail');
+test('a fence after a list marker closes where it says it does', () => {
+	expect(
+		canonicalizeMathFences(c('- ```py\n  x = 1\n  ```\n\n然后：\n\n$$S=\\begin{bmatrix}\n1&2\n\\end{bmatrix}$$\n\n完。')),
+	).toBe('- ```py\n  x = 1\n  ```\n\n然后：\n\n$$\nS=\\begin{bmatrix}\n1&2\n\\end{bmatrix}\n$$\n\n完。');
 });
 
-test('two blocks on one line both move, and nothing is duplicated', () => {
-	expect(canonicalizeMathFences(c('a $$x=\n1$$ b $$y=\n2$$ c'))).toBe('a\n$$\nx=\n1\n$$\nb\n$$\ny=\n2\n$$\nc');
+test('a $$ inside a code span is not a delimiter', () => {
+	// The run in the span is invisible, so the one on the next line opens the
+	// block and the span is left as the model wrote it.
+	expect(canonicalizeMathFences(c('`$$` 是分隔符。\n$$x=1\ny=2\n$$ tail'))).toBe(
+		'`$$` 是分隔符。\n$$\nx=1\ny=2\n$$\ntail',
+	);
+});
+
+test('two blocks in one message both move, and nothing is duplicated', () => {
+	expect(canonicalizeMathFences(c('$$x=\n1$$\n$$y=\n2$$'))).toBe('$$\nx=\n1\n$$\n$$\ny=\n2\n$$');
 });
 
 test('a $$ enclosed by inline math is left where it is', () => {
@@ -111,9 +148,10 @@ test('a $$ enclosed by inline math is left where it is', () => {
 });
 
 test('a run of three never closes on a run of two', () => {
-	// remark refuses this pairing, so neither run is a delimiter and both are
-	// neutralized rather than opening a block.
-	expect(canonicalizeMathFences(c('$$$x=\n1$$'))).toBe('\\$\\$\\$x=\n1\\$\\$');
+	// remark refuses this pairing, so the opener is not a delimiter and is
+	// neutralized rather than left to open a block. The run after it never
+	// started a line and stays as it is.
+	expect(canonicalizeMathFences(c('$$$x=\n1$$'))).toBe('\\$\\$\\$x=\n1$$');
 });
 
 test('a run whose closer has not arrived yet is escaped', () => {
@@ -122,14 +160,12 @@ test('a run whose closer has not arrived yet is escaped', () => {
 	expect(canonicalizeMathFences(c('矩阵：\n$$S=\\begin{bmatrix}\n0.99'))).toBe(
 		'矩阵：\n\\$\\$S=\\begin{bmatrix}\n0.99',
 	);
-	// A lone `$` is a dollar sign in prose, not a half-written delimiter.
-	expect(canonicalizeMathFences(c('成本 $5 到 $$8'))).toBe('成本 $5 到 \\$\\$8');
 	// And the escape is gone as soon as the closing run arrives.
 	expect(canonicalizeMathFences(c('矩阵：\n$$S=1\n$$'))).toBe('矩阵：\n$$\nS=1\n$$');
 });
 
 test('CRLF text stays CRLF', () => {
-	expect(canonicalizeMathFences(c('看：$$x=\r\n1$$\r\n后文。'))).toBe('看：\r\n$$\r\nx=\r\n1\r\n$$\r\n后文。');
+	expect(canonicalizeMathFences(c('$$x=\r\n1$$\r\n后文。'))).toBe('$$\r\nx=\r\n1\r\n$$\r\n后文。');
 });
 
 // Whitespace-stripped, for the "nothing was deleted" invariant. The transform
@@ -201,6 +237,28 @@ function html(markdown: string): string {
 	return renderToStaticMarkup(createElement(ReactMarkdown, { remarkPlugins } as any, markdown));
 }
 
+// The mdast the renderer actually gets, as one flat line per node that carries
+// text. A plugin appended to the real set keeps the tree, so nothing about the
+// parse is reconstructed here.
+function tree(markdown: string): string[] {
+	let root: any = { type: 'root' };
+	const capture = () => (node: any) => {
+		root = node;
+	};
+	renderToStaticMarkup(
+		createElement(ReactMarkdown, { remarkPlugins: [...remarkPlugins, capture] } as any, markdown),
+	);
+	const out: string[] = [];
+	(function walk(node: any) {
+		if (node.type === 'math') out.push(`math(${node.meta ?? ''}):${node.value}`);
+		else if (node.type === 'inlineMath' || node.type === 'code' || node.type === 'text')
+			out.push(`${node.type}:${node.value}`);
+		else if (node.type === 'paragraph') out.push('p');
+		for (const child of node.children ?? []) walk(child);
+	})(root);
+	return out;
+}
+
 test('the canonical form parses as one display block, the raw form does not', () => {
 	const fixed = html(canonicalizeMathFences(REAL));
 	expect(fixed).toContain(
@@ -212,4 +270,54 @@ test('the canonical form parses as one display block, the raw form does not', ()
 	const raw = html(REAL);
 	expect(raw).not.toContain('<p>现在把 x₃ 和 x₄ 对调。</p>');
 	expect(raw).toContain('现在把 x₃ 和 x₄ 对调。</code>');
+});
+
+test('a mid-line run already parses as inline math and keeps doing so', () => {
+	const matrix = '用矩阵：$$S=\\begin{bmatrix}\n1&2\n\\end{bmatrix}$$ 然后。';
+	const parsed = ['p', 'text:用矩阵：', 'inlineMath:S=\\begin{bmatrix}\n1&2\n\\end{bmatrix}', 'text: 然后。'];
+	expect(tree(matrix)).toEqual(parsed);
+	expect(tree(canonicalizeMathFences(matrix))).toEqual(parsed);
+
+	// Inline math stops at a blank line, so the price is prose and only the
+	// second pair is a formula.
+	const price = '定价 $$29.99。\n\n爱因斯坦 $$E=mc^2$$ 有名。';
+	const asWritten = ['p', 'text:定价 $$29.99。', 'p', 'text:爱因斯坦 ', 'inlineMath:E=mc^2', 'text: 有名。'];
+	expect(tree(price)).toEqual(asWritten);
+	expect(tree(canonicalizeMathFences(price))).toEqual(asWritten);
+});
+
+test('a line-start run that crosses a blank line stops eating the rest', () => {
+	const text = '$$x=1\n\n还有 y$$ 完。';
+	expect(tree(text)).toEqual(['math(x=1):\n还有 y$$ 完。']);
+	expect(tree(canonicalizeMathFences(text))).toEqual(['math():x=1\n\n还有 y', 'p', 'text:完。']);
+});
+
+test('an indented code block keeps its dollars', () => {
+	const text = '    echo $$';
+	expect(tree(text)).toEqual(['code:echo $$']);
+	expect(tree(canonicalizeMathFences(text))).toEqual(['code:echo $$']);
+});
+
+test('a fence opened after a list marker leaves the formula after it reachable', () => {
+	const text = '- ```py\n  x = 1\n  ```\n\n然后：\n\n$$S=\\begin{bmatrix}\n1&2\n\\end{bmatrix}$$\n\n完。';
+	expect(tree(text)).toEqual([
+		'code:x = 1',
+		'p',
+		'text:然后：',
+		'math(S=\\begin{bmatrix}):1&2\n\\end{bmatrix}$$\n\n完。',
+	]);
+	expect(tree(canonicalizeMathFences(text))).toEqual([
+		'code:x = 1',
+		'p',
+		'text:然后：',
+		'math():S=\\begin{bmatrix}\n1&2\n\\end{bmatrix}',
+		'p',
+		'text:完。',
+	]);
+});
+
+test('a dollar run inside a list-marked fence is code either way', () => {
+	const text = '1. ```python\n   x = "$$a"\n   ```';
+	expect(tree(text)).toEqual(['code:x = "$$a"']);
+	expect(tree(canonicalizeMathFences(text))).toEqual(['code:x = "$$a"']);
 });

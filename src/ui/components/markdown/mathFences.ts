@@ -10,16 +10,11 @@
 // that way; not one is in the canonical form, under a prompt that already names
 // the delimiters.
 //
-// So the source is canonicalized here instead: the fences move onto their own
-// lines and everything else stays byte for byte. Single-line `$$x$$` pairs are
-// left alone — remark reads those as inline math and they render today, and
-// promoting them to display blocks would restyle every stored formula. An
-// opening run whose closer has not arrived is escaped instead, which is what
-// keeps a formula from painting the reply red for as long as it streams.
-//
-// Self-contained rather than sharing anchors.ts's codeRanges: this needs one
-// left-to-right pass that interleaves escapes, backtick spans and dollar runs
-// and hands back the runs' offsets, which a list of ranges cannot give.
+// Only a run that starts its own line reaches that rule. A run anywhere else on
+// the line is inline math, which spans newlines and renders as written, so the
+// scope here is one shape: a pair whose opening run starts its line and whose
+// content crosses a newline. Its two fences move onto lines of their own; every
+// other run in the text comes back byte for byte.
 
 // A run of one or more `$` and the line it sits on. The line is recorded by the
 // scanner rather than recomputed later, so telling a pair that straddles a
@@ -36,25 +31,42 @@ interface Pair {
 	close: Run;
 }
 
-const FENCE = /^ {0,3}(`{3,}|~{3,})/;
-const MATH_LINE = /^ {0,3}(\$\$+)[ \t\r]*$/;
-const CONTAINER = /^(?:[ \t]*>[ \t]?)*[ \t]*/;
-const LIST_MARKER = /^(?:[-*+]|\d{1,9}[.)])[ \t]+/;
+// The container matter a line may carry and still count as starting with what
+// comes after it: blockquote markers, one list marker, and up to three spaces at
+// each step, which is remark's own threshold for letting a flow construct open.
+// A fourth space opens an indented code block instead.
+const PREFIX = /^((?: {0,3}>[ \t]?)*)(?:( {0,3})((?:[-*+]|\d{1,9}[.)])[ \t]+))?( {0,3})/;
+const FENCE = /^(`{3,}|~{3,})/;
+const MATH_LINE = /^(\$\$+)[ \t\r]*$/;
 const BLANK_LINE = /\n[ \t]*\n/;
-const TRAILING_SPACE = /[ \t]+$/;
 const LEADING_SPACE = /^[ \t]*/;
 
-// Which lines sit inside a fenced code block. A fence opens on a line starting
-// with three or more backticks or tildes (the info string is irrelevant) and
-// closes on a line with the same character, at least as long, and nothing but
-// whitespace after the run. An unterminated fence runs to the end of the text:
-// mid-stream that is exactly right, and it keeps a half-written block from being
-// rewritten.
+function afterPrefix(line: string): string {
+	return line.slice(PREFIX.exec(line)?.[0].length ?? 0);
+}
+
+// The prefix every line inserted for a run has to repeat, or null when the run
+// does not start its own line. Fences prefixed but body lines left lazy splits
+// the list item and lets the block escape the quote. The list marker becomes
+// spaces, so an inserted line continues the item instead of opening a second one.
+function openerPrefix(text: string, at: number): string | null {
+	const head = text.slice(text.lastIndexOf('\n', at - 1) + 1, at);
+	const m = PREFIX.exec(head);
+	if (!m || m[0].length !== head.length) return null;
+	return m[1] + (m[2] ?? '') + ' '.repeat(m[3]?.length ?? 0) + m[4];
+}
+
+// Which lines sit inside a fenced code block. A fence opens on a line whose
+// container prefix is followed by three or more backticks or tildes (the info
+// string is irrelevant) and closes on a line with the same character, at least
+// as long, and nothing but whitespace after the run. An unterminated fence runs
+// to the end of the text: mid-stream that is exactly right, and it keeps a
+// half-written block from being rewritten.
 //
 // Indented (four-space) code blocks are not modeled — telling one from a lazy
-// list continuation needs container context this pass does not have. The failure
-// is bounded: a rewrite inside one only inserts newlines carrying the line's own
-// indentation, so the block stays a code block.
+// list continuation needs container context this pass does not have. Nothing
+// inside one is rewritten anyway: openerPrefix does not admit that much
+// indentation.
 //
 // A display block already in canonical form is the one thing that can hold a
 // fence line without opening a code block, exactly as remark reads it: `$$`
@@ -67,15 +79,16 @@ function fencedLines(text: string): boolean[] {
 	let open: { char: string; len: number } | null = null;
 	let math: number | null = null;
 	for (const line of text.split('\n')) {
-		const m = FENCE.exec(line);
+		const rest = afterPrefix(line);
+		const m = FENCE.exec(rest);
 		if (open) {
 			flags.push(true);
 			const closes =
-				m !== null && m[1][0] === open.char && m[1].length >= open.len && line.slice(m[0].length).trim() === '';
+				m !== null && m[1][0] === open.char && m[1].length >= open.len && rest.slice(m[0].length).trim() === '';
 			if (closes) open = null;
 			continue;
 		}
-		const alone = MATH_LINE.exec(line);
+		const alone = MATH_LINE.exec(rest);
 		if (math !== null) {
 			flags.push(false);
 			if (alone && alone[1].length >= math) math = null;
@@ -217,19 +230,6 @@ function pairRuns(text: string, runs: Run[]): { pairs: Pair[]; unpaired: Run[] }
 	return { pairs, unpaired };
 }
 
-// The container matter a line carries — blockquote markers and indentation, plus
-// one list marker — and the column where the line's own content starts. Every
-// inserted line repeats this prefix: fences prefixed but body lines left lazy
-// splits the list item and lets the block escape the quote. The list marker
-// becomes spaces, so an inserted line continues the item instead of opening a
-// second one.
-function containerOf(line: string): { prefix: string; contentAt: number } {
-	const quote = CONTAINER.exec(line)?.[0] ?? '';
-	const marker = LIST_MARKER.exec(line.slice(quote.length));
-	if (!marker) return { prefix: quote, contentAt: quote.length };
-	return { prefix: quote + ' '.repeat(marker[0].length), contentAt: quote.length + marker[0].length };
-}
-
 // The block's content, one output line each. The first segment sits on the
 // opening line and is written as it stands; every later one has whatever
 // container matter it already carries stripped, which both re-indents a lazy
@@ -261,26 +261,30 @@ function fencedBetween(fenced: boolean[], from: number, to: number): boolean {
 }
 
 // One rewrite the output pass has to make, in the order the offsets come.
-type Edit = { at: number; kind: 'block'; block: Pair } | { at: number; kind: 'escape'; run: Run };
+type Edit =
+	| { at: number; kind: 'block'; open: Run; close: Run; prefix: string }
+	| { at: number; kind: 'escape'; run: Run };
 
 export function canonicalizeMathFences(text: string): string {
 	if (!text.includes('$$')) return text;
 	const fenced = fencedLines(text);
 	const { pairs, unpaired } = pairRuns(text, scanRuns(text, fenced));
-	// Only a pair whose content crosses a newline is ours, and only when no line
-	// of it is inside a fenced code block — a pair straddling a fence has one
-	// end in code and is left byte-identical.
-	const blocks = pairs.filter(
-		(p) =>
-			text.slice(p.open.end, p.close.start).includes('\n') &&
-			!fencedBetween(fenced, p.open.line, p.close.line),
-	);
-	if (blocks.length === 0 && unpaired.length === 0) return text;
+	const edits: Edit[] = [];
+	for (const { open, close } of pairs) {
+		const prefix = openerPrefix(text, open.start);
+		if (prefix === null) continue;
+		// A single-line pair is inline math and renders as it is; a pair with one
+		// line inside a fenced block has that end in code.
+		if (!text.slice(open.end, close.start).includes('\n')) continue;
+		if (fencedBetween(fenced, open.line, close.line)) continue;
+		edits.push({ at: open.start, kind: 'block', open, close, prefix });
+	}
+	for (const run of unpaired) {
+		if (openerPrefix(text, run.start) !== null) edits.push({ at: run.start, kind: 'escape', run });
+	}
+	if (edits.length === 0) return text;
+	edits.sort((a, b) => a.at - b.at);
 	const nl = text.includes('\r\n') ? '\r\n' : '\n';
-	const edits: Edit[] = [
-		...blocks.map((block) => ({ at: block.open.start, kind: 'block' as const, block })),
-		...unpaired.map((run) => ({ at: run.start, kind: 'escape' as const, run })),
-	].sort((a, b) => a.at - b.at);
 	let out = '';
 	let last = 0;
 	for (const edit of edits) {
@@ -296,31 +300,21 @@ export function canonicalizeMathFences(text: string): string {
 			last = edit.run.end;
 			continue;
 		}
-		const block = edit.block;
-		out += text.slice(last, block.open.start);
-		// The line as it stands in the output, not in the input: a pair earlier on
-		// the same line may already have been rewritten.
-		const tail = out.slice(out.lastIndexOf('\n') + 1);
-		const { prefix, contentAt } = containerOf(tail);
-		if (tail.slice(contentAt).trim() !== '') {
-			// Right-trimmed first, or the spaces that separated the prose from the
-			// fence become a two-space hard break at the end of the line.
-			out = out.replace(TRAILING_SPACE, '') + nl + prefix;
-		}
-		out += text.slice(block.open.start, block.open.end) + nl;
-		for (const line of bodyLines(text.slice(block.open.end, block.close.start), prefix)) {
+		const { open, close, prefix } = edit;
+		out += text.slice(last, open.end) + nl;
+		for (const line of bodyLines(text.slice(open.end, close.start), prefix)) {
 			out += prefix + line + nl;
 		}
-		out += prefix + text.slice(block.close.start, block.close.end);
+		out += prefix + text.slice(close.start, close.end);
 		// The closing line must hold nothing but the run, so whatever followed it
 		// moves to a line of its own.
-		const rest = text.slice(block.close.end, lineEnd(text, block.close.end));
+		const rest = text.slice(close.end, lineEnd(text, close.end));
 		if (rest.trim() === '') {
-			last = block.close.end;
+			last = close.end;
 			continue;
 		}
 		out += nl + prefix;
-		last = block.close.end + (LEADING_SPACE.exec(rest)?.[0].length ?? 0);
+		last = close.end + (LEADING_SPACE.exec(rest)?.[0].length ?? 0);
 	}
 	return out + text.slice(last);
 }
