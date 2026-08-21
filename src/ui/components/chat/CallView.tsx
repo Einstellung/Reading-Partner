@@ -62,6 +62,9 @@ interface CallViewProps {
 	// Whether this call takes the chat zoom. The phone reaches this view too, and
 	// has neither of the gestures that drive it.
 	scalable?: boolean;
+	// Identifies the conversation for the transcript's scroll memory. Absent =
+	// the list is not remembered and opens at the newest message.
+	stickKey?: string;
 }
 
 // The scope's box without the zoom, so the tree is the same shape either way.
@@ -89,6 +92,7 @@ export default function CallView({
 	marks,
 	aside,
 	scalable = true,
+	stickKey,
 }: CallViewProps) {
 	const empty = messages.length === 0;
 	const Scope = scalable ? ChatScaleScope : PlainScope;
@@ -178,6 +182,7 @@ export default function CallView({
 							className="mx-auto max-w-[calc(48rem*var(--chat-scale,1))] pb-6"
 							onCardAction={onCardAction}
 							marks={marks}
+							stickKey={stickKey}
 						/>
 					</div>
 					<div className="px-4 pb-6">

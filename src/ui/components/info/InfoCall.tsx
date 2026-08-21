@@ -102,6 +102,7 @@ export function InfoCall({
           voice={voice}
           onCardAction={call.onCardAction}
           scalable={false}
+          stickKey={call.stickKey}
         />
       </div>
       {pipCards && (

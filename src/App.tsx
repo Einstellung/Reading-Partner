@@ -113,6 +113,7 @@ import LibraryScreen from "./ui/components/library/LibraryScreen";
 import Toast, { useToasts } from "./ui/components/common/Toast";
 import SettingsButton from "./ui/components/common/SettingsButton";
 import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
+import { clearScrollMemory } from "./ui/components/common/scroll-memory";
 import type { Annotation as PopupAnnotation, ToolType } from "./ui/components/reader/types";
 import type { PendingImage } from "./ui/components/chat/types";
 import {
@@ -624,6 +625,16 @@ export default function App() {
     }
     lastCallThreadRef.current = id;
   }, [call?.threadId, call?.isBook, call?.aside]);
+
+  // A place is kept for as long as a call is open, and hanging up drops every
+  // one of them. Switching threads inside an open call replaces the call in
+  // place rather than ending it, so the lesson's place survives an aside and the
+  // way back to it; swapping to the page and back is not an end either, which is
+  // what the memory is for.
+  const callOpen = !!call;
+  useEffect(() => {
+    if (!callOpen) clearScrollMemory();
+  }, [callOpen]);
 
   // A page citation carrying a source quote: confirm the quote against the
   // page's extracted text (fulltext cache), then hand the reader the exact
@@ -1473,7 +1484,7 @@ export default function App() {
   const verifyQuote = useMemo<QuoteCheck>(() => {
     const cache = new Map<string, boolean>();
     return (page, quote) => {
-      const key = `${page} ${quote}`;
+      const key = `${page}\u0000${quote}`;
       const seen = cache.get(key);
       if (seen !== undefined) return seen;
       // No text for that page — extraction still running, an unreadable scan, a
@@ -1772,6 +1783,7 @@ export default function App() {
                 intents={callIntents}
                 emptyNote={callNote}
                 voice={callVoice}
+                stickKey={call.threadId}
               />
             </div>
             <div className="absolute right-3 top-3 z-50">
