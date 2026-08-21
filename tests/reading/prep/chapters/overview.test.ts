@@ -1,6 +1,6 @@
-// Unit tests for the chapter-graph prompt builders (src/reading/notes/overview.ts):
-// the output-language wiring and the shape the second pass is asked for.
-// Run: bun test.
+// Unit tests for the chapter-graph prompt builders
+// (src/reading/prep/chapters/overview.ts): the output-language wiring and the
+// shape the second pass is asked for. Run: bun test.
 
 import { expect, test } from "bun:test";
 import { overviewSystemPrompt, overviewUserMessage } from "../../../../src/reading/prep/chapters/overview";
