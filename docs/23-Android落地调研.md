@@ -149,9 +149,9 @@ WebView 侧按 Google 自己的[文档](https://developer.android.com/develop/ui
 
 ## Google 登录
 
-Android 类型 OAuth client + 反向 client id 自定义 URI scheme + PKCE,和 iOS 同形态。协议上没得选:loopback 重定向对 Android / iOS / Chrome 三种 client 类型 2022-10-21 起封停,只有 Desktop 类型还留着([Loopback IP Address flow Migration Guide](https://developers.google.com/identity/protocols/oauth2/resources/loopback-migration))。
+移动端 scheme 流那套设计(两平台共用的 `authFlow.ts` 契约、PKCE、冷启动缺口与补救)在 [18](./18-iOS-Google登录.md);Android 上 singleTask 复用实例,只有进程真被杀才会走到冷启动那条路。以下只记 Android 独有的事实。
 
-client id `379091688229-8mb45l09bamhv2ln623knt4kob14folb.apps.googleusercontent.com`,公开值——mobile client 没有 `client_secret`,PKCE 是全部保护。绑包名 `com.xinyuan.readingpartner` 和签名证书 SHA-1 `CB:1B:AD:0E:0C:DE:DE:6A:F1:50:1E:5D:EF:9D:AB:F5:19:AF:90:83`(CI 那把 keystore,从 0.8.19 的构建日志核实)。换 keystore 就要同步改 Console 里的 SHA-1,否则这个 client 作废。
+client id `379091688229-8mb45l09bamhv2ln623knt4kob14folb.apps.googleusercontent.com`,绑包名 `com.xinyuan.readingpartner` 和签名证书 SHA-1 `CB:1B:AD:0E:0C:DE:DE:6A:F1:50:1E:5D:EF:9D:AB:F5:19:AF:90:83`(CI 那把 keystore,从 0.8.19 的构建日志核实)。换 keystore 就要同步改 Console 里的 SHA-1,否则这个 client 作废。
 
 Cloud Console 该 client 的 Advanced settings 里 Enable Custom URI Scheme 已打开。Google 2023-10-02 起对新建的 Android client 默认关掉它,但留了这个手工开关([Google Developers Blog](https://developers.googleblog.com/en/improving-user-safety-in-oauth-flows-through-new-oauth-custom-uri-scheme-restrictions/))。关掉就收不到回调,别动。
 
@@ -172,8 +172,6 @@ Android 11+ 的 package visibility 不卡这条:被过滤的是 `queryIntentActi
 wry 的 `RustWebViewClient.onReceivedError` 里那段 workaround("外部 URL 重定向到自定义协议时会收到 `net::ERR_CONNECTION_REFUSED`,因为重定向不走 `shouldInterceptRequest`")在这条路上不成立:重定向发生在系统浏览器里,wry 不在链路上。
 
 上面两条链路是读 `tauri-plugin-opener` 2.5.4、`tauri-plugin-deep-link` 2.4.9、`tauri` 2.11.5 的源码推出来的,没有真机也没有模拟器验证。
-
-冷启动缺口和 iOS 是同一个([18](./18-iOS-Google登录.md)):授权途中进程被系统回收,再经 deep link 冷启动带回 URL 时,JS 侧的 state 和 verifier 已经丢了,`getCurrent()` 拿到 code 也换不成 token。Android 上 singleTask 复用实例,只有进程真被杀才会走到。
 
 ### 等设备到手照着跑一遍
 
