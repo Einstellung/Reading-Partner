@@ -207,7 +207,7 @@
 - [14-dev-build-oomd-session-kill](./14-dev-build-oomd-session-kill.md) — 全量 Rust 编译触发 systemd-oomd 杀整个桌面会话；日常用 `bun run dev:capped`
 - [55-worktree-dev-server-serves-stale-modules](./55-worktree-dev-server-serves-stale-modules.md) — worktree 在 `.claude/` 下，正好被 Vite 的 watch ignore 命中，dev server 看不见自己的改动；每次改完要重启
 - [118-the-simulator-is-the-same-webkit-with-a-different-finger](./118-the-simulator-is-the-same-webkit-with-a-different-finger.md) — iPad 模拟器跑的是真 WKWebView + 真 PDFium + 经 HID 注入的真触摸，橡皮筋、笔手路由、双指缩放都能量出数；但没有笔（`pointerType` 恒为 touch）、没有接触面积（恒 40×40）、idb 一次只有一根手指（双指只能走 XCUITest 的 pinch，三指以上无解）。跑法在 `scripts/ios-sim.sh`
-- [119-mock-module-rewrites-the-registry-for-the-whole-worker](./119-mock-module-rewrites-the-registry-for-the-whole-worker.md) — `mock.module` 改的是整个 worker 的模块表且不回滚，两个测试文件分到同一 worker 就互相污染（只跑了 33 个用例里的 7 个）；被测模块把依赖当参数收，别换模块表
+- [119-mock-module-rewrites-the-registry-for-the-whole-worker](./119-mock-module-rewrites-the-registry-for-the-whole-worker.md) — `mock.module` 改的是整个进程的模块表且不回滚，两个测试文件加载顺序一前一后就互相污染（只跑了 33 个用例里的 7 个）；归因是错的：`bun test` 全场一个进程没有 worker，胜负由加载顺序决定（坑 120）。被测模块把依赖当参数收，别换模块表
 - [120-a-registered-dom-outlives-the-file-that-registered-it](./120-a-registered-dom-outlives-the-file-that-registered-it.md) — `bun test` 全场一个进程，注册一次 DOM 之后每个文件都有 `window`，`isTauri()`/settings 退出 flush/debounced-writer/overlay 全被推到浏览器分支；窗口按文件搭按文件拆（`tests/support/dom.ts` 的 `useDom()`），拆在 `afterAll`，要趁 DOM 还在做的事放 `afterEach`；跑过一次真 DOM 全场一次性慢 0.11s，不随文件数涨
 - [121-react-dom-decides-once-whether-it-is-in-a-browser](./121-react-dom-decides-once-whether-it-is-in-a-browser.md) — react-dom 在模块求值时算一次 `canUseDOM`，晚了就永久不监听 `input`，受控 input 的 `onChange` 静默不响；bun 先求值 node_modules 再求值本地依赖，调 import 顺序没用，只能让 `useDom()` 注册完窗口再动态 import 并返回 `@testing-library/react`
 - [122-spyon-swaps-an-esm-export-and-puts-it-back](./122-spyon-swaps-an-esm-export-and-puts-it-back.md) — bun 的 ESM 命名空间可写：`spyOn(ns, "导出名")` 导入方看得见，`mockRestore()` 能还原，命名导出/默认导出/再导出链都成立；这是 119 之外替换模块导出的另一条路，还原写在 finally 里
@@ -227,5 +227,5 @@
 - [02-math-sumprecise-polyfill](./02-math-sumprecise-polyfill.md) — mobile pdf.js 裸调 Math.sumPrecise；WebKitGTK 落后于新内建这条仍在，现在体现为加载 pdf.js 前要补 `Promise.withResolvers`
 - [04-programmatic-select-no-popup](./04-programmatic-select-no-popup.md) — 程序化选中不弹浮窗；EmbedPDF 下结论反过来了，弹窗照开
 - [07-image-annotation-base64](./07-image-annotation-base64.md) — image 标注内联截图导致 JSON 膨胀；区域框选已移除，但"大字段拆出 JSON 单独落盘"被 threads 沿用
-- [10-cross-realm-uint8array](./10-cross-realm-uint8array.md) — iframe 跨 realm 的 Uint8Array instanceof；app 里已无 iframe，webview-pipe 会再撞上
+- [10-cross-realm-uint8array](./10-cross-realm-uint8array.md) — iframe 跨 realm 的 Uint8Array instanceof；app 里的 iframe 回来了（deck 的 srcdoc，见坑 152），但走 postMessage 不传字节，撞不上
 - [11-engine-calls-before-init](./11-engine-calls-before-init.md) — 引擎方法必须等就绪信号之后调；PDFViewerApplication 没了，规矩还在
