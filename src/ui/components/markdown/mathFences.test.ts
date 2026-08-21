@@ -313,15 +313,31 @@ test('a run whose closer has not arrived yet is escaped', () => {
 	// the rest of the reply; escaped, the half-written formula shows as the
 	// source it is, and the escape is gone the moment the closing run arrives.
 	const streaming = c('矩阵：\n$$S=\\begin{bmatrix}\n0.99');
-	expect(canonicalizeMathFences(streaming)).toBe('矩阵：\n\\$\\$S=\\begin{bmatrix}\n0.99');
+	expect(canonicalizeMathFences(streaming)).toBe('矩阵：\n&#36;&#36;S=\\begin{bmatrix}\n0.99');
 	expect(tree(canonicalizeMathFences(streaming))).toEqual(['p', 'text:矩阵：\n$$S=\\begin{bmatrix}\n0.99']);
 	expect(canonicalizeMathFences(c('矩阵：\n$$S=1\n$$'))).toBe('矩阵：\n$$\nS=1\n$$');
+});
+
+test('the escape for a block still streaming writes no dollar of its own', () => {
+	// `\$\$` would still carry two delimiters: mathText does not honour a
+	// backslash before a closing dollar, so a lone `$` earlier in the paragraph
+	// closes an inline span over the prose between them and paints it red. A
+	// character reference is resolved after inline parsing, so its dollars are
+	// never delimiters, and the reader still sees `$$`.
+	const text = c('每股 $200\n$$S=\\begin{bmatrix}');
+	expect(tree(text)).toEqual(['p', 'text:每股 $200', 'math(S=\\begin{bmatrix}):']);
+	const fixed = canonicalizeMathFences(text);
+	expect(fixed).toBe('每股 $200\n&#36;&#36;S=\\begin{bmatrix}');
+	expect(tree(fixed)).toEqual(['p', 'text:每股 $200\n$$S=\\begin{bmatrix}']);
+	const alone = c('&#36;&#36;S=\\begin{bmatrix}\n1&2');
+	expect(tree(alone)).toEqual(['p', 'text:$$S=\\begin{bmatrix}\n1&2']);
+	expect(canonicalizeMathFences(alone)).toBe(alone);
 });
 
 test('a run of three never closes on a run of two', () => {
 	// remark refuses that pairing, so the block this would open never closes and
 	// its opener is escaped instead of cut.
-	expect(canonicalizeMathFences(c('$$$x=\n1$$'))).toBe('\\$\\$\\$x=\n1$$');
+	expect(canonicalizeMathFences(c('$$$x=\n1$$'))).toBe('&#36;&#36;&#36;x=\n1$$');
 	expect(canonicalizeMathFences(c('$$$x=\n1$$$'))).toBe('$$$\nx=\n1\n$$$');
 });
 
@@ -331,7 +347,7 @@ test('a line-start run inside a block is content, not a closer', () => {
 	// escaped. The formula shows as source instead of as a wall of red.
 	const text = c('$$x=1\ny=2\n$$ tail');
 	expect(tree(text)).toEqual(['math(x=1):y=2\n$$ tail']);
-	expect(canonicalizeMathFences(text)).toBe('\\$\\$x=1\ny=2\n\\$\\$ tail');
+	expect(canonicalizeMathFences(text)).toBe('&#36;&#36;x=1\ny=2\n&#36;&#36; tail');
 	expect(tree(canonicalizeMathFences(text))).toEqual(['p', 'text:$$x=1\ny=2\n$$ tail']);
 });
 
@@ -339,11 +355,12 @@ test('CRLF text stays CRLF', () => {
 	expect(canonicalizeMathFences(c('$$x=\r\n1$$\r\n后文。'))).toBe('$$\r\nx=\r\n1\r\n$$\r\n后文。');
 });
 
-// Whitespace-stripped, for the "nothing was deleted" invariant. The transform
-// adds newlines, indentation, quote markers and the one escape; it never drops a
+// Whitespace-stripped and with the escape resolved, for the "nothing was
+// deleted" invariant. The transform adds newlines, indentation and quote
+// markers, and writes a still-open block's `$$` as `&#36;&#36;`; it never drops a
 // character that carries meaning.
 function dense(text: string): string {
-	return text.replace(/\s+/g, '');
+	return text.replace(/&#36;/g, () => '$').replace(/\s+/g, '');
 }
 
 function isSubsequence(inner: string, outer: string): boolean {

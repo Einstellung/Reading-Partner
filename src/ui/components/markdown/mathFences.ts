@@ -24,7 +24,7 @@
 // `$$` runs can see that. Two cuts: the broken opening line becomes the run and
 // then the rest of the line, the broken closing line becomes what came before it,
 // then the run, then whatever followed. The exception is a block whose closer has
-// not streamed in yet — its opening run is escaped to `\$\$`, because a block
+// not streamed in yet — its opening run becomes `&#36;&#36;`, because a block
 // left open paints the rest of the reply red until the model finishes typing.
 
 // The container matter a line may carry and still count as starting with what
@@ -243,13 +243,17 @@ function pass(text: string): string {
 	for (const at of scanned.escapes) {
 		// A `$$` whose closer has not arrived yet. Left as it is, it opens a flow
 		// block that eats its own opening line and paints everything after it red
-		// for as long as the formula streams; escaped, the half-written formula
-		// shows as the source the model is writing. The escape is invisible
-		// (markdown eats the backslash) and self-cancelling: every render recomputes
-		// from the model's text, so it is gone the moment the closing run arrives.
+		// for as long as the formula streams. The replacement is a character
+		// reference rather than `\$\$`: mathText does not honour a backslash before
+		// a dollar, so `\$\$` still carries two delimiters and a lone `$` earlier in
+		// the paragraph closes an inline span over the prose between them. A
+		// character reference is resolved after inline parsing, so its dollars are
+		// never delimiters, and the reader sees `$$`. It is self-cancelling either
+		// way: every render recomputes from the model's text, so it is gone the
+		// moment the closing run arrives.
 		const line = lines[at];
 		const run = (RUN.exec(line.content) as RegExpExecArray)[0];
-		rewritten.set(at, [line.prefix + '\\$'.repeat(run.length) + line.content.slice(run.length)]);
+		rewritten.set(at, [line.prefix + '&#36;'.repeat(run.length) + line.content.slice(run.length)]);
 	}
 	for (const block of scanned.blocks) {
 		// A block whose container ended before its closer is left exactly as the
