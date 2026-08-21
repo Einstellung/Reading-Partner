@@ -707,6 +707,8 @@ if ([_recognizer supportsOnDeviceRecognition])
 
 ### 修正的形态建议
 
+作废 2026-08-21：下面"先做 Web Speech 真机 spike 再分岔"的建议已经走完——三轮真机探针跑完，形态定为全原生（docs/33「形态：全原生」「ASR」），走的正是"不够用，上原生"那条分岔。中文识别质量、专名、后台行为的证据仍然成立，留作决策依据。
+
 先做 Web Speech 的真机 spike，因为它成本最低（零原生代码，只加两个 plist key），且能一次性验证形态是否成立：
 
 1. `src-tauri/Info.ios.plist` 加 `NSMicrophoneUsageDescription` + `NSSpeechRecognitionUsageDescription`。

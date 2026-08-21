@@ -7,6 +7,8 @@
 
 ## 结论先行
 
+作废 2026-08-21："webview 形态成立，不必退到全原生"已被推翻，形态定为全原生（docs/33「形态：全原生」）。AEC/后台测量数据仍然成立，是那个决定的依据之一。
+
 外放场景下全双工能成立，但**不能靠 `getUserMedia` 默认路径**。iOS WKWebView 确实给真 AEC（WebKit 源码证实），可是 AEC 的参考信号只接了 MediaStreamTrack 播放这一条路；`<audio src>` 和 Web Audio 直接输出不在参考路径里。要么把 TTS 播放绕成 MediaStream，要么退回半双工。
 
 **后台/锁屏也能活**（第二轮核实，见 §7）：WebKit 对"播 MediaStream 音频 + 同时在采集"这个组合有明写的后台和锁屏豁免；AudioContext 只要不连 `ctx.destination` 就不会被后台中断。webview 形态成立，不必退到全原生。
@@ -16,6 +18,8 @@
 ---
 
 ## 1. 唤醒词（KWS）
+
+作废 2026-08-21：唤醒词降为备案，不在当前语音工作范围内（docs/33「VAD 和轮次检测」，范围定死为只判"说完了没有"）。以下选型留作将来要做时的候选。
 
 ### sherpa-onnx keyword spotting — 推荐
 
