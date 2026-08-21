@@ -178,7 +178,7 @@ export default function ReaderTopBar(props: {
           aria-label={gate.bookThread === null ? BOOK_THREAD : `${BOOK_THREAD}: ${gate.bookThread}`}
           onClick={props.onOpenBookThread}
         >
-          <IconLessonPath size={18} />
+          <IconLessonPath size={20} />
         </Button>
         <MoreMenu items={moreItems} alert={props.settingsAlert} />
       </div>

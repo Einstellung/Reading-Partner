@@ -524,7 +524,7 @@ export function IconBooks({ size = 20 }: IconProps) {
 // Sized against its neighbours rather than against its own viewBox: the drawn
 // mark fills 73% of the box's height, which is what IconSparkle and
 // IconHighlight do in theirs. An earlier cut filled 65% and read a size small
-// next to them even though both render at 18px.
+// next to them at the same rendered size.
 const MARK = {
 	deep: '#2F4F39',
 	mid: '#7FA971',
