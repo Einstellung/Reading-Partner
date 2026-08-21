@@ -26,12 +26,12 @@
 
 必须落地的配置（已在本分支完成，除占位符替换）：
 
-1. `tauri.conf.json` → `plugins.deep-link.mobile[0].scheme` = `["com.googleusercontent.apps.<你的反向 client id>"]`，`appLink: false`。已填入本仓库的 iOS client（379091688229-esc23unqq02igufrjr9jjvtsug49j097）。
+1. `tauri.conf.json` → `plugins.deep-link.mobile[0].scheme` 数组里两条，iOS 和 Android 各一条，`appLink: false`。已填入本仓库的 iOS client（379091688229-esc23unqq02igufrjr9jjvtsug49j097）和 Android client（379091688229-8mb45l09bamhv2ln623knt4kob14folb，见 [23](./23-Android落地调研.md) 的「Google 登录」）。
 2. `.env` → `VITE_GOOGLE_IOS_CLIENT_ID` = 完整 iOS client id（`<id>.apps.googleusercontent.com`）。前端构建时读，必须和上面 scheme 指向同一个 client。
 
 gen/apple 落地后要核对（后续批次接上时验一遍）：
 
-- 构建产物 `src-tauri/gen/apple/*/Info.plist` 里出现一条 `CFBundleURLTypes` → `CFBundleURLSchemes` = `com.googleusercontent.apps.<id>`（不带 `://` 和路径段）。若因插件行为变化没自动生成，手动加这一条即可（key/值同上）。别手改再被 `tauri ios init` 覆盖——配置源头始终是 `tauri.conf.json`。
+- 构建产物 `src-tauri/gen/apple/*/Info.plist` 里出现的 `CFBundleURLTypes` → `CFBundleURLSchemes` 要两条 `com.googleusercontent.apps.<id>` 都在（iOS 和 Android 各一条，不带 `://` 和路径段）。若因插件行为变化没自动生成，手动加即可（key/值同上）。别手改再被 `tauri ios init` 覆盖——配置源头始终是 `tauri.conf.json`。
 - CI（`.github/workflows/ios-testflight.yml`）的 `bun run build` 步骤要能拿到 `VITE_GOOGLE_IOS_CLIENT_ID`（加进 workflow env 或 secret），否则 iOS 包里 client id 为空、登录按钮 disabled。
 
 ## Google Cloud Console 操作步骤（用户侧）
