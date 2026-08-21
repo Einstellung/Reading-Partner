@@ -7,6 +7,8 @@
 
 ## 结论
 
+作废 2026-08-21：本节"不必搬到原生 Swift 侧"的结论已被推翻——docs/33 定的是全原生（「形态：全原生」）。下文的 Info.plist 合并顺序、wry 的媒体权限授予、iOS 26 保活线程数据仍然成立，是那个决定用到的证据。
+
 场景成立。代价：Info.plist 加 `UIBackgroundModes = [audio]`，录音必须在前台按下才能带进后台，锁屏控件要另外接。
 
 录音和播放**不必**搬到原生 Swift 侧——WKWebView 里的 `getUserMedia` 在宿主 app 声明了 audio 后台模式时继续工作。但如果决定搬一半，会比不搬更糟：宿主 app 改自己的 AVAudioSession 会打断 webview 的音频（见第 4 节）。要么全在 webview，要么全在原生，没有中间态。
