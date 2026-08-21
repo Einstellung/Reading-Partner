@@ -626,10 +626,11 @@ export default function App() {
     lastCallThreadRef.current = id;
   }, [call?.threadId, call?.isBook, call?.aside]);
 
-  // A call that ended takes the scroll memory of its conversations with it: the
-  // next door onto any of them — the trace list, the blackboard — is a fresh
-  // open and starts at the newest message. Swapping to the page and back is not
-  // an end, which is what the memory is for.
+  // A place is kept for as long as a call is open, and hanging up drops every
+  // one of them. Switching threads inside an open call replaces the call in
+  // place rather than ending it, so the lesson's place survives an aside and the
+  // way back to it; swapping to the page and back is not an end either, which is
+  // what the memory is for.
   const callOpen = !!call;
   useEffect(() => {
     if (!callOpen) clearScrollMemory();
