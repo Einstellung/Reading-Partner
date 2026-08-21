@@ -157,11 +157,12 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 	// next scroll reads as one more growth and is discarded.
 	let seenHeight = 0;
 	// The position this module last wrote itself, kept until the browser echoes it
-	// back, and compared by value within a pixel rather than armed as a flag. Two
-	// rules keep it from swallowing a scroll of the reader's: only a write that
-	// actually moved the list arms it, because a write that changes nothing fires
-	// no event and would leave the marker standing at that position for good; and
-	// whatever event arrives next spends it, matched or not.
+	// back, and compared by value within a pixel rather than armed as a flag. A
+	// write that moved nothing is not an event: it arms nothing, because the marker
+	// would stand at that position for good with no echo coming to spend it, and it
+	// clears nothing, because the echo still on its way belongs to an earlier write
+	// and reading it as the reader's is what drops a restore. Whatever event does
+	// arrive spends the marker, matched or not.
 	let selfTop: number | null = null;
 
 	function applyRestore() {
@@ -198,7 +199,7 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 		// as the reader taking over, which drops the place for good.
 		host.scrollTop = pending;
 		const landed = host.scrollTop;
-		selfTop = landed === before ? null : landed;
+		if (landed !== before) selfTop = landed;
 		seenHeight = host.scrollHeight;
 		// The pin the wait ran under ends here: the place is the reader's, and
 		// following the newest message from it would drag them straight off it.
@@ -260,7 +261,7 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 		// Read back and kept for the same reason the restore does it: the echo of
 		// this write is a scroll event like any other, and without the marker it is
 		// recorded as a place the reader chose.
-		selfTop = landed === before ? null : landed;
+		if (landed !== before) selfTop = landed;
 		seenHeight = host.scrollHeight;
 	}
 

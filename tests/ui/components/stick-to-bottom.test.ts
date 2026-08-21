@@ -12,7 +12,10 @@
 //   away, or the first growth would unpin the list forever, and must not be
 //   recorded as a place the reader chose. A write that moved nothing is owed no
 //   such scroll, and the marker it would leave standing swallows the reader's
-//   return to the bottom — the list then stops following the stream for good.
+//   return to the bottom — the list then stops following the stream for good. It
+//   must not spend the marker of an earlier write either: that echo is still on
+//   its way, and reading it as the reader drops the restore and overwrites the
+//   memory with a position nobody scrolled to.
 // - Teardown must release the container it bound to, so a re-pin (a new thread)
 //   does not leave the old listener running.
 // - A remembered list must come back where the reader was, and must write that
@@ -525,6 +528,26 @@ test("a write that moved nothing leaves no marker behind", () => {
 	back.scrollTo(100);
 	back.scrollTo(400);
 	expect(memory.saved()).toEqual({ top: 400, stuck: true });
+	stop();
+});
+
+test("a write that moved nothing leaves the marker of one that did standing", () => {
+	const memory = makeMemory();
+	leaveAt(memory, 200);
+	// A transcript that comes back too short for the place: the bind pins it to the
+	// bottom, and the height watcher's first delivery — same list, same height —
+	// writes that same number again. Only the first move is owed an echo.
+	const back = makeHost(400, 300);
+	const { stop, contentChanged } = bindRemembered(back, memory);
+	expect(back.scrollTop).toBe(bottomOf(back));
+	contentChanged();
+	back.flush();
+	// The echo is this module's own, so nothing here was the reader: the place is
+	// still waiting and the memory still holds it.
+	expect(memory.saved()).toEqual({ top: 200, stuck: false });
+	back.grow(600);
+	contentChanged();
+	expect(back.scrollTop).toBe(200);
 	stop();
 });
 
