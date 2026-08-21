@@ -1,7 +1,8 @@
 // The two AI entries the reader offers (docs/09): the pen rack's AI pen, which is
 // about one passage, and the top bar's button, which is about the whole book.
-// They wore the same sparkle, so nothing on screen said they were different
-// things. The blackboard is the whole book, and the rack keeps the sparkle.
+// Each now has its own drawing: the top bar carries a lesson path threading
+// through the book, start to finish; the rack carries a speech bubble asking
+// about the line it just marked. Neither borrows the other's glyph.
 //
 // The icons are rendered; the two call sites are read as source, because both
 // components measure the viewport at render and neither is what this is about.
@@ -12,7 +13,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
-import { IconReadTogether, IconSparkle } from "../../../src/ui/components/base/icons";
+import { IconAskHere, IconLessonPath } from "../../../src/ui/components/base/icons";
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "../../../src");
 const read = (path: string): string => readFileSync(join(SRC, path), "utf8");
@@ -21,7 +22,7 @@ const topBar = read("ui/components/reader/ReaderTopBar.tsx");
 const rack = read("ui/components/reader/PenToolbar.tsx");
 
 test("the entry's mark is the one icon in colour, and the only one", () => {
-  const markup = renderToStaticMarkup(<IconReadTogether size={18} />);
+  const markup = renderToStaticMarkup(<IconLessonPath size={18} />);
   expect(markup).toContain('viewBox="0 0 24 24"');
   expect(markup).toContain('width="18"');
   expect(markup).toContain('height="18"');
@@ -39,22 +40,22 @@ test("the entry's mark is the one icon in colour, and the only one", () => {
   expect(strays).toEqual([]);
 });
 
-test("the blackboard and the sparkle are different drawings", () => {
-  expect(renderToStaticMarkup(<IconReadTogether size={18} />)).not.toBe(
-    renderToStaticMarkup(<IconSparkle size={18} />),
+test("the lesson path and the ask-here bubble are different drawings", () => {
+  expect(renderToStaticMarkup(<IconLessonPath size={18} />)).not.toBe(
+    renderToStaticMarkup(<IconAskHere size={18} />),
   );
 });
 
-test("the top bar's book entry wears the blackboard and says what it opens", () => {
-  expect(topBar).toContain("IconReadTogether");
-  expect(topBar).not.toContain("IconSparkle");
+test("the top bar's book entry wears the lesson path and says what it opens", () => {
+  expect(topBar).toContain("IconLessonPath");
+  expect(topBar).not.toContain("IconAskHere");
   // The label is a constant: while the button is dim its title is the line that
   // says why instead, and both readings are rendered in pen-rack-gate.test.tsx.
   expect(topBar).toContain('const BOOK_THREAD = "Learn this book with AI"');
   expect(topBar).not.toContain("Talk about this book");
 });
 
-test("the pen rack keeps the sparkle for the passage-level pen", () => {
-  expect(rack).toContain("IconSparkle");
-  expect(rack).not.toContain("IconReadTogether");
+test("the pen rack wears the ask-here bubble for the passage-level pen", () => {
+  expect(rack).toContain("IconAskHere");
+  expect(rack).not.toContain("IconLessonPath");
 });
