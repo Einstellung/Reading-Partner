@@ -22,7 +22,7 @@
 
 ## gen/apple 接线清单
 
-`src-tauri/gen/apple` 不入库，CI 里 `tauri ios init --ci` 生成，`tauri ios build` 构建。deep-link 插件的 build.rs 在 iOS 构建时用 `update_info_plist` 从 `tauri.conf.json` 的 `plugins.deep-link.mobile[].scheme` 自动生成 Info.plist 的 `CFBundleURLTypes`。所以正常情况下无需手改 gen/apple。
+`src-tauri/gen/apple` 不入库，CI 里 `tauri ios init --ci` 生成，`tauri ios build` 构建。deep-link 插件的 build.rs 用 `update_info_plist` 从 `tauri.conf.json` 的 `plugins.deep-link.mobile[].scheme` 写 Info.plist 的 `CFBundleURLTypes`，但这是编译那个 crate 的副作用：CI 的 rust-cache 一命中就不跑，`gen/apple` 又每次现生成，键会整个消失（坑 [157](./pitfall/157-a-cached-crate-never-replays-its-build-script.md)）。所以 iOS 两条 workflow 在 init 之后自己跑 `bun scripts/ios-deep-link-plist.ts inject` 注入（源头仍是 `tauri.conf.json`），并在 ipa 上跑同一个脚本的 `verify` 断言，缺 scheme 就让构建失败。
 
 必须落地的配置（已在本分支完成，除占位符替换）：
 
@@ -31,7 +31,7 @@
 
 gen/apple 落地后要核对（后续批次接上时验一遍）：
 
-- 构建产物 `src-tauri/gen/apple/*/Info.plist` 里出现的 `CFBundleURLTypes` → `CFBundleURLSchemes` 要两条 `com.googleusercontent.apps.<id>` 都在（iOS 和 Android 各一条，不带 `://` 和路径段）。若因插件行为变化没自动生成，手动加即可（key/值同上）。别手改再被 `tauri ios init` 覆盖——配置源头始终是 `tauri.conf.json`。
+- `CFBundleURLTypes` → `CFBundleURLSchemes` 要两条 `com.googleusercontent.apps.<id>` 都在（iOS 和 Android 各一条，不带 `://` 和路径段）。这条现在由 CI 断言，不用人去核；断言读的是 ipa 里的 `Payload/*.app/Info.plist`，两条 scheme 少一条就红。别手改 gen/apple，会被下次 `tauri ios init` 覆盖。
 - CI（`.github/workflows/ios-testflight.yml`）的 `bun run build` 步骤要能拿到 `VITE_GOOGLE_IOS_CLIENT_ID`（加进 workflow env 或 secret），否则 iOS 包里 client id 为空、登录按钮 disabled。
 
 ## Google Cloud Console 操作步骤（用户侧）
@@ -48,7 +48,7 @@ gen/apple 落地后要核对（后续批次接上时验一遍）：
 
 ## 真机待验项
 
-本轮无 iOS 真机/gen/apple，以下只能上真机确认：
+以下只能上真机确认。0.9.2 build 48 和 0.10.1 build 53 授权完 Safari 报「网址无效」不属于这里的任何一条：那是包里 `CFBundleURLTypes` 丢了（坑 [157](./pitfall/157-a-cached-crate-never-replays-its-build-script.md)），CI 已经加了注入和断言。
 
 - Safari 授权后经自定义 scheme 跳回 app，`onOpenUrl` 能收到完整回调 URL 且 state 比对通过。
 - 自定义 scheme 跳回前 Safari 会弹一次"用 App 打开?"插页，是固有体验；要去掉得上 ASWebAuthenticationSession（需原生插件），本轮不做。
