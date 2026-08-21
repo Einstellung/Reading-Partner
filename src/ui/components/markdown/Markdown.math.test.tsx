@@ -42,15 +42,17 @@ test('the formula and the citations in the same reply both survive', () => {
 });
 
 test('a formula still streaming shows as source, not as a red block', () => {
-	// Every cut from the opening run to just before the closing one: the block
-	// has no closer yet, so nothing is math and nothing is red. It becomes a
-	// display block in one step when the closer arrives.
+	// Every cut from the opening run to just before the closing one: the block has
+	// no closer yet, so nothing is red. It becomes a display block in one step
+	// when the closer arrives. The single frame where the reply ends on the bare
+	// `$$` is an empty display block, because a `$$` alone on its line is a
+	// correct opener and the pass escapes only the ones it cut itself.
 	const open = REPLY.indexOf('$$');
 	const closer = REPLY.lastIndexOf('$$');
 	for (let cut = open + 1; cut <= closer + 1; cut += 1) {
 		const html = plain(REPLY.slice(0, cut));
 		expect(html).not.toContain(ERROR_COLOR);
-		expect(html).not.toContain(DISPLAY);
+		if (html.includes(DISPLAY)) expect(cut).toBe(open + 2);
 	}
 	expect(plain(REPLY).split(DISPLAY).length - 1).toBe(1);
 });

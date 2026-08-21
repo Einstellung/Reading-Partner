@@ -24,4 +24,12 @@ remark-math 的 flow 规则。开头那行 `$$` 后面还有东西，那些东�
 
 ## 解法
 
-在交给 react-markdown 之前把围栏搬到自己的行上：`src/ui/components/markdown/mathFences.ts` 的 `canonicalizeMathFences`，装在 `MarkdownRenderer.tsx` 里 `linkifyCitations` 前面。只动开头那个 `$$` 起在行首、内容又跨行的那一对，别的一个字节都不改。配对照 remark 的规则算（`\$` 转义、行内代码、代码块里的 `$$` 都不是分隔符，开三收二不配对），插进去的每一行都得带上列表和引用的前缀，否则块会从列表项里掉出来。还没等到收尾的 `$$` 转义成 `\$\$`，不然流式过程中那堵红墙会一直立到公式写完。守着的单测是同目录的 `mathFences.test.ts` 和 `Markdown.math.test.tsx`。
+在交给 react-markdown 之前把围栏搬到自己的行上：`src/ui/components/markdown/mathFences.ts` 的 `canonicalizeMathFences`，装在 `MarkdownRenderer.tsx` 里 `linkifyCitations` 前面。
+
+它逐行走，只认上面那个坏形状：`$$` 起在行首、后面还跟着东西、而且跟着的东西里没有另一个同样长的 `$$`（有的话 remark 按 inline math 读，本来就是好的）。这样的开头行切成「`$$`」和「剩下的」；块里第一个前面有内容的收尾行切成「前面的」「`$$`」「后面的」。别的字节一个不改，行中间的 `$$`、单行成对、代码块、缩进代码、正文里的钱数都不用特判，形状本身就把它们排除了。
+
+插进去的行要带上引用和列表前缀，否则块会从列表项里掉出来。块在开它的那个容器（引用层数、列表缩进）结束时结束；这一步读错了最多是不动手，不会改坏。
+
+只有一处会写出原文里没有的字节：被切开的开头行直到文末都没等到收尾（流式写到一半），那个 `$$` 转义成 `\$\$`，不然半截公式的红墙会一直立到公式写完。本来就规范的 `$$`（独占一行）即使还没收尾也不碰——那是能正常渲染的块，转义了反而把它变成字面文本。
+
+守着的单测是同目录的 `mathFences.test.ts` 和 `Markdown.math.test.tsx`。

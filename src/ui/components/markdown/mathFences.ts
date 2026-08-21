@@ -10,311 +10,285 @@
 // that way; not one is in the canonical form, under a prompt that already names
 // the delimiters.
 //
-// Only a run that starts its own line reaches that rule. A run anywhere else on
-// the line is inline math, which spans newlines and renders as written, so the
-// scope here is one shape: a pair whose opening run starts its line and whose
-// content crosses a newline. Its two fences move onto lines of their own; every
-// other run in the text comes back byte for byte.
-
-// A run of one or more `$` and the line it sits on. The line is recorded by the
-// scanner rather than recomputed later, so telling a pair that straddles a
-// fenced code block from one that does not costs nothing.
-interface Run {
-	start: number;
-	end: number;
-	len: number;
-	line: number;
-}
-
-interface Pair {
-	open: Run;
-	close: Run;
-}
+// That line is the only shape remark gets wrong, so it is the only one this pass
+// touches. A `$$` alone on its line already opens and closes a block; a run
+// anywhere but the start of a line is inline math, which spans newlines and
+// renders as written; and a line-start `$$…$$` whose remainder holds another run
+// is refused as flow and falls back to inline math, which renders too. Those, and
+// every dollar in prose, money or code, come back byte for byte. The only bytes
+// this module writes are the two cuts on a broken block's own fence lines, and
+// the escape below when such a block has no closer yet.
+//
+// It is a line pass because remark's rules are container-relative: a flow block
+// ends where the blockquote or list item that opened it ends, and no scan of
+// `$$` runs can see that. Two cuts: the broken opening line becomes the run and
+// then the rest of the line, the broken closing line becomes what came before it,
+// then the run, then whatever followed. The exception is a block whose closer has
+// not streamed in yet — its opening run is escaped to `\$\$`, because a block
+// left open paints the rest of the reply red until the model finishes typing.
 
 // The container matter a line may carry and still count as starting with what
 // comes after it: blockquote markers, one list marker, and up to three spaces at
 // each step, which is remark's own threshold for letting a flow construct open.
-// A fourth space opens an indented code block instead.
+// A fourth space opens an indented code block, so a run behind that much
+// whitespace never starts a line as far as this pass is concerned.
 const PREFIX = /^((?: {0,3}>[ \t]?)*)(?:( {0,3})((?:[-*+]|\d{1,9}[.)])[ \t]+))?( {0,3})/;
 const FENCE = /^(`{3,}|~{3,})/;
-const MATH_LINE = /^(\$\$+)[ \t\r]*$/;
-const BLANK_LINE = /\n[ \t]*\n/;
+const RUN = /^\$\$+/;
 const LEADING_SPACE = /^[ \t]*/;
 
-function afterPrefix(line: string): string {
-	return line.slice(PREFIX.exec(line)?.[0].length ?? 0);
+interface Line {
+	// The line without its terminator, and the terminator it had. Splitting on
+	// `\n` and carrying the `\r` separately is what keeps a CRLF document CRLF.
+	text: string;
+	eol: string;
+	// The container matter as written, and the form an inserted line repeats:
+	// the list marker becomes spaces, so a new line continues the item instead of
+	// opening a second one. Fences prefixed but body lines left lazy would split
+	// the item and let the block escape the quote.
+	prefix: string;
+	cont: string;
+	depth: number;
+	// Leading whitespace, uncapped — for a line carrying a marker, the whitespace
+	// before the marker.
+	indent: number;
+	// The column a later line has to reach to still be inside the list item this
+	// one opens. Plain indentation is not a container, so a line without a marker
+	// sets no column and anything after it is still in the same container.
+	column: number;
+	content: string;
 }
 
-// The prefix every line inserted for a run has to repeat, or null when the run
-// does not start its own line. Fences prefixed but body lines left lazy splits
-// the list item and lets the block escape the quote. The list marker becomes
-// spaces, so an inserted line continues the item instead of opening a second one.
-function openerPrefix(text: string, at: number): string | null {
-	const head = text.slice(text.lastIndexOf('\n', at - 1) + 1, at);
-	const m = PREFIX.exec(head);
-	if (!m || m[0].length !== head.length) return null;
-	return m[1] + (m[2] ?? '') + ' '.repeat(m[3]?.length ?? 0) + m[4];
+function parseLine(raw: string, last: boolean): Line {
+	const crlf = raw.endsWith('\r');
+	const text = crlf ? raw.slice(0, -1) : raw;
+	const m = PREFIX.exec(text) as RegExpExecArray;
+	const quotes = m[1];
+	const marker = m[3] ?? '';
+	const indent =
+		marker === '' ? (LEADING_SPACE.exec(text.slice(quotes.length)) as RegExpExecArray)[0].length : (m[2] ?? '').length;
+	return {
+		text,
+		eol: last ? '' : crlf ? '\r\n' : '\n',
+		prefix: m[0],
+		cont: quotes + (m[2] ?? '') + ' '.repeat(marker.length) + m[4],
+		depth: (quotes.match(/>/g) ?? []).length,
+		indent,
+		column: marker === '' ? 0 : indent + marker.length + m[4].length,
+		content: text.slice(m[0].length),
+	};
 }
 
-// Which lines sit inside a fenced code block. A fence opens on a line whose
-// container prefix is followed by three or more backticks or tildes (the info
-// string is irrelevant) and closes on a line with the same character, at least
-// as long, and nothing but whitespace after the run. An unterminated fence runs
-// to the end of the text: mid-stream that is exactly right, and it keeps a
-// half-written block from being rewritten.
-//
-// Indented (four-space) code blocks are not modeled — telling one from a lazy
-// list continuation needs container context this pass does not have. Nothing
-// inside one is rewritten anyway: openerPrefix does not admit that much
-// indentation.
-//
-// A display block already in canonical form is the one thing that can hold a
-// fence line without opening a code block, exactly as remark reads it: `$$`
-// alone opens a flow block whose lines are all content until a line of nothing
-// but `$$`. Without that state, running this function over its own output would
-// find a code fence in a formula and reach a different pairing than the pass
-// that wrote it.
-function fencedLines(text: string): boolean[] {
-	const flags: boolean[] = [];
-	let open: { char: string; len: number } | null = null;
-	let math: number | null = null;
-	for (const line of text.split('\n')) {
-		const rest = afterPrefix(line);
-		const m = FENCE.exec(rest);
-		if (open) {
-			flags.push(true);
-			const closes =
-				m !== null && m[1][0] === open.char && m[1].length >= open.len && rest.slice(m[0].length).trim() === '';
-			if (closes) open = null;
-			continue;
-		}
-		const alone = MATH_LINE.exec(rest);
-		if (math !== null) {
-			flags.push(false);
-			if (alone && alone[1].length >= math) math = null;
-			continue;
-		}
-		if (alone) {
-			math = alone[1].length;
-			flags.push(false);
-			continue;
-		}
-		if (m) open = { char: m[1][0], len: m[1].length };
-		flags.push(m !== null);
-	}
-	return flags;
-}
-
-function runEnd(text: string, at: number, char: string): number {
-	let i = at;
-	while (text[i] === char) i += 1;
-	return i;
-}
-
-// Where a code span opened by `n` backticks closes: the next run of exactly n
-// backticks, fenced lines skipped. Null when it never closes, in which case the
-// backticks were literal.
-function closingTicks(
-	text: string,
-	from: number,
-	fromLine: number,
-	n: number,
-	fenced: boolean[],
-): { at: number; line: number } | null {
-	let i = from;
-	let line = fromLine;
-	while (i < text.length) {
-		if (fenced[line]) {
-			const nl = text.indexOf('\n', i);
-			if (nl === -1) return null;
-			i = nl + 1;
-			line += 1;
-			continue;
-		}
-		const ch = text[i];
-		if (ch === '\n') {
+// Whether a run of at least `len` dollars appears anywhere in the rest of an
+// opening line. remark refuses flow for such a line and reads the pair as inline
+// math, which renders, so the line is not ours.
+function holdsRun(rest: string, len: number): boolean {
+	let i = 0;
+	while (i < rest.length) {
+		if (rest[i] !== '$') {
 			i += 1;
-			line += 1;
 			continue;
 		}
-		if (ch === '`') {
-			const end = runEnd(text, i, '`');
-			if (end - i === n) return { at: end, line };
-			i = end;
+		let end = i;
+		while (rest[end] === '$') end += 1;
+		if (end - i >= len) return true;
+		i = end;
+	}
+	return false;
+}
+
+interface Cut {
+	before: string;
+	run: string;
+	rest: string;
+}
+
+// The three pieces of a broken closing line — `\end{bmatrix}$$` and
+// `\end{bmatrix}$$ 然后。` — which is a run of at least the opener's length with
+// something before it on the line. A run with nothing before it is not a closer:
+// remark reads that line as another opener and swallows it, and so does this pass.
+function closerCut(line: Line, len: number): Cut | null {
+	const { content } = line;
+	let i = 0;
+	while (i < content.length) {
+		if (content[i] !== '$') {
+			i += 1;
 			continue;
 		}
-		i += 1;
+		let end = i;
+		while (content[end] === '$') end += 1;
+		// A backslash makes the dollar inert. Inside a formula it is LaTeX either
+		// way, and cutting there would break the formula in half.
+		const inert = i > 0 && content[i - 1] === '\\';
+		if (!inert && end - i >= len && content.slice(0, i).trim() !== '') {
+			return {
+				before: line.text.slice(0, line.prefix.length + i),
+				run: content.slice(i, end),
+				rest: content.slice(end).replace(LEADING_SPACE, ''),
+			};
+		}
+		i = end;
 	}
 	return null;
 }
 
-// Every `$` run that markdown will read as text. One pass, because what a
-// character means depends on what came before it: a backslash makes the next
-// character inert, so `\$\$` stays a literal the model asked for, and a code
-// span is a stretch where no delimiter counts at all.
-function scanRuns(text: string, fenced: boolean[]): Run[] {
-	const runs: Run[] = [];
-	let i = 0;
-	let line = 0;
-	while (i < text.length) {
-		if (fenced[line]) {
-			const nl = text.indexOf('\n', i);
-			if (nl === -1) break;
-			i = nl + 1;
-			line += 1;
+interface Block {
+	open: number;
+	// Whether the opening line has to be cut. A `$$` alone on its line opens the
+	// same block and needs no edit.
+	split: boolean;
+	close: number | null;
+	cut: Cut | null;
+	ended: 'closer' | 'container' | 'eot';
+}
+
+interface Open {
+	line: number;
+	split: boolean;
+	len: number;
+	depth: number;
+	column: number;
+}
+
+// Whether a line is still inside the container the block opened in. Getting this
+// wrong ends the block early, which costs no more than the pass declining: a
+// block cut short this way is left exactly as the model wrote it.
+function holds(line: Line, open: Open): boolean {
+	if (line.text.trim() === '') return open.depth === 0 && open.column === 0;
+	return line.depth === open.depth && line.indent >= open.column;
+}
+
+// Where the display blocks are, reading the lines the way remark does: a code
+// fence and a math block each swallow lines until their own closer, and neither
+// can open inside the other. Lines named in `escaped` open nothing, because the
+// emit pass is about to turn their run into a literal.
+function scan(lines: Line[], escaped: ReadonlySet<number>): { blocks: Block[]; escapes: number[] } {
+	const blocks: Block[] = [];
+	const escapes: number[] = [];
+	let fence: { char: string; len: number } | null = null;
+	let open: Open | null = null;
+	for (let i = 0; i < lines.length; i += 1) {
+		const line = lines[i];
+		if (fence) {
+			const f = FENCE.exec(line.content);
+			if (f && f[1][0] === fence.char && f[1].length >= fence.len && line.content.slice(f[0].length).trim() === '')
+				fence = null;
 			continue;
 		}
-		const ch = text[i];
-		if (ch === '\n') {
-			i += 1;
-			line += 1;
-			continue;
-		}
-		if (ch === '\\') {
-			// A backslash before a newline is a hard break; it escapes nothing.
-			i += text[i + 1] === '\n' ? 1 : 2;
-			continue;
-		}
-		if (ch === '`') {
-			const spanStart = runEnd(text, i, '`');
-			const close = closingTicks(text, spanStart, line, spanStart - i, fenced);
-			if (!close) {
-				i = spanStart;
+		if (open) {
+			if (holds(line, open)) {
+				const run = RUN.exec(line.content);
+				if (run && run[0].length >= open.len && line.content.slice(run[0].length).trim() === '') {
+					blocks.push({ open: open.line, split: open.split, close: i, cut: null, ended: 'closer' });
+					open = null;
+					continue;
+				}
+				const cut = closerCut(line, open.len);
+				if (cut) {
+					blocks.push({ open: open.line, split: open.split, close: i, cut, ended: 'closer' });
+					open = null;
+					continue;
+				}
 				continue;
 			}
-			i = close.at;
-			line = close.line;
+			blocks.push({ open: open.line, split: open.split, close: null, cut: null, ended: 'container' });
+			open = null;
+		}
+		const f = FENCE.exec(line.content);
+		if (f) {
+			fence = { char: f[1][0], len: f[1].length };
 			continue;
 		}
-		if (ch === '$') {
-			const end = runEnd(text, i, '$');
-			runs.push({ start: i, end, len: end - i, line });
-			i = end;
+		if (escaped.has(i)) {
+			escapes.push(i);
 			continue;
 		}
-		i += 1;
+		const run = RUN.exec(line.content);
+		if (!run) continue;
+		const len = run[0].length;
+		const rest = line.content.slice(len);
+		if (rest.trim() === '') {
+			open = { line: i, split: false, len, depth: line.depth, column: line.column };
+			continue;
+		}
+		if (holdsRun(rest, len)) continue;
+		open = { line: i, split: true, len, depth: line.depth, column: line.column };
 	}
-	return runs;
+	if (open) blocks.push({ open: open.line, split: open.split, close: null, cut: null, ended: 'eot' });
+	return { blocks, escapes };
 }
 
-// remark's pairing, measured: a run of two or more `$` opens flow math and
-// closes on a run at least as long (open-3 never closes on close-2), and a lone
-// `$` opens inline math that closes on another lone `$`. Following it exactly is
-// what keeps this from rewriting text remark would not read as math.
-function pairRuns(text: string, runs: Run[]): { pairs: Pair[]; unpaired: Run[] } {
-	const pairs: Pair[] = [];
-	const unpaired: Run[] = [];
-	let i = 0;
-	while (i < runs.length) {
-		const run = runs[i];
-		if (run.len === 1) {
-			// Inline math is not ours, but its span has to be jumped: that is what
-			// leaves the `$$` in `$x $$ y$` alone. A lone `$` that closes nothing is
-			// a dollar sign in prose and the scan carries on past it.
-			let j = i + 1;
-			while (j < runs.length && runs[j].len !== 1) j += 1;
-			const closes = j < runs.length && !BLANK_LINE.test(text.slice(run.end, runs[j].start));
-			i = closes ? j + 1 : i + 1;
-			continue;
-		}
-		let j = i + 1;
-		while (j < runs.length && runs[j].len < run.len) j += 1;
-		if (j < runs.length) {
-			pairs.push({ open: run, close: runs[j] });
-			i = j + 1;
-			continue;
-		}
-		unpaired.push(run);
-		i += 1;
-	}
-	return { pairs, unpaired };
-}
-
-// The block's content, one output line each. The first segment sits on the
-// opening line and is written as it stands; every later one has whatever
-// container matter it already carries stripped, which both re-indents a lazy
-// continuation line and keeps a marker the model did write from doubling.
-function bodyLines(body: string, prefix: string): string[] {
-	const lines = body.split(/\r?\n/);
-	if (prefix !== '') {
-		const quotes = (prefix.match(/>/g) ?? []).length;
-		const lastQuote = prefix.lastIndexOf('>');
-		const spaces = lastQuote === -1 ? prefix.length : prefix.length - lastQuote - 1;
-		const strip = new RegExp(`^(?:[ \\t]*>[ \\t]?){0,${quotes}}[ \\t]{0,${spaces}}`);
-		for (let i = 1; i < lines.length; i += 1) lines[i] = lines[i].replace(strip, '');
-	}
-	// The model usually already broke the line after the opening fence, and the
-	// blank at the end is the closing fence's own line.
-	if (lines.length > 0 && lines[0].trim() === '') lines.shift();
-	if (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop();
-	return lines;
-}
-
-function lineEnd(text: string, at: number): number {
-	const nl = text.indexOf('\n', at);
-	return nl === -1 ? text.length : nl;
-}
-
-function fencedBetween(fenced: boolean[], from: number, to: number): boolean {
-	for (let line = from; line <= to; line += 1) if (fenced[line]) return true;
-	return false;
-}
-
-// One rewrite the output pass has to make, in the order the offsets come.
-type Edit =
-	| { at: number; kind: 'block'; open: Run; close: Run; prefix: string }
-	| { at: number; kind: 'escape'; run: Run };
-
-export function canonicalizeMathFences(text: string): string {
+// One walk of the lines. Not the whole transform: cutting a closing line can put
+// what was mid-line at the start of a line, where the same rules read it
+// differently, so canonicalizeMathFences repeats this until it settles.
+function pass(text: string): string {
 	if (!text.includes('$$')) return text;
-	const fenced = fencedLines(text);
-	const { pairs, unpaired } = pairRuns(text, scanRuns(text, fenced));
-	const edits: Edit[] = [];
-	for (const { open, close } of pairs) {
-		const prefix = openerPrefix(text, open.start);
-		if (prefix === null) continue;
-		// A single-line pair is inline math and renders as it is; a pair with one
-		// line inside a fenced block has that end in code.
-		if (!text.slice(open.end, close.start).includes('\n')) continue;
-		if (fencedBetween(fenced, open.line, close.line)) continue;
-		edits.push({ at: open.start, kind: 'block', open, close, prefix });
+	const raw = text.split('\n');
+	const lines = raw.map((line, i) => parseLine(line, i === raw.length - 1));
+
+	// Escaping an opener takes its block away, which changes what the lines after
+	// it belong to, so the scan is repeated until no cut opener is left hanging.
+	// Each round escapes at least one more line, and an escaped line never opens
+	// a block again.
+	const escaped = new Set<number>();
+	let scanned = scan(lines, escaped);
+	for (;;) {
+		const hanging = scanned.blocks.filter((b) => b.split && b.ended === 'eot');
+		if (hanging.length === 0) break;
+		for (const block of hanging) escaped.add(block.open);
+		scanned = scan(lines, escaped);
 	}
-	for (const run of unpaired) {
-		if (openerPrefix(text, run.start) !== null) edits.push({ at: run.start, kind: 'escape', run });
+
+	const rewritten = new Map<number, string[]>();
+	for (const at of scanned.escapes) {
+		// A `$$` whose closer has not arrived yet. Left as it is, it opens a flow
+		// block that eats its own opening line and paints everything after it red
+		// for as long as the formula streams; escaped, the half-written formula
+		// shows as the source the model is writing. The escape is invisible
+		// (markdown eats the backslash) and self-cancelling: every render recomputes
+		// from the model's text, so it is gone the moment the closing run arrives.
+		const line = lines[at];
+		const run = (RUN.exec(line.content) as RegExpExecArray)[0];
+		rewritten.set(at, [line.prefix + '\\$'.repeat(run.length) + line.content.slice(run.length)]);
 	}
-	if (edits.length === 0) return text;
-	edits.sort((a, b) => a.at - b.at);
+	for (const block of scanned.blocks) {
+		// A block whose container ended before its closer is left exactly as the
+		// model wrote it: the pass declines rather than guess where it stopped.
+		if (block.ended !== 'closer') continue;
+		const open = lines[block.open];
+		if (block.split) {
+			const run = (RUN.exec(open.content) as RegExpExecArray)[0];
+			rewritten.set(block.open, [
+				open.prefix + run,
+				open.cont + open.content.slice(run.length).replace(LEADING_SPACE, ''),
+			]);
+		}
+		if (block.cut) {
+			const pieces = [block.cut.before, open.cont + block.cut.run];
+			if (block.cut.rest !== '') pieces.push(open.cont + block.cut.rest);
+			rewritten.set(block.close as number, pieces);
+		}
+	}
+	if (rewritten.size === 0) return text;
+
 	const nl = text.includes('\r\n') ? '\r\n' : '\n';
 	let out = '';
-	let last = 0;
-	for (const edit of edits) {
-		if (edit.kind === 'escape') {
-			// A `$$` whose closer has not arrived yet. Left as it is, it opens a
-			// flow block that eats its own opening line and paints everything after
-			// it red for as long as the formula streams; escaped, the half-written
-			// formula shows as the source the model is writing. The escape is
-			// invisible (markdown eats the backslash) and self-cancelling: every
-			// render recomputes from the model's text, so it is gone the moment the
-			// closing run arrives.
-			out += text.slice(last, edit.run.start) + '\\$'.repeat(edit.run.len);
-			last = edit.run.end;
-			continue;
-		}
-		const { open, close, prefix } = edit;
-		out += text.slice(last, open.end) + nl;
-		for (const line of bodyLines(text.slice(open.end, close.start), prefix)) {
-			out += prefix + line + nl;
-		}
-		out += prefix + text.slice(close.start, close.end);
-		// The closing line must hold nothing but the run, so whatever followed it
-		// moves to a line of its own.
-		const rest = text.slice(close.end, lineEnd(text, close.end));
-		if (rest.trim() === '') {
-			last = close.end;
-			continue;
-		}
-		out += nl + prefix;
-		last = close.end + (LEADING_SPACE.exec(rest)?.[0].length ?? 0);
+	for (let i = 0; i < lines.length; i += 1) {
+		const pieces = rewritten.get(i);
+		out += (pieces === undefined ? lines[i].text : pieces.join(nl)) + lines[i].eol;
 	}
-	return out + text.slice(last);
+	return out;
+}
+
+export function canonicalizeMathFences(text: string): string {
+	// Each round either breaks a line in two or turns a run into a literal, and
+	// neither can be undone by a later round, so this settles rather than cycles.
+	// Real replies settle on the first round; a second one only ever has the
+	// pieces the first round created to look at.
+	let out = text;
+	for (;;) {
+		const next = pass(out);
+		if (next === out) return out;
+		out = next;
+	}
 }
