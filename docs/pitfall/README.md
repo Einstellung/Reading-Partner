@@ -194,6 +194,7 @@
 - [136-react-18-warns-on-every-hyphenated-svg-attribute](./136-react-18-warns-on-every-hyphenated-svg-attribute.md) — React 18 把 `stroke-width` 这类连字符 SVG 属性照写进 DOM，但每个都报一次 `Invalid DOM property`，一张图刷几十条；元素树保留真名，交给 React 前驼峰化，`aria-*`/`data-*` 除外。文里的图表卡和 `SvgFigure` 已删（作废 2026-08-20，见 [40](../40-聊天里画结构图.md)），React 18 的这个行为本身仍成立，再手写 SVG 元素树按这条办
 - [153-a-cjk-full-stop-keeps-bold-from-closing](./153-a-cjk-full-stop-keeps-bold-from-closing.md) — CommonMark 的 flanking 规则不让 `**` 在中文标点和汉字之间收尾，`**结论：**这样不行` 整句连星号一起显示，而模型写中文时几乎每段都这么写；加 `remark-cjk-friendly` 和 `remark-cjk-friendly-gfm-strikethrough`（后者必须排在 `remarkGfm` 之后），插件表单独一个模块以免把 lazy chunk 拖进主包
 - [154-react-markdown-hands-every-override-a-node-prop](./154-react-markdown-hands-every-override-a-node-prop.md) — react-markdown v10 给每个换成组件的元素多传一个 `node`（hast 节点），`AnchorHTMLAttributes` 里没有这个字段，它跟着 `...rest` 铺到 `<a>` 上渲染成 `node="[object Object]"`；类型全绿、React 18 也不警告。签名交叉上包里的 `ExtraProps` 再把 `node` 解构出来丢掉
+- [156-a-display-fence-must-be-alone-on-its-line](./156-a-display-fence-must-be-alone-on-its-line.md) — remark-math 只认独占一行的 `$$`：开头行 `$$` 后面的内容变成 `meta` 被丢掉，`\end{bmatrix}$$` 不算收尾，没收上的块把后面的正文一起吃进同一个 math 节点渲染成红色原文；模型写的多行公式全是这个形状，一处规范形式都没有。解析前逐行走一遍，把这个形状的开头行和收尾行各切一刀（`mathFences.ts`），行中间的 `$$`、单行成对的、代码里的都不动；只有被切开又等不到收尾的开头行（流式写到一半）转义成 `\$\$`
 
 ## AI 调用与上下文窗口
 
