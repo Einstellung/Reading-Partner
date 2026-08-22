@@ -25,6 +25,7 @@ import {
   createAsideThread,
   deleteThreadTree,
   getThread,
+  patchThreadMessage,
   readThreadImages,
   saveThreadImages,
   setThreadFocusChapter,
@@ -46,7 +47,7 @@ import {
   type CallView,
   type RowChange,
 } from "../call-state";
-import { toolStatusLabel } from "../context";
+import { annotationPage, toolStatusLabel } from "../context";
 import { chapterByNumber, type TableChapter } from "../chapters";
 import { loadChapterTable } from "../lecture";
 import type { FiguresIndex } from "../figures";
@@ -579,10 +580,10 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     [bookIdRef],
   );
 
-  // The line an aside leaves on the conversation it came off (docs/09): a chip
-  // the reader sees in the lesson's transcript and a sentence the model reads on
-  // its next turn, both taken from the aside's own first question. No second
-  // model call, so closing an aside waits for nothing.
+  // The line an aside leaves on the conversation it came off (docs/09): a
+  // footnote row the reader sees under the lesson's last message and a sentence
+  // the model reads on its next turn, both taken from the aside's own first
+  // question. No second model call, so closing an aside waits for nothing.
   //
   // Written to the parent's file, never to the screen: the reader either goes
   // back to the parent, which is reopened from that file a moment later, or they
@@ -612,6 +613,14 @@ export function useCall<M extends CallRow, I extends StagedImage>(
       const receipt = asideReceipt({
         threadId: c.threadId,
         span: c.aside.span,
+        // Where the reader stepped out, for the row. A mark drawn in the book
+        // has a page; a chat mark has none, and the row shows the words the
+        // aside was pulled out of instead.
+        page: annotationPage(
+          annsRef.current.get(c.annotationId) as
+            | { position?: { pageIndex?: number } }
+            | undefined,
+        ),
         messages:
           asked || !remembered
             ? own.messages
@@ -619,6 +628,17 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         parent: to.parent.messages,
       });
       if (!receipt) return;
+      const card = receipt.card as unknown as PersistedCardPayload;
+      if (receipt.mode === "merge") {
+        // Asides left one after another with nothing said in the lesson between
+        // them are one row, not one each: the sentence joins that row's text and
+        // the aside joins its card, in place (reading/aside.ts).
+        patchThreadMessage(bookId, to.parent.id, receipt.ts, {
+          text: receipt.text,
+          parts: [{ type: "card", id: receipt.cardId, card }],
+        });
+        return;
+      }
       appendMessage(bookId, to.parent.id, {
         role: "ai",
         text: receipt.text,
@@ -629,14 +649,14 @@ export function useCall<M extends CallRow, I extends StagedImage>(
             // The shell's card ids, like every other card this layer raises. The
             // fallback is for a surface with no card channel at all, where the
             // sentence still has to be written even though nothing will draw the
-            // chip; one receipt per aside, so the aside's own id serves.
+            // row; one row per run of asides, so the first one's id serves.
             id: shapes.current.cards?.id("aside") ?? `aside-${c.threadId}`,
-            card: receipt.card as unknown as PersistedCardPayload,
+            card,
           },
         ],
       });
     },
-    [bookIdRef, parentOf],
+    [annsRef, bookIdRef, parentOf],
   );
 
   const openThread = useCallback(

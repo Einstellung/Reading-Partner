@@ -67,6 +67,12 @@ const buttonVariants = cva(
         chip: "rounded-lg px-2.5 py-1 text-[13px] coarse:min-h-[44px]",
         // info's calls to action and the buttons on the home cards.
         lg: "rounded-lg px-4 py-2 text-[14px] coarse:min-h-[44px]",
+        // A footnote row in a transcript (the aside receipt): packed tight
+        // enough that a run of them reads as one block, and set in the
+        // transcript's own scale so it stays smaller than the prose above it
+        // whatever the reader has that turned up to.
+        footnote:
+          "rounded-md px-1 py-[calc(0.1875rem*var(--chat-scale,1))] text-[calc(0.8125rem*var(--chat-scale,1))] leading-snug coarse:min-h-[44px]",
         icon: "h-8 w-8 rounded-md coarse:h-11 coarse:w-11",
         link: `relative p-0 coarse:px-2 coarse:py-1.5 ${HIT_44}`,
       },

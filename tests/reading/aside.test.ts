@@ -6,12 +6,17 @@
 import { expect, test } from "bun:test";
 import {
   asideAnchorAt,
+  asideAnchorLabel,
   asideFraming,
   asideParentTail,
   asideReceipt,
+  asideReceiptItems,
+  asideReceiptSummary,
   asideReturn,
   asideSpan,
   carriesAsideReceipt,
+  openAsideReceipt,
+  ASIDE_ANCHOR_MAX,
   ASIDE_KICKOFF,
   ASIDE_PARENT_MAX_MESSAGES,
   ASIDE_PARENT_ROUNDS,
@@ -199,6 +204,19 @@ const asked = [
   { role: "user" as const, text: "and the softmax?" },
 ];
 
+// A conversation with nothing in it but prose: the row an aside would join is
+// not there, so every receipt written onto this one is a row of its own.
+const prose = [{ text: "some prose", ts: 10, parts: [{ type: "text" as const, text: "some prose" }] }];
+
+// One receipt row as the file holds it, with `items` on the card.
+function row(ts: number, id: string, items: unknown[], text = "[Aside, now closed: …]") {
+  return {
+    text,
+    ts,
+    parts: [{ type: "card" as const, id, card: { kind: "aside", items } }],
+  };
+}
+
 test("the receipt is the aside's first question, taken without a second model call", () => {
   const receipt = asideReceipt({
     threadId: "aside-1",
@@ -206,11 +224,12 @@ test("the receipt is the aside's first question, taken without a second model ca
     messages: asked,
     parent: [],
   });
+  expect(receipt?.mode).toBe("new");
   expect(receipt?.card).toEqual({
     kind: "aside",
-    threadId: "aside-1",
-    span: "attention heads",
-    question: "what is a head, concretely?",
+    items: [
+      { threadId: "aside-1", span: "attention heads", question: "what is a head, concretely?" },
+    ],
   });
   // The sentence the model reads next turn carries the question and reads as a
   // note rather than as something it said out loud.
@@ -243,29 +262,111 @@ test("a long first question is cut to a line", () => {
     messages: [{ role: "user", text: "q".repeat(ASIDE_QUESTION_MAX * 2) }],
     parent: [],
   });
-  expect(receipt?.card.question).toHaveLength(ASIDE_QUESTION_MAX);
+  expect(receipt?.card.items?.[0].question).toHaveLength(ASIDE_QUESTION_MAX);
 });
 
-// Reopening an aside from its chip and stepping back again must not restate the
+test("an aside drawn on the book carries the page it was drawn on", () => {
+  const on = (page: number | null) =>
+    asideReceipt({ threadId: "aside-1", span: "attention heads", page, messages: asked, parent: [] })
+      ?.card.items?.[0];
+  expect(on(96)).toMatchObject({ page: 96 });
+  expect(asideAnchorLabel(on(96)!)).toBe("p.96");
+  // One pulled out of a reply has no page; its row shows the words instead.
+  expect(on(null)).not.toHaveProperty("page");
+  expect(asideAnchorLabel(on(null)!)).toBe("“attention heads”");
+  expect(asideAnchorLabel({ threadId: "a", span: "", question: "q" })).toBe("");
+  const long = { threadId: "a", span: "w".repeat(ASIDE_ANCHOR_MAX * 2), question: "q" };
+  expect(asideAnchorLabel(long)).toHaveLength(ASIDE_ANCHOR_MAX + 2);
+});
+
+// Reopening an aside from its row and stepping back again must not restate the
 // same sentence on the lesson.
 test("a conversation that already carries the line does not get it twice", () => {
+  const parent = [...prose, row(11, "aside-aside-1", [{ threadId: "aside-1", span: "s", question: "q" }])];
+  expect(carriesAsideReceipt(parent, "aside-1")).toBe(true);
+  expect(carriesAsideReceipt(parent, "aside-2")).toBe(false);
+  expect(carriesAsideReceipt([{ parts: undefined }], "aside-1")).toBe(false);
+  expect(asideReceipt({ threadId: "aside-1", span: "s", messages: asked, parent })).toBeNull();
+  expect(asideReceipt({ threadId: "aside-2", span: "s", messages: asked, parent })).not.toBeNull();
+});
+
+// --- several asides on one row ---------------------------------------------
+
+test("an aside left straight after another joins its row", () => {
   const parent = [
-    { parts: [{ type: "text" as const, text: "some prose" }] },
+    ...prose,
+    row(11, "card-1", [{ threadId: "aside-1", span: "s1", question: "q1" }], "[Aside 1]"),
+  ];
+  const receipt = asideReceipt({ threadId: "aside-2", span: "s2", messages: asked, parent });
+  expect(receipt).toMatchObject({ mode: "merge", ts: 11, cardId: "card-1" });
+  expect(receipt?.card.items).toEqual([
+    { threadId: "aside-1", span: "s1", question: "q1" },
+    { threadId: "aside-2", span: "s2", question: "what is a head, concretely?" },
+  ]);
+  // One sentence per aside, in the order they were left: the model reads the
+  // same lines whether they were written one to a row or several.
+  expect(receipt?.text.startsWith("[Aside 1]\n[Aside, now closed")).toBe(true);
+});
+
+test("anything said in the lesson since starts a new row", () => {
+  const parent = [
+    row(11, "card-1", [{ threadId: "aside-1", span: "s1", question: "q1" }]),
+    { text: "carry on", ts: 12, parts: [{ type: "text" as const, text: "carry on" }] },
+  ];
+  expect(asideReceipt({ threadId: "aside-2", span: "s2", messages: asked, parent })?.mode).toBe(
+    "new",
+  );
+  // Nor does a row that carries the receipt beside something else take one.
+  const mixed = [
     {
+      text: "prose and a card",
+      ts: 13,
       parts: [
+        { type: "text" as const, text: "prose and a card" },
         {
           type: "card" as const,
-          id: "aside-aside-1",
-          card: { kind: "aside", threadId: "aside-1", span: "s", question: "q" },
+          id: "card-1",
+          card: { kind: "aside", items: [{ threadId: "aside-1", span: "s1", question: "q1" }] },
         },
       ],
     },
   ];
-  expect(carriesAsideReceipt(parent, "aside-1")).toBe(true);
-  expect(carriesAsideReceipt(parent, "aside-2")).toBe(false);
-  expect(carriesAsideReceipt([{ parts: undefined }], "aside-1")).toBe(false);
-  expect(
-    asideReceipt({ threadId: "aside-1", span: "s", messages: asked, parent }),
-  ).toBeNull();
-  expect(asideReceipt({ threadId: "aside-2", span: "s", messages: asked, parent })).not.toBeNull();
+  expect(openAsideReceipt(mixed[0])).toBeNull();
+  expect(asideReceipt({ threadId: "aside-2", span: "s2", messages: asked, parent: mixed })?.mode).toBe(
+    "new",
+  );
+});
+
+// The reader steps out twice through the same aside — from the row, then back
+// again. The second pass is dropped whole, so the row it would have joined does
+// not end up naming that aside twice.
+test("merging cannot repeat an aside already on the row", () => {
+  const parent = [
+    ...prose,
+    row(11, "card-1", [
+      { threadId: "aside-1", span: "s1", question: "q1" },
+      { threadId: "aside-2", span: "s2", question: "q2" },
+    ]),
+  ];
+  expect(carriesAsideReceipt(parent, "aside-2")).toBe(true);
+  expect(asideReceipt({ threadId: "aside-2", span: "s2", messages: asked, parent })).toBeNull();
+});
+
+// The records already on disk: one aside per card, its fields at the top level.
+// They are read as a receipt of one, and the next aside joins them.
+test("a receipt written before items reads as one item", () => {
+  const old = { kind: "aside" as const, threadId: "aside-1", span: "s", question: "q" };
+  expect(asideReceiptItems(old)).toEqual([{ threadId: "aside-1", span: "s", question: "q" }]);
+  expect(asideReceiptItems({ kind: "aside" })).toEqual([]);
+  const parent = [
+    ...prose,
+    { text: "[Aside 1]", ts: 11, parts: [{ type: "card" as const, id: "card-1", card: old }] },
+  ];
+  const receipt = asideReceipt({ threadId: "aside-2", span: "s2", messages: asked, parent });
+  expect(receipt?.mode).toBe("merge");
+  expect(receipt?.card.items?.map((i) => i.threadId)).toEqual(["aside-1", "aside-2"]);
+});
+
+test("a receipt of several is collapsed to a count", () => {
+  expect(asideReceiptSummary(5)).toBe("5 questions while you were reading");
 });

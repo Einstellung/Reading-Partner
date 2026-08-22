@@ -53,6 +53,12 @@ function fakeWorld(seed: Record<string, Thread>) {
       t.messages.push(message);
       return t;
     }),
+    spyOn(threads, "patchThreadMessage").mockImplementation((_bookId, threadId, ts, patch) => {
+      const t = held[threadId];
+      const i = t ? t.messages.findIndex((m) => m.ts === ts) : -1;
+      if (!t || i < 0) return;
+      t.messages[i] = { ...t.messages[i], ...patch };
+    }),
     spyOn(threads, "createAsideThread").mockImplementation((_bookId, threadId, init) => {
       const t: Thread = {
         id: threadId,
@@ -249,8 +255,9 @@ test("nothing but the lesson can step out", () => {
   }
 });
 
-// The receipt: a chip the reader sees and a sentence the model reads, both taken
-// from the aside's own first question rather than from a second model call.
+// The receipt: a footnote row the reader sees and a sentence the model reads,
+// both taken from the aside's own first question rather than from a second
+// model call.
 test("going back leaves one line on the lesson and reopens it", async () => {
   const world = fakeWorld({ [LESSON]: thread(LESSON, { book: true }) });
   try {
@@ -266,13 +273,16 @@ test("going back leaves one line on the lesson and reopens it", async () => {
     expect(written).toHaveLength(1);
     expect(written[0].role).toBe("ai");
     expect(written[0].text).toContain("what is a head?");
-    // A card part, so the row short-circuits the prose: the reader gets the chip
-    // and the model gets the sentence.
+    // A card part, so the row short-circuits the prose: the reader gets the
+    // footnote row and the model gets the sentence.
     expect(written[0].parts).toEqual([
       {
         type: "card",
         id: "aside-1",
-        card: { kind: "aside", threadId: aside, span: "attention heads", question: "what is a head?" },
+        card: {
+          kind: "aside",
+          items: [{ threadId: aside, span: "attention heads", question: "what is a head?" }],
+        },
       },
     ]);
     // Reopened as the lesson, with the line already in the history the reader
@@ -280,6 +290,47 @@ test("going back leaves one line on the lesson and reopens it", async () => {
     expect(view.result.current.call?.threadId).toBe(LESSON);
     expect(view.result.current.call?.isBook).toBe(true);
     expect(view.result.current.call?.aside).toBeUndefined();
+    expect(view.result.current.call?.messages).toHaveLength(1);
+  } finally {
+    world.restore();
+  }
+});
+
+// Five marks on one page while the lesson waits is five asides and would be
+// five rows in the transcript. With nothing said in the lesson between them they
+// are one row carrying five, and the model still reads one sentence per aside.
+test("asides left one after another land on one row", async () => {
+  const world = fakeWorld({ [LESSON]: thread(LESSON, { book: true }) });
+  try {
+    const view = renderHook(() => useCall<CallRow, StagedImage>(host()));
+    act(() => view.result.current.openThread(lessonCall, []));
+
+    act(() => view.result.current.openChatAside(SPAN));
+    const first = view.result.current.call!.threadId;
+    await ask(view, "what is a head?");
+    act(() => view.result.current.returnFromAside());
+
+    act(() => view.result.current.openChatAside({ messageTs: 9, text: "the residual stream" }));
+    const second = view.result.current.call!.threadId;
+    await ask(view, "why add it back?");
+    act(() => view.result.current.returnFromAside());
+
+    const written = world.held[LESSON].messages;
+    expect(written).toHaveLength(1);
+    expect(written[0].parts?.[0]).toMatchObject({
+      type: "card",
+      card: {
+        kind: "aside",
+        items: [
+          { threadId: first, span: "attention heads", question: "what is a head?" },
+          { threadId: second, span: "the residual stream", question: "why add it back?" },
+        ],
+      },
+    });
+    // One sentence per aside, in the order they were left.
+    expect(written[0].text.split("\n")).toHaveLength(2);
+    expect(written[0].text).toContain("what is a head?");
+    expect(written[0].text).toContain("why add it back?");
     expect(view.result.current.call?.messages).toHaveLength(1);
   } finally {
     world.restore();

@@ -1221,10 +1221,10 @@ export default function App() {
     [reopenThreadCall, hasThread],
   );
 
-  // The receipt chip in a conversation's transcript (ui/components/reader/
+  // A receipt row in a conversation's transcript (ui/components/reader/
   // AsideCard.tsx): reopen the side conversation it stands for. This is the only
   // door into one that was pulled out of a reply — it has no mark, so the trace
-  // list never holds it — and it is why the chip is a durable card part.
+  // list never holds it — and it is why the receipt is a durable card part.
   const openAsideThread = useCallback(
     (threadId: string) => {
       const bookId = bookIdRef.current;

@@ -233,8 +233,8 @@ export function isPersistableCardKind(kind: CardKind): boolean {
     kind === "rehearsal-decision" ||
     // An aside's receipt is the only door back into a side conversation pulled
     // out of a reply (reading/aside.ts): it carries no mark and no page, so the
-    // chip in the lesson's transcript is where it is reached from. Losing the
-    // chip on reopen would lose the conversation.
+    // row in the lesson's transcript is where it is reached from. Losing the
+    // row on reopen would lose the conversation.
     kind === "aside"
   );
 }
