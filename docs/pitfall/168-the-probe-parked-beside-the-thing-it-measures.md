@@ -49,39 +49,60 @@ if stage != .off {
 
 ## 解法
 
-别帮它复位，直接拒绝。
+别帮它复位，直接拒绝。但判据不是"探针现在停在哪一档"——那条第一次就写错了：
 
 ```swift
-if stage != .off {
+// 错的
+if stage != .off { throw ... "先把探针关掉" }
+```
+
+因为 `setIndicatorProbe(.off)` 自己也 `teardownLocked()`。人看到"先把探针关掉"、
+点了 `off`、再按住，这时 `stage == .off`，放行——可要复用的引擎在点 `off` 的那一瞬间
+就已经没了。数据照样静默作废，而且这一版还是提示语亲手指挥人去毁的。
+
+判据是"从上一次按住到现在，探针被碰过没有"，`off` 也算碰过：
+
+```swift
+if probeTouchedSinceHold {
+    teardownLocked()               // 栈退回空，代价记在这次被拒的按住头上
+    probeTouchedSinceHold = false  // 只赔一次按住
     throw DictationError(
-        "The indicator probe is parked on \(stage.rawValue). "
-            + "Put it back on Off before holding to talk.")
+        "The indicator probe has had the microphone since the last hold, so this one "
+            + "was refused and the audio stack put back to nothing. The holds before it "
+            + "are not a run any more — start the profile over from the next hold.")
 }
 ```
 
-偷偷复位和拒绝，测出来的数据都是干净的——差别在于人知不知道。偷偷复位那条路上，
-屏幕上探针还亮着，人以为自己在测正常按住，实际上刚拆完一个引擎；
-拒绝那条路上，界面直接说"先把探针关掉"，这次按住不产生数据，也就不产生假数据。
+拆除动作放在被拒的那次按住里，而不是放在下一次被服务的按住里——这是整件事的分界：
+被拒的那次按住的数不算数，所以它出多少钱都无所谓；被服务的那次出了钱，账就记在
+`session` 那一格上，行看起来完全正常。碰一次探针固定赔一次按住，下一次就是干净的冷启动。
+
+界面上不能写"先把探针关掉"，那正是会毁掉引擎的动作。要写的是这一轮结束了：探针和按住测量
+互斥，碰过就得重来一轮。同时把探针那排按钮折进一个开关后面——它原来是五个整宽按钮平铺在
+拇指上方，误触一下就毁一轮。
 
 配套两条，缺一条就还是会静默：
 
-- 拒绝掉的那次按住照样落一行，带上"按住之前探针停在哪一档"。事后能验证隔离真的生效，
-  而不是只能相信它生效了。取值分三种：`never`（这个进程没碰过探针）、`off`（碰过又放回去）、
-  和某一档的名字（这次被拒了）。
-- 拒绝之后的 `release()` 不许拆探针。被拒的那次按住照样会走 `stop()` → `release()`，
-  在那儿拆掉探针就等于绕了个弯又变回偷偷复位。
+- 拒绝掉的那次按住照样落一行，带上两个字段：`probeStage`（`never` / `off` / 某一档）和
+  `probeTouched`。判"这次被拒了"只能看后者，前者是给人读的上下文。
+- 拒绝之后 `release()` 不用再特殊照顾——被拒那次已经把栈退回空了，`stage` 一定是 `off`。
 
 没走成的快路径要说出理由。`reused: false` 旁边加一个 `reuseSkipped`，
 写清是"没东西可复用"、"格式变了"、还是"留下的引擎起不来"。
 一个孤零零的 false 分不出"复用没用"和"复用没跑"，而这两件事的结论正好相反。
 
-顺带：复用路径上的 `session` / `voiceProcessing` / `microphoneFormat` 三个 mark 挪到
-`engine.start()` 前面。会话本来就没断、IO 单元本来就没重建，这三步是继承来的不是花钱买的；
-挪完之后"重启一个 paused 引擎要多久"就单独露在 `capturing` 减 `microphoneFormat` 上，
-那才是 `reuse` 这一档要测的数。
+顺带两条埋点：
+
+- 复用路径上的 `session` / `voiceProcessing` / `microphoneFormat` 挪到 `engine.start()` 前面。
+  会话本来就没断、IO 单元本来就没重建，这三步是继承来的不是花钱买的；挪完之后
+  "重启一个 paused 引擎要多久"就单独露在 `capturing` 减 `microphoneFormat` 上。
+- `AVAudioEngine()` 加第一次读 `inputNode` 单独埋一格。第一次读 `inputNode` 会实例化输入
+  audio unit 并问硬件，跳过 VPIO 的两档的钱全在那儿，混在 `voiceProcessing` 那一格里
+  同一个 profile 能差 27 倍（14ms 和 372ms）。
 
 ## 还没堵上的
 
-换音频档也有同样的形状，但小一档：从 `reuse` 切到别的档，切完第一次按住要先拆掉上一次
-留着的引擎。文件里每次切档都有一行 `profile`，所以那一次是认得出来的——按每档五次算，
-二十次里有两次。没做自动清理，因为清理动作本身又会碰探针。
+换音频档是同一个形状的小一号版本：从 `reuse` 切到别的档，切完第一次按住得先拆掉上一档
+留着的引擎，账同样落在它的 `session` 上。没上"赔一次按住"那套，因为它认得出来——文件里
+每次切档都有一行 `profile`，紧跟着的第一次按住就是那一次，按每档五次算二十次里有两次。
+下一轮要是发现这两次也碍事，照 `probeTouchedSinceHold` 的做法再来一遍就行。

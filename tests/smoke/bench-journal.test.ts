@@ -26,9 +26,11 @@ const segments: DictationTiming = {
   reused: true,
   reuseSkipped: null,
   probeStage: "off",
+  probeTouched: false,
   steps: {
     permission: 1,
     session: 38,
+    inputNode: 40,
     voiceProcessing: 41,
     microphoneFormat: 44,
     capturing: 46,
@@ -132,10 +134,13 @@ test("a hold carries what each step of the press cost", () => {
   // rebuilt every press would otherwise read as "reuse does not help".
   expect(parsed.timing.reused).toBe(true);
   expect(parsed.timing.reuseSkipped).toBeNull();
-  // And where the indicator probe was standing when the finger went down: a
-  // press that followed a parked one is a press with a teardown in front of it,
-  // which is how a round of twenty-one holds was lost (docs/pitfall/168).
+  // And whether a probe had been in the audio stack since the last hold, which
+  // is the press the plugin refuses: serving it is how a round of twenty-one
+  // holds was lost (docs/pitfall/168). The stage it was left on is beside it and
+  // is not the same question — `off` is where a probe that was put away sits,
+  // and putting it away is itself a teardown.
   expect(parsed.timing.probeStage).toBe("off");
+  expect(parsed.timing.probeTouched).toBe(false);
   // The native side's own word for the profile, beside the bench's. They
   // disagreeing is a thing worth being able to see.
   expect(parsed.timing.profile).toBe("reuse");

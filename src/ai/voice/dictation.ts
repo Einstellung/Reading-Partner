@@ -49,11 +49,14 @@ export interface DictationTiming {
   // Why it was built rather than inherited, on a profile that asked to inherit
   // it; null when it was inherited and null on the profiles that never keep one.
   reuseSkipped: string | null;
-  // Where the indicator probe was standing when the finger went down (see
-  // src/smoke/indicator-probe.ts). Anything but "off", "never" and "unread" is a
-  // press the plugin refused: a parked probe holds the microphone.
+  // Where the indicator probe was standing when the finger went down: a stage
+  // name, or "never", "off", "unread" (see src/smoke/indicator-probe.ts).
   probeStage: string;
-  // Milliseconds from the press to each step of the start: session,
+  // Whether a probe had been in the audio stack since the previous hold, which
+  // is what decides whether this press was refused. Not the same question as
+  // probeStage: putting a probe back on "off" tears the stack down too.
+  probeTouched: boolean;
+  // Milliseconds from the press to each step of the start: session, inputNode,
   // voiceProcessing, microphoneFormat, capturing, firstBuffer, running and the
   // recognizer's own steps between them.
   steps: Record<string, number>;

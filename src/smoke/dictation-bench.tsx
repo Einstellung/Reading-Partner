@@ -36,9 +36,12 @@
 //      nativeDictation() reads it as the hold begins; the probe parks the audio
 //      stack at one step and leaves it there so the status bar can be read
 //      (indicator-probe.ts). Both go into the file: every hold line carries its
-//      profile and where the probe was standing when the finger went down, and a
-//      switch or a probe is a line of its own. A hold pressed while the probe is
-//      parked is refused by the plugin and gets a row saying so.
+//      profile, where the probe was standing when the finger went down and
+//      whether one had been in the stack since the last hold, and a switch or a
+//      probe is a line of its own. The first hold after any probe call is
+//      refused by the plugin and gets a row saying so — a probe call, `off`
+//      included, tears the audio stack down, so a probe in the middle of a run
+//      of holds ends it.
 //   5. The press's own segments, which the plugin sends once the hold is down
 //      and every hold line then carries — how long the session, the voice
 //      processing, the format read and the first buffer each took, what the
@@ -60,8 +63,8 @@
 // itself back to keyboard mode, which is a textarea appearing where the bar
 // was; a cancel is neither of those happening before the flush window closes.
 // A fourth comes from the plugin rather than from the gesture — a press it
-// refused because the probe held the microphone — and it is read before the
-// other three, which are all empty when it is true.
+// refused because a probe had been in the audio stack since the last hold — and
+// it is read before the other three, which are all empty when it is true.
 //
 // The level readout comes from a second listener on the plugin's event stream.
 // Tauri's Swift Plugin keeps an array of channels per event name and trigger
@@ -99,8 +102,9 @@ import {
 import { benchJournal, type BenchOutcome } from "./bench-journal";
 import {
   INDICATOR_STAGE_OPTIONS,
-  probeHoldsTheMicrophone,
-  probeRefusalNote,
+  PROBE_ENDS_THE_RUN,
+  PROBE_REFUSED_THE_HOLD,
+  probeRefusedTheHold,
   setIndicatorProbe,
   type IndicatorProbeState,
   type IndicatorStage,
@@ -151,7 +155,7 @@ const OUTCOME: Record<BenchOutcome, { label: string; note: string; tint: string;
   },
   refused: {
     label: "Refused",
-    note: "the indicator probe had the microphone — put it back on Off and hold again",
+    note: PROBE_REFUSED_THE_HOLD,
     tint: "text-amber-700",
     rule: "border-amber-500",
   },
@@ -234,6 +238,13 @@ function Bench() {
   const [profile, setProfile] = useState<AudioProfile>(DEFAULT_AUDIO_PROFILE);
   const [switching, setSwitching] = useState(false);
   const [holding, setHolding] = useState(false);
+  // Whether the probe has been in the audio stack since the last hold, mirrored
+  // from the button that put it there. The plugin keeps the same flag and is the
+  // one that enforces it; this copy exists so the warning is on screen before
+  // the press rather than only in the row after it. One press clears it on both
+  // sides — the plugin's refusal resets the stack, and the row that press
+  // produces is what clears this.
+  const [probeTouched, setProbeTouched] = useState(false);
   const { level, reset, tally, timing, error } = useDictationTap();
 
   const hostRef = useRef<HTMLDivElement>(null);
@@ -289,6 +300,7 @@ function Bench() {
       if (!g) return;
       gesture.current = null;
       window.clearTimeout(g.timer);
+      setProbeTouched(false);
       const heard: Heard = {
         ...tally.current,
         ms: (g.releasedAt || Date.now()) - g.at,
@@ -298,10 +310,10 @@ function Bench() {
           sent,
           keyboardBack: !!hostRef.current?.querySelector("textarea"),
           heard,
-          // The plugin says so itself: every hold carries where the probe was
-          // standing when the finger went down, and a parked one is a press it
-          // refused rather than a microphone that failed.
-          refused: probeHoldsTheMicrophone(timing.current?.probeStage),
+          // The plugin says so itself: every hold carries whether a probe had
+          // been in the audio stack since the last one, which is the press it
+          // refuses rather than a microphone that failed.
+          refused: probeRefusedTheHold(timing.current),
         }),
         text,
         heard,
@@ -450,7 +462,13 @@ function Bench() {
 
       <ProfileSwitch profile={profile} onPick={pickProfile} />
 
-      <IndicatorProbe />
+      <IndicatorProbe onTouched={() => setProbeTouched(true)} />
+
+      {probeTouched && (
+        <div className="mt-1 shrink-0 rounded-lg bg-amber-50 px-3 py-2 text-[12px] leading-snug text-amber-800">
+          {PROBE_ENDS_THE_RUN}
+        </div>
+      )}
 
       <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-1 py-2">
         {entries.length === 0 ? (
@@ -556,37 +574,60 @@ function ProfileSwitch({
 // native state to prove it — a stage that says it installed a tap and reports no
 // buffers is a stage that did not do what it says.
 //
-// While one is parked the plugin refuses holds, and this says so where the
-// person is looking. It is not the enforcement — that is in AudioFront and
-// cannot be got around from here — it is the reason, at the moment it applies.
-function IndicatorProbe() {
+// It is folded away behind one button. The five stages used to sit open under
+// the profile switch, a row of full-width targets right above the thumb, and
+// touching any of them — Off included — ends the run of holds in progress. A
+// measurement a stray tap can spoil should not be one tap away.
+//
+// A stage is reported upwards the moment it is asked for, before the answer
+// comes back: the native side tears the stack down on its way in, so a call that
+// then fails has ended the run just as thoroughly as one that succeeded.
+function IndicatorProbe({ onTouched }: { onTouched: () => void }) {
+  const [open, setOpen] = useState(false);
   const [stage, setStage] = useState<IndicatorStage>("off");
   const [state, setState] = useState<IndicatorProbeState | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const pick = useCallback(async (wanted: IndicatorStage) => {
-    setBusy(true);
-    try {
-      const answer = await setIndicatorProbe(wanted);
-      setStage(answer.stage);
-      setState(answer);
-      setFailure(null);
-      benchJournal.probe(wanted, answer);
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      // The native side tears the probe down before it throws, so the stack is
-      // at rest whatever went wrong.
-      setStage("off");
-      setState(null);
-      setFailure(message);
-      benchJournal.probe(wanted, { error: message });
-    } finally {
-      setBusy(false);
-    }
-  }, []);
+  const pick = useCallback(
+    async (wanted: IndicatorStage) => {
+      setBusy(true);
+      onTouched();
+      try {
+        const answer = await setIndicatorProbe(wanted);
+        setStage(answer.stage);
+        setState(answer);
+        setFailure(null);
+        benchJournal.probe(wanted, answer);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        // The native side tears the probe down before it throws, so the stack is
+        // at rest whatever went wrong.
+        setStage("off");
+        setState(null);
+        setFailure(message);
+        benchJournal.probe(wanted, { error: message });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [onTouched],
+  );
 
   const note = INDICATOR_STAGE_OPTIONS.find((o) => o.value === stage)?.note ?? "";
+  if (!open) {
+    return (
+      <div className="shrink-0 pt-2">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="min-h-11 rounded-lg bg-neutral-100 px-3 text-[12px] font-medium text-neutral-500"
+        >
+          Indicator probe{stage === "off" ? "" : ` · parked on ${stage}`}
+        </button>
+      </div>
+    );
+  }
   return (
     <div className="shrink-0 pt-2">
       <div className="flex gap-1">
@@ -606,6 +647,13 @@ function IndicatorProbe() {
             {o.label}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="min-h-11 shrink-0 rounded-lg bg-neutral-100 px-2 text-[12px] font-medium text-neutral-500"
+        >
+          Hide
+        </button>
       </div>
       <div className="px-2 pt-1 text-[11px] leading-snug text-neutral-500">
         {failure ? (
@@ -624,11 +672,6 @@ function IndicatorProbe() {
           </>
         )}
       </div>
-      {probeHoldsTheMicrophone(stage) && (
-        <div className="mt-1 rounded-lg bg-amber-50 px-3 py-2 text-[12px] leading-snug text-amber-800">
-          {probeRefusalNote(stage)}
-        </div>
-      )}
     </div>
   );
 }
@@ -689,11 +732,13 @@ function Instructions() {
         keeping the engine can show. Every line here and in the file says which one it ran on.
       </p>
       <p className="m-0">
-        The dark row is the indicator probe. It takes the microphone away from dictation and holds
-        it at one step until another step is chosen, so the orange dot in the status bar can be read
-        without guessing what turned it on. Put it back on <b>Off</b> before holding again: while it
-        is parked the plugin refuses every hold, because a press that took the microphone back would
-        be timed with the teardown of the probe in front of it.
+        Behind <b>Indicator probe</b> is a row that parks the audio stack at one step and leaves it
+        there, so the orange dot in the status bar can be read without guessing what turned it on.
+        It is folded away because touching it ends the run of holds in progress — every stage,
+        including <b>Off</b>, tears the whole stack down. The plugin refuses the first hold after
+        one and puts the stack back to nothing in the same breath; that hold gets a row saying so,
+        and the holds before it no longer belong to a run. Probe first, then measure, never the two
+        interleaved.
       </p>
     </div>
   );

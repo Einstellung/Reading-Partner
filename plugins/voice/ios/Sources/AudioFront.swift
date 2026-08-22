@@ -21,16 +21,18 @@
 // already emitted, at the same names, so a log from before this file and a log
 // from after it line up column for column. `session` still means "the audio
 // session is active", `capturing` still means "the engine is running with a tap
-// on it". What is new is the pair between them — `voiceProcessing` and
-// `microphoneFormat` — which is what tells the IO unit's rebuild apart from the
-// format read that used to be blamed with it.
+// on it". What is new is the three between them — `inputNode`,
+// `voiceProcessing` and `microphoneFormat` — one line each, which is what tells
+// the IO unit's rebuild apart from the input unit's first instantiation and
+// from the format read that used to be blamed with both.
 //
 // One rule this file enforces rather than describes: the indicator probe below
-// and a hold cannot share the microphone, and a hold that arrives while the
-// probe is parked is refused. It used to take the microphone back instead, and
-// a round of twenty-one holds went in the bin for it — every press that
-// followed a parked probe paid to tear that probe's engine down first, the bill
-// landed on the `session` step, and nothing in the record said so
+// and a hold cannot share a run. Every probe call, `off` included, tears the
+// whole stack down on its way in, so the first hold after one is refused — the
+// stack goes back to nothing, the refusal says so, and the hold after that is a
+// clean cold start. It used to serve that hold instead, paying for the probe's
+// teardown inside it, and a round of twenty-one holds went in the bin: the bill
+// landed on the `session` step and nothing in the record said so
 // (docs/pitfall/168).
 //
 // Locks: `lock` guards the state machine below and is the one held across calls
@@ -179,6 +181,14 @@ final class AudioFront {
     /// probed" leave the same state behind and are not the same fact about a
     /// press: one of them means somebody parked the microphone and put it back.
     private var probeEverSet = false
+    /// Whether a probe has been in the audio stack since the last hold — which
+    /// is the question a press has to ask, and it is not "is one parked now".
+    /// Every `setIndicatorProbe` call tears the stack down on its way in,
+    /// including the one that asks for `off`, so the button that puts the probe
+    /// away is itself the thing that destroys a kept engine. A press that
+    /// checked the parked stage would let that one through and report a cold
+    /// build as the third hold of a reuse run (docs/pitfall/168).
+    private var probeTouchedSinceHold = false
 
     /// The one thing the audio thread reads. Guarded by its own lock and never
     /// called while that lock is held.
@@ -214,21 +224,34 @@ final class AudioFront {
         lock.lock()
         defer { lock.unlock() }
 
-        // Where the probe was standing when the finger went down, recorded
-        // whatever happens next. A press whose numbers cannot be checked against
-        // it afterwards is a press nobody can trust.
-        timing.recordProbeStage(probeStageNameLocked())
+        // Where the probe was standing when the finger went down and whether it
+        // has been in here at all since the last hold, both recorded whatever
+        // happens next. A press whose numbers cannot be checked against them
+        // afterwards is a press nobody can trust.
+        timing.recordProbeStage(probeStageNameLocked(), touched: probeTouchedSinceHold)
 
-        // A probe and a hold cannot share the microphone. Taking the microphone
-        // back would work and would also be a lie: the teardown is charged to
-        // this press, its `session` step comes back five to ten times its usual
-        // size, and the log reads as an ordinary slow press (docs/pitfall/168).
-        // So the hold is refused and the person is told which button to press.
-        if stage != .off {
-            NSLog("RP-DICT front refused a hold: the probe is parked on %@", stage.rawValue)
+        // A probe and a hold cannot share a run. Not merely the microphone: any
+        // probe call tears the whole stack down on its way in, so a run of holds
+        // that a probe happened in the middle of is two runs with a gap, and the
+        // hold after the gap is a cold build wearing the number of a warm one.
+        // Serving it anyway is what put a round of twenty-one holds in the bin
+        // (docs/pitfall/168).
+        //
+        // The refusal costs exactly one press: the stack goes back to nothing
+        // here, and the flag clears, so the press after this one is a clean cold
+        // start and every press after that is an ordinary one. Doing that
+        // teardown inside a press that is *served* is the trap — the bill lands
+        // on its `session` step and the row looks normal.
+        if probeTouchedSinceHold {
+            NSLog(
+                "RP-DICT front refused a hold: the probe has had the stack since the last one "
+                    + "(now %@)", stage.rawValue)
+            teardownLocked()
+            probeTouchedSinceHold = false
             throw DictationError(
-                "The indicator probe is parked on \(stage.rawValue). "
-                    + "Put it back on Off before holding to talk.")
+                "The indicator probe has had the microphone since the last hold, so this one "
+                    + "was refused and the audio stack put back to nothing. The holds before it "
+                    + "are not a run any more — start the profile over from the next hold.")
         }
 
         if let reused = reuseLocked(
@@ -284,6 +307,7 @@ final class AudioFront {
         // `capturing` minus `microphoneFormat`, which is the number `reuse` is
         // being run to find out.
         timing.mark("session", since: pressedAt)
+        timing.mark("inputNode", since: pressedAt)
         timing.mark("voiceProcessing", since: pressedAt)
         timing.mark("microphoneFormat", since: pressedAt)
         if !engine.isRunning {
@@ -333,7 +357,15 @@ final class AudioFront {
 
         let engine = AVAudioEngine()
         self.engine = engine
+        // The first read of `inputNode` is where the input audio unit is
+        // instantiated and the hardware asked about itself, and on the profiles
+        // that skip voice processing it is the whole of the step that used to
+        // sit between `session` and `voiceProcessing` — 14 ms in one hold and
+        // 372 ms in the next, with nothing else in there to explain the
+        // difference. It gets its own mark so that `voiceProcessing` means one
+        // line and this means the other.
         let input = engine.inputNode
+        timing.mark("inputNode", since: pressedAt)
 
         if profile.usesVoiceProcessing {
             do {
@@ -387,18 +419,6 @@ final class AudioFront {
         lock.lock()
         defer { lock.unlock() }
 
-        // A parked probe is not this run's to let go of. It can only be standing
-        // here after a refused hold — a probe stops a live run before it takes
-        // the microphone, and `open` refuses a hold while one is parked — and
-        // tearing it down on the way out of that refusal would undo the refusal
-        // silently: the screen would still say the probe was on, the next press
-        // would find a clean stack, and the round after it would be as
-        // unreadable as the one this rule exists for (docs/pitfall/168).
-        guard stage == .off else {
-            NSLog("RP-DICT front left the probe on %@ through a release", stage.rawValue)
-            return
-        }
-
         setSink(nil)
         // `openProfile == profile` is the part that is not the caller's opinion:
         // a run that failed before it opened anything is still asked to release,
@@ -435,10 +455,12 @@ final class AudioFront {
         defer { lock.unlock() }
 
         teardownLocked()
-        // Before the early return below, so that asking for `off` counts as
-        // having probed: a stack put back by hand and a stack nobody has touched
-        // are different facts about the press that follows.
+        // Both set before the early return below, so that asking for `off`
+        // counts. That call tears the stack down like every other one, which is
+        // exactly why "put it back on Off" cannot be what a press waits for: the
+        // engine a reusing profile was keeping is gone by then either way.
         probeEverSet = true
+        probeTouchedSinceHold = true
         sinkLock.lock()
         probeBuffers = 0
         probeLevel = 0

@@ -58,9 +58,16 @@ struct DictationTiming: Encodable {
     /// Where the indicator probe was standing when the finger went down:
     /// `never` if nothing has probed in this process, `off` if something did and
     /// put it back, `unread` on a press that never reached the microphone, and
-    /// otherwise the stage it was parked on — which is a press that was refused,
-    /// because a parked probe and a hold cannot share the microphone.
+    /// otherwise the stage it was parked on.
     let probeStage: String
+    /// Whether a probe had been in the audio stack since the previous hold. This
+    /// is the one that says whether the press was refused, and `probeStage`
+    /// beside it is not: putting the probe back on `off` tears the stack down
+    /// like every other probe call, so a press can find nothing parked and still
+    /// be the first one after the engine it meant to reuse was demolished
+    /// (docs/pitfall/168). True on exactly one press per probe excursion — the
+    /// refused one — and false on every hold that ran.
+    let probeTouched: Bool
     /// Milliseconds from the press to each step of the start.
     let steps: [String: Double]
     /// Milliseconds from the release to each step of the teardown. A different
@@ -73,8 +80,8 @@ struct DictationTiming: Encodable {
     let echoCancelledInput: EchoCancelledInput?
 
     enum CodingKeys: String, CodingKey {
-        case profile, reused, reuseSkipped, probeStage, steps, teardown, preroll
-        case echoCancelledInput
+        case profile, reused, reuseSkipped, probeStage, probeTouched, steps, teardown
+        case preroll, echoCancelledInput
     }
 
     /// Written by hand for one reason: a synthesised encoding leaves a nil
@@ -87,6 +94,7 @@ struct DictationTiming: Encodable {
         try container.encode(reused, forKey: .reused)
         try container.encode(reuseSkipped, forKey: .reuseSkipped)
         try container.encode(probeStage, forKey: .probeStage)
+        try container.encode(probeTouched, forKey: .probeTouched)
         try container.encode(steps, forKey: .steps)
         try container.encode(teardown, forKey: .teardown)
         try container.encode(preroll, forKey: .preroll)
@@ -122,6 +130,7 @@ final class TimingLog {
     /// failed on the permission prompt never asked where the probe was, and
     /// saying `never` for it would be an answer nobody measured.
     private var probeStage = "unread"
+    private var probeTouched = false
 
     /// Logs the step and keeps it. Both roads from one call, so a step can never
     /// reach one and not the other.
@@ -175,9 +184,10 @@ final class TimingLog {
         lock.unlock()
     }
 
-    func recordProbeStage(_ value: String) {
+    func recordProbeStage(_ value: String, touched: Bool) {
         lock.lock()
         probeStage = value
+        probeTouched = touched
         lock.unlock()
     }
 
@@ -193,6 +203,7 @@ final class TimingLog {
             reused: reused,
             reuseSkipped: reuseSkipped,
             probeStage: probeStage,
+            probeTouched: probeTouched,
             steps: steps,
             teardown: teardownSteps,
             preroll: preroll,

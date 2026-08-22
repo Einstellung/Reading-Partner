@@ -62,6 +62,7 @@ test("a timing event is not a fourth thing the transcript has to fold", () => {
       reused: false,
       reuseSkipped: null,
       probeStage: "never",
+      probeTouched: false,
       steps: { firstBuffer: 1040 },
       teardown: { released: 2 },
       preroll: null,

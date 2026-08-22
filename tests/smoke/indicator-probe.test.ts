@@ -13,9 +13,10 @@ import {
   INDICATOR_PROBE_COMMAND,
   INDICATOR_STAGES,
   INDICATOR_STAGE_OPTIONS,
+  PROBE_ENDS_THE_RUN,
+  PROBE_REFUSED_THE_HOLD,
   createIndicatorProbe,
-  probeHoldsTheMicrophone,
-  probeRefusalNote,
+  probeRefusedTheHold,
   type IndicatorProbeState,
 } from "../../src/smoke/indicator-probe";
 
@@ -61,28 +62,36 @@ test("the stages are the four steps plus off, in the order they are entered", ()
   }
 });
 
-// A parked probe owns the microphone and the plugin refuses holds while it does.
-// The predicate is what the screen and the row both read, and it decides against
-// a string the native side wrote, so every answer it can send is named here.
-test("every stage that holds the microphone is one the bench calls refused", () => {
+// The refusal is read off the flag and never off the stage. Getting this wrong
+// is the whole of pitfall 168: `off` is where a probe that has been put away
+// sits, putting it away is itself a teardown, and a press that only looked at
+// the stage would serve the hold whose engine had just been demolished.
+test("the refusal follows the flag, not where the probe was left", () => {
+  expect(probeRefusedTheHold({ probeTouched: true })).toBe(true);
+  // Every stage, including the one that means the probe was put away.
   for (const stage of INDICATOR_STAGES) {
-    expect(probeHoldsTheMicrophone(stage)).toBe(stage !== "off");
+    expect(probeRefusedTheHold({ probeStage: stage, probeTouched: true })).toBe(true);
+    expect(probeRefusedTheHold({ probeStage: stage, probeTouched: false })).toBe(false);
   }
-  // The two answers that are not a stage at all. A process nobody has probed in
-  // and a press that never reached the microphone are both clear.
-  expect(probeHoldsTheMicrophone("never")).toBe(false);
-  expect(probeHoldsTheMicrophone("unread")).toBe(false);
-  // And a build that sends no such field at all, which is every one before this.
-  expect(probeHoldsTheMicrophone(undefined)).toBe(false);
-  expect(probeHoldsTheMicrophone(null)).toBe(false);
-  expect(probeHoldsTheMicrophone("")).toBe(false);
 });
 
-test("the refusal names the button to press and the stage it is on", () => {
-  const note = probeRefusalNote("engine");
-  expect(note).toContain("Engine");
-  expect(note).toContain("Off");
-  // A stage name the bench does not know still produces a sentence rather than
-  // "undefined": the native side is free to add one before this file hears.
-  expect(probeRefusalNote("something-newer")).toContain("something-newer");
+test("a hold with no numbers back is not a hold that was refused", () => {
+  // The row is made whether or not the timing crossed back in time, and a
+  // missing answer must read as "not refused" rather than as a refusal: filing
+  // an ordinary fault as a refusal would hide the fault.
+  expect(probeRefusedTheHold(null)).toBe(false);
+  expect(probeRefusedTheHold(undefined)).toBe(false);
+  expect(probeRefusedTheHold({})).toBe(false);
+});
+
+// What the person reads. Neither sentence may tell them to put the probe back on
+// Off: that is the tap which ends the run, so an instruction to make it is an
+// instruction to spoil the next set of numbers.
+test("neither sentence sends the person back to the Off button", () => {
+  for (const sentence of [PROBE_ENDS_THE_RUN, PROBE_REFUSED_THE_HOLD]) {
+    expect(sentence.length).toBeGreaterThan(0);
+    expect(sentence).not.toContain("Off");
+  }
+  expect(PROBE_ENDS_THE_RUN).toContain("refused");
+  expect(PROBE_REFUSED_THE_HOLD).toContain("not a run");
 });
