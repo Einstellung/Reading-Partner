@@ -33,3 +33,9 @@ RP-DICT route in=[] out=[Speaker]
 代码侧：不要指望 interruption 通知能覆盖"麦克风没了"。真要检测，判据是"装了 tap 之后
 一段时间内一个 buffer 都没有"——探针的 input watchdog 就是干这个的，promote 的时候
 砍掉了；如果以后要做后台/录长音，它得回来。
+
+引擎跨按住留着之后（坑 166）这条从"脚本才撞得到"变成产品也撞得到：语音模式里用户按了
+电源键或切走 app，引擎还留着，橙点还亮着。`AudioFront` 因此订阅
+`UIApplication.didEnterBackgroundNotification`——锁屏只给这一条——空闲时把栈拆掉，
+下次按住重建。路由变空也订阅了，但要在拿到锁之后重读一次路由：建 session 的过程中路由
+本来就会短暂为空，照通知里的值判会把刚建好的栈拆掉。

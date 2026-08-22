@@ -49,11 +49,32 @@ VPIO、tap、`engine.start()`），第二半才是识别器。两半之间 tap �
 的队列没有东西可垫。头损失原封不动，就是 press 到第一个 buffer 那一整秒，
 `RP-DICT firstBuffer` 量的正是它。
 
-## 还没验的
+## 解法：留着引擎不拆
 
-- 引擎复用：一次按住结束不 stop，把 session、VPIO 单元和引擎留着，下次按住只装 tap。
-  第 2 到第 5 次和第 1 次一样慢就是冲这条来的。
-- `setPrefersEchoCancelledInput`（iOS 18.2+）绕开 VPIO，省掉那 690ms。它要求 mode 是
-  `default`，且只支持内置麦加内置扬声器、仅部分 2024 年后机型（docs/33）。
+2026-08-22，同一台 iPhone 16、iOS 26.6，28 次真机按住：
 
-两条都没测过，省得下来多少不知道。
+```
+                  n   按下→首个 buffer 中位数   范围         转写完整
+留着引擎           9        304ms             120-316      9/9
+每次重建          13       1082ms             490-1277     2/13
+```
+
+丢头字就此消失。做法是把音频前端（session + VPIO + engine + tap）的持有者从一次按住
+改成一次语音模式：第一次按住建，之后按住之间 `engine.pause()` 而不是 `stop()`
+（`stop()` 会释放 `prepare()` 分配的资源），切回键盘 / 离开聊天 / 组件卸载才真拆。
+完整形态和 iOS 收走麦克风怎么处理在 docs/33「按住说话的启动延迟：定稿」。
+
+第一次按住仍然付那一秒，仍可能丢头字，接受——预热必然点亮橙点（坑 167），代价是用户
+还没开口就亮。
+
+`setPrefersEchoCancelledInput` 那条不用了。同一轮里开 VPIO 复用 305ms、关 VPIO 复用
+277ms，分不出差别（VPIO 那几百毫秒只在第一次付），而且 `isEchoCancelledInputAvailable`
+在这台 iPhone 16 上是 false，根本拿不到。代码已删。
+
+## pre-roll 现在有用了
+
+上面那段「重排 start() 收益为零」记的是原因，不是判决。冷启动时 pre-roll 缓冲到 0 个
+buffer，因为那一秒里麦克风还没开，队列里没有东西可垫；复用形态下麦克风一直开着，按下
+那一刻 tap 已经在跑，缓冲里真有音频。所以它现在管的是识别器那一半的 80–180ms——
+locale、模型、`bestAvailableAudioFormat`、`prepareToAnalyze`——那段时间的音频进队列，
+`analyzer.start()` 之后按序补喂。代码没动，位置没变，只是终于有东西给它接。
