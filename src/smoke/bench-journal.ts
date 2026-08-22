@@ -14,14 +14,16 @@
 // line, so a truncated tail costs the last line and nothing before it.
 //
 // It carries more than the screen does. The row says what happened; the line
-// says when, in what order, in which language, on which audio profile, and what
-// the plugin streamed while the finger was down — which is what it takes to line the file up
-// afterwards against a console log, a syslog, or someone's memory of what they
-// said. The index and the session line are what keep that readable across
-// relaunches: the file outlives the process, the numbering does not.
+// says when, in what order, in which language, on which audio profile, what the
+// plugin streamed while the finger was down and what each step of the press cost
+// — which is what it takes to line the file up afterwards against a console log,
+// a syslog, or someone's memory of what they said. The index and the session
+// line are what keep that readable across relaunches: the file outlives the
+// process, the numbering does not.
 
 import { mkdir, writeTextFile, BaseDirectory } from "@tauri-apps/plugin-fs";
 import type { AudioProfile } from "../ai/voice/audio-profile";
+import type { DictationTiming } from "../ai/voice/dictation";
 import type { IndicatorStage } from "./indicator-probe";
 import type { HoldOutcome, Heard } from "./hold-outcome";
 
@@ -49,6 +51,18 @@ export interface BenchEntry {
   /// on different settings and a timing without its setting is not a
   /// measurement.
   profile: AudioProfile;
+  /// Where the press went, as the plugin measured it: milliseconds to each step
+  /// of the start, milliseconds to each step of the teardown, what the pre-roll
+  /// held, and what the session answered about echo cancellation. Null when the
+  /// hold produced none — a typed line, or a hold whose numbers had not crossed
+  /// back by the time the row was made.
+  ///
+  /// The reason it is in the file at all: the same numbers go to the system log
+  /// as `RP-DICT` lines, and on the round this was written for the log was the
+  /// only road. The Mac's idevicesyslog stayed up with a dead stream behind it
+  /// and twelve holds' worth of them were gone. A file on the phone is read
+  /// afterwards, which is when it turns out whether the road was open.
+  timing: DictationTiming | null;
 }
 
 /// A wall clock on every line, so a gap in the file reads as a gap rather than
@@ -78,6 +92,7 @@ export function benchHoldLine(entry: BenchEntry, wall: number): string {
       chars: entry.text.length,
       text: entry.text,
       heard: entry.heard,
+      timing: entry.timing,
     }) + "\n"
   );
 }

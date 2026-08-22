@@ -189,6 +189,10 @@ export async function runLongDictation(): Promise<void> {
       levels += 1;
       return;
     }
+    // The press's segments, sent once the hold is down. The bench keeps them
+    // (bench-journal.ts); this harness measures a long hold, whose question is
+    // what happens after the first second rather than inside it.
+    if (e.kind === "timing") return;
     const text = e.text.trim();
     if (e.kind === "final") {
       finals += 1;

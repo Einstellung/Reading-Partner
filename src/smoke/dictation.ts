@@ -158,7 +158,9 @@ function fold(events: Stamped[]): string {
   const finals: string[] = [];
   let tail = "";
   for (const { e } of events) {
-    if (e.kind === "level") continue;
+    // Neither carries words: a level is a number and a timing is the press's
+    // segments, which this harness records nothing about.
+    if (e.kind === "level" || e.kind === "timing") continue;
     const text = e.text.trim();
     if (e.kind === "final") {
       if (text) finals.push(text);

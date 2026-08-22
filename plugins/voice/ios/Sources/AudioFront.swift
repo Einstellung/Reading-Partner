@@ -121,8 +121,15 @@ struct IndicatorProbeState: Encodable {
 /// One `RP-DICT <step> +<n>ms` line. Shared with DictationRun so that the steps
 /// on either side of the hand-off are the same shape and measured from the same
 /// zero — the moment the finger went down.
-func markStep(_ step: String, since start: CFAbsoluteTime) {
-    NSLog("RP-DICT %@ +%.0fms", step, (CFAbsoluteTimeGetCurrent() - start) * 1000)
+///
+/// Returns what it printed, so that TimingLog can keep the same number without
+/// reading the clock a second time and disagreeing with the log by a hair. The
+/// result is not discardable: a step worth a line is a step worth keeping, and
+/// the compiler asking about it is how the two roads stay in step.
+func markStep(_ step: String, since start: CFAbsoluteTime) -> Double {
+    let ms = (CFAbsoluteTimeGetCurrent() - start) * 1000
+    NSLog("RP-DICT %@ +%.0fms", step, ms)
+    return ms
 }
 
 /// A format as one comparable line. Sample rate, channels, layout and sample
@@ -180,9 +187,13 @@ final class AudioFront {
     ///
     /// `pressedAt` is the caller's zero, not this call's, so the lines this
     /// emits are directly comparable with the ones the run emits after it.
+    /// `timing` is the run's, for the same reason: the steps this half of the
+    /// press produces and the steps the other half produces end up in one
+    /// record, which is what the bench writes to the device (DictationTiming).
     func open(
         profile: AudioProfile,
         pressedAt: CFAbsoluteTime,
+        timing: TimingLog,
         sink: @escaping (AVAudioPCMBuffer) -> Void
     ) throws -> Opened {
         lock.lock()
@@ -195,10 +206,13 @@ final class AudioFront {
             teardownLocked()
         }
 
-        if let reused = reuseLocked(profile: profile, pressedAt: pressedAt, sink: sink) {
+        if let reused = reuseLocked(
+            profile: profile, pressedAt: pressedAt, timing: timing, sink: sink)
+        {
             return reused
         }
-        return try openFreshLocked(profile: profile, pressedAt: pressedAt, sink: sink)
+        return try openFreshLocked(
+            profile: profile, pressedAt: pressedAt, timing: timing, sink: sink)
     }
 
     /// The fast path: an engine from a previous press, still built, still voice-
@@ -209,6 +223,7 @@ final class AudioFront {
     private func reuseLocked(
         profile: AudioProfile,
         pressedAt: CFAbsoluteTime,
+        timing: TimingLog,
         sink: @escaping (AVAudioPCMBuffer) -> Void
     ) -> Opened? {
         guard profile.keepsEngine else { return nil }
@@ -245,20 +260,17 @@ final class AudioFront {
             return nil
         }
 
-        markStep("session", since: pressedAt)
-        markStep("voiceProcessing", since: pressedAt)
-        markStep("microphoneFormat", since: pressedAt)
+        timing.mark("session", since: pressedAt)
+        timing.mark("voiceProcessing", since: pressedAt)
+        timing.mark("microphoneFormat", since: pressedAt)
         if !profile.usesVoiceProcessing {
             // Apple: the enabled state may change when the route changes to one
             // that cannot do it, a headset being the example. A kept session is
             // exactly where that goes unnoticed, so it is re-read rather than
             // remembered from the press that configured it.
-            let session = AVAudioSession.sharedInstance()
-            NSLog(
-                "RP-DICT echoCancelledInput available=%d enabled=%d",
-                session.isEchoCancelledInputAvailable ? 1 : 0,
-                session.isEchoCancelledInputEnabled ? 1 : 0)
+            reportEchoCancelledInput(AVAudioSession.sharedInstance(), to: timing)
         }
+        timing.recordReuse(true)
         NSLog("RP-DICT front reused profile=%@", profile.rawValue)
         return Opened(engine: engine, format: format)
     }
@@ -271,12 +283,13 @@ final class AudioFront {
     private func openFreshLocked(
         profile: AudioProfile,
         pressedAt: CFAbsoluteTime,
+        timing: TimingLog,
         sink: @escaping (AVAudioPCMBuffer) -> Void
     ) throws -> Opened {
         teardownLocked()
 
-        try configureSessionLocked(profile)
-        markStep("session", since: pressedAt)
+        try configureSessionLocked(profile, timing: timing)
+        timing.mark("session", since: pressedAt)
 
         let engine = AVAudioEngine()
         self.engine = engine
@@ -290,7 +303,7 @@ final class AudioFront {
                     "The microphone could not be prepared: \(DictationError.describe(error))")
             }
         }
-        markStep("voiceProcessing", since: pressedAt)
+        timing.mark("voiceProcessing", since: pressedAt)
 
         // Read after the session is active and voice processing is decided: both
         // change what the input node reports. This one read is the format the tap
@@ -299,7 +312,7 @@ final class AudioFront {
         // where most of the second before the first buffer is spent.
         let hardwareFormat = input.outputFormat(forBus: 0)
         NSLog("RP-DICT microphone=%@", describeFormat(hardwareFormat))
-        markStep("microphoneFormat", since: pressedAt)
+        timing.mark("microphoneFormat", since: pressedAt)
         guard hardwareFormat.sampleRate > 0 else {
             throw DictationError(
                 "The microphone did not open. The audio session never became active.")
@@ -317,6 +330,7 @@ final class AudioFront {
 
         self.format = hardwareFormat
         openProfile = profile
+        timing.recordReuse(false)
         NSLog("RP-DICT front built profile=%@", profile.rawValue)
         return Opened(engine: engine, format: hardwareFormat)
     }
@@ -379,7 +393,7 @@ final class AudioFront {
         // Nobody releases a probe the way a run releases a hold, so anything
         // half-configured has to be cleaned up here or it stays that way.
         do {
-            try configureSessionLocked(.current)
+            try configureSessionLocked(.current, timing: nil)
         } catch {
             teardownLocked()
             throw error
@@ -475,7 +489,7 @@ final class AudioFront {
 
     // MARK: - Session
 
-    private func configureSessionLocked(_ profile: AudioProfile) throws {
+    private func configureSessionLocked(_ profile: AudioProfile, timing: TimingLog?) throws {
         let session = AVAudioSession.sharedInstance()
         do {
             if profile.usesVoiceProcessing {
@@ -519,11 +533,21 @@ final class AudioFront {
             if !session.isEchoCancelledInputEnabled {
                 preferEchoCancelledInput(session, when: "activated")
             }
-            NSLog(
-                "RP-DICT echoCancelledInput available=%d enabled=%d",
-                session.isEchoCancelledInputAvailable ? 1 : 0,
-                session.isEchoCancelledInputEnabled ? 1 : 0)
+            reportEchoCancelledInput(session, to: timing)
         }
+    }
+
+    /// What the system says about echo cancellation, logged and kept. Both
+    /// halves are read here rather than assumed anywhere: availability is a
+    /// property of the current route, and a phone that was asked is not a phone
+    /// that agreed.
+    private func reportEchoCancelledInput(_ session: AVAudioSession, to timing: TimingLog?) {
+        let available = session.isEchoCancelledInputAvailable
+        let enabled = session.isEchoCancelledInputEnabled
+        NSLog(
+            "RP-DICT echoCancelledInput available=%d enabled=%d",
+            available ? 1 : 0, enabled ? 1 : 0)
+        timing?.recordEchoCancelledInput(available: available, enabled: enabled)
     }
 
     /// Asks for echo cancellation without the voice-processing IO unit. Never

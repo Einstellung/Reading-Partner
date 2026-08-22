@@ -37,6 +37,13 @@
 //      stack at one step and leaves it there so the status bar can be read
 //      (indicator-probe.ts). Both go into the file: every hold line carries its
 //      profile, and a switch or a probe is a line of its own.
+//   5. The press's own segments, which the plugin sends once the hold is down
+//      and every hold line then carries — how long the session, the voice
+//      processing, the format read and the first buffer each took, what the
+//      pre-roll held, and what the phone answered about echo cancellation. The
+//      same numbers are `RP-DICT` lines in the system log, and the log is the
+//      road that broke: a whole afternoon of them was lost to a syslog stream
+//      that had died with its reader still running.
 //
 // Every row also goes into a file as it is made, one appended line each
 // (bench-journal.ts). The list on screen is state, and state is gone with the
@@ -75,6 +82,7 @@ import {
   VOICE_PLUGIN,
   hasOnDeviceDictation,
   type DictationEvent,
+  type DictationTiming,
 } from "../ai/voice/dictation";
 import {
   DICTATION_LOCALE_OPTIONS,
@@ -100,6 +108,7 @@ interface Entry {
   heard: Heard | null;
   locale: DictationLocale;
   profile: AudioProfile;
+  timing: DictationTiming | null;
 }
 
 const OUTCOME: Record<BenchOutcome, { label: string; note: string; tint: string; rule: string }> = {
@@ -152,9 +161,14 @@ function useDictationTap(): {
   // hold's level is not still standing there under the next one.
   reset: () => void;
   tally: React.MutableRefObject<Heard>;
+  // The last hold's segments, as the plugin sent them once the run was down.
+  // Last one wins and the press clears it, so a set of numbers that arrived too
+  // late for its own row is dropped rather than written against the next one.
+  timing: React.MutableRefObject<DictationTiming | null>;
   error: string | null;
 } {
   const tally = useRef<Heard>({ ...NO_HEARD });
+  const timing = useRef<DictationTiming | null>(null);
   const [level, setLevel] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
@@ -173,8 +187,10 @@ function useDictationTap(): {
         setLevel(e.value);
       } else if (e.kind === "final") {
         t.finals += 1;
-      } else {
+      } else if (e.kind === "volatile") {
         t.volatiles += 1;
+      } else {
+        timing.current = e.timing;
       }
     })
       .then((l) => {
@@ -190,10 +206,11 @@ function useDictationTap(): {
 
   const reset = useCallback(() => {
     tally.current = { ...NO_HEARD };
+    timing.current = null;
     setLevel(0);
   }, []);
 
-  return { level, reset, tally, error };
+  return { level, reset, tally, timing, error };
 }
 
 // --- the screen --------------------------------------------------------------
@@ -204,7 +221,7 @@ function Bench() {
   const [profile, setProfile] = useState<AudioProfile>(DEFAULT_AUDIO_PROFILE);
   const [switching, setSwitching] = useState(false);
   const [holding, setHolding] = useState(false);
-  const { level, reset, tally, error } = useDictationTap();
+  const { level, reset, tally, timing, error } = useDictationTap();
 
   const hostRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -221,25 +238,35 @@ function Bench() {
   // Every row goes two places: the list on screen, and the file. The id is
   // taken here rather than inside the updater so the row and its line carry the
   // same number.
-  const append = useCallback((outcome: BenchOutcome, text: string, heard: Heard | null) => {
-    const entry: Entry = {
-      id: nextId.current++,
-      outcome,
-      text,
-      heard,
-      locale: localeRef.current,
-      profile: profileRef.current,
-    };
-    setEntries((list) => [...list, entry]);
-    benchJournal.hold({
-      index: entry.id,
-      outcome: entry.outcome,
-      text: entry.text,
-      heard: entry.heard,
-      locale: entry.locale,
-      profile: entry.profile,
-    });
-  }, []);
+  const append = useCallback(
+    (
+      outcome: BenchOutcome,
+      text: string,
+      heard: Heard | null,
+      segments: DictationTiming | null,
+    ) => {
+      const entry: Entry = {
+        id: nextId.current++,
+        outcome,
+        text,
+        heard,
+        locale: localeRef.current,
+        profile: profileRef.current,
+        timing: segments,
+      };
+      setEntries((list) => [...list, entry]);
+      benchJournal.hold({
+        index: entry.id,
+        outcome: entry.outcome,
+        text: entry.text,
+        heard: entry.heard,
+        locale: entry.locale,
+        profile: entry.profile,
+        timing: entry.timing,
+      });
+    },
+    [],
+  );
 
   // Close the hold being watched, reading its outcome off the three signals in
   // hold-outcome.ts.
@@ -261,9 +288,14 @@ function Bench() {
         }),
         text,
         heard,
+        // Whatever crossed back before this row was made. The plugin sends it
+        // once the run is down, which is inside the flush window the row waits
+        // out; a hold that ends before it arrives keeps null rather than
+        // borrowing the last one's numbers.
+        timing.current,
       );
     },
-    [append, tally],
+    [append, tally, timing],
   );
 
   // A send from the composer. It is the same prop the real chat passes, so a
@@ -272,7 +304,7 @@ function Bench() {
   const onSend = useCallback(
     (text: string) => {
       if (gesture.current) settle(true, text);
-      else append("typed", text, null);
+      else append("typed", text, null, null);
     },
     [append, settle],
   );
@@ -578,6 +610,9 @@ function IndicatorProbe() {
 function Row({ entry }: { entry: Entry }) {
   const style = OUTCOME[entry.outcome];
   const h = entry.heard;
+  // Press to first audio buffer, which is the number every one of these holds
+  // is being run to find out. The rest of the segments are in the file.
+  const firstBuffer = entry.timing?.steps.firstBuffer;
   return (
     <div className={"border-l-2 pl-3 " + style.rule}>
       <div className="flex flex-wrap items-baseline gap-x-2">
@@ -588,6 +623,11 @@ function Row({ entry }: { entry: Entry }) {
           <span className="text-[11px] tabular-nums text-neutral-400">
             {(h.ms / 1000).toFixed(1)}s · peak {Math.round(h.peak * 100)}% · {h.finals} settled ·{" "}
             {h.volatiles} guesses
+          </span>
+        )}
+        {firstBuffer !== undefined && (
+          <span className="text-[11px] tabular-nums text-neutral-400">
+            {Math.round(firstBuffer)} ms to audio
           </span>
         )}
       </div>

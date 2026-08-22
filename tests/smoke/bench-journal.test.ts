@@ -15,8 +15,28 @@ import {
   type BenchEntry,
 } from "../../src/smoke/bench-journal";
 import type { Heard } from "../../src/smoke/hold-outcome";
+import type { DictationTiming } from "../../src/ai/voice/dictation";
 
 const spoke: Heard = { ms: 3000, levels: 45, volatiles: 8, finals: 2, peak: 0.6 };
+
+// What the plugin sends once a hold is down. Shaped like a real one: the start
+// measured from the press, the teardown measured from the release.
+const segments: DictationTiming = {
+  profile: "reuse",
+  reused: true,
+  steps: {
+    permission: 1,
+    session: 38,
+    voiceProcessing: 41,
+    microphoneFormat: 44,
+    capturing: 46,
+    firstBuffer: 121,
+    running: 612,
+  },
+  teardown: { released: 2, finalized: 104, results: 118, stopped: 118 },
+  preroll: { buffers: 6, ms: 512, droppedMs: 0, handoverMs: 3 },
+  echoCancelledInput: { available: true, enabled: false },
+};
 
 const hold = (over: Partial<BenchEntry> = {}): BenchEntry => ({
   index: 1,
@@ -25,6 +45,7 @@ const hold = (over: Partial<BenchEntry> = {}): BenchEntry => ({
   heard: spoke,
   locale: "zh-CN",
   profile: "current",
+  timing: segments,
   ...over,
 });
 
@@ -83,10 +104,52 @@ test("the outcomes that produce no message still get a line", () => {
   expect(silent.heard.levels).toBe(0);
 });
 
+// The point of the file. The same numbers go to the system log as RP-DICT
+// lines, and a round of twelve holds came back with the transcripts and none of
+// the timings, because the Mac's syslog reader was still running with a dead
+// stream behind it.
+test("a hold carries what each step of the press cost", () => {
+  const parsed = JSON.parse(benchHoldLine(hold(), 1));
+  expect(parsed.timing.steps.firstBuffer).toBe(121);
+  expect(parsed.timing.steps.voiceProcessing).toBe(41);
+  expect(parsed.timing.steps.running).toBe(612);
+  // A different zero from the steps above, and the file has to keep them apart:
+  // 2 ms means two milliseconds after the finger came up, not after the press.
+  expect(parsed.timing.teardown.released).toBe(2);
+  expect(parsed.timing.preroll).toEqual({
+    buffers: 6,
+    ms: 512,
+    droppedMs: 0,
+    handoverMs: 3,
+  });
+  // Asked for is not granted. Both halves are the phone's answer, and the line
+  // that says available-but-not-enabled is the one that explains a profile
+  // running without echo cancellation.
+  expect(parsed.timing.echoCancelledInput).toEqual({ available: true, enabled: false });
+  // Whether the microphone was inherited or rebuilt. A `reuse` run that quietly
+  // rebuilt every press would otherwise read as "reuse does not help".
+  expect(parsed.timing.reused).toBe(true);
+  // The native side's own word for the profile, beside the bench's. They
+  // disagreeing is a thing worth being able to see.
+  expect(parsed.timing.profile).toBe("reuse");
+});
+
+test("a hold whose numbers never crossed back says null rather than nothing", () => {
+  // The plugin sends them once the run is down; a row made before that arrives
+  // keeps null. Absent and null read the same to a person and differently to a
+  // parser, so the key is always there.
+  const parsed = JSON.parse(benchHoldLine(hold({ timing: null }), 1));
+  expect("timing" in parsed).toBe(true);
+  expect(parsed.timing).toBeNull();
+});
+
 test("a typed line has no hold to report", () => {
-  const parsed = JSON.parse(benchHoldLine(hold({ outcome: "typed", heard: null }), 1));
+  const parsed = JSON.parse(
+    benchHoldLine(hold({ outcome: "typed", heard: null, timing: null }), 1),
+  );
   expect(parsed.outcome).toBe("typed");
   expect(parsed.heard).toBeNull();
+  expect(parsed.timing).toBeNull();
 });
 
 test("the session line opens the file for one process", async () => {

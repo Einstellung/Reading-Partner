@@ -114,8 +114,11 @@ private final class Gate {
 final class DictationRun {
     /// One event, three shapes: `{kind:"volatile"|"final",text}` and
     /// `{kind:"level",value}`. The webview's reducer has no default branch, so
-    /// a fourth kind leaves it holding `undefined` and the next event throws
-    /// inside a callback nothing catches.
+    /// a further kind leaves it holding `undefined` and the next event throws
+    /// inside a callback nothing catches — which is why the fourth one,
+    /// `{kind:"timing",timing}`, arrived in the reducer as a case of its own
+    /// before the plugin was allowed to send it. It does not come through here:
+    /// the plugin sends it once the run is down (VoicePlugin.emitTiming).
     typealias Emit = (JSObject) -> Void
 
     private let emit: Emit
@@ -124,6 +127,13 @@ final class DictationRun {
     /// carried here only to be handed to AudioFront and logged; `current` is
     /// what everything that does not ask gets.
     private let profile: AudioProfile
+
+    /// Every step of this hold, gathered as it happens and handed to the plugin
+    /// when the hold is over (DictationTiming.swift). The `RP-DICT` lines are
+    /// unchanged and still the primary record; this is the copy that reaches the
+    /// device's own file, because a syslog stream is a thing that stops without
+    /// saying so.
+    private let timing = TimingLog()
 
     private var transcriber: SpeechTranscriber?
     private var analyzer: SpeechAnalyzer?
@@ -369,8 +379,9 @@ final class DictationRun {
 
         let opened: AudioFront.Opened
         do {
-            opened = try AudioFront.shared.open(profile: profile, pressedAt: t0) {
-                [weak self] buffer in
+            opened = try AudioFront.shared.open(
+                profile: profile, pressedAt: t0, timing: timing
+            ) { [weak self] buffer in
                 self?.consume(buffer)
             }
         } catch {
@@ -529,7 +540,7 @@ final class DictationRun {
         // Measured from the release, not from the press: what this one says is
         // whether letting go is cheaper than tearing down, which is the other
         // half of the question `reuse` is asking.
-        mark("released", since: t0)
+        markTeardown("released", since: t0)
 
         dropPreroll()
 
@@ -551,7 +562,7 @@ final class DictationRun {
                 NSLog("RP-DICT finalize did not return in %llums", Self.finalizeGraceMs)
             }
         }
-        mark("finalized", since: t0)
+        markTeardown("finalized", since: t0)
 
         // The results task is a separate Task and may still be delivering the
         // last final when finalize returns. Waiting for the stream to end is
@@ -564,8 +575,8 @@ final class DictationRun {
         }
         resultsTask?.cancel()
         resultsTask = nil
-        mark("results", since: t0)
-        mark("stopped", since: t0)
+        markTeardown("results", since: t0)
+        markTeardown("stopped", since: t0)
     }
 
     /// Drops whatever the pre-roll is still holding: it is the user's voice and
@@ -878,11 +889,15 @@ final class DictationRun {
             // predicts 11.7 Hz and twelve holds read 9.6-10.0. installTap's
             // bufferSize is a request, not a contract, and nothing had ever
             // logged what was actually delivered.
+            let elapsed = (firstBufferAt - pressedAt) * 1000
             NSLog(
                 "RP-DICT firstBuffer +%.0fms frames=%u rate=%.0f",
-                (firstBufferAt - pressedAt) * 1000,
+                elapsed,
                 buffer.frameLength,
                 buffer.format.sampleRate)
+            // Kept rather than marked: the line above carries the frame count
+            // and the sample rate too, and pitfall 161 is argued from it.
+            timing.record("firstBuffer", ms: elapsed)
         }
         emitLevel(buffer)
 
@@ -934,10 +949,14 @@ final class DictationRun {
                 let dropped = prerollDropped
                 prerollLock.unlock()
                 let rate = tapSampleRate > 0 ? tapSampleRate : 1
+                let heldMs = Double(handed) / rate * 1000
+                let droppedMs = Double(dropped) / rate * 1000
+                let handoverMs = (CFAbsoluteTimeGetCurrent() - began) * 1000
                 NSLog(
                     "RP-DICT preroll %d buffers %.0fms dropped=%.0fms in %.0fms",
-                    buffers, Double(handed) / rate * 1000, Double(dropped) / rate * 1000,
-                    (CFAbsoluteTimeGetCurrent() - began) * 1000)
+                    buffers, heldMs, droppedMs, handoverMs)
+                timing.recordPreroll(
+                    buffers: buffers, ms: heldMs, droppedMs: droppedMs, handoverMs: handoverMs)
                 return
             }
             let next = preroll.removeFirst()
@@ -1135,7 +1154,21 @@ final class DictationRun {
 
     // MARK: - Timing
 
+    /// Every step this hold reached, for the plugin to hand to the webview once
+    /// the run is down. Read after stop(), so the teardown's own steps are in
+    /// it; safe on a run whose start threw, which is the case where the missing
+    /// steps are the answer.
+    func timingReport() -> DictationTiming {
+        timing.snapshot(profile: profile)
+    }
+
     private func mark(_ step: String, since start: CFAbsoluteTime) {
-        markStep(step, since: start)
+        timing.mark(step, since: start)
+    }
+
+    /// A step of the teardown, measured from the release. Kept apart from the
+    /// ones above because it has a different zero.
+    private func markTeardown(_ step: String, since start: CFAbsoluteTime) {
+        timing.markTeardown(step, since: start)
     }
 }

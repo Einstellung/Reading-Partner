@@ -50,6 +50,26 @@ test("level events carry no text and leave the transcript alone", () => {
   expect(assembleTranscript(stream)).toBe("One.");
 });
 
+test("a timing event is not a fourth thing the transcript has to fold", () => {
+  // It arrives once the hold is down and carries the press's segments, which
+  // only the bench reads. The reducer has no default branch, so a kind it does
+  // not name leaves the state undefined and the next event throws inside a
+  // callback nothing catches.
+  const timing = {
+    kind: "timing",
+    timing: {
+      profile: "current",
+      reused: false,
+      steps: { firstBuffer: 1040 },
+      teardown: { released: 2 },
+      preroll: null,
+      echoCancelledInput: null,
+    },
+  } as const satisfies DictationEvent;
+  expect(assembleTranscript([{ kind: "final", text: "One." }, timing])).toBe("One.");
+  expect(applyDictationEvent(EMPTY_TRANSCRIPT, timing)).toEqual(EMPTY_TRANSCRIPT);
+});
+
 test("an empty final still clears the tail", () => {
   expect(
     assembleTranscript([

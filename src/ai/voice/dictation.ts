@@ -28,7 +28,43 @@ export type DictationEvent =
   | { kind: "final"; text: string }
   // Input level 0..1, for the meter. Carries no text and never reaches the
   // transcript.
-  | { kind: "level"; value: number };
+  | { kind: "level"; value: number }
+  // Where the press went, once. Sent after the hold is over and read by nothing
+  // in the product; the bench writes it into its file (src/smoke/bench-journal.ts).
+  | { kind: "timing"; timing: DictationTiming };
+
+// One hold's segments, as the plugin measured them
+// (plugins/voice/ios/Sources/DictationTiming.swift). It is a measurement and not
+// a contract: the step names are whatever the native side marked, so a build
+// that marks one more step needs nothing here.
+//
+// Numbers and states only. There is no field it could carry speech in, which is
+// deliberate — the same rule the native side's logging follows.
+export interface DictationTiming {
+  // The audio front end the hold ran on, as the native side resolved it.
+  profile: string;
+  // True when the microphone was inherited from the previous hold instead of
+  // built for this one. Only a reusing profile can say true.
+  reused: boolean;
+  // Milliseconds from the press to each step of the start: session,
+  // voiceProcessing, microphoneFormat, capturing, firstBuffer, running and the
+  // recognizer's own steps between them.
+  steps: Record<string, number>;
+  // Milliseconds from the release to each step of the teardown. A different zero
+  // from `steps`.
+  teardown: Record<string, number>;
+  // What the pre-roll was holding when the recognizer took over, or null on a
+  // hold that never got that far.
+  preroll: {
+    buffers: number;
+    ms: number;
+    droppedMs: number;
+    handoverMs: number;
+  } | null;
+  // The session's own answer, on the profiles that ask for echo-cancelled input;
+  // null on the ones that run the voice-processing unit instead.
+  echoCancelledInput: { available: boolean; enabled: boolean } | null;
+}
 
 export interface DictationSource {
   start(onEvent: (e: DictationEvent) => void): Promise<void>;
@@ -89,7 +125,10 @@ export function transcriptText(t: Transcript): string {
 
 export function applyDictationEvent(t: Transcript, e: DictationEvent): Transcript {
   switch (e.kind) {
+    // Neither carries words. A timing arrives once the hold is over, after the
+    // last final, so folding it in as a no-op is all there is to do with it.
     case "level":
+    case "timing":
       return t;
     case "volatile":
       return { finals: t.finals, volatile: e.text.trim() };

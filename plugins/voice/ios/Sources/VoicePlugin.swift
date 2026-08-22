@@ -94,6 +94,9 @@ class VoicePlugin: Plugin {
                 // Tear the half-built run down before answering, so the audio
                 // session is not left active behind a failed start.
                 await run.stop()
+                // The steps it did reach say where it stopped, which is the
+                // whole of what a failed start has to report.
+                self.emitTiming(run)
                 invoke.reject(DictationError.describe(error))
                 return
             }
@@ -119,6 +122,7 @@ class VoicePlugin: Plugin {
             // hold while the old one is still subscribed.
             run.endEmitting()
             await run.stop()
+            self.emitTiming(run)
 
             let transcript = run.transcript()
             // A recognizer that died mid-hold has no other way to say so: the
@@ -179,19 +183,44 @@ class VoicePlugin: Plugin {
             }
             run.endEmitting()
             await run.stop()
+            self.emitTiming(run)
             invoke.resolve()
         }
     }
 
     // MARK: - Events
 
-    /// The one event leaves through here, on the main queue. The listener table
+    /// The run's own events leave through here, on the main queue. The listener table
     /// inside Tauri's Plugin is a plain dictionary written by registerListener
     /// on the IPC queue and read by trigger; funnelling every emission through
     /// one queue keeps the reads serialised among themselves.
     private func emit(_ payload: JSObject) {
         DispatchQueue.main.async { [weak self] in
             self?.trigger("dictation", data: payload)
+        }
+    }
+
+    /// The hold's segments, on the same event as everything else this plugin
+    /// says and with a kind of its own (DictationTiming.swift). Sent from here
+    /// rather than from the run, and after the teardown rather than during it,
+    /// for two reasons: the teardown's own steps are only complete once stop()
+    /// has returned, and the run's emission gate is shut by then. That gate
+    /// exists to keep words out of the wrong hold; this payload has no words in
+    /// it, and the bench that reads it keeps one listener for the whole session
+    /// rather than one per hold.
+    ///
+    /// Only the three endings a hold has of its own — stopped, cancelled, or a
+    /// start that threw — send one. A run torn down because something else
+    /// wanted the microphone does not: its numbers would arrive after the next
+    /// press and be written down against it.
+    private func emitTiming(_ run: DictationRun) {
+        let event = DictationTimingEvent(timing: run.timingReport())
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            // Encodable rather than a JSObject: the payload is nested, and the
+            // JSON encoder is the one path that does not have to be trusted to
+            // coerce a dictionary of dictionaries correctly.
+            try? self.trigger("dictation", data: event)
         }
     }
 
