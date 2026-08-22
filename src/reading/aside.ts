@@ -194,25 +194,84 @@ export function asideReturn(
 
 // --- the line an aside leaves on the lesson -------------------------------
 
-// The receipt (docs/09): a chip the reader sees in the lesson's transcript and a
-// sentence the model reads on the next turn of it. Both come from the aside's
-// own first question — no second model call, so nothing about closing an aside
-// waits on one.
-export interface AsideReceiptCardData {
-  kind: "aside";
-  // The aside itself, so the chip is the door back into it. A chat-span aside
+// The receipt (docs/09): a footnote row the reader sees under the lesson's last
+// message and a sentence the model reads on the next turn of it. Both come from
+// the aside's own first question — no second model call, so nothing about
+// closing an aside waits on one.
+
+// One aside on a receipt.
+export interface AsideReceiptItem {
+  // The aside itself, so the row is the door back into it. A chat-span aside
   // has no mark and no page: the lesson's transcript is the only place it can be
   // reached from.
   threadId: string;
   span: string;
   question: string;
+  // The page the aside was drawn on, when it was drawn on the book. One pulled
+  // out of a reply has no page, and its row shows the words instead.
+  page?: number;
+}
+
+// What a receipt's card holds: one entry per aside, in the order they were
+// left. Several land on one card when nothing was said in the lesson between
+// them.
+//
+// A record written before a receipt could hold more than one aside carries that
+// aside's fields at the top level and no `items`. Nothing migrates them —
+// asideReceiptItems reads either shape.
+export interface AsideReceiptCardData extends Partial<AsideReceiptItem> {
+  kind: "aside";
+  items?: AsideReceiptItem[];
 }
 
 // Every card the aside unit contributes to the chat's payload union.
 export type AsideCard = AsideReceiptCardData;
 
+export function asideReceiptItems(card: AsideReceiptCardData): AsideReceiptItem[] {
+  if (card.items) return card.items;
+  const { threadId, span, question, page } = card;
+  if (threadId === undefined) return [];
+  return [
+    {
+      threadId,
+      span: span ?? "",
+      question: question ?? "",
+      ...(page === undefined ? {} : { page }),
+    },
+  ];
+}
+
+// How much of a span a row shows as the place the reader stepped out from.
+export const ASIDE_ANCHOR_MAX = 24;
+
+// Where the aside was opened, for its row: the page it was drawn on, or the
+// words it was pulled out of. Empty when there is neither.
+export function asideAnchorLabel(item: AsideReceiptItem): string {
+  if (item.page !== undefined) return `p.${item.page}`;
+  return item.span === "" ? "" : `“${oneLine(item.span, ASIDE_ANCHOR_MAX)}”`;
+}
+
+// The one line a receipt of several asides is collapsed to.
+export function asideReceiptSummary(count: number): string {
+  return `${count} questions while you were reading`;
+}
+
+// The receipt row at the end of a conversation, if the last thing in it is one:
+// a row carrying an aside card and nothing else. That is the row the next aside
+// joins; anything said in the lesson since — a question, a reply — starts a new
+// one.
+export function openAsideReceipt(
+  message: Pick<ThreadMessage, "parts"> | null | undefined,
+): { cardId: string; card: AsideReceiptCardData } | null {
+  const parts = message?.parts;
+  if (!parts || parts.length !== 1) return null;
+  const part = parts[0];
+  if (part.type !== "card" || part.card.kind !== "aside") return null;
+  return { cardId: part.id, card: part.card as unknown as AsideReceiptCardData };
+}
+
 // Whether this conversation already carries the line for that aside. Leaving an
-// aside a second time — the reader reopened it from the chip and stepped back —
+// aside a second time — the reader reopened it from its row and stepped back —
 // must not write the same sentence twice, and the question it summarises is the
 // first one either way.
 export function carriesAsideReceipt(
@@ -221,35 +280,66 @@ export function carriesAsideReceipt(
 ): boolean {
   return messages.some((m) =>
     (m.parts ?? []).some(
-      (p) => p.type === "card" && p.card.kind === "aside" && p.card.threadId === threadId,
+      (p) =>
+        p.type === "card" &&
+        p.card.kind === "aside" &&
+        asideReceiptItems(p.card as unknown as AsideReceiptCardData).some(
+          (item) => item.threadId === threadId,
+        ),
     ),
   );
 }
+
+// Where the line goes: onto the receipt row already at the end of the
+// conversation, or onto a new row of its own.
+export type AsideReceiptWrite =
+  | { mode: "new"; text: string; card: AsideReceiptCardData }
+  | { mode: "merge"; ts: number; cardId: string; text: string; card: AsideReceiptCardData };
 
 export function asideReceipt(input: {
   // The aside being left.
   threadId: string;
   span: string;
+  // The page it hangs on, when it was drawn on the book.
+  page?: number | null;
   // Its own messages, as the thread file holds them.
   messages: readonly Pick<ThreadMessage, "role" | "text">[];
-  // The parent's, for the line it may already carry.
-  parent: readonly Pick<ThreadMessage, "parts">[];
-}): { text: string; card: AsideReceiptCardData } | null {
-  const { threadId, span, messages, parent } = input;
+  // The parent's, for the line it may already carry and the row that may take
+  // this one.
+  parent: readonly Pick<ThreadMessage, "text" | "ts" | "parts">[];
+}): AsideReceiptWrite | null {
+  const { threadId, span, page, messages, parent } = input;
   if (carriesAsideReceipt(parent, threadId)) return null;
   // An aside the reader opened and asked nothing in leaves nothing behind.
   const asked = messages.find((m) => m.role === "user" && m.text.trim() !== "");
   if (!asked) return null;
   const question = oneLine(asked.text, ASIDE_QUESTION_MAX);
-  return {
-    // Bracketed, and about the reader rather than to them: the row is written
-    // with the assistant's role, so the model reads this back as a note it left
-    // itself rather than as something it said out loud.
-    //
-    // "now closed" and not "and came back": the same line is written when the
-    // reader hangs up inside the aside, and then they have not come back. What
-    // is true on every way out is that the side conversation is over.
-    text: `[Aside, now closed: the reader stepped out of this conversation to ask "${question}".]`,
-    card: { kind: "aside", threadId, span: oneLine(span, ASIDE_SPAN_MAX), question },
+  const item: AsideReceiptItem = {
+    threadId,
+    span: oneLine(span, ASIDE_SPAN_MAX),
+    question,
+    ...(typeof page === "number" ? { page } : {}),
   };
+  // Bracketed, and about the reader rather than to them: the row is written
+  // with the assistant's role, so the model reads this back as a note it left
+  // itself rather than as something it said out loud.
+  //
+  // "now closed" and not "and came back": the same line is written when the
+  // reader hangs up inside the aside, and then they have not come back. What
+  // is true on every way out is that the side conversation is over.
+  const text = `[Aside, now closed: the reader stepped out of this conversation to ask "${question}".]`;
+  const last = parent.length > 0 ? parent[parent.length - 1] : null;
+  const open = last ? openAsideReceipt(last) : null;
+  if (last && open) {
+    return {
+      mode: "merge",
+      ts: last.ts,
+      cardId: open.cardId,
+      // One sentence per aside, oldest first: the model reads the same lines in
+      // the same order whether they were written one to a row or several.
+      text: `${last.text}\n${text}`,
+      card: { kind: "aside", items: [...asideReceiptItems(open.card), item] },
+    };
+  }
+  return { mode: "new", text, card: { kind: "aside", items: [item] } };
 }

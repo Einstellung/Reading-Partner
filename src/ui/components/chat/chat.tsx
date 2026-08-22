@@ -600,9 +600,23 @@ const MessageBubble = memo(function MessageBubble({
 	const textPart = parts.find((p): p is Extract<typeof p, { type: 'text' }> => p.type === 'text' && !!p.text);
 
 	// A card row (add-source flow) stands alone in the flow — no prose or trace.
+	//
+	// An aside receipt is the exception: it is a footnote on the message above it
+	// rather than a turn of its own, so its row pulls back over the list's gap
+	// and keeps a few pixels of it. The pull is per list spacing (lg / sm) and is
+	// applied to no other kind of card.
 	if (cardParts.length > 0) {
+		const footnote = cardParts.every((p) => p.card.kind === 'aside');
 		return (
-			<div className="my-1 flex flex-col gap-2">
+			<div
+				className={
+					footnote
+						? lg
+							? 'mt-[calc(0.625rem_-_1.5rem*var(--chat-scale,1))] flex flex-col'
+							: '-mt-1.5 flex flex-col'
+						: 'my-1 flex flex-col gap-2'
+				}
+			>
 				{cardParts.map((p) => (
 					<CardPartView key={p.id} part={p} surface={surface} onCardAction={onCardAction} />
 				))}
