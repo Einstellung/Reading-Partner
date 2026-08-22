@@ -24,6 +24,7 @@ import { holdTheScreen } from "./wake-lock";
 import {
   hasOnDeviceDictation,
   nativeDictation,
+  releaseDictationMicrophone,
   type DictationEvent,
 } from "../ai/voice/dictation";
 
@@ -473,5 +474,11 @@ export async function runDictationSmoke(): Promise<void> {
   } catch (e) {
     result.error = String((e as Error)?.message ?? e);
     await save("failed");
+  } finally {
+    // The plugin keeps the microphone standing between holds, which is what the
+    // product does and what this script is here to exercise. Nothing above ends
+    // a voice mode, so without this the script leaves the orange indicator lit
+    // on a phone nobody is holding.
+    await releaseDictationMicrophone();
   }
 }

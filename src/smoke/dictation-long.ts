@@ -32,7 +32,11 @@
 import { mkdir, writeTextFile, BaseDirectory } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../platform/app/atomic-fs";
 import { holdTheScreen } from "./wake-lock";
-import { nativeDictation, type DictationEvent } from "../ai/voice/dictation";
+import {
+  nativeDictation,
+  releaseDictationMicrophone,
+  type DictationEvent,
+} from "../ai/voice/dictation";
 
 export const LONG_RESULT_DIR = "smoke";
 export const LONG_RESULT_FILE = "smoke/dictation-long.json";
@@ -265,6 +269,9 @@ export async function runLongDictation(): Promise<void> {
   } catch (e) {
     result.stopError = String((e as Error)?.message ?? e);
   }
+  // The stop pauses the microphone for a next hold that is not coming here, and
+  // the orange indicator stays lit until something says so.
+  await releaseDictationMicrophone();
   result.releaseToAnswerMs = +(performance.now() - released).toFixed(1);
   result.streamedChars = fold().length;
   result.ok = result.stopError === null;

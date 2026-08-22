@@ -185,6 +185,9 @@ final class AudioFront {
     /// one of them is a teardown, and a teardown's `setActive(false)` is worth
     /// hundreds of milliseconds.
     private let lifecycleQueue = DispatchQueue(label: "com.readingpartner.voice.lifecycle")
+    /// Kept because the call hands them back and they are never given up: this
+    /// object is the process's, and so is what it subscribes to.
+    private var lifecycleObservers: [NSObjectProtocol] = []
 
     private init() {
         observeLifecycle()
@@ -425,35 +428,38 @@ final class AudioFront {
         let center = NotificationCenter.default
         let session = AVAudioSession.sharedInstance()
 
-        center.addObserver(
-            forName: AVAudioSession.interruptionNotification, object: session, queue: nil
-        ) { [weak self] note in
-            guard
-                let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
-                let type = AVAudioSession.InterruptionType(rawValue: raw),
-                type == .began
-            else { return }
-            // Only `.began` is acted on. Nothing here resumes on `.ended`: iOS
-            // refuses to start recording from the background (docs/33), and a
-            // press is what the next microphone waits for.
-            self?.lose("an interruption began")
-        }
+        lifecycleObservers.append(
+            center.addObserver(
+                forName: AVAudioSession.interruptionNotification, object: session, queue: nil
+            ) { [weak self] note in
+                guard
+                    let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                    let type = AVAudioSession.InterruptionType(rawValue: raw),
+                    type == .began
+                else { return }
+                // Only `.began` is acted on. Nothing here resumes on `.ended`:
+                // iOS refuses to start recording from the background (docs/33),
+                // and a press is what the next microphone waits for.
+                self?.lose("an interruption began")
+            })
 
-        center.addObserver(
-            forName: AVAudioSession.routeChangeNotification, object: session, queue: nil
-        ) { [weak self] _ in
-            self?.loseIfInputRouteWentAway()
-        }
+        lifecycleObservers.append(
+            center.addObserver(
+                forName: AVAudioSession.routeChangeNotification, object: session, queue: nil
+            ) { [weak self] _ in
+                self?.loseIfInputRouteWentAway()
+            })
 
         // A locked screen backgrounds the app and takes the input route with it
         // without ever posting an interruption (docs/pitfall/162). It is also
         // the app switcher, and either way a kept engine is about to be one iOS
         // has stopped feeding — with the indicator still lit over it.
-        center.addObserver(
-            forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: nil
-        ) { [weak self] _ in
-            self?.lose("the app left the screen")
-        }
+        lifecycleObservers.append(
+            center.addObserver(
+                forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: nil
+            ) { [weak self] _ in
+                self?.lose("the app left the screen")
+            })
     }
 
     private func lose(_ why: String) {
