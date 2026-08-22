@@ -1,12 +1,13 @@
 // The microphone itself, held apart from the hold that listens to it.
 //
 // It exists because of one measurement. Press to first audio buffer is
-// 1028-1255 ms on an iPhone 16 running iOS 26.6, and ~690 ms of it sits in a
-// single line — `setVoiceProcessingEnabled(true)`, which rebuilds the whole IO
-// unit, followed by the first read of the hardware format that the rebuilt unit
-// can only answer once it has settled. The second, third and fifth press cost
-// the same as the first, which is the tell: the engine was torn down between
-// them and rebuilt from nothing every time.
+// 1090-1315 ms on an iPhone 16 running iOS 26.6, and two lines hold most of it:
+// `setVoiceProcessingEnabled(true)`, which rebuilds the whole IO unit, and
+// `engine.start()` on the unit it rebuilt. The first read of the hardware
+// format is not one of them — 0-12 ms in all 21 holds of 2026-08-22 — and an
+// earlier note here that billed it alongside the rebuild was wrong. The second,
+// third and fifth press cost the same as the first, which is the tell: the
+// engine was torn down between them and rebuilt from nothing every time.
 //
 // So the engine, the session and the tap moved out of DictationRun, whose
 // lifetime is one press, and into an object whose lifetime is the process. What
@@ -21,7 +22,16 @@
 // from after it line up column for column. `session` still means "the audio
 // session is active", `capturing` still means "the engine is running with a tap
 // on it". What is new is the pair between them — `voiceProcessing` and
-// `microphoneFormat` — which is where the missing 690 ms turned out to live.
+// `microphoneFormat` — which is what tells the IO unit's rebuild apart from the
+// format read that used to be blamed with it.
+//
+// One rule this file enforces rather than describes: the indicator probe below
+// and a hold cannot share the microphone, and a hold that arrives while the
+// probe is parked is refused. It used to take the microphone back instead, and
+// a round of twenty-one holds went in the bin for it — every press that
+// followed a parked probe paid to tear that probe's engine down first, the bill
+// landed on the `session` step, and nothing in the record said so
+// (docs/pitfall/168).
 //
 // Locks: `lock` guards the state machine below and is the one held across calls
 // into AVAudioEngine. `sinkLock` guards a single closure reference and is the
@@ -50,8 +60,9 @@ import Foundation
 ///              `echoCancelledInput` and `reuseEchoCancelledInput` ask the
 ///              session for `setPrefersEchoCancelledInput(true)` instead, which
 ///              Apple says "does not require explicit voice processing
-///              configuration" — and which therefore skips the IO unit rebuild
-///              that costs the 690 ms. It is iOS 18.2 and later on iPhones from
+///              configuration" — and which therefore skips the IO unit rebuild.
+///              Worth 300-450 ms of the press when it was measured on
+///              2026-08-22. It is iOS 18.2 and later on iPhones from
 ///              2024 on, it is available only under `.playAndRecord` with mode
 ///              `.default`, and asking for it is not the same as getting it:
 ///              `isEchoCancelledInputEnabled` is the system's answer and it is
@@ -164,6 +175,10 @@ final class AudioFront {
     private var tapInstalled = false
     private var sessionActive = false
     private var stage: IndicatorStage = .off
+    /// Whether anything has asked for a probe in this process. `off` and "never
+    /// probed" leave the same state behind and are not the same fact about a
+    /// press: one of them means somebody parked the microphone and put it back.
+    private var probeEverSet = false
 
     /// The one thing the audio thread reads. Guarded by its own lock and never
     /// called while that lock is held.
@@ -199,11 +214,21 @@ final class AudioFront {
         lock.lock()
         defer { lock.unlock() }
 
-        // A probe and a hold cannot share the microphone, and the probe is the
-        // one nobody is waiting on.
+        // Where the probe was standing when the finger went down, recorded
+        // whatever happens next. A press whose numbers cannot be checked against
+        // it afterwards is a press nobody can trust.
+        timing.recordProbeStage(probeStageNameLocked())
+
+        // A probe and a hold cannot share the microphone. Taking the microphone
+        // back would work and would also be a lie: the teardown is charged to
+        // this press, its `session` step comes back five to ten times its usual
+        // size, and the log reads as an ordinary slow press (docs/pitfall/168).
+        // So the hold is refused and the person is told which button to press.
         if stage != .off {
-            NSLog("RP-DICT front dropping the indicator probe for a hold")
-            teardownLocked()
+            NSLog("RP-DICT front refused a hold: the probe is parked on %@", stage.rawValue)
+            throw DictationError(
+                "The indicator probe is parked on \(stage.rawValue). "
+                    + "Put it back on Off before holding to talk.")
         }
 
         if let reused = reuseLocked(
@@ -227,9 +252,15 @@ final class AudioFront {
         sink: @escaping (AVAudioPCMBuffer) -> Void
     ) -> Opened? {
         guard profile.keepsEngine else { return nil }
-        guard let engine = engine, let format = format, tapInstalled, sessionActive,
-            openProfile == profile
-        else { return nil }
+        guard let engine = engine, let format = format, tapInstalled, sessionActive else {
+            timing.recordReuseSkipped("nothing was standing to reuse")
+            return nil
+        }
+        guard openProfile == profile else {
+            timing.recordReuseSkipped(
+                "what was standing belonged to \(openProfile?.rawValue ?? "no profile")")
+            return nil
+        }
 
         // The graph can move while nobody is holding it — a headset, a call, a
         // route change. A tap whose format disagrees with the node it sits on is
@@ -240,29 +271,38 @@ final class AudioFront {
             NSLog(
                 "RP-DICT front cannot reuse: the microphone went from %@ to %@",
                 describeFormat(format), describeFormat(current))
+            timing.recordReuseSkipped("the microphone changed format between holds")
             teardownLocked()
             return nil
         }
 
         setSink(sink)
+        // Marked before the restart rather than after it: on this path the
+        // session never went inactive and the IO unit was never rebuilt, so
+        // these three are what the press inherited and not what it paid for.
+        // What restarting a paused engine costs then stands on its own, as
+        // `capturing` minus `microphoneFormat`, which is the number `reuse` is
+        // being run to find out.
+        timing.mark("session", since: pressedAt)
+        timing.mark("voiceProcessing", since: pressedAt)
+        timing.mark("microphoneFormat", since: pressedAt)
         if !engine.isRunning {
             do {
                 try engine.start()
             } catch {
                 NSLog("RP-DICT front reuse start failed: %@", DictationError.describe(error))
+                timing.recordReuseSkipped("the kept engine would not start")
                 teardownLocked()
                 return nil
             }
         }
         guard engine.isRunning else {
             NSLog("RP-DICT front reuse start returned without running")
+            timing.recordReuseSkipped("the kept engine started without running")
             teardownLocked()
             return nil
         }
 
-        timing.mark("session", since: pressedAt)
-        timing.mark("voiceProcessing", since: pressedAt)
-        timing.mark("microphoneFormat", since: pressedAt)
         if !profile.usesVoiceProcessing {
             // Apple: the enabled state may change when the route changes to one
             // that cannot do it, a headset being the example. A kept session is
@@ -308,8 +348,10 @@ final class AudioFront {
         // Read after the session is active and voice processing is decided: both
         // change what the input node reports. This one read is the format the tap
         // is installed with, the format the pre-roll holds, and later the
-        // converter's input side. It is also, on the voice-processing profiles,
-        // where most of the second before the first buffer is spent.
+        // converter's input side. It is not where the time goes: 0-12 ms in
+        // every one of the 21 holds of 2026-08-22, on both the profiles that
+        // rebuild the IO unit and the ones that do not. The line above it and
+        // `startLocked` below it are what the press pays for.
         let hardwareFormat = input.outputFormat(forBus: 0)
         NSLog("RP-DICT microphone=%@", describeFormat(hardwareFormat))
         timing.mark("microphoneFormat", since: pressedAt)
@@ -344,6 +386,18 @@ final class AudioFront {
     func release(profile: AudioProfile, keep: Bool) {
         lock.lock()
         defer { lock.unlock() }
+
+        // A parked probe is not this run's to let go of. It can only be standing
+        // here after a refused hold — a probe stops a live run before it takes
+        // the microphone, and `open` refuses a hold while one is parked — and
+        // tearing it down on the way out of that refusal would undo the refusal
+        // silently: the screen would still say the probe was on, the next press
+        // would find a clean stack, and the round after it would be as
+        // unreadable as the one this rule exists for (docs/pitfall/168).
+        guard stage == .off else {
+            NSLog("RP-DICT front left the probe on %@ through a release", stage.rawValue)
+            return
+        }
 
         setSink(nil)
         // `openProfile == profile` is the part that is not the caller's opinion:
@@ -381,6 +435,10 @@ final class AudioFront {
         defer { lock.unlock() }
 
         teardownLocked()
+        // Before the early return below, so that asking for `off` counts as
+        // having probed: a stack put back by hand and a stack nobody has touched
+        // are different facts about the press that follows.
+        probeEverSet = true
         sinkLock.lock()
         probeBuffers = 0
         probeLevel = 0
@@ -443,6 +501,14 @@ final class AudioFront {
             "RP-DICT probe %@ engine=running tap=%d microphone=%@",
             wanted.rawValue, tapInstalled ? 1 : 0, describeFormat(hardwareFormat))
         return stateLocked()
+    }
+
+    /// Where the probe is standing, as a press records it. `never` and `off`
+    /// leave the same audio stack behind and are not the same answer: one of
+    /// them means somebody parked the microphone during this run of the app and
+    /// put it back, which is worth being able to see in the file afterwards.
+    private func probeStageNameLocked() -> String {
+        probeEverSet ? stage.rawValue : "never"
     }
 
     /// What the probe is doing right now, as the plugin answers it. Counts and a

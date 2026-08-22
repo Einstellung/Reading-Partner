@@ -48,6 +48,30 @@ export interface IndicatorProbeState {
   inputs: string;
 }
 
+/// The three answers to "where was the probe when the finger went down" that
+/// leave the microphone free. Every hold now carries one of them
+/// (DictationTiming.probeStage): `off` is a probe that was put back, `never` a
+/// process nothing has probed in, `unread` a press that never reached the
+/// microphone. Anything else is a stage, and a stage is parked.
+const CLEAR: readonly string[] = ["off", "never", "unread"];
+
+/// Whether a probe was holding the microphone when the press arrived, which is
+/// the press the plugin refuses. It refuses rather than taking the microphone
+/// back because taking it back is invisible: the teardown gets charged to the
+/// press that follows, whose `session` step then comes back five to ten times
+/// its usual size with nothing in the record to say why — one round of
+/// twenty-one holds was lost to exactly that (docs/pitfall/168).
+export function probeHoldsTheMicrophone(at: string | undefined | null): boolean {
+  return typeof at === "string" && at.length > 0 && !CLEAR.includes(at);
+}
+
+/// The sentence a person reads, in one place: the strip above the bar says it
+/// while a probe is parked, and a refused row says it afterwards.
+export function probeRefusalNote(at: string): string {
+  const label = INDICATOR_STAGE_OPTIONS.find((o) => o.value === at)?.label ?? at;
+  return `The probe is parked on ${label}. Holds are refused until it is back on Off.`;
+}
+
 /// The command string and the argument key, which no compiler compares against
 /// the Swift selector and the Rust command name they have to match.
 export const INDICATOR_PROBE_COMMAND = "plugin:voice|set_indicator_probe";

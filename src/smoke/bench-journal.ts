@@ -32,7 +32,7 @@ export const BENCH_JOURNAL_DIR = "smoke";
 /// from the app container, same place as the long harness's journal.
 export const BENCH_JOURNAL_FILE = "smoke/dictation-bench.jsonl";
 
-/// The five a hold can end in, plus the one that is not a hold at all.
+/// The six a hold can end in, plus the one that is not a hold at all.
 export type BenchOutcome = HoldOutcome | "typed";
 
 /// A row as the bench made it, before it becomes a line.
@@ -106,9 +106,9 @@ export function benchProfileLine(profile: AudioProfile, wall: number): string {
 }
 
 /** One indicator-probe stage, entered. It takes the microphone away from
- * dictation, so a hold that behaves strangely right after one is explained by
- * the line above it. `state` is whatever the native side answered, or null when
- * it refused. */
+ * dictation and the plugin refuses holds until it is put back, so a run of
+ * refused presses is explained by the line above it. `state` is whatever the
+ * native side answered, or null when it refused. */
 export function benchProbeLine(
   stage: IndicatorStage,
   state: unknown,

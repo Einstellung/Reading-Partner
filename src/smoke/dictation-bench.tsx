@@ -36,7 +36,9 @@
 //      nativeDictation() reads it as the hold begins; the probe parks the audio
 //      stack at one step and leaves it there so the status bar can be read
 //      (indicator-probe.ts). Both go into the file: every hold line carries its
-//      profile, and a switch or a probe is a line of its own.
+//      profile and where the probe was standing when the finger went down, and a
+//      switch or a probe is a line of its own. A hold pressed while the probe is
+//      parked is refused by the plugin and gets a row saying so.
 //   5. The press's own segments, which the plugin sends once the hold is down
 //      and every hold line then carries — how long the session, the voice
 //      processing, the format read and the first buffer each took, what the
@@ -57,6 +59,9 @@
 // send arrives as the composer's own onSend; an edit is the composer switching
 // itself back to keyboard mode, which is a textarea appearing where the bar
 // was; a cancel is neither of those happening before the flush window closes.
+// A fourth comes from the plugin rather than from the gesture — a press it
+// refused because the probe held the microphone — and it is read before the
+// other three, which are all empty when it is true.
 //
 // The level readout comes from a second listener on the plugin's event stream.
 // Tauri's Swift Plugin keeps an array of channels per event name and trigger
@@ -94,6 +99,8 @@ import {
 import { benchJournal, type BenchOutcome } from "./bench-journal";
 import {
   INDICATOR_STAGE_OPTIONS,
+  probeHoldsTheMicrophone,
+  probeRefusalNote,
   setIndicatorProbe,
   type IndicatorProbeState,
   type IndicatorStage,
@@ -141,6 +148,12 @@ const OUTCOME: Record<BenchOutcome, { label: string; note: string; tint: string;
     note: "the hold was long enough but no audio reached the page — this one is a fault",
     tint: "text-red-700",
     rule: "border-red-500",
+  },
+  refused: {
+    label: "Refused",
+    note: "the indicator probe had the microphone — put it back on Off and hold again",
+    tint: "text-amber-700",
+    rule: "border-amber-500",
   },
   typed: {
     label: "Sent from the keyboard",
@@ -285,6 +298,10 @@ function Bench() {
           sent,
           keyboardBack: !!hostRef.current?.querySelector("textarea"),
           heard,
+          // The plugin says so itself: every hold carries where the probe was
+          // standing when the finger went down, and a parked one is a press it
+          // refused rather than a microphone that failed.
+          refused: probeHoldsTheMicrophone(timing.current?.probeStage),
         }),
         text,
         heard,
@@ -538,6 +555,10 @@ function ProfileSwitch({
 // What this screen shows is which step it is standing on and enough of the
 // native state to prove it — a stage that says it installed a tap and reports no
 // buffers is a stage that did not do what it says.
+//
+// While one is parked the plugin refuses holds, and this says so where the
+// person is looking. It is not the enforcement — that is in AudioFront and
+// cannot be got around from here — it is the reason, at the moment it applies.
 function IndicatorProbe() {
   const [stage, setStage] = useState<IndicatorStage>("off");
   const [state, setState] = useState<IndicatorProbeState | null>(null);
@@ -603,6 +624,11 @@ function IndicatorProbe() {
           </>
         )}
       </div>
+      {probeHoldsTheMicrophone(stage) && (
+        <div className="mt-1 rounded-lg bg-amber-50 px-3 py-2 text-[12px] leading-snug text-amber-800">
+          {probeRefusalNote(stage)}
+        </div>
+      )}
     </div>
   );
 }
@@ -665,7 +691,9 @@ function Instructions() {
       <p className="m-0">
         The dark row is the indicator probe. It takes the microphone away from dictation and holds
         it at one step until another step is chosen, so the orange dot in the status bar can be read
-        without guessing what turned it on. Put it back on <b>Off</b> before holding again.
+        without guessing what turned it on. Put it back on <b>Off</b> before holding again: while it
+        is parked the plugin refuses every hold, because a press that took the microphone back would
+        be timed with the teardown of the probe in front of it.
       </p>
     </div>
   );

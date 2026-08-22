@@ -55,6 +55,29 @@ test("a quiet room still counts as audio", () => {
   expect(classifyHold({ sent: false, keyboardBack: false, heard: silent })).toBe("cancel");
 });
 
+test("a press the plugin refused is not a fault of the microphone", () => {
+  // The indicator probe had the microphone, so the press never opened one. From
+  // the outside it is identical to the fault above — no levels, no text, a
+  // gesture that did nothing — and the two must not be filed together, because
+  // the round after this one is read off these rows.
+  const heard = { ...NO_HEARD, ms: 3000 };
+  expect(classifyHold({ sent: false, keyboardBack: false, heard, refused: true })).toBe("refused");
+  // Even a short one: the refusal explains it, the duration does not.
+  const brief = { ...NO_HEARD, ms: 120 };
+  expect(classifyHold({ sent: false, keyboardBack: false, heard: brief, refused: true })).toBe(
+    "refused",
+  );
+});
+
+test("nothing was refused when the plugin did not say so", () => {
+  // The signal is absent on every hold from a build that does not send it, and
+  // absent means "not refused" rather than "unknown" — the outcome below it is
+  // the same one the bench has always read.
+  const heard = { ...NO_HEARD, ms: 3000 };
+  expect(classifyHold({ sent: false, keyboardBack: false, heard })).toBe("silent");
+  expect(classifyHold({ sent: false, keyboardBack: false, heard, refused: false })).toBe("silent");
+});
+
 test("the wait for a cancel outlasts the composer's flush", () => {
   // A send delivers no later than FINISH_TIMEOUT_MS after the release. If the
   // bench gave up first it would file every slow send as a cancel.

@@ -60,6 +60,8 @@ test("a timing event is not a fourth thing the transcript has to fold", () => {
     timing: {
       profile: "current",
       reused: false,
+      reuseSkipped: null,
+      probeStage: "never",
       steps: { firstBuffer: 1040 },
       teardown: { released: 2 },
       preroll: null,

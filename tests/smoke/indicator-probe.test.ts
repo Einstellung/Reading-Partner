@@ -14,6 +14,8 @@ import {
   INDICATOR_STAGES,
   INDICATOR_STAGE_OPTIONS,
   createIndicatorProbe,
+  probeHoldsTheMicrophone,
+  probeRefusalNote,
   type IndicatorProbeState,
 } from "../../src/smoke/indicator-probe";
 
@@ -57,4 +59,30 @@ test("the stages are the four steps plus off, in the order they are entered", ()
   for (const option of INDICATOR_STAGE_OPTIONS) {
     expect(option.note.length).toBeGreaterThan(0);
   }
+});
+
+// A parked probe owns the microphone and the plugin refuses holds while it does.
+// The predicate is what the screen and the row both read, and it decides against
+// a string the native side wrote, so every answer it can send is named here.
+test("every stage that holds the microphone is one the bench calls refused", () => {
+  for (const stage of INDICATOR_STAGES) {
+    expect(probeHoldsTheMicrophone(stage)).toBe(stage !== "off");
+  }
+  // The two answers that are not a stage at all. A process nobody has probed in
+  // and a press that never reached the microphone are both clear.
+  expect(probeHoldsTheMicrophone("never")).toBe(false);
+  expect(probeHoldsTheMicrophone("unread")).toBe(false);
+  // And a build that sends no such field at all, which is every one before this.
+  expect(probeHoldsTheMicrophone(undefined)).toBe(false);
+  expect(probeHoldsTheMicrophone(null)).toBe(false);
+  expect(probeHoldsTheMicrophone("")).toBe(false);
+});
+
+test("the refusal names the button to press and the stage it is on", () => {
+  const note = probeRefusalNote("engine");
+  expect(note).toContain("Engine");
+  expect(note).toContain("Off");
+  // A stage name the bench does not know still produces a sentence rather than
+  // "undefined": the native side is free to add one before this file hears.
+  expect(probeRefusalNote("something-newer")).toContain("something-newer");
 });

@@ -22,6 +22,11 @@
 //
 // A cancel is the fall-through and has to be: it is defined by producing
 // nothing. Everything that could have produced something is ruled out first.
+//
+// The fourth signal comes from the plugin rather than from the gesture: a press
+// that arrived while the indicator probe was parked is refused outright, and
+// from the outside that is indistinguishable from the microphone being broken.
+// It is read first, because it explains every other signal being empty.
 
 import { FINISH_TIMEOUT_MS } from "../ai/voice/hold-machine";
 
@@ -41,7 +46,7 @@ export interface Heard {
 
 export const NO_HEARD: Heard = { ms: 0, levels: 0, volatiles: 0, finals: 0, peak: 0 };
 
-export type HoldOutcome = "sent" | "edit" | "cancel" | "short" | "silent";
+export type HoldOutcome = "sent" | "edit" | "cancel" | "short" | "silent" | "refused";
 
 // How long after the finger lifts to wait before calling a hold cancelled. The
 // composer's own flush window plus room for the IPC round trip and the commit
@@ -58,7 +63,11 @@ export function classifyHold(signals: {
   sent: boolean;
   keyboardBack: boolean;
   heard: Heard;
+  // The plugin never opened the microphone: the indicator probe had it
+  // (indicator-probe.ts). Nothing else about the press means anything then.
+  refused?: boolean;
 }): HoldOutcome {
+  if (signals.refused) return "refused";
   if (signals.sent) return "sent";
   if (signals.keyboardBack) return "edit";
   if (signals.heard.levels === 0) {

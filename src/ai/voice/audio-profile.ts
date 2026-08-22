@@ -1,12 +1,14 @@
 // Which audio front end a hold opens the microphone on.
 //
-// Press to first audio buffer is a second on an iPhone 16 running iOS 26.6, and
-// the recogniser is not what is slow: ~690 ms of it is the voice-processing IO
-// unit being rebuilt and re-read on every single press, including the fifth one
-// in a row. Two things could take that back — keeping the engine between presses
-// instead of rebuilding it, and asking the session for echo cancellation
-// without the voice-processing unit at all — and they are independent, so there
-// are four settings and one build can be held five times on each.
+// Press to first audio buffer is 1090-1315 ms on an iPhone 16 running iOS 26.6,
+// and the recogniser is not what is slow: the voice-processing IO unit is
+// rebuilt and restarted on every single press, including the fifth one in a
+// row. Not opening it at all took 300-450 ms back when the four settings were
+// held on 2026-08-22 — 790-870 ms from press to first buffer — which is the size
+// of what there is to win. Two things could win it, and they are independent:
+// keeping the engine between presses instead of rebuilding it, and asking the
+// session for echo cancellation without the voice-processing unit at all. So
+// there are four settings and one build can be held five times on each.
 //
 // This is a measurement knob, not a preference. `current` is what the app did
 // before any of this existed and is what every caller that says nothing gets;

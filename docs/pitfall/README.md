@@ -39,7 +39,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 167）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 169）。
 
 ## EmbedPDF 引擎
 
@@ -148,6 +148,7 @@
 - [165-a-harness-that-buffers-cannot-report-the-crash-it-watches-for](./165-a-harness-that-buffers-cannot-report-the-crash-it-watches-for.md) — 探针把记录攒在内存里、跑完才落盘，就报不了它自己要抓的那种死法：jetsam、看门狗、锁屏挂起定时器都不给收尾机会，死在第十八分钟和从没开始过取回来是同一个空文件。按事件 `append` 一行 JSON，每条带墙钟时间戳；高频事件只计数不入账。有了它，跑多久就没那么要紧——死在第四分钟就是四分钟的数据
 - [166-the-microphone-opens-after-the-user-has-started-talking](./166-the-microphone-opens-after-the-user-has-started-talking.md) — 按住说话丢头字：tap 装上之前没有麦克风，press 到第一个 buffer 实测一整秒，其中约 690ms 花在 `setVoiceProcessingEnabled(true)`，识别器那一半只占 80–180ms。2.6 秒的句子全对、2.4 秒的丢头，峰值电平 86-99%，看着像识别质量问题。把 `start()` 切成"先开麦克风、后备识别器"两半、中间垫 pre-roll 队列，实测收益为零（五次按住四次缓冲到 0 个 buffer），头损失原封不动。还没验的是引擎复用不 stop、`setPrefersEchoCancelledInput` 绕开 VPIO
 - [167-the-microphone-indicator-lights-at-engine-start](./167-the-microphone-indicator-lights-at-engine-start.md) — 橙点在 `engine.start()` 那一步亮，`setActive(true)` 那一步不亮（实测四档，Apple 对触发点零文档，推过两次都错）。意味着坑 166 那 690ms 没法提前付掉而不点亮橙点：VPIO 只有引擎跑起来才建得成。只剩两种形态——切进语音模式就起引擎（用户没开口橙点就亮），或第一次按住时建、之后不 `stop()` 只 `pause()`（橙点从第一次说话开始亮）。取后者
+- [168-the-probe-parked-beside-the-thing-it-measures](./168-the-probe-parked-beside-the-thing-it-measures.md) — 橙点探针停在 `engine`/`tap`/`recording` 不撤，下一次按住先替它拆引擎，四百到八百毫秒记在 `session` 那一步上，21 次按住的一整轮数据作废（探针停 off/session 的 11 次全是 72-156ms，停在建了引擎那三档的 9 次全是 584-977ms，中间没有值）；顺带把上一次留着的引擎也清了，`reuse` 十次按住 `reused` 全 false。日志和字段全都正常，所以看不出来。解法是探针停着就拒绝这次按住并在界面上说原因，不偷偷复位；每行记下按住前探针停在哪一档，快路径没走成要写 `reuseSkipped` 说明理由
 
 ## WebKit / webview
 

@@ -24,6 +24,8 @@ const spoke: Heard = { ms: 3000, levels: 45, volatiles: 8, finals: 2, peak: 0.6 
 const segments: DictationTiming = {
   profile: "reuse",
   reused: true,
+  reuseSkipped: null,
+  probeStage: "off",
   steps: {
     permission: 1,
     session: 38,
@@ -129,6 +131,11 @@ test("a hold carries what each step of the press cost", () => {
   // Whether the microphone was inherited or rebuilt. A `reuse` run that quietly
   // rebuilt every press would otherwise read as "reuse does not help".
   expect(parsed.timing.reused).toBe(true);
+  expect(parsed.timing.reuseSkipped).toBeNull();
+  // And where the indicator probe was standing when the finger went down: a
+  // press that followed a parked one is a press with a teardown in front of it,
+  // which is how a round of twenty-one holds was lost (docs/pitfall/168).
+  expect(parsed.timing.probeStage).toBe("off");
   // The native side's own word for the profile, beside the bench's. They
   // disagreeing is a thing worth being able to see.
   expect(parsed.timing.profile).toBe("reuse");

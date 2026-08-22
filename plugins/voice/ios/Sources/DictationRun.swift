@@ -280,9 +280,13 @@ final class DictationRun {
     ///
     /// All of it was measured with voice processing on, whose automatic gain is
     /// worth 18 dB on near-voice (docs/33). The profiles that run without it
-    /// (AudioProfile.echoCancelledInput) therefore read low through this window
-    /// — the same speech at the same distance came back 17 dB quieter with VPIO
-    /// off — so a peak from one profile and a peak from another are not
+    /// (AudioProfile.echoCancelledInput) therefore read low through this window:
+    /// on 2026-08-22, twenty holds on one iPhone 16, the loudest sample of a
+    /// hold came back 4.2 dB quieter with the unit off — -19.0 dB against
+    /// -23.2 dB, ten holds averaged on each side. That is a peak, while the
+    /// 18 dB above is a mean of near-voice level; an earlier note here quoted
+    /// 17 dB from another phone on iOS 18.7 and read the two as the same
+    /// quantity. A peak from one profile and a peak from another are still not
     /// comparable, and the bench's peak column is a within-profile number.
     private static let quietDb: Float = -50
     private static let loudDb: Float = -10

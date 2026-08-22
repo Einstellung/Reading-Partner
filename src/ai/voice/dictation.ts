@@ -46,6 +46,13 @@ export interface DictationTiming {
   // True when the microphone was inherited from the previous hold instead of
   // built for this one. Only a reusing profile can say true.
   reused: boolean;
+  // Why it was built rather than inherited, on a profile that asked to inherit
+  // it; null when it was inherited and null on the profiles that never keep one.
+  reuseSkipped: string | null;
+  // Where the indicator probe was standing when the finger went down (see
+  // src/smoke/indicator-probe.ts). Anything but "off", "never" and "unread" is a
+  // press the plugin refused: a parked probe holds the microphone.
+  probeStage: string;
   // Milliseconds from the press to each step of the start: session,
   // voiceProcessing, microphoneFormat, capturing, firstBuffer, running and the
   // recognizer's own steps between them.

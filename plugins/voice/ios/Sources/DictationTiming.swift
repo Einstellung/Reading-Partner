@@ -12,8 +12,10 @@
 //
 // Nothing here can carry what the user said, and nothing here may be made able
 // to. The steps are milliseconds, the pre-roll is a count and two durations, the
-// echo canceller's answer is two booleans. Same rule as the result log in
-// DictationRun.handle: shape and timing, never the words.
+// echo canceller's answer is two booleans. The two strings are a stage name from
+// an enum and one of a handful of sentences written in AudioFront; neither is
+// built from anything a press produced, and neither may become so. Same rule as
+// the result log in DictationRun.handle: shape and timing, never the words.
 
 import Foundation
 
@@ -46,6 +48,19 @@ struct DictationTiming: Encodable {
     /// them that quietly rebuilt every time would otherwise read as "reuse does
     /// not help".
     let reused: Bool
+    /// Why the microphone was built rather than inherited, on a profile that
+    /// asked to inherit it. Nil when it was inherited and nil on the profiles
+    /// that never keep one. It exists because the round of 2026-08-22 came back
+    /// with `reused` false on all ten holds that had asked for it and no way to
+    /// tell from the file why (docs/pitfall/168) — a false with nothing beside
+    /// it is the silent failure this pair is against.
+    let reuseSkipped: String?
+    /// Where the indicator probe was standing when the finger went down:
+    /// `never` if nothing has probed in this process, `off` if something did and
+    /// put it back, `unread` on a press that never reached the microphone, and
+    /// otherwise the stage it was parked on — which is a press that was refused,
+    /// because a parked probe and a hold cannot share the microphone.
+    let probeStage: String
     /// Milliseconds from the press to each step of the start.
     let steps: [String: Double]
     /// Milliseconds from the release to each step of the teardown. A different
@@ -58,7 +73,8 @@ struct DictationTiming: Encodable {
     let echoCancelledInput: EchoCancelledInput?
 
     enum CodingKeys: String, CodingKey {
-        case profile, reused, steps, teardown, preroll, echoCancelledInput
+        case profile, reused, reuseSkipped, probeStage, steps, teardown, preroll
+        case echoCancelledInput
     }
 
     /// Written by hand for one reason: a synthesised encoding leaves a nil
@@ -69,6 +85,8 @@ struct DictationTiming: Encodable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(profile, forKey: .profile)
         try container.encode(reused, forKey: .reused)
+        try container.encode(reuseSkipped, forKey: .reuseSkipped)
+        try container.encode(probeStage, forKey: .probeStage)
         try container.encode(steps, forKey: .steps)
         try container.encode(teardown, forKey: .teardown)
         try container.encode(preroll, forKey: .preroll)
@@ -99,6 +117,11 @@ final class TimingLog {
     private var preroll: DictationTiming.Preroll?
     private var echo: DictationTiming.EchoCancelledInput?
     private var reused = false
+    private var reuseSkipped: String?
+    /// Until the front end is reached there is nothing to report: a press that
+    /// failed on the permission prompt never asked where the probe was, and
+    /// saying `never` for it would be an answer nobody measured.
+    private var probeStage = "unread"
 
     /// Logs the step and keeps it. Both roads from one call, so a step can never
     /// reach one and not the other.
@@ -144,6 +167,20 @@ final class TimingLog {
         lock.unlock()
     }
 
+    /// The reason the fast path was not taken. One of a handful of sentences
+    /// written in AudioFront, never anything the press produced.
+    func recordReuseSkipped(_ reason: String) {
+        lock.lock()
+        reuseSkipped = reason
+        lock.unlock()
+    }
+
+    func recordProbeStage(_ value: String) {
+        lock.lock()
+        probeStage = value
+        lock.unlock()
+    }
+
     /// Everything gathered so far. Read once, when the hold is over, and safe on
     /// a run that never got past its first step: what it did reach is there and
     /// the rest is simply absent, which is itself the measurement when a start
@@ -154,6 +191,8 @@ final class TimingLog {
         return DictationTiming(
             profile: profile.rawValue,
             reused: reused,
+            reuseSkipped: reuseSkipped,
+            probeStage: probeStage,
             steps: steps,
             teardown: teardownSteps,
             preroll: preroll,
