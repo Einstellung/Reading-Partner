@@ -670,9 +670,9 @@ function Instructions() {
         rough one, so set it to what you are about to speak.
       </p>
       <p className="m-0">
-        Under it is the audio setting the next press uses. Hold five times on one before moving to
-        the next; the second and later presses are the interesting ones, because that is where
-        keeping the engine can show. Every line here and in the file says which one it ran on.
+        The microphone is built by the first hold and kept for the ones after it, so the second and
+        later presses are the quick ones. Every line says whether it got a kept microphone or built
+        its own.
       </p>
       <p className="m-0">
         Behind <b>Indicator probe</b> is a row that parks the audio stack at one step and leaves it

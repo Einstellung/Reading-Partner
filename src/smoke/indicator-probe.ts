@@ -70,7 +70,7 @@ export function probeRefusedTheHold(
 /// the action that does the damage; it says the run is over.
 export const PROBE_ENDS_THE_RUN =
   "The probe has had the audio stack. The next hold is refused and puts it back to nothing — " +
-  "the holds before it are not a run any more. Start the profile over after that.";
+  "the holds before it are not a run any more. Start the run over after that.";
 
 /// The same fact, sized for a row in the list.
 export const PROBE_REFUSED_THE_HOLD =
