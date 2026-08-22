@@ -1,30 +1,39 @@
 // The microphone itself, held apart from the hold that listens to it.
 //
-// It exists because of one measurement. Press to first audio buffer is
-// 1090-1315 ms on an iPhone 16 running iOS 26.6, and two lines hold most of it:
-// `setVoiceProcessingEnabled(true)`, which rebuilds the whole IO unit, and
-// `engine.start()` on the unit it rebuilt. The first read of the hardware
-// format is not one of them — 0-12 ms in all 21 holds of 2026-08-22 — and an
-// earlier note here that billed it alongside the rebuild was wrong. The second,
-// third and fifth press cost the same as the first, which is the tell: the
-// engine was torn down between them and rebuilt from nothing every time.
+// Its lifetime is one voice mode, not one press. The first hold of a voice mode
+// builds the session, the voice-processing IO unit, the engine and the tap; the
+// holds after it inherit all four. Measured on an iPhone 16 running iOS 26.6,
+// 28 holds: press to first audio buffer is 1082 ms (490-1277) when the stack is
+// rebuilt every time and 304 ms (120-316) when it is inherited, and the head of
+// a short sentence survives 9 times out of 9 on the second number against 2 out
+// of 13 on the first. The rebuild is `setVoiceProcessingEnabled(true)` plus the
+// `engine.start()` on the unit it rebuilds; reading the hardware format is not
+// part of it (0-12 ms in every hold).
 //
-// So the engine, the session and the tap moved out of DictationRun, whose
-// lifetime is one press, and into an object whose lifetime is the process. What
-// a press does to it is now a parameter — see AudioProfile — and one build can
-// be held five times on each setting and the numbers compared. Nothing here
-// picks a winner; `current` reproduces exactly what the shipping path did when
-// this file was written, and it is the default everywhere the frontend does not
-// say otherwise.
+// What is kept between holds is kept with `pause()`, never `stop()`: Apple
+// documents `stop()` as releasing the resources `prepare()` allocated, which is
+// the rebuild the next press would then pay for again. The tap stays installed
+// with nothing behind it and its buffers are dropped at a nil sink.
 //
-// Every profile is measured with the same `RP-DICT <step> +<n>ms` lines the run
-// already emitted, at the same names, so a log from before this file and a log
-// from after it line up column for column. `session` still means "the audio
-// session is active", `capturing` still means "the engine is running with a tap
-// on it". What is new is the three between them — `inputNode`,
-// `voiceProcessing` and `microphoneFormat` — one line each, which is what tells
-// the IO unit's rebuild apart from the input unit's first instantiation and
-// from the format read that used to be blamed with both.
+// The cost is the orange indicator. It lights at `engine.start()` and not at
+// `setActive(true)` (docs/pitfall/167), so it is lit for as long as the engine
+// is kept — from the user's first word to the moment they leave voice mode.
+// That is why nothing here warms the engine up on the way into voice mode, and
+// why `close()` exists and is called the instant voice mode ends: the indicator
+// has to go out with it.
+//
+// Nothing releases the engine for idleness. A user who stops to think, to read
+// an answer, or to scroll comes back to an inherited microphone; an idle timer
+// would make exactly that pause the most expensive thing they can do.
+//
+// iOS takes the microphone back on its own, and the window in which it can do so
+// is now the whole voice mode rather than one press. Three notifications below
+// answer for that: an interruption beginning, an input route that went empty,
+// and the app leaving the screen — which is the one a locked screen gives,
+// because a locked screen backgrounds the app without ever posting an
+// interruption (docs/pitfall/162). Parked, any of them tears the stack down and
+// the next press rebuilds. Mid-hold, they only refuse the keep: the run owns its
+// own teardown, and what would be kept is exactly what just broke.
 //
 // One rule this file enforces rather than describes: the indicator probe below
 // and a hold cannot share a run. Every probe call, `off` included, tears the
@@ -40,57 +49,14 @@
 // only lock the tap callback takes. They are always taken in that order and
 // never the other way round, which is what keeps `engine.pause()` — a call that
 // waits for the audio thread to come to rest — from waiting on a tap callback
-// that is itself waiting for the lock the pauser holds.
+// that is itself waiting for the lock the pauser holds. The notification
+// handlers take `lock` on a queue of their own, never on the thread the
+// notification arrived on and never on the main one, so a teardown that takes
+// half a second cannot land in the middle of a frame.
 
 import AVFoundation
 import Foundation
-
-/// What a press is allowed to reuse and which echo canceller it runs.
-///
-/// Two independent choices, so four cases:
-///
-///   engine     `current` and `echoCancelledInput` tear the engine down when the
-///              finger lifts, the way the shipping path always did.  `reuse` and
-///              `reuseEchoCancelledInput` keep it — `pause()` rather than
-///              `stop()`, because Apple documents `stop()` as releasing the
-///              resources `prepare()` allocated and `pause()` as keeping them.
-///              The session stays active too, which is the cost: whatever the
-///              orange indicator answers to an active session, it answers
-///              between holds as well.
-///   canceller  `current` and `reuse` use the voice-processing IO unit, whose
-///              reference signal is by construction what this app plays.
-///              `echoCancelledInput` and `reuseEchoCancelledInput` ask the
-///              session for `setPrefersEchoCancelledInput(true)` instead, which
-///              Apple says "does not require explicit voice processing
-///              configuration" — and which therefore skips the IO unit rebuild.
-///              Worth 300-450 ms of the press when it was measured on
-///              2026-08-22. It is iOS 18.2 and later on iPhones from
-///              2024 on, it is available only under `.playAndRecord` with mode
-///              `.default`, and asking for it is not the same as getting it:
-///              `isEchoCancelledInputEnabled` is the system's answer and it is
-///              logged rather than assumed.
-enum AudioProfile: String {
-    case current
-    case reuse
-    case echoCancelledInput
-    case reuseEchoCancelledInput
-
-    /// Anything unrecognised is the shipping path. The tag crosses the webview
-    /// boundary as a bare string and a build that does not know a newer name
-    /// should measure the baseline, not refuse to record.
-    static func parse(_ tag: String?) -> AudioProfile {
-        guard let tag = tag, let profile = AudioProfile(rawValue: tag) else { return .current }
-        return profile
-    }
-
-    var keepsEngine: Bool {
-        self == .reuse || self == .reuseEchoCancelledInput
-    }
-
-    var usesVoiceProcessing: Bool {
-        self == .current || self == .reuse
-    }
-}
+import UIKit
 
 /// How far up the audio stack the indicator probe stops, and stays.
 ///
@@ -135,13 +101,20 @@ struct IndicatorProbeState: Encodable {
 /// on either side of the hand-off are the same shape and measured from the same
 /// zero — the moment the finger went down.
 ///
+/// The line is a debug build's only. The numbers themselves are not: they go to
+/// the webview on every build through DictationTiming, which is what the bench
+/// reads and writes to the device. A shipping build has nothing to say to the
+/// system log about how long a press took.
+///
 /// Returns what it printed, so that TimingLog can keep the same number without
 /// reading the clock a second time and disagreeing with the log by a hair. The
 /// result is not discardable: a step worth a line is a step worth keeping, and
 /// the compiler asking about it is how the two roads stay in step.
 func markStep(_ step: String, since start: CFAbsoluteTime) -> Double {
     let ms = (CFAbsoluteTimeGetCurrent() - start) * 1000
-    NSLog("RP-DICT %@ +%.0fms", step, ms)
+    #if DEBUG
+        NSLog("RP-DICT %@ +%.0fms", step, ms)
+    #endif
     return ms
 }
 
@@ -157,14 +130,14 @@ func describeFormat(_ format: AVAudioFormat) -> String {
 final class AudioFront {
     /// One microphone, one process. A second engine on the same session is the
     /// failure that leaves a microphone open with nobody listening, and the
-    /// whole point of `reuse` is that something outlives the press.
+    /// whole point of keeping one is that something outlives the press.
     static let shared = AudioFront()
 
     /// What `open` hands back: the engine, which the caller watches for
     /// reconfiguration and re-reads the input format from once the recogniser is
     /// up, and the format the tap was installed with. Whether this press paid
-    /// for the build or inherited it is in the log, not here — nothing in a run
-    /// behaves differently for it.
+    /// for the build or inherited it is in the timing, not here — nothing in a
+    /// run behaves differently for it.
     struct Opened {
         let engine: AVAudioEngine
         let format: AVAudioFormat
@@ -172,11 +145,19 @@ final class AudioFront {
 
     private let lock = NSLock()
     private var engine: AVAudioEngine?
-    private var openProfile: AudioProfile?
     private var format: AVAudioFormat?
     private var tapInstalled = false
     private var sessionActive = false
     private var stage: IndicatorStage = .off
+
+    /// True between `open` and `release`: a run has the microphone right now and
+    /// owns its teardown. What the notification handlers may do depends on it.
+    private var holding = false
+    /// Set when one of them fired while a run had the microphone. The release
+    /// then tears down whatever the run asked for, because what it wanted kept is
+    /// the thing that broke.
+    private var lostDuringHold = false
+
     /// Whether anything has asked for a probe in this process. `off` and "never
     /// probed" leave the same state behind and are not the same fact about a
     /// press: one of them means somebody parked the microphone and put it back.
@@ -187,7 +168,7 @@ final class AudioFront {
     /// including the one that asks for `off`, so the button that puts the probe
     /// away is itself the thing that destroys a kept engine. A press that
     /// checked the parked stage would let that one through and report a cold
-    /// build as the third hold of a reuse run (docs/pitfall/168).
+    /// build as the third hold of a run (docs/pitfall/168).
     private var probeTouchedSinceHold = false
 
     /// The one thing the audio thread reads. Guarded by its own lock and never
@@ -200,11 +181,18 @@ final class AudioFront {
     private var probeBuffers = 0
     private var probeLevel: Float = 0
 
-    private init() {}
+    /// Where the notifications are answered. Never the main queue: the answer to
+    /// one of them is a teardown, and a teardown's `setActive(false)` is worth
+    /// hundreds of milliseconds.
+    private let lifecycleQueue = DispatchQueue(label: "com.readingpartner.voice.lifecycle")
+
+    private init() {
+        observeLifecycle()
+    }
 
     // MARK: - A hold
 
-    /// Opens the microphone under `profile` and points it at `sink`.
+    /// Opens the microphone and points it at `sink`.
     ///
     /// Synchronous on purpose, like every other lock-taking helper in this
     /// plugin: taking a lock directly inside an `async` function blocks a
@@ -216,7 +204,6 @@ final class AudioFront {
     /// press produces and the steps the other half produces end up in one
     /// record, which is what the bench writes to the device (DictationTiming).
     func open(
-        profile: AudioProfile,
         pressedAt: CFAbsoluteTime,
         timing: TimingLog,
         sink: @escaping (AVAudioPCMBuffer) -> Void
@@ -251,37 +238,31 @@ final class AudioFront {
             throw DictationError(
                 "The indicator probe has had the microphone since the last hold, so this one "
                     + "was refused and the audio stack put back to nothing. The holds before it "
-                    + "are not a run any more — start the profile over from the next hold.")
+                    + "are not a run any more — start over from the next hold.")
         }
 
-        if let reused = reuseLocked(
-            profile: profile, pressedAt: pressedAt, timing: timing, sink: sink)
-        {
+        lostDuringHold = false
+        if let reused = reuseLocked(pressedAt: pressedAt, timing: timing, sink: sink) {
+            holding = true
             return reused
         }
-        return try openFreshLocked(
-            profile: profile, pressedAt: pressedAt, timing: timing, sink: sink)
+        let opened = try openFreshLocked(pressedAt: pressedAt, timing: timing, sink: sink)
+        holding = true
+        return opened
     }
 
     /// The fast path: an engine from a previous press, still built, still voice-
     /// processed, still tapped. Returns nil when there is nothing to reuse or
     /// when what there is cannot be trusted, and the caller then pays for a
-    /// fresh one — every reason is logged, because a `reuse` run that quietly
+    /// fresh one — every reason is recorded, because a voice mode that quietly
     /// rebuilt every time would read as "reuse does not help".
     private func reuseLocked(
-        profile: AudioProfile,
         pressedAt: CFAbsoluteTime,
         timing: TimingLog,
         sink: @escaping (AVAudioPCMBuffer) -> Void
     ) -> Opened? {
-        guard profile.keepsEngine else { return nil }
         guard let engine = engine, let format = format, tapInstalled, sessionActive else {
             timing.recordReuseSkipped("nothing was standing to reuse")
-            return nil
-        }
-        guard openProfile == profile else {
-            timing.recordReuseSkipped(
-                "what was standing belonged to \(openProfile?.rawValue ?? "no profile")")
             return nil
         }
 
@@ -302,10 +283,9 @@ final class AudioFront {
         setSink(sink)
         // Marked before the restart rather than after it: on this path the
         // session never went inactive and the IO unit was never rebuilt, so
-        // these three are what the press inherited and not what it paid for.
+        // these four are what the press inherited and not what it paid for.
         // What restarting a paused engine costs then stands on its own, as
-        // `capturing` minus `microphoneFormat`, which is the number `reuse` is
-        // being run to find out.
+        // `capturing` minus `microphoneFormat`.
         timing.mark("session", since: pressedAt)
         timing.mark("inputNode", since: pressedAt)
         timing.mark("voiceProcessing", since: pressedAt)
@@ -327,63 +307,48 @@ final class AudioFront {
             return nil
         }
 
-        if !profile.usesVoiceProcessing {
-            // Apple: the enabled state may change when the route changes to one
-            // that cannot do it, a headset being the example. A kept session is
-            // exactly where that goes unnoticed, so it is re-read rather than
-            // remembered from the press that configured it.
-            reportEchoCancelledInput(AVAudioSession.sharedInstance(), to: timing)
-        }
         timing.recordReuse(true)
-        NSLog("RP-DICT front reused profile=%@", profile.rawValue)
+        NSLog("RP-DICT front reused")
         return Opened(engine: engine, format: format)
     }
 
-    /// The slow path, and the one every `current` press takes. This is the
+    /// The slow path, which the first hold of a voice mode takes. This is the
     /// sequence the timings above were measured on, and the order is load-
     /// bearing: voice processing before any format is read, the format read
     /// before the tap, the tap before `prepare()`, and `mainMixerNode` touched
     /// by nobody (docs/pitfall/133).
     private func openFreshLocked(
-        profile: AudioProfile,
         pressedAt: CFAbsoluteTime,
         timing: TimingLog,
         sink: @escaping (AVAudioPCMBuffer) -> Void
     ) throws -> Opened {
         teardownLocked()
 
-        try configureSessionLocked(profile, timing: timing)
+        try configureSessionLocked()
         timing.mark("session", since: pressedAt)
 
         let engine = AVAudioEngine()
         self.engine = engine
         // The first read of `inputNode` is where the input audio unit is
-        // instantiated and the hardware asked about itself, and on the profiles
-        // that skip voice processing it is the whole of the step that used to
-        // sit between `session` and `voiceProcessing` — 14 ms in one hold and
-        // 372 ms in the next, with nothing else in there to explain the
-        // difference. It gets its own mark so that `voiceProcessing` means one
-        // line and this means the other.
+        // instantiated and the hardware asked about itself. It gets its own mark
+        // so that `voiceProcessing` means one line and this means the other.
         let input = engine.inputNode
         timing.mark("inputNode", since: pressedAt)
 
-        if profile.usesVoiceProcessing {
-            do {
-                try input.setVoiceProcessingEnabled(true)
-            } catch {
-                throw DictationError(
-                    "The microphone could not be prepared: \(DictationError.describe(error))")
-            }
+        do {
+            try input.setVoiceProcessingEnabled(true)
+        } catch {
+            throw DictationError(
+                "The microphone could not be prepared: \(DictationError.describe(error))")
         }
         timing.mark("voiceProcessing", since: pressedAt)
 
-        // Read after the session is active and voice processing is decided: both
+        // Read after the session is active and voice processing is on: both
         // change what the input node reports. This one read is the format the tap
         // is installed with, the format the pre-roll holds, and later the
         // converter's input side. It is not where the time goes: 0-12 ms in
-        // every one of the 21 holds of 2026-08-22, on both the profiles that
-        // rebuild the IO unit and the ones that do not. The line above it and
-        // `startLocked` below it are what the press pays for.
+        // every hold ever measured. The line above it and `startLocked` below it
+        // are what a cold press pays for.
         let hardwareFormat = input.outputFormat(forBus: 0)
         NSLog("RP-DICT microphone=%@", describeFormat(hardwareFormat))
         timing.mark("microphoneFormat", since: pressedAt)
@@ -403,30 +368,28 @@ final class AudioFront {
         try startLocked(engine)
 
         self.format = hardwareFormat
-        openProfile = profile
         timing.recordReuse(false)
-        NSLog("RP-DICT front built profile=%@", profile.rawValue)
+        NSLog("RP-DICT front built")
         return Opened(engine: engine, format: hardwareFormat)
     }
 
-    /// Lets go of the microphone at the end of a hold.
+    /// Lets go of the microphone at the end of a hold, and keeps it standing for
+    /// the next one.
     ///
-    /// `keep` is the caller's judgement, not this object's: a profile that
-    /// reuses says yes, and a run whose session was interrupted or whose route
-    /// went away says no however it was configured, because what would be kept
-    /// is exactly the thing that just broke.
-    func release(profile: AudioProfile, keep: Bool) {
+    /// `keep` is the caller's judgement about its own run: a run whose session
+    /// was interrupted or whose route went away says no, because what would be
+    /// kept is exactly the thing that just broke. This object overrules it in one
+    /// direction only — never into keeping something a notification said was
+    /// gone.
+    func release(keep: Bool) {
         lock.lock()
         defer { lock.unlock() }
 
+        holding = false
         setSink(nil)
-        // `openProfile == profile` is the part that is not the caller's opinion:
-        // a run that failed before it opened anything is still asked to release,
-        // and if what is standing belongs to some other profile then nobody is
-        // going to come back for it. Tearing down is the safe half of that
-        // choice — the cost is one rebuild, and the alternative is a microphone
-        // left open with nobody listening.
-        guard keep, profile.keepsEngine, openProfile == profile, let engine = engine else {
+        let lost = lostDuringHold
+        lostDuringHold = false
+        guard keep, !lost, let engine = engine else {
             teardownLocked()
             return
         }
@@ -435,7 +398,104 @@ final class AudioFront {
         // pay for again. The tap stays installed with nothing behind it; buffers
         // that arrive before the next press find a nil sink and are dropped.
         engine.pause()
-        NSLog("RP-DICT front paused profile=%@ session=active", profile.rawValue)
+        NSLog("RP-DICT front paused session=active")
+    }
+
+    /// Voice mode is over. Everything goes, now — the orange indicator has been
+    /// lit since the user's first word and it has to go out with the bar that
+    /// explained it. Safe to call with nothing standing, and safe to call twice.
+    func close() {
+        lock.lock()
+        defer { lock.unlock() }
+
+        holding = false
+        lostDuringHold = false
+        guard engine != nil || sessionActive else { return }
+        NSLog("RP-DICT front closed")
+        teardownLocked()
+    }
+
+    // MARK: - What iOS takes back
+
+    /// The three ways the microphone stops being ours without anybody pressing
+    /// anything. Registered once, for the life of the process: the stack they
+    /// answer for now outlives every run, so a per-run subscription would leave
+    /// the parked window uncovered — which is the window that got longer.
+    private func observeLifecycle() {
+        let center = NotificationCenter.default
+        let session = AVAudioSession.sharedInstance()
+
+        center.addObserver(
+            forName: AVAudioSession.interruptionNotification, object: session, queue: nil
+        ) { [weak self] note in
+            guard
+                let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                let type = AVAudioSession.InterruptionType(rawValue: raw),
+                type == .began
+            else { return }
+            // Only `.began` is acted on. Nothing here resumes on `.ended`: iOS
+            // refuses to start recording from the background (docs/33), and a
+            // press is what the next microphone waits for.
+            self?.lose("an interruption began")
+        }
+
+        center.addObserver(
+            forName: AVAudioSession.routeChangeNotification, object: session, queue: nil
+        ) { [weak self] _ in
+            self?.loseIfInputRouteWentAway()
+        }
+
+        // A locked screen backgrounds the app and takes the input route with it
+        // without ever posting an interruption (docs/pitfall/162). It is also
+        // the app switcher, and either way a kept engine is about to be one iOS
+        // has stopped feeding — with the indicator still lit over it.
+        center.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: nil
+        ) { [weak self] _ in
+            self?.lose("the app left the screen")
+        }
+    }
+
+    private func lose(_ why: String) {
+        lifecycleQueue.async { [weak self] in
+            guard let self = self else { return }
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            self.loseLocked(why)
+        }
+    }
+
+    /// An empty input route is the microphone going away, and on a locked screen
+    /// it is the only notice given (docs/pitfall/162).
+    ///
+    /// The route is re-read here rather than taken from the notification: it also
+    /// changes on the way in, while the session is being configured, and it is
+    /// legitimately empty for part of that. By the time this runs, whoever was
+    /// building has finished and the route is whatever it settled on.
+    private func loseIfInputRouteWentAway() {
+        lifecycleQueue.async { [weak self] in
+            guard let self = self else { return }
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            guard AVAudioSession.sharedInstance().currentRoute.inputs.isEmpty else { return }
+            self.loseLocked("the input route went away")
+        }
+    }
+
+    private func loseLocked(_ why: String) {
+        if holding {
+            // A run has the microphone and owns its own teardown — it hears the
+            // same interruption and the same route change and stops itself. All
+            // this may do is refuse the keep, so the release that follows does
+            // not park something iOS has already taken.
+            guard !lostDuringHold else { return }
+            lostDuringHold = true
+            NSLog("RP-DICT front will not keep this hold's microphone: %@", why)
+            return
+        }
+        guard engine != nil || sessionActive else { return }
+        NSLog("RP-DICT front let a parked microphone go: %@", why)
+        teardownLocked()
     }
 
     // MARK: - The indicator probe
@@ -447,7 +507,7 @@ final class AudioFront {
     ///
     /// Always torn down first, so each stage is entered from nothing and the
     /// indicator's state is the state of that stage and not of its predecessor.
-    /// Configured as the shipping path configures itself — `.playAndRecord`,
+    /// Configured the way a hold configures itself — `.playAndRecord`,
     /// `.voiceChat`, voice processing on — because the question is about what
     /// this app does, not about what is cheapest.
     func setIndicatorProbe(_ wanted: IndicatorStage) throws -> IndicatorProbeState {
@@ -455,10 +515,12 @@ final class AudioFront {
         defer { lock.unlock() }
 
         teardownLocked()
+        holding = false
+        lostDuringHold = false
         // Both set before the early return below, so that asking for `off`
         // counts. That call tears the stack down like every other one, which is
         // exactly why "put it back on Off" cannot be what a press waits for: the
-        // engine a reusing profile was keeping is gone by then either way.
+        // engine a voice mode was keeping is gone by then either way.
         probeEverSet = true
         probeTouchedSinceHold = true
         sinkLock.lock()
@@ -473,7 +535,7 @@ final class AudioFront {
         // Nobody releases a probe the way a run releases a hold, so anything
         // half-configured has to be cleaned up here or it stays that way.
         do {
-            try configureSessionLocked(.current, timing: nil)
+            try configureSessionLocked()
         } catch {
             teardownLocked()
             throw error
@@ -577,32 +639,17 @@ final class AudioFront {
 
     // MARK: - Session
 
-    private func configureSessionLocked(_ profile: AudioProfile, timing: TimingLog?) throws {
+    /// `.voiceChat` is the mode the voice-processing unit wants, and it sets HFP
+    /// itself, so no Bluetooth option here. `.defaultToSpeaker` is what puts
+    /// playback on the speaker, which is the echo the unit is there to cancel.
+    private func configureSessionLocked() throws {
         let session = AVAudioSession.sharedInstance()
         do {
-            if profile.usesVoiceProcessing {
-                // .voiceChat is the mode the voice-processing unit wants, and it
-                // sets HFP itself, so no Bluetooth option here.
-                try session.setCategory(
-                    .playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker])
-            } else {
-                // Both halves are required by setPrefersEchoCancelledInput and
-                // neither is negotiable: Apple documents the flag as valid "only
-                // when used with .playAndRecord category and .default mode".
-                // Nothing is said about options, and .defaultToSpeaker is what
-                // puts playback on the speaker — which is the echo this is
-                // asking to have cancelled. Whether the system honoured any of
-                // it is read back below rather than assumed.
-                try session.setCategory(
-                    .playAndRecord, mode: .default, options: [.defaultToSpeaker])
-            }
+            try session.setCategory(
+                .playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker])
         } catch {
             throw DictationError(
                 "The microphone is in use by something else: \(DictationError.describe(error))")
-        }
-
-        if !profile.usesVoiceProcessing {
-            preferEchoCancelledInput(session, when: "configured")
         }
 
         do {
@@ -612,46 +659,6 @@ final class AudioFront {
                 "The microphone is in use by something else: \(DictationError.describe(error))")
         }
         sessionActive = true
-
-        if !profile.usesVoiceProcessing {
-            // Asked again after activation, and logged either way. Availability
-            // is a property of the current route, which activation is what
-            // settles; and asking for the flag is not the same as being given
-            // it, so what the system says afterwards is the measurement.
-            if !session.isEchoCancelledInputEnabled {
-                preferEchoCancelledInput(session, when: "activated")
-            }
-            reportEchoCancelledInput(session, to: timing)
-        }
-    }
-
-    /// What the system says about echo cancellation, logged and kept. Both
-    /// halves are read here rather than assumed anywhere: availability is a
-    /// property of the current route, and a phone that was asked is not a phone
-    /// that agreed.
-    private func reportEchoCancelledInput(_ session: AVAudioSession, to timing: TimingLog?) {
-        let available = session.isEchoCancelledInputAvailable
-        let enabled = session.isEchoCancelledInputEnabled
-        NSLog(
-            "RP-DICT echoCancelledInput available=%d enabled=%d",
-            available ? 1 : 0, enabled ? 1 : 0)
-        timing?.recordEchoCancelledInput(available: available, enabled: enabled)
-    }
-
-    /// Asks for echo cancellation without the voice-processing IO unit. Never
-    /// fatal: a phone that refuses is a phone whose hold runs without echo
-    /// cancellation, which is a worse recording and a perfectly good
-    /// measurement, and the log says which one happened.
-    private func preferEchoCancelledInput(_ session: AVAudioSession, when: String) {
-        let available = session.isEchoCancelledInputAvailable
-        do {
-            try session.setPrefersEchoCancelledInput(true)
-            NSLog("RP-DICT echoCancelledInput asked=%@ available=%d", when, available ? 1 : 0)
-        } catch {
-            NSLog(
-                "RP-DICT echoCancelledInput refused=%@ available=%d: %@",
-                when, available ? 1 : 0, DictationError.describe(error))
-        }
     }
 
     // MARK: - Engine
@@ -699,7 +706,6 @@ final class AudioFront {
         tapInstalled = false
         self.engine = nil
         format = nil
-        openProfile = nil
         if sessionActive {
             do {
                 try AVAudioSession.sharedInstance().setActive(

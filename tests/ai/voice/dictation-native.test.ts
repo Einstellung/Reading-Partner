@@ -1,4 +1,4 @@
-// The wire contract with the iOS voice plugin: three command strings, two
+// The wire contract with the iOS voice plugin: four command strings, two
 // argument keys, one plugin event name, and the `{transcript}` return shape.
 // None of it is checked by anything else — nativeDictation() answers null off
 // iOS, so under bun the class is never built — and every one of these strings
@@ -14,6 +14,7 @@
 import { expect, test } from "bun:test";
 import {
   createNativeDictation,
+  releaseDictationMicrophone,
   type DictationBridge,
   type DictationEvent,
 } from "../../../src/ai/voice/dictation";
@@ -90,21 +91,7 @@ test("both start arguments are undefined when the composer omits them", async ()
   const args = b.calls[0].args as Record<string, unknown>;
   expect(args.locale).toBeUndefined();
   expect(args.contextualStrings).toBeUndefined();
-  expect(args.audioProfile).toBeUndefined();
   expect(JSON.stringify(args)).toBe("{}");
-});
-
-// The audio profile is a measurement knob the bench sets and nothing else
-// touches. It reaches the plugin the same way the locale does and under a key
-// that no compiler compares against the Swift property it is decoded into.
-test("the chosen audio profile is what the start command carries", async () => {
-  const b = bridge();
-  const source = createNativeDictation({ audioProfile: "reuseEchoCancelledInput" }, b.it);
-  await source.start(() => {});
-
-  expect((b.calls[0].args as Record<string, unknown>).audioProfile).toBe(
-    "reuseEchoCancelledInput",
-  );
 });
 
 test("events reach the callback as the payload itself", async () => {
@@ -199,4 +186,31 @@ test("no locale means the key is absent rather than null", async () => {
   const args = b.calls[0].args as Record<string, unknown>;
   expect("locale" in args && args.locale !== undefined).toBe(false);
   expect(JSON.stringify(args)).toBe('{"contextualStrings":["Transformer"]}');
+});
+
+// --- letting the microphone go ----------------------------------------------
+//
+// The native side keeps the session, the engine and the tap standing between
+// holds, and the orange indicator is lit for as long as it does. Nothing but
+// this command puts it out, so the command name is load-bearing in a way the
+// others are not: a typo in `stop_dictation` shows up as a hold that will not
+// finish, and a typo here shows up as an indicator that stays on after the user
+// has gone back to the keyboard.
+//
+// Off iOS it is not sent at all. `hasOnDeviceDictation()` is false under bun,
+// which is what these two tests are standing on, and it is the same gate the bar
+// itself is behind.
+test("releasing the microphone is one command and carries no arguments", async () => {
+  const b = bridge();
+  await releaseDictationMicrophone(b.it);
+  expect(b.calls).toEqual([{ command: "plugin:voice|release_microphone", args: undefined }]);
+});
+
+test("a release that the host rejects is swallowed", async () => {
+  const b = bridge({
+    "plugin:voice|release_microphone": new Error("Dictation is not available."),
+  });
+  // It runs in an unmount cleanup, where a rejection has nowhere to go and would
+  // surface as an unhandled promise instead.
+  await releaseDictationMicrophone(b.it);
 });

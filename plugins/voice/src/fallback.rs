@@ -31,9 +31,14 @@ impl<R: Runtime> Voice<R> {
         &self,
         _locale: Option<String>,
         _contextual_strings: Option<Vec<String>>,
-        _audio_profile: Option<String>,
     ) -> crate::Result<()> {
         Err(Error::Unsupported(UNSUPPORTED.to_string()))
+    }
+
+    /// Nothing to let go of, and saying so would be noise: the composer calls
+    /// this whenever voice mode ends, on every host that reaches the code.
+    pub async fn release_microphone(&self) -> crate::Result<()> {
+        Ok(())
     }
 
     /// Rejecting, like the start above: the bench shows whatever comes back as

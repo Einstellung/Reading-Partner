@@ -58,7 +58,6 @@ test("a timing event is not a fourth thing the transcript has to fold", () => {
   const timing = {
     kind: "timing",
     timing: {
-      profile: "current",
       reused: false,
       reuseSkipped: null,
       probeStage: "never",
@@ -66,7 +65,6 @@ test("a timing event is not a fourth thing the transcript has to fold", () => {
       steps: { firstBuffer: 1040 },
       teardown: { released: 2 },
       preroll: null,
-      echoCancelledInput: null,
     },
   } as const satisfies DictationEvent;
   expect(assembleTranscript([{ kind: "final", text: "One." }, timing])).toBe("One.");

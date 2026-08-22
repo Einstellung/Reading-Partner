@@ -30,15 +30,8 @@ pub(crate) async fn start_dictation<R: Runtime>(
     // Proper nouns to bias recognition towards. Capped and truncated natively;
     // the composer sends an uncapped `glossary.split('\n')`.
     contextual_strings: Option<Vec<String>>,
-    // Which audio front end to open the microphone on: `current`, `reuse`,
-    // `echoCancelledInput` or `reuseEchoCancelledInput`. Absent everywhere but
-    // the bench, and an unknown name is `current`, so this argument can only
-    // change a hold that asked for something.
-    audio_profile: Option<String>,
 ) -> Result<()> {
-    app.voice()
-        .start_dictation(locale, contextual_strings, audio_profile)
-        .await
+    app.voice().start_dictation(locale, contextual_strings).await
 }
 
 /// Finish, flush what the recogniser was still holding, and hand back
@@ -54,6 +47,15 @@ pub(crate) async fn stop_dictation<R: Runtime>(app: AppHandle<R>) -> Result<Stop
 #[command]
 pub(crate) async fn cancel_dictation<R: Runtime>(app: AppHandle<R>) -> Result<()> {
     app.voice().cancel_dictation().await
+}
+
+/// Let the microphone go: voice mode is over. Whatever was being kept for the
+/// next hold is torn down and the orange indicator goes out with it. Resolves on
+/// a host with no microphone stack too — the composer calls it on its way out and
+/// has nowhere to show a rejection.
+#[command]
+pub(crate) async fn release_microphone<R: Runtime>(app: AppHandle<R>) -> Result<()> {
+    app.voice().release_microphone().await
 }
 
 /// Leave the audio stack standing at one step — session active, engine running,

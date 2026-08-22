@@ -1,12 +1,13 @@
 ## Default Permission
 
-Dictate on the device: start, stop and cancel a hold, subscribe to the dictation event, and park the audio stack for the indicator probe.
+Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, and park the audio stack for the indicator probe.
 
 #### This default permission set includes the following:
 
 - `allow-start-dictation`
 - `allow-stop-dictation`
 - `allow-cancel-dictation`
+- `allow-release-microphone`
 - `allow-set-indicator-probe`
 - `allow-register-listener`
 - `allow-remove-listener`
@@ -42,6 +43,32 @@ Enables the cancel_dictation command without any pre-configured scope.
 <td>
 
 Denies the cancel_dictation command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:allow-release-microphone`
+
+</td>
+<td>
+
+Enables the release_microphone command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:deny-release-microphone`
+
+</td>
+<td>
+
+Denies the release_microphone command without any pre-configured scope.
 
 </td>
 </tr>

@@ -7,9 +7,10 @@
 // The webview side is a binding and a transcript. The commands and the event
 // name are the contract with the native side:
 //
-//   plugin:voice|start_dictation   { locale?, contextualStrings? }
-//   plugin:voice|stop_dictation    -> { transcript }
+//   plugin:voice|start_dictation      { locale?, contextualStrings? }
+//   plugin:voice|stop_dictation       -> { transcript }
 //   plugin:voice|cancel_dictation
+//   plugin:voice|release_microphone
 //   plugin event ("voice", "dictation")   payload: DictationEvent
 //
 // A DictationSource is an interface so the gesture and the transcript can be
@@ -17,7 +18,6 @@
 
 import { addPluginListener, invoke } from "@tauri-apps/api/core";
 import { hasOnDeviceDictation } from "../../platform/app/platform";
-import { chosenAudioProfile, type AudioProfile } from "./audio-profile";
 
 export type DictationEvent =
   // The tail that is not settled yet. Each one replaces the last in full — it is
@@ -41,13 +41,10 @@ export type DictationEvent =
 // Numbers and states only. There is no field it could carry speech in, which is
 // deliberate — the same rule the native side's logging follows.
 export interface DictationTiming {
-  // The audio front end the hold ran on, as the native side resolved it.
-  profile: string;
-  // True when the microphone was inherited from the previous hold instead of
-  // built for this one. Only a reusing profile can say true.
+  // True when the microphone was inherited from the hold before it instead of
+  // built for this one. False on the first hold of a voice mode.
   reused: boolean;
-  // Why it was built rather than inherited, on a profile that asked to inherit
-  // it; null when it was inherited and null on the profiles that never keep one.
+  // Why it was built rather than inherited; null when it was inherited.
   reuseSkipped: string | null;
   // Where the indicator probe was standing when the finger went down: a stage
   // name, or "never", "off", "unread" (see src/smoke/indicator-probe.ts).
@@ -71,9 +68,6 @@ export interface DictationTiming {
     droppedMs: number;
     handoverMs: number;
   } | null;
-  // The session's own answer, on the profiles that ask for echo-cancelled input;
-  // null on the ones that run the voice-processing unit instead.
-  echoCancelledInput: { available: boolean; enabled: boolean } | null;
 }
 
 export interface DictationSource {
@@ -90,10 +84,6 @@ export interface DictationOptions {
   // Proper names to bias recognition towards — the book's title and outline,
   // same glossary the desktop cleanup pass gets.
   contextualStrings?: string[];
-  // Which audio front end to open the microphone on (audio-profile.ts). Absent
-  // on every path but the bench; the native side reads an absent or unknown one
-  // as `current`, which is what the app did before the knob existed.
-  audioProfile?: AudioProfile;
 }
 
 export { hasOnDeviceDictation };
@@ -174,7 +164,7 @@ export function assembleTranscript(events: readonly DictationEvent[]): string {
 export const VOICE_PLUGIN = "voice";
 export const DICTATION_EVENT = "dictation";
 
-// The three commands and the one subscription, as parameters rather than
+// The four commands and the one subscription, as parameters rather than
 // imports. Under bun `nativeDictation()` returns null, so nothing in this file
 // below the transcript would otherwise be exercised at all — and the command
 // strings, the argument keys, the `{transcript}` shape and the event name are
@@ -207,7 +197,6 @@ class NativeDictation implements DictationSource {
       await this.bridge.invoke<void>("plugin:voice|start_dictation", {
         locale: this.options.locale,
         contextualStrings: this.options.contextualStrings,
-        audioProfile: this.options.audioProfile,
       });
     } catch (e) {
       this.drop();
@@ -251,15 +240,33 @@ const tauriBridge: DictationBridge = {
 };
 
 // The host's dictation, or null where there is none.
-// The profile is filled in here rather than in the class: a caller that named
-// one keeps it, and a caller that named none gets whatever the bench has
-// selected — which off the bench is always the baseline. createNativeDictation()
-// stays literal about its options, so the wire tests can still assert an empty
-// payload.
 export function nativeDictation(options: DictationOptions = {}): DictationSource | null {
   if (!hasOnDeviceDictation()) return null;
-  return new NativeDictation(
-    { ...options, audioProfile: options.audioProfile ?? chosenAudioProfile() },
-    tauriBridge,
-  );
+  return new NativeDictation(options, tauriBridge);
+}
+
+// Voice mode is over, so the microphone goes. The native side keeps the audio
+// stack standing between holds — that is what makes the second press of a voice
+// mode 300 ms instead of a second — and the orange indicator stays lit for as
+// long as it does. Nothing else puts it out, so this is called the moment the
+// bar goes away: back to the keyboard, out of the chat, or unmounted under the
+// user.
+//
+// Never rejects. It runs in an unmount cleanup, where there is nobody left to
+// show a failure to, and off iOS it is a no-op: hasOnDeviceDictation() is the
+// same gate the bar itself is behind.
+export async function releaseDictationMicrophone(bridge?: DictationBridge): Promise<void> {
+  // No bridge is the composer's call and the host decides, the same way
+  // nativeDictation() decides. A bridge means the caller is the transport and
+  // has decided already, which is what lets the command string be checked
+  // somewhere other than a device build.
+  const transport = bridge ?? (hasOnDeviceDictation() ? tauriBridge : null);
+  if (!transport) return;
+  try {
+    await transport.invoke<void>("plugin:voice|release_microphone");
+  } catch {
+    // The stack it would have torn down is torn down by the next thing that
+    // takes the microphone, and by the process ending. Neither is worth an
+    // error in a component that no longer exists.
+  }
 }

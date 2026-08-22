@@ -7,10 +7,12 @@
 // explicit Objective-C selector matching the snake_case command name while
 // keeping a Swift-shaped method name.
 //
-// The three commands run on one serial chain. The composer can issue a start
-// while the previous stop is still flushing — that is what its flush timeout
-// makes routine — and two runs fighting over the audio session is the one
-// failure that leaves a microphone open with nobody listening.
+// Every command runs on one serial chain. The composer can issue a start while
+// the previous stop is still flushing — that is what its flush timeout makes
+// routine — and two runs fighting over the audio session is the one failure that
+// leaves a microphone open with nobody listening. `release_microphone` is on it
+// for the same reason: it arrives right behind the cancel the composer sends
+// when voice mode ends, and it must not take the stack apart underneath it.
 
 import AVFoundation
 import Foundation
@@ -25,10 +27,6 @@ import Tauri
 class StartDictationArgs: Decodable {
     let locale: String?
     let contextualStrings: [String]?
-    /// Which audio front end to open this hold on (AudioFront.swift). Absent on
-    /// every path but the bench, and an unknown name is the shipping one, so
-    /// nothing that does not know about this argument is affected by it.
-    let audioProfile: String?
 }
 
 /// Arguments of `set_indicator_probe`. One name from IndicatorStage; anything
@@ -69,7 +67,6 @@ class VoicePlugin: Plugin {
         let args = try? invoke.parseArgs(StartDictationArgs.self)
         let locale = args?.locale
         let hints = args?.contextualStrings ?? []
-        let profile = AudioProfile.parse(args?.audioProfile)
 
         serial { [weak self] in
             guard let self = self else {
@@ -85,7 +82,7 @@ class VoicePlugin: Plugin {
                 await previous.stop()
             }
 
-            let run = DictationRun(profile: profile) { [weak self] payload in
+            let run = DictationRun { [weak self] payload in
                 self?.emit(payload)
             }
             do {
@@ -136,6 +133,34 @@ class VoicePlugin: Plugin {
             }
             NSLog("RP-DICT stop transcript=%d chars", transcript.count)
             invoke.resolve(["transcript": transcript])
+        }
+    }
+
+    /// Voice mode is over: the user went back to the keyboard, left the chat, or
+    /// the bar was unmounted under them. Whatever the microphone was keeping for
+    /// the next hold goes now, and the orange indicator goes with it — the whole
+    /// reason the engine was left standing is that the user was about to speak
+    /// again, and they are not.
+    ///
+    /// Resolves either way. It is the last thing a composer does on its way out
+    /// and there is nobody left to show a rejection to.
+    @objc(release_microphone:)
+    public func releaseMicrophone(_ invoke: Invoke) {
+        serial { [weak self] in
+            guard let self = self else {
+                invoke.resolve()
+                return
+            }
+            // A hold still in flight is torn down first rather than pulled apart
+            // from underneath. The chain makes it rare — the composer cancels
+            // before it releases — but a press that outlived its bar is exactly
+            // the case this command is the last defence for.
+            if let previous = self.takeRun() {
+                NSLog("RP-DICT voice mode ended with a run still live; stopping it")
+                await previous.stop()
+            }
+            AudioFront.shared.close()
+            invoke.resolve()
         }
     }
 

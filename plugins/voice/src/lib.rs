@@ -2,10 +2,11 @@
 // echo cancellation and SpeechAnalyzer recognition all live in Swift, under
 // ios/; this crate is the bridge and nothing else.
 //
-// Three commands and one event. `start_dictation` / `stop_dictation` /
-// `cancel_dictation` are invoked from the composer's hold-to-talk bar; the
-// `dictation` event carries `{kind:"volatile"|"final",text}` and
-// `{kind:"level",value}` and reaches the frontend as a plugin listener.
+// Four commands and one event. `start_dictation` / `stop_dictation` /
+// `cancel_dictation` are invoked from the composer's hold-to-talk bar, and
+// `release_microphone` when it goes away; the `dictation` event carries
+// `{kind:"volatile"|"final",text}`, `{kind:"level",value}` and
+// `{kind:"timing",timing}` and reaches the frontend as a plugin listener.
 
 use tauri::{
     plugin::{Builder, TauriPlugin},
@@ -55,6 +56,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::start_dictation,
             commands::stop_dictation,
             commands::cancel_dictation,
+            commands::release_microphone,
             commands::set_indicator_probe,
             commands::register_listener,
             commands::remove_listener

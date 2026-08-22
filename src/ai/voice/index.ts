@@ -22,20 +22,13 @@ export { transcribe } from "./stt";
 export { buildGlossary, cleanupTranscript, type CleanupModel, type GlossarySource } from "./cleanup";
 export { startRecording, stopRecording, cancelRecording } from "./recorder";
 export {
-  AUDIO_PROFILE_OPTIONS,
-  DEFAULT_AUDIO_PROFILE,
-  chooseAudioProfile,
-  chosenAudioProfile,
-  isAudioProfile,
-  type AudioProfile,
-} from "./audio-profile";
-export {
   EMPTY_TRANSCRIPT,
   applyDictationEvent,
   assembleTranscript,
   hasOnDeviceDictation,
   joinSpeech,
   nativeDictation,
+  releaseDictationMicrophone,
   transcriptText,
   type DictationEvent,
   type DictationOptions,

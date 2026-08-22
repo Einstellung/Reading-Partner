@@ -10,6 +10,12 @@
 // the zone hit-test and the meter in hold-zones.ts. What is left here is pointer
 // capture, the finishing timer and JSX. The overlay is a positioned child of the
 // composer, not a portal: it belongs to the bar it sits on and moves with it.
+//
+// This component's lifetime is the voice mode, and the microphone's is the same.
+// The native side keeps the audio stack standing between holds — that is what
+// makes every press after the first one 300 ms instead of a second — and the
+// orange indicator stays lit for as long as it does. Nothing but the unmount
+// below puts it out.
 
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '../ui/button';
@@ -21,6 +27,7 @@ import {
 	INITIAL_HOLD_STATE,
 	holdReducer,
 	nativeDictation,
+	releaseDictationMicrophone,
 	type DictationSource,
 	type HoldEffect,
 	type HoldEvent,
@@ -165,8 +172,18 @@ export function HoldToTalk({
 		return () => window.clearTimeout(timer);
 	}, [state.status]);
 
-	// Cancel a live recognizer if the composer goes away mid-hold.
-	useEffect(() => () => dispatchRef.current({ type: 'unmount' }), []);
+	// The bar is going away: back to the keyboard, out of the chat, or the whole
+	// composer with it. A live recognizer is cancelled first, then the microphone
+	// itself goes — the native side was keeping it for a next hold that is not
+	// coming, and the orange indicator over it has to go out now rather than
+	// whenever something else happens to want the microphone.
+	useEffect(
+		() => () => {
+			dispatchRef.current({ type: 'unmount' });
+			void releaseDictationMicrophone();
+		},
+		[],
+	);
 
 	const holding = state.status === 'arming' || state.status === 'listening';
 

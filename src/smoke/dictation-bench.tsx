@@ -30,25 +30,22 @@
 //      (docs/pitfall/164) — so without a switch only half the thing can be
 //      tried. It writes the same `dictationLocale` setting the settings card
 //      writes and the composer reads.
-//   4. An audio-profile switch and an indicator probe, which are measurement
-//      rather than product. The profile decides what the next press does to the
-//      microphone (audio-profile.ts) and applies without a remount, because
-//      nativeDictation() reads it as the hold begins; the probe parks the audio
-//      stack at one step and leaves it there so the status bar can be read
-//      (indicator-probe.ts). Both go into the file: every hold line carries its
-//      profile, where the probe was standing when the finger went down and
-//      whether one had been in the stack since the last hold, and a switch or a
-//      probe is a line of its own. The first hold after any probe call is
-//      refused by the plugin and gets a row saying so — a probe call, `off`
-//      included, tears the audio stack down, so a probe in the middle of a run
-//      of holds ends it.
+//   4. An indicator probe, which is measurement rather than product: it parks
+//      the audio stack at one step and leaves it there so the status bar can be
+//      read (indicator-probe.ts). Every hold line says where it was standing
+//      when the finger went down and whether it had been in the stack since the
+//      last hold, and a probe call is a line of its own. The first hold after
+//      any probe call is refused by the plugin and gets a row saying so — a
+//      probe call, `off` included, tears the audio stack down, so a probe in the
+//      middle of a run of holds ends it.
 //   5. The press's own segments, which the plugin sends once the hold is down
-//      and every hold line then carries — how long the session, the voice
-//      processing, the format read and the first buffer each took, what the
-//      pre-roll held, and what the phone answered about echo cancellation. The
-//      same numbers are `RP-DICT` lines in the system log, and the log is the
-//      road that broke: a whole afternoon of them was lost to a syslog stream
-//      that had died with its reader still running.
+//      and every hold line then carries — whether the microphone was inherited
+//      from the hold before it, how long the session, the voice processing, the
+//      format read and the first buffer each took, and what the pre-roll held.
+//      It is the only road on a shipping build: the `RP-DICT` lines that carry
+//      the same numbers are a debug build's only, and the log is the road that
+//      broke anyway — a whole afternoon of them was lost to a syslog stream that
+//      had died with its reader still running.
 //
 // Every row also goes into a file as it is made, one appended line each
 // (bench-journal.ts). The list on screen is state, and state is gone with the
@@ -79,12 +76,6 @@ import ReactDOM from "react-dom/client";
 import { addPluginListener } from "@tauri-apps/api/core";
 
 import { Composer } from "../ui/components/chat/chat";
-import {
-  AUDIO_PROFILE_OPTIONS,
-  DEFAULT_AUDIO_PROFILE,
-  chooseAudioProfile,
-  type AudioProfile,
-} from "../ai/voice/audio-profile";
 import {
   DICTATION_EVENT,
   VOICE_PLUGIN,
@@ -118,7 +109,6 @@ interface Entry {
   text: string;
   heard: Heard | null;
   locale: DictationLocale;
-  profile: AudioProfile;
   timing: DictationTiming | null;
 }
 
@@ -235,7 +225,6 @@ function useDictationTap(): {
 function Bench() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [locale, setLocale] = useState<DictationLocale | null>(null);
-  const [profile, setProfile] = useState<AudioProfile>(DEFAULT_AUDIO_PROFILE);
   const [switching, setSwitching] = useState(false);
   const [holding, setHolding] = useState(false);
   // Whether the probe has been in the audio stack since the last hold, mirrored
@@ -252,8 +241,6 @@ function Bench() {
   const nextId = useRef(1);
   const localeRef = useRef<DictationLocale>("zh-CN");
   localeRef.current = locale ?? "zh-CN";
-  const profileRef = useRef<AudioProfile>(DEFAULT_AUDIO_PROFILE);
-  profileRef.current = profile;
 
   // The hold being watched: when it went down, when it came up, and the timer
   // that closes it if nothing else does.
@@ -275,7 +262,6 @@ function Bench() {
         text,
         heard,
         locale: localeRef.current,
-        profile: profileRef.current,
         timing: segments,
       };
       setEntries((list) => [...list, entry]);
@@ -285,7 +271,6 @@ function Bench() {
         text: entry.text,
         heard: entry.heard,
         locale: entry.locale,
-        profile: entry.profile,
         timing: entry.timing,
       });
     },
@@ -389,16 +374,6 @@ function Bench() {
     [locale, switching],
   );
 
-  // The audio front end the next press opens the microphone on. No await and no
-  // remount: nativeDictation() reads the choice as the hold begins, so the
-  // switch lands on the next press and the composer under it never notices.
-  const pickProfile = useCallback((next: AudioProfile) => {
-    if (next === profileRef.current) return;
-    chooseAudioProfile(next);
-    setProfile(next);
-    benchJournal.profile(next);
-  }, []);
-
   // Open the file before anything can be written to it, so the rows below it
   // are known to belong to this launch and not to the one before.
   useEffect(() => {
@@ -459,8 +434,6 @@ function Bench() {
       </header>
 
       <LiveStrip holding={holding} level={level} error={error} />
-
-      <ProfileSwitch profile={profile} onPick={pickProfile} />
 
       <IndicatorProbe onTouched={() => setProbeTouched(true)} />
 
@@ -533,40 +506,6 @@ function LiveStrip({
   );
 }
 
-// The audio front end the next press will open the microphone on. Four
-// settings, one build: `current` reproduces what the app did before any of this
-// existed, and the other three are the two things that could take back the
-// second between the press and the first buffer, separately and together.
-function ProfileSwitch({
-  profile,
-  onPick,
-}: {
-  profile: AudioProfile;
-  onPick: (next: AudioProfile) => void;
-}) {
-  const note = AUDIO_PROFILE_OPTIONS.find((o) => o.value === profile)?.note ?? "";
-  return (
-    <div className="shrink-0 pt-2">
-      <div className="flex rounded-full bg-neutral-100 p-1">
-        {AUDIO_PROFILE_OPTIONS.map((o) => (
-          <button
-            key={o.value}
-            type="button"
-            onClick={() => onPick(o.value)}
-            className={
-              "min-h-11 min-w-0 flex-1 rounded-full px-2 text-[13px] font-medium transition-colors " +
-              (profile === o.value ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500")
-            }
-          >
-            {o.label}
-          </button>
-        ))}
-      </div>
-      <div className="px-2 pt-1 text-[11px] leading-snug text-neutral-500">{note}</div>
-    </div>
-  );
-}
-
 // The orange indicator, one step at a time. Each button parks the audio stack
 // somewhere and leaves it there until another is pressed, so the question is
 // answered by looking at the status bar rather than by anything on this screen.
@@ -574,10 +513,10 @@ function ProfileSwitch({
 // native state to prove it — a stage that says it installed a tap and reports no
 // buffers is a stage that did not do what it says.
 //
-// It is folded away behind one button. The five stages used to sit open under
-// the profile switch, a row of full-width targets right above the thumb, and
-// touching any of them — Off included — ends the run of holds in progress. A
-// measurement a stray tap can spoil should not be one tap away.
+// It is folded away behind one button. The five stages used to sit open above
+// the list, a row of full-width targets right above the thumb, and touching any
+// of them — Off included — ends the run of holds in progress. A measurement a
+// stray tap can spoil should not be one tap away.
 //
 // A stage is reported upwards the moment it is asked for, before the answer
 // comes back: the native side tears the stack down on its way in, so a call that
@@ -687,7 +626,11 @@ function Row({ entry }: { entry: Entry }) {
       <div className="flex flex-wrap items-baseline gap-x-2">
         <span className={"text-[13px] font-semibold " + style.tint}>{style.label}</span>
         <span className="text-[11px] text-neutral-400">{entry.locale}</span>
-        <span className="text-[11px] text-neutral-400">{entry.profile}</span>
+        {entry.timing && (
+          <span className="text-[11px] text-neutral-400">
+            {entry.timing.reused ? "reused" : "built"}
+          </span>
+        )}
         {h && (
           <span className="text-[11px] tabular-nums text-neutral-400">
             {(h.ms / 1000).toFixed(1)}s · peak {Math.round(h.peak * 100)}% · {h.finals} settled ·{" "}

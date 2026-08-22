@@ -7,8 +7,28 @@
 // The platform is mocked because it is the whole gate: hasOnDeviceDictation()
 // asks the OS plugin, and under bun there is none. Run: bun test.
 
-import { afterAll, afterEach, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, expect, mock, test } from "bun:test";
 import { useDom } from "../../support/dom";
+
+// Every invoke the composer makes, recorded. The one this file is here for is
+// the release the hold bar sends as it goes away: the native side keeps the
+// microphone standing between holds and the orange indicator with it, and
+// leaving voice mode is the only thing that puts either out.
+//
+// The real module is spread back in and put back at the end, because
+// mock.module rewrites the worker's registry and does not roll back on its own
+// (docs/pitfall/119) — and `@tauri-apps/api/core` is imported by half the app.
+const core = await import("@tauri-apps/api/core");
+const invoked: string[] = [];
+mock.module("@tauri-apps/api/core", () => ({
+  ...core,
+  invoke: async (command: string) => {
+    invoked.push(command);
+  },
+}));
+beforeEach(() => {
+  invoked.length = 0;
+});
 
 // Mutable so one file can be both hosts, and the whole module surface is stood
 // up rather than the one function under test: mock.module rewrites the worker's
@@ -30,6 +50,7 @@ mock.module("@tauri-apps/plugin-os", () => ({
 }));
 afterAll(() => {
   host = "linux";
+  mock.module("@tauri-apps/api/core", () => core);
 });
 
 const { cleanup, fireEvent, render } = await useDom();
@@ -42,6 +63,7 @@ const { Composer, resolveComposerDictation } = await import("../../../src/ui/com
 const TO_VOICE = "Switch to voice";
 const TO_KEYBOARD = "Switch to keyboard";
 const BAR = "Hold to Talk";
+const RELEASE = "plugin:voice|release_microphone";
 
 test("resolveComposerDictation: on by default where the host dictates", () => {
   expect(resolveComposerDictation(undefined, true)).toEqual({ glossary: "" });
@@ -85,4 +107,48 @@ test("a desktop composer has no switch and no bar", () => {
   expect(container.querySelector(`[aria-label="${TO_VOICE}"]`)).toBeNull();
   expect(container.textContent).not.toContain(BAR);
   expect(container.querySelector("textarea")).toBeTruthy();
+});
+
+// The bar's lifetime is the voice mode's, and the microphone's is the bar's. A
+// hold that ended left the session, the engine and the tap standing for the next
+// one — which is what makes every press after the first 300 ms instead of a
+// second — and the orange indicator is lit the whole time. Switching back to the
+// keyboard has to put it out immediately: the user can see it, and an indicator
+// that outlives the reason for it is the kind of thing that costs trust rather
+// than milliseconds.
+test("switching back to the keyboard lets the microphone go", () => {
+  host = "ios";
+  const { getByLabelText } = render(<Composer onSend={() => {}} placeholder="Ask…" pill />);
+
+  fireEvent.click(getByLabelText(TO_VOICE));
+  expect(invoked).not.toContain(RELEASE);
+
+  fireEvent.click(getByLabelText(TO_KEYBOARD));
+  expect(invoked).toContain(RELEASE);
+});
+
+// Leaving the chat is the same event as switching back, and the bar has no other
+// way of hearing about it: nothing tells it the screen went away, only that it
+// is being unmounted.
+test("the composer going away lets the microphone go", () => {
+  host = "ios";
+  const { getByLabelText, unmount } = render(<Composer onSend={() => {}} placeholder="Ask…" pill />);
+
+  fireEvent.click(getByLabelText(TO_VOICE));
+  expect(invoked).not.toContain(RELEASE);
+
+  unmount();
+  expect(invoked).toContain(RELEASE);
+});
+
+// Entering voice mode does not touch the microphone. It is built by the first
+// hold and not before it, because the indicator lights when the engine starts
+// (docs/pitfall/167) and a warm-up would light it over a user who has not said
+// anything yet.
+test("entering voice mode asks the plugin for nothing", () => {
+  host = "ios";
+  const { getByLabelText } = render(<Composer onSend={() => {}} placeholder="Ask…" pill />);
+
+  fireEvent.click(getByLabelText(TO_VOICE));
+  expect(invoked.filter((c) => c.startsWith("plugin:voice|"))).toEqual([]);
 });

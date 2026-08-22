@@ -34,7 +34,6 @@ pub struct Voice<R: Runtime>(PluginHandle<R>);
 struct StartDictationArgs {
     locale: Option<String>,
     contextual_strings: Option<Vec<String>>,
-    audio_profile: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -64,7 +63,6 @@ impl<R: Runtime> Voice<R> {
         &self,
         locale: Option<String>,
         contextual_strings: Option<Vec<String>>,
-        audio_profile: Option<String>,
     ) -> crate::Result<()> {
         self.0
             .run_mobile_plugin_async(
@@ -72,9 +70,15 @@ impl<R: Runtime> Voice<R> {
                 StartDictationArgs {
                     locale,
                     contextual_strings,
-                    audio_profile,
                 },
             )
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn release_microphone(&self) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("release_microphone", ())
             .await
             .map_err(Into::into)
     }

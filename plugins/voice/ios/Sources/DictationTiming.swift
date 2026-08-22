@@ -1,21 +1,25 @@
 // The press's segments, on their way to the webview.
 //
-// Every number here is already an `RP-DICT <step> +<n>ms` line and every one of
-// those lines stays. What this adds is a second road for the same numbers: the
-// plugin hands them over when the hold ends and the bench appends them to its
-// own file on the device (src/smoke/bench-journal.ts).
+// The plugin hands them over when the hold ends and the bench appends them to
+// its own file on the device (src/smoke/bench-journal.ts).
 //
-// It exists because the first road broke without saying so. Four audio profiles
-// were held three times each on a phone; the transcripts came back and not one
-// press-to-first-buffer number did, because the Mac's idevicesyslog was still
-// running with a dead stream behind it. A measurement with one way out has none.
+// It is the only road on a shipping build. The same numbers go out as
+// `RP-DICT <step> +<n>ms` lines too, but only on a debug one (markStep): a build
+// on somebody's phone has nothing to say about how long a press took to the
+// system log.
+//
+// A file on the device rather than a log because the log broke without saying
+// so. Four settings were held three times each on a phone; the transcripts came
+// back and not one press-to-first-buffer number did, because the Mac's
+// idevicesyslog was still running with a dead stream behind it. A measurement
+// with one way out has none.
 //
 // Nothing here can carry what the user said, and nothing here may be made able
-// to. The steps are milliseconds, the pre-roll is a count and two durations, the
-// echo canceller's answer is two booleans. The two strings are a stage name from
-// an enum and one of a handful of sentences written in AudioFront; neither is
-// built from anything a press produced, and neither may become so. Same rule as
-// the result log in DictationRun.handle: shape and timing, never the words.
+// to. The steps are milliseconds and the pre-roll is a count and two durations.
+// The two strings are a stage name from an enum and one of a handful of
+// sentences written in AudioFront; neither is built from anything a press
+// produced, and neither may become so. Same rule as the result log in
+// DictationRun.handle: shape and timing, never the words.
 
 import Foundation
 
@@ -32,28 +36,16 @@ struct DictationTiming: Encodable {
         let handoverMs: Double
     }
 
-    /// The session's answer about echo cancellation without the voice-processing
-    /// unit. Asking for it is not the same as being given it, so both halves are
-    /// the system's own, read after activation rather than remembered from the
-    /// press that configured it.
-    struct EchoCancelledInput: Encodable {
-        let available: Bool
-        let enabled: Bool
-    }
-
-    /// The front end this hold opened the microphone on.
-    let profile: String
-    /// True when the microphone was inherited from the previous hold rather than
-    /// built for this one. Only a reusing profile can say true, and a run of
-    /// them that quietly rebuilt every time would otherwise read as "reuse does
-    /// not help".
+    /// True when the microphone was inherited from the hold before it rather
+    /// than built for this one. False on the first hold of a voice mode and on
+    /// every hold after something took the microphone back; a voice mode that
+    /// quietly rebuilt every time would otherwise read as "reuse does not help".
     let reused: Bool
-    /// Why the microphone was built rather than inherited, on a profile that
-    /// asked to inherit it. Nil when it was inherited and nil on the profiles
-    /// that never keep one. It exists because the round of 2026-08-22 came back
-    /// with `reused` false on all ten holds that had asked for it and no way to
-    /// tell from the file why (docs/pitfall/168) — a false with nothing beside
-    /// it is the silent failure this pair is against.
+    /// Why the microphone was built rather than inherited. Nil when it was
+    /// inherited. It exists because the round of 2026-08-22 came back with
+    /// `reused` false on all ten holds that had asked for it and no way to tell
+    /// from the file why (docs/pitfall/168) — a false with nothing beside it is
+    /// the silent failure this pair is against.
     let reuseSkipped: String?
     /// Where the indicator probe was standing when the finger went down:
     /// `never` if nothing has probed in this process, `off` if something did and
@@ -76,12 +68,9 @@ struct DictationTiming: Encodable {
     /// bury it under the length of the hold.
     let teardown: [String: Double]
     let preroll: Preroll?
-    /// Nil on the profiles that run the voice-processing unit, which never ask.
-    let echoCancelledInput: EchoCancelledInput?
 
     enum CodingKeys: String, CodingKey {
-        case profile, reused, reuseSkipped, probeStage, probeTouched, steps, teardown
-        case preroll, echoCancelledInput
+        case reused, reuseSkipped, probeStage, probeTouched, steps, teardown, preroll
     }
 
     /// Written by hand for one reason: a synthesised encoding leaves a nil
@@ -90,7 +79,6 @@ struct DictationTiming: Encodable {
     /// same thing and do not look it.
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(profile, forKey: .profile)
         try container.encode(reused, forKey: .reused)
         try container.encode(reuseSkipped, forKey: .reuseSkipped)
         try container.encode(probeStage, forKey: .probeStage)
@@ -98,7 +86,6 @@ struct DictationTiming: Encodable {
         try container.encode(steps, forKey: .steps)
         try container.encode(teardown, forKey: .teardown)
         try container.encode(preroll, forKey: .preroll)
-        try container.encode(echoCancelledInput, forKey: .echoCancelledInput)
     }
 }
 
@@ -123,7 +110,6 @@ final class TimingLog {
     private var steps: [String: Double] = [:]
     private var teardownSteps: [String: Double] = [:]
     private var preroll: DictationTiming.Preroll?
-    private var echo: DictationTiming.EchoCancelledInput?
     private var reused = false
     private var reuseSkipped: String?
     /// Until the front end is reached there is nothing to report: a press that
@@ -163,13 +149,6 @@ final class TimingLog {
         lock.unlock()
     }
 
-    func recordEchoCancelledInput(available: Bool, enabled: Bool) {
-        let value = DictationTiming.EchoCancelledInput(available: available, enabled: enabled)
-        lock.lock()
-        echo = value
-        lock.unlock()
-    }
-
     func recordReuse(_ value: Bool) {
         lock.lock()
         reused = value
@@ -195,18 +174,16 @@ final class TimingLog {
     /// a run that never got past its first step: what it did reach is there and
     /// the rest is simply absent, which is itself the measurement when a start
     /// fails.
-    func snapshot(profile: AudioProfile) -> DictationTiming {
+    func snapshot() -> DictationTiming {
         lock.lock()
         defer { lock.unlock() }
         return DictationTiming(
-            profile: profile.rawValue,
             reused: reused,
             reuseSkipped: reuseSkipped,
             probeStage: probeStage,
             probeTouched: probeTouched,
             steps: steps,
             teardown: teardownSteps,
-            preroll: preroll,
-            echoCancelledInput: echo)
+            preroll: preroll)
     }
 }

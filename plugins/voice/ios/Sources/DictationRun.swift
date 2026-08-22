@@ -4,10 +4,9 @@
 // The chain, in the order start() builds it (docs/33, ASR and AEC 与音频路由):
 //
 //   AudioFront                                   the session, the engine and the
-//                                                tap, which outlive this object
-//                                                on the profiles that reuse
-//                                                them; it is also where the
-//                                                echo canceller is chosen
+//                                                tap, which outlive this object:
+//                                                their lifetime is one voice
+//                                                mode and this one is a press
 //   tap -> AVAudioConverter                      SpeechAnalyzer does no audio
 //                                                conversion of its own; the
 //                                                format it wants comes from
@@ -122,11 +121,6 @@ final class DictationRun {
     typealias Emit = (JSObject) -> Void
 
     private let emit: Emit
-
-    /// Which front end this hold runs on. Chosen per press by the caller and
-    /// carried here only to be handed to AudioFront and logged; `current` is
-    /// what everything that does not ask gets.
-    private let profile: AudioProfile
 
     /// Every step of this hold, gathered as it happens and handed to the plugin
     /// when the hold is over (DictationTiming.swift). The `RP-DICT` lines are
@@ -279,15 +273,11 @@ final class DictationRun {
     /// throughout. -10 is set against the loud end deliberately.
     ///
     /// All of it was measured with voice processing on, whose automatic gain is
-    /// worth 18 dB on near-voice (docs/33). The profiles that run without it
-    /// (AudioProfile.echoCancelledInput) therefore read low through this window:
-    /// on 2026-08-22, twenty holds on one iPhone 16, the loudest sample of a
-    /// hold came back 4.2 dB quieter with the unit off — -19.0 dB against
-    /// -23.2 dB, ten holds averaged on each side. That is a peak, while the
-    /// 18 dB above is a mean of near-voice level; an earlier note here quoted
-    /// 17 dB from another phone on iOS 18.7 and read the two as the same
-    /// quantity. A peak from one profile and a peak from another are still not
-    /// comparable, and the bench's peak column is a within-profile number.
+    /// worth 18 dB on near-voice (docs/33), and every hold now runs with it on.
+    /// A build that ran without the unit read 4.2 dB quieter at the peak when
+    /// the two were measured side by side on 2026-08-22 — -23.2 dB against
+    /// -19.0 dB, ten holds averaged on each side — which is what these numbers
+    /// would have to be refitted against if the unit ever came out.
     private static let quietDb: Float = -50
     private static let loudDb: Float = -10
 
@@ -341,8 +331,7 @@ final class DictationRun {
     /// stop_dictation arrives.
     private static let finalizeGraceMs: UInt64 = 2000
 
-    init(profile: AudioProfile, emit: @escaping Emit) {
-        self.profile = profile
+    init(emit: @escaping Emit) {
         self.emit = emit
     }
 
@@ -384,7 +373,7 @@ final class DictationRun {
         let opened: AudioFront.Opened
         do {
             opened = try AudioFront.shared.open(
-                profile: profile, pressedAt: t0, timing: timing
+                pressedAt: t0, timing: timing
             ) { [weak self] buffer in
                 self?.consume(buffer)
             }
@@ -393,10 +382,9 @@ final class DictationRun {
             markSessionBroken()
             throw error
         }
-        // The engine belongs to the front end, which on a reusing profile keeps
-        // it after this run is gone. What this run needs it for is two reads:
-        // the input node's format, once the recogniser is up, and the
-        // reconfiguration notice.
+        // The engine belongs to the front end, which keeps it after this run is
+        // gone. What this run needs it for is two reads: the input node's
+        // format, once the recogniser is up, and the reconfiguration notice.
         let input = opened.engine.inputNode
         let hardwareFormat = opened.format
         observeEngineNotifications(opened.engine)
@@ -540,10 +528,10 @@ final class DictationRun {
         // Back to the front end, which decides between pausing and tearing
         // down. This run only says whether what it had is worth keeping.
         capturing = false
-        AudioFront.shared.release(profile: profile, keep: !sessionIsBroken())
-        // Measured from the release, not from the press: what this one says is
-        // whether letting go is cheaper than tearing down, which is the other
-        // half of the question `reuse` is asking.
+        AudioFront.shared.release(keep: !sessionIsBroken())
+        // Measured from the release, not from the press: 6-39 ms when the
+        // microphone is parked for the next hold and 142-264 ms when it is torn
+        // down, which is how a file says which of the two happened.
         markTeardown("released", since: t0)
 
         dropPreroll()
@@ -834,7 +822,7 @@ final class DictationRun {
     /// The engine's own notification, which can only be subscribed once there is
     /// an engine. It posts this when the hardware format changes under it, and
     /// it stops itself on the way — the one event that explains a hold which
-    /// started without an error and captured nothing. A reused engine is a
+    /// started without an error and captured nothing. A kept engine is a
     /// reconfiguration risk between holds as well, which is why the front end
     /// re-reads the input format before handing one back.
     private func observeEngineNotifications(_ engine: AVAudioEngine) {
@@ -894,11 +882,13 @@ final class DictationRun {
             // bufferSize is a request, not a contract, and nothing had ever
             // logged what was actually delivered.
             let elapsed = (firstBufferAt - pressedAt) * 1000
-            NSLog(
-                "RP-DICT firstBuffer +%.0fms frames=%u rate=%.0f",
-                elapsed,
-                buffer.frameLength,
-                buffer.format.sampleRate)
+            #if DEBUG
+                NSLog(
+                    "RP-DICT firstBuffer +%.0fms frames=%u rate=%.0f",
+                    elapsed,
+                    buffer.frameLength,
+                    buffer.format.sampleRate)
+            #endif
             // Kept rather than marked: the line above carries the frame count
             // and the sample rate too, and pitfall 161 is argued from it.
             timing.record("firstBuffer", ms: elapsed)
@@ -1163,7 +1153,7 @@ final class DictationRun {
     /// it; safe on a run whose start threw, which is the case where the missing
     /// steps are the answer.
     func timingReport() -> DictationTiming {
-        timing.snapshot(profile: profile)
+        timing.snapshot()
     }
 
     private func mark(_ step: String, since start: CFAbsoluteTime) {
