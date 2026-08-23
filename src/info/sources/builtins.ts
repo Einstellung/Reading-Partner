@@ -401,12 +401,6 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
   },
 ];
 
-const BY_ID = new Map(BUILTIN_SOURCES.map((s) => [s.id, s]));
-
-export function builtinById(id: string): SourceDescriptor | undefined {
-  return BY_ID.get(id);
-}
-
 // Per-source engineering pitfalls from the ingestion research: facts a fresh
 // generic probe cannot see (undocumented behavior, a broken feed path, a paywall
 // the descriptor already routes around). The verified descriptor above encodes

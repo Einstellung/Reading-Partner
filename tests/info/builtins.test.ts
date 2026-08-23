@@ -5,7 +5,7 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { BUILTIN_SOURCES, builtinById, builtinCaveat } from "../../src/info/sources/builtins";
+import { BUILTIN_SOURCES, builtinCaveat } from "../../src/info/sources/builtins";
 import { pollIntervalMs, validateDescriptor } from "../../src/info/sources/descriptor";
 
 test("builtin ids are unique and every descriptor validates", () => {
@@ -31,7 +31,7 @@ const BLOOMBERG_SECTIONS = [
 
 test("every Bloomberg section that carries articles is present, with the webview pipe", () => {
   for (const [id, slug] of BLOOMBERG_SECTIONS) {
-    const d = builtinById(id);
+    const d = BUILTIN_SOURCES.find((s) => s.id === id);
     expect(d?.discovery).toEqual({
       kind: "feed",
       url: `https://www.bloomberg.com/feeds/${slug}/news.rss`,
@@ -53,7 +53,7 @@ test("the business section is not a section, whatever its feed says", () => {
   // Fetched for real: 20 rows, zero articles — 14-15 podcast episodes and 4-5
   // web copies of a newsletter, with "Source: Bloomberg, 6:21" (a duration) for
   // a description. A feed that parses is not a feed that carries anything.
-  expect(builtinById("bloomberg-business")).toBeUndefined();
+  expect(BUILTIN_SOURCES.find((s) => s.id === "bloomberg-business")).toBeUndefined();
 });
 
 test("the preset list is the sites that get read, not everything that was researched", () => {
@@ -72,12 +72,12 @@ test("the preset list is the sites that get read, not everything that was resear
     "mit-tech-review",
     "xinzhiyuan",
   ]) {
-    expect(builtinById(id)).toBeUndefined();
+    expect(BUILTIN_SOURCES.find((s) => s.id === id)).toBeUndefined();
   }
   // And what is kept: two Chinese sources, Bloomberg, Nature, Science, the
   // Economist.
-  expect(builtinById("jiqizhixin")).toBeTruthy();
-  expect(builtinById("jiemian")).toBeTruthy();
+  expect(BUILTIN_SOURCES.find((s) => s.id === "jiqizhixin")).toBeTruthy();
+  expect(BUILTIN_SOURCES.find((s) => s.id === "jiemian")).toBeTruthy();
   expect(BUILTIN_SOURCES.length).toBe(24);
 });
 
@@ -97,7 +97,7 @@ test("Bloomberg's caveat carries the 403 wall, the short window, and the terms",
 });
 
 test("Nature is an RDF feed read as discovery-only, with the 406/rate-limit caveat", () => {
-  const d = builtinById("nature");
+  const d = BUILTIN_SOURCES.find((s) => s.id === "nature");
   expect(d?.discovery).toEqual({ kind: "feed", url: "https://www.nature.com/nature.rss", format: "rdf" });
   // The editorial summary rides in content:encoded; the engine's field fallback
   // picks it up, so the descriptor does not have to claim a full text it lacks.
@@ -107,12 +107,12 @@ test("Nature is an RDF feed read as discovery-only, with the 406/rate-limit cave
   expect(c).toMatch(/406/);
   expect(c).toMatch(/rate-limit/);
   expect(c).toMatch(/webview/);
-  expect(builtinById("nature-machine-intelligence")?.fulltext.mode).toBe("none");
+  expect(BUILTIN_SOURCES.find((s) => s.id === "nature-machine-intelligence")?.fulltext.mode).toBe("none");
   expect(builtinCaveat("nature-machine-intelligence")).toMatch(/406/);
 });
 
 test("Science news is a feed and Science research discovers through Crossref", () => {
-  const news = builtinById("science-news");
+  const news = BUILTIN_SOURCES.find((s) => s.id === "science-news");
   expect(news?.discovery).toEqual({
     kind: "feed",
     url: "https://www.science.org/rss/news_current.xml",
@@ -120,7 +120,7 @@ test("Science news is a feed and Science research discovers through Crossref", (
   });
   expect(news?.fulltext.mode).toBe("none");
 
-  const journal = builtinById("science-journal");
+  const journal = BUILTIN_SOURCES.find((s) => s.id === "science-journal");
   expect(journal?.discovery.kind).toBe("json-api");
   const disc = journal?.discovery as { listUrl: string; itemsPath?: string; fields: Record<string, unknown> };
   expect(disc.listUrl).toContain("api.crossref.org/journals/0036-8075/works");
@@ -161,8 +161,8 @@ test("Economist sections share one pipe and one caveat", () => {
 
 test("Bloomberg is polled every three hours, because its window is six", () => {
   for (const [id] of BLOOMBERG_SECTIONS) {
-    expect(builtinById(id)?.pollMinutes).toBe(180);
-    expect(pollIntervalMs(builtinById(id)!)).toBe(3 * 60 * 60_000);
+    expect(BUILTIN_SOURCES.find((s) => s.id === id)?.pollMinutes).toBe(180);
+    expect(pollIntervalMs(BUILTIN_SOURCES.find((s) => s.id === id)!)).toBe(3 * 60 * 60_000);
   }
 });
 
@@ -174,7 +174,7 @@ test("the three-week and one-week windows are polled daily", () => {
     "science-journal",
     ...BUILTIN_SOURCES.filter((s) => s.id.startsWith("economist-")).map((s) => s.id),
   ];
-  for (const id of daily) expect(builtinById(id)?.pollMinutes).toBe(24 * 60);
+  for (const id of daily) expect(BUILTIN_SOURCES.find((s) => s.id === id)?.pollMinutes).toBe(24 * 60);
 });
 
 test("a builtin with no measured window states no interval and takes the default", () => {
@@ -183,5 +183,5 @@ test("a builtin with no measured window states no interval and takes the default
   const stated = BUILTIN_SOURCES.filter((s) => s.pollMinutes !== undefined).map((s) => s.id);
   expect(stated).not.toContain("jiemian");
   expect(stated).not.toContain("jiqizhixin");
-  expect(pollIntervalMs(builtinById("jiqizhixin")!)).toBe(pollIntervalMs({}));
+  expect(pollIntervalMs(BUILTIN_SOURCES.find((s) => s.id === "jiqizhixin")!)).toBe(pollIntervalMs({}));
 });
