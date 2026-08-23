@@ -25,8 +25,9 @@ mock.module("@tauri-apps/plugin-fs", () => ({
 mock.module("@tauri-apps/api/core", () => app.core);
 mock.module("../../../src/platform/app/atomic-fs", () => app.atomicFs);
 
-const { appendRun, deleteRunthroughs, loadRunthroughs, runthroughFile, runthroughIdOf } =
-  await import("../../../src/reading/runthrough/store");
+const { appendRun, deleteRunthroughs, loadRunthroughs, runthroughFile } = await import(
+  "../../../src/reading/runthrough/store"
+);
 
 const TALK = "1754400000000";
 
@@ -165,13 +166,4 @@ test("deleting takes the log and its rescue copy with it", async () => {
 test("deleting a talk that was never given is not an error", async () => {
   await deleteRunthroughs("never");
   expect(app.files.size).toBe(0);
-});
-
-// The talk file, its conversation and its runs sit in one directory.
-test("a run-through file is told apart from the talk's other files", () => {
-  expect(runthroughIdOf(`runthrough-${TALK}.json`)).toBe(TALK);
-  expect(runthroughIdOf(`talk-${TALK}.json`)).toBeNull();
-  expect(runthroughIdOf(`threads-talk-${TALK}.json`)).toBeNull();
-  expect(runthroughIdOf(`runthrough-${TALK}.json.bad`)).toBeNull();
-  expect(runthroughIdOf("runthrough-.json")).toBeNull();
 });

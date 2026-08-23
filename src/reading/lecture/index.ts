@@ -9,7 +9,6 @@ export {
   correctEstimate,
   decideInline,
   inlinePages,
-  lectureTokens,
   wholeBookSection,
   CHAPTER_MAX_TOKENS,
   LECTURE_TOKEN_SAFETY,

@@ -14,7 +14,6 @@ import {
   setIncluded,
   slotAt,
   slotFor,
-  talkProgress,
   toRehearsalPlan,
   toTalkDecision,
   upsertDecision,
@@ -207,10 +206,4 @@ test("the outline numbers what is in the talk and leaves the cut ones unnumbered
 test("one material means no book label on the rows", () => {
   const t = talk({ materials: [{ bookId: "b1", title: "Eye and Brain" }], decisions: [decision()] });
   expect(outlineRows(t, combineChapters(oneBook).slots)[0].bookLabel).toBeNull();
-});
-
-test("progress counts the settled chapters against the combined list", () => {
-  const { slots } = combineChapters(twoBooks);
-  const t = talk({ decisions: [decision(), decision({ bookId: "b9", chapter: 1 })] });
-  expect(talkProgress(t, slots)).toEqual({ settled: 1, total: 3 });
 });

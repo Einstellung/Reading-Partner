@@ -2,7 +2,7 @@
 // prompt (src/reading/rehearsal/marks.ts). Pure. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { bucketMarks, formatMarks, markCounts } from "../../../src/reading/rehearsal/marks";
+import { bucketMarks, formatMarks } from "../../../src/reading/rehearsal/marks";
 import type { Mark, RehearsalChapter } from "../../../src/reading/rehearsal/types";
 
 const chapters: RehearsalChapter[] = [
@@ -33,7 +33,6 @@ test("a mark with no page and a mark with no content are dropped", () => {
 test("every chapter gets a bucket, empty ones included", () => {
   const buckets = bucketMarks(chapters, [{ page: 2, text: "only one" }]);
   expect([...buckets.keys()]).toEqual([1, 2]);
-  expect(markCounts(buckets)).toEqual(new Map([[1, 1], [2, 0]]));
 });
 
 test("the full form carries the page, the passage and the reader's own note", () => {

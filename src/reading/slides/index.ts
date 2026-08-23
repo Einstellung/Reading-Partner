@@ -15,7 +15,6 @@ export type {
 export {
   SLIDES_VERSION,
   createSlidesState,
-  hasPendingWork,
   hasUnrunSlides,
   normalizeSlidesOnLoad,
   upsertTalk,

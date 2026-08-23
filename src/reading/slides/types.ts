@@ -156,11 +156,6 @@ export function hasUnrunSlides(state: SlidesState): boolean {
   return state.slides.some((s) => s.contentStatus === "pending" || s.assetStatus === "pending");
 }
 
-// Whether resuming this talk would run anything at all, assembly included.
-export function hasPendingWork(state: SlidesState): boolean {
-  return hasUnrunSlides(state) || state.assembleStatus !== "done";
-}
-
 // One row in slides/talks.json: a generated deck, newest appended last.
 export interface TalkEntry {
   // The talk id (its directory under slides/). Absent on rows written before the

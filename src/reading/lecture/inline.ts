@@ -13,12 +13,11 @@
 // 258,829 characters, 43.5% of them CJK) came out about a third under what the
 // provider actually counted — the Latin third of a book like that is code,
 // identifiers and formulae, none of which tokenize anywhere near four characters
-// to the token. So every number here is taken through `lectureTokens`, which
+// to the token. So every number here is taken through `correctEstimate`, which
 // adds the headroom back, and the thresholds are set against the corrected
 // number. Being wrong in this direction costs a turn some inlined text it could
 // have afforded; being wrong in the other direction costs the answer.
 
-import { estimateTextTokens } from "../../budget";
 import { BOOK_PAGE_LABEL } from "../../fulltext/format";
 import type { Fulltext } from "../../fulltext/types";
 import type { TableChapter } from "../chapters";
@@ -46,11 +45,6 @@ export const CHAPTER_MAX_TOKENS = 60_000;
 // is. A guard on a table that is wrong rather than a budget: the budget is the
 // threshold above.
 export const MAX_CHAPTER_PAGES = 60;
-
-// An estimate with the measured shortfall added back.
-export function lectureTokens(text: string): number {
-  return Math.ceil(estimateTextTokens(text) * LECTURE_TOKEN_SAFETY);
-}
 
 export function correctEstimate(estimate: number): number {
   return Math.ceil(estimate * LECTURE_TOKEN_SAFETY);

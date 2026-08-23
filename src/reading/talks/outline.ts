@@ -271,13 +271,3 @@ export function outlineRows(talk: Talk, slots: readonly TalkSlot[] = []): Outlin
     };
   });
 }
-
-// How far the rehearsal has got, for the line under the talk's name: how many of
-// the combined chapters have been settled.
-export function talkProgress(
-  talk: Talk,
-  slots: readonly TalkSlot[],
-): { settled: number; total: number } {
-  const settled = talk.decisions.filter((d) => slotFor(slots, d.bookId, d.chapter)).length;
-  return { settled, total: slots.length };
-}

@@ -5,7 +5,6 @@
 
 import { expect, test } from "bun:test";
 import {
-  hasPendingWork,
   hasUnrunSlides,
   normalizeSlidesOnLoad,
   upsertTalk,
@@ -103,14 +102,4 @@ test("hasUnrunSlides is about AI work only, so a stale deck does not ask for one
   expect(hasUnrunSlides(state({ assembleStatus: "stale" }))).toBe(false);
   expect(hasUnrunSlides(state({ planStatus: "pending" }))).toBe(true);
   expect(hasUnrunSlides(state({ slides: [slide(1, { assetStatus: "pending" })] }))).toBe(true);
-});
-
-test("hasPendingWork sees an unplanned, unwritten, or unassembled talk", () => {
-  expect(hasPendingWork(state())).toBe(false);
-  expect(hasPendingWork(state({ planStatus: "pending" }))).toBe(true);
-  expect(hasPendingWork(state({ slides: [slide(1, { contentStatus: "pending" })] }))).toBe(true);
-  expect(hasPendingWork(state({ slides: [slide(1, { assetStatus: "pending" })] }))).toBe(true);
-  expect(hasPendingWork(state({ assembleStatus: "stale" }))).toBe(true);
-  // A failed slide is not pending work: it waits for an explicit re-run.
-  expect(hasPendingWork(state({ slides: [slide(1, { contentStatus: "failed" })] }))).toBe(false);
 });

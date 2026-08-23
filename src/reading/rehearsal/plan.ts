@@ -6,14 +6,7 @@
 // rather than prose. Where it lives, and in what order, belongs to the talk
 // (reading/talks/outline.ts); this file only reads it back.
 
-import type { RehearsalChapter, RehearsalDecision, RehearsalPlan } from "./types";
-
-export function decisionFor(
-  plan: RehearsalPlan | null,
-  chapter: number,
-): RehearsalDecision | undefined {
-  return plan?.decisions.find((d) => d.chapter === chapter);
-}
+import type { RehearsalChapter, RehearsalPlan } from "./types";
 
 // The whole outline as something to read back to the reader when they ask what
 // their talk looks like (read_talk_outline). Different from formatPlan, which is

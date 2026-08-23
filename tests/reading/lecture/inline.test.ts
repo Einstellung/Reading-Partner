@@ -11,7 +11,6 @@ import {
   correctEstimate,
   decideInline,
   inlinePages,
-  lectureTokens,
   wholeBookSection,
   CHAPTER_MAX_TOKENS,
   LECTURE_TOKEN_SAFETY,
@@ -41,7 +40,6 @@ const CH: TableChapter = {
 test("the estimate is corrected upward before anything is compared to it", () => {
   expect(LECTURE_TOKEN_SAFETY).toBe(1.5);
   expect(correctEstimate(20_000)).toBe(30_000);
-  expect(lectureTokens("书".repeat(1_000))).toBe(1_500);
 });
 
 test("a document inside the bar is inlined whole", () => {

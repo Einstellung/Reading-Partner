@@ -12,7 +12,6 @@ export {
   setIncluded,
   slotAt,
   slotFor,
-  talkProgress,
   toRehearsalPlan,
   toTalkDecision,
   upsertDecision,
