@@ -9,8 +9,7 @@ import {
   FIND_PAPER_PROMPT,
 } from "../../../src/reading/papers/citation-tool";
 import type { AgentTool } from "../../../src/ai/agent";
-
-const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
+import { jsonResponse } from "../../support/fetch";
 
 const S2_SEED = {
   paperId: "s2seed",
@@ -50,8 +49,8 @@ test("the tool names are lowercase and underscored", () => {
 
 test("find_paper returns the record with the ids a walk needs", async () => {
   const { find } = tools({
-    "api.openalex.org": () => json(OA_SEED),
-    "api.semanticscholar.org": () => json(S2_SEED),
+    "api.openalex.org": () => jsonResponse(OA_SEED),
+    "api.semanticscholar.org": () => jsonResponse(S2_SEED),
   });
   const text = await find.execute({ paper: "10.1073/pnas.0611396104" });
   expect(text).toContain("Cellular scaling rules for primate brains");
@@ -88,8 +87,8 @@ test("walk_citations rejects a direction it cannot walk", async () => {
 // would hear "no one has followed this up" about a paper that was never looked at.
 test("walk_citations fails loudly when the seed itself could not be identified", async () => {
   const { walk } = tools({
-    "api.openalex.org": () => json({ results: [] }),
-    "api.semanticscholar.org": () => json({ data: [] }),
+    "api.openalex.org": () => jsonResponse({ results: [] }),
+    "api.semanticscholar.org": () => jsonResponse({ data: [] }),
   });
   await expect(
     walk.execute({ paper: "A paper nobody has heard of", direction: "citations" }),
@@ -99,7 +98,7 @@ test("walk_citations fails loudly when the seed itself could not be identified",
 test("walk_citations resolves the seed, then walks forward from it", async () => {
   const { walk, seen } = tools({
     "filter=cites": () =>
-      json({
+      jsonResponse({
         meta: { count: 44 },
         results: [
           {
@@ -110,8 +109,8 @@ test("walk_citations resolves the seed, then walks forward from it", async () =>
           },
         ],
       }),
-    "api.openalex.org": () => json(OA_SEED),
-    "api.semanticscholar.org": () => json(S2_SEED),
+    "api.openalex.org": () => jsonResponse(OA_SEED),
+    "api.semanticscholar.org": () => jsonResponse(S2_SEED),
   });
   const text = await walk.execute({
     paper: "10.1073/pnas.0611396104",
@@ -128,11 +127,11 @@ test("walk_citations resolves the seed, then walks forward from it", async () =>
 
 test("a seed matched only by title says so above the results", async () => {
   const { walk } = tools({
-    "filter=cites": () => json({ meta: { count: 1 }, results: [] }),
+    "filter=cites": () => jsonResponse({ meta: { count: 1 }, results: [] }),
     "/citations": () =>
-      json({ data: [{ citingPaper: { paperId: "c1", title: "A citing paper", year: 2025 } }] }),
-    "api.openalex.org": () => json({ results: [] }),
-    "api.semanticscholar.org": () => json({ data: [S2_SEED] }),
+      jsonResponse({ data: [{ citingPaper: { paperId: "c1", title: "A citing paper", year: 2025 } }] }),
+    "api.openalex.org": () => jsonResponse({ results: [] }),
+    "api.semanticscholar.org": () => jsonResponse({ data: [S2_SEED] }),
   });
   const text = await walk.execute({
     paper: "Herculano-Houzel, S. Cellular scaling rules for primate brains. PNAS (2007).",
@@ -143,7 +142,7 @@ test("a seed matched only by title says so above the results", async () => {
 
 test("without add_source the results never promise to fetch a paper", async () => {
   const { find } = tools(
-    { "api.openalex.org": () => json(OA_SEED), "api.semanticscholar.org": () => json(S2_SEED) },
+    { "api.openalex.org": () => jsonResponse(OA_SEED), "api.semanticscholar.org": () => jsonResponse(S2_SEED) },
     false,
   );
   expect(await find.execute({ paper: "10.1073/pnas.0611396104" })).not.toContain("add_source");

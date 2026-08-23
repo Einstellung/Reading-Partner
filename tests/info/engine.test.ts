@@ -15,16 +15,13 @@ import {
 import type { ExtractReadable } from "../../src/info/extract/readable-select";
 import type { SourceDescriptor } from "../../src/info/sources/descriptor";
 import type { WebviewArticle } from "../../src/info/extract/webview-article";
+import { textResponse } from "../support/fetch";
 
 const extract: ExtractReadable = (_html, url) => ({
   title: "Extracted title",
   contentHtml: `<p>body of ${url}</p>`,
   textContent: `plain body of ${url}`,
 });
-
-function res(body: string, status = 200): Response {
-  return new Response(body, { status });
-}
 
 // --- json-api + detail endpoint (jiqizhixin shape) -------------------------
 
@@ -64,7 +61,7 @@ test("json-api + detail-endpoint pulls list then per-item body", async () => {
   const calls: string[] = [];
   const fetchFn = async (url: string) => {
     calls.push(url);
-    return res(url.includes("/api/") ? detail : list);
+    return textResponse(url.includes("/api/") ? detail : list);
   };
   const items = await collectSource(JQX, { fetchFn });
   expect(items.length).toBe(1);
@@ -79,7 +76,7 @@ test("json-api + detail-endpoint pulls list then per-item body", async () => {
 
 test("json-api keeps a summary-only item when the detail fetch fails", async () => {
   const list = JSON.stringify({ articles: [{ slug: "s1", title: "T1", summary: "just a blurb" }] });
-  const fetchFn = async (url: string) => (url.includes("/api/") ? res("nope", 500) : res(list));
+  const fetchFn = async (url: string) => (url.includes("/api/") ? textResponse("nope", 500) : textResponse(list));
   const items = await collectSource(JQX, { fetchFn });
   expect(items.length).toBe(1);
   expect(items[0].textContent).toBeUndefined();
@@ -114,7 +111,7 @@ test("json-api feed-field reads the body inline with no second request", async (
   const calls: string[] = [];
   const fetchFn = async (url: string) => {
     calls.push(url);
-    return res(list);
+    return textResponse(list);
   };
   const items = await collectSource(desc, { fetchFn });
   expect(calls.length).toBe(1);
@@ -140,7 +137,7 @@ const QBIT: SourceDescriptor = {
 };
 
 test("feed + fetch-page fetches the page and runs the injected extractor", async () => {
-  const fetchFn = async (url: string) => (url.endsWith("/feed") ? res(RSS) : res("<html>page</html>"));
+  const fetchFn = async (url: string) => (url.endsWith("/feed") ? textResponse(RSS) : textResponse("<html>page</html>"));
   const items = await collectSource(QBIT, { fetchFn, extract });
   expect(items.length).toBe(1);
   expect(items[0].source).toBe("qbit");
@@ -151,7 +148,7 @@ test("feed + fetch-page fetches the page and runs the injected extractor", async
 });
 
 test("feed + fetch-page keeps a summary-only item when the page fetch fails", async () => {
-  const fetchFn = async (url: string) => (url.endsWith("/feed") ? res(RSS) : res("boom", 500));
+  const fetchFn = async (url: string) => (url.endsWith("/feed") ? textResponse(RSS) : textResponse("boom", 500));
   const items = await collectSource(QBIT, { fetchFn, extract });
   expect(items.length).toBe(1);
   expect(items[0].contentHtml).toBeUndefined();
@@ -204,7 +201,7 @@ test("a webview source discovers headlines without opening a single window", asy
     return article();
   };
   const items = await collectSource(BLOOMBERG, {
-    fetchFn: async () => res(BB_RSS),
+    fetchFn: async () => textResponse(BB_RSS),
     fetchViaWebview,
   });
   expect(windows).toBe(0);
@@ -214,7 +211,7 @@ test("a webview source discovers headlines without opening a single window", asy
 
 test("fetchBodies renders a webview source's article and folds the body in", async () => {
   const asked: string[] = [];
-  const items = await collectSource(BLOOMBERG, { fetchFn: async () => res(BB_RSS) });
+  const items = await collectSource(BLOOMBERG, { fetchFn: async () => textResponse(BB_RSS) });
   const out = await fetchBodies(items, [BLOOMBERG], {
     fetchViaWebview: async (url) => {
       asked.push(url);
@@ -229,7 +226,7 @@ test("fetchBodies renders a webview source's article and folds the body in", asy
 });
 
 test("an anonymous body on a source with a sign-in stays flagged as partial", async () => {
-  const items = await collectSource(BLOOMBERG, { fetchFn: async () => res(BB_RSS) });
+  const items = await collectSource(BLOOMBERG, { fetchFn: async () => textResponse(BB_RSS) });
   const out = await fetchBodies(items, [BLOOMBERG], {
     fetchViaWebview: async () => article({ seesSignIn: true }),
   });
@@ -240,7 +237,7 @@ test("an anonymous body on a source with a sign-in stays flagged as partial", as
 });
 
 test("a wall or a timeout leaves the item alone, with nothing recorded against it", async () => {
-  const items = await collectSource(BLOOMBERG, { fetchFn: async () => res(BB_RSS) });
+  const items = await collectSource(BLOOMBERG, { fetchFn: async () => textResponse(BB_RSS) });
   for (const status of ["blocked", "timeout", "network"] as const) {
     const out = await fetchBodies(items, [BLOOMBERG], {
       fetchViaWebview: async () => article({ status, text: null, html: null, chars: 0 }),
@@ -255,7 +252,7 @@ test("a wall or a timeout leaves the item alone, with nothing recorded against i
 });
 
 test("no webview on this platform is a headline, not a failure", async () => {
-  const items = await collectSource(BLOOMBERG, { fetchFn: async () => res(BB_RSS) });
+  const items = await collectSource(BLOOMBERG, { fetchFn: async () => textResponse(BB_RSS) });
   // iOS, and any desktop whose bridge is not written: the dependency is simply
   // absent, and nothing throws or hangs.
   const out = await fetchBodies(items, [BLOOMBERG], {});
@@ -264,7 +261,7 @@ test("no webview on this platform is a headline, not a failure", async () => {
 });
 
 test("a webview fetch that throws costs the body and nothing else", async () => {
-  const items = await collectSource(BLOOMBERG, { fetchFn: async () => res(BB_RSS) });
+  const items = await collectSource(BLOOMBERG, { fetchFn: async () => textResponse(BB_RSS) });
   const out = await fetchBodies(items, [BLOOMBERG], {
     fetchViaWebview: async () => {
       throw new Error("command not found");
@@ -286,7 +283,7 @@ test("feed-field 'none' yields a summary-only item with the summary set", async 
     fulltext: { mode: "none" },
   };
   const rss = `<rss><channel><item><title>Paper</title><link>https://a/abs/1</link><description>An abstract here.</description></item></channel></rss>`;
-  const items = await collectSource(desc, { fetchFn: async () => res(rss) });
+  const items = await collectSource(desc, { fetchFn: async () => textResponse(rss) });
   expect(items[0].summaryOnly).toBe(true);
   expect(items[0].summary).toContain("abstract");
   expect(items[0].textContent).toBeUndefined();
@@ -302,7 +299,7 @@ test("feed-field flags a truncated (paywalled) body as summary-only", async () =
     fulltext: { mode: "feed-field", field: "content:encoded", truncationMarker: "Read more" },
   };
   const rss = `<rss xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><item><title>Paid</title><link>https://s/1</link><content:encoded><![CDATA[<p>Intro paragraph. Read more</p>]]></content:encoded></item></channel></rss>`;
-  const items = await collectSource(desc, { fetchFn: async () => res(rss) });
+  const items = await collectSource(desc, { fetchFn: async () => textResponse(rss) });
   expect(items[0].contentHtml).toContain("Intro paragraph");
   expect(items[0].summaryOnly).toBe(true);
 });
@@ -319,7 +316,7 @@ test("listpage finds article links, dedups, and fetches each page", async () => 
     fulltext: { mode: "fetch-page" },
   };
   const listHtml = `<a href="/article/123.html">x</a> ... <a href="/article/123.html">dup</a> ... <a href="/article/456.html">y</a>`;
-  const fetchFn = async (url: string) => (url.includes("/lists/") ? res(listHtml) : res("<html>art</html>"));
+  const fetchFn = async (url: string) => (url.includes("/lists/") ? textResponse(listHtml) : textResponse("<html>art</html>"));
   const items = await collectSource(desc, { fetchFn, extract });
   expect(items.length).toBe(2);
   expect(items[0].url).toBe("https://ji.com/article/123.html");
@@ -337,7 +334,7 @@ test("stream discovery is rejected (M-info-3)", async () => {
     discovery: { kind: "stream", url: "https://flash" },
     fulltext: { mode: "none" },
   } as unknown as SourceDescriptor;
-  await expect(collectSource(desc, { fetchFn: async () => res("{}") })).rejects.toThrow();
+  await expect(collectSource(desc, { fetchFn: async () => textResponse("{}") })).rejects.toThrow();
 });
 
 // --- collectAll: isolation + health ----------------------------------------
@@ -361,8 +358,8 @@ test("collectAll isolates a failing source and records health", async () => {
   };
   const disabled: SourceDescriptor = { ...good, id: "off", enabled: false };
   const fetchFn = async (url: string) => {
-    if (url.includes("good/list")) return res(JSON.stringify([{ id: "1", t: "Good one", c: "<p>body</p>" }]));
-    return res("down", 500); // bad feed fails
+    if (url.includes("good/list")) return textResponse(JSON.stringify([{ id: "1", t: "Good one", c: "<p>body</p>" }]));
+    return textResponse("down", 500); // bad feed fails
   };
   const { items, health } = await collectAll([good, bad, disabled], { fetchFn, now: () => 1000 });
   expect(items.length).toBe(1);
@@ -394,8 +391,8 @@ test("collectAll hands each source over as it settles, items and all, once per e
   const disabled: SourceDescriptor = { ...good, id: "off", enabled: false };
   const fetchFn = async (url: string) => {
     if (url.includes("good/list"))
-      return res(JSON.stringify([{ id: "1", t: "Good one", c: "<p>body</p>" }, { id: "2", t: "Another", c: "<p>b</p>" }]));
-    return res("down", 500); // bad feed fails after 5xx retries
+      return textResponse(JSON.stringify([{ id: "1", t: "Good one", c: "<p>body</p>" }, { id: "2", t: "Another", c: "<p>b</p>" }]));
+    return textResponse("down", 500); // bad feed fails after 5xx retries
   };
 
   const settled: SourceSettled[] = [];
@@ -433,7 +430,7 @@ test("a source fetches its articles several at a time, in feed order", async () 
   let inFlight = 0;
   let peak = 0;
   const fetchFn = async (url: string) => {
-    if (url.endsWith("/feed")) return res(feedOf(8));
+    if (url.endsWith("/feed")) return textResponse(feedOf(8));
     inFlight++;
     peak = Math.max(peak, inFlight);
     const body = await new Promise<Response>((resolve) => pages.push(resolve));
@@ -445,9 +442,9 @@ test("a source fetches its articles several at a time, in feed order", async () 
   await new Promise<void>((r) => setTimeout(r, 0));
   expect(peak).toBeGreaterThan(1);
   // Answer in reverse, so completion order is the opposite of feed order.
-  for (const resolve of [...pages].reverse()) resolve(res("<html>page</html>"));
+  for (const resolve of [...pages].reverse()) resolve(textResponse("<html>page</html>"));
   await new Promise<void>((r) => setTimeout(r, 0));
-  for (const resolve of pages) resolve(res("<html>page</html>"));
+  for (const resolve of pages) resolve(textResponse("<html>page</html>"));
   const items = await run;
   expect(items.map((i) => i.url)).toEqual(
     Array.from({ length: 8 }, (_, i) => `https://q/${i}.html`),
@@ -458,11 +455,11 @@ test("an abort stops a source mid-collection and sends nothing more", async () =
   const controller = new AbortController();
   let pageFetches = 0;
   const fetchFn = async (url: string) => {
-    if (url.endsWith("/feed")) return res(feedOf(20));
+    if (url.endsWith("/feed")) return textResponse(feedOf(20));
     pageFetches++;
     // Slow enough that the abort lands while the first batch is in flight.
     await new Promise<void>((r) => setTimeout(r, 5));
-    return res("<html>page</html>");
+    return textResponse("<html>page</html>");
   };
   const run = collectSource(QBIT, { fetchFn, extract, signal: controller.signal });
   await new Promise<void>((r) => setTimeout(r, 0));
@@ -481,7 +478,7 @@ test("a source already aborted is never fetched at all", async () => {
   let calls = 0;
   const fetchFn = async () => {
     calls++;
-    return res(feedOf(1));
+    return textResponse(feedOf(1));
   };
   await expect(collectSource(QBIT, { fetchFn, extract, signal: controller.signal })).rejects.toThrow();
   expect(calls).toBe(0);
@@ -499,10 +496,10 @@ test("collectAll keeps the sources that settled and stays quiet about the aborte
   };
   const slow: SourceDescriptor = { ...QBIT, id: "slow", name: "Slow" };
   const fetchFn = async (url: string) => {
-    if (url.includes("fast/list")) return res(JSON.stringify([{ id: "1", t: "One", c: "<p>b</p>" }]));
-    if (url.endsWith("/feed")) return res(feedOf(20));
+    if (url.includes("fast/list")) return textResponse(JSON.stringify([{ id: "1", t: "One", c: "<p>b</p>" }]));
+    if (url.endsWith("/feed")) return textResponse(feedOf(20));
     await new Promise<void>((r) => setTimeout(r, 50));
-    return res("<html>page</html>");
+    return textResponse("<html>page</html>");
   };
   const settled: SourceSettled[] = [];
   const run = collectAll([fast, slow], {
@@ -537,7 +534,7 @@ test("a settled source reports how long it took", async () => {
   const { health } = await collectAll([desc], {
     fetchFn: async () => {
       clock += 250;
-      return res(JSON.stringify([{ id: "1", t: "One", c: "<p>b</p>" }]));
+      return textResponse(JSON.stringify([{ id: "1", t: "One", c: "<p>b</p>" }]));
     },
     now: () => clock,
     onSourceSettled: (r) => void settled.push(r),
@@ -553,7 +550,7 @@ test("discoveryOnly takes the headlines and sends not one article request", asyn
   const calls: string[] = [];
   const fetchFn = async (url: string) => {
     calls.push(url);
-    return res(url.endsWith("/feed") ? RSS : "<html>page</html>");
+    return textResponse(url.endsWith("/feed") ? RSS : "<html>page</html>");
   };
   const items = await collectSource(QBIT, { fetchFn, extract, discoveryOnly: true });
   expect(calls).toEqual(["https://q/feed"]);
@@ -579,7 +576,7 @@ test("discoveryOnly keeps a body the list response already carried", async () =>
   const items = await collectSource(desc, {
     fetchFn: async (url) => {
       calls.push(url);
-      return res(rss);
+      return textResponse(rss);
     },
     extract,
     discoveryOnly: true,
@@ -596,7 +593,7 @@ test("discoveryOnly skips the detail endpoint, and fetchBodies pays for it later
   const calls: string[] = [];
   const fetchFn = async (url: string) => {
     calls.push(url);
-    return res(url.includes("/api/") ? detail : list);
+    return textResponse(url.includes("/api/") ? detail : list);
   };
   const discovered = await collectSource(JQX, { fetchFn, discoveryOnly: true });
   expect(calls).toEqual(["https://jqx/list"]);
@@ -613,7 +610,7 @@ test("discoveryOnly skips the detail endpoint, and fetchBodies pays for it later
 });
 
 test("fetchBodies fetches the page for a fetch-page source, reporting each as it settles", async () => {
-  const fetchFn = async (url: string) => res(url.endsWith("/feed") ? RSS : "<html>page</html>");
+  const fetchFn = async (url: string) => textResponse(url.endsWith("/feed") ? RSS : "<html>page</html>");
   const discovered = await collectSource(QBIT, { fetchFn, extract, discoveryOnly: true });
   const settled: string[] = [];
   const filled = await fetchBodies(discovered, [QBIT], { fetchFn, extract }, (it) => {
@@ -625,7 +622,7 @@ test("fetchBodies fetches the page for a fetch-page source, reporting each as it
 });
 
 test("fetchBodies leaves an item summary-only when its page will not load", async () => {
-  const fetchFn = async (url: string) => (url.endsWith("/feed") ? res(RSS) : res("boom", 500));
+  const fetchFn = async (url: string) => (url.endsWith("/feed") ? textResponse(RSS) : textResponse("boom", 500));
   const discovered = await collectSource(QBIT, { fetchFn, extract, discoveryOnly: true });
   const filled = await fetchBodies(discovered, [QBIT], { fetchFn, extract });
   expect(filled.length).toBe(1);
@@ -657,7 +654,7 @@ test("fetchBodies never re-fetches a body the feed already gave, and skips unkno
   const filled = await fetchBodies([withBody, orphan], [desc], {
     fetchFn: async (url) => {
       calls.push(url);
-      return res("<html/>");
+      return textResponse("<html/>");
     },
     extract,
   });
@@ -668,9 +665,9 @@ test("fetchBodies never re-fetches a body the feed already gave, and skips unkno
 test("a Stop during the material step surfaces rather than passing for a finished fetch", async () => {
   const controller = new AbortController();
   const fetchFn = async (url: string) => {
-    if (url.endsWith("/feed")) return res(RSS);
+    if (url.endsWith("/feed")) return textResponse(RSS);
     controller.abort();
-    return res("<html>page</html>");
+    return textResponse("<html>page</html>");
   };
   const discovered = await collectSource(QBIT, { fetchFn, extract, discoveryOnly: true });
   await expect(
@@ -693,7 +690,7 @@ test("an entry whose only text is content:encoded still gets a blurb", async () 
     discovery: { kind: "feed", url: "https://n/rss" },
     fulltext: { mode: "none" },
   };
-  const items = await collectSource(desc, { fetchFn: async () => res(rss) });
+  const items = await collectSource(desc, { fetchFn: async () => textResponse(rss) });
   expect(items[0].summary).toContain("stays coherent at 4K");
   // Flattened out of its HTML, like any other blurb.
   expect(items[0].summary).not.toContain("<p>");
@@ -709,6 +706,6 @@ test("a feed with its own description is unaffected by that fallback", async () 
     discovery: { kind: "feed", url: "https://a/rss" },
     fulltext: { mode: "none" },
   };
-  const items = await collectSource(desc, { fetchFn: async () => res(rss) });
+  const items = await collectSource(desc, { fetchFn: async () => textResponse(rss) });
   expect(items[0].summary).toBe("The list blurb.");
 });

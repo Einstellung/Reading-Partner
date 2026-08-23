@@ -9,16 +9,13 @@ import type { ProbeConfirmCardData } from "../../src/info/sources/source-cards";
 import type { ExtractReadable } from "../../src/info/extract/readable-select";
 import type { SourceDescriptor } from "../../src/info/sources/descriptor";
 import type { WebviewArticle } from "../../src/info/extract/webview-article";
+import { textResponse } from "../support/fetch";
 
 const extract: ExtractReadable = (_html, url) => ({
   title: `Title of ${url}`,
   contentHtml: `<p>${"body ".repeat(80)}</p>`,
   textContent: "body ".repeat(80),
 });
-
-function res(body: string, status = 200): Response {
-  return new Response(body, { status });
-}
 
 const FEED_DESC: SourceDescriptor = {
   id: "ex", name: "Example", line: "AI", enabled: true,
@@ -31,7 +28,7 @@ const FEED_XML = `<rss><channel>${[1, 2, 3]
   .join("")}</channel></rss>`;
 
 test("trialSource fetches up to 3 articles and reports char counts + full-text", async () => {
-  const fetchFn = async (url: string) => res(url.endsWith("/feed") ? FEED_XML : "<html></html>");
+  const fetchFn = async (url: string) => textResponse(url.endsWith("/feed") ? FEED_XML : "<html></html>");
   const r = await trialSource(FEED_DESC, { fetchFn, extract });
   expect(r.ok).toBe(true);
   expect(r.samples.length).toBe(3);
@@ -40,7 +37,7 @@ test("trialSource fetches up to 3 articles and reports char counts + full-text",
 });
 
 test("trialSource returns not-ok on a discovery failure", async () => {
-  const fetchFn = async () => res("boom", 500);
+  const fetchFn = async () => textResponse("boom", 500);
   const r = await trialSource(FEED_DESC, { fetchFn, extract });
   expect(r.ok).toBe(false);
   expect(r.error).toBeTruthy();
@@ -49,7 +46,7 @@ test("trialSource returns not-ok on a discovery failure", async () => {
 test("trial_source tool fires a confirm card and demands consent before add", async () => {
   const cards: ProbeConfirmCardData[] = [];
   const added: SourceDescriptor[] = [];
-  const fetchFn = async (url: string) => res(url.endsWith("/feed") ? FEED_XML : "<html></html>");
+  const fetchFn = async (url: string) => textResponse(url.endsWith("/feed") ? FEED_XML : "<html></html>");
   const tools = buildSourceTools({
     fetchFn,
     extract,
@@ -69,7 +66,7 @@ test("trial_source tool fires a confirm card and demands consent before add", as
 test("add_source writes the trialed descriptor enabled", async () => {
   const added: SourceDescriptor[] = [];
   const tools = buildSourceTools({
-    fetchFn: async () => res(""),
+    fetchFn: async () => textResponse(""),
     extract,
     addSource: async (d) => void added.push(d),
     onProbeCard: () => {},
@@ -83,7 +80,7 @@ test("add_source writes the trialed descriptor enabled", async () => {
 
 test("tools reject a missing or invalid descriptor JSON", async () => {
   const tools = buildSourceTools({
-    fetchFn: async () => res(""),
+    fetchFn: async () => textResponse(""),
     extract,
     addSource: async () => {},
     onProbeCard: () => {},
@@ -95,7 +92,7 @@ test("tools reject a missing or invalid descriptor JSON", async () => {
 
 test("trial_source/add_source descriptions grant the AI descriptor authorship", () => {
   const tools = buildSourceTools({
-    fetchFn: async () => res(""),
+    fetchFn: async () => textResponse(""),
     extract,
     addSource: async () => {},
     onProbeCard: () => {},
@@ -116,7 +113,7 @@ test("trial_source/add_source descriptions grant the AI descriptor authorship", 
 test("a hand-drafted (non-probe) descriptor trials and adds like any other", async () => {
   const cards: ProbeConfirmCardData[] = [];
   const added: SourceDescriptor[] = [];
-  const fetchFn = async (url: string) => res(url.endsWith("/feed") ? FEED_XML : "<html></html>");
+  const fetchFn = async (url: string) => textResponse(url.endsWith("/feed") ? FEED_XML : "<html></html>");
   const tools = buildSourceTools({
     fetchFn,
     extract,
@@ -173,7 +170,7 @@ function webviewArticle(url: string, text: string | null, seesSignIn = false): W
   };
 }
 
-const feedFetch = async (url: string) => res(url.endsWith("/feed") ? FEED_XML : "<html></html>");
+const feedFetch = async (url: string) => textResponse(url.endsWith("/feed") ? FEED_XML : "<html></html>");
 
 test("trialSource fetches a webview source's body through the injected window", async () => {
   const asked: string[] = [];

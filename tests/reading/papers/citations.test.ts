@@ -19,6 +19,7 @@ import {
   type WalkResult,
 } from "../../../src/reading/papers/citations";
 import type { PaperCandidate } from "../../../src/reading/papers/paper-search";
+import { jsonResponse } from "../../support/fetch";
 
 function candidate(over: Partial<PaperCandidate> = {}): PaperCandidate {
   return {
@@ -185,10 +186,8 @@ function routed(handlers: Record<string, (url: string) => Response>) {
   return { fetchFn, seen };
 }
 
-const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
-
 test("the forward walk asks OpenAlex to filter by date and sort by citations", async () => {
-  const { fetchFn, seen } = routed({ "filter=cites": () => json(OA_PAGE(44)) });
+  const { fetchFn, seen } = routed({ "filter=cites": () => jsonResponse(OA_PAGE(44)) });
   const result = await walkCitations(
     candidate({ openAlexId: "W2033231119", citedByCount: 423 }),
     "citations",
@@ -220,7 +219,7 @@ const S2_REFS = {
 };
 
 test("the backward walk reads S2's whole bibliography and ranks it here", async () => {
-  const { fetchFn, seen } = routed({ "/references": () => json(S2_REFS) });
+  const { fetchFn, seen } = routed({ "/references": () => jsonResponse(S2_REFS) });
   const result = await walkCitations(
     candidate({ s2PaperId: "seed1" }),
     "references",
@@ -240,14 +239,14 @@ test("the backward walk reads S2's whole bibliography and ranks it here", async 
 // data: null. That is not "a paper that cites nothing" — OpenAlex still has it.
 test("an elided S2 reference list falls through to OpenAlex instead of reading as empty", async () => {
   const { fetchFn } = routed({
-    "/references": () => json({ data: null, citingPaperInfo: { title: "Seed" } }),
+    "/references": () => jsonResponse({ data: null, citingPaperInfo: { title: "Seed" } }),
     "/works/": () =>
-      json({
+      jsonResponse({
         id: "https://openalex.org/W2033231119",
         display_name: "Seed",
         referenced_works: ["https://openalex.org/W312766858"],
       }),
-    "filter=openalex_id": () => json(OA_PAGE(1)),
+    "filter=openalex_id": () => jsonResponse(OA_PAGE(1)),
   });
   const result = await walkCitations(
     candidate({ s2PaperId: "seed1", openAlexId: "W2033231119" }),
@@ -264,7 +263,7 @@ test("a library that refuses is reported by name, not swallowed as an empty grap
   const { fetchFn } = routed({
     // Out of free credits: the failure that must never read as "nothing cites this".
     "filter=cites": () => new Response("out of credits", { status: 409 }),
-    "/citations": () => json({ data: [] }),
+    "/citations": () => jsonResponse({ data: [] }),
   });
   const result = await walkCitations(candidate({ openAlexId: "W1", s2PaperId: "s1" }), "citations", {}, { fetchFn });
   expect(result.papers).toEqual([]);
@@ -283,7 +282,7 @@ test("the forward fallback through S2 admits the list is a sample", async () => 
   }));
   const { fetchFn } = routed({
     "filter=cites": () => new Response("nope", { status: 503 }),
-    "/citations": () => json({ data: rows }),
+    "/citations": () => jsonResponse({ data: rows }),
   });
   const result = await walkCitations(
     candidate({ openAlexId: "W1", s2PaperId: "s1" }),
@@ -303,7 +302,7 @@ test("the forward fallback through S2 admits the list is a sample", async () => 
 });
 
 test("the walk limit is clamped whatever the model asked for", async () => {
-  const { fetchFn, seen } = routed({ "filter=cites": () => json(OA_PAGE(9999)) });
+  const { fetchFn, seen } = routed({ "filter=cites": () => jsonResponse(OA_PAGE(9999)) });
   await walkCitations(candidate({ openAlexId: "W1" }), "citations", { limit: 500 }, { fetchFn });
   expect(decodeURIComponent(seen[0])).toContain("per-page=25");
 });
@@ -323,14 +322,14 @@ const S2_PAPER = {
 test("resolving a DOI merges both libraries, so the walk has an id for either", async () => {
   const { fetchFn } = routed({
     "api.openalex.org": () =>
-      json({
+      jsonResponse({
         id: "https://openalex.org/W2033231119",
         display_name: "Cellular scaling rules for primate brains",
         publication_year: 2007,
         cited_by_count: 423,
         doi: "https://doi.org/10.1073/pnas.0611396104",
       }),
-    "api.semanticscholar.org": () => json(S2_PAPER),
+    "api.semanticscholar.org": () => jsonResponse(S2_PAPER),
   });
   const result = await resolvePaper("10.1073/pnas.0611396104", { fetchFn });
   expect(result.confidence).toBe("id");
@@ -343,8 +342,8 @@ test("resolving a DOI merges both libraries, so the walk has an id for either", 
 
 test("a title resolves through a search and reports how sure the match is", async () => {
   const { fetchFn } = routed({
-    "api.openalex.org": () => json({ results: [] }),
-    "api.semanticscholar.org": () => json({ data: [S2_PAPER] }),
+    "api.openalex.org": () => jsonResponse({ results: [] }),
+    "api.semanticscholar.org": () => jsonResponse({ data: [S2_PAPER] }),
   });
   const note =
     "Herculano-Houzel, S. Cellular scaling rules for primate brains. PNAS 104, 3562 (2007).";
@@ -361,9 +360,9 @@ test("a title resolves through a search and reports how sure the match is", asyn
 
 test("nothing matching is said plainly, with the near misses and no guess", async () => {
   const { fetchFn } = routed({
-    "api.openalex.org": () => json({ results: [] }),
+    "api.openalex.org": () => jsonResponse({ results: [] }),
     "api.semanticscholar.org": () =>
-      json({ data: [{ paperId: "x", title: "A completely unrelated paper about wheat" }] }),
+      jsonResponse({ data: [{ paperId: "x", title: "A completely unrelated paper about wheat" }] }),
   });
   const result = await resolvePaper("Some paper that does not exist anywhere", { fetchFn });
   expect(result.paper).toBeNull();
