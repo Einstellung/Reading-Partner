@@ -478,9 +478,9 @@ test("two notes with no base between them keep both files", () => {
 // --- opaque -----------------------------------------------------------------
 
 test("an unrecognised file keeps one copy whole and parks the other", () => {
-  const local = bytes(" binary one");
-  const remote = bytes(" binary two");
-  const out = merge("library/x.pdf", bytes(" binary"), local, remote);
+  const local = bytes("\0binary one");
+  const remote = bytes("\0binary two");
+  const out = merge("library/x.pdf", bytes("\0binary"), local, remote);
   expect(out.copies).toHaveLength(1);
   expect(out.copies[0].path).toMatch(/^library\/x\.conflict-[0-9a-f]{8}\.pdf$/);
   expect(out.dropped).toEqual([]);

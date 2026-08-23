@@ -20,6 +20,7 @@
 | 出 iOS 包、签名、图标、深链接 | iOS 构建与签名 + 开发环境 |
 | 动 CI 的构建缓存、靠 build script 生成的东西 | iOS 构建与签名 |
 | 原生录音、回声消除、后台识别 | 原生音频与语音 |
+| 写 CJK 字符类、抄一段带非 ASCII 边界的正则 | 原生音频与语音 |
 | 出 Android 包、签名、对齐 | Android 构建与签名 |
 | 桌面 webview 行为异常 | WebKit / webview |
 | 隐藏 webview 取正文、反爬、UA、站点登录与退出 | WebKit / webview + 网络与 CSP |
@@ -31,6 +32,7 @@
 | 全局样式、Tailwind layer、字体与行高 | 排版基线与 Tailwind + EmbedPDF 引擎 |
 | 加测试文件、给 store 写单测 | 开发环境 |
 | 搬目录、切子域、动分层表 | 开发环境 |
+| 拿 grep 判断"这东西没人用"、按结论删代码 | 开发环境 |
 | 在 worktree 里起 dev server 做实验 | 开发环境 |
 | 查滚动卡顿、主线程占用 | WebKit / webview + EmbedPDF 引擎 |
 | 渲染 AI 回复的 markdown、加 remark/rehype 插件 | markdown 渲染 |
@@ -39,7 +41,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 169）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 171）。
 
 ## EmbedPDF 引擎
 
@@ -149,6 +151,7 @@
 - [166-the-microphone-opens-after-the-user-has-started-talking](./166-the-microphone-opens-after-the-user-has-started-talking.md) — 按住说话丢头字：tap 装上之前没有麦克风，press 到第一个 buffer 实测一整秒，其中约 690ms 花在 `setVoiceProcessingEnabled(true)`，识别器那一半只占 80–180ms。2.6 秒的句子全对、2.4 秒的丢头，峰值电平 86-99%，看着像识别质量问题。把 `start()` 切成"先开麦克风、后备识别器"两半、中间垫 pre-roll 队列，冷启动收益为零（五次按住四次缓冲到 0 个 buffer）。解法是留着引擎不拆——28 次实测，复用 304ms（9/9 完整）对重建 1082ms（2/13 完整），丢头字消失；pre-roll 在复用形态下才第一次有东西可垫。`setPrefersEchoCancelledInput` 用不上：iPhone 16 上 `isEchoCancelledInputAvailable` 是 false，而且复用之后开不开 VPIO 差不出来
 - [167-the-microphone-indicator-lights-at-engine-start](./167-the-microphone-indicator-lights-at-engine-start.md) — 橙点在 `engine.start()` 那一步亮，`setActive(true)` 那一步不亮（实测四档，Apple 对触发点零文档，推过两次都错）。意味着坑 166 那 690ms 没法提前付掉而不点亮橙点：VPIO 只有引擎跑起来才建得成。只剩两种形态——切进语音模式就起引擎（用户没开口橙点就亮），或第一次按住时建、之后不 `stop()` 只 `pause()`（橙点从第一次说话开始亮）。取后者，已落地：橙点在语音模式里一直亮，退出语音模式立刻灭
 - [168-the-probe-parked-beside-the-thing-it-measures](./168-the-probe-parked-beside-the-thing-it-measures.md) — 橙点探针停在 `engine`/`tap`/`recording` 不撤，下一次按住先替它拆引擎，四百到八百毫秒记在 `session` 那一步上，21 次按住的一整轮数据作废（探针停 off/session 的 11 次全是 72-156ms，停在建了引擎那三档的 9 次全是 584-977ms，中间没有值）；顺带把上一次留着的引擎也清了，`reuse` 十次按住 `reused` 全 false。日志和字段全都正常，所以看不出来。解法是拒绝这次按住并在界面上说原因，不偷偷复位；判据是"上次按住之后碰过探针没有"而不是"探针现在停在哪一档"——`setIndicatorProbe(.off)` 自己也 teardown，提示人"先把探针关掉"等于亲手指挥人毁掉要复用的引擎；拆除动作放进被拒的那次按住里（它的数不算数），碰一次探针固定赔一次按住；每行记 `probeStage` 和 `probeTouched`，快路径没走成要写 `reuseSkipped`
+- [170-a-regex-boundary-is-a-code-point-not-a-glyph](./170-a-regex-boundary-is-a-code-point-not-a-glyph.md) — CJK 字符类的边界 U+F900 和 U+8C48 渲染成同一个字形，抄成后者就把 U+8C48–U+FAFF 这 2.8 万个码点（谚文、彝文、私用区，加上没有 `u` 标志时每个 emoji 的前导代理）全算成 CJK，seam 该留的空格被吃掉；bench 只跑纯中文和纯英文，两种范围结论一致，测不出来。边界按码点读不按字形读
 
 ## WebKit / webview
 
@@ -233,6 +236,7 @@
 - [144-the-layering-test-reads-imports-inside-comments](./144-the-layering-test-reads-imports-inside-comments.md) — `tests/layering.test.ts` 不剥注释，注释里写成 `from "../lecture"` 形式的一行照样落成一条目录依赖边，造出一个代码里不存在的环；注释里指别的目录写裸路径，别写 import 语句形式
 - [155-cargo-never-hears-that-the-icon-changed](./155-cargo-never-hears-that-the-icon-changed.md) — 图标是编译期嵌进二进制的，`tauri_build::build()` 的 rerun-if-changed 名单里没有 `src-tauri/icons/`，`generate_context!` 又只 `include_bytes!` 一份 `OUT_DIR` 里按校验和命名的副本；换了图片 cargo 认为没东西变，dev 起来还是旧图标。`touch src-tauri/tauri.conf.json` 再起。桌面用的是 `bundle.icon` 里第一个 `.png`（`icons/32x32.png`），不是 `icon.png`
 - [151-a-dev-build-registers-the-dev-binary-for-login](./151-a-dev-build-registers-the-dev-binary-for-login.md) — dev 下打开开机启动写进登录项的是 `target/debug` 那个二进制，它的 devUrl 指着 vite dev server，开机起来只有一张 connection refused 错误页；手删还会被下次启动的对齐写回去。dev 构建里开机启动整个当作不可用，启动时的对齐无条件 `disable()`，`device.json` 里的意愿留着等打包版
+- [169-a-nul-byte-makes-the-whole-file-invisible-to-grep](./169-a-nul-byte-makes-the-whole-file-invisible-to-grep.md) — 源码里写死的 0x00 字节（不是 `\0` 转义）让整个文件对 grep 变二进制：GNU grep 的提示走 stderr、退出码还是 0，会话里套了 `-I` 的 ugrep 连提示都没有，于是「grep 扫不到这个文件」和「这个符号没人用」长得一模一样，一次审计差点删掉一个还在被 import 的模块。改回 `\0` 转义，`tests/source-is-text.test.ts` 扫 `src`/`tests`/`scripts` 的每个 `.ts`/`.tsx`
 
 ## 历史（zotero/reader 引擎时代）
 
