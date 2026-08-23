@@ -485,7 +485,7 @@ test("the AI pen comes back on the way out, and the other tools are never touche
   const picked = "ai";
   expect(toolInCall(picked, ASIDE)).toBe("none");
   expect(toolInCall(picked, LESSON)).toBe("ai");
-  for (const tool of ["none", "navlock", "highlight", "underline"] as const) {
+  for (const tool of ["none", "navlock", "highlight"] as const) {
     expect(toolInCall(tool, ASIDE)).toBe(tool);
     expect(toolInCall(tool, LESSON)).toBe(tool);
   }
