@@ -27,18 +27,6 @@ export function cooldownAfter(round: number, ladder: readonly number[] = COOLDOW
   return round < ladder.length ? ladder[round] : null;
 }
 
-// A `Retry-After` value in either form the RFC allows: a delay in seconds, or an
-// HTTP date. Null when it is neither, or when the date has already passed.
-export function retryAfterMs(value: string | null | undefined, now: number): number | null {
-  if (!value) return null;
-  const trimmed = value.trim();
-  const seconds = Number(trimmed);
-  if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1000);
-  const at = Date.parse(trimmed);
-  if (!Number.isFinite(at)) return null;
-  return at > now ? at - now : null;
-}
-
 // Everything a failure can say about itself in text: its own message, plus the
 // provider's message when pi carried one back on the AssistantMessage. Read by
 // duck typing rather than by importing ModelCallError, so this module stays free

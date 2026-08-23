@@ -648,20 +648,15 @@ export const getThread = (bookId: string, threadId: string): Thread | undefined 
   store.get(bookId, threadId);
 export const listThreads = (bookId: string): Thread[] => store.list(bookId);
 export const getBookThread = (bookId: string): Thread | undefined => store.getBook(bookId);
-export const getThreadAsides = (bookId: string, threadId: string): Thread[] =>
-  store.asides(bookId, threadId);
-export const getOrphanAsides = (bookId: string): Thread[] => store.orphanAsides(bookId);
 export const createThread = (bookId: string, annotationId: string, threadId: string): Thread =>
   store.create(bookId, annotationId, threadId);
 export const createBookThread = (bookId: string, threadId: string): Thread =>
   store.createBook(bookId, threadId);
 export const createAsideThread = (bookId: string, threadId: string, init: AsideInit): Thread =>
   store.createAside(bookId, threadId, init);
-export const deleteThread = (bookId: string, threadId: string): boolean =>
-  store.remove(bookId, threadId);
-// The same delete as `deleteThread`, with every id that went named back. Use
-// this wherever something else is keyed by thread id — a live turn, staged
-// images — and `deleteThread` where the only question is whether it was there.
+// Deletes a conversation and its asides, with every id that went named back.
+// Whatever else is keyed by thread id — a live turn, staged images — is cleared
+// from those names.
 export const deleteThreadTree = (bookId: string, threadId: string): string[] =>
   store.removeTree(bookId, threadId);
 export const appendMessage = (

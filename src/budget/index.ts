@@ -10,7 +10,6 @@ export {
   estimateContextTokens,
   estimateMessageTokens,
   estimateTextTokens,
-  fitsAllowance,
   fitsBudget,
   outputAllowance,
   piBudget,

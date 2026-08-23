@@ -142,12 +142,6 @@ export function applyDictationEvent(t: Transcript, e: DictationEvent): Transcrip
   }
 }
 
-// The whole stream folded at once. What the machine does incrementally, for
-// tests and for anything holding a recording.
-export function assembleTranscript(events: readonly DictationEvent[]): string {
-  return transcriptText(events.reduce(applyDictationEvent, EMPTY_TRANSCRIPT));
-}
-
 // --- the host's source ------------------------------------------------------
 
 // The plugin's own listener bus, not the global one. A Swift plugin can only

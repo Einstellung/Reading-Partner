@@ -8,11 +8,9 @@ import {
   createAsideThread,
   createBookThread,
   createThread,
-  deleteThread,
   deleteThreadTree,
   getBookThread,
   getThread,
-  getThreadAsides,
   patchThreadMessage,
   threadKind,
   type PersistedPart,
@@ -66,39 +64,6 @@ test("the book marker survives the JSON persistence shape", () => {
   expect(restored.threads["bt-4"].annotationId).toBe("");
 });
 
-// --- deleteThread -----------------------------------------------------------
-
-test("deleteThread removes a mark-anchored thread and leaves its siblings", () => {
-  const path = "/books/delete-a.pdf";
-  createThread(path, "ann-1", "th-1");
-  createThread(path, "ann-2", "th-2");
-  appendMessage(path, "th-1", { role: "user", text: "hi", ts: 1 });
-
-  expect(deleteThread(path, "th-1")).toBe(true);
-  expect(getThread(path, "th-1")).toBeUndefined();
-  // The other thread is untouched.
-  expect(getThread(path, "th-2")).toBeDefined();
-});
-
-test("deleteThread removes the book-level thread so a fresh one can be made", () => {
-  const path = "/books/delete-b.pdf";
-  const book = createBookThread(path, "bt-1");
-  expect(getBookThread(path)).toBe(book);
-
-  expect(deleteThread(path, "bt-1")).toBe(true);
-  expect(getBookThread(path)).toBeUndefined();
-  expect(getThread(path, "bt-1")).toBeUndefined();
-});
-
-test("deleteThread is a no-op (returns false) on an unknown thread or unloaded file", () => {
-  const path = "/books/delete-c.pdf";
-  createThread(path, "ann-1", "th-1");
-  expect(deleteThread(path, "missing")).toBe(false);
-  expect(deleteThread("/books/never-loaded.pdf", "th-1")).toBe(false);
-  // The real thread survives the misses.
-  expect(getThread(path, "th-1")).toBeDefined();
-});
-
 // --- the three kinds (docs/03) ----------------------------------------------
 
 // `annotationId === ""` and `book === true` were one binary between them, and it
@@ -132,7 +97,6 @@ test("createAsideThread links to its parent and is never the book thread", () =>
   expect(threadKind(aside)).toBe("aside");
   // The top-bar button still finds the lesson.
   expect(getBookThread(path)).toBe(lesson);
-  expect(getThreadAsides(path, "bt-a").map((t) => t.id)).toEqual(["as-a"]);
 });
 
 test("deleteThreadTree takes a conversation's asides with it and names them all", () => {
@@ -155,7 +119,6 @@ test("deleting an aside leaves the conversation it hangs off alone", () => {
 
   expect(deleteThreadTree(path, "as-c")).toEqual(["as-c"]);
   expect(getThread(path, "bt-c")).toBe(lesson);
-  expect(getThreadAsides(path, "bt-c")).toEqual([]);
 });
 
 // --- parts format (new) vs the plain { role, text, ts } shape (old) ---------
