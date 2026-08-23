@@ -5,7 +5,7 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../ai/agent";
-import { chapterAt, textAround } from "../fulltext/query";
+import { textAround } from "../fulltext/query";
 import { formatPages, formatSearch, MAX_PAGES, type TopicMaterial } from "../fulltext/format";
 import type { Fulltext } from "../fulltext/types";
 import { RESEARCH_LABEL, RESEARCH_TOOL_NAME } from "./papers/research-agent";
@@ -53,12 +53,6 @@ export function spineOverviewSection(overview: string | null | undefined, max = 
 export function surroundingText(ft: Fulltext, page: number): string {
   if (ft.status !== "ok") return "";
   return clip(textAround(ft, page, SURROUND_RADIUS), SURROUND_MAX);
-}
-
-// The chapter title a page falls under, or null (no outline / no text).
-export function chapterTitleAt(ft: Fulltext | null, page: number | null): string | null {
-  if (!ft || ft.status !== "ok" || page === null) return null;
-  return chapterAt(ft, page)?.title ?? null;
 }
 
 // Human phrase for a running/failed tool call, shown in the chat trace.

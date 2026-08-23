@@ -331,23 +331,6 @@ export function IconPagedLayout({ size = 20 }: IconProps) {
 	);
 }
 
-// Vertical continuous scroll layout: a page with a downward flow arrow.
-export function IconVerticalLayout({ size = 20 }: IconProps) {
-	return (
-		<svg
-			{...svgProps(size)}
-			stroke="currentColor"
-			strokeWidth="1.5"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-		>
-			<rect x="4" y="3" width="12" height="14" rx="1" />
-			<path d="M10 6.5V13.5" />
-			<path d="M7.5 11L10 13.5L12.5 11" />
-		</svg>
-	);
-}
-
 // Down chevron for the toolbar "More" overflow menu.
 export function IconChevronDown({ size = 20 }: IconProps) {
 	return (
