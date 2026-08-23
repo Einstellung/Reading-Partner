@@ -4,8 +4,9 @@
 // Run: bun test.
 //
 // The layers, innermost first:
-//   platform   host and storage primitives (platform/app, platform/sync).
-//              platform/app is the floor and imports nothing.
+//   platform   host, storage and wire-protocol primitives (platform/app,
+//              platform/http, platform/sync). platform/app is the floor and
+//              imports nothing.
 //   capability headless services a domain calls into (ai/, ai/voice, budget/,
 //              fulltext/). They may use platform and each other; they must
 //              never reach up into a domain, because that is how ai/ ended up
@@ -41,6 +42,7 @@ type Layer = "platform" | "capability" | "domain" | "ui" | "shell" | "entry";
 const LAYER: Record<string, Layer> = {
   platform: "platform",
   "platform/app": "platform",
+  "platform/http": "platform",
   "platform/sync": "platform",
   "platform/sync/merge": "platform",
 

@@ -9,6 +9,7 @@
 
 import { isTauri, type FetchFn } from "../../platform/app/host";
 import { cleanTauriFetch } from "../../platform/app/tauri-fetch";
+import { MAX_RETRY_WAIT_MS, retryAfterMs } from "../../platform/http/retry-after";
 
 export type { FetchFn };
 
@@ -144,6 +145,8 @@ export interface RetryOptions {
   fetchFn?: FetchFn;
   sleep?: (ms: number) => Promise<void>;
   throttle?: Throttle;
+  // Injected by tests. Read only to measure an HTTP-date Retry-After against.
+  now?: () => number;
 }
 
 const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -162,10 +165,11 @@ export function interactiveRetry(fetchFn?: FetchFn): RetryOptions {
   return fetchFn ? { ...INTERACTIVE_RETRY, fetchFn } : INTERACTIVE_RETRY;
 }
 
-// Fetch with retry on 429/5xx/network errors, honouring Retry-After when the
-// server sends one. Other non-OK statuses (404, 400) return immediately — the
-// caller decides what a miss means. A terminal 429 throws RateLimitError so the
-// pipeline can cool the paper down instead of failing it.
+// Fetch with retry on 429/5xx/network errors, honouring Retry-After (either RFC
+// form, capped at MAX_RETRY_WAIT_MS) when the server sends one. Other non-OK
+// statuses (404, 400) return immediately — the caller decides what a miss
+// means. A terminal 429 throws RateLimitError so the pipeline can cool the paper
+// down instead of failing it.
 export async function fetchWithRetry(url: string, init?: RequestInit, opts?: RetryOptions): Promise<Response> {
   const retries = opts?.retries ?? 3;
   const doFetch = opts?.fetchFn ?? readingFetch;
@@ -175,6 +179,7 @@ export async function fetchWithRetry(url: string, init?: RequestInit, opts?: Ret
   const throttle = opts?.throttle ?? (opts?.fetchFn ? noopThrottle : hostThrottle);
   const baseMs = opts?.baseMs ?? 1000;
   const base429 = opts?.base429Ms ?? 5000;
+  const now = opts?.now ?? Date.now;
   const host = new URL(url).hostname;
 
   let lastError: unknown = null;
@@ -191,10 +196,16 @@ export async function fetchWithRetry(url: string, init?: RequestInit, opts?: Ret
       if (res.status === 429 || res.status >= 500) {
         lastWas429 = res.status === 429;
         lastError = new Error(`HTTP ${res.status} from ${host}`);
-        const after = Number(res.headers.get("retry-after"));
+        const asked = retryAfterMs(res.headers.get("retry-after"), now());
         const base = lastWas429 ? base429 : baseMs;
+        // Capped: a host answering 429 with "retry-after: 999999" is asking for
+        // longer than any lookup here can wait. A wait of zero — the header said
+        // 0, or named a date already past — is nothing to honour, so the backoff
+        // stands.
         waitBeforeNext =
-          Number.isFinite(after) && after > 0 ? after * 1000 : backoffMs(attempt, base);
+          asked !== null && asked > 0
+            ? Math.min(asked, MAX_RETRY_WAIT_MS)
+            : backoffMs(attempt, base);
         continue;
       }
       return res;

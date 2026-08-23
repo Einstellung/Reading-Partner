@@ -10,12 +10,8 @@
 import { expect, test } from "bun:test";
 import { isAbortError } from "../../src/platform/app/abort";
 import type { FetchFn } from "../../src/platform/app/host";
-import {
-  MAX_RETRY_WAIT_MS,
-  fetchText,
-  retryAfterMs,
-  retryBackoffMs,
-} from "../../src/info/extract/http";
+import { MAX_RETRY_WAIT_MS } from "../../src/platform/http/retry-after";
+import { fetchText, retryBackoffMs } from "../../src/info/extract/http";
 
 // A fixed wall clock, so an HTTP-date Retry-After has something to be relative to.
 const NOW = Date.UTC(2026, 0, 1, 12, 0, 0);
@@ -170,17 +166,4 @@ test("a run stopped during the wait gives up instead of sitting it out", async (
 
   expect(outcome).toBe("gave up");
   expect(log).toEqual(["fetch 1", `wait ${MAX_RETRY_WAIT_MS}`]);
-});
-
-test("retryAfterMs reads both forms and refuses the rest", () => {
-  expect(retryAfterMs(null, NOW)).toBeNull();
-  expect(retryAfterMs("", NOW)).toBeNull();
-  expect(retryAfterMs("120", NOW)).toBe(120_000);
-  expect(retryAfterMs("  120  ", NOW)).toBe(120_000);
-  expect(retryAfterMs("0", NOW)).toBe(0);
-  expect(retryAfterMs(new Date(NOW + 30_000).toUTCString(), NOW)).toBe(30_000);
-  // A date that has already passed is not a negative wait.
-  expect(retryAfterMs(new Date(NOW - 30_000).toUTCString(), NOW)).toBe(0);
-  expect(retryAfterMs("tomorrow", NOW)).toBeNull();
-  expect(retryAfterMs("-5", NOW)).toBeNull();
 });
