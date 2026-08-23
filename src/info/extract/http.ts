@@ -7,6 +7,7 @@
 import { isAbortError, throwIfAborted } from "../../platform/app/abort";
 import { isTauri, type FetchFn } from "../../platform/app/host";
 import { cleanTauriFetch } from "../../platform/app/tauri-fetch";
+import { MAX_RETRY_WAIT_MS, retryAfterMs } from "../../platform/http/retry-after";
 import { INFO_USER_AGENT } from "./user-agent";
 
 export type { FetchFn };
@@ -34,31 +35,9 @@ export interface FetchTextOptions {
   now?: () => number;
 }
 
-// The longest a retry will wait. A source that answers 429 with "come back in
-// an hour" is asking for more than a briefing run has: past the cap the attempt
-// is given up and the item degrades, which is what any other non-OK status does
-// here anyway.
-export const MAX_RETRY_WAIT_MS = 30_000;
-
 // Doubling from half a second, so the default two retries wait 0.5s then 1s.
 export function retryBackoffMs(attempt: number): number {
   return 500 * 2 ** attempt;
-}
-
-// `Retry-After` in either form the RFC allows: a delay in seconds, or an HTTP
-// date. Null when the header is absent or is neither, so the caller falls back
-// to its own backoff rather than treating a header it cannot read as "retry
-// now". A date already in the past is no wait at all.
-export function retryAfterMs(header: string | null | undefined, now: number): number | null {
-  if (!header) return null;
-  const value = header.trim();
-  if (/^\d+$/.test(value)) return Number(value) * 1000;
-  // Every form of HTTP date carries letters (a month name, a weekday, "GMT"),
-  // so a value with none is a broken delay and not a date. Without this,
-  // Date.parse reads "-5" as a year and the header becomes "retry now".
-  if (!/[a-z]/i.test(value)) return null;
-  const at = Date.parse(value);
-  return Number.isNaN(at) ? null : Math.max(0, at - now);
 }
 
 const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
