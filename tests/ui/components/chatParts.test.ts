@@ -8,8 +8,6 @@ import {
   chatGlance,
   findCardPart,
   insertBeforeLast,
-  isPersistableCardKind,
-  isPersistablePart,
   messageToParts,
   nextCardId,
   patchCardPayload,
@@ -105,24 +103,7 @@ test("nextCardId is unique per call", () => {
   expect(nextCardId("probe")).not.toBe(nextCardId("probe"));
 });
 
-// --- persistence policy + round-trip ---------------------------------------
-
-test("persistence policy: text yes, tool-trace no, card by kind", () => {
-  expect(isPersistablePart({ type: "text", text: "x" })).toBe(true);
-  expect(isPersistablePart({ type: "tool-trace", tools: [] })).toBe(false);
-  expect(isPersistablePart({ type: "card", id: "c", card: probe() })).toBe(true);
-  expect(
-    isPersistablePart({
-      type: "card",
-      id: "c",
-      card: { kind: "briefing-progress", phase: "fetching", collect: null, triage: null },
-    }),
-  ).toBe(false);
-  expect(isPersistableCardKind("probe-confirm")).toBe(true);
-  expect(isPersistableCardKind("briefing-ready")).toBe(true);
-  expect(isPersistableCardKind("briefing-progress")).toBe(false);
-  expect(isPersistableCardKind("briefing-failed")).toBe(false);
-});
+// --- persistence round-trip ------------------------------------------------
 
 test("toPersistedCardPart -> JSON -> rehydrateParts round-trips a card", () => {
   const persisted = toPersistedCardPart("c1", probe(true));

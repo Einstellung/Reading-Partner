@@ -219,32 +219,6 @@ export function patchCardPayload(
   return found ? next : messages;
 }
 
-// --- persistence policy ----------------------------------------------------
-// Persist strategy per part type: text persists; the tool trace never does (it
-// is recomputed live); a card persists by kind — the confirm card, the ready
-// card and a recorded rehearsal decision are durable outcomes, the progress card
-// is not (a reopened session is long past it) and a failure is in-session only
-// (retry needs the live pipeline).
-export function isPersistableCardKind(kind: CardKind): boolean {
-  return (
-    kind === "probe-confirm" ||
-    kind === "briefing-ready" ||
-    kind === "profile-update" ||
-    kind === "rehearsal-decision" ||
-    // An aside's receipt is the only door back into a side conversation pulled
-    // out of a reply (reading/aside.ts): it carries no mark and no page, so the
-    // row in the lesson's transcript is where it is reached from. Losing the
-    // row on reopen would lose the conversation.
-    kind === "aside"
-  );
-}
-
-export function isPersistablePart(part: ChatPart): boolean {
-  if (part.type === "text") return true;
-  if (part.type === "tool-trace") return false;
-  return isPersistableCardKind(part.card.kind);
-}
-
 // Project a card into a durable part. Persistence keeps cards opaque (an info
 // interface, not a Record), so the payload is widened through unknown here.
 export function toPersistedCardPart(cardId: string, payload: CardPayload): PersistedPart {

@@ -35,19 +35,6 @@ export interface DeckSlide {
 
 export type DeckSignal = DeckReady | DeckSlide;
 
-// What the host sends back. Not used by any control in this round — the deck's
-// own keys and clicks are the paging UI — but it is half of the contract and the
-// review pane will want it ("take me to that page again").
-export interface DeckHostGoto {
-  source: "deck-host";
-  type: "goto";
-  index: number;
-}
-
-export function gotoMessage(index: number): DeckHostGoto {
-  return { source: "deck-host", type: "goto", index };
-}
-
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
 // Read one posted message. Anything that is not this deck's contract reads as

@@ -5,7 +5,6 @@
 import { expect, test } from "bun:test";
 import {
   defaultNavOpen,
-  isTopicSection,
   NAV_OPEN_KEY,
   readNavEnv,
   readNavOpen,
@@ -17,12 +16,6 @@ import {
 test("the sidebar has exactly the three sections, Materials first", () => {
   expect(TOPIC_SECTIONS.map((s) => s.id)).toEqual(["materials", "talks", "observations"]);
   expect(TOPIC_SECTIONS.map((s) => s.label)).toEqual(["Materials", "Talks", "AI observations"]);
-});
-
-test("a section name is validated, not trusted", () => {
-  expect(isTopicSection("talks")).toBe(true);
-  expect(isTopicSection("Talks")).toBe(false);
-  expect(isTopicSection(undefined)).toBe(false);
 });
 
 test("a desktop starts expanded at any width, because it has a mouse", () => {

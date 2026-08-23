@@ -13,10 +13,6 @@ export const TOPIC_SECTIONS: readonly { id: TopicSection; label: string }[] = [
 
 export const DEFAULT_SECTION: TopicSection = "materials";
 
-export function isTopicSection(value: unknown): value is TopicSection {
-  return TOPIC_SECTIONS.some((s) => s.id === value);
-}
-
 // What the sidebar is decided from: viewport width and pointer type, never the
 // operating system (CLAUDE.md). Same two measurements the shell choice uses
 // (platform/app/shell.ts), for the same reason — an OS check would collapse the
