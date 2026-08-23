@@ -63,10 +63,3 @@ export function setPaperTint(on: boolean): void {
   enabled = on;
   for (const listener of listeners) listener();
 }
-
-// Tests only: all of this is module state and outlives a single case.
-export function resetPaperTint(): void {
-  enabled = false;
-  hydrated = false;
-  listeners.clear();
-}
