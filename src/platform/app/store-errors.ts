@@ -94,9 +94,10 @@ const COPY: Record<StoreScope, ScopeCopy> = {
     message: () => "Reading position could not be saved",
   },
   // The two derived caches. Both are re-extracted from the document when they
-  // are missing, so a failed write costs a second extraction, not a mark.
+  // are missing, so a failed write costs a second extraction, not a mark. A
+  // cache that could not be read reports here too, so the line names either.
   fulltext: {
-    log: "failed to persist fulltext cache",
+    log: "failed to read or persist the fulltext cache",
     level: "warn",
     message: () => null,
   },

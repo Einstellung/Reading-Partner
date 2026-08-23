@@ -778,15 +778,3 @@ const session = createCollectorSession({
 export function amICollecting(): Promise<boolean> {
   return session.amICollecting();
 }
-
-// Become the collector. Idempotent, so a settings change can call it without
-// checking.
-export function startCollecting(): Promise<void> {
-  return session.start();
-}
-
-// Stop being the collector: give the claim up now rather than letting it expire,
-// so whoever is next takes over in seconds instead of a day.
-export function stopCollecting(): Promise<void> {
-  return session.stop();
-}
