@@ -4,14 +4,8 @@
 
 export { buildRun, type BuildRunInput } from "./build";
 export type { TranscriptSource } from "./source";
-export {
-  appendRun,
-  deleteRunthroughs,
-  loadRunthroughs,
-  runthroughFile,
-  runthroughIdOf,
-} from "./store";
-export { countWords, pagesMissed, runSummary, type RunSummary } from "./summary";
+export { appendRun, deleteRunthroughs, loadRunthroughs, runthroughFile } from "./store";
+export { countWords, runSummary, type RunSummary } from "./summary";
 export {
   emptyLog,
   normalizeLog,

@@ -50,26 +50,6 @@ function spoken(page: RunthroughPage): boolean {
   return page.transcript.trim().length > 0;
 }
 
-/**
- * The pages of a deck of `totalSlides` that this run went past in silence.
- * A page that was never reached counts as missed too — the reader did not
- * speak to it either way, and a run that stopped halfway is exactly the case
- * this is asked about.
- */
-export function pagesMissed(run: RunthroughRun, totalSlides: number): number[] {
-  const said = new Set<number>();
-  for (const page of run.pages) if (spoken(page)) said.add(page.index);
-  const out: number[] = [];
-  for (let i = 0; i < totalSlides; i++) if (!said.has(i)) out.push(i);
-  // A page the run visited past the end of the deck it was given (the deck was
-  // rebuilt shorter since) is still a page that was there and got nothing said
-  // to it.
-  for (const page of run.pages) {
-    if (page.index >= totalSlides && !said.has(page.index)) out.push(page.index);
-  }
-  return out.sort((a, b) => a - b);
-}
-
 // Ideographs, kana and hangul syllables. Their punctuation is deliberately out:
 // a full stop is not a word in either script.
 const CJK_CHAR = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7a3]/gu;

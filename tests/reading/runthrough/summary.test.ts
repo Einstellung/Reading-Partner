@@ -1,13 +1,8 @@
 // One run read from outside (src/reading/runthrough/summary.ts): the row a list
-// shows, the pages that got nothing said to them, and the word count of a
-// transcript that is half Chinese. Run: bun test.
+// shows, and the word count of a transcript that is half Chinese. Run: bun test.
 
 import { expect, test } from "bun:test";
-import {
-  countWords,
-  pagesMissed,
-  runSummary,
-} from "../../../src/reading/runthrough/summary";
+import { countWords, runSummary } from "../../../src/reading/runthrough/summary";
 import type { RunthroughPage, RunthroughRun } from "../../../src/reading/runthrough/types";
 
 function page(index: number, transcript: string, enteredAt = index * 1000): RunthroughPage {
@@ -60,21 +55,6 @@ test("a run that was never ended is measured to the last thing that happened", (
 
 test("a run with nothing in it is zero minutes, not a negative number", () => {
   expect(runSummary(run([], { startedAt: 5_000, endedAt: null })).minutes).toBe(0);
-});
-
-test("the pages that got nothing said to them include the ones never reached", () => {
-  const built = run([page(0, "opening"), page(1, ""), page(3, "the close")]);
-  expect(pagesMissed(built, 5)).toEqual([1, 2, 4]);
-});
-
-test("nothing was missed when every page was spoken to", () => {
-  expect(pagesMissed(run([page(0, "a"), page(1, "b")]), 2)).toEqual([]);
-});
-
-// The deck was rebuilt shorter after the run. A page that was there and got
-// nothing said to it is still a page that was missed.
-test("a page past the end of the deck is still reported", () => {
-  expect(pagesMissed(run([page(0, "a"), page(1, "")]), 1)).toEqual([1]);
 });
 
 test("English is counted by whitespace", () => {

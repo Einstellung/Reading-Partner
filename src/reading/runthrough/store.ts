@@ -32,12 +32,6 @@ function badFile(talkId: string): string {
   return `${runthroughFile(talkId)}.bad`;
 }
 
-// A talk id out of a file name, or null for anything else in the directory.
-export function runthroughIdOf(fileName: string): string | null {
-  if (!fileName.startsWith(PREFIX) || !fileName.endsWith(".json")) return null;
-  return fileName.slice(PREFIX.length, -".json".length) || null;
-}
-
 /**
  * This talk's runs, oldest first. A talk that has never been given reads as an
  * empty log, and so does one whose file this build cannot use — but in that

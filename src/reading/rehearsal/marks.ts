@@ -47,10 +47,6 @@ export function bucketMarks(
   return out;
 }
 
-export function markCounts(buckets: ReadonlyMap<number, Mark[]>): Map<number, number> {
-  return new Map([...buckets].map(([index, marks]) => [index, marks.length]));
-}
-
 function markLine(m: Mark, max: number): string {
   const text = clip(m.text, max);
   const head = m.page === null ? "-" : `- [p.${m.page}]`;

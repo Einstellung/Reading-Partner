@@ -4,8 +4,8 @@
 // the assembly that conversation is made of, and none of it touches disk.
 
 export type { ReadingCard, RehearsalDecisionCardData } from "./cards";
-export { bucketMarks, formatMarks, markCounts } from "./marks";
-export { decisionFor, formatOutline, formatPlan, nextChapter } from "./plan";
+export { bucketMarks, formatMarks } from "./marks";
+export { formatOutline, formatPlan, nextChapter } from "./plan";
 export {
   buildRehearsalSystemPrompt,
   REHEARSAL_INSTRUCTIONS,

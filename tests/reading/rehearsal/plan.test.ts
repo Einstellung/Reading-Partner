@@ -4,12 +4,7 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import {
-  decisionFor,
-  formatOutline,
-  formatPlan,
-  nextChapter,
-} from "../../../src/reading/rehearsal/plan";
+import { formatOutline, formatPlan, nextChapter } from "../../../src/reading/rehearsal/plan";
 import type {
   RehearsalChapter,
   RehearsalDecision,
@@ -36,13 +31,6 @@ function decision(over: Partial<RehearsalDecision> = {}): RehearsalDecision {
 function plan(...decisions: RehearsalDecision[]): RehearsalPlan {
   return { version: 1, createdAt: 1, updatedAt: 100, decisions };
 }
-
-test("a chapter's decision is found by its number", () => {
-  const p = plan(decision(), decision({ chapter: 3, title: "Endings" }));
-  expect(decisionFor(p, 3)?.title).toBe("Endings");
-  expect(decisionFor(p, 2)).toBeUndefined();
-  expect(decisionFor(null, 1)).toBeUndefined();
-});
 
 // Not "the last one plus one": the reader may jump around, and the gap is what
 // is actually left to do.
