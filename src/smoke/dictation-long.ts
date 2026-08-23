@@ -33,6 +33,7 @@ import { mkdir, writeTextFile, BaseDirectory } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../platform/app/atomic-fs";
 import { holdTheScreen } from "./wake-lock";
 import {
+  joinSpeech,
   nativeDictation,
   releaseDictationMicrophone,
   type DictationEvent,
@@ -81,17 +82,6 @@ export interface LongResult {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-const CJK = /[⺀-〿぀-ヿ㐀-䶿一-鿿豈-﫿︰-﹏＀-￯]/;
-function join(left: string, right: string): string {
-  if (!left) return right;
-  if (!right) return left;
-  const seam =
-    /\s$/.test(left) || /^\s/.test(right) || CJK.test(left.slice(-1)) || CJK.test(right[0])
-      ? ""
-      : " ";
-  return left + seam + right;
-}
 
 // One line, appended, flushed before the next thing happens. Failures are
 // swallowed: a run that cannot write is still worth watching in the console, and
@@ -186,7 +176,7 @@ export async function runLongDictation(): Promise<void> {
   let tail = "";
   const t0 = performance.now();
   const at = () => performance.now() - t0;
-  const fold = () => [...settled, tail].reduce(join, "").trim();
+  const fold = () => [...settled, tail].reduce(joinSpeech, "").trim();
 
   const onEvent = (e: DictationEvent) => {
     if (e.kind === "level") {

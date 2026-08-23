@@ -58,24 +58,24 @@ afterEach(cleanup);
 
 // After the window is up, not statically: the composer reaches react-dom, which
 // decides once at evaluation whether it is in a browser (tests/support/dom.ts).
-const { Composer, resolveComposerDictation } = await import("../../../src/ui/components/chat/chat");
+const { Composer, resolveComposerVoice } = await import("../../../src/ui/components/chat/chat");
 
 const TO_VOICE = "Switch to voice";
 const TO_KEYBOARD = "Switch to keyboard";
 const BAR = "Hold to Talk";
 const RELEASE = "plugin:voice|release_microphone";
 
-test("resolveComposerDictation: on by default where the host dictates", () => {
-  expect(resolveComposerDictation(undefined, true)).toEqual({ glossary: "" });
-  expect(resolveComposerDictation({ glossary: "CD-LAM" }, true)).toEqual({ glossary: "CD-LAM" });
+test("resolveComposerVoice: on by default where the host dictates", () => {
+  expect(resolveComposerVoice(undefined, true)).toEqual({ glossary: "" });
+  expect(resolveComposerVoice({ glossary: "CD-LAM" }, true)).toEqual({ glossary: "CD-LAM" });
 });
 
-test("resolveComposerDictation: voice={false} opts a surface out of both voice paths", () => {
-  expect(resolveComposerDictation(false, true)).toBeNull();
+test("resolveComposerVoice: voice={false} opts a surface out of both voice paths", () => {
+  expect(resolveComposerVoice(false, true)).toBeNull();
 });
 
-test("resolveComposerDictation: a host that cannot dictate never sees the switch", () => {
-  expect(resolveComposerDictation(undefined, false)).toBeNull();
+test("resolveComposerVoice: a host that cannot dictate never sees the switch", () => {
+  expect(resolveComposerVoice(undefined, false)).toBeNull();
 });
 
 test("a dictating host gets the switch, and starts on the keyboard", () => {
