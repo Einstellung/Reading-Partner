@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { setApiKey, type ProviderInfo } from "../../../ai/aiClient";
+import { setApiKey, type ProviderInfo } from "../../../ai";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { CARD } from "./cardStyles";

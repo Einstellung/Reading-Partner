@@ -21,7 +21,7 @@ import {
   surroundingText,
 } from "./context";
 import { toAnnotationLite, type AnnotationLite, type TopicMaterial } from "../fulltext/format";
-import { modelSupportsImages, type ProviderId } from "../ai/aiClient";
+import { modelSupportsImages, type ProviderId } from "../ai";
 import { providers, toPiMessages } from "../ai/providers";
 import { estimateTextTokens, fitToBudget } from "../budget";
 import { EXPLAIN_KICKOFF } from "./intents";

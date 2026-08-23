@@ -31,7 +31,7 @@ import {
   settingsPullAction,
   type Settings,
 } from "../../../platform/app/settings";
-import { enforceKnownModel, listProviders, type ProviderInfo } from "../../../ai/aiClient";
+import { enforceKnownModel, listProviders, type ProviderInfo } from "../../../ai";
 import type { SyncHealthReport } from "../../../platform/sync";
 import type { ToastKind } from "./toast-list";
 import { useSyncHealth } from "./useSyncHealth";

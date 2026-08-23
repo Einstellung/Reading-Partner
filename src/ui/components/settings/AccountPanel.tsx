@@ -25,7 +25,7 @@ import {
   type ModelChoice,
   type ProviderId,
   type ProviderInfo,
-} from "../../../ai/aiClient";
+} from "../../../ai";
 import { type Settings, type ThinkingSetting } from "../../../platform/app/settings";
 import { CARD } from "./cardStyles";
 import { ChoiceField, FieldGrid } from "./ChoiceField";

@@ -14,7 +14,7 @@
 // so it is handed the constructors rather than the types.
 
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { runAgentTurn, type ProviderId } from "../../ai/aiClient";
+import { runAgentTurn, type ProviderId } from "../../ai";
 import type { CompressedImage } from "../../ai/image-utils";
 import type { SubagentProgress } from "../../ai/subagent";
 import { logEvent } from "../../platform/app/events";

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { type DeviceCodeState, type ProviderInfo } from "../../../ai/aiClient";
+import { type DeviceCodeState, type ProviderInfo } from "../../../ai";
 import { isIOS } from "../../../platform/app/platform";
 import { CARD } from "./cardStyles";
 import { Button } from "../ui/button";

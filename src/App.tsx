@@ -44,7 +44,7 @@ import { readClipboardImage } from "./platform/app/clipboard";
 import { isTauri } from "./platform/app/host";
 import { DEFAULT_SETTINGS, type Settings } from "./platform/app/settings";
 import { buildGlossary } from "./ai/voice";
-import { modelSupportsImages, type ProviderId } from "./ai/aiClient";
+import { modelSupportsImages, type ProviderId } from "./ai";
 import { locateQuote, prepKind, type Citation } from "./reading/prep";
 import { usePrep } from "./reading/prep/papers/use-prep";
 import { usePrepTrigger } from "./reading/session/use-prep-trigger";

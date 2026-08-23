@@ -17,7 +17,7 @@ import {
   type ThreadMessage as StoredMessage,
 } from "../../../platform/app/threads";
 import { loadSettings, toReasoning, type Settings } from "../../../platform/app/settings";
-import { runAgentTurn, type ProviderId } from "../../../ai/aiClient";
+import { runAgentTurn, type ProviderId } from "../../../ai";
 import { toolStatusLabel } from "../../../reading/context";
 import type { RehearsalDecisionCardData } from "../../../reading/rehearsal";
 import {

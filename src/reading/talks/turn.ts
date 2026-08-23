@@ -11,7 +11,7 @@
 // stream; the caller owns runAgentTurn.
 
 import type { AgentTool } from "../../ai/agent";
-import { modelSupportsImages, type ProviderId } from "../../ai/aiClient";
+import { modelSupportsImages, type ProviderId } from "../../ai";
 import { toPiMessages } from "../../ai/providers";
 import { fitToBudget } from "../../budget";
 import { configuredModel, HISTORY_KEEP, HISTORY_KEEP_TIGHT } from "../turn";
