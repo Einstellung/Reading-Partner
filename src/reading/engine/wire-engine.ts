@@ -574,7 +574,7 @@ export async function wireEngine(
   // coasts for up to a second; a jump issued mid-coast is overwritten frame by
   // frame and lands nowhere near the page it asked for (measured in Chromium:
   // 613px instead of 2604px). So the jump silences the router first, the same
-  // reset a layout switch does (layout-modes.applyJump).
+  // reset a layout switch does.
   //
   // Two: the jump must not hand the scroll position to a second animator
   // either. `behavior: "smooth"` runs the browser's own scroll animation, which
