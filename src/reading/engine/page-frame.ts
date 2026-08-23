@@ -72,9 +72,3 @@ export type PageFrameName = keyof typeof PAGE_FRAMES;
 // The one in effect. Switching this is the whole of choosing between them.
 export const PAGE_FRAME_NAME: PageFrameName = "float";
 export const PAGE_FRAME: PageFrame = PAGE_FRAMES[PAGE_FRAME_NAME];
-
-// The separator as the reader sees it: the model's gap taken to the scale the
-// document is rendered at. The only place the two units meet.
-export function pageGapPx(frame: PageFrame, scale: number): number {
-  return frame.pageGap * scale;
-}

@@ -1,9 +1,7 @@
-// The two reading layouts as data, plus the reducer that switches between them
-// and the rule for where each one thinks the reader is. Pure and engine-free so
-// the properties that matter can be unit tested: entering a layout and leaving
-// it again restores every setting the entry touched, doing it repeatedly changes
-// nothing further, and a position saved in either layout names the page the
-// reader is looking at.
+// The two reading layouts as data, plus the rule for where each one thinks the
+// reader is. Pure and engine-free so the properties that matter can be unit
+// tested: a position saved in either layout names the page the reader is
+// looking at.
 //
 // EmbedPdfView.setLayout applies these fields on every switch, in this order,
 // and EmbedPdfView.currentState reads the anchor back. Anything a layout owns
@@ -143,80 +141,4 @@ export function readingPosition(
 export function openingZoom(layout: ReadingLayout, saved: number | undefined): number | null {
   if (LAYOUT_SETTINGS[layout].zoom === "fit-page") return null;
   return typeof saved === "number" && saved > 0 ? saved : null;
-}
-
-// Everything a layout switch owns, in the abstract: the engine settings above
-// plus the touch router's live state. The router state is in here because a
-// switch must never inherit a gesture from the layout it just left — a drag, a
-// rubber band, an inertia fling, a captured pointer and a paused engine all
-// belong to the layout that started them.
-export interface LayoutEngineState {
-  axis: ScrollAxis;
-  zoom: ZoomLock;
-  touchLock: boolean;
-  // Numeric fit-page scale, or 0 when none is held.
-  fitPageBaseline: number;
-  gesturesIdle: boolean;
-  enginePaused: boolean;
-  pointerCaptured: boolean;
-  inertia: boolean;
-}
-
-// The state a freshly switched layout is in. Total, not a patch: every field is
-// written from the target layout or reset, so the result never depends on how
-// dirty the previous one was.
-export function applyLayout(prev: LayoutEngineState, layout: ReadingLayout): LayoutEngineState {
-  const s = LAYOUT_SETTINGS[layout];
-  return {
-    axis: s.axis,
-    zoom: s.zoom,
-    touchLock: s.touchLock,
-    fitPageBaseline: s.tracksFitPage ? prev.fitPageBaseline : 0,
-    gesturesIdle: true,
-    enginePaused: false,
-    pointerCaptured: false,
-    inertia: false,
-  };
-}
-
-// The state a reader sits in while resting in a layout, i.e. what a round trip
-// has to come back to.
-export function restingState(layout: ReadingLayout, fitPageBaseline = 0): LayoutEngineState {
-  const s = LAYOUT_SETTINGS[layout];
-  return {
-    axis: s.axis,
-    zoom: s.zoom,
-    touchLock: s.touchLock,
-    fitPageBaseline: s.tracksFitPage ? fitPageBaseline : 0,
-    gesturesIdle: true,
-    enginePaused: false,
-    pointerCaptured: false,
-    inertia: false,
-  };
-}
-
-// A host-driven jump — the outline, the trace list, an AI citation — is the
-// other event a gesture must not survive. The touch router owns the scroll
-// position (the page divs are touch-action:none, so nothing scrolls unless the
-// router writes it — pitfall 37), and anything it still has in flight keeps
-// writing after the jump: an inertia fling coasts for up to a second and drags
-// the reader straight back off the page it was sent to. So a jump drops the
-// router's state exactly as a layout switch does.
-//
-// What it must NOT touch is the layout itself. A jump is not a switch: the
-// axis, the zoom lock and the fit-page baseline are whatever the current layout
-// says they are, and re-deriving them here would silently re-assert a layout
-// the reader may have changed.
-export function applyJump(prev: LayoutEngineState): LayoutEngineState {
-  return {
-    ...prev,
-    gesturesIdle: true,
-    enginePaused: false,
-    pointerCaptured: false,
-    inertia: false,
-  };
-}
-
-export function otherLayout(layout: ReadingLayout): ReadingLayout {
-  return layout === "paged" ? "vertical" : "paged";
 }

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { PAGE_FRAME, PAGE_FRAMES, pageGapPx, type PageFrame } from "./page-frame";
+import { PAGE_FRAMES, type PageFrame } from "./page-frame";
 import { fitScale } from "./layout-settle";
 
 const FRAMES = Object.entries(PAGE_FRAMES) as [string, PageFrame][];
@@ -27,14 +27,7 @@ test("a zero viewport gap makes fit-width exactly the viewport width", () => {
 test("every frame keeps a separator, so a full-width page never leaks its neighbour", () => {
   for (const [name, f] of FRAMES) {
     expect([name, f.pageGap > 0]).toEqual([name, true]);
-    const scale = fitScale("fit-page", PAGE, PORTRAIT, f.viewportGap);
-    expect([name, pageGapPx(f, scale) >= 2]).toEqual([name, true]);
   }
-});
-
-test("the separator is measured at the scale the document is rendered at", () => {
-  expect(pageGapPx({ ...PAGE_FRAME, pageGap: 8 }, 1.5)).toBe(12);
-  expect(pageGapPx({ ...PAGE_FRAME, pageGap: 8 }, 1)).toBe(8);
 });
 
 test("the sheet is lighter than what surrounds it", () => {

@@ -295,16 +295,3 @@ export function fitScale(
   if (lock === "fit-width") return byWidth;
   return Math.min(byWidth, availableHeight / page.height);
 }
-
-// Whether the two fits resolve to the same scale on this screen — the case
-// where switching layout changes no number the zoom plugin can notice.
-export function fitsCoincide(
-  page: { width: number; height: number },
-  viewport: { clientWidth: number; clientHeight: number },
-  viewportGap: number,
-): boolean {
-  return (
-    fitScale("fit-width", page, viewport, viewportGap) ===
-    fitScale("fit-page", page, viewport, viewportGap)
-  );
-}

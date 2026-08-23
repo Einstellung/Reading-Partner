@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import {
   centeredScrollX,
   fitScale,
-  fitsCoincide,
   geometrySettled,
   landedAt,
   lockedFitScale,
@@ -323,23 +322,6 @@ test("landing is measured with slack, never for equality", () => {
   expect(landedAt(5791, 5794)).toBe(false);
   // Half a page off — the reported symptom, two pages meeting on screen.
   expect(landedAt(4904, 5324)).toBe(false);
-});
-
-test("fit-page and fit-width are the same number on a portrait screen", () => {
-  // Measured: 834x1194 viewport, 612x792 page, both fits resolve to 1.3627. The
-  // switch's zoom request therefore changes no scale, fires no scale change,
-  // and recomputes nothing — which is why the switch cannot lean on it.
-  expect(fitsCoincide(PAGE, IPAD_PORTRAIT, GAP)).toBe(true);
-  expect(fitScale("fit-width", PAGE, IPAD_PORTRAIT, GAP)).toBeCloseTo(1.3627, 4);
-  expect(fitScale("fit-page", PAGE, IPAD_PORTRAIT, GAP)).toBeCloseTo(1.3627, 4);
-});
-
-test("on a shorter viewport the two fits differ", () => {
-  // Measured: 900x1000, same page. fit-width 1.4706, fit-page 1.2626.
-  const wide = { clientWidth: 900, clientHeight: 1000 };
-  expect(fitsCoincide(PAGE, wide, GAP)).toBe(false);
-  expect(fitScale("fit-width", PAGE, wide, GAP)).toBeCloseTo(1.4706, 4);
-  expect(fitScale("fit-page", PAGE, wide, GAP)).toBeCloseTo(1.2626, 4);
 });
 
 test("a viewport gap costs the fit twice over, which is why the reader has none", () => {
