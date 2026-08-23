@@ -3,7 +3,7 @@
 // changes. Styled with Tailwind utilities.
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { IconAskHere, IconColorSwatch, IconHighlight, IconPointer, IconUnderline } from '../base/icons';
+import { IconAskHere, IconColorSwatch, IconHighlight, IconPointer } from '../base/icons';
 import { placePanel } from '../common/panel-position';
 import { useViewportSize } from '../common/useViewportSize';
 import { Button } from '../ui/button';
@@ -29,12 +29,8 @@ interface PenToolbarProps {
 const TOOLS: { type: ToolType; label: string; Icon: (p: { size?: number }) => JSX.Element }[] = [
 	{ type: 'navlock', label: 'Navigate only', Icon: IconPointer },
 	{ type: 'highlight', label: 'Highlight', Icon: IconHighlight },
-	{ type: 'underline', label: 'Underline', Icon: IconUnderline },
 	{ type: 'ai', label: 'AI pen', Icon: IconAskHere },
 ];
-
-// The two tools that paint in a color.
-type PenType = 'highlight' | 'underline';
 
 const CARD = 'rounded-xl border border-black/10 bg-popover shadow-lg';
 // Distance from the swatch to the palette that opens off it.
@@ -62,9 +58,9 @@ export default function PenToolbar({
 	// Without an inset this is the plain 8px gutter, as it was.
 	const margin = useOverlaySafePadding();
 	const horizontal = orientation === 'horizontal';
-	// Only the painting tools carry a color; the navigation lock, the AI pen and
+	// Only the highlighter paints in a color; the navigation lock, the AI pen and
 	// the all-unselected state do not.
-	const hasColor = tool.type === 'highlight' || tool.type === 'underline';
+	const hasColor = tool.type === 'highlight';
 
 	// Horizontal hangs the palette below the swatch and centres it on it; vertical
 	// opens it to the swatch's side. Both are measured and clamped to the viewport:
@@ -108,22 +104,16 @@ export default function PenToolbar({
 		if (!hasColor) setPaletteOpen(false);
 	}, [hasColor]);
 
-	// Which pen the color belongs to when none is out. Reaching for the color is
-	// reaching for the pen, so the swatch picks the last one used rather than
-	// sitting there dead.
-	const lastPen = useRef<PenType>('highlight');
-	useEffect(() => {
-		if (hasColor) lastPen.current = tool.type as PenType;
-	}, [hasColor, tool.type]);
-
 	// Pressing the active button releases it: the rack drops to 'none', which is
 	// the traditional mode, not another tool.
 	function pickTool(type: ToolType) {
 		onToolChange({ type: type === tool.type ? 'none' : type, color: tool.color });
 	}
 
+	// Reaching for the color is reaching for the highlighter, the one pen the
+	// color belongs to, so the swatch picks it up rather than sitting there dead.
 	function pickSwatch() {
-		if (!hasColor) onToolChange({ type: lastPen.current, color: tool.color });
+		if (!hasColor) onToolChange({ type: 'highlight', color: tool.color });
 		setPaletteOpen((v) => !hasColor || !v);
 	}
 

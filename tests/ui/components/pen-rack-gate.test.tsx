@@ -59,14 +59,24 @@ test("pressing it picks nothing", () => {
   expect(picked).toEqual([]);
 });
 
-test("the pens beside it are untouched", () => {
+test("the pen beside it is untouched", () => {
   const { picked, button } = rack({ ai: WHY });
-  const underline = button("Underline");
+  const highlight = button("Highlight");
 
-  expect(underline?.disabled).toBe(false);
-  expect(underline?.getAttribute("title")).toBe("Underline");
-  fireEvent.click(underline as HTMLButtonElement);
-  expect(picked).toEqual([{ type: "underline", color: COLORS[0].color }]);
+  expect(highlight?.disabled).toBe(false);
+  expect(highlight?.getAttribute("title")).toBe("Highlight");
+  fireEvent.click(highlight as HTMLButtonElement);
+  expect(picked).toEqual([{ type: "highlight", color: COLORS[0].color }]);
+});
+
+// Three on the rack: the navigation lock, the highlighter and the AI pen.
+test("the rack holds three", () => {
+  const { button } = rack();
+
+  expect(button("Navigate only")).not.toBeNull();
+  expect(button("Highlight")).not.toBeNull();
+  expect(button("AI pen")).not.toBeNull();
+  expect(button("Underline")).toBeNull();
 });
 
 test("with nothing dim the rack is the rack it was", () => {

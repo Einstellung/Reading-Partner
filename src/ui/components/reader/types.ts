@@ -12,7 +12,7 @@ export interface ColorEntry {
 //   'navlock' — the palm toggle, a navigation lock: every pointer only moves the
 //               page. Mutually exclusive with the annotation tools by being one
 //               of the same values.
-export type ToolType = 'none' | 'navlock' | 'highlight' | 'underline' | 'ai';
+export type ToolType = 'none' | 'navlock' | 'highlight' | 'ai';
 
 export interface Tool {
 	type: ToolType;
