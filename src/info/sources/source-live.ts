@@ -1,9 +1,9 @@
 // Live wiring of the add-source flow (docs/17): binds the real fetch (infoFetch,
-// browser UA) and the readable extractor to the pure probe/trial logic and the
-// source tools. The pure logic stays testable with injected deps; this module is
-// where the app grabs a ready-to-use tool set and a one-shot "paste a URL" path
-// for the source-list page. The extractor is loaded on first use (readable-lazy)
-// rather than imported here, so Readability/defuddle stay off the boot path.
+// browser UA) and the readable extractor to the pure probe/trial logic. The pure
+// logic stays testable with injected deps; this module is where the app grabs a
+// one-shot "paste a URL" path for the source-list page. The extractor is loaded
+// on first use (readable-lazy) rather than imported here, so Readability and
+// defuddle stay off the boot path.
 
 import { infoFetch } from "../extract/http";
 import { loadExtractReadable } from "../extract/readable-lazy";
@@ -11,10 +11,8 @@ import { fetchArticleViaWebview } from "../extract/webview-article";
 import { hasWebviewFetch } from "../../platform/app/platform";
 import type { WebviewFetch } from "./engine";
 import { probeSource } from "./probe";
-import { buildSourceTools, trialSource, trialUsesWebview } from "./source-tools";
-import { addSource } from "./source-store";
+import { trialSource, trialUsesWebview } from "./source-tools";
 import type { ProbeConfirmCardData } from "./source-cards";
-import type { AgentTool } from "../../ai/agent";
 
 // The hidden-webview article fetcher where the host has one, wired exactly as
 // the collection path wires it (briefing/live.ts). A trial without it answers
@@ -23,22 +21,6 @@ import type { AgentTool } from "../../ai/agent";
 // added at all.
 export function liveWebviewFetch(): WebviewFetch | undefined {
   return hasWebviewFetch() ? fetchArticleViaWebview : undefined;
-}
-
-// The three add-source tools bound to the live fetch/extract/store. `onProbeCard`
-// lets the chat surface the confirm card when trial_source succeeds. Async only
-// because the extractor's chunk is fetched here, before the tools that inject it
-// exist — the tools themselves still get a plain synchronous extractor.
-export async function buildLiveSourceTools(
-  onProbeCard: (card: ProbeConfirmCardData) => void,
-): Promise<AgentTool[]> {
-  return buildSourceTools({
-    fetchFn: infoFetch,
-    extract: await loadExtractReadable(),
-    fetchViaWebview: liveWebviewFetch(),
-    addSource: (d) => addSource(d).then(() => {}),
-    onProbeCard,
-  });
 }
 
 export type ProbeAddOutcome =

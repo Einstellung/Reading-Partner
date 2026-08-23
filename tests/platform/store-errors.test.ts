@@ -136,7 +136,9 @@ test("a lost write is logged loudly, a lost cache quietly, and a bad file only o
 
   logged = [];
   heard("fulltext", new Error("EIO"));
-  expect(logged).toEqual([{ level: "warn", line: "failed to persist fulltext cache" }]);
+  expect(logged).toEqual([
+    { level: "warn", line: "failed to read or persist the fulltext cache" },
+  ]);
 
   // The one scope reported from two places — an extraction that failed and a
   // write that failed — so its line covers both. Said once, and by the channel:
