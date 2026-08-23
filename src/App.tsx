@@ -1413,11 +1413,14 @@ export default function App() {
             pen: chatPen,
             color: chatPen === "ai" ? AI_PEN_COLOR : penColor,
             marks: traceAnns,
+            // The same setting the page is routed by, so a finger does the same
+            // thing in the classroom as it does on the book.
+            fingerDraw,
             onDraw: drawChatMark,
             onOpen: openChatMark,
           }
         : null,
-    [call?.view, call?.threadId, chatPen, penColor, traceAnns, drawChatMark, openChatMark],
+    [call?.view, call?.threadId, chatPen, penColor, fingerDraw, traceAnns, drawChatMark, openChatMark],
   );
 
   // The empty state, and whether there is a lesson to go back to.

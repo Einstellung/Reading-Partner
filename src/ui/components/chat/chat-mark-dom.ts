@@ -82,7 +82,11 @@ export function indexRendered(root: Node | null | undefined): RenderedText {
 //
 // A seam the rendering already has whitespace on either side of is left alone:
 // the gap is there, and a second space would be one the reply never had.
-export function spacedSlice(index: RenderedText, start: number, end: number): string {
+export function spacedSlice(
+  index: Pick<RenderedText, "text" | "breaks">,
+  start: number,
+  end: number,
+): string {
   let out = "";
   let at = start;
   for (const seam of index.breaks) {

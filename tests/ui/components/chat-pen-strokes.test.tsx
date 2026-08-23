@@ -374,3 +374,146 @@ test("a stroke does not outlive the conversation it was drawn in", async () => {
     restore();
   }
 });
+
+// --- the stroke taken straight off the drag (docs/09) ----------------------
+//
+// The long-press path above is what a finger falls back to. A stylus, a mouse
+// and — when the reader has asked for it — a finger draw directly instead:
+// pointerdown starts the stroke, the drag extends it, pointerup lands it, and no
+// native selection is ever made. Routed by the reader's own table, so the
+// classroom and the page answer a pointer the same way (chat-pen-drag.ts).
+//
+// happy-dom has neither caret API, so the point-to-offset step is stubbed: a
+// clientX is read as an offset into the reply. That is the only thing standing
+// in for a browser here; everything else is the real wiring.
+function caretsByX(node: Node): () => void {
+  const doc = document as Document & {
+    caretRangeFromPoint?: (x: number, y: number) => Range | null;
+  };
+  const had = doc.caretRangeFromPoint;
+  doc.caretRangeFromPoint = (x: number) => {
+    const range = document.createRange();
+    const at = Math.max(0, Math.min(Math.round(x), (node.textContent ?? "").length));
+    range.setStart(node, at);
+    range.setEnd(node, at);
+    return range;
+  };
+  return () => {
+    doc.caretRangeFromPoint = had;
+  };
+}
+
+async function dragAcross(
+  body: HTMLElement,
+  from: number,
+  to: number,
+  pointerType: string,
+): Promise<void> {
+  await act(async () => {
+    fireEvent.pointerDown(body, { pointerId: 1, pointerType, button: 0, clientX: from, clientY: 5 });
+    fireEvent.pointerMove(body, { pointerId: 1, pointerType, clientX: to, clientY: 5 });
+    fireEvent.pointerUp(body, { pointerId: 1, pointerType, clientX: to, clientY: 5 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
+function replyBody(view: { container: HTMLElement }): HTMLElement {
+  return view.container.querySelector("[data-reply-body]") as HTMLElement;
+}
+
+test("a stylus dragged across a reply marks it without making a selection first", async () => {
+  const drawn: ChatMarkDraw[] = [];
+  const view = await renderChat(messages, host("highlight", drawn));
+  const restore = caretsByX(textNodeHolding(view.container, REPLY));
+  try {
+    await dragAcross(replyBody(view), 20, 34, "pen");
+    expect(drawn).toEqual([
+      { messageTs: 2, text: "three matrices", occurrence: 0, pen: "highlight" },
+    ]);
+    expect(document.getSelection()?.isCollapsed).toBe(true);
+  } finally {
+    restore();
+  }
+});
+
+test("a mouse dragged across a reply does the same", async () => {
+  const drawn: ChatMarkDraw[] = [];
+  const view = await renderChat(messages, host("underline", drawn));
+  const restore = caretsByX(textNodeHolding(view.container, REPLY));
+  try {
+    await dragAcross(replyBody(view), 0, 15, "mouse");
+    expect(drawn.map((d) => d.text)).toEqual(["attention heads"]);
+  } finally {
+    restore();
+  }
+});
+
+// The finger moves the lesson by default, exactly as it moves the page: it takes
+// no stroke, and the reply keeps its scrolling.
+test("a finger takes no stroke and the reply stays scrollable", async () => {
+  const drawn: ChatMarkDraw[] = [];
+  const view = await renderChat(messages, host("highlight", drawn));
+  const restore = caretsByX(textNodeHolding(view.container, REPLY));
+  try {
+    await dragAcross(replyBody(view), 20, 34, "touch");
+    expect(drawn).toEqual([]);
+    expect(replyBody(view).style.touchAction).toBe("");
+  } finally {
+    restore();
+  }
+});
+
+test("with the setting on, a finger draws and the reply gives up its scrolling", async () => {
+  const drawn: ChatMarkDraw[] = [];
+  const view = await renderChat(messages, { ...host("highlight", drawn), fingerDraw: true });
+  const restore = caretsByX(textNodeHolding(view.container, REPLY));
+  try {
+    expect(replyBody(view).style.touchAction).toBe("none");
+    await dragAcross(replyBody(view), 20, 34, "touch");
+    expect(drawn.map((d) => d.text)).toEqual(["three matrices"]);
+  } finally {
+    restore();
+  }
+});
+
+// One gesture is one stroke. The drag prevents the selection it would otherwise
+// have made, but a browser left holding one anyway must not have it committed a
+// second time on the same pointerup.
+test("a gesture the pen took directly is not committed again from a selection", async () => {
+  const drawn: ChatMarkDraw[] = [];
+  const view = await renderChat(messages, host("highlight", drawn));
+  const restore = caretsByX(textNodeHolding(view.container, REPLY));
+  try {
+    const body = replyBody(view);
+    const node = textNodeHolding(view.container, REPLY);
+    await act(async () => {
+      fireEvent.pointerDown(body, { pointerId: 1, pointerType: "pen", button: 0, clientX: 20, clientY: 5 });
+      fireEvent.pointerMove(body, { pointerId: 1, pointerType: "pen", clientX: 34, clientY: 5 });
+      const range = document.createRange();
+      range.setStart(node, 0);
+      range.setEnd(node, 15);
+      const selection = document.getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+      fireEvent.pointerUp(body, { pointerId: 1, pointerType: "pen", clientX: 34, clientY: 5 });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(drawn.map((d) => d.text)).toEqual(["three matrices"]);
+  } finally {
+    restore();
+  }
+});
+
+// The reader can still put a finger on a mark and open it: a press that never
+// moved is not a stroke, and the gesture it was part of is not taken.
+test("a stylus press that never moved takes no stroke", async () => {
+  const drawn: ChatMarkDraw[] = [];
+  const view = await renderChat(messages, host("highlight", drawn));
+  const restore = caretsByX(textNodeHolding(view.container, REPLY));
+  try {
+    await dragAcross(replyBody(view), 20, 20, "pen");
+    expect(drawn).toEqual([]);
+  } finally {
+    restore();
+  }
+});

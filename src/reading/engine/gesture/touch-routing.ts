@@ -1,8 +1,15 @@
-// Pen/finger input routing for the reader. Given the active tool, the pointer's
-// device type and one setting, decides whether a single-pointer gesture should
-// DRAW (annotate) or SCROLL (pan / turn pages). Pure and DOM-free so the whole
-// routing table is unit testable; the host translates the verdict into engine
-// calls.
+// Pen/finger input routing. Given the active tool, the pointer's device type and
+// one setting, decides whether a single-pointer gesture should DRAW (annotate)
+// or SCROLL (pan / turn pages). Pure and DOM-free so the whole routing table is
+// unit testable; the host translates the verdict into engine calls.
+//
+// Two surfaces answer with this table now: the page (attach-touch.ts) and the
+// classroom, where the same two pens draw on an AI reply (docs/09,
+// ui/components/chat/chat-pen-drag.ts). What the finger does must not depend on
+// which of them the reader is looking at, so there is one table and no second
+// answer to the same question. The parts below the routing table itself —
+// finger counts, the pinch latch, the pen-priority latch — are the page's: the
+// classroom takes one pointer at a time and reads none of them.
 //
 // The design mirrors paper: the stylus marks the page, the finger moves it. That
 // holds on every platform and at every moment — the finger never draws unless
