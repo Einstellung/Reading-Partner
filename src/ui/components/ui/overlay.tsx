@@ -66,15 +66,6 @@ export const OVERLAY_Z = {
   anchored: "z-[1100]",
 } as const;
 
-export type OverlayLayerName = keyof typeof OVERLAY_Z;
-
-// The scale as numbers, for anything that has to compare two layers. Read off
-// the class strings above, which stay the only place a layer's number is
-// written.
-export function overlayZIndex(layer: OverlayLayerName): number {
-  return Number(OVERLAY_Z[layer].match(/\d+/)![0]);
-}
-
 export const OVERLAY_SAFE = {
   // Centred in the viewport: AlertDialog and Dialog.
   centered: "overlay-safe",

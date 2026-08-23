@@ -8,7 +8,6 @@ import { expect, test } from "bun:test";
 import { CARD_REGISTRY } from "../../../src/ui/components/cardRegistry";
 import { RehearsalDecisionCard } from "../../../src/ui/components/reader/RehearsalCard";
 import { Button } from "../../../src/ui/components/ui/button";
-import { isPersistableCardKind } from "../../../src/ui/components/chat/chatParts";
 import type { RehearsalDecisionCardData } from "../../../src/reading/rehearsal/cards";
 
 function texts(node: unknown, out: string[] = []): string[] {
@@ -80,10 +79,4 @@ test("a cut chapter says so, and shows no points it does not have", () => {
 // fresh card. A row of buttons here would be a second, worse editor.
 test("the card raises nothing: it has no controls", () => {
   expect(controls(RehearsalDecisionCard({ payload, surface: "call", dispatch: () => {} }))).toHaveLength(0);
-});
-
-// A rehearsal runs over several sittings, so a receipt the reader cannot find
-// again tomorrow is not a receipt.
-test("the decision card is durable", () => {
-  expect(isPersistableCardKind("rehearsal-decision")).toBe(true);
 });

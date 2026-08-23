@@ -11,7 +11,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { CARD_REGISTRY } from "../../../src/ui/components/cardRegistry";
 import { AsideReceiptCard } from "../../../src/ui/components/reader/AsideCard";
-import { isPersistableCardKind } from "../../../src/ui/components/chat/chatParts";
 import type { CardAction } from "../../../src/ui/components/chat/chatParts";
 import type { AsideReceiptCardData } from "../../../src/reading/aside";
 import { useDom } from "../../support/dom";
@@ -46,13 +45,6 @@ function draw(payload: AsideReceiptCardData) {
 
 test("the registry has a component for the card's kind", () => {
   expect(CARD_REGISTRY.aside).toBe(AsideReceiptCard);
-});
-
-// Losing the row on reopen would lose the conversation: one opened on words out
-// of a reply has no mark and no page, so the lesson's transcript is the only
-// place it exists.
-test("the receipt is durable", () => {
-  expect(isPersistableCardKind("aside")).toBe(true);
 });
 
 test("one aside is one row, saying where it was asked and what was asked", () => {

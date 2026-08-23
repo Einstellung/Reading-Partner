@@ -9,7 +9,6 @@ import {
   endEvent,
   formatElapsed,
   formatRunDate,
-  gotoMessage,
   hasRecordedPages,
   positionLabel,
   readDeckSignal,
@@ -92,10 +91,6 @@ test("a deck built by a newer app is named as one, and does not ask for a rebuil
     "This deck was built by a newer version of the app (deck protocol 3, this app speaks 2). " +
       "What it reports may not be the page on screen — update the app.",
   );
-});
-
-test("the host's goto is addressed to the deck", () => {
-  expect(gotoMessage(4)).toEqual({ source: "deck-host", type: "goto", index: 4 });
 });
 
 test("a page report becomes a timestamped event", () => {

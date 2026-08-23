@@ -18,7 +18,6 @@ import {
   tileStyle,
   TOPIC_GRID_COLUMNS_CLASS,
   TOPIC_GRID_STEPS,
-  topicGridColumns,
 } from "../../../src/ui/components/shelf/topic-shelf";
 
 function file(name: string, addedAt: number, lastOpenedAt?: number): FileRef {
@@ -33,13 +32,6 @@ function file(name: string, addedAt: number, lastOpenedAt?: number): FileRef {
 function topic(name: string, files: FileRef[], createdAt = 0): Topic {
   return { id: name, name, createdAt, files };
 }
-
-test("the grid is dense enough to be a shelf at every form factor", () => {
-  expect(topicGridColumns(390)).toBe(2); // phone
-  expect(topicGridColumns(820)).toBe(3); // iPad portrait
-  expect(topicGridColumns(1180)).toBe(4); // iPad landscape
-  expect(topicGridColumns(1600)).toBe(5); // a wide desktop window
-});
 
 test("the grid class string is the same table the numbers come from", () => {
   expect(TOPIC_GRID_COLUMNS_CLASS).toBe("grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5");

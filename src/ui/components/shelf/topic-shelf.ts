@@ -33,14 +33,6 @@ export const TOPIC_GRID_STEPS: readonly GridStep[] = [
 
 export const TOPIC_GRID_COLUMNS_CLASS = TOPIC_GRID_STEPS.map((s) => s.className).join(" ");
 
-export function topicGridColumns(width: number): number {
-  let columns = TOPIC_GRID_STEPS[0].columns;
-  for (const step of TOPIC_GRID_STEPS) {
-    if (width >= step.minWidth) columns = step.columns;
-  }
-  return columns;
-}
-
 // Newest topic first, the order listTopics already returns them in, restated
 // here so the screen does not depend on who loaded the list. Name breaks a tie
 // (two topics created in the same millisecond by an import).

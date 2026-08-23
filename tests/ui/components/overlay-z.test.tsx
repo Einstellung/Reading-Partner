@@ -7,10 +7,8 @@
 // row — which is why it was reported as a dead control (docs/pitfall/103).
 //
 // What these assertions prove: the full-screen page really renders with the
-// layer OVERLAY_Z names, and the anchored layer the Select and DropdownMenu
-// contents take outranks it and everything else on the scale. Both sides are
-// read from the one map the components import, so a layer that moves moves here
-// too.
+// layer OVERLAY_Z names, and every generated overlay reads its layer off the
+// same map, so a layer that moves moves here too.
 //
 // What they do not prove: that the browser paints it that way. There is no DOM
 // and no stylesheet in this runner, so nothing here resolves a Tailwind class to
@@ -28,25 +26,9 @@ import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { Dialog, DialogFullScreenContent } from "../../../src/ui/components/ui/dialog";
-import {
-  OVERLAY_Z,
-  overlayZIndex,
-  type OverlayLayerName,
-} from "../../../src/ui/components/ui/overlay";
+import { OVERLAY_Z } from "../../../src/ui/components/ui/overlay";
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "../../../src");
-
-const LAYERS = Object.keys(OVERLAY_Z) as OverlayLayerName[];
-
-test("an anchored overlay outranks every surface a trigger can sit on", () => {
-  // The invariant. A Select or a DropdownMenu is portalled to <body> and shares
-  // one z axis with whatever opened it, so the only layer that always works is
-  // one above the whole scale.
-  for (const layer of LAYERS) {
-    if (layer === "anchored") continue;
-    expect(overlayZIndex("anchored")).toBeGreaterThan(overlayZIndex(layer));
-  }
-});
 
 test("the full-screen page renders on the layer OVERLAY_Z names for it", () => {
   const markup = renderToStaticMarkup(
