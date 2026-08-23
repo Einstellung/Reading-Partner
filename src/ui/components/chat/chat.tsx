@@ -64,28 +64,20 @@ export interface ComposerVoice {
 	glossary?: string;
 }
 
-// Resolve the `voice` prop into what the mic needs. The mic is enabled unless a
-// caller explicitly opts out with `voice={false}`, or the host has no recorder —
-// on a phone the capture commands are not compiled in, so a mic there is a
-// button whose only outcome is an error (see hasNativeRecorder).
+// Resolve the `voice` prop against one host capability. The control is enabled
+// unless a caller explicitly opts out with `voice={false}`, or the host cannot
+// do it — on a phone the capture commands are not compiled in, so a mic there is
+// a button whose only outcome is an error (see hasNativeRecorder).
+//
+// The composer asks this once for the recorder and once for on-device dictation.
+// The two are exclusive in practice — a host either records for an STT round
+// trip or dictates on device — but they are asked separately, so a host that
+// grew both would show both rather than silently pick one.
 export function resolveComposerVoice(
 	voice: ComposerVoice | false | undefined,
-	hasRecorder: boolean,
+	hostCan: boolean,
 ): { glossary: string } | null {
-	if (voice === false || !hasRecorder) return null;
-	return { glossary: voice?.glossary ?? '' };
-}
-
-// Whether the composer offers the hold-to-talk mode: the same opt-out, against
-// the other capability. The two are exclusive in practice — a host either
-// records for an STT round trip or dictates on device — but they are asked
-// separately, so a host that grew both would show both rather than silently
-// pick one.
-export function resolveComposerDictation(
-	voice: ComposerVoice | false | undefined,
-	hasDictation: boolean,
-): { glossary: string } | null {
-	if (voice === false || !hasDictation) return null;
+	if (voice === false || !hostCan) return null;
 	return { glossary: voice?.glossary ?? '' };
 }
 
@@ -831,7 +823,7 @@ export function Composer({
 	const [voiceHint, setVoiceHint] = useState<string | null>(null);
 	const taRef = useRef<HTMLTextAreaElement>(null);
 	const resolvedVoice = resolveComposerVoice(voice, hasNativeRecorder());
-	const dictation = resolveComposerDictation(voice, hasOnDeviceDictation());
+	const dictation = resolveComposerVoice(voice, hasOnDeviceDictation());
 	// Which half of the composer is showing on a host that dictates. Keyboard
 	// first: the mode is a place the user goes, not one they land in.
 	const [voiceMode, setVoiceMode] = useState(false);

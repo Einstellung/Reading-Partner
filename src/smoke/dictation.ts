@@ -23,6 +23,7 @@ import { writeTextAtomic } from "../platform/app/atomic-fs";
 import { holdTheScreen } from "./wake-lock";
 import {
   hasOnDeviceDictation,
+  joinSpeech,
   nativeDictation,
   releaseDictationMicrophone,
   type DictationEvent,
@@ -144,17 +145,9 @@ async function runScenario(s: Scenario): Promise<Scenario> {
 
 // applyDictationEvent + transcriptText, folded here so the file can record what
 // the composer's own timeout path would have produced from the same stream and
-// the native answer can be compared against it.
-const CJK = /[⺀-〿぀-ヿ㐀-䶿一-鿿豈-﫿︰-﹏＀-￯]/;
-function join(left: string, right: string): string {
-  if (!left) return right;
-  if (!right) return left;
-  const seam =
-    /\s$/.test(left) || /^\s/.test(right) || CJK.test(left.slice(-1)) || CJK.test(right[0])
-      ? ""
-      : " ";
-  return left + seam + right;
-}
+// the native answer can be compared against it. The seam rule is the composer's
+// own joinSpeech rather than a copy of it, so a run cannot agree with a rule the
+// composer has stopped using.
 function fold(events: Stamped[]): string {
   const finals: string[] = [];
   let tail = "";
@@ -170,7 +163,7 @@ function fold(events: Stamped[]): string {
       tail = text;
     }
   }
-  return [...finals, tail].reduce(join, "").trim();
+  return [...finals, tail].reduce(joinSpeech, "").trim();
 }
 
 // A tap: start, then cancel as soon as the start resolves. This is what the
