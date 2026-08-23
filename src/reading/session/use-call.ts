@@ -699,8 +699,8 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   // Nothing is written down here. A conversation pulled out of a reply has no
   // mark and no place in the trace list, so one the reader asked nothing in
   // could never be reached again — and it would still be in the book's threads
-  // file forever, enumerated by every later pass over it (getOrphanAsides, the
-  // distillation arrears sweep). A tap on the control that was not meant, or was
+  // file forever, enumerated by every later pass over it (the distillation
+  // arrears sweep). A tap on the control that was not meant, or was
   // thought better of, costs nothing at all; the record arrives with the first
   // question (ensureAsideRecord).
   const openChatAside = useCallback(

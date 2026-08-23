@@ -6,7 +6,6 @@ import { expect, test } from "bun:test";
 import {
   EMPTY_TRANSCRIPT,
   applyDictationEvent,
-  assembleTranscript,
   hasOnDeviceDictation,
   joinSpeech,
   nativeDictation,
@@ -14,9 +13,13 @@ import {
   type DictationEvent,
 } from "../../../src/ai/voice/dictation";
 
+// What the machine does incrementally, folded here in one go.
+const fold = (events: readonly DictationEvent[]): string =>
+  transcriptText(events.reduce(applyDictationEvent, EMPTY_TRANSCRIPT));
+
 test("a volatile tail is a guess: the next one replaces it whole", () => {
   expect(
-    assembleTranscript([
+    fold([
       { kind: "volatile", text: "attention is" },
       { kind: "volatile", text: "attention is all" },
     ]),
@@ -25,7 +28,7 @@ test("a volatile tail is a guess: the next one replaces it whole", () => {
 
 test("a final settles the tail rather than adding to it", () => {
   expect(
-    assembleTranscript([
+    fold([
       { kind: "volatile", text: "attention is all" },
       { kind: "final", text: "Attention is all you need." },
     ]),
@@ -34,7 +37,7 @@ test("a final settles the tail rather than adding to it", () => {
 
 test("the current text is the settled stretches plus the live tail", () => {
   expect(
-    assembleTranscript([
+    fold([
       { kind: "final", text: "First point." },
       { kind: "volatile", text: "and then" },
     ]),
@@ -47,7 +50,7 @@ test("level events carry no text and leave the transcript alone", () => {
     { kind: "final", text: "One." },
     { kind: "level", value: 0.9 },
   ];
-  expect(assembleTranscript(stream)).toBe("One.");
+  expect(fold(stream)).toBe("One.");
 });
 
 test("a timing event is not a fourth thing the transcript has to fold", () => {
@@ -67,13 +70,13 @@ test("a timing event is not a fourth thing the transcript has to fold", () => {
       preroll: null,
     },
   } as const satisfies DictationEvent;
-  expect(assembleTranscript([{ kind: "final", text: "One." }, timing])).toBe("One.");
+  expect(fold([{ kind: "final", text: "One." }, timing])).toBe("One.");
   expect(applyDictationEvent(EMPTY_TRANSCRIPT, timing)).toEqual(EMPTY_TRANSCRIPT);
 });
 
 test("an empty final still clears the tail", () => {
   expect(
-    assembleTranscript([
+    fold([
       { kind: "volatile", text: "erm" },
       { kind: "final", text: "  " },
     ]),
@@ -81,7 +84,7 @@ test("an empty final still clears the tail", () => {
 });
 
 test("nothing said is an empty transcript, not a space", () => {
-  expect(assembleTranscript([])).toBe("");
+  expect(fold([])).toBe("");
   expect(transcriptText(EMPTY_TRANSCRIPT)).toBe("");
 });
 

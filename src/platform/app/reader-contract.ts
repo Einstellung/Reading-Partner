@@ -126,11 +126,6 @@ export function pageMarks(annotations: readonly Annotation[]): Annotation[] {
   return annotations.filter(isPageMark);
 }
 
-// The other half. Same file, same trace list, drawn by the chat instead.
-export function chatMarks(annotations: readonly Annotation[]): Annotation[] {
-  return annotations.filter(isChatMark);
-}
-
 // Engine annotation page (0-based position.pageIndex) -> 1-based page for the
 // full-text helpers. Null when the annotation has no page, which every chat
 // mark is: it was drawn on a reply, and every caller already had to take null

@@ -189,9 +189,3 @@ export const OUTPUT_FLOOR: Record<BudgetPurpose, number> = {
 export function fitsBudget(budget: ContextBudget, purpose: BudgetPurpose): boolean {
   return budget.allowedOutput >= OUTPUT_FLOOR[purpose];
 }
-
-// The same gate for a caller that already knows its token count and window and
-// has no pi Context to hand (the whole-input tasks price their material directly).
-export function fitsAllowance(contextWindow: number, used: number, purpose: BudgetPurpose): boolean {
-  return outputAllowance(contextWindow, used) >= OUTPUT_FLOOR[purpose];
-}

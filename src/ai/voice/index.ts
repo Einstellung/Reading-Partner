@@ -24,7 +24,6 @@ export { startRecording, stopRecording, cancelRecording } from "./recorder";
 export {
   EMPTY_TRANSCRIPT,
   applyDictationEvent,
-  assembleTranscript,
   hasOnDeviceDictation,
   joinSpeech,
   nativeDictation,

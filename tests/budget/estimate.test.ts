@@ -8,7 +8,6 @@ import {
   contextBudget,
   estimateContextTokens,
   estimateTextTokens,
-  fitsAllowance,
   fitsBudget,
   outputAllowance,
   piBudget,
@@ -166,11 +165,4 @@ test("the output floor gates the call before it is sent", () => {
   for (const purpose of Object.keys(OUTPUT_FLOOR) as (keyof typeof OUTPUT_FLOOR)[]) {
     expect(fitsBudget(over, purpose)).toBe(false);
   }
-});
-
-test("fitsAllowance gates a caller that only has numbers", () => {
-  expect(fitsAllowance(200_000, 100_000, "plan")).toBe(true);
-  expect(fitsAllowance(200_000, 180_000, "plan")).toBe(false);
-  expect(fitsAllowance(200_000, 180_000, "chat")).toBe(true);
-  expect(fitsAllowance(0, 5_000_000, "plan")).toBe(true);
 });

@@ -8,7 +8,6 @@ import {
   COOLDOWN_LADDER_MS,
   isRateLimited,
   namedRetryAfterMs,
-  retryAfterMs,
 } from "../../src/ai/limiter";
 import { StoppedError } from "../../src/ai/watchdog";
 
@@ -71,16 +70,6 @@ test("the ladder is the prep cooldown ladder, and runs out", () => {
   expect(cooldownAfter(2)).toBe(COOLDOWN_LADDER_MS[2]);
   expect(cooldownAfter(3)).toBeNull();
   expect(cooldownAfter(-1)).toBe(COOLDOWN_LADDER_MS[0]);
-});
-
-test("retryAfterMs reads seconds and HTTP dates, and ignores the past", () => {
-  expect(retryAfterMs("30", 0)).toBe(30_000);
-  expect(retryAfterMs(" 0 ", 0)).toBe(0);
-  expect(retryAfterMs("not a number", 0)).toBeNull();
-  expect(retryAfterMs(undefined, 0)).toBeNull();
-  const now = Date.parse("2026-08-19T10:00:00Z");
-  expect(retryAfterMs("Wed, 19 Aug 2026 10:01:00 GMT", now)).toBe(60_000);
-  expect(retryAfterMs("Wed, 19 Aug 2026 09:59:00 GMT", now)).toBeNull();
 });
 
 test("a rate limit is recognized from the message or the provider's own message", () => {

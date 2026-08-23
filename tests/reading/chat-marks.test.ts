@@ -7,7 +7,6 @@ import { expect, test } from "bun:test";
 import {
   annotationPage,
   chatAnchorOf,
-  chatMarks,
   isChatMark,
   isPageMark,
   pageMarks,
@@ -109,7 +108,7 @@ test("a partial anchor keeps the mark: occurrence defaults to the first, pen to 
 test("only page marks go to the engine; the file keeps both", () => {
   const all = [pageMark("p1"), chatMark("c1"), pageMark("p2", 4)];
   expect(pageMarks(all).map((a) => a.id)).toEqual(["p1", "p2"]);
-  expect(chatMarks(all).map((a) => a.id)).toEqual(["c1"]);
+  expect(all.filter(isChatMark).map((a) => a.id)).toEqual(["c1"]);
 });
 
 // --- locating the words ---------------------------------------------------
