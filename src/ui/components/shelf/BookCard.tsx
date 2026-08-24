@@ -57,7 +57,7 @@ export default function BookCard(props: {
           label={`Actions for ${title}`}
           items={[
             ...(props.onRetell
-              ? [{ label: "Retell a talk…", onSelect: props.onRetell }]
+              ? [{ label: "Retell this book…", onSelect: props.onRetell }]
               : []),
             { label: "Remove", onSelect: props.onRemove, destructive: true },
           ]}
