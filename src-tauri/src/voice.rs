@@ -648,4 +648,155 @@ mod tests {
             SEGMENT_SECONDS_MAX
         );
     }
+
+    // -----------------------------------------------------------------------
+    // Real-device measurements
+    //
+    // Ignored: they hold the microphone and spend a few seconds of wall clock
+    // each, so `cargo test` and CI never run them. To run them:
+    //
+    //   cargo test --lib voice:: -- --ignored --nocapture
+    //
+    // They count samples and never look at them. What is measured is whether the
+    // device kept feeding the buffer across a segment boundary, not what was said
+    // into it, so a silent room measures exactly as well as a spoken one.
+    // -----------------------------------------------------------------------
+
+    use tauri::Manager as _; // `manage` and `state` on the mock app
+
+    // Both measurements own the input device and time themselves against the wall
+    // clock, so they must not overlap.
+    static MIC: Mutex<()> = Mutex::new(());
+
+    const MEASURE_SEGMENTS: usize = 10;
+    const MEASURE_SEGMENT: Duration = Duration::from_millis(300);
+
+    // A `tauri::State` can only be handed out by a running App, so the
+    // measurements reach the commands through a headless mock one: the path the
+    // frontend takes, minus the IPC.
+    fn mock_voice_app() -> tauri::App<tauri::test::MockRuntime> {
+        let app = tauri::test::mock_app();
+        app.manage(VoiceState::default());
+        app
+    }
+
+    fn describe_default_input() -> String {
+        let host = cpal::default_host();
+        let Some(device) = host.default_input_device() else {
+            return "<no default input device>".into();
+        };
+        let name = device.name().unwrap_or_else(|_| "<unnamed>".into());
+        match device.default_input_config() {
+            Ok(config) => format!(
+                "{name} ({:?}, {} ch @ {} Hz, {:?})",
+                host.id(),
+                config.channels(),
+                config.sample_rate().0,
+                config.sample_format()
+            ),
+            Err(e) => format!("{name}: no default input config ({e})"),
+        }
+    }
+
+    // How much of the elapsed wall clock did not make it into the audio.
+    fn shortfall_ms(frames: usize, elapsed: Duration) -> f64 {
+        elapsed.as_secs_f64() * 1000.0 - frames as f64 * 1000.0 / TARGET_RATE as f64
+    }
+
+    // The claim the session design rests on: cutting a segment costs no audio,
+    // because the stream never stops and a cut is one `mem::take`.
+    #[test]
+    #[ignore = "needs a real input device; takes about 3 s of wall clock"]
+    fn cutting_a_live_session_captures_the_whole_wall_clock() {
+        let _mic = MIC.lock().unwrap_or_else(|e| e.into_inner());
+        let app = mock_voice_app();
+        let state = app.state::<VoiceState>();
+
+        // Auto-cut parked at the ceiling: this measures explicit cuts.
+        start_voice_session(state.clone(), Some(SEGMENT_SECONDS_MAX)).expect("session starts");
+        let began = Instant::now();
+        let stream = {
+            let guard = state.session.lock().unwrap();
+            let ctx = &guard.as_ref().expect("session is live").capture.ctx;
+            format!("{} ch @ {} Hz", ctx.channels, ctx.sample_rate)
+        };
+
+        let mut frames = 0usize;
+        for _ in 0..MEASURE_SEGMENTS {
+            std::thread::sleep(MEASURE_SEGMENT);
+            frames += wav_frames(&cut_voice_session(state.clone()).expect("cut"));
+        }
+        frames += wav_frames(&stop_voice_session(state.clone()).expect("stop"));
+        let elapsed = began.elapsed();
+
+        let expected = elapsed.as_secs_f64() * TARGET_RATE as f64;
+        let missing = shortfall_ms(frames, elapsed);
+        println!(
+            "live session: {}, stream {stream}\n\
+             live session: {MEASURE_SEGMENTS} cuts over {:.1} ms wall clock, captured {frames} \
+             frames of {expected:.0} expected ({:.2}%), missing {missing:.1} ms total, \
+             {:.1} ms per cut",
+            describe_default_input(),
+            elapsed.as_secs_f64() * 1000.0,
+            frames as f64 / expected * 100.0,
+            missing / MEASURE_SEGMENTS as f64,
+        );
+
+        // The clock starts after the stream is already playing, so a run that
+        // loses nothing lands at or just above 1.00 — only the resampler's
+        // per-chunk rounding is unaccounted for. Cutting by stopping and
+        // restarting the stream instead measures around 0.97 (the other test),
+        // and losing 100 ms at each of ten cuts would land near 0.67, so the bar
+        // sits above both.
+        assert!(
+            frames as f64 >= expected * 0.98,
+            "the session lost audio across cuts: captured {frames} frames, expected about \
+             {expected:.0} for {:.1} ms of wall clock ({missing:.1} ms missing, {:.1} ms per cut)",
+            elapsed.as_secs_f64() * 1000.0,
+            missing / MEASURE_SEGMENTS as f64,
+        );
+    }
+
+    // The alternative that was turned down, measured: segmenting by stopping and
+    // restarting the recording instead of cutting a live one. Prints what one
+    // seam costs.
+    #[test]
+    #[ignore = "needs a real input device; takes about 3 s of wall clock"]
+    fn stop_and_start_segmenting_loses_audio_at_every_seam() {
+        let _mic = MIC.lock().unwrap_or_else(|e| e.into_inner());
+        let app = mock_voice_app();
+        let state = app.state::<VoiceState>();
+
+        // The clock starts once the first stream is live, so what it measures is
+        // the seams between segments, not the cost of opening the first stream.
+        start_voice_recording(state.clone()).expect("first recording starts");
+        let began = Instant::now();
+
+        let mut frames = 0usize;
+        for i in 0..MEASURE_SEGMENTS {
+            std::thread::sleep(MEASURE_SEGMENT);
+            frames += wav_frames(&stop_voice_recording(state.clone()).expect("stop"));
+            if i + 1 < MEASURE_SEGMENTS {
+                start_voice_recording(state.clone()).expect("restart");
+            }
+        }
+        let elapsed = began.elapsed();
+
+        let seams = MEASURE_SEGMENTS - 1;
+        let expected = elapsed.as_secs_f64() * TARGET_RATE as f64;
+        let missing = shortfall_ms(frames, elapsed);
+        println!(
+            "stop/start: {}\n\
+             stop/start: {MEASURE_SEGMENTS} segments over {:.1} ms wall clock, captured {frames} \
+             frames of {expected:.0} expected ({:.2}%), missing {missing:.1} ms across {seams} \
+             seams, {:.1} ms per seam",
+            describe_default_input(),
+            elapsed.as_secs_f64() * 1000.0,
+            frames as f64 / expected * 100.0,
+            missing / seams as f64,
+        );
+
+        // Only that the run was real; the number above is the point.
+        assert!(frames > 0, "no audio captured, nothing to measure");
+    }
 }
