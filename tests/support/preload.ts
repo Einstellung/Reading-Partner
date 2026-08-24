@@ -20,6 +20,12 @@
 //                 The file that replaced it puts it back itself.
 
 import { beforeEach, mock } from "bun:test";
+import { markPreloaded } from "./gate";
+
+// Evidence that this file ran, for tests/preload-gate.test.ts to assert on. bun
+// resolves bunfig.toml against the working directory, so a run started from a
+// subdirectory skips this file without a word.
+markPreloaded();
 
 beforeEach(() => {
   mock.restore();
