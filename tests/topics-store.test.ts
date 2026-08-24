@@ -28,7 +28,10 @@ import {
   removeFileFromTopic,
   renameTopic,
   setFileHash,
+  createTopicStore,
   type Topic,
+  type TopicFile,
+  type TopicIo,
 } from "../src/platform/app/topics";
 import { installAppData, type FakeDisk } from "./support/appdata-fake";
 
@@ -231,4 +234,53 @@ test("a refused mutation does not block the one behind it", async () => {
   disk.readFails = false;
   await renameTopic("t1", "JITs");
   expect(topicOnDisk("t1").name).toBe("JITs");
+});
+
+// --- the queue belongs to a store, not to the module ------------------------
+
+// The chain was a module-level `let`, so every test file sharing the worker
+// queued behind the same promise. That is invisible while every mutation
+// finishes, and it is a deadlock the moment one does not: a file that left a
+// write in flight — its spies taken down under it between cases — is what the
+// next file's first mutation waits behind, in a file nobody touched. Two stores
+// over the same bytes is the smallest way to show it.
+test("a second store's mutation does not queue behind the first store's unfinished one", async () => {
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  // Only the first write is held open; the second store's own write runs.
+  let heldOne = false;
+  const file = { text: SHELF_JSON };
+  const io: TopicIo = {
+    read: async () => ({ status: "ok", value: JSON.parse(file.text) as TopicFile }),
+    write: async (contents: string) => {
+      if (!heldOne) {
+        heldOne = true;
+        await held;
+      }
+      file.text = contents;
+    },
+    newId: () => "generated",
+    now: () => 1_700_000_000_000,
+  };
+
+  const first = createTopicStore(io);
+  const second = createTopicStore(io);
+
+  const stuck = first.rename("t1", "JITs");
+  // Let the first store reach its write and stop there.
+  while (!heldOne) await null;
+
+  const landed = await Promise.race([
+    second.rename("t2", "attention heads").then(() => "landed"),
+    Bun.sleep(100).then(() => "still queued behind the other store"),
+  ]);
+  expect(landed).toBe("landed");
+  expect(JSON.parse(file.text).topics.find((t: Topic) => t.id === "t2").name).toBe(
+    "attention heads",
+  );
+
+  release();
+  await stuck;
 });
