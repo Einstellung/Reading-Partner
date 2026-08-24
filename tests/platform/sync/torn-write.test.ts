@@ -26,8 +26,10 @@ const OLD = JSON.stringify({ books: { a: { title: "the one already here" } } });
 const NEW_TEXT = JSON.stringify({ books: { a: { title: "x" }, b: { title: "y" } } });
 const NEW_BYTES = new TextEncoder().encode(NEW_TEXT);
 
-// The temp name the Rust writer uses, near enough: same directory, dot-prefixed,
-// .tmp suffix. Only its existence is asserted, never its exact spelling.
+// The temp name this file's own tearing writer puts the half bytes in, shaped
+// like the Rust writer's (same directory, dot-prefixed, .tmp suffix) minus the
+// pid and sequence it adds. Nothing in src knows this name; it is only how the
+// tests below get at the tear to show it happened.
 const tempFor = (path: string): string => {
   const slash = path.lastIndexOf("/");
   return slash < 0 ? `.${path}.tmp` : `${path.slice(0, slash)}/.${path.slice(slash + 1)}.tmp`;
