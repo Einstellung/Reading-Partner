@@ -19,18 +19,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { IconClose } from "../base/icons";
 import { Button } from "../ui/button";
-import {
-  appendRun,
-  buildRun,
-  type RehearsalEvent,
-  type TranscriptSource,
-} from "../../../reading/rehearsal";
+import { appendRun, type RehearsalEvent, type TranscriptSource } from "../../../reading/rehearsal";
 import { useDeckHtml } from "./useRehearsal";
 import {
   checkDeckProtocol,
-  endEvent,
+  finishRun,
   formatElapsed,
-  hasRecordedPages,
   isPageTurn,
   positionLabel,
   type ProtocolCheck,
@@ -51,6 +45,10 @@ export interface RehearsalViewProps {
   // pages and no words, which is a run and not a failure.
   transcript?: TranscriptSource;
   onExit(): void;
+  // The run is on disk. Later than onExit — a source still uploading holds the
+  // run back by seconds — and only when there was a run to write, so the caller
+  // reads the file at the one moment it has changed.
+  onSaved(): void;
 }
 
 export default function RehearsalView({
@@ -59,6 +57,7 @@ export default function RehearsalView({
   deckFile,
   transcript,
   onExit,
+  onSaved,
 }: RehearsalViewProps) {
   const { html, error } = useDeckHtml(deckFile);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
@@ -80,6 +79,13 @@ export default function RehearsalView({
   const transcriptRef = useRef(transcript);
   useEffect(() => {
     transcriptRef.current = transcript;
+  });
+
+  // Same reason, and one more: this one is called after the view is gone (see
+  // finish below), so it cannot be read off a render that has been torn down.
+  const onSavedRef = useRef(onSaved);
+  useEffect(() => {
+    onSavedRef.current = onSaved;
   });
 
   // Only messages from this view's own frame count. `source === 'deck'` alone is
@@ -156,34 +162,28 @@ export default function RehearsalView({
   // The last page's words arrive after the reader has left: stopping the source
   // sends the final segment and waits for every earlier one still on its way
   // back from STT, and the utterances land through the callback above. So the
-  // run is built on the other side of that await. The rest of this runs after
-  // the view is gone — the End button unmounts it before the uploads finish —
-  // and that is fine because nothing past this point touches React state: the
-  // events are a ref and appendRun writes a file.
+  // run is built on the other side of that await, which is finishRun's order
+  // (rehearsal.ts). The rest of this runs after the view is gone — the End
+  // button unmounts it before the uploads finish — which is why nothing past
+  // this point touches this view's state: the events are a ref, the store
+  // writes a file, and onSaved belongs to the view above, which is still up.
   const finish = useCallback(async () => {
     // The gate closes before the first await, so the second caller (the End
     // button and then the unmount, or the other way round) turns back here
     // rather than writing the run twice.
     if (savedRef.current) return;
     savedRef.current = true;
-    // Stamped now, not after the wait: the rehearsal ended when the reader
-    // stopped talking, not when the last upload came back.
-    const endedAt = Date.now();
-    const source = transcriptRef.current;
-    if (source) {
-      await source.stop().catch((e: unknown) => console.warn("transcript stop failed", e));
-    }
-    const events = [...eventsRef.current, endEvent(endedAt)];
-    if (!hasRecordedPages(events)) return;
-    const run = buildRun({
-      id: crypto.randomUUID(),
-      ordinal: 0, // appendRun assigns it
+    const saved = await finishRun({
       talkId,
       deckFile,
+      id: crypto.randomUUID(),
       startedAt: startedAtRef.current,
-      events,
+      endedAt: Date.now(),
+      source: transcriptRef.current,
+      events: () => eventsRef.current,
+      save: appendRun,
     });
-    void appendRun(run).catch((e: unknown) => console.warn("failed to record the run", e));
+    if (saved) onSavedRef.current();
   }, [talkId, deckFile]);
 
   // Unmounting is an exit like any other (a topic switch, a book opened from
@@ -200,7 +200,8 @@ export default function RehearsalView({
   );
 
   // Leaving does not wait for the run to be written. finish() carries on after
-  // this view is gone, and the reader is back in the talk in the meantime.
+  // this view is gone, and the reader is back in the talk in the meantime; the
+  // history there fills in when onSaved fires.
   const leave = () => {
     void finish();
     onExit();
