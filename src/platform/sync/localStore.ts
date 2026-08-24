@@ -21,15 +21,8 @@
 // first pass after this landed has none, nor does a file this device never
 // pulled, and the merge contract handles that case.
 
-import {
-  exists,
-  mkdir,
-  readFile,
-  readTextFile,
-  remove,
-  writeFile,
-} from "@tauri-apps/plugin-fs";
-import { APPDATA, writeTextAtomic } from "../app/atomic-fs";
+import { appData } from "../app/appdata";
+import { writeTextAtomic } from "../app/atomic-fs";
 
 export const BASE_DIR = "sync-base";
 export const TRASH_FILE = "sync-trash.jsonl";
@@ -54,14 +47,14 @@ function basePath(path: string): string {
 export const tauriBaseStore: BaseStore = {
   async read(path) {
     try {
-      return await readFile(basePath(path), APPDATA);
+      return await appData.readBytes(basePath(path));
     } catch {
       return null;
     }
   },
   async has(path) {
     try {
-      return await exists(basePath(path), APPDATA);
+      return await appData.exists(basePath(path));
     } catch {
       return false;
     }
@@ -69,12 +62,12 @@ export const tauriBaseStore: BaseStore = {
   async write(path, bytes) {
     const full = basePath(path);
     const slash = full.lastIndexOf("/");
-    await mkdir(full.slice(0, slash), { ...APPDATA, recursive: true });
-    await writeFile(full, bytes, APPDATA);
+    await appData.mkdirp(full.slice(0, slash));
+    await appData.writeBytes(full, bytes);
   },
   async remove(path) {
     try {
-      await remove(basePath(path), APPDATA);
+      await appData.remove(basePath(path));
     } catch {
       // Already gone, which is the state this asks for.
     }
@@ -118,8 +111,8 @@ export function pruneTrashText(text: string, now: number): string | null {
 
 async function readTrash(): Promise<string> {
   try {
-    if (!(await exists(TRASH_FILE, APPDATA))) return "";
-    return await readTextFile(TRASH_FILE, APPDATA);
+    if (!(await appData.exists(TRASH_FILE))) return "";
+    return await appData.readText(TRASH_FILE);
   } catch {
     return "";
   }

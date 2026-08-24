@@ -27,14 +27,7 @@
 // in-memory file on a fake clock instead of rewriting the module registry for
 // every other test sharing the worker (pitfall 119).
 
-import {
-  BaseDirectory,
-  exists,
-  mkdir,
-  readFile,
-  readTextFile,
-  writeFile,
-} from "@tauri-apps/plugin-fs";
+import { appData } from "./appdata";
 import { quarantineFile, writeTextAtomic, type CorruptFileReport } from "./atomic-fs";
 import {
   createDebouncedWriter,
@@ -632,9 +625,7 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
 
 const store = createThreadStore({
   read: async (file) =>
-    (await exists(file, { baseDir: BaseDirectory.AppData }))
-      ? readTextFile(file, { baseDir: BaseDirectory.AppData })
-      : null,
+    (await appData.exists(file)) ? appData.readText(file) : null,
   write: writeTextAtomic,
   quarantine: quarantineFile,
   onError: (e) => reportStoreError("threads", e),
@@ -714,14 +705,12 @@ export async function saveThreadImages(
   images: { data: string; mediaType: string }[],
 ): Promise<string[]> {
   if (images.length === 0) return [];
-  await mkdir(threadImageDir(threadId), { baseDir: BaseDirectory.AppData, recursive: true });
+  await appData.mkdirp(threadImageDir(threadId));
   const stamp = Date.now();
   const names: string[] = [];
   for (let i = 0; i < images.length; i++) {
     const name = `${stamp}-${i}.${extFor(images[i].mediaType)}`;
-    await writeFile(`${threadImageDir(threadId)}/${name}`, base64ToBytes(images[i].data), {
-      baseDir: BaseDirectory.AppData,
-    });
+    await appData.writeBytes(`${threadImageDir(threadId)}/${name}`, base64ToBytes(images[i].data));
     names.push(name);
   }
   return names;
@@ -736,8 +725,8 @@ export async function readThreadImages(
   const out: { data: string; mediaType: "image/png" | "image/jpeg" }[] = [];
   for (const name of names) {
     const path = `${threadImageDir(threadId)}/${name}`;
-    if (!(await exists(path, { baseDir: BaseDirectory.AppData }))) continue;
-    const bytes = await readFile(path, { baseDir: BaseDirectory.AppData });
+    if (!(await appData.exists(path))) continue;
+    const bytes = await appData.readBytes(path);
     out.push({ data: bytesToBase64(bytes), mediaType: mediaTypeFor(name) });
   }
   return out;

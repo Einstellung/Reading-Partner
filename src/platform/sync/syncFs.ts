@@ -20,14 +20,8 @@
 // pasted on one device shows as a missing image on the other, which
 // readThreadImages already tolerates.
 
-import {
-  mkdir,
-  readDir,
-  readFile,
-  stat,
-  writeFile,
-} from "@tauri-apps/plugin-fs";
-import { APPDATA, writeTextAtomic } from "../app/atomic-fs";
+import { appData } from "../app/appdata";
+import { writeTextAtomic } from "../app/atomic-fs";
 
 // What a scan of the sync range sees: one stat per file, nothing read.
 export interface ScannedFile {
@@ -158,7 +152,7 @@ function worthDescending(rel: string): boolean {
 async function walk(dir: string, out: ScannedFile[]): Promise<void> {
   let entries;
   try {
-    entries = await readDir(dir || ".", APPDATA);
+    entries = await appData.readDir(dir || ".");
   } catch {
     return;
   }
@@ -170,12 +164,13 @@ async function walk(dir: string, out: ScannedFile[]): Promise<void> {
       continue;
     }
     if (!e.isFile || !inSyncRange(rel)) continue;
-    try {
-      const info = await stat(rel, APPDATA);
-      out.push({ path: rel, mtime: info.mtime ? info.mtime.getTime() : 0, size: info.size });
-    } catch {
-      // A file that vanished between readDir and stat is simply skipped.
-    }
+    // A file that vanished between readDir and stat has no stat to take: null,
+    // and it is simply skipped. Not a throw to swallow — appData.stat answers
+    // null for a file it cannot read, so this test is the whole of the
+    // handling and dropping it would empty every scan.
+    const info = await appData.stat(rel);
+    if (!info) continue;
+    out.push({ path: rel, mtime: info.mtimeMs, size: info.size });
   }
 }
 
@@ -186,7 +181,7 @@ export const tauriSyncFs: SyncFs = {
     return out;
   },
   read(path) {
-    return readFile(path, APPDATA);
+    return appData.readBytes(path);
   },
   async write(path, bytes) {
     // Every in-range file is UTF-8 text this app wrote, so a pull lands through
@@ -206,15 +201,11 @@ export const tauriSyncFs: SyncFs = {
       return;
     }
     const slash = path.lastIndexOf("/");
-    if (slash > 0) await mkdir(path.slice(0, slash), { ...APPDATA, recursive: true });
-    await writeFile(path, bytes, APPDATA);
+    if (slash > 0) await appData.mkdirp(path.slice(0, slash));
+    await appData.writeBytes(path, bytes);
   },
   async stat(path) {
-    try {
-      const info = await stat(path, APPDATA);
-      return { mtime: info.mtime ? info.mtime.getTime() : 0, size: info.size };
-    } catch {
-      return null;
-    }
+    const info = await appData.stat(path);
+    return info === null ? null : { mtime: info.mtimeMs, size: info.size };
   },
 };

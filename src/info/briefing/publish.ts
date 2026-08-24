@@ -31,8 +31,8 @@
 // by not making that request, strip every <img> in buildPublishedBodies instead
 // of only the data: ones — that call is the whole switch.
 
-import { exists, readTextFile } from "@tauri-apps/plugin-fs";
-import { APPDATA, readJson, writeTextAtomic } from "../../platform/app/atomic-fs";
+import { appData } from "../../platform/app/appdata";
+import { readJson, writeTextAtomic } from "../../platform/app/atomic-fs";
 import { stripDataImages } from "../extract/sanitize";
 import { loadArticles, loadItems, loadLatestBriefing, type CachedArticle } from "./store";
 import type { Briefing } from "./types";
@@ -261,8 +261,8 @@ async function readPublishedStamp<T extends BriefingStamp>(
 ): Promise<{ stamp: T | null; writable: boolean }> {
   let text: string;
   try {
-    if (!(await exists(file, APPDATA))) return { stamp: null, writable: true };
-    text = await readTextFile(file, APPDATA);
+    if (!(await appData.exists(file))) return { stamp: null, writable: true };
+    text = await appData.readText(file);
   } catch (e) {
     console.warn(`failed to read ${file}`, e);
     return { stamp: null, writable: false };

@@ -5,11 +5,7 @@
 // both go to the one store-error channel, which logs them, never silently
 // swallowed (pitfall 09).
 
-import {
-  BaseDirectory,
-  exists,
-  readTextFile,
-} from "@tauri-apps/plugin-fs";
+import { appData } from "../platform/app/appdata";
 import { writeTextAtomic } from "../platform/app/atomic-fs";
 import { reportStoreError } from "../platform/app/store-errors";
 import { extractFulltext } from "./extract";
@@ -25,10 +21,8 @@ function fileFor(hash: string): string {
 export async function getFulltext(hash: string): Promise<Fulltext | null> {
   const name = fileFor(hash);
   try {
-    if (!(await exists(name, { baseDir: BaseDirectory.AppData }))) return null;
-    const parsed = JSON.parse(
-      await readTextFile(name, { baseDir: BaseDirectory.AppData }),
-    ) as Fulltext;
+    if (!(await appData.exists(name))) return null;
+    const parsed = JSON.parse(await appData.readText(name)) as Fulltext;
     if (!parsed || parsed.version !== FULLTEXT_VERSION) return null;
     return parsed;
   } catch (e) {

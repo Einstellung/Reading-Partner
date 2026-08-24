@@ -2,11 +2,11 @@
 // (events-<topicId>.jsonl), append-only, local only — it never leaves the
 // device. Payloads are ids and numbers, never message or passage text.
 // The append is injected so the format and logger run headless in tests.
-// This is the one writer that stays on the fs plugin: an O_APPEND of one short
+// This is the one write in the app that is not atomic: an O_APPEND of one short
 // line is already all-or-nothing, and the atomic writer would have to rewrite
 // the whole log to add a line.
 
-import { BaseDirectory, writeTextFile } from "@tauri-apps/plugin-fs";
+import { appData } from "./appdata";
 import { isTauri } from "./host";
 
 export type EventType =
@@ -108,10 +108,7 @@ export function createEventLogger(append: AppendFn, now: () => number = Date.now
 // unattended pipelines log one on every structured parse.
 async function tauriAppend(topicId: string, line: string): Promise<void> {
   if (!isTauri()) return;
-  await writeTextFile(`events-${topicId}.jsonl`, line, {
-    baseDir: BaseDirectory.AppData,
-    append: true,
-  });
+  await appData.appendText(`events-${topicId}.jsonl`, line);
 }
 
 export const logEvent = createEventLogger(tauriAppend);
