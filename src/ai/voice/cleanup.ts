@@ -16,10 +16,15 @@ export interface GlossarySource {
   outline?: { title: string }[];
 }
 
-// A compact glossary of the current book's proper names for the model to anchor
-// mis-transcriptions against: the title plus outline/chapter headings, capped so
-// the prompt stays small. Empty string when no book is open.
-export function buildGlossary(source: GlossarySource): string {
+// The current book's proper names, one term at a time: the title plus
+// outline/chapter headings, de-duplicated and capped so what is built from them
+// stays small. Empty when no book is open.
+//
+// Two callers want the same list in two shapes. A prompt wants it joined
+// (buildGlossary, below); iOS wants the terms themselves, as the recognizer's
+// contextualStrings (docs/15) — so the list and its cap live here once rather
+// than being split back out of a string.
+export function glossaryTerms(source: GlossarySource): string[] {
   const terms: string[] = [];
   const push = (t: string | undefined | null) => {
     const v = t?.trim();
@@ -28,13 +33,21 @@ export function buildGlossary(source: GlossarySource): string {
   push(source.title);
   for (const item of source.outline ?? []) push(item.title);
 
-  let out = "";
+  const kept: string[] = [];
+  let length = 0;
   for (const t of terms) {
-    const next = out ? `${out}; ${t}` : t;
-    if (next.length > GLOSSARY_MAX_CHARS) break;
-    out = next;
+    const next = length ? length + 2 + t.length : t.length;
+    if (next > GLOSSARY_MAX_CHARS) break;
+    kept.push(t);
+    length = next;
   }
-  return out;
+  return kept;
+}
+
+// A compact glossary of the current book's proper names for the model to anchor
+// mis-transcriptions against. Empty string when no book is open.
+export function buildGlossary(source: GlossarySource): string {
+  return glossaryTerms(source).join("; ");
 }
 
 export function buildCleanupSystemPrompt(glossary: string): string {

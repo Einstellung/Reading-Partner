@@ -5,6 +5,11 @@
 export { buildRun, type BuildRunInput } from "./build";
 export { createDesktopTranscriptSource } from "./desktop-source";
 export {
+  closingTail,
+  createDictatedTranscriptSource,
+  type DictatedSourceOptions,
+} from "./dictated-source";
+export {
   createSegmentedTranscriptSource,
   MAX_SEGMENT_SECONDS,
   type RecordingSession,
@@ -13,6 +18,12 @@ export {
   type TranscribeSegment,
 } from "./segmented-source";
 export type { TranscriptSource, Utterance } from "./source";
+export {
+  chooseTranscriptSource,
+  createTranscriptSource,
+  type TranscriptSourceHost,
+  type TranscriptSourceOptions,
+} from "./transcript-source";
 export { appendRun, deleteRehearsals, loadRehearsals, rehearsalFile } from "./store";
 export { countWords, runSummary, type RunSummary } from "./summary";
 export {

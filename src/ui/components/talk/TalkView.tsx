@@ -23,7 +23,7 @@ import { Composer, MessageList } from "../chat/chat";
 import NameDialog from "../common/NameDialog";
 import { Button } from "../ui/button";
 import { cutSession, startSession, stopSession } from "../../../ai/voice";
-import { createDesktopTranscriptSource, type TranscriptSource } from "../../../reading/rehearsal";
+import { createTranscriptSource, type TranscriptSource } from "../../../reading/rehearsal";
 import { outlineRows, type Talk } from "../../../reading/talks";
 import { defaultNavOpen, readNavEnv } from "../base/topic-nav";
 import DeckDialog from "./DeckDialog";
@@ -61,12 +61,14 @@ export default function TalkView(props: {
   // leaving the talk.
   const [rehearsing, setRehearsing] = useState(false);
   // The words for the pass about to be given, or null when the machine has no
-  // way to hear them (no STT key). Made here rather than inside the rehearsal
-  // because the source has to be recording before the deck reports its first
-  // page: reading the STT config is a trip to disk, and doing it after the view
-  // is up would race the deck's own load — every word said to page one while
-  // that race was on would be lost. Made once per pass, too: a source that has
-  // been stopped is finished, and the next Rehearse needs a new one.
+  // way to hear them (no STT key on the desktop, no dictation on the host).
+  // Which of the two shapes it is belongs to the rehearsal, not to this button
+  // (reading/rehearsal/transcript-source.ts). Made here rather than inside the
+  // rehearsal because the source has to be recording before the deck reports its
+  // first page: reading the STT config is a trip to disk, and doing it after the
+  // view is up would race the deck's own load — every word said to page one
+  // while that race was on would be lost. Made once per pass, too: a source that
+  // has been stopped is finished, and the next Rehearse needs a new one.
   const [transcript, setTranscript] = useState<TranscriptSource | null>(null);
   // Making it is a trip to disk, and the button stays on screen for the whole of
   // it. Two presses would make two sources and open two recording sessions, and
@@ -76,10 +78,12 @@ export default function TalkView(props: {
   const [preparing, setPreparing] = useState(false);
   const rehearse = () => {
     setPreparing(true);
-    void createDesktopTranscriptSource({
-      start: startSession,
-      cut: cutSession,
-      stop: stopSession,
+    void createTranscriptSource({
+      session: { start: startSession, cut: cutSession, stop: stopSession },
+      // Which talk is being given is known before a word of it is said, so its
+      // proper names go in as the recognizer's hot words. The desktop's
+      // record-and-upload path has nowhere to put them and ignores them.
+      glossary: { title: talk.talk?.name, outline: [...(talk.talk?.materials ?? []), ...rows] },
     })
       .catch((e: unknown) => {
         // A run that records pages and no words is a run (reading/rehearsal),

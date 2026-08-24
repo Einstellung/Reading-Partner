@@ -7,6 +7,7 @@ import {
   buildCleanupSystemPrompt,
   buildGlossary,
   cleanupTranscript,
+  glossaryTerms,
   type CleanupModel,
   type CleanupRunner,
 } from "../../../src/ai/voice/cleanup";
@@ -30,6 +31,21 @@ test("buildGlossary stays within the ~300 char cap", () => {
 test("buildGlossary is empty when there is no book", () => {
   expect(buildGlossary({})).toBe("");
   expect(buildGlossary({ title: null, outline: [] })).toBe("");
+});
+
+// The same list in the other shape: iOS sends the terms themselves as
+// contextualStrings (docs/15), so the two must be the one list under the one cap.
+test("glossaryTerms is what buildGlossary joins", () => {
+  const source = {
+    title: "Attention Is All You Need",
+    outline: Array.from({ length: 100 }, (_, i) => ({ title: `Chapter number ${i}` })),
+  };
+  expect(glossaryTerms({ title: "Book", outline: [{ title: "One" }, { title: "One" }] })).toEqual([
+    "Book",
+    "One",
+  ]);
+  expect(glossaryTerms(source).join("; ")).toBe(buildGlossary(source));
+  expect(glossaryTerms({})).toEqual([]);
 });
 
 test("buildCleanupSystemPrompt includes the glossary only when present", () => {
