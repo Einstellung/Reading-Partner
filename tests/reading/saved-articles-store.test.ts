@@ -14,9 +14,6 @@
 // Run: bun test.
 
 import { beforeEach, expect, test } from "bun:test";
-// parseSavedArticles sanitizes on read, and the sanitizer parses with a
-// DOMParser that bun does not have.
-import "../support/dom-parser";
 import { CORRUPT_SUFFIX, createFakeAppData, type FakeAppData } from "../support/guarded-appdata";
 import {
   SAVED_ARTICLES_FILE,

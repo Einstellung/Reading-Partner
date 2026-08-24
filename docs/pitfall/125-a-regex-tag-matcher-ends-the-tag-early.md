@@ -23,4 +23,4 @@
 
 改成用 DOMParser 解析 + 白名单走树：允许的元素、每个元素允许的属性、允许的 URL scheme，其余一律丢；留下的标签全部用解析出来的名字和值重新写出来，文本转义后写出去。渲染端重新解析到的，就是检查过的那棵树。svg/math 整棵子树丢掉（`<svg><script>`、`<foreignObject>` 回到 HTML 命名空间、math/mtext 的 mXSS 链都从这里进来）。没有 DOMParser 就返回 `""`，不返回没检查过的 HTML。
 
-测试要两个东西：bun 没有 DOMParser，用 jsdom（parse5，和 WebKit 同一份 HTML5 规范）在 `tests/support/dom-parser.ts` 里补一个，跑的就是线上那条代码；判定不能读输出字符串，要用 `HTMLRewriter` 问「浏览器在这段输出里看到哪些元素和属性」——`expect(out).not.toContain("onclick")` 分不清中和掉的 payload 和换个写法的 payload。
+测试要两个东西：bun 没有 DOMParser，用 jsdom（parse5，和 WebKit 同一份 HTML5 规范）在 `tests/support/preload.ts` 里补一个，跑的就是线上那条代码；判定不能读输出字符串，要用 `HTMLRewriter` 问「浏览器在这段输出里看到哪些元素和属性」——`expect(out).not.toContain("onclick")` 分不清中和掉的 payload 和换个写法的 payload。
