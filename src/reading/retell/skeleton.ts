@@ -1,4 +1,4 @@
-// The skeleton the rehearsal walks: the book's chapters with page ranges.
+// The skeleton the retell walks: the book's chapters with page ranges.
 //
 // It is assembled from structure the app already has, never from a fresh AI
 // call. The reader presses the button and waits, so a plan pass here would be a
@@ -8,7 +8,7 @@
 import { chaptersFromOutline, type TableChapter } from "../chapters";
 import type { SpineChapter } from "../prep/chapters/types";
 import type { OutlineItem } from "../../fulltext/types";
-import type { RehearsalChapter, Skeleton } from "./types";
+import type { RetellChapter, Skeleton } from "./types";
 
 export interface SkeletonInput {
   // The notes pipeline's chapter plan (prep-<bookId>/chapters/state.json), or null.
@@ -18,7 +18,7 @@ export interface SkeletonInput {
   pageCount: number;
 }
 
-function withSpine(chapters: SpineChapter[]): RehearsalChapter[] {
+function withSpine(chapters: SpineChapter[]): RetellChapter[] {
   return chapters.map((c) => ({
     index: c.index,
     title: c.title,
@@ -30,7 +30,7 @@ function withSpine(chapters: SpineChapter[]): RehearsalChapter[] {
 }
 
 // The book's own chapters, with no note behind any of them yet.
-function unwritten(chapters: TableChapter[]): RehearsalChapter[] {
+function unwritten(chapters: TableChapter[]): RetellChapter[] {
   return chapters.map((c) => ({
     index: c.index,
     title: c.title,
@@ -60,7 +60,7 @@ export function buildSkeleton(input: SkeletonInput): Skeleton {
 // The 1-based chapter a page falls in. Pages outside every range clamp to the
 // nearest end rather than vanishing: a mark on the cover or the index belongs
 // with the chapter it is closest to, and dropping it would lose evidence.
-export function chapterOfPage(chapters: readonly RehearsalChapter[], page: number): number {
+export function chapterOfPage(chapters: readonly RetellChapter[], page: number): number {
   if (chapters.length === 0) return 1;
   for (const c of chapters) {
     if (page >= c.startPage && page <= c.endPage) return c.index;

@@ -32,7 +32,7 @@ export function outlineEntries(
 
 // The outline's chapters with page ranges, unfiltered, or null when the outline
 // holds no structure. The caller that wants the filtered table asks
-// pickChapterTable with outlineEntries instead; this one is for the rehearsal,
+// pickChapterTable with outlineEntries instead; this one is for the retell,
 // which walks whatever divisions the book offers and does not reject a thin
 // table — a two-chapter walk is still a walk.
 export function chaptersFromOutline(

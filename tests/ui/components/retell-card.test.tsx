@@ -1,4 +1,4 @@
-// The rehearsal decision card (src/ui/components/reader/RehearsalCard.tsx): that
+// The retell decision card (src/ui/components/reader/RetellCard.tsx): that
 // the registry covers its kind, that the card is a receipt rather than an editor,
 // and that a recorded decision survives a reopened conversation. Rendered as a
 // plain function call and walked as an element tree — no DOM needed.
@@ -6,9 +6,9 @@
 
 import { expect, test } from "bun:test";
 import { CARD_REGISTRY } from "../../../src/ui/components/cardRegistry";
-import { RehearsalDecisionCard } from "../../../src/ui/components/reader/RehearsalCard";
+import { RetellDecisionCard } from "../../../src/ui/components/reader/RetellCard";
 import { Button } from "../../../src/ui/components/ui/button";
-import type { RehearsalDecisionCardData } from "../../../src/reading/rehearsal/cards";
+import type { RetellDecisionCardData } from "../../../src/reading/retell/cards";
 
 function texts(node: unknown, out: string[] = []): string[] {
   if (Array.isArray(node)) {
@@ -37,8 +37,8 @@ function controls(node: unknown, out: unknown[] = []): unknown[] {
   return out;
 }
 
-const payload: RehearsalDecisionCardData = {
-  kind: "rehearsal-decision",
+const payload: RetellDecisionCardData = {
+  kind: "retell-decision",
   chapter: 3,
   title: "Endings",
   include: true,
@@ -48,11 +48,11 @@ const payload: RehearsalDecisionCardData = {
 };
 
 test("the registry has a component for the card's kind", () => {
-  expect(CARD_REGISTRY["rehearsal-decision"]).toBe(RehearsalDecisionCard);
+  expect(CARD_REGISTRY["retell-decision"]).toBe(RetellDecisionCard);
 });
 
 test("the card shows what was written down", () => {
-  const shown = texts(RehearsalDecisionCard({ payload, surface: "call", dispatch: () => {} }));
+  const shown = texts(RetellDecisionCard({ payload, surface: "call", dispatch: () => {} }));
   const joined = shown.join(" ");
   expect(joined).toContain("Endings");
   expect(joined).toContain("3");
@@ -63,14 +63,14 @@ test("the card shows what was written down", () => {
 });
 
 test("a cut chapter says so, and shows no points it does not have", () => {
-  const cut: RehearsalDecisionCardData = {
-    kind: "rehearsal-decision",
+  const cut: RetellDecisionCardData = {
+    kind: "retell-decision",
     chapter: 2,
     title: "Middlegame",
     include: false,
     points: [],
   };
-  const joined = texts(RehearsalDecisionCard({ payload: cut, surface: "call", dispatch: () => {} })).join(" ");
+  const joined = texts(RetellDecisionCard({ payload: cut, surface: "call", dispatch: () => {} })).join(" ");
   expect(joined).toContain("Cut");
   expect(joined).not.toContain("In the talk");
 });
@@ -78,5 +78,5 @@ test("a cut chapter says so, and shows no points it does not have", () => {
 // Correcting a decision is a sentence to the AI, which re-records it and raises a
 // fresh card. A row of buttons here would be a second, worse editor.
 test("the card raises nothing: it has no controls", () => {
-  expect(controls(RehearsalDecisionCard({ payload, surface: "call", dispatch: () => {} }))).toHaveLength(0);
+  expect(controls(RetellDecisionCard({ payload, surface: "call", dispatch: () => {} }))).toHaveLength(0);
 });

@@ -1,40 +1,40 @@
-// The rehearsal's agent tools: write a chapter's decision to the talk's outline,
+// The retell's agent tools: write a chapter's decision to the talk's outline,
 // read back a chapter note the reader already wrote, and read the outline as it
 // now stands.
 //
 // record_chapter_decision is the one tool in this app whose side effect is not
 // derived from anything (docs/31: the decisions are the outline of the talk).
 // It writes without asking, which is deliberate — a confirm gate on every
-// chapter would make the rehearsal a form to fill in — but the write is bounded:
+// chapter would make the retell a form to fill in — but the write is bounded:
 // one chapter, replacing that chapter's previous decision, and the reader sees
 // exactly what landed in the card it raises.
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../ai/agent";
-import type { RehearsalDecisionCardData } from "./cards";
+import type { RetellDecisionCardData } from "./cards";
 import { formatOutline } from "./plan";
-import type { RehearsalChapter, RehearsalDecision, RehearsalPlan } from "./types";
+import type { RetellChapter, RetellDecision, RetellPlan } from "./types";
 
-export interface RehearsalToolDeps {
-  chapters: readonly RehearsalChapter[];
+export interface RetellToolDeps {
+  chapters: readonly RetellChapter[];
   // Merge one decision into the book's plan file and return nothing useful; the
   // model's confirmation is the card, not a payload.
-  record(decision: RehearsalDecision): Promise<void>;
+  record(decision: RetellDecision): Promise<void>;
   // A chapter note's body, or null when the reader never generated one.
   readNote(chapter: number): Promise<string | null>;
   // The decision file as it is on disk right now — re-read rather than closed
   // over, so a decision recorded earlier in this same turn is in the answer.
-  readPlan(): Promise<RehearsalPlan | null>;
+  readPlan(): Promise<RetellPlan | null>;
   // Raise the decision card in the conversation. Absent in headless tests.
-  onCard?(card: RehearsalDecisionCardData): void;
+  onCard?(card: RetellDecisionCardData): void;
   now?(): number;
 }
 
-function chapterList(chapters: readonly RehearsalChapter[]): string {
+function chapterList(chapters: readonly RetellChapter[]): string {
   return chapters.map((c) => `${c.index}. ${c.title}`).join("; ") || "(none)";
 }
 
-export function buildRehearsalTools(deps: RehearsalToolDeps): AgentTool[] {
+export function buildRetellTools(deps: RetellToolDeps): AgentTool[] {
   const now = deps.now ?? (() => Date.now());
   const find = (n: number) => deps.chapters.find((c) => c.index === n);
 
@@ -73,7 +73,7 @@ export function buildRehearsalTools(deps: RehearsalToolDeps): AgentTool[] {
           : [];
         const figure = typeof args.figure === "string" ? args.figure.trim() : "";
         const note = typeof args.note === "string" ? args.note.trim() : "";
-        const decision: RehearsalDecision = {
+        const decision: RetellDecision = {
           chapter,
           title: target.title,
           include: !!args.include,
@@ -85,7 +85,7 @@ export function buildRehearsalTools(deps: RehearsalToolDeps): AgentTool[] {
         await deps.record(decision);
         const { updatedAt, ...rest } = decision;
         void updatedAt;
-        deps.onCard?.({ kind: "rehearsal-decision", ...rest });
+        deps.onCard?.({ kind: "retell-decision", ...rest });
         return decision.include
           ? `Recorded chapter ${chapter} as going in the talk, with ${points.length} point(s). The reader can see the entry.`
           : `Recorded chapter ${chapter} as cut from the talk. The reader can see the entry.`;

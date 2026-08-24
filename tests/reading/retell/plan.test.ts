@@ -1,23 +1,23 @@
-// How the record of a rehearsal reads to the model at the top of a turn
-// (src/reading/rehearsal/plan.ts). Where the record is kept and in what order is
+// How the record of a retell reads to the model at the top of a turn
+// (src/reading/retell/plan.ts). Where the record is kept and in what order is
 // the talk's (tests/reading/talks/outline.test.ts); this is the read-back.
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { formatOutline, formatPlan, nextChapter } from "../../../src/reading/rehearsal/plan";
+import { formatOutline, formatPlan, nextChapter } from "../../../src/reading/retell/plan";
 import type {
-  RehearsalChapter,
-  RehearsalDecision,
-  RehearsalPlan,
-} from "../../../src/reading/rehearsal/types";
+  RetellChapter,
+  RetellDecision,
+  RetellPlan,
+} from "../../../src/reading/retell/types";
 
-const chapters: RehearsalChapter[] = [
+const chapters: RetellChapter[] = [
   { index: 1, title: "Openings", startPage: 1, endPage: 10, hasNote: false },
   { index: 2, title: "Middlegame", startPage: 11, endPage: 20, hasNote: false },
   { index: 3, title: "Endings", startPage: 21, endPage: 30, hasNote: false },
 ];
 
-function decision(over: Partial<RehearsalDecision> = {}): RehearsalDecision {
+function decision(over: Partial<RetellDecision> = {}): RetellDecision {
   return {
     chapter: 1,
     title: "Openings",
@@ -28,7 +28,7 @@ function decision(over: Partial<RehearsalDecision> = {}): RehearsalDecision {
   };
 }
 
-function plan(...decisions: RehearsalDecision[]): RehearsalPlan {
+function plan(...decisions: RetellDecision[]): RetellPlan {
   return { version: 1, createdAt: 1, updatedAt: 100, decisions };
 }
 
@@ -92,7 +92,7 @@ test("the record keeps the order it was given in", () => {
   expect(text.indexOf("Chapter 3.")).toBeLessThan(text.indexOf("Chapter 1."));
 });
 
-test("a finished rehearsal is told not to walk the chapters again", () => {
+test("a finished retell is told not to walk the chapters again", () => {
   const text = formatPlan(chapters, plan(...chapters.map((c) => decision({ chapter: c.index, title: c.title }))));
   expect(text).toContain("Every chapter has a decision");
   expect(text).not.toContain("Next up");

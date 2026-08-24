@@ -1,5 +1,5 @@
 // The talk's outline (src/reading/talks/outline.ts): laying several materials'
-// chapters into the one numbered list the rehearsal walks, translating a
+// chapters into the one numbered list the retell walks, translating a
 // decision back to the book it is about, and the reader's edits to the order.
 // Pure. Run: bun test.
 
@@ -14,13 +14,13 @@ import {
   setIncluded,
   slotAt,
   slotFor,
-  toRehearsalPlan,
+  toRetellPlan,
   toTalkDecision,
   upsertDecision,
   type TalkSkeleton,
 } from "../../../src/reading/talks/outline";
 import type { Talk, TalkDecision } from "../../../src/reading/talks/types";
-import type { RehearsalDecision, Skeleton } from "../../../src/reading/rehearsal/types";
+import type { RetellDecision, Skeleton } from "../../../src/reading/retell/types";
 
 function skeleton(titles: string[], source: Skeleton["source"] = "notes-plan"): Skeleton {
   return {
@@ -113,7 +113,7 @@ test("marks are bucketed per material, not across the combined page ranges", () 
 
 test("a decision recorded against a combined number comes back as a book's chapter", () => {
   const { slots } = combineChapters(twoBooks);
-  const recorded: RehearsalDecision = {
+  const recorded: RetellDecision = {
     chapter: 3,
     title: "Vision — Retina",
     include: true,
@@ -134,7 +134,7 @@ test("the record handed to the prompt is in the talk's order, numbered combined"
   const t = talk({
     decisions: [decision({ bookId: "b2", chapter: 1, title: "Retina" }), decision()],
   });
-  const plan = toRehearsalPlan(t, slots);
+  const plan = toRetellPlan(t, slots);
   expect(plan.decisions.map((d) => d.chapter)).toEqual([3, 1]);
 });
 
@@ -143,7 +143,7 @@ test("the record handed to the prompt is in the talk's order, numbered combined"
 test("a decision whose material is not in the talk is left out of the record", () => {
   const { slots } = combineChapters(oneBook);
   const t = talk({ decisions: [decision({ bookId: "b2", chapter: 1 })] });
-  expect(toRehearsalPlan(t, slots).decisions).toHaveLength(0);
+  expect(toRetellPlan(t, slots).decisions).toHaveLength(0);
 });
 
 test("recording a chapter again replaces it where it already sits", () => {
@@ -156,7 +156,7 @@ test("recording a chapter again replaces it where it already sits", () => {
   expect(next[1].chapter).toBe(2);
 });
 
-test("a new decision goes on the end, in the order the rehearsal walks", () => {
+test("a new decision goes on the end, in the order the retell walks", () => {
   const list = upsertDecision([decision()], decision({ chapter: 2, title: "Middlegame" }));
   expect(list.map((d) => d.chapter)).toEqual([1, 2]);
 });

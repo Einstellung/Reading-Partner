@@ -14,7 +14,7 @@
 import type { FC } from "react";
 import type { InfoCard } from "../../../info/briefing/cards";
 import type { AsideCard } from "../../../reading/aside";
-import type { ReadingCard } from "../../../reading/rehearsal/cards";
+import type { ReadingCard } from "../../../reading/retell/cards";
 import type {
   PersistedCardPayload,
   PersistedPart,
@@ -24,11 +24,11 @@ import type { ThreadMessage } from "./types";
 import type { ToolStatus } from "../../../ai/tool-status";
 
 // The domain payload a card renders. Payload types stay in the domain layer
-// (info/briefing/cards.ts, reading/rehearsal/cards.ts, reading/aside.ts); this
+// (info/briefing/cards.ts, reading/retell/cards.ts, reading/aside.ts); this
 // protocol only references the union, so the dependency direction stays
 // components -> domain and never the reverse. Each unit contributes its own
 // member — a unit, not a whole domain: reading/aside contributes separately from
-// reading/rehearsal so neither has to import the other to be in the union. The
+// reading/retell so neither has to import the other to be in the union. The
 // registry (ui/components/cardRegistry.ts, one level above chat/) is where the
 // components are gathered.
 export type CardPayload = InfoCard | ReadingCard | AsideCard;

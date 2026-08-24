@@ -3,7 +3,7 @@
 // It opens with the marked ones already ticked (docs/31: 新建时不从零勾选) so the
 // common case is one press. A material with no book id yet — added to the topic
 // but never opened — is not offered: there is nothing on disk under it to
-// rehearse from.
+// retell from.
 
 import { useState } from "react";
 import { Button } from "../../ui/button";
@@ -44,7 +44,7 @@ export default function NewTalkDialog(props: {
 
         {props.candidates.length === 0 ? (
           <p className="m-0 text-sm text-muted-foreground">
-            Nothing to rehearse yet — open a book in this topic first.
+            Nothing to retell yet — open a book in this topic first.
           </p>
         ) : (
           <ul className="m-0 flex max-h-[50vh] list-none flex-col gap-1 overflow-y-auto p-0">

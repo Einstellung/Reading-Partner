@@ -38,7 +38,7 @@ function decision(chapter: number): TalkDecision {
 
 const NO_DECKS: ReadonlyMap<string, string> = new Map();
 
-// The two ends meet on the talk id: the talk file says how far the rehearsal
+// The two ends meet on the talk id: the talk file says how far the retell
 // got, the deck the caller looked up says whether a deck came out of it.
 test("a talk with a deck says so and carries the file to open", () => {
   const [row] = talkRows([talk()], new Map([["100", "slides/100-a-talk.html"]]));

@@ -1,4 +1,4 @@
-// One talk, opened (docs/31, "界面"): the rehearsal conversation in the main
+// One talk, opened (docs/31, "界面"): the retell conversation in the main
 // area and the outline it is growing beside it.
 //
 // It replaces the topic's sections while it is open, the way the saved-article

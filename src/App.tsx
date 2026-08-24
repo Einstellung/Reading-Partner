@@ -146,14 +146,14 @@ interface PopupState {
 // is the render layer's own (chatParts.ts), which the domain never touches.
 interface CallMessage extends CallRow {
   // The durable parts of the row (chatParts.ts). Present on rows that carry a
-  // card — a recorded rehearsal decision — and absent on plain prose, which
+  // card — a recorded retell decision — and absent on plain prose, which
   // renders from `text`.
   parts?: ChatPart[];
 }
 
 // Persisted thread messages -> display messages. Image bytes are loaded
 // separately (hydrateThreadImages), so images start absent here. Stored parts
-// come back as render parts (rehydrateMessage), so a rehearsal decision card is
+// come back as render parts (rehydrateMessage), so a retell decision card is
 // still there when the conversation is reopened days later.
 // The part of a thread record that says whether it is a side conversation and
 // what of. Narrow, so a conversation being created can be framed before it has a

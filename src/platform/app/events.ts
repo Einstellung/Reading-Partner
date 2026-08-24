@@ -23,7 +23,7 @@ export type EventType =
   | "thread-delete" // { threadId, book } — conversation deleted (and its mark, if any)
   // A pass that finished. `trigger` is what set it going (hangup, trim, timer,
   // startup, foreground, book-switch, talk-exit). A transcript pass carries the
-  // threadId, a silent-marking pass the bookId, a rehearsal's pass (docs/31) also
+  // threadId, a silent-marking pass the bookId, a retell's pass (docs/31) also
   // { talkId, messages } — which talk it was and how many messages it covered.
   | "distill-run" // { trigger, threadId?, bookId?, created, updated, deleted, talkId?, messages? }
   // A distillation pass that did not finish, so nothing was observed and its

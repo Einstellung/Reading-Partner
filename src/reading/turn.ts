@@ -303,7 +303,7 @@ export function backgroundFailureToast(kind: TurnFailure, markedText: string): s
 // The configured model's metadata (its context window is all we want). A
 // synchronous catalog lookup — no credentials, no network. Null when settings
 // name a provider or model pi doesn't know, in which case the turn is assembled
-// without a budget rather than blocked on one. Shared with the rehearsal turn
+// without a budget rather than blocked on one. Shared with the retell turn
 // (talks/turn.ts): the lookup is the same one either way.
 export function configuredModel(s: Settings): Model<Api> | null {
   const provider = providers[s.defaultProviderId as ProviderId];

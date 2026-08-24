@@ -19,7 +19,7 @@ import {
 import { loadSettings, toReasoning, type Settings } from "../../../platform/app/settings";
 import { runAgentTurn, type ProviderId } from "../../../ai";
 import { toolStatusLabel } from "../../../reading/context";
-import type { RehearsalDecisionCardData } from "../../../reading/rehearsal";
+import type { RetellDecisionCardData } from "../../../reading/retell";
 import {
   buildTalkTurn,
   loadMaterials,
@@ -33,7 +33,7 @@ import {
   type LoadedMaterial,
   type Talk,
 } from "../../../reading/talks";
-import { distillRehearsal } from "../../../observation";
+import { distillRetell } from "../../../observation";
 import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
 import type { ThreadMessage } from "../chat/types";
 import {
@@ -116,7 +116,7 @@ export function useTalk(talkId: string, topicName: string): TalkController {
     pending?.();
   }, []);
 
-  // Leaving the talk is this conversation's hangup (docs/31: the rehearsal is
+  // Leaving the talk is this conversation's hangup (docs/31: the retell is
   // the most worth observing stretch of conversation there is, and it had no
   // distillation at all). Every way out of a talk — the Back button, switching
   // topic, opening a book, moving to another home screen — unmounts this hook,
@@ -128,7 +128,7 @@ export function useTalk(talkId: string, topicName: string): TalkController {
   // finished giving. A deferred pass is also why the turn is then left running
   // rather than aborted — it has to land for there to be anything to read.
   //
-  // A rehearsal the reader never spoke in is not deferred and not distilled: an
+  // A retell the reader never spoke in is not deferred and not distilled: an
   // opening question with no answer under it holds nothing that cannot be
   // re-derived, and leaving it alone keeps a talk opened and closed at once from
   // costing a model call.
@@ -139,7 +139,7 @@ export function useTalk(talkId: string, topicName: string): TalkController {
     const spoken = stored.filter((m) => m.text.trim() !== "");
     if (!spoken.some((m) => m.role === "user")) return false;
     const run = () =>
-      void distillRehearsal({
+      void distillRetell({
         topicId: current.topicId,
         topicName: topicNameRef.current,
         talkId: current.id,
@@ -213,7 +213,7 @@ export function useTalk(talkId: string, topicName: string): TalkController {
     const s = settingsRef.current;
     if (!current) return;
     if (!s?.defaultProviderId || !s?.defaultModelId) {
-      setError("Configure a provider in Settings to start the rehearsal.");
+      setError("Configure a provider in Settings to start the retell.");
       return;
     }
     const controller = new AbortController();
@@ -251,8 +251,8 @@ export function useTalk(talkId: string, topicName: string): TalkController {
       settleExit();
     };
 
-    const onDecisionCard = (payload: RehearsalDecisionCardData) => {
-      const cardId = nextCardId("rehearsal");
+    const onDecisionCard = (payload: RetellDecisionCardData) => {
+      const cardId = nextCardId("retell");
       const cardTs = Date.now();
       setMessages((rows) => insertBeforeLast(rows, cardRow(cardId, payload, cardTs)));
       appendMessage(key, threadId, {
@@ -342,7 +342,7 @@ export function useTalk(talkId: string, topicName: string): TalkController {
     })();
   }, [talkId, key, threadId, topicName, patchRow, settleExit]);
 
-  // A talk opened with nothing in it starts itself: stage one of the rehearsal is
+  // A talk opened with nothing in it starts itself: stage one of the retell is
   // the AI laying out the skeleton and asking which thread the talk should
   // follow (docs/31), and making the reader type "go on" first would be a step
   // that says nothing. Once per talk — reopening a talk with history does not

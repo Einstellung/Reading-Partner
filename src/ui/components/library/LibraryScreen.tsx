@@ -12,7 +12,7 @@
 // An open talk replaces the whole topic while it lasts (the same move the saved
 // article reader makes), so entering one needs no route and leaving it puts the
 // topic back as it was. A talk runs on material read from disk, so nothing above
-// this screen has to know a rehearsal is happening.
+// this screen has to know a retell is happening.
 
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -105,9 +105,9 @@ export default function LibraryScreen(props: {
     setOpenTalkId(null);
   }, [activeTopic?.id]);
 
-  // Rehearse one book: a talk of its own, entered straight away (docs/31 — the
+  // Retell one book: a talk of its own, entered straight away (docs/31 — the
   // entry is in the topic, on the material). A file with no book id has nothing
-  // on disk to rehearse from, so the card does not offer it.
+  // on disk to retell from, so the card does not offer it.
   const startTalkOn = useCallback(
     async (file: FileRef) => {
       if (!activeTopic || !file.hash) return;
@@ -187,7 +187,7 @@ export default function LibraryScreen(props: {
                   savedArticles={savedArticles}
                   onAddFile={props.onAddFile}
                   onOpenFile={props.onOpenFile}
-                  onRehearse={(f) => void startTalkOn(f)}
+                  onRetell={(f) => void startTalkOn(f)}
                   onRemoveFile={async (p) => {
                     await removeFileFromTopic(activeTopic.id, p);
                     await props.onTopicsChanged();
@@ -364,7 +364,7 @@ function TopicMaterials(props: {
   onAddFile: () => void;
   onOpenFile: (file: FileRef) => void;
   // Start a talk about this one book and go straight into it.
-  onRehearse: (file: FileRef) => void;
+  onRetell: (file: FileRef) => void;
   onRemoveFile: (path: string) => void;
   onOpenSavedArticle: (article: SavedArticle) => void;
   onRemoveSavedArticle: (id: string) => void;
@@ -421,7 +421,7 @@ function TopicMaterials(props: {
               file={f}
               meta={meta[f.path]}
               onOpen={() => props.onOpenFile(f)}
-              onRehearse={f.hash ? () => props.onRehearse(f) : undefined}
+              onRetell={f.hash ? () => props.onRetell(f) : undefined}
               onRemove={() => setRemoving(f)}
             />
           ))}

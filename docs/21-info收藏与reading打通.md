@@ -76,7 +76,7 @@ AI 这次用了哪几条外部材料，用户要看得见。可见性是闸的�
 
 - Topic 装得下文章。已做：没有往 `FileRef` 上挂可选字段，也没有塞进 `Topic.files`——`SavedArticle` 自带 `topicId`（`src/reading/saved-articles.ts`），`savedArticlesForTopic` 按 topic 过滤，topic 屏另列一段展示（`LibraryScreen.tsx`、手机端 `PhoneApp.tsx` 经 `SavedArticleView`）。默认 topic 也已经有了：固定 id 的 Brief topic，首次收下时创建，按 id 幂等（`ensureBriefTopic`，`src/platform/app/topics.ts`）；清空还要新加。prep 抓来的论文是同一个坑的既有案例，它至今没进 topic，住在 `prep-<bookHash>/` 里。
 
-- 保存那一刻的编排。工具形状现成（`AgentTool`：name / description / TypeBox schema / execute），`src/ai/` 只有机器、零领域工具，收藏工具属于领域。卡片这边已经动过：联合类型已拆成 `CardPayload = InfoCard | ReadingCard | AsideCard`（`src/ui/components/chat/chatParts.ts`），白名单里也已经有 reading 侧的项（`rehearsal-decision`、`aside`），reading 侧的聊天现在会落卡片（`src/reading/session/use-call.ts` 写 `PersistedCardPayload`）。只剩收藏卡这一种还没做。工具名要避开 `add_source`——info 的"订阅源"和 prep 的"摄入 URL"已经各占一次。
+- 保存那一刻的编排。工具形状现成（`AgentTool`：name / description / TypeBox schema / execute），`src/ai/` 只有机器、零领域工具，收藏工具属于领域。卡片这边已经动过：联合类型已拆成 `CardPayload = InfoCard | ReadingCard | AsideCard`（`src/ui/components/chat/chatParts.ts`），白名单里也已经有 reading 侧的项（`retell-decision`、`aside`），reading 侧的聊天现在会落卡片（`src/reading/session/use-call.ts` 写 `PersistedCardPayload`）。只剩收藏卡这一种还没做。工具名要避开 `add_source`——info 的"订阅源"和 prep 的"摄入 URL"已经各占一次。
 
   分层上这件事落在 reading：材料进的是 reading 的上下文，编排代码放 `src/reading/` 下。现在已有两条 reading → info 的边（`src/reading/saved-articles.ts`、`src/reading/sources/article.ts`，都只 import `info/extract/sanitize` 这个纯函数模块）；星标在 info 的卡片上、写路径在 reading，由 `App.tsx` 接线，聊天里的保存工具由 `ui/components/info` 装配（ui 可以 import 任何领域）。`info` 的四个子目录（`briefing`、`briefing/speech`、`companion`、`extract`、`sources`）在 `tests/layering.test.ts` 的 LAYER 表里已按真实粒度登记，全图无环，不必再顾虑升级到分组目录。
 

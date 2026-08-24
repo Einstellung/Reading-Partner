@@ -52,10 +52,10 @@ export function contentSystemPrompt(aiLanguage: AiLanguage = "auto"): string {
 }
 
 // The kickoff for one slide: its title/kind, asset slot, the reader's own points
-// when the talk was rehearsed, the relevant notes, and — on a re-run — the
+// when the talk was retold, the relevant notes, and — on a re-run — the
 // one-line steer the user typed.
 //
-// `readerPoints` are the lines the reader settled in rehearsal mode (docs/31),
+// `readerPoints` are the lines the reader settled in retell mode (docs/31),
 // verbatim: they arrive here exactly as recorded, never having passed through
 // the plan stage's wording. They are the slide, and the notes below them are
 // only background for filling it out.

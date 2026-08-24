@@ -1,4 +1,4 @@
-// Distillation of a rehearsal conversation (docs/31 second stage, docs/02 part 2
+// Distillation of a retell conversation (docs/31 second stage, docs/02 part 2
 // write side): the reader went through a finished book chapter by chapter with
 // the AI as examiner, and left. This pass reads that stretch of conversation and
 // curates the topic's observations from it.
@@ -32,9 +32,9 @@ import {
 import type { ObservationMeta } from "../record/store";
 import { buildObservationTools, type ObservationWriteAction } from "../record/tools";
 
-export const REHEARSAL_DISTILL_AGENT_NAME = "rehearsal_distiller";
+export const RETELL_DISTILL_AGENT_NAME = "retell_distiller";
 
-export interface RehearsalDistillInput {
+export interface RetellDistillInput {
   topicName: string;
   talkName: string;
   // The talk's materials by title, so an observation can name the book a
@@ -45,7 +45,7 @@ export interface RehearsalDistillInput {
   // not already see (selectNewMessages).
   messages: DistillMessage[];
   // How many messages earlier passes already folded in, so the transcript below
-  // does not read as the whole rehearsal.
+  // does not read as the whole retell.
   earlier: number;
   // The current observation index — the whole of it, every pass. The first thing
   // the prompt asks for is a reconciliation against these lines.
@@ -69,10 +69,10 @@ export function selectNewMessages(
   return { fresh: spoken.slice(from), total: spoken.length };
 }
 
-export function buildRehearsalDistillSystemPrompt(input: RehearsalDistillInput): string {
+export function buildRetellDistillSystemPrompt(input: RetellDistillInput): string {
   return [
     "You keep a reading companion's observations of its reader. The reader has",
-    "just stepped out of a rehearsal: a conversation in which you quizzed them,",
+    "just stepped out of a retell: a conversation in which you quizzed them,",
     "chapter by chapter, about a book they have finished reading, to prepare a",
     "talk they are going to give out loud. Distill from that stretch of",
     "conversation what is worth observing about the reader, using the observation",
@@ -89,25 +89,25 @@ export function buildRehearsalDistillSystemPrompt(input: RehearsalDistillInput):
     "- Read the observation index at the end of this prompt and work out which",
     "  existing observations this conversation bears on. Decide what has to change",
     "  before you decide what to add. observation_read gives you one in full.",
-    "- A rehearsal is where earlier observations get tested. Something recorded as",
+    "- A retell is where earlier observations get tested. Something recorded as",
     "  a stuck-point while they were reading, and explained cleanly here, is not a",
     "  stuck-point any more; a question they voiced as a belief and have now",
     "  answered themselves is not open any more. Update those. Crossing types is",
     "  normal: change the old entry, giving it a different type when its state has",
     "  changed, rather than leaving it and writing a fresh one beside it.",
     "- Never leave two observations standing for the two ends of one story. That",
-    "  is the failure this step exists to prevent: the next rehearsal reads the",
+    "  is the failure this step exists to prevent: the next retell reads the",
     "  index, finds the stale stuck-point, and spends its questions on ground the",
     "  reader has already covered, while what actually needs work waits below it.",
     "- Updating keeps the history. Add a line to the body's timeline — e.g.",
     '  "2026-08-06 explained once, never tested; 2026-08-07 gave it unprompted in',
-    '  the rehearsal, via the Dyna analogy" — instead of overwriting the old',
+    '  the retell, via the Dyna analogy" — instead of overwriting the old',
     "  conclusion with the new one.",
     "- An observation this conversation shows was plain wrong — not out of date,",
     "  but mistaken when it was written — may be corrected outright or deleted,",
     "  with the body saying why.",
     "",
-    "Then record what only a rehearsal can tell you. Three things:",
+    "Then record what only a retell can tell you. Three things:",
     "- Whether the reader can give a chapter out loud, and when they cannot, which",
     "  part is missing: gave the conclusion and skipped the argument, mixed this",
     "  chapter up with another, had the mechanism but not the evidence for it.",
@@ -123,7 +123,7 @@ export function buildRehearsalDistillSystemPrompt(input: RehearsalDistillInput):
     "  that it is a habit rather than a one-off.",
     "",
     "Do not record:",
-    "- What the rehearsal decided to put in the talk. That is already written down,",
+    "- What the retell decided to put in the talk. That is already written down,",
     "  structured, and more precise than prose.",
     "- What you explained. It can be produced again from the book.",
     "- A running account of the conversation. An observation is a judgement plus a",
@@ -131,7 +131,7 @@ export function buildRehearsalDistillSystemPrompt(input: RehearsalDistillInput):
     "",
     "Judge from what the reader actually said. You were the examiner here, which",
     'makes your own verdicts in the transcript worthless as evidence: "that is',
-    'exactly right" was said to keep the rehearsal moving, and taking it as proof',
+    'exactly right" was said to keep the retell moving, and taking it as proof',
     "that they can explain the chapter is reading your own encouragement back to",
     "yourself. Their words, not your reactions to them. Where an answer came back",
     "thin and you filled the rest in, that is a cannot-explain however warm the",
@@ -153,10 +153,10 @@ export function buildRehearsalDistillSystemPrompt(input: RehearsalDistillInput):
     "Writing rules:",
     "- Say in the body which material and which chapter an observation is about,",
     "  in words (the titles are in the message below). There is no field for it.",
-    "- One chapter rehearsed twice is one observation, updated, with a timeline in",
+    "- One chapter retold twice is one observation, updated, with a timeline in",
     "  the body. Do not let a single chapter grow three entries: the index is what",
     "  the next conversation reads, and it is short.",
-    ...datingRule("rehearsal", input.dates),
+    ...datingRule("retell", input.dates),
     "- Anchor evidence: pass the message ids an observation came from.",
     "- A short or shallow stretch of conversation may yield nothing worth keeping;",
     "  making no tool call at all is a fine outcome.",
@@ -166,20 +166,20 @@ export function buildRehearsalDistillSystemPrompt(input: RehearsalDistillInput):
   ].join("\n");
 }
 
-export function buildRehearsalDistillUserMessage(input: RehearsalDistillInput): string {
+export function buildRetellDistillUserMessage(input: RetellDistillInput): string {
   const lines = [
     `Topic: ${input.topicName}`,
     `Talk: ${input.talkName}`,
     `Material${input.materials.length === 1 ? "" : "s"}: ${
       input.materials.length ? input.materials.join(", ") : "(none named)"
     }`,
-    ...(input.dates ? [`Rehearsal date: ${formatEvidenceSpan(input.dates)}`] : []),
+    ...(input.dates ? [`Retell date: ${formatEvidenceSpan(input.dates)}`] : []),
     `Thread ${input.threadId}`,
   ];
   if (input.earlier > 0) {
     lines.push(
       `An earlier pass already folded in the first ${input.earlier} message(s) of this` +
-        " rehearsal; only what follows is new.",
+        " retell; only what follows is new.",
     );
   }
   lines.push("", "Transcript (message ids in brackets):");
@@ -193,16 +193,16 @@ export function buildRehearsalDistillUserMessage(input: RehearsalDistillInput): 
 // the same reason: a correct pass over a thin conversation makes no tool call at
 // all, and "required" would record every one of those as a failure and hold the
 // cursor back (see distill.ts).
-export function buildRehearsalDistillAgent(
-  input: RehearsalDistillInput,
+export function buildRetellDistillAgent(
+  input: RetellDistillInput,
   tools: AgentTool[],
   model?: SubagentModel,
 ): SubagentDefinition {
   return {
-    name: REHEARSAL_DISTILL_AGENT_NAME,
-    description: "Curate this topic's observations from a finished rehearsal.",
+    name: RETELL_DISTILL_AGENT_NAME,
+    description: "Curate this topic's observations from a finished retell.",
     label: "Distilling observations",
-    systemPrompt: buildRehearsalDistillSystemPrompt(input),
+    systemPrompt: buildRetellDistillSystemPrompt(input),
     tools,
     maxRounds: DISTILL_MAX_ROUNDS,
     model,
@@ -211,10 +211,10 @@ export function buildRehearsalDistillAgent(
   };
 }
 
-// One pass over a rehearsal transcript. Rejects only for cancellation
+// One pass over a retell transcript. Rejects only for cancellation
 // (StoppedError); every other way of not finishing comes back in `ok`.
-export async function runRehearsalDistillation(
-  input: RehearsalDistillInput,
+export async function runRetellDistillation(
+  input: RetellDistillInput,
   adapter: ObservationAdapter,
   deps: DistillDeps,
 ): Promise<DistillResult> {
@@ -228,8 +228,8 @@ export async function runRehearsalDistillation(
   });
   const brief = await runSubagent(
     {
-      definition: buildRehearsalDistillAgent(input, tools, deps.model),
-      task: buildRehearsalDistillUserMessage(input),
+      definition: buildRetellDistillAgent(input, tools, deps.model),
+      task: buildRetellDistillUserMessage(input),
       signal: deps.signal,
     },
     { run: deps.run },
@@ -240,19 +240,19 @@ export async function runRehearsalDistillation(
 
 // --- one pass over a talk's conversation, with the cursor discipline ---
 
-export interface RehearsalPassStore {
+export interface RetellPassStore {
   getMeta(): Promise<ObservationMeta>;
   setMeta(meta: ObservationMeta): Promise<void>;
   readIndexText(): Promise<string>;
 }
 
-export interface RehearsalPassDeps extends DistillDeps {
-  store: RehearsalPassStore;
+export interface RetellPassDeps extends DistillDeps {
+  store: RetellPassStore;
   adapter: ObservationAdapter;
   now?: () => number;
 }
 
-export interface RehearsalPassInput {
+export interface RetellPassInput {
   topicName: string;
   talkName: string;
   materials: string[];
@@ -265,10 +265,10 @@ export interface RehearsalPassInput {
 // Why the pass did nothing, when it did nothing. Both are ordinary: leaving a
 // talk twice in a row is one of the two exits from the view, and a reader who
 // only listened has left nothing that cannot be re-derived.
-export type RehearsalSkip = "no-new-messages" | "reader-silent";
+export type RetellSkip = "no-new-messages" | "reader-silent";
 
-export type RehearsalPassResult =
-  | { ran: false; skipped: RehearsalSkip }
+export type RetellPassResult =
+  | { ran: false; skipped: RetellSkip }
   | ({ ran: true; distilled: number; coverage: DistillCoverage } & DistillResult);
 
 // Assemble the input from the cursor, run the pass, and move the cursor only if
@@ -280,16 +280,16 @@ export type RehearsalPassResult =
 // write: every pass is handed the whole current index and told to reconcile
 // against it first, so a stretch of new conversation can update or delete an
 // observation left by any earlier pass, of either kind.
-export async function runRehearsalDistillPass(
-  input: RehearsalPassInput,
-  deps: RehearsalPassDeps,
-): Promise<RehearsalPassResult> {
+export async function runRetellDistillPass(
+  input: RetellPassInput,
+  deps: RetellPassDeps,
+): Promise<RetellPassResult> {
   const now = deps.now ?? Date.now;
   const meta = await deps.store.getMeta();
   const cursor = meta.distilledMessages?.[input.threadId] ?? 0;
   const { fresh, total } = selectNewMessages(input.messages, cursor);
   if (fresh.length === 0) return { ran: false, skipped: "no-new-messages" };
-  // Nothing the reader said in this stretch → nothing a rehearsal is uniquely
+  // Nothing the reader said in this stretch → nothing a retell is uniquely
   // able to observe. The AI's own half of the conversation is not evidence
   // about the reader (see the prompt's examiner rule).
   if (!fresh.some((m) => m.role === "user" && m.text.trim() !== "")) {
@@ -298,7 +298,7 @@ export async function runRehearsalDistillPass(
 
   const stamps = fresh.map((m) => m.ts);
   const coverage = distillCoverage(stamps, cursor);
-  const result = await runRehearsalDistillation(
+  const result = await runRetellDistillation(
     {
       topicName: input.topicName,
       talkName: input.talkName,

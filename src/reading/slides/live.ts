@@ -95,7 +95,7 @@ export interface DeckTalk {
 }
 
 // Every talk a deck can be built from (docs/31: the deck is a talk's product, so
-// what gets listed is talks, not books). A talk qualifies when its rehearsal
+// what gets listed is talks, not books). A talk qualifies when its retell
 // settled at least one entry as in — the decisions are the material, whether or
 // not a notes pass ever ran — or, failing that, when one of its materials has
 // notes for the old plan path to work from.
@@ -125,8 +125,8 @@ export async function listDeckTalks(): Promise<DeckTalk[]> {
 // optional — the overview contains no chapter numbers, so a plan built on it
 // alone can only guess at sourceChapters (docs/29).
 //
-// The chapters come from the same projection the rehearsal walked
-// (talks/material.ts, rehearsal/skeleton.ts): the notes plan when there is one,
+// The chapters come from the same projection the retell walked
+// (talks/material.ts, retell/skeleton.ts): the notes plan when there is one,
 // the PDF's table of contents when there is not, and the whole book as one
 // chapter when there is neither. Reading the notes state directly instead is
 // what left the second book of a talk with an empty chapter table — a talk is
@@ -159,7 +159,7 @@ export async function planMaterial(bookId: string): Promise<PlanBook> {
 //
 // Null means the talk has settled nothing, which is what puts the plan stage
 // back on its old path. Read fresh per run rather than cached across the deck's
-// lifetime: the reader goes back into the rehearsal and changes their mind, and
+// lifetime: the reader goes back into the retell and changes their mind, and
 // the next re-run has to see that.
 export async function readDeckOutline(talkId: string): Promise<TalkOutline | null> {
   return buildTalkOutline(await loadTalk(talkId));

@@ -24,7 +24,7 @@ test("core user-data files are in range", () => {
     "prep-deadbeef/chapters/state.json",
     "prep-deadbeef/chapters/overview.md",
     "prep-deadbeef/chapters/chapter-01.md",
-    // A talk (docs/31): its materials and the outline its rehearsal settled.
+    // A talk (docs/31): its materials and the outline its retell settled.
     // Nothing rebuilds it from the books, so it travels like marks and threads
     // rather than like the caches below — and so does its conversation, which is
     // a thread file keyed by the talk.

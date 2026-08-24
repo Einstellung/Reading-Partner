@@ -1,4 +1,4 @@
-// The outline beside the rehearsal, pinned by a static render: the running
+// The outline beside the retell, pinned by a static render: the running
 // order is numbered, a cut entry stays visible without a number, and the ends of
 // the list cannot be moved further out. What the rows mean is decided in
 // src/reading/talks/outline.ts and tested there. Run: bun test.

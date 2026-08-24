@@ -1,6 +1,6 @@
 // A talk's materials, assembled from disk.
 //
-// This is the difference between a rehearsal and every other conversation in the
+// This is the difference between a retell and every other conversation in the
 // app: it happens in the topic, with no book open, no reader mounted and no
 // engine running. Everything it needs is already on disk under the book's
 // content hash — fulltext-<hash>.json, annotations-<hash>.json,
@@ -15,13 +15,13 @@ import { getLibraryEntry, readLibraryBook } from "../../platform/app/library";
 import { getFulltext } from "../../fulltext/store";
 import type { Fulltext } from "../../fulltext/types";
 import { toAnnotationLite, type AnnotationLite } from "../../fulltext/format";
-import { buildSkeleton, type Skeleton } from "../rehearsal";
+import { buildSkeleton, type Skeleton } from "../retell";
 import { getFigures } from "../figures/store";
 import type { Figure } from "../figures/types";
 import { loadChapterSpineState } from "../prep/chapters/store";
 import type { TalkMaterial } from "./types";
 
-// One material of a talk with everything the rehearsal reads about it.
+// One material of a talk with everything the retell reads about it.
 export interface LoadedMaterial {
   bookId: string;
   // The library's title, falling back to the one stored on the talk.

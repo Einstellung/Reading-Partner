@@ -42,7 +42,7 @@ export interface ObservationMeta {
   // every mark ever made.
   lastAnnotationDistillAt: number | null;
   // How many messages of a conversation have already been distilled, by thread
-  // id. Both paths write it, over disjoint thread ids: a rehearsal is left and
+  // id. Both paths write it, over disjoint thread ids: a retell is left and
   // re-entered over days (docs/31), and a reading thread is distilled again and
   // again by the arrears sweep (arrears.ts). Neither may drop the other's
   // bookkeeping when it writes here.

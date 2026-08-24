@@ -1,4 +1,4 @@
-// The outline beside the rehearsal (docs/31, "界面"): the talk as it stands, one
+// The outline beside the retell (docs/31, "界面"): the talk as it stands, one
 // entry per chapter that has been settled, in the order it will be given.
 //
 // It is not a read-out of the conversation — it is the same data the AI writes

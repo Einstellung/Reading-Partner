@@ -1,5 +1,5 @@
 // The Talks section of a topic (docs/31, "界面"): the talks being prepared under
-// this topic, each one openable back into its own rehearsal conversation.
+// this topic, each one openable back into its own retell conversation.
 //
 // It lists talks, not decks. A deck is one thing a talk eventually produces, so
 // it shows as a talk's state ("deck ready") and as a button on its row — the

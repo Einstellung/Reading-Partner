@@ -1,7 +1,7 @@
-// What a rehearsal turn gives up when it does not fit the model's context
+// What a retell turn gives up when it does not fit the model's context
 // window, and in what order (src/budget/ladder.ts owns the walking of it). The
 // same tiers as the reading ladder (../ladder.ts), over a different set of
-// material: a rehearsal is assembled out of a talk's books rather than the page
+// material: a retell is assembled out of a talk's books rather than the page
 // a reader is on, so the reader's own marks are the material here rather than a
 // hint, and the whole-book survey never appears.
 
@@ -10,9 +10,9 @@ import type { Rung } from "../../budget";
 export type TalkReductionId =
   | "figure-catalog"
   | "observation-trim"
-  | "rehearsal-notes"
+  | "retell-notes"
   | "tool-result-stubs"
-  | "rehearsal-marks"
+  | "retell-marks"
   | "history-trim";
 
 export const TALK_LADDER: readonly Rung<TalkReductionId>[] = [
@@ -23,14 +23,14 @@ export const TALK_LADDER: readonly Rung<TalkReductionId>[] = [
   // note goes before the tool results: the model asked for those and is working
   // from them, while the note was put in front of it unasked and
   // read_chapter_note fetches it straight back.
-  { id: "rehearsal-notes", price: "bulk" },
+  { id: "retell-notes", price: "bulk" },
   { id: "tool-result-stubs", price: "none" },
   // tier 3: evidence. The reader's own marks, in the one mode where they are the
-  // material rather than a hint (docs/31). Trimmed, not dropped: a rehearsal
-  // with no marks in front of it stops being a rehearsal of *their* reading, so
+  // material rather than a hint (docs/31). Trimmed, not dropped: a retell
+  // with no marks in front of it stops being a retell of *their* reading, so
   // what goes is the long tail of each chapter and the length of each quote.
   {
-    id: "rehearsal-marks",
+    id: "retell-marks",
     price: "bulk",
     notice: "your highlights are shortened here to fit; ask me to pull a chapter's marks up in full and I'll read them again",
   },

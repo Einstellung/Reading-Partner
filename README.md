@@ -112,7 +112,7 @@ The sidebar has a Notes tab: one click generates chapter-by-chapter lecture note
 
 Notes also accrue as you read: a chapter distills into its note once your highlights move past it, chapters you never marked are skipped, and a final pass runs when you close the book. The notes overview is part of the context each conversation opens with, so the AI knows what the book has already covered.
 
-## Rehearse it, then give the talk
+## Retell it, then give the talk
 
 Reading a book and being able to explain it are different things, and the second one is testable. A talk is an object under a topic, not a button: pick the books and papers you left traces on — several at once, papers included — and the AI stops teaching and starts examining.
 
@@ -168,7 +168,7 @@ Drive sync needs your own Google OAuth Desktop client: copy `.env.example` to `.
 - `src/platform/` — `app/` is the host (settings, per-device settings, lifecycle, filesystem); `sync/` is the Drive backend and the record-level merge.
 - `src/ai/` — provider streaming, the agent tool loop, and sub-agents. `src/budget/` — context-window accounting. `src/fulltext/` — the search index.
 - `src/info/` — the briefing half: `sources/` holds the descriptor format and the generic engine that runs one, `extract/` turns a page into text (including the hidden-webview path), `briefing/` is the collector, the funnel, the item pool and the reader-side view of what a collector published, `companion/` is the chat over a briefing.
-- `src/reading/` — the book half: `engine/` is the EmbedPDF adapter (assembles the headless core + plugins, renders from in-memory bytes, converts annotations at the boundary), `prep/` and `papers/` are lesson prep and the citation graph, `sources/` fetches and extracts a pasted link, `notes/`, `figures/`, `talks/`, `rehearsal/` and `slides/` run from notes through to the deck. `src/observation/` — what the AI has noticed about the reader: `record/` is one observation on disk (format, per-topic store, recall adapter, agent tools), `distill/` the silent passes that write them and the arrears that decide when one runs, `profile/` the user profile document.
+- `src/reading/` — the book half: `engine/` is the EmbedPDF adapter (assembles the headless core + plugins, renders from in-memory bytes, converts annotations at the boundary), `prep/` and `papers/` are lesson prep and the citation graph, `sources/` fetches and extracts a pasted link, `notes/`, `figures/`, `talks/`, `retell/` and `slides/` run from notes through to the deck. `src/observation/` — what the AI has noticed about the reader: `record/` is one observation on disk (format, per-topic store, recall adapter, agent tools), `distill/` the silent passes that write them and the arrears that decide when one runs, `profile/` the user profile document.
 - `public/pdfium/pdfium.wasm` — the PDFium engine binary, self-hosted (gitignored; staged by `bun run wasm` from the npm package, no CDN at build or runtime). `src-tauri/` — Tauri 2 app, including the tray and the hidden-webview fetch.
 - Design consensus documents (in Chinese) live in `docs/`; hard-won engine/Tauri surprises are indexed in `docs/pitfall/`.
 

@@ -1,7 +1,7 @@
 // The talk's outline: the decisions, in the order they will be given, and the
-// mapping between them and the chapter numbers the rehearsal talks in.
+// mapping between them and the chapter numbers the retell talks in.
 //
-// The rehearsal walks one numbered list of chapters (reading/rehearsal), and a
+// The retell walks one numbered list of chapters (reading/retell), and a
 // talk can hold several books. So the books' skeletons are laid end to end into
 // one numbered list — a slot per chapter, remembering which book and which of
 // its chapters it is — and the decisions on disk stay in book+chapter terms,
@@ -14,16 +14,16 @@
 
 import type {
   Mark,
-  RehearsalChapter,
-  RehearsalDecision,
-  RehearsalPlan,
+  RetellChapter,
+  RetellDecision,
+  RetellPlan,
   Skeleton,
   SkeletonSource,
-} from "../rehearsal";
-import { bucketMarks, REHEARSAL_VERSION } from "../rehearsal";
+} from "../retell";
+import { bucketMarks, RETELL_VERSION } from "../retell";
 import type { Talk, TalkDecision } from "./types";
 
-// One chapter of one material, as the rehearsal numbers it for this talk.
+// One chapter of one material, as the retell numbers it for this talk.
 export interface TalkSlot {
   // 1-based position in the combined chapter list.
   index: number;
@@ -42,7 +42,7 @@ export interface TalkSkeleton {
 }
 
 export interface CombinedChapters {
-  chapters: RehearsalChapter[];
+  chapters: RetellChapter[];
   slots: TalkSlot[];
 }
 
@@ -50,7 +50,7 @@ export interface CombinedChapters {
 // book's own skeleton, renumbered by nothing; with several, each chapter's title
 // carries its book so a numbered list of forty lines still says what it is.
 export function combineChapters(materials: readonly TalkSkeleton[]): CombinedChapters {
-  const chapters: RehearsalChapter[] = [];
+  const chapters: RetellChapter[] = [];
   const slots: TalkSlot[] = [];
   const many = materials.length > 1;
   let index = 0;
@@ -115,16 +115,16 @@ export function slotFor(
   return slots.find((s) => s.bookId === bookId && s.chapter === chapter);
 }
 
-// The talk's decisions as the rehearsal prompt reads them: chapter numbers in
+// The talk's decisions as the retell prompt reads them: chapter numbers in
 // the combined list, in the order the reader has the outline. A decision whose
 // material is no longer in the talk has no slot and is left out — it is still on
 // disk, it just is not part of this talk's numbering any more.
-export function toRehearsalPlan(
+export function toRetellPlan(
   talk: Talk,
   slots: readonly TalkSlot[],
   now = talk.updatedAt,
-): RehearsalPlan {
-  const decisions: RehearsalDecision[] = [];
+): RetellPlan {
+  const decisions: RetellDecision[] = [];
   for (const d of talk.decisions) {
     const slot = slotFor(slots, d.bookId, d.chapter);
     if (!slot) continue;
@@ -139,19 +139,19 @@ export function toRehearsalPlan(
     });
   }
   return {
-    version: REHEARSAL_VERSION,
+    version: RETELL_VERSION,
     createdAt: talk.createdAt,
     updatedAt: now,
     decisions,
   };
 }
 
-// A decision the rehearsal just recorded, in combined-chapter terms, translated
+// A decision the retell just recorded, in combined-chapter terms, translated
 // back to the book it is about. Null when the number is not a chapter of this
 // talk (the tool has already rejected those, so this is the belt).
 export function toTalkDecision(
   slots: readonly TalkSlot[],
-  decision: RehearsalDecision,
+  decision: RetellDecision,
 ): TalkDecision | null {
   const slot = slotAt(slots, decision.chapter);
   if (!slot) return null;
@@ -175,7 +175,7 @@ function sameEntry(a: TalkDecision, b: { bookId: string; chapter: number }): boo
 
 // Merge one decision in. A chapter that already has an entry is replaced *in
 // place*: the reader may have moved it, and re-recording it must not throw that
-// away. A new one goes on the end, which is the order the rehearsal walks in.
+// away. A new one goes on the end, which is the order the retell walks in.
 export function upsertDecision(
   decisions: readonly TalkDecision[],
   decision: TalkDecision,
@@ -207,7 +207,7 @@ export function moveDecision(
 
 // Drop an entry entirely. Different from cutting it: a cut chapter is a settled
 // question that stays in the record, a removed one goes back to being a chapter
-// the rehearsal has not reached, and it will be asked about again.
+// the retell has not reached, and it will be asked about again.
 export function removeDecision(
   decisions: readonly TalkDecision[],
   bookId: string,

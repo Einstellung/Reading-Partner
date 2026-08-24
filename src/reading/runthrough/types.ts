@@ -3,7 +3,7 @@
 // What that leaves behind is this record — which page was up when, and what was
 // said while it was.
 //
-// Not the same thing as reading/rehearsal, which is the AI questioning the
+// Not the same thing as reading/retell, which is the AI questioning the
 // reader chapter by chapter before there is a deck at all. This is after: one
 // pass over the finished deck, no interruptions, no grading. Feedback and
 // distillation are not part of it — nothing can be said about how a talk went

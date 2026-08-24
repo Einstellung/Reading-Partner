@@ -4,7 +4,7 @@
 // Sync range (docs/13): the user's own data — reading position, marks, AI
 // threads, topics, per-topic AI observations, a document's prep material of
 // either kind (docs/09 — paper notes and chapter spines both live under
-// prep-<hash>/), talks and what their rehearsal settled plus the record of each
+// prep-<hash>/), talks and what their retell settled plus the record of each
 // time one was given (docs/31), the cross-scenario user profile and
 // info feedback log (docs/16), and app settings. Book PDFs travel the separate books channel
 // (content-addressed blobs), never the data channel. Excluded: derived caches
@@ -99,7 +99,7 @@ export function inSyncRange(path: string): boolean {
       // A talk's conversation is threads-talk-<talkId>.json, so it is already
       // covered by the line above.
       /^threads-.+\.json$/.test(top) ||
-      // Talks (docs/31): the materials, the outline the rehearsal settled and the
+      // Talks (docs/31): the materials, the outline the retell settled and the
       // order the reader put it in. Nothing can rebuild it from the books, so it
       // travels like marks and threads rather than like a cache. The deck it
       // produces (slides/**) stays out: that is a build output.

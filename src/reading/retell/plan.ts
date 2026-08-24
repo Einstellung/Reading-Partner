@@ -1,20 +1,20 @@
-// The record of the rehearsal, laid out for the prompt.
+// The record of the retell, laid out for the prompt.
 //
-// The record is what makes the rehearsal survivable across sittings (docs/31: a
+// The record is what makes the retell survivable across sittings (docs/31: a
 // talk has a life, it is prepared over several goes and returned to). It is also
 // the deck's outline later, which is why a decision names points and a figure
 // rather than prose. Where it lives, and in what order, belongs to the talk
 // (reading/talks/outline.ts); this file only reads it back.
 
-import type { RehearsalChapter, RehearsalPlan } from "./types";
+import type { RetellChapter, RetellPlan } from "./types";
 
 // The whole outline as something to read back to the reader when they ask what
 // their talk looks like (read_talk_outline). Different from formatPlan, which is
 // the model's working record: this one is ordered as the talk will run, says
 // what is still undecided, and carries no instructions about what to do next.
 export function formatOutline(
-  chapters: readonly RehearsalChapter[],
-  plan: RehearsalPlan | null,
+  chapters: readonly RetellChapter[],
+  plan: RetellPlan | null,
 ): string {
   const decisions = plan?.decisions ?? [];
   if (decisions.length === 0) {
@@ -55,29 +55,29 @@ export function formatOutline(
   return lines.join("\n");
 }
 
-// The chapter the rehearsal is up to: the lowest chapter with no decision yet,
+// The chapter the retell is up to: the lowest chapter with no decision yet,
 // or null when every chapter has one. Not "the last one recorded plus one" —
 // the reader may jump around, and the gap is what is actually left to do.
 export function nextChapter(
-  chapters: readonly RehearsalChapter[],
-  plan: RehearsalPlan | null,
+  chapters: readonly RetellChapter[],
+  plan: RetellPlan | null,
 ): number | null {
   const done = new Set((plan?.decisions ?? []).map((d) => d.chapter));
   for (const c of chapters) if (!done.has(c.index)) return c.index;
   return null;
 }
 
-// The record of the rehearsal so far, as the model reads it at the top of every
+// The record of the retell so far, as the model reads it at the top of every
 // turn. This is what makes "start from where it stands" answerable.
 export function formatPlan(
-  chapters: readonly RehearsalChapter[],
-  plan: RehearsalPlan | null,
+  chapters: readonly RetellChapter[],
+  plan: RetellPlan | null,
 ): string {
   const decisions = plan?.decisions ?? [];
   const next = nextChapter(chapters, plan);
   if (decisions.length === 0) {
     return [
-      "Where the rehearsal stands: nothing recorded yet.",
+      "Where the retell stands: nothing recorded yet.",
       "If the conversation so far is empty, this is the opening: lay out the",
       "skeleton, get the reader to confirm or correct the spine and say which",
       "thread they want the talk to follow, then start at chapter 1.",
@@ -88,7 +88,7 @@ export function formatPlan(
       "again — carry on with chapter 1.",
     ].join("\n");
   }
-  const lines = ["Where the rehearsal stands — what has been recorded so far:"];
+  const lines = ["Where the retell stands — what has been recorded so far:"];
   for (const d of decisions) {
     lines.push("", `Chapter ${d.chapter}. ${d.title} — ${d.include ? "in the talk" : "cut"}`);
     for (const p of d.points) lines.push(`  - ${p}`);

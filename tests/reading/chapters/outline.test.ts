@@ -118,7 +118,7 @@ test("only the outline's top level is read, and entries off the end are not", ()
   ]);
 });
 
-// The unfiltered path, for the rehearsal: it walks whatever divisions the book
+// The unfiltered path, for the retell: it walks whatever divisions the book
 // offers and a thin table is still a table to walk.
 test("chaptersFromOutline uses top-level entries, needs at least two", () => {
   const chapters = chaptersFromOutline(

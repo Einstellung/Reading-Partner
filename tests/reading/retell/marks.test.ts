@@ -1,11 +1,11 @@
 // Bucketing the reader's marks under the skeleton and laying them out for the
-// prompt (src/reading/rehearsal/marks.ts). Pure. Run: bun test.
+// prompt (src/reading/retell/marks.ts). Pure. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { bucketMarks, formatMarks } from "../../../src/reading/rehearsal/marks";
-import type { Mark, RehearsalChapter } from "../../../src/reading/rehearsal/types";
+import { bucketMarks, formatMarks } from "../../../src/reading/retell/marks";
+import type { Mark, RetellChapter } from "../../../src/reading/retell/types";
 
-const chapters: RehearsalChapter[] = [
+const chapters: RetellChapter[] = [
   { index: 1, title: "Openings", startPage: 1, endPage: 10, hasNote: true },
   { index: 2, title: "Middlegame", startPage: 11, endPage: 20, hasNote: false },
 ];
@@ -42,7 +42,7 @@ test("the full form carries the page, the passage and the reader's own note", ()
   expect(text).toContain("--- 1. Openings (pp.1-10) ---");
 });
 
-// "This chapter has nothing marked in it" is itself something the rehearsal can
+// "This chapter has nothing marked in it" is itself something the retell can
 // ask about, so an empty chapter is listed rather than skipped.
 test("a chapter with nothing marked says so", () => {
   const text = formatMarks(chapters, bucketMarks(chapters, [{ page: 2, text: "one" }]));

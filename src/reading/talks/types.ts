@@ -2,7 +2,7 @@
 // living under a topic, spanning one or more materials, holding its own
 // conversation and the decisions that conversation produced.
 //
-// It is not a mode and not a book: the rehearsal conversation is anchored on the
+// It is not a mode and not a book: the retell conversation is anchored on the
 // talk, so it survives the book being closed and it can cover several books at
 // once. The decisions therefore say which book's chapter they are about — a
 // chapter number alone stops meaning anything the moment a second material joins.
@@ -21,8 +21,8 @@ export interface TalkMaterial {
   title: string;
 }
 
-// What the rehearsal settled about one chapter of one material. The same shape
-// the rehearsal has always produced (reading/rehearsal/types.ts), plus the book
+// What the retell settled about one chapter of one material. The same shape
+// the retell has always produced (reading/retell/types.ts), plus the book
 // it belongs to.
 export interface TalkDecision {
   bookId: string;

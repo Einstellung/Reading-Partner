@@ -697,8 +697,8 @@ export async function runDistillPass(
   );
   if (!result.ok) return { ran: true, coverage, ...result };
   // One cursor per thread this transcript came from, and — when this pass
-  // actually saw the marks — the book's mark cursor. Spread first: the rehearsal
-  // pass keeps its own per-thread cursor in the same file (rehearsal.ts) and a
+  // actually saw the marks — the book's mark cursor. Spread first: the retell
+  // pass keeps its own per-thread cursor in the same file (retell.ts) and a
   // hangup here must not wipe it.
   await deps.store.setMeta({
     ...meta,

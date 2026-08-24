@@ -1,6 +1,6 @@
 // The chapter list a deck is planned against (src/reading/slides/live.ts
-// planMaterial), and that it is the same list the rehearsal walked
-// (src/reading/rehearsal/skeleton.ts buildSkeleton).
+// planMaterial), and that it is the same list the retell walked
+// (src/reading/retell/skeleton.ts buildSkeleton).
 //
 // A talk qualifies for a deck when *any* of its materials has notes, but the
 // plan stage reads every material. A second book with no notes therefore
@@ -77,7 +77,7 @@ mock.module("../../../src/platform/app/atomic-fs", () => ({
 }));
 
 const { planMaterial } = await import("../../../src/reading/slides/live");
-const { buildSkeleton } = await import("../../../src/reading/rehearsal/skeleton");
+const { buildSkeleton } = await import("../../../src/reading/retell/skeleton");
 const { citableWithOutline } = await import("../../../src/reading/slides/outline");
 
 const WITH_NOTES = "book-with-notes";
@@ -147,9 +147,9 @@ test("a book with notes is planned against its notes chapters", async () => {
 });
 
 // The bug: the second book of a talk. It has a text layer and a table of
-// contents, so the rehearsal walked two real chapters of it; the planner used to
+// contents, so the retell walked two real chapters of it; the planner used to
 // see none, because it only ever looked at the notes state.
-test("a book with no notes is planned against the same chapters the rehearsal walked", async () => {
+test("a book with no notes is planned against the same chapters the retell walked", async () => {
   putFulltext(NO_NOTES);
   const fulltext = JSON.parse(files.get(`fulltext-${NO_NOTES}.json`)!);
   const skeleton = buildSkeleton({
