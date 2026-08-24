@@ -10,7 +10,7 @@
 // device.json is out of the sync range by omission (platform/sync/syncFs.ts):
 // the range is a whitelist, and nothing here is on it. There is a test.
 
-import { readGuardedJson, writeTextAtomic } from "./atomic-fs";
+import { readGuardedJson, writeTextAtomic, type GuardedRead } from "./atomic-fs";
 import { isMobilePlatform } from "./platform";
 import { loadSettings } from "./settings";
 
@@ -102,83 +102,139 @@ export function initialDeviceSettings(
   return { settings, changed };
 }
 
-// The one in-memory copy, so the role can be answered without a read on every
-// call. Filled by initDeviceSettings and kept in step by saveDeviceSettings.
-let cached: DeviceSettings | null = null;
-
-function withRole(settings: DeviceSettings): DeviceSettings {
-  return { ...settings, role: deviceRoleFor(settings.role, isMobilePlatform()) };
-}
-
 function parseStored(raw: unknown): Partial<DeviceSettings> | null {
   return raw && typeof raw === "object" ? (raw as Partial<DeviceSettings>) : null;
 }
 
-// Missing is the normal first-run case and means the defaults. Unreadable is
-// treated the same way here, and deliberately: a device file holds preferences a
-// user can set again in a second, not data the app cannot rebuild, so the read
-// guard's quarantine is enough and nothing has to be blocked from writing.
-export async function loadDeviceSettings(): Promise<DeviceSettings> {
-  const read = await readGuardedJson<Partial<DeviceSettings>>(DEVICE_FILE, parseStored);
-  const stored = read.status === "ok" ? read.value : {};
-  const settings = withRole({ ...DEFAULT_DEVICE_SETTINGS, ...stored });
-  cached = settings;
-  return settings;
+// Everything the store reaches outside itself, passed in rather than imported,
+// so a test can run the real store against its own file and its own answer to
+// "is this a phone".
+export interface DeviceIo {
+  read: () => Promise<GuardedRead<Partial<DeviceSettings>>>;
+  write: (contents: string) => Promise<void>;
+  // The account's old file, read once by the migration below. Anything it
+  // throws means there is nothing to inherit.
+  legacy: () => Promise<unknown>;
+  newId: () => string;
+  isMobile: () => boolean;
 }
 
-// The first read of the session: give a machine that has never had one an
-// identity, and take over the two settings that used to be the account's. Called
-// once at startup, before anything asks for the role.
-export async function initDeviceSettings(): Promise<DeviceSettings> {
-  const read = await readGuardedJson<Partial<DeviceSettings>>(DEVICE_FILE, parseStored);
-  const stored = read.status === "ok" ? read.value : {};
-  let legacy: { backgroundCollect?: boolean; fingerDraw?: boolean } = {};
-  if (stored.backgroundCollect === undefined || stored.fingerDraw === undefined) {
-    try {
-      // The two keys are gone from the Settings type and still on disk, which is
-      // exactly the shape a one-time migration reads.
-      const old = (await loadSettings()) as unknown as {
-        backgroundCollect?: unknown;
-        fingerDraw?: unknown;
-      };
-      legacy = {
-        backgroundCollect:
-          typeof old.backgroundCollect === "boolean" ? old.backgroundCollect : undefined,
-        fingerDraw: typeof old.fingerDraw === "boolean" ? old.fingerDraw : undefined,
-      };
-    } catch {
-      // Nothing to inherit; the defaults stand.
-    }
+export interface DeviceStore {
+  load: () => Promise<DeviceSettings>;
+  init: () => Promise<DeviceSettings>;
+  role: () => DeviceRole;
+  id: () => string;
+  save: (settings: DeviceSettings) => Promise<void>;
+  patch: (patch: Partial<DeviceSettings>) => Promise<void>;
+}
+
+export function createDeviceStore(io: DeviceIo): DeviceStore {
+  // The one in-memory copy, so the role can be answered without a read on every
+  // call. Filled by init and kept in step by save.
+  let cached: DeviceSettings | null = null;
+
+  function withRole(settings: DeviceSettings): DeviceSettings {
+    return { ...settings, role: deviceRoleFor(settings.role, io.isMobile()) };
   }
-  const { settings, changed } = initialDeviceSettings(stored, legacy, () => crypto.randomUUID());
-  cached = withRole(settings);
-  if (changed) await saveDeviceSettings(settings).catch(() => {});
-  return cached;
+
+  // Written straight through, not debounced: these change when a user flips a
+  // switch, which is rare enough that a write per flip costs nothing.
+  function save(settings: DeviceSettings): Promise<void> {
+    cached = withRole(settings);
+    return io.write(JSON.stringify(settings, null, 2));
+  }
+
+  // Missing is the normal first-run case and means the defaults. Unreadable is
+  // treated the same way here, and deliberately: a device file holds preferences
+  // a user can set again in a second, not data the app cannot rebuild, so the
+  // read guard's quarantine is enough and nothing has to be blocked from
+  // writing.
+  async function load(): Promise<DeviceSettings> {
+    const read = await io.read();
+    const stored = read.status === "ok" ? read.value : {};
+    const settings = withRole({ ...DEFAULT_DEVICE_SETTINGS, ...stored });
+    cached = settings;
+    return settings;
+  }
+
+  return {
+    load,
+    // The first read of the session: give a machine that has never had one an
+    // identity, and take over the two settings that used to be the account's.
+    // Called once at startup, before anything asks for the role.
+    init: async () => {
+      const read = await io.read();
+      const stored = read.status === "ok" ? read.value : {};
+      let legacy: { backgroundCollect?: boolean; fingerDraw?: boolean } = {};
+      if (stored.backgroundCollect === undefined || stored.fingerDraw === undefined) {
+        try {
+          // The two keys are gone from the Settings type and still on disk,
+          // which is exactly the shape a one-time migration reads.
+          const old = (await io.legacy()) as {
+            backgroundCollect?: unknown;
+            fingerDraw?: unknown;
+          };
+          legacy = {
+            backgroundCollect:
+              typeof old.backgroundCollect === "boolean" ? old.backgroundCollect : undefined,
+            fingerDraw: typeof old.fingerDraw === "boolean" ? old.fingerDraw : undefined,
+          };
+        } catch {
+          // Nothing to inherit; the defaults stand.
+        }
+      }
+      const { settings, changed } = initialDeviceSettings(stored, legacy, io.newId);
+      cached = withRole(settings);
+      if (changed) await save(settings).catch(() => {});
+      return cached;
+    },
+    // The role, for callers that cannot wait for a read: the shells resolve it
+    // once at startup and everything after reads this. "reader" until it is
+    // known, so a collector's singletons are never constructed by accident on a
+    // device that turns out to be a reader — that is the expensive mistake, not
+    // its reverse.
+    role: () => (cached ? cached.role : "reader"),
+    id: () => cached?.deviceId ?? "",
+    save,
+    // One field, without the caller having to hold the rest of the file. A
+    // whole-object save carries whatever copy the caller last read, so two
+    // screens that each own a different setting undo each other; a patch merges
+    // onto the live copy.
+    patch: async (patch) => {
+      const current = cached ?? (await load());
+      await save({ ...current, ...patch });
+    },
+  };
 }
 
-// The role, for callers that cannot wait for a read: the shells resolve it once
-// at startup and everything after reads this. "reader" until it is known, so a
-// collector's singletons are never constructed by accident on a device that
-// turns out to be a reader — that is the expensive mistake, not its reverse.
+const store = createDeviceStore({
+  read: () => readGuardedJson<Partial<DeviceSettings>>(DEVICE_FILE, parseStored),
+  write: (contents) => writeTextAtomic(DEVICE_FILE, contents),
+  legacy: () => loadSettings(),
+  newId: () => crypto.randomUUID(),
+  isMobile: isMobilePlatform,
+});
+
+export function loadDeviceSettings(): Promise<DeviceSettings> {
+  return store.load();
+}
+
+export function initDeviceSettings(): Promise<DeviceSettings> {
+  return store.init();
+}
+
 export function currentDeviceRole(): DeviceRole {
-  return cached ? cached.role : "reader";
+  return store.role();
 }
 
 export function currentDeviceId(): string {
-  return cached?.deviceId ?? "";
+  return store.id();
 }
 
-// Written straight through, not debounced: these change when a user flips a
-// switch, which is rare enough that a write per flip costs nothing.
 export function saveDeviceSettings(settings: DeviceSettings): Promise<void> {
-  cached = withRole(settings);
-  return writeTextAtomic(DEVICE_FILE, JSON.stringify(settings, null, 2));
+  return store.save(settings);
 }
 
-// One field, without the caller having to hold the rest of the file. A whole-object
-// save carries whatever copy the caller last read, so two screens that each own
-// a different setting undo each other; a patch merges onto the live copy.
-export async function patchDeviceSettings(patch: Partial<DeviceSettings>): Promise<void> {
-  const current = cached ?? (await loadDeviceSettings());
-  await saveDeviceSettings({ ...current, ...patch });
+export function patchDeviceSettings(patch: Partial<DeviceSettings>): Promise<void> {
+  return store.patch(patch);
 }
