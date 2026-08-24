@@ -9,7 +9,7 @@
 // talk each would otherwise write the same registry and one of them would lose.
 // A file per talk means the only thing two devices can collide on is one talk.
 
-import { BaseDirectory, exists, readDir, readTextFile, remove } from "@tauri-apps/plugin-fs";
+import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { deleteRehearsals } from "../rehearsal/store";
 import {
@@ -43,10 +43,8 @@ export function talkIdOf(fileName: string): string | null {
 export async function loadTalk(talkId: string): Promise<Talk | null> {
   try {
     const file = talkFile(talkId);
-    if (!(await exists(file, { baseDir: BaseDirectory.AppData }))) return null;
-    const parsed = JSON.parse(
-      await readTextFile(file, { baseDir: BaseDirectory.AppData }),
-    ) as Talk;
+    if (!(await appData.exists(file))) return null;
+    const parsed = JSON.parse(await appData.readText(file)) as Talk;
     return normalizeTalk(parsed);
   } catch (e) {
     console.warn("failed to read a talk", talkId, e);
@@ -62,7 +60,7 @@ export async function saveTalk(talk: Talk): Promise<void> {
 export async function listAllTalks(): Promise<Talk[]> {
   let entries;
   try {
-    entries = await readDir(".", { baseDir: BaseDirectory.AppData });
+    entries = await appData.readDir(".");
   } catch {
     return [];
   }
@@ -94,7 +92,7 @@ export interface StartTalkInput {
 // directory name and two talks cannot share one.
 export async function startTalk(input: StartTalkInput): Promise<Talk> {
   let now = input.now ?? Date.now();
-  while (await exists(talkFile(newTalkId(now)), { baseDir: BaseDirectory.AppData })) now += 1;
+  while (await appData.exists(talkFile(newTalkId(now)))) now += 1;
   const talk = newTalk({
     id: newTalkId(now),
     topicId: input.topicId,
@@ -140,7 +138,7 @@ export function recordTalkDecision(
 // longer exists, and nothing will ever open them again.
 export async function deleteTalk(talkId: string): Promise<void> {
   try {
-    await remove(talkFile(talkId), { baseDir: BaseDirectory.AppData });
+    await appData.remove(talkFile(talkId));
   } catch (e) {
     console.warn("failed to delete a talk", talkId, e);
   }

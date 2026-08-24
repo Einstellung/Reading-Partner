@@ -5,14 +5,7 @@
 //   prep-<surveyHash>/pdf/<slug>.pdf — downloaded paper PDFs
 // Paper full texts reuse the fulltext cache keyed by a synthetic path.
 
-import {
-  BaseDirectory,
-  exists,
-  mkdir,
-  readFile,
-  readTextFile,
-  writeFile,
-} from "@tauri-apps/plugin-fs";
+import { appData } from "../../../platform/app/appdata";
 import { writeTextAtomic } from "../../../platform/app/atomic-fs";
 import { hashPath } from "../../../platform/app/storage";
 import { PREP_VERSION, type PrepState } from "./types";
@@ -44,17 +37,15 @@ export function paperFulltextHash(surveyHash: string, slug: string): string {
 }
 
 async function ensurePrepDir(hash: string): Promise<void> {
-  await mkdir(dirFor(hash), { baseDir: BaseDirectory.AppData, recursive: true });
+  await appData.mkdirp(dirFor(hash));
 }
 
 // Missing state is normal (prep never started); a corrupt or stale-version
 // state reads as null so the pipeline replans instead of crashing.
 export async function loadPrepState(hash: string): Promise<PrepState | null> {
   try {
-    if (!(await exists(stateFile(hash), { baseDir: BaseDirectory.AppData }))) return null;
-    const parsed = JSON.parse(
-      await readTextFile(stateFile(hash), { baseDir: BaseDirectory.AppData }),
-    ) as PrepState;
+    if (!(await appData.exists(stateFile(hash)))) return null;
+    const parsed = JSON.parse(await appData.readText(stateFile(hash))) as PrepState;
     if (!parsed || parsed.version !== PREP_VERSION) return null;
     return parsed;
   } catch (e) {
@@ -75,8 +66,8 @@ export async function writePrepNote(hash: string, slug: string, content: string)
 
 export async function readPrepNote(hash: string, slug: string): Promise<string | null> {
   try {
-    if (!(await exists(noteFile(hash, slug), { baseDir: BaseDirectory.AppData }))) return null;
-    return await readTextFile(noteFile(hash, slug), { baseDir: BaseDirectory.AppData });
+    if (!(await appData.exists(noteFile(hash, slug)))) return null;
+    return await appData.readText(noteFile(hash, slug));
   } catch (e) {
     console.warn("failed to read prep note", e);
     return null;
@@ -84,16 +75,14 @@ export async function readPrepNote(hash: string, slug: string): Promise<string |
 }
 
 export async function writePaperPdf(hash: string, slug: string, bytes: ArrayBuffer): Promise<void> {
-  await mkdir(`${dirFor(hash)}/pdf`, { baseDir: BaseDirectory.AppData, recursive: true });
-  await writeFile(pdfFile(hash, slug), new Uint8Array(bytes), {
-    baseDir: BaseDirectory.AppData,
-  });
+  await appData.mkdirp(`${dirFor(hash)}/pdf`);
+  await appData.writeBytes(pdfFile(hash, slug), new Uint8Array(bytes));
 }
 
 export async function readPaperPdf(hash: string, slug: string): Promise<ArrayBuffer | null> {
   try {
-    if (!(await exists(pdfFile(hash, slug), { baseDir: BaseDirectory.AppData }))) return null;
-    const bytes = await readFile(pdfFile(hash, slug), { baseDir: BaseDirectory.AppData });
+    if (!(await appData.exists(pdfFile(hash, slug)))) return null;
+    const bytes = await appData.readBytes(pdfFile(hash, slug));
     return bytes.slice().buffer as ArrayBuffer;
   } catch (e) {
     console.warn("failed to read cached paper pdf", e);

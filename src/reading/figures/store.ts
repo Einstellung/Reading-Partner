@@ -18,11 +18,7 @@
 //   there, so the re-extraction wrote its result over bytes nobody had read.
 //   readCache keeps those two apart and refuses the write for the second.
 
-import {
-  BaseDirectory,
-  exists,
-  readTextFile,
-} from "@tauri-apps/plugin-fs";
+import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { reportStoreError } from "../../platform/app/store-errors";
 import { extractFiguresFromDocument, FIGURES_VERSION } from "./extract";
@@ -83,8 +79,8 @@ async function readCache(hash: string): Promise<{ index: FiguresIndex | null; wr
   const name = fileFor(hash);
   let text: string;
   try {
-    if (!(await exists(name, { baseDir: BaseDirectory.AppData }))) return { index: null, writable: true };
-    text = await readTextFile(name, { baseDir: BaseDirectory.AppData });
+    if (!(await appData.exists(name))) return { index: null, writable: true };
+    text = await appData.readText(name);
   } catch (e) {
     console.warn("failed to read figures cache", e);
     return { index: null, writable: false };

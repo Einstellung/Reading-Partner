@@ -9,12 +9,7 @@
 // prep-<surveyHash>/ by, so a document has one prep directory whichever kind of
 // material it turns out to need.
 
-import {
-  BaseDirectory,
-  exists,
-  mkdir,
-  readTextFile,
-} from "@tauri-apps/plugin-fs";
+import { appData } from "../../../platform/app/appdata";
 import { writeTextAtomic } from "../../../platform/app/atomic-fs";
 import { CHAPTER_SPINE_VERSION, type ChapterSpineState } from "./types";
 
@@ -39,17 +34,15 @@ function overviewFile(bookId: string): string {
 }
 
 async function ensureChapterSpineDir(bookId: string): Promise<void> {
-  await mkdir(dirFor(bookId), { baseDir: BaseDirectory.AppData, recursive: true });
+  await appData.mkdirp(dirFor(bookId));
 }
 
 // Missing state is normal (the spine was never generated); a corrupt or stale-version
 // state reads as null so the pipeline starts fresh instead of crashing.
 export async function loadChapterSpineState(bookId: string): Promise<ChapterSpineState | null> {
   try {
-    if (!(await exists(stateFile(bookId), { baseDir: BaseDirectory.AppData }))) return null;
-    const parsed = JSON.parse(
-      await readTextFile(stateFile(bookId), { baseDir: BaseDirectory.AppData }),
-    ) as ChapterSpineState;
+    if (!(await appData.exists(stateFile(bookId)))) return null;
+    const parsed = JSON.parse(await appData.readText(stateFile(bookId))) as ChapterSpineState;
     if (!parsed || parsed.version !== CHAPTER_SPINE_VERSION) return null;
     return parsed;
   } catch (e) {
@@ -70,8 +63,8 @@ export async function writeChapterSpine(bookId: string, index: number, body: str
 
 export async function readChapterSpine(bookId: string, index: number): Promise<string | null> {
   try {
-    if (!(await exists(chapterFile(bookId, index), { baseDir: BaseDirectory.AppData }))) return null;
-    return await readTextFile(chapterFile(bookId, index), { baseDir: BaseDirectory.AppData });
+    if (!(await appData.exists(chapterFile(bookId, index)))) return null;
+    return await appData.readText(chapterFile(bookId, index));
   } catch (e) {
     console.warn("failed to read chapter note", e);
     return null;
@@ -85,8 +78,8 @@ export async function writeSpineOverview(bookId: string, body: string): Promise<
 
 export async function readSpineOverview(bookId: string): Promise<string | null> {
   try {
-    if (!(await exists(overviewFile(bookId), { baseDir: BaseDirectory.AppData }))) return null;
-    return await readTextFile(overviewFile(bookId), { baseDir: BaseDirectory.AppData });
+    if (!(await appData.exists(overviewFile(bookId)))) return null;
+    return await appData.readText(overviewFile(bookId));
   } catch (e) {
     console.warn("failed to read overview note", e);
     return null;
