@@ -19,16 +19,10 @@
 // base64 assets beside it, megabytes of derived data. Syncing the index without
 // them would show the other device a "done" deck whose files are not there.
 
-import {
-  exists,
-  mkdir,
-  readDir,
-  readTextFile,
-  remove,
-} from "@tauri-apps/plugin-fs";
 import { appDataDir, join } from "@tauri-apps/api/path";
 import { openPath } from "@tauri-apps/plugin-opener";
-import { APPDATA, writeTextAtomic } from "../../platform/app/atomic-fs";
+import { appData } from "../../platform/app/appdata";
+import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import {
   SLIDES_VERSION,
   upsertTalk,
@@ -60,13 +54,13 @@ export function deckFile(talkId: string, slug: string): string {
 }
 
 async function ensureDir(dir: string): Promise<void> {
-  await mkdir(dir, { ...APPDATA, recursive: true });
+  await appData.mkdirp(dir);
 }
 
 async function readIfExists(path: string): Promise<string | null> {
   try {
-    if (!(await exists(path, APPDATA))) return null;
-    return await readTextFile(path, APPDATA);
+    if (!(await appData.exists(path))) return null;
+    return await appData.readText(path);
   } catch (e) {
     console.warn("failed to read", path, e);
     return null;
@@ -99,7 +93,7 @@ export async function saveSlidesState(state: SlidesState): Promise<void> {
 export async function listSlidesStates(): Promise<SlidesState[]> {
   let entries;
   try {
-    entries = await readDir(SLIDES_DIR, APPDATA);
+    entries = await appData.readDir(SLIDES_DIR);
   } catch {
     return []; // no slides directory yet
   }
@@ -132,7 +126,7 @@ export async function writeAsset(
   const path = assetFile(talkId, index);
   if (dataUrl === null) {
     try {
-      if (await exists(path, APPDATA)) await remove(path, APPDATA);
+      if (await appData.exists(path)) await appData.remove(path);
     } catch (e) {
       console.warn("failed to drop asset", path, e);
     }
