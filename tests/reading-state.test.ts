@@ -18,10 +18,13 @@ import { writeTextAtomic } from "../src/platform/app/atomic-fs";
 import type { ViewState } from "../src/platform/app/reader-contract";
 import {
   STATE_FILE,
+  createViewStateStore,
   dropViewStateCache,
   getViewState,
   saveViewState,
   saveViewStateOnExit,
+  type ViewStateFile,
+  type ViewStateIo,
 } from "../src/platform/app/storage";
 // The door every other writer of this file goes through, and the one sync's own
 // writes land on (syncFs.write).
@@ -214,4 +217,34 @@ test("another file being written leaves the held map alone", async () => {
 
   expect(disk.reads.length).toBe(before);
   expect(onDisk().states).toEqual({ jit: at(140), tracing: at(7), attention: at(31) });
+});
+
+// --- the held map belongs to a store, not to the module ---------------------
+
+// It was a module-level `let`, so every test file sharing the worker shared one
+// map. A file that saved a position left it behind, and the next file's exit
+// write went out from that map rather than from the file — the clobber the pull
+// route exists to prevent, arriving from another test instead of from another
+// device. Two stores over the same bytes is the smallest way to show it: the
+// second one has nothing held and must read.
+test("a second store does not write out the first store's held map", async () => {
+  const file = { text: STATES_JSON };
+  const io: ViewStateIo = {
+    read: async () => ({ status: "ok", value: JSON.parse(file.text) as ViewStateFile }),
+    write: async (contents: string) => {
+      file.text = contents;
+    },
+  };
+
+  const first = createViewStateStore(io);
+  await first.save("jit", at(121));
+
+  // The file moves on — a pull, a migration, the other half of the app — and
+  // the second store is never told, because it did not exist yet.
+  file.text = JSON.stringify({ states: { jit: at(500) } }, null, 2);
+
+  const second = createViewStateStore(io);
+  await second.saveOnExit("tracing", at(8));
+
+  expect(JSON.parse(file.text).states).toEqual({ jit: at(500), tracing: at(8) });
 });
