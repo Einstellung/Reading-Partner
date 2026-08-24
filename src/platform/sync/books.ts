@@ -2,13 +2,7 @@
 // library.json) and read/write their content-addressed blobs. Injected so the
 // books-channel logic is testable without the real filesystem.
 
-import {
-  exists,
-  mkdir,
-  readTextFile,
-  writeFile,
-} from "@tauri-apps/plugin-fs";
-import { APPDATA } from "../app/atomic-fs";
+import { appData } from "../app/appdata";
 import { libraryHas, libraryPdfPath, readLibraryBook, type LibraryStore } from "../app/library";
 
 export interface BookFs {
@@ -22,8 +16,8 @@ export interface BookFs {
 export const tauriBookFs: BookFs = {
   async listHashes() {
     try {
-      if (!(await exists("library.json", APPDATA))) return [];
-      const store = JSON.parse(await readTextFile("library.json", APPDATA)) as LibraryStore;
+      if (!(await appData.exists("library.json"))) return [];
+      const store = JSON.parse(await appData.readText("library.json")) as LibraryStore;
       return store?.books ? Object.keys(store.books) : [];
     } catch {
       return [];
@@ -36,7 +30,7 @@ export const tauriBookFs: BookFs = {
     return readLibraryBook(hash);
   },
   async write(hash, bytes) {
-    await mkdir("library", { ...APPDATA, recursive: true });
-    await writeFile(libraryPdfPath(hash), bytes, APPDATA);
+    await appData.mkdirp("library");
+    await appData.writeBytes(libraryPdfPath(hash), bytes);
   },
 };

@@ -8,11 +8,7 @@
 // and the old on-value syncs back and turns it on again" loop. Sync enablement is
 // a per-device choice anyway.
 
-import {
-  BaseDirectory,
-  exists,
-  readTextFile,
-} from "@tauri-apps/plugin-fs";
+import { appData } from "../app/appdata";
 import { writeTextAtomic } from "../app/atomic-fs";
 import type { Snapshot } from "./reconcile";
 
@@ -79,10 +75,8 @@ export function recordPassResult(
 
 export async function loadState(): Promise<SyncState> {
   try {
-    if (!(await exists(STATE_FILE, { baseDir: BaseDirectory.AppData }))) return emptyState();
-    const parsed = JSON.parse(
-      await readTextFile(STATE_FILE, { baseDir: BaseDirectory.AppData }),
-    ) as Partial<SyncState>;
+    if (!(await appData.exists(STATE_FILE))) return emptyState();
+    const parsed = JSON.parse(await appData.readText(STATE_FILE)) as Partial<SyncState>;
     const base = emptyState();
     return {
       ...base,

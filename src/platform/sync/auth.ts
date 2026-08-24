@@ -37,11 +37,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
-import {
-  BaseDirectory,
-  exists,
-  readTextFile,
-} from "@tauri-apps/plugin-fs";
+import { appData } from "../app/appdata";
 import { writeTextAtomic } from "../app/atomic-fs";
 import { base64Url, generatePKCE } from "../app/oauth";
 import { cleanTauriFetch } from "../app/tauri-fetch";
@@ -75,8 +71,8 @@ export interface GoogleAuth {
 
 export async function loadAuth(): Promise<GoogleAuth | null> {
   try {
-    if (!(await exists(AUTH_FILE, { baseDir: BaseDirectory.AppData }))) return null;
-    return JSON.parse(await readTextFile(AUTH_FILE, { baseDir: BaseDirectory.AppData })) as GoogleAuth;
+    if (!(await appData.exists(AUTH_FILE))) return null;
+    return JSON.parse(await appData.readText(AUTH_FILE)) as GoogleAuth;
   } catch {
     return null;
   }
