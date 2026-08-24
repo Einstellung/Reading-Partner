@@ -18,11 +18,7 @@
 // the real store against an in-memory file on a fake clock instead of rewriting
 // the module registry for every other test sharing the worker (pitfall 119).
 
-import {
-  BaseDirectory,
-  exists,
-  readTextFile,
-} from "@tauri-apps/plugin-fs";
+import { appData } from "./appdata";
 import { writeTextAtomic } from "./atomic-fs";
 import {
   createDebouncedWriter,
@@ -240,9 +236,7 @@ export function createAnnotationStore(io: AnnotationIo): AnnotationStore {
 
 const store = createAnnotationStore({
   read: async (file) =>
-    (await exists(file, { baseDir: BaseDirectory.AppData }))
-      ? readTextFile(file, { baseDir: BaseDirectory.AppData })
-      : null,
+    (await appData.exists(file)) ? appData.readText(file) : null,
   write: writeTextAtomic,
   onError: (e) => reportStoreError("annotations", e),
 });

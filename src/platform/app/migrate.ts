@@ -8,12 +8,7 @@
 // are keyed by content and rebuild cheaply under the new key on next open, so the
 // old files are simply left orphaned. Only the user's own data moves.
 
-import {
-  BaseDirectory,
-  exists as fsExists,
-  readTextFile,
-  rename,
-} from "@tauri-apps/plugin-fs";
+import { appData } from "./appdata";
 import { writeTextAtomic } from "./atomic-fs";
 
 // Mirrors storage.ts's STATE_FILE (the shared reading-position map).
@@ -105,14 +100,10 @@ export async function migrateBook(
 }
 
 const tauriMigrateFs: MigrateFs = {
-  exists: (name) => fsExists(name, { baseDir: BaseDirectory.AppData }),
-  readText: (name) => readTextFile(name, { baseDir: BaseDirectory.AppData }),
+  exists: (name) => appData.exists(name),
+  readText: (name) => appData.readText(name),
   writeText: (name, content) => writeTextAtomic(name, content),
-  rename: (from, to) =>
-    rename(from, to, {
-      oldPathBaseDir: BaseDirectory.AppData,
-      newPathBaseDir: BaseDirectory.AppData,
-    }),
+  rename: (from, to) => appData.rename(from, to),
 };
 
 // Live migration against the Tauri fs.

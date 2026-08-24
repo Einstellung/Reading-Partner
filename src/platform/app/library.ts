@@ -5,13 +5,7 @@
 // the authoritative one, so later edits to the original file on disk don't
 // affect the app.
 
-import {
-  BaseDirectory,
-  exists,
-  mkdir,
-  readFile,
-  writeFile,
-} from "@tauri-apps/plugin-fs";
+import { appData } from "./appdata";
 import { readGuardedJson, writeTextAtomic } from "./atomic-fs";
 import { contentHash } from "./content-hash";
 import { basename, decodeLegacyName } from "./path";
@@ -64,8 +58,8 @@ export function healLibrary(store: LibraryStore): LibraryStore {
 
 async function ensureDir(): Promise<void> {
   try {
-    if (!(await exists(LIBRARY_DIR, { baseDir: BaseDirectory.AppData }))) {
-      await mkdir(LIBRARY_DIR, { baseDir: BaseDirectory.AppData, recursive: true });
+    if (!(await appData.exists(LIBRARY_DIR))) {
+      await appData.mkdirp(LIBRARY_DIR);
     }
   } catch {
     // A real problem resurfaces on the write below.
@@ -113,12 +107,12 @@ export async function repairLibraryNames(): Promise<boolean> {
 
 // Whether the library holds the authoritative copy of a book.
 export function libraryHas(bookId: string): Promise<boolean> {
-  return exists(libraryPdfPath(bookId), { baseDir: BaseDirectory.AppData });
+  return appData.exists(libraryPdfPath(bookId));
 }
 
 // Read a book's authoritative copy back for opening.
 export function readLibraryBook(bookId: string): Promise<Uint8Array> {
-  return readFile(libraryPdfPath(bookId), { baseDir: BaseDirectory.AppData });
+  return appData.readBytes(libraryPdfPath(bookId));
 }
 
 export async function getLibraryEntry(bookId: string): Promise<LibraryEntry | null> {
@@ -135,7 +129,7 @@ export async function importBook(bytes: Uint8Array, originalPath: string): Promi
   const hash = await contentHash(bytes);
   await ensureDir();
   if (!(await libraryHas(hash))) {
-    await writeFile(libraryPdfPath(hash), bytes, { baseDir: BaseDirectory.AppData });
+    await appData.writeBytes(libraryPdfPath(hash), bytes);
   }
   const { store, writable } = await loadStore();
   const existing = store.books[hash];
