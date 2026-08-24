@@ -14,15 +14,17 @@
 // last test can state the property the whole fix exists for: a field another
 // device merged into settings.json survives this shell's next whole-object save.
 // atomic-fs is reached with spyOn rather than mock.module: a spy is one property
-// and it is put back afterwards (pitfall 122), where mock.module rewrites the
-// registry for every file that runs after this one (pitfall 119).
+// and tests/support/preload.ts puts it back between cases (pitfall 122), where
+// mock.module rewrites the registry for every file that runs after this one
+// (pitfall 119). The spies go in beforeEach for the same reason: that restore
+// would take a module-scope spy down before the first case.
 //
 // Both file calls land a turn late on purpose. A real read is a Tauri IPC
 // round-trip and a real write is writeTextAtomic -> invoke, so nothing can be
 // on disk before the promise resolves; a fake that assigns before its first
 // await would let a read-back that never waits for the flush pass. Run: bun test.
 
-import { afterAll, afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import * as atomicFs from "../../../src/platform/app/atomic-fs";
 import type { GuardedRead } from "../../../src/platform/app/atomic-fs";
 import {
@@ -50,28 +52,22 @@ const files = new Map<string, string>();
 // same bytes and sets the same state.
 let settingsReads = 0;
 
-const read = spyOn(atomicFs, "readGuardedJson").mockImplementation(
-  async <T,>(file: string, validate: (raw: unknown) => T | null): Promise<GuardedRead<T>> => {
-    await Promise.resolve();
-    if (file === SETTINGS_FILE) settingsReads++;
-    const text = files.get(file);
-    if (text === undefined) return { status: "missing" };
-    const value = validate(JSON.parse(text) as unknown);
-    return value === null ? { status: "corrupt", savedAs: null } : { status: "ok", value };
-  },
-);
+async function fakeRead<T>(
+  file: string,
+  validate: (raw: unknown) => T | null,
+): Promise<GuardedRead<T>> {
+  await Promise.resolve();
+  if (file === SETTINGS_FILE) settingsReads++;
+  const text = files.get(file);
+  if (text === undefined) return { status: "missing" };
+  const value = validate(JSON.parse(text) as unknown);
+  return value === null ? { status: "corrupt", savedAs: null } : { status: "ok", value };
+}
 
-const write = spyOn(atomicFs, "writeTextAtomic").mockImplementation(
-  async (file: string, contents: string): Promise<void> => {
-    await Promise.resolve();
-    files.set(file, contents);
-  },
-);
-
-afterAll(() => {
-  read.mockRestore();
-  write.mockRestore();
-});
+async function fakeWrite(file: string, contents: string): Promise<void> {
+  await Promise.resolve();
+  files.set(file, contents);
+}
 
 const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
 const dec = (b: Uint8Array): string => new TextDecoder().decode(b);
@@ -142,6 +138,8 @@ beforeEach(() => {
   files.clear();
   files.set(SETTINGS_FILE, settingsFile(DEFAULT_SETTINGS));
   settingsReads = 0;
+  spyOn(atomicFs, "readGuardedJson").mockImplementation(fakeRead);
+  spyOn(atomicFs, "writeTextAtomic").mockImplementation(fakeWrite);
 });
 
 test("a pull that names settings.json with the panel closed is read back at once", async () => {

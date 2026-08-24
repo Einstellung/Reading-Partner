@@ -4,10 +4,12 @@
 // moves the scale while that read is in flight, and that a pinch's worth of
 // events costs one write.
 //
-// device.ts is reached with spyOn and put back afterwards (pitfall 122), so no
-// file is touched and no window is needed. Run: bun test.
+// device.ts is reached with spyOn (pitfall 122), so no file is touched and no
+// window is needed. The spies go in beforeEach, where the suite-wide
+// mock.restore() in tests/support/preload.ts puts them back after each case; a
+// module-scope spy would be taken down before the first one. Run: bun test.
 
-import { afterAll, afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, expect, spyOn, test, type Mock } from "bun:test";
 import * as device from "../../../src/platform/app/device";
 import {
   CHAT_SCALE_DEFAULT,
@@ -20,8 +22,8 @@ import {
   subscribeChatScale,
 } from "../../../src/ui/components/base/useChatScale";
 
-const load = spyOn(device, "loadDeviceSettings");
-const patch = spyOn(device, "patchDeviceSettings");
+let load: Mock<typeof device.loadDeviceSettings>;
+let patch: Mock<typeof device.patchDeviceSettings>;
 
 // Longer than the store's debounce, so the write has landed by the time it is
 // asserted on. Real time rather than a fake clock: the store holds the timer.
@@ -36,17 +38,13 @@ function stored(chatScale: unknown): Promise<device.DeviceSettings> {
 
 beforeEach(() => {
   resetChatScale();
-  load.mockReset();
-  patch.mockReset();
-  load.mockImplementation(() => stored(CHAT_SCALE_DEFAULT));
-  patch.mockImplementation(() => Promise.resolve());
+  load = spyOn(device, "loadDeviceSettings").mockImplementation(() =>
+    stored(CHAT_SCALE_DEFAULT),
+  );
+  patch = spyOn(device, "patchDeviceSettings").mockImplementation(() => Promise.resolve());
 });
 
 afterEach(resetChatScale);
-afterAll(() => {
-  load.mockRestore();
-  patch.mockRestore();
-});
 
 test("the stored value is read on the first subscriber, and only once", async () => {
   load.mockImplementation(() => stored(1.4));
