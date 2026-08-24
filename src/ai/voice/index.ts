@@ -19,7 +19,13 @@ export {
   type SttConfig,
 } from "./config";
 export { transcribe } from "./stt";
-export { buildGlossary, cleanupTranscript, type CleanupModel, type GlossarySource } from "./cleanup";
+export {
+  buildGlossary,
+  cleanupTranscript,
+  glossaryTerms,
+  type CleanupModel,
+  type GlossarySource,
+} from "./cleanup";
 export {
   startRecording,
   stopRecording,
