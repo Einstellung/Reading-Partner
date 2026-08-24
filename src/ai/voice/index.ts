@@ -20,7 +20,15 @@ export {
 } from "./config";
 export { transcribe } from "./stt";
 export { buildGlossary, cleanupTranscript, type CleanupModel, type GlossarySource } from "./cleanup";
-export { startRecording, stopRecording, cancelRecording } from "./recorder";
+export {
+  startRecording,
+  stopRecording,
+  cancelRecording,
+  startSession,
+  cutSession,
+  stopSession,
+  cancelSession,
+} from "./recorder";
 export {
   EMPTY_TRANSCRIPT,
   applyDictationEvent,
