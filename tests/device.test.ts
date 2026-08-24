@@ -6,8 +6,10 @@
 import { expect, test } from "bun:test";
 import {
   DEFAULT_DEVICE_SETTINGS,
+  createDeviceStore,
   deviceRoleFor,
   initialDeviceSettings,
+  type DeviceIo,
   type DeviceSettings,
 } from "../src/platform/app/device";
 
@@ -80,4 +82,62 @@ test("an identity survives across runs", () => {
   const first = initialDeviceSettings({}, {}, () => "id-1").settings;
   const second = initialDeviceSettings(first, {}, () => "id-2").settings;
   expect(second.deviceId).toBe("id-1");
+});
+
+// --- the in-memory copy belongs to a store, not to the module ---------------
+
+// It was a module-level `let`, so every test file sharing the worker shared one
+// machine's answer. A file that loaded a device file left its identity behind,
+// and currentDeviceId() then named that machine for every file after it — which
+// is the name a collector writes its published files under. The patch below is
+// the same leak doing damage: a patch merges onto the live copy, so the wrong
+// live copy writes another machine's settings into this one's file.
+
+// A store over one file's bytes, with nothing shared but what is passed in.
+function storeOver(stored: Partial<DeviceSettings> | null): {
+  store: ReturnType<typeof createDeviceStore>;
+  written: () => Partial<DeviceSettings> | null;
+} {
+  let text = stored === null ? null : JSON.stringify(stored);
+  const io: DeviceIo = {
+    read: async () =>
+      text === null
+        ? { status: "missing" }
+        : { status: "ok", value: JSON.parse(text) as Partial<DeviceSettings> },
+    write: async (contents: string) => {
+      text = contents;
+    },
+    legacy: async () => ({}),
+    newId: () => "generated",
+    isMobile: () => false,
+  };
+  return {
+    store: createDeviceStore(io),
+    written: () => (text === null ? null : (JSON.parse(text) as Partial<DeviceSettings>)),
+  };
+}
+
+test("a second store does not answer with the first store's identity", async () => {
+  const first = storeOver({ deviceId: "id-9", role: "reader" });
+  await first.store.load();
+  expect(first.store.id()).toBe("id-9");
+
+  // A machine that has not read its file yet knows nothing about itself.
+  const second = storeOver(null);
+  expect(second.store.id()).toBe("");
+});
+
+test("a second store patches onto its own file, not the first store's copy", async () => {
+  const first = storeOver({ deviceId: "id-9", autostart: true, chatScale: 1.4 });
+  await first.store.load();
+
+  const second = storeOver(null);
+  await second.store.patch({ fingerDraw: true });
+
+  const out = second.written()!;
+  expect(out.fingerDraw).toBe(true);
+  // Neither of the other machine's answers came along.
+  expect(out.deviceId).toBe(DEFAULT_DEVICE_SETTINGS.deviceId);
+  expect(out.autostart).toBe(false);
+  expect(out.chatScale).toBe(DEFAULT_DEVICE_SETTINGS.chatScale);
 });

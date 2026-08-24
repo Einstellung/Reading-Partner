@@ -19,8 +19,10 @@ import { beforeEach, expect, spyOn, test } from "bun:test";
 import * as extract from "../../../src/fulltext/extract";
 import {
   FIGURES_RETRY_AFTER_MS,
+  createFiguresStore,
   ensureFigures,
   getFigures,
+  type FiguresIo,
 } from "../../../src/reading/figures/store";
 import { FIGURES_VERSION } from "../../../src/reading/figures/types";
 import { installAppData, type FakeDisk } from "../../support/appdata-fake";
@@ -160,4 +162,54 @@ test("cache bytes that will not parse are replaced by a fresh extraction", async
   expect((await ensureFigures(KEY, BYTES, () => T0)).status).toBe("ok");
   expect(JSON.parse(disk.files.get(FILE) ?? "null").status).toBe("ok");
   expect([...disk.files.keys()]).toEqual([FILE]);
+});
+
+// --- the map of jobs belongs to a store, not to the module ------------------
+
+// It was a module-level Map, and an entry only comes out in the `finally` of the
+// call that put it in. A fire-and-forget ensureFigures whose job never settles —
+// the shape open-book calls it in — leaves the key behind, and the next caller
+// asking for that key, in whatever file, is handed a promise nothing is going to
+// settle. Two stores over one disk is the smallest way to show it: everything
+// else about them is shared, so only the map can couple them.
+
+// A store over `files` whose pdf.js can be made to wait to be let go.
+function storeOver(files: Map<string, string>, hold: boolean) {
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let opens = 0;
+  const io: FiguresIo = {
+    read: async (file) => files.get(file) ?? null,
+    write: async (file, contents) => {
+      files.set(file, contents);
+    },
+    loadPdfjs: async () => {
+      opens++;
+      if (hold) await held;
+      return stubPdfjs;
+    },
+    onError: () => {},
+  };
+  return { store: createFiguresStore(io), release, opens: () => opens };
+}
+
+test("a second store does not join the first store's in-flight extraction", async () => {
+  const files = new Map<string, string>();
+  const first = storeOver(files, true);
+  const second = storeOver(files, false);
+
+  const stuck = first.store.ensure(KEY, BYTES, () => T0);
+  while (first.opens() === 0) await null;
+
+  const landed = await Promise.race([
+    second.store.ensure(KEY, BYTES, () => T0).then((index) => index.status),
+    Bun.sleep(100).then(() => "still waiting on the other store's job"),
+  ]);
+  expect(landed).toBe("ok");
+  expect(second.opens()).toBe(1);
+
+  first.release();
+  await stuck;
 });

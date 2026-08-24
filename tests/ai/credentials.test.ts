@@ -5,8 +5,10 @@
 import { expect, test } from "bun:test";
 import {
 	activeProviderId,
+	createCredentialsStore,
 	withActiveCredential,
 	type CredentialStore,
+	type CredentialsIo,
 } from "../../src/ai/credentials";
 import { defaultModelFor, getModels, nextDefaultsForActive } from "../../src/ai/providers";
 
@@ -98,4 +100,54 @@ test("nextDefaultsForActive keeps the model on a re-login of the same provider",
 test("nextDefaultsForActive resets an unknown model to the provider default", () => {
 	const next = nextDefaultsForActive("anthropic", "no-such-model", "anthropic");
 	expect(next.defaultModelId).toBe(defaultModelFor("anthropic"));
+});
+
+// --- the mutation queue belongs to a store, not to the module ---------------
+
+// The chain was a module-level `let`, so everything that ever imported this file
+// queued behind one promise. While every mutation finishes that is invisible; a
+// mutation left in flight — a token refresh a test file started and never let
+// land — is what the next caller waits behind, in a file nobody touched. Two
+// stores over the same bytes is the smallest way to show it.
+test("a second store's mutation does not queue behind the first store's unfinished one", async () => {
+	let release: () => void = () => {};
+	const held = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	// Only the first write is held open; the second store's own write runs.
+	let heldOne = false;
+	const file = { text: "{}" };
+	const io: CredentialsIo = {
+		read: async () => ({ status: "ok", value: JSON.parse(file.text) as CredentialStore }),
+		write: async (contents: string) => {
+			if (!heldOne) {
+				heldOne = true;
+				await held;
+			}
+			file.text = contents;
+		},
+	};
+
+	const first = createCredentialsStore(io);
+	const second = createCredentialsStore(io);
+
+	const stuck = first.update((s) => {
+		s.anthropic = oauth;
+	});
+	// Let the first store reach its write and stop there.
+	while (!heldOne) await null;
+
+	const landed = await Promise.race([
+		second
+			.update((s) => {
+				s.imageGen = key("img");
+			})
+			.then(() => "landed"),
+		Bun.sleep(100).then(() => "still queued behind the other store"),
+	]);
+	expect(landed).toBe("landed");
+	expect((JSON.parse(file.text) as CredentialStore).imageGen).toEqual(key("img"));
+
+	release();
+	await stuck;
 });
