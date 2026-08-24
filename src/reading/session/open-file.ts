@@ -6,7 +6,7 @@
 // The io is an argument so this can be run without a filesystem. The default
 // binds the real one; App passes nothing.
 
-import { readFile } from "@tauri-apps/plugin-fs";
+import { appData } from "../../platform/app/appdata";
 import { importBook, libraryHas, readLibraryBook } from "../../platform/app/library";
 import { migrateBookLive } from "../../platform/app/migrate";
 import { hashPath } from "../../platform/app/storage";
@@ -15,6 +15,7 @@ import { setFileHash, type FileRef } from "../../platform/app/topics";
 export interface BookSourceIo {
   libraryHas(bookId: string): Promise<boolean>;
   readLibraryBook(bookId: string): Promise<Uint8Array>;
+  /** The file at the absolute path the reader picked, not an AppData one. */
   readFile(path: string): Promise<Uint8Array>;
   importBook(bytes: Uint8Array, originalPath: string): Promise<{ hash: string }>;
   // Legacy path-hash-keyed data (annotations, threads, position) moved under the
@@ -27,7 +28,7 @@ export interface BookSourceIo {
 export const bookSourceIo: BookSourceIo = {
   libraryHas,
   readLibraryBook,
-  readFile,
+  readFile: (path) => appData.readPicked(path),
   importBook,
   migrateBookLive,
   pathHash: hashPath,

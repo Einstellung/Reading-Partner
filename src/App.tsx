@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { readFile } from "@tauri-apps/plugin-fs";
 import {
   isPageMark,
   type Annotation,
@@ -10,6 +9,7 @@ import {
   type ViewState,
   type ViewStats,
 } from "./platform/app/reader-contract";
+import { appData } from "./platform/app/appdata";
 import { hashPath } from "./platform/app/storage";
 import { importBook, repairLibraryNames } from "./platform/app/library";
 import { migrateBookLive } from "./platform/app/migrate";
@@ -398,7 +398,7 @@ export default function App() {
         for (const f of t.files) {
           if (f.hash) continue;
           try {
-            const bytes = await readFile(f.path);
+            const bytes = await appData.readPicked(f.path);
             const entry = await importBook(bytes, f.path);
             await migrateBookLive(hashPath(f.path), entry.hash);
             await setFileHash(t.id, f.path, entry.hash);

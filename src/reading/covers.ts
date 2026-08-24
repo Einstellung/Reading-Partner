@@ -17,14 +17,8 @@
 // a bare string with nowhere to revoke it, and an unrevoked blob URL lives as
 // long as the document does.
 
-import {
-  exists,
-  mkdir,
-  readFile,
-  readTextFile,
-  writeFile,
-} from "@tauri-apps/plugin-fs";
-import { APPDATA, writeTextAtomic } from "../platform/app/atomic-fs";
+import { appData } from "../platform/app/appdata";
+import { writeTextAtomic } from "../platform/app/atomic-fs";
 import { contentHash } from "../platform/app/content-hash";
 import { libraryHas, readLibraryBook } from "../platform/app/library";
 import type { FileRef } from "../platform/app/topics";
@@ -70,10 +64,12 @@ async function produce(file: FileRef): Promise<string | null> {
 
   let bytes: Uint8Array;
   try {
+    // The one read here that is not AppData-relative: a file the reader picked,
+    // still at wherever they keep it, because this book has never been imported.
     bytes =
       file.hash && (await libraryHas(file.hash))
         ? await readLibraryBook(file.hash)
-        : await readFile(file.path);
+        : await appData.readPicked(file.path);
   } catch (e) {
     await recordFailure(unreadableKey(file.path), file, "unreadable", e);
     return null;
@@ -138,8 +134,8 @@ async function renderCover(
 async function readCover(bookId: string): Promise<string | null> {
   const path = coverImagePath(bookId);
   try {
-    if (!(await exists(path, APPDATA))) return null;
-    return dataUrl(await readFile(path, APPDATA));
+    if (!(await appData.exists(path))) return null;
+    return dataUrl(await appData.readBytes(path));
   } catch (e) {
     console.warn("failed to read cached cover", path, e);
     return null;
@@ -148,10 +144,10 @@ async function readCover(bookId: string): Promise<string | null> {
 
 async function writeCover(bookId: string, jpeg: Uint8Array): Promise<void> {
   try {
-    if (!(await exists(COVERS_DIR, APPDATA))) {
-      await mkdir(COVERS_DIR, { ...APPDATA, recursive: true });
+    if (!(await appData.exists(COVERS_DIR))) {
+      await appData.mkdirp(COVERS_DIR);
     }
-    await writeFile(coverImagePath(bookId), jpeg, APPDATA);
+    await appData.writeBytes(coverImagePath(bookId), jpeg);
   } catch (e) {
     // The cover is already rendered and is returned either way; only the next
     // cold start pays for this.
@@ -172,8 +168,8 @@ function dataUrl(jpeg: Uint8Array): string {
 async function readFailure(key: string): Promise<CoverFailure | null> {
   const path = coverFailurePath(key);
   try {
-    if (!(await exists(path, APPDATA))) return null;
-    return parseCoverFailure(JSON.parse(await readTextFile(path, APPDATA)));
+    if (!(await appData.exists(path))) return null;
+    return parseCoverFailure(JSON.parse(await appData.readText(path)));
   } catch (e) {
     console.warn("failed to read cover failure marker", path, e);
     return null;
