@@ -63,7 +63,7 @@ export async function writeTextAtomic(path: string, contents: string): Promise<v
  * The line between atomic and plain is drawn on the payload, not on the path:
  * bytes that decode as UTF-8 go through the atomic writer, bytes that do not are
  * written plainly. Every file sync carries on the data channel is JSON, JSONL or
- * markdown this app wrote, so that test sends all of them through the atomic
+ * markdown this app wrote, so the decode sends all of them through the atomic
  * writer; bytes that fail it cannot be ours, and are kept verbatim rather than
  * mangled, for the loader to quarantine. Book blobs never reach here at all —
  * they travel their own channel (platform/sync/books.ts) and stay on

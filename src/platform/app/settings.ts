@@ -219,6 +219,11 @@ export function createSettingsStore(io: SettingsIo): SettingsStore {
       // asked here, at the moment of the write. It used to be asked once and
       // remembered in a flag, which answered for the rest of the process — for
       // files it had never read, and long after the one it had read came back.
+      //
+      // The cost is one read on the way out of the app, where a suspended
+      // webview may not get it and the last 500ms of edits are then lost. That
+      // is one setting change; the other side of the trade is a shell that never
+      // read the file flattening a real provider and real keys.
       const read = await io.read();
       if (read.status === "corrupt" && read.savedAs === null) {
         throw new Error(`${SETTINGS_FILE} could not be read; refusing to overwrite it`);
