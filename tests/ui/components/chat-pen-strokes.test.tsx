@@ -15,7 +15,16 @@ import type { ThreadMessage } from "../../../src/ui/components/chat/types";
 import { useDom } from "../../support/dom";
 
 const { act, cleanup, fireEvent, render } = await useDom();
-afterEach(cleanup);
+
+// The selection belongs to the document, not to the tree, so unmounting does not
+// drop it and one case's leftover is the next case's starting state. A case that
+// selects and gets no stroke for it — the pen path never clears a selection it
+// did not commit — leaves one behind, and "the pen made no selection" then reads
+// the previous case's.
+afterEach(() => {
+  cleanup();
+  document.getSelection()?.removeAllRanges();
+});
 
 const REPLY = "attention heads are three matrices";
 
