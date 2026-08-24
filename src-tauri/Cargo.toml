@@ -86,6 +86,13 @@ javascriptcore-rs = "=1.1.2"
 # wry link against.
 gtk = "0.18"
 
+[dev-dependencies]
+# Only for the ignored microphone measurements in voice.rs: a `tauri::State` can
+# only be handed out by a running App, so they drive the recording commands
+# through `tauri::test::mock_app` (headless, no window, no webview). Feature
+# resolution keeps this out of every non-test build.
+tauri = { version = "2", features = ["test"] }
+
 # Full dev rebuilds peak at many GB of linker memory, which has triggered
 # systemd-oomd to kill the whole desktop session (docs/pitfall/14).
 [profile.dev]
