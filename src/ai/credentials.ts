@@ -9,7 +9,7 @@
 // through updateCredentials, which serializes and re-reads, so no writer
 // resurrects the state it read before another one committed.
 
-import { readGuardedJson, writeTextAtomic } from "../platform/app/atomic-fs";
+import { readGuardedJson, writeTextAtomic, type GuardedRead } from "../platform/app/atomic-fs";
 
 const FILE = "credentials.json";
 
@@ -99,30 +99,86 @@ export function withActiveCredential(
 	return next;
 }
 
-// Reads the store. Unparseable content is moved aside (the tokens in it are
-// unusable anyway) and reads as an empty store — the user signs in again. A file
-// that exists but cannot be read throws instead: the credentials are still in
-// there, and every writer loads before it writes, so throwing is what stops a
-// good file from being replaced by an empty one.
-export async function loadCredentials(): Promise<CredentialStore> {
-	const read = await readGuardedJson<CredentialStore>(FILE, (raw) =>
-		raw && typeof raw === "object" ? (raw as CredentialStore) : null,
-	);
-	if (read.status === "ok") return read.value;
-	if (read.status === "missing") return {};
-	if (read.savedAs === null) throw new Error(`${FILE} could not be read`);
-	return {};
+// Everything the store reaches outside itself, passed in rather than imported,
+// so a test can run the real store — the serialisation included — against its
+// own file.
+export interface CredentialsIo {
+	// The guarded read, so the quarantine policy stays in atomic-fs.
+	read: () => Promise<GuardedRead<CredentialStore>>;
+	write: (contents: string) => Promise<void>;
 }
 
-export async function saveCredentials(store: CredentialStore): Promise<void> {
-	// The write throws on failure; let it propagate to the caller/UI.
-	await writeTextAtomic(FILE, JSON.stringify(store, null, 2));
+/** The store over credentials.json. CredentialStore above is what is in it. */
+export interface CredentialsStore {
+	load: () => Promise<CredentialStore>;
+	save: (store: CredentialStore) => Promise<void>;
+	update: (mutate: (store: CredentialStore) => CredentialStore | void) => Promise<CredentialStore>;
 }
 
-// Serializes every read-modify-write of the file. Chained rather than locked:
-// each mutation waits for the previous one to have landed, then reads the file
-// itself, so `mutate` always sees what is actually on disk.
-let queue: Promise<unknown> = Promise.resolve();
+export function createCredentialsStore(io: CredentialsIo): CredentialsStore {
+	// Serializes every read-modify-write of the file. Chained rather than locked:
+	// each mutation waits for the previous one to have landed, then reads the
+	// file itself, so `mutate` always sees what is actually on disk.
+	//
+	// In the closure rather than at module scope: a chain is a queue of work, and
+	// a queue shared by everything that ever imported this file makes one
+	// caller's unfinished write the thing the next caller waits behind.
+	let queue: Promise<unknown> = Promise.resolve();
+
+	// Reads the store. Unparseable content is moved aside (the tokens in it are
+	// unusable anyway) and reads as an empty store — the user signs in again. A
+	// file that exists but cannot be read throws instead: the credentials are
+	// still in there, and every writer loads before it writes, so throwing is
+	// what stops a good file from being replaced by an empty one.
+	async function load(): Promise<CredentialStore> {
+		const read = await io.read();
+		if (read.status === "ok") return read.value;
+		if (read.status === "missing") return {};
+		if (read.savedAs === null) throw new Error(`${FILE} could not be read`);
+		return {};
+	}
+
+	async function save(store: CredentialStore): Promise<void> {
+		// The write throws on failure; let it propagate to the caller/UI.
+		await io.write(JSON.stringify(store, null, 2));
+	}
+
+	return {
+		load,
+		save,
+		update: (mutate) => {
+			const run = queue.then(async () => {
+				const store = await load();
+				const next = mutate(store) ?? store;
+				await save(next);
+				return next;
+			});
+			// Keep the chain alive after a failure; the failure itself is the
+			// caller's.
+			queue = run.then(
+				() => undefined,
+				() => undefined,
+			);
+			return run;
+		},
+	};
+}
+
+const store = createCredentialsStore({
+	read: () =>
+		readGuardedJson<CredentialStore>(FILE, (raw) =>
+			raw && typeof raw === "object" ? (raw as CredentialStore) : null,
+		),
+	write: (contents) => writeTextAtomic(FILE, contents),
+});
+
+export function loadCredentials(): Promise<CredentialStore> {
+	return store.load();
+}
+
+export function saveCredentials(next: CredentialStore): Promise<void> {
+	return store.save(next);
+}
 
 /**
  * Apply one mutation to credentials.json, serialized against every other
@@ -133,18 +189,7 @@ let queue: Promise<unknown> = Promise.resolve();
 export function updateCredentials(
 	mutate: (store: CredentialStore) => CredentialStore | void,
 ): Promise<CredentialStore> {
-	const run = queue.then(async () => {
-		const store = await loadCredentials();
-		const next = mutate(store) ?? store;
-		await saveCredentials(next);
-		return next;
-	});
-	// Keep the chain alive after a failure; the failure itself is the caller's.
-	queue = run.then(
-		() => undefined,
-		() => undefined,
-	);
-	return run;
+	return store.update(mutate);
 }
 
 // Single-active write: store one provider's credential and drop the other two,
