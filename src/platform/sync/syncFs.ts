@@ -108,7 +108,7 @@ export function inSyncRange(path: string): boolean {
       // (docs/31): which page was up when, and what was said to it. A trace,
       // not a derivation — no deck and no book rebuilds it. The .bad copy a
       // failed parse leaves beside it is deliberately not matched.
-      /^runthrough-.+\.json$/.test(top) ||
+      /^rehearsal-.+\.json$/.test(top) ||
       // The two files devices leave for each other (docs/36). One per device and
       // written by that device alone, so there is never a merge to do: a
       // collector says who it is and when it was last alive, and a reader asks

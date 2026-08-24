@@ -1,11 +1,11 @@
-// One run read from outside (src/reading/runthrough/summary.ts): the row a list
+// One run read from outside (src/reading/rehearsal/summary.ts): the row a list
 // shows, and the word count of a transcript that is half Chinese. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { countWords, runSummary } from "../../../src/reading/runthrough/summary";
-import type { RunthroughPage, RunthroughRun } from "../../../src/reading/runthrough/types";
+import { countWords, runSummary } from "../../../src/reading/rehearsal/summary";
+import type { RehearsalPage, RehearsalRun } from "../../../src/reading/rehearsal/types";
 
-function page(index: number, transcript: string, enteredAt = index * 1000): RunthroughPage {
+function page(index: number, transcript: string, enteredAt = index * 1000): RehearsalPage {
   return {
     index,
     kind: "content",
@@ -16,7 +16,7 @@ function page(index: number, transcript: string, enteredAt = index * 1000): Runt
   };
 }
 
-function run(pages: RunthroughPage[], over: Partial<RunthroughRun> = {}): RunthroughRun {
+function run(pages: RehearsalPage[], over: Partial<RehearsalRun> = {}): RehearsalRun {
   return {
     id: "run-1",
     ordinal: 2,

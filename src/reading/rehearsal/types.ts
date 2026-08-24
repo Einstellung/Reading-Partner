@@ -1,4 +1,4 @@
-// A run-through (docs/31, the third stage): the reader puts the talk's deck on
+// A rehearsal (docs/31, the third stage): the reader puts the talk's deck on
 // screen and gives the whole thing once, start to finish, with the AI silent.
 // What that leaves behind is this record — which page was up when, and what was
 // said while it was.
@@ -13,12 +13,12 @@
 // A talk is given many times. Every run is kept, oldest first, so the second
 // pass can be held against the first.
 
-export const RUNTHROUGH_VERSION = 1 as const;
+export const REHEARSAL_VERSION = 1 as const;
 
-// One slide, for as long as the run-through was on it. A page the reader came
+// One slide, for as long as the rehearsal was on it. A page the reader came
 // back to is still one entry: `enteredAt` is the first arrival, `leftAt` the
 // last departure, and `transcript` holds both visits.
-export interface RunthroughPage {
+export interface RehearsalPage {
   index: number; // 0-based slide index
   kind: string; // as reported by the deck
   title: string;
@@ -30,27 +30,27 @@ export interface RunthroughPage {
 // One pass over the deck. `deckFile` is the deck that was on screen, kept so a
 // run can still say what it was given against after the deck is rebuilt; null
 // when the caller did not have one to name.
-export interface RunthroughRun {
+export interface RehearsalRun {
   id: string;
-  ordinal: number; // 1 for this talk's first run-through
+  ordinal: number; // 1 for this talk's first rehearsal
   talkId: string;
   deckFile: string | null;
   startedAt: number;
   endedAt: number | null;
-  pages: RunthroughPage[];
+  pages: RehearsalPage[];
 }
 
-export interface RunthroughLog {
-  version: typeof RUNTHROUGH_VERSION;
+export interface RehearsalLog {
+  version: typeof REHEARSAL_VERSION;
   talkId: string;
-  runs: RunthroughRun[]; // oldest first
+  runs: RehearsalRun[]; // oldest first
 }
 
 // What the deck and the microphone report while a run is in progress. The
 // build step (build.ts) turns a list of these into a run; nothing accumulates
 // state during the run itself, so a run that ends badly still yields whatever
 // was collected before it did.
-export type RunthroughEvent =
+export type RehearsalEvent =
   | { kind: "slide"; at: number; index: number; slideKind: string; title: string }
   | { kind: "utterance"; at: number; endedAt: number; text: string }
   | { kind: "end"; at: number };
@@ -59,13 +59,13 @@ export type RunthroughEvent =
 // cannot use at all reads as null (the store then moves it aside), while one
 // odd run inside a usable file is dropped rather than losing the rest. A lost
 // run is one talk given again; a lost log is every run there ever was.
-export function normalizeLog(raw: unknown): RunthroughLog | null {
-  const log = raw as RunthroughLog | null;
+export function normalizeLog(raw: unknown): RehearsalLog | null {
+  const log = raw as RehearsalLog | null;
   if (!log || typeof log !== "object") return null;
-  if (log.version !== RUNTHROUGH_VERSION) return null;
+  if (log.version !== REHEARSAL_VERSION) return null;
   if (typeof log.talkId !== "string" || !log.talkId) return null;
   if (!Array.isArray(log.runs)) return null;
-  const runs: RunthroughRun[] = [];
+  const runs: RehearsalRun[] = [];
   const seen = new Set<string>();
   for (const r of log.runs) {
     const run = normalizeRun(r, log.talkId);
@@ -73,15 +73,15 @@ export function normalizeLog(raw: unknown): RunthroughLog | null {
     seen.add(run.id);
     runs.push(run);
   }
-  return { version: RUNTHROUGH_VERSION, talkId: log.talkId, runs };
+  return { version: REHEARSAL_VERSION, talkId: log.talkId, runs };
 }
 
-function normalizeRun(raw: unknown, talkId: string): RunthroughRun | null {
-  const run = raw as RunthroughRun | null;
+function normalizeRun(raw: unknown, talkId: string): RehearsalRun | null {
+  const run = raw as RehearsalRun | null;
   if (!run || typeof run !== "object") return null;
   if (typeof run.id !== "string" || !run.id) return null;
   if (!Number.isFinite(run.startedAt)) return null;
-  const pages: RunthroughPage[] = [];
+  const pages: RehearsalPage[] = [];
   for (const p of Array.isArray(run.pages) ? run.pages : []) {
     const index = Math.round(Number(p?.index));
     if (!Number.isFinite(index) || index < 0) continue;
@@ -107,6 +107,6 @@ function normalizeRun(raw: unknown, talkId: string): RunthroughRun | null {
   };
 }
 
-export function emptyLog(talkId: string): RunthroughLog {
-  return { version: RUNTHROUGH_VERSION, talkId, runs: [] };
+export function emptyLog(talkId: string): RehearsalLog {
+  return { version: REHEARSAL_VERSION, talkId, runs: [] };
 }

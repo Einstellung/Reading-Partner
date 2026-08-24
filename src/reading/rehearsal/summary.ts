@@ -1,8 +1,8 @@
-// What a run-through looks like from outside: one row per run, and the pages it
+// What a rehearsal looks like from outside: one row per run, and the pages it
 // went past without a word. Pure, so a list can be drawn from a log without
 // re-reading anything.
 
-import type { RunthroughPage, RunthroughRun } from "./types";
+import type { RehearsalPage, RehearsalRun } from "./types";
 
 export interface RunSummary {
   ordinal: number;
@@ -19,7 +19,7 @@ export interface RunSummary {
 // A run cut short — the app was closed, the process died — has no endedAt. The
 // last thing that happened is still on the pages, so the length is measured to
 // there rather than reported as zero.
-function lastMoment(run: RunthroughRun): number {
+function lastMoment(run: RehearsalRun): number {
   if (run.endedAt !== null) return run.endedAt;
   let last = run.startedAt;
   for (const p of run.pages) {
@@ -28,7 +28,7 @@ function lastMoment(run: RunthroughRun): number {
   return last;
 }
 
-export function runSummary(run: RunthroughRun): RunSummary {
+export function runSummary(run: RehearsalRun): RunSummary {
   let pagesSpoken = 0;
   let wordsSpoken = 0;
   for (const page of run.pages) {
@@ -46,7 +46,7 @@ export function runSummary(run: RunthroughRun): RunSummary {
   };
 }
 
-function spoken(page: RunthroughPage): boolean {
+function spoken(page: RehearsalPage): boolean {
   return page.transcript.trim().length > 0;
 }
 

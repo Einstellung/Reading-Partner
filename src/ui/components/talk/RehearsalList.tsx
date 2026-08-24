@@ -1,4 +1,4 @@
-// The run-throughs of this talk, under the outline (docs/31). Data that is
+// The rehearsals of this talk, under the outline (docs/31). Data that is
 // recorded and never shown is data that was not recorded, so the pass leaves a
 // mark where the talk is: which pass it was, when, how far it got, how long it
 // took, and — opened up — what was said on each page.
@@ -11,10 +11,10 @@ import { useState } from "react";
 import { Button } from "../ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 import { IconChevronDown, IconChevronUp } from "../base/icons";
-import { runSummary, type RunthroughRun } from "../../../reading/runthrough";
-import { formatElapsed, formatRunDate } from "./runthrough";
+import { runSummary, type RehearsalRun } from "../../../reading/rehearsal";
+import { formatElapsed, formatRunDate } from "./rehearsal";
 
-function PageRow({ page }: { page: RunthroughRun["pages"][number] }) {
+function PageRow({ page }: { page: RehearsalRun["pages"][number] }) {
   const spent = page.leftAt === null ? null : page.leftAt - page.enteredAt;
   return (
     <li className="flex flex-col gap-0.5 border-t border-border py-1.5 first:border-t-0">
@@ -38,7 +38,7 @@ function PageRow({ page }: { page: RunthroughRun["pages"][number] }) {
   );
 }
 
-function RunRow({ run }: { run: RunthroughRun }) {
+function RunRow({ run }: { run: RehearsalRun }) {
   const [open, setOpen] = useState(false);
   const s = runSummary(run);
   return (
@@ -78,7 +78,7 @@ function RunRow({ run }: { run: RunthroughRun }) {
   );
 }
 
-export default function RunthroughList({ runs }: { runs: RunthroughRun[] }) {
+export default function RehearsalList({ runs }: { runs: RehearsalRun[] }) {
   const [open, setOpen] = useState(false);
   return (
     <Collapsible
@@ -99,7 +99,7 @@ export default function RunthroughList({ runs }: { runs: RunthroughRun[] }) {
           }
         >
           <span className="min-w-0 flex-1 text-[12px] font-medium">
-            Run-throughs{runs.length > 0 ? ` (${runs.length})` : ""}
+            Rehearsals{runs.length > 0 ? ` (${runs.length})` : ""}
           </span>
           {runs.length > 0 && (
             <span className="flex-none text-muted-foreground">

@@ -1,20 +1,20 @@
-// Events into one run (src/reading/runthrough/build.ts): which page a sentence
+// Events into one run (src/reading/rehearsal/build.ts): which page a sentence
 // belongs to, what a page the reader came back to looks like, and what the
 // timestamps mean when a source reports out of order. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { buildRun } from "../../../src/reading/runthrough/build";
-import type { RunthroughEvent } from "../../../src/reading/runthrough/types";
+import { buildRun } from "../../../src/reading/rehearsal/build";
+import type { RehearsalEvent } from "../../../src/reading/rehearsal/types";
 
-function slide(at: number, index: number, title = `Page ${index}`): RunthroughEvent {
+function slide(at: number, index: number, title = `Page ${index}`): RehearsalEvent {
   return { kind: "slide", at, index, slideKind: "content", title };
 }
 
-function said(at: number, text: string, duration = 1_000): RunthroughEvent {
+function said(at: number, text: string, duration = 1_000): RehearsalEvent {
   return { kind: "utterance", at, endedAt: at + duration, text };
 }
 
-function run(events: RunthroughEvent[], startedAt = 0) {
+function run(events: RehearsalEvent[], startedAt = 0) {
   return buildRun({
     id: "run-1",
     ordinal: 1,
@@ -147,7 +147,7 @@ test("events out of order are put back in order before anything is decided", () 
     said(12, "one"),
     slide(20, 1),
     said(22, "two"),
-    { kind: "end", at: 30 } as RunthroughEvent,
+    { kind: "end", at: 30 } as RehearsalEvent,
   ];
   const shuffled = [inOrder[3], inOrder[1], inOrder[4], inOrder[2], inOrder[0]];
   expect(run(shuffled)).toEqual(run(inOrder));

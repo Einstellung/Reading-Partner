@@ -11,7 +11,7 @@
 
 import { BaseDirectory, exists, readDir, readTextFile, remove } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
-import { deleteRunthroughs } from "../runthrough/store";
+import { deleteRehearsals } from "../rehearsal/store";
 import {
   newTalk,
   newTalkId,
@@ -136,7 +136,7 @@ export function recordTalkDecision(
 // Delete a talk, and the record of every time it was given. The conversation
 // file and the deck under slides/<talkId>/ are left where they are: the thread
 // store owns one and the slides pipeline the other, and an orphan of either is
-// inert. The run-throughs are not — they are a list of runs of a talk that no
+// inert. The rehearsals are not — they are a list of runs of a talk that no
 // longer exists, and nothing will ever open them again.
 export async function deleteTalk(talkId: string): Promise<void> {
   try {
@@ -144,7 +144,7 @@ export async function deleteTalk(talkId: string): Promise<void> {
   } catch (e) {
     console.warn("failed to delete a talk", talkId, e);
   }
-  await deleteRunthroughs(talkId);
+  await deleteRehearsals(talkId);
 }
 
 // The talk's conversation lives in its own thread file, keyed like every other

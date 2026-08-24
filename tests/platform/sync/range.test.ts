@@ -32,7 +32,7 @@ test("core user-data files are in range", () => {
     "threads-talk-1754400000000.json",
     // Every time that talk was given against its deck (docs/31): the pages and
     // what was said to them. A trace of the reader, so it travels.
-    "runthrough-1754400000000.json",
+    "rehearsal-1754400000000.json",
     // The cross-scenario user profile and the info feedback log are the user's
     // data (docs/16); info-profile.md is the profile's old name, kept in range
     // through the transition.
@@ -86,9 +86,9 @@ test("caches, logs, sync internals, and book blobs are out of range", () => {
     "slides/1737000000000/state.json",
     "slides/1737000000000/slide-01.html",
     "slides/1737000000000/asset-03.txt",
-    // The rescue copy a run-through log that would not parse is moved to. It is
+    // The rescue copy a rehearsal log that would not parse is moved to. It is
     // there for a person to look at, not to be pushed at the other device.
-    "runthrough-1754400000000.json.bad",
+    "rehearsal-1754400000000.json.bad",
     "library/abc123.pdf",
     "images/threads/t1/photo.png",
     // Info triage: the daily briefing and article cache are derived, not synced.

@@ -1,4 +1,4 @@
-// Events in, one run out. The whole of what a run-through means is here, and it
+// Events in, one run out. The whole of what a rehearsal means is here, and it
 // is a pure function: the deck reports pages, the transcript source reports
 // utterances, and neither of them has to know what a run looks like on disk.
 //
@@ -15,7 +15,7 @@
 //     source that reports an utterance a moment late does not shuffle the
 //     transcript into the wrong page.
 
-import type { RunthroughEvent, RunthroughPage, RunthroughRun } from "./types";
+import type { RehearsalEvent, RehearsalPage, RehearsalRun } from "./types";
 
 export interface BuildRunInput {
   id: string;
@@ -23,16 +23,16 @@ export interface BuildRunInput {
   talkId: string;
   deckFile: string | null;
   startedAt: number;
-  events: readonly RunthroughEvent[];
+  events: readonly RehearsalEvent[];
 }
 
 // At one instant, the page change happened before anything said at that
 // instant, and the run ended after everything said at it. Otherwise the first
 // utterance of a page could land on the previous one, and the last word before
 // the reader stopped could be lost.
-const ORDER: Record<RunthroughEvent["kind"], number> = { slide: 0, utterance: 1, end: 2 };
+const ORDER: Record<RehearsalEvent["kind"], number> = { slide: 0, utterance: 1, end: 2 };
 
-function sorted(events: readonly RunthroughEvent[]): RunthroughEvent[] {
+function sorted(events: readonly RehearsalEvent[]): RehearsalEvent[] {
   return events
     .map((event, seq) => ({ event, seq }))
     .sort((a, b) => {
@@ -55,9 +55,9 @@ function appendSaid(transcript: string, text: string): string {
   return transcript ? `${transcript}\n${said}` : said;
 }
 
-export function buildRun(input: BuildRunInput): RunthroughRun {
-  const pages = new Map<number, RunthroughPage>();
-  let current: RunthroughPage | null = null;
+export function buildRun(input: BuildRunInput): RehearsalRun {
+  const pages = new Map<number, RehearsalPage>();
+  let current: RehearsalPage | null = null;
   let endedAt: number | null = null;
 
   for (const event of sorted(input.events)) {

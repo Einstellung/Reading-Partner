@@ -82,7 +82,7 @@ test("an empty outline says what will land there, not nothing", () => {
   expect(render([])).toContain("Nothing settled yet");
 });
 
-// The run-throughs at the foot of the pane: a talk that has been given has
+// The rehearsals at the foot of the pane: a talk that has been given has
 // somewhere to show it, and a talk that has not says so instead of hiding.
 test("the passes through the talk are counted at the foot", () => {
   const run = {
@@ -104,7 +104,7 @@ test("the passes through the talk are counted at the foot", () => {
       onClose={() => {}}
     />,
   );
-  expect(withRuns).toContain("Run-throughs (2)");
-  expect(render(rows)).toContain("Run-throughs");
+  expect(withRuns).toContain("Rehearsals (2)");
+  expect(render(rows)).toContain("Rehearsals");
   expect(render(rows)).toContain("Give the talk once");
 });

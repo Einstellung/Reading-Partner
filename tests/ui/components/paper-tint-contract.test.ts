@@ -153,12 +153,12 @@ test("the tint is applied before React mounts", () => {
   expect(applied).toBeLessThan(mounted);
 });
 
-// The one exemption, by file and by exact class. A run-through is a projected
+// The one exemption, by file and by exact class. A rehearsal is a projected
 // deck on near-black chrome, and a tenth of white is how a control lights up on
 // it; a palette token would put a cream fill there. Kept as the full class
 // string rather than the file name so a plain `bg-white` added to the same file
 // still fails.
-const WHITE_ALLOWED = new Map([["ui/components/talk/RunthroughView.tsx", ["bg-white/10"]]]);
+const WHITE_ALLOWED = new Map([["ui/components/talk/RehearsalView.tsx", ["bg-white/10"]]]);
 
 test("nothing in the UI paints itself white outside the palette", () => {
   const offenders: string[] = [];

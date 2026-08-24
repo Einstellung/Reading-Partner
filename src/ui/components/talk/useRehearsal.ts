@@ -1,14 +1,14 @@
-// Loading for the run-through: which deck this talk has, that deck's HTML, and
+// Loading for the rehearsal: which deck this talk has, that deck's HTML, and
 // the runs already recorded against it (docs/31).
 //
 // Three small hooks rather than one: the talk header only needs to know whether a
-// deck exists, the run-through needs the megabytes, and the list beside the
+// deck exists, the rehearsal needs the megabytes, and the list beside the
 // outline needs the history. Keeping them apart is what stops opening a talk from
 // reading a 20 MB file to decide whether a button is enabled.
 
 import { useEffect, useState } from "react";
 import { listDecks, readDeckHtml } from "../../../reading/slides";
-import { loadRunthroughs, type RunthroughRun } from "../../../reading/runthrough";
+import { loadRehearsals, type RehearsalRun } from "../../../reading/rehearsal";
 
 // The deck registered for this talk, or null when it has none yet. `reloadKey`
 // is bumped by the caller when the deck dialog closes: a deck generated in this
@@ -68,7 +68,7 @@ export function useDeckHtml(file: string | null): { html: string | null; error: 
   return { html, error };
 }
 
-// This talk's run-throughs, newest first. `reloadKey` is bumped by the caller
+// This talk's rehearsals, newest first. `reloadKey` is bumped by the caller
 // when a run ends, which is the only moment this device changes the list.
 //
 // A sync pull changes it too — another device's pass through the same talk —
@@ -77,17 +77,17 @@ export function useDeckHtml(file: string | null): { html: string | null; error: 
 // registers both on that ground), so the two go stale together and reopening
 // the talk picks both up. Routing the pull here alone would refresh the history
 // under a talk still showing the copy it was opened with.
-export function useRunthroughs(talkId: string, reloadKey: number): RunthroughRun[] {
-  const [runs, setRuns] = useState<RunthroughRun[]>([]);
+export function useRehearsals(talkId: string, reloadKey: number): RehearsalRun[] {
+  const [runs, setRuns] = useState<RehearsalRun[]>([]);
 
   useEffect(() => {
     let cancelled = false;
-    void loadRunthroughs(talkId)
+    void loadRehearsals(talkId)
       .then((log) => {
         if (!cancelled) setRuns(log.runs.slice().reverse());
       })
       .catch((e: unknown) => {
-        console.warn("failed to read the run-throughs", talkId, e);
+        console.warn("failed to read the rehearsals", talkId, e);
       });
     return () => {
       cancelled = true;

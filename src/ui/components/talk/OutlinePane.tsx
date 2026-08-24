@@ -17,14 +17,14 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import type { OutlineRow } from "../../../reading/talks";
-import type { RunthroughRun } from "../../../reading/runthrough";
-import RunthroughList from "./RunthroughList";
+import type { RehearsalRun } from "../../../reading/rehearsal";
+import RehearsalList from "./RehearsalList";
 
 export interface OutlinePaneProps {
   rows: OutlineRow[];
   // The passes through this talk so far, newest first. Optional because the pane
   // is the outline first: a talk that has never been given still shows one.
-  runs?: RunthroughRun[];
+  runs?: RehearsalRun[];
   onMove(index: number, delta: number): void;
   onSetIncluded(bookId: string, chapter: number, include: boolean): void;
   onRemove(bookId: string, chapter: number): void;
@@ -169,7 +169,7 @@ export default function OutlinePane({
         )}
       </div>
 
-      <RunthroughList runs={runs} />
+      <RehearsalList runs={runs} />
     </aside>
   );
 }

@@ -1,4 +1,4 @@
-// The run-through's logic, without React: what a deck's postMessage means, what
+// The rehearsal's logic, without React: what a deck's postMessage means, what
 // the host makes of it, and how a run reads back afterwards (docs/31).
 //
 // The deck is a self-contained HTML file running in an iframe and it owns paging
@@ -9,7 +9,7 @@
 // Everything a message could be is decided here rather than in the view, so the
 // view is left with an iframe, a listener and four numbers on a bar.
 
-import type { RunthroughEvent } from "../../../reading/runthrough";
+import type { RehearsalEvent } from "../../../reading/rehearsal";
 
 // The protocol the deck announces in its ready message. A deck built before the
 // bridge existed announces nothing at all and simply never reports a page — the
@@ -91,7 +91,7 @@ export function checkDeckProtocol(sig: DeckReady, host: number = DECK_PROTOCOL):
   };
 }
 
-export function slideEvent(sig: DeckSlide, at: number): RunthroughEvent {
+export function slideEvent(sig: DeckSlide, at: number): RehearsalEvent {
   return { kind: "slide", at, index: sig.index, slideKind: sig.kind, title: sig.title };
 }
 
@@ -99,11 +99,11 @@ export function utteranceEvent(u: {
   text: string;
   startedAt: number;
   endedAt: number;
-}): RunthroughEvent {
+}): RehearsalEvent {
   return { kind: "utterance", at: u.startedAt, endedAt: u.endedAt, text: u.text };
 }
 
-export function endEvent(at: number): RunthroughEvent {
+export function endEvent(at: number): RehearsalEvent {
   return { kind: "end", at };
 }
 
@@ -112,10 +112,10 @@ export function endEvent(at: number): RunthroughEvent {
 // window drag would otherwise close the current page and open an identical one
 // half a second later. Going 3 → 4 → 3 is a real second visit and is kept.
 export function withSlideEvent(
-  events: readonly RunthroughEvent[],
+  events: readonly RehearsalEvent[],
   sig: DeckSlide,
   at: number,
-): RunthroughEvent[] {
+): RehearsalEvent[] {
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i];
     if (e.kind !== "slide") continue;
@@ -128,7 +128,7 @@ export function withSlideEvent(
 // Whether anything of a run was actually recorded. A view that failed to load a
 // deck, or one the reader backed out of before the first page arrived, is not a
 // pass through the talk and does not become a row in its history.
-export function hasRecordedPages(events: readonly RunthroughEvent[]): boolean {
+export function hasRecordedPages(events: readonly RehearsalEvent[]): boolean {
   return events.some((e) => e.kind === "slide");
 }
 
