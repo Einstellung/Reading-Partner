@@ -17,8 +17,8 @@ import {
   createAsideThread,
   createBookThread,
   createThread,
-  dropThreadCache,
   getThread,
+  rebuildThreadStoreForTests,
   setThreadFocusChapter,
 } from "../../src/platform/app/threads";
 import type { Figure } from "../../src/reading/figures/types";
@@ -154,7 +154,10 @@ const names = (t: { name: string }[]) => t.map((x) => x.name).sort();
 
 beforeEach(() => {
   installAppData();
-  dropThreadCache(BOOK);
+  // The thread store is the process-wide singleton, and the cases here append to
+  // it. Rebuilt rather than dropped: a drop re-reads the file over the cached
+  // entry and keeps whatever the cache holds.
+  rebuildThreadStoreForTests();
 });
 
 test("companion turn: reading tools only, kickoff as the first message", async () => {
@@ -961,10 +964,8 @@ function pageRenderer() {
   };
 }
 
-// A fresh thread id per test. dropThreadCache does not clear the thread store's
-// cache — it re-reads the file over it, and a thread the cache already holds
-// wins — so a test sharing "thread-1" inherits the forty messages an earlier one
-// appended to it.
+// A fresh thread id per test, so a case reads only what it wrote whatever order
+// the cases run in.
 const withWindow = (
   threadId: string,
   renderPage: (p: number, w: number) => Promise<any>,

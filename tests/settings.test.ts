@@ -7,18 +7,25 @@ import { beforeEach, expect, test } from "bun:test";
 import {
   AI_LANGUAGE_OPTIONS,
   DEFAULT_SETTINGS,
+  flushSettings,
   languageInstruction,
   loadSettings,
+  rebuildSettingsStoreForTests,
+  saveSettings,
   SETTINGS_FILE,
   toReasoning,
   type Settings,
 } from "../src/platform/app/settings";
+import { onStoreError } from "../src/platform/app/store-errors";
 import { installAppData, type FakeDisk } from "./support/appdata-fake";
 
 let disk: FakeDisk;
 
 beforeEach(() => {
   disk = installAppData();
+  // The singleton carries a latch that one unreadable file sets for good, so a
+  // case that reads settings starts from a store that has read nothing yet.
+  rebuildSettingsStoreForTests();
 });
 
 // settings.json as an earlier run left it.
@@ -109,6 +116,46 @@ test("aiLanguage defaults to auto and an old file without it loads as auto", asy
   persist({ defaultProviderId: "openai", defaultModelId: "gpt" });
   const s = await loadSettings();
   expect(s.aiLanguage).toBe("auto");
+});
+
+// The save path runs with no window. A store built at import time cannot capture
+// window.setTimeout, because in a headless run there is no window to capture.
+test("saveSettings schedules a write with no window in the process", async () => {
+  expect(typeof globalThis.window).toBe("undefined");
+  saveSettings({ ...DEFAULT_SETTINGS, defaultProviderId: "openai" });
+  await flushSettings();
+  expect(disk.writes).toEqual([SETTINGS_FILE]);
+  expect(JSON.parse(disk.files.get(SETTINGS_FILE) ?? "null")).toMatchObject({
+    defaultProviderId: "openai",
+  });
+});
+
+// A file that exists and will not open blocks writing for as long as the store
+// lives: settings the app never read must not be overwritten with the defaults
+// it fell back to. That is right for the app and is why the store has to be
+// rebuildable — the latch outlives the case that set it otherwise.
+test("a load off an unreadable file blocks the writes of that store and no other", async () => {
+  const errors: string[] = [];
+  const off = onStoreError((e) => errors.push(e.scope));
+  try {
+    disk.files.set(SETTINGS_FILE, JSON.stringify({ defaultProviderId: "openai" }));
+    disk.unreadable.add(SETTINGS_FILE);
+    expect(await loadSettings()).toEqual(DEFAULT_SETTINGS);
+
+    saveSettings({ ...DEFAULT_SETTINGS, defaultProviderId: "anthropic" });
+    await flushSettings();
+    expect(disk.writes).toEqual([]);
+    expect(errors).toContain("settings");
+
+    // A fresh store over the same disk, now readable, writes.
+    rebuildSettingsStoreForTests();
+    disk.unreadable.delete(SETTINGS_FILE);
+    saveSettings({ ...DEFAULT_SETTINGS, defaultProviderId: "anthropic" });
+    await flushSettings();
+    expect(disk.writes).toEqual([SETTINGS_FILE]);
+  } finally {
+    off();
+  }
 });
 
 test("languageInstruction is empty on auto and names the native language otherwise", () => {

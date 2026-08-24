@@ -623,14 +623,26 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
   };
 }
 
-const store = createThreadStore({
-  read: async (file) =>
-    (await appData.exists(file)) ? appData.readText(file) : null,
-  write: writeTextAtomic,
-  quarantine: quarantineFile,
-  onError: (e) => reportStoreError("threads", e),
-  onCorrupt: (report) => reportStoreError("corrupt-file", report),
-});
+function liveStore(): ThreadStore {
+  return createThreadStore({
+    read: async (file) => ((await appData.exists(file)) ? appData.readText(file) : null),
+    write: writeTextAtomic,
+    quarantine: quarantineFile,
+    onError: (e) => reportStoreError("threads", e),
+    onCorrupt: (report) => reportStoreError("corrupt-file", report),
+  });
+}
+
+let store = liveStore();
+
+// The store as this module was first imported with. `drop` is not this: it
+// re-reads the file over the cached entry, and a thread the cache already holds
+// outranks what comes back — which is right for a sync pull and useless to a
+// test, whose next case shares the process and gets the previous one's messages
+// appended to the same thread id.
+export function rebuildThreadStoreForTests(): void {
+  store = liveStore();
+}
 
 export const loadThreads = (bookId: string): Promise<ThreadMap> => store.load(bookId);
 export const peekThreads = (bookId: string): Promise<Thread[]> => store.peek(bookId);

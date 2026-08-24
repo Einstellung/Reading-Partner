@@ -4,7 +4,7 @@
 
 import type { ThinkingLevel } from "@earendil-works/pi-ai";
 import { readGuardedJson, writeTextAtomic, type GuardedRead } from "./atomic-fs";
-import { createDebouncedWriter } from "./debounced-writer";
+import { createDebouncedWriter, WINDOW_TIMER } from "./debounced-writer";
 import { observeAppExit } from "./lifecycle";
 import { reportStoreError } from "./store-errors";
 
@@ -246,20 +246,38 @@ export function createSettingsStore(io: SettingsIo): SettingsStore {
   return { load, save, flush: writer.flush };
 }
 
-const store = createSettingsStore({
-  read: () =>
-    readGuardedJson<Partial<Settings>>(SETTINGS_FILE, (raw) =>
-      raw && typeof raw === "object" ? (raw as Partial<Settings>) : null,
-    ),
-  write: (contents) => writeTextAtomic(SETTINGS_FILE, contents),
-  schedule: (fn, ms) => window.setTimeout(fn, ms),
-  cancel: (id) => window.clearTimeout(id),
-  bindExit: (flush) => {
-    if (typeof window === "undefined") return;
-    observeAppExit(window, flush);
-  },
-  onError: (e) => reportStoreError("settings", e),
-});
+function liveStore(): SettingsStore {
+  return createSettingsStore({
+    read: () =>
+      readGuardedJson<Partial<Settings>>(SETTINGS_FILE, (raw) =>
+        raw && typeof raw === "object" ? (raw as Partial<Settings>) : null,
+      ),
+    write: (contents) => writeTextAtomic(SETTINGS_FILE, contents),
+    // The shared writer's timer, which looks the window up per call. Reaching
+    // for window.setTimeout here instead is a ReferenceError out of saveSettings
+    // in any run that has no window, thrown before the debounce it was meant to
+    // start (debounced-writer.ts: WINDOW_TIMER).
+    schedule: WINDOW_TIMER.schedule,
+    cancel: WINDOW_TIMER.cancel,
+    bindExit: (flush) => {
+      if (typeof window === "undefined") return;
+      observeAppExit(window, flush);
+    },
+    onError: (e) => reportStoreError("settings", e),
+  });
+}
+
+let store = liveStore();
+
+// The store as this module was first imported with. One load off a file that
+// exists and will not open latches `blockWrites` for the life of the process,
+// and only a load that succeeds clears it — so a test that reads settings off an
+// unreadable disk leaves every later flush in the run refused and reporting a
+// store error. Called from a test's beforeEach, this hands the next one a store
+// that has read nothing yet.
+export function rebuildSettingsStoreForTests(): void {
+  store = liveStore();
+}
 
 export const loadSettings = (): Promise<Settings> => store.load();
 export const saveSettings = (settings: Settings): void => store.save(settings);
