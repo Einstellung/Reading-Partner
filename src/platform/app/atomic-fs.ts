@@ -1,24 +1,31 @@
-// Durable data-file access. Every JSON/markdown store writes through
-// writeTextAtomic (temp + fsync + rename in Rust, src-tauri/src/atomic_fs.rs)
-// rather than the fs plugin's truncate-in-place writeTextFile, so a process
-// death mid-write cannot leave a half file behind.
+// Durability policy for data files. Not filesystem access — that is appdata.ts,
+// and every disk touch below goes through it.
+//
+// Every JSON/markdown store writes through writeTextAtomic (temp + fsync +
+// rename in Rust, src-tauri/src/atomic_fs.rs) rather than a truncate-in-place
+// write, so a process death mid-write cannot leave a half file behind.
 //
 // The other half of the same problem is on the read side: most loaders treat an
 // unparseable file as "empty" and the next save then makes that permanent. For
 // data the app cannot rebuild (the shelf, settings, credentials) readGuardedJson
 // moves the bad file aside first, so the fallback is never destructive.
 //
-// Binary blobs (library PDFs, pasted images) keep using the fs plugin: they are
-// content-addressed and re-derivable, and passing hundreds of megabytes through
-// the IPC as a JSON number array is not viable (pitfall 29).
+// Binary blobs (library PDFs, pasted images) are written plainly, through
+// appData.writeBytes: they are content-addressed and re-derivable, and passing
+// hundreds of megabytes through the IPC as a JSON number array is not viable
+// (pitfall 29).
 
-import { invoke } from "@tauri-apps/api/core";
-import { BaseDirectory, exists, readTextFile } from "@tauri-apps/plugin-fs";
+import { BaseDirectory } from "@tauri-apps/plugin-fs";
+import { appData } from "./appdata";
 import { reportStoreError } from "./store-errors";
 
 /**
  * The base every data file in the app is addressed from. Passed to the fs
  * plugin as-is, spread when a call needs more (`{ ...APPDATA, recursive: true }`).
+ *
+ * On its way out: the callers that still pass it are being moved onto appData,
+ * which says the base once. This and the plugin import above go with the last
+ * of them.
  */
 export const APPDATA = { baseDir: BaseDirectory.AppData } as const;
 
@@ -48,7 +55,7 @@ export function onFileWritten(listener: (path: string) => void): () => void {
 
 /** Replace an AppData-relative text file atomically. Parent dirs are created. */
 export async function writeTextAtomic(path: string, contents: string): Promise<void> {
-  await invoke("write_text_file_atomic", { path, contents });
+  await appData.writeAtomic(path, contents);
   // A listener exists to drop something; one that throws must not turn a write
   // that landed into a write that failed.
   for (const listener of [...writeListeners]) {
@@ -65,7 +72,7 @@ export async function writeTextAtomic(path: string, contents: string): Promise<v
  * Resolves to the new name, or null when there was nothing to move.
  */
 export function quarantineFile(path: string): Promise<string | null> {
-  return invoke<string | null>("quarantine_file", { path });
+  return appData.quarantine(path);
 }
 
 // Declared in store-errors.ts, beside the sentence the user is shown, and
@@ -94,8 +101,8 @@ export async function readGuardedJson<T>(
 ): Promise<GuardedRead<T>> {
   let text: string;
   try {
-    if (!(await exists(file, APPDATA))) return { status: "missing" };
-    text = await readTextFile(file, APPDATA);
+    if (!(await appData.exists(file))) return { status: "missing" };
+    text = await appData.readText(file);
   } catch (e) {
     console.error(`failed to read ${file}`, e);
     reportStoreError("corrupt-file", { file, savedAs: null });
@@ -137,8 +144,8 @@ export async function readJson<T>(
   validate?: (raw: unknown) => T | null,
 ): Promise<T | null> {
   try {
-    if (!(await exists(file, APPDATA))) return null;
-    const raw = JSON.parse(await readTextFile(file, APPDATA)) as unknown;
+    if (!(await appData.exists(file))) return null;
+    const raw = JSON.parse(await appData.readText(file)) as unknown;
     if (!validate) return raw as T;
     const value = validate(raw);
     if (value === null) console.warn(`unexpected shape in ${file}`);
@@ -159,8 +166,8 @@ export async function readJson<T>(
  */
 export async function readGuardedText(file: string): Promise<GuardedRead<string>> {
   try {
-    if (!(await exists(file, APPDATA))) return { status: "missing" };
-    return { status: "ok", value: await readTextFile(file, APPDATA) };
+    if (!(await appData.exists(file))) return { status: "missing" };
+    return { status: "ok", value: await appData.readText(file) };
   } catch (e) {
     console.error(`failed to read ${file}`, e);
     reportStoreError("corrupt-file", { file, savedAs: null });
