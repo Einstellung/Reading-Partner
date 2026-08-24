@@ -31,6 +31,7 @@ import {
   endEvent,
   formatElapsed,
   hasRecordedPages,
+  isPageTurn,
   positionLabel,
   type ProtocolCheck,
   readDeckSignal,
@@ -44,9 +45,10 @@ export interface RehearsalViewProps {
   // The deck to give, AppData-relative. The caller already knows it — that is
   // what enabled the button that got here.
   deckFile: string;
-  // Speech, when there is any. Nothing supplies one yet: the voice line
-  // (docs/15, docs/31 "语音") is what will, and until it does a run records pages
-  // and no words. Deliberately not faked here.
+  // Speech, when there is any. The caller makes one before it mounts this view
+  // (TalkView) so that capture is already running when the deck reports its
+  // first page; with no STT key configured there is none, and the run records
+  // pages and no words, which is a run and not a failure.
   transcript?: TranscriptSource;
   onExit(): void;
 }
@@ -71,6 +73,15 @@ export default function RehearsalView({
   const [elapsed, setElapsed] = useState(0);
   const [mismatch, setMismatch] = useState<ProtocolCheck | null>(null);
 
+  // The listener below and the save are both mounted once and hold their
+  // closures for the life of the view, so the source is reached through a ref:
+  // read the prop directly and a page turn would cut a source the view was
+  // handed on its first render.
+  const transcriptRef = useRef(transcript);
+  useEffect(() => {
+    transcriptRef.current = transcript;
+  });
+
   // Only messages from this view's own frame count. `source === 'deck'` alone is
   // not enough: any document that gets a handle on this window can say it.
   useEffect(() => {
@@ -87,6 +98,13 @@ export default function RehearsalView({
         setMismatch(check.ok ? null : check);
         return;
       }
+      // The page turn is the cut. Desktop STT hands back one block of text with
+      // no timings inside it (docs/43), so a segment's only boundaries are the
+      // two page turns around it — without this the whole talk is one segment
+      // and the transcript has no pages in it. A repeated report is the deck
+      // redrawing the page that is already up, and cutting on that would put a
+      // seam in the middle of a page.
+      if (isPageTurn(eventsRef.current, signal)) transcriptRef.current?.cut();
       eventsRef.current = withSlideEvent(eventsRef.current, signal, Date.now());
       setCurrent({ index: signal.index, total: signal.total, title: signal.title });
     };
@@ -113,9 +131,11 @@ export default function RehearsalView({
   }, []);
 
   // Speech, when a source is handed in. Declared before the save effect on
-  // purpose: React tears cleanups down in declaration order, so stop() has run
-  // by the time the run is built and a source that flushes its last utterance
-  // synchronously still makes it into the run.
+  // purpose: React tears cleanups down in declaration order, so the stop is
+  // already under way by the time the save runs. It is not enough on its own —
+  // stopping the desktop source waits for every segment still uploading, which
+  // is why finish() awaits it too. Both calls land on the one stop: a source is
+  // stopped once and every caller gets that same promise back.
   useEffect(() => {
     if (!transcript) return;
     void transcript
@@ -132,10 +152,28 @@ export default function RehearsalView({
   // out of the deck (it failed to load, or the reader turned round immediately)
   // has nothing to write: an empty row in the history would be a pass that never
   // happened.
-  const finish = useCallback(() => {
+  //
+  // The last page's words arrive after the reader has left: stopping the source
+  // sends the final segment and waits for every earlier one still on its way
+  // back from STT, and the utterances land through the callback above. So the
+  // run is built on the other side of that await. The rest of this runs after
+  // the view is gone — the End button unmounts it before the uploads finish —
+  // and that is fine because nothing past this point touches React state: the
+  // events are a ref and appendRun writes a file.
+  const finish = useCallback(async () => {
+    // The gate closes before the first await, so the second caller (the End
+    // button and then the unmount, or the other way round) turns back here
+    // rather than writing the run twice.
     if (savedRef.current) return;
     savedRef.current = true;
-    const events = [...eventsRef.current, endEvent(Date.now())];
+    // Stamped now, not after the wait: the rehearsal ended when the reader
+    // stopped talking, not when the last upload came back.
+    const endedAt = Date.now();
+    const source = transcriptRef.current;
+    if (source) {
+      await source.stop().catch((e: unknown) => console.warn("transcript stop failed", e));
+    }
+    const events = [...eventsRef.current, endEvent(endedAt)];
     if (!hasRecordedPages(events)) return;
     const run = buildRun({
       id: crypto.randomUUID(),
@@ -154,10 +192,17 @@ export default function RehearsalView({
   useEffect(() => {
     finishRef.current = finish;
   });
-  useEffect(() => () => finishRef.current(), []);
+  useEffect(
+    () => () => {
+      void finishRef.current();
+    },
+    [],
+  );
 
+  // Leaving does not wait for the run to be written. finish() carries on after
+  // this view is gone, and the reader is back in the talk in the meantime.
   const leave = () => {
-    finish();
+    void finish();
     onExit();
   };
 

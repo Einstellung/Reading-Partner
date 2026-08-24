@@ -22,6 +22,8 @@ import { IconClose, IconOutline } from "../base/icons";
 import { Composer, MessageList } from "../chat/chat";
 import NameDialog from "../common/NameDialog";
 import { Button } from "../ui/button";
+import { cutSession, startSession, stopSession } from "../../../ai/voice";
+import { createDesktopTranscriptSource, type TranscriptSource } from "../../../reading/rehearsal";
 import { outlineRows, type Talk } from "../../../reading/talks";
 import { defaultNavOpen, readNavEnv } from "../base/topic-nav";
 import DeckDialog from "./DeckDialog";
@@ -58,6 +60,31 @@ export default function TalkView(props: {
   // (useTalk's cleanup), and stepping over to the deck for ten minutes is not
   // leaving the talk.
   const [rehearsing, setRehearsing] = useState(false);
+  // The words for the pass about to be given, or null when the machine has no
+  // way to hear them (no STT key). Made here rather than inside the rehearsal
+  // because the source has to be recording before the deck reports its first
+  // page: reading the STT config is a trip to disk, and doing it after the view
+  // is up would race the deck's own load — every word said to page one while
+  // that race was on would be lost. Made once per pass, too: a source that has
+  // been stopped is finished, and the next Rehearse needs a new one.
+  const [transcript, setTranscript] = useState<TranscriptSource | null>(null);
+  const rehearse = () => {
+    void createDesktopTranscriptSource({
+      start: startSession,
+      cut: cutSession,
+      stop: stopSession,
+    })
+      .catch((e: unknown) => {
+        // A run that records pages and no words is a run (reading/rehearsal),
+        // so a source that cannot be built does not stop the rehearsal.
+        console.warn("no transcript for this rehearsal", e);
+        return null;
+      })
+      .then((source) => {
+        setTranscript(source);
+        setRehearsing(true);
+      });
+  };
   // Bumped when the deck dialog closes: a deck generated in this sitting has to
   // turn Rehearse on in this sitting.
   const [deckKey, setDeckKey] = useState(0);
@@ -132,7 +159,7 @@ export default function TalkView(props: {
             size="sm"
             disabled={!talk.talk || !readiness.ok}
             title={readiness.title}
-            onClick={() => setRehearsing(true)}
+            onClick={rehearse}
           >
             Rehearse
           </Button>
@@ -186,8 +213,10 @@ export default function TalkView(props: {
             talkId={talk.talk.id}
             talkName={talk.talk.name}
             deckFile={deck.file}
+            transcript={transcript ?? undefined}
             onExit={() => {
               setRehearsing(false);
+              setTranscript(null);
               setRunsKey((n) => n + 1);
             }}
           />

@@ -13,12 +13,46 @@ import {
   MAX_SEGMENT_SECONDS,
   type RecordingSession,
   type Schedule,
+  wavHasSamples,
 } from "../../../src/reading/rehearsal/segmented-source";
 import type { Utterance } from "../../../src/reading/rehearsal/source";
 
 // Let every already-resolved promise chain run out.
 function flush(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+// A WAV the way the recorder writes one (hound, src-tauri/src/voice.rs): RIFF,
+// fmt, data. `samples` bytes of audio, so zero is the header-only WAV a page
+// nobody spoke to comes back as.
+function wav(samples: number, opts: { extraChunk?: number } = {}): Uint8Array {
+  // A chunk of odd length is followed by a pad byte.
+  const extra = opts.extraChunk === undefined ? 0 : 8 + opts.extraChunk + (opts.extraChunk % 2);
+  const bytes = new Uint8Array(44 + extra + samples);
+  const view = new DataView(bytes.buffer);
+  const tag = (at: number, s: string) => {
+    for (let i = 0; i < 4; i++) bytes[at + i] = s.charCodeAt(i);
+  };
+  tag(0, "RIFF");
+  view.setUint32(4, bytes.length - 8, true);
+  tag(8, "WAVE");
+  tag(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, 16_000, true);
+  view.setUint32(28, 32_000, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  // Something between fmt and data, when the test asks for it: the data chunk is
+  // found by walking, not by counting to 36.
+  if (opts.extraChunk !== undefined) {
+    tag(36, "LIST");
+    view.setUint32(40, opts.extraChunk, true);
+  }
+  tag(36 + extra, "data");
+  view.setUint32(40 + extra, samples, true);
+  return bytes;
 }
 
 // The recorder. Each cut hands back one distinguishable byte, numbered in the
@@ -28,6 +62,9 @@ class FakeSession implements RecordingSession {
   startOptions: { maxSegmentSeconds?: number } | undefined;
   private taken = 0;
   cutFails = false;
+  // Nothing was said on this page: the recorder hands back a WAV with no audio
+  // in it, which is not an error.
+  silent = false;
 
   async start(opts?: { maxSegmentSeconds?: number }): Promise<void> {
     this.calls.push("start");
@@ -37,12 +74,14 @@ class FakeSession implements RecordingSession {
   async cut(): Promise<Uint8Array> {
     this.calls.push("cut");
     if (this.cutFails) throw new Error("the recorder let go");
-    return new Uint8Array([++this.taken]);
+    this.taken++;
+    return this.silent ? wav(0) : new Uint8Array([this.taken]);
   }
 
   async stop(): Promise<Uint8Array> {
     this.calls.push("stop");
-    return new Uint8Array([++this.taken]);
+    this.taken++;
+    return this.silent ? wav(0) : new Uint8Array([this.taken]);
   }
 }
 
@@ -334,4 +373,91 @@ test("a session that will not start leaves a source that cuts nothing", async ()
   await flush();
   expect(h.stt.calls).toEqual([]);
   expect(h.heard).toEqual([]);
+});
+
+// The view stops the source twice on the way out: once from the effect cleanup
+// that tears the rehearsal down, once from the save, which has to wait for the
+// last uploads before it writes the run. A second call that returned early would
+// let the run be built with the last pages still in flight.
+test("stopping twice is one stop, and the second caller waits for it too", async () => {
+  const h = harness();
+  await h.start();
+
+  h.at(2_000);
+  h.source.cut();
+  await flush();
+
+  h.at(5_000);
+  const first = h.source.stop();
+  const second = h.source.stop();
+  expect(second).toBe(first);
+  await flush();
+  // The recorder is asked once, however many times the source is stopped.
+  expect(h.session.calls).toEqual(["start", "cut", "stop"]);
+
+  let done = false;
+  void second.then(() => {
+    done = true;
+  });
+  await flush();
+  expect(done).toBe(false);
+
+  h.stt.resolve(1, "the page before it");
+  h.stt.resolve(2, "the last page");
+  await flush();
+  await second;
+  expect(done).toBe(true);
+  expect(h.heard.map((u) => u.text)).toEqual(["the page before it", "the last page"]);
+
+  // A stop after everything is in is still that same stop, not a new cut.
+  await h.source.stop();
+  expect(h.session.calls).toEqual(["start", "cut", "stop"]);
+});
+
+test("a page nobody spoke to is never sent, and still waits its turn", async () => {
+  const h = harness();
+  await h.start();
+
+  h.at(2_000);
+  h.source.cut();
+  await flush();
+  h.session.silent = true;
+  h.at(3_000);
+  h.source.cut();
+  await flush();
+
+  // Silence costs no upload and no retry: only the page with words on it went.
+  expect(h.stt.calls).toEqual([1]);
+  // Settling without leaving the machine does not let it overtake the page in
+  // front of it either.
+  expect(h.heard).toEqual([]);
+
+  h.stt.resolve(1, "the first page");
+  await flush();
+  expect(h.heard).toEqual([
+    { text: "the first page", startedAt: 1_000, endedAt: 2_000 },
+    { text: "", startedAt: 2_000, endedAt: 3_000 },
+  ]);
+});
+
+// What "no audio in it" is read from: the data chunk's declared length, found by
+// walking the chunks. Not the file's byte count — a header-only WAV is 44 bytes
+// under this encoder, and that is the encoder's business.
+test("a WAV with an empty data chunk has no samples, whatever else is in it", () => {
+  expect(wavHasSamples(wav(0))).toBe(false);
+  expect(wavHasSamples(wav(0, { extraChunk: 3 }))).toBe(false);
+  expect(wavHasSamples(wav(320))).toBe(true);
+  expect(wavHasSamples(wav(320, { extraChunk: 3 }))).toBe(true);
+});
+
+test("bytes that are not a WAV are sent as they are", () => {
+  expect(wavHasSamples(new Uint8Array(0))).toBe(true);
+  expect(wavHasSamples(new Uint8Array([1]))).toBe(true);
+  expect(wavHasSamples(new TextEncoder().encode("this is not audio at all, but it is long"))).toBe(
+    true,
+  );
+  // RIFF and WAVE, and no data chunk to read a length from.
+  const noData = wav(0);
+  noData.set(new TextEncoder().encode("junk"), 36);
+  expect(wavHasSamples(noData)).toBe(true);
 });
