@@ -15,7 +15,7 @@
 // device with no info-sources.json at all, which is not what an existing user's
 // device looks like.
 
-import { BaseDirectory, exists, readTextFile } from "@tauri-apps/plugin-fs";
+import { appData } from "../../platform/app/appdata";
 import {
   quarantineFile,
   readGuardedJson,
@@ -227,10 +227,8 @@ export async function setSourceEnabled(
 
 export async function loadSourceHealth(): Promise<Record<string, SourceHealth>> {
   try {
-    if (!(await exists(HEALTH_FILE, { baseDir: BaseDirectory.AppData }))) return {};
-    return JSON.parse(
-      await readTextFile(HEALTH_FILE, { baseDir: BaseDirectory.AppData }),
-    ) as Record<string, SourceHealth>;
+    if (!(await appData.exists(HEALTH_FILE))) return {};
+    return JSON.parse(await appData.readText(HEALTH_FILE)) as Record<string, SourceHealth>;
   } catch {
     return {};
   }
@@ -244,8 +242,8 @@ export async function saveSourceHealth(health: Record<string, SourceHealth>): Pr
 
 export async function loadSiteSessions(): Promise<SiteSessions> {
   try {
-    if (!(await exists(SESSIONS_FILE, { baseDir: BaseDirectory.AppData }))) return {};
-    return parseSiteSessions(await readTextFile(SESSIONS_FILE, { baseDir: BaseDirectory.AppData }));
+    if (!(await appData.exists(SESSIONS_FILE))) return {};
+    return parseSiteSessions(await appData.readText(SESSIONS_FILE));
   } catch {
     return {};
   }

@@ -3,13 +3,7 @@
 // day, both keyed by the local date. Only today's briefing is ever shown;
 // regenerate overwrites. Persisted under AppData.
 
-import {
-  BaseDirectory,
-  exists,
-  readDir,
-  readTextFile,
-  remove,
-} from "@tauri-apps/plugin-fs";
+import { appData } from "../../platform/app/appdata";
 import { readJson, writeTextAtomic } from "../../platform/app/atomic-fs";
 import { INFO_RUN_VERSION, type InfoRunState } from "./run-state";
 import type { Briefing } from "./types";
@@ -65,10 +59,8 @@ export async function saveBriefing(briefing: Briefing): Promise<void> {
 // vestibule shows the "generate" state instead of crashing.
 export async function loadBriefing(date: string = todayLocal()): Promise<Briefing | null> {
   try {
-    if (!(await exists(briefingFile(date), { baseDir: BaseDirectory.AppData }))) return null;
-    const parsed = JSON.parse(
-      await readTextFile(briefingFile(date), { baseDir: BaseDirectory.AppData }),
-    ) as Briefing;
+    if (!(await appData.exists(briefingFile(date)))) return null;
+    const parsed = JSON.parse(await appData.readText(briefingFile(date))) as Briefing;
     return parsed && parsed.date === date ? parsed : null;
   } catch {
     return null;
@@ -96,7 +88,7 @@ export function newestBriefingDate(names: string[]): string | null {
 export async function loadLatestBriefing(): Promise<Briefing | null> {
   let names: string[];
   try {
-    const entries = await readDir("", { baseDir: BaseDirectory.AppData });
+    const entries = await appData.readDir("");
     names = entries.filter((e) => e.isFile).map((e) => e.name);
   } catch {
     return null;
@@ -114,10 +106,11 @@ export async function saveArticles(
 
 export async function loadArticles(date: string): Promise<Record<string, CachedArticle>> {
   try {
-    if (!(await exists(articlesFile(date), { baseDir: BaseDirectory.AppData }))) return {};
-    return JSON.parse(
-      await readTextFile(articlesFile(date), { baseDir: BaseDirectory.AppData }),
-    ) as Record<string, CachedArticle>;
+    if (!(await appData.exists(articlesFile(date)))) return {};
+    return JSON.parse(await appData.readText(articlesFile(date))) as Record<
+      string,
+      CachedArticle
+    >;
   } catch {
     return {};
   }
@@ -146,10 +139,8 @@ export async function saveItems(date: string, items: InfoItem[]): Promise<void> 
 
 export async function loadItems(date: string): Promise<InfoItem[]> {
   try {
-    if (!(await exists(itemsFile(date), { baseDir: BaseDirectory.AppData }))) return [];
-    const parsed = JSON.parse(
-      await readTextFile(itemsFile(date), { baseDir: BaseDirectory.AppData }),
-    );
+    if (!(await appData.exists(itemsFile(date)))) return [];
+    const parsed = JSON.parse(await appData.readText(itemsFile(date)));
     return Array.isArray(parsed) ? (parsed as InfoItem[]) : [];
   } catch {
     return [];
@@ -176,10 +167,8 @@ export async function saveRun(state: InfoRunState): Promise<void> {
 // the cost of getting this wrong is a refetch, not a lost briefing.
 export async function loadRun(date: string): Promise<InfoRunState | null> {
   try {
-    if (!(await exists(runFile(date), { baseDir: BaseDirectory.AppData }))) return null;
-    const parsed = JSON.parse(
-      await readTextFile(runFile(date), { baseDir: BaseDirectory.AppData }),
-    ) as InfoRunState;
+    if (!(await appData.exists(runFile(date)))) return null;
+    const parsed = JSON.parse(await appData.readText(runFile(date))) as InfoRunState;
     if (!parsed || parsed.version !== INFO_RUN_VERSION || parsed.date !== date) return null;
     return parsed;
   } catch {
@@ -191,8 +180,8 @@ export async function loadRun(date: string): Promise<InfoRunState | null> {
 // generation overwrites it, and isResumable rejects it once the day turns.
 export async function clearRun(date: string): Promise<void> {
   try {
-    if (await exists(runFile(date), { baseDir: BaseDirectory.AppData })) {
-      await remove(runFile(date), { baseDir: BaseDirectory.AppData });
+    if (await appData.exists(runFile(date))) {
+      await appData.remove(runFile(date));
     }
   } catch {
     // Leave it; it costs disk, not correctness.
@@ -257,14 +246,14 @@ export function staleDailyFiles(names: string[], today: string): string[] {
 export async function pruneStaleDailyFiles(today: string): Promise<void> {
   let names: string[];
   try {
-    const entries = await readDir("", { baseDir: BaseDirectory.AppData });
+    const entries = await appData.readDir("");
     names = entries.filter((e) => e.isFile).map((e) => e.name);
   } catch {
     return;
   }
   for (const name of staleDailyFiles(names, today)) {
     try {
-      await remove(name, { baseDir: BaseDirectory.AppData });
+      await appData.remove(name);
     } catch {
       // Locked or already gone; keep going through the rest.
     }

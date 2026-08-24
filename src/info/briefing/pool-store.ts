@@ -18,7 +18,7 @@
 //                          cycle, which is exactly why it is not in with the
 //                          marks.
 
-import { BaseDirectory, exists, readDir, remove } from "@tauri-apps/plugin-fs";
+import { appData } from "../../platform/app/appdata";
 import { readJson, writeTextAtomic } from "../../platform/app/atomic-fs";
 import { emptyPool, POOL_VERSION, type Pool, type PoolMark } from "./item-pool";
 import type { InfoItem } from "../sources/item";
@@ -41,7 +41,7 @@ export async function loadPool(): Promise<Pool> {
   const pool = emptyPool();
   let names: string[] = [];
   try {
-    const entries = await readDir("", { baseDir: BaseDirectory.AppData });
+    const entries = await appData.readDir("");
     names = entries.filter((e) => e.isFile).map((e) => e.name);
   } catch {
     return pool;
@@ -81,7 +81,7 @@ export async function savePoolPolled(pool: Pool): Promise<void> {
 export async function removeCollectedPoolFiles(): Promise<void> {
   let names: string[] = [];
   try {
-    const entries = await readDir("", { baseDir: BaseDirectory.AppData });
+    const entries = await appData.readDir("");
     names = entries.filter((e) => e.isFile).map((e) => e.name);
   } catch {
     return;
@@ -89,7 +89,7 @@ export async function removeCollectedPoolFiles(): Promise<void> {
   const doomed = names.filter((n) => DAY_FILE.test(n) || n === POLLED_FILE);
   for (const name of doomed) {
     try {
-      await remove(name, { baseDir: BaseDirectory.AppData });
+      await appData.remove(name);
     } catch {
       // Locked or already gone; keep going through the rest.
     }
@@ -101,8 +101,8 @@ export async function removeCollectedPoolFiles(): Promise<void> {
 export async function removePoolDays(dates: string[]): Promise<void> {
   for (const date of dates) {
     try {
-      if (await exists(poolDayFile(date), { baseDir: BaseDirectory.AppData })) {
-        await remove(poolDayFile(date), { baseDir: BaseDirectory.AppData });
+      if (await appData.exists(poolDayFile(date))) {
+        await appData.remove(poolDayFile(date));
       }
     } catch {
       // Keep going through the rest.

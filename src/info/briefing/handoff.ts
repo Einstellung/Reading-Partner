@@ -21,7 +21,7 @@
 // meant to be. A machine that lost and comes back joins the queue at the end
 // rather than taking the work back off whoever picked it up.
 
-import { BaseDirectory, exists, readDir, readTextFile } from "@tauri-apps/plugin-fs";
+import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import type { PullMatcher } from "../../platform/sync/pull-routes";
 import type { SourceHealth } from "../sources/engine";
@@ -248,7 +248,7 @@ async function readMatching<T>(
 ): Promise<T[]> {
   let names: string[];
   try {
-    const entries = await readDir("", { baseDir: BaseDirectory.AppData });
+    const entries = await appData.readDir("");
     names = entries
       .filter((e) => e.isFile && e.name.startsWith(prefix) && e.name.endsWith(JSON_SUFFIX))
       .map((e) => e.name);
@@ -258,9 +258,7 @@ async function readMatching<T>(
   const out: T[] = [];
   for (const name of names) {
     try {
-      const parsed: unknown = JSON.parse(
-        await readTextFile(name, { baseDir: BaseDirectory.AppData }),
-      );
+      const parsed: unknown = JSON.parse(await appData.readText(name));
       if (keep(parsed)) out.push(parsed);
     } catch {
       // A half-written or hand-edited file is one device's opinion missing, not
@@ -295,8 +293,8 @@ export function writeAsk(ask: AskRecord): Promise<void> {
 export async function readOwnClaim(deviceId: string): Promise<CollectorClaim | null> {
   const file = collectorFile(deviceId);
   try {
-    if (!(await exists(file, { baseDir: BaseDirectory.AppData }))) return null;
-    const parsed: unknown = JSON.parse(await readTextFile(file, { baseDir: BaseDirectory.AppData }));
+    if (!(await appData.exists(file))) return null;
+    const parsed: unknown = JSON.parse(await appData.readText(file));
     return isClaim(parsed) ? parsed : null;
   } catch {
     return null;
