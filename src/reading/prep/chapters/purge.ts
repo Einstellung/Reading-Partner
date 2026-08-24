@@ -22,10 +22,8 @@
 // the local files are still there and the next start-up asks for the same paths
 // again (the queue de-duplicates). The other order loses the list.
 
-import { BaseDirectory, readDir, remove } from "@tauri-apps/plugin-fs";
+import { appData } from "../../../platform/app/appdata";
 import { requestRemotePurge } from "../../../platform/sync";
-
-const APPDATA = { baseDir: BaseDirectory.AppData } as const;
 
 // The directory name this pass wrote under before its material moved into the
 // document's prep directory (store.ts).
@@ -40,7 +38,7 @@ export async function findLegacyChapterNotes(): Promise<{ dirs: string[]; files:
   const files: string[] = [];
   let top;
   try {
-    top = await readDir(".", APPDATA);
+    top = await appData.readDir(".");
   } catch {
     return { dirs, files };
   }
@@ -48,7 +46,7 @@ export async function findLegacyChapterNotes(): Promise<{ dirs: string[]; files:
     if (!e.isDirectory || !e.name.startsWith(LEGACY_PREFIX)) continue;
     dirs.push(e.name);
     try {
-      for (const f of await readDir(e.name, APPDATA)) {
+      for (const f of await appData.readDir(e.name)) {
         if (f.isFile) files.push(`${e.name}/${f.name}`);
       }
     } catch {
@@ -74,7 +72,7 @@ export async function purgeLegacyChapterNotes(): Promise<void> {
   }
   for (const dir of dirs) {
     try {
-      await remove(dir, { ...APPDATA, recursive: true });
+      await appData.removeDir(dir);
     } catch (e) {
       console.warn(`failed to delete ${dir}`, e);
     }

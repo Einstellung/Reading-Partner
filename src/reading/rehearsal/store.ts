@@ -14,12 +14,11 @@
 // loader returns empty, the next write commits the empty version over the top,
 // and every entry is gone with no error anywhere.
 
-import { BaseDirectory, exists, readTextFile, remove, rename } from "@tauri-apps/plugin-fs";
+import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { emptyLog, normalizeLog, type RehearsalLog, type RehearsalRun } from "./types";
 
 const PREFIX = "rehearsal-";
-const APPDATA = { baseDir: BaseDirectory.AppData } as const;
 
 export function rehearsalFile(talkId: string): string {
   return `${PREFIX}${talkId}.json`;
@@ -42,8 +41,8 @@ export async function loadRehearsals(talkId: string): Promise<RehearsalLog> {
   const file = rehearsalFile(talkId);
   let text: string;
   try {
-    if (!(await exists(file, APPDATA))) return emptyLog(talkId);
-    text = await readTextFile(file, APPDATA);
+    if (!(await appData.exists(file))) return emptyLog(talkId);
+    text = await appData.readText(file);
   } catch (e) {
     // An IO error says nothing is wrong with the file itself. Nothing is moved
     // and nothing is written over it — appendRun goes through here, so a read
@@ -65,10 +64,7 @@ export async function loadRehearsals(talkId: string): Promise<RehearsalLog> {
 async function setAside(talkId: string): Promise<void> {
   const file = rehearsalFile(talkId);
   try {
-    await rename(file, badFile(talkId), {
-      oldPathBaseDir: BaseDirectory.AppData,
-      newPathBaseDir: BaseDirectory.AppData,
-    });
+    await appData.rename(file, badFile(talkId));
     console.warn(`${file} could not be read; kept as ${badFile(talkId)} and started over`);
   } catch (e) {
     console.warn(`${file} could not be read and could not be moved aside`, e);
@@ -95,7 +91,7 @@ export async function appendRun(run: RehearsalRun): Promise<RehearsalRun> {
 export async function deleteRehearsals(talkId: string): Promise<void> {
   for (const file of [rehearsalFile(talkId), badFile(talkId)]) {
     try {
-      if (await exists(file, APPDATA)) await remove(file, APPDATA);
+      if (await appData.exists(file)) await appData.remove(file);
     } catch (e) {
       console.warn("failed to delete", file, e);
     }
