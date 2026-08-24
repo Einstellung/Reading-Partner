@@ -100,10 +100,14 @@ export function createFulltextStore(io: FulltextIo): FulltextStore {
   };
 }
 
+// Called through rather than handed over: the wiring is evaluated once, at
+// import, and a name captured then is the one this module keeps for the rest of
+// the process — a spy installed on the imported module later would never be
+// reached (docs/pitfall/122).
 const store = createFulltextStore({
   read: async (file) => ((await appData.exists(file)) ? appData.readText(file) : null),
-  write: writeTextAtomic,
-  extract: extractFulltext,
+  write: (file, contents) => writeTextAtomic(file, contents),
+  extract: (buffer) => extractFulltext(buffer),
   onError: (e) => reportStoreError("fulltext", e),
 });
 
