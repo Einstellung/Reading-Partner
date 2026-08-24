@@ -9,7 +9,12 @@
 // Everything a message could be is decided here rather than in the view, so the
 // view is left with an iframe, a listener and four numbers on a bar.
 
-import type { RehearsalEvent } from "../../../reading/rehearsal";
+import {
+  buildRun,
+  type RehearsalEvent,
+  type RehearsalRun,
+  type TranscriptSource,
+} from "../../../reading/rehearsal";
 
 // The protocol the deck announces in its ready message. A deck built before the
 // bridge existed announces nothing at all and simply never reports a page — the
@@ -141,6 +146,58 @@ export function hasRecordedPages(events: readonly RehearsalEvent[]): boolean {
   return events.some((e) => e.kind === "slide");
 }
 
+export interface FinishRunInput {
+  talkId: string;
+  deckFile: string;
+  // Stamped by the caller at the moment the reader finished, not after the wait
+  // below: the rehearsal ended when they stopped talking, not when the last
+  // upload came back.
+  endedAt: number;
+  startedAt: number;
+  id: string;
+  // The speech, when there was any. Closed here, and awaited: stopping a
+  // segmented source sends the last segment and waits for every earlier one
+  // still on its way back from STT.
+  source?: TranscriptSource;
+  // Read after the source has stopped, which is why it is a function and not an
+  // array: the last page's words arrive during that wait, through the callback
+  // the caller gave start().
+  events(): readonly RehearsalEvent[];
+  save(run: RehearsalRun): Promise<unknown>;
+}
+
+// End a rehearsal: close the speech, build the run out of everything that
+// arrived, write it. True when a run reached the store, which is the only case
+// in which the talk's history has changed and has to be read again — a pass
+// that recorded no page was never a pass, and a write that failed did not
+// happen (docs/43).
+//
+// The order is the whole of it, and the order is why this is not in the view:
+// the run cannot be built before the source has stopped, and the history cannot
+// be reloaded before the run is on disk.
+export async function finishRun(input: FinishRunInput): Promise<boolean> {
+  if (input.source) {
+    await input.source.stop().catch((e: unknown) => console.warn("transcript stop failed", e));
+  }
+  const events = [...input.events(), endEvent(input.endedAt)];
+  if (!hasRecordedPages(events)) return false;
+  const run = buildRun({
+    id: input.id,
+    ordinal: 0, // the store assigns it
+    talkId: input.talkId,
+    deckFile: input.deckFile,
+    startedAt: input.startedAt,
+    events,
+  });
+  try {
+    await input.save(run);
+  } catch (e) {
+    console.warn("failed to record the run", e);
+    return false;
+  }
+  return true;
+}
+
 // m:ss under an hour, h:mm:ss over it. Elapsed time in a talk is read at a
 // glance and compared against "I have fifteen minutes", so the minutes are the
 // number that has to be legible.
@@ -188,7 +245,13 @@ export interface RehearsalReadiness {
 export function rehearsalReadiness(input: {
   deckFile: string | null;
   loading: boolean;
+  // A pass that has been asked for and is not on screen yet. Starting a second
+  // one here would open a second recording session, and the recorder keeps one:
+  // the newer start drains the older session (src-tauri/src/voice.rs), leaving
+  // the first source cutting into a session that is already gone.
+  preparing?: boolean;
 }): RehearsalReadiness {
+  if (input.preparing) return { ok: false, title: "Starting this rehearsal…" };
   if (input.loading) return { ok: false, title: "Looking for this talk's deck…" };
   if (!input.deckFile) {
     return {

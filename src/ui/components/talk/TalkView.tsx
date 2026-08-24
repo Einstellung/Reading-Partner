@@ -68,7 +68,14 @@ export default function TalkView(props: {
   // that race was on would be lost. Made once per pass, too: a source that has
   // been stopped is finished, and the next Rehearse needs a new one.
   const [transcript, setTranscript] = useState<TranscriptSource | null>(null);
+  // Making it is a trip to disk, and the button stays on screen for the whole of
+  // it. Two presses would make two sources and open two recording sessions, and
+  // the recorder keeps one: the second start drains the first session
+  // (src-tauri/src/voice.rs), so the first source's page turns would cut a
+  // session that is already gone. The gate is the button's, through readiness.
+  const [preparing, setPreparing] = useState(false);
   const rehearse = () => {
+    setPreparing(true);
     void createDesktopTranscriptSource({
       start: startSession,
       cut: cutSession,
@@ -82,6 +89,7 @@ export default function TalkView(props: {
       })
       .then((source) => {
         setTranscript(source);
+        setPreparing(false);
         setRehearsing(true);
       });
   };
@@ -89,9 +97,12 @@ export default function TalkView(props: {
   // turn Rehearse on in this sitting.
   const [deckKey, setDeckKey] = useState(0);
   const deck = useTalkDeckFile(props.talkId, deckKey);
-  const readiness = rehearsalReadiness({ deckFile: deck.file, loading: deck.loading });
-  // Bumped when a run ends: the only moment this device changes the history (a
-  // pull can too, and useRehearsals says why it does not follow that).
+  const readiness = rehearsalReadiness({ deckFile: deck.file, loading: deck.loading, preparing });
+  // Bumped when a run reaches the disk, not when the rehearsal is left: the two
+  // are seconds apart, because the run waits for the last of the speech to come
+  // back from STT (docs/43). It is the only moment this device changes the
+  // history (a pull can too, and useRehearsals says why it does not follow
+  // that).
   const [runsKey, setRunsKey] = useState(0);
   const runs = useRehearsals(props.talkId, runsKey);
 
@@ -217,8 +228,8 @@ export default function TalkView(props: {
             onExit={() => {
               setRehearsing(false);
               setTranscript(null);
-              setRunsKey((n) => n + 1);
             }}
+            onSaved={() => setRunsKey((n) => n + 1)}
           />
         )}
 

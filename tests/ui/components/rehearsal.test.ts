@@ -7,6 +7,7 @@ import {
   checkDeckProtocol,
   DECK_PROTOCOL,
   endEvent,
+  finishRun,
   formatElapsed,
   formatRunDate,
   hasRecordedPages,
@@ -18,7 +19,11 @@ import {
   utteranceEvent,
   withSlideEvent,
 } from "../../../src/ui/components/talk/rehearsal";
-import type { RehearsalEvent } from "../../../src/reading/rehearsal";
+import type {
+  RehearsalEvent,
+  RehearsalRun,
+  TranscriptSource,
+} from "../../../src/reading/rehearsal";
 
 const slide = (index: number, total = 12) => ({
   source: "deck",
@@ -187,8 +192,110 @@ test("the Rehearse button says why it is off", () => {
   expect(rehearsalReadiness({ deckFile: "slides/t-x.html", loading: false }).ok).toBe(true);
 });
 
+test("a rehearsal being started holds the button, deck or no deck", () => {
+  const starting = rehearsalReadiness({
+    deckFile: "slides/t-x.html",
+    loading: false,
+    preparing: true,
+  });
+  expect(starting.ok).toBe(false);
+  expect(starting.title).toContain("Starting");
+  // The gate lifts on its own, so the same talk is rehearsable again afterwards.
+  expect(
+    rehearsalReadiness({ deckFile: "slides/t-x.html", loading: false, preparing: false }).ok,
+  ).toBe(true);
+});
+
 test("the counter is 1-based, and says nothing before the deck does", () => {
   expect(positionLabel(null)).toBe("—");
   expect(positionLabel({ index: 0, total: 12 })).toBe("1 / 12");
   expect(positionLabel({ index: 11, total: 12 })).toBe("12 / 12");
+});
+
+// --- ending a rehearsal ------------------------------------------------------
+
+const onPage = (index: number, at: number): RehearsalEvent => ({
+  kind: "slide",
+  at,
+  index,
+  slideKind: "content",
+  title: `Slide ${index}`,
+});
+
+// A source whose last words only arrive while it is being stopped, which is what
+// the desktop one does: stop() sends the final segment and waits for every
+// upload still out.
+function lateSource(events: RehearsalEvent[], said: string): TranscriptSource {
+  return {
+    start: async () => {},
+    cut: () => {},
+    stop: async () => {
+      events.push(utteranceEvent({ text: said, startedAt: 2_000, endedAt: 3_000 }));
+    },
+  };
+}
+
+const finishInput = (events: RehearsalEvent[], save: (run: RehearsalRun) => Promise<unknown>) => ({
+  talkId: "t-1",
+  deckFile: "slides/t-1.html",
+  id: "run-1",
+  startedAt: 1_000,
+  endedAt: 4_000,
+  events: () => events,
+  save,
+});
+
+test("the run is built out of what arrived while the source was stopping", async () => {
+  const events: RehearsalEvent[] = [onPage(0, 1_500)];
+  const written: RehearsalRun[] = [];
+  const saved = await finishRun({
+    ...finishInput(events, async (run) => void written.push(run)),
+    source: lateSource(events, "the last thing I said"),
+  });
+  expect(saved).toBe(true);
+  expect(written).toHaveLength(1);
+  expect(written[0].pages[0].transcript).toBe("the last thing I said");
+  // Stamped when the reader finished, not when the upload came back.
+  expect(written[0].endedAt).toBe(4_000);
+});
+
+test("a pass that recorded no page is not written and is not news", async () => {
+  const written: RehearsalRun[] = [];
+  const saved = await finishRun(finishInput([], async (run) => void written.push(run)));
+  expect(saved).toBe(false);
+  expect(written).toHaveLength(0);
+});
+
+test("a write that failed is not reported as a run", async () => {
+  const realWarn = console.warn;
+  console.warn = () => {};
+  try {
+    const saved = await finishRun(
+      finishInput([onPage(0, 1_500)], () => Promise.reject(new Error("disk full"))),
+    );
+    expect(saved).toBe(false);
+  } finally {
+    console.warn = realWarn;
+  }
+});
+
+test("a source that will not stop still costs only its own words", async () => {
+  const realWarn = console.warn;
+  console.warn = () => {};
+  try {
+    const events: RehearsalEvent[] = [onPage(0, 1_500)];
+    const written: RehearsalRun[] = [];
+    const saved = await finishRun({
+      ...finishInput(events, async (run) => void written.push(run)),
+      source: {
+        start: async () => {},
+        cut: () => {},
+        stop: () => Promise.reject(new Error("the recorder is gone")),
+      },
+    });
+    expect(saved).toBe(true);
+    expect(written[0].pages[0].transcript).toBe("");
+  } finally {
+    console.warn = realWarn;
+  }
 });
