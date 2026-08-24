@@ -6,10 +6,15 @@
 import { expect, mock, test } from "bun:test";
 // Type-only, so it is erased and never loads the module before mock.module runs.
 import type { Settings } from "../src/platform/app/settings";
+import { pluginFsSurface } from "./support/stub-surface";
 
 // In-memory backing for the mocked @tauri-apps/plugin-fs used by loadSettings.
+// The surface spread first is the whole plugin; the keys below are this file's
+// disk and win over it. mock.module is process-wide, so a name missing here
+// would break whichever file loads next (docs/pitfall/119).
 let fileContent: string | null = null;
 mock.module("@tauri-apps/plugin-fs", () => ({
+  ...pluginFsSurface(),
   BaseDirectory: { AppData: 1 },
   exists: async () => fileContent !== null,
   mkdir: async () => {},

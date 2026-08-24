@@ -9,6 +9,7 @@
 
 import { afterAll, afterEach, beforeEach, expect, mock, test } from "bun:test";
 import { useDom } from "../../support/dom";
+import { pluginOsSurface } from "../../support/stub-surface";
 
 // Every invoke the composer makes, recorded. The one this file is here for is
 // the release the hold bar sends as it goes away: the native side keeps the
@@ -38,6 +39,7 @@ beforeEach(() => {
 // assume the desktop mic (tests/ai/voice/composer.test.tsx).
 let host = "ios";
 mock.module("@tauri-apps/plugin-os", () => ({
+  ...pluginOsSurface(),
   platform: () => host,
   arch: () => "x86_64",
   family: () => "unix",

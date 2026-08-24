@@ -5,12 +5,21 @@
 
 import { test, expect, mock } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
+import { pluginOsSurface } from "../../support/stub-surface";
 
 // The render tests stand in for a desktop host: capture is a Rust command
 // compiled `#[cfg(desktop)]`, and without the plugin the composer would rightly
 // hide the mic (see hasNativeRecorder). This says nothing about the prop rules,
 // which the resolver tests cover directly.
-mock.module("@tauri-apps/plugin-os", () => ({ platform: () => "linux" }));
+//
+// The whole module's surface goes in, not just platform: mock.module is
+// process-wide and does not roll back, so a file loading after this one that
+// imports hostname off this module would otherwise fail to link and not run at
+// all (docs/pitfall/119).
+mock.module("@tauri-apps/plugin-os", () => ({
+  ...pluginOsSurface(),
+  platform: () => "linux",
+}));
 import { Composer, resolveComposerVoice } from "../../../src/ui/components/chat/chat";
 
 // The mic button's title/aria-label; its presence in the markup means the mic

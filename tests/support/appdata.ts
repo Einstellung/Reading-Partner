@@ -16,11 +16,18 @@
 // export is here for the same reason — a half-mocked module breaks whichever
 // file loads next.
 //
+// pluginFs and core therefore start from the real modules' full surface
+// (tests/support/stub-surface.ts) and the disk below overrides the names it
+// answers for. What the disk does not name — rename, the watchers, the handle
+// API — resolves to a dead-host no-op rather than to nothing at all.
+//
 // readGuardedJson mirrors src/platform/app/atomic-fs.ts: missing, ok, or
 // corrupt — and corrupt says whether the bad bytes could be moved aside, which
 // is what a caller uses to decide it may write. The real one is tested against
 // its own mocked plugin in tests/atomic-fs.test.ts; this is the shape callers
 // are written against.
+
+import { apiCoreSurface, pluginFsSurface } from "./stub-surface";
 
 export interface FakeAppData {
   /** Text files, by AppData-relative path. */
@@ -65,6 +72,7 @@ export function makeAppData(): FakeAppData {
   };
 
   const pluginFs: Record<string, unknown> = {
+    ...pluginFsSurface(),
     BaseDirectory: { AppData: 1 },
     exists: async (path: string) => path === "" || files.has(path) || blobs.has(path),
     mkdir: async () => {},
@@ -96,6 +104,7 @@ export function makeAppData(): FakeAppData {
   };
 
   const core: Record<string, unknown> = {
+    ...apiCoreSurface(),
     invoke: async (cmd: string, args: { path: string; contents?: string }) => {
       if (cmd === "write_text_file_atomic") {
         files.set(args.path, args.contents ?? "");
