@@ -41,7 +41,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 172）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 173）。
 
 ## EmbedPDF 引擎
 
@@ -238,6 +238,7 @@
 - [151-a-dev-build-registers-the-dev-binary-for-login](./151-a-dev-build-registers-the-dev-binary-for-login.md) — dev 下打开开机启动写进登录项的是 `target/debug` 那个二进制，它的 devUrl 指着 vite dev server，开机起来只有一张 connection refused 错误页；手删还会被下次启动的对齐写回去。dev 构建里开机启动整个当作不可用，启动时的对齐无条件 `disable()`，`device.json` 里的意愿留着等打包版
 - [169-a-nul-byte-makes-the-whole-file-invisible-to-grep](./169-a-nul-byte-makes-the-whole-file-invisible-to-grep.md) — 源码里写死的 0x00 字节（不是 `\0` 转义）让整个文件对 grep 变二进制：GNU grep 的提示走 stderr、退出码还是 0，会话里套了 `-I` 的 ugrep 连提示都没有，于是「grep 扫不到这个文件」和「这个符号没人用」长得一模一样，一次审计差点删掉一个还在被 import 的模块。改回 `\0` 转义，`tests/source-is-text.test.ts` 扫 `src`/`tests`/`scripts` 的每个 `.ts`/`.tsx`
 - [171-a-leaked-spy-fails-someone-elses-file](./171-a-leaked-spy-fails-someone-elses-file.md) — 装在模块顶层的 `spyOn` 装完就一直是假的，后面每个文件都看得见，`afterAll` 里的还原在文件顶层抛错时不跑；随机文件顺序下挂的全是没装 spy 的文件（seed 23 62 fail）。`bunfig.toml` 的 `[test] preload` 挂 `tests/support/preload.ts` 做全局 `beforeEach(mock.restore())`，spy 一律装在 `beforeEach` 或用例体里——装模块顶层会从第二个用例起静默失效，拿到真实现
+- [172-bunfig-is-found-from-the-working-directory](./172-bunfig-is-found-from-the-working-directory.md) — bun 按当前工作目录找 `bunfig.toml`，不往上找项目根；`cd tests && bun test reading/` 于是没有 preload，坑 171 那条全局 `beforeEach(mock.restore())` 整个不装，模块顶层的 spy 照旧漏给下一个文件，而且一句提示都没有。`tests/support/gate.ts` 一个惰性 flag 由 preload 点亮，`tests/preload-gate.test.ts` 断言它为真并再用两个用例断言还原真的发生；只在选中了这个文件的运行里生效
 
 ## 历史（zotero/reader 引擎时代）
 
