@@ -5,14 +5,7 @@
 // the real model through runAgentTurn with the same provider config as chat, and
 // a tiny change feed so the observations panel refreshes after background writes.
 
-import {
-  BaseDirectory,
-  exists,
-  mkdir,
-  readDir,
-  readTextFile,
-  remove,
-} from "@tauri-apps/plugin-fs";
+import { appData } from "../platform/app/appdata";
 import { writeTextAtomic } from "../platform/app/atomic-fs";
 import { resolveModel } from "../ai/model-call";
 import { runSubagentTurnLive } from "../ai/subagent";
@@ -74,20 +67,20 @@ import {
 
 const tauriFs: ObservationFs = {
   async read(path) {
-    if (!(await exists(path, { baseDir: BaseDirectory.AppData }))) return null;
-    return readTextFile(path, { baseDir: BaseDirectory.AppData });
+    if (!(await appData.exists(path))) return null;
+    return appData.readText(path);
   },
   async write(path, content) {
     const dir = path.slice(0, path.lastIndexOf("/"));
-    if (dir) await mkdir(dir, { baseDir: BaseDirectory.AppData, recursive: true });
+    if (dir) await appData.mkdirp(dir);
     await writeTextAtomic(path, content);
   },
   async remove(path) {
-    await remove(path, { baseDir: BaseDirectory.AppData });
+    await appData.remove(path);
   },
   async listDir(path) {
-    if (!(await exists(path, { baseDir: BaseDirectory.AppData }))) return [];
-    const entries = await readDir(path, { baseDir: BaseDirectory.AppData });
+    if (!(await appData.exists(path))) return [];
+    const entries = await appData.readDir(path);
     return entries.filter((e) => e.isFile).map((e) => e.name);
   },
 };

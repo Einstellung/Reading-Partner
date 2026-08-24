@@ -13,11 +13,7 @@
 // then it is empty and triage judges on an item's own merit.
 // Persisted to AppData/user-profile.md.
 
-import {
-  BaseDirectory,
-  exists,
-  readTextFile,
-} from "@tauri-apps/plugin-fs";
+import { appData } from "../../platform/app/appdata";
 import { readGuardedText, writeTextAtomic } from "../../platform/app/atomic-fs";
 import type { GuessState } from "./guess";
 
@@ -127,10 +123,10 @@ export const GUESS_STATE_FILE = "profile-guess.json";
 
 export async function loadGuessState(): Promise<GuessState> {
   try {
-    if (!(await exists(GUESS_STATE_FILE, { baseDir: BaseDirectory.AppData }))) {
+    if (!(await appData.exists(GUESS_STATE_FILE))) {
       return { lastRunAt: null, lastMemoryAt: null };
     }
-    const raw = await readTextFile(GUESS_STATE_FILE, { baseDir: BaseDirectory.AppData });
+    const raw = await appData.readText(GUESS_STATE_FILE);
     const parsed = JSON.parse(raw) as Partial<GuessState>;
     return {
       lastRunAt: typeof parsed.lastRunAt === "number" ? parsed.lastRunAt : null,

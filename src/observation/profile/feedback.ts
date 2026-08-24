@@ -11,11 +11,7 @@
 // answers "" for a file that is not there and null for one that would not open,
 // and appendFeedback writes nothing on null.
 
-import {
-  BaseDirectory,
-  exists,
-  readTextFile,
-} from "@tauri-apps/plugin-fs";
+import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 
 export const FEEDBACK_FILE = "info-feedback.jsonl";
@@ -57,8 +53,8 @@ export function parseFeedbackLog(text: string): FeedbackEvent[] {
 // platform/app/atomic-fs.ts, the JSON-shaped version of this distinction.
 async function readLogText(): Promise<string | null> {
   try {
-    if (!(await exists(FEEDBACK_FILE, { baseDir: BaseDirectory.AppData }))) return "";
-    return await readTextFile(FEEDBACK_FILE, { baseDir: BaseDirectory.AppData });
+    if (!(await appData.exists(FEEDBACK_FILE))) return "";
+    return await appData.readText(FEEDBACK_FILE);
   } catch (e) {
     console.warn(`failed to read ${FEEDBACK_FILE}`, e);
     return null;
