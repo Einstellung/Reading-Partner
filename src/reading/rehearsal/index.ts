@@ -3,7 +3,16 @@
 // up when and what was said to it. Recording only — no feedback, no AI, no UI.
 
 export { buildRun, type BuildRunInput } from "./build";
-export type { TranscriptSource } from "./source";
+export { createDesktopTranscriptSource } from "./desktop-source";
+export {
+  createSegmentedTranscriptSource,
+  MAX_SEGMENT_SECONDS,
+  type RecordingSession,
+  type Schedule,
+  type SegmentedSourceOptions,
+  type TranscribeSegment,
+} from "./segmented-source";
+export type { TranscriptSource, Utterance } from "./source";
 export { appendRun, deleteRehearsals, loadRehearsals, rehearsalFile } from "./store";
 export { countWords, runSummary, type RunSummary } from "./summary";
 export {
