@@ -15,19 +15,8 @@
 // hundreds of megabytes through the IPC as a JSON number array is not viable
 // (pitfall 29).
 
-import { BaseDirectory } from "@tauri-apps/plugin-fs";
 import { appData } from "./appdata";
 import { reportStoreError } from "./store-errors";
-
-/**
- * The base every data file in the app is addressed from. Passed to the fs
- * plugin as-is, spread when a call needs more (`{ ...APPDATA, recursive: true }`).
- *
- * On its way out: the callers that still pass it are being moved onto appData,
- * which says the base once. This and the plugin import above go with the last
- * of them.
- */
-export const APPDATA = { baseDir: BaseDirectory.AppData } as const;
 
 // Who to tell when a file is replaced. A store that holds a file's contents in
 // memory between reads is only right for as long as nothing else replaces the
