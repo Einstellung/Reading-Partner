@@ -10,6 +10,7 @@ import {
   formatElapsed,
   formatRunDate,
   hasRecordedPages,
+  isPageTurn,
   positionLabel,
   readDeckSignal,
   rehearsalReadiness,
@@ -125,6 +126,25 @@ test("coming back to a page later is a second visit", () => {
   events = withSlideEvent(events, readDeckSignal(slide(1)) as never, 200);
   events = withSlideEvent(events, readDeckSignal(slide(0)) as never, 300);
   expect(events.map((e) => (e.kind === "slide" ? e.index : -1))).toEqual([0, 1, 0]);
+});
+
+// What the view cuts the recording on. A resize makes the deck report the page
+// that is already up; cutting on that would put a segment boundary in the middle
+// of a page and hang the words after it on a second visit that never happened.
+test("a page turn is a report of a page that is not the one on screen", () => {
+  const first = readDeckSignal(slide(0)) as never;
+  expect(isPageTurn([], first)).toBe(true);
+
+  let events: RehearsalEvent[] = withSlideEvent([], first, 100);
+  expect(isPageTurn(events, readDeckSignal(slide(0)) as never)).toBe(false);
+  expect(isPageTurn(events, readDeckSignal(slide(1)) as never)).toBe(true);
+
+  // Words on the page do not turn a repeat into a turn, and going back to a page
+  // is one.
+  events = [...events, utteranceEvent({ text: "and so", startedAt: 150, endedAt: 300 })];
+  expect(isPageTurn(events, readDeckSignal(slide(0)) as never)).toBe(false);
+  events = withSlideEvent(events, readDeckSignal(slide(1)) as never, 400);
+  expect(isPageTurn(events, readDeckSignal(slide(0)) as never)).toBe(true);
 });
 
 test("an utterance between two reports of the same page does not split it", () => {

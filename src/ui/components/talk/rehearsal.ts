@@ -107,21 +107,30 @@ export function endEvent(at: number): RehearsalEvent {
   return { kind: "end", at };
 }
 
+// Whether this report is the reader moving, or the deck repeating the page that
+// is already on screen. The deck re-runs its own show() on every window resize,
+// so a rotation or a window drag reports the current page again. Going 3 → 4 → 3
+// is a real second visit and counts.
+//
+// A page turn is also where the transcript is cut (docs/43), which is why this
+// is its own function: the run's events and the recording have to agree on what
+// a turn is, or a resize would put a segment boundary in the middle of a page.
+export function isPageTurn(events: readonly RehearsalEvent[], sig: DeckSlide): boolean {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e.kind !== "slide") continue;
+    return e.index !== sig.index;
+  }
+  return true;
+}
+
 // Append a page report, unless it repeats the page that is already on screen.
-// The deck re-runs its own show() on every window resize, so a rotation or a
-// window drag would otherwise close the current page and open an identical one
-// half a second later. Going 3 → 4 → 3 is a real second visit and is kept.
 export function withSlideEvent(
   events: readonly RehearsalEvent[],
   sig: DeckSlide,
   at: number,
 ): RehearsalEvent[] {
-  for (let i = events.length - 1; i >= 0; i--) {
-    const e = events[i];
-    if (e.kind !== "slide") continue;
-    if (e.index === sig.index) return events.slice();
-    break;
-  }
+  if (!isPageTurn(events, sig)) return events.slice();
   return [...events, slideEvent(sig, at)];
 }
 

@@ -22,11 +22,37 @@
 //     uploads finished in.
 //   - A segment that will not transcribe is retried once and then given up on,
 //     as empty text. One page loses its words; the run stands.
+//   - A page nobody spoke to is not sent at all. It still takes its place in the
+//     queue, empty, so the order behind it is untouched.
 
 import type { TranscriptSource, Utterance } from "./source";
 
 // Longest a single segment may run before this source cuts one itself.
 export const MAX_SEGMENT_SECONDS = 60;
+
+// Whether a segment has any audio in it. A page the reader turned past without
+// speaking cuts a valid WAV with an empty data chunk (recorder.ts, and
+// src-tauri/src/voice.rs writes the header either way), and sending that costs
+// an upload and a retry to be told there were no words in silence.
+//
+// The data chunk's declared length is what says so, not the file's size: a
+// header-only WAV is 44 bytes today and the number is the encoder's business,
+// not this file's. Bytes this cannot read as a WAV at all are sent as they are —
+// this skips what it can prove is silent, and guesses at nothing.
+export function wavHasSamples(wav: Uint8Array): boolean {
+  if (wav.length < 12) return true;
+  const view = new DataView(wav.buffer, wav.byteOffset, wav.byteLength);
+  const tag = (at: number) => String.fromCharCode(wav[at], wav[at + 1], wav[at + 2], wav[at + 3]);
+  if (tag(0) !== "RIFF" || tag(8) !== "WAVE") return true;
+  // Walk the chunks: `data` need not be the first one, and a chunk of odd length
+  // is followed by a pad byte.
+  for (let at = 12; at + 8 <= wav.length; ) {
+    const size = view.getUint32(at + 4, true);
+    if (tag(at) === "data") return size > 0;
+    at += 8 + size + (size % 2);
+  }
+  return true;
+}
 
 // The recording session, as this source uses it (ai/voice/recorder.ts): capture
 // starts once and runs to the end of the rehearsal, and a cut hands back what
@@ -82,6 +108,12 @@ class SegmentedTranscriptSource implements TranscriptSource {
   private readonly maxSegmentSeconds: number;
 
   private status: "idle" | "running" | "stopped" = "idle";
+  // The one stop in progress. Every later caller waits on this same promise
+  // rather than being told the source is already stopped: the view stops the
+  // source from an effect cleanup and again when it writes the run (docs/43),
+  // and a second call that returned early would let the run be built while the
+  // last segments were still on their way up.
+  private stopping: Promise<void> | null = null;
   private onUtterance: ((u: Utterance) => void) | null = null;
   private segmentStartedAt = 0;
   private cancelTimer: (() => void) | null = null;
@@ -124,8 +156,17 @@ class SegmentedTranscriptSource implements TranscriptSource {
     this.arm();
   }
 
-  async stop(): Promise<void> {
-    if (this.status !== "running") return;
+  stop(): Promise<void> {
+    if (this.stopping) return this.stopping;
+    // Never started, so there is nothing out and nothing to wait for. Not
+    // remembered either: a source stopped before it started can still be
+    // started, and would then have a stop of its own to do.
+    if (this.status !== "running") return Promise.resolve();
+    this.stopping = this.runStop();
+    return this.stopping;
+  }
+
+  private async runStop(): Promise<void> {
     this.status = "stopped";
     this.disarm();
     // The last segment is a segment: what was said to the page that was up when
@@ -160,7 +201,10 @@ class SegmentedTranscriptSource implements TranscriptSource {
     );
     const trip = audio
       .then(
-        (wav) => this.transcribeOnce(wav),
+        // Silence settles as empty text without leaving the machine. The segment
+        // keeps its place in the queue, so the pages behind it come out where
+        // they were spoken.
+        (wav) => (wavHasSamples(wav) ? this.transcribeOnce(wav) : ""),
         // No audio came back. There is nothing to send and nothing to retry.
         () => "",
       )
