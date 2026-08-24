@@ -2,7 +2,7 @@
 // it (docs/31, "界面" — 讲是这个 topic 下的几场讲).
 //
 // A talk's state is two questions, and they are answered from two places that
-// share one id: how far the rehearsal has got, which is the talk file, and
+// share one id: how far the retell has got, which is the talk file, and
 // whether a deck has come out of it, which is the deck registry
 // (slides/talks.json, keyed by the same talk id). The second one arrives as a
 // plain map from the caller rather than as the registry's own type — the deck is
@@ -18,7 +18,7 @@ export interface MaterialCandidate extends TalkMaterial {
 
 // What a new talk starts with ticked (docs/31: 默认把这个 topic 里有痕迹的材料放进去,
 // 用户在里面减). A material with no marks is one the reader has not read against
-// this question yet, and a rehearsal of it would have nothing of theirs to work
+// this question yet, and a retell of it would have nothing of theirs to work
 // from. When nothing in the topic has been marked, everything is offered rather
 // than nothing — an empty dialog gives the reader no way forward.
 export function defaultMaterialSelection(candidates: readonly MaterialCandidate[]): string[] {

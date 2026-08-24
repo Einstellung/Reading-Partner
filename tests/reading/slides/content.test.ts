@@ -63,7 +63,7 @@ test("contentUserMessage handles a slide with no notes", () => {
   expect(contentUserMessage(slide, "")).toContain("No source notes");
 });
 
-// The reader's own points come from the rehearsal (docs/31) and reach this stage
+// The reader's own points come from the retell (docs/31) and reach this stage
 // without having gone through the plan call's wording. They are what the slide
 // says; the chapter notes under them are only background for filling them out.
 test("contentUserMessage carries the reader's points verbatim, above the notes", () => {
@@ -76,7 +76,7 @@ test("contentUserMessage carries the reader's points verbatim, above the notes",
   expect(msg).toContain("not a second source of points");
 });
 
-// A rehearsed chapter may have no note at all; the points still carry the slide,
+// A retold chapter may have no note at all; the points still carry the slide,
 // so it must not be told it has nothing to write from.
 test("a slide with points and no notes is not told it has no material", () => {
   const slide: SlideRun = { index: 2, title: "Openings", kind: "content", contentStatus: "pending" };

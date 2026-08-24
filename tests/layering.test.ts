@@ -73,7 +73,7 @@ const LAYER: Record<string, Layer> = {
   "reading/prep/chapters": "domain",
   "reading/prep/papers": "domain",
   "reading/rehearsal": "domain",
-  "reading/runthrough": "domain",
+  "reading/retell": "domain",
   "reading/session": "domain",
   "reading/slides": "domain",
   "reading/sources": "domain",

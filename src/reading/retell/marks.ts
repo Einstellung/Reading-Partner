@@ -1,4 +1,4 @@
-// The reader's marks, bucketed by chapter, for the rehearsal prompt.
+// The reader's marks, bucketed by chapter, for the retell prompt.
 //
 // docs/31: the marks are the main material and the book is the background. They
 // are the prompter — what the reader stopped for — so the AI can hear which of
@@ -7,11 +7,11 @@
 // them out so that is possible.
 
 import { chapterOfPage } from "./skeleton";
-import type { Mark, RehearsalChapter } from "./types";
+import type { Mark, RetellChapter } from "./types";
 
 // Trim to `max` characters on a word boundary, adding an ellipsis when cut. The
 // same shape as reading/context.ts's clip, kept local: importing it would make
-// reading/rehearsal depend on the group root that assembles the turn, and the
+// reading/retell depend on the group root that assembles the turn, and the
 // turn already depends on this unit (tests/layering.test.ts calls that a cycle).
 function clip(text: string, max: number): string {
   const t = text.trim();
@@ -24,14 +24,14 @@ function clip(text: string, max: number): string {
 // A single mark's text cap. Long enough that a marked paragraph survives whole,
 // short enough that one runaway selection cannot eat the chapter.
 const MARK_MAX = 400;
-// The trimmed form (the budget ladder's rehearsal-marks rung).
+// The trimmed form (the budget ladder's retell-marks rung).
 const MARK_MAX_TIGHT = 140;
 const PER_CHAPTER_TIGHT = 6;
 
 // Group marks by chapter index, in page order. Marks with no page and empty
 // marks are dropped: neither can be pointed at, so neither is evidence.
 export function bucketMarks(
-  chapters: readonly RehearsalChapter[],
+  chapters: readonly RetellChapter[],
   marks: readonly Mark[],
 ): Map<number, Mark[]> {
   const out = new Map<number, Mark[]>();
@@ -63,9 +63,9 @@ export interface MarksFormat {
 
 // The marks section of the prompt. Chapters with no marks are still listed, with
 // one line saying so: "this chapter has nothing marked in it" is itself
-// something the rehearsal can ask about.
+// something the retell can ask about.
 export function formatMarks(
-  chapters: readonly RehearsalChapter[],
+  chapters: readonly RetellChapter[],
   buckets: ReadonlyMap<number, Mark[]>,
   opts: MarksFormat = {},
 ): string {

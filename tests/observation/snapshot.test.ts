@@ -58,7 +58,7 @@ test("empty entries yield an empty snapshot", () => {
   expect(buildObservationSnapshot([])).toBe("");
 });
 
-// The rehearsal asks its first question about whatever the reader got stuck on,
+// The retell asks its first question about whatever the reader got stuck on,
 // so a trim by recency alone can take away the line that rule runs on: the two
 // beliefs below are newer than every stuck-point.
 test("a trim keeps the types the caller leads with, newest first inside a type", () => {

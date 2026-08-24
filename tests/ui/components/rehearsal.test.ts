@@ -1,5 +1,5 @@
 // What the host makes of a deck's messages, and what it puts on the bar
-// (src/ui/components/talk/runthrough.ts). The view around it is an iframe and a
+// (src/ui/components/talk/rehearsal.ts). The view around it is an iframe and a
 // listener; everything that can be wrong is in here. Run: bun test.
 
 import { expect, test } from "bun:test";
@@ -16,8 +16,8 @@ import {
   slideEvent,
   utteranceEvent,
   withSlideEvent,
-} from "../../../src/ui/components/talk/runthrough";
-import type { RunthroughEvent } from "../../../src/reading/runthrough";
+} from "../../../src/ui/components/talk/rehearsal";
+import type { RehearsalEvent } from "../../../src/reading/rehearsal";
 
 const slide = (index: number, total = 12) => ({
   source: "deck",
@@ -120,7 +120,7 @@ test("re-reporting the page that is already up does not open a second visit", ()
 });
 
 test("coming back to a page later is a second visit", () => {
-  let events: RunthroughEvent[] = [];
+  let events: RehearsalEvent[] = [];
   events = withSlideEvent(events, readDeckSignal(slide(0)) as never, 100);
   events = withSlideEvent(events, readDeckSignal(slide(1)) as never, 200);
   events = withSlideEvent(events, readDeckSignal(slide(0)) as never, 300);
@@ -128,7 +128,7 @@ test("coming back to a page later is a second visit", () => {
 });
 
 test("an utterance between two reports of the same page does not split it", () => {
-  let events: RunthroughEvent[] = [];
+  let events: RehearsalEvent[] = [];
   events = withSlideEvent(events, readDeckSignal(slide(4)) as never, 100);
   events = [...events, utteranceEvent({ text: "and so", startedAt: 150, endedAt: 300 })];
   events = withSlideEvent(events, readDeckSignal(slide(4)) as never, 400);

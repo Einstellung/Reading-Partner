@@ -1,36 +1,36 @@
-// The rehearsal's two agent tools (src/reading/rehearsal/tools.ts): what
+// The retell's two agent tools (src/reading/retell/tools.ts): what
 // record_chapter_decision writes, what it raises in the conversation, and what
 // both tools say when the model asks for a chapter that does not exist.
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { buildRehearsalTools } from "../../../src/reading/rehearsal/tools";
-import type { RehearsalDecisionCardData } from "../../../src/reading/rehearsal/cards";
-import { REHEARSAL_VERSION } from "../../../src/reading/rehearsal/types";
+import { buildRetellTools } from "../../../src/reading/retell/tools";
+import type { RetellDecisionCardData } from "../../../src/reading/retell/cards";
+import { RETELL_VERSION } from "../../../src/reading/retell/types";
 import type {
-  RehearsalChapter,
-  RehearsalDecision,
-  RehearsalPlan,
-} from "../../../src/reading/rehearsal/types";
+  RetellChapter,
+  RetellDecision,
+  RetellPlan,
+} from "../../../src/reading/retell/types";
 
-const chapters: RehearsalChapter[] = [
+const chapters: RetellChapter[] = [
   { index: 1, title: "Openings", startPage: 1, endPage: 10, hasNote: true },
   { index: 2, title: "Middlegame", startPage: 11, endPage: 20, hasNote: false },
 ];
 
 function harness(notes: Record<number, string> = {}) {
-  const recorded: RehearsalDecision[] = [];
-  const cards: RehearsalDecisionCardData[] = [];
+  const recorded: RetellDecision[] = [];
+  const cards: RetellDecisionCardData[] = [];
   // Stands in for the talk: what record writes is what readPlan hands back, so
   // read_talk_outline is tested against decisions made in the same run. Appended
   // rather than sorted, because the talk keeps the order it recorded in.
-  let plan: RehearsalPlan | null = null;
-  const tools = buildRehearsalTools({
+  let plan: RetellPlan | null = null;
+  const tools = buildRetellTools({
     chapters,
     record: async (d) => {
       recorded.push(d);
       plan = {
-        version: REHEARSAL_VERSION,
+        version: RETELL_VERSION,
         createdAt: plan?.createdAt ?? d.updatedAt,
         updatedAt: d.updatedAt,
         decisions: [...(plan?.decisions ?? []).filter((x) => x.chapter !== d.chapter), d],
@@ -74,7 +74,7 @@ test("the decision raises a card carrying what was written", async () => {
   });
   expect(h.cards).toEqual([
     {
-      kind: "rehearsal-decision",
+      kind: "retell-decision",
       chapter: 2,
       title: "Middlegame",
       include: false,

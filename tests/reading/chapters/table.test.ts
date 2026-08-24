@@ -223,7 +223,7 @@ test("ranging sorts, de-dupes shared start pages, and clamps to the book", () =>
 });
 
 // No entries is no table. The one-chapter-that-is-the-book fallback belongs to
-// the caller that wants one (rehearsal/skeleton.ts), not here: a book with no
+// the caller that wants one (retell/skeleton.ts), not here: a book with no
 // divisions has no chapter table, and saying otherwise invents a chapter.
 test("no entries ranges to no chapters", () => {
   expect(chapterRanges([], 12)).toEqual([]);

@@ -1,4 +1,4 @@
-// One talk, opened (docs/31, "界面"): the rehearsal conversation in the main
+// One talk, opened (docs/31, "界面"): the retell conversation in the main
 // area and the outline it is growing beside it.
 //
 // It replaces the topic's sections while it is open, the way the saved-article
@@ -26,9 +26,9 @@ import { outlineRows, type Talk } from "../../../reading/talks";
 import { defaultNavOpen, readNavEnv } from "../base/topic-nav";
 import DeckDialog from "./DeckDialog";
 import OutlinePane from "./OutlinePane";
-import RunthroughView from "./RunthroughView";
-import { rehearsalReadiness } from "./runthrough";
-import { useRunthroughs, useTalkDeckFile } from "./useRunthrough";
+import RehearsalView from "./RehearsalView";
+import { rehearsalReadiness } from "./rehearsal";
+import { useRehearsals, useTalkDeckFile } from "./useRehearsal";
 import { useTalk } from "./useTalk";
 
 // The line under the talk's name: what it is being prepared from.
@@ -64,9 +64,9 @@ export default function TalkView(props: {
   const deck = useTalkDeckFile(props.talkId, deckKey);
   const readiness = rehearsalReadiness({ deckFile: deck.file, loading: deck.loading });
   // Bumped when a run ends: the only moment this device changes the history (a
-  // pull can too, and useRunthroughs says why it does not follow that).
+  // pull can too, and useRehearsals says why it does not follow that).
   const [runsKey, setRunsKey] = useState(0);
-  const runs = useRunthroughs(props.talkId, runsKey);
+  const runs = useRehearsals(props.talkId, runsKey);
 
   return (
     <CitationContext.Provider value={null}>
@@ -182,7 +182,7 @@ export default function TalkView(props: {
         </div>
 
         {rehearsing && talk.talk && deck.file && (
-          <RunthroughView
+          <RehearsalView
             talkId={talk.talk.id}
             talkName={talk.talk.name}
             deckFile={deck.file}

@@ -1,4 +1,4 @@
-// The rehearsal skeleton (src/reading/rehearsal/skeleton.ts): which structure it
+// The retell skeleton (src/reading/retell/skeleton.ts): which structure it
 // takes the chapters from, how a page maps to a chapter, and how the list reads
 // to the model. Pure. Run: bun test.
 
@@ -7,7 +7,7 @@ import {
   buildSkeleton,
   chapterOfPage,
   formatSkeleton,
-} from "../../../src/reading/rehearsal/skeleton";
+} from "../../../src/reading/retell/skeleton";
 import type { SpineChapter } from "../../../src/reading/prep/chapters/types";
 import type { OutlineItem } from "../../../src/fulltext/types";
 
@@ -46,7 +46,7 @@ test("an empty notes plan is not a plan", () => {
   expect(buildSkeleton({ spineChapters: [], outline, pageCount: 90 }).source).toBe("outline");
 });
 
-test("neither: the whole book is one chapter, and the rehearsal still runs", () => {
+test("neither: the whole book is one chapter, and the retell still runs", () => {
   const s = buildSkeleton({ spineChapters: null, outline: [], pageCount: 12 });
   expect(s.source).toBe("whole-book");
   expect(s.chapters).toHaveLength(1);

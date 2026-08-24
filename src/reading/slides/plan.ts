@@ -104,8 +104,8 @@ function chapterLine(c: PlanChapter): string {
 
 // One book as the planner reads it: overview (the through-line), chapter list
 // (what the slides can be sourced from), figure list. Shared with the
-// rehearsal-outline path (outline.ts), which renders rehearsed books its own way
-// but still needs this one for the books that were never rehearsed.
+// retell-outline path (outline.ts), which renders retold books its own way
+// but still needs this one for the books that were never retold.
 export function bookBlock(b: PlanBook): string {
   const lines = [`=== Book "${b.title}" (bookId: ${b.bookId}) ===`];
   if (b.overview.trim()) {

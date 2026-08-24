@@ -1,4 +1,4 @@
-// The rehearsal's compression ladder (src/reading/talks/ladder.ts): what a talk
+// The retell's compression ladder (src/reading/talks/ladder.ts): what a talk
 // turn gives up when it does not fit the window, in what order, and what the
 // reader is told for it. Same contract as the reading ladder, different
 // material. Run: bun test.
@@ -14,9 +14,9 @@ const FITS_AT = WINDOW - PI_CONTEXT_SAFETY_TOKENS - 4096;
 const EVEN: Record<TalkReductionId, number> = {
   "figure-catalog": 5_000,
   "observation-trim": 5_000,
-  "rehearsal-notes": 5_000,
+  "retell-notes": 5_000,
   "tool-result-stubs": 5_000,
-  "rehearsal-marks": 5_000,
+  "retell-marks": 5_000,
   "history-trim": 5_000,
 };
 
@@ -35,22 +35,22 @@ test("the talk ladder's order and its wording are pinned", () => {
   expect(TALK_LADDER.map((r) => [r.id, r.notice ?? ""])).toEqual([
     ["figure-catalog", ""],
     ["observation-trim", ""],
-    ["rehearsal-notes", ""],
+    ["retell-notes", ""],
     ["tool-result-stubs", ""],
     [
-      "rehearsal-marks",
+      "retell-marks",
       "your highlights are shortened here to fit; ask me to pull a chapter's marks up in full and I'll read them again",
     ],
     ["history-trim", "earlier turns of this conversation were left out to make room"],
   ]);
 });
 
-// The rehearsal's inlined chapter note is tier 2 like the tool results:
+// The retell's inlined chapter note is tier 2 like the tool results:
 // read_chapter_note fetches it straight back, so it goes without a word, and it
 // goes before the results the model asked for itself.
 test("the chapter note goes silently, ahead of the tool results", () => {
   const p = plan(FITS_AT + 11_000);
-  expect(p.apply[p.apply.length - 1]).toBe("rehearsal-notes");
+  expect(p.apply[p.apply.length - 1]).toBe("retell-notes");
   expect(p.apply).not.toContain("tool-result-stubs");
   expect(p.notice).toBe("");
 });
@@ -59,7 +59,7 @@ test("the chapter note goes silently, ahead of the tool results", () => {
 // the line says how to get them back, because read_annotations really can.
 test("shortening the reader's marks is told to the reader", () => {
   const p = plan(FITS_AT + 21_000);
-  expect(p.apply[p.apply.length - 1]).toBe("rehearsal-marks");
+  expect(p.apply[p.apply.length - 1]).toBe("retell-marks");
   expect(p.apply).not.toContain("history-trim");
   expect(p.notice).toBe(
     "Note: your highlights are shortened here to fit; ask me to pull a chapter's marks up in full and I'll read them again.",
@@ -82,9 +82,9 @@ test("the rungs that are not priced like the rest say so on the table", () => {
   expect(priced).toEqual({
     "figure-catalog": "prompt",
     "observation-trim": "prompt",
-    "rehearsal-notes": "bulk",
+    "retell-notes": "bulk",
     "tool-result-stubs": "none",
-    "rehearsal-marks": "bulk",
+    "retell-marks": "bulk",
     "history-trim": "messages",
   });
 });

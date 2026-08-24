@@ -12,7 +12,7 @@ export {
   setIncluded,
   slotAt,
   slotFor,
-  toRehearsalPlan,
+  toRetellPlan,
   toTalkDecision,
   upsertDecision,
   type CombinedChapters,

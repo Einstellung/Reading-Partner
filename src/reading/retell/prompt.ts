@@ -1,4 +1,4 @@
-// Rehearsal-mode system prompt (docs/31). Pure assembly.
+// Retell-mode system prompt (docs/31). Pure assembly.
 //
 // The shape mirrors classroom.ts — a stable instruction block, then the
 // variable material — but the posture is the opposite one. Classroom is the AI
@@ -23,17 +23,17 @@
 import { formatMarks } from "./marks";
 import { formatPlan } from "./plan";
 import { formatSkeleton } from "./skeleton";
-import type { Mark, RehearsalPlan, Skeleton } from "./types";
+import type { Mark, RetellPlan, Skeleton } from "./types";
 
 // A chapter note already on disk (prep-<bookId>/chapters/chapter-NN.md), inlined so the
 // AI knows what the reader's own notes pass already said about the chapter.
-export interface RehearsalNote {
+export interface RetellNote {
   chapter: number;
   title: string;
   body: string;
 }
 
-export interface RehearsalContext {
+export interface RetellContext {
   topicName: string;
   bookName: string;
   pageLabel: string | null;
@@ -41,8 +41,8 @@ export interface RehearsalContext {
   marks: ReadonlyMap<number, Mark[]>;
   // Chapter notes to inline. Empty when none exist or when the budget ladder
   // dropped them (read_chapter_note fetches one back).
-  notes: RehearsalNote[];
-  plan: RehearsalPlan | null;
+  notes: RetellNote[];
+  plan: RetellPlan | null;
   // Compact figure catalog for the book (M9), or "" when none were detected.
   figureCatalog?: string;
   // Whether the book's reading tools (read_pages / search_topic /
@@ -53,16 +53,16 @@ export interface RehearsalContext {
   fullMarks?: boolean;
 }
 
-// The opening user message for a rehearsal turn. The companion's kickoff asks
+// The opening user message for a retell turn. The companion's kickoff asks
 // the AI to explain a marked passage, which is the one thing this mode must not
 // do, so it gets its own.
-export const REHEARSAL_KICKOFF =
-  "Pick the rehearsal up from wherever the record above says it stands.";
+export const RETELL_KICKOFF =
+  "Pick the retell up from wherever the record above says it stands.";
 
 // The instruction block. Stable for a given book, so provider prompt caching can
 // hold it across the turns of one sitting.
-export const REHEARSAL_INSTRUCTIONS = [
-  "You are sitting in on a rehearsal. The reader has finished this book and is",
+export const RETELL_INSTRUCTIONS = [
+  "You are sitting in on a retell. The reader has finished this book and is",
   "preparing to give a talk about it to other people — out loud, to a room, soon.",
   "You are their audience and their examiner. You are not their teacher here.",
   "They do the talking; your job is to find out what they cannot yet say, and to",
@@ -71,7 +71,7 @@ export const REHEARSAL_INSTRUCTIONS = [
   "The rule everything else follows: never say for them the thing they are about",
   "to have to say. No summary of a chapter before they have spoken about it, no",
   '"so the argument is roughly X, right?", no finishing their sentence when they',
-  "pause. The moment you hand them the answer, the rehearsal is over and they",
+  "pause. The moment you hand them the answer, the retell is over and they",
   "walk into the room still unable to give it. This binds hardest where you know",
   "most: an observation that they got stuck here tells you what to ask about,",
   "never what to explain first. Ask, and open the book only once their answer has",
@@ -94,7 +94,7 @@ export const REHEARSAL_INSTRUCTIONS = [
   "  in this book — the spine of its argument in a handful of lines, not the table",
   "  of contents read back — and ask two things. Is this the spine, or have you got",
   "  it wrong? And which thread of it do they want this talk to be about? Their",
-  "  answer decides what you press on for the rest of the rehearsal.",
+  "  answer decides what you press on for the rest of the retell.",
   "- Stage two: chapter by chapter, in order. One question, two at most, then",
   "  stop and listen. When the chapter is done, settle what it contributes to the",
   "  talk and record it. Then the next chapter.",
@@ -172,19 +172,19 @@ export const REHEARSAL_INSTRUCTIONS = [
   "Your replies render as Markdown: math as $...$ / $$...$$, code fenced.",
 ].join("\n");
 
-export function buildRehearsalSystemPrompt(ctx: RehearsalContext): string {
+export function buildRetellSystemPrompt(ctx: RetellContext): string {
   const counts = new Map<number, number>();
   for (const c of ctx.skeleton.chapters) counts.set(c.index, (ctx.marks.get(c.index) ?? []).length);
 
   const lines: string[] = [
-    REHEARSAL_INSTRUCTIONS,
+    RETELL_INSTRUCTIONS,
     "",
     `The book: "${ctx.bookName}" (topic: ${ctx.topicName}).`,
   ];
   if (ctx.pageLabel) {
     lines.push(
       `The reader's book is open at page ${ctx.pageLabel} — where they stopped`,
-      "reading, not where the rehearsal is. The record below says that.",
+      "reading, not where the retell is. The record below says that.",
     );
   }
 

@@ -7,7 +7,7 @@ import { afterEach, expect, spyOn, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { CardPayload, CardRegistry } from "../../../src/ui/components/chat/chatParts";
 import type { ThreadMessage } from "../../../src/ui/components/chat/types";
-import type { RehearsalDecisionCardData } from "../../../src/reading/rehearsal/cards";
+import type { RetellDecisionCardData } from "../../../src/reading/retell/cards";
 import { useDom } from "../../support/dom";
 import { hushShell } from "../../support/shell";
 
@@ -25,8 +25,8 @@ const { CARD_REGISTRY } = await import("../../../src/ui/components/cardRegistry"
 const { MessageList } = await import("../../../src/ui/components/chat/chat");
 const InfoHomeModule = await import("../../../src/ui/components/info/InfoHome");
 
-const DECISION: RehearsalDecisionCardData = {
-  kind: "rehearsal-decision",
+const DECISION: RetellDecisionCardData = {
+  kind: "retell-decision",
   chapter: 3,
   title: "Endings",
   include: true,
@@ -50,7 +50,7 @@ function rowWithCard(): ThreadMessage[] {
 const STUB_TEXT = "stub card stood in for the real one";
 const STUB: CardRegistry = {
   ...CARD_REGISTRY,
-  "rehearsal-decision": () => <p>{STUB_TEXT}</p>,
+  "retell-decision": () => <p>{STUB_TEXT}</p>,
 };
 
 test("the card comes from the registry the host provided, not from chat's own import", () => {

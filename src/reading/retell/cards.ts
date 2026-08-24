@@ -3,18 +3,18 @@
 // component that renders it import the same definition and the dependency
 // direction stays components -> reading.
 
-import type { RehearsalDecision } from "./types";
+import type { RetellDecision } from "./types";
 
 // Shown when record_chapter_decision writes a chapter's decision. Durable: it is
-// the reader's receipt for a chapter, and a rehearsal is spread over sittings,
+// the reader's receipt for a chapter, and a retell is spread over sittings,
 // so a reopened thread has to still show what was settled.
 //
 // Read-only by design. Correcting a decision is a sentence to the AI, not a
 // button on the card (the conversation is the correction UI); the card exists so
 // the reader can see what was written down without being asked to trust it.
-export interface RehearsalDecisionCardData extends Omit<RehearsalDecision, "updatedAt"> {
-  kind: "rehearsal-decision";
+export interface RetellDecisionCardData extends Omit<RetellDecision, "updatedAt"> {
+  kind: "retell-decision";
 }
 
 // Every card the reading side contributes to the chat's payload union.
-export type ReadingCard = RehearsalDecisionCardData;
+export type ReadingCard = RetellDecisionCardData;

@@ -128,7 +128,7 @@ test("the plan message carries the reader's points verbatim and names the cuts",
   expect(msg).not.toContain("Whole-book overview");
 });
 
-// A talk can hold a material the rehearsal has not reached; that one still gets
+// A talk can hold a material the retell has not reached; that one still gets
 // its chapter list and overview to be planned from.
 test("a material with no decisions keeps its ordinary block", () => {
   const other: PlanBook = { ...book, bookId: "b2", title: "Other Book" };
@@ -155,7 +155,7 @@ test("a kept chapter with no chapter note is still citable", () => {
   expect(citableWithOutline([book], null)[0]).toBe(book);
 });
 
-// A material rehearsed off the PDF's own table of contents has decisions against
+// A material retold off the PDF's own table of contents has decisions against
 // chapters no notes plan ever enumerated; validation must not call them invented.
 test("a kept chapter the notes pass never enumerated is added to the chapter list", () => {
   const bare: PlanBook = { ...book, chapters: [], overview: "" };
@@ -191,7 +191,7 @@ test("a cut chapter cited alongside a kept one is stripped, and the slide says s
     outline(),
   );
   expect(out.slides[0].sourceChapters).toEqual([1]);
-  expect(out.slides[0].planNotice).toContain("Chapter 2 was cut in the rehearsal");
+  expect(out.slides[0].planNotice).toContain("Chapter 2 was cut in the retell");
 });
 
 test("a chapter with no decision is left out of a settled material's slide", () => {
@@ -201,7 +201,7 @@ test("a chapter with no decision is left out of a settled material's slide", () 
     o,
   );
   expect(out.slides[0].sourceChapters).toEqual([1]);
-  expect(out.slides[0].planNotice).toContain("Chapter 3 has no rehearsal decision");
+  expect(out.slides[0].planNotice).toContain("Chapter 3 has no retell decision");
 });
 
 // The chapter numbers of two materials collide, so a decision has to be matched

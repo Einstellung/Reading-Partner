@@ -1,4 +1,4 @@
-// The reading domain's chat cards. One so far: the receipt a rehearsal leaves
+// The reading domain's chat cards. One so far: the receipt a retell leaves
 // when it records what a chapter contributes to the talk (docs/31).
 //
 // Read-only on purpose. Changing a decision is a sentence to the AI, which
@@ -6,12 +6,12 @@
 // be a second, worse editor for something the conversation already edits well.
 // Presentational, Tailwind-only, like the info cards.
 
-import type { RehearsalDecisionCardData } from "../../../reading/rehearsal/cards";
+import type { RetellDecisionCardData } from "../../../reading/retell/cards";
 import type { CardComponentProps, CardRegistryFor } from "../chat/chatParts";
-import type { ReadingCard } from "../../../reading/rehearsal/cards";
+import type { ReadingCard } from "../../../reading/retell/cards";
 import { Badge } from "../ui/badge";
 
-export function RehearsalDecisionCard({ payload }: CardComponentProps<RehearsalDecisionCardData>) {
+export function RetellDecisionCard({ payload }: CardComponentProps<RetellDecisionCardData>) {
   const kept = payload.include;
   return (
     <div className="w-full max-w-md rounded-xl border border-black/10 bg-card p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
@@ -44,5 +44,5 @@ export function RehearsalDecisionCard({ payload }: CardComponentProps<RehearsalD
 }
 
 export const READING_CARD_REGISTRY: CardRegistryFor<ReadingCard["kind"]> = {
-  "rehearsal-decision": RehearsalDecisionCard,
+  "retell-decision": RetellDecisionCard,
 };

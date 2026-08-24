@@ -1,4 +1,4 @@
-// Turn assembly for a talk's rehearsal (src/reading/talks/turn.ts): which tools
+// Turn assembly for a talk's retell (src/reading/talks/turn.ts): which tools
 // are mounted with no book open, that the reader's marks arrive under the right
 // chapters, that a recorded decision comes back as a book's chapter, and that a
 // whole book of highlights is fitted to the window rather than sent over it.
@@ -19,7 +19,7 @@ import type { ObservationIndexEntry, ObservationType } from "../../../src/observ
 const { buildTalkTurn, OBSERVATION_ORDER_TIGHT } = await import(
   "../../../src/reading/talks/turn",
 );
-// The replay cap is the reading turn's; a rehearsal borrows it rather than
+// The replay cap is the reading turn's; a retell borrows it rather than
 // declaring a second one.
 const { HISTORY_KEEP } = await import("../../../src/reading/turn");
 const { combineChapters } = await import("../../../src/reading/talks/outline");
@@ -95,9 +95,9 @@ function input(over: Partial<Parameters<typeof buildTalkTurn>[0]> = {}) {
   };
 }
 
-test("the rehearsal prompt and its own tools, with no book open", async () => {
+test("the retell prompt and its own tools, with no book open", async () => {
   const turn = await buildTalkTurn(input());
-  expect(turn.systemPrompt).toContain("You are sitting in on a rehearsal");
+  expect(turn.systemPrompt).toContain("You are sitting in on a retell");
   expect(turn.systemPrompt).toContain("nothing recorded yet");
   expect(names(turn.tools)).toEqual([
     "observation_read",
@@ -109,7 +109,7 @@ test("the rehearsal prompt and its own tools, with no book open", async () => {
     "record_chapter_decision",
     "search_topic",
   ]);
-  expect(turn.messages[0].text).toContain("rehearsal");
+  expect(turn.messages[0].text).toContain("retell");
 });
 
 // read_pages says "the book the user is currently in"; with two materials there
@@ -365,7 +365,7 @@ test("marks too large for the window are shortened, and the reader is told", asy
 
 // The order the ladder gives things up in, seen from this path rather than from
 // the table. The figure catalog is redundancy and goes silently; the reader's
-// own marks are the material of a rehearsal, so shortening them is said out
+// own marks are the material of a retell, so shortening them is said out
 // loud; the conversation is below both.
 test("the talk ladder drops the catalog, then shortens the marks, and leaves the conversation whole", async () => {
   const annotations = Array.from({ length: 1_200 }, (_, i) => ({
@@ -422,7 +422,7 @@ test("read_chapter_note answers in combined chapter numbers", async () => {
 // lines. A chapter the reader read but could not give out loud is where the next
 // question should go, so cannot-explain sits directly behind stuck-point — ahead
 // of a belief, which only shapes how the question is phrased.
-test("the tight observation order keeps what the rehearsal asks its next question from", () => {
+test("the tight observation order keeps what the retell asks its next question from", () => {
   const e = (type: ObservationType, id: string, updated: string): ObservationIndexEntry => ({
     id,
     type,

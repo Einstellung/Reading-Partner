@@ -1,26 +1,17 @@
-// Rehearsal mode (docs/31): the posture where the AI questions and the reader
-// answers, and the by-product is the outline of the talk they are preparing. The
-// conversation it runs in belongs to a talk (reading/talks); everything here is
-// the assembly that conversation is made of, and none of it touches disk.
+// A rehearsal (docs/31): the reader gives the talk once against its finished
+// deck, the AI silent throughout, and what is left is a record of which page was
+// up when and what was said to it. Recording only — no feedback, no AI, no UI.
 
-export type { ReadingCard, RehearsalDecisionCardData } from "./cards";
-export { bucketMarks, formatMarks } from "./marks";
-export { formatOutline, formatPlan, nextChapter } from "./plan";
+export { buildRun, type BuildRunInput } from "./build";
+export type { TranscriptSource } from "./source";
+export { appendRun, deleteRehearsals, loadRehearsals, rehearsalFile } from "./store";
+export { countWords, runSummary, type RunSummary } from "./summary";
 export {
-  buildRehearsalSystemPrompt,
-  REHEARSAL_INSTRUCTIONS,
-  REHEARSAL_KICKOFF,
-  type RehearsalContext,
-  type RehearsalNote,
-} from "./prompt";
-export { buildSkeleton, chapterOfPage, formatSkeleton, type SkeletonInput } from "./skeleton";
-export { buildRehearsalTools, type RehearsalToolDeps } from "./tools";
-export {
+  emptyLog,
+  normalizeLog,
   REHEARSAL_VERSION,
-  type Mark,
-  type RehearsalChapter,
-  type RehearsalDecision,
-  type RehearsalPlan,
-  type Skeleton,
-  type SkeletonSource,
+  type RehearsalEvent,
+  type RehearsalLog,
+  type RehearsalPage,
+  type RehearsalRun,
 } from "./types";

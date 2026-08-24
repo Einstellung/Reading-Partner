@@ -1,6 +1,6 @@
 // Where the words come from. Declared here and implemented elsewhere: the
 // streaming ASR this needs is the voice line's (docs/27, docs/33), and hooking
-// it up is not part of recording a run-through.
+// it up is not part of recording a rehearsal.
 //
 // A run with no source is a legal run, not a broken one. The deck still reports
 // its pages, so what lands on disk is the shape of the talk — which page, how

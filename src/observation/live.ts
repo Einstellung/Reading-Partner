@@ -1,7 +1,7 @@
 // Live wiring of the observation module: the Tauri fs behind ObservationFs, one
 // adapter per topic for the app's lifetime, the distillation entry points — a
 // reading conversation on hangup or a trim, a stretch of silent marking picked
-// up by the arrears sweep, a rehearsal when the reader leaves the talk — all on
+// up by the arrears sweep, a retell when the reader leaves the talk — all on
 // the real model through runAgentTurn with the same provider config as chat, and
 // a tiny change feed so the observations panel refreshes after background writes.
 
@@ -65,7 +65,7 @@ import {
   type DistillMessage,
   type DistillUnitPart,
 } from "./distill/distill";
-import { runRehearsalDistillPass } from "./distill/rehearsal";
+import { runRetellDistillPass } from "./distill/retell";
 import {
   createDistillGate,
   createSweeps,
@@ -592,7 +592,7 @@ export function startDistillSweeps(isThreadBusy: (threadId: string) => boolean):
   return sweeps.start(isThreadBusy);
 }
 
-export interface DistillRehearsalOptions {
+export interface DistillRetellOptions {
   topicId: string;
   topicName: string;
   talkId: string;
@@ -600,27 +600,27 @@ export interface DistillRehearsalOptions {
   // The talk's materials by title.
   materials: string[];
   threadId: string;
-  // The rehearsal conversation as it stands on disk, oldest first. Which part of
-  // it is new is worked out from the stored cursor (rehearsal.ts).
+  // The retell conversation as it stands on disk, oldest first. Which part of
+  // it is new is worked out from the stored cursor (retell.ts).
   messages: DistillMessage[];
   signal?: AbortSignal;
 }
 
-// One silent distillation pass over a rehearsal the reader has just left
+// One silent distillation pass over a retell the reader has just left
 // (docs/31). Same posture as distillThread: never throws, never surfaces UI, a
 // failed pass is a warn plus an event and the cursor stays where it was so the
 // next exit redoes the stretch.
 //
 // Unlike the reading trigger there is only one caller and one route into it —
 // the talk view unmounting — because every way out of a talk goes through that.
-export function distillRehearsal(opts: DistillRehearsalOptions): Promise<void> {
+export function distillRetell(opts: DistillRetellOptions): Promise<void> {
   const { threadId, topicId } = opts;
   return gate.run(threadId, async () => {
     try {
       // The chat model config, like the reading pass: this is a silent turn of the
       // reader's own conversation, not a background pipeline.
       const model = await resolveModel("chat");
-      const result = await runRehearsalDistillPass(
+      const result = await runRetellDistillPass(
         {
           topicName: opts.topicName,
           talkName: opts.talkName,
@@ -645,7 +645,7 @@ export function distillRehearsal(opts: DistillRehearsalOptions): Promise<void> {
       // back. Nothing ran, so nothing changed.
       if (!result.ran) return;
       if (!result.ok) {
-        console.warn("rehearsal distillation did not finish:", result.failure);
+        console.warn("retell distillation did not finish:", result.failure);
         logEvent(topicId, "distill-failed", {
           threadId,
           talkId: opts.talkId,
@@ -672,7 +672,7 @@ export function distillRehearsal(opts: DistillRehearsalOptions): Promise<void> {
       notifyObservationChange(topicId);
     } catch (e) {
       if (e instanceof StoppedError) return;
-      console.warn("rehearsal distillation could not start", e);
+      console.warn("retell distillation could not start", e);
       logEvent(topicId, "distill-failed", {
         threadId,
         talkId: opts.talkId,

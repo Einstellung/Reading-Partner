@@ -1,4 +1,4 @@
-// Assembly of one turn of a talk's rehearsal conversation (docs/31).
+// Assembly of one turn of a talk's retell conversation (docs/31).
 //
 // The counterpart of reading/turn.ts, and deliberately not a branch of it: that
 // one assembles a conversation about the page the reader is on, out of the book
@@ -35,37 +35,37 @@ import { renderFigure } from "../figures/render";
 import type { Figure } from "../figures/types";
 import { readChapterSpine } from "../prep/chapters/store";
 import {
-  buildRehearsalSystemPrompt,
-  buildRehearsalTools,
+  buildRetellSystemPrompt,
+  buildRetellTools,
   nextChapter,
-  REHEARSAL_KICKOFF,
-  type RehearsalDecision,
-  type RehearsalDecisionCardData,
-  type RehearsalNote,
-} from "../rehearsal";
+  RETELL_KICKOFF,
+  type RetellDecision,
+  type RetellDecisionCardData,
+  type RetellNote,
+} from "../retell";
 import { readMaterialBytes, type LoadedMaterial } from "./material";
 import {
   bucketTalkMarks,
   combineChapters,
   combinedSource,
   slotAt,
-  toRehearsalPlan,
+  toRetellPlan,
   toTalkDecision,
   type TalkSlot,
 } from "./outline";
 import type { Talk, TalkDecision } from "./types";
 
 // The replay cap and its tight form come from the reading turn, not a second
-// pair of constants: a rehearsal is the same kind of conversation, and two
+// pair of constants: a retell is the same kind of conversation, and two
 // copies of a cap are two things to keep in step.
 const OBSERVATION_KEEP_TIGHT = 3;
-// Which observations survive that cut here. The rehearsal sources a chapter's
+// Which observations survive that cut here. The retell sources a chapter's
 // first question from where this reader got stuck and pitches its language at
-// what they turn out to know (reading/rehearsal/prompt.ts), so those two types
+// what they turn out to know (reading/retell/prompt.ts), so those two types
 // go first; reading position is last because the book is finished.
 // cannot-explain rides directly behind stuck-point: a chapter the reader read
 // but could not give out loud last time is the strongest candidate there is for
-// this rehearsal's next question, and with three lines to spend it has to be one
+// this retell's next question, and with three lines to spend it has to be one
 // of them. can-explain earns its place further down — it says where not to
 // spend a question, which is worth less than knowing where to.
 export const OBSERVATION_ORDER_TIGHT: ObservationType[] = [
@@ -103,7 +103,7 @@ export interface TalkTurnInput {
   readTalk?(): Talk | null | Promise<Talk | null>;
   // Raised when a decision is recorded, so the shell can put the card in the
   // conversation. Absent = the decision is still written, it just is not shown.
-  onDecisionCard?(card: RehearsalDecisionCardData): void;
+  onDecisionCard?(card: RetellDecisionCardData): void;
   now?(): number;
   // Injected for tests: the book's bytes and the figure rasterizer.
   readBytes?: (bookId: string) => Promise<ArrayBuffer | null>;
@@ -175,7 +175,7 @@ export async function buildTalkTurn(input: TalkTurnInput): Promise<TalkTurn> {
   const { chapters, slots } = combineChapters(materials);
   const skeleton = { source: combinedSource(materials), chapters };
   const marks = bucketTalkMarks(materials, slots);
-  const plan = toRehearsalPlan(talk, slots);
+  const plan = toRetellPlan(talk, slots);
 
   // The reading tools, over the talk's materials rather than the topic's: a talk
   // is a chosen set, and searching a book the reader left out would answer with
@@ -194,7 +194,7 @@ export async function buildTalkTurn(input: TalkTurnInput): Promise<TalkTurn> {
   });
   const hasReadingTools = tools.length > 0;
 
-  // Per-topic AI observations (docs/02, docs/31: the rehearsal opens by handing
+  // Per-topic AI observations (docs/02, docs/31: the retell opens by handing
   // the reader their own trail back).
   let observationSection = "";
   let observationSectionTight = "";
@@ -248,7 +248,7 @@ export async function buildTalkTurn(input: TalkTurnInput): Promise<TalkTurn> {
     if (!slot) return null;
     return readChapterSpine(slot.bookId, slot.chapter).catch(() => null);
   };
-  let notes: RehearsalNote[] = [];
+  let notes: RetellNote[] = [];
   const upcoming = nextChapter(chapters, plan) ?? chapters[0]?.index;
   const chapter = chapters.find((c) => c.index === upcoming);
   if (chapter?.hasNote) {
@@ -258,9 +258,9 @@ export async function buildTalkTurn(input: TalkTurnInput): Promise<TalkTurn> {
 
   tools = [
     ...tools,
-    ...buildRehearsalTools({
+    ...buildRetellTools({
       chapters,
-      record: async (decision: RehearsalDecision) => {
+      record: async (decision: RetellDecision) => {
         const entry = toTalkDecision(slots, decision);
         if (entry) await record(entry);
       },
@@ -268,26 +268,26 @@ export async function buildTalkTurn(input: TalkTurnInput): Promise<TalkTurn> {
       // Re-projected from the talk as it stands, not from the copy above: the
       // combined numbering is this turn's, but what it is applied to has to be
       // current.
-      readPlan: async () => toRehearsalPlan((await readTalk()) ?? talk, slots),
+      readPlan: async () => toRetellPlan((await readTalk()) ?? talk, slots),
       onCard: onDecisionCard,
       now,
     }),
   ];
 
   function composePrompt(dropped: ReadonlySet<TalkReductionId>): string {
-    let prompt = buildRehearsalSystemPrompt({
+    let prompt = buildRetellSystemPrompt({
       topicName,
       bookName: materialsLabel(materials),
-      // The rehearsal happens away from the reader, so there is no open page to
+      // The retell happens away from the reader, so there is no open page to
       // report; the record below is the only "where we are" there is.
       pageLabel: null,
       skeleton,
       marks,
-      notes: dropped.has("rehearsal-notes") ? [] : notes,
+      notes: dropped.has("retell-notes") ? [] : notes,
       plan,
       figureCatalog: dropped.has("figure-catalog") ? "" : figureCatalog,
       hasReadingTools,
-      fullMarks: !dropped.has("rehearsal-marks"),
+      fullMarks: !dropped.has("retell-marks"),
     });
     const lang = languageInstruction(s.aiLanguage);
     if (lang) prompt += "\n\n" + lang;
@@ -299,7 +299,7 @@ export async function buildTalkTurn(input: TalkTurnInput): Promise<TalkTurn> {
   function composeMessages(dropped: ReadonlySet<TalkReductionId>): TalkTurnMessage[] {
     const keep = dropped.has("history-trim") ? HISTORY_KEEP_TIGHT : HISTORY_KEEP;
     const tail = history.length > keep ? history.slice(history.length - keep) : history;
-    return [{ role: "user" as const, text: REHEARSAL_KICKOFF }, ...tail];
+    return [{ role: "user" as const, text: RETELL_KICKOFF }, ...tail];
   }
 
   // Fit the call to the model's window before it is sent. A whole book's

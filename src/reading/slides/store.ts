@@ -176,7 +176,7 @@ export async function recordTalk(entry: TalkEntry): Promise<void> {
 }
 
 // Read a built deck back as text, by the AppData-relative path the registry
-// holds. This is what the in-app run-through embeds (docs/31): the deck is
+// holds. This is what the in-app rehearsal embeds (docs/31): the deck is
 // self-contained, so the whole file is the whole thing to show — several
 // megabytes of it, most of that base64 images. Missing or unreadable reads as
 // null, the same as every other read here.

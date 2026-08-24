@@ -1,4 +1,4 @@
-// The outline beside the rehearsal (docs/31, "界面"): the talk as it stands, one
+// The outline beside the retell (docs/31, "界面"): the talk as it stands, one
 // entry per chapter that has been settled, in the order it will be given.
 //
 // It is not a read-out of the conversation — it is the same data the AI writes
@@ -17,14 +17,14 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import type { OutlineRow } from "../../../reading/talks";
-import type { RunthroughRun } from "../../../reading/runthrough";
-import RunthroughList from "./RunthroughList";
+import type { RehearsalRun } from "../../../reading/rehearsal";
+import RehearsalList from "./RehearsalList";
 
 export interface OutlinePaneProps {
   rows: OutlineRow[];
   // The passes through this talk so far, newest first. Optional because the pane
   // is the outline first: a talk that has never been given still shows one.
-  runs?: RunthroughRun[];
+  runs?: RehearsalRun[];
   onMove(index: number, delta: number): void;
   onSetIncluded(bookId: string, chapter: number, include: boolean): void;
   onRemove(bookId: string, chapter: number): void;
@@ -169,7 +169,7 @@ export default function OutlinePane({
         )}
       </div>
 
-      <RunthroughList runs={runs} />
+      <RehearsalList runs={runs} />
     </aside>
   );
 }

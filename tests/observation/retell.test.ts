@@ -1,4 +1,4 @@
-// Rehearsal distillation (src/observation/distill/rehearsal.ts): the pass that runs when
+// Retell distillation (src/observation/distill/retell.ts): the pass that runs when
 // the reader leaves a talk. Same harness as tests/observation/distill.test.ts —
 // the sub-agent turn is the real agent loop over a scripted stream, so the real
 // observation tools and the real failure mapping run against a fake fs with no
@@ -21,13 +21,13 @@ import type { SubagentTurnFn, SubagentTurnRequest } from "../../src/ai/subagent/
 import { FileObservationAdapter } from "../../src/observation/record/adapter";
 import { runDistillPass } from "../../src/observation/distill/distill";
 import {
-  buildRehearsalDistillSystemPrompt,
-  buildRehearsalDistillUserMessage,
-  runRehearsalDistillPass,
+  buildRetellDistillSystemPrompt,
+  buildRetellDistillUserMessage,
+  runRetellDistillPass,
   selectNewMessages,
-  type RehearsalDistillInput,
-  type RehearsalPassInput,
-} from "../../src/observation/distill/rehearsal";
+  type RetellDistillInput,
+  type RetellPassInput,
+} from "../../src/observation/distill/retell";
 import { ObservationFileStore } from "../../src/observation/record/store";
 import { JULY_17, JULY_20, makeFakeFs } from "./fakefs";
 
@@ -91,7 +91,7 @@ function makeStore() {
   return { store, adapter: new FileObservationAdapter(store) };
 }
 
-function passInput(overrides: Partial<RehearsalPassInput> = {}): RehearsalPassInput {
+function passInput(overrides: Partial<RetellPassInput> = {}): RetellPassInput {
   return {
     topicName: "minds",
     talkName: "A Brief History of Intelligence",
@@ -105,7 +105,7 @@ function passInput(overrides: Partial<RehearsalPassInput> = {}): RehearsalPassIn
   };
 }
 
-function input(overrides: Partial<RehearsalDistillInput> = {}): RehearsalDistillInput {
+function input(overrides: Partial<RetellDistillInput> = {}): RetellDistillInput {
   return {
     topicName: "minds",
     talkName: "A Brief History of Intelligence",
@@ -145,7 +145,7 @@ test("selectNewMessages drops empty rows and takes only what is past the cursor"
 
 test("a finished pass writes observations and stores the message cursor", async () => {
   const { store, adapter } = makeStore();
-  const result = await runRehearsalDistillPass(passInput(), {
+  const result = await runRetellDistillPass(passInput(), {
     store,
     adapter,
     now: () => JULY_17,
@@ -159,7 +159,7 @@ test("a finished pass writes observations and stores the message cursor", async 
               action: "create",
               type: "can-explain",
               summary: "Can give chapter 22 of A Brief History of Intelligence",
-              body: "2026-07-17 gave the lesion-study argument himself in the rehearsal.",
+              body: "2026-07-17 gave the lesion-study argument himself in the retell.",
               messageIds: ["talk-1:200"],
             },
           },
@@ -180,14 +180,14 @@ test("a finished pass writes observations and stores the message cursor", async 
 
 test("re-entering and leaving with nothing new distils nothing", async () => {
   const { store, adapter } = makeStore();
-  await runRehearsalDistillPass(passInput(), {
+  await runRetellDistillPass(passInput(), {
     store,
     adapter,
     now: () => JULY_17,
     ...scriptedRunner([{ text: "done" }]),
   });
   const runner = scriptedRunner([{ text: "done" }]);
-  const second = await runRehearsalDistillPass(passInput(), {
+  const second = await runRetellDistillPass(passInput(), {
     store,
     adapter,
     now: () => JULY_20,
@@ -200,7 +200,7 @@ test("re-entering and leaving with nothing new distils nothing", async () => {
 
 test("a second pass sends only the new stretch, and says what came before it", async () => {
   const { store, adapter } = makeStore();
-  await runRehearsalDistillPass(passInput(), {
+  await runRetellDistillPass(passInput(), {
     store,
     adapter,
     now: () => JULY_17,
@@ -208,7 +208,7 @@ test("a second pass sends only the new stretch, and says what came before it", a
   });
 
   const runner = scriptedRunner([{ text: "done" }]);
-  const second = await runRehearsalDistillPass(
+  const second = await runRetellDistillPass(
     passInput({
       messages: [
         ...passInput().messages,
@@ -230,7 +230,7 @@ test("a second pass sends only the new stretch, and says what came before it", a
 test("a stretch the reader said nothing in is not distilled", async () => {
   const { store, adapter } = makeStore();
   const runner = scriptedRunner([{ text: "done" }]);
-  const result = await runRehearsalDistillPass(
+  const result = await runRetellDistillPass(
     passInput({ messages: [{ role: "ai", text: "Which chapter shall we take?", ts: 100 }] }),
     { store, adapter, now: () => JULY_17, run: runner.run },
   );
@@ -243,7 +243,7 @@ test("a stretch the reader said nothing in is not distilled", async () => {
 
 test("a pass that did not finish leaves the cursor where it was", async () => {
   const { store, adapter } = makeStore();
-  const result = await runRehearsalDistillPass(passInput(), {
+  const result = await runRetellDistillPass(passInput(), {
     store,
     adapter,
     now: () => JULY_17,
@@ -251,14 +251,14 @@ test("a pass that did not finish leaves the cursor where it was", async () => {
   });
 
   expect(result).toMatchObject({ ran: true, ok: false, outcome: "failed" });
-  // The next exit redoes this stretch; the alternative is a rehearsal that is
+  // The next exit redoes this stretch; the alternative is a retell that is
   // never observed and nothing left to say so.
   expect((await store.getMeta()).distilledMessages).toBeUndefined();
 });
 
 test("the two passes do not overwrite each other's bookkeeping in meta.json", async () => {
   const { store, adapter } = makeStore();
-  await runRehearsalDistillPass(passInput(), {
+  await runRetellDistillPass(passInput(), {
     store,
     adapter,
     now: () => JULY_17,
@@ -283,7 +283,7 @@ test("the two passes do not overwrite each other's bookkeeping in meta.json", as
   expect(await store.getMeta()).toEqual({
     lastDistilledAt: JULY_20,
     lastAnnotationDistillAt: null,
-    // The rehearsal's cursor survived the reading pass, and vice versa.
+    // The retell's cursor survived the reading pass, and vice versa.
     distilledMessages: { "talk-1": 2, "thread-9": 1 },
     distilledMarks: { "book-1": 700 },
   });
@@ -292,7 +292,7 @@ test("the two passes do not overwrite each other's bookkeeping in meta.json", as
 // --- the prompt ---
 
 test("the system prompt leads with reconciliation against the current index", () => {
-  const prompt = buildRehearsalDistillSystemPrompt(
+  const prompt = buildRetellDistillSystemPrompt(
     input({
       indexText:
         "- [stuck-point] Stuck on how active inference relates to volition (updated 2026-07-01, id m-11111111)",
@@ -305,23 +305,23 @@ test("the system prompt leads with reconciliation against the current index", ()
   expect(prompt).toContain("Crossing types is");
   expect(prompt).toContain("Never leave two observations standing for the two ends of one story");
   expect(prompt).toContain("timeline");
-  expect(prompt).toContain("rehearsal below happened on 2026-07-17");
+  expect(prompt).toContain("retell below happened on 2026-07-17");
 });
 
 test("the system prompt writes down the examiner's bias and the three things to keep", () => {
-  const prompt = buildRehearsalDistillSystemPrompt(input());
+  const prompt = buildRetellDistillSystemPrompt(input());
   expect(prompt).toContain("You were the examiner here");
   expect(prompt).toContain("cannot-explain however warm the");
   expect(prompt).toContain("can-explain / cannot-explain");
   expect(prompt).toContain("Where the reader corrected you");
   expect(prompt).toContain("holds across books");
   // And what it must not turn into.
-  expect(prompt).toContain("What the rehearsal decided to put in the talk");
+  expect(prompt).toContain("What the retell decided to put in the talk");
   expect(prompt).toContain("never a retelling");
 });
 
 test("the user message carries the talk, its materials, and the message ids", () => {
-  const msg = buildRehearsalDistillUserMessage(input());
+  const msg = buildRetellDistillUserMessage(input());
   expect(msg).toContain("Topic: minds");
   expect(msg).toContain("Talk: A Brief History of Intelligence");
   expect(msg).toContain("Materials: A Brief History of Intelligence, Surfing Uncertainty");

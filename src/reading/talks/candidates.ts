@@ -24,9 +24,9 @@ import { startTalk } from "./store";
 import type { Talk, TalkMaterial } from "./types";
 
 // The topic's materials a talk can be started from: everything with a book id,
-// with its mark count so the picker can tick the ones worth rehearsing
+// with its mark count so the picker can tick the ones worth retelling
 // (defaultMaterialSelection, list.ts). A file with no book id has nothing on
-// disk to rehearse from and is skipped rather than offered and then failing.
+// disk to retell from and is skipped rather than offered and then failing.
 //
 // A book whose marks cannot be read counts as zero rather than taking the whole
 // picker down with it: the count decides what starts ticked, and being offered

@@ -10,7 +10,7 @@
 //
 // A talk with no decisions yet keeps the old path (chapter list + overview, model
 // invents the outline), as does a material inside a settled talk that the
-// rehearsal has not reached.
+// retell has not reached.
 //
 // This module is pure and one-way: slides reads talks, never the reverse. It
 // works on the talk as a value; loading it is live.ts's readDeckOutline.
@@ -84,7 +84,7 @@ export function entriesFor(outline: TalkOutline | null, bookId: string): Outline
 }
 
 // Whether the talk settled anything at all about a material. A material the
-// rehearsal has not reached is planned the old way even inside a settled talk.
+// retell has not reached is planned the old way even inside a settled talk.
 function settledBooks(outline: TalkOutline): Set<string> {
   const ids = new Set<string>();
   for (const e of outline.included) ids.add(e.bookId);
@@ -99,8 +99,8 @@ function settledBooks(outline: TalkOutline): Set<string> {
 // otherwise the validator strips the very citations the outline asked for.
 //
 // A chapter the talk knows and the chapter list does not is added rather than
-// dropped: the rehearsal skeleton can come from the PDF's own table of contents,
-// so a material rehearsed without a notes pass has decisions against chapters no
+// dropped: the retell skeleton can come from the PDF's own table of contents,
+// so a material retold without a notes pass has decisions against chapters no
 // notes plan ever enumerated.
 export function citableWithOutline(books: PlanBook[], outline: TalkOutline | null): PlanBook[] {
   if (!outline) return books;
@@ -170,7 +170,7 @@ export const SLIDES_OUTLINE_PLAN_SYSTEM_PROMPT = [
   "A slide may have at most one of illustration or figure, not both.",
   "",
   "A material listed below with a chapter list instead of outline entries is one",
-  "the rehearsal has not reached: for that one, plan it yourself from its overview",
+  "the retell has not reached: for that one, plan it yourself from its overview",
   "and chapters, after the settled entries, and only cite chapters marked [note].",
 ].join("\n");
 
@@ -219,7 +219,7 @@ function outlineBlock(outline: TalkOutline, books: PlanBook[]): string {
 }
 
 // The plan call's user message when the talk has settled something: the outline
-// first, then the ordinary block for any material the rehearsal has not reached.
+// first, then the ordinary block for any material the retell has not reached.
 export function outlinePlanUserMessage(
   books: PlanBook[],
   outline: TalkOutline,
@@ -273,10 +273,10 @@ export function applyTalkOutline(plan: DeckPlan, outline: TalkOutline): DeckPlan
     );
     const notices: string[] = [];
     if (droppedCut.length) {
-      notices.push(`Chapter ${droppedCut.join(", ")} was cut in the rehearsal and is not in the talk.`);
+      notices.push(`Chapter ${droppedCut.join(", ")} was cut in the retell and is not in the talk.`);
     }
     if (undecided.length) {
-      notices.push(`Chapter ${undecided.join(", ")} has no rehearsal decision, so it was left out.`);
+      notices.push(`Chapter ${undecided.join(", ")} has no retell decision, so it was left out.`);
     }
     slides.push({
       ...slide,

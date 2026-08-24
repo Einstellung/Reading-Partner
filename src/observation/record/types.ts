@@ -3,12 +3,12 @@
 // that is what gets loaded into context. Dates are absolute ("YYYY-MM-DD") at
 // write time.
 
-// can-explain / cannot-explain come out of a rehearsal (docs/31): the reader has
+// can-explain / cannot-explain come out of a retell (docs/31): the reader has
 // finished the book and is being asked to give it back out loud. They are not
 // stuck-point in a milder form — stuck-point is not having understood it while
 // reading, these two are having understood it and not being able to say it. Nor
 // are they one neutral type with a verdict inside, because what the next
-// rehearsal keeps when the window is tight is decided by type order
+// retell keeps when the window is tight is decided by type order
 // (reading/talks/turn.ts), and "cannot say this chapter" has to sort near the top.
 export const OBSERVATION_TYPES = [
   "reading-position",

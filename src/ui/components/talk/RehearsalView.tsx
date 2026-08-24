@@ -22,10 +22,10 @@ import { Button } from "../ui/button";
 import {
   appendRun,
   buildRun,
-  type RunthroughEvent,
+  type RehearsalEvent,
   type TranscriptSource,
-} from "../../../reading/runthrough";
-import { useDeckHtml } from "./useRunthrough";
+} from "../../../reading/rehearsal";
+import { useDeckHtml } from "./useRehearsal";
 import {
   checkDeckProtocol,
   endEvent,
@@ -36,9 +36,9 @@ import {
   readDeckSignal,
   utteranceEvent,
   withSlideEvent,
-} from "./runthrough";
+} from "./rehearsal";
 
-export interface RunthroughViewProps {
+export interface RehearsalViewProps {
   talkId: string;
   talkName: string;
   // The deck to give, AppData-relative. The caller already knows it — that is
@@ -51,17 +51,17 @@ export interface RunthroughViewProps {
   onExit(): void;
 }
 
-export default function RunthroughView({
+export default function RehearsalView({
   talkId,
   talkName,
   deckFile,
   transcript,
   onExit,
-}: RunthroughViewProps) {
+}: RehearsalViewProps) {
   const { html, error } = useDeckHtml(deckFile);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
 
-  const eventsRef = useRef<RunthroughEvent[]>([]);
+  const eventsRef = useRef<RehearsalEvent[]>([]);
   const startedAtRef = useRef(Date.now());
   const savedRef = useRef(false);
 
@@ -163,7 +163,7 @@ export default function RunthroughView({
 
   return (
     // The one screen that is not on the app's palette and is not tinted with
-    // it: a run-through is a projected deck, and the chrome around it is dark so
+    // it: a rehearsal is a projected deck, and the chrome around it is dark so
     // the room looks at the slide. The paper tint (styles.css) has nothing to
     // say here — it lightens a reading surface, and there is none.
     <div className="absolute inset-0 flex flex-col bg-[#0d0f14]">
@@ -189,12 +189,12 @@ export default function RunthroughView({
         </span>
         <span
           className="flex-none text-[13px] tabular-nums text-white/70"
-          title="How long this run-through has been going"
+          title="How long this rehearsal has been going"
         >
           {formatElapsed(elapsed)}
         </span>
         <Button type="button" onClick={leave}>
-          End the run-through
+          End the rehearsal
         </Button>
       </div>
 

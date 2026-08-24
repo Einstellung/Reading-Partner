@@ -28,7 +28,7 @@ export type AiSurface =
   | "reading"
   // Classroom mode, carrying the prep notes (docs/09).
   | "classroom"
-  // Rehearsing a talk (docs/31).
+  // Retelling a talk (docs/31).
   | "talk"
   // The info companion.
   | "info"
