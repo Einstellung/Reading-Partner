@@ -17,24 +17,39 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { Slot } from "@radix-ui/react-slot";
+import { useDom } from "../../support/dom";
 
-import * as alertDialog from "../../../src/ui/components/ui/alert-dialog";
-import * as badge from "../../../src/ui/components/ui/badge";
-import * as button from "../../../src/ui/components/ui/button";
-import * as checkbox from "../../../src/ui/components/ui/checkbox";
-import * as collapsible from "../../../src/ui/components/ui/collapsible";
-import * as dialog from "../../../src/ui/components/ui/dialog";
-import * as dropdownMenu from "../../../src/ui/components/ui/dropdown-menu";
-import * as input from "../../../src/ui/components/ui/input";
-import * as label from "../../../src/ui/components/ui/label";
-import * as overlay from "../../../src/ui/components/ui/overlay";
-import * as select from "../../../src/ui/components/ui/select";
-import * as separator from "../../../src/ui/components/ui/separator";
-import * as switchModule from "../../../src/ui/components/ui/switch";
-import * as tabs from "../../../src/ui/components/ui/tabs";
-import * as textarea from "../../../src/ui/components/ui/textarea";
-import * as toast from "../../../src/ui/components/ui/toast";
+// The primitives come in dynamically, after the window is up. Eleven of the
+// sixteen wrap a Radix package that reaches for a portal, and that pulls in
+// react-dom's client bundle, which decides at module evaluation whether it is
+// in a browser and never reconsiders (docs/pitfall/121). Static imports are
+// evaluated before any top-level await in the file, so importing them the
+// ordinary way evaluates react-dom before this file — or any file — has
+// called useDom(), and every useDom() in the run then throws. It is harmless
+// only for as long as this file happens to run late (docs/pitfall/175).
+//
+// Nothing below needs a DOM. The window is here so that react-dom's feature
+// detection lands where it would have landed if this file had never run.
+await useDom();
+
+const { Slot } = await import("@radix-ui/react-slot");
+
+const alertDialog = await import("../../../src/ui/components/ui/alert-dialog");
+const badge = await import("../../../src/ui/components/ui/badge");
+const button = await import("../../../src/ui/components/ui/button");
+const checkbox = await import("../../../src/ui/components/ui/checkbox");
+const collapsible = await import("../../../src/ui/components/ui/collapsible");
+const dialog = await import("../../../src/ui/components/ui/dialog");
+const dropdownMenu = await import("../../../src/ui/components/ui/dropdown-menu");
+const input = await import("../../../src/ui/components/ui/input");
+const label = await import("../../../src/ui/components/ui/label");
+const overlay = await import("../../../src/ui/components/ui/overlay");
+const select = await import("../../../src/ui/components/ui/select");
+const separator = await import("../../../src/ui/components/ui/separator");
+const switchModule = await import("../../../src/ui/components/ui/switch");
+const tabs = await import("../../../src/ui/components/ui/tabs");
+const textarea = await import("../../../src/ui/components/ui/textarea");
+const toast = await import("../../../src/ui/components/ui/toast");
 
 const UI = join(dirname(fileURLToPath(import.meta.url)), "../../../src/ui/components/ui");
 const FORWARD_REF = Symbol.for("react.forward_ref");
