@@ -214,7 +214,12 @@ async function gatherSlideNotes(slide: SlideRun, bookIds: string[]): Promise<Gat
   }
   for (const id of bookIds) {
     const ov = await readSpineOverview(id);
-    if (ov) parts.push(`# ${(await getLibraryEntry(id))?.title ?? id}\n${ov.trim()}`);
+    // The title is a heading over notes that are already in hand; a registry
+    // that would not open costs the heading, not the deck.
+    if (ov) {
+      const entry = await getLibraryEntry(id).catch(() => null);
+      parts.push(`# ${entry?.title ?? id}\n${ov.trim()}`);
+    }
   }
   return { text: clip(parts.join("\n\n")) };
 }

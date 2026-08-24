@@ -59,6 +59,15 @@ beforeEach(() => {
 
 // --- a read that failed for IO reasons --------------------------------------
 
+// "No position" and "the file would not open" are different answers. Handed the
+// first, the reader is dropped at page one of a book they were halfway through
+// and told nothing; the caller that opens the book decides what to do with the
+// second (reading/session/open-book.ts toasts and opens at the top).
+test("a read off an unreadable file raises rather than answering with no position", async () => {
+  disk.readFails = true;
+  expect(getViewState("jit")).rejects.toThrow(/could not be read/);
+});
+
 test("a position saved over an unreadable file is refused, and the file is untouched", async () => {
   disk.readFails = true;
   await expect(saveViewState("jit", at(121))).rejects.toThrow(/could not be read/);

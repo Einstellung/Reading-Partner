@@ -174,7 +174,8 @@ const DEFAULTS = DEFAULT_SETTINGS;
 // test file that shares the worker, and bun never unwinds it (pitfall 119).
 export interface SettingsIo {
   // The guarded read, so the quarantine policy stays in atomic-fs. "corrupt"
-  // with no quarantine copy is the case that blocks writing.
+  // with no quarantine copy is the case a load raises on and a save refuses to
+  // write over; it is read on both paths, not remembered between them.
   read: () => Promise<GuardedRead<Partial<Settings>>>;
   write: (contents: string) => Promise<void>;
   schedule: (fn: () => void, ms: number) => number;
@@ -204,21 +205,25 @@ export function createSettingsStore(io: SettingsIo): SettingsStore {
   // The settings a debounce is holding, so the write — which runs later, off the
   // writer's chain — has something to serialise.
   let pending: Settings | null = null;
-  // Set when the file exists but could not be read, so the app is running on
-  // defaults that would erase real configuration (provider, keys) if written
-  // back. Reset on a successful load, which is the only thing that can happen
-  // first.
-  let blockWrites = false;
 
   // One file, so one key. The debounce, the single flush on the way out and the
   // chaining of writes in flight are all the shared writer's
   // (debounced-writer.ts); what is left here is what to write and when not to.
   const writer = createDebouncedWriter<string>({
     write: async () => {
-      if (blockWrites) {
+      if (pending === null) return;
+      // The one store in platform/app whose save does not already read the file:
+      // a shell holds settings.json whole in memory and every save serialises
+      // that whole copy, so a shell that never got the file would write the
+      // defaults it started on over a real provider and real keys. The disk is
+      // asked here, at the moment of the write. It used to be asked once and
+      // remembered in a flag, which answered for the rest of the process — for
+      // files it had never read, and long after the one it had read came back.
+      const read = await io.read();
+      if (read.status === "corrupt" && read.savedAs === null) {
         throw new Error(`${SETTINGS_FILE} could not be read; refusing to overwrite it`);
       }
-      if (pending !== null) await io.write(JSON.stringify(pending, null, 2));
+      await io.write(JSON.stringify(pending, null, 2));
     },
     debounceMs: SAVE_DEBOUNCE,
     onError: io.onError,
@@ -226,14 +231,16 @@ export function createSettingsStore(io: SettingsIo): SettingsStore {
     exit: io.bindExit,
   });
 
-  // Falling back to the defaults is fine for a missing file and unavoidable for
-  // an unreadable one, but it must not become the new truth: unparseable content
-  // is quarantined first (in atomic-fs), and an unreadable file blocks saving
-  // until a later load succeeds.
+  // The defaults are the answer for a file that is not there, and for one whose
+  // bad content has just been moved aside. They are not the answer for a file
+  // that is sitting there unread: a caller handed them would show the user a
+  // provider and a language they have not got.
   async function load(): Promise<Settings> {
     const read = await io.read();
-    blockWrites = read.status === "corrupt" && read.savedAs === null;
     if (read.status === "ok") return { ...DEFAULTS, ...read.value };
+    if (read.status === "corrupt" && read.savedAs === null) {
+      throw new Error(`${SETTINGS_FILE} could not be read`);
+    }
     return { ...DEFAULTS };
   }
 
@@ -269,12 +276,9 @@ function liveStore(): SettingsStore {
 
 let store = liveStore();
 
-// The store as this module was first imported with. One load off a file that
-// exists and will not open latches `blockWrites` for the life of the process,
-// and only a load that succeeds clears it — so a test that reads settings off an
-// unreadable disk leaves every later flush in the run refused and reporting a
-// store error. Called from a test's beforeEach, this hands the next one a store
-// that has read nothing yet.
+// The store as this module was first imported with: nothing pending and no
+// debounce in flight. Called from a test's beforeEach, so a save one case
+// scheduled and did not flush cannot land during the next one.
 export function rebuildSettingsStoreForTests(): void {
   store = liveStore();
 }

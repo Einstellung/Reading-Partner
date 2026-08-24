@@ -242,21 +242,37 @@ test("nothing is written on the way out when nothing is pending", async () => {
   expect(writes).toEqual([]);
 });
 
+test("an unreadable file makes the load raise rather than answer with defaults", async () => {
+  file = JSON.stringify({ defaultProviderId: "openai" });
+  readFails = true;
+  expect(store.load()).rejects.toThrow(SETTINGS_FILE);
+});
+
 test("an unreadable file is not overwritten, and the failure is reported", async () => {
   file = "{}";
   readFails = true;
-  await store.load();
 
   store.save({ ...DEFAULT_SETTINGS, aiLanguage: "ja" });
   await advance(500);
   expect(writes).toEqual([]);
   expect(errors.length).toBe(1);
+  // Untouched, not half-written: the refusal is before the write, not inside it.
+  expect(file).toBe("{}");
+});
 
-  // A later successful load clears the block.
+// The refusal is a question this store asks the disk each time it writes, not a
+// flag it set once. So the same store — no rebuild, no second load — writes as
+// soon as the file opens again.
+test("the same store writes again the moment the file can be read", async () => {
+  file = "{}";
+  readFails = true;
+  store.save({ ...DEFAULT_SETTINGS, aiLanguage: "ja" });
+  await advance(500);
+  expect(writes).toEqual([]);
+
   readFails = false;
-  file = JSON.stringify(DEFAULT_SETTINGS, null, 2);
-  await store.load();
   store.save({ ...DEFAULT_SETTINGS, aiLanguage: "ja" });
   await advance(500);
   expect(writes).toEqual([SETTINGS_FILE]);
+  expect(onDisk().aiLanguage).toBe("ja");
 });

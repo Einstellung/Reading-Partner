@@ -66,27 +66,28 @@ async function ensureDir(): Promise<void> {
   }
 }
 
-// The registry read, plus whether it is safe to write the result back. The shelf
-// cannot be rebuilt from anywhere (the PDFs survive in library/, their titles do
-// not), so an unreadable file must never be silently replaced by "one book, the
-// one being imported". Content that doesn't parse is quarantined and a fresh
-// registry takes over; a file that could not be read at all is left alone and
-// writing is refused until the next launch reads it successfully.
-async function readStore(): Promise<{ store: LibraryStore; writable: boolean }> {
+// The registry read. An empty registry is the answer for a file that is not
+// there yet, and for one whose bad content has just been moved aside. It is not
+// the answer for a file that is sitting there unread: the shelf cannot be
+// rebuilt from anywhere (the PDFs survive in library/, their titles do not), so
+// "no books" would be the app telling the reader their library is gone. Raising
+// is also what keeps the file from being overwritten — every writer below loads
+// before it saves.
+async function readStore(): Promise<LibraryStore> {
   const read = await readGuardedJson<LibraryStore>(LIBRARY_FILE, (raw) => {
     const parsed = raw as LibraryStore | null;
     return parsed && typeof parsed === "object" && parsed.books ? parsed : null;
   });
-  if (read.status === "ok") return { store: read.value, writable: true };
-  if (read.status === "missing") return { store: { books: {} }, writable: true };
-  return { store: { books: {} }, writable: read.savedAs !== null };
+  if (read.status === "ok") return read.value;
+  if (read.status === "missing") return { books: {} };
+  if (read.savedAs === null) throw new Error(`${LIBRARY_FILE} could not be read`);
+  return { books: {} };
 }
 
 // Every read hands out repaired names, whether or not the file on disk has been
 // rewritten yet.
-async function loadStore(): Promise<{ store: LibraryStore; writable: boolean }> {
-  const read = await readStore();
-  return { store: healLibrary(read.store), writable: read.writable };
+async function loadStore(): Promise<LibraryStore> {
+  return healLibrary(await readStore());
 }
 
 async function saveStore(store: LibraryStore): Promise<void> {
@@ -98,9 +99,9 @@ async function saveStore(store: LibraryStore): Promise<void> {
 // nothing, so this can run at every launch without producing a sync revision.
 // Returns whether it wrote.
 export async function repairLibraryNames(): Promise<boolean> {
-  const { store, writable } = await readStore();
+  const store = await readStore();
   const healed = healLibrary(store);
-  if (healed === store || !writable) return false;
+  if (healed === store) return false;
   await saveStore(healed);
   return true;
 }
@@ -116,8 +117,7 @@ export function readLibraryBook(bookId: string): Promise<Uint8Array> {
 }
 
 export async function getLibraryEntry(bookId: string): Promise<LibraryEntry | null> {
-  const { store } = await loadStore();
-  return store.books[bookId] ?? null;
+  return (await loadStore()).books[bookId] ?? null;
 }
 
 // Import a PDF by its bytes: compute the book id, copy the bytes into the library
@@ -131,10 +131,9 @@ export async function importBook(bytes: Uint8Array, originalPath: string): Promi
   if (!(await libraryHas(hash))) {
     await appData.writeBytes(libraryPdfPath(hash), bytes);
   }
-  const { store, writable } = await loadStore();
+  const store = await loadStore();
   const existing = store.books[hash];
   if (existing) return existing;
-  if (!writable) throw new Error(`${LIBRARY_FILE} could not be read; refusing to overwrite it`);
   const entry: LibraryEntry = {
     hash,
     title: basename(originalPath),

@@ -12,9 +12,9 @@ import { applyProfileUpdate } from "../../src/info/companion/card-actions";
 import {
   LEGACY_PROFILE_FILE,
   PROFILE_FILE,
+  ProfileUnreadableError,
   loadProfile,
   loadProfileForWrite,
-  loadProfileGuarded,
   saveProfile,
 } from "../../src/observation/profile/profile";
 import { installAppData, type FakeDisk } from "../support/appdata-fake";
@@ -74,12 +74,11 @@ test("the new file wins over a stale legacy file and no migration write happens"
 
 const WRITTEN = "Interests: robotics.\nBackground: builds them for a living.\n";
 
-test("a profile that cannot be read is not writable, and its bytes stay where they are", async () => {
+test("a profile that cannot be read raises for a writer, and its bytes stay where they are", async () => {
   disk.files.set(PROFILE_FILE, WRITTEN);
   disk.unreadable.add(PROFILE_FILE);
 
-  expect(await loadProfileGuarded()).toEqual({ text: "", writable: false });
-  expect(loadProfileForWrite()).rejects.toThrow();
+  expect(loadProfileForWrite()).rejects.toThrow(ProfileUnreadableError);
   // Nothing wrote, and the document is still on disk exactly as it was.
   expect(writes()).toBe(0);
   expect(disk.files.get(PROFILE_FILE)).toBe(WRITTEN);
@@ -97,7 +96,7 @@ test("a legacy file that cannot be read holds the migration rather than retiring
   disk.files.set(LEGACY_PROFILE_FILE, "legacy taste");
   disk.unreadable.add(LEGACY_PROFILE_FILE);
 
-  expect(await loadProfileGuarded()).toEqual({ text: "", writable: false });
+  expect(loadProfileForWrite()).rejects.toThrow(ProfileUnreadableError);
   // Had a write been allowed, user-profile.md would exist and the promotion
   // would never run again — the old build's profile orphaned by one bad read.
   expect(disk.files.has(PROFILE_FILE)).toBe(false);
@@ -105,8 +104,10 @@ test("a legacy file that cannot be read holds the migration rather than retiring
   expect(writes()).toBe(0);
 });
 
-test("no file at all is still the first run: empty and writable", async () => {
-  expect(await loadProfileGuarded()).toEqual({ text: "", writable: true });
+// Missing and unreadable have to stay different answers: a first run must reach
+// a write, and only a file that is there and would not open may hold one off.
+test("no file at all is still the first run: empty, and a writer may go ahead", async () => {
+  expect(await loadProfile()).toBe("");
   expect(await loadProfileForWrite()).toBe("");
 });
 

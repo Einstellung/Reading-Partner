@@ -71,6 +71,13 @@ beforeEach(() => {
 
 // --- a read that failed for IO reasons: the bytes are still good ------------
 
+// An empty shelf would be the app saying the reader has no questions on the go,
+// which is exactly the state the mutators below then write down.
+test("a list off an unreadable file raises rather than reading as an empty shelf", async () => {
+  disk.readFails = true;
+  expect(listTopics()).rejects.toThrow(/could not be read/);
+});
+
 test("a topic created over an unreadable file is refused, and the file is untouched", async () => {
   disk.readFails = true;
   await expect(createTopic("a third question")).rejects.toThrow(/could not be read/);
