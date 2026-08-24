@@ -13,11 +13,13 @@
 import { beforeEach, expect, mock, test } from "bun:test";
 import { FIGURES_VERSION } from "../../../src/reading/figures/types";
 import { CHAPTER_SPINE_VERSION } from "../../../src/reading/prep/chapters/types";
+import { pluginFsSurface } from "../../support/stub-surface";
 
 const files = new Map<string, string>();
 const blobs = new Map<string, Uint8Array>();
 
 mock.module("@tauri-apps/plugin-fs", () => ({
+  ...pluginFsSurface(),
   BaseDirectory: { AppData: 1 },
   exists: async (p: string) => files.has(p) || blobs.has(p),
   mkdir: async () => {},
@@ -47,9 +49,15 @@ mock.module("@tauri-apps/plugin-fs", () => ({
 }));
 
 // The stores write through the Rust atomic writer, not the fs plugin. The rest
-// of the module's surface is kept, because mock.module replaces it for every
-// file in the run and other stores read through readGuardedJson.
+// of the module is the real one, imported after the plugin above so it links
+// against this file's disk rather than the host — mock.module replaces the
+// module for every file in the run, and other stores read through the exports
+// that are not overridden here. Dynamic, because a static import of anything
+// under src/ from a test file pins the chain at the state it had when the file
+// loaded, and every mock.module after that stops reaching it.
+const realAtomicFs = await import("../../../src/platform/app/atomic-fs");
 mock.module("../../../src/platform/app/atomic-fs", () => ({
+  ...realAtomicFs,
   writeTextAtomic: async (path: string, contents: string) => {
     files.set(path, contents);
   },

@@ -16,13 +16,18 @@
 import { beforeEach, expect, mock, test } from "bun:test";
 // Type-only, so it is erased and never loads the module before mock.module runs.
 import type { ViewState } from "../src/platform/app/reader-contract";
+import { apiCoreSurface, pluginFsSurface } from "./support/stub-surface";
 
 const files = new Map<string, string>();
 let readFails = false;
 let quarantineFails = false;
 let reads = 0;
 
+// The surface spread first is the whole plugin; the keys below are this file's
+// disk and win over it. mock.module is process-wide, so a name missing here
+// would break whichever file loads next (docs/pitfall/119).
 mock.module("@tauri-apps/plugin-fs", () => ({
+  ...pluginFsSurface(),
   BaseDirectory: { AppData: 1 },
   exists: async (path: string) => files.has(path),
   mkdir: async () => {},
@@ -45,6 +50,7 @@ mock.module("@tauri-apps/plugin-fs", () => ({
 }));
 
 mock.module("@tauri-apps/api/core", () => ({
+  ...apiCoreSurface(),
   invoke: async (cmd: string, args: { path: string; contents?: string }) => {
     if (cmd === "write_text_file_atomic") {
       files.set(args.path, args.contents ?? "");

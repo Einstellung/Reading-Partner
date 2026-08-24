@@ -6,6 +6,7 @@
 // in-memory map. Run: bun test.
 
 import { beforeEach, expect, mock, test } from "bun:test";
+import { pluginFsSurface } from "../support/stub-surface";
 
 const files = new Map<string, string>();
 // Paths that are on disk but whose read fails: a locked file, a bad sector, a
@@ -13,9 +14,11 @@ const files = new Map<string, string>();
 const unreadable = new Set<string>();
 let writes = 0;
 
-// The mock is process-wide (bun mock.module); include every export the fs modules
-// import so a sibling test file that loads after this one still resolves.
+// The mock is process-wide (bun mock.module), so the whole plugin's surface goes
+// in and the keys below override the ones this file answers for — a name missing
+// here breaks whichever sibling file loads after this one.
 mock.module("@tauri-apps/plugin-fs", () => ({
+  ...pluginFsSurface(),
   BaseDirectory: { AppData: 1 },
   exists: async (path: string) => path === "" || files.has(path),
   mkdir: async () => {},

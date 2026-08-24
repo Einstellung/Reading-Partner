@@ -11,6 +11,7 @@
 import { beforeEach, expect, mock, test } from "bun:test";
 import type { EventPayload, EventType } from "../../../src/platform/app/events";
 import type { FileRef, Topic } from "../../../src/platform/app/topics";
+import { pluginFsSurface } from "../../support/stub-surface";
 
 const files = new Map<string, string>();
 const blobs = new Map<string, Uint8Array>();
@@ -19,6 +20,7 @@ const blobs = new Map<string, Uint8Array>();
 // module out for the run, and a half-mocked plugin breaks whichever other file
 // imports the rest.
 mock.module("@tauri-apps/plugin-fs", () => ({
+  ...pluginFsSurface(),
   BaseDirectory: { AppData: 1 },
   exists: async (p: string) => files.has(p) || blobs.has(p),
   mkdir: async () => {},
@@ -45,7 +47,13 @@ mock.module("@tauri-apps/plugin-fs", () => ({
   },
 }));
 
+// The rest of the module is the real one, imported after the plugin above so it
+// links against this file's disk rather than the host. Dynamic, because a static
+// import of anything under src/ from a test file pins the chain at the state it
+// had when the file loaded, and every mock.module after that stops reaching it.
+const realAtomicFs = await import("../../../src/platform/app/atomic-fs");
 mock.module("../../../src/platform/app/atomic-fs", () => ({
+  ...realAtomicFs,
   writeTextAtomic: async (path: string, contents: string) => {
     files.set(path, contents);
   },

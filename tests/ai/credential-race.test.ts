@@ -13,7 +13,15 @@ const FILE = "credentials.json";
 // is nothing to run headless).
 const files = new Map<string, string>();
 
+// Only the two calls credentials.json goes through are replaced; the rest of
+// the module is the real one, so a file that loads after this one still finds
+// every export where it left it (mock.module is process-wide, docs/pitfall/119).
+// Dynamic, because a static import of anything under src/ from a test file pins
+// the chain at the state it had when the file loaded, and every mock.module
+// after that stops reaching it.
+const realAtomicFs = await import("../../src/platform/app/atomic-fs");
 mock.module("../../src/platform/app/atomic-fs", () => ({
+  ...realAtomicFs,
   writeTextAtomic: async (path: string, contents: string) => {
     await null;
     files.set(path, contents);

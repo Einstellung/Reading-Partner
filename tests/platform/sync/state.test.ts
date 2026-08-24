@@ -7,11 +7,17 @@
 // file. The fs plugin is in-memory. Run: bun test.
 
 import { expect, mock, test } from "bun:test";
+import { pluginFsSurface } from "../../support/stub-surface";
 
 let file: string | null = null;
 let readFails = false;
 
+// The surface spread first is the whole plugin; the two keys below are this
+// file's disk and win over it — readFails included, which is what these tests
+// are about. mock.module is process-wide, so a name missing here would break
+// whichever file loads next (docs/pitfall/119).
 mock.module("@tauri-apps/plugin-fs", () => ({
+  ...pluginFsSurface(),
   BaseDirectory: { AppData: 1 },
   exists: async () => file !== null,
   readTextFile: async () => {
