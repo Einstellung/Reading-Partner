@@ -78,28 +78,24 @@ export function createViewStateStore(io: ViewStateIo): ViewStateStore {
   // happens after it drops the merged positions either way.
   let cached: ViewStateFile | null = null;
 
-  function hold(
-    store: ViewStateFile,
-    writable: boolean,
-  ): { store: ViewStateFile; writable: boolean } {
-    if (writable) cached = store;
-    return { store, writable };
+  function hold(store: ViewStateFile): ViewStateFile {
+    cached = store;
+    return store;
   }
 
   // One file holds every book's position, and every save rewrites all of it. So
   // a read that failed must not be answered with an empty map: the next scroll
   // would write it back and reading-state.json would hold the book that happens
   // to be open and nothing else. Unparseable content is quarantined and an empty
-  // map is then the truth about what is left; a file that could not be read at
-  // all stays where it is and saving is refused until a later read succeeds.
-  async function load(): Promise<{ store: ViewStateFile; writable: boolean }> {
+  // map is then the truth about what is left; a file that is there and could not
+  // be read at all raises, which is what leaves it where it is — every save
+  // below loads first.
+  async function load(): Promise<ViewStateFile> {
     const read = await io.read();
-    if (read.status === "ok") return hold(read.value, true);
-    if (read.status === "missing") return hold({ states: {} }, true);
-    // Quarantined: an empty map is what is left. Not quarantined: this is not
-    // the truth about the file, only what could be got, so it is not held
-    // either.
-    return hold({ states: {} }, read.savedAs !== null);
+    if (read.status === "ok") return hold(read.value);
+    if (read.status === "missing") return hold({ states: {} });
+    if (read.savedAs === null) throw new Error(`${STATE_FILE} could not be read`);
+    return hold({ states: {} });
   }
 
   async function save(store: ViewStateFile): Promise<void> {
@@ -112,19 +108,13 @@ export function createViewStateStore(io: ViewStateIo): ViewStateStore {
   }
 
   async function saveOne(bookId: string, state: ViewState): Promise<void> {
-    const { store, writable } = await load();
-    if (!writable) {
-      throw new Error(`${STATE_FILE} could not be read; refusing to overwrite it`);
-    }
+    const store = await load();
     store.states[bookId] = state;
     await save(store);
   }
 
   return {
-    get: async (bookId) => {
-      const { store } = await load();
-      return store.states[bookId] ?? null;
-    },
+    get: async (bookId) => (await load()).states[bookId] ?? null,
     save: saveOne,
     // saveViewState on the way out of the app: one IPC when this session has
     // already seen the file, and the ordinary read-then-write when it has not —

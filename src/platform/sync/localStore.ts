@@ -22,7 +22,7 @@
 // pulled, and the merge contract handles that case.
 
 import { appData } from "../app/appdata";
-import { writeTextAtomic } from "../app/atomic-fs";
+import { writeBytesAtomic, writeTextAtomic } from "../app/atomic-fs";
 
 export const BASE_DIR = "sync-base";
 export const TRASH_FILE = "sync-trash.jsonl";
@@ -59,11 +59,14 @@ export const tauriBaseStore: BaseStore = {
       return false;
     }
   },
-  async write(path, bytes) {
-    const full = basePath(path);
-    const slash = full.lastIndexOf("/");
-    await appData.mkdirp(full.slice(0, slash));
-    await appData.writeBytes(full, bytes);
+  // Atomically, like the data file it mirrors: the base is what a three-way
+  // merge reasons from, and half a base is worse than none — a missing base
+  // makes the merge keep both sides, while a truncated one that still parses
+  // makes it call the records past the tear "added by the other device". The
+  // bytes are a copy of an in-range file, so they are always text; the
+  // atomic/plain line is writeBytesAtomic's.
+  write(path, bytes) {
+    return writeBytesAtomic(basePath(path), bytes);
   },
   async remove(path) {
     try {

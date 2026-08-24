@@ -86,13 +86,6 @@ export function healTopics(topics: Topic[]): Topic[] {
   return changed ? healed : topics;
 }
 
-// What a mutator raises rather than writing its own copy of the library over a
-// file it could not read. The user has already been told which file it is and
-// where the bad bytes went (atomic-fs reports it); this is what stops the edit.
-function unreadable(): Error {
-  return new Error(`${TOPICS_FILE} could not be read; refusing to overwrite it`);
-}
-
 // Everything the store reaches outside itself, passed in rather than imported,
 // so a test can run the real store — the serialisation included — against its
 // own file.
@@ -145,31 +138,31 @@ export function createTopicStore(io: TopicIo): TopicStore {
     return next;
   }
 
-  // The topic library read, plus whether it is safe to write the result back.
+  // The topic library read.
   //
   // Nothing rebuilds a topic. The PDFs are still on disk, but which question they
   // were read against, when they were added and when they were last opened live
-  // only here — and lastOpenedAt is the only source "Continue reading" has. So an
-  // unreadable file must never turn into "one topic, the one being edited": the
-  // shelf is one sync unit, so local-changed against remote-unchanged is
-  // classified an upload rather than a merge (sync/reconcile.ts), the one-topic
-  // file goes to Drive whole, and nothing is journalled to sync-trash.jsonl.
+  // only here — and lastOpenedAt is the only source "Continue reading" has. So a
+  // file that is there and could not be read raises rather than reading as no
+  // topics at all: an empty library turns the next edit into "one topic, the one
+  // being edited", and the shelf is one sync unit, so local-changed against
+  // remote-unchanged is classified an upload rather than a merge
+  // (sync/reconcile.ts) — the one-topic file goes to Drive whole and nothing is
+  // journalled to sync-trash.jsonl.
   //
-  // Content that doesn't parse is quarantined and a fresh library takes over; a
-  // file that could not be read at all is left where it is and writing is refused
-  // until a later read succeeds.
-  async function readStore(): Promise<{ store: TopicFile; writable: boolean }> {
+  // Content that doesn't parse is quarantined and a fresh library takes over.
+  async function readStore(): Promise<TopicFile> {
     const read = await io.read();
-    if (read.status === "ok") return { store: read.value, writable: true };
-    if (read.status === "missing") return { store: { topics: [] }, writable: true };
-    return { store: { topics: [] }, writable: read.savedAs !== null };
+    if (read.status === "ok") return read.value;
+    if (read.status === "missing") return { topics: [] };
+    if (read.savedAs === null) throw new Error(`${TOPICS_FILE} could not be read`);
+    return { topics: [] };
   }
 
   // Every read hands out repaired references, whether or not the file on disk has
   // been rewritten yet.
-  async function load(): Promise<{ store: TopicFile; writable: boolean }> {
-    const { store, writable } = await readStore();
-    return { store: { topics: healTopics(store.topics) }, writable };
+  async function load(): Promise<TopicFile> {
+    return { topics: healTopics((await readStore()).topics) };
   }
 
   function save(store: TopicFile): Promise<void> {
@@ -182,22 +175,21 @@ export function createTopicStore(io: TopicIo): TopicStore {
     // revision. Returns whether it wrote.
     repairPaths: () =>
       serialize(async () => {
-        const { store, writable } = await readStore();
+        const store = await readStore();
         const healed = healTopics(store.topics);
-        if (healed === store.topics || !writable) return false;
+        if (healed === store.topics) return false;
         await save({ topics: healed });
         return true;
       }),
 
     list: async () => {
-      const { store } = await load();
+      const store = await load();
       return store.topics.sort((a, b) => b.createdAt - a.createdAt);
     },
 
     create: (name) =>
       serialize(async () => {
-        const { store, writable } = await load();
-        if (!writable) throw unreadable();
+        const store = await load();
         const topic: Topic = {
           id: io.newId(),
           name: name.trim() || "Untitled",
@@ -212,10 +204,9 @@ export function createTopicStore(io: TopicIo): TopicStore {
     // The Brief topic, created on first use. Idempotent by id.
     ensureBrief: () =>
       serialize(async () => {
-        const { store, writable } = await load();
-        // Before the lookup, not after: an unreadable file has no topics in it,
-        // so "not found" here would mean creating a second Brief over the first.
-        if (!writable) throw unreadable();
+        // The raise happens in the read, before the lookup rather than after: no
+        // topics in hand would mean creating a second Brief over the first.
+        const store = await load();
         const found = store.topics.find((t) => t.id === BRIEF_TOPIC_ID);
         if (found) return found;
         const topic: Topic = {
@@ -231,8 +222,7 @@ export function createTopicStore(io: TopicIo): TopicStore {
 
     rename: (id, name) =>
       serialize(async () => {
-        const { store, writable } = await load();
-        if (!writable) throw unreadable();
+        const store = await load();
         const topic = store.topics.find((t) => t.id === id);
         if (!topic) return;
         topic.name = name.trim() || topic.name;
@@ -241,10 +231,9 @@ export function createTopicStore(io: TopicIo): TopicStore {
 
     remove: (id) =>
       serialize(async () => {
-        const { store, writable } = await load();
         // An unreadable file holds an unknown number of topics, so a delete over
-        // it deletes everything but this one rather than the one asked for.
-        if (!writable) throw unreadable();
+        // it would keep this one and drop the rest. The read raises instead.
+        const store = await load();
         store.topics = store.topics.filter((t) => t.id !== id);
         await save(store);
       }),
@@ -256,8 +245,7 @@ export function createTopicStore(io: TopicIo): TopicStore {
     addFile: (id, rawPath) => {
       const path = normalizeFilePath(rawPath);
       return serialize(async () => {
-        const { store, writable } = await load();
-        if (!writable) throw unreadable();
+        const store = await load();
         const topic = store.topics.find((t) => t.id === id);
         if (!topic || topic.files.some((f) => f.path === path)) return;
         topic.files.push({ path, name: basename(path), addedAt: io.now() });
@@ -267,8 +255,7 @@ export function createTopicStore(io: TopicIo): TopicStore {
 
     removeFile: (id, path) =>
       serialize(async () => {
-        const { store, writable } = await load();
-        if (!writable) throw unreadable();
+        const store = await load();
         const topic = store.topics.find((t) => t.id === id);
         if (!topic) return;
         topic.files = topic.files.filter((f) => f.path !== path);
@@ -285,8 +272,8 @@ export function createTopicStore(io: TopicIo): TopicStore {
     // looking at could not be opened (App.tsx's openFile catches around both).
     setFileHash: (id, path, hash) =>
       serialize(async () => {
-        const { store, writable } = await load();
-        if (!writable) return;
+        const store = await load().catch(() => null);
+        if (!store) return;
         const file = store.topics.find((t) => t.id === id)?.files.find((f) => f.path === path);
         if (!file || file.hash === hash) return;
         file.hash = hash;
@@ -295,8 +282,8 @@ export function createTopicStore(io: TopicIo): TopicStore {
 
     markOpened: (id, path) =>
       serialize(async () => {
-        const { store, writable } = await load();
-        if (!writable) return;
+        const store = await load().catch(() => null);
+        if (!store) return;
         const file = store.topics.find((t) => t.id === id)?.files.find((f) => f.path === path);
         if (!file) return;
         file.lastOpenedAt = io.now();

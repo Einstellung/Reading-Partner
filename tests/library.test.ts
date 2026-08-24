@@ -2,14 +2,18 @@
 // registry transform run headless; the Tauri fs copy path is exercised by the
 // app. Run: bun test.
 
-import { expect, test } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
 import { contentHash } from "../src/platform/app/content-hash";
 import {
+  LIBRARY_FILE,
   addEntry,
+  getLibraryEntry,
   healLibrary,
+  importBook,
   libraryPdfPath,
   type LibraryStore,
 } from "../src/platform/app/library";
+import { installAppData, QUARANTINE_SUFFIX, type FakeDisk } from "./support/appdata-fake";
 
 test("contentHash is the sha256 hex truncated to 16 bytes", async () => {
   // sha256("abc") = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
@@ -103,4 +107,61 @@ test("healLibrary returns a clean store unchanged, by identity", () => {
   };
   const once = healLibrary(dirty);
   expect(healLibrary(once)).toBe(once);
+});
+
+// --- the registry on disk ---------------------------------------------------
+
+// The shelf's titles live only here: the PDFs survive in library/, their names
+// do not. So a registry file that is there and will not open is a failure, not
+// an empty shelf — answering "no books" would be the app telling the reader
+// their library is gone, and the write that followed would make it true.
+
+let disk: FakeDisk;
+
+beforeEach(() => {
+  disk = installAppData();
+});
+
+const REGISTERED = JSON.stringify({
+  books: { h1: { hash: "h1", title: "Tracing JITs.pdf", originalFilename: "a.pdf", addedAt: 1 } },
+});
+
+test("an unreadable registry raises rather than reading as an empty shelf", async () => {
+  disk.files.set(LIBRARY_FILE, REGISTERED);
+  disk.unreadable.add(LIBRARY_FILE);
+
+  expect(getLibraryEntry("h1")).rejects.toThrow(/could not be read/);
+});
+
+test("an import over an unreadable registry is refused, and the file is untouched", async () => {
+  disk.files.set(LIBRARY_FILE, REGISTERED);
+  disk.unreadable.add(LIBRARY_FILE);
+
+  await expect(importBook(new Uint8Array([1, 2, 3]), "/books/new.pdf")).rejects.toThrow(
+    /could not be read/,
+  );
+  expect(disk.files.get(LIBRARY_FILE)).toBe(REGISTERED);
+  expect(disk.files.has(`${LIBRARY_FILE}${QUARANTINE_SUFFIX}`)).toBe(false);
+});
+
+// Bytes that will not parse are a different case: they are moved aside first, so
+// a fresh registry is what is left and the import may go ahead.
+test("an unparseable registry is moved aside and the import goes ahead", async () => {
+  disk.files.set(LIBRARY_FILE, REGISTERED.slice(0, 20));
+
+  const entry = await importBook(new Uint8Array([1, 2, 3]), "/books/new.pdf");
+
+  expect(entry.title).toBe("new.pdf");
+  expect(disk.files.get(`${LIBRARY_FILE}${QUARANTINE_SUFFIX}`)).toBe(REGISTERED.slice(0, 20));
+  expect(Object.keys((JSON.parse(disk.files.get(LIBRARY_FILE)!) as LibraryStore).books)).toEqual([
+    entry.hash,
+  ]);
+});
+
+// A file that is not there is the first run, and it has to reach a write.
+test("no registry at all still registers the first import", async () => {
+  const entry = await importBook(new Uint8Array([4, 5, 6]), "/books/first.pdf");
+  expect(Object.keys((JSON.parse(disk.files.get(LIBRARY_FILE)!) as LibraryStore).books)).toEqual([
+    entry.hash,
+  ]);
 });

@@ -131,6 +131,19 @@ test("a book opens with no tool held and nothing selected", async () => {
   expect(names(log)).toContain("clearSelectedMark");
 });
 
+// reading-state.json raises for a file that is there and will not open, rather
+// than answering "no position" — so the book opens at the top and says why,
+// instead of opening at the top and letting the reader think they lost it.
+test("a position that cannot be read costs its sentence, not the book", async () => {
+  const log: Call[] = [];
+  const io = fakeIo(log, { getViewState: () => Promise.reject(new Error("EIO")) });
+  await openBook(fakeShell(log), book, io);
+
+  expect(argsOf(log, "pushToast")).toEqual(["warn", "Saved reading position could not be loaded"]);
+  expect(argsOf(log, "seedReadingPosition")).toEqual(["book-1", null]);
+  expect(names(log)).toContain("mountReader");
+});
+
 test("marks that cannot be read cost their sentence, not the book", async () => {
   const log: Call[] = [];
   const io = fakeIo(log, { loadAnnotations: () => Promise.reject(new Error("EIO")) });

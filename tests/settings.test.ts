@@ -23,8 +23,8 @@ let disk: FakeDisk;
 
 beforeEach(() => {
   disk = installAppData();
-  // The singleton carries a latch that one unreadable file sets for good, so a
-  // case that reads settings starts from a store that has read nothing yet.
+  // A save one case scheduled and did not flush would otherwise land on the next
+  // case's disk.
   rebuildSettingsStoreForTests();
 });
 
@@ -130,25 +130,26 @@ test("saveSettings schedules a write with no window in the process", async () =>
   });
 });
 
-// A file that exists and will not open blocks writing for as long as the store
-// lives: settings the app never read must not be overwritten with the defaults
-// it fell back to. That is right for the app and is why the store has to be
-// rebuildable — the latch outlives the case that set it otherwise.
-test("a load off an unreadable file blocks the writes of that store and no other", async () => {
+// A file that exists and will not open is a failure, not an empty file. Handed
+// the defaults, the settings panel would show a reader who has configured a
+// provider that they have configured none — and the next save would make that
+// true. So the load raises, and the save asks the disk again and refuses.
+test("an unreadable file raises out of the load and is not written over", async () => {
   const errors: string[] = [];
   const off = onStoreError((e) => errors.push(e.scope));
   try {
     disk.files.set(SETTINGS_FILE, JSON.stringify({ defaultProviderId: "openai" }));
     disk.unreadable.add(SETTINGS_FILE);
-    expect(await loadSettings()).toEqual(DEFAULT_SETTINGS);
+    expect(loadSettings()).rejects.toThrow(SETTINGS_FILE);
 
     saveSettings({ ...DEFAULT_SETTINGS, defaultProviderId: "anthropic" });
     await flushSettings();
     expect(disk.writes).toEqual([]);
     expect(errors).toContain("settings");
+    expect(disk.files.get(SETTINGS_FILE)).toBe(JSON.stringify({ defaultProviderId: "openai" }));
 
-    // A fresh store over the same disk, now readable, writes.
-    rebuildSettingsStoreForTests();
+    // The same store, no rebuild: the refusal was a question asked of the disk,
+    // not a flag set for the life of the process.
     disk.unreadable.delete(SETTINGS_FILE);
     saveSettings({ ...DEFAULT_SETTINGS, defaultProviderId: "anthropic" });
     await flushSettings();

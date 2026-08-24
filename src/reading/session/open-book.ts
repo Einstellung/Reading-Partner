@@ -76,7 +76,15 @@ export async function openBook(
   shell.clearSelectedMark();
   shell.resetTool();
 
-  const state = await io.getViewState(bookId);
+  // Every read here is optional: the book opens either way, and being told which
+  // part of it could not be loaded beats being told the book could not be.
+  let state: ViewState | null = null;
+  try {
+    state = await io.getViewState(bookId);
+  } catch (e) {
+    console.error("failed to load the reading position", e);
+    shell.pushToast("warn", "Saved reading position could not be loaded");
+  }
   let saved: Annotation[] = [];
   try {
     saved = await io.loadAnnotations(bookId);
