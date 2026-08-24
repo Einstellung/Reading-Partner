@@ -710,10 +710,7 @@ export async function saveThreadImages(
   const names: string[] = [];
   for (let i = 0; i < images.length; i++) {
     const name = `${stamp}-${i}.${extFor(images[i].mediaType)}`;
-    await appData.writeBytes(
-      `${threadImageDir(threadId)}/${name}`,
-      base64ToBytes(images[i].data),
-    );
+    await appData.writeBytes(`${threadImageDir(threadId)}/${name}`, base64ToBytes(images[i].data));
     names.push(name);
   }
   return names;

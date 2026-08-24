@@ -107,10 +107,8 @@ export async function saveArticles(
 export async function loadArticles(date: string): Promise<Record<string, CachedArticle>> {
   try {
     if (!(await appData.exists(articlesFile(date)))) return {};
-    return JSON.parse(await appData.readText(articlesFile(date))) as Record<
-      string,
-      CachedArticle
-    >;
+    const text = await appData.readText(articlesFile(date));
+    return JSON.parse(text) as Record<string, CachedArticle>;
   } catch {
     return {};
   }
