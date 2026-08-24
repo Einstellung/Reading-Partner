@@ -356,4 +356,7 @@ test("closingTail measures against what went out, ignoring the seams", () => {
   expect(closingTail(["hello", "there"], "hellothere and more")).toBe("and more");
   expect(closingTail(["a", "b"], "")).toBe("");
   expect(closingTail(["a", "b"], "a b")).toBe("");
+  // A code point outside the BMP is two code units wide, and matching it one
+  // unit at a time would fail the prefix and re-emit the whole line after it.
+  expect(closingTail(["\u{30B1e}\u{30B1e}面"], "\u{30B1e}\u{30B1e}面 很好吃")).toBe("很好吃");
 });

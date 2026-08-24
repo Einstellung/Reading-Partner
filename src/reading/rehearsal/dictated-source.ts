@@ -64,8 +64,12 @@ function afterPrefix(text: string, prefix: string): number {
   for (const c of prefix) {
     if (isSpace(c)) continue;
     while (at < text.length && isSpace(text[at])) at++;
-    if (text[at] !== c) return -1;
-    at++;
+    // startsWith/`c.length` rather than an index compare: `c` is a code point,
+    // and one outside the BMP is two code units wide. Comparing it against a
+    // single unit would never match, and the retreat above would then re-emit
+    // everything from that character on.
+    if (!text.startsWith(c, at)) return -1;
+    at += c.length;
   }
   return at;
 }
