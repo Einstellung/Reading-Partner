@@ -21,7 +21,7 @@
 // readThreadImages already tolerates.
 
 import { appData } from "../app/appdata";
-import { writeTextAtomic } from "../app/atomic-fs";
+import { writeBytesAtomic } from "../app/atomic-fs";
 
 // What a scan of the sync range sees: one stat per file, nothing read.
 export interface ScannedFile {
@@ -183,26 +183,12 @@ export const tauriSyncFs: SyncFs = {
   read(path) {
     return appData.readBytes(path);
   },
-  async write(path, bytes) {
-    // Every in-range file is UTF-8 text this app wrote, so a pull lands through
-    // the atomic writer (which also creates the parent directory): a pull is
-    // exactly when a torn write would be worst — half of the other device's
-    // library.json, then a local import overwriting the rest. Bytes that are
-    // not valid UTF-8 can't be ours; keep them verbatim rather than mangling
-    // them, and let the loader quarantine the file.
-    let text: string | null = null;
-    try {
-      text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    } catch {
-      text = null;
-    }
-    if (text !== null) {
-      await writeTextAtomic(path, text);
-      return;
-    }
-    const slash = path.lastIndexOf("/");
-    if (slash > 0) await appData.mkdirp(path.slice(0, slash));
-    await appData.writeBytes(path, bytes);
+  // Every in-range file is UTF-8 text this app wrote, so a pull lands through the
+  // atomic writer: a pull is exactly when a torn write would be worst — half of
+  // the other device's library.json, then a local import overwriting the rest.
+  // Where the atomic/plain line is drawn, and why, is writeBytesAtomic's.
+  write(path, bytes) {
+    return writeBytesAtomic(path, bytes);
   },
   async stat(path) {
     const info = await appData.stat(path);

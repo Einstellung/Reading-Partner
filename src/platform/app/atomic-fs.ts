@@ -26,9 +26,9 @@ import { reportStoreError } from "./store-errors";
 // moment the held copy stops being the file, rather than at the end of whatever
 // pass replaced it.
 //
-// The one text write that does not come through here is syncFs.write's fallback
-// for bytes that are not valid UTF-8. Nothing this app wrote is invalid UTF-8, so
-// a file arriving that way is not one any store here has a copy of.
+// The one text write that does not come through here is writeBytesAtomic's
+// fallback for bytes that are not valid UTF-8. Nothing this app wrote is invalid
+// UTF-8, so a file arriving that way is not one any store here has a copy of.
 const writeListeners = new Set<(path: string) => void>();
 
 /**
@@ -54,6 +54,35 @@ export async function writeTextAtomic(path: string, contents: string): Promise<v
       console.error(`write listener failed for ${path}`, e);
     }
   }
+}
+
+/**
+ * Replace an AppData-relative file whose payload arrives as bytes rather than as
+ * a string — sync, which reads and writes everything as bytes.
+ *
+ * The line between atomic and plain is drawn on the payload, not on the path:
+ * bytes that decode as UTF-8 go through the atomic writer, bytes that do not are
+ * written plainly. Every file sync carries on the data channel is JSON, JSONL or
+ * markdown this app wrote, so that test sends all of them through the atomic
+ * writer; bytes that fail it cannot be ours, and are kept verbatim rather than
+ * mangled, for the loader to quarantine. Book blobs never reach here at all —
+ * they travel their own channel (platform/sync/books.ts) and stay on
+ * appData.writeBytes for the reason at the top of this file.
+ */
+export async function writeBytesAtomic(path: string, bytes: Uint8Array): Promise<void> {
+  let text: string | null = null;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    text = null;
+  }
+  if (text !== null) {
+    await writeTextAtomic(path, text);
+    return;
+  }
+  const slash = path.lastIndexOf("/");
+  if (slash > 0) await appData.mkdirp(path.slice(0, slash));
+  await appData.writeBytes(path, bytes);
 }
 
 /**
