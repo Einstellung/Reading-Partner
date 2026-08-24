@@ -3,24 +3,22 @@
 // cannot record. Covered two ways — the pure prop resolver, and a static render
 // that proves the mic button is actually in (or out of) the DOM. Run: bun test.
 
-import { test, expect, mock } from "bun:test";
+import { beforeEach, expect, spyOn, test } from "bun:test";
+import * as os from "@tauri-apps/plugin-os";
 import { renderToStaticMarkup } from "react-dom/server";
-import { pluginOsSurface } from "../../support/stub-surface";
+import { Composer, resolveComposerVoice } from "../../../src/ui/components/chat/chat";
 
 // The render tests stand in for a desktop host: capture is a Rust command
 // compiled `#[cfg(desktop)]`, and without the plugin the composer would rightly
 // hide the mic (see hasNativeRecorder). This says nothing about the prop rules,
 // which the resolver tests cover directly.
 //
-// The whole module's surface goes in, not just platform: mock.module is
-// process-wide and does not roll back, so a file loading after this one that
-// imports hostname off this module would otherwise fail to link and not run at
-// all (docs/pitfall/119).
-mock.module("@tauri-apps/plugin-os", () => ({
-  ...pluginOsSurface(),
-  platform: () => "linux",
-}));
-import { Composer, resolveComposerVoice } from "../../../src/ui/components/chat/chat";
+// A spy rather than mock.module: the preload takes it back down between cases,
+// so this file cannot decide what platform the files after it run on
+// (docs/pitfall/171, 119).
+beforeEach(() => {
+  spyOn(os, "platform").mockImplementation(() => "linux");
+});
 
 // The mic button's title/aria-label; its presence in the markup means the mic
 // rendered.

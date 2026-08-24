@@ -1,8 +1,7 @@
 // The two published names on disk (src/info/briefing/publish.ts), against an
 // in-memory AppData: what a collector writes over them, and the two cases where
 // it must write nothing at all. tests/info/publish.test.ts covers the pure half;
-// this file is here for the writes, so the mocked filesystem has to be in place
-// before the module is imported.
+// this file is here for the writes.
 //
 // Both cases are the same mistake: an answer that stands in for a file, and a
 // write that then makes it true.
@@ -17,24 +16,23 @@
 //
 // Run: bun test.
 
-import { beforeEach, expect, mock, test } from "bun:test";
-import type { Briefing } from "../../src/info/briefing/types";
-import type { CachedArticle } from "../../src/info/briefing/store";
-import type { InfoItem } from "../../src/info/sources/item";
-import { makeAppData } from "../support/appdata";
-
-const app = makeAppData();
-const { files, unreadable } = app;
-mock.module("@tauri-apps/plugin-fs", () => app.pluginFs);
-mock.module("@tauri-apps/api/core", () => app.core);
-mock.module("../../src/platform/app/atomic-fs", () => app.atomicFs);
-
-const {
-  backfillPublish,
-  publishBriefing,
+import { beforeEach, expect, test } from "bun:test";
+import {
   PUBLISHED_BODIES_FILE,
   PUBLISHED_BRIEFING_FILE,
-} = await import("../../src/info/briefing/publish");
+  backfillPublish,
+  publishBriefing,
+} from "../../src/info/briefing/publish";
+import type { CachedArticle } from "../../src/info/briefing/store";
+import type { Briefing } from "../../src/info/briefing/types";
+import type { InfoItem } from "../../src/info/sources/item";
+import { installAppData, type FakeDisk } from "../support/appdata-fake";
+
+let disk: FakeDisk;
+
+beforeEach(() => {
+  disk = installAppData();
+});
 
 const DATE = "2026-08-12";
 
@@ -80,20 +78,18 @@ function putDayFiles(b: Briefing): void {
     a: { textContent: "the whole of article a", contentHtml: "<p>a</p>" } as CachedArticle,
     b: { textContent: "the whole of article b", contentHtml: "<p>b</p>" } as CachedArticle,
   };
-  files.set(`briefing-${b.date}.json`, JSON.stringify(b, null, 2));
-  files.set(`info-articles-${b.date}.json`, JSON.stringify(articles));
-  files.set(`info-items-${b.date}.json`, JSON.stringify([item("a"), item("b")]));
+  disk.files.set(`briefing-${b.date}.json`, JSON.stringify(b, null, 2));
+  disk.files.set(`info-articles-${b.date}.json`, JSON.stringify(articles));
+  disk.files.set(`info-items-${b.date}.json`, JSON.stringify([item("a"), item("b")]));
 }
-
-beforeEach(() => app.reset());
 
 test("a backfill publishes the briefing the readers never got", async () => {
   const local = briefing(1_000);
   putDayFiles(local);
 
   expect(await backfillPublish()).toBe("published");
-  expect(JSON.parse(files.get(PUBLISHED_BRIEFING_FILE) ?? "null").generatedAt).toBe(1_000);
-  expect(JSON.parse(files.get(PUBLISHED_BODIES_FILE) ?? "null").bodies.a.text).toBe(
+  expect(JSON.parse(disk.files.get(PUBLISHED_BRIEFING_FILE) ?? "null").generatedAt).toBe(1_000);
+  expect(JSON.parse(disk.files.get(PUBLISHED_BODIES_FILE) ?? "null").bodies.a.text).toBe(
     "the whole of article a",
   );
 });
@@ -105,21 +101,21 @@ test("a published briefing that could not be read is not published over", async 
   const local = briefing(1_000);
   putDayFiles(local);
   const newer = JSON.stringify(briefing(9_000), null, 2);
-  files.set(PUBLISHED_BRIEFING_FILE, newer);
-  files.set(PUBLISHED_BODIES_FILE, JSON.stringify({ date: DATE, generatedAt: 9_000, bodies: {} }));
-  unreadable.add(PUBLISHED_BRIEFING_FILE);
+  disk.files.set(PUBLISHED_BRIEFING_FILE, newer);
+  disk.files.set(PUBLISHED_BODIES_FILE, JSON.stringify({ date: DATE, generatedAt: 9_000, bodies: {} }));
+  disk.unreadable.add(PUBLISHED_BRIEFING_FILE);
 
   expect(await backfillPublish()).toBe("unreadable-published");
 
   // Byte for byte: not overwritten, and not moved aside either — nothing is
   // known to be wrong with it.
-  expect(files.get(PUBLISHED_BRIEFING_FILE)).toBe(newer);
-  expect([...files.keys()].some((k) => k.includes(".corrupt-"))).toBe(false);
+  expect(disk.files.get(PUBLISHED_BRIEFING_FILE)).toBe(newer);
+  expect([...disk.files.keys()].some((k) => k.includes(".corrupt-"))).toBe(false);
 
   // It opens on the next launch, and then the newer briefing wins on its own.
-  unreadable.clear();
+  disk.unreadable.clear();
   expect(await backfillPublish()).toBe("published-newer");
-  expect(files.get(PUBLISHED_BRIEFING_FILE)).toBe(newer);
+  expect(disk.files.get(PUBLISHED_BRIEFING_FILE)).toBe(newer);
 });
 
 // The briefing already out is this machine's own, so what is left to decide is
@@ -131,16 +127,16 @@ test("the bodies file counts too: neither half is published over an unread one",
   putDayFiles(local);
   const published = JSON.stringify(local, null, 2);
   const bodies = JSON.stringify({ date: DATE, generatedAt: 1_000, bodies: {} });
-  files.set(PUBLISHED_BRIEFING_FILE, published);
-  files.set(PUBLISHED_BODIES_FILE, bodies);
-  unreadable.add(PUBLISHED_BODIES_FILE);
+  disk.files.set(PUBLISHED_BRIEFING_FILE, published);
+  disk.files.set(PUBLISHED_BODIES_FILE, bodies);
+  disk.unreadable.add(PUBLISHED_BODIES_FILE);
 
   expect(await backfillPublish()).toBe("unreadable-published");
-  expect(files.get(PUBLISHED_BODIES_FILE)).toBe(bodies);
-  expect(files.get(PUBLISHED_BRIEFING_FILE)).toBe(published);
+  expect(disk.files.get(PUBLISHED_BODIES_FILE)).toBe(bodies);
+  expect(disk.files.get(PUBLISHED_BRIEFING_FILE)).toBe(published);
 
   // It opens on the next launch, and the pair turns out to have been whole.
-  unreadable.clear();
+  disk.unreadable.clear();
   expect(await backfillPublish()).toBe("up-to-date");
 });
 
@@ -151,11 +147,11 @@ test("the bodies file counts too: neither half is published over an unread one",
 test("a published briefing that is not JSON is replaced, not set aside", async () => {
   const local = briefing(1_000);
   putDayFiles(local);
-  files.set(PUBLISHED_BRIEFING_FILE, "{ half a briefi");
+  disk.files.set(PUBLISHED_BRIEFING_FILE, "{ half a briefi");
 
   expect(await backfillPublish()).toBe("published");
-  expect(JSON.parse(files.get(PUBLISHED_BRIEFING_FILE) ?? "null").generatedAt).toBe(1_000);
-  expect([...files.keys()].some((k) => k.includes(".corrupt-"))).toBe(false);
+  expect(JSON.parse(disk.files.get(PUBLISHED_BRIEFING_FILE) ?? "null").generatedAt).toBe(1_000);
+  expect([...disk.files.keys()].some((k) => k.includes(".corrupt-"))).toBe(false);
 });
 
 // The two branches at once, which is where quarantining lost the name outright:
@@ -166,17 +162,17 @@ test("a published briefing that is not JSON is replaced, not set aside", async (
 test("an unparseable briefing survives a refused republish", async () => {
   const local = briefing(1_000);
   putDayFiles(local);
-  files.set(PUBLISHED_BRIEFING_FILE, "{ half a briefi");
-  files.set(PUBLISHED_BODIES_FILE, JSON.stringify({ date: DATE, generatedAt: 9_000, bodies: {} }));
-  unreadable.add(PUBLISHED_BODIES_FILE);
+  disk.files.set(PUBLISHED_BRIEFING_FILE, "{ half a briefi");
+  disk.files.set(PUBLISHED_BODIES_FILE, JSON.stringify({ date: DATE, generatedAt: 9_000, bodies: {} }));
+  disk.unreadable.add(PUBLISHED_BODIES_FILE);
 
   expect(await backfillPublish()).toBe("unreadable-published");
-  expect(files.get(PUBLISHED_BRIEFING_FILE)).toBe("{ half a briefi");
+  expect(disk.files.get(PUBLISHED_BRIEFING_FILE)).toBe("{ half a briefi");
 
   // The bodies open again, and the same briefing name is repaired in place.
-  unreadable.clear();
+  disk.unreadable.clear();
   expect(await backfillPublish()).toBe("published");
-  expect(JSON.parse(files.get(PUBLISHED_BRIEFING_FILE) ?? "null").generatedAt).toBe(1_000);
+  expect(JSON.parse(disk.files.get(PUBLISHED_BRIEFING_FILE) ?? "null").generatedAt).toBe(1_000);
 });
 
 // A re-triage on a day whose article cache has already been pruned. Every body
@@ -187,18 +183,18 @@ test("a briefing whose bodies rebuilt empty is not published, and takes nothing 
   const first = briefing(1_000);
   putDayFiles(first);
   expect(await publishBriefing(first)).toBe("published");
-  const publishedBriefing = files.get(PUBLISHED_BRIEFING_FILE);
-  const publishedBodies = files.get(PUBLISHED_BODIES_FILE);
+  const publishedBriefing = disk.files.get(PUBLISHED_BRIEFING_FILE);
+  const publishedBodies = disk.files.get(PUBLISHED_BODIES_FILE);
 
   // The day's files are pruned once a run starts on a new day; the briefing
   // outlives them, and a re-triage rewrites it.
-  files.delete(`info-articles-${DATE}.json`);
-  files.delete(`info-items-${DATE}.json`);
+  disk.files.delete(`info-articles-${DATE}.json`);
+  disk.files.delete(`info-items-${DATE}.json`);
   const retriaged = { ...first, generatedAt: 2_000, overview: "same day, moved around" };
 
   expect(await publishBriefing(retriaged)).toBe("no-bodies");
-  expect(files.get(PUBLISHED_BRIEFING_FILE)).toBe(publishedBriefing);
-  expect(files.get(PUBLISHED_BODIES_FILE)).toBe(publishedBodies);
+  expect(disk.files.get(PUBLISHED_BRIEFING_FILE)).toBe(publishedBriefing);
+  expect(disk.files.get(PUBLISHED_BODIES_FILE)).toBe(publishedBodies);
   // What the readers still have is the whole pair, text and all.
   expect(JSON.parse(publishedBodies ?? "null").bodies.a.text).toBe("the whole of article a");
 });

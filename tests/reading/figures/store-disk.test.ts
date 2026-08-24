@@ -1,7 +1,6 @@
 // The figure-index cache on disk (src/reading/figures/store.ts) against an
 // in-memory AppData and a stub pdf.js. store.test.ts covers the pure version
-// gate; this file is for what ends up in the file, and the mocked filesystem has
-// to be installed before the module is imported.
+// gate; this file is for what ends up in the file.
 //
 // Both cases here are the same shape: an empty index that says nothing about
 // where it came from.
@@ -16,15 +15,17 @@
 //
 // Run: bun test.
 
-import { beforeEach, expect, mock, test } from "bun:test";
+import { beforeEach, expect, spyOn, test } from "bun:test";
+import * as extract from "../../../src/fulltext/extract";
+import {
+  FIGURES_RETRY_AFTER_MS,
+  ensureFigures,
+  getFigures,
+} from "../../../src/reading/figures/store";
 import { FIGURES_VERSION } from "../../../src/reading/figures/types";
-import { makeAppData } from "../../support/appdata";
+import { installAppData, type FakeDisk } from "../../support/appdata-fake";
 
-const app = makeAppData();
-const { files, unreadable } = app;
-mock.module("@tauri-apps/plugin-fs", () => app.pluginFs);
-mock.module("@tauri-apps/api/core", () => app.core);
-mock.module("../../../src/platform/app/atomic-fs", () => app.atomicFs);
+let disk: FakeDisk;
 
 // A document with one blank page: enough for the extractor to walk and come back
 // with an honest, empty, "ok" index. `opens` is the switch the failure cases
@@ -50,18 +51,6 @@ const stubPdfjs = {
   },
 };
 
-// Everything else in the module is kept: mock.module replaces it for the whole
-// run, and loadPdfjs is the only export that needs a browser.
-const realFulltextExtract = await import("../../../src/fulltext/extract");
-mock.module("../../../src/fulltext/extract", () => ({
-  ...realFulltextExtract,
-  loadPdfjs: async () => stubPdfjs,
-}));
-
-const { ensureFigures, getFigures, FIGURES_RETRY_AFTER_MS } = await import(
-  "../../../src/reading/figures/store"
-);
-
 const KEY = "deadbeef";
 const FILE = `figures-${KEY}.json`;
 const BYTES = new ArrayBuffer(8);
@@ -75,15 +64,21 @@ const GOOD = JSON.stringify({
 });
 
 beforeEach(() => {
-  app.reset();
+  disk = installAppData();
   opens = true;
   openCalls = 0;
+  // loadPdfjs is the one export in that module that needs a browser; a spy on
+  // it leaves the rest of the extractor real, and the preload puts it back
+  // between cases (docs/pitfall/122).
+  spyOn(extract, "loadPdfjs").mockImplementation(
+    (async () => stubPdfjs) as unknown as typeof extract.loadPdfjs,
+  );
 });
 
 test("a document that opens is indexed and cached as an answer about the document", async () => {
   const index = await ensureFigures(KEY, BYTES, () => T0);
   expect(index.status).toBe("ok");
-  expect(JSON.parse(files.get(FILE) ?? "null")).toEqual({
+  expect(JSON.parse(disk.files.get(FILE) ?? "null")).toEqual({
     version: FIGURES_VERSION,
     status: "ok",
     figures: [],
@@ -102,7 +97,7 @@ test("a failed extraction is recorded as a failure and tried again a day later",
   opens = false;
   const index = await ensureFigures(KEY, BYTES, () => T0);
   expect(index).toEqual({ version: FIGURES_VERSION, status: "failed", figures: [], failedAt: T0 });
-  expect(JSON.parse(files.get(FILE) ?? "null").status).toBe("failed");
+  expect(JSON.parse(disk.files.get(FILE) ?? "null").status).toBe("failed");
 
   // Within the day it stands, so every open of the book does not re-run a
   // failing extraction.
@@ -115,7 +110,7 @@ test("a failed extraction is recorded as a failure and tried again a day later",
   const retried = await ensureFigures(KEY, BYTES, () => T0 + FIGURES_RETRY_AFTER_MS);
   expect(openCalls).toBe(1);
   expect(retried.status).toBe("ok");
-  expect(JSON.parse(files.get(FILE) ?? "null")).toEqual({
+  expect(JSON.parse(disk.files.get(FILE) ?? "null")).toEqual({
     version: FIGURES_VERSION,
     status: "ok",
     figures: [],
@@ -123,7 +118,7 @@ test("a failed extraction is recorded as a failure and tried again a day later",
 });
 
 test("a stale failure reads as a miss, so nothing serves it as the book's figures", async () => {
-  files.set(
+  disk.files.set(
     FILE,
     JSON.stringify({ version: FIGURES_VERSION, status: "failed", figures: [], failedAt: T0 }),
   );
@@ -135,23 +130,23 @@ test("a stale failure reads as a miss, so nothing serves it as the book's figure
 // cache file that is not there: nothing is known to be wrong with those bytes,
 // so the extraction that runs instead must not land on top of them.
 test("a cache that could not be read is not overwritten by the extraction that replaced it", async () => {
-  files.set(FILE, GOOD);
-  unreadable.add(FILE);
+  disk.files.set(FILE, GOOD);
+  disk.unreadable.add(FILE);
 
   // The extraction fails as well — the pairing that used to file a good index
   // as an empty one.
   opens = false;
   expect((await ensureFigures(KEY, BYTES, () => T0)).status).toBe("failed");
-  expect(files.get(FILE)).toBe(GOOD);
+  expect(disk.files.get(FILE)).toBe(GOOD);
 
   // And it does not land when the extraction succeeds either: a fresh index is
   // still a guess about a file this run never read.
   opens = true;
   expect((await ensureFigures(KEY, BYTES, () => T0)).status).toBe("ok");
-  expect(files.get(FILE)).toBe(GOOD);
+  expect(disk.files.get(FILE)).toBe(GOOD);
 
   // The next launch reads the file, and the figures are all still there.
-  unreadable.clear();
+  disk.unreadable.clear();
   const back = await getFigures(KEY, T0);
   expect(back?.figures.map((f) => f.id)).toEqual(["3"]);
 });
@@ -161,8 +156,8 @@ test("a cache that could not be read is not overwritten by the extraction that r
 // no sentence shown to the reader — that is for data nothing can rebuild
 // (platform/app/atomic-fs.ts readGuardedJson).
 test("cache bytes that will not parse are replaced by a fresh extraction", async () => {
-  files.set(FILE, "{ half an ind");
+  disk.files.set(FILE, "{ half an ind");
   expect((await ensureFigures(KEY, BYTES, () => T0)).status).toBe("ok");
-  expect(JSON.parse(files.get(FILE) ?? "null").status).toBe("ok");
-  expect([...files.keys()]).toEqual([FILE]);
+  expect(JSON.parse(disk.files.get(FILE) ?? "null").status).toBe("ok");
+  expect([...disk.files.keys()]).toEqual([FILE]);
 });

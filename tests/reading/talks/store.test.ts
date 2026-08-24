@@ -1,6 +1,5 @@
-// The talk's two disk paths against one in-memory AppData (they share a file so
-// they share a mocked filesystem: mock.module swaps a module out for the whole
-// run, and two files mocking @tauri-apps/plugin-fs would fight over it).
+// The talk's two disk paths against one in-memory AppData; they share a file, so
+// they share the disk.
 //
 //   store.ts    — the talk file: the round trip, the listing that is the
 //                 directory rather than a registry, the read-modify-write that
@@ -10,73 +9,15 @@
 //
 // Run: bun test.
 
-import { beforeEach, expect, mock, test } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
 import { FIGURES_VERSION } from "../../../src/reading/figures/types";
 import { CHAPTER_SPINE_VERSION } from "../../../src/reading/prep/chapters/types";
-import { pluginFsSurface } from "../../support/stub-surface";
-
-const files = new Map<string, string>();
-const blobs = new Map<string, Uint8Array>();
-
-mock.module("@tauri-apps/plugin-fs", () => ({
-  ...pluginFsSurface(),
-  BaseDirectory: { AppData: 1 },
-  exists: async (p: string) => files.has(p) || blobs.has(p),
-  mkdir: async () => {},
-  readDir: async () => [...files.keys()].map((name) => ({ name, isFile: true, isDirectory: false })),
-  // The whole surface: mock.module swaps the module out for every file in the
-  // run, and a half-mocked plugin breaks whichever other file imports the rest.
-  readFile: async (p: string) => {
-    const v = blobs.get(p);
-    if (v === undefined) throw new Error("no file");
-    return v;
-  },
-  stat: async () => {
-    throw new Error("no file");
-  },
-  writeFile: async () => {},
-  readTextFile: async (p: string) => {
-    const v = files.get(p);
-    if (v === undefined) throw new Error("no file");
-    return v;
-  },
-  remove: async (p: string) => {
-    files.delete(p);
-  },
-  writeTextFile: async (p: string, body: string) => {
-    files.set(p, body);
-  },
-}));
-
-// The stores write through the Rust atomic writer, not the fs plugin. The rest
-// of the module is the real one, imported after the plugin above so it links
-// against this file's disk rather than the host — mock.module replaces the
-// module for every file in the run, and other stores read through the exports
-// that are not overridden here. Dynamic, because a static import of anything
-// under src/ from a test file pins the chain at the state it had when the file
-// loaded, and every mock.module after that stops reaching it.
-const realAtomicFs = await import("../../../src/platform/app/atomic-fs");
-mock.module("../../../src/platform/app/atomic-fs", () => ({
-  ...realAtomicFs,
-  writeTextAtomic: async (path: string, contents: string) => {
-    files.set(path, contents);
-  },
-  quarantineFile: async () => null,
-  onCorruptFile: () => {},
-  readGuardedJson: async (path: string, validate?: (raw: unknown) => unknown) => {
-    const raw = files.get(path);
-    if (raw === undefined) return { status: "missing" };
-    try {
-      const parsed = JSON.parse(raw);
-      const value = validate ? validate(parsed) : parsed;
-      return value === null ? { status: "corrupt", savedAs: null } : { status: "ok", value };
-    } catch {
-      return { status: "corrupt", savedAs: null };
-    }
-  },
-}));
-
-const {
+import {
+  loadMaterial,
+  loadMaterials,
+  readMaterialBytes,
+} from "../../../src/reading/talks/material";
+import {
   deleteTalk,
   listTalksForTopic,
   loadTalk,
@@ -86,10 +27,10 @@ const {
   talkIdOf,
   talkThreadKey,
   updateTalk,
-} = await import("../../../src/reading/talks/store");
-const { loadMaterial, loadMaterials, readMaterialBytes } = await import(
-  "../../../src/reading/talks/material"
-);
+} from "../../../src/reading/talks/store";
+import { installAppData, type FakeDisk } from "../../support/appdata-fake";
+
+let disk: FakeDisk;
 
 const MATERIALS = [{ bookId: "book-hash", title: "Eye and Brain" }];
 
@@ -105,14 +46,13 @@ function decision(chapter: number, points: string[], updatedAt: number) {
 }
 
 beforeEach(() => {
-  files.clear();
-  blobs.clear();
+  disk = installAppData();
 });
 
 const BOOK = "book-hash";
 
 function library(entries: Record<string, string>) {
-  files.set(
+  disk.files.set(
     "library.json",
     JSON.stringify({
       books: Object.fromEntries(
@@ -130,7 +70,7 @@ test("starting a talk writes it under its own id and names it after its material
   const talk = await startTalk({ topicId: "topic-1", materials: MATERIALS, now: 1_700 });
   expect(talk.id).toBe("1700");
   expect(talk.name).toBe("Eye and Brain");
-  expect(files.has(talkFile("1700"))).toBe(true);
+  expect(disk.files.has(talkFile("1700"))).toBe(true);
   expect((await loadTalk("1700"))?.topicId).toBe("topic-1");
 });
 
@@ -153,7 +93,7 @@ test("the list is the directory, newest first, and scoped to one topic", async (
 // mistaken for a talk file by the listing.
 test("the conversation file is not mistaken for a talk", async () => {
   await startTalk({ topicId: "topic-1", materials: MATERIALS, now: 100 });
-  files.set(`threads-${talkThreadKey("100")}.json`, "{}");
+  disk.files.set(`threads-${talkThreadKey("100")}.json`, "{}");
   expect((await listTalksForTopic("topic-1")).map((t) => t.id)).toEqual(["100"]);
   expect(talkIdOf("threads-talk-100.json")).toBeNull();
   expect(talkIdOf("talk-100.json")).toBe("100");
@@ -184,7 +124,7 @@ test("a decision for a talk that is gone is dropped, not resurrected", async () 
   const talk = await startTalk({ topicId: "topic-1", materials: MATERIALS, now: 10 });
   await deleteTalk(talk.id);
   expect(await recordTalkDecision(talk.id, decision(1, ["a"], 20))).toBeNull();
-  expect(files.has(talkFile(talk.id))).toBe(false);
+  expect(disk.files.has(talkFile(talk.id))).toBe(false);
 });
 
 test("an edit reads, patches and writes back", async () => {
@@ -196,9 +136,9 @@ test("an edit reads, patches and writes back", async () => {
 });
 
 test("a file this build cannot read is absent, not a crash", async () => {
-  files.set(talkFile("x"), JSON.stringify({ version: 99, id: "x" }));
+  disk.files.set(talkFile("x"), JSON.stringify({ version: 99, id: "x" }));
   expect(await loadTalk("x")).toBeNull();
-  files.set(talkFile("x"), "{not json");
+  disk.files.set(talkFile("x"), "{not json");
   expect(await loadTalk("x")).toBeNull();
 });
 
@@ -206,7 +146,7 @@ test("a file this build cannot read is absent, not a crash", async () => {
 // lived shape. The entry goes, the talk stays: a lost decision is re-made in one
 // exchange, an unopenable talk is not.
 test("a decision the file cannot use is dropped, not thrown", async () => {
-  files.set(
+  disk.files.set(
     talkFile("x"),
     JSON.stringify({
       version: 1,
@@ -235,8 +175,8 @@ test("a decision the file cannot use is dropped, not thrown", async () => {
 // must not take the topic's list down with it.
 test("one unreadable file does not stop the rest of the list", async () => {
   await startTalk({ topicId: "topic-1", materials: MATERIALS, now: 100 });
-  files.set(talkFile("broken"), "{not json");
-  files.set("rehearsal-book-hash.json", JSON.stringify({ version: 1, decisions: [] }));
+  disk.files.set(talkFile("broken"), "{not json");
+  disk.files.set("rehearsal-book-hash.json", JSON.stringify({ version: 1, decisions: [] }));
   expect((await listTalksForTopic("topic-1")).map((t) => t.id)).toEqual(["100"]);
 });
 
@@ -256,11 +196,11 @@ test("a book with nothing on disk still becomes a material", async () => {
 
 test("the skeleton comes from the notes plan the reader's notes pass wrote", async () => {
   library({ [BOOK]: "Eye and Brain" });
-  files.set(
+  disk.files.set(
     `fulltext-${BOOK}.json`,
     JSON.stringify({ version: 1, status: "ok", pages: ["a", "b", "c"], outline: [] }),
   );
-  files.set(
+  disk.files.set(
     `prep-${BOOK}/chapters/state.json`,
     JSON.stringify({
       version: CHAPTER_SPINE_VERSION,
@@ -277,7 +217,7 @@ test("the skeleton comes from the notes plan the reader's notes pass wrote", asy
 });
 
 test("with no notes plan the book's own table of contents does", async () => {
-  files.set(
+  disk.files.set(
     `fulltext-${BOOK}.json`,
     JSON.stringify({
       version: 1,
@@ -295,7 +235,7 @@ test("with no notes plan the book's own table of contents does", async () => {
 });
 
 test("marks arrive flattened, and the ones that point at nothing are dropped", async () => {
-  files.set(
+  disk.files.set(
     `annotations-${BOOK}.json`,
     JSON.stringify([
       { id: "a", text: "the claim", position: { pageIndex: 0 } },
@@ -312,7 +252,7 @@ test("marks arrive flattened, and the ones that point at nothing are dropped", a
 });
 
 test("the figure index comes off disk too, with no engine", async () => {
-  files.set(
+  disk.files.set(
     `figures-${BOOK}.json`,
     JSON.stringify({
       version: FIGURES_VERSION,
@@ -335,7 +275,7 @@ test("several materials load together", async () => {
 // Only view_figure and a figure card ever ask for this, so a hundred megabytes
 // is never read to assemble a prompt.
 test("the book's bytes come from the library copy, on request", async () => {
-  blobs.set(`library/${BOOK}.pdf`, new Uint8Array([1, 2, 3]));
+  disk.blobs.set(`library/${BOOK}.pdf`, new Uint8Array([1, 2, 3]));
   expect((await readMaterialBytes(BOOK))?.byteLength).toBe(3);
   expect(await readMaterialBytes("missing")).toBeNull();
 });

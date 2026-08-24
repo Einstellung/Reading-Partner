@@ -3,23 +3,19 @@
 // every anchor the model sees is one it can copy verbatim and have work. Run:
 // bun test.
 
-import { expect, test } from "bun:test";
-import { mock } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
 import { FULLTEXT_VERSION, type Fulltext } from "../../../../src/fulltext/types";
+import { saveFulltext } from "../../../../src/fulltext/store";
+import { buildClassroomTools } from "../../../../src/reading/prep/papers/tools";
+import { paperFulltextHash, writePrepNote } from "../../../../src/reading/prep/papers/store";
 import type { PrepPaper, PrepState } from "../../../../src/reading/prep/papers/types";
-import { makeAppData } from "../../../support/appdata";
+import { installAppData } from "../../../support/appdata-fake";
 
-// An empty in-memory AppData so the note and the cached full text this file
-// writes are the ones the tools read back. atomic-fs goes in whole for the same
-// reason turn.test.ts does it (mock.module is process-wide).
-const app = makeAppData();
-mock.module("@tauri-apps/plugin-fs", () => app.pluginFs);
-mock.module("@tauri-apps/api/core", () => app.core);
-mock.module("../../../../src/platform/app/atomic-fs", () => app.atomicFs);
-
-const { buildClassroomTools } = await import("../../../../src/reading/prep/papers/tools");
-const { paperFulltextHash, writePrepNote } = await import("../../../../src/reading/prep/papers/store");
-const { saveFulltext } = await import("../../../../src/fulltext/store");
+// An empty in-memory AppData, so the note and the cached full text this file
+// writes are the ones the tools read back.
+beforeEach(() => {
+  installAppData();
+});
 
 const SURVEY = "survey-hash";
 const SLUG = "dream-to-control-learning-behaviors-by-latent-imag";

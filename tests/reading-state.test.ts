@@ -13,68 +13,22 @@
 //
 // Run: bun test.
 
-import { beforeEach, expect, mock, test } from "bun:test";
-// Type-only, so it is erased and never loads the module before mock.module runs.
+import { beforeEach, expect, test } from "bun:test";
+import { writeTextAtomic } from "../src/platform/app/atomic-fs";
 import type { ViewState } from "../src/platform/app/reader-contract";
-import { apiCoreSurface, pluginFsSurface } from "./support/stub-surface";
-
-const files = new Map<string, string>();
-let readFails = false;
-let quarantineFails = false;
-let reads = 0;
-
-// The surface spread first is the whole plugin; the keys below are this file's
-// disk and win over it. mock.module is process-wide, so a name missing here
-// would break whichever file loads next (docs/pitfall/119).
-mock.module("@tauri-apps/plugin-fs", () => ({
-  ...pluginFsSurface(),
-  BaseDirectory: { AppData: 1 },
-  exists: async (path: string) => files.has(path),
-  mkdir: async () => {},
-  readDir: async () => [],
-  readTextFile: async (path: string) => {
-    reads++;
-    if (readFails) throw new Error("EIO");
-    const v = files.get(path);
-    if (v === undefined) throw new Error(`no file: ${path}`);
-    return v;
-  },
-  writeTextFile: async (path: string, content: string) => {
-    files.set(path, content);
-  },
-  // Only so importing syncFs.ts resolves; nothing here reaches them. Its write
-  // takes the atomic-writer branch for the UTF-8 text every in-range file is.
-  readFile: async () => new Uint8Array(),
-  stat: async () => ({ mtime: null, size: 0 }),
-  writeFile: async () => {},
-}));
-
-mock.module("@tauri-apps/api/core", () => ({
-  ...apiCoreSurface(),
-  invoke: async (cmd: string, args: { path: string; contents?: string }) => {
-    if (cmd === "write_text_file_atomic") {
-      files.set(args.path, args.contents ?? "");
-      return null;
-    }
-    if (cmd === "quarantine_file") {
-      if (quarantineFails) throw new Error("rename failed");
-      const body = files.get(args.path);
-      if (body === undefined) return null;
-      const renamed = `${args.path}.corrupt-1700000000000`;
-      files.set(renamed, body);
-      files.delete(args.path);
-      return renamed;
-    }
-    throw new Error(`unexpected command ${cmd}`);
-  },
-}));
-
-const { STATE_FILE, dropViewStateCache, getViewState, saveViewState, saveViewStateOnExit } =
-  await import("../src/platform/app/storage");
+import {
+  STATE_FILE,
+  dropViewStateCache,
+  getViewState,
+  saveViewState,
+  saveViewStateOnExit,
+} from "../src/platform/app/storage";
 // The door every other writer of this file goes through, and the one sync's own
 // writes land on (syncFs.write).
-const { writeTextAtomic } = await import("../src/platform/app/atomic-fs");
-const { tauriSyncFs } = await import("../src/platform/sync/syncFs");
+import { tauriSyncFs } from "../src/platform/sync/syncFs";
+import { installAppData, type FakeDisk } from "./support/appdata-fake";
+
+let disk: FakeDisk;
 
 const at = (pageIndex: number): ViewState => ({ pageIndex, scale: "auto", scrollMode: 0 });
 
@@ -91,29 +45,26 @@ const STATES_JSON = JSON.stringify(STATES, null, 2);
 const CORRUPT = "reading-state.json.corrupt-1700000000000";
 
 function onDisk(): { states: Record<string, ViewState> } {
-  return JSON.parse(files.get(STATE_FILE)!) as { states: Record<string, ViewState> };
+  return JSON.parse(disk.files.get(STATE_FILE)!) as { states: Record<string, ViewState> };
 }
 
 beforeEach(() => {
-  files.clear();
-  files.set(STATE_FILE, STATES_JSON);
-  readFails = false;
-  quarantineFails = false;
-  reads = 0;
+  disk = installAppData();
+  disk.files.set(STATE_FILE, STATES_JSON);
   dropViewStateCache();
 });
 
 // --- a read that failed for IO reasons --------------------------------------
 
 test("a position saved over an unreadable file is refused, and the file is untouched", async () => {
-  readFails = true;
+  disk.readFails = true;
   await expect(saveViewState("jit", at(121))).rejects.toThrow(/could not be read/);
 
-  expect(files.get(STATE_FILE)).toBe(STATES_JSON);
-  expect(files.has(CORRUPT)).toBe(false);
+  expect(disk.files.get(STATE_FILE)).toBe(STATES_JSON);
+  expect(disk.files.has(CORRUPT)).toBe(false);
 
   // The two books that were not even open still have their positions.
-  readFails = false;
+  disk.readFails = false;
   expect(await getViewState("tracing")).toEqual(at(7));
   expect(await getViewState("attention")).toEqual(at(31));
 });
@@ -123,20 +74,20 @@ test("a position saved over an unreadable file is refused, and the file is untou
 const TRUNCATED = STATES_JSON.slice(0, 40);
 
 test("a truncated file is moved aside rather than written over", async () => {
-  files.set(STATE_FILE, TRUNCATED);
+  disk.files.set(STATE_FILE, TRUNCATED);
 
   await saveViewState("jit", at(121));
 
   expect(onDisk().states).toEqual({ jit: at(121) });
-  expect(files.get(CORRUPT)).toBe(TRUNCATED);
+  expect(disk.files.get(CORRUPT)).toBe(TRUNCATED);
 });
 
 test("bytes that could not be moved aside are not overwritten either", async () => {
-  files.set(STATE_FILE, TRUNCATED);
-  quarantineFails = true;
+  disk.files.set(STATE_FILE, TRUNCATED);
+  disk.quarantineFails = true;
 
   await expect(saveViewState("jit", at(121))).rejects.toThrow(/could not be read/);
-  expect(files.get(STATE_FILE)).toBe(TRUNCATED);
+  expect(disk.files.get(STATE_FILE)).toBe(TRUNCATED);
 });
 
 test("an ordinary save keeps every other book's position", async () => {
@@ -150,11 +101,11 @@ test("an ordinary save keeps every other book's position", async () => {
 // the write and nothing else.
 test("the exit path writes without reading the file again", async () => {
   await saveViewState("jit", at(121));
-  const before = reads;
+  const before = disk.reads.length;
 
   await saveViewStateOnExit("jit", at(140));
 
-  expect(reads).toBe(before);
+  expect(disk.reads.length).toBe(before);
   expect(onDisk().states).toEqual({ jit: at(140), tracing: at(7), attention: at(31) });
 });
 
@@ -163,22 +114,22 @@ test("the exit path writes without reading the file again", async () => {
 // — still goes out in one IPC.
 test("a read primes the exit path, so a session's first write is one IPC too", async () => {
   expect(await getViewState("jit")).toEqual(at(120));
-  const before = reads;
+  const before = disk.reads.length;
 
   await saveViewStateOnExit("jit", at(140));
 
-  expect(reads).toBe(before);
+  expect(disk.reads.length).toBe(before);
   expect(onDisk().states).toEqual({ jit: at(140), tracing: at(7), attention: at(31) });
 });
 
 // Nothing has been read yet, so there is nothing to write from: this one reads
 // first, and what it must never do is write the one book on its own.
 test("an exit before anything was read falls back to reading, and refuses a bad read", async () => {
-  readFails = true;
+  disk.readFails = true;
   await expect(saveViewStateOnExit("jit", at(140))).rejects.toThrow(/could not be read/);
-  expect(files.get(STATE_FILE)).toBe(STATES_JSON);
+  expect(disk.files.get(STATE_FILE)).toBe(STATES_JSON);
 
-  readFails = false;
+  disk.readFails = false;
   await saveViewStateOnExit("jit", at(140));
   expect(onDisk().states).toEqual({ jit: at(140), tracing: at(7), attention: at(31) });
 });
@@ -189,7 +140,7 @@ test("a pull drops the held map, so the exit write does not undo it", async () =
   await saveViewState("jit", at(121));
 
   // The pull lands, with a book this device has never opened in it.
-  files.set(
+  disk.files.set(
     STATE_FILE,
     JSON.stringify({ states: { ...STATES.states, jit: at(121), ipad: at(5) } }, null, 2),
   );
@@ -256,11 +207,11 @@ test("a merge landing through syncFs drops it too", async () => {
 // IPC at pagehide, which is the whole point of holding the map.
 test("another file being written leaves the held map alone", async () => {
   await saveViewState("jit", at(121));
-  const before = reads;
+  const before = disk.reads.length;
 
   await writeTextAtomic("topics.json", JSON.stringify({ topics: [] }, null, 2));
   await saveViewStateOnExit("jit", at(140));
 
-  expect(reads).toBe(before);
+  expect(disk.reads.length).toBe(before);
   expect(onDisk().states).toEqual({ jit: at(140), tracing: at(7), attention: at(31) });
 });

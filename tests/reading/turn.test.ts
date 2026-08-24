@@ -3,41 +3,16 @@
 // the figure/link-ingestion gates, what each turn inlines, and the history
 // trim. Run: bun test.
 
-import { beforeEach, expect, mock, test } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
+import { REFUSE_MIDTURN, REFUSE_ROUNDS } from "../../src/ai/agent";
+import type { SubagentTurnFn } from "../../src/ai/subagent";
+import { StoppedError } from "../../src/ai/watchdog";
+import { estimateTextTokens } from "../../src/budget";
+import { getFulltext } from "../../src/fulltext/store";
+import type { Fulltext } from "../../src/fulltext/types";
 import type { Annotation } from "../../src/platform/app/reader-contract";
 import { DEFAULT_SETTINGS, type Settings } from "../../src/platform/app/settings";
-import type { Fulltext } from "../../src/fulltext/types";
-import type { Figure } from "../../src/reading/figures/types";
-import type { PrepPaper, PrepState } from "../../src/reading/prep/papers/types";
-import type { SavedArticle } from "../../src/reading/saved-articles";
-import type { SubagentTurnFn } from "../../src/ai/subagent";
-import { makeAppData } from "../support/appdata";
-
-// An empty in-memory AppData, so every optional read misses (the overview note,
-// the observation index) and the turn treats them as "not there yet" — and so the
-// one thing a turn here writes, the kept article's text going into the fulltext
-// cache, can be read back the way read_paper would.
-// atomic-fs goes in too, whole: mock.module is process-wide and the last file to
-// load wins, so another test file's two-export stub would otherwise be what the
-// stores here write through — and the write would land on a disk this file cannot
-// read back (tests/support/appdata.ts).
-const app = makeAppData();
-mock.module("@tauri-apps/plugin-fs", () => app.pluginFs);
-mock.module("@tauri-apps/api/core", () => app.core);
-mock.module("../../src/platform/app/atomic-fs", () => app.atomicFs);
-
-const { backgroundFailureToast, buildReadingTurn, turnFailureView, EXPLAIN_KICKOFF, HISTORY_KEEP } =
-  await import("../../src/reading/turn");
-const { getFulltext } = await import("../../src/fulltext/store");
-const { paperFulltextHash, writePrepNote } = await import("../../src/reading/prep/papers/store");
-const { CLASSROOM_NOTE_BUDGET } = await import("../../src/reading/prep/papers/classroom");
-const { estimateTextTokens } = await import("../../src/budget");
-const { REFUSE_MIDTURN, REFUSE_ROUNDS } = await import("../../src/ai/agent");
-const { StoppedError } = await import("../../src/ai/watchdog");
-const { RESEARCH_TOOL_NAME, RESEARCH_TURN_ROUNDS } = await import(
-  "../../src/reading/papers/research-agent"
-);
-const {
+import {
   appendMessage,
   createAsideThread,
   createBookThread,
@@ -45,7 +20,26 @@ const {
   dropThreadCache,
   getThread,
   setThreadFocusChapter,
-} = await import("../../src/platform/app/threads");
+} from "../../src/platform/app/threads";
+import type { Figure } from "../../src/reading/figures/types";
+import { RESEARCH_TOOL_NAME, RESEARCH_TURN_ROUNDS } from "../../src/reading/papers/research-agent";
+import { CLASSROOM_NOTE_BUDGET } from "../../src/reading/prep/papers/classroom";
+import { paperFulltextHash, writePrepNote } from "../../src/reading/prep/papers/store";
+import type { PrepPaper, PrepState } from "../../src/reading/prep/papers/types";
+import type { SavedArticle } from "../../src/reading/saved-articles";
+import {
+  EXPLAIN_KICKOFF,
+  HISTORY_KEEP,
+  backgroundFailureToast,
+  buildReadingTurn,
+  turnFailureView,
+} from "../../src/reading/turn";
+import { installAppData } from "../support/appdata-fake";
+
+// An empty in-memory AppData, so every optional read misses (the overview note,
+// the observation index) and the turn treats them as "not there yet" — and so
+// the one thing a turn here writes, the kept article's text going into the
+// fulltext cache, can be read back the way read_paper would.
 
 const BOOK = "book-hash";
 
@@ -159,6 +153,7 @@ function input(over: Partial<Parameters<typeof buildReadingTurn>[0]> = {}) {
 const names = (t: { name: string }[]) => t.map((x) => x.name).sort();
 
 beforeEach(() => {
+  installAppData();
   dropThreadCache(BOOK);
 });
 
@@ -966,8 +961,10 @@ function pageRenderer() {
   };
 }
 
-// A fresh thread id per test: the fake disk outlives dropThreadCache, so a test
-// sharing "thread-1" inherits the forty messages an earlier one appended to it.
+// A fresh thread id per test. dropThreadCache does not clear the thread store's
+// cache — it re-reads the file over it, and a thread the cache already holds
+// wins — so a test sharing "thread-1" inherits the forty messages an earlier one
+// appended to it.
 const withWindow = (
   threadId: string,
   renderPage: (p: number, w: number) => Promise<any>,

@@ -4,48 +4,35 @@
 // (the backend searches by name before creating, and reconcile falls back to
 // comparing mtimes), while the autoSync toggle is not, and quietly reverts to
 // off. Also recordPassResult, the one path by which a pass result reaches the
-// file. The fs plugin is in-memory. Run: bun test.
+// file. AppData is in memory. Run: bun test.
 
-import { expect, mock, test } from "bun:test";
-import { pluginFsSurface } from "../../support/stub-surface";
+import { beforeEach, expect, test } from "bun:test";
+import { emptyState, loadState, recordPassResult } from "../../../src/platform/sync/state";
+import { installAppData, type FakeDisk } from "../../support/appdata-fake";
 
-let file: string | null = null;
-let readFails = false;
+// state.ts keeps this name to itself and nothing else writes the file, so it is
+// spelled out here rather than exported for one test.
+const STATE_FILE = "sync-state.json";
 
-// The surface spread first is the whole plugin; the two keys below are this
-// file's disk and win over it — readFails included, which is what these tests
-// are about. mock.module is process-wide, so a name missing here would break
-// whichever file loads next (docs/pitfall/119).
-mock.module("@tauri-apps/plugin-fs", () => ({
-  ...pluginFsSurface(),
-  BaseDirectory: { AppData: 1 },
-  exists: async () => file !== null,
-  readTextFile: async () => {
-    if (readFails) throw new Error("EIO");
-    if (file === null) throw new Error("no file");
-    return file;
-  },
-}));
+let disk: FakeDisk;
 
-const { emptyState, loadState, recordPassResult } = await import(
-  "../../../src/platform/sync/state"
-);
+beforeEach(() => {
+  disk = installAppData();
+});
 
 test("a first run with no state file loads the defaults", async () => {
-  file = null;
-  readFails = false;
   expect(await loadState()).toEqual(emptyState());
 });
 
 test("an unreadable or corrupt state file falls back to defaults instead of failing startup", async () => {
-  file = "{ this is not json";
-  readFails = false;
+  disk.files.set(STATE_FILE, "{ this is not json");
   expect(await loadState()).toEqual(emptyState());
 
-  file = "{}";
-  readFails = true;
+  // The other half: bytes that are fine and a read that is not.
+  disk.files.set(STATE_FILE, "{}");
+  disk.readFails = true;
   const s = await loadState();
-  readFails = false;
+  disk.readFails = false;
   expect(s.snapshot).toEqual({});
   expect(s.drive).toEqual({ fileIds: {}, bookIds: {} });
   // The one thing the fallback cannot rebuild: auto-sync goes quiet until the
@@ -54,12 +41,14 @@ test("an unreadable or corrupt state file falls back to defaults instead of fail
 });
 
 test("a state file written by an older version keeps its values and fills the missing maps", async () => {
-  readFails = false;
-  file = JSON.stringify({
-    autoSync: true,
-    snapshot: { "settings.json": { rev: 3, mtime: 10, size: 2 } },
-    drive: { folderId: "f1", dataFolderId: "d1", fileIds: { "settings.json": "x1" } },
-  });
+  disk.files.set(
+    STATE_FILE,
+    JSON.stringify({
+      autoSync: true,
+      snapshot: { "settings.json": { rev: 3, mtime: 10, size: 2 } },
+      drive: { folderId: "f1", dataFolderId: "d1", fileIds: { "settings.json": "x1" } },
+    }),
+  );
 
   const s = await loadState();
 
@@ -76,14 +65,13 @@ test("a state file written by an older version keeps its values and fills the mi
 // saveState is one writeTextAtomic of JSON.stringify(state), so this is the
 // round trip: what it writes must load back unchanged.
 test("a complete state file loads back exactly as written", async () => {
-  readFails = false;
   const state = emptyState();
   state.autoSync = true;
   state.drive.folderId = "f1";
   state.drive.booksFolderId = "b1";
   state.drive.bookIds = { abc: "book-1" };
   state.snapshot = { "topics.json": { rev: 7, mtime: 40, size: 9 } };
-  file = JSON.stringify(state, null, 2);
+  disk.files.set(STATE_FILE, JSON.stringify(state, null, 2));
 
   // Dropping any of this on the way back in is what makes the next pass
   // re-adopt, or re-create, every remote file.

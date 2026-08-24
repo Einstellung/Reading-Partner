@@ -7,52 +7,34 @@
 // The platform is mocked because it is the whole gate: hasOnDeviceDictation()
 // asks the OS plugin, and under bun there is none. Run: bun test.
 
-import { afterAll, afterEach, beforeEach, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import * as core from "@tauri-apps/api/core";
+import * as os from "@tauri-apps/plugin-os";
 import { useDom } from "../../support/dom";
-import { pluginOsSurface } from "../../support/stub-surface";
 
 // Every invoke the composer makes, recorded. The one this file is here for is
 // the release the hold bar sends as it goes away: the native side keeps the
 // microphone standing between holds and the orange indicator with it, and
 // leaving voice mode is the only thing that puts either out.
-//
-// The real module is spread back in and put back at the end, because
-// mock.module rewrites the worker's registry and does not roll back on its own
-// (docs/pitfall/119) — and `@tauri-apps/api/core` is imported by half the app.
-const core = await import("@tauri-apps/api/core");
 const invoked: string[] = [];
-mock.module("@tauri-apps/api/core", () => ({
-  ...core,
-  invoke: async (command: string) => {
-    invoked.push(command);
-  },
-}));
+
+// The host, mutable so one file can be both of them. Read through the spy at
+// call time, so a test sets it before it renders.
+let host: os.Platform = "ios";
+
+// Spies rather than mock.module: mock.module rewrites the registry for every
+// file that runs after this one and does not roll back (docs/pitfall/119),
+// which is how this file used to leave every later file on a host of its
+// choosing. The preload restores a spy between cases, so both go up in
+// beforeEach (docs/pitfall/171).
 beforeEach(() => {
   invoked.length = 0;
-});
-
-// Mutable so one file can be both hosts, and the whole module surface is stood
-// up rather than the one function under test: mock.module rewrites the worker's
-// registry and does not roll back, so a later file that imports `hostname` off
-// this module gets whatever is registered here (docs/pitfall/119). Left on a
-// desktop platform at the end for the same reason — the files after this one
-// assume the desktop mic (tests/ai/voice/composer.test.tsx).
-let host = "ios";
-mock.module("@tauri-apps/plugin-os", () => ({
-  ...pluginOsSurface(),
-  platform: () => host,
-  arch: () => "x86_64",
-  family: () => "unix",
-  type: () => "linux",
-  version: () => "0.0.0",
-  eol: () => "\n",
-  exeExtension: () => "",
-  hostname: async () => "test-host",
-  locale: async () => "en-US",
-}));
-afterAll(() => {
-  host = "linux";
-  mock.module("@tauri-apps/api/core", () => core);
+  host = "ios";
+  spyOn(core, "invoke").mockImplementation((async (command: string) => {
+    invoked.push(command);
+    return null;
+  }) as typeof core.invoke);
+  spyOn(os, "platform").mockImplementation(() => host);
 });
 
 const { cleanup, fireEvent, render } = await useDom();

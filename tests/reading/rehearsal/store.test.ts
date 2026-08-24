@@ -4,30 +4,21 @@
 // (docs/29) is a loader that returns empty and a writer that then commits the
 // empty version over the top. Run: bun test.
 
-import { beforeEach, expect, mock, test } from "bun:test";
-import { makeAppData } from "../../support/appdata";
+import { beforeEach, expect, test } from "bun:test";
+import {
+  appendRun,
+  deleteRehearsals,
+  loadRehearsals,
+  rehearsalFile,
+} from "../../../src/reading/rehearsal/store";
 import type { RehearsalRun } from "../../../src/reading/rehearsal/types";
+import { installAppData, type FakeDisk } from "../../support/appdata-fake";
 
-const app = makeAppData();
-// rename is not part of the shared fake: only this store moves a file aside by
-// name, so the move lives here with the test that asserts it.
-const renamed: string[] = [];
-mock.module("@tauri-apps/plugin-fs", () => ({
-  ...app.pluginFs,
-  rename: async (from: string, to: string) => {
-    const body = app.files.get(from);
-    if (body === undefined) throw new Error(`no file: ${from}`);
-    app.files.set(to, body);
-    app.files.delete(from);
-    renamed.push(`${from} -> ${to}`);
-  },
-}));
-mock.module("@tauri-apps/api/core", () => app.core);
-mock.module("../../../src/platform/app/atomic-fs", () => app.atomicFs);
+let disk: FakeDisk;
 
-const { appendRun, deleteRehearsals, loadRehearsals, rehearsalFile } = await import(
-  "../../../src/reading/rehearsal/store"
-);
+beforeEach(() => {
+  disk = installAppData();
+});
 
 const TALK = "1754400000000";
 
@@ -53,16 +44,11 @@ function aRun(id: string, over: Partial<RehearsalRun> = {}): RehearsalRun {
   };
 }
 
-beforeEach(() => {
-  app.reset();
-  renamed.length = 0;
-});
-
 test("a talk that has never been given reads as an empty log, not an error", async () => {
   const log = await loadRehearsals(TALK);
   expect(log.runs).toEqual([]);
   expect(log.talkId).toBe(TALK);
-  expect(app.files.has(rehearsalFile(TALK))).toBe(false);
+  expect(disk.files.has(rehearsalFile(TALK))).toBe(false);
 });
 
 test("a run written comes back the way it went in", async () => {
@@ -92,41 +78,41 @@ test("one talk's runs are not another's", async () => {
 
 // docs/29: the loss that has already happened once, on slides/talks.json.
 test("a file that will not parse is moved aside before the empty log is handed back", async () => {
-  app.files.set(rehearsalFile(TALK), "{not json");
+  disk.files.set(rehearsalFile(TALK), "{not json");
   const log = await loadRehearsals(TALK);
   expect(log.runs).toEqual([]);
-  expect(renamed).toEqual([`${rehearsalFile(TALK)} -> ${rehearsalFile(TALK)}.bad`]);
-  expect(app.files.get(`${rehearsalFile(TALK)}.bad`)).toBe("{not json");
-  expect(app.files.has(rehearsalFile(TALK))).toBe(false);
+  expect(disk.renames).toEqual([`${rehearsalFile(TALK)} -> ${rehearsalFile(TALK)}.bad`]);
+  expect(disk.files.get(`${rehearsalFile(TALK)}.bad`)).toBe("{not json");
+  expect(disk.files.has(rehearsalFile(TALK))).toBe(false);
 });
 
 test("a write after a bad file lands on the file, not on top of the bad bytes", async () => {
-  app.files.set(rehearsalFile(TALK), "{not json");
+  disk.files.set(rehearsalFile(TALK), "{not json");
   await appendRun(aRun("r1"));
-  expect(app.files.get(`${rehearsalFile(TALK)}.bad`)).toBe("{not json");
+  expect(disk.files.get(`${rehearsalFile(TALK)}.bad`)).toBe("{not json");
   expect((await loadRehearsals(TALK)).runs.map((r) => r.id)).toEqual(["r1"]);
 });
 
 test("a version this build does not know is set aside, not read as empty in place", async () => {
-  app.files.set(rehearsalFile(TALK), JSON.stringify({ version: 99, talkId: TALK, runs: [] }));
+  disk.files.set(rehearsalFile(TALK), JSON.stringify({ version: 99, talkId: TALK, runs: [] }));
   expect((await loadRehearsals(TALK)).runs).toEqual([]);
-  expect(renamed).toHaveLength(1);
+  expect(disk.renames).toHaveLength(1);
 });
 
 // A read that failed for IO reasons says nothing about the bytes, so they stay
 // where they are and nothing is moved.
 test("a file that would not open is left alone", async () => {
-  app.files.set(rehearsalFile(TALK), JSON.stringify({ version: 1, talkId: TALK, runs: [] }));
-  app.unreadable.add(rehearsalFile(TALK));
+  disk.files.set(rehearsalFile(TALK), JSON.stringify({ version: 1, talkId: TALK, runs: [] }));
+  disk.unreadable.add(rehearsalFile(TALK));
   expect((await loadRehearsals(TALK)).runs).toEqual([]);
-  expect(renamed).toEqual([]);
-  expect(app.files.has(rehearsalFile(TALK))).toBe(true);
+  expect(disk.renames).toEqual([]);
+  expect(disk.files.has(rehearsalFile(TALK))).toBe(true);
 });
 
 // One unusable run inside a usable file is dropped: a lost run is one talk
 // given again, a lost log is every run there ever was.
 test("a run the file cannot use is dropped and the rest of the log survives", async () => {
-  app.files.set(
+  disk.files.set(
     rehearsalFile(TALK),
     JSON.stringify({
       version: 1,
@@ -152,18 +138,18 @@ test("a run the file cannot use is dropped and the rest of the log survives", as
   const log = await loadRehearsals(TALK);
   expect(log.runs.map((r) => r.id)).toEqual(["r1", "r3"]);
   expect(log.runs[1].pages.map((p) => p.index)).toEqual([1]);
-  expect(renamed).toEqual([]);
+  expect(disk.renames).toEqual([]);
 });
 
 test("deleting takes the log and its rescue copy with it", async () => {
   await appendRun(aRun("r1"));
-  app.files.set(`${rehearsalFile(TALK)}.bad`, "{not json");
+  disk.files.set(`${rehearsalFile(TALK)}.bad`, "{not json");
   await deleteRehearsals(TALK);
-  expect(app.files.has(rehearsalFile(TALK))).toBe(false);
-  expect(app.files.has(`${rehearsalFile(TALK)}.bad`)).toBe(false);
+  expect(disk.files.has(rehearsalFile(TALK))).toBe(false);
+  expect(disk.files.has(`${rehearsalFile(TALK)}.bad`)).toBe(false);
 });
 
 test("deleting a talk that was never given is not an error", async () => {
   await deleteRehearsals("never");
-  expect(app.files.size).toBe(0);
+  expect(disk.files.size).toBe(0);
 });

@@ -8,71 +8,13 @@
 //
 // Run: bun test.
 
-import { beforeEach, expect, mock, test } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
 import type { EventPayload, EventType } from "../../../src/platform/app/events";
 import type { FileRef, Topic } from "../../../src/platform/app/topics";
-import { pluginFsSurface } from "../../support/stub-surface";
+import { createTalk, talkCandidates } from "../../../src/reading/talks/candidates";
+import { installAppData, type FakeDisk } from "../../support/appdata-fake";
 
-const files = new Map<string, string>();
-const blobs = new Map<string, Uint8Array>();
-
-// The whole surface, for the reason store.test.ts gives: mock.module swaps the
-// module out for the run, and a half-mocked plugin breaks whichever other file
-// imports the rest.
-mock.module("@tauri-apps/plugin-fs", () => ({
-  ...pluginFsSurface(),
-  BaseDirectory: { AppData: 1 },
-  exists: async (p: string) => files.has(p) || blobs.has(p),
-  mkdir: async () => {},
-  readDir: async () => [...files.keys()].map((name) => ({ name, isFile: true, isDirectory: false })),
-  readFile: async (p: string) => {
-    const v = blobs.get(p);
-    if (v === undefined) throw new Error("no file");
-    return v;
-  },
-  stat: async () => {
-    throw new Error("no file");
-  },
-  writeFile: async () => {},
-  readTextFile: async (p: string) => {
-    const v = files.get(p);
-    if (v === undefined) throw new Error("no file");
-    return v;
-  },
-  remove: async (p: string) => {
-    files.delete(p);
-  },
-  writeTextFile: async (p: string, body: string) => {
-    files.set(p, body);
-  },
-}));
-
-// The rest of the module is the real one, imported after the plugin above so it
-// links against this file's disk rather than the host. Dynamic, because a static
-// import of anything under src/ from a test file pins the chain at the state it
-// had when the file loaded, and every mock.module after that stops reaching it.
-const realAtomicFs = await import("../../../src/platform/app/atomic-fs");
-mock.module("../../../src/platform/app/atomic-fs", () => ({
-  ...realAtomicFs,
-  writeTextAtomic: async (path: string, contents: string) => {
-    files.set(path, contents);
-  },
-  quarantineFile: async () => null,
-  onCorruptFile: () => {},
-  readGuardedJson: async (path: string, validate?: (raw: unknown) => unknown) => {
-    const raw = files.get(path);
-    if (raw === undefined) return { status: "missing" };
-    try {
-      const parsed = JSON.parse(raw);
-      const value = validate ? validate(parsed) : parsed;
-      return value === null ? { status: "corrupt", savedAs: null } : { status: "ok", value };
-    } catch {
-      return { status: "corrupt", savedAs: null };
-    }
-  },
-}));
-
-const { createTalk, talkCandidates } = await import("../../../src/reading/talks/candidates");
+let disk: FakeDisk;
 
 // The library's naming rule is passed in; here it is one the assertions can see
 // through.
@@ -92,7 +34,7 @@ function topic(fileRefs: FileRef[]): Topic {
 }
 
 function marks(bookId: string, count: number): void {
-  files.set(
+  disk.files.set(
     `annotations-${bookId}.json`,
     JSON.stringify(
       Array.from({ length: count }, (_, i) => ({ id: `${bookId}-${i}`, text: "a mark" })),
@@ -101,8 +43,7 @@ function marks(bookId: string, count: number): void {
 }
 
 beforeEach(() => {
-  files.clear();
-  blobs.clear();
+  disk = installAppData();
   logged.length = 0;
 });
 
@@ -124,7 +65,7 @@ test("a topic where nothing has a book id offers nothing", async () => {
 
 test("marks that will not read count as zero rather than taking the picker down", async () => {
   // A corrupt annotations file: loadAnnotations rethrows a genuine read error.
-  files.set("annotations-cand-bad.json", "{ not json");
+  disk.files.set("annotations-cand-bad.json", "{ not json");
   marks("cand-good", 2);
   const candidates = await talkCandidates(
     topic([
@@ -174,7 +115,7 @@ test("starting a talk logs one talk-start carrying how much material went in", a
 
 test("the started talk is on disk with the materials it was given", async () => {
   const talk = await createTalk("topic-c", [{ bookId: "cand-a", title: "Eye and Brain" }], log);
-  const written = files.get(`talk-${talk.id}.json`);
+  const written = disk.files.get(`talk-${talk.id}.json`);
   expect(written).toBeDefined();
   expect(JSON.parse(written as string)).toMatchObject({
     topicId: "topic-c",

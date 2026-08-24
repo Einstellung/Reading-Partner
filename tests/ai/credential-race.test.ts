@@ -5,37 +5,19 @@
 // refresh landing later merges into the file instead of restoring the snapshot
 // it read at the start. Run: bun test.
 
-import { afterAll, beforeEach, expect, mock, test } from "bun:test";
+import { afterAll, beforeEach, expect, test } from "bun:test";
+import { anthropicLogout, getValidAnthropicAuth } from "../../src/ai/anthropic-oauth";
+import { setImageGenKey } from "../../src/ai/credentials";
+import { getValidOpenAIAuth } from "../../src/ai/openai-oauth";
+import { setSttKey } from "../../src/ai/voice/config";
+import { installAppData, type FakeDisk } from "../support/appdata-fake";
 
 const FILE = "credentials.json";
 
-// In-memory credentials.json behind the atomic writer (a Rust command, so there
-// is nothing to run headless).
-const files = new Map<string, string>();
-
-// Only the two calls credentials.json goes through are replaced; the rest of
-// the module is the real one, so a file that loads after this one still finds
-// every export where it left it (mock.module is process-wide, docs/pitfall/119).
-// Dynamic, because a static import of anything under src/ from a test file pins
-// the chain at the state it had when the file loaded, and every mock.module
-// after that stops reaching it.
-const realAtomicFs = await import("../../src/platform/app/atomic-fs");
-mock.module("../../src/platform/app/atomic-fs", () => ({
-  ...realAtomicFs,
-  writeTextAtomic: async (path: string, contents: string) => {
-    await null;
-    files.set(path, contents);
-  },
-  quarantineFile: async () => null,
-  onCorruptFile: () => {},
-  readGuardedJson: async (file: string, validate: (raw: unknown) => unknown) => {
-    await null;
-    const text = files.get(file);
-    if (text === undefined) return { status: "missing" };
-    const value = validate(JSON.parse(text));
-    return value === null ? { status: "corrupt", savedAs: null } : { status: "ok", value };
-  },
-}));
+// credentials.json in memory. The store writes through the real writeTextAtomic
+// and reads through the real readGuardedJson; only the two host packages under
+// them are spied, so the serialisation this file is about is the app's own.
+let disk: FakeDisk;
 
 // Both providers refresh with a POST to their own token endpoint (Anthropic
 // sends JSON, Codex sends a form). The stub records the refresh token it was
@@ -76,11 +58,6 @@ afterAll(() => {
   globalThis.fetch = realFetch;
 });
 
-const { setImageGenKey } = await import("../../src/ai/credentials");
-const { setSttKey } = await import("../../src/ai/voice/config");
-const { anthropicLogout, getValidAnthropicAuth } = await import("../../src/ai/anthropic-oauth");
-const { getValidOpenAIAuth } = await import("../../src/ai/openai-oauth");
-
 const expired = (refresh: string) => ({
   type: "oauth",
   access: "stale",
@@ -89,11 +66,11 @@ const expired = (refresh: string) => ({
 });
 
 function write(store: Record<string, unknown>): void {
-  files.set(FILE, JSON.stringify(store));
+  disk.files.set(FILE, JSON.stringify(store));
 }
 
 function read(): Record<string, any> {
-  return JSON.parse(files.get(FILE) ?? "{}");
+  return JSON.parse(disk.files.get(FILE) ?? "{}");
 }
 
 // Let every pending microtask-only step run.
@@ -102,7 +79,7 @@ async function settle(): Promise<void> {
 }
 
 beforeEach(() => {
-  files.clear();
+  disk = installAppData();
   refreshCalls.length = 0;
   armGate();
 });

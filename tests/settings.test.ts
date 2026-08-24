@@ -1,34 +1,30 @@
 // Unit tests for settings (src/platform/app/settings.ts): the thinking defaults, the
 // setting -> pi-ai reasoning-level mapping, and that loadSettings fills defaults
 // over a persisted file (so an old file without the thinking keys still loads).
-// The Tauri fs plugin is mocked with an in-memory file. Run: bun test.
+// AppData is in memory, the store is the real singleton. Run: bun test.
 
-import { expect, mock, test } from "bun:test";
-// Type-only, so it is erased and never loads the module before mock.module runs.
-import type { Settings } from "../src/platform/app/settings";
-import { pluginFsSurface } from "./support/stub-surface";
+import { beforeEach, expect, test } from "bun:test";
+import {
+  AI_LANGUAGE_OPTIONS,
+  DEFAULT_SETTINGS,
+  languageInstruction,
+  loadSettings,
+  SETTINGS_FILE,
+  toReasoning,
+  type Settings,
+} from "../src/platform/app/settings";
+import { installAppData, type FakeDisk } from "./support/appdata-fake";
 
-// In-memory backing for the mocked @tauri-apps/plugin-fs used by loadSettings.
-// The surface spread first is the whole plugin; the keys below are this file's
-// disk and win over it. mock.module is process-wide, so a name missing here
-// would break whichever file loads next (docs/pitfall/119).
-let fileContent: string | null = null;
-mock.module("@tauri-apps/plugin-fs", () => ({
-  ...pluginFsSurface(),
-  BaseDirectory: { AppData: 1 },
-  exists: async () => fileContent !== null,
-  mkdir: async () => {},
-  readTextFile: async () => {
-    if (fileContent === null) throw new Error("no file");
-    return fileContent;
-  },
-  writeTextFile: async (_path: string, content: string) => {
-    fileContent = content;
-  },
-}));
+let disk: FakeDisk;
 
-const { AI_LANGUAGE_OPTIONS, DEFAULT_SETTINGS, languageInstruction, loadSettings, toReasoning } =
-  await import("../src/platform/app/settings");
+beforeEach(() => {
+  disk = installAppData();
+});
+
+// settings.json as an earlier run left it.
+function persist(settings: Record<string, unknown>): void {
+  disk.files.set(SETTINGS_FILE, JSON.stringify(settings));
+}
 
 test("thinking defaults are low (chat) and medium (prep)", () => {
   expect(DEFAULT_SETTINGS.chatThinking).toBe("low");
@@ -45,7 +41,7 @@ test("the two per-device settings are gone from the account's shape", () => {
 });
 
 test("an old file's per-device keys are carried through untouched", async () => {
-  fileContent = JSON.stringify({ defaultProviderId: "openai", fingerDraw: true, backgroundCollect: false });
+  persist({ defaultProviderId: "openai", fingerDraw: true, backgroundCollect: false });
   const s = (await loadSettings()) as unknown as Record<string, unknown>;
   expect(s.fingerDraw).toBe(true);
   expect(s.backgroundCollect).toBe(false);
@@ -57,7 +53,7 @@ test("an old file's per-device keys are carried through untouched", async () => 
 // an error — and every real setting beside it has to survive.
 test("an old file carrying the deleted autoNotes key still loads", async () => {
   expect("autoNotes" in DEFAULT_SETTINGS).toBe(false);
-  fileContent = JSON.stringify({ autoNotes: false, defaultProviderId: "openai", aiLanguage: "zh-CN" });
+  persist({ autoNotes: false, defaultProviderId: "openai", aiLanguage: "zh-CN" });
   const s = await loadSettings();
   expect(s.defaultProviderId).toBe("openai");
   expect(s.aiLanguage).toBe("zh-CN");
@@ -73,7 +69,6 @@ test("toReasoning maps off -> undefined and passes the levels through", () => {
 });
 
 test("loadSettings returns the defaults when nothing is persisted", async () => {
-  fileContent = null;
   const s = await loadSettings();
   expect(s).toEqual(DEFAULT_SETTINGS);
 });
@@ -92,13 +87,13 @@ test("loadSettings round-trips a fully persisted object", async () => {
     dictationLocale: "en-US",
     aiLanguage: "zh-CN",
   };
-  fileContent = JSON.stringify(saved);
+  persist(saved as unknown as Record<string, unknown>);
   const s = await loadSettings();
   expect(s).toEqual(saved);
 });
 
 test("loadSettings fills the thinking defaults for an old file missing them", async () => {
-  fileContent = JSON.stringify({
+  persist({
     defaultProviderId: "openai",
     defaultModelId: "gpt",
     semanticScholarApiKey: null,
@@ -111,7 +106,7 @@ test("loadSettings fills the thinking defaults for an old file missing them", as
 
 test("aiLanguage defaults to auto and an old file without it loads as auto", async () => {
   expect(DEFAULT_SETTINGS.aiLanguage).toBe("auto");
-  fileContent = JSON.stringify({ defaultProviderId: "openai", defaultModelId: "gpt" });
+  persist({ defaultProviderId: "openai", defaultModelId: "gpt" });
   const s = await loadSettings();
   expect(s.aiLanguage).toBe("auto");
 });

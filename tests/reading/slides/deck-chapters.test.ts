@@ -11,82 +11,15 @@
 //
 // Run: bun test.
 
-import { beforeEach, expect, mock, test } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
 import { FIGURES_VERSION } from "../../../src/reading/figures/types";
 import { CHAPTER_SPINE_VERSION } from "../../../src/reading/prep/chapters/types";
-import { pluginFsSurface } from "../../support/stub-surface";
+import { buildSkeleton } from "../../../src/reading/retell/skeleton";
+import { planMaterial } from "../../../src/reading/slides/live";
+import { citableWithOutline } from "../../../src/reading/slides/outline";
+import { installAppData, type FakeDisk } from "../../support/appdata-fake";
 
-const files = new Map<string, string>();
-const blobs = new Map<string, Uint8Array>();
-
-mock.module("@tauri-apps/plugin-fs", () => ({
-  ...pluginFsSurface(),
-  BaseDirectory: { AppData: 1 },
-  exists: async (p: string) => files.has(p) || blobs.has(p),
-  mkdir: async () => {},
-  readDir: async () => [...files.keys()].map((name) => ({ name, isFile: true, isDirectory: false })),
-  readFile: async (p: string) => {
-    const v = blobs.get(p);
-    if (v === undefined) throw new Error("no file");
-    return v;
-  },
-  stat: async () => {
-    throw new Error("no file");
-  },
-  writeFile: async () => {},
-  readTextFile: async (p: string) => {
-    const v = files.get(p);
-    if (v === undefined) throw new Error("no file");
-    return v;
-  },
-  remove: async (p: string) => {
-    files.delete(p);
-  },
-  writeTextFile: async (p: string, body: string) => {
-    files.set(p, body);
-  },
-}));
-
-// The stores write through the Rust atomic writer, not the fs plugin, and read
-// JSON back through readGuardedJson. mock.module replaces the module for every
-// file in the run, so the whole surface has to be here: the real module,
-// imported after the plugin above so it links against this file's disk rather
-// than the host, with the keys below over the top. Dynamic, because a static
-// import of anything under src/ from a test file pins the chain at the state it
-// had when the file loaded, and every mock.module after that stops reaching it.
-const realAtomicFs = await import("../../../src/platform/app/atomic-fs");
-mock.module("../../../src/platform/app/atomic-fs", () => ({
-  ...realAtomicFs,
-  APPDATA: { baseDir: 1 },
-  readJson: async (path: string) => {
-    const raw = files.get(path);
-    return raw === undefined ? null : JSON.parse(raw);
-  },
-  readJsonOr: async (path: string, fallback: unknown) => {
-    const raw = files.get(path);
-    return raw === undefined ? fallback : JSON.parse(raw);
-  },
-  writeTextAtomic: async (path: string, contents: string) => {
-    files.set(path, contents);
-  },
-  quarantineFile: async () => null,
-  onCorruptFile: () => {},
-  readGuardedJson: async (path: string, validate?: (raw: unknown) => unknown) => {
-    const raw = files.get(path);
-    if (raw === undefined) return { status: "missing" };
-    try {
-      const parsed = JSON.parse(raw);
-      const value = validate ? validate(parsed) : parsed;
-      return value === null ? { status: "corrupt", savedAs: null } : { status: "ok", value };
-    } catch {
-      return { status: "corrupt", savedAs: null };
-    }
-  },
-}));
-
-const { planMaterial } = await import("../../../src/reading/slides/live");
-const { buildSkeleton } = await import("../../../src/reading/retell/skeleton");
-const { citableWithOutline } = await import("../../../src/reading/slides/outline");
+let disk: FakeDisk;
 
 const WITH_NOTES = "book-with-notes";
 const NO_NOTES = "book-without-notes";
@@ -94,7 +27,7 @@ const NO_NOTES = "book-without-notes";
 // A book whose text layer is on disk with a table of contents, and nothing else:
 // no notes run has ever touched it.
 function putFulltext(bookId: string) {
-  files.set(
+  disk.files.set(
     `fulltext-${bookId}.json`,
     JSON.stringify({
       version: 1,
@@ -109,7 +42,7 @@ function putFulltext(bookId: string) {
 }
 
 function putNotes(bookId: string) {
-  files.set(
+  disk.files.set(
     `prep-${bookId}/chapters/state.json`,
     JSON.stringify({
       version: CHAPTER_SPINE_VERSION,
@@ -124,19 +57,18 @@ function putNotes(bookId: string) {
       overviewStatus: "done",
     }),
   );
-  files.set(`prep-${bookId}/chapters/chapter-01.md`, "The first chapter argues that seeing is inference.");
-  files.set(`prep-${bookId}/chapters/chapter-02.md`, "The second chapter argues that belief follows.");
+  disk.files.set(`prep-${bookId}/chapters/chapter-01.md`, "The first chapter argues that seeing is inference.");
+  disk.files.set(`prep-${bookId}/chapters/chapter-02.md`, "The second chapter argues that belief follows.");
 }
 
 beforeEach(() => {
-  files.clear();
-  blobs.clear();
+  disk = installAppData();
 });
 
 test("a book with notes is planned against its notes chapters", async () => {
   putFulltext(WITH_NOTES);
   putNotes(WITH_NOTES);
-  files.set(
+  disk.files.set(
     `figures-${WITH_NOTES}.json`,
     JSON.stringify({
       version: FIGURES_VERSION,
@@ -159,7 +91,7 @@ test("a book with notes is planned against its notes chapters", async () => {
 // see none, because it only ever looked at the notes state.
 test("a book with no notes is planned against the same chapters the retell walked", async () => {
   putFulltext(NO_NOTES);
-  const fulltext = JSON.parse(files.get(`fulltext-${NO_NOTES}.json`)!);
+  const fulltext = JSON.parse(disk.files.get(`fulltext-${NO_NOTES}.json`)!);
   const skeleton = buildSkeleton({
     spineChapters: null,
     outline: fulltext.outline,
