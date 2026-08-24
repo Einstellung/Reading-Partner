@@ -31,6 +31,7 @@
 | 顶栏、工具条、下拉浮层的定位 | 浮层与 shadcn 原语 |
 | 全局样式、Tailwind layer、字体与行高 | 排版基线与 Tailwind + EmbedPDF 引擎 |
 | 加测试文件、给 store 写单测 | 开发环境 |
+| 跑测试确认一个改动、拿别人报的全绿当结论 | 开发环境 |
 | 搬目录、切子域、动分层表 | 开发环境 |
 | 拿 grep 判断"这东西没人用"、按结论删代码 | 开发环境 |
 | 在 worktree 里起 dev server 做实验 | 开发环境 |
@@ -41,7 +42,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 174）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 175）。
 
 ## EmbedPDF 引擎
 
@@ -240,6 +241,7 @@
 - [171-a-leaked-spy-fails-someone-elses-file](./171-a-leaked-spy-fails-someone-elses-file.md) — 装在模块顶层的 `spyOn` 装完就一直是假的，后面每个文件都看得见，`afterAll` 里的还原在文件顶层抛错时不跑；随机文件顺序下挂的全是没装 spy 的文件（seed 23 62 fail）。`bunfig.toml` 的 `[test] preload` 挂 `tests/support/preload.ts` 做全局 `beforeEach(mock.restore())`，spy 一律装在 `beforeEach` 或用例体里——装模块顶层会从第二个用例起静默失效，拿到真实现
 - [172-bunfig-is-found-from-the-working-directory](./172-bunfig-is-found-from-the-working-directory.md) — bun 按当前工作目录找 `bunfig.toml`，不往上找项目根；`cd tests && bun test reading/` 于是没有 preload，坑 171 那条全局 `beforeEach(mock.restore())` 整个不装，模块顶层的 spy 照旧漏给下一个文件，而且一句提示都没有。`tests/support/gate.ts` 一个惰性 flag 由 preload 点亮，`tests/preload-gate.test.ts` 断言它为真并再用两个用例断言还原真的发生；只在选中了这个文件的运行里生效
 - [173-a-leaked-window-makes-a-conditional-installer-skip-its-job](./173-a-leaked-window-makes-a-conditional-installer-skip-its-job.md) — 一个 `useDom()` 文件在模块作用域抛错就把 happy-dom 的 window 漏给后面，`tests/support/dom-parser.ts` 的 `if (typeof DOMParser === "undefined")` 于是什么也不装，再往后谁的 `afterAll` 卸掉那个 window，`unregister()` 就按 register 时存的 null 把 `DOMParser` delete 掉，此后 `sanitizeArticleHtml` 对任何输入都返回 `""`；默认顺序和单文件单跑都是绿的。改成 preload 里无条件装（getter 惰性 require jsdom），`dom-parser.ts` 删掉；`DOMParser` 不像 window 那样是分支判据，所以不违反坑 120
+- [174-the-file-order-belongs-to-the-filesystem](./174-the-file-order-belongs-to-the-filesystem.md) — bun 的文件顺序是 readdir 顺序，`--seed` 只是拿它洗牌；ext4 按文件名哈希读、种子在超级块里，所以同一块盘上的主 checkout / worktree / 新 clone 顺序完全相同，换到 tmpfs 就 302 个位置差 297 个，默认顺序下同一个 commit 从 0 fail 变 7 fail。worktree 里的全绿推不出 CI 也绿。`bun test a b c` 不认参数顺序，`Ran N tests across M files` 的 M 照数链接期就死掉的文件。能转述的只有每文件一进程那一趟，且要拿"每文件用例总数 == 单进程用例总数"当闸，两个数都当场算不写死
 
 ## 历史（zotero/reader 引擎时代）
 
