@@ -31,6 +31,7 @@
 | 顶栏、工具条、下拉浮层的定位 | 浮层与 shadcn 原语 |
 | 全局样式、Tailwind layer、字体与行高 | 排版基线与 Tailwind + EmbedPDF 引擎 |
 | 加测试文件、给 store 写单测 | 开发环境 |
+| 用 `useDom()` / RTL 写组件测试 | 开发环境 |
 | 跑测试确认一个改动、拿别人报的全绿当结论 | 开发环境 |
 | 搬目录、切子域、动分层表 | 开发环境 |
 | 拿 grep 判断"这东西没人用"、按结论删代码 | 开发环境 |
@@ -42,7 +43,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 176）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 177）。
 
 ## EmbedPDF 引擎
 
@@ -243,6 +244,7 @@
 - [173-a-leaked-window-makes-a-conditional-installer-skip-its-job](./173-a-leaked-window-makes-a-conditional-installer-skip-its-job.md) — 一个 `useDom()` 文件在模块作用域抛错就把 happy-dom 的 window 漏给后面，`tests/support/dom-parser.ts` 的 `if (typeof DOMParser === "undefined")` 于是什么也不装，再往后谁的 `afterAll` 卸掉那个 window，`unregister()` 就按 register 时存的 null 把 `DOMParser` delete 掉，此后 `sanitizeArticleHtml` 对任何输入都返回 `""`；默认顺序和单文件单跑都是绿的。改成 preload 里无条件装（getter 惰性 require jsdom），`dom-parser.ts` 删掉；`DOMParser` 不像 window 那样是分支判据，所以不违反坑 120
 - [174-the-file-order-belongs-to-the-filesystem](./174-the-file-order-belongs-to-the-filesystem.md) — bun 的文件顺序是 readdir 顺序，`--seed` 只是拿它洗牌；ext4 按文件名哈希读、种子在超级块里，所以同一块盘上的主 checkout / worktree / 新 clone 顺序完全相同，换到 tmpfs 就 302 个位置差 297 个，默认顺序下同一个 commit 从 0 fail 变 7 fail。worktree 里的全绿推不出 CI 也绿。`bun test a b c` 不认参数顺序，`Ran N tests across M files` 的 M 照数链接期就死掉的文件。能转述的只有每文件一进程那一趟，且要拿"每文件用例总数 == 单进程用例总数"当闸，两个数都当场算不写死
 - [175-a-static-radix-import-races-the-first-usedom](./175-a-static-radix-import-races-the-first-usedom.md) — 16 个原语里 11 个（要 portal 的那些 Radix 包）传递地拉进 react-dom 客户端 bundle，静态 import 它们的测试文件跑在第一个 `useDom()` 之前，就打死这一轮每一个 `useDom()` 文件（mirror 树上 21 个文件 load 崩、170 个测试不跑），跑在之后则无事发生，而文件顺序不可移植。改成 `await useDom()` 加 `await import(...)`；不加静态检查，精确规矩要传递闭包分析，便宜的近似今天命中的 5 个文件里 4 个根本不拉那个 bundle（`Button`、`overlay.tsx`、`react-dom/server`、`@radix-ui/react-slot` 都是干净的）
+- [176-a-selection-outlives-the-tree-that-made-it](./176-a-selection-outlives-the-tree-that-made-it.md) — `document.getSelection()` 挂在 document 上不挂在树上，RTL 的 `cleanup()` 卸树卸不掉它；一个用例选中文字但没有让手势收走选区，就把它原样留给下一个用例，`--seed` 洗过顺序后随机撞上不同的用例（chat-pen-strokes：seed=1 撞 stylus 用例自己的 isCollapsed 断言，seed=4 撞 chat.tsx:379 那道"点击是不是划词收尾"的判断）。`afterEach` 里 `cleanup()` 之后补一句 `document.getSelection()?.removeAllRanges()`
 
 ## 历史（zotero/reader 引擎时代）
 
