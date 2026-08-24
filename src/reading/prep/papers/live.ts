@@ -295,6 +295,15 @@ export function peekPrepPipeline(surveyHash: string): PrepPipeline | null {
   return pipelines.get(surveyHash) ?? null;
 }
 
+// The registry as this module was first imported with. A pipeline is keyed by
+// the survey's hash and kept for the life of the process, so a second case using
+// the same hash re-attaches to whatever the first one left running instead of
+// starting its own. Not rebuilt: a running pipeline is dropped rather than
+// stopped, which is only safe where nothing started one.
+export function resetPrepPipelinesForTests(): void {
+  pipelines.clear();
+}
+
 // Whether a survey has prep state on disk (drives auto-resume on book open).
 export async function hasPrepState(surveyHash: string): Promise<boolean> {
   return (await loadPrepState(surveyHash)) !== null;

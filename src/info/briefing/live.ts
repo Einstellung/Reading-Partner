@@ -66,7 +66,7 @@ import {
 } from "./store";
 import { dailyAction, DAILY_TICK_MS, lastAnchorDate } from "./daily";
 import { collectorStatusLine, InfoCollector } from "./collector";
-import { createCollectorSession } from "./presence";
+import { createCollectorSession, type CollectorSession } from "./presence";
 import { backfillPublish, loadPublishedBriefing, publishBriefing } from "./publish";
 import {
   ASK_PULL_ROUTE,
@@ -485,7 +485,7 @@ let pipeline: InfoPipeline | null = null;
 let collector: InfoCollector | null = null;
 
 // One screen wake lock for the app, held while a briefing generates (docs/22).
-const wakeLock = createScreenWakeLock(browserWakeLockTarget());
+let wakeLock = createScreenWakeLock(browserWakeLockTarget());
 
 // The background collector (docs/35), which also owns the one in-memory copy of
 // the pool — the pipeline draws from the same pool the polling fills.
@@ -743,38 +743,67 @@ async function siteStates(): Promise<Record<string, boolean>> {
   }
 }
 
-const session = createCollectorSession({
-  deviceId: currentDeviceId,
-  describeDevice: async () => ({
-    deviceName: await machineName(),
-    platform: platformName(),
-    hasWebviewFetch: hasWebviewFetch(),
-  }),
-  readOwnClaim,
-  readClaims: readCollectorClaims,
-  writeClaim: writeCollectorClaim,
-  readAsks,
-  loadDeviceSettings,
-  loadSourceHealth,
-  siteStates,
-  now: Date.now,
-  setInterval: (fn, ms) => setInterval(fn, ms),
-  clearInterval: (handle: ReturnType<typeof setInterval>) => clearInterval(handle),
-  subscribeSyncStatus: (cb) =>
-    subscribeSyncStatus((s) => cb({ engineStarted: s.engineStarted, lastSyncAt: s.lastSyncAt })),
-  // A source the reader subscribed to or turned on elsewhere, and a reader
-  // asking for a briefing. Two routes rather than one subscription with two
-  // arms: they answer to different files and neither cares about the other's.
-  subscribeSourcesPulled: (cb) => registerPullRoute({ ...SOURCES_PULL_ROUTE, onPulled: cb }),
-  subscribeAskPulled: (cb) => registerPullRoute({ ...ASK_PULL_ROUTE, onPulled: cb }),
-  onExit: (cb) => observeAppExit(window, cb),
-  backfillPublish,
-  pipeline: getInfoPipeline,
-  collector: getInfoCollector,
-});
+function liveSession(): CollectorSession {
+  return createCollectorSession({
+    deviceId: currentDeviceId,
+    describeDevice: async () => ({
+      deviceName: await machineName(),
+      platform: platformName(),
+      hasWebviewFetch: hasWebviewFetch(),
+    }),
+    readOwnClaim,
+    readClaims: readCollectorClaims,
+    writeClaim: writeCollectorClaim,
+    readAsks,
+    loadDeviceSettings,
+    loadSourceHealth,
+    siteStates,
+    now: Date.now,
+    setInterval: (fn, ms) => setInterval(fn, ms),
+    clearInterval: (handle: ReturnType<typeof setInterval>) => clearInterval(handle),
+    subscribeSyncStatus: (cb) =>
+      subscribeSyncStatus((s) => cb({ engineStarted: s.engineStarted, lastSyncAt: s.lastSyncAt })),
+    // A source the reader subscribed to or turned on elsewhere, and a reader
+    // asking for a briefing. Two routes rather than one subscription with two
+    // arms: they answer to different files and neither cares about the other's.
+    subscribeSourcesPulled: (cb) => registerPullRoute({ ...SOURCES_PULL_ROUTE, onPulled: cb }),
+    subscribeAskPulled: (cb) => registerPullRoute({ ...ASK_PULL_ROUTE, onPulled: cb }),
+    onExit: (cb) => observeAppExit(window, cb),
+    backfillPublish,
+    pipeline: getInfoPipeline,
+    collector: getInfoCollector,
+  });
+}
+
+let session = liveSession();
 
 // Whether this machine is the one collecting. False for anything that is not a
 // running collector, so every caller can ask without knowing the role.
 export function amICollecting(): Promise<boolean> {
   return session.amICollecting();
+}
+
+// Everything this module keeps for the life of the process, put back to how the
+// first import left it: the three lazily built objects, the collector session,
+// the wake lock, the morning round's recorded date and timer, and this machine's
+// name. One function rather than seven, because they refer to each other — the
+// session is built holding the two getters, and the morning round runs through
+// the pipeline.
+//
+// Whatever was started is stopped first. A session left running keeps a
+// heartbeat, two pull routes and a sync subscription; a morning timer left
+// running keeps waking a pipeline nothing can reach any more.
+export function resetInfoLiveForTests(): void {
+  void session.stop().catch(() => {});
+  cancelDailyTimer?.();
+  cancelDailyTimer = null;
+  wakeLock.set(false);
+  session = liveSession();
+  wakeLock = createScreenWakeLock(browserWakeLockTarget());
+  pipeline = null;
+  collector = null;
+  reader = null;
+  dailyRunDate = undefined;
+  dailyStopped = false;
+  deviceName = null;
 }

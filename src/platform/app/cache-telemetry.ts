@@ -187,6 +187,15 @@ export function createCacheReporter(log: LogFn, now: () => number = Date.now): C
 
 // The app's reporter, bound to the event log. Fire-and-forget like every other
 // event: instrumentation must never break the turn it observes.
-const live = createCacheReporter(logEvent);
+let live = createCacheReporter(logEvent);
 
-export const recordCacheTurn = live.recordTurn;
+// The reporter as this module was first imported with. It holds the request-start
+// of the last turn per surface and thread, which is what the gap on the next
+// turn's line is measured against.
+export function rebuildCacheReporterForTests(): void {
+  live = createCacheReporter(logEvent);
+}
+
+// Forwarded rather than bound: `live.recordTurn` taken once here would still be
+// the reporter the rebuild replaced.
+export const recordCacheTurn: CacheReporter["recordTurn"] = (input) => live.recordTurn(input);

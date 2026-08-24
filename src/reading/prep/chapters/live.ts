@@ -185,6 +185,15 @@ export function peekChapterSpinePipeline(bookId: string): ChapterSpinePipeline |
   return pipelines.get(bookId) ?? null;
 }
 
+// The registry as this module was first imported with. A pipeline is keyed by
+// the book and kept for the life of the process, so a second case using the same
+// book id re-attaches to whatever the first one left running instead of starting
+// its own. Not rebuilt: a running pipeline is dropped rather than stopped, which
+// is only safe where nothing started one.
+export function resetChapterSpinePipelinesForTests(): void {
+  pipelines.clear();
+}
+
 // Whether a book has chapter-spine state on disk (drives auto-resume on book open).
 export async function hasChapterSpineState(bookId: string): Promise<boolean> {
   return (await loadChapterSpineState(bookId)) !== null;

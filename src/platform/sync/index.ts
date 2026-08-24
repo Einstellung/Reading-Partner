@@ -303,3 +303,23 @@ export async function syncNow(): Promise<void> {
   await ensureEngine().syncNow();
   if (state.autoSync) startEngine();
 }
+
+// Everything this module keeps for the life of the process, put back to how the
+// first import left it. `initialized` is the one that makes a rebuild necessary
+// rather than tidy: initSync returns immediately once it is true, so the second
+// case to call it in a process runs against whatever the first one signed in as.
+//
+// The engine and the lifecycle hooks are stopped first, and the status listeners
+// are dropped last: a subscriber from an earlier case would otherwise be told
+// about a sync it has nothing to do with.
+export function resetSyncForTests(): void {
+  stopEngine();
+  engine = null;
+  state = emptyState();
+  initialized = false;
+  signedIn = false;
+  email = null;
+  graceSince = null;
+  shell = "desktop";
+  statusListeners.clear();
+}

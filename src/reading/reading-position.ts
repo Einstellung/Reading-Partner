@@ -77,11 +77,21 @@ export function createReadingPositions(io: ReadingPositionIo): ReadingPositions 
   };
 }
 
-const positions = createReadingPositions({
-  write: saveViewState,
-  writeOnExit: saveViewStateOnExit,
-  onError: (e) => reportStoreError("reading-position", e),
-});
+function livePositions(): ReadingPositions {
+  return createReadingPositions({
+    write: saveViewState,
+    writeOnExit: saveViewStateOnExit,
+    onError: (e) => reportStoreError("reading-position", e),
+  });
+}
+
+let positions = livePositions();
+
+// The positions as this module was first imported with: no book seeded and
+// nothing waiting to be written.
+export function rebuildReadingPositionsForTests(): void {
+  positions = livePositions();
+}
 
 export const seedReadingPosition = (bookId: string, state: ViewState | null): void =>
   positions.seed(bookId, state);

@@ -427,6 +427,15 @@ export function getCurrentDeck(): SlidesPipeline | null {
   return current;
 }
 
+// The last deck this module built, forgotten. It is held for the life of the
+// process so the UI can re-attach after a remount, which also means a case that
+// starts a deck leaves `getCurrentDeck` answering with it for every case after.
+// Not rebuilt: the pipeline is dropped rather than stopped, which is only safe
+// where nothing started one.
+export function resetCurrentDeckForTests(): void {
+  current = null;
+}
+
 // Every deck with a state on disk, newest first.
 export function listDeckStates(): Promise<SlidesState[]> {
   return listSlidesStates();

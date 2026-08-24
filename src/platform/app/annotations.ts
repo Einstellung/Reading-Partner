@@ -234,12 +234,22 @@ export function createAnnotationStore(io: AnnotationIo): AnnotationStore {
   };
 }
 
-const store = createAnnotationStore({
-  read: async (file) =>
-    (await appData.exists(file)) ? appData.readText(file) : null,
-  write: writeTextAtomic,
-  onError: (e) => reportStoreError("annotations", e),
-});
+function liveStore(): AnnotationStore {
+  return createAnnotationStore({
+    read: async (file) => ((await appData.exists(file)) ? appData.readText(file) : null),
+    write: writeTextAtomic,
+    onError: (e) => reportStoreError("annotations", e),
+  });
+}
+
+let store = liveStore();
+
+// The store as this module was first imported with: an empty cache and nothing
+// waiting to be written. `drop` takes one book out; this takes the whole store
+// back, which is what a test process shared by several files needs.
+export function rebuildAnnotationStoreForTests(): void {
+  store = liveStore();
+}
 
 export const loadAnnotations = (bookId: string): Promise<Annotation[]> => store.load(bookId);
 export const peekAnnotations = (bookId: string): Promise<Annotation[]> => store.peek(bookId);

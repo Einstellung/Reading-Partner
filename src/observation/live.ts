@@ -63,6 +63,7 @@ import {
   createDistillGate,
   createSweeps,
   type DistillTrigger,
+  type Sweeps,
 } from "./distill/sweeps";
 
 const tauriFs: ObservationFs = {
@@ -181,7 +182,7 @@ export interface DistillThreadOptions {
 // One pass at a time per subject: a thread id for a transcript pass, "marks:<bookId>"
 // for a silent-marking pass. Covers every trigger, so the sweep cannot start a
 // second pass over what a hangup is already distilling (sweeps.ts).
-const gate = createDistillGate();
+let gate = createDistillGate();
 
 // One silent distillation pass for a finished (or long-running) thread.
 //
@@ -547,25 +548,44 @@ async function runGuessPass(trigger: DistillTrigger): Promise<void> {
 // every half hour, and again whenever the app comes back to the front (a laptop
 // shut for a week wakes with a timer that has not fired). The rules about when
 // they may run are in sweeps.ts.
-const sweeps = createSweeps({
-  gate,
-  collectArrears,
-  distill: runDistillJob,
-  guess: runGuessPass,
-  now: Date.now,
-  schedule: (tick) => {
-    const timer = setInterval(() => tick("timer"), SWEEP_INTERVAL_MS);
-    const unobserve = observeAppLifecycle(window, {
-      onForeground: () => tick("foreground"),
-      onBackground: () => {},
-    });
-    return () => {
-      clearInterval(timer);
-      unobserve();
-    };
-  },
-  warn: (message, e) => console.warn(message, e),
-});
+function liveSweeps(): Sweeps {
+  return createSweeps({
+    gate,
+    collectArrears,
+    distill: runDistillJob,
+    guess: runGuessPass,
+    now: Date.now,
+    schedule: (tick) => {
+      const timer = setInterval(() => tick("timer"), SWEEP_INTERVAL_MS);
+      const unobserve = observeAppLifecycle(window, {
+        onForeground: () => tick("foreground"),
+        onBackground: () => {},
+      });
+      return () => {
+        clearInterval(timer);
+        unobserve();
+      };
+    },
+    warn: (message, e) => console.warn(message, e),
+  });
+}
+
+let sweeps = liveSweeps();
+
+// The gate and the sweeps as this module was first imported with. One function
+// for both: the sweeps hold the gate they were built with, so a gate replaced on
+// its own would leave them checking the one nothing else uses. A pass abandoned
+// mid-flight — the case ended, its promise never settled — leaves its subject in
+// the gate for good, and every later pass over that subject is then skipped
+// silently.
+//
+// Only for a process that never started the sweeps. `startObservationSweeps`
+// hands its timer back to the caller as the undo, and rebuilding out from under
+// a running one leaves that timer ticking on a Sweeps nothing can stop.
+export function rebuildObservationSweepsForTests(): void {
+  gate = createDistillGate();
+  sweeps = liveSweeps();
+}
 
 export function sweepDistillation(trigger: DistillTrigger): Promise<void> {
   return sweeps.sweepDistillation(trigger);
