@@ -606,7 +606,7 @@ export function countNewReaderMessages(
 // the asides pulled out of it (observation/distill/arrears.ts).
 //
 // The cursors stay per thread and each one still counts over that thread's own
-// messages, which is what they have always meant and what the talk pipeline's
+// messages, which is what they have always meant and what the retell pipeline's
 // own cursors in the same map mean (docs/02). A single cursor over the merged
 // list would be a number whose meaning changes when one of the threads is
 // deleted or lost to sync: the list shrinks under it, and everything it now

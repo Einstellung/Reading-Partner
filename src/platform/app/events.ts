@@ -9,10 +9,15 @@
 import { appData } from "./appdata";
 import { isTauri } from "./host";
 
+// The talk- names are the old word, deliberately: this object is a retell now,
+// but these strings are already written into every events-<topicId>.jsonl on
+// both of the reader's devices, the file is append-only, and the distillation
+// sweeps read them back (observation/distill/sweeps.ts). Renaming them would
+// make every retell that has already happened invisible.
 export type EventType =
   | "classroom-toggle" // { on: boolean }
-  | "talk-start" // { talkId, materials } — a talk was started (docs/31)
-  | "talk-open" // { talkId } — a talk was opened from the topic's list
+  | "talk-start" // { retellId, materials } — a retell was started (docs/31)
+  | "talk-open" // { retellId } — a retell was opened from the topic's list
   | "citation-click" // { kind: "page", page } | { kind: "paper", slug }
   | "page-nav" // { from, to, dwellMs } — dwell is time spent on the previous page
   // { threadId, book, aside? } — a conversation opened. `book` is the top-bar
@@ -24,8 +29,8 @@ export type EventType =
   // A pass that finished. `trigger` is what set it going (hangup, trim, timer,
   // startup, foreground, book-switch, talk-exit). A transcript pass carries the
   // threadId, a silent-marking pass the bookId, a retell's pass (docs/31) also
-  // { talkId, messages } — which talk it was and how many messages it covered.
-  | "distill-run" // { trigger, threadId?, bookId?, created, updated, deleted, talkId?, messages? }
+  // { retellId, messages } — which retell it was and how many messages it covered.
+  | "distill-run" // { trigger, threadId?, bookId?, created, updated, deleted, retellId?, messages? }
   // A distillation pass that did not finish, so nothing was observed and its
   // cursors did not advance. `stage` is how far it got and `reason` is the one
   // category the failure sorts into; `outcome` is the sub-agent's
@@ -34,7 +39,7 @@ export type EventType =
   // `fromTs`/`toTs` the timestamps at the ends of that stretch — which is the
   // stretch a later pass has to redo. Fields and the classifier are in
   // observation/distill/distill.ts (distillFailurePayload).
-  | "distill-failed" // { trigger, threadId?, bookId?, talkId?, stage, reason, outcome, from, to, fromTs, toTs, created, updated, deleted }
+  | "distill-failed" // { trigger, threadId?, bookId?, retellId?, stage, reason, outcome, from, to, fromTs, toTs, created, updated, deleted }
   // A profile-guess pass that finished (observation/profile/guess.ts), in events-ai.jsonl
   // rather than a topic's log: the pass looks across every topic at once.
   // `wrote` says whether the guess section actually changed.

@@ -1,4 +1,4 @@
-// The outline beside the retell (docs/31, "界面"): the talk as it stands, one
+// The outline beside the retell (docs/31, "界面"): the retell as it stands, one
 // entry per chapter that has been settled, in the order it will be given.
 //
 // It is not a read-out of the conversation — it is the same data the AI writes
@@ -16,14 +16,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
-import type { OutlineRow } from "../../../reading/talks";
+import type { OutlineRow } from "../../../reading/retell";
 import type { RehearsalRun } from "../../../reading/rehearsal";
 import RehearsalList from "./RehearsalList";
 
 export interface OutlinePaneProps {
   rows: OutlineRow[];
   // The passes through this talk so far, newest first. Optional because the pane
-  // is the outline first: a talk that has never been given still shows one.
+  // is the outline first: a retell that has never been given still shows one.
   runs?: RehearsalRun[];
   onMove(index: number, delta: number): void;
   onSetIncluded(bookId: string, chapter: number, include: boolean): void;
@@ -42,7 +42,7 @@ export default function OutlinePane({
   return (
     <aside className="flex h-full w-[300px] flex-none flex-col border-l border-border bg-background">
       <div className="flex flex-none items-center gap-2 border-b border-border px-3 py-2">
-        <span className="flex-1 text-[13px] font-medium">The talk so far</span>
+        <span className="flex-1 text-[13px] font-medium">The retell so far</span>
         <Button
           type="button"
           variant="ghost"
@@ -132,7 +132,7 @@ export default function OutlinePane({
                         <DropdownMenuItem
                           onSelect={() => onSetIncluded(row.bookId, row.chapter, !row.include)}
                         >
-                          {row.include ? "Cut from the talk" : "Put back in the talk"}
+                          {row.include ? "Cut from the retell" : "Put back in the retell"}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           className="text-destructive focus:text-destructive"

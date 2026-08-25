@@ -73,7 +73,7 @@ export default function IllustrationsCard({
         />
       </Label>
       <p className="m-0 text-xs text-[#777]">
-        Without a key, talk decks are generated without AI illustrations.
+        Without a key, retell decks are generated without AI illustrations.
       </p>
     </div>
   );

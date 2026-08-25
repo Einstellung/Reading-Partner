@@ -5,7 +5,7 @@ import { expect, test } from "bun:test";
 import { assembleDeck, slideTitleText, slugify } from "../../../src/reading/slides/template";
 
 test("slugify makes a filename-safe stem", () => {
-  expect(slugify("My Great Talk!")).toBe("my-great-talk");
+  expect(slugify("My Great Retell!")).toBe("my-great-retell");
   expect(slugify("   ")).toBe("talk");
   expect(slugify("a".repeat(80)).length).toBeLessThanOrEqual(60);
 });
@@ -36,16 +36,16 @@ test("assembleDeck removes a placeholder and its empty figwrap when no asset", (
 
 test("assembleDeck wraps slides, sets the counter total, and marks the title slide", () => {
   const html = assembleDeck({
-    title: "Talk",
+    title: "Retell",
     slides: [
-      { kind: "title", fragment: "<h1 class=\"deck-title\">Talk</h1>", asset: null },
+      { kind: "title", fragment: "<h1 class=\"deck-title\">Retell</h1>", asset: null },
       { kind: "content", fragment: "<h2>Body</h2>", asset: null },
     ],
   });
   expect(html).toContain('<section class="slide title-slide" data-slide="0"');
   expect(html).toContain('<section class="slide" data-slide="1"');
   expect(html).toContain("1 / 2");
-  expect(html).toContain("<title>Talk</title>");
+  expect(html).toContain("<title>Retell</title>");
 });
 
 test("the assembled deck is self-contained: no external URLs", () => {
@@ -98,14 +98,14 @@ test("slideTitleText prefers the h2 when a fragment carries both", () => {
 
 test("each section carries its index, kind and escaped title for the host", () => {
   const html = assembleDeck({
-    title: "Talk",
+    title: "Retell",
     slides: [
-      { kind: "title", fragment: '<h1 class="deck-title">Talk</h1>', asset: null },
+      { kind: "title", fragment: '<h1 class="deck-title">Retell</h1>', asset: null },
       { kind: "section", fragment: '<h2>Part <span class="pg">p.3</span></h2>', asset: null },
       { kind: "closing", fragment: '<h2>A "quoted" &amp; more</h2>', asset: null },
     ],
   });
-  expect(html).toContain('data-slide="0" data-kind="title" data-title="Talk"');
+  expect(html).toContain('data-slide="0" data-kind="title" data-title="Retell"');
   expect(html).toContain('data-slide="1" data-kind="section" data-title="Part"');
   expect(html).toContain('data-slide="2" data-kind="closing" data-title="A &quot;quoted&quot; &amp; more"');
 });

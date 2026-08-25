@@ -1,5 +1,5 @@
 // What a hangup hands to distillation (src/reading/session/hangup): which page
-// the talk belongs to, what it was marked on, what of the thread goes, and when
+// the retell belongs to, what it was marked on, what of the thread goes, and when
 // it is read.
 // Run: bun test.
 
@@ -22,7 +22,7 @@ const stored = [
   { role: "ai" as const, text: "because", ts: 2 },
 ];
 
-test("a mark-anchored talk is pinned to the mark's page, not to where the reader is", () => {
+test("a mark-anchored retell is pinned to the mark's page, not to where the reader is", () => {
   const pass = hangupPass({
     call: { threadId: "t1", annotationId: "mark-1" },
     context,
@@ -62,7 +62,7 @@ test("the book-level thread from the library, with no page open, is pinned nowhe
   expect(pass.page).toBeNull();
 });
 
-test("a mark deleted under the talk leaves it with no page and no quote", () => {
+test("a mark deleted under the retell leaves it with no page and no quote", () => {
   const pass = hangupPass({
     call: { threadId: "t1", annotationId: "mark-1" },
     context,
@@ -104,7 +104,7 @@ test("a mark whose text is not a sentence contributes no quote", () => {
 
 // The book-level thread quotes nothing even with a mark in hand: it is about the
 // book, and a sentence lifted from wherever the reader last marked would be a
-// quote the talk never made.
+// quote the retell never made.
 test("the book-level thread never quotes a mark", () => {
   const pass = hangupPass({
     call: { threadId: "t2", annotationId: "", isBook: true },
@@ -118,7 +118,7 @@ test("the book-level thread never quotes a mark", () => {
   expect(pass.page).toBe(12);
 });
 
-test("the transcript is the three fields a talk is made of, and nothing the screen added", () => {
+test("the transcript is the three fields a retell is made of, and nothing the screen added", () => {
   const pass = hangupPass({
     call: { threadId: "t1", annotationId: "mark-1" },
     context,
@@ -128,7 +128,7 @@ test("the transcript is the three fields a talk is made of, and nothing the scre
         role: "ai",
         text: "because",
         ts: 2,
-        // What a display row picks up on the way past: never the talk.
+        // What a display row picks up on the way past: never the retell.
         streaming: true,
         notice: "left out chapter 2",
       } as unknown as { role: "ai"; text: string; ts: number },

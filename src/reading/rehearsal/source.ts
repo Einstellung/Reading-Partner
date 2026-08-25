@@ -1,7 +1,7 @@
 // Where the words come from. One interface, two shapes of machine behind it.
 //
 // A run with no source is a legal run, not a broken one. The deck still reports
-// its pages, so what lands on disk is the shape of the talk — which page, how
+// its pages, so what lands on disk is the shape of the retell — which page, how
 // long — with every transcript empty. That is worth keeping on its own (it says
 // where the reader ran long), and a run recorded today reads the same after the
 // microphone is wired in. The same rule holds one segment at a time: a stretch

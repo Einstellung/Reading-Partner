@@ -3,7 +3,7 @@
 // back to a neutral grey or to plain white flattens it.
 //
 // The tint is also scoped. The user bubble and the code block are rendered by
-// components the corner bubble, TalkView and the reader panels also use, and
+// components the corner bubble, RetellView and the reader panels also use, and
 // those stay white, so the two colours travel as variables the CallView root
 // sets and everything else defaults away from. Applying either as a plain class
 // is what this file exists to catch.
@@ -52,7 +52,7 @@ test("the bubble and the code block read the variable, with a palette fill as de
   // cold patch on the paper tint.
   expect(chat).toContain("bg-[var(--chat-bubble-bg,var(--color-muted-soft))]");
   expect(markdown).toContain("[&_pre]:bg-[var(--chat-code-bg,var(--color-muted-faint))]");
-  // A bare token class here would repaint the corner bubble, TalkView and the
+  // A bare token class here would repaint the corner bubble, RetellView and the
   // reader panels along with the call window.
   expect(chat).not.toContain("bg-chat-bubble ");
   expect(markdown).not.toContain("bg-chat-code");

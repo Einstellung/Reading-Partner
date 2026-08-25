@@ -18,7 +18,7 @@ function run(events: RehearsalEvent[], startedAt = 0) {
   return buildRun({
     id: "run-1",
     ordinal: 1,
-    talkId: "talk-1",
+    retellId: "talk-1",
     deckFile: "slides/talk-1-my-talk.html",
     startedAt,
     events,
@@ -191,7 +191,7 @@ test("empty utterances neither add a line nor a blank one", () => {
   expect(built.pages[0].transcript).toBe("one\ntwo");
 });
 
-test("a run with no transcript source at all still records the shape of the talk", () => {
+test("a run with no transcript source at all still records the shape of the retell", () => {
   const built = run([slide(10, 0), slide(70_000, 1), { kind: "end", at: 130_000 }]);
   expect(built.pages.map((p) => [p.enteredAt, p.leftAt])).toEqual([
     [10, 70_000],

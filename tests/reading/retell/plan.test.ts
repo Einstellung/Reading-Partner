@@ -1,13 +1,13 @@
 // How the record of a retell reads to the model at the top of a turn
 // (src/reading/retell/plan.ts). Where the record is kept and in what order is
-// the talk's (tests/reading/talks/outline.test.ts); this is the read-back.
+// the retell's (tests/reading/retell/outline.test.ts); this is the read-back.
 // Run: bun test.
 
 import { expect, test } from "bun:test";
 import { formatOutline, formatPlan, nextChapter } from "../../../src/reading/retell/plan";
 import type {
   RetellChapter,
-  RetellDecision,
+  PlanDecision,
   RetellPlan,
 } from "../../../src/reading/retell/types";
 
@@ -17,7 +17,7 @@ const chapters: RetellChapter[] = [
   { index: 3, title: "Endings", startPage: 21, endPage: 30, hasNote: false },
 ];
 
-function decision(over: Partial<RetellDecision> = {}): RetellDecision {
+function decision(over: Partial<PlanDecision> = {}): PlanDecision {
   return {
     chapter: 1,
     title: "Openings",
@@ -28,7 +28,7 @@ function decision(over: Partial<RetellDecision> = {}): RetellDecision {
   };
 }
 
-function plan(...decisions: RetellDecision[]): RetellPlan {
+function plan(...decisions: PlanDecision[]): RetellPlan {
   return { version: 1, createdAt: 1, updatedAt: 100, decisions };
 }
 
@@ -56,7 +56,7 @@ test("an empty record tells the model this is the opening, not chapter one", () 
   const text = formatPlan(chapters, null);
   expect(text).toContain("nothing recorded yet");
   expect(text).toContain("skeleton");
-  expect(text).toContain("thread they want the talk to follow");
+  expect(text).toContain("thread they want the retell to follow");
 });
 
 // The record only knows about recorded chapters, so the turn right after the
@@ -73,7 +73,7 @@ test("the record names what was settled and where to pick up", () => {
       decision({ chapter: 2, title: "Middlegame", include: false, points: [] }),
     ),
   );
-  expect(text).toContain("Chapter 1. Openings — in the talk");
+  expect(text).toContain("Chapter 1. Openings — in the retell");
   expect(text).toContain("the argument rests on the 1962 data");
   expect(text).toContain("figure: [fig:3]");
   expect(text).toContain("note: thin on evidence");
@@ -81,9 +81,9 @@ test("the record names what was settled and where to pick up", () => {
   expect(text).toContain("Next up: chapter 3");
 });
 
-// The record is read in the order the talk holds it, not sorted back into
+// The record is read in the order the retell holds it, not sorted back into
 // chapter order: the reader may have moved an entry, and the model has to see
-// the talk as it now stands.
+// the retell as it now stands.
 test("the record keeps the order it was given in", () => {
   const text = formatPlan(
     chapters,
@@ -98,7 +98,7 @@ test("a finished retell is told not to walk the chapters again", () => {
   expect(text).not.toContain("Next up");
 });
 
-// formatOutline is what read_talk_outline reads back to the reader, so unlike
+// formatOutline is what read_retell_outline reads back to the reader, so unlike
 // formatPlan it carries no instruction about what the model should do next.
 test("formatOutline lists what is in, what was cut, and what is not settled", () => {
   const text = formatOutline(
@@ -121,15 +121,15 @@ test("formatOutline says there is no outline before the first decision", () => {
   expect(formatOutline(chapters, plan())).toContain("No chapter has been settled yet");
 });
 
-test("formatOutline does not claim a talk when every settled chapter was cut", () => {
+test("formatOutline does not claim a retell when every settled chapter was cut", () => {
   const text = formatOutline(chapters, plan(decision({ chapter: 1, include: false, points: [] })));
-  expect(text).toContain("Nothing is in the talk yet");
+  expect(text).toContain("Nothing is in the retell yet");
   expect(text).toContain("Cut:");
 });
 
-// The outline is read in the order the talk holds it, like formatPlan: a reader
-// who moved an entry has to hear their talk in the order it will be given.
-test("formatOutline keeps the order the talk holds", () => {
+// The outline is read in the order the retell holds it, like formatPlan: a reader
+// who moved an entry has to hear their retell in the order it will be given.
+test("formatOutline keeps the order the retell holds", () => {
   const text = formatOutline(
     chapters,
     plan(decision({ chapter: 3, title: "Endings" }), decision({ chapter: 1 })),

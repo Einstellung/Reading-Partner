@@ -54,7 +54,7 @@ echo "$sum vs $single"
 ccaee72 上这个闸是红的：单进程 3587 个用例，每文件加起来 3561，三个文件单跑起不来，三棵树结果一致。
 
 - `tests/reading/slides/deck-chapters.test.ts`
-- `tests/reading/talks/candidates.test.ts`
-- `tests/reading/talks/store.test.ts`
+- `tests/reading/retell/candidates.test.ts`
+- `tests/reading/retell/store.test.ts`
 
 都死在 `SyntaxError: Export named 'rename' not found in module '@tauri-apps/plugin-fs'`（坑 119 的模块表）。全量跑的时候前面已经有文件把真模块加载过了，所以三种全量顺序下都看不见。

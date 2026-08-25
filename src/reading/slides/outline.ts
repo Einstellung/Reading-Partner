@@ -1,26 +1,26 @@
-// The outline a talk settled, as the deck planner's input (docs/31: "PPT 是把这个
+// The outline a retell settled, as the deck planner's input (docs/31: "PPT 是把这个
 // 已经达成的东西排成页，不是 AI 猜一份大纲").
 //
-// A talk's decisions say what the talk contains: which chapter of which material
+// A retell's decisions say what the retell contains: which chapter of which material
 // goes in, what it contributes, which figure carries it, and — because the array
-// is the outline the reader arranged (reading/talks/outline.ts) — in what order.
+// is the outline the reader arranged (reading/retell/outline.ts) — in what order.
 // The plan stage's job shrinks to laying that out as pages: how many pages an
 // entry needs, what to call them, how the deck opens and closes. It no longer
-// decides what is in the talk.
+// decides what is in the retell.
 //
-// A talk with no decisions yet keeps the old path (chapter list + overview, model
-// invents the outline), as does a material inside a settled talk that the
+// A retell with no decisions yet keeps the old path (chapter list + overview, model
+// invents the outline), as does a material inside a settled retell that the
 // retell has not reached.
 //
-// This module is pure and one-way: slides reads talks, never the reverse. It
-// works on the talk as a value; loading it is live.ts's readDeckOutline.
+// This module is pure and one-way: slides reads retells, never the reverse. It
+// works on the retell as a value; loading it is live.ts's readDeckOutline.
 
 import { languageInstruction, type AiLanguage } from "../../platform/app/settings";
-import type { Talk } from "../talks/types";
+import type { Retell } from "../retell/types";
 import { bookBlock, type DeckPlan, type PlanBook } from "./plan";
 import type { SlideOutline } from "./types";
 
-// One entry of the talk, in the order the talk gives it.
+// One entry of the retell, in the order the retell gives it.
 export interface OutlineEntry {
   bookId: string;
   bookTitle: string;
@@ -34,7 +34,7 @@ export interface OutlineEntry {
   note?: string;
 }
 
-// One entry the talk settled as staying out.
+// One entry the retell settled as staying out.
 export interface OutlineCut {
   bookId: string;
   bookTitle: string;
@@ -43,22 +43,22 @@ export interface OutlineCut {
   note?: string;
 }
 
-// A talk's settled shape: what is in, in order, and what was cut.
-export interface TalkOutline {
+// A retell's settled shape: what is in, in order, and what was cut.
+export interface RetellOutline {
   included: OutlineEntry[];
   cut: OutlineCut[];
 }
 
-// The talk's decisions as the deck reads them. Returns null when nothing has
+// The retell's decisions as the deck reads them. Returns null when nothing has
 // been settled — that is the signal to take the old plan path, and it has to be
 // a distinct value from "settled and everything was cut".
-export function buildTalkOutline(talk: Talk | null): TalkOutline | null {
-  if (!talk || talk.decisions.length === 0) return null;
+export function buildRetellOutline(retell: Retell | null): RetellOutline | null {
+  if (!retell || retell.decisions.length === 0) return null;
   const titleOf = (bookId: string) =>
-    talk.materials.find((m) => m.bookId === bookId)?.title ?? bookId;
+    retell.materials.find((m) => m.bookId === bookId)?.title ?? bookId;
   const included: OutlineEntry[] = [];
   const cut: OutlineCut[] = [];
-  for (const d of talk.decisions) {
+  for (const d of retell.decisions) {
     const head = {
       bookId: d.bookId,
       bookTitle: titleOf(d.bookId),
@@ -79,13 +79,13 @@ export function buildTalkOutline(talk: Talk | null): TalkOutline | null {
   return { included, cut };
 }
 
-export function entriesFor(outline: TalkOutline | null, bookId: string): OutlineEntry[] {
+export function entriesFor(outline: RetellOutline | null, bookId: string): OutlineEntry[] {
   return (outline?.included ?? []).filter((e) => e.bookId === bookId);
 }
 
-// Whether the talk settled anything at all about a material. A material the
-// retell has not reached is planned the old way even inside a settled talk.
-function settledBooks(outline: TalkOutline): Set<string> {
+// Whether the retell settled anything at all about a material. A material the
+// retell has not reached is planned the old way even inside a settled retell.
+function settledBooks(outline: RetellOutline): Set<string> {
   const ids = new Set<string>();
   for (const e of outline.included) ids.add(e.bookId);
   for (const c of outline.cut) ids.add(c.bookId);
@@ -98,11 +98,11 @@ function settledBooks(outline: TalkOutline): Set<string> {
 // points are the material. So mark those chapters citable before validation,
 // otherwise the validator strips the very citations the outline asked for.
 //
-// A chapter the talk knows and the chapter list does not is added rather than
+// A chapter the retell knows and the chapter list does not is added rather than
 // dropped: the retell skeleton can come from the PDF's own table of contents,
 // so a material retold without a notes pass has decisions against chapters no
 // notes plan ever enumerated.
-export function citableWithOutline(books: PlanBook[], outline: TalkOutline | null): PlanBook[] {
+export function citableWithOutline(books: PlanBook[], outline: RetellOutline | null): PlanBook[] {
   if (!outline) return books;
   return books.map((b) => {
     const entries = entriesFor(outline, b.bookId);
@@ -113,7 +113,7 @@ export function citableWithOutline(books: PlanBook[], outline: TalkOutline | nul
     for (const e of entries) {
       if (known.has(e.chapter)) continue;
       // No page range: nothing downstream of validation reads one for a chapter
-      // that only the talk knows about.
+      // that only the retell knows about.
       chapters.push({
         index: e.chapter,
         title: e.title,
@@ -128,12 +128,12 @@ export function citableWithOutline(books: PlanBook[], outline: TalkOutline | nul
 }
 
 export const SLIDES_OUTLINE_PLAN_SYSTEM_PROMPT = [
-  "You are the deck-planning stage of a reading companion. This talk is already",
+  "You are the deck-planning stage of a reading companion. This retell is already",
   "settled: the reader went through their material chapter by chapter and recorded",
   "what each chapter contributes, what it is worth saying about it, which chapters",
   "they are not going to talk about at all, and the order they will speak in.",
   "",
-  "You are not deciding what the talk says. That is decided. You are laying it out",
+  "You are not deciding what the retell says. That is decided. You are laying it out",
   "as pages. Output a single JSON object and nothing else — no prose, no markdown",
   "fences.",
   "",
@@ -155,7 +155,7 @@ export const SLIDES_OUTLINE_PLAN_SYSTEM_PROMPT = [
   "- Entries listed as CUT get no slide. Do not bring them back, do not mention",
   "  them in passing, do not fold their material into a neighbouring slide.",
   "- Keep the outline order. That is the order the reader arranged and the order",
-  "  they are going to speak in — it is not always chapter order, and when the talk",
+  "  they are going to speak in — it is not always chapter order, and when the retell",
   "  spans several materials it moves between them.",
   "- Do not write the points out in your titles and do not invent new ones. The",
   "  next stage receives the reader's own wording for the entries a slide cites;",
@@ -182,12 +182,12 @@ export function outlinePlanSystemPrompt(aiLanguage: AiLanguage = "auto"): string
 }
 
 // The settled outline as one ordered list. Every row names its bookId, because
-// the order is the talk's and a talk over several materials moves between them —
+// the order is the retell's and a retell over several materials moves between them —
 // grouping the rows by book would throw away the one thing this list is for.
-function outlineBlock(outline: TalkOutline, books: PlanBook[]): string {
-  const lines = ["=== The talk's settled outline ==="];
+function outlineBlock(outline: RetellOutline, books: PlanBook[]): string {
+  const lines = ["=== The retell's settled outline ==="];
   if (outline.included.length) {
-    lines.push("In the talk, in the order it will be given:");
+    lines.push("In the retell, in the order it will be given:");
     outline.included.forEach((e, i) => {
       lines.push(`${i + 1}. [bookId: ${e.bookId}] chapter ${e.chapter} — ${e.title}`);
       for (const p of e.points) lines.push(`  - ${p}`);
@@ -196,7 +196,7 @@ function outlineBlock(outline: TalkOutline, books: PlanBook[]): string {
       if (e.note) lines.push(`  note: ${e.note}`);
     });
   } else {
-    lines.push("Nothing was kept for the talk.");
+    lines.push("Nothing was kept for the retell.");
   }
   if (outline.cut.length) {
     lines.push(
@@ -218,11 +218,11 @@ function outlineBlock(outline: TalkOutline, books: PlanBook[]): string {
   return lines.join("\n");
 }
 
-// The plan call's user message when the talk has settled something: the outline
+// The plan call's user message when the retell has settled something: the outline
 // first, then the ordinary block for any material the retell has not reached.
 export function outlinePlanUserMessage(
   books: PlanBook[],
-  outline: TalkOutline,
+  outline: RetellOutline,
   instruction: string,
 ): string {
   const settled = settledBooks(outline);
@@ -234,8 +234,8 @@ export function outlinePlanUserMessage(
   const steer = instruction.trim();
   parts.push(
     steer
-      ? `Talk instruction (theme / audience): ${steer}`
-      : "No specific talk instruction was given; the settled outline is the talk.",
+      ? `Deck instruction (theme / audience): ${steer}`
+      : "No specific deck instruction was given; the settled outline is the deck.",
   );
   parts.push("Return the deck outline JSON now.");
   return parts.join("\n\n");
@@ -248,7 +248,7 @@ export function outlinePlanUserMessage(
 // The other direction is repaired rather than dropped — an entry the reader kept
 // that the plan forgot is appended, because losing it silently is the exact
 // failure this whole path exists to prevent.
-export function applyTalkOutline(plan: DeckPlan, outline: TalkOutline): DeckPlan {
+export function applyRetellOutline(plan: DeckPlan, outline: RetellOutline): DeckPlan {
   const settled = settledBooks(outline);
   const included = new Set(outline.included.map((e) => `${e.bookId}:${e.chapter}`));
   const cut = new Set(outline.cut.map((c) => `${c.bookId}:${c.chapter}`));
@@ -265,7 +265,7 @@ export function applyTalkOutline(plan: DeckPlan, outline: TalkOutline): DeckPlan
       slides.push(slide);
       continue;
     }
-    // Nothing left to say: the page existed only for chapters the talk took out.
+    // Nothing left to say: the page existed only for chapters the retell took out.
     if (!kept.length) continue;
     const droppedCut = slide.sourceChapters.filter((n) => cut.has(`${bookId}:${n}`));
     const undecided = slide.sourceChapters.filter(
@@ -273,7 +273,7 @@ export function applyTalkOutline(plan: DeckPlan, outline: TalkOutline): DeckPlan
     );
     const notices: string[] = [];
     if (droppedCut.length) {
-      notices.push(`Chapter ${droppedCut.join(", ")} was cut in the retell and is not in the talk.`);
+      notices.push(`Chapter ${droppedCut.join(", ")} was cut in the retell and is not in the retell.`);
     }
     if (undecided.length) {
       notices.push(`Chapter ${undecided.join(", ")} has no retell decision, so it was left out.`);
@@ -299,7 +299,7 @@ export function applyTalkOutline(plan: DeckPlan, outline: TalkOutline): DeckPlan
       kind: "content",
       bookId: e.bookId,
       sourceChapters: [e.chapter],
-      planNotice: "The plan left this entry out; it is in the talk, so a slide was added back.",
+      planNotice: "The plan left this entry out; it is in the retell, so a slide was added back.",
     });
   }
   if (missing.length) {
@@ -315,7 +315,7 @@ export function applyTalkOutline(plan: DeckPlan, outline: TalkOutline): DeckPlan
 // what the content stage writes the page from; the plan stage never touched
 // these strings.
 export function readerPointsFor(
-  outline: TalkOutline | null,
+  outline: RetellOutline | null,
   slide: Pick<SlideOutline, "bookId" | "sourceChapters">,
 ): string[] {
   if (!outline || !slide.bookId || !slide.sourceChapters?.length) return [];

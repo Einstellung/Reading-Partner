@@ -4,7 +4,7 @@
 //
 // The mechanism is all that is here. Which rungs a real turn has and what each
 // one says is a domain's business, and is pinned where the ladder is declared:
-// tests/reading/ladder.test.ts and tests/reading/talks/ladder.test.ts. This file
+// tests/reading/ladder.test.ts and tests/reading/retell/ladder.test.ts. This file
 // walks a made-up ladder so the walking cannot be confused with the table.
 // Run: bun test.
 

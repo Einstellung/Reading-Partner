@@ -1,11 +1,11 @@
-// The talk's outline (src/reading/talks/outline.ts): laying several materials'
+// The retell's outline (src/reading/retell/outline.ts): laying several materials'
 // chapters into the one numbered list the retell walks, translating a
 // decision back to the book it is about, and the reader's edits to the order.
 // Pure. Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
-  bucketTalkMarks,
+  bucketRetellMarks,
   combineChapters,
   combinedSource,
   moveDecision,
@@ -15,12 +15,12 @@ import {
   slotAt,
   slotFor,
   toRetellPlan,
-  toTalkDecision,
+  toRetellDecision,
   upsertDecision,
-  type TalkSkeleton,
-} from "../../../src/reading/talks/outline";
-import type { Talk, TalkDecision } from "../../../src/reading/talks/types";
-import type { RetellDecision, Skeleton } from "../../../src/reading/retell/types";
+  type MaterialSkeleton,
+} from "../../../src/reading/retell/outline";
+import type { Retell, RetellDecision } from "../../../src/reading/retell/types";
+import type { PlanDecision, Skeleton } from "../../../src/reading/retell/types";
 
 function skeleton(titles: string[], source: Skeleton["source"] = "notes-plan"): Skeleton {
   return {
@@ -35,16 +35,16 @@ function skeleton(titles: string[], source: Skeleton["source"] = "notes-plan"): 
   };
 }
 
-const oneBook: TalkSkeleton[] = [
+const oneBook: MaterialSkeleton[] = [
   { bookId: "b1", title: "Eye and Brain", skeleton: skeleton(["Openings", "Middlegame"]) },
 ];
 
-const twoBooks: TalkSkeleton[] = [
+const twoBooks: MaterialSkeleton[] = [
   ...oneBook,
   { bookId: "b2", title: "Vision", skeleton: skeleton(["Retina"], "outline") },
 ];
 
-function decision(over: Partial<TalkDecision> = {}): TalkDecision {
+function decision(over: Partial<RetellDecision> = {}): RetellDecision {
   return {
     bookId: "b1",
     chapter: 1,
@@ -56,11 +56,11 @@ function decision(over: Partial<TalkDecision> = {}): TalkDecision {
   };
 }
 
-function talk(over: Partial<Talk> = {}): Talk {
+function retell(over: Partial<Retell> = {}): Retell {
   return {
     version: 1,
     id: "t1",
-    name: "A talk",
+    name: "A retell",
     topicId: "topic-1",
     materials: [
       { bookId: "b1", title: "Eye and Brain" },
@@ -100,7 +100,7 @@ test("the combined list names the best source its materials have", () => {
 // book under the first book's chapter, because their page ranges overlap.
 test("marks are bucketed per material, not across the combined page ranges", () => {
   const { slots } = combineChapters(twoBooks);
-  const buckets = bucketTalkMarks(
+  const buckets = bucketRetellMarks(
     [
       { ...twoBooks[0], annotations: [{ page: 1, text: "from the first book" }] },
       { ...twoBooks[1], annotations: [{ page: 5, text: "from the second book" }] },
@@ -113,36 +113,36 @@ test("marks are bucketed per material, not across the combined page ranges", () 
 
 test("a decision recorded against a combined number comes back as a book's chapter", () => {
   const { slots } = combineChapters(twoBooks);
-  const recorded: RetellDecision = {
+  const recorded: PlanDecision = {
     chapter: 3,
     title: "Vision — Retina",
     include: true,
     points: ["the ganglion density argument"],
     updatedAt: 5,
   };
-  expect(toTalkDecision(slots, recorded)).toMatchObject({
+  expect(toRetellDecision(slots, recorded)).toMatchObject({
     bookId: "b2",
     chapter: 1,
     // The book's name is on the entry already; the title stays the chapter's.
     title: "Retina",
   });
-  expect(toTalkDecision(slots, { ...recorded, chapter: 9 })).toBeNull();
+  expect(toRetellDecision(slots, { ...recorded, chapter: 9 })).toBeNull();
 });
 
-test("the record handed to the prompt is in the talk's order, numbered combined", () => {
+test("the record handed to the prompt is in the retell's order, numbered combined", () => {
   const { slots } = combineChapters(twoBooks);
-  const t = talk({
+  const t = retell({
     decisions: [decision({ bookId: "b2", chapter: 1, title: "Retina" }), decision()],
   });
   const plan = toRetellPlan(t, slots);
   expect(plan.decisions.map((d) => d.chapter)).toEqual([3, 1]);
 });
 
-// A material dropped from the talk leaves its decision on disk; it just has no
-// number in this talk any more.
-test("a decision whose material is not in the talk is left out of the record", () => {
+// A material dropped from the retell leaves its decision on disk; it just has no
+// number in this retell any more.
+test("a decision whose material is not in the retell is left out of the record", () => {
   const { slots } = combineChapters(oneBook);
-  const t = talk({ decisions: [decision({ bookId: "b2", chapter: 1 })] });
+  const t = retell({ decisions: [decision({ bookId: "b2", chapter: 1 })] });
   expect(toRetellPlan(t, slots).decisions).toHaveLength(0);
 });
 
@@ -188,8 +188,8 @@ test("cutting a chapter that has no entry changes nothing", () => {
   expect(setIncluded(list, "b1", 9, false, 500)).toEqual(list);
 });
 
-test("the outline numbers what is in the talk and leaves the cut ones unnumbered", () => {
-  const t = talk({
+test("the outline numbers what is in the retell and leaves the cut ones unnumbered", () => {
+  const t = retell({
     decisions: [
       decision(),
       decision({ chapter: 2, title: "Middlegame", include: false }),
@@ -204,6 +204,6 @@ test("the outline numbers what is in the talk and leaves the cut ones unnumbered
 });
 
 test("one material means no book label on the rows", () => {
-  const t = talk({ materials: [{ bookId: "b1", title: "Eye and Brain" }], decisions: [decision()] });
+  const t = retell({ materials: [{ bookId: "b1", title: "Eye and Brain" }], decisions: [decision()] });
   expect(outlineRows(t, combineChapters(oneBook).slots)[0].bookLabel).toBeNull();
 });

@@ -1,12 +1,12 @@
-// This talk's deck (docs/31: the PPT is the talk's product, the last step of the
-// loop). Opened from the talk it belongs to, so there is nothing to pick and no
-// talk to describe — the materials and the outline are the talk's, and the deck
-// lands under the talk's own id.
+// This retell's deck (docs/31: the PPT is the retell's product, the last step of the
+// loop). Opened from the retell it belongs to, so there is nothing to pick and no
+// retell to describe — the materials and the outline are the retell's, and the deck
+// lands under the retell's own id.
 //
-// It is a dialog rather than a third pane in TalkView: a deck run is a list of
-// twenty rows with per-row controls, and the talk's two panes (the conversation
+// It is a dialog rather than a third pane in RetellView: a deck run is a list of
+// twenty rows with per-row controls, and the retell's two panes (the conversation
 // and the outline) are where the reader is actually working. Opening it over the
-// talk keeps one entry point and leaves that layout alone.
+// retell keeps one entry point and leaves that layout alone.
 //
 // While a run is in flight it shows the same visual language as notes generation
 // — stage, per slide progress, liveness seconds, Stop — and it drives the three
@@ -15,7 +15,7 @@
 // to settle for — a chapter that had no note, a figure that could not be cropped,
 // a body that will not fit the stage — is printed on its row.
 //
-// A centred Dialog (docs/30, fourth pass). TalkView mounts and unmounts it, so
+// A centred Dialog (docs/30, fourth pass). RetellView mounts and unmounts it, so
 // `open` is constant and onOpenChange reports the closes Radix decides on:
 // Escape, and a press outside the box.
 
@@ -24,7 +24,7 @@ import {
   getCurrentDeck,
   hasUnrunSlides,
   listDecks,
-  listDeckTalks,
+  listDeckRetells,
   openDeck,
   revealDeckFile,
   startDeck,
@@ -32,7 +32,7 @@ import {
   type SlidesActivity,
   type SlidesPipeline,
   type SlidesSnapshot,
-  type TalkEntry,
+  type RetellEntry,
 } from "../../../reading/slides";
 import { cn } from "../lib/utils";
 import { Button } from "../ui/button";
@@ -239,48 +239,48 @@ function RunView({
 }
 
 export default function DeckDialog({
-  talkId,
-  talkName,
+  retellId,
+  retellName,
   onClose,
 }: {
-  talkId: string;
-  talkName: string;
+  retellId: string;
+  retellName: string;
   onClose: () => void;
 }) {
   const [instruction, setInstruction] = useState("");
-  const [deck, setDeck] = useState<TalkEntry | null>(null);
-  // null while the check is running; false when the talk has nothing to build a
+  const [deck, setDeck] = useState<RetellEntry | null>(null);
+  // null while the check is running; false when the retell has nothing to build a
   // deck from, which is a state the reader has to be told about rather than a
   // button that does nothing.
   const [buildable, setBuildable] = useState<boolean | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
 
-  // A run this talk started before the dialog was closed and reopened. Another
-  // talk's run is not ours to show, so it is filtered out rather than attached.
+  // A run this retell started before the dialog was closed and reopened. Another
+  // retell's run is not ours to show, so it is filtered out rather than attached.
   const mine = (): SlidesPipeline | null => {
     const p = getCurrentDeck();
-    return p?.snapshot().state.id === talkId ? p : null;
+    return p?.snapshot().state.id === retellId ? p : null;
   };
   const [pipeline, setPipeline] = useState<SlidesPipeline | null>(mine);
   const [snap, setSnap] = useState<SlidesSnapshot | null>(() => mine()?.snapshot() ?? null);
 
-  // Attach to this talk's deck run if one is already on disk, and pick up the
+  // Attach to this retell's deck run if one is already on disk, and pick up the
   // instruction it was started with so a re-plan does not silently lose it.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const p = await openDeck(talkId);
+      const p = await openDeck(retellId);
       if (!cancelled && p) {
         setPipeline(p);
         setInstruction(p.snapshot().state.instruction);
       }
-      const talks = await listDeckTalks();
-      if (!cancelled) setBuildable(talks.some((t) => t.talkId === talkId));
+      const retells = await listDeckRetells();
+      if (!cancelled) setBuildable(retells.some((t) => t.retellId === retellId));
     })();
     return () => {
       cancelled = true;
     };
-  }, [talkId]);
+  }, [retellId]);
 
   useEffect(() => {
     if (!pipeline) {
@@ -297,19 +297,19 @@ export default function DeckDialog({
   useEffect(() => {
     let cancelled = false;
     void listDecks().then((all) => {
-      if (!cancelled) setDeck(all.find((d) => d.talkId === talkId) ?? null);
+      if (!cancelled) setDeck(all.find((d) => d.talkId === retellId) ?? null);
     });
     return () => {
       cancelled = true;
     };
-  }, [talkId, assembleStatus, outputFile]);
+  }, [retellId, assembleStatus, outputFile]);
 
   const running = snap?.running ?? false;
   const planned = !!snap?.state && snap.state.slides.length > 0;
 
   const generate = () => {
     if (running || buildable === false) return;
-    void startDeck(talkId, instruction.trim()).then((p) => {
+    void startDeck(retellId, instruction.trim()).then((p) => {
       if (p) setPipeline(p);
     });
   };
@@ -342,7 +342,7 @@ export default function DeckDialog({
       >
         <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
           <DialogTitle className="min-w-0 truncate text-[15px] font-semibold leading-normal text-[#1b1b1b]">
-            The deck for “{talkName}”
+            The deck for “{retellName}”
           </DialogTitle>
           <Button type="button" variant="outline" onClick={onClose}>
             Close
@@ -352,13 +352,13 @@ export default function DeckDialog({
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
           {buildable === false ? (
             <p className="m-0 text-[12px] text-neutral-400">
-              Nothing has been settled in this talk yet, and none of its materials has notes — go
+              Nothing has been settled in this retell yet, and none of its materials has notes — go
               through a chapter or two first and the deck follows from the outline.
             </p>
           ) : (
             <>
               <div>
-                {/* Not a description of the talk: the outline already is the talk.
+                {/* Not a description of the retell: the outline already is the retell.
                     This only steers the shape of the pages. */}
                 <div className="mb-1.5 text-[12px] font-semibold text-[#777]">
                   Theme or audience (optional)

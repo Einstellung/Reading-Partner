@@ -1,9 +1,9 @@
-// The open talk's live state: its file, its materials, its conversation and the
+// The open retell's live state: its file, its materials, its conversation and the
 // turn currently streaming (docs/31).
 //
-// It sits in the ui layer rather than in reading/talks because it is where the
+// It sits in the ui layer rather than in reading/retell because it is where the
 // domain meets the chat rendering (chatParts): the decision the AI records is
-// both a write to the talk file and a card in the conversation, and one of those
+// both a write to the retell file and a card in the conversation, and one of those
 // two is a render concern. Everything decidable without React — the outline
 // operations, the turn assembly, the list rows — is in the domain and tested
 // there; what is left here is wiring.
@@ -21,18 +21,18 @@ import { runAgentTurn, type ProviderId } from "../../../ai";
 import { toolStatusLabel } from "../../../reading/context";
 import type { RetellDecisionCardData } from "../../../reading/retell";
 import {
-  buildTalkTurn,
+  buildRetellTurn,
   loadMaterials,
-  loadTalk,
+  loadRetell,
   moveDecision,
-  recordTalkDecision,
+  recordRetellDecision,
   removeDecision,
   setIncluded,
-  talkThreadKey,
-  updateTalk,
+  retellThreadKey,
+  updateRetell,
   type LoadedMaterial,
-  type Talk,
-} from "../../../reading/talks";
+  type Retell,
+} from "../../../reading/retell";
 import { distillRetell } from "../../../observation";
 import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
 import type { ThreadMessage } from "../chat/types";
@@ -45,37 +45,37 @@ import {
 } from "../chat/chatParts";
 import { holdsNoAnswer, refusalRow } from "../../../ai/turn-rows";
 
-// A talk has exactly one conversation, so the thread id is the talk id. Nothing
+// A retell has exactly one conversation, so the thread id is the retell id. Nothing
 // has to be looked up, and a thread file with a second thread in it could only
 // come from a hand edit.
-function threadIdOf(talkId: string): string {
-  return talkId;
+function threadIdOf(retellId: string): string {
+  return retellId;
 }
 
 function toDisplay(msgs: StoredMessage[]): ThreadMessage[] {
   return msgs.map(rehydrateMessage);
 }
 
-export interface TalkController {
-  talk: Talk | null;
+export interface RetellController {
+  retell: Retell | null;
   materials: LoadedMaterial[];
   messages: ThreadMessage[];
   loading: boolean;
   streaming: boolean;
   // A failure the reader has to see: no provider configured, a turn that could
-  // not be assembled, a talk file that has gone.
+  // not be assembled, a retell file that has gone.
   error: string | null;
   send(text: string): void;
   stop(): void;
-  // Outline edits. Each one writes the talk file and is reflected immediately.
+  // Outline edits. Each one writes the retell file and is reflected immediately.
   moveEntry(index: number, delta: number): void;
   cutEntry(bookId: string, chapter: number, include: boolean): void;
   removeEntry(bookId: string, chapter: number): void;
   rename(name: string): void;
 }
 
-export function useTalk(talkId: string, topicName: string): TalkController {
-  const [talk, setTalk] = useState<Talk | null>(null);
+export function useRetell(retellId: string, topicName: string): RetellController {
+  const [retell, setRetell] = useState<Retell | null>(null);
   const [materials, setMaterials] = useState<LoadedMaterial[]>([]);
   const [messages, setMessages] = useState<ThreadMessage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,25 +83,25 @@ export function useTalk(talkId: string, topicName: string): TalkController {
   const [error, setError] = useState<string | null>(null);
 
   // Read by the stable turn callback, so a reply in flight always writes against
-  // the talk as it is now rather than as it was when the turn started.
-  const talkRef = useRef<Talk | null>(null);
+  // the retell as it is now rather than as it was when the turn started.
+  const retellRef = useRef<Retell | null>(null);
   const materialsRef = useRef<LoadedMaterial[]>([]);
   const settingsRef = useRef<Settings | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const partialRef = useRef<{ ts: number; text: string } | null>(null);
 
   useEffect(() => {
-    talkRef.current = talk;
-  }, [talk]);
+    retellRef.current = retell;
+  }, [retell]);
   useEffect(() => {
     materialsRef.current = materials;
   }, [materials]);
 
-  const key = talkThreadKey(talkId);
-  const threadId = threadIdOf(talkId);
+  const key = retellThreadKey(retellId);
+  const threadId = threadIdOf(retellId);
 
   // Read by the exit capture, which must not be rebuilt when the topic is
-  // renamed: it is a dependency of the effect that opens the talk.
+  // renamed: it is a dependency of the effect that opens the retell.
   const topicNameRef = useRef(topicName);
   useEffect(() => {
     topicNameRef.current = topicName;
@@ -116,9 +116,9 @@ export function useTalk(talkId: string, topicName: string): TalkController {
     pending?.();
   }, []);
 
-  // Leaving the talk is this conversation's hangup (docs/31: the retell is
+  // Leaving the retell is this conversation's hangup (docs/31: the retell is
   // the most worth observing stretch of conversation there is, and it had no
-  // distillation at all). Every way out of a talk — the Back button, switching
+  // distillation at all). Every way out of a retell — the Back button, switching
   // topic, opening a book, moving to another home screen — unmounts this hook,
   // so the one place that covers all of them is the cleanup below.
   //
@@ -130,10 +130,10 @@ export function useTalk(talkId: string, topicName: string): TalkController {
   //
   // A retell the reader never spoke in is not deferred and not distilled: an
   // opening question with no answer under it holds nothing that cannot be
-  // re-derived, and leaving it alone keeps a talk opened and closed at once from
+  // re-derived, and leaving it alone keeps a retell opened and closed at once from
   // costing a model call.
   const captureExit = useCallback((): boolean => {
-    const current = talkRef.current;
+    const current = retellRef.current;
     if (!current) return false;
     const stored = getThread(key, threadId)?.messages ?? [];
     const spoken = stored.filter((m) => m.text.trim() !== "");
@@ -142,8 +142,8 @@ export function useTalk(talkId: string, topicName: string): TalkController {
       void distillRetell({
         topicId: current.topicId,
         topicName: topicNameRef.current,
-        talkId: current.id,
-        talkName: current.name,
+        retellId: current.id,
+        retellName: current.name,
         materials: current.materials.map((m) => m.title),
         threadId,
         // Read at the moment the pass starts, not now: a deferred pass runs
@@ -161,23 +161,23 @@ export function useTalk(talkId: string, topicName: string): TalkController {
     return false;
   }, [key, threadId]);
 
-  // Open the talk: its file, its materials, its conversation. Runs once per
-  // talk; leaving the view unmounts the hook, distils what was said and stops
+  // Open the retell: its file, its materials, its conversation. Runs once per
+  // retell; leaving the view unmounts the hook, distils what was said and stops
   // any turn that is not owed to the distillation.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
     void (async () => {
-      const loaded = await loadTalk(talkId);
+      const loaded = await loadRetell(retellId);
       if (cancelled) return;
       if (!loaded) {
-        setError("This talk could not be read.");
+        setError("This retell could not be read.");
         setLoading(false);
         return;
       }
-      setTalk(loaded);
-      talkRef.current = loaded;
+      setRetell(loaded);
+      retellRef.current = loaded;
       settingsRef.current = await loadSettings().catch(() => null);
       const [mats] = await Promise.all([
         loadMaterials(loaded.materials),
@@ -199,17 +199,17 @@ export function useTalk(talkId: string, topicName: string): TalkController {
       abortRef.current?.abort();
       abortRef.current = null;
     };
-  }, [talkId, key, threadId, captureExit]);
+  }, [retellId, key, threadId, captureExit]);
 
   const patchRow = useCallback((ts: number, fn: (m: ThreadMessage) => ThreadMessage) => {
     setMessages((rows) => rows.map((m) => (m.ts === ts && m.role === "ai" ? fn(m) : m)));
   }, []);
 
-  // One turn. Assembles from the talk as it stands, streams into the last row,
+  // One turn. Assembles from the retell as it stands, streams into the last row,
   // persists on done. A decision recorded mid-turn writes the file and drops a
   // card in above the reply being written.
   const runTurn = useCallback(() => {
-    const current = talkRef.current;
+    const current = retellRef.current;
     const s = settingsRef.current;
     if (!current) return;
     if (!s?.defaultProviderId || !s?.defaultModelId) {
@@ -264,8 +264,8 @@ export function useTalk(talkId: string, topicName: string): TalkController {
     };
 
     void (async () => {
-      const turn = await buildTalkTurn({
-        talk: talkRef.current ?? current,
+      const turn = await buildRetellTurn({
+        retell: retellRef.current ?? current,
         materials: materialsRef.current,
         topicName,
         settings: s,
@@ -277,16 +277,16 @@ export function useTalk(talkId: string, topicName: string): TalkController {
           .filter((m) => m.text.trim() !== "")
           .map((m) => ({ role: m.role, text: m.text })),
         record: async (decision) => {
-          const next = await recordTalkDecision(talkId, decision);
+          const next = await recordRetellDecision(retellId, decision);
           if (next) {
-            talkRef.current = next;
-            setTalk(next);
+            retellRef.current = next;
+            setRetell(next);
           }
         },
-        // The ref, not the snapshot the turn was assembled from: read_talk_outline
+        // The ref, not the snapshot the turn was assembled from: read_retell_outline
         // has to answer with the entry recorded a moment ago in this same turn,
         // and with the one the reader just moved in the outline pane.
-        readTalk: () => talkRef.current,
+        readRetell: () => retellRef.current,
         onDecisionCard,
       });
       if (controller.signal.aborted) return;
@@ -340,20 +340,20 @@ export function useTalk(talkId: string, topicName: string): TalkController {
         onRefusal: (message) => decline(message),
       });
     })();
-  }, [talkId, key, threadId, topicName, patchRow, settleExit]);
+  }, [retellId, key, threadId, topicName, patchRow, settleExit]);
 
-  // A talk opened with nothing in it starts itself: stage one of the retell is
-  // the AI laying out the skeleton and asking which thread the talk should
+  // A retell opened with nothing in it starts itself: stage one of the retell is
+  // the AI laying out the skeleton and asking which thread the retell should
   // follow (docs/31), and making the reader type "go on" first would be a step
-  // that says nothing. Once per talk — reopening a talk with history does not
+  // that says nothing. Once per retell — reopening a retell with history does not
   // fire another turn.
   const startedRef = useRef<string | null>(null);
   useEffect(() => {
-    if (loading || !talk || error) return;
-    if (messages.length > 0 || startedRef.current === talk.id) return;
-    startedRef.current = talk.id;
+    if (loading || !retell || error) return;
+    if (messages.length > 0 || startedRef.current === retell.id) return;
+    startedRef.current = retell.id;
     runTurn();
-  }, [loading, talk, error, messages.length, runTurn]);
+  }, [loading, retell, error, messages.length, runTurn]);
 
   const send = useCallback(
     (text: string) => {
@@ -389,16 +389,16 @@ export function useTalk(talkId: string, topicName: string): TalkController {
   // The outline edits. Each writes the file and takes what came back, so what is
   // on screen is what a reload would show.
   const edit = useCallback(
-    (patch: (talk: Talk) => Talk) => {
+    (patch: (retell: Retell) => Retell) => {
       void (async () => {
-        const next = await updateTalk(talkId, patch);
+        const next = await updateRetell(retellId, patch);
         if (next) {
-          talkRef.current = next;
-          setTalk(next);
+          retellRef.current = next;
+          setRetell(next);
         }
       })();
     },
-    [talkId],
+    [retellId],
   );
 
   const moveEntry = useCallback(
@@ -428,7 +428,7 @@ export function useTalk(talkId: string, topicName: string): TalkController {
   );
 
   return {
-    talk,
+    retell,
     materials,
     messages,
     loading,

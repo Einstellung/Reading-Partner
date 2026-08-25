@@ -13,7 +13,7 @@
 //             assistant's own on the next turn.
 //
 // Kept out of the render layer so every chat surface can end a turn the same way
-// (the reading session, useTalk and the info companion all do), and reachable
+// (the reading session, useRetell and the info companion all do), and reachable
 // from a domain: this is what an agent turn's ending is, not how a row is drawn.
 // The rows are taken structurally, so each surface keeps its own row type.
 
@@ -29,7 +29,7 @@ function keptTools(previous: { tools?: ToolStatus[] }): ToolStatus[] {
 // always empty when this runs. REFUSE_MIDTURN fires at the top of a round,
 // before that round's stream; REFUSE_ROUNDS fires only after a round that called
 // tools (agent.ts). And a tool start blanks the row's text on all three surfaces
-// (App.tsx, useTalk.ts, InfoCall.tsx). So the notice is the whole row and
+// (App.tsx, useRetell.ts, InfoCall.tsx). So the notice is the whole row and
 // chat.tsx draws it alone. A refusal that still carries the model's words is
 // unreachable from the loop — the function leaves them alone if one is ever
 // built, but nothing downstream needs to be kept working for that case.

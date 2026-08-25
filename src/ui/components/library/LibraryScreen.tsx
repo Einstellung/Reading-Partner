@@ -5,13 +5,13 @@
 // itself and which one is active stay on App, which needs them for the reading
 // context.
 //
-// A topic has a sidebar down its left (docs/31, "界面"): Materials, Talks, AI
+// A topic has a sidebar down its left (docs/31, "界面"): Materials, Retell, AI
 // observations. Which section is showing and whether the sidebar is open live
 // here — they are view state of this screen and nothing above it reads them.
 //
-// An open talk replaces the whole topic while it lasts (the same move the saved
+// An open retell replaces the whole topic while it lasts (the same move the saved
 // article reader makes), so entering one needs no route and leaving it puts the
-// topic back as it was. A talk runs on material read from disk, so nothing above
+// topic back as it was. A retell runs on material read from disk, so nothing above
 // this screen has to know a retell is happening.
 
 import { useCallback, useEffect, useState } from "react";
@@ -35,8 +35,8 @@ import {
   savedArticlesForTopic,
   type SavedArticle,
 } from "../../../reading/saved-articles";
-import { createTalk } from "../../../reading/talks";
-import TalkView from "../talk/TalkView";
+import { createRetell } from "../../../reading/retell";
+import RetellView from "../retell/RetellView";
 import { Button } from "../ui/button";
 import BookCard from "../shelf/BookCard";
 import { ADD_CARD, ADD_CARD_BOX, CARD_LABEL, LIBRARY_GRID, LIBRARY_PAGE } from "../shelf/cardStyles";
@@ -48,7 +48,7 @@ import TopicCard from "../shelf/TopicCard";
 import NameDialog from "../common/NameDialog";
 import { shelfOrder, TOPIC_GRID_COLUMNS_CLASS } from "../shelf/topic-shelf";
 import ObservationSection from "./topic/ObservationSection";
-import TalksSection from "./topic/TalksSection";
+import RetellSection from "./topic/RetellSection";
 import TopicNav from "./topic/TopicNav";
 import {
   browserNavStore,
@@ -86,11 +86,11 @@ export default function LibraryScreen(props: {
   // The sidebar. Read once at mount, like the shell choice it shares its
   // measurements with: following a rotation would reopen a sidebar the user
   // closed. The section resets to Materials with every topic — a topic is
-  // entered to read, and Talks is where you go on purpose.
+  // entered to read, and Retell is where you go on purpose.
   const [section, setSection] = useState<TopicSection>(DEFAULT_SECTION);
-  // The talk being prepared, if any. Nothing else on this screen changes while
+  // The retell being prepared, if any. Nothing else on this screen changes while
   // one is open, so leaving it is one setState.
-  const [openTalkId, setOpenTalkId] = useState<string | null>(null);
+  const [openRetellId, setOpenRetellId] = useState<string | null>(null);
   const [navOpen, setNavOpen] = useState(() =>
     readNavOpen(browserNavStore(window), readNavEnv(window)),
   );
@@ -102,19 +102,19 @@ export default function LibraryScreen(props: {
   }, []);
   useEffect(() => {
     setSection(DEFAULT_SECTION);
-    setOpenTalkId(null);
+    setOpenRetellId(null);
   }, [activeTopic?.id]);
 
-  // Retell one book: a talk of its own, entered straight away (docs/31 — the
+  // Retell one book: a retell of its own, entered straight away (docs/31 — the
   // entry is in the topic, on the material). A file with no book id has nothing
   // on disk to retell from, so the card does not offer it.
-  const startTalkOn = useCallback(
+  const startRetellOn = useCallback(
     async (file: FileRef) => {
       if (!activeTopic || !file.hash) return;
-      const talk = await createTalk(activeTopic.id, [
+      const retell = await createRetell(activeTopic.id, [
         { bookId: file.hash, title: displayFileTitle(file.name) },
       ]);
-      setOpenTalkId(talk.id);
+      setOpenRetellId(retell.id);
     },
     [activeTopic],
   );
@@ -138,13 +138,13 @@ export default function LibraryScreen(props: {
     return <SavedArticleView article={openSavedArticle} onBack={() => setOpenSavedArticle(null)} />;
   }
 
-  if (activeTopic && openTalkId) {
+  if (activeTopic && openRetellId) {
     return (
-      <TalkView
-        key={openTalkId}
-        talkId={openTalkId}
+      <RetellView
+        key={openRetellId}
+        retellId={openRetellId}
         topicName={activeTopic.name}
-        onBack={() => setOpenTalkId(null)}
+        onBack={() => setOpenRetellId(null)}
       />
     );
   }
@@ -179,15 +179,15 @@ export default function LibraryScreen(props: {
           <div className="min-w-0 flex-1 overflow-y-auto">
             <div className={LIBRARY_PAGE}>
               <h1 className={PAGE_TITLE}>{activeTopic.name}</h1>
-              {section === "talks" ? (
-                <TalksSection topic={activeTopic} onOpenTalk={setOpenTalkId} />
+              {section === "retell" ? (
+                <RetellSection topic={activeTopic} onOpenRetell={setOpenRetellId} />
               ) : (
                 <TopicMaterials
                   topic={activeTopic}
                   savedArticles={savedArticles}
                   onAddFile={props.onAddFile}
                   onOpenFile={props.onOpenFile}
-                  onRetell={(f) => void startTalkOn(f)}
+                  onRetell={(f) => void startRetellOn(f)}
                   onRemoveFile={async (p) => {
                     await removeFileFromTopic(activeTopic.id, p);
                     await props.onTopicsChanged();
@@ -363,7 +363,7 @@ function TopicMaterials(props: {
   savedArticles: SavedArticle[];
   onAddFile: () => void;
   onOpenFile: (file: FileRef) => void;
-  // Start a talk about this one book and go straight into it.
+  // Start a retell of this one book and go straight into it.
   onRetell: (file: FileRef) => void;
   onRemoveFile: (path: string) => void;
   onOpenSavedArticle: (article: SavedArticle) => void;

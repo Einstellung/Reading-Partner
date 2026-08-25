@@ -1,5 +1,5 @@
 // Naming something, for both the times it happens: creating it and renaming it.
-// A topic and a talk both use it. A dialog rather than a field on the shelf — a
+// A topic and a retell both use it. A dialog rather than a field on the shelf — a
 // name is given once and changed once more at most, and a permanent text box was
 // the loudest thing on a screen that is supposed to be about the books.
 //

@@ -1,6 +1,6 @@
 # srcdoc iframe 继承父页的 CSP，deck 的内联脚本是靠 app 的 `'unsafe-inline'` 活着的
 
-现象：把生成好的 deck（自包含单 HTML，内联 `<style>` + 内联 `<script>` + base64 图）塞进 app 内的 iframe 放映（`src/ui/components/talk/RehearsalView.tsx`）。app 的 CSP 是 `frame-src 'self'`，另有 COOP `same-origin` + COEP `require-corp`。预期是 iframe 被 `frame-src` 拦掉、或者内联脚本跑不起来、或者几 MB 的 srcdoc 卡住主线程——三件都没发生，而真正的耦合藏在别处。
+现象：把生成好的 deck（自包含单 HTML，内联 `<style>` + 内联 `<script>` + base64 图）塞进 app 内的 iframe 放映（`src/ui/components/retell/RehearsalView.tsx`）。app 的 CSP 是 `frame-src 'self'`，另有 COOP `same-origin` + COEP `require-corp`。预期是 iframe 被 `frame-src` 拦掉、或者内联脚本跑不起来、或者几 MB 的 srcdoc 卡住主线程——三件都没发生，而真正的耦合藏在别处。
 
 实测（WebKitGTK 2.52.3，`xvfb-run` 无窗口，真 CSP 响应头，探针脚本在 scratchpad）：
 

@@ -1,5 +1,5 @@
 // The slides pipeline orchestrator (docs/14, docs/29): plan -> per-slide content
-// -> per-slot assets -> assemble, for one talk. All IO and AI calls are injected
+// -> per-slot assets -> assemble, for one retell. All IO and AI calls are injected
 // so the whole state machine runs in bun tests with fakes; live.ts provides the
 // real deps. Structurally the sibling of the notes pipeline: the plan and
 // content stages stream and run under the shared stall watchdog
@@ -8,7 +8,7 @@
 //
 // Everything the run produces goes to disk as it is produced (state.json, one
 // file per slide body, one per asset), which buys three things a one-shot
-// in-memory run could not have: a talk interrupted halfway resumes where it
+// in-memory run could not have: a retell interrupted halfway resumes where it
 // stopped, one page can be re-run without touching the rest, and assembling is
 // just reading what is on disk — so it can be repeated at any time.
 
@@ -88,7 +88,7 @@ export interface SlidesDeps {
   readFragment(index: number): Promise<string | null>;
   writeAsset(index: number, dataUrl: string | null): Promise<void>;
   readAsset(index: number): Promise<string | null>;
-  // Write the deck and record the talk; returns the file path.
+  // Write the deck and record the retell; returns the file path.
   assemble(input: AssembleInput): Promise<string>;
   now(): number;
   sleep(ms: number): Promise<void>;
@@ -134,11 +134,11 @@ export class SlidesPipeline extends ObservableRun<SlidesState, SlidesActivity> {
     config: Partial<PipelineConfig> = {},
   ) {
     // Whatever was in flight when the app died goes back to pending here, so a
-    // resumed talk re-runs the interrupted unit and nothing else.
+    // resumed retell re-runs the interrupted unit and nothing else.
     super(normalizeSlidesOnLoad(state), deps, config);
   }
 
-  // A pipeline over a talk that does not exist yet.
+  // A pipeline over a retell that does not exist yet.
   static create(
     deps: SlidesDeps,
     init: SlidesInit,
@@ -160,7 +160,7 @@ export class SlidesPipeline extends ObservableRun<SlidesState, SlidesActivity> {
     this.notify();
   }
 
-  // Run everything this talk still needs: the plan if it has none, every pending
+  // Run everything this retell still needs: the plan if it has none, every pending
   // slide body, every pending asset, then the deck. This is both the first run
   // and the resume — a slide that is done is never re-run.
   async start(): Promise<void> {
@@ -256,7 +256,7 @@ export class SlidesPipeline extends ObservableRun<SlidesState, SlidesActivity> {
   }
 
   // Where the run lands when nothing failed: "done" only once a deck exists on
-  // disk. A talk whose pages were re-run sits at "idle" until it is reassembled.
+  // disk. A retell whose pages were re-run sits at "idle" until it is reassembled.
   private settle(): void {
     this.state.runStatus = this.state.assembleStatus === "done" ? "done" : "idle";
   }

@@ -1,10 +1,10 @@
-// One talk, opened (docs/31, "界面"): the retell conversation in the main
+// One retell, opened (docs/31, "界面"): the conversation in the main
 // area and the outline it is growing beside it.
 //
 // It replaces the topic's sections while it is open, the way the saved-article
-// reader does, so entering a talk needs no route and leaving it puts the topic
+// reader does, so entering a retell needs no route and leaving it puts the topic
 // back exactly as it was. There is no reader under it and no engine running —
-// the materials come off disk (reading/talks/material.ts).
+// the materials come off disk (reading/retell/material.ts).
 //
 // Citations render as text here. [p.12] can be clicked in the reader because
 // there is a page to jump to; there is none here, and a chip that answers a tap
@@ -24,41 +24,41 @@ import NameDialog from "../common/NameDialog";
 import { Button } from "../ui/button";
 import { cutSession, startSession, stopSession } from "../../../ai/voice";
 import { createTranscriptSource, type TranscriptSource } from "../../../reading/rehearsal";
-import { outlineRows, type Talk } from "../../../reading/talks";
+import { outlineRows, type Retell } from "../../../reading/retell";
 import { defaultNavOpen, readNavEnv } from "../base/topic-nav";
 import DeckDialog from "./DeckDialog";
 import OutlinePane from "./OutlinePane";
 import RehearsalView from "./RehearsalView";
 import { rehearsalReadiness } from "./rehearsal";
-import { useRehearsals, useTalkDeckFile } from "./useRehearsal";
-import { useTalk } from "./useTalk";
+import { useRehearsals, useRetellDeckFile } from "./useRehearsal";
+import { useRetell } from "./useRetell";
 
-// The line under the talk's name: what it is being prepared from.
-export function materialsLine(talk: Talk | null): string {
-  if (!talk || talk.materials.length === 0) return "";
-  if (talk.materials.length === 1) return talk.materials[0].title;
-  return `${talk.materials.length} materials`;
+// The line under the retell's name: what it is being prepared from.
+export function materialsLine(retell: Retell | null): string {
+  if (!retell || retell.materials.length === 0) return "";
+  if (retell.materials.length === 1) return retell.materials[0].title;
+  return `${retell.materials.length} materials`;
 }
 
-export default function TalkView(props: {
-  talkId: string;
+export default function RetellView(props: {
+  retellId: string;
   topicName: string;
   onBack(): void;
 }) {
-  const talk = useTalk(props.talkId, props.topicName);
+  const retell = useRetell(props.retellId, props.topicName);
   // Desktop opens with the outline showing; a portrait iPad starts collapsed and
   // the button is right there (docs/31). Read once at mount, like the topic
   // sidebar: following a rotation would reopen a pane the reader closed.
   const [outlineOpen, setOutlineOpen] = useState(() => defaultNavOpen(readNavEnv(window)));
   const [renaming, setRenaming] = useState(false);
   const [deckOpen, setDeckOpen] = useState(false);
-  const rows = useMemo(() => (talk.talk ? outlineRows(talk.talk) : []), [talk.talk]);
+  const rows = useMemo(() => (retell.retell ? outlineRows(retell.retell) : []), [retell.retell]);
 
-  // Giving the talk covers this view rather than replacing it: no route, and
-  // leaving it puts the talk back exactly as it was. Covering rather than
+  // Giving the retell covers this view rather than replacing it: no route, and
+  // leaving it puts the retell back exactly as it was. Covering rather than
   // swapping is not cosmetic — unmounting the conversation is what distils it
-  // (useTalk's cleanup), and stepping over to the deck for ten minutes is not
-  // leaving the talk.
+  // (useRetell's cleanup), and stepping over to the deck for ten minutes is not
+  // leaving the retell.
   const [rehearsing, setRehearsing] = useState(false);
   // The words for the pass about to be given, or null when the machine has no
   // way to hear them (no STT key on the desktop, no dictation on the host).
@@ -80,10 +80,10 @@ export default function TalkView(props: {
     setPreparing(true);
     void createTranscriptSource({
       session: { start: startSession, cut: cutSession, stop: stopSession },
-      // Which talk is being given is known before a word of it is said, so its
+      // Which retell is being given is known before a word of it is said, so its
       // proper names go in as the recognizer's hot words. The desktop's
       // record-and-upload path has nowhere to put them and ignores them.
-      glossary: { title: talk.talk?.name, outline: [...(talk.talk?.materials ?? []), ...rows] },
+      glossary: { title: retell.retell?.name, outline: [...(retell.retell?.materials ?? []), ...rows] },
     })
       .catch((e: unknown) => {
         // A run that records pages and no words is a run (reading/rehearsal),
@@ -100,7 +100,7 @@ export default function TalkView(props: {
   // Bumped when the deck dialog closes: a deck generated in this sitting has to
   // turn Rehearse on in this sitting.
   const [deckKey, setDeckKey] = useState(0);
-  const deck = useTalkDeckFile(props.talkId, deckKey);
+  const deck = useRetellDeckFile(props.retellId, deckKey);
   const readiness = rehearsalReadiness({ deckFile: deck.file, loading: deck.loading, preparing });
   // Bumped when a run reaches the disk, not when the rehearsal is left: the two
   // are seconds apart, because the run waits for the last of the speech to come
@@ -108,7 +108,7 @@ export default function TalkView(props: {
   // history (a pull can too, and useRehearsals says why it does not follow
   // that).
   const [runsKey, setRunsKey] = useState(0);
-  const runs = useRehearsals(props.talkId, runsKey);
+  const runs = useRehearsals(props.retellId, runsKey);
 
   return (
     <CitationContext.Provider value={null}>
@@ -125,19 +125,19 @@ export default function TalkView(props: {
           >
             <IconClose size={18} />
           </Button>
-          {/* The name is the button: a talk gets named once, and a permanent
+          {/* The name is the button: a retell gets named once, and a permanent
               field in a header that is otherwise about the conversation would be
               the loudest thing on the screen. */}
           <button
             className="flex min-w-0 flex-1 cursor-pointer flex-col items-start gap-0.5 rounded-md border-0 bg-transparent px-1.5 py-1 text-left can-hover:hover:bg-muted"
-            title="Rename this talk"
-            disabled={!talk.talk}
+            title="Rename this retell"
+            disabled={!retell.retell}
             onClick={() => setRenaming(true)}
           >
-            <span className="truncate text-[15px] font-medium">{talk.talk?.name ?? "Talk"}</span>
-            {materialsLine(talk.talk) && (
+            <span className="truncate text-[15px] font-medium">{retell.retell?.name ?? "Retell"}</span>
+            {materialsLine(retell.retell) && (
               <span className="truncate text-xs text-muted-foreground">
-                {materialsLine(talk.talk)}
+                {materialsLine(retell.retell)}
               </span>
             )}
           </button>
@@ -150,29 +150,29 @@ export default function TalkView(props: {
               className="gap-1.5"
             >
               <IconOutline size={16} />
-              The talk so far
+              The retell so far
             </Button>
           )}
-          {/* The deck is this talk's product and the last step of the loop
-              (docs/31), so it starts here, from this talk's outline — there is
+          {/* The deck is this retell's product and the last step of the loop
+              (docs/31), so it starts here, from this retell's outline — there is
               no second place to generate one from. */}
           <Button
             type="button"
             variant="outline"
             size="sm"
-            disabled={!talk.talk}
+            disabled={!retell.retell}
             onClick={() => setDeckOpen(true)}
           >
             Deck
           </Button>
           {/* The deck is only half of the last step: docs/31's judgement is
-              whether the reader can give the talk, so the deck has a Rehearse
+              whether the reader can give the retell, so the deck has a Rehearse
               beside it and the pass is recorded. */}
           <Button
             type="button"
             variant="outline"
             size="sm"
-            disabled={!talk.talk || !readiness.ok}
+            disabled={!retell.retell || !readiness.ok}
             title={readiness.title}
             onClick={rehearse}
           >
@@ -182,17 +182,17 @@ export default function TalkView(props: {
 
         <div className="flex min-h-0 flex-1">
           <ChatScaleScope className="flex min-w-0 flex-1 flex-col">
-            {talk.error && (
+            {retell.error && (
               <p className="m-0 border-b border-border bg-muted/40 px-4 py-2 text-sm text-destructive">
-                {talk.error}
+                {retell.error}
               </p>
             )}
-            {talk.loading ? (
-              <p className="m-0 px-4 py-3 text-sm text-muted-foreground">Loading the talk…</p>
+            {retell.loading ? (
+              <p className="m-0 px-4 py-3 text-sm text-muted-foreground">Loading the retell…</p>
             ) : (
               <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-4">
                 <MessageList
-                  messages={talk.messages}
+                  messages={retell.messages}
                   size="lg"
                   className="mx-auto max-w-[calc(48rem*var(--chat-scale,1))] pb-6"
                 />
@@ -201,11 +201,11 @@ export default function TalkView(props: {
             <div className="px-4 pb-6">
               <div className="mx-auto w-full max-w-[calc(48rem*var(--chat-scale,1))]">
                 <Composer
-                  onSend={talk.send}
+                  onSend={retell.send}
                   placeholder="Say it in your own words…"
                   pill
-                  streaming={talk.streaming}
-                  onStop={talk.stop}
+                  streaming={retell.streaming}
+                  onStop={retell.stop}
                 />
               </div>
             </div>
@@ -215,18 +215,18 @@ export default function TalkView(props: {
             <OutlinePane
               rows={rows}
               runs={runs}
-              onMove={talk.moveEntry}
-              onSetIncluded={talk.cutEntry}
-              onRemove={talk.removeEntry}
+              onMove={retell.moveEntry}
+              onSetIncluded={retell.cutEntry}
+              onRemove={retell.removeEntry}
               onClose={() => setOutlineOpen(false)}
             />
           )}
         </div>
 
-        {rehearsing && talk.talk && deck.file && (
+        {rehearsing && retell.retell && deck.file && (
           <RehearsalView
-            talkId={talk.talk.id}
-            talkName={talk.talk.name}
+            retellId={retell.retell.id}
+            retellName={retell.retell.name}
             deckFile={deck.file}
             transcript={transcript ?? undefined}
             onExit={() => {
@@ -237,10 +237,10 @@ export default function TalkView(props: {
           />
         )}
 
-        {deckOpen && talk.talk && (
+        {deckOpen && retell.retell && (
           <DeckDialog
-            talkId={talk.talk.id}
-            talkName={talk.talk.name}
+            retellId={retell.retell.id}
+            retellName={retell.retell.name}
             onClose={() => {
               setDeckOpen(false);
               setDeckKey((n) => n + 1);
@@ -248,15 +248,15 @@ export default function TalkView(props: {
           />
         )}
 
-        {renaming && talk.talk && (
+        {renaming && retell.retell && (
           <NameDialog
             open
             onOpenChange={setRenaming}
-            title="Rename this talk"
+            title="Rename this retell"
             description="Only the name changes. The outline and the conversation stay as they are."
             confirmLabel="Save"
-            initialValue={talk.talk.name}
-            onConfirm={talk.rename}
+            initialValue={retell.retell.name}
+            onConfirm={retell.rename}
           />
         )}
       </div>

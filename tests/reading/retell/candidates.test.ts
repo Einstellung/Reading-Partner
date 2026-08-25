@@ -1,4 +1,4 @@
-// Starting a talk from a topic (src/reading/talks/candidates.ts): which of a
+// Starting a retell from a topic (src/reading/retell/candidates.ts): which of a
 // topic's files are offered as material, and what a start records.
 //
 // Runs against one in-memory AppData, so the marks a candidate carries are read
@@ -11,7 +11,7 @@
 import { beforeEach, expect, test } from "bun:test";
 import type { EventPayload, EventType } from "../../../src/platform/app/events";
 import type { FileRef, Topic } from "../../../src/platform/app/topics";
-import { createTalk, talkCandidates } from "../../../src/reading/talks/candidates";
+import { createRetell, retellCandidates } from "../../../src/reading/retell/candidates";
 import { installAppData, type FakeDisk } from "../../support/appdata-fake";
 
 let disk: FakeDisk;
@@ -49,7 +49,7 @@ beforeEach(() => {
 
 test("a file with no book id is not offered as material", async () => {
   marks("cand-a", 3);
-  const candidates = await talkCandidates(
+  const candidates = await retellCandidates(
     topic([
       file({ name: "Eye and Brain.pdf", hash: "cand-a", addedAt: 2 }),
       file({ name: "Never opened.pdf", addedAt: 1 }),
@@ -60,14 +60,14 @@ test("a file with no book id is not offered as material", async () => {
 });
 
 test("a topic where nothing has a book id offers nothing", async () => {
-  expect(await talkCandidates(topic([file({ name: "A.pdf" })]), title)).toEqual([]);
+  expect(await retellCandidates(topic([file({ name: "A.pdf" })]), title)).toEqual([]);
 });
 
 test("marks that will not read count as zero rather than taking the picker down", async () => {
   // A corrupt annotations file: loadAnnotations rethrows a genuine read error.
   disk.files.set("annotations-cand-bad.json", "{ not json");
   marks("cand-good", 2);
-  const candidates = await talkCandidates(
+  const candidates = await retellCandidates(
     topic([
       file({ name: "Bad.pdf", hash: "cand-bad", addedAt: 2 }),
       file({ name: "Good.pdf", hash: "cand-good", addedAt: 1 }),
@@ -81,7 +81,7 @@ test("marks that will not read count as zero rather than taking the picker down"
 });
 
 test("a book with no annotations file at all is offered with no marks", async () => {
-  const candidates = await talkCandidates(
+  const candidates = await retellCandidates(
     topic([file({ name: "Fresh.pdf", hash: "cand-fresh" })]),
     title,
   );
@@ -89,7 +89,7 @@ test("a book with no annotations file at all is offered with no marks", async ()
 });
 
 test("candidates come in the topic's order, most recently opened first", async () => {
-  const candidates = await talkCandidates(
+  const candidates = await retellCandidates(
     topic([
       file({ name: "Old.pdf", hash: "cand-old", addedAt: 10 }),
       file({ name: "Recent.pdf", hash: "cand-recent", addedAt: 1, lastOpenedAt: 99 }),
@@ -99,8 +99,8 @@ test("candidates come in the topic's order, most recently opened first", async (
   expect(candidates.map((c) => c.bookId)).toEqual(["cand-recent", "cand-old"]);
 });
 
-test("starting a talk logs one talk-start carrying how much material went in", async () => {
-  const talk = await createTalk(
+test("starting a retell logs one talk-start carrying how much material went in", async () => {
+  const retell = await createRetell(
     "topic-c",
     [
       { bookId: "cand-a", title: "Eye and Brain" },
@@ -109,13 +109,13 @@ test("starting a talk logs one talk-start carrying how much material went in", a
     log,
   );
   expect(logged).toEqual([
-    { topicId: "topic-c", type: "talk-start", payload: { talkId: talk.id, materials: 2 } },
+    { topicId: "topic-c", type: "talk-start", payload: { retellId: retell.id, materials: 2 } },
   ]);
 });
 
-test("the started talk is on disk with the materials it was given", async () => {
-  const talk = await createTalk("topic-c", [{ bookId: "cand-a", title: "Eye and Brain" }], log);
-  const written = disk.files.get(`talk-${talk.id}.json`);
+test("the started retell is on disk with the materials it was given", async () => {
+  const retell = await createRetell("topic-c", [{ bookId: "cand-a", title: "Eye and Brain" }], log);
+  const written = disk.files.get(`talk-${retell.id}.json`);
   expect(written).toBeDefined();
   expect(JSON.parse(written as string)).toMatchObject({
     topicId: "topic-c",

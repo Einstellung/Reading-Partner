@@ -1,13 +1,13 @@
 // What a retell turn gives up when it does not fit the model's context
 // window, and in what order (src/budget/ladder.ts owns the walking of it). The
 // same tiers as the reading ladder (../ladder.ts), over a different set of
-// material: a retell is assembled out of a talk's books rather than the page
+// material: a retell is assembled out of its own books rather than the page
 // a reader is on, so the reader's own marks are the material here rather than a
 // hint, and the whole-book survey never appears.
 
 import type { Rung } from "../../budget";
 
-export type TalkReductionId =
+export type RetellReductionId =
   | "figure-catalog"
   | "observation-trim"
   | "retell-notes"
@@ -15,7 +15,7 @@ export type TalkReductionId =
   | "retell-marks"
   | "history-trim";
 
-export const TALK_LADDER: readonly Rung<TalkReductionId>[] = [
+export const RETELL_LADDER: readonly Rung<RetellReductionId>[] = [
   // tier 1: redundancy.
   { id: "figure-catalog" },
   { id: "observation-trim" },

@@ -1,16 +1,16 @@
 // The record of the retell, laid out for the prompt.
 //
 // The record is what makes the retell survivable across sittings (docs/31: a
-// talk has a life, it is prepared over several goes and returned to). It is also
+// retell has a life, it is prepared over several goes and returned to). It is also
 // the deck's outline later, which is why a decision names points and a figure
-// rather than prose. Where it lives, and in what order, belongs to the talk
-// (reading/talks/outline.ts); this file only reads it back.
+// rather than prose. Where it lives, and in what order, belongs to the retell
+// (reading/retell/outline.ts); this file only reads it back.
 
 import type { RetellChapter, RetellPlan } from "./types";
 
 // The whole outline as something to read back to the reader when they ask what
-// their talk looks like (read_talk_outline). Different from formatPlan, which is
-// the model's working record: this one is ordered as the talk will run, says
+// their retell looks like (read_retell_outline). Different from formatPlan, which is
+// the model's working record: this one is ordered as the retell will run, says
 // what is still undecided, and carries no instructions about what to do next.
 export function formatOutline(
   chapters: readonly RetellChapter[],
@@ -18,19 +18,19 @@ export function formatOutline(
 ): string {
   const decisions = plan?.decisions ?? [];
   if (decisions.length === 0) {
-    return "No chapter has been settled yet, so there is no outline — the talk starts taking shape after the first chapter is recorded.";
+    return "No chapter has been settled yet, so there is no outline — the retell starts taking shape after the first chapter is recorded.";
   }
   const byChapter = new Map(decisions.map((d) => [d.chapter, d]));
   const included = decisions.filter((d) => d.include);
   const cut = decisions.filter((d) => !d.include);
   const undecided = chapters.filter((c) => !byChapter.has(c.index));
 
-  const lines = ["The talk as it stands."];
+  const lines = ["The retell as it stands."];
   if (included.length) {
     const points = included.reduce((n, d) => n + d.points.length, 0);
     lines.push(
       "",
-      `In the talk — ${included.length} chapter(s), ${points} point(s), in this order:`,
+      `In the retell — ${included.length} chapter(s), ${points} point(s), in this order:`,
     );
     for (const d of included) {
       lines.push("", `${d.chapter}. ${d.title}`);
@@ -40,7 +40,7 @@ export function formatOutline(
       if (d.note) lines.push(`  note: ${d.note}`);
     }
   } else {
-    lines.push("", "Nothing is in the talk yet — every chapter settled so far was cut.");
+    lines.push("", "Nothing is in the retell yet — every chapter settled so far was cut.");
   }
   if (cut.length) {
     lines.push("", "Cut:");
@@ -80,7 +80,7 @@ export function formatPlan(
       "Where the retell stands: nothing recorded yet.",
       "If the conversation so far is empty, this is the opening: lay out the",
       "skeleton, get the reader to confirm or correct the spine and say which",
-      "thread they want the talk to follow, then start at chapter 1.",
+      "thread they want the retell to follow, then start at chapter 1.",
       // The record only knows about recorded chapters, so on the turn right after
       // the opening it still says "nothing recorded". Without this the model lays
       // the skeleton out a second time.
@@ -90,7 +90,7 @@ export function formatPlan(
   }
   const lines = ["Where the retell stands — what has been recorded so far:"];
   for (const d of decisions) {
-    lines.push("", `Chapter ${d.chapter}. ${d.title} — ${d.include ? "in the talk" : "cut"}`);
+    lines.push("", `Chapter ${d.chapter}. ${d.title} — ${d.include ? "in the retell" : "cut"}`);
     for (const p of d.points) lines.push(`  - ${p}`);
     if (d.figure) lines.push(`  figure: ${d.figure}`);
     if (d.note) lines.push(`  note: ${d.note}`);
@@ -98,7 +98,7 @@ export function formatPlan(
   lines.push(
     "",
     next === null
-      ? "Every chapter has a decision. Do not re-walk them: ask what the reader wants to revisit, or go over the shape of the talk as a whole."
+      ? "Every chapter has a decision. Do not re-walk them: ask what the reader wants to revisit, or go over the shape of the retell as a whole."
       : `Next up: chapter ${next}. Pick up there — the chapters above are settled unless the reader reopens one.`,
   );
   return lines.join("\n");

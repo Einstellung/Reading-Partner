@@ -14,8 +14,8 @@ import {
 } from "../../../src/ui/components/base/topic-nav";
 
 test("the sidebar has exactly the three sections, Materials first", () => {
-  expect(TOPIC_SECTIONS.map((s) => s.id)).toEqual(["materials", "talks", "observations"]);
-  expect(TOPIC_SECTIONS.map((s) => s.label)).toEqual(["Materials", "Talks", "AI observations"]);
+  expect(TOPIC_SECTIONS.map((s) => s.id)).toEqual(["materials", "retell", "observations"]);
+  expect(TOPIC_SECTIONS.map((s) => s.label)).toEqual(["Materials", "Retell", "AI observations"]);
 });
 
 test("a desktop starts expanded at any width, because it has a mouse", () => {

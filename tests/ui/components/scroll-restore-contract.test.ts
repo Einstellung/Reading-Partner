@@ -108,11 +108,11 @@ test("the info call's list is given the key its hook made", () => {
 
 test("the surfaces that are not remembered pass no key", () => {
   // The corner bubble is a different surface and is not unmounted by the swap;
-  // a key on it would let it read the call window's position. The talk and the
+  // a key on it would let it read the call window's position. The retell and the
   // spike harness have no swap at all.
   for (const path of [
     "ui/components/chat/CallBubble.tsx",
-    "ui/components/talk/TalkView.tsx",
+    "ui/components/retell/RetellView.tsx",
     "ui/components/chat/aside-spike-harness.tsx",
   ]) {
     expect(read(path)).not.toContain("stickKey");

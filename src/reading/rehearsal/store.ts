@@ -1,6 +1,6 @@
-// Rehearsals on disk: rehearsal-<talkId>.json under AppData, beside the
-// talk-<talkId>.json they belong to. One file per talk, all of that talk's runs
-// inside it, oldest first — the runs of one talk are only ever read together
+// Rehearsals on disk: rehearsal-<retellId>.json under AppData, beside the
+// talk-<retellId>.json they belong to. One file per retell, all of that retell's runs
+// inside it, oldest first — the runs of one retell are only ever read together
 // (this pass against the last one), and one file per run would make listing them
 // a directory scan for no gain.
 //
@@ -8,7 +8,7 @@
 // reader left and nothing can rebuild it — not the deck, not the book. The deck
 // it was given against stays out (slides/** is a build output).
 //
-// A file that will not parse is moved to rehearsal-<talkId>.json.bad before the
+// A file that will not parse is moved to rehearsal-<retellId>.json.bad before the
 // empty log is handed back, so the next append cannot make the loss permanent.
 // That is the shape docs/29 recorded on slides/talks.json: parse fails, the
 // loader returns empty, the next write commits the empty version over the top,
@@ -20,59 +20,59 @@ import { emptyLog, normalizeLog, type RehearsalLog, type RehearsalRun } from "./
 
 const PREFIX = "rehearsal-";
 
-export function rehearsalFile(talkId: string): string {
-  return `${PREFIX}${talkId}.json`;
+export function rehearsalFile(retellId: string): string {
+  return `${PREFIX}${retellId}.json`;
 }
 
 // Where a file that would not parse is kept. Out of the sync range, so a
 // device that could not read the file does not push its rescue copy at the
 // others.
-function badFile(talkId: string): string {
-  return `${rehearsalFile(talkId)}.bad`;
+function badFile(retellId: string): string {
+  return `${rehearsalFile(retellId)}.bad`;
 }
 
 /**
- * This talk's runs, oldest first. A talk that has never been given reads as an
+ * This retell's runs, oldest first. A retell that has never been given reads as an
  * empty log, and so does one whose file this build cannot use — but in that
  * case the bytes are moved aside first, so the empty log the caller gets is
  * never the only copy left.
  */
-export async function loadRehearsals(talkId: string): Promise<RehearsalLog> {
-  const file = rehearsalFile(talkId);
+export async function loadRehearsals(retellId: string): Promise<RehearsalLog> {
+  const file = rehearsalFile(retellId);
   let text: string;
   try {
-    if (!(await appData.exists(file))) return emptyLog(talkId);
+    if (!(await appData.exists(file))) return emptyLog(retellId);
     text = await appData.readText(file);
   } catch (e) {
     // An IO error says nothing is wrong with the file itself. Nothing is moved
     // and nothing is written over it — appendRun goes through here, so a read
     // that failed cannot turn into an overwrite.
-    console.warn("failed to read the rehearsals of", talkId, e);
-    return emptyLog(talkId);
+    console.warn("failed to read the rehearsals of", retellId, e);
+    return emptyLog(retellId);
   }
   let log: RehearsalLog | null = null;
   try {
     log = normalizeLog(JSON.parse(text) as unknown);
   } catch (e) {
-    console.warn("failed to parse the rehearsals of", talkId, e);
+    console.warn("failed to parse the rehearsals of", retellId, e);
   }
   if (log) return log;
-  await setAside(talkId);
-  return emptyLog(talkId);
+  await setAside(retellId);
+  return emptyLog(retellId);
 }
 
-async function setAside(talkId: string): Promise<void> {
-  const file = rehearsalFile(talkId);
+async function setAside(retellId: string): Promise<void> {
+  const file = rehearsalFile(retellId);
   try {
-    await appData.rename(file, badFile(talkId));
-    console.warn(`${file} could not be read; kept as ${badFile(talkId)} and started over`);
+    await appData.rename(file, badFile(retellId));
+    console.warn(`${file} could not be read; kept as ${badFile(retellId)} and started over`);
   } catch (e) {
     console.warn(`${file} could not be read and could not be moved aside`, e);
   }
 }
 
 /**
- * Add one run to its talk's log and write it. The ordinal is assigned here —
+ * Add one run to its retell's log and write it. The ordinal is assigned here —
  * one past the highest already on disk — because it is a property of the log
  * and not of the run: a caller counting for itself would give two runs the same
  * number the first time one is recorded from a stale list. Returns the run as
@@ -87,9 +87,9 @@ export async function appendRun(run: RehearsalRun): Promise<RehearsalRun> {
   return stored;
 }
 
-/** Drop a talk's rehearsals, and the rescue copy if there is one. */
-export async function deleteRehearsals(talkId: string): Promise<void> {
-  for (const file of [rehearsalFile(talkId), badFile(talkId)]) {
+/** Drop a retell's rehearsals, and the rescue copy if there is one. */
+export async function deleteRehearsals(retellId: string): Promise<void> {
+  for (const file of [rehearsalFile(retellId), badFile(retellId)]) {
     try {
       if (await appData.exists(file)) await appData.remove(file);
     } catch (e) {

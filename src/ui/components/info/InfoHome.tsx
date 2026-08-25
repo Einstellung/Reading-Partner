@@ -93,7 +93,7 @@ export default function InfoHome(props: {
   // reader on a screen they never chose. Omitted by the desktop shell, where
   // back is the call's own Hang up.
   onOverlayChange?: (dismiss: (() => void) | null) => void;
-  // A shell's own wrapper around the two screens that have something to talk
+  // A shell's own wrapper around the two screens that have something to talk about
   // about, the briefing and an article. The phone (docs/22) returns them inside
   // its pull-down-to-ask host, so a pull from the top opens the same chat the
   // Ask button opens; the desktop shell omits this and gets exactly what it drew

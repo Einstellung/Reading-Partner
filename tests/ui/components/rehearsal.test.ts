@@ -1,5 +1,5 @@
 // What the host makes of a deck's messages, and what it puts on the bar
-// (src/ui/components/talk/rehearsal.ts). The view around it is an iframe and a
+// (src/ui/components/retell/rehearsal.ts). The view around it is an iframe and a
 // listener; everything that can be wrong is in here. Run: bun test.
 
 import { expect, test } from "bun:test";
@@ -18,7 +18,7 @@ import {
   slideEvent,
   utteranceEvent,
   withSlideEvent,
-} from "../../../src/ui/components/talk/rehearsal";
+} from "../../../src/ui/components/retell/rehearsal";
 import type {
   RehearsalEvent,
   RehearsalRun,
@@ -160,7 +160,7 @@ test("an utterance between two reports of the same page does not split it", () =
   expect(events).toHaveLength(2);
 });
 
-test("a run with no page ever reported is not a pass through the talk", () => {
+test("a run with no page ever reported is not a pass through the retell", () => {
   expect(hasRecordedPages([])).toBe(false);
   expect(hasRecordedPages([endEvent(1)])).toBe(false);
   expect(hasRecordedPages([utteranceEvent({ text: "hm", startedAt: 1, endedAt: 2 })])).toBe(false);
@@ -200,7 +200,7 @@ test("a rehearsal being started holds the button, deck or no deck", () => {
   });
   expect(starting.ok).toBe(false);
   expect(starting.title).toContain("Starting");
-  // The gate lifts on its own, so the same talk is rehearsable again afterwards.
+  // The gate lifts on its own, so the same retell is rehearsable again afterwards.
   expect(
     rehearsalReadiness({ deckFile: "slides/t-x.html", loading: false, preparing: false }).ok,
   ).toBe(true);
@@ -236,7 +236,7 @@ function lateSource(events: RehearsalEvent[], said: string): TranscriptSource {
 }
 
 const finishInput = (events: RehearsalEvent[], save: (run: RehearsalRun) => Promise<unknown>) => ({
-  talkId: "t-1",
+  retellId: "t-1",
   deckFile: "slides/t-1.html",
   id: "run-1",
   startedAt: 1_000,

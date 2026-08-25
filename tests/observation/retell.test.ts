@@ -1,5 +1,5 @@
 // Retell distillation (src/observation/distill/retell.ts): the pass that runs when
-// the reader leaves a talk. Same harness as tests/observation/distill.test.ts —
+// the reader leaves a retell. Same harness as tests/observation/distill.test.ts —
 // the sub-agent turn is the real agent loop over a scripted stream, so the real
 // observation tools and the real failure mapping run against a fake fs with no
 // provider, network or token spend. Run: bun test.
@@ -94,7 +94,7 @@ function makeStore() {
 function passInput(overrides: Partial<RetellPassInput> = {}): RetellPassInput {
   return {
     topicName: "minds",
-    talkName: "A Brief History of Intelligence",
+    retellName: "A Brief History of Intelligence",
     materials: ["A Brief History of Intelligence"],
     threadId: "talk-1",
     messages: [
@@ -108,7 +108,7 @@ function passInput(overrides: Partial<RetellPassInput> = {}): RetellPassInput {
 function input(overrides: Partial<RetellDistillInput> = {}): RetellDistillInput {
   return {
     topicName: "minds",
-    talkName: "A Brief History of Intelligence",
+    retellName: "A Brief History of Intelligence",
     materials: ["A Brief History of Intelligence", "Surfing Uncertainty"],
     threadId: "talk-1",
     messages: [
@@ -316,14 +316,14 @@ test("the system prompt writes down the examiner's bias and the three things to 
   expect(prompt).toContain("Where the reader corrected you");
   expect(prompt).toContain("holds across books");
   // And what it must not turn into.
-  expect(prompt).toContain("What the retell decided to put in the talk");
+  expect(prompt).toContain("What the retell settled on keeping");
   expect(prompt).toContain("never a retelling");
 });
 
-test("the user message carries the talk, its materials, and the message ids", () => {
+test("the user message carries the retell, its materials, and the message ids", () => {
   const msg = buildRetellDistillUserMessage(input());
   expect(msg).toContain("Topic: minds");
-  expect(msg).toContain("Talk: A Brief History of Intelligence");
+  expect(msg).toContain("Retell: A Brief History of Intelligence");
   expect(msg).toContain("Materials: A Brief History of Intelligence, Surfing Uncertainty");
   expect(msg).toContain("[talk-1:200] reader: the lesion studies");
   expect(msg).toContain("[talk-1:100] you: What is chapter 22 resting on?");

@@ -541,8 +541,8 @@ export function IconLessonPath({ size = 20 }: IconProps) {
 	);
 }
 
-// A screen on a stand: a talk, which is a deck shown to someone.
-export function IconTalk({ size = 20 }: IconProps) {
+// A screen on a stand: a retell and the deck it ends in.
+export function IconRetell({ size = 20 }: IconProps) {
 	return (
 		<svg
 			width={size}

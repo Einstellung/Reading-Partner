@@ -10,8 +10,8 @@
 // could not say out loud. Only the plumbing is shared — the sub-agent caps, the
 // message shape, the result type.
 //
-// It never imports the talks domain: everything about the talk arrives as input
-// (the trigger point is on the talk's side, in ui/components/talk/useTalk.ts).
+// It never imports the retell domain: everything about the retell arrives as input
+// (the trigger point is on the retell's side, in ui/components/retell/useRetell.ts).
 
 import type { AgentTool } from "../../ai/agent";
 import { runSubagent, type SubagentDefinition, type SubagentModel } from "../../ai/subagent";
@@ -36,8 +36,8 @@ export const RETELL_DISTILL_AGENT_NAME = "retell_distiller";
 
 export interface RetellDistillInput {
   topicName: string;
-  talkName: string;
-  // The talk's materials by title, so an observation can name the book a
+  retellName: string;
+  // The retell's materials by title, so an observation can name the book a
   // chapter belongs to. Attribution is prose, not a field (docs/31).
   materials: string[];
   threadId: string;
@@ -50,14 +50,14 @@ export interface RetellDistillInput {
   // The current observation index — the whole of it, every pass. The first thing
   // the prompt asks for is a reconciliation against these lines.
   indexText: string;
-  // When the stretch below happened, from the messages' own timestamps. A talk
+  // When the stretch below happened, from the messages' own timestamps. A retell
   // is left and re-entered over days (docs/31), so this is routinely not today.
   dates: EvidenceDates | null;
 }
 
 // The conversation this pass has not seen yet, and the cursor to store if it
-// finishes. Messages with no text of their own are dropped first: a talk's
-// thread holds decision cards as empty rows (ui/components/talk/useTalk.ts), and
+// finishes. Messages with no text of their own are dropped first: a retell's
+// thread holds decision cards as empty rows (ui/components/retell/useRetell.ts), and
 // counting them would move the cursor past conversation that was never read.
 // Pure — unit-tested.
 export function selectNewMessages(
@@ -73,8 +73,8 @@ export function buildRetellDistillSystemPrompt(input: RetellDistillInput): strin
   return [
     "You keep a reading companion's observations of its reader. The reader has",
     "just stepped out of a retell: a conversation in which you quizzed them,",
-    "chapter by chapter, about a book they have finished reading, to prepare a",
-    "talk they are going to give out loud. Distill from that stretch of",
+    "chapter by chapter, about a book they have finished reading, to see whether",
+    "they can say it back. Distill from that stretch of",
     "conversation what is worth observing about the reader, using the observation",
     "tools.",
     "This is a silent background pass: the reader sees nothing. Make your tool",
@@ -123,7 +123,7 @@ export function buildRetellDistillSystemPrompt(input: RetellDistillInput): strin
     "  that it is a habit rather than a one-off.",
     "",
     "Do not record:",
-    "- What the retell decided to put in the talk. That is already written down,",
+    "- What the retell settled on keeping. That is already written down,",
     "  structured, and more precise than prose.",
     "- What you explained. It can be produced again from the book.",
     "- A running account of the conversation. An observation is a judgement plus a",
@@ -169,7 +169,7 @@ export function buildRetellDistillSystemPrompt(input: RetellDistillInput): strin
 export function buildRetellDistillUserMessage(input: RetellDistillInput): string {
   const lines = [
     `Topic: ${input.topicName}`,
-    `Talk: ${input.talkName}`,
+    `Retell: ${input.retellName}`,
     `Material${input.materials.length === 1 ? "" : "s"}: ${
       input.materials.length ? input.materials.join(", ") : "(none named)"
     }`,
@@ -238,7 +238,7 @@ export async function runRetellDistillation(
   return { ...counts, ok, outcome: brief.outcome, failure: ok ? undefined : brief.brief };
 }
 
-// --- one pass over a talk's conversation, with the cursor discipline ---
+// --- one pass over a retell's conversation, with the cursor discipline ---
 
 export interface RetellPassStore {
   getMeta(): Promise<ObservationMeta>;
@@ -254,7 +254,7 @@ export interface RetellPassDeps extends DistillDeps {
 
 export interface RetellPassInput {
   topicName: string;
-  talkName: string;
+  retellName: string;
   materials: string[];
   threadId: string;
   // The whole conversation as it stands on disk, oldest first. What this pass
@@ -263,7 +263,7 @@ export interface RetellPassInput {
 }
 
 // Why the pass did nothing, when it did nothing. Both are ordinary: leaving a
-// talk twice in a row is one of the two exits from the view, and a reader who
+// retell twice in a row is one of the two exits from the view, and a reader who
 // only listened has left nothing that cannot be re-derived.
 export type RetellSkip = "no-new-messages" | "reader-silent";
 
@@ -301,7 +301,7 @@ export async function runRetellDistillPass(
   const result = await runRetellDistillation(
     {
       topicName: input.topicName,
-      talkName: input.talkName,
+      retellName: input.retellName,
       materials: input.materials,
       threadId: input.threadId,
       messages: fresh,

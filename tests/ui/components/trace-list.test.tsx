@@ -58,7 +58,7 @@ test("the AI thread shortcut shows only on a mark that owns a thread", () => {
   expect(html.split('aria-label="Open AI thread"').length - 1).toBe(1);
 });
 
-// A mark outlives the conversation it opened (docs/09): deleting the talk leaves
+// A mark outlives the conversation it opened (docs/09): deleting the retell leaves
 // the mark on the book. The id on it is then a door to nothing, and a button
 // that cannot be answered is worse than no button.
 test("the shortcut goes when the conversation it points at is no longer here", () => {

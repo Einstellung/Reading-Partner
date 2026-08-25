@@ -44,7 +44,7 @@ function aRun(id: string, over: Partial<RehearsalRun> = {}): RehearsalRun {
   };
 }
 
-test("a talk that has never been given reads as an empty log, not an error", async () => {
+test("a retell that has never been given reads as an empty log, not an error", async () => {
   const log = await loadRehearsals(TALK);
   expect(log.runs).toEqual([]);
   expect(log.talkId).toBe(TALK);
@@ -69,7 +69,7 @@ test("the store numbers the runs, oldest first", async () => {
   expect(log.runs.map((r) => r.ordinal)).toEqual([1, 2, 3]);
 });
 
-test("one talk's runs are not another's", async () => {
+test("one retell's runs are not another's", async () => {
   await appendRun(aRun("r1"));
   await appendRun(aRun("other", { talkId: "talk-2" }));
   expect((await loadRehearsals(TALK)).runs.map((r) => r.id)).toEqual(["r1"]);
@@ -109,7 +109,7 @@ test("a file that would not open is left alone", async () => {
   expect(disk.files.has(rehearsalFile(TALK))).toBe(true);
 });
 
-// One unusable run inside a usable file is dropped: a lost run is one talk
+// One unusable run inside a usable file is dropped: a lost run is one retell
 // given again, a lost log is every run there ever was.
 test("a run the file cannot use is dropped and the rest of the log survives", async () => {
   disk.files.set(
@@ -149,7 +149,7 @@ test("deleting takes the log and its rescue copy with it", async () => {
   expect(disk.files.has(`${rehearsalFile(TALK)}.bad`)).toBe(false);
 });
 
-test("deleting a talk that was never given is not an error", async () => {
+test("deleting a retell that was never given is not an error", async () => {
   await deleteRehearsals("never");
   expect(disk.files.size).toBe(0);
 });

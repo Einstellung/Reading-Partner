@@ -1,20 +1,20 @@
-// Loading for the rehearsal: which deck this talk has, that deck's HTML, and
+// Loading for the rehearsal: which deck this retell has, that deck's HTML, and
 // the runs already recorded against it (docs/31).
 //
-// Three small hooks rather than one: the talk header only needs to know whether a
+// Three small hooks rather than one: the retell header only needs to know whether a
 // deck exists, the rehearsal needs the megabytes, and the list beside the
-// outline needs the history. Keeping them apart is what stops opening a talk from
+// outline needs the history. Keeping them apart is what stops opening a retell from
 // reading a 20 MB file to decide whether a button is enabled.
 
 import { useEffect, useState } from "react";
 import { listDecks, readDeckHtml } from "../../../reading/slides";
 import { loadRehearsals, type RehearsalRun } from "../../../reading/rehearsal";
 
-// The deck registered for this talk, or null when it has none yet. `reloadKey`
+// The deck registered for this retell, or null when it has none yet. `reloadKey`
 // is bumped by the caller when the deck dialog closes: a deck generated in this
 // sitting has to enable the button in this sitting.
-export function useTalkDeckFile(
-  talkId: string,
+export function useRetellDeckFile(
+  retellId: string,
   reloadKey: number,
 ): { file: string | null; loading: boolean } {
   const [file, setFile] = useState<string | null>(null);
@@ -27,13 +27,13 @@ export function useTalkDeckFile(
       .catch(() => [])
       .then((decks) => {
         if (cancelled) return;
-        setFile(decks.find((d) => d.talkId === talkId)?.file ?? null);
+        setFile(decks.find((d) => d.talkId === retellId)?.file ?? null);
         setLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [talkId, reloadKey]);
+  }, [retellId, reloadKey]);
 
   return { file, loading };
 }
@@ -48,7 +48,7 @@ export function useDeckHtml(file: string | null): { html: string | null; error: 
     setHtml(null);
     setError(null);
     if (!file) {
-      setError("This talk has no deck yet.");
+      setError("This retell has no deck yet.");
       return;
     }
     void readDeckHtml(file)
@@ -68,31 +68,31 @@ export function useDeckHtml(file: string | null): { html: string | null; error: 
   return { html, error };
 }
 
-// This talk's rehearsals, newest first. `reloadKey` is bumped by the caller
+// This retell's rehearsals, newest first. `reloadKey` is bumped by the caller
 // when a run ends, which is the only moment this device changes the list.
 //
-// A sync pull changes it too — another device's pass through the same talk —
+// A sync pull changes it too — another device's pass through the same retell —
 // and this hook deliberately does not hear about it. The list is read when the
-// talk opens, as the talk itself is (tests/platform/sync/pull-coverage.test.ts
+// retell opens, as the retell itself is (tests/platform/sync/pull-coverage.test.ts
 // registers both on that ground), so the two go stale together and reopening
-// the talk picks both up. Routing the pull here alone would refresh the history
-// under a talk still showing the copy it was opened with.
-export function useRehearsals(talkId: string, reloadKey: number): RehearsalRun[] {
+// the retell picks both up. Routing the pull here alone would refresh the history
+// under a retell still showing the copy it was opened with.
+export function useRehearsals(retellId: string, reloadKey: number): RehearsalRun[] {
   const [runs, setRuns] = useState<RehearsalRun[]>([]);
 
   useEffect(() => {
     let cancelled = false;
-    void loadRehearsals(talkId)
+    void loadRehearsals(retellId)
       .then((log) => {
         if (!cancelled) setRuns(log.runs.slice().reverse());
       })
       .catch((e: unknown) => {
-        console.warn("failed to read the rehearsals", talkId, e);
+        console.warn("failed to read the rehearsals", retellId, e);
       });
     return () => {
       cancelled = true;
     };
-  }, [talkId, reloadKey]);
+  }, [retellId, reloadKey]);
 
   return runs;
 }

@@ -1,12 +1,12 @@
 // The outline beside the retell, pinned by a static render: the running
 // order is numbered, a cut entry stays visible without a number, and the ends of
 // the list cannot be moved further out. What the rows mean is decided in
-// src/reading/talks/outline.ts and tested there. Run: bun test.
+// src/reading/retell/outline.ts and tested there. Run: bun test.
 
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import OutlinePane from "../../../src/ui/components/talk/OutlinePane";
-import type { OutlineRow } from "../../../src/reading/talks";
+import OutlinePane from "../../../src/ui/components/retell/OutlinePane";
+import type { OutlineRow } from "../../../src/reading/retell";
 
 const rows: OutlineRow[] = [
   {
@@ -59,7 +59,7 @@ test("the entries are there with their points, figure and book", () => {
   expect(html).toContain("Openings");
   expect(html).toContain("the 1962 data does the work");
   expect(html).toContain("Figure: [fig:3]");
-  // Only shown when the talk has more than one material.
+  // Only shown when the retell has more than one material.
   expect(html).toContain("Vision");
 });
 
@@ -82,9 +82,9 @@ test("an empty outline says what will land there, not nothing", () => {
   expect(render([])).toContain("Nothing settled yet");
 });
 
-// The rehearsals at the foot of the pane: a talk that has been given has
-// somewhere to show it, and a talk that has not says so instead of hiding.
-test("the passes through the talk are counted at the foot", () => {
+// The rehearsals at the foot of the pane: a retell that has been given has
+// somewhere to show it, and a retell that has not says so instead of hiding.
+test("the passes through the retell are counted at the foot", () => {
   const run = {
     id: "r1",
     ordinal: 1,

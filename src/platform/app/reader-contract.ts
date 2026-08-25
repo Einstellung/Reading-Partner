@@ -26,7 +26,7 @@ export interface ViewState {
   // rather than the top-bar entry itself (docs/09). Files written by older builds
   // carry it; nothing writes it and nothing reads it. Declared for one release so
   // a sync round-trip does not look like a schema change, then gone — along with
-  // the `rehearsal` key some builds wrote beside it (that mode is a talk now,
+  // the `rehearsal` key some builds wrote beside it (that mode is a retell now,
   // docs/31).
   classroom?: boolean;
   // Reading layout, per book: "vertical" continuous scroll (default) or "paged"

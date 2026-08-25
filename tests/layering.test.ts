@@ -77,7 +77,6 @@ const LAYER: Record<string, Layer> = {
   "reading/session": "domain",
   "reading/slides": "domain",
   "reading/sources": "domain",
-  "reading/talks": "domain",
 
   ui: "ui",
   "ui/components": "ui",
@@ -91,9 +90,9 @@ const LAYER: Record<string, Layer> = {
   "ui/components/markdown": "ui",
   "ui/components/phone": "ui",
   "ui/components/reader": "ui",
+  "ui/components/retell": "ui",
   "ui/components/settings": "ui",
   "ui/components/shelf": "ui",
-  "ui/components/talk": "ui",
   "ui/components/ui": "ui",
   "App.tsx": "shell",
   "PhoneApp.tsx": "shell",

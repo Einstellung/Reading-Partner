@@ -9,7 +9,7 @@
 // reading, these two are having understood it and not being able to say it. Nor
 // are they one neutral type with a verdict inside, because what the next
 // retell keeps when the window is tight is decided by type order
-// (reading/talks/turn.ts), and "cannot say this chapter" has to sort near the top.
+// (reading/retell/turn.ts), and "cannot say this chapter" has to sort near the top.
 export const OBSERVATION_TYPES = [
   "reading-position",
   "stuck-point",

@@ -414,7 +414,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       },
       // The loop declined mid-turn rather than failing to reach the model. It is
       // not an error and there is nothing to retry, so it is not dressed as one
-      // (turn-rows.ts; App and useTalk pass this too).
+      // (turn-rows.ts; App and useRetell pass this too).
       onRefusal: (m) => {
         patchLast((prev) => refusalRow(prev, m));
         setStreaming(false);

@@ -1,5 +1,5 @@
 // The reading domain's chat cards. One so far: the receipt a retell leaves
-// when it records what a chapter contributes to the talk (docs/31).
+// when it records what a chapter contributes to the retell (docs/31).
 //
 // Read-only on purpose. Changing a decision is a sentence to the AI, which
 // re-records it and raises a fresh card; a row of Edit/Delete buttons here would
@@ -20,7 +20,7 @@ export function RetellDecisionCard({ payload }: CardComponentProps<RetellDecisio
           Chapter {payload.chapter}
         </span>
         <span className="flex-1" />
-        <Badge className="shrink-0">{kept ? "In the talk" : "Cut"}</Badge>
+        <Badge className="shrink-0">{kept ? "In the retell" : "Cut"}</Badge>
       </div>
       <div className="mt-1 text-[15px] font-medium text-[#1b1b1b]">{payload.title}</div>
       {payload.points.length > 0 && (

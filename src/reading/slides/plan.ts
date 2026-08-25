@@ -1,4 +1,4 @@
-// Slides plan (docs/14), pure parts: turn a set of books' notes plus a talk
+// Slides plan (docs/14), pure parts: turn a set of books' notes plus a retell
 // instruction into an ordered deck outline. One AI call feeds each book's
 // chapter list (plus its overview as the through-line) and the instruction; the
 // model returns JSON — a deck title and ordered slides, each tagged with a kind
@@ -46,8 +46,8 @@ const KINDS: SlideKind[] = ["title", "section", "content", "closing"];
 
 export const SLIDES_PLAN_SYSTEM_PROMPT = [
   "You are the deck-planning stage of a reading companion. You are given the",
-  "reading notes for one or more books and a talk instruction (theme, audience).",
-  "Design a talk deck: an ordered outline of slides that makes an argument, not a",
+  "reading notes for one or more books and a deck instruction (theme, audience).",
+  "Design a deck: an ordered outline of slides that makes an argument, not a",
   "book report. Output a single JSON object and nothing else — no prose, no",
   "markdown fences.",
   "",
@@ -65,7 +65,7 @@ export const SLIDES_PLAN_SYSTEM_PROMPT = [
   "Rules:",
   '- kind is one of "title", "section", "content", "closing". Open with a title',
   "  slide and end with a closing slide. Use section slides to divide movements.",
-  "- Scale the slide count to the material: a handful for a thin talk, a few dozen",
+  "- Scale the slide count to the material: a handful for a thin deck, a few dozen",
   "  for a rich one. Do not pad.",
   "- When there is more than one book, the deck is a synthesis across them — weave",
   "  the ideas into one argument, do not go book-after-book, unless the",
@@ -126,15 +126,15 @@ export function bookBlock(b: PlanBook): string {
   return lines.join("\n");
 }
 
-// Build the plan call's user message: each book's block, then the talk
+// Build the plan call's user message: each book's block, then the deck
 // instruction.
 export function planUserMessage(books: PlanBook[], instruction: string): string {
   const parts: string[] = books.map(bookBlock);
   const steer = instruction.trim();
   parts.push(
     steer
-      ? `Talk instruction (theme / audience): ${steer}`
-      : "No specific talk instruction was given; design a clear general-audience talk.",
+      ? `Deck instruction (theme / audience): ${steer}`
+      : "No specific deck instruction was given; design a clear general-audience deck.",
   );
   parts.push("Return the deck outline JSON now.");
   return parts.join("\n\n");
@@ -210,7 +210,7 @@ export function parseSlidePlan(text: string, tally?: ParseTally): DeckPlan {
   const raw = JSON.parse(extractJson(text)) as Record<string, unknown>;
   const hasTitle = typeof raw.title === "string" && !!raw.title.trim();
   if (!hasTitle && tally) tally.repaired++;
-  const title = hasTitle ? (raw.title as string).trim() : "Untitled talk";
+  const title = hasTitle ? (raw.title as string).trim() : "Untitled deck";
   const rawSlides = Array.isArray(raw.slides) ? raw.slides : [];
   const slides = rawSlides
     .map((s) => cleanSlide(s, tally))

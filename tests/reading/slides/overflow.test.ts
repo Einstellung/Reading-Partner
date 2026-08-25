@@ -12,7 +12,7 @@ const bullets = (n: number, text: string) =>
 test("a normal content slide fits", () => {
   const html = `<div class="kicker">PART ONE</div><h2>The core argument</h2>${bullets(
     4,
-    "A short talk point that runs to about one line of the slide.",
+    "A short retell point that runs to about one line of the slide.",
   )}<div class="bottomline"><b>Takeaway:</b> one line.</div>`;
   const est = estimateOverflow(html);
   expect(est.overflows).toBe(false);
@@ -28,7 +28,7 @@ test("a title slide fits", () => {
 test("too many bullets overflow", () => {
   const html = `<h2>Everything at once</h2>${bullets(
     12,
-    "A talk point that is long enough to wrap onto a second line on the slide, as they tend to be.",
+    "A retell point that is long enough to wrap onto a second line on the slide, as they tend to be.",
   )}`;
   const est = estimateOverflow(html);
   expect(est.overflows).toBe(true);
@@ -39,7 +39,7 @@ test("too many bullets overflow", () => {
 test("CJK counts a full em, so the same character count wraps sooner", () => {
   // Both bullets are the same length; only the script differs.
   const latinPoint =
-    "A talk point of about eighty-five characters, which is still one line on a wide slide.";
+    "A retell point of about eighty-five characters, which is still one line on a wide slide.";
   const cjkPoint =
     "这一条讲的是作者靠什么论证他的结论，这个结论到底成不成立，以及它和上一章之间是什么关系，值不值得在台上多说一句。";
   const latin = `<h2>Head</h2>${bullets(5, latinPoint)}`;
@@ -49,7 +49,7 @@ test("CJK counts a full em, so the same character count wraps sooner", () => {
 });
 
 test("a figure slot claims room, so text plus a figure overflows sooner", () => {
-  const text = `<h2>With a figure</h2>${bullets(5, "A talk point of a reasonable length here.")}`;
+  const text = `<h2>With a figure</h2>${bullets(5, "A retell point of a reasonable length here.")}`;
   const withFig = `${text}<div class="figwrap"><!--figure--></div>`;
   expect(estimateOverflow(text).overflows).toBe(false);
   expect(estimateOverflow(withFig).usedCqh).toBeGreaterThan(estimateOverflow(text).usedCqh + 20);

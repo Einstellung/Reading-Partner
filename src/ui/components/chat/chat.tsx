@@ -771,7 +771,7 @@ const MessageBubble = memo(function MessageBubble({
 
 	if (role === 'user') {
 		// The bubble fill comes from the enclosing surface (--chat-bubble-bg): this
-		// row also renders in the corner bubble and in TalkView, both on white.
+		// row also renders in the corner bubble and in RetellView, both on white.
 		const hasImages = !!images && images.length > 0;
 		return (
 			<div className="flex flex-col items-end gap-1.5">
@@ -917,7 +917,7 @@ export function MessageList({
 	// the reader was rather than at the newest.
 	stickKey?: string | number;
 	// The two pens on these replies (docs/09). Absent on every chat that is not
-	// the open book's — the info chat, the talk — where a reply is not the book
+	// the open book's — the info chat, the retell — where a reply is not the book
 	// continued and nothing is drawn on it.
 	marks?: ChatMarkHost | null;
 }) {

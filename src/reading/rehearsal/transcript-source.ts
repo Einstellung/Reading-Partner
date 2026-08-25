@@ -7,7 +7,7 @@
 // (dictated-source.ts), so it takes nothing — it opens the microphone itself,
 // no key, no upload. Neither is available everywhere, and no source at all is a
 // legal run: the deck still reports its pages and what lands on disk is the
-// shape of the talk with every transcript empty (source.ts).
+// shape of the retell with every transcript empty (source.ts).
 
 import {
   hasOnDeviceDictation,
@@ -30,7 +30,7 @@ export interface TranscriptSourceHost {
 
 // The branch, on its own so it can be checked without a host. On-device
 // dictation and the desktop's record-and-upload are two independent paths and
-// not each other's fallback (docs/15): a host that hears the talk itself never
+// not each other's fallback (docs/15): a host that hears the retell itself never
 // records a file to send anywhere, and one that cannot dictate has no
 // recognizer to fall back to. So the choice is made once and nothing is retried
 // down the other side.
@@ -44,7 +44,7 @@ export interface TranscriptSourceOptions {
   // The desktop recorder, wired by the caller (ai/voice/recorder.ts). Untouched
   // on a host that dictates on device — nothing is captured to a file there.
   session: RecordingSession;
-  // The talk's proper names, built the same way the chat composer's glossary is
+  // The retell's proper names, built the same way the chat composer's glossary is
   // (ai/voice/cleanup.ts). The on-device recognizer takes them as hot words; the
   // desktop's round trip to an STT host has nowhere to put them and ignores
   // them.
@@ -67,7 +67,7 @@ export function createTranscriptSource(
       const locale = await loadSettings()
         .then((s) => s.dictationLocale)
         .catch(() => undefined);
-      // Hot words. Which talk is being given is known before a word of it is
+      // Hot words. Which retell is being given is known before a word of it is
       // said, so the book's title and the outline's headings go in as
       // contextualStrings — the same list the desktop's cleanup prompt is
       // anchored on, one term at a time as the plugin takes them. Absent rather

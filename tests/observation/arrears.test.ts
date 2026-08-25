@@ -335,7 +335,7 @@ test("a book with no asides is one unit per thread, unchanged", () => {
 });
 
 // Only the three fields a transcript is made of: a stored message also carries
-// image filenames and the display row's parts, and neither is the talk.
+// image filenames and the display row's parts, and neither is the retell.
 test("a folded transcript carries no more than role, text and ts", () => {
   const threads = [
     unit({ id: "bt", messages: [{ ...said1("l1", 1), images: ["a.png"] } as DistillMessage] }),

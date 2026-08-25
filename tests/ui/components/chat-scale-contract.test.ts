@@ -27,7 +27,7 @@ const scope = read("ui/components/base/ChatScaleScope.tsx");
 const keys = read("ui/components/base/chat-scale-keys.ts");
 const chat = read("ui/components/chat/chat.tsx");
 const callView = read("ui/components/chat/CallView.tsx");
-const talkView = read("ui/components/talk/TalkView.tsx");
+const retellView = read("ui/components/retell/RetellView.tsx");
 const infoCall = read("ui/components/info/InfoCall.tsx");
 const markdown = read("ui/components/markdown/MarkdownRenderer.tsx");
 
@@ -44,7 +44,7 @@ test("the scope publishes the variable and takes the gestures", () => {
 });
 
 test("both maximized windows are wrapped, and on the same value", () => {
-  for (const source of [callView, talkView]) {
+  for (const source of [callView, retellView]) {
     expect(source).toContain("ChatScaleScope");
     // The column has to widen with the type: at 1.8x a fixed 48rem column is a
     // dozen words a line, which is the layout this exists to avoid.

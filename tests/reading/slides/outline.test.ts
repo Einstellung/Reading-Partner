@@ -1,26 +1,26 @@
-// The talk's settled outline as the deck planner's input (src/reading/slides/
-// outline.ts): folding a talk into an outline, the two paths the plan stage can
+// The retell's settled outline as the deck planner's input (src/reading/slides/
+// outline.ts): folding a retell into an outline, the two paths the plan stage can
 // take, and what happens to a cut entry and to a kept one the plan forgot.
 // Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
-  applyTalkOutline,
-  buildTalkOutline,
+  applyRetellOutline,
+  buildRetellOutline,
   citableWithOutline,
   outlinePlanSystemPrompt,
   outlinePlanUserMessage,
   readerPointsFor,
-  type TalkOutline,
+  type RetellOutline,
 } from "../../../src/reading/slides/outline";
 import { planUserMessage, validateDeckPlan, type PlanBook } from "../../../src/reading/slides/plan";
 import type { DeckPlan } from "../../../src/reading/slides/plan";
-import { newTalk } from "../../../src/reading/talks/types";
-import type { Talk, TalkDecision } from "../../../src/reading/talks/types";
+import { newRetell } from "../../../src/reading/retell/types";
+import type { Retell, RetellDecision } from "../../../src/reading/retell/types";
 import { languageInstruction } from "../../../src/platform/app/settings";
 
-function talk(decisions: Partial<TalkDecision>[]): Talk {
-  const base = newTalk({
+function retell(decisions: Partial<RetellDecision>[]): Retell {
+  const base = newRetell({
     id: "t1",
     topicId: "topic",
     materials: [
@@ -55,7 +55,7 @@ const book: PlanBook = {
   figures: [{ id: "3", caption: "The 1962 series" }],
 };
 
-const settled = talk([
+const settled = retell([
   {
     chapter: 1,
     title: "Openings",
@@ -67,22 +67,22 @@ const settled = talk([
   { chapter: 3, title: "Endings", include: true, points: ["it ends where it started"] },
 ]);
 
-function outline(): TalkOutline {
-  return buildTalkOutline(settled)!;
+function outline(): RetellOutline {
+  return buildRetellOutline(settled)!;
 }
 
 function deck(slides: DeckPlan["slides"]): DeckPlan {
-  return { title: "A Talk", slides };
+  return { title: "A Retell", slides };
 }
 
-// The two paths. A talk that has settled nothing leaves the pipeline exactly
+// The two paths. A retell that has settled nothing leaves the pipeline exactly
 // where it was: the model designs the outline from the chapter list and overview.
-test("a talk with no decisions means no outline, which is the old plan path", () => {
-  expect(buildTalkOutline(null)).toBeNull();
-  expect(buildTalkOutline(talk([]))).toBeNull();
+test("a retell with no decisions means no outline, which is the old plan path", () => {
+  expect(buildRetellOutline(null)).toBeNull();
+  expect(buildRetellOutline(retell([]))).toBeNull();
 });
 
-test("decisions fold into included and cut, keeping the talk's order, empty points dropped", () => {
+test("decisions fold into included and cut, keeping the retell's order, empty points dropped", () => {
   const o = outline();
   expect(o.included.map((e) => e.chapter)).toEqual([1, 3]);
   expect(o.included[0].points).toEqual([
@@ -102,11 +102,11 @@ test("decisions fold into included and cut, keeping the talk's order, empty poin
   ]);
 });
 
-// The talk's order is not chapter order: the reader moved an entry, and the deck
+// The retell's order is not chapter order: the reader moved an entry, and the deck
 // has to be paged out in the order they will speak.
 test("the outline keeps the order the reader arranged, not chapter order", () => {
-  const o = buildTalkOutline(
-    talk([
+  const o = buildRetellOutline(
+    retell([
       { chapter: 3, title: "Endings" },
       { chapter: 1, title: "Openings" },
     ]),
@@ -128,12 +128,12 @@ test("the plan message carries the reader's points verbatim and names the cuts",
   expect(msg).not.toContain("Whole-book overview");
 });
 
-// A talk can hold a material the retell has not reached; that one still gets
+// A retell can hold a material the retell has not reached; that one still gets
 // its chapter list and overview to be planned from.
 test("a material with no decisions keeps its ordinary block", () => {
   const other: PlanBook = { ...book, bookId: "b2", title: "Other Book" };
   const msg = outlinePlanUserMessage([book, other], outline(), "");
-  expect(msg).toContain("=== The talk's settled outline ===");
+  expect(msg).toContain("=== The retell's settled outline ===");
   expect(msg).toContain('=== Book "Other Book" (bookId: b2) ===');
   expect(msg).toContain("Whole-book overview");
   expect(msg).toContain(planUserMessage([other], "").split("\n\n")[0]);
@@ -172,7 +172,7 @@ test("a kept chapter the notes pass never enumerated is added to the chapter lis
 });
 
 test("a slide for a cut chapter does not survive", () => {
-  const out = applyTalkOutline(
+  const out = applyRetellOutline(
     deck([
       { title: "Open", kind: "title" },
       { title: "Openings", kind: "content", bookId: "b1", sourceChapters: [1] },
@@ -186,7 +186,7 @@ test("a slide for a cut chapter does not survive", () => {
 });
 
 test("a cut chapter cited alongside a kept one is stripped, and the slide says so", () => {
-  const out = applyTalkOutline(
+  const out = applyRetellOutline(
     deck([{ title: "Both", kind: "content", bookId: "b1", sourceChapters: [1, 2] }]),
     outline(),
   );
@@ -195,8 +195,8 @@ test("a cut chapter cited alongside a kept one is stripped, and the slide says s
 });
 
 test("a chapter with no decision is left out of a settled material's slide", () => {
-  const o = buildTalkOutline(talk([{ chapter: 1, title: "Openings", points: ["a"] }]))!;
-  const out = applyTalkOutline(
+  const o = buildRetellOutline(retell([{ chapter: 1, title: "Openings", points: ["a"] }]))!;
+  const out = applyRetellOutline(
     deck([{ title: "Two", kind: "content", bookId: "b1", sourceChapters: [1, 3] }]),
     o,
   );
@@ -208,13 +208,13 @@ test("a chapter with no decision is left out of a settled material's slide", () 
 // on the book as well: chapter 2 of b1 is cut, chapter 2 of b2 was never asked
 // about, and one must not answer for the other.
 test("a cut chapter of one material does not cut the same number in another", () => {
-  const o = buildTalkOutline(
-    talk([
+  const o = buildRetellOutline(
+    retell([
       { bookId: "b1", chapter: 2, title: "Middlegame", include: false },
       { bookId: "b2", chapter: 2, title: "Their Middlegame", points: ["theirs"] },
     ]),
   )!;
-  const out = applyTalkOutline(
+  const out = applyRetellOutline(
     deck([
       { title: "Mine", kind: "content", bookId: "b1", sourceChapters: [2] },
       { title: "Theirs", kind: "content", bookId: "b2", sourceChapters: [2] },
@@ -227,7 +227,7 @@ test("a cut chapter of one material does not cut the same number in another", ()
 // The other direction: losing an entry the reader decided to talk about is the
 // failure this path exists to prevent, so it is repaired rather than reported.
 test("a kept entry the plan forgot gets a slide back, before the closing", () => {
-  const out = applyTalkOutline(
+  const out = applyRetellOutline(
     deck([
       { title: "Open", kind: "title" },
       { title: "Openings", kind: "content", bookId: "b1", sourceChapters: [1] },
@@ -240,9 +240,9 @@ test("a kept entry the plan forgot gets a slide back, before the closing", () =>
   expect(out.slides[2].planNotice).toContain("added back");
 });
 
-test("slides for materials the talk settled nothing about pass through untouched", () => {
+test("slides for materials the retell settled nothing about pass through untouched", () => {
   const slide = { title: "Other", kind: "content" as const, bookId: "b2", sourceChapters: [7] };
-  const out = applyTalkOutline(deck([slide, { title: "Wrap", kind: "closing" }]), outline());
+  const out = applyRetellOutline(deck([slide, { title: "Wrap", kind: "closing" }]), outline());
   expect(out.slides[0]).toBe(slide);
 });
 

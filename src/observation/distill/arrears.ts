@@ -90,7 +90,7 @@ function foldsInto(
 
 // Only the three fields a transcript is made of, the same narrowing the hangup
 // path has always done: a stored message also carries image filenames and the
-// display row's parts, and neither is the talk.
+// display row's parts, and neither is the retell.
 function plain(messages: readonly DistillMessage[]): DistillMessage[] {
   return messages.map(({ role, text, ts }) => ({ role, text, ts }));
 }

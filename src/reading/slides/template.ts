@@ -17,7 +17,7 @@ export interface AssembledSlide {
   asset?: string | null;
 }
 
-// A URL-and-filename-safe slug for the talk title (used in the deck filename).
+// A URL-and-filename-safe slug for the retell title (used in the deck filename).
 export function slugify(title: string): string {
   const s = title
     .toLowerCase()
@@ -331,7 +331,7 @@ const STYLE = `
   }
   /* Shown only while the active slide is taller than the stage. The stage clips
      overflow, so without this the last bullets are simply not there and nobody
-     finds out until the talk. It sits in the dark surround, outside the 16:9
+     finds out until the retell. It sits in the dark surround, outside the 16:9
      frame, so it marks the problem without landing on the slide itself. */
   .overflow-warn{
     position:fixed;right:20px;bottom:38px;

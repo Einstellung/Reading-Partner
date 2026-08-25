@@ -1,12 +1,12 @@
-// Slides data model (docs/14, "PPT（slides）共识"; docs/31). The unit is a talk,
+// Slides data model (docs/14, "PPT（slides）共识"; docs/31). The unit is a retell,
 // not a book: a deck synthesized across one or more books that already have
-// notes, plus a free-text talk instruction.
+// notes, plus a free-text retell instruction.
 //
 // The state is persisted the same way the notes pipeline persists its own
-// (docs/29 asked for it): one directory per talk holding state.json, one file
+// (docs/29 asked for it): one directory per retell holding state.json, one file
 // per slide body and one per resolved asset. That is what makes a single page
 // re-runnable and a half-finished run resumable across a restart — before this
-// the whole talk lived in memory, so any change meant re-running everything.
+// the whole retell lived in memory, so any change meant re-running everything.
 
 export const SLIDES_VERSION = 1 as const;
 
@@ -30,7 +30,7 @@ export type AssetStatus = SlideStatus | "missing";
 export type AssembleStatus = SlideStatus | "stale";
 
 // Overall run lifecycle. "idle" is "nothing in flight and nothing failed, but
-// the deck is not assembled" (a fresh talk, or one whose pages were re-run).
+// the deck is not assembled" (a fresh retell, or one whose pages were re-run).
 // "stopped" is a user Stop (distinct from a failure).
 export type RunStatus = "idle" | "running" | "done" | "failed" | "stopped";
 
@@ -82,14 +82,14 @@ export interface SlideRun extends SlideOutline {
   sourceNotice?: string;
   // A generation-time estimate that the body will not fit the 16:9 stage. The
   // deck shell clips overflow, so an unflagged overflow stays invisible until
-  // the talk (overflow.ts; the shell flags it at playback too).
+  // the retell (overflow.ts; the shell flags it at playback too).
   overflow?: string;
   error?: string;
 }
 
 export interface SlidesState {
   version: typeof SLIDES_VERSION;
-  // Talk id, and the directory name under slides/. Fixed at creation (the
+  // Retell id, and the directory name under slides/. Fixed at creation (the
   // creation timestamp) so the on-disk home exists before the title is known.
   id: string;
   title: string;
@@ -108,7 +108,7 @@ export interface SlidesState {
 }
 
 export interface SlidesInit {
-  talkId: string;
+  retellId: string;
   createdAt: number;
   instruction: string;
   bookIds: string[];
@@ -117,8 +117,8 @@ export interface SlidesInit {
 export function createSlidesState(init: SlidesInit): SlidesState {
   return {
     version: SLIDES_VERSION,
-    id: init.talkId,
-    title: "Untitled talk",
+    id: init.retellId,
+    title: "Untitled deck",
     createdAt: init.createdAt,
     instruction: init.instruction,
     bookIds: init.bookIds,
@@ -148,7 +148,7 @@ export function normalizeSlidesOnLoad(state: SlidesState): SlidesState {
   };
 }
 
-// Whether this talk still needs an AI call: a plan, a slide body, or an asset.
+// Whether this retell still needs an AI call: a plan, a slide body, or an asset.
 // (Assembly is not an AI call, which is why it is asked about separately — one
 // button per kind of work, so neither of them lies about what it will spend.)
 export function hasUnrunSlides(state: SlidesState): boolean {
@@ -157,9 +157,11 @@ export function hasUnrunSlides(state: SlidesState): boolean {
 }
 
 // One row in slides/talks.json: a generated deck, newest appended last.
-export interface TalkEntry {
-  // The talk id (its directory under slides/). Absent on rows written before the
-  // state was persisted per talk; those decks still open, but cannot be re-run.
+export interface RetellEntry {
+  // The retell id (its directory under slides/). Absent on rows written before
+  // the state was persisted per retell; those decks still open, but cannot be
+  // re-run. The old word, on purpose: the key is in slides/talks.json already,
+  // and a renamed key would make every existing row un-rerunnable.
   talkId?: string;
   title: string;
   file: string; // AppData-relative path, e.g. "slides/1737000000000-my-talk.html"
@@ -168,13 +170,13 @@ export interface TalkEntry {
   instruction: string;
 }
 
-// Record a talk in the registry (pure). Newest last; caller reverses for display.
-// Re-assembling the same talk replaces its row instead of adding a second one —
+// Record a retell in the registry (pure). Newest last; caller reverses for display.
+// Re-assembling the same retell replaces its row instead of adding a second one —
 // a deck can now be rebuilt any number of times.
-export function upsertTalk(talks: TalkEntry[], entry: TalkEntry): TalkEntry[] {
-  const at = entry.talkId ? talks.findIndex((t) => t.talkId === entry.talkId) : -1;
-  if (at < 0) return [...talks, entry];
-  const next = talks.slice();
+export function upsertRetell(retells: RetellEntry[], entry: RetellEntry): RetellEntry[] {
+  const at = entry.talkId ? retells.findIndex((t) => t.talkId === entry.talkId) : -1;
+  if (at < 0) return [...retells, entry];
+  const next = retells.slice();
   next[at] = entry;
   return next;
 }

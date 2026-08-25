@@ -1,7 +1,7 @@
 // Live wiring of the observation module: the Tauri fs behind ObservationFs, one
 // adapter per topic for the app's lifetime, the distillation entry points — a
 // reading conversation on hangup or a trim, a stretch of silent marking picked
-// up by the arrears sweep, a retell when the reader leaves the talk — all on
+// up by the arrears sweep, a retell when the reader leaves the retell — all on
 // the real model through runAgentTurn with the same provider config as chat, and
 // a tiny change feed so the observations panel refreshes after background writes.
 
@@ -608,9 +608,9 @@ export function startDistillSweeps(isThreadBusy: (threadId: string) => boolean):
 export interface DistillRetellOptions {
   topicId: string;
   topicName: string;
-  talkId: string;
-  talkName: string;
-  // The talk's materials by title.
+  retellId: string;
+  retellName: string;
+  // The retell's materials by title.
   materials: string[];
   threadId: string;
   // The retell conversation as it stands on disk, oldest first. Which part of
@@ -625,7 +625,7 @@ export interface DistillRetellOptions {
 // next exit redoes the stretch.
 //
 // Unlike the reading trigger there is only one caller and one route into it —
-// the talk view unmounting — because every way out of a talk goes through that.
+// the retell view unmounting — because every way out of a retell goes through that.
 export function distillRetell(opts: DistillRetellOptions): Promise<void> {
   const { threadId, topicId } = opts;
   return gate.run(threadId, async () => {
@@ -636,7 +636,7 @@ export function distillRetell(opts: DistillRetellOptions): Promise<void> {
       const result = await runRetellDistillPass(
         {
           topicName: opts.topicName,
-          talkName: opts.talkName,
+          retellName: opts.retellName,
           materials: opts.materials,
           threadId,
           messages: opts.messages,
@@ -653,7 +653,7 @@ export function distillRetell(opts: DistillRetellOptions): Promise<void> {
           signal: opts.signal,
         },
       );
-      // Leaving a talk twice with nothing said in between is the ordinary case,
+      // Leaving a retell twice with nothing said in between is the ordinary case,
       // not something to log: the reader steps out to check the outline and comes
       // back. Nothing ran, so nothing changed.
       if (!result.ran) return;
@@ -661,7 +661,7 @@ export function distillRetell(opts: DistillRetellOptions): Promise<void> {
         console.warn("retell distillation did not finish:", result.failure);
         logEvent(topicId, "distill-failed", {
           threadId,
-          talkId: opts.talkId,
+          retellId: opts.retellId,
           trigger: "talk-exit",
           ...distillFailurePayload({
             stage: "run",
@@ -675,7 +675,7 @@ export function distillRetell(opts: DistillRetellOptions): Promise<void> {
       }
       logEvent(topicId, "distill-run", {
         threadId,
-        talkId: opts.talkId,
+        retellId: opts.retellId,
         trigger: "talk-exit",
         messages: result.distilled,
         created: result.created,
@@ -688,7 +688,7 @@ export function distillRetell(opts: DistillRetellOptions): Promise<void> {
       console.warn("retell distillation could not start", e);
       logEvent(topicId, "distill-failed", {
         threadId,
-        talkId: opts.talkId,
+        retellId: opts.retellId,
         trigger: "talk-exit",
         ...distillFailurePayload({ stage: "setup", error: e }),
       });

@@ -179,7 +179,7 @@ test("the pointer draws nothing at all", async () => {
 });
 
 // No host is how a surface says a reply there is not the book continued: the
-// info chat, the talk, the corner bubble over a page the pen is aimed at.
+// info chat, the retell, the corner bubble over a page the pen is aimed at.
 test("a chat with no marks host takes no stroke", async () => {
   const view = await renderChat(messages);
   await select(view.container, "three matrices");
