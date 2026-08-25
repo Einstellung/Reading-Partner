@@ -11,6 +11,8 @@
 // (which decides whether books travel at all) and the window's foreground and
 // background edges, both kept out of the pass itself.
 
+import { onPathChanged } from "../app/appdata";
+import { onFileWritten } from "../app/atomic-fs";
 import { observeAppLifecycle } from "../app/lifecycle";
 import type { Shell } from "../app/shell";
 import { DriveBackend } from "./driveBackend";
@@ -134,6 +136,19 @@ export function engineDeps(forShell: Shell): EngineDeps {
     snapshot: state.snapshot,
     purge: state.purge,
     restoredLastSyncAt: state.lastSyncAt,
+    // The two ways a local file changes, joined here rather than in the engine:
+    // the atomic writer every store writes through (platform/app/atomic-fs.ts),
+    // and the AppData door every removal and rename goes through
+    // (platform/app/appdata.ts). Both are module-level registries, which is
+    // exactly what the pass must not import if it is to stay headless.
+    watchLocal: (listener) => {
+      const offWrites = onFileWritten(listener);
+      const offPaths = onPathChanged(listener);
+      return () => {
+        offWrites();
+        offPaths();
+      };
+    },
     onPulled: (paths) => dispatchPull(paths),
     onStatus: (r) => {
       recordPassResult(state, r);

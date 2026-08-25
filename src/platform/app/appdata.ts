@@ -80,6 +80,39 @@ export interface AppDataFs {
   readPicked(absolutePath: string): Promise<Uint8Array>;
 }
 
+// Who to tell when a path stops holding what it held, by something other than a
+// write. Writes are announced one layer up, by atomic-fs.ts, which is where the
+// policy that routes them lives; the four operations below are this door's own
+// and nothing above sees any of them. The sync engine listens to both feeds so
+// that a local edit no longer has to be found by re-scanning the whole sync
+// range every fifteen seconds (platform/sync/engine.ts).
+const pathListeners = new Set<(path: string) => void>();
+
+/**
+ * Hear about every AppData path this door changed other than by writing to it:
+ * remove(), removeDir() (the directory itself — the files under it are never
+ * named), both ends of a rename(), and quarantine(). By relative path, after
+ * the operation succeeded. Returns the undo.
+ */
+export function onPathChanged(listener: (path: string) => void): () => void {
+  pathListeners.add(listener);
+  return () => {
+    pathListeners.delete(listener);
+  };
+}
+
+// A listener exists to invalidate something; one that throws must not turn an
+// operation that happened into one that failed.
+function announce(path: string): void {
+  for (const listener of [...pathListeners]) {
+    try {
+      listener(path);
+    } catch (e) {
+      console.error(`path listener failed for ${path}`, e);
+    }
+  }
+}
+
 /**
  * AppData, as the app addresses it: relative paths, no base directory, no
  * options objects. One object rather than fourteen exports so a test can spy a
@@ -137,19 +170,28 @@ export const appData: AppDataFs = {
     }
   },
 
-  remove(path) {
-    return remove(path, base());
+  async remove(path) {
+    await remove(path, base());
+    announce(path);
   },
 
-  removeDir(path) {
-    return remove(path, { ...base(), recursive: true });
+  async removeDir(path) {
+    await remove(path, { ...base(), recursive: true });
+    // The directory, not what was in it: this call never learns the names, and
+    // a listener that cares about a file under it has to sweep for itself.
+    announce(path);
   },
 
-  rename(from, to) {
-    return rename(from, to, {
+  async rename(from, to) {
+    await rename(from, to, {
       oldPathBaseDir: BaseDirectory.AppData,
       newPathBaseDir: BaseDirectory.AppData,
     });
+    // Both ends. The file left one path and appeared at the other, and neither
+    // half is a write that anything else announces — which is how
+    // annotations-<key>.json moves during the key migration (migrate.ts).
+    announce(from);
+    announce(to);
   },
 
   // Temp file, fsync, rename, in Rust (src-tauri/src/atomic_fs.rs), so a process
@@ -161,9 +203,13 @@ export const appData: AppDataFs = {
   },
 
   // Move an unreadable file aside as `<name>.corrupt-<unix-ms>`, returning the
-  // new name or null when there was nothing to move.
-  quarantine(path) {
-    return invoke<string | null>("quarantine_file", { path });
+  // new name or null when there was nothing to move. Only the path that was
+  // emptied is announced; where the bad bytes went is a name nothing syncs and
+  // no store holds a copy of.
+  async quarantine(path) {
+    const savedAs = await invoke<string | null>("quarantine_file", { path });
+    if (savedAs !== null) announce(path);
+    return savedAs;
   },
 
   // The one read that is not AppData-relative: an absolute path the reader

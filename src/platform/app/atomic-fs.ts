@@ -29,6 +29,11 @@ import { reportStoreError } from "./store-errors";
 // The one text write that does not come through here is writeBytesAtomic's
 // fallback for bytes that are not valid UTF-8. Nothing this app wrote is invalid
 // UTF-8, so a file arriving that way is not one any store here has a copy of.
+//
+// The sync engine listens for a different reason: this is how it knows a file
+// changed without stat-ing the whole sync range every fifteen seconds
+// (platform/sync/engine.ts). It needs the removals too, and those never come
+// through here — appdata.ts announces its own (onPathChanged).
 const writeListeners = new Set<(path: string) => void>();
 
 /**
