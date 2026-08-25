@@ -19,6 +19,10 @@ import {
 import type { IngestResult } from "../../src/reading/prep/papers/source-tool";
 import type { SavedArticle } from "../../src/reading/saved-articles";
 
+// The body prepareSavedArticle is handed. It lives in its own file now
+// (saved-articles.ts), so the record beside it only says how long it is.
+const BODY = "the body of the kept article";
+
 function article(over: Partial<SavedArticle> = {}): SavedArticle {
   return {
     id: "https://example.com/a",
@@ -30,8 +34,8 @@ function article(over: Partial<SavedArticle> = {}): SavedArticle {
     publishedAt: "2026-07-20T08:00:00Z",
     savedAt: 1000,
     summaryOnly: false,
-    text: "the body of the kept article",
-    html: "<p>the body</p>",
+    bodyHash: "0123456789abcdef0123456789abcdef",
+    textChars: BODY.length,
     ...over,
   };
 }
@@ -153,7 +157,7 @@ test("a runaway source name is cut like the title is", () => {
 });
 
 test("a summary-only row says the full text was never read", () => {
-  const out = formatSavedArticleList([article({ summaryOnly: true, text: "just the summary" })], "");
+  const out = formatSavedArticleList([article({ summaryOnly: true, textChars: 16 })], "");
   expect(out).toContain("summary only — the full text was never read");
 });
 
@@ -175,7 +179,7 @@ test("add: an unknown id tells the model how to get a real one", async () => {
 test("add: an article kept without a body is refused instead of digested empty", async () => {
   let called = false;
   const { add } = tools({
-    list: async () => [article({ text: "   ", summaryOnly: true })],
+    list: async () => [article({ textChars: 0, summaryOnly: true })],
     add: async () => {
       called = true;
       throw new Error("should not run");
@@ -216,7 +220,7 @@ test("add: a failed ingest surfaces as a tool error", async () => {
 // --- what the article becomes on the prep list ------------------------------
 
 test("the prepared paper is a user-added, captured article carrying its URL", () => {
-  const prepared = prepareSavedArticle(article());
+  const prepared = prepareSavedArticle(article(), BODY);
   const paper = prepared.mint(new Set());
   expect(paper.kind).toBe("article");
   expect(paper.addedByUser).toBe(true);
@@ -233,12 +237,14 @@ test("the prepared paper is a user-added, captured article carrying its URL", ()
 });
 
 test("the slug avoids one already on the prep list", () => {
-  const paper = prepareSavedArticle(article()).mint(new Set(["attention-is-all-you-need-again"]));
+  const paper = prepareSavedArticle(article(), BODY).mint(
+    new Set(["attention-is-all-you-need-again"]),
+  );
   expect(paper.slug).toBe("attention-is-all-you-need-again-2");
 });
 
 test("an unparseable publication date leaves the year unset instead of guessing", () => {
-  const paper = prepareSavedArticle(article({ publishedAt: "last tuesday" })).mint(new Set());
+  const paper = prepareSavedArticle(article({ publishedAt: "last tuesday" }), BODY).mint(new Set());
   expect(paper.year).toBeNull();
   expect(formatSavedArticleList([article({ publishedAt: "last tuesday" })], "")).toContain(
     "last tuesday",
@@ -246,7 +252,7 @@ test("an unparseable publication date leaves the year unset instead of guessing"
 });
 
 test("the text handed to the pipeline carries its provenance and the whole body", () => {
-  const prepared = prepareSavedArticle(article());
+  const prepared = prepareSavedArticle(article(), BODY);
   const text = prepared.fulltext.pages[0];
   expect(text).toContain("Saved by the reader from The Feed");
   expect(text).toContain("published 2026-07-20");
@@ -259,9 +265,9 @@ test("the text handed to the pipeline carries its provenance and the whole body"
 // note off this text, and read_paper hands it to a later turn that never saw this
 // tool's answer.
 test("summaryOnly rides into the text and into the digest angle", () => {
-  const a = article({ summaryOnly: true, text: "just the summary" });
+  const a = article({ summaryOnly: true, textChars: 16 });
   expect(savedArticleProvenance(a)).toContain("the full text was never read");
-  const prepared = prepareSavedArticle(a);
+  const prepared = prepareSavedArticle(a, "just the summary");
   expect(prepared.fulltext.pages[0]).toContain("the full text was never read");
   expect(prepared.mint(new Set()).reason).toContain("the note must say the full text was never read");
 });

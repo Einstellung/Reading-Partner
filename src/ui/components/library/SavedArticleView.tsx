@@ -3,11 +3,17 @@
 // ArticleView owns all of that and takes info's own item shape, so this is a
 // separate screen rather than a reuse. The prose look is shared (proseCss).
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ARTICLE_PROSE_CLASS, ARTICLE_PROSE_CSS, hideBrokenImage } from "../markdown/proseCss";
 import { articleHtmlForWebview } from "../../../platform/app/image-proxy";
 import { handleDelegatedLinkClick } from "../../../platform/app/external-link";
-import { formatPublishedAt, type SavedArticle } from "../../../reading/saved-articles";
+import {
+  formatPublishedAt,
+  loadSavedArticleBody,
+  NO_ARTICLE_BODY,
+  type SavedArticle,
+  type SavedArticleBody,
+} from "../../../reading/saved-articles";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 
@@ -23,12 +29,26 @@ export default function SavedArticleView({
   backLabel?: string;
 }) {
   const published = formatPublishedAt(article.publishedAt);
+  // The body is its own file (docs/21), so opening the article is what reads it.
+  // Null until it has answered: "no body was saved with this article" is a claim
+  // about the record, not the state of a read still running.
+  const [body, setBody] = useState<SavedArticleBody | null>(null);
+  useEffect(() => {
+    let live = true;
+    setBody(null);
+    loadSavedArticleBody(article)
+      .then((b) => live && setBody(b))
+      .catch(() => live && setBody(NO_ARTICLE_BODY));
+    return () => {
+      live = false;
+    };
+  }, [article]);
   // The stored HTML keeps the original image URLs; the img: proxy is applied on
   // the way to the webview (docs/pitfall/30), with the saved article's own URL
   // as the Referer the image hosts ask for.
-  const body = useMemo(
-    () => articleHtmlForWebview(article.html, article.url),
-    [article.html, article.url],
+  const html = useMemo(
+    () => (body === null ? "" : articleHtmlForWebview(body.html, article.url)),
+    [body, article.url],
   );
   return (
     <div className="absolute inset-0 overflow-y-auto bg-background">
@@ -54,17 +74,17 @@ export default function SavedArticleView({
           </p>
         )}
 
-        {body ? (
+        {body === null ? null : html ? (
           <div
             className={ARTICLE_PROSE_CLASS}
             onErrorCapture={(e) => hideBrokenImage(e.target)}
             // The links in here are injected HTML, so one delegated listener is
             // what sends them to the system browser (docs/pitfall/94).
             onClick={handleDelegatedLinkClick}
-            dangerouslySetInnerHTML={{ __html: body }}
+            dangerouslySetInnerHTML={{ __html: html }}
           />
-        ) : article.text ? (
-          <div className={`${ARTICLE_PROSE_CLASS} whitespace-pre-wrap`}>{article.text}</div>
+        ) : body.text ? (
+          <div className={`${ARTICLE_PROSE_CLASS} whitespace-pre-wrap`}>{body.text}</div>
         ) : (
           <p className="my-3.5 text-[15px] leading-relaxed text-[#777]">
             No body was saved with this article.

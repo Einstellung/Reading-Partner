@@ -2,7 +2,7 @@
 
 > 本文记录"info 侧的材料怎么进 reading"的共识，是 [16](./16-信息陪读与分诊.md)、[17](./17-信息源系统.md) 的下游；落法依赖 [13](./13-账户同步.md) 的三方合并模型和 [02](./02-AI核心与memory设计.md) 的记忆设计。文中的现状按 2026-07-27 的代码查证。
 
-> 落地状态（2026-07-30）：收下的存储已落地。`saved-articles.json`（`src/reading/saved-articles.ts`）在同步范围里（`src/platform/sync/syncFs.ts`），也登记进了合并契约的 `RECORD_FILES`（`src/platform/sync/merge/contract.ts`）。内容寻址的快照通道还没有：正文快照现在直接躺在记录里（`SavedArticle` 的 `text` / `html`）。
+> 落地状态（2026-08-25）：收下的存储已落地，正文也已拆出记录。`saved-articles.json`（`src/reading/saved-articles.ts`）只剩元数据，在同步范围里（`src/platform/sync/syncFs.ts`），登记在合并契约的 `RECORD_FILES`（`src/platform/sync/merge/contract.ts`）。正文按内容寻址落在 `article-bodies/<hash>.json`，一篇一个文件、写一次不再改，同步范围里单列一条规则，合并策略是 `opaque`。记录里留 `bodyHash` 和 `textChars`。
 
 ---
 
@@ -64,15 +64,15 @@ AI 这次用了哪几条外部材料，用户要看得见。可见性是闸的�
 
 正文快照按内容寻址存成不可变 blob，像书那样只传一次，不进每次同步都参与合并的记录文件。记录文件里只留快照 hash、URL、标题、来源、发表时间、`summaryOnly` 和归属。
 
-同步范围（`src/platform/sync/syncFs.ts`）现在的分界：`user-profile.md`、`info-sources.json`、`info-feedback.jsonl` 在范围内，`threads-*.json` 通配匹配所以 `threads-info-<date>.json` 也在；`briefing-<date>.json`、`info-articles-<date>.json`、`info-items-<date>.json`、`info-source-health.json` 都是派生的，不同步。收下的记录要进范围，快照走 blob 通道。
+已落地，走的是 data 通道不是 books blob 通道：`article-bodies/<hash>.json`，文件名是自己字节的 hash，合并落 `opaque`（同名即同内容，没有冲突可解）。拆之前 34 条记录 883 KB，其中 857 KB 是正文，每收藏一篇整份重传。整文件删除不传播（[13](./13-账户同步.md)），所以取消收下只删记录，正文文件留着。
+
+同步范围（`src/platform/sync/syncFs.ts`）现在的分界：`user-profile.md`、`info-sources.json`、`info-feedback.jsonl` 在范围内，`threads-*.json` 通配匹配所以 `threads-info-<date>.json` 也在；`briefing-<date>.json`、`info-articles-<date>.json`、`info-items-<date>.json`、`info-source-health.json` 都是派生的，不同步。收下的记录和 `article-bodies/<hash>.json` 都在范围内。
 
 新记录文件要在两处登记：`strategyFor` 的 `RECORD_FILES`（`src/platform/sync/merge/contract.ts`）和 `recordShape`（`merge/records.ts`）。不登记就掉进 opaque——保我的、把对方的停在旁边——两台设备各收各的会一直丢一半。
 
 ## 现在缺什么
 
 按依赖排。
-
-- 收下的存储。一份新的 records 文件（进同步范围 + 两处合并登记），加一条内容寻址的正文快照通道。现在的 blob 通道只认书：接口方法叫 `hasBook` / `uploadBook` / `downloadBook`，Drive 侧写死 `books/` 文件夹和 `.pdf` 后缀（`src/platform/sync/driveBackend.ts`），驱动它的是 `library.json` 的 hash 列表。要么泛化成按 kind 分文件夹的 blob 通道，要么另开一条。
 
 - Topic 装得下文章。已做：没有往 `FileRef` 上挂可选字段，也没有塞进 `Topic.files`——`SavedArticle` 自带 `topicId`（`src/reading/saved-articles.ts`），`savedArticlesForTopic` 按 topic 过滤，topic 屏另列一段展示（`LibraryScreen.tsx`、手机端 `PhoneApp.tsx` 经 `SavedArticleView`）。默认 topic 也已经有了：固定 id 的 Brief topic，首次收下时创建，按 id 幂等（`ensureBriefTopic`，`src/platform/app/topics.ts`）；清空还要新加。prep 抓来的论文是同一个坑的既有案例，它至今没进 topic，住在 `prep-<bookHash>/` 里。
 

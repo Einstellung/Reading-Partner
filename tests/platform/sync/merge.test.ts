@@ -56,6 +56,11 @@ test("the files the app writes are classified by what they hold", () => {
   expect(strategyFor("info-ask-abc.json")).toBe("opaque");
   expect(strategyFor("info-briefing.json")).toBe("opaque");
   expect(strategyFor("info-bodies.json")).toBe("opaque");
+  // A kept article's body (docs/21). Opaque because it is named after the hash
+  // of its own bytes: the same name on two devices is the same content, so there
+  // is nothing to merge. Named to land here rather than in "prose" (a .md tail)
+  // or "records" (an entry in the set above), which is what the check is for.
+  expect(strategyFor("article-bodies/0123456789abcdef0123456789abcdef.json")).toBe("opaque");
   expect(strategyFor("notes-abc/state.json")).toBe("fields");
   expect(strategyFor("prep-abc/state.json")).toBe("fields");
   expect(strategyFor("notes-abc/chapter-01.md")).toBe("prose");

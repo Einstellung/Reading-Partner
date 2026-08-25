@@ -42,8 +42,10 @@ test("core user-data files are in range", () => {
     "info-profile.md",
     "info-feedback.jsonl",
     // Articles kept out of a briefing (docs/21): the reader's own picks, so they
-    // travel — unlike the daily briefing/article caches they came from.
+    // travel — unlike the daily briefing/article caches they came from. The
+    // index is the record per article; the bodies are one immutable file each.
     "saved-articles.json",
+    "article-bodies/0123456789abcdef0123456789abcdef.json",
     // What a collector publishes for the readers (docs/36), and the two files
     // devices leave for each other: who is collecting, and a reader asking for a
     // briefing it cannot build itself.

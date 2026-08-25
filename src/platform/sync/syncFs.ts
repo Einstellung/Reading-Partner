@@ -65,9 +65,9 @@ export const ROOT_FILES = new Set([
   "info-profile.md",
   "info-sources.json",
   "info-feedback.jsonl",
-  // Articles the reader kept out of a briefing (docs/21). Body snapshots ride
-  // along inside the records for now — stripped of inlined images, so a record
-  // is text, not re-encoded JPEGs.
+  // Articles the reader kept out of a briefing (docs/21). The index only: a few
+  // hundred bytes a record, rewritten and re-uploaded on every keep. The bodies
+  // are one immutable file each under article-bodies/ (below).
   "saved-articles.json",
   // What the collector publishes for the readers (docs/36): the briefing itself,
   // and the bodies of the items it put in the three tiers, with every <img>
@@ -116,6 +116,12 @@ export function inSyncRange(path: string): boolean {
       /^info-ask-.+\.json$/.test(top)
     );
   }
+  // The body of one kept article (docs/21), one immutable file per body, named
+  // for the hash of its own bytes. In range because the index alone is a list of
+  // titles: without these the other device opens a kept article and finds
+  // nothing to read. Cold once uploaded — the name changes with the content, so
+  // a file is written once and never revised.
+  if (top === "article-bodies") return parts.length === 2 && isArticleBodyFile(parts[1]);
   // Per-topic AI observations: every file under memory-<topicId>/ (entries,
   // index, meta). "memory-" is the historical directory name and is deliberately
   // unchanged: the feature was renamed on 2026-08-06, the directories on disk and
@@ -141,11 +147,23 @@ function isPrepFile(name: string): boolean {
   return name === "state.json" || name.endsWith(".md");
 }
 
+// The only names accepted inside article-bodies/: the 32-hex content hash the
+// writer produces (reading/saved-articles.ts). Spelled out here rather than
+// imported so this module keeps depending on nothing but platform/app — and
+// narrow on purpose, since the name in a record is what becomes a path, and that
+// record arrives over sync.
+const ARTICLE_BODY_NAME = /^[0-9a-f]{32}\.json$/;
+
+function isArticleBodyFile(name: string): boolean {
+  return ARTICLE_BODY_NAME.test(name);
+}
+
 // Whether a directory can hold an in-range file, so the walk descends into it.
 // Spelled out rather than left at "anything under prep-", which would open every
 // prep-<hash>/pdf/ to a readDir that can only ever return files inSyncRange
 // rejects. "memory-" is the observation directories' historical name; see above.
 function worthDescending(rel: string): boolean {
+  if (rel === "article-bodies") return true;
   if (rel.startsWith("memory-")) return true;
   if (!rel.startsWith("prep-")) return false;
   const parts = rel.split("/");

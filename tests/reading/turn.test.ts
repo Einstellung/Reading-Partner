@@ -98,9 +98,16 @@ function pipeline(
   } as never;
 }
 
-// The kept-article store as the assembly sees it: a cheap gate and the records.
+// The kept-article store as the assembly sees it: a cheap gate, the records, and
+// the one body a tool call asks for. The body is its own file now (docs/21), so
+// the records carry a length and a pointer and nothing else.
+const KEPT_BODY = "the kept body";
 function savedStore(list: SavedArticle[]) {
-  return { any: async () => list.length > 0, all: async () => list };
+  return {
+    any: async () => list.length > 0,
+    all: async () => list,
+    body: async () => ({ text: KEPT_BODY, html: `<p>${KEPT_BODY}</p>` }),
+  };
 }
 
 function savedArticle(): SavedArticle {
@@ -114,8 +121,8 @@ function savedArticle(): SavedArticle {
     publishedAt: "2026-07-20T08:00:00Z",
     savedAt: 1,
     summaryOnly: false,
-    text: "the kept body",
-    html: "<p>the kept body</p>",
+    bodyHash: "0123456789abcdef0123456789abcdef",
+    textChars: KEPT_BODY.length,
   };
 }
 
@@ -302,6 +309,7 @@ test("the mount gate does not read the records; a tool call reads them once", as
           reads++;
           return [savedArticle()];
         },
+        body: savedStore([]).body,
       },
     }),
   );

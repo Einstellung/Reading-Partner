@@ -57,6 +57,9 @@ const NO_IN_MEMORY_STATE: Record<string, string> = {
   "rehearsal-": "a rehearsal is read from disk when the topic's list is drawn",
   "runs-rehearsal-": "a rehearsal's runs are read with the rehearsal, when it is opened",
   "memory-": "the observation store reads its entries per query",
+  "article-bodies/":
+    "a kept article's body is read when the article is opened, and the file is named " +
+    "after its own bytes, so a pull can add one but never change the one on screen",
   "prep-": "a document's prep material is read when the document it belongs to opens",
 };
 
@@ -83,6 +86,7 @@ function sampleForRegex(literal: string): string {
 // it before inSyncRange will take it. What that file is called is the one thing
 // the prefix cannot say, so it is said here.
 const DIRECTORY_SAMPLES: Record<string, string[]> = {
+  "article-bodies": ["article-bodies/0123456789abcdef0123456789abcdef.json"],
   "memory-": ["memory-topic1/entries.jsonl", "memory-topic1/index.json"],
   "prep-": [
     "prep-book1/state.json",
@@ -97,7 +101,14 @@ function perKeySamples(): { pattern: string; paths: string[] }[] {
   for (const m of inRangeBody.matchAll(/\/\^[^/\n]+\$\//g)) {
     out.push({ pattern: m[0], paths: [sampleForRegex(m[0])] });
   }
-  for (const m of inRangeBody.matchAll(/startsWith\("([^"]+)"\)/g)) {
+  // Two ways inSyncRange names a directory: a prefix its name varies inside
+  // (memory-<topicId>), and a fixed name (article-bodies). Both need a sample,
+  // because what a directory holds is the one thing its name cannot say.
+  const dirs = [
+    ...inRangeBody.matchAll(/startsWith\("([^"]+)"\)/g),
+    ...inRangeBody.matchAll(/top === "([^"]+)"/g),
+  ];
+  for (const m of dirs) {
     const prefix = m[1];
     const paths = DIRECTORY_SAMPLES[prefix];
     if (!paths) {
@@ -118,10 +129,10 @@ test("the samples this test is built from are all in sync range", () => {
   for (const file of ROOT_FILES) expect(inSyncRange(file)).toBe(true);
 
   const patterns = perKeySamples();
-  // Seven filename patterns and two directory prefixes, as of this writing;
-  // the count is asserted so a pattern that stops being found by the scan is
+  // Seven filename patterns and three directories, as of this writing; the
+  // count is asserted so a pattern that stops being found by the scan is
   // noticed rather than quietly dropping its files from the check.
-  expect(patterns.length).toBe(9);
+  expect(patterns.length).toBe(10);
   for (const { pattern, paths } of patterns) {
     for (const path of paths) {
       expect(`${pattern} -> ${path}: ${inSyncRange(path)}`).toBe(`${pattern} -> ${path}: true`);
@@ -190,6 +201,18 @@ test("the routes claim the files their subscribers used to", () => {
   expect(claim("info-collector-device1.json")).toBe("reader");
   expect(claim("info-sources.json")).toBe("sources");
   expect(claim("info-ask-device1.json")).toBe("ask");
+});
+
+// The bodies are the point of the split (docs/21): the index stays hot and
+// small, the bodies go cold. Both halves have to be in range — an index whose
+// bodies were left behind is a list of titles on the other device.
+test("a kept article's index and its bodies are both synced, and only those names", () => {
+  expect(inSyncRange("saved-articles.json")).toBe(true);
+  expect(inSyncRange("article-bodies/0123456789abcdef0123456789abcdef.json")).toBe(true);
+  // The name in a record is what becomes a path, and records arrive over sync.
+  expect(inSyncRange("article-bodies/../../secrets.json")).toBe(false);
+  expect(inSyncRange("article-bodies/notes.md")).toBe(false);
+  expect(inSyncRange("article-bodies/sub/0123456789abcdef0123456789abcdef.json")).toBe(false);
 });
 
 test("a route hears only its own files", () => {
