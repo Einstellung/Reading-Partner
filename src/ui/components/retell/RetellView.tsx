@@ -22,15 +22,23 @@ import { IconClose, IconOutline } from "../base/icons";
 import { Composer, MessageList } from "../chat/chat";
 import NameDialog from "../common/NameDialog";
 import { Button } from "../ui/button";
-import { cutSession, startSession, stopSession } from "../../../ai/voice";
-import { createTranscriptSource, type TranscriptSource } from "../../../reading/rehearsal";
+import {
+  rehearsalForRetell,
+  type Rehearsal,
+  type TranscriptSource,
+} from "../../../reading/rehearsal";
 import { outlineRows, type Retell } from "../../../reading/retell";
 import { defaultNavOpen, readNavEnv } from "../base/topic-nav";
 import DeckDialog from "./DeckDialog";
 import OutlinePane from "./OutlinePane";
-import RehearsalView from "./RehearsalView";
-import { rehearsalReadiness } from "./rehearsal";
-import { useRehearsals, useRetellDeckFile } from "./useRehearsal";
+import RehearsalView from "../rehearsal/RehearsalView";
+import { rehearsalReadiness } from "../rehearsal/rehearsal";
+import { openTranscriptSource } from "../rehearsal/start";
+import {
+  useRehearsalRuns,
+  useRetellDeckFile,
+  useRetellRehearsal,
+} from "../rehearsal/useRehearsal";
 import { useRetell } from "./useRetell";
 
 // The line under the retell's name: what it is being prepared from.
@@ -59,7 +67,11 @@ export default function RetellView(props: {
   // swapping is not cosmetic — unmounting the conversation is what distils it
   // (useRetell's cleanup), and stepping over to the deck for ten minutes is not
   // leaving the retell.
-  const [rehearsing, setRehearsing] = useState(false);
+  //
+  // What is being given is a rehearsal object (docs/43), found or made by the
+  // press: the topic's Rehearsal section opens the same object, so the two doors
+  // end at one history and not two.
+  const [rehearsing, setRehearsing] = useState<Rehearsal | null>(null);
   // The words for the pass about to be given, or null when the machine has no
   // way to hear them (no STT key on the desktop, no dictation on the host).
   // Which of the two shapes it is belongs to the rehearsal, not to this button
@@ -77,25 +89,30 @@ export default function RetellView(props: {
   // session that is already gone. The gate is the button's, through readiness.
   const [preparing, setPreparing] = useState(false);
   const rehearse = () => {
+    const target = retell.retell;
+    if (!target || !deck.file) return;
     setPreparing(true);
-    void createTranscriptSource({
-      session: { start: startSession, cut: cutSession, stop: stopSession },
+    void Promise.all([
+      rehearsalForRetell({
+        topicId: target.topicId,
+        retellId: target.id,
+        name: target.name,
+        deckFile: deck.file,
+      }),
       // Which retell is being given is known before a word of it is said, so its
-      // proper names go in as the recognizer's hot words. The desktop's
-      // record-and-upload path has nowhere to put them and ignores them.
-      glossary: { title: retell.retell?.name, outline: [...(retell.retell?.materials ?? []), ...rows] },
-    })
-      .catch((e: unknown) => {
-        // A run that records pages and no words is a run (reading/rehearsal),
-        // so a source that cannot be built does not stop the rehearsal.
-        console.warn("no transcript for this rehearsal", e);
-        return null;
-      })
-      .then((source) => {
+      // proper names go in as the recognizer's hot words.
+      openTranscriptSource({ title: target.name, outline: [...target.materials, ...rows] }),
+    ])
+      .then(([rehearsal, source]) => {
         setTranscript(source);
-        setPreparing(false);
-        setRehearsing(true);
-      });
+        setRehearsing(rehearsal);
+      })
+      .catch((e: unknown) => {
+        // The object is the pass: without it there is nothing to record against,
+        // so unlike a missing transcript this does stop the rehearsal.
+        console.warn("could not open the rehearsal", e);
+      })
+      .finally(() => setPreparing(false));
   };
   // Bumped when the deck dialog closes: a deck generated in this sitting has to
   // turn Rehearse on in this sitting.
@@ -105,10 +122,11 @@ export default function RetellView(props: {
   // Bumped when a run reaches the disk, not when the rehearsal is left: the two
   // are seconds apart, because the run waits for the last of the speech to come
   // back from STT (docs/43). It is the only moment this device changes the
-  // history (a pull can too, and useRehearsals says why it does not follow
+  // history (a pull can too, and useRehearsalRuns says why it does not follow
   // that).
   const [runsKey, setRunsKey] = useState(0);
-  const runs = useRehearsals(props.retellId, runsKey);
+  const rehearsal = useRetellRehearsal(props.retellId, runsKey);
+  const runs = useRehearsalRuns(rehearsal?.id ?? null, runsKey);
 
   return (
     <CitationContext.Provider value={null}>
@@ -223,14 +241,13 @@ export default function RetellView(props: {
           )}
         </div>
 
-        {rehearsing && retell.retell && deck.file && (
+        {rehearsing && (
           <RehearsalView
-            retellId={retell.retell.id}
-            retellName={retell.retell.name}
-            deckFile={deck.file}
+            rehearsal={rehearsing}
+            backLabel="Back to the retell"
             transcript={transcript ?? undefined}
             onExit={() => {
-              setRehearsing(false);
+              setRehearsing(null);
               setTranscript(null);
             }}
             onSaved={() => setRunsKey((n) => n + 1)}

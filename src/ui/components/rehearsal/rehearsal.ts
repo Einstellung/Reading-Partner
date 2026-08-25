@@ -141,13 +141,13 @@ export function withSlideEvent(
 
 // Whether anything of a run was actually recorded. A view that failed to load a
 // deck, or one the reader backed out of before the first page arrived, is not a
-// pass through the retell and does not become a row in its history.
+// pass over the deck and does not become a row in its history.
 export function hasRecordedPages(events: readonly RehearsalEvent[]): boolean {
   return events.some((e) => e.kind === "slide");
 }
 
 export interface FinishRunInput {
-  retellId: string;
+  rehearsalId: string;
   deckFile: string;
   // Stamped by the caller at the moment the reader finished, not after the wait
   // below: the rehearsal ended when they stopped talking, not when the last
@@ -168,7 +168,7 @@ export interface FinishRunInput {
 
 // End a rehearsal: close the speech, build the run out of everything that
 // arrived, write it. True when a run reached the store, which is the only case
-// in which the retell's history has changed and has to be read again — a pass
+// in which the rehearsal's history has changed and has to be read again — a pass
 // that recorded no page was never a pass, and a write that failed did not
 // happen (docs/43).
 //
@@ -184,7 +184,7 @@ export async function finishRun(input: FinishRunInput): Promise<boolean> {
   const run = buildRun({
     id: input.id,
     ordinal: 0, // the store assigns it
-    retellId: input.retellId,
+    rehearsalId: input.rehearsalId,
     deckFile: input.deckFile,
     startedAt: input.startedAt,
     events,
@@ -241,7 +241,7 @@ export interface RehearsalReadiness {
   title: string;
 }
 
-// Whether this retell can be given from the top, and what the button says about it.
+// Whether this deck can be given from the top, and what the button says about it.
 export function rehearsalReadiness(input: {
   deckFile: string | null;
   loading: boolean;
@@ -259,7 +259,7 @@ export function rehearsalReadiness(input: {
       title: "There is no deck for this retell yet. Generate one first (Deck).",
     };
   }
-  return { ok: true, title: "Give this talk from the deck, from the top" };
+  return { ok: true, title: "Give it from the deck, from the top" };
 }
 
 // The counter on the bar. Before the deck says anything there is no position to

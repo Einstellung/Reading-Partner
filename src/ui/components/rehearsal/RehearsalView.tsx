@@ -1,5 +1,7 @@
-// Giving the retell (docs/31, the third stage): the built deck, full screen, and a
-// record of where the reader was and how long they stayed there.
+// Giving the deck (docs/43): the deck full screen, and a record of where the
+// reader was and how long they stayed there. Reached from the topic's Rehearsal
+// section or from the Rehearse button on a retell — one object either way, so
+// one view.
 //
 // The deck is the file that already exists on disk — self-contained HTML, opens
 // in any browser — dropped into an iframe as srcdoc. It keeps its own paging:
@@ -14,12 +16,17 @@
 //
 // The run lands on disk on the way out, whichever way out that was — the End
 // button, the back button, or the view being unmounted from under it. A pass
-// through a retell is expensive to make and worthless to half-record.
+// over a deck is expensive to make and worthless to half-record.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { IconClose } from "../base/icons";
 import { Button } from "../ui/button";
-import { appendRun, type RehearsalEvent, type TranscriptSource } from "../../../reading/rehearsal";
+import {
+  appendRun,
+  type Rehearsal,
+  type RehearsalEvent,
+  type TranscriptSource,
+} from "../../../reading/rehearsal";
 import {
   browserWakeLockTarget,
   createScreenWakeLock,
@@ -39,15 +46,17 @@ import {
 } from "./rehearsal";
 
 export interface RehearsalViewProps {
-  retellId: string;
-  retellName: string;
-  // The deck to give, AppData-relative. The caller already knows it — that is
-  // what enabled the button that got here.
-  deckFile: string;
+  // The object this pass is recorded against, deck and all. Created or found by
+  // the caller before it mounts this view, so both doors (docs/43) arrive here
+  // holding the same thing.
+  rehearsal: Rehearsal;
+  // Where the close button goes, in words: the retell for one door, the topic's
+  // list for the other.
+  backLabel: string;
   // Speech, when there is any. The caller makes one before it mounts this view
-  // (RetellView) so that capture is already running when the deck reports its
-  // first page; with no STT key configured there is none, and the run records
-  // pages and no words, which is a run and not a failure.
+  // so that capture is already running when the deck reports its first page;
+  // with no STT key configured there is none, and the run records pages and no
+  // words, which is a run and not a failure.
   transcript?: TranscriptSource;
   onExit(): void;
   // The run is on disk. Later than onExit — a source still uploading holds the
@@ -57,14 +66,13 @@ export interface RehearsalViewProps {
 }
 
 export default function RehearsalView({
-  retellId,
-  retellName,
-  deckFile,
+  rehearsal,
+  backLabel,
   transcript,
   onExit,
   onSaved,
 }: RehearsalViewProps) {
-  const { html, error } = useDeckHtml(deckFile);
+  const { html, error } = useDeckHtml(rehearsal.deckFile);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
 
   const eventsRef = useRef<RehearsalEvent[]>([]);
@@ -93,9 +101,9 @@ export default function RehearsalView({
     onSavedRef.current = onSaved;
   });
 
-  // Keep the screen on for the length of the retell (platform/app/wake-lock).
+  // Keep the screen on for the length of the pass (platform/app/wake-lock).
   // Tens of minutes go by with nobody touching the iPad, and a device that locks
-  // itself suspends the webview: the dictation session listening to the retell
+  // itself suspends the webview: the dictation session listening to the deck
   // goes down with it, and the rest of the pass is recorded as pages and no
   // words. Asked for here rather than after any await so the request still rides
   // the tap that opened the rehearsal — Safari wants a gesture for it — and
@@ -126,7 +134,7 @@ export default function RehearsalView({
       }
       // The page turn is the cut. Desktop STT hands back one block of text with
       // no timings inside it (docs/43), so a segment's only boundaries are the
-      // two page turns around it — without this the whole retell is one segment
+      // two page turns around it — without this the whole pass is one segment
       // and the transcript has no pages in it. A repeated report is the deck
       // redrawing the page that is already up, and cutting on that would put a
       // seam in the middle of a page.
@@ -199,8 +207,8 @@ export default function RehearsalView({
     // still uploading do not need the iPad awake.
     lockRef.current?.set(false);
     const saved = await finishRun({
-      retellId,
-      deckFile,
+      rehearsalId: rehearsal.id,
+      deckFile: rehearsal.deckFile,
       id: crypto.randomUUID(),
       startedAt: startedAtRef.current,
       endedAt: Date.now(),
@@ -209,7 +217,7 @@ export default function RehearsalView({
       save: appendRun,
     });
     if (saved) onSavedRef.current();
-  }, [retellId, deckFile]);
+  }, [rehearsal.id, rehearsal.deckFile]);
 
   // Unmounting is an exit like any other (a topic switch, a book opened from
   // elsewhere), so the save hangs off the cleanup rather than off the buttons.
@@ -225,8 +233,8 @@ export default function RehearsalView({
   );
 
   // Leaving does not wait for the run to be written. finish() carries on after
-  // this view is gone, and the reader is back in the retell in the meantime; the
-  // history there fills in when onSaved fires.
+  // this view is gone, and the reader is back where they came from in the
+  // meantime; the history there fills in when onSaved fires.
   const leave = () => {
     void finish();
     onExit();
@@ -247,14 +255,14 @@ export default function RehearsalView({
           type="button"
           variant="ghost"
           size="icon"
-          title="Back to the retell"
-          aria-label="Back to the retell"
+          title={backLabel}
+          aria-label={backLabel}
           onClick={leave}
           className="h-9 w-9 text-white/70 can-hover:hover:bg-white/10 can-hover:hover:text-white"
         >
           <IconClose size={18} />
         </Button>
-        <span className="min-w-0 flex-1 truncate text-[13px] text-white/70">{retellName}</span>
+        <span className="min-w-0 flex-1 truncate text-[13px] text-white/70">{rehearsal.name}</span>
         <span className="flex-none text-[13px] tabular-nums text-white/70">
           {positionLabel(current)}
         </span>
@@ -284,7 +292,7 @@ export default function RehearsalView({
         ) : (
           <iframe
             ref={frameRef}
-            title={`Deck for ${retellName}`}
+            title={`Deck for ${rehearsal.name}`}
             className="h-full w-full border-0 bg-[#0d0f14]"
           />
         )}

@@ -90,6 +90,7 @@ const LAYER: Record<string, Layer> = {
   "ui/components/markdown": "ui",
   "ui/components/phone": "ui",
   "ui/components/reader": "ui",
+  "ui/components/rehearsal": "ui",
   "ui/components/retell": "ui",
   "ui/components/settings": "ui",
   "ui/components/shelf": "ui",

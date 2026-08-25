@@ -18,7 +18,7 @@ function run(events: RehearsalEvent[], startedAt = 0) {
   return buildRun({
     id: "run-1",
     ordinal: 1,
-    retellId: "1754400000000",
+    rehearsalId: "1754400000000",
     deckFile: "slides/1754400000000-my-retell.html",
     startedAt,
     events,

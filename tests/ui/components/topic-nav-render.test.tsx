@@ -35,8 +35,8 @@ test("the open section is the current one", () => {
 
 test("every row is a 44px touch target in both widths", () => {
   for (const open of [true, false]) {
-    // One toggle plus three sections.
-    expect(render(open).match(/h-11/g)?.length).toBe(4);
+    // One toggle plus four sections.
+    expect(render(open).match(/h-11/g)?.length).toBe(5);
   }
 });
 

@@ -3,11 +3,15 @@
 // (docs/31, "界面"). None of it touches the DOM, so the rendering can change
 // without re-deriving any of it (CLAUDE.md).
 
-export type TopicSection = "materials" | "retell" | "observations";
+export type TopicSection = "materials" | "retell" | "rehearsal" | "observations";
 
+// In the order the work happens: read the materials, go through them with the AI,
+// give the result out loud. Rehearsal is not under Retell (docs/43): the deck
+// being rehearsed is as often one the reader already had as one this app built.
 export const TOPIC_SECTIONS: readonly { id: TopicSection; label: string }[] = [
   { id: "materials", label: "Materials" },
   { id: "retell", label: "Retell" },
+  { id: "rehearsal", label: "Rehearsal" },
   { id: "observations", label: "AI observations" },
 ];
 

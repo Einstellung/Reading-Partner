@@ -30,9 +30,11 @@ test("core user-data files are in range", () => {
     // a thread file keyed by the retell.
     "retell-1754400000000.json",
     "threads-retell-1754400000000.json",
-    // Every time that retell was given against its deck (docs/31): the pages and
-    // what was said to them. A trace of the reader, so it travels.
+    // A rehearsal (docs/43) and every pass over its deck: the pages and what was
+    // said to them. A trace of the reader, so both travel; the deck they were
+    // given against does not.
     "rehearsal-1754400000000.json",
+    "runs-rehearsal-1754400000000.json",
     // The cross-scenario user profile and the info feedback log are the user's
     // data (docs/16); info-profile.md is the profile's old name, kept in range
     // through the transition.
@@ -86,9 +88,12 @@ test("caches, logs, sync internals, and book blobs are out of range", () => {
     "slides/1737000000000/state.json",
     "slides/1737000000000/slide-01.html",
     "slides/1737000000000/asset-03.txt",
-    // The rescue copy a rehearsal log that would not parse is moved to. It is
-    // there for a person to look at, not to be pushed at the other device.
-    "rehearsal-1754400000000.json.bad",
+    // The rescue copy a run log that would not parse is moved to. It is there
+    // for a person to look at, not to be pushed at the other device.
+    "runs-rehearsal-1754400000000.json.bad",
+    // A deck brought in from outside: tens of megabytes of self-contained HTML,
+    // imported on the device it is rehearsed on (src/reading/rehearsal/store.ts).
+    "rehearsals/1754400000000.html",
     "library/abc123.pdf",
     "images/threads/t1/photo.png",
     // Info triage: the daily briefing and article cache are derived, not synced.

@@ -54,7 +54,8 @@ const NO_IN_MEMORY_STATE: Record<string, string> = {
   "info-feedback.jsonl": "append-only, and read in full when it is read at all",
   "info-pool-marks.json": "read at the start of a collection run, not held between them",
   "retell-": "a retell is read from disk when it is opened",
-  "rehearsal-": "a retell's rehearsals are read with the retell, when that retell is opened",
+  "rehearsal-": "a rehearsal is read from disk when the topic's list is drawn",
+  "runs-rehearsal-": "a rehearsal's runs are read with the rehearsal, when it is opened",
   "memory-": "the observation store reads its entries per query",
   "prep-": "a document's prep material is read when the document it belongs to opens",
 };
@@ -117,10 +118,10 @@ test("the samples this test is built from are all in sync range", () => {
   for (const file of ROOT_FILES) expect(inSyncRange(file)).toBe(true);
 
   const patterns = perKeySamples();
-  // Six filename patterns and two directory prefixes, as of this writing;
+  // Seven filename patterns and two directory prefixes, as of this writing;
   // the count is asserted so a pattern that stops being found by the scan is
   // noticed rather than quietly dropping its files from the check.
-  expect(patterns.length).toBe(8);
+  expect(patterns.length).toBe(9);
   for (const { pattern, paths } of patterns) {
     for (const path of paths) {
       expect(`${pattern} -> ${path}: ${inSyncRange(path)}`).toBe(`${pattern} -> ${path}: true`);

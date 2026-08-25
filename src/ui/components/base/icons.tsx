@@ -561,3 +561,26 @@ export function IconRetell({ size = 20 }: IconProps) {
 		</svg>
 	);
 }
+
+// The same screen, with someone talking at it: a deck being given out loud.
+// Deliberately IconRetell's frame — a rehearsal is that deck, one step on — with
+// the stand replaced by a microphone, which is the only thing this section adds.
+export function IconRehearse({ size = 20 }: IconProps) {
+	return (
+		<svg
+			width={size}
+			height={size}
+			viewBox="0 0 20 20"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			xmlns="http://www.w3.org/2000/svg"
+		>
+			<path d="M3.25 3.75H16.75V11.25H3.25V3.75Z" />
+			<rect x="8.5" y="12.75" width="3" height="4.5" rx="1.5" />
+			<path d="M6.75 15.5C6.75 17.2 8.2 18.5 10 18.5C11.8 18.5 13.25 17.2 13.25 15.5" />
+		</svg>
+	);
+}

@@ -37,6 +37,8 @@ import {
 } from "../../../reading/saved-articles";
 import { createRetell } from "../../../reading/retell";
 import RetellView from "../retell/RetellView";
+import RehearsalScreen from "../rehearsal/RehearsalScreen";
+import type { Rehearsal } from "../../../reading/rehearsal";
 import { Button } from "../ui/button";
 import BookCard from "../shelf/BookCard";
 import { ADD_CARD, ADD_CARD_BOX, CARD_LABEL, LIBRARY_GRID, LIBRARY_PAGE } from "../shelf/cardStyles";
@@ -48,6 +50,7 @@ import TopicCard from "../shelf/TopicCard";
 import NameDialog from "../common/NameDialog";
 import { shelfOrder, TOPIC_GRID_COLUMNS_CLASS } from "../shelf/topic-shelf";
 import ObservationSection from "./topic/ObservationSection";
+import RehearsalSection from "./topic/RehearsalSection";
 import RetellSection from "./topic/RetellSection";
 import TopicNav from "./topic/TopicNav";
 import {
@@ -91,6 +94,13 @@ export default function LibraryScreen(props: {
   // The retell being prepared, if any. Nothing else on this screen changes while
   // one is open, so leaving it is one setState.
   const [openRetellId, setOpenRetellId] = useState<string | null>(null);
+  // The deck being given, if any (docs/43). A rehearsal replaces the sections
+  // the way a retell does rather than covering them: the section it is started
+  // from sits inside a scrolling column, which would clip a full-screen cover.
+  const [openRehearsal, setOpenRehearsal] = useState<Rehearsal | null>(null);
+  // Bumped when a pass reaches disk, which is the only moment this device
+  // changes the counts the section shows.
+  const [rehearsalKey, setRehearsalKey] = useState(0);
   const [navOpen, setNavOpen] = useState(() =>
     readNavOpen(browserNavStore(window), readNavEnv(window)),
   );
@@ -103,6 +113,7 @@ export default function LibraryScreen(props: {
   useEffect(() => {
     setSection(DEFAULT_SECTION);
     setOpenRetellId(null);
+    setOpenRehearsal(null);
   }, [activeTopic?.id]);
 
   // Retell one book: a retell of its own, entered straight away (docs/31 — the
@@ -136,6 +147,17 @@ export default function LibraryScreen(props: {
 
   if (openSavedArticle) {
     return <SavedArticleView article={openSavedArticle} onBack={() => setOpenSavedArticle(null)} />;
+  }
+
+  if (activeTopic && openRehearsal) {
+    return (
+      <RehearsalScreen
+        key={openRehearsal.id}
+        rehearsal={openRehearsal}
+        onBack={() => setOpenRehearsal(null)}
+        onSaved={() => setRehearsalKey((n) => n + 1)}
+      />
+    );
   }
 
   if (activeTopic && openRetellId) {
@@ -179,7 +201,13 @@ export default function LibraryScreen(props: {
           <div className="min-w-0 flex-1 overflow-y-auto">
             <div className={LIBRARY_PAGE}>
               <h1 className={PAGE_TITLE}>{activeTopic.name}</h1>
-              {section === "retell" ? (
+              {section === "rehearsal" ? (
+                <RehearsalSection
+                  topic={activeTopic}
+                  reloadKey={rehearsalKey}
+                  onStart={setOpenRehearsal}
+                />
+              ) : section === "retell" ? (
                 <RetellSection topic={activeTopic} onOpenRetell={setOpenRetellId} />
               ) : (
                 <TopicMaterials
