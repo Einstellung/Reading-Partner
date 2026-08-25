@@ -20,6 +20,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { IconClose } from "../base/icons";
 import { Button } from "../ui/button";
 import { appendRun, type RehearsalEvent, type TranscriptSource } from "../../../reading/rehearsal";
+import {
+  browserWakeLockTarget,
+  createScreenWakeLock,
+  type ScreenWakeLock,
+} from "../../../platform/app/wake-lock";
 import { useDeckHtml } from "./useRehearsal";
 import {
   checkDeckProtocol,
@@ -87,6 +92,21 @@ export default function RehearsalView({
   useEffect(() => {
     onSavedRef.current = onSaved;
   });
+
+  // Keep the screen on for the length of the talk (platform/app/wake-lock).
+  // Tens of minutes go by with nobody touching the iPad, and a device that locks
+  // itself suspends the webview: the dictation session listening to the talk
+  // goes down with it, and the rest of the pass is recorded as pages and no
+  // words. Asked for here rather than after any await so the request still rides
+  // the tap that opened the rehearsal — Safari wants a gesture for it — and
+  // failure is not the caller's business: a screen that naps is a worse
+  // rehearsal, not a lost one.
+  const lockRef = useRef<ScreenWakeLock | null>(null);
+  useEffect(() => {
+    const lock = createScreenWakeLock(browserWakeLockTarget());
+    lockRef.current = lock;
+    lock.set(true);
+  }, []);
 
   // Only messages from this view's own frame count. `source === 'deck'` alone is
   // not enough: any document that gets a handle on this window can say it.
@@ -173,6 +193,11 @@ export default function RehearsalView({
     // rather than writing the run twice.
     if (savedRef.current) return;
     savedRef.current = true;
+    // The screen is handed back at the same gate the run is written at, so the
+    // three ways out (End, back, unmount) are one path to keep right and not
+    // two. Before the await: the reader has stopped talking, and the segments
+    // still uploading do not need the iPad awake.
+    lockRef.current?.set(false);
     const saved = await finishRun({
       talkId,
       deckFile,
