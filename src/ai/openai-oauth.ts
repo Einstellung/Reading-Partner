@@ -125,7 +125,7 @@ function refreshToken(refresh: string): Promise<OpenAICredential> {
 }
 
 async function store(cred: OpenAICredential): Promise<void> {
-	// Single-active: this also signs out Anthropic and DeepSeek.
+	// Single-active: this also signs out whichever other provider was connected.
 	await setActiveCredential("openai", cred);
 	pending = null;
 }

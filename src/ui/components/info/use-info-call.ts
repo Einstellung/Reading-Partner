@@ -48,7 +48,7 @@ import {
   upsertCardRow,
   type CardAction,
 } from "../chat/chatParts";
-import type { ChatMessage } from "../../../ai/providers";
+import type { ChatMessage, ProviderId } from "../../../ai/providers";
 import type { BriefingView, RequestOutcome } from "../../../info/briefing/reader";
 import type { ProfileUpdateCardData } from "../../../info/briefing/cards";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
@@ -382,7 +382,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     let full = "";
 
     void runAgentTurn({
-      providerId: settings.defaultProviderId as "anthropic" | "openai" | "deepseek",
+      providerId: settings.defaultProviderId as ProviderId,
       modelId: settings.defaultModelId,
       systemPrompt: anchor.systemPrompt,
       messages: history,
