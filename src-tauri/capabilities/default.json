@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "M1 capabilities: open any user file, persist reading state under appdata. HTTP scope is widened to any https host (see the http:default allow list) so user-pasted links (link ingestion, docs/09) can be fetched from anywhere; still https-only, so no plaintext http is permitted. The opener URL scope is any web link, because every external link now leaves through the system browser (src/platform/app/external-link.ts, src-tauri/src/navigation.rs) instead of navigating the webview away from the app.",
+  "description": "M1 capabilities: open any user file, persist reading state under appdata. HTTP scope is widened to any https host (see the http:default allow list) so user-pasted links (link ingestion, docs/09) can be fetched from anywhere; still https-only, so no plaintext http is permitted. The named https entries below are documentation of the endpoints the app itself reaches — the trailing https://* wildcard is what admits them, and the AI provider hosts are derived from the provider table at runtime (bridgedHosts in src/ai/providers.ts), so adding a provider needs no edit here. The opener URL scope is any web link, because every external link now leaves through the system browser (src/platform/app/external-link.ts, src-tauri/src/navigation.rs) instead of navigating the webview away from the app.",
   "windows": ["main"],
   "permissions": [
     "core:default",
