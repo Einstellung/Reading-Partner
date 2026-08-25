@@ -103,12 +103,7 @@ export default function AccountPanel({
           onChanged={refresh}
           onActivated={() => activate("openai")}
         />
-        <KeyCard
-          providerId="deepseek"
-          name="DeepSeek"
-          providers={providers}
-          onActivated={() => activate("deepseek")}
-        />
+        <KeyCard providers={providers} onActivated={activate} />
       </SettingsSection>
 
       <SettingsSection title="Default conversation">
