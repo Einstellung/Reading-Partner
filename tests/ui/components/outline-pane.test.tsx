@@ -5,8 +5,23 @@
 
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import OutlinePane from "../../../src/ui/components/retell/OutlinePane";
 import type { OutlineRow } from "../../../src/reading/retell";
+import { useDom } from "../../support/dom";
+
+// The pane comes in after the window. It hangs a dropdown menu off its rows,
+// and that Radix package reaches for a portal, which pulls react-dom's client
+// bundle — and react-dom decides at module evaluation whether it is in a
+// browser and never reconsiders (docs/pitfall/121).
+//
+// Static imports are evaluated before any top-level await,
+// so importing it the ordinary way evaluates that bundle with no window in
+// scope and every useDom() in the run then throws — harmless only for as long
+// as this file happens to run late (docs/pitfall/175). Nothing below needs a
+// DOM; the window is here so react-dom's feature detection lands where it would
+// have landed if this file had never run.
+await useDom();
+
+const { default: OutlinePane } = await import("../../../src/ui/components/retell/OutlinePane");
 
 const rows: OutlineRow[] = [
   {

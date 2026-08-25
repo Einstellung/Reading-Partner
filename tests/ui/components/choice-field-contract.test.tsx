@@ -17,7 +17,20 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { ChoiceField } from "../../../src/ui/components/settings/ChoiceField";
+import { useDom } from "../../support/dom";
+
+// The field comes in after the window. It builds on Radix's Select, which
+// reaches for a portal, and that pulls react-dom's client bundle, which decides
+// at module evaluation whether it is in a browser and never reconsiders
+// (docs/pitfall/121). Static imports are evaluated before any top-level await,
+// so importing it the ordinary way evaluates that bundle with no window in
+// scope and every useDom() in the run then throws — harmless only for as long
+// as this file happens to run late (docs/pitfall/175). Nothing below needs a
+// DOM; the window is here so react-dom's feature detection lands where it would
+// have landed if this file had never run.
+await useDom();
+
+const { ChoiceField } = await import("../../../src/ui/components/settings/ChoiceField");
 
 const markup = renderToStaticMarkup(
   <ChoiceField
