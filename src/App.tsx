@@ -13,6 +13,7 @@ import { appData } from "./platform/app/appdata";
 import { hashPath } from "./platform/app/storage";
 import { importBook, repairLibraryNames } from "./platform/app/library";
 import { migrateBookLive } from "./platform/app/migrate";
+import { splitSavedArticleBodiesOnce } from "./reading/saved-articles";
 import { documentShape, type Fulltext } from "./fulltext";
 import Sidebar, { type SidebarTab } from "./ui/components/reader/Sidebar";
 import {
@@ -384,6 +385,13 @@ export default function App() {
     if (migrationRan.current) return;
     migrationRan.current = true;
     void (async () => {
+      // A kept article's body moved out of saved-articles.json into a file of
+      // its own (docs/21). Independent of the book backfill below and not
+      // awaited with it: nothing here reads the kept articles, and the shelf
+      // reads either shape.
+      void splitSavedArticleBodiesOnce().catch((e) =>
+        console.warn("saved-article body split skipped", e),
+      );
       // Names an iOS import left percent-encoded (docs/pitfall/106). Runs first
       // so the backfill below reads the repaired paths, and writes nothing when
       // there is nothing encoded, so it costs no sync revision.

@@ -114,7 +114,13 @@ import {
   SAVED_ARTICLES_PROMPT,
   type SavedArticleStore,
 } from "./saved-article-tools";
-import { hasSavedArticles, loadSavedArticles, type SavedArticle } from "./saved-articles";
+import {
+  hasSavedArticles,
+  loadSavedArticles,
+  loadSavedArticleBody,
+  NO_ARTICLE_BODY,
+  type SavedArticle,
+} from "./saved-articles";
 import { readingFetch } from "./papers/http";
 import { searchPapers, type PaperSearchFn } from "./papers/paper-search";
 import { buildFindPaperTool, FIND_PAPER_PROMPT } from "./papers/citation-tool";
@@ -154,6 +160,7 @@ export const HISTORY_KEEP_TIGHT = 6;
 const savedArticleStoreOnDisk: SavedArticleStore = {
   any: () => hasSavedArticles().catch(() => false),
   all: () => loadSavedArticles().catch((): SavedArticle[] => []),
+  body: (article) => loadSavedArticleBody(article).catch(() => NO_ARTICLE_BODY),
 };
 
 // The live reading position and topic scope for the turn (App's ctxRef).
@@ -641,9 +648,10 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   if (livePipeline && prepState) {
     savedArticlesMounted = await savedArticles.any().catch(() => false);
     if (savedArticlesMounted) {
-      // The records are read on the first tool call, not here: reading them
-      // sanitizes every stored body, and most turns mount these tools without the
-      // model ever reaching for them. Read once per turn, however often it does.
+      // The records are read on the first tool call, not here: most turns mount
+      // these tools without the model ever reaching for them. Read once per
+      // turn, however often it does. The bodies are not in there — only the one
+      // article the reader names is read, in add below.
       let records: Promise<SavedArticle[]> | null = null;
       const list = () => (records ??= savedArticles.all().catch((): SavedArticle[] => []));
       tools = [
@@ -651,7 +659,8 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
         ...buildSavedArticleTools({
           list,
           add: async (article) => {
-            const prepared = prepareSavedArticle(article);
+            const body = await savedArticles.body(article);
+            const prepared = prepareSavedArticle(article, body.text);
             const paper = await livePipeline.ingestCaptured(prepared.mint, prepared.fetched);
             // The kept text goes into the fulltext cache under the slug the paper
             // got, which is why it is written after the ingest and not before:

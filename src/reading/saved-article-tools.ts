@@ -28,7 +28,7 @@ import type { FetchOutcome } from "./prep/papers/pipeline";
 import { uniqueSlug } from "./prep/papers/plan";
 import type { IngestResult } from "./prep/papers/source-tool";
 import type { PrepPaper } from "./prep/papers/types";
-import type { SavedArticle } from "./saved-articles";
+import { savedArticleTextChars, type SavedArticle, type SavedArticleBody } from "./saved-articles";
 
 // Rows the list answers with at most. A kept list is a queue, meant to be
 // emptied (docs/21), so a few dozen covers a realistic backlog; the cap is what
@@ -52,17 +52,22 @@ export interface SavedArticlePorts {
   // Every kept article. Order does not matter: the list sorts (see newestFirst)
   // and the add path looks up by id. Not filtered by topic — see the file header.
   list(): Promise<SavedArticle[]>;
-  // Put one kept article's stored text into the current book's prep list.
+  // Put one kept article's stored text into the current book's prep list. The
+  // body is not in the record any more (saved-articles.ts), so reading it is
+  // part of this call rather than something the tool does first: only the one
+  // article the reader named is ever read off disk.
   add(article: SavedArticle): Promise<IngestResult>;
 }
 
 // What the turn assembly needs of the store: whether to mount the tools at all,
 // and — only once one of them runs — every record. Two calls rather than one
-// because they cost different amounts: `all` sanitizes every stored body, and the
-// mount gate is asked on every classroom turn (saved-articles.ts).
+// because they cost different amounts: `all` reads and parses the whole index,
+// and the mount gate is asked on every classroom turn (saved-articles.ts).
 export interface SavedArticleStore {
   any(): Promise<boolean>;
   all(): Promise<SavedArticle[]>;
+  // One article's body, read on demand from the file the record points at.
+  body(article: SavedArticle): Promise<SavedArticleBody>;
 }
 
 // --- pure parts (unit-tested) ----------------------------------------------
@@ -112,9 +117,10 @@ function dateLabel(article: SavedArticle): string {
 // One row: everything needed to pick an article and to quote it responsibly, on
 // one line. The id is never clipped — it is the handle add_saved_article takes.
 function row(article: SavedArticle, n: number): string {
+  const chars = savedArticleTextChars(article);
   const length = article.summaryOnly
-    ? `${article.text.length} characters (summary only — the full text was never read)`
-    : `${article.text.length} characters`;
+    ? `${chars} characters (summary only — the full text was never read)`
+    : `${chars} characters`;
   const title = clip(article.title, SAVED_TITLE_MAX) || "(untitled)";
   return `${n}. "${title}" — ${sourceLabel(article)} — ${dateLabel(article)} — ${length} — id: ${article.id}`;
 }
@@ -205,13 +211,15 @@ export interface PreparedArticle {
 }
 
 // What a kept article becomes on the prep list: a user-added article source whose
-// fetch stage is already over.
-export function prepareSavedArticle(article: SavedArticle): PreparedArticle {
-  const text = `${savedArticleProvenance(article)}\n\n${article.text.trim()}`;
+// fetch stage is already over. The body comes in beside the record rather than
+// out of it — it lives in its own file now (saved-articles.ts) — so this stays a
+// pure function the tests can drive.
+export function prepareSavedArticle(article: SavedArticle, text: string): PreparedArticle {
+  const body = `${savedArticleProvenance(article)}\n\n${text.trim()}`;
   const fulltext: Fulltext = {
     version: FULLTEXT_VERSION,
     status: "ok",
-    pages: [text],
+    pages: [body],
     outline: [],
   };
   const title = article.title.trim();
@@ -240,7 +248,7 @@ export function prepareSavedArticle(article: SavedArticle): PreparedArticle {
       title: title || undefined,
     },
     fulltext,
-    chars: text.length,
+    chars: body.length,
   };
 }
 
@@ -302,7 +310,7 @@ export function buildSavedArticleTools(ports: SavedArticlePorts): AgentTool[] {
               `as it appears there.`,
           );
         }
-        if (article.text.trim() === "") {
+        if (savedArticleTextChars(article) === 0) {
           throw new Error(
             `"${clip(article.title, SAVED_TITLE_MAX)}" was kept without any body text` +
               `${article.summaryOnly ? " — not even a summary" : ""}, so there is nothing to ` +

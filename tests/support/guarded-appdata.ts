@@ -28,6 +28,10 @@ export interface FakeAppData {
   write(file: string, contents: string): Promise<void>;
   quarantine(file: string): Promise<string | null>;
   reportCorrupt(report: CorruptFileReport): void;
+  /** A plain read for a file that can be rebuilt or done without: null for both
+   *  "not there" and "unreadable", the way readJson answers. */
+  readBody(file: string): Promise<unknown>;
+  exists(file: string): Promise<boolean>;
   /** What is on disk at `file`, parsed. Undefined when there is no file. */
   json(file: string): unknown;
 }
@@ -76,6 +80,23 @@ export function createFakeAppData(): FakeAppData {
 
     reportCorrupt(report: CorruptFileReport): void {
       io.reports.push(report);
+    },
+
+    async readBody(file: string): Promise<unknown> {
+      await null;
+      if (io.readFails) return null;
+      const text = io.files.get(file);
+      if (text === undefined) return null;
+      try {
+        return JSON.parse(text) as unknown;
+      } catch {
+        return null;
+      }
+    },
+
+    async exists(file: string): Promise<boolean> {
+      await null;
+      return io.files.has(file);
     },
 
     json(file: string): unknown {

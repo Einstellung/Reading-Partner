@@ -80,5 +80,9 @@ export function strategyFor(path: string): MergeStrategy {
   if (name === "settings.json" || name === "state.json") return "fields";
   if (/^annotations-.+\.json$/.test(name)) return "records";
   if (/^threads-.+\.json$/.test(name)) return "records";
+  // article-bodies/<hash>.json falls through here on purpose. A body file is
+  // named after the hash of its own bytes, so two devices holding the same name
+  // hold the same content and there is no conflict to resolve; keeping ours is
+  // the right answer and the conflict copy never gets written.
   return "opaque";
 }
