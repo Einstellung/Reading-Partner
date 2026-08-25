@@ -225,9 +225,26 @@ test("a version this build does not know is set aside, not read as empty in plac
 test("a file that would not open is left alone", async () => {
   disk.files.set(RUNS, JSON.stringify({ version: 1, rehearsalId: ID, runs: [] }));
   disk.unreadable.add(RUNS);
-  expect((await loadRehearsalRuns(ID)).runs).toEqual([]);
+  await expect(loadRehearsalRuns(ID)).rejects.toThrow(/could not be read/);
   expect(disk.renames).toEqual([]);
   expect(disk.files.has(RUNS)).toBe(true);
+});
+
+// docs/29 on the other branch. appendRun reads through the loader before it
+// writes, so an empty log handed back for a read that failed is not a fallback
+// the caller displays — it is the whole history replaced by the one run being
+// recorded, on a file the other device syncs.
+test("a run recorded after a failed read does not replace the history", async () => {
+  await appendRun(aRun("r1"));
+  await appendRun(aRun("r2"));
+  const onDisk = disk.files.get(RUNS);
+  disk.unreadable.add(RUNS);
+
+  await expect(appendRun(aRun("r3"))).rejects.toThrow(/could not be read/);
+
+  expect(disk.files.get(RUNS)).toBe(onDisk);
+  disk.unreadable.delete(RUNS);
+  expect((await loadRehearsalRuns(ID)).runs.map((r) => r.id)).toEqual(["r1", "r2"]);
 });
 
 // One unusable run inside a usable file is dropped: a lost run is one pass given

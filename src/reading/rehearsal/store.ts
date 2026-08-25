@@ -206,6 +206,12 @@ function badFile(rehearsalId: string): string {
  * slides/retells.json: parse fails, the loader returns empty, the next write
  * commits the empty version over the top, and every entry is gone with no error
  * anywhere.
+ *
+ * A file that is there and would not open raises. Nothing can be moved aside —
+ * nothing is known to be wrong with the bytes — so the raise is the only thing
+ * standing between the failed read and the overwrite. The three callers all
+ * have somewhere to put it: the two lists show what they already have, and
+ * finishRun reports the pass as not recorded.
  */
 export async function loadRehearsalRuns(rehearsalId: string): Promise<RehearsalLog> {
   const file = rehearsalRunsFile(rehearsalId);
@@ -214,11 +220,13 @@ export async function loadRehearsalRuns(rehearsalId: string): Promise<RehearsalL
     if (!(await appData.exists(file))) return emptyLog(rehearsalId);
     text = await appData.readText(file);
   } catch (e) {
-    // An IO error says nothing is wrong with the file itself. Nothing is moved
-    // and nothing is written over it — appendRun goes through here, so a read
-    // that failed cannot turn into an overwrite.
+    // An IO error says nothing is wrong with the file itself, so nothing is
+    // moved. An empty log is not the answer either: appendRun goes through
+    // here, and answering empty would let one failed read replace every pass
+    // ever given with the one being recorded — on a file the other device
+    // syncs (platform/sync/syncFs.ts).
     console.warn("failed to read the runs of", rehearsalId, e);
-    return emptyLog(rehearsalId);
+    throw new Error(`${file} could not be read`);
   }
   let log: RehearsalLog | null = null;
   try {
