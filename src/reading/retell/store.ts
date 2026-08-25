@@ -19,7 +19,7 @@
 
 import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
-import { deleteRehearsals } from "../rehearsal/store";
+import { deleteRehearsalsForRetell } from "../rehearsal/store";
 import {
   newRetell,
   newRetellId,
@@ -151,7 +151,7 @@ export async function deleteRetell(retellId: string): Promise<void> {
   } catch (e) {
     console.warn("failed to delete a retell", retellId, e);
   }
-  await deleteRehearsals(retellId);
+  await deleteRehearsalsForRetell(retellId);
 }
 
 // The retell's conversation lives in its own thread file, keyed like every other

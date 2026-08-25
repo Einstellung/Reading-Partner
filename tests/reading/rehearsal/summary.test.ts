@@ -20,7 +20,7 @@ function run(pages: RehearsalPage[], over: Partial<RehearsalRun> = {}): Rehearsa
   return {
     id: "run-1",
     ordinal: 2,
-    retellId: "1754400000000",
+    rehearsalId: "1754400000000",
     deckFile: null,
     startedAt: 0,
     endedAt: 600_000,

@@ -98,11 +98,16 @@ export function inSyncRange(path: string): boolean {
       // travels like marks and threads rather than like a cache. The deck it
       // produces (slides/**) stays out: that is a build output.
       /^retell-.+\.json$/.test(top) ||
-      // What the reader left behind giving that retell against its deck
-      // (docs/31): which page was up when, and what was said to it. A trace,
-      // not a derivation — no deck and no book rebuilds it. The .bad copy a
-      // failed parse leaves beside it is deliberately not matched.
+      // A rehearsal and its runs (docs/43): the deck the reader gives over and
+      // over, and what they said on each page each time. A trace, not a
+      // derivation — no deck and no book rebuilds it. The deck itself stays out:
+      // a built one is slides/**, and an imported one is rehearsals/**, tens of
+      // megabytes of self-contained HTML that has no business in a per-file
+      // merge. So the other device shows the rehearsal and its history with no
+      // deck to give until one is imported there too. The .bad copy a failed
+      // parse leaves beside the runs is deliberately not matched.
       /^rehearsal-.+\.json$/.test(top) ||
+      /^runs-rehearsal-.+\.json$/.test(top) ||
       // The two files devices leave for each other (docs/36). One per device and
       // written by that device alone, so there is never a merge to do: a
       // collector says who it is and when it was last alive, and a reader asks
