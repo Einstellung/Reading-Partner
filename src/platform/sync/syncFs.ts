@@ -100,14 +100,15 @@ export function inSyncRange(path: string): boolean {
       // travels like marks and threads rather than like a cache. The deck it
       // produces (slides/**) stays out: that is a build output.
       /^retell-.+\.json$/.test(top) ||
-      // A rehearsal and its runs (docs/43): the deck the reader gives over and
-      // over, and what they said on each page each time. A trace, not a
-      // derivation — no deck and no book rebuilds it. The deck itself stays out:
-      // a built one is slides/**, and an imported one is rehearsals/**, tens of
-      // megabytes of self-contained HTML that has no business in a per-file
-      // merge. So the other device shows the rehearsal and its history with no
-      // deck to give until one is imported there too. The .bad copy a failed
-      // parse leaves beside the runs is deliberately not matched.
+      // A rehearsal and the index of its passes (docs/43): the deck the reader
+      // gives over and over, and one row per time they gave it. A trace, not a
+      // derivation — no deck and no book rebuilds it. The transcripts are one
+      // file each under runs/ (below). The deck itself stays out: a built one is
+      // slides/**, and an imported one is rehearsals/**, tens of megabytes of
+      // self-contained HTML that has no business in a per-file merge. So the
+      // other device shows the rehearsal and its history with no deck to give
+      // until one is imported there too. The .bad copy a failed parse leaves
+      // beside the index is deliberately not matched.
       /^rehearsal-.+\.json$/.test(top) ||
       /^runs-rehearsal-.+\.json$/.test(top) ||
       // The two files devices leave for each other (docs/36). One per device and
@@ -124,6 +125,16 @@ export function inSyncRange(path: string): boolean {
   // nothing to read. Cold once uploaded — the name changes with the content, so
   // a file is written once and never revised.
   if (top === "article-bodies") return parts.length === 2 && isArticleBodyFile(parts[1]);
+  // What the reader said on each page of one pass over a deck (docs/43), under
+  // runs/<rehearsalId>/<runId>.json: one immutable file per pass, written when
+  // the pass ends and never revised. In range for the same reason the index is —
+  // nothing rebuilds what the reader said — and out of the index so that
+  // recording the tenth pass does not re-upload the first nine. Both levels are
+  // plain names or nothing: the run id comes off an index that arrives over
+  // sync, which is what makes it a path built from external data.
+  if (top === "runs") {
+    return parts.length === 3 && isIdSegment(parts[1]) && isRunPagesFile(parts[2]);
+  }
   // Per-topic AI observations: every file under memory-<topicId>/ (entries,
   // index, meta). "memory-" is the historical directory name and is deliberately
   // unchanged: the feature was renamed on 2026-08-06, the directories on disk and
@@ -160,12 +171,31 @@ function isArticleBodyFile(name: string): boolean {
   return ARTICLE_BODY_NAME.test(name);
 }
 
+// The only shape a rehearsal id or a run id may have inside runs/
+// (reading/rehearsal/store.ts, which spells out the same rule for the writer).
+// Restated here rather than imported so this module keeps depending on nothing
+// but platform/app, and narrow on purpose: both ids come off a synced index, and
+// a name that is not a plain one never becomes a path.
+const ID_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+
+function isIdSegment(name: string): boolean {
+  return ID_SEGMENT.test(name);
+}
+
+function isRunPagesFile(name: string): boolean {
+  return name.endsWith(".json") && isIdSegment(name.slice(0, -".json".length));
+}
+
 // Whether a directory can hold an in-range file, so the walk descends into it.
 // Spelled out rather than left at "anything under prep-", which would open every
 // prep-<hash>/pdf/ to a readDir that can only ever return files inSyncRange
 // rejects. "memory-" is the observation directories' historical name; see above.
 function worthDescending(rel: string): boolean {
   if (rel === "article-bodies") return true;
+  // runs/ holds one directory per rehearsal and nothing else, so the walk goes
+  // exactly two levels and no further.
+  if (rel === "runs") return true;
+  if (rel.startsWith("runs/")) return rel.split("/").length === 2;
   if (rel.startsWith("memory-")) return true;
   if (!rel.startsWith("prep-")) return false;
   const parts = rel.split("/");

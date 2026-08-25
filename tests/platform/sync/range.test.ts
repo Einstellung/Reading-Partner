@@ -30,11 +30,12 @@ test("core user-data files are in range", () => {
     // a thread file keyed by the retell.
     "retell-1754400000000.json",
     "threads-retell-1754400000000.json",
-    // A rehearsal (docs/43) and every pass over its deck: the pages and what was
-    // said to them. A trace of the reader, so both travel; the deck they were
-    // given against does not.
+    // A rehearsal (docs/43), the index of every pass over its deck, and one
+    // transcript file per pass. A trace of the reader, so all three travel; the
+    // deck they were given against does not.
     "rehearsal-1754400000000.json",
     "runs-rehearsal-1754400000000.json",
+    "runs/1754400000000/8f1c0a52-3b7d-4c1e-9a2f-0d5e6b7c8a90.json",
     // The cross-scenario user profile and the info feedback log are the user's
     // data (docs/16); info-profile.md is the profile's old name, kept in range
     // through the transition.
@@ -93,6 +94,13 @@ test("caches, logs, sync internals, and book blobs are out of range", () => {
     // The rescue copy a run log that would not parse is moved to. It is there
     // for a person to look at, not to be pushed at the other device.
     "runs-rehearsal-1754400000000.json.bad",
+    // Both names under runs/ are what became a path out of a synced log, so both
+    // are a plain name or nothing, and the depth is exactly two.
+    "runs/1754400000000/../../secrets.json",
+    "runs/../../secrets.json",
+    "runs/1754400000000/notes.md",
+    "runs/1754400000000/sub/8f1c0a52.json",
+    "runs/1754400000000.json",
     // A deck brought in from outside: tens of megabytes of self-contained HTML,
     // imported on the device it is rehearsed on (src/reading/rehearsal/store.ts).
     "rehearsals/1754400000000.html",

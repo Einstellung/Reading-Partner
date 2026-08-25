@@ -11,10 +11,15 @@ import { useState } from "react";
 import { Button } from "../ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 import { IconChevronDown, IconChevronUp } from "../base/icons";
-import { runSummary, type RehearsalRun } from "../../../reading/rehearsal";
+import {
+  runSummary,
+  type RehearsalPage,
+  type RehearsalRunEntry,
+} from "../../../reading/rehearsal";
 import { formatElapsed, formatRunDate } from "./rehearsal";
+import { useRunPages } from "./useRehearsal";
 
-function PageRow({ page }: { page: RehearsalRun["pages"][number] }) {
+function PageRow({ page }: { page: RehearsalPage }) {
   const spent = page.leftAt === null ? null : page.leftAt - page.enteredAt;
   return (
     <li className="flex flex-col gap-0.5 border-t border-border py-1.5 first:border-t-0">
@@ -38,7 +43,25 @@ function PageRow({ page }: { page: RehearsalRun["pages"][number] }) {
   );
 }
 
-function RunRow({ run }: { run: RehearsalRun }) {
+// The transcript is read when the row is opened and not before: it is the one
+// part of a pass that is measured in tens of KB, and it lives in a file of its
+// own for exactly that reason (reading/rehearsal/store.ts).
+function RunPages({ run }: { run: RehearsalRunEntry }) {
+  const pages = useRunPages(run);
+  return (
+    <ul className="m-0 list-none px-2 pb-2 pl-2">
+      {pages === null ? (
+        <li className="py-1.5 text-[11px] text-muted-foreground">Reading…</li>
+      ) : pages.length === 0 ? (
+        <li className="py-1.5 text-[11px] text-muted-foreground">No pages were recorded.</li>
+      ) : (
+        pages.map((p, i) => <PageRow key={`${p.index}-${i}`} page={p} />)
+      )}
+    </ul>
+  );
+}
+
+function RunRow({ run }: { run: RehearsalRunEntry }) {
   const [open, setOpen] = useState(false);
   const s = runSummary(run);
   return (
@@ -65,20 +88,14 @@ function RunRow({ run }: { run: RehearsalRun }) {
       </CollapsibleTrigger>
       {open && (
         <CollapsibleContent>
-          <ul className="m-0 list-none px-2 pb-2 pl-2">
-            {run.pages.length === 0 ? (
-              <li className="py-1.5 text-[11px] text-muted-foreground">No pages were recorded.</li>
-            ) : (
-              run.pages.map((p, i) => <PageRow key={`${p.index}-${i}`} page={p} />)
-            )}
-          </ul>
+          <RunPages run={run} />
         </CollapsibleContent>
       )}
     </Collapsible>
   );
 }
 
-export default function RehearsalList({ runs }: { runs: RehearsalRun[] }) {
+export default function RehearsalList({ runs }: { runs: RehearsalRunEntry[] }) {
   const [open, setOpen] = useState(false);
   return (
     <Collapsible
@@ -109,8 +126,8 @@ export default function RehearsalList({ runs }: { runs: RehearsalRun[] }) {
         </Button>
       </CollapsibleTrigger>
       {/* Mounted only while it is open: a closed Collapsible still renders its
-          content for the height animation, and this one holds every page of every
-          pass. */}
+          content for the height animation, and every row inside this one would
+          then go and read its pass's transcript off disk. */}
       {open && (
         <CollapsibleContent>
           <div className="max-h-[40vh] overflow-y-auto px-3 pb-3">

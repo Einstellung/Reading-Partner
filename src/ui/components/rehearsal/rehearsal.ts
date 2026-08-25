@@ -11,8 +11,8 @@
 
 import {
   buildRun,
+  type BuiltRun,
   type RehearsalEvent,
-  type RehearsalRun,
   type TranscriptSource,
 } from "../../../reading/rehearsal";
 
@@ -163,7 +163,7 @@ export interface FinishRunInput {
   // array: the last page's words arrive during that wait, through the callback
   // the caller gave start().
   events(): readonly RehearsalEvent[];
-  save(run: RehearsalRun): Promise<unknown>;
+  save(run: BuiltRun): Promise<unknown>;
 }
 
 // End a rehearsal: close the speech, build the run out of everything that

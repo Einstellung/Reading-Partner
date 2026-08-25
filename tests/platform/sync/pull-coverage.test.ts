@@ -56,6 +56,9 @@ const NO_IN_MEMORY_STATE: Record<string, string> = {
   "retell-": "a retell is read from disk when it is opened",
   "rehearsal-": "a rehearsal is read from disk when the topic's list is drawn",
   "runs-rehearsal-": "a rehearsal's runs are read with the rehearsal, when it is opened",
+  "runs/":
+    "what was said on one pass is read when that pass's row is opened, and the file is " +
+    "written once under the run's own id, so a pull can add one but never change the one on screen",
   "memory-": "the observation store reads its entries per query",
   "article-bodies/":
     "a kept article's body is read when the article is opened, and the file is named " +
@@ -87,6 +90,7 @@ function sampleForRegex(literal: string): string {
 // the prefix cannot say, so it is said here.
 const DIRECTORY_SAMPLES: Record<string, string[]> = {
   "article-bodies": ["article-bodies/0123456789abcdef0123456789abcdef.json"],
+  runs: ["runs/1754400000000/8f1c0a52-3b7d-4c1e-9a2f-0d5e6b7c8a90.json"],
   "memory-": ["memory-topic1/entries.jsonl", "memory-topic1/index.json"],
   "prep-": [
     "prep-book1/state.json",
@@ -129,10 +133,10 @@ test("the samples this test is built from are all in sync range", () => {
   for (const file of ROOT_FILES) expect(inSyncRange(file)).toBe(true);
 
   const patterns = perKeySamples();
-  // Seven filename patterns and three directories, as of this writing; the
+  // Seven filename patterns and four directories, as of this writing; the
   // count is asserted so a pattern that stops being found by the scan is
   // noticed rather than quietly dropping its files from the check.
-  expect(patterns.length).toBe(10);
+  expect(patterns.length).toBe(11);
   for (const { pattern, paths } of patterns) {
     for (const path of paths) {
       expect(`${pattern} -> ${path}: ${inSyncRange(path)}`).toBe(`${pattern} -> ${path}: true`);

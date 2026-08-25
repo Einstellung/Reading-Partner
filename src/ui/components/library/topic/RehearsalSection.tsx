@@ -64,8 +64,9 @@ export default function RehearsalSection(props: {
       const file = built.get(t.id);
       if (file) decked.push({ retellId: t.id, name: t.name, deckFile: file });
     }
-    // One read per rehearsal. The runs are a file of their own precisely so this
-    // list does not have to hold every word ever said to draw a count.
+    // One read per rehearsal, of the index alone: what a pass said is a file of
+    // its own (reading/rehearsal/store.ts), so a count here costs a few hundred
+    // bytes a pass however long the talk was.
     //
     // A runs file that will not open costs its own count and nothing else: this
     // list never writes a run, and the rest of the section — every other deck

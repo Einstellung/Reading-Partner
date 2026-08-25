@@ -1,8 +1,14 @@
 // What a rehearsal looks like from outside: one row per run, and the pages it
 // went past without a word. Pure, so a list can be drawn from a log without
-// re-reading anything.
+// re-reading anything — which is now literal, since the transcripts are files of
+// their own (store.ts) and a row must be drawable without opening one.
+//
+// So the counting happens twice over: runEntryOf does it once, when the run is
+// written, and runSummary reads what it left. The second path is for an entry
+// that still carries its pages — one written before the split, or synced from a
+// device still on that build.
 
-import type { RehearsalPage, RehearsalRun } from "./types";
+import type { BuiltRun, RehearsalPage, RehearsalRunEntry } from "./types";
 
 export interface RunSummary {
   ordinal: number;
@@ -19,7 +25,7 @@ export interface RunSummary {
 // A run cut short — the app was closed, the process died — has no endedAt. The
 // last thing that happened is still on the pages, so the length is measured to
 // there rather than reported as zero.
-function lastMoment(run: RehearsalRun): number {
+function lastMoment(run: { startedAt: number; endedAt: number | null; pages: RehearsalPage[] }) {
   if (run.endedAt !== null) return run.endedAt;
   let last = run.startedAt;
   for (const p of run.pages) {
@@ -28,22 +34,62 @@ function lastMoment(run: RehearsalRun): number {
   return last;
 }
 
-export function runSummary(run: RehearsalRun): RunSummary {
+// The log entry for a run that has just been built: the times and the counts,
+// with the pages left out because they are about to become a file of their own.
+export function runEntryOf(run: BuiltRun): RehearsalRunEntry {
+  const counts = countPages(run.pages);
+  return {
+    id: run.id,
+    ordinal: run.ordinal,
+    rehearsalId: run.rehearsalId,
+    deckFile: run.deckFile,
+    startedAt: run.startedAt,
+    endedAt: run.endedAt,
+    lastMomentAt: lastMoment(run),
+    pagesTotal: run.pages.length,
+    pagesSpoken: counts.pagesSpoken,
+    wordsSpoken: counts.wordsSpoken,
+  };
+}
+
+function countPages(pages: readonly RehearsalPage[]): { pagesSpoken: number; wordsSpoken: number } {
   let pagesSpoken = 0;
   let wordsSpoken = 0;
-  for (const page of run.pages) {
+  for (const page of pages) {
     if (!spoken(page)) continue;
     pagesSpoken++;
     wordsSpoken += countWords(page.transcript);
   }
+  return { pagesSpoken, wordsSpoken };
+}
+
+export function runSummary(entry: RehearsalRunEntry): RunSummary {
+  // An entry that still carries its pages predates the split, and its counts
+  // were never written down. Counting them here rather than repairing the file
+  // keeps a list draw free of writes; the split (store.ts) is what settles it.
+  if (entry.pages) {
+    const counts = countPages(entry.pages);
+    return {
+      ordinal: entry.ordinal,
+      startedAt: entry.startedAt,
+      minutes: minutes(entry.startedAt, lastMoment({ ...entry, pages: entry.pages })),
+      pagesTotal: entry.pages.length,
+      pagesSpoken: counts.pagesSpoken,
+      wordsSpoken: counts.wordsSpoken,
+    };
+  }
   return {
-    ordinal: run.ordinal,
-    startedAt: run.startedAt,
-    minutes: Math.max(0, Math.round((lastMoment(run) - run.startedAt) / 60_000)),
-    pagesTotal: run.pages.length,
-    pagesSpoken,
-    wordsSpoken,
+    ordinal: entry.ordinal,
+    startedAt: entry.startedAt,
+    minutes: minutes(entry.startedAt, entry.lastMomentAt),
+    pagesTotal: entry.pagesTotal,
+    pagesSpoken: entry.pagesSpoken,
+    wordsSpoken: entry.wordsSpoken,
   };
+}
+
+function minutes(startedAt: number, lastAt: number): number {
+  return Math.max(0, Math.round((lastAt - startedAt) / 60_000));
 }
 
 function spoken(page: RehearsalPage): boolean {
