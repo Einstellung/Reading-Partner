@@ -42,8 +42,10 @@ export default function RehearsalSection(props: {
   // read again at the one moment they change.
   reloadKey: number;
   onStart: (rehearsal: Rehearsal) => void;
+  // Open the talk's conversation without giving a pass first.
+  onTalk: (outlineId: string) => void;
 }) {
-  const { topic, reloadKey, onStart } = props;
+  const { topic, reloadKey, onStart, onTalk } = props;
   // null while loading; [] when this topic has nothing to rehearse.
   const [rows, setRows] = useState<RehearsalRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -176,6 +178,17 @@ export default function RehearsalSection(props: {
                   <span className="truncate text-[15px]">{row.name}</span>
                   <span className="text-xs text-muted-foreground">{rehearsalSummary(row)}</span>
                 </button>
+                {/* The way back into the talk's conversation without giving a
+                    pass first (docs/44): it spans every pass over this talk, so
+                    a reply left unread after the last one is still there. */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => onTalk(row.outlineId)}
+                >
+                  How it went
+                </Button>
                 <Button variant="outline" size="sm" disabled={busy} onClick={() => void start(row)}>
                   Rehearse
                 </Button>

@@ -48,6 +48,7 @@ import {
   segmentTitle,
   withSegmentEvent,
 } from "./outline-run";
+import { handOffPass } from "./coach-thread";
 import { finishRun, formatElapsed, positionLabel, utteranceEvent } from "./rehearsal";
 
 export interface RehearsalViewProps {
@@ -69,10 +70,12 @@ export interface RehearsalViewProps {
   // which is a run and not a failure.
   transcript?: TranscriptSource;
   onExit(): void;
-  // The run is on disk. Later than onExit — a source still uploading holds the
-  // run back by seconds — and only when there was a run to write, so the caller
-  // reads the file at the one moment it has changed.
-  onSaved(): void;
+  // The pass has been dealt with: written to disk and handed to the talk's
+  // conversation, or found to be nothing worth writing. Later than onExit — a
+  // source still uploading holds it back by seconds — and `recorded` says which
+  // of the two it was, so the caller both re-reads the history at the one moment
+  // it changed and stops waiting when there was never anything to wait for.
+  onSaved(recorded: boolean): void;
 }
 
 // A formula, through the renderer the rest of the app already reads maths with
@@ -338,9 +341,14 @@ export default function RehearsalView({
       source: transcriptRef.current,
       events: () => eventsRef.current,
       save: appendRun,
+      // Stopping is handing it in (docs/44): the pass goes into the talk's
+      // conversation as the reader's own message, and the coach answers it there
+      // rather than here. After the write and never instead of it — finishRun
+      // keeps that order.
+      handoff: (run, entry) => handOffPass({ outline, entry, pages: run.pages }),
     });
-    if (saved) onSavedRef.current();
-  }, [rehearsal.id]);
+    onSavedRef.current(saved);
+  }, [rehearsal.id, outline]);
 
   // Unmounting is an exit like any other (a topic switch, a book opened from
   // elsewhere), so the save hangs off the cleanup rather than off the buttons.

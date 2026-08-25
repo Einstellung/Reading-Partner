@@ -103,3 +103,14 @@ export function formatPlan(
   );
   return lines.join("\n");
 }
+
+// The signal that the retell is over and the arrangement begins: every chapter
+// has a decision (docs/44 — the arrangement is the last exchange of the retell,
+// not a fourth feature). A skeleton with no chapters is not "all settled", it is
+// a retell that has not started.
+export function isArranging(
+  chapters: readonly RetellChapter[],
+  plan: RetellPlan | null,
+): boolean {
+  return chapters.length > 0 && nextChapter(chapters, plan) === null;
+}

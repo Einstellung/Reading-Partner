@@ -1,9 +1,24 @@
 // A rehearsal (docs/44): a talk the reader gives out loud, again and again,
 // against an outline (reading/talk), and the record of every pass — which
 // segment was up when, and what was said to it. An object of the topic, level
-// with a retell. Recording only — no feedback, no AI, no UI.
+// with a retell.
+//
+// A pass is handed in whole and then the coach speaks (docs/44), so this
+// directory holds both halves: the recording, and the conversation that reads a
+// recording back (coach.ts, coach-turn.ts, handoff.ts). No UI.
 
 export { buildRun, type BuildRunInput } from "./build";
+export { buildCoachSystemPrompt, COACH_INSTRUCTIONS, type CoachContext } from "./coach";
+export {
+  buildCoachTurn,
+  COACH_LADDER,
+  type CoachReductionId,
+  type CoachTalkAccess,
+  type CoachTurn,
+  type CoachTurnInput,
+  type CoachTurnMessage,
+} from "./coach-turn";
+export { passMessage, type PassHandoff } from "./handoff";
 export { createDesktopTranscriptSource } from "./desktop-source";
 export {
   closingTail,

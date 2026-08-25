@@ -1,44 +1,21 @@
-// The arrangement tools (src/reading/retell/arrange.ts): when the stage opens,
-// what each tool writes to the talk outline, what it raises in the conversation,
-// and the two things that would quietly corrupt a talk — a positional segment id
-// and a freshly drafted segment recorded as ready.
+// The tools that write a talk outline (src/reading/talk/tools.ts): what each one
+// writes, what it raises in the conversation, and the two things that would
+// quietly corrupt a talk — a positional segment id and a freshly drafted segment
+// recorded as ready.
 // Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
   buildArrangeTools,
   formatTalkOutline,
-  isArranging,
   materialLabel,
   segmentStatusLabel,
   toTalkMaterial,
-} from "../../../src/reading/retell/arrange";
-import type { TalkArrangementCardData } from "../../../src/reading/retell/cards";
-import { PLAN_VERSION } from "../../../src/reading/retell/types";
-import type { RetellChapter, RetellPlan } from "../../../src/reading/retell/types";
+} from "../../../src/reading/talk/tools";
+import type { TalkArrangementCardData } from "../../../src/reading/talk/cards";
 import { newTalkOutline, type TalkOutline } from "../../../src/reading/talk/types";
 
 const last = (cards: TalkArrangementCardData[]) => cards[cards.length - 1];
-
-const chapters: RetellChapter[] = [
-  { index: 1, title: "Openings", startPage: 1, endPage: 10, hasNote: true },
-  { index: 2, title: "Middlegame", startPage: 11, endPage: 20, hasNote: false },
-];
-
-function plan(...settled: number[]): RetellPlan {
-  return {
-    version: PLAN_VERSION,
-    createdAt: 1,
-    updatedAt: 1,
-    decisions: settled.map((chapter) => ({
-      chapter,
-      title: `Chapter ${chapter}`,
-      include: true,
-      points: [],
-      updatedAt: 1,
-    })),
-  };
-}
 
 function harness() {
   let outline: TalkOutline | null = null;
@@ -64,14 +41,6 @@ function harness() {
     byName: (name: string) => tools.find((t) => t.name === name)!,
   };
 }
-
-test("the arrangement opens only when every chapter has a decision", () => {
-  expect(isArranging(chapters, null)).toBe(false);
-  expect(isArranging(chapters, plan(1))).toBe(false);
-  expect(isArranging(chapters, plan(1, 2))).toBe(true);
-  // Not "all settled" — a retell that has not started.
-  expect(isArranging([], null)).toBe(false);
-});
 
 test("the spine writes only the fields it was sent", async () => {
   const h = harness();

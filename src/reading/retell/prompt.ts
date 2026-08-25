@@ -20,8 +20,7 @@
 // where a chapter's first question comes from — rather than collected into a
 // section about observations, which would sit too far from the move it governs.
 
-import type { TalkOutline } from "../talk";
-import { formatTalkOutline } from "./arrange";
+import { formatTalkOutline, type TalkOutline } from "../talk";
 import { formatMarks } from "./marks";
 import { formatPlan } from "./plan";
 import { formatSkeleton } from "./skeleton";
