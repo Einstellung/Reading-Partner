@@ -3,6 +3,7 @@
 // given against one, and it belongs to neither of them — which is why it is a
 // directory of its own that imports neither.
 
+export type { TalkArrangementCardData } from "./cards";
 export {
   moveSegment,
   newSegmentId,
@@ -43,3 +44,12 @@ export {
   type TalkSegment,
   type TalkSpine,
 } from "./types";
+export {
+  buildArrangeTools,
+  formatTalkOutline,
+  materialLabel,
+  segmentCard,
+  segmentStatusLabel,
+  toTalkMaterial,
+  type ArrangeToolDeps,
+} from "./tools";

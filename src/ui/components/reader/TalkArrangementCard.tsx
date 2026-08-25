@@ -4,11 +4,11 @@
 //
 // Read-only, like the decision card next to it. The talk is corrected by saying
 // so to the AI, which rewrites the segment and raises a fresh card.
-// Presentational, Tailwind-only; the labels come from reading/retell/arrange.ts
+// Presentational, Tailwind-only; the labels come from reading/talk/tools.ts
 // so the model's read-back and this card call a status the same thing.
 
 import type { ReactNode } from "react";
-import { materialLabel, segmentStatusLabel } from "../../../reading/retell/arrange";
+import { materialLabel, segmentStatusLabel } from "../../../reading/talk";
 import type { TalkArrangementCardData } from "../../../reading/retell/cards";
 import type { CardComponentProps } from "../chat/chatParts";
 import { Badge } from "../ui/badge";

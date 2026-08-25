@@ -4,7 +4,13 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { formatOutline, formatPlan, nextChapter } from "../../../src/reading/retell/plan";
+import {
+  formatOutline,
+  formatPlan,
+  isArranging,
+  nextChapter,
+} from "../../../src/reading/retell/plan";
+import { PLAN_VERSION } from "../../../src/reading/retell/types";
 import type {
   RetellChapter,
   PlanDecision,
@@ -135,4 +141,21 @@ test("formatOutline keeps the order the retell holds", () => {
     plan(decision({ chapter: 3, title: "Endings" }), decision({ chapter: 1 })),
   );
   expect(text.indexOf("3. Endings")).toBeLessThan(text.indexOf("1. Openings"));
+});
+
+// docs/44: the arrangement is the last exchange of the retell, and it opens when
+// every chapter has been settled.
+test("the arrangement opens only when every chapter has a decision", () => {
+  const two = chapters.slice(0, 2);
+  const settled = (...only: number[]): RetellPlan => ({
+    version: PLAN_VERSION,
+    createdAt: 1,
+    updatedAt: 1,
+    decisions: only.map((chapter) => decision({ chapter, title: `Chapter ${chapter}` })),
+  });
+  expect(isArranging(two, null)).toBe(false);
+  expect(isArranging(two, settled(1))).toBe(false);
+  expect(isArranging(two, settled(1, 2))).toBe(true);
+  // Not "all settled" — a retell that has not started.
+  expect(isArranging([], null)).toBe(false);
 });

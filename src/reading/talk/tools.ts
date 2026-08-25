@@ -1,48 +1,32 @@
-// The last stretch of a retell: turning the chapter decisions into a talk
-// (docs/44). The retell settled what each chapter contributes; a talk is given
-// in segments, and segments are not chapters — an opening belongs to none, one
-// chapter can break into six, two can fuse into one. The arrangement is the
-// conversation that crosses that gap, and these are the tools it writes with.
+// How an AI writes to a talk outline (docs/44): five tools over edit.ts, and
+// the readback the prompt inlines.
 //
-// They sit here rather than in reading/talk because arranging is something the
-// retell does. reading/talk owns the object and the edits; this file owns the
-// stage of the conversation that applies them, which is why the edit functions
-// come from there and only the tool wrapping is new.
+// They sit here because there are two conversations that write a talk and
+// neither owns the other. The retell arranges one at its last stretch, turning
+// the chapter decisions into segments; the coach edits the same outline after a
+// pass has been given against it (reading/rehearsal/coach.ts), because what
+// comes out of a rehearsal is a change to the talk rather than a review of it.
+// Each of those two owns its own stretch of prompt — ARRANGE_INSTRUCTIONS in
+// reading/retell/prompt.ts, COACH_INSTRUCTIONS in reading/rehearsal/coach.ts —
+// and shares the writing.
 //
-// Same posture as record_chapter_decision (tools.ts): the write does not ask,
-// because a confirm gate on every segment would make the arrangement a form; but
-// each write is bounded to one segment or one spine, and the card says exactly
-// what landed. What must be discussed first is the arrangement itself, and that
-// is the prompt's job (ARRANGE_INSTRUCTIONS in prompt.ts), not a gate here.
+// Same posture as record_chapter_decision (reading/retell/tools.ts): the write
+// does not ask, because a confirm gate on every segment would make the
+// arrangement a form; but each write is bounded to one segment or one spine, and
+// the card says exactly what landed. What must be discussed first is the change
+// itself, and that is the prompt's job, not a gate here.
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../ai/agent";
-import {
-  moveSegment,
-  putSegment,
-  removeSegment,
-  setSpine,
-  type SegmentEdit,
-  type SegmentStatus,
-  type TalkMaterial,
-  type TalkOutline,
-  type TalkSegment,
-  type TalkSpine,
-} from "../talk";
+import { moveSegment, putSegment, removeSegment, setSpine, type SegmentEdit } from "./edit";
 import type { TalkArrangementCardData } from "./cards";
-import { nextChapter } from "./plan";
-import type { RetellChapter, RetellPlan } from "./types";
-
-// The signal that the retell is over and the arrangement begins: every chapter
-// has a decision (docs/44 — the arrangement is the last exchange of the retell,
-// not a fourth feature). A skeleton with no chapters is not "all settled", it is
-// a retell that has not started.
-export function isArranging(
-  chapters: readonly RetellChapter[],
-  plan: RetellPlan | null,
-): boolean {
-  return chapters.length > 0 && nextChapter(chapters, plan) === null;
-}
+import type {
+  SegmentStatus,
+  TalkMaterial,
+  TalkOutline,
+  TalkSegment,
+  TalkSpine,
+} from "./types";
 
 const STATUS_LABEL: Record<SegmentStatus, string> = {
   ready: "Ready",
