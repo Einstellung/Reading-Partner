@@ -107,7 +107,10 @@ test("the passes through the retell are counted at the foot", () => {
     deckFile: "slides/t1-x.html",
     startedAt: Date.now(),
     endedAt: null,
-    pages: [],
+    lastMomentAt: Date.now(),
+    pagesTotal: 0,
+    pagesSpoken: 0,
+    wordsSpoken: 0,
   };
   const withRuns = renderToStaticMarkup(
     <OutlinePane

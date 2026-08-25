@@ -61,6 +61,16 @@ test("the files the app writes are classified by what they hold", () => {
   // is nothing to merge. Named to land here rather than in "prose" (a .md tail)
   // or "records" (an entry in the set above), which is what the check is for.
   expect(strategyFor("article-bodies/0123456789abcdef0123456789abcdef.json")).toBe("opaque");
+  // A rehearsal's passes (docs/43). The index is rows with ids, so two devices
+  // that each gave the deck a turn keep both passes; one pass's transcript is
+  // written once under that pass's id and has nothing to merge. The transcript
+  // is classified by its directory, which is what keeps a run that happened to
+  // be called "state" out of the fields strategy.
+  expect(strategyFor("runs-rehearsal-1754400000000.json")).toBe("records");
+  expect(strategyFor("runs/1754400000000/8f1c0a52-3b7d-4c1e-9a2f-0d5e6b7c8a90.json")).toBe(
+    "opaque",
+  );
+  expect(strategyFor("runs/1754400000000/state.json")).toBe("opaque");
   expect(strategyFor("notes-abc/state.json")).toBe("fields");
   expect(strategyFor("prep-abc/state.json")).toBe("fields");
   expect(strategyFor("notes-abc/chapter-01.md")).toBe("prose");
@@ -94,6 +104,39 @@ test("an annotation both sides edited is settled by content and reported", () =>
   const kept = JSON.parse(text(out.merged)) as { note: string }[];
   const lost = out.dropped[0].record as { note: string };
   expect([kept[0].note, lost.note].sort()).toEqual(["from the desk", "from the iPad"]);
+});
+
+// A pass is a thing that happened, and two devices can each have one to report.
+// Under opaque one of them would go into a conflict copy nobody opens; as
+// records both survive, and the wrapper keys the log carries come through.
+test("two devices that each recorded a pass keep both of them", () => {
+  const row = (id: string, ordinal: number) => ({
+    id,
+    ordinal,
+    rehearsalId: "1754400000000",
+    deckFile: "slides/x.html",
+    startedAt: ordinal * 1000,
+    endedAt: ordinal * 1000 + 600_000,
+    lastMomentAt: ordinal * 1000 + 600_000,
+    pagesTotal: 12,
+    pagesSpoken: 11,
+    wordsSpoken: 3400,
+  });
+  const log = (...runs: object[]) =>
+    json({ version: 1, rehearsalId: "1754400000000", runs });
+  const out = merge(
+    "runs-rehearsal-1754400000000.json",
+    log(row("a", 1)),
+    log(row("a", 1), row("desk", 2)),
+    log(row("a", 1), row("ipad", 2)),
+  );
+  const merged = JSON.parse(text(out.merged)) as { version: number; runs: { id: string }[] };
+  // Which of the two comes first is settled by content, so both devices agree on
+  // it; the reader sorts by when the pass started (reading/rehearsal/types.ts).
+  expect(merged.runs.map((r) => r.id).sort()).toEqual(["a", "desk", "ipad"]);
+  expect(merged.version).toBe(1);
+  expect(out.copies).toEqual([]);
+  expect(out.dropped).toEqual([]);
 });
 
 test("a record one side deleted and the other left alone is dropped", () => {

@@ -21,6 +21,7 @@ import {
 //   saved-articles.json        array of SavedArticle, `id`     (reading/saved-articles.ts)
 //   topics.json                { topics: Topic[] }, `id`       (platform/app/topics.ts)
 //   threads-<key>.json         { threads: Record<id, Thread> } (platform/app/threads.ts)
+//   runs-rehearsal-<id>.json   { runs: RehearsalRunEntry[] }, `id` (reading/rehearsal/store.ts)
 //   library.json               { books: Record<hash, Entry> }  (platform/app/library.ts)
 //   reading-state.json         { states: Record<bookId, ViewState> } (platform/app/storage.ts)
 //   info-feedback.jsonl        one JSON object per line        (observation/profile/feedback.ts)
@@ -49,6 +50,13 @@ export function recordShape(path: string): RecordShape | null {
   if (name === "info-pool-marks.json") return { kind: "map", container: "marks", idField: null };
   if (/^annotations-.+\.json$/.test(name)) return { kind: "array", container: null, idField: "id" };
   if (/^threads-.+\.json$/.test(name)) return { kind: "map", container: "threads", idField: null };
+  // A rehearsal's passes, one row each, keyed by the run id the device that
+  // recorded the pass minted (reading/rehearsal/store.ts). `version` and
+  // `rehearsalId` sit beside `runs` as wrapper keys and readCollection keeps
+  // them.
+  if (/^runs-rehearsal-.+\.json$/.test(name)) {
+    return { kind: "array", container: "runs", idField: "id" };
+  }
   return null;
 }
 

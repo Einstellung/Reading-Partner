@@ -15,7 +15,7 @@
 //     source that reports an utterance a moment late does not shuffle the
 //     transcript into the wrong page.
 
-import type { RehearsalEvent, RehearsalPage, RehearsalRun } from "./types";
+import type { BuiltRun, RehearsalEvent, RehearsalPage } from "./types";
 
 export interface BuildRunInput {
   id: string;
@@ -55,7 +55,7 @@ function appendSaid(transcript: string, text: string): string {
   return transcript ? `${transcript}\n${said}` : said;
 }
 
-export function buildRun(input: BuildRunInput): RehearsalRun {
+export function buildRun(input: BuildRunInput): BuiltRun {
   const pages = new Map<number, RehearsalPage>();
   let current: RehearsalPage | null = null;
   let endedAt: number | null = null;

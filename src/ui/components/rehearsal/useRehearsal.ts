@@ -12,9 +12,11 @@ import { listDecks } from "../../../reading/slides";
 import {
   listAllRehearsals,
   loadRehearsalRuns,
+  loadRunPages,
   readRehearsalDeck,
   type Rehearsal,
-  type RehearsalRun,
+  type RehearsalPage,
+  type RehearsalRunEntry,
 } from "../../../reading/rehearsal";
 
 // The deck registered for this retell, or null when it has none yet. `reloadKey`
@@ -99,8 +101,12 @@ export function useDeckHtml(file: string | null): { html: string | null; error: 
   return { html, error };
 }
 
-// This rehearsal's runs, newest first. `reloadKey` is bumped by the caller
-// when a run ends, which is the only moment this device changes the list.
+// This rehearsal's passes, newest first — the rows only. The transcripts are a
+// file each and are read when a row is opened (useRunPages below), which is what
+// keeps drawing the strip to one read however many passes there have been.
+//
+// `reloadKey` is bumped by the caller when a run ends, which is the only moment
+// this device changes the list.
 //
 // A sync pull changes it too — another device's pass over the same deck — and
 // this hook deliberately does not hear about it. The list is read when the
@@ -109,8 +115,11 @@ export function useDeckHtml(file: string | null): { html: string | null; error: 
 // the two go stale together and reopening picks both up. Routing the pull here
 // alone would refresh the history under a view still showing the copy it was
 // opened with.
-export function useRehearsalRuns(rehearsalId: string | null, reloadKey: number): RehearsalRun[] {
-  const [runs, setRuns] = useState<RehearsalRun[]>([]);
+export function useRehearsalRuns(
+  rehearsalId: string | null,
+  reloadKey: number,
+): RehearsalRunEntry[] {
+  const [runs, setRuns] = useState<RehearsalRunEntry[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -131,4 +140,37 @@ export function useRehearsalRuns(rehearsalId: string | null, reloadKey: number):
   }, [rehearsalId, reloadKey]);
 
   return runs;
+}
+
+// What was said on each page of one pass. Read when the row is opened, and only
+// then: it is the one thing about a pass that is measured in tens of KB, and a
+// history of ten passes is read shut.
+//
+// Null means it is still being read, which the row shows as such. `[]` is a real
+// answer — a pass with nothing said on any page, and a pass whose transcript did
+// not survive (store.ts says why that is not an error).
+export function useRunPages(entry: RehearsalRunEntry | null): RehearsalPage[] | null {
+  const [pages, setPages] = useState<RehearsalPage[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!entry) {
+      setPages(null);
+      return;
+    }
+    setPages(null);
+    void loadRunPages(entry)
+      .then((read) => {
+        if (!cancelled) setPages(read);
+      })
+      .catch((e: unknown) => {
+        console.warn("failed to read the transcript", entry.id, e);
+        if (!cancelled) setPages([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [entry]);
+
+  return pages;
 }

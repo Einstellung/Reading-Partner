@@ -13,6 +13,7 @@ import { appData } from "./platform/app/appdata";
 import { hashPath } from "./platform/app/storage";
 import { importBook, repairLibraryNames } from "./platform/app/library";
 import { migrateBookLive } from "./platform/app/migrate";
+import { splitRehearsalRunPagesOnce } from "./reading/rehearsal";
 import { splitSavedArticleBodiesOnce } from "./reading/saved-articles";
 import { documentShape, type Fulltext } from "./fulltext";
 import Sidebar, { type SidebarTab } from "./ui/components/reader/Sidebar";
@@ -391,6 +392,13 @@ export default function App() {
       // reads either shape.
       void splitSavedArticleBodiesOnce().catch((e) =>
         console.warn("saved-article body split skipped", e),
+      );
+      // What the reader said on each pass over a deck moved out of the
+      // rehearsal's log into a file per pass (docs/43). Independent of both, and
+      // not awaited: everything that reads a rehearsal reads either shape, so
+      // nothing below is waiting on it. Writes nothing once it has run.
+      void splitRehearsalRunPagesOnce().catch((e) =>
+        console.warn("rehearsal transcript split skipped", e),
       );
       // Names an iOS import left percent-encoded (docs/pitfall/106). Runs first
       // so the backfill below reads the repaired paths, and writes nothing when

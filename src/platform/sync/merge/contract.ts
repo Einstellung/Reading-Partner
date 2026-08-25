@@ -74,12 +74,26 @@ const RECORD_FILES = new Set([
 ]);
 
 export function strategyFor(path: string): MergeStrategy {
+  // What the reader said on one pass over a deck (docs/43),
+  // runs/<rehearsalId>/<runId>.json. Judged by where it sits and not by its
+  // name, because its name is a run id: an id that happened to read as
+  // "state.json" would otherwise be merged field by field. Opaque, and never
+  // exercised — the file is written once, under an id nothing else will ever
+  // use, so the same path on two devices is the same pass.
+  if (path.startsWith("runs/")) return "opaque";
   const name = path.slice(path.lastIndexOf("/") + 1);
   if (name.endsWith(".md")) return "prose";
   if (RECORD_FILES.has(name)) return "records";
   if (name === "settings.json" || name === "state.json") return "fields";
   if (/^annotations-.+\.json$/.test(name)) return "records";
   if (/^threads-.+\.json$/.test(name)) return "records";
+  // A rehearsal's index of passes (docs/43): identified rows in a `runs` array,
+  // and a row is a pass that happened — nothing ever edits one. Records, so two
+  // devices that each gave the deck a turn keep both passes; opaque would park
+  // one of them in a conflict copy nobody opens. It could only be records once
+  // the transcripts moved out: merging row by row is cheap, merging thirty KB of
+  // talk per row was not the shape to grow into.
+  if (/^runs-rehearsal-.+\.json$/.test(name)) return "records";
   // article-bodies/<hash>.json falls through here on purpose. A body file is
   // named after the hash of its own bytes, so two devices holding the same name
   // hold the same content and there is no conflict to resolve; keeping ours is

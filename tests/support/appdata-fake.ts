@@ -81,6 +81,18 @@ export function installAppData(): FakeDisk {
 
   const has = (path: string): boolean => disk.files.has(path) || disk.blobs.has(path);
 
+  // A directory exists when something is under it, which is what a real
+  // filesystem answers and what a caller about to remove one asks. The disk is
+  // flat (see readDir below), so it is read off the keys; the trailing slash is
+  // what keeps `exists("rehearsal-1")` from being answered by
+  // `rehearsal-1.json`.
+  const hasDir = (path: string): boolean => {
+    const prefix = `${path}/`;
+    for (const key of disk.files.keys()) if (key.startsWith(prefix)) return true;
+    for (const key of disk.blobs.keys()) if (key.startsWith(prefix)) return true;
+    return false;
+  };
+
   const quarantine = async (path: string): Promise<string | null> => {
     if (disk.quarantineFails) throw new Error("rename failed");
     const body = disk.files.get(path);
@@ -100,7 +112,7 @@ export function installAppData(): FakeDisk {
   // The AppData root itself is a directory, not a file: `exists("")` is how a
   // caller asks whether the base is there at all.
   spyOn(fs, "exists").mockImplementation(
-    asFs<"exists">(async (path: string) => path === "" || has(path)),
+    asFs<"exists">(async (path: string) => path === "" || has(path) || hasDir(path)),
   );
 
   spyOn(fs, "mkdir").mockImplementation(async () => {});

@@ -17,14 +17,14 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import type { OutlineRow } from "../../../reading/retell";
-import type { RehearsalRun } from "../../../reading/rehearsal";
+import type { RehearsalRunEntry } from "../../../reading/rehearsal";
 import RehearsalList from "../rehearsal/RehearsalList";
 
 export interface OutlinePaneProps {
   rows: OutlineRow[];
   // The passes through this talk so far, newest first. Optional because the pane
   // is the outline first: a retell that has never been given still shows one.
-  runs?: RehearsalRun[];
+  runs?: RehearsalRunEntry[];
   onMove(index: number, delta: number): void;
   onSetIncluded(bookId: string, chapter: number, include: boolean): void;
   onRemove(bookId: string, chapter: number): void;
