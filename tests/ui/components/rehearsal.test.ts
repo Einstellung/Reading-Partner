@@ -184,29 +184,23 @@ test("a run in this year is dated by time of day, an older one by year", () => {
 });
 
 test("the Rehearse button says why it is off", () => {
-  expect(rehearsalReadiness({ deckFile: null, loading: true }).ok).toBe(false);
-  expect(rehearsalReadiness({ deckFile: null, loading: true }).title).toContain("Looking");
-  const none = rehearsalReadiness({ deckFile: null, loading: false });
+  expect(rehearsalReadiness({ segments: null }).ok).toBe(false);
+  expect(rehearsalReadiness({ segments: null }).title).toContain("Looking");
+  const none = rehearsalReadiness({ segments: 0 });
   expect(none.ok).toBe(false);
-  expect(none.title).toContain("no deck");
-  expect(rehearsalReadiness({ deckFile: "slides/t-x.html", loading: false }).ok).toBe(true);
+  expect(none.title).toContain("no segments");
+  expect(rehearsalReadiness({ segments: 3 }).ok).toBe(true);
 });
 
-test("a rehearsal being started holds the button, deck or no deck", () => {
-  const starting = rehearsalReadiness({
-    deckFile: "slides/t-x.html",
-    loading: false,
-    preparing: true,
-  });
+test("a rehearsal being started holds the button, outline or no outline", () => {
+  const starting = rehearsalReadiness({ segments: 3, preparing: true });
   expect(starting.ok).toBe(false);
   expect(starting.title).toContain("Starting");
   // The gate lifts on its own, so the same retell is rehearsable again afterwards.
-  expect(
-    rehearsalReadiness({ deckFile: "slides/t-x.html", loading: false, preparing: false }).ok,
-  ).toBe(true);
+  expect(rehearsalReadiness({ segments: 3, preparing: false }).ok).toBe(true);
 });
 
-test("the counter is 1-based, and says nothing before the deck does", () => {
+test("the counter is 1-based, and says nothing before a segment is up", () => {
   expect(positionLabel(null)).toBe("—");
   expect(positionLabel({ index: 0, total: 12 })).toBe("1 / 12");
   expect(positionLabel({ index: 11, total: 12 })).toBe("12 / 12");

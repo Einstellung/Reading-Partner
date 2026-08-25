@@ -1,13 +1,12 @@
-// The rehearsal's logic, without React: what a deck's postMessage means, what
-// the host makes of it, and how a run reads back afterwards (docs/31).
+// The rehearsal's logic, without React: how a pass ends, how a run reads back
+// afterwards, and what the bar above the panel says (docs/44).
 //
-// The deck is a self-contained HTML file running in an iframe and it owns paging
-// — its own keyboard and click handling, unchanged. All it does extra is say
-// where it is; the host stamps the time, because a deck that reported its own
-// clock would be reporting the clock of a document the host just created.
-//
-// Everything a message could be is decided here rather than in the view, so the
-// view is left with an iframe, a listener and four numbers on a bar.
+// The deck half of this module — the postMessage contract below, down to
+// withSlideEvent — is frozen. A pass is given against an outline now and nothing
+// mounts a deck, but the bridge is the deck's side of a protocol that is still
+// on disk in every deck ever built (docs/44 freezes slides/, import-deck.ts and
+// isDeckPath on the same grounds). The segment signal the panel sends instead is
+// in outline-run.ts, and it is deliberately the same event.
 
 import {
   buildRun,
@@ -148,10 +147,9 @@ export function hasRecordedPages(events: readonly RehearsalEvent[]): boolean {
 
 export interface FinishRunInput {
   rehearsalId: string;
-  // What the pass was given against, when the caller had a file to name. Null
-  // where a rehearsal used to always carry one (docs/44), and already what
-  // BuiltRun holds.
-  deckFile: string | null;
+  // Frozen at null: the pass is given against an outline (docs/44) and nothing
+  // has a deck to name. Still on the shape because BuiltRun carries it.
+  deckFile?: string | null;
   // Stamped by the caller at the moment the reader finished, not after the wait
   // below: the rehearsal ended when they stopped talking, not when the last
   // upload came back.
@@ -188,7 +186,7 @@ export async function finishRun(input: FinishRunInput): Promise<boolean> {
     id: input.id,
     ordinal: 0, // the store assigns it
     rehearsalId: input.rehearsalId,
-    deckFile: input.deckFile,
+    deckFile: input.deckFile ?? null,
     startedAt: input.startedAt,
     events,
   });
@@ -244,10 +242,13 @@ export interface RehearsalReadiness {
   title: string;
 }
 
-// Whether this deck can be given from the top, and what the button says about it.
+// Whether this talk can be given from the top, and what the button says about
+// it. The gate is the outline and no longer a deck (docs/44): a talk with
+// nothing arranged on it yet has nothing to put on the panel, and the way to
+// get segments onto it is the last exchange of the retell, not this button.
 export function rehearsalReadiness(input: {
-  deckFile: string | null;
-  loading: boolean;
+  // How many segments the outline has, or null while it is still being read.
+  segments: number | null;
   // A pass that has been asked for and is not on screen yet. Starting a second
   // one here would open a second recording session, and the recorder keeps one:
   // the newer start drains the older session (src-tauri/src/voice.rs), leaving
@@ -255,18 +256,18 @@ export function rehearsalReadiness(input: {
   preparing?: boolean;
 }): RehearsalReadiness {
   if (input.preparing) return { ok: false, title: "Starting this rehearsal…" };
-  if (input.loading) return { ok: false, title: "Looking for this retell's deck…" };
-  if (!input.deckFile) {
+  if (input.segments === null) return { ok: false, title: "Looking for this talk's outline…" };
+  if (input.segments === 0) {
     return {
       ok: false,
-      title: "There is no deck for this retell yet. Generate one first (Deck).",
+      title: "This talk has no segments yet. Arrange it at the end of the retell first.",
     };
   }
-  return { ok: true, title: "Give it from the deck, from the top" };
+  return { ok: true, title: "Give the talk, from the top" };
 }
 
-// The counter on the bar. Before the deck says anything there is no position to
-// show, and a made-up "1 / 1" would be worse than a dash.
+// The counter on the bar. Before a segment is up there is no position to show,
+// and a made-up "1 / 1" would be worse than a dash.
 export function positionLabel(current: { index: number; total: number } | null): string {
   if (!current) return "—";
   return `${current.index + 1} / ${current.total}`;

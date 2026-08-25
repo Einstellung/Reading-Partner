@@ -1,7 +1,7 @@
 // The rehearsals of this retell, under the outline (docs/31). Data that is
 // recorded and never shown is data that was not recorded, so the pass leaves a
-// mark where the retell is: which pass it was, when, how far it got, how long it
-// took, and — opened up — what was said on each page.
+// mark where the retell is: which pass it was, when, how many segments it
+// covered, how long it took, and — opened up — what was said to each of them.
 //
 // Deliberately a strip at the foot of a pane rather than a panel of its own.
 // There is nothing to do here yet; the AI reading these runs back is the next
@@ -19,6 +19,9 @@ import {
 import { formatElapsed, formatRunDate } from "./rehearsal";
 import { useRunPages } from "./useRehearsal";
 
+// One segment of one pass. `page` is what the run calls the stretch it spent on
+// one segment (reading/rehearsal/types.ts); the index is the segment's position
+// in the outline as it stood that day.
 function PageRow({ page }: { page: RehearsalPage }) {
   const spent = page.leftAt === null ? null : page.leftAt - page.enteredAt;
   return (
@@ -28,7 +31,7 @@ function PageRow({ page }: { page: RehearsalPage }) {
           {page.index + 1}
         </span>
         <span className="min-w-0 flex-1 truncate text-[12px] leading-snug">
-          {page.title || <span className="text-muted-foreground">Untitled page</span>}
+          {page.title || <span className="text-muted-foreground">Untitled segment</span>}
         </span>
         <span className="flex-none text-[11px] tabular-nums text-muted-foreground">
           {spent === null ? "—" : formatElapsed(spent)}
@@ -53,7 +56,9 @@ function RunPages({ run }: { run: RehearsalRunEntry }) {
       {pages === null ? (
         <li className="py-1.5 text-[11px] text-muted-foreground">Reading…</li>
       ) : pages.length === 0 ? (
-        <li className="py-1.5 text-[11px] text-muted-foreground">No pages were recorded.</li>
+        <li className="py-1.5 text-[11px] text-muted-foreground">
+          No segments were recorded.
+        </li>
       ) : (
         pages.map((p, i) => <PageRow key={`${p.index}-${i}`} page={p} />)
       )}
@@ -77,7 +82,7 @@ function RunRow({ run }: { run: RehearsalRunEntry }) {
               Run {s.ordinal} · {formatRunDate(s.startedAt)}
             </span>
             <span className="block text-[11px] font-normal text-muted-foreground">
-              {s.pagesSpoken} of {s.pagesTotal} pages · {s.minutes} min
+              {s.segmentsSpoken} of {s.segments} segments · {s.minutes} min
               {s.wordsSpoken > 0 ? ` · ${s.wordsSpoken} words` : ""}
             </span>
           </span>
