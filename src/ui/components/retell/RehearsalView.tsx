@@ -247,8 +247,8 @@ export default function RehearsalView({
           type="button"
           variant="ghost"
           size="icon"
-          title="Back to the talk"
-          aria-label="Back to the talk"
+          title="Back to the retell"
+          aria-label="Back to the retell"
           onClick={leave}
           className="h-9 w-9 text-white/70 can-hover:hover:bg-white/10 can-hover:hover:text-white"
         >
