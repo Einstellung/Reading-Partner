@@ -27,7 +27,15 @@ react-dom 在模块求值时算一次 `canUseDOM`（坑 121），`tests/support/
 
 精确的规矩是"测试文件不许静态 import 任何传递地求值 react-dom 客户端 bundle 的东西"，要做传递闭包分析，而且答案会随 Radix 换版本变。
 
-退而求其次的"不许静态 import `src/ui/components/ui/*` 或 `@radix-ui/*`"今天命中 5 个文件，只有这一个是真的：另外四个（cardDispatch、intent-chips、retell-card 只 import `Button`，overlay-z import `overlay.tsx` 加 `react-dom/server`）按上表全在"不拉"那一列，逼它们 `useDom()` 是加戏。下一个是谁，由 CI 的 `bun test --seed=$RANDOM` 概率性地抓——守卫的报错信息自己就写着该怎么改。
+退而求其次的"不许静态 import `src/ui/components/ui/*` 或 `@radix-ui/*`"今天命中 5 个文件，两个是真的。另外三个（cardDispatch、intent-chips、retell-card 只 import `Button`）按上表在"不拉"那一列，逼它们 `useDom()` 是加戏。
+
+overlay-z 上面记成了假阳性（"import `overlay.tsx` 加 `react-dom/server`"），错的：它同时从 `ui/dialog` import `Dialog` 和 `DialogFullScreenContent`，写这篇的时候就有这一行，只是没看见。它是真的那两个之一。
+
+## 危险的形状
+
+不是"静态 import 了 `ui/components`"。一个文件自己的 import 把 bundle 拉进来、它自己又调 `useDom()`，那它在自己的守卫上就抛，单跑就红——谁都看得见。藏起来的是拉了 bundle 又从不要 window 的文件：单跑绿，多数顺序下也绿，只在排到前面的那些顺序里把这一轮每个 `useDom()` 文件打死。全库 316 个文件里有三个（overlay-z、choice-field-contract、outline-pane，27cd8033 改的就是它们）。
+
+要看见它，得每文件一进程加一个探针：单文件跑完时报 react-dom 客户端 bundle 在不在 require cache，再对上这个文件有没有要过 window。`bash scripts/isolate.sh` 干的就是这件事，三十秒，答案不随文件系统变（坑 174）。随机 seed 严格更弱：改之前那棵树 17 个 seed 里 3 个红（22 个 load 崩、153 个测试没跑），默认序和另外 14 个 seed 全绿。
 
 ## 顺带
 
