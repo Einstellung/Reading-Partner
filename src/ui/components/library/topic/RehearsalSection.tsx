@@ -66,9 +66,14 @@ export default function RehearsalSection(props: {
     }
     // One read per rehearsal. The runs are a file of their own precisely so this
     // list does not have to hold every word ever said to draw a count.
+    //
+    // A runs file that will not open costs its own count and nothing else: this
+    // list never writes a run, and the rest of the section — every other deck
+    // under the topic, and the door into this one — has no reason to go with it.
     const counts = new Map<string, RunCount>();
     for (const r of rehearsals) {
-      const log = await loadRehearsalRuns(r.id);
+      const log = await loadRehearsalRuns(r.id).catch(() => null);
+      if (!log) continue;
       const last = log.runs[log.runs.length - 1];
       counts.set(r.id, { runs: log.runs.length, lastRunAt: last ? last.startedAt : null });
     }
