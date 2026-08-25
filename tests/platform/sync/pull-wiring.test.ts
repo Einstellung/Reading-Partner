@@ -66,7 +66,7 @@ test("a pull of a book's threads or marks drops that book's cache", () => {
   dispatchPull([
     "threads-abc123.json",
     "annotations-abc123.json",
-    "threads-talk-t1.json",
+    "threads-retell-t1.json",
     "reading-state.json",
     "library.json",
   ]);
@@ -74,7 +74,7 @@ test("a pull of a book's threads or marks drops that book's cache", () => {
   expect(dropped).toEqual([
     "threads:abc123",
     "annotations:abc123",
-    "threads:talk-t1",
+    "threads:retell-t1",
     "view-states",
   ]);
   off();

@@ -366,7 +366,7 @@ function makeDeps(retellId: string, bookIds: string[], instruction: string): Sli
       });
       const file = await writeDeck(input.id, slugify(input.title), html);
       const entry: RetellEntry = {
-        talkId: input.id,
+        retellId: input.id,
         title: input.title,
         file,
         createdAt: input.createdAt,

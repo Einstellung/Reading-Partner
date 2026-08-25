@@ -297,7 +297,7 @@ export default function DeckDialog({
   useEffect(() => {
     let cancelled = false;
     void listDecks().then((all) => {
-      if (!cancelled) setDeck(all.find((d) => d.talkId === retellId) ?? null);
+      if (!cancelled) setDeck(all.find((d) => d.retellId === retellId) ?? null);
     });
     return () => {
       cancelled = true;

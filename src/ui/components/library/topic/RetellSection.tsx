@@ -48,7 +48,7 @@ export default function RetellSection(props: {
     // The join between a retell and the deck built from it is the shared id; the
     // retell list only needs the file to open, so that is all it is handed.
     const files = new Map<string, string>();
-    for (const d of decks) if (d.talkId) files.set(d.talkId, d.file);
+    for (const d of decks) if (d.retellId) files.set(d.retellId, d.file);
     setRows(retellRows(retells, files));
   }, [topic.id]);
 

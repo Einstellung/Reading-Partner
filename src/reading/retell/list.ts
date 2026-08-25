@@ -4,7 +4,7 @@
 // A retell's state is two questions, and they are answered from two places that
 // share one id: how far the retell has got, which is the retell file, and
 // whether a deck has come out of it, which is the deck registry
-// (slides/talks.json, keyed by the same retell id). The second one arrives as a
+// (slides/retells.json, keyed by the same retell id). The second one arrives as a
 // plain map from the caller rather than as the registry's own type — the deck is
 // the retell's product, so slides reads retells and not the other way round.
 

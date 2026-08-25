@@ -95,9 +95,24 @@ test("the conversation file is not mistaken for a retell", async () => {
   await startRetell({ topicId: "topic-1", materials: MATERIALS, now: 100 });
   disk.files.set(`threads-${retellThreadKey("100")}.json`, "{}");
   expect((await listRetellsForTopic("topic-1")).map((t) => t.id)).toEqual(["100"]);
-  expect(retellIdOf("threads-talk-100.json")).toBeNull();
-  expect(retellIdOf("talk-100.json")).toBe("100");
-  expect(retellIdOf("talks.json")).toBeNull();
+  expect(retellIdOf("threads-retell-100.json")).toBeNull();
+  expect(retellIdOf("retell-100.json")).toBe("100");
+  expect(retellIdOf("retells.json")).toBeNull();
+  expect(retellIdOf("rehearsal-100.json")).toBeNull();
+});
+
+// Files this object left behind when it was called a talk are not read back and
+// not migrated: the listing walks the directory, and nothing there matches.
+test("a file left by a build that called this a talk is not seen", async () => {
+  disk.files.set(
+    "talk-100.json",
+    JSON.stringify({ version: 1, id: "100", topicId: "topic-1", materials: [], decisions: [] }),
+  );
+  disk.files.set("threads-talk-100.json", "{}");
+  expect(await listRetellsForTopic("topic-1")).toEqual([]);
+  expect(await loadRetell("100")).toBeNull();
+  // Left where it is, not moved and not deleted.
+  expect(disk.files.has("talk-100.json")).toBe(true);
 });
 
 test("a decision is merged into the retell and the file says so", async () => {

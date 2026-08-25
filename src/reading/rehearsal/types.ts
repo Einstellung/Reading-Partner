@@ -33,10 +33,7 @@ export interface RehearsalPage {
 export interface RehearsalRun {
   id: string;
   ordinal: number; // 1 for this retell's first rehearsal
-  // The old word, on purpose: this key is in every rehearsal log already on
-  // disk and on the reader's other device. Renaming it would make normalizeLog
-  // reject those files, which is every run they have ever given.
-  talkId: string;
+  retellId: string;
   deckFile: string | null;
   startedAt: number;
   endedAt: number | null;
@@ -45,8 +42,7 @@ export interface RehearsalRun {
 
 export interface RehearsalLog {
   version: typeof REHEARSAL_VERSION;
-  // Same as RehearsalRun.talkId: the key on disk keeps the old word.
-  talkId: string;
+  retellId: string;
   runs: RehearsalRun[]; // oldest first
 }
 
@@ -67,17 +63,17 @@ export function normalizeLog(raw: unknown): RehearsalLog | null {
   const log = raw as RehearsalLog | null;
   if (!log || typeof log !== "object") return null;
   if (log.version !== REHEARSAL_VERSION) return null;
-  if (typeof log.talkId !== "string" || !log.talkId) return null;
+  if (typeof log.retellId !== "string" || !log.retellId) return null;
   if (!Array.isArray(log.runs)) return null;
   const runs: RehearsalRun[] = [];
   const seen = new Set<string>();
   for (const r of log.runs) {
-    const run = normalizeRun(r, log.talkId);
+    const run = normalizeRun(r, log.retellId);
     if (!run || seen.has(run.id)) continue;
     seen.add(run.id);
     runs.push(run);
   }
-  return { version: REHEARSAL_VERSION, talkId: log.talkId, runs };
+  return { version: REHEARSAL_VERSION, retellId: log.retellId, runs };
 }
 
 function normalizeRun(raw: unknown, retellId: string): RehearsalRun | null {
@@ -103,7 +99,7 @@ function normalizeRun(raw: unknown, retellId: string): RehearsalRun | null {
   return {
     id: run.id,
     ordinal: Number.isFinite(run.ordinal) && run.ordinal > 0 ? Math.round(run.ordinal) : 1,
-    talkId: typeof run.talkId === "string" && run.talkId ? run.talkId : retellId,
+    retellId: typeof run.retellId === "string" && run.retellId ? run.retellId : retellId,
     deckFile: typeof run.deckFile === "string" && run.deckFile ? run.deckFile : null,
     startedAt: run.startedAt,
     endedAt: Number.isFinite(run.endedAt as number) ? (run.endedAt as number) : null,
@@ -112,5 +108,5 @@ function normalizeRun(raw: unknown, retellId: string): RehearsalRun | null {
 }
 
 export function emptyLog(retellId: string): RehearsalLog {
-  return { version: REHEARSAL_VERSION, talkId: retellId, runs: [] };
+  return { version: REHEARSAL_VERSION, retellId, runs: [] };
 }

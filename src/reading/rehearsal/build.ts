@@ -105,7 +105,7 @@ export function buildRun(input: BuildRunInput): RehearsalRun {
   return {
     id: input.id,
     ordinal: input.ordinal,
-    talkId: input.retellId,
+    retellId: input.retellId,
     deckFile: input.deckFile,
     startedAt: input.startedAt,
     endedAt,

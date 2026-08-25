@@ -88,7 +88,7 @@ test("the passes through the retell are counted at the foot", () => {
   const run = {
     id: "r1",
     ordinal: 1,
-    talkId: "t1",
+    retellId: "t1",
     deckFile: "slides/t1-x.html",
     startedAt: Date.now(),
     endedAt: null,

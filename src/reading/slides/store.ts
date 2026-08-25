@@ -1,9 +1,9 @@
 // Slides persistence under AppData/slides/ (docs/14, docs/29). Layout:
-//   slides/talks.json                  — the deck registry (one row per retell)
-//   slides/<retellId>/state.json         — the run state (the resume point)
-//   slides/<retellId>/slide-NN.html      — one slide body, sanitized fragment
-//   slides/<retellId>/asset-NN.txt       — that slide's resolved asset (data: URL)
-//   slides/<retellId>-<slug>.html        — the assembled deck
+//   slides/retells.json              — the deck registry (one row per retell)
+//   slides/<retellId>/state.json     — the run state (the resume point)
+//   slides/<retellId>/slide-NN.html  — one slide body, sanitized fragment
+//   slides/<retellId>/asset-NN.txt   — that slide's resolved asset (data: URL)
+//   slides/<retellId>-<slug>.html    — the assembled deck
 //
 // One directory per retell, same shape as prep-<bookId>/chapters/: the bodies and assets
 // are the expensive part, so they live on disk and assemble is pure assembly —
@@ -31,7 +31,7 @@ import {
 } from "./types";
 
 export const SLIDES_DIR = "slides";
-const TALKS_FILE = `${SLIDES_DIR}/talks.json`;
+const RETELLS_FILE = `${SLIDES_DIR}/retells.json`;
 
 export function retellDir(retellId: string): string {
   return `${SLIDES_DIR}/${retellId}`;
@@ -151,13 +151,13 @@ export async function writeDeck(retellId: string, slug: string, html: string): P
 // The retell registry, newest last. Missing or corrupt reads as empty so a bad
 // file never blocks generating a new deck.
 export async function loadRetells(): Promise<RetellEntry[]> {
-  const text = await readIfExists(TALKS_FILE);
+  const text = await readIfExists(RETELLS_FILE);
   if (text === null) return [];
   try {
     const parsed = JSON.parse(text);
     return Array.isArray(parsed) ? (parsed as RetellEntry[]) : [];
   } catch (e) {
-    console.warn("failed to parse talks.json", e);
+    console.warn("failed to parse retells.json", e);
     return [];
   }
 }
@@ -166,7 +166,7 @@ export async function loadRetells(): Promise<RetellEntry[]> {
 export async function recordRetell(entry: RetellEntry): Promise<void> {
   await ensureDir(SLIDES_DIR);
   const retells = upsertRetell(await loadRetells(), entry);
-  await writeTextAtomic(TALKS_FILE, JSON.stringify(retells, null, 2));
+  await writeTextAtomic(RETELLS_FILE, JSON.stringify(retells, null, 2));
 }
 
 // Read a built deck back as text, by the AppData-relative path the registry

@@ -6,7 +6,7 @@ import { assembleDeck, slideTitleText, slugify } from "../../../src/reading/slid
 
 test("slugify makes a filename-safe stem", () => {
   expect(slugify("My Great Retell!")).toBe("my-great-retell");
-  expect(slugify("   ")).toBe("talk");
+  expect(slugify("   ")).toBe("deck");
   expect(slugify("a".repeat(80)).length).toBeLessThanOrEqual(60);
 });
 
