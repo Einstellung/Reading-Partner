@@ -5,18 +5,20 @@
 // and is reported, never thrown — a missing figure index must never break full
 // text.
 //
-// Two things that empty index used to lose, both because it said nothing about
-// where it came from:
+// That empty index used to say nothing about where it came from, so one pdf.js
+// failure filed a document as having no figures for good. Nothing ever looked
+// again, and view_figure was never offered to the AI for that book (tools.ts).
+// The record carries a status and the time of the failure instead, and a failed
+// one expires the way a failed cover does (reading/cover-cache.ts).
 //
-//   One pdf.js failure filed a document as having no figures for good. Nothing
-//   ever looked again, so view_figure was never offered to the AI for that book
-//   again (tools.ts). The record now carries a status and the time of the
-//   failure, and a failed one expires the way a failed cover does
-//   (reading/cover-cache.ts).
-//
-//   A cache file that could not be read looked exactly like one that was not
-//   there, so the re-extraction wrote its result over bytes nobody had read.
-//   readCache keeps those two apart and refuses the write for the second.
+// A cache file that will not open reads the same as one that is not there, and
+// the extraction that runs instead writes over it. That is the opposite of the
+// stores under platform/app, and the difference is that this file is derived:
+// the document makes it again, so bytes nobody can read hold nothing worth
+// keeping. Holding the write back cost more than it saved — a file stuck
+// unreadable was re-extracted on every open for as long as it stayed that way,
+// and the same file was replaced without a second thought whenever its content
+// merely failed to parse.
 
 import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
@@ -66,7 +68,7 @@ export function parseFiguresCache(raw: unknown, version: number = FIGURES_VERSIO
 export interface FiguresIo {
   /**
    * The cache file's text, or null when there is none. Throwing means the bytes
-   * are there and would not open, which is the case that forbids the write.
+   * are there and would not open, which reads as a miss like any other.
    */
   read: (file: string) => Promise<string | null>;
   write: (file: string, contents: string) => Promise<void>;
@@ -88,37 +90,26 @@ export function createFiguresStore(io: FiguresIo): FiguresStore {
   // once the caller that started it has gone, is a job nothing will settle.
   const inFlight = new Map<string, Promise<FiguresIndex>>();
 
-  // The cache file, plus whether this document's cache may be written. Three
-  // answers, not two:
-  //
-  //   nothing there, or content this version does not accept — no index, and the
-  //   name is free: the cache is derived from the PDF and re-extracting is the
-  //   whole repair.
-  //   bytes that could not be read — no index either, and the name is NOT free.
-  //   Nothing is known to be wrong with that file, and a re-extraction that wrote
-  //   over it would be a guess replacing a record. Costs one extraction that is
-  //   thrown away; the next launch reads the file again.
-  //
-  // The same split readGuardedJson makes for files that cannot be rebuilt
-  // (platform/app/atomic-fs.ts). It is spelled out here rather than reused
-  // because a figure index is a cache: bad content is silently replaced instead
-  // of being quarantined and shown to the reader.
-  async function readCache(
-    hash: string,
-  ): Promise<{ index: FiguresIndex | null; writable: boolean }> {
+  // The cached index, or null when there is none to use. One answer for all
+  // three ways of not having one — nothing there, content this version does not
+  // accept, bytes that would not open — because the repair is the same in all
+  // three: extract it again from the document and write the result down. No
+  // quarantine either, for the same reason readGuardedJson has one
+  // (platform/app/atomic-fs.ts): that is for what nothing can rebuild.
+  async function readCache(hash: string): Promise<FiguresIndex | null> {
     let text: string | null;
     try {
       text = await io.read(fileFor(hash));
     } catch (e) {
       console.warn("failed to read figures cache", e);
-      return { index: null, writable: false };
+      return null;
     }
-    if (text === null) return { index: null, writable: true };
+    if (text === null) return null;
     try {
-      return { index: parseFiguresCache(JSON.parse(text)), writable: true };
+      return parseFiguresCache(JSON.parse(text));
     } catch (e) {
       console.warn("failed to parse figures cache", e);
-      return { index: null, writable: true };
+      return null;
     }
   }
 
@@ -128,7 +119,7 @@ export function createFiguresStore(io: FiguresIo): FiguresStore {
     // record of an extraction that failed long enough ago to be worth another
     // try. A read/parse error is logged, not thrown.
     get: async (hash, now = Date.now()) => {
-      const { index } = await readCache(hash);
+      const index = await readCache(hash);
       if (!index) return null;
       return figuresCacheFresh(index, now) ? index : null;
     },
@@ -139,7 +130,7 @@ export function createFiguresStore(io: FiguresIo): FiguresStore {
     // which is cached for a day and then tried again.
     ensure: async (key, buffer, now = Date.now) => {
       const hash = key;
-      const { index: cached, writable } = await readCache(hash);
+      const cached = await readCache(hash);
       if (cached && figuresCacheFresh(cached, now())) return cached;
       const existing = inFlight.get(hash);
       if (existing) return existing;
@@ -169,14 +160,10 @@ export function createFiguresStore(io: FiguresIo): FiguresStore {
           io.onError(e);
           index = failedFigures(now());
         }
-        // Not when the file on disk could not be read: what is there was never
-        // seen, and this result is not evidence about it.
-        if (writable) {
-          try {
-            await io.write(fileFor(hash), JSON.stringify(index));
-          } catch (e) {
-            io.onError(e);
-          }
+        try {
+          await io.write(fileFor(hash), JSON.stringify(index));
+        } catch (e) {
+          io.onError(e);
         }
         return index;
       })();
