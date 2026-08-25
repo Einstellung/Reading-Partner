@@ -2,16 +2,15 @@
 // in-memory AppData and a stub pdf.js. store.test.ts covers the pure version
 // gate; this file is for what ends up in the file.
 //
-// Both cases here are the same shape: an empty index that says nothing about
-// where it came from.
+// The case this file was written for: an empty index that says nothing about
+// where it came from. pdf.js failing to open a document wrote the same empty
+// index a document with no figures writes, and it was consulted forever after —
+// the figure catalog stayed empty and view_figure was never offered to the AI
+// for that book again (tools.ts). A status and a failure time keep those apart.
 //
-//   pdf.js failing to open a document wrote the same empty index a document
-//   with no figures writes, and it was consulted forever after — the figure
-//   catalog stayed empty and view_figure was never offered to the AI for that
-//   book again (tools.ts).
-//
-//   A cache file that could not be read looked exactly like one that was not
-//   there, so the re-extraction wrote its result over bytes nobody had read.
+// What is not a case here is a cache file that will not open. This one file is
+// derived from the PDF, so the write goes ahead over it — the reasoning is on
+// readCache in src/reading/figures/store.ts.
 //
 // Run: bun test.
 
@@ -128,40 +127,47 @@ test("a stale failure reads as a miss, so nothing serves it as the book's figure
   expect(await getFigures(KEY, T0 + FIGURES_RETRY_AFTER_MS)).toBeNull();
 });
 
-// The one that costs a real index. A cache file that will not open is not a
-// cache file that is not there: nothing is known to be wrong with those bytes,
-// so the extraction that runs instead must not land on top of them.
-test("a cache that could not be read is not overwritten by the extraction that replaced it", async () => {
-  disk.files.set(FILE, GOOD);
-  disk.unreadable.add(FILE);
-
-  // The extraction fails as well — the pairing that used to file a good index
-  // as an empty one.
-  opens = false;
-  expect((await ensureFigures(KEY, BYTES, () => T0)).status).toBe("failed");
-  expect(disk.files.get(FILE)).toBe(GOOD);
-
-  // And it does not land when the extraction succeeds either: a fresh index is
-  // still a guess about a file this run never read.
-  opens = true;
-  expect((await ensureFigures(KEY, BYTES, () => T0)).status).toBe("ok");
-  expect(disk.files.get(FILE)).toBe(GOOD);
-
-  // The next launch reads the file, and the figures are all still there.
-  disk.unreadable.clear();
-  const back = await getFigures(KEY, T0);
-  expect(back?.figures.map((f) => f.id)).toEqual(["3"]);
-});
-
-// Deliberately the other way round: an index is derived from the PDF, so bytes
-// that will not parse cost one extraction and nothing else. No quarantine file,
-// no sentence shown to the reader — that is for data nothing can rebuild
-// (platform/app/atomic-fs.ts readGuardedJson).
+// An index is derived from the PDF, so every way of not having a usable one
+// costs one extraction and nothing else — bytes that will not parse and bytes
+// that will not open alike. No quarantine file and no sentence shown to the
+// reader: that is for data nothing can rebuild (platform/app/atomic-fs.ts
+// readGuardedJson).
 test("cache bytes that will not parse are replaced by a fresh extraction", async () => {
   disk.files.set(FILE, "{ half an ind");
   expect((await ensureFigures(KEY, BYTES, () => T0)).status).toBe("ok");
   expect(JSON.parse(disk.files.get(FILE) ?? "null").status).toBe("ok");
   expect([...disk.files.keys()]).toEqual([FILE]);
+});
+
+// The same for a file that would not open. Refusing the write here bought
+// nothing: the bytes are unreadable, so they answer nobody, and every open of
+// the book paid for another extraction that was thrown away.
+test("a cache that could not be read is replaced by the extraction that ran instead", async () => {
+  disk.files.set(FILE, GOOD);
+  disk.unreadable.add(FILE);
+
+  expect((await ensureFigures(KEY, BYTES, () => T0)).status).toBe("ok");
+
+  disk.unreadable.clear();
+  expect(JSON.parse(disk.files.get(FILE) ?? "null")).toEqual({
+    version: FIGURES_VERSION,
+    status: "ok",
+    figures: [],
+  });
+  expect([...disk.files.keys()]).toEqual([FILE]);
+});
+
+// And a failed extraction over an unreadable cache lands too, so the day-long
+// backoff applies to it the way it applies anywhere else.
+test("a failed extraction over an unreadable cache is recorded like any other", async () => {
+  disk.files.set(FILE, GOOD);
+  disk.unreadable.add(FILE);
+  opens = false;
+
+  expect((await ensureFigures(KEY, BYTES, () => T0)).status).toBe("failed");
+
+  disk.unreadable.clear();
+  expect(await getFigures(KEY, T0 + 1)).toMatchObject({ status: "failed", failedAt: T0 });
 });
 
 // --- the map of jobs belongs to a store, not to the module ------------------

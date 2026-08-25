@@ -76,12 +76,24 @@ beforeEach(() => {
 
 // --- the read that fails ----------------------------------------------------
 
+// An empty list is what a reader who has kept nothing has. Handed it, a reader
+// who has kept thirty articles is shown an empty shelf and told nothing — and
+// the keep they reach for next writes that one article over the thirty.
+test("a read off an unreadable file raises rather than answering with nothing kept", async () => {
+  io.files.set(FILE, JSON.stringify(KEPT));
+  io.readFails = true;
+
+  await expect(loadSavedArticles(io)).rejects.toThrow(/could not be read/);
+});
+
 test("un-keeping after a failed read leaves every kept article on disk", async () => {
   const bytes = JSON.stringify(KEPT);
   io.files.set(FILE, bytes);
   io.readFails = true;
 
-  await removeSavedArticle("https://example.com/b", io);
+  await expect(removeSavedArticle("https://example.com/b", io)).rejects.toThrow(
+    /could not be read/,
+  );
 
   // Nothing was written, and nothing was moved aside: the bytes are fine, it is
   // this process that could not read them.
@@ -94,9 +106,7 @@ test("keeping an article after a failed read writes nothing and says so", async 
   io.files.set(FILE, bytes);
   io.readFails = true;
 
-  // Null, the same answer as an article with no identity: the caller must not
-  // show it as kept.
-  expect(await saveArticle(input(), io)).toBeNull();
+  await expect(saveArticle(input(), io)).rejects.toThrow(/could not be read/);
   expect(io.files.get(FILE)).toBe(bytes);
 });
 
@@ -216,6 +226,13 @@ test("the first keep on a device with no file writes just that article", async (
   expect(io.files.has(ASIDE)).toBe(false);
 });
 
+// The one thing left that comes back null. An article with neither a URL nor a
+// title has no id to de-duplicate on, so keeping it twice would file it twice.
+test("an article with no identity is not kept, and null says so", async () => {
+  expect(await saveArticle({ ...input(), url: "", title: "" }, io)).toBeNull();
+  expect(io.files.has(FILE)).toBe(false);
+});
+
 // --- the cheap probe --------------------------------------------------------
 
 // The mount gate for the classroom's saved-article tools asks this on every turn
@@ -241,6 +258,10 @@ test("hasSavedArticles answers from the file without setting the records aside",
   expect(io.files.has(ASIDE)).toBe(false);
 });
 
+// The one reader here that does not raise on an unreadable file. It is a mount
+// gate on a chat turn, its only caller already answers false for a throw
+// (reading/turn.ts), and the cost of the wrong answer is a tool the model is not
+// offered — not a screen that says the reader kept nothing.
 test("hasSavedArticles says no when the file cannot be read", async () => {
   io.files.set(FILE, JSON.stringify(KEPT));
   io.readFails = true;
