@@ -18,7 +18,7 @@ import {
 } from "../ui/dropdown-menu";
 import type { OutlineRow } from "../../../reading/retell";
 import type { RehearsalRun } from "../../../reading/rehearsal";
-import RehearsalList from "./RehearsalList";
+import RehearsalList from "../rehearsal/RehearsalList";
 
 export interface OutlinePaneProps {
   rows: OutlineRow[];

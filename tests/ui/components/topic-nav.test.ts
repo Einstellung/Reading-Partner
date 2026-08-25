@@ -13,9 +13,19 @@ import {
   type NavStore,
 } from "../../../src/ui/components/base/topic-nav";
 
-test("the sidebar has exactly the three sections, Materials first", () => {
-  expect(TOPIC_SECTIONS.map((s) => s.id)).toEqual(["materials", "retell", "observations"]);
-  expect(TOPIC_SECTIONS.map((s) => s.label)).toEqual(["Materials", "Retell", "AI observations"]);
+test("the sidebar has exactly the four sections, Materials first", () => {
+  expect(TOPIC_SECTIONS.map((s) => s.id)).toEqual([
+    "materials",
+    "retell",
+    "rehearsal",
+    "observations",
+  ]);
+  expect(TOPIC_SECTIONS.map((s) => s.label)).toEqual([
+    "Materials",
+    "Retell",
+    "Rehearsal",
+    "AI observations",
+  ]);
 });
 
 test("a desktop starts expanded at any width, because it has a mouse", () => {

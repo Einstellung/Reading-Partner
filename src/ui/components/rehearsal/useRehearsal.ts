@@ -1,14 +1,21 @@
-// Loading for the rehearsal: which deck this retell has, that deck's HTML, and
-// the runs already recorded against it (docs/31).
+// Loading for a rehearsal (docs/43): the deck a retell has built, the rehearsal
+// object that deck is given through, that deck's HTML, and the passes already
+// recorded against it.
 //
-// Three small hooks rather than one: the retell header only needs to know whether a
+// Small hooks rather than one: the retell header only needs to know whether a
 // deck exists, the rehearsal needs the megabytes, and the list beside the
-// outline needs the history. Keeping them apart is what stops opening a retell from
-// reading a 20 MB file to decide whether a button is enabled.
+// outline needs the history. Keeping them apart is what stops opening a retell
+// from reading a 20 MB file to decide whether a button is enabled.
 
 import { useEffect, useState } from "react";
-import { listDecks, readDeckHtml } from "../../../reading/slides";
-import { loadRehearsals, type RehearsalRun } from "../../../reading/rehearsal";
+import { listDecks } from "../../../reading/slides";
+import {
+  listAllRehearsals,
+  loadRehearsalRuns,
+  readRehearsalDeck,
+  type Rehearsal,
+  type RehearsalRun,
+} from "../../../reading/rehearsal";
 
 // The deck registered for this retell, or null when it has none yet. `reloadKey`
 // is bumped by the caller when the deck dialog closes: a deck generated in this
@@ -38,6 +45,27 @@ export function useRetellDeckFile(
   return { file, loading };
 }
 
+// The rehearsal this retell's deck is given through, or null before the first
+// Rehearse creates it. Read rather than created: opening a retell must not put
+// an object on disk for a deck the reader may never give.
+export function useRetellRehearsal(retellId: string, reloadKey: number): Rehearsal | null {
+  const [rehearsal, setRehearsal] = useState<Rehearsal | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listAllRehearsals()
+      .then((all) => {
+        if (!cancelled) setRehearsal(all.find((r) => r.retellId === retellId) ?? null);
+      })
+      .catch((e: unknown) => console.warn("failed to look for the rehearsal", retellId, e));
+    return () => {
+      cancelled = true;
+    };
+  }, [retellId, reloadKey]);
+
+  return rehearsal;
+}
+
 // The deck itself. Null html with a null error means it is still being read.
 export function useDeckHtml(file: string | null): { html: string | null; error: string | null } {
   const [html, setHtml] = useState<string | null>(null);
@@ -48,13 +76,16 @@ export function useDeckHtml(file: string | null): { html: string | null; error: 
     setHtml(null);
     setError(null);
     if (!file) {
-      setError("This retell has no deck yet.");
+      setError("There is no deck for this rehearsal.");
       return;
     }
-    void readDeckHtml(file)
+    void readRehearsalDeck(file)
       .then((text) => {
         if (cancelled) return;
-        if (text === null) setError(`The deck file is missing: ${file}`);
+        // The one case that is not a fault: the rehearsal came from another
+        // device and the deck did not (the deck is out of the sync range, see
+        // reading/rehearsal/store.ts), so the file named here was never here.
+        if (text === null) setError(`The deck file is not on this device: ${file}`);
         else setHtml(text);
       })
       .catch((e: unknown) => {
@@ -68,31 +99,36 @@ export function useDeckHtml(file: string | null): { html: string | null; error: 
   return { html, error };
 }
 
-// This retell's rehearsals, newest first. `reloadKey` is bumped by the caller
+// This rehearsal's runs, newest first. `reloadKey` is bumped by the caller
 // when a run ends, which is the only moment this device changes the list.
 //
-// A sync pull changes it too — another device's pass through the same retell —
-// and this hook deliberately does not hear about it. The list is read when the
-// retell opens, as the retell itself is (tests/platform/sync/pull-coverage.test.ts
-// registers both on that ground), so the two go stale together and reopening
-// the retell picks both up. Routing the pull here alone would refresh the history
-// under a retell still showing the copy it was opened with.
-export function useRehearsals(retellId: string, reloadKey: number): RehearsalRun[] {
+// A sync pull changes it too — another device's pass over the same deck — and
+// this hook deliberately does not hear about it. The list is read when the
+// rehearsal is opened, as the rehearsal itself is
+// (tests/platform/sync/pull-coverage.test.ts registers both on that ground), so
+// the two go stale together and reopening picks both up. Routing the pull here
+// alone would refresh the history under a view still showing the copy it was
+// opened with.
+export function useRehearsalRuns(rehearsalId: string | null, reloadKey: number): RehearsalRun[] {
   const [runs, setRuns] = useState<RehearsalRun[]>([]);
 
   useEffect(() => {
     let cancelled = false;
-    void loadRehearsals(retellId)
+    if (!rehearsalId) {
+      setRuns([]);
+      return;
+    }
+    void loadRehearsalRuns(rehearsalId)
       .then((log) => {
         if (!cancelled) setRuns(log.runs.slice().reverse());
       })
       .catch((e: unknown) => {
-        console.warn("failed to read the rehearsals", retellId, e);
+        console.warn("failed to read the runs", rehearsalId, e);
       });
     return () => {
       cancelled = true;
     };
-  }, [retellId, reloadKey]);
+  }, [rehearsalId, reloadKey]);
 
   return runs;
 }

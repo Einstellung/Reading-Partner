@@ -1,5 +1,5 @@
 // What the host makes of a deck's messages, and what it puts on the bar
-// (src/ui/components/retell/rehearsal.ts). The view around it is an iframe and a
+// (src/ui/components/rehearsal/rehearsal.ts). The view around it is an iframe and a
 // listener; everything that can be wrong is in here. Run: bun test.
 
 import { expect, test } from "bun:test";
@@ -18,7 +18,7 @@ import {
   slideEvent,
   utteranceEvent,
   withSlideEvent,
-} from "../../../src/ui/components/retell/rehearsal";
+} from "../../../src/ui/components/rehearsal/rehearsal";
 import type {
   RehearsalEvent,
   RehearsalRun,
@@ -236,7 +236,7 @@ function lateSource(events: RehearsalEvent[], said: string): TranscriptSource {
 }
 
 const finishInput = (events: RehearsalEvent[], save: (run: RehearsalRun) => Promise<unknown>) => ({
-  retellId: "t-1",
+  rehearsalId: "t-1",
   deckFile: "slides/t-1.html",
   id: "run-1",
   startedAt: 1_000,
