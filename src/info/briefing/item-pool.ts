@@ -66,10 +66,17 @@ export interface Pool {
   // phone suspends a backgrounded webview and its timers with it, so whether a
   // source is due has to be answerable from what is on disk.
   lastPolled: Record<string, number>;
+  // Whether `marks` is what the marks file holds, and so whether that file may
+  // be written from this pool. A read that succeeded grants it (pool-store.ts)
+  // and nothing else does: an empty `marks` is also what a file that would not
+  // open looks like, and saving that says nothing has ever been briefed.
+  marksWritable: boolean;
 }
 
+// Unwritable, because nothing has read the file yet. The one pool that is ever
+// saved comes from loadPool, which grants it there.
 export function emptyPool(): Pool {
-  return { version: POOL_VERSION, days: {}, marks: {}, lastPolled: {} };
+  return { version: POOL_VERSION, days: {}, marks: {}, lastPolled: {}, marksWritable: false };
 }
 
 // --- dates ------------------------------------------------------------------
