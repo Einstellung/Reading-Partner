@@ -1,11 +1,12 @@
 // The sync engine's pass (src/platform/sync/engine.ts) over a fake backend + fake fs +
 // fake book store: push, pull, three-way merge, the books channel, the pulled
-// callback, single-flight, what a pass does when part of it fails, and what a
-// restarted engine still knows about the last one. No timers
-// (syncNow drives a pass directly), no network. Run: bun test.
+// callback, single-flight, the bounded transfer pool, what a pass does when
+// part of it fails, and what a restarted engine still knows about the last one.
+// No timers (syncNow drives a pass directly), no network. Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
+  DATA_CONCURRENCY,
   MAX_CONSECUTIVE_FAILURES,
   RESUME_MIN_INTERVAL_MS,
   SyncEngine,
@@ -930,7 +931,7 @@ test("a file gone from the remote is skipped, not counted as a fault", async () 
 
 test("a run of failures ends the pass instead of grinding through the rest", async () => {
   const remote: RemoteState = {};
-  for (let i = 0; i < 6; i++) remote[`f${i}.json`] = { rev: 1, mtime: 1, size: 1 };
+  for (let i = 0; i < 60; i++) remote[`f${i}.json`] = { rev: 1, mtime: 1, size: 1 };
   const be = makeBackend(remote);
   let attempts = 0;
   be.backend.download = async () => {
@@ -941,8 +942,154 @@ test("a run of failures ends the pass instead of grinding through the rest", asy
 
   await engine.syncNow();
 
-  expect(attempts).toBe(MAX_CONSECUTIVE_FAILURES);
-  expect(engine.status().lastError).toStartWith("3 items failed; first: download f0.json failed:");
+  // The pool is asked before it dispatches and cannot call back what is already
+  // on the wire, so a dead link costs one set of slots plus the streak that
+  // tripped the halt — not the sixty it would otherwise be asked for.
+  expect(attempts).toBeGreaterThanOrEqual(MAX_CONSECUTIVE_FAILURES);
+  expect(attempts).toBeLessThanOrEqual(DATA_CONCURRENCY + MAX_CONSECUTIVE_FAILURES);
+  expect(engine.status().lastError).toMatch(
+    /^\d+ items failed; first: download f\d+\.json failed:/,
+  );
+});
+
+// --- the transfer pool -----------------------------------------------------
+//
+// The reported failure: a first sync on a phone took close to two minutes,
+// because 273 small data files went one round trip at a time. The transfers now
+// run several at once; everything the per-item design promises has to survive
+// that, which is what the four tests below are for.
+
+// A remote of `count` files, each with bytes of its own.
+function manyRemote(count: number) {
+  const remote: RemoteState = {};
+  const data: Record<string, string> = {};
+  for (let i = 0; i < count; i++) {
+    remote[`f${i}.json`] = { rev: 1, mtime: 1, size: 2 };
+    data[`f${i}.json`] = `v${i}`;
+  }
+  return { remote, data };
+}
+
+// A latency the pool can fill: a task that never yields to the macrotask queue
+// would finish before the next one starts, and every reading would be 1.
+const roundTrip = () => new Promise<void>((r) => setTimeout(r, 0));
+
+test("downloads run several at a time and never exceed the cap", async () => {
+  const { remote, data } = manyRemote(DATA_CONCURRENCY * 3);
+  const be = makeBackend(remote, data);
+  const download = be.backend.download;
+  let inFlight = 0;
+  let peak = 0;
+  be.backend.download = async (name) => {
+    inFlight += 1;
+    peak = Math.max(peak, inFlight);
+    try {
+      await roundTrip();
+      return await download(name);
+    } finally {
+      inFlight -= 1;
+    }
+  };
+  const { fs, files } = makeFs();
+  const { engine } = makeEngine({ backend: be.backend, fs, snapshot: {} });
+
+  await engine.syncNow();
+
+  expect(peak).toBe(DATA_CONCURRENCY);
+  expect(inFlight).toBe(0);
+  // The cap is a cap, not a budget: every file still gets pulled.
+  expect(files.size).toBe(DATA_CONCURRENCY * 3);
+  expect(engine.status().lastError).toBeNull();
+});
+
+test("uploads run several at a time and never exceed the cap", async () => {
+  const be = makeBackend();
+  const upload = be.backend.upload;
+  let inFlight = 0;
+  let peak = 0;
+  be.backend.upload = async (name, bytes, meta) => {
+    inFlight += 1;
+    peak = Math.max(peak, inFlight);
+    try {
+      await roundTrip();
+      return await upload(name, bytes, meta);
+    } finally {
+      inFlight -= 1;
+    }
+  };
+  const seed: Record<string, { text: string; mtime: number }> = {};
+  for (let i = 0; i < DATA_CONCURRENCY * 3; i++) seed[`f${i}.json`] = { text: `v${i}`, mtime: 500 };
+  const { fs } = makeFs(seed);
+  const { engine } = makeEngine({ backend: be.backend, fs, snapshot: {} });
+
+  await engine.syncNow();
+
+  expect(peak).toBe(DATA_CONCURRENCY);
+  expect(inFlight).toBe(0);
+  expect(be.data.size).toBe(DATA_CONCURRENCY * 3);
+  expect(engine.status().lastError).toBeNull();
+});
+
+test("one download failing with siblings in flight costs only itself", async () => {
+  const { remote, data } = manyRemote(DATA_CONCURRENCY * 2);
+  const be = makeBackend(remote, data);
+  const download = be.backend.download;
+  be.backend.download = async (name) => {
+    // Rejects while its siblings are still on the wire. A pool that let a
+    // rejection escape would cancel them with it, which is the all-or-nothing
+    // pass all over again (docs/pitfall/52).
+    await roundTrip();
+    if (name === "f3.json") throw new Error("error sending request");
+    return download(name);
+  };
+  const { fs, files } = makeFs();
+  const snapshot: Snapshot = {};
+  const { engine } = makeEngine({ backend: be.backend, fs, snapshot });
+
+  await engine.syncNow();
+
+  expect(files.size).toBe(DATA_CONCURRENCY * 2 - 1);
+  expect(files.has("f3.json")).toBe(false);
+  expect(snapshot["f3.json"]).toBeUndefined();
+  expect(Object.keys(snapshot)).toHaveLength(DATA_CONCURRENCY * 2 - 1);
+  // One file short of mirrored is not synced, however many landed.
+  expect(engine.status().lastSyncAt).toBeNull();
+  expect(engine.status().lastError).toStartWith("download f3.json failed:");
+});
+
+test("a dead token stops the pool from queueing the rest of the pass", async () => {
+  const { remote } = manyRemote(DATA_CONCURRENCY * 5);
+  const be = makeBackend(remote);
+  let attempts = 0;
+  be.backend.download = async () => {
+    attempts += 1;
+    await roundTrip();
+    const e = new Error("Google sign-in expired");
+    e.name = "GoogleAuthError";
+    throw e;
+  };
+  const { fs } = makeFs({ "settings.json": { text: "{}", mtime: 500 } });
+  let signedOut = 0;
+  const { engine } = makeEngine({
+    backend: be.backend,
+    fs,
+    snapshot: {},
+    onSignedOut: () => {
+      signedOut += 1;
+    },
+  });
+
+  await engine.syncNow();
+
+  // The slots already open still come back; nothing behind them is dispatched.
+  // Forty files each confirming the same dead token is the thing to avoid.
+  expect(attempts).toBe(DATA_CONCURRENCY);
+  expect(signedOut).toBe(1);
+  expect(be.data.has("settings.json")).toBe(false); // the uploads never ran
+  // The auth failure ends the pass; the siblings that hit the same wall are one
+  // condition, not a tally of faults.
+  expect(engine.status().lastError).toBe("Google sign-in expired");
+  expect(engine.status().lastSyncAt).toBeNull();
 });
 
 test("a dead token stops the pass at once instead of counting as one bad file", async () => {

@@ -28,13 +28,19 @@
 // never do is claim more than it did — lastSyncAt advances only when nothing
 // failed, and only a file that actually landed is snapshotted.
 //
+// The per-item transfers of the data channel run in a bounded pool
+// (DATA_CONCURRENCY) rather than one after another: the channel holds hundreds
+// of small files, and one request at a time makes a first sync a queue of
+// hundreds of round trips. The merges and the books channel stay serial for
+// reasons of their own, written where they are.
+//
 // Timers: an initial pass on start, a periodic tick every TICK_MS that runs a
 // pass when local files changed or PULL_INTERVAL_MS has elapsed since the last
 // pull, and an on-demand syncNow(). The app coming back to the front and going
 // away drive two more (onForeground/onBackground) — a schedule built on timers
 // alone is wrong on a phone, where the timers stop the moment the app is
-// backgrounded. All of them funnel through runPass(), so single-flight is the
-// only concurrency rule.
+// backgrounded. All of them funnel through runPass(), so no two passes ever
+// overlap; the concurrency inside one is the transfer pool and nothing else.
 //
 // Everything the pass touches (backend, fs, books) is injected; the Tauri wiring
 // lives in index.ts. reconcile() (reconcile.ts) is the pure decision core.
@@ -62,8 +68,53 @@ export const RESUME_MIN_INTERVAL_MS = 30_000;
 
 // A run of failures this long means the link is down, not that one file is
 // awkward. The rest of the pass would only spend its retry budget failing the
-// same way, so it is left for the next pass.
+// same way, so it is left for the next pass. It is consulted before a transfer
+// is dispatched, so a pool that trips it still has whatever it had on the wire:
+// the guard exists to save a device from grinding through hundreds of items on
+// a dead link, not to make the last few requests exact.
 export const MAX_CONSECUTIVE_FAILURES = 3;
+
+// How many data-channel transfers are on the wire at once.
+//
+// Latency is the entire cost here: the data files average 11 KB, so a pass over
+// the current 273 of them is 273 round trips with nothing in between, which
+// through a proxy is close to two minutes of first sync on a phone. None of
+// that is bandwidth, and none of it gets better by waiting.
+//
+// The ceiling is memory, not the server: a body handed to the Tauri http plugin
+// costs about twenty times its own size while the request is alive
+// (docs/pitfall/54), so eight 11 KB files in flight is on the order of 2 MB —
+// irrelevant next to what opening one book already costs. Drive's per-user
+// rate limits sit far above eight concurrent requests, so they are not what
+// picks this number either. Eight is small enough that a data file which grew
+// an order of magnitude would still be affordable.
+export const DATA_CONCURRENCY = 8;
+
+// Run `task` over every item with at most `limit` of them in flight.
+//
+// `task` must not reject. A rejection would take the whole Promise.all with it
+// and leave its siblings running unobserved, which is precisely the
+// all-or-nothing behaviour a pass must not have (docs/pitfall/52) — so every
+// caller keeps the try/catch its serial loop had, inside the task.
+//
+// `stop` is asked before each dispatch and never mid-task: nothing here can
+// call back a request that is already on the wire, so a pool that stops costs
+// at most the tasks it had already started.
+async function runPool<T>(
+  items: readonly T[],
+  limit: number,
+  stop: () => boolean,
+  task: (item: T) => Promise<void>,
+): Promise<void> {
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < items.length && !stop()) {
+      await task(items[next++]);
+    }
+  };
+  const width = Math.min(Math.max(1, limit), items.length);
+  await Promise.all(Array.from({ length: width }, () => worker()));
+}
 
 // Cap on the failure text kept for the UI: it is shown on one line in Settings,
 // and Drive's error bodies run long.
@@ -138,6 +189,7 @@ class PassFailures {
   count = 0;
   private first: string | null = null;
   private streak = 0;
+  private auth: unknown = null;
 
   record(what: string, e: unknown): void {
     this.count += 1;
@@ -149,12 +201,29 @@ class PassFailures {
     }
   }
 
+  // A dead token is not one awkward file: every request left in the pass would
+  // only spend itself learning the same thing, which on the data channel is two
+  // hundred more requests into the same wall. The serial loops throw it on the
+  // spot; a pool cannot, because it has siblings on the wire that nothing can
+  // call back — so it is kept here, dispatch stops at once, the in-flight tasks
+  // are left to settle, and rethrowAuthFailure() puts the pass exactly where
+  // the serial `throw` used to put it. Siblings that fail the same way after it
+  // are dropped rather than recorded: they are one condition, not several
+  // faults, and the pass reports the auth error itself either way.
+  recordAuth(e: unknown): void {
+    if (this.auth === null) this.auth = e;
+  }
+
+  rethrowAuthFailure(): void {
+    if (this.auth !== null) throw this.auth;
+  }
+
   succeeded(): void {
     this.streak = 0;
   }
 
   halted(): boolean {
-    return this.streak >= MAX_CONSECUTIVE_FAILURES;
+    return this.auth !== null || this.streak >= MAX_CONSECUTIVE_FAILURES;
   }
 
   message(): string | null {
@@ -456,8 +525,7 @@ export class SyncEngine {
 
       const changed: string[] = [];
       // Pull first so library.json is current before the books channel reads it.
-      for (const dl of plan.downloads) {
-        if (failures.halted()) break;
+      await runPool(plan.downloads, DATA_CONCURRENCY, () => failures.halted(), async (dl) => {
         try {
           const bytes = await this.d.backend.download(dl.path);
           await this.d.fs.write(dl.path, bytes);
@@ -474,19 +542,28 @@ export class SyncEngine {
           changed.push(dl.path);
           failures.succeeded();
         } catch (e) {
-          if (isAuthFailure(e)) throw e;
+          if (isAuthFailure(e)) {
+            failures.recordAuth(e);
+            return;
+          }
           // Listed a moment ago, gone by the time it was asked for. Nothing to
           // pull and nothing a retry can do; deletions are not propagated
           // (docs/13), so the local copy stays as it is.
-          if (isRemoteGone(e)) continue;
+          if (isRemoteGone(e)) return;
           failures.record(`download ${dl.path}`, e);
         }
-      }
+      });
+      failures.rethrowAuthFailure();
 
       // Both sides changed since the base. The merge is what gets published, at
       // a rev above the remote's, so both devices converge on it instead of one
       // of them winning the whole file. A merge that fails is one bad file like
       // any other, never the end of the pass.
+      //
+      // Serial, unlike the transfers on either side of it: a merge is not a
+      // round trip but a read-modify-write over local files, the base store and
+      // the trash journal, and a pass only ever has a handful. There is no
+      // queue of latency here to win back.
       for (const mg of plan.merges) {
         if (failures.halted()) break;
         try {
@@ -502,8 +579,7 @@ export class SyncEngine {
         }
       }
 
-      for (const up of plan.uploads) {
-        if (failures.halted()) break;
+      await runPool(plan.uploads, DATA_CONCURRENCY, () => failures.halted(), async (up) => {
         try {
           const bytes = await this.d.fs.read(up.path);
           await this.d.backend.upload(up.path, bytes, {
@@ -517,10 +593,14 @@ export class SyncEngine {
           await this.record(up, bytes);
           failures.succeeded();
         } catch (e) {
-          if (isAuthFailure(e)) throw e;
+          if (isAuthFailure(e)) {
+            failures.recordAuth(e);
+            return;
+          }
           failures.record(`upload ${up.path}`, e);
         }
-      }
+      });
+      failures.rethrowAuthFailure();
 
       await this.seedBases(
         local,
@@ -551,6 +631,13 @@ export class SyncEngine {
     }
   }
 
+  // One book at a time, and it stays that way whatever the data channel does.
+  // A blob handed to the http plugin costs about twenty times its own size in
+  // memory while the request is alive (docs/pitfall/54): 26 MB peaked at 400 MB
+  // on an iPad and got the webview killed by jetsam, which is why the upload is
+  // chunked at all. Chunking bounds one book's peak; two books at once
+  // multiplies whatever that peak is, and the device that needs this channel
+  // most is the one with the least memory to lose.
   private async syncBooks(failures: PassFailures): Promise<void> {
     // Before listHashes, not inside the loop: under "off" the channel does not
     // exist, so it does not read library.json either.
