@@ -9,9 +9,10 @@ import { isTauri } from "../platform/app/host";
 import { cleanTauriFetch } from "../platform/app/tauri-fetch";
 import { bridgedHosts } from "./providers";
 
-// The OAuth hosts, which no provider's baseUrl names: the two authorize/token
-// endpoints and the pages they redirect through. All CORS-free, and none may see
-// the webview origin.
+// The hosts the two OAuth flows reach: the authorize pages, the token endpoints,
+// and the inference hosts. The four that are not any provider's baseUrl
+// (platform.claude.com, claude.ai, api.openai.com, auth.openai.com) are why this
+// list exists at all. All CORS-free, and none may see the webview origin.
 const OAUTH_HOSTS = [
 	"api.anthropic.com",
 	"platform.claude.com",
