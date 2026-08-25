@@ -26,6 +26,7 @@ export {
   talkOutlineForRetell,
   talkOutlineIdOf,
   talkOutlineOfRetell,
+  talkThreadKey,
   type StartTalkOutlineInput,
 } from "./store";
 export {

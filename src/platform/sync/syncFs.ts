@@ -92,8 +92,8 @@ export function inSyncRange(path: string): boolean {
     if (ROOT_FILES.has(top)) return true;
     return (
       /^annotations-.+\.json$/.test(top) ||
-      // A retell's conversation is threads-retell-<retellId>.json, so it is
-      // already covered by the line above.
+      // A retell's conversation is threads-retell-<retellId>.json and a talk's
+      // is threads-talk-<outlineId>.json, so both are covered by this line.
       /^threads-.+\.json$/.test(top) ||
       // Retells (docs/31): the materials, the outline the retell settled and the
       // order the reader put it in. Nothing can rebuild it from the books, so it

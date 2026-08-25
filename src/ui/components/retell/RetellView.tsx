@@ -31,6 +31,7 @@ import { outlineRows, type Retell } from "../../../reading/retell";
 import { defaultNavOpen, readNavEnv } from "../base/topic-nav";
 import DeckDialog from "./DeckDialog";
 import OutlinePane from "./OutlinePane";
+import CoachView from "../rehearsal/CoachView";
 import RehearsalView from "../rehearsal/RehearsalView";
 import { rehearsalReadiness } from "../rehearsal/rehearsal";
 import { openTranscriptSource } from "../rehearsal/start";
@@ -72,6 +73,12 @@ export default function RetellView(props: {
   // press: the topic's Rehearsal section opens the same object, so the two doors
   // end at one history and not two.
   const [rehearsing, setRehearsing] = useState<Rehearsal | null>(null);
+  // The coach's conversation, opened by the pass ending and covering the retell
+  // the way the panel does. A pass not written yet keeps `passPending` on, and
+  // `passKey` is bumped when it has landed in the conversation.
+  const [coaching, setCoaching] = useState(false);
+  const [passPending, setPassPending] = useState(false);
+  const [passKey, setPassKey] = useState(0);
   // The words for the pass about to be given, or null when the machine has no
   // way to hear them (no STT key on the desktop, no dictation on the host).
   // Which of the two shapes it is belongs to the rehearsal, not to this button
@@ -250,11 +257,33 @@ export default function RetellView(props: {
             outline={talk.outline}
             backLabel="Back to the retell"
             transcript={transcript ?? undefined}
+            // Closing the panel hands the pass in (docs/44), so it lands in the
+            // talk's conversation — which is a different conversation from this
+            // one. The retell settled what the talk says; the coach hears it
+            // said, and covers the retell the way the panel did.
             onExit={() => {
               setRehearsing(null);
               setTranscript(null);
+              setCoaching(true);
+              setPassPending(true);
             }}
-            onSaved={() => setRunsKey((n) => n + 1)}
+            onSaved={(recorded) => {
+              setPassPending(false);
+              if (!recorded) return;
+              setRunsKey((n) => n + 1);
+              setPassKey((n) => n + 1);
+            }}
+          />
+        )}
+
+        {coaching && talk.outline && (
+          <CoachView
+            outlineId={talk.outline.id}
+            topicName={props.topicName}
+            backLabel="Back to the retell"
+            passKey={passKey}
+            pending={passPending}
+            onBack={() => setCoaching(false)}
           />
         )}
 

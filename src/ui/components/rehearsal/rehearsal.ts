@@ -145,7 +145,7 @@ export function hasRecordedPages(events: readonly RehearsalEvent[]): boolean {
   return events.some((e) => e.kind === "slide");
 }
 
-export interface FinishRunInput {
+export interface FinishRunInput<Saved = unknown> {
   rehearsalId: string;
   // Frozen at null: the pass is given against an outline (docs/44) and nothing
   // has a deck to name. Still on the shape because BuiltRun carries it.
@@ -164,7 +164,13 @@ export interface FinishRunInput {
   // array: the last page's words arrive during that wait, through the callback
   // the caller gave start().
   events(): readonly RehearsalEvent[];
-  save(run: BuiltRun): Promise<unknown>;
+  save(run: BuiltRun): Promise<Saved>;
+  // Hand the pass to the talk's conversation, once it is on disk (docs/44:
+  // stopping is handing it in). After the save and never instead of it: the pass
+  // is the record, and a message about a pass that was not written would be the
+  // coach discussing something the reader cannot open. A handoff that fails is
+  // warned about and nothing more — the pass still happened.
+  handoff?(run: BuiltRun, saved: Saved): Promise<unknown>;
 }
 
 // End a rehearsal: close the speech, build the run out of everything that
@@ -176,7 +182,7 @@ export interface FinishRunInput {
 // The order is the whole of it, and the order is why this is not in the view:
 // the run cannot be built before the source has stopped, and the history cannot
 // be reloaded before the run is on disk.
-export async function finishRun(input: FinishRunInput): Promise<boolean> {
+export async function finishRun<Saved>(input: FinishRunInput<Saved>): Promise<boolean> {
   if (input.source) {
     await input.source.stop().catch((e: unknown) => console.warn("transcript stop failed", e));
   }
@@ -190,11 +196,17 @@ export async function finishRun(input: FinishRunInput): Promise<boolean> {
     startedAt: input.startedAt,
     events,
   });
+  let saved: Saved;
   try {
-    await input.save(run);
+    saved = await input.save(run);
   } catch (e) {
     console.warn("failed to record the run", e);
     return false;
+  }
+  if (input.handoff) {
+    await input
+      .handoff(run, saved)
+      .catch((e: unknown) => console.warn("failed to hand the pass to the conversation", e));
   }
   return true;
 }

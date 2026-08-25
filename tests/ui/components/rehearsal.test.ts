@@ -273,6 +273,50 @@ test("a write that failed is not reported as a run", async () => {
   }
 });
 
+// docs/44: stopping is handing the pass in. The handoff runs on the far side of
+// the write, so what the coach is told about is a pass the reader can open.
+test("a written run is handed to the conversation, after the write", async () => {
+  const order: string[] = [];
+  const events: RehearsalEvent[] = [onPage(0, 1_500)];
+  const saved = await finishRun({
+    ...finishInput(events, async () => {
+      order.push("save");
+      return "entry-1";
+    }),
+    handoff: async (run, entry) => {
+      order.push(`handoff ${entry} ${run.id}`);
+    },
+  });
+  expect(saved).toBe(true);
+  expect(order).toEqual(["save", "handoff entry-1 run-1"]);
+});
+
+test("a pass that was never written is not handed over", async () => {
+  const handed: string[] = [];
+  const saved = await finishRun({
+    ...finishInput([], async () => "entry-1"),
+    handoff: async () => void handed.push("handed"),
+  });
+  expect(saved).toBe(false);
+  expect(handed).toEqual([]);
+});
+
+// The pass happened whatever the conversation did with it: a handoff that threw
+// must not turn a recorded pass into one the caller reads as lost.
+test("a handoff that fails still leaves the pass recorded", async () => {
+  const realWarn = console.warn;
+  console.warn = () => {};
+  try {
+    const saved = await finishRun({
+      ...finishInput([onPage(0, 1_500)], async () => "entry-1"),
+      handoff: () => Promise.reject(new Error("no thread")),
+    });
+    expect(saved).toBe(true);
+  } finally {
+    console.warn = realWarn;
+  }
+});
+
 test("a source that will not stop still costs only its own words", async () => {
   const realWarn = console.warn;
   console.warn = () => {};

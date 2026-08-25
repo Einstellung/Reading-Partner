@@ -37,6 +37,7 @@ import {
 } from "../../../reading/saved-articles";
 import { createRetell } from "../../../reading/retell";
 import RetellView from "../retell/RetellView";
+import CoachView from "../rehearsal/CoachView";
 import RehearsalScreen from "../rehearsal/RehearsalScreen";
 import type { Rehearsal } from "../../../reading/rehearsal";
 import { Button } from "../ui/button";
@@ -98,6 +99,15 @@ export default function LibraryScreen(props: {
   // the way a retell does rather than covering them: the section it is started
   // from sits inside a scrolling column, which would clip a full-screen cover.
   const [openRehearsal, setOpenRehearsal] = useState<Rehearsal | null>(null);
+  // The talk whose conversation is open, which is where a pass is handed in
+  // (docs/44). Held as the outline's id and not as the rehearsal's: the
+  // conversation belongs to the talk and spans every pass over it.
+  const [coachOutlineId, setCoachOutlineId] = useState<string | null>(null);
+  // A pass has been given and is not on disk yet — the last of the speech is
+  // still coming back from the recogniser.
+  const [passPending, setPassPending] = useState(false);
+  // Bumped when a pass has landed in the conversation, so the coach reads it.
+  const [passKey, setPassKey] = useState(0);
   // Bumped when a pass reaches disk, which is the only moment this device
   // changes the counts the section shows.
   const [rehearsalKey, setRehearsalKey] = useState(0);
@@ -114,6 +124,7 @@ export default function LibraryScreen(props: {
     setSection(DEFAULT_SECTION);
     setOpenRetellId(null);
     setOpenRehearsal(null);
+    setCoachOutlineId(null);
   }, [activeTopic?.id]);
 
   // Retell one book: a retell of its own, entered straight away (docs/31 — the
@@ -150,12 +161,40 @@ export default function LibraryScreen(props: {
   }
 
   if (activeTopic && openRehearsal) {
+    const outlineId = openRehearsal.outlineId;
     return (
       <RehearsalScreen
         key={openRehearsal.id}
         rehearsal={openRehearsal}
-        onBack={() => setOpenRehearsal(null)}
-        onSaved={() => setRehearsalKey((n) => n + 1)}
+        // Closing the panel is handing the pass in (docs/44), so it lands in the
+        // talk's conversation rather than back on the section it was opened
+        // from. The pass itself is still being written at this point — the
+        // coach's view says so until onSaved lands.
+        onBack={() => {
+          setCoachOutlineId(outlineId);
+          setPassPending(true);
+          setOpenRehearsal(null);
+        }}
+        onSaved={(recorded) => {
+          setPassPending(false);
+          if (!recorded) return;
+          setRehearsalKey((n) => n + 1);
+          setPassKey((n) => n + 1);
+        }}
+      />
+    );
+  }
+
+  if (activeTopic && coachOutlineId) {
+    return (
+      <CoachView
+        key={coachOutlineId}
+        outlineId={coachOutlineId}
+        topicName={activeTopic.name}
+        backLabel="Back to the topic"
+        passKey={passKey}
+        pending={passPending}
+        onBack={() => setCoachOutlineId(null)}
       />
     );
   }
@@ -206,6 +245,7 @@ export default function LibraryScreen(props: {
                   topic={activeTopic}
                   reloadKey={rehearsalKey}
                   onStart={setOpenRehearsal}
+                  onTalk={setCoachOutlineId}
                 />
               ) : section === "retell" ? (
                 <RetellSection topic={activeTopic} onOpenRetell={setOpenRetellId} />

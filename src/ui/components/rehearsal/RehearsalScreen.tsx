@@ -15,7 +15,7 @@ import { useTalkOutline } from "./useRehearsal";
 export default function RehearsalScreen(props: {
   rehearsal: Rehearsal;
   onBack(): void;
-  onSaved(): void;
+  onSaved(recorded: boolean): void;
 }) {
   // Made once, before the panel is on screen: capture has to be running by the
   // time the first segment goes up, or every word said to it is lost. null is
