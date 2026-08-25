@@ -7,7 +7,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { generatePKCE, parseManualInput } from "../platform/app/oauth";
-import { loadCredentials, setActiveCredential, updateCredentials, type AnthropicCredential } from "./credentials";
+import {
+	isOAuthCredential,
+	loadCredentials,
+	setActiveCredential,
+	updateCredentials,
+	type AnthropicCredential,
+} from "./credentials";
 import { coalesceRefresh } from "./token-refresh";
 
 const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
@@ -101,9 +107,17 @@ function refreshToken(refresh: string): Promise<AnthropicCredential> {
 }
 
 async function store(cred: AnthropicCredential): Promise<void> {
-	// Single-active: this also signs out OpenAI and DeepSeek.
+	// Single-active: this also signs out whichever other provider was connected.
 	await setActiveCredential("anthropic", cred);
 	pending = null;
+}
+
+// The stored Anthropic credential, or null when there is none. The store holds
+// a provider credential of either shape, and only the OAuth triple is one this
+// app can refresh.
+async function loadStored(): Promise<AnthropicCredential | null> {
+	const cred = (await loadCredentials()).anthropic;
+	return isOAuthCredential(cred) ? cred : null;
 }
 
 /**
@@ -171,7 +185,7 @@ export async function anthropicLogout(): Promise<void> {
  * token-refresh.ts).
  */
 export async function getValidAnthropicAuth(): Promise<string | null> {
-	const cred = (await loadCredentials()).anthropic;
+	const cred = await loadStored();
 	if (!cred) return null;
 	if (Date.now() < cred.expires) return cred.access;
 
@@ -179,7 +193,7 @@ export async function getValidAnthropicAuth(): Promise<string | null> {
 		// Re-read inside the coalescer: a refresh that finished between our read
 		// and our turn already spent this refresh token, and left the only valid
 		// successor on disk.
-		const current = (await loadCredentials()).anthropic;
+		const current = await loadStored();
 		if (!current) return null;
 		if (Date.now() < current.expires) return current.access;
 
@@ -187,7 +201,8 @@ export async function getValidAnthropicAuth(): Promise<string | null> {
 		await updateCredentials((s) => {
 			// A sign-in or sign-out that landed while the exchange was in flight
 			// owns the file now; putting our token back would undo it.
-			if (s.anthropic?.refresh === current.refresh) s.anthropic = next;
+			if (isOAuthCredential(s.anthropic) && s.anthropic.refresh === current.refresh)
+				s.anthropic = next;
 		});
 		return next.access;
 	});

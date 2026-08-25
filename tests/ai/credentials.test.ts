@@ -1,6 +1,6 @@
-// Single-active credential semantics: at most one of the three model providers
-// holds a live credential. Tests the pure reducer/resolver (no fs/Tauri) plus
-// the default-conversation chain follow. Run: bun test.
+// Single-active credential semantics: at most one model provider holds a live
+// credential, whichever of the list it is. Tests the pure reducer/resolver (no
+// fs/Tauri) plus the default-conversation chain follow. Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
@@ -11,11 +11,12 @@ import {
 	type CredentialsIo,
 } from "../../src/ai/credentials";
 import { defaultModelFor, getModels, nextDefaultsForActive } from "../../src/ai/providers";
+import { PROVIDER_IDS } from "../../src/ai/provider-ids";
 
 const oauth = { type: "oauth", access: "a", refresh: "r", expires: 1 } as const;
 const key = (k: string) => ({ type: "apiKey", key: k }) as const;
 
-// --- mutual-exclusion matrix (three providers, pairwise) -------------------
+// --- mutual-exclusion matrix (pairwise) ------------------------------------
 
 test("activating anthropic drops openai and deepseek", () => {
 	const before: CredentialStore = { openai: oauth, deepseek: key("dk") };
@@ -60,6 +61,43 @@ test("withActiveCredential does not mutate the input store", () => {
 	expect(before.deepseek).toBeUndefined();
 });
 
+// --- mutual exclusion holds for the whole list, not just the first three ---
+
+test("activating any provider drops every other one", () => {
+	// Every provider in turn, over a store already holding all the others.
+	for (const id of PROVIDER_IDS) {
+		const before: CredentialStore = {};
+		for (const other of PROVIDER_IDS) before[other] = key(`k-${other}`);
+		const after = withActiveCredential(before, id, key("new"));
+		expect(after[id]).toEqual(key("new"));
+		for (const other of PROVIDER_IDS) {
+			if (other !== id) expect(after[other]).toBeUndefined();
+		}
+	}
+});
+
+test("a key saved for one of the newer providers signs the previous one out", () => {
+	const before: CredentialStore = { groq: key("gsk") };
+	const after = withActiveCredential(before, "xai", key("xai-key"));
+	expect(after.xai).toEqual(key("xai-key"));
+	expect(after.groq).toBeUndefined();
+	expect(activeProviderId(after)).toBe("xai");
+});
+
+test("device keys survive a switch between two of the newer providers", () => {
+	const before: CredentialStore = {
+		"kimi-coding": key("kimi"),
+		imageGen: key("img"),
+		voiceStt: key("stt"),
+	};
+	const after = withActiveCredential(before, "cerebras", key("cb"));
+	expect(after.imageGen).toEqual(key("img"));
+	expect(after.voiceStt).toEqual(key("stt"));
+	expect(after["kimi-coding"]).toBeUndefined();
+	// Nor do the device keys ever count as the active provider.
+	expect(activeProviderId({ imageGen: key("img"), voiceStt: key("stt") })).toBeNull();
+});
+
 // --- legacy multi-provider read rule ---------------------------------------
 
 test("activeProviderId returns the single provider when only one is set", () => {
@@ -68,11 +106,14 @@ test("activeProviderId returns the single provider when only one is set", () => 
 	expect(activeProviderId({})).toBeNull();
 });
 
-test("legacy file with several providers resolves by priority (anthropic > openai > deepseek)", () => {
+test("legacy file with several providers resolves by priority (anthropic > openai > the rest)", () => {
 	expect(activeProviderId({ anthropic: oauth, openai: oauth, deepseek: key("dk") })).toBe(
 		"anthropic",
 	);
 	expect(activeProviderId({ openai: oauth, deepseek: key("dk") })).toBe("openai");
+	// Among the key providers the tie-break is the list's own order.
+	expect(activeProviderId({ xai: key("x"), deepseek: key("dk") })).toBe("deepseek");
+	expect(activeProviderId({ anthropic: oauth, groq: key("g") })).toBe("anthropic");
 });
 
 test("a legacy OpenAI api-key credential is not treated as active", () => {

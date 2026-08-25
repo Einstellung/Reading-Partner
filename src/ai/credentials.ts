@@ -1,7 +1,7 @@
 // Local credential store: AppData/credentials.json. Anthropic and OpenAI hold
-// the OAuth triple (access/refresh/expires); DeepSeek holds an API key. Write
-// failures are surfaced, never swallowed — a silently dropped credential looks
-// like the login worked until the next request fails.
+// the OAuth triple (access/refresh/expires); every other provider holds an API
+// key. Write failures are surfaced, never swallowed — a silently dropped
+// credential looks like the login worked until the next request fails.
 //
 // One file, several independent writers: any of the five AI singletons (prep,
 // notes, slides, briefing, chat) can persist a refreshed token at any moment,
@@ -10,6 +10,7 @@
 // resurrects the state it read before another one committed.
 
 import { readGuardedJson, writeTextAtomic, type GuardedRead } from "../platform/app/atomic-fs";
+import { PROVIDER_IDS, type ProviderId } from "./provider-ids";
 
 const FILE = "credentials.json";
 
@@ -42,35 +43,41 @@ export function isOAuthCredential(cred: unknown): cred is OAuthCredential {
 	);
 }
 
-export interface CredentialStore {
-	anthropic?: AnthropicCredential;
-	// OAuth now, but on-disk data may still carry a legacy apiKey credential;
-	// isOAuthCredential ignores it.
-	openai?: OpenAICredential | ApiKeyCredential;
-	deepseek?: ApiKeyCredential;
+// One provider's stored credential: an OAuth triple for the two subscription
+// providers, an API key for the rest. Anthropic and OpenAI are declared with the
+// union too rather than narrowly, because on-disk data may carry a legacy
+// OpenAI apiKey credential; the OAuth paths narrow with isOAuthCredential.
+export type ProviderCredential = OAuthCredential | ApiKeyCredential;
+
+export type CredentialStore = Partial<Record<ProviderCredentialId, ProviderCredential>> & {
 	// Paid image-relay key for deck illustrations (docs/14). A credential, not a
 	// setting, so it stays on the device and out of the sync range.
 	imageGen?: ApiKeyCredential;
 	// Speech-to-text key for voice input (docs/15). Same reasoning: on-device,
 	// never synced.
 	voiceStt?: ApiKeyCredential;
-}
+};
 
-// The three model providers. At most one may hold a live credential at a time:
+// The model providers. At most one may hold a live credential at a time:
 // signing into (or saving a key for) one signs the others out. imageGen and
 // voiceStt are device keys, outside this set, and are never touched by it.
-export type ProviderCredentialId = "anthropic" | "openai" | "deepseek";
+export type ProviderCredentialId = ProviderId;
 
 // Priority used only to disambiguate a legacy credentials.json that carries more
 // than one provider (written before single-active). The highest-priority present
 // credential is treated as the active one; the rest are ignored on read and get
 // physically dropped the next time any provider is activated. Deterministic and
-// self-contained (no settings needed).
-const ACTIVE_PRIORITY: ProviderCredentialId[] = ["anthropic", "openai", "deepseek"];
+// self-contained (no settings needed). The two subscription providers lead
+// because they are the only ones a pre-single-active file could pair with a key.
+const ACTIVE_PRIORITY: ProviderCredentialId[] = [
+	"anthropic",
+	"openai",
+	...PROVIDER_IDS.filter((id) => id !== "anthropic" && id !== "openai"),
+];
 
 // Which provider a store counts as active. OpenAI must be a real OAuth triple; a
-// legacy OpenAI API-key credential is ignored (isOAuthCredential). Null when none
-// of the three is set.
+// legacy OpenAI API-key credential is ignored (isOAuthCredential). Null when no
+// provider is set.
 export function activeProviderId(store: CredentialStore): ProviderCredentialId | null {
 	for (const id of ACTIVE_PRIORITY) {
 		if (id === "openai") {
@@ -82,20 +89,16 @@ export function activeProviderId(store: CredentialStore): ProviderCredentialId |
 	return null;
 }
 
-// Pure single-active reducer: a copy of `store` with `id` set to `cred` and the
-// other two providers removed. Device keys pass through unchanged.
+// Pure single-active reducer: a copy of `store` with `id` set to `cred` and
+// every other provider removed. Device keys pass through unchanged.
 export function withActiveCredential(
 	store: CredentialStore,
 	id: ProviderCredentialId,
-	cred: OAuthCredential | ApiKeyCredential,
+	cred: ProviderCredential,
 ): CredentialStore {
 	const next: CredentialStore = { ...store };
-	delete next.anthropic;
-	delete next.openai;
-	delete next.deepseek;
-	if (id === "anthropic") next.anthropic = cred as AnthropicCredential;
-	else if (id === "openai") next.openai = cred as OpenAICredential;
-	else next.deepseek = cred as ApiKeyCredential;
+	for (const other of PROVIDER_IDS) delete next[other];
+	next[id] = cred;
 	return next;
 }
 
@@ -192,13 +195,13 @@ export function updateCredentials(
 	return store.update(mutate);
 }
 
-// Single-active write: store one provider's credential and drop the other two,
-// so credentials.json holds at most one of the three. Every sign-in path
-// (Anthropic OAuth, OpenAI OAuth, DeepSeek key) routes here, so the mutual
-// exclusion lives in one place.
+// Single-active write: store one provider's credential and drop every other
+// one, so credentials.json holds at most one provider. Every sign-in path
+// (Anthropic OAuth, OpenAI OAuth, an API key saved in Settings) routes here, so
+// the mutual exclusion lives in one place.
 export async function setActiveCredential(
 	id: ProviderCredentialId,
-	cred: OAuthCredential | ApiKeyCredential,
+	cred: ProviderCredential,
 ): Promise<void> {
 	await updateCredentials((s) => withActiveCredential(s, id, cred));
 }

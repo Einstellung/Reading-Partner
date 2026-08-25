@@ -1,14 +1,45 @@
-// Provider abstraction over pi-ai for the three configured providers. Anthropic
-// and OpenAI authenticate via subscription OAuth (Claude Pro/Max, ChatGPT
-// Plus/Pro); the access token is injected as StreamOptions.apiKey — for
-// Anthropic pi switches to Bearer + Claude Code headers, for OpenAI (Codex
-// backend) pi decodes the account id out of the token and sets the
-// chatgpt-account-id header. DeepSeek uses an API key over pi's
-// openai-completions API.
+// Provider abstraction over pi-ai. Anthropic and OpenAI authenticate via
+// subscription OAuth (Claude Pro/Max, ChatGPT Plus/Pro); the access token is
+// injected as StreamOptions.apiKey — for Anthropic pi switches to Bearer +
+// Claude Code headers, for OpenAI (Codex backend) pi decodes the account id out
+// of the token and sets the chatgpt-account-id header. Every other provider
+// takes an API key and reaches its endpoint over pi's openai-completions (or,
+// for MiniMax, anthropic-messages) API.
+//
+// The factories are imported one file at a time. pi ships a
+// providers/all barrel, but it statically imports the AWS SDK and other
+// node-only packages, which then land in the webview bundle. Each of these
+// files is lazy underneath: it carries a model table and defers the api
+// implementation.
 
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
 import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
 import { deepseekProvider } from "@earendil-works/pi-ai/providers/deepseek";
+import { opencodeProvider } from "@earendil-works/pi-ai/providers/opencode";
+import { opencodeGoProvider } from "@earendil-works/pi-ai/providers/opencode-go";
+import { openrouterProvider } from "@earendil-works/pi-ai/providers/openrouter";
+import { vercelAIGatewayProvider } from "@earendil-works/pi-ai/providers/vercel-ai-gateway";
+import { huggingfaceProvider } from "@earendil-works/pi-ai/providers/huggingface";
+import { nvidiaProvider } from "@earendil-works/pi-ai/providers/nvidia";
+import { togetherProvider } from "@earendil-works/pi-ai/providers/together";
+import { qwenTokenPlanProvider } from "@earendil-works/pi-ai/providers/qwen-token-plan";
+import { qwenTokenPlanCnProvider } from "@earendil-works/pi-ai/providers/qwen-token-plan-cn";
+import { moonshotaiProvider } from "@earendil-works/pi-ai/providers/moonshotai";
+import { moonshotaiCnProvider } from "@earendil-works/pi-ai/providers/moonshotai-cn";
+import { zaiProvider } from "@earendil-works/pi-ai/providers/zai";
+import { zaiCodingCnProvider } from "@earendil-works/pi-ai/providers/zai-coding-cn";
+import { groqProvider } from "@earendil-works/pi-ai/providers/groq";
+import { antLingProvider } from "@earendil-works/pi-ai/providers/ant-ling";
+import { xiaomiProvider } from "@earendil-works/pi-ai/providers/xiaomi";
+import { xiaomiTokenPlanAmsProvider } from "@earendil-works/pi-ai/providers/xiaomi-token-plan-ams";
+import { xiaomiTokenPlanCnProvider } from "@earendil-works/pi-ai/providers/xiaomi-token-plan-cn";
+import { xiaomiTokenPlanSgpProvider } from "@earendil-works/pi-ai/providers/xiaomi-token-plan-sgp";
+import { cerebrasProvider } from "@earendil-works/pi-ai/providers/cerebras";
+import { fireworksProvider } from "@earendil-works/pi-ai/providers/fireworks";
+import { kimiCodingProvider } from "@earendil-works/pi-ai/providers/kimi-coding";
+import { minimaxProvider } from "@earendil-works/pi-ai/providers/minimax";
+import { minimaxCnProvider } from "@earendil-works/pi-ai/providers/minimax-cn";
+import { xaiProvider } from "@earendil-works/pi-ai/providers/xai";
 import type {
 	Api,
 	AssistantMessage,
@@ -25,13 +56,30 @@ import type {
 import { getValidAnthropicAuth } from "./anthropic-oauth";
 import { getValidOpenAIAuth } from "./openai-oauth";
 import { activeProviderId, loadCredentials, setActiveCredential } from "./credentials";
+import {
+	API_KEY_PROVIDER_IDS,
+	AUTH_KIND,
+	PROVIDER_IDS,
+	isApiKeyProvider,
+	type ApiKeyProviderId,
+	type AuthKind,
+	type ProviderId,
+} from "./provider-ids";
 
-export type ProviderId = "anthropic" | "openai" | "deepseek";
+export {
+	API_KEY_PROVIDER_IDS,
+	AUTH_KIND,
+	PROVIDER_IDS,
+	isApiKeyProvider,
+	type ApiKeyProviderId,
+	type AuthKind,
+	type ProviderId,
+};
 
 export interface ProviderInfo {
 	id: ProviderId;
 	name: string;
-	authKind: "oauth" | "apiKey";
+	authKind: AuthKind;
 	configured: boolean;
 }
 
@@ -55,7 +103,7 @@ export type StreamOutcome = AssistantMessage;
 // The HTTP response head, delivered after the headers are in and before the
 // body is read. Its value is the provider's request id and its rate-limit
 // headers: the only handle that can be matched against the provider's own
-// records when a call goes wrong. All three providers call it.
+// records when a call goes wrong. Every provider api calls it.
 export type ResponseHead = (response: ProviderResponse, model: Model<Api>) => void;
 
 // A model call that failed, carrying pi's AssistantMessage when the failure came
@@ -97,19 +145,66 @@ export interface StreamChatOptions {
 	onError(message: string, assistant?: StreamOutcome): void;
 }
 
-const AUTH_KIND: Record<ProviderId, "oauth" | "apiKey"> = {
-	anthropic: "oauth",
-	openai: "oauth",
-	deepseek: "apiKey",
-};
-
 // Exported so the agent loop (src/ai/agent.ts) reuses the exact same provider
-// instances, model lookup, and OAuth/api-key resolution as streamChat.
+// instances, model lookup, and OAuth/api-key resolution as streamChat. The keys
+// are this app's ids, not pi's: our "openai" is pi's openai-codex.
 export const providers: Record<ProviderId, Provider> = {
 	anthropic: anthropicProvider(),
 	openai: openaiCodexProvider(),
 	deepseek: deepseekProvider(),
+	opencode: opencodeProvider(),
+	"opencode-go": opencodeGoProvider(),
+	openrouter: openrouterProvider(),
+	"vercel-ai-gateway": vercelAIGatewayProvider(),
+	huggingface: huggingfaceProvider(),
+	nvidia: nvidiaProvider(),
+	together: togetherProvider(),
+	"qwen-token-plan": qwenTokenPlanProvider(),
+	"qwen-token-plan-cn": qwenTokenPlanCnProvider(),
+	moonshotai: moonshotaiProvider(),
+	"moonshotai-cn": moonshotaiCnProvider(),
+	zai: zaiProvider(),
+	"zai-coding-cn": zaiCodingCnProvider(),
+	groq: groqProvider(),
+	"ant-ling": antLingProvider(),
+	xiaomi: xiaomiProvider(),
+	"xiaomi-token-plan-ams": xiaomiTokenPlanAmsProvider(),
+	"xiaomi-token-plan-cn": xiaomiTokenPlanCnProvider(),
+	"xiaomi-token-plan-sgp": xiaomiTokenPlanSgpProvider(),
+	cerebras: cerebrasProvider(),
+	fireworks: fireworksProvider(),
+	"kimi-coding": kimiCodingProvider(),
+	minimax: minimaxProvider(),
+	"minimax-cn": minimaxCnProvider(),
+	xai: xaiProvider(),
 };
+
+// Every hostname the providers talk to: the provider's own baseUrl plus each
+// model's, since a few providers (OpenCode) carry no provider-level baseUrl and
+// name the endpoint per model. This is what the fetch bridge routes through
+// Tauri — the webview CSP allows only 'self' and ipc:, so a host missing from
+// this set is a provider that cannot make a single request.
+export function bridgedHosts(): Set<string> {
+	const hosts = new Set<string>();
+	const add = (url: string | undefined) => {
+		if (!url) return;
+		let host: string;
+		try {
+			host = new URL(url).hostname;
+		} catch {
+			// A baseUrl that is not a URL belongs to a provider we cannot reach
+			// anyway; one of them must not take the app's startup with it.
+			return;
+		}
+		if (host) hosts.add(host);
+	};
+	for (const id of PROVIDER_IDS) {
+		const provider = providers[id];
+		add(provider.baseUrl);
+		for (const model of provider.getModels()) add(model.baseUrl);
+	}
+	return hosts;
+}
 
 // The Codex backend defaults to a WebSocket transport, which a webview cannot
 // use: the browser WebSocket API can't attach the Authorization /
@@ -125,7 +220,7 @@ export async function listProviders(): Promise<ProviderInfo[]> {
 	// Single-active: exactly one provider (or none) reports configured, even if a
 	// legacy file carries several — activeProviderId picks the deterministic one.
 	const active = activeProviderId(creds);
-	return (Object.keys(providers) as ProviderId[]).map((id) => ({
+	return PROVIDER_IDS.map((id) => ({
 		id,
 		name: providers[id].name,
 		authKind: AUTH_KIND[id],
@@ -133,8 +228,8 @@ export async function listProviders(): Promise<ProviderInfo[]> {
 	}));
 }
 
-export async function setApiKey(id: "deepseek", key: string): Promise<void> {
-	// Single-active: saving the DeepSeek key signs out Anthropic and OpenAI.
+export async function setApiKey(id: ApiKeyProviderId, key: string): Promise<void> {
+	// Single-active: saving a key signs out whichever provider was connected.
 	await setActiveCredential(id, { type: "apiKey", key });
 }
 
@@ -294,7 +389,7 @@ export type SimpleStreamFn = (
 ) => AssistantMessageEventStream;
 
 // Client-side retries for the request that opens the stream. pi has the loop
-// inlined in all three of our APIs (retryProviderRequest) but defaults it to 0,
+// inlined in every api we reach (retryProviderRequest) but defaults it to 0,
 // so until it is passed there are none: a 503 with `retry-after: 1` fails the
 // call a millisecond later and the server is asked once. Two retries turn the
 // same 503 into a reply about two seconds later.

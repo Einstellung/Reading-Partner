@@ -7,21 +7,30 @@
 
 import { isTauri } from "../platform/app/host";
 import { cleanTauriFetch } from "../platform/app/tauri-fetch";
+import { bridgedHosts } from "./providers";
 
-// Must stay in sync with the http:default allowlist in
-// src-tauri/capabilities/default.json.
-const BRIDGED_HOSTS = new Set([
+// The hosts the two OAuth flows reach: the authorize pages, the token endpoints,
+// and the inference hosts. The four that are not any provider's baseUrl
+// (platform.claude.com, claude.ai, api.openai.com, auth.openai.com) are why this
+// list exists at all. All CORS-free, and none may see the webview origin.
+const OAUTH_HOSTS = [
 	"api.anthropic.com",
 	"platform.claude.com",
 	"claude.ai",
 	"api.openai.com",
-	// OpenAI subscription (ChatGPT) OAuth token endpoint + the Codex inference
-	// backend the subscription token talks to. Both are CORS-free and must not
-	// see the webview origin.
 	"auth.openai.com",
 	"chatgpt.com",
-	"api.deepseek.com",
-]);
+];
+
+// Every host the app's AI traffic goes to: the OAuth endpoints plus whatever the
+// provider table's baseUrls resolve to (src/ai/providers.ts bridgedHosts). Read
+// off the table rather than copied out of it, so a provider added there is
+// reachable without a second edit here.
+export function bridgedFetchHosts(): Set<string> {
+	const hosts = bridgedHosts();
+	for (const host of OAUTH_HOSTS) hosts.add(host);
+	return hosts;
+}
 
 function requestUrl(input: RequestInfo | URL): string {
 	if (typeof input === "string") return input;
@@ -56,11 +65,12 @@ let installed = false;
 
 export function installFetchBridge(): void {
 	if (installed || !isTauri()) return;
+	const bridged = bridgedFetchHosts();
 	const nativeFetch = window.fetch.bind(window);
 	window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
 		try {
 			const host = new URL(requestUrl(input), window.location.href).hostname;
-			if (BRIDGED_HOSTS.has(host)) {
+			if (bridged.has(host)) {
 				const bridgedInit: RequestInit = { ...init, headers: bridgedHeaders(init, input) };
 				return cleanTauriFetch(input, bridgedInit);
 			}
