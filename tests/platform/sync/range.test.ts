@@ -28,8 +28,8 @@ test("core user-data files are in range", () => {
     // Nothing rebuilds it from the books, so it travels like marks and threads
     // rather than like the caches below — and so does its conversation, which is
     // a thread file keyed by the retell.
-    "talk-1754400000000.json",
-    "threads-talk-1754400000000.json",
+    "retell-1754400000000.json",
+    "threads-retell-1754400000000.json",
     // Every time that retell was given against its deck (docs/31): the pages and
     // what was said to them. A trace of the reader, so it travels.
     "rehearsal-1754400000000.json",
@@ -78,8 +78,8 @@ test("caches, logs, sync internals, and book blobs are out of range", () => {
     // beside it is not, and neither is anything deeper.
     "prep-deadbeef/chapters/figures/fig-01.png",
     "prep-deadbeef/drafts/chapter-01.md",
-    "slides/talks.json",
-    "slides/1737000000000-my-talk.html",
+    "slides/retells.json",
+    "slides/1737000000000-my-retell.html",
     // A retell's own state and products stay out too, unlike prep-*/state.json:
     // the index alone rebuilds nothing, and what it indexes is megabytes of
     // slide bodies and base64 images (src/reading/slides/store.ts).

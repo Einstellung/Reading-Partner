@@ -18,8 +18,8 @@ function run(events: RehearsalEvent[], startedAt = 0) {
   return buildRun({
     id: "run-1",
     ordinal: 1,
-    retellId: "talk-1",
-    deckFile: "slides/talk-1-my-talk.html",
+    retellId: "1754400000000",
+    deckFile: "slides/1754400000000-my-retell.html",
     startedAt,
     events,
   });
@@ -30,7 +30,7 @@ test("a run with no events at all is a run with no pages", () => {
   expect(built.pages).toEqual([]);
   expect(built.endedAt).toBeNull();
   expect(built.id).toBe("run-1");
-  expect(built.deckFile).toBe("slides/talk-1-my-talk.html");
+  expect(built.deckFile).toBe("slides/1754400000000-my-retell.html");
 });
 
 test("pages with nothing said to them are still pages, in index order", () => {

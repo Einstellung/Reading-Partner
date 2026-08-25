@@ -96,7 +96,7 @@ function passInput(overrides: Partial<RetellPassInput> = {}): RetellPassInput {
     topicName: "minds",
     retellName: "A Brief History of Intelligence",
     materials: ["A Brief History of Intelligence"],
-    threadId: "talk-1",
+    threadId: "retell-1",
     messages: [
       { role: "ai", text: "Chapter 22. What is the argument resting on?", ts: 100 },
       { role: "user", text: "he gets there from the lesion studies", ts: 200 },
@@ -110,7 +110,7 @@ function input(overrides: Partial<RetellDistillInput> = {}): RetellDistillInput 
     topicName: "minds",
     retellName: "A Brief History of Intelligence",
     materials: ["A Brief History of Intelligence", "Surfing Uncertainty"],
-    threadId: "talk-1",
+    threadId: "retell-1",
     messages: [
       { role: "ai", text: "What is chapter 22 resting on?", ts: 100 },
       { role: "user", text: "the lesion studies", ts: 200 },
@@ -160,7 +160,7 @@ test("a finished pass writes observations and stores the message cursor", async 
               type: "can-explain",
               summary: "Can give chapter 22 of A Brief History of Intelligence",
               body: "2026-07-17 gave the lesion-study argument himself in the retell.",
-              messageIds: ["talk-1:200"],
+              messageIds: ["retell-1:200"],
             },
           },
         ],
@@ -174,7 +174,7 @@ test("a finished pass writes observations and stores the message cursor", async 
   expect(await store.getMeta()).toEqual({
     lastDistilledAt: JULY_17,
     lastAnnotationDistillAt: null,
-    distilledMessages: { "talk-1": 2 },
+    distilledMessages: { "retell-1": 2 },
   });
 });
 
@@ -221,10 +221,10 @@ test("a second pass sends only the new stretch, and says what came before it", a
 
   expect(second).toMatchObject({ ran: true, ok: true, distilled: 2 });
   const task = runner.requests[0].task;
-  expect(task).toContain("[talk-1:400] reader: that one I can only give the conclusion of");
+  expect(task).toContain("[retell-1:400] reader: that one I can only give the conclusion of");
   expect(task).not.toContain("lesion studies"); // already folded in
   expect(task).toContain("first 2 message(s)");
-  expect((await store.getMeta()).distilledMessages).toEqual({ "talk-1": 4 });
+  expect((await store.getMeta()).distilledMessages).toEqual({ "retell-1": 4 });
 });
 
 test("a stretch the reader said nothing in is not distilled", async () => {
@@ -284,7 +284,7 @@ test("the two passes do not overwrite each other's bookkeeping in meta.json", as
     lastDistilledAt: JULY_20,
     lastAnnotationDistillAt: null,
     // The retell's cursor survived the reading pass, and vice versa.
-    distilledMessages: { "talk-1": 2, "thread-9": 1 },
+    distilledMessages: { "retell-1": 2, "thread-9": 1 },
     distilledMarks: { "book-1": 700 },
   });
 });
@@ -325,8 +325,8 @@ test("the user message carries the retell, its materials, and the message ids", 
   expect(msg).toContain("Topic: minds");
   expect(msg).toContain("Retell: A Brief History of Intelligence");
   expect(msg).toContain("Materials: A Brief History of Intelligence, Surfing Uncertainty");
-  expect(msg).toContain("[talk-1:200] reader: the lesion studies");
-  expect(msg).toContain("[talk-1:100] you: What is chapter 22 resting on?");
+  expect(msg).toContain("[retell-1:200] reader: the lesion studies");
+  expect(msg).toContain("[retell-1:100] you: What is chapter 22 resting on?");
   // A first pass has nothing behind it to mention.
   expect(msg).not.toContain("earlier pass");
 });

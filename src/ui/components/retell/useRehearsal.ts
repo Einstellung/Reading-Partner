@@ -27,7 +27,7 @@ export function useRetellDeckFile(
       .catch(() => [])
       .then((decks) => {
         if (cancelled) return;
-        setFile(decks.find((d) => d.talkId === retellId)?.file ?? null);
+        setFile(decks.find((d) => d.retellId === retellId)?.file ?? null);
         setLoading(false);
       });
     return () => {

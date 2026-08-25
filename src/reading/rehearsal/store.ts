@@ -1,5 +1,5 @@
 // Rehearsals on disk: rehearsal-<retellId>.json under AppData, beside the
-// talk-<retellId>.json they belong to. One file per retell, all of that retell's runs
+// retell-<retellId>.json they belong to. One file per retell, all of that retell's runs
 // inside it, oldest first — the runs of one retell are only ever read together
 // (this pass against the last one), and one file per run would make listing them
 // a directory scan for no gain.
@@ -10,7 +10,7 @@
 //
 // A file that will not parse is moved to rehearsal-<retellId>.json.bad before the
 // empty log is handed back, so the next append cannot make the loss permanent.
-// That is the shape docs/29 recorded on slides/talks.json: parse fails, the
+// That is the shape docs/29 recorded on slides/retells.json: parse fails, the
 // loader returns empty, the next write commits the empty version over the top,
 // and every entry is gone with no error anywhere.
 
@@ -79,11 +79,11 @@ async function setAside(retellId: string): Promise<void> {
  * it was stored, ordinal included.
  */
 export async function appendRun(run: RehearsalRun): Promise<RehearsalRun> {
-  const log = await loadRehearsals(run.talkId);
+  const log = await loadRehearsals(run.retellId);
   const ordinal = log.runs.reduce((max, r) => Math.max(max, r.ordinal), 0) + 1;
   const stored: RehearsalRun = { ...run, ordinal };
   const next: RehearsalLog = { ...log, runs: [...log.runs, stored] };
-  await writeTextAtomic(rehearsalFile(run.talkId), JSON.stringify(next, null, 2));
+  await writeTextAtomic(rehearsalFile(run.retellId), JSON.stringify(next, null, 2));
   return stored;
 }
 

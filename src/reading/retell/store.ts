@@ -1,4 +1,4 @@
-// Retells on disk: talk-<retellId>.json under AppData, one file per retell.
+// Retells on disk: retell-<retellId>.json under AppData, one file per retell.
 //
 // Not a derived cache — nothing can rebuild it, because it is the record of what
 // the reader and the AI agreed the retell will contain and in what order. So it is
@@ -9,14 +9,13 @@
 // retell each would otherwise write the same registry and one of them would lose.
 // A file per retell means the only thing two devices can collide on is one retell.
 //
-// The prefix on disk is the old word, deliberately. This object used to be called
-// a talk, and every file it has ever written is named talk-<id>.json. Renaming
-// them would read to the sync engine as one delete and one create, and a device
-// that is half-migrated could carry the delete to the other one and take the
-// reader's retells with it. The prefix is never shown anywhere, so it costs
-// nothing to leave it. The same goes for threads-talk-<id>.json, for
-// rehearsal-<id>.json's talkId key, for slides/talks.json, and for the
-// talk-start / talk-open / talk-exit events (platform/app/events.ts).
+// This object used to be called a talk, and the names on disk followed: files
+// written before the rename are talk-<id>.json, with threads-talk-<id>.json
+// beside them, a talkId key inside rehearsal-<id>.json, and slides/talks.json
+// for the deck registry. None of those are read any more and nothing migrates
+// them: the old files stay where they are and this build behaves as if they were
+// not there. The events in platform/app/events.ts keep the old names, because
+// they are history already written into events-<topicId>.jsonl.
 
 import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
@@ -31,15 +30,16 @@ import {
 } from "./types";
 import { upsertDecision } from "./outline";
 
-const PREFIX = "talk-";
+const PREFIX = "retell-";
 
 export function retellFile(retellId: string): string {
   return `${PREFIX}${retellId}.json`;
 }
 
 // A retell id out of a file name, or null for anything else in the directory.
-// threads-talk-<id>.json is the retell's conversation and does not match: it is
-// prefixed, and the prefix is checked at the start of the name.
+// threads-retell-<id>.json is the retell's conversation and does not match: it
+// is prefixed, and the prefix is checked at the start of the name. Neither does
+// rehearsal-<id>.json, nor a talk-<id>.json left by a build before the rename.
 export function retellIdOf(fileName: string): string | null {
   if (!fileName.startsWith(PREFIX) || !fileName.endsWith(".json")) return null;
   const id = fileName.slice(PREFIX.length, -".json".length);
@@ -158,5 +158,5 @@ export async function deleteRetell(retellId: string): Promise<void> {
 // thread file (platform/app/threads.ts writes threads-<key>.json). The key is
 // prefixed so it can never collide with a book's content hash.
 export function retellThreadKey(retellId: string): string {
-  return `talk-${retellId}`;
+  return `retell-${retellId}`;
 }

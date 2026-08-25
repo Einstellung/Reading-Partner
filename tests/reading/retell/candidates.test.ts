@@ -115,7 +115,7 @@ test("starting a retell logs one talk-start carrying how much material went in",
 
 test("the started retell is on disk with the materials it was given", async () => {
   const retell = await createRetell("topic-c", [{ bookId: "cand-a", title: "Eye and Brain" }], log);
-  const written = disk.files.get(`talk-${retell.id}.json`);
+  const written = disk.files.get(`retell-${retell.id}.json`);
   expect(written).toBeDefined();
   expect(JSON.parse(written as string)).toMatchObject({
     topicId: "topic-c",

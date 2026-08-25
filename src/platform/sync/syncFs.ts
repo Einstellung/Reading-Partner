@@ -90,14 +90,14 @@ export function inSyncRange(path: string): boolean {
     if (ROOT_FILES.has(top)) return true;
     return (
       /^annotations-.+\.json$/.test(top) ||
-      // A retell's conversation is threads-talk-<retellId>.json, so it is already
-      // covered by the line above.
+      // A retell's conversation is threads-retell-<retellId>.json, so it is
+      // already covered by the line above.
       /^threads-.+\.json$/.test(top) ||
       // Retells (docs/31): the materials, the outline the retell settled and the
       // order the reader put it in. Nothing can rebuild it from the books, so it
       // travels like marks and threads rather than like a cache. The deck it
       // produces (slides/**) stays out: that is a build output.
-      /^talk-.+\.json$/.test(top) ||
+      /^retell-.+\.json$/.test(top) ||
       // What the reader left behind giving that retell against its deck
       // (docs/31): which page was up when, and what was said to it. A trace,
       // not a derivation — no deck and no book rebuilds it. The .bad copy a

@@ -24,7 +24,7 @@ export function slugify(title: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 60);
-  return s || "talk";
+  return s || "deck";
 }
 
 function escapeHtml(s: string): string {

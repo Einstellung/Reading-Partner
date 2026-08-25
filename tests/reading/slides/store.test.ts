@@ -13,8 +13,8 @@ import {
   type RetellEntry,
 } from "../../../src/reading/slides/types";
 
-const entry = (title: string, createdAt: number, talkId?: string): RetellEntry => ({
-  talkId,
+const entry = (title: string, createdAt: number, retellId?: string): RetellEntry => ({
+  retellId,
   title,
   file: `slides/${createdAt}-${title}.html`,
   createdAt,

@@ -156,15 +156,14 @@ export function hasUnrunSlides(state: SlidesState): boolean {
   return state.slides.some((s) => s.contentStatus === "pending" || s.assetStatus === "pending");
 }
 
-// One row in slides/talks.json: a generated deck, newest appended last.
+// One row in slides/retells.json: a generated deck, newest appended last.
 export interface RetellEntry {
-  // The retell id (its directory under slides/). Absent on rows written before
-  // the state was persisted per retell; those decks still open, but cannot be
-  // re-run. The old word, on purpose: the key is in slides/talks.json already,
-  // and a renamed key would make every existing row un-rerunnable.
-  talkId?: string;
+  // The retell id (its directory under slides/). Optional because a row is only
+  // re-runnable through the state kept under that directory, and a deck whose
+  // row has no id still opens.
+  retellId?: string;
   title: string;
-  file: string; // AppData-relative path, e.g. "slides/1737000000000-my-talk.html"
+  file: string; // AppData-relative path, e.g. "slides/1737000000000-my-retell.html"
   createdAt: number;
   bookIds: string[];
   instruction: string;
@@ -174,7 +173,7 @@ export interface RetellEntry {
 // Re-assembling the same retell replaces its row instead of adding a second one —
 // a deck can now be rebuilt any number of times.
 export function upsertRetell(retells: RetellEntry[], entry: RetellEntry): RetellEntry[] {
-  const at = entry.talkId ? retells.findIndex((t) => t.talkId === entry.talkId) : -1;
+  const at = entry.retellId ? retells.findIndex((t) => t.retellId === entry.retellId) : -1;
   if (at < 0) return [...retells, entry];
   const next = retells.slice();
   next[at] = entry;

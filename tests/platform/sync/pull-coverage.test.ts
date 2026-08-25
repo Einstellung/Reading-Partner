@@ -53,7 +53,7 @@ const NO_IN_MEMORY_STATE: Record<string, string> = {
   "info-profile.md": "the profile's old name, read the same way",
   "info-feedback.jsonl": "append-only, and read in full when it is read at all",
   "info-pool-marks.json": "read at the start of a collection run, not held between them",
-  "talk-": "a retell is read from disk when it is opened",
+  "retell-": "a retell is read from disk when it is opened",
   "rehearsal-": "a retell's rehearsals are read with the retell, when that retell is opened",
   "memory-": "the observation store reads its entries per query",
   "prep-": "a document's prep material is read when the document it belongs to opens",
@@ -183,7 +183,7 @@ test("the routes claim the files their subscribers used to", () => {
   expect(claim("settings.json")).toBe("settings");
   expect(claim("threads-abc123.json")).toBe("book-caches");
   expect(claim("annotations-abc123.json")).toBe("book-caches");
-  expect(claim("threads-talk-t1.json")).toBe("book-caches");
+  expect(claim("threads-retell-t1.json")).toBe("book-caches");
   expect(claim("info-briefing.json")).toBe("reader");
   expect(claim("info-bodies.json")).toBe("reader");
   expect(claim("info-collector-device1.json")).toBe("reader");
