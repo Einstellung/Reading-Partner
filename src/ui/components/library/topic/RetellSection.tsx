@@ -1,55 +1,55 @@
-// The Talks section of a topic (docs/31, "界面"): the talks being prepared under
+// The Retell section of a topic (docs/31, "界面"): the retells being prepared under
 // this topic, each one openable back into its own retell conversation.
 //
-// It lists talks, not decks. A deck is one thing a talk eventually produces, so
-// it shows as a talk's state ("deck ready") and as a button on its row — the
+// It lists retells, not decks. A deck is one thing a retell eventually produces, so
+// it shows as a retell's state ("deck ready") and as a button on its row — the
 // list itself is of the objects being prepared, which is what a reader comes
 // here looking for.
 
 import { useCallback, useEffect, useState } from "react";
 import { logEvent } from "../../../../platform/app/events";
 import type { Topic } from "../../../../platform/app/topics";
-import { listDecks, revealDeckFile, type TalkEntry } from "../../../../reading/slides";
+import { listDecks, revealDeckFile, type RetellEntry } from "../../../../reading/slides";
 import {
-  createTalk,
-  deleteTalk,
-  listTalksForTopic,
-  talkCandidates,
-  talkRows,
-  talkSummary,
+  createRetell,
+  deleteRetell,
+  listRetellsForTopic,
+  retellCandidates,
+  retellRows,
+  retellSummary,
   type MaterialCandidate,
-  type TalkRow,
+  type RetellRow,
 } from "../../../../reading/retell";
 import { Button } from "../../ui/button";
 import CardMenu from "../../shelf/CardMenu";
 import { displayFileTitle } from "../../shelf/file-title";
-import DeleteTalkButton from "./DeleteTalkButton";
-import NewTalkDialog from "./NewTalkDialog";
+import DeleteRetellButton from "./DeleteRetellButton";
+import NewRetellDialog from "./NewRetellDialog";
 
 const ROW = "flex items-center gap-2 rounded-lg border border-border py-1 pl-3 pr-1.5";
 
-export default function TalksSection(props: {
+export default function RetellSection(props: {
   topic: Topic;
-  onOpenTalk: (talkId: string) => void;
+  onOpenRetell: (retellId: string) => void;
 }) {
-  const { topic, onOpenTalk } = props;
-  // null while loading; [] when this topic has no talks.
-  const [rows, setRows] = useState<TalkRow[] | null>(null);
+  const { topic, onOpenRetell } = props;
+  // null while loading; [] when this topic has no retells.
+  const [rows, setRows] = useState<RetellRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [deleting, setDeleting] = useState<TalkRow | null>(null);
+  const [deleting, setDeleting] = useState<RetellRow | null>(null);
   const [candidates, setCandidates] = useState<MaterialCandidate[]>([]);
 
   const refresh = useCallback(async () => {
-    const [talks, decks] = await Promise.all([
-      listTalksForTopic(topic.id),
-      listDecks().catch((): TalkEntry[] => []),
+    const [retells, decks] = await Promise.all([
+      listRetellsForTopic(topic.id),
+      listDecks().catch((): RetellEntry[] => []),
     ]);
-    // The join between a talk and the deck built from it is the shared id; the
-    // talk list only needs the file to open, so that is all it is handed.
+    // The join between a retell and the deck built from it is the shared id; the
+    // retell list only needs the file to open, so that is all it is handed.
     const files = new Map<string, string>();
     for (const d of decks) if (d.talkId) files.set(d.talkId, d.file);
-    setRows(talkRows(talks, files));
+    setRows(retellRows(retells, files));
   }, [topic.id]);
 
   useEffect(() => {
@@ -58,7 +58,7 @@ export default function TalksSection(props: {
     void refresh().catch(() => {
       if (!cancelled) setRows([]);
     });
-    void talkCandidates(topic, displayFileTitle).then((c) => {
+    void retellCandidates(topic, displayFileTitle).then((c) => {
       if (!cancelled) setCandidates(c);
     });
     return () => {
@@ -66,7 +66,7 @@ export default function TalksSection(props: {
     };
   }, [topic, refresh]);
 
-  // Literally the same path the talk's own deck dialog opens a deck by, and the
+  // Literally the same path the retell's own deck dialog opens a deck by, and the
   // failure goes on screen where the button is.
   const revealDeck = useCallback(async (file: string) => {
     setError(null);
@@ -79,16 +79,16 @@ export default function TalksSection(props: {
       setError(null);
       try {
         const picked = candidates.filter((c) => bookIds.includes(c.bookId));
-        const talk = await createTalk(
+        const retell = await createRetell(
           topic.id,
           picked.map(({ bookId, title }) => ({ bookId, title })),
         );
-        onOpenTalk(talk.id);
+        onOpenRetell(retell.id);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Could not start the talk");
+        setError(e instanceof Error ? e.message : "Could not start the retell");
       }
     },
-    [candidates, topic.id, onOpenTalk],
+    [candidates, topic.id, onOpenRetell],
   );
 
   return (
@@ -100,11 +100,11 @@ export default function TalksSection(props: {
       ) : rows.length === 0 ? (
         <div className="max-w-prose">
           <p className="m-0 mb-4 text-sm text-muted-foreground">
-            No talks yet. A talk is one thing you are preparing to give from what you have read here
-            — you go through it chapter by chapter with the AI, and the outline of the talk is what
+            No retells yet. A retell is one thing you are preparing to give from what you have read here
+            — you go through it chapter by chapter with the AI, and the outline of the retell is what
             comes out.
           </p>
-          <Button onClick={() => setCreating(true)}>New talk</Button>
+          <Button onClick={() => setCreating(true)}>New retell</Button>
         </div>
       ) : (
         <>
@@ -114,12 +114,12 @@ export default function TalksSection(props: {
                 <button
                   className="flex min-w-0 flex-1 cursor-pointer flex-col gap-0.5 border-0 bg-transparent px-0 py-2 text-left"
                   onClick={() => {
-                    logEvent(topic.id, "talk-open", { talkId: row.id });
-                    onOpenTalk(row.id);
+                    logEvent(topic.id, "talk-open", { retellId: row.id });
+                    onOpenRetell(row.id);
                   }}
                 >
                   <span className="truncate text-[15px]">{row.name}</span>
-                  <span className="text-xs text-muted-foreground">{talkSummary(row)}</span>
+                  <span className="text-xs text-muted-foreground">{retellSummary(row)}</span>
                 </button>
                 {row.deckFile && (
                   <Button
@@ -134,7 +134,7 @@ export default function TalksSection(props: {
                   label={`Actions for ${row.name}`}
                   items={[
                     {
-                      label: "Delete this talk",
+                      label: "Delete this retell",
                       destructive: true,
                       onSelect: () => setDeleting(row),
                     },
@@ -144,24 +144,24 @@ export default function TalksSection(props: {
             ))}
           </ul>
           <Button variant="outline" onClick={() => setCreating(true)}>
-            New talk
+            New retell
           </Button>
         </>
       )}
 
       {deleting && (
-        <DeleteTalkButton
+        <DeleteRetellButton
           name={deleting.name}
           open
           onOpenChange={(open) => !open && setDeleting(null)}
           onDelete={() => {
-            void deleteTalk(deleting.id).then(refresh);
+            void deleteRetell(deleting.id).then(refresh);
           }}
         />
       )}
 
       {creating && (
-        <NewTalkDialog
+        <NewRetellDialog
           open
           onOpenChange={setCreating}
           candidates={candidates}

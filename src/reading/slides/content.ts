@@ -52,7 +52,7 @@ export function contentSystemPrompt(aiLanguage: AiLanguage = "auto"): string {
 }
 
 // The kickoff for one slide: its title/kind, asset slot, the reader's own points
-// when the talk was retold, the relevant notes, and — on a re-run — the
+// from the retell, the relevant notes, and — on a re-run — the
 // one-line steer the user typed.
 //
 // `readerPoints` are the lines the reader settled in retell mode (docs/31),

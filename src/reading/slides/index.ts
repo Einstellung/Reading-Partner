@@ -10,14 +10,14 @@ export type {
   SlideStatus,
   SlidesInit,
   SlidesState,
-  TalkEntry,
+  RetellEntry,
 } from "./types";
 export {
   SLIDES_VERSION,
   createSlidesState,
   hasUnrunSlides,
   normalizeSlidesOnLoad,
-  upsertTalk,
+  upsertRetell,
 } from "./types";
 export {
   bookBlock,
@@ -31,8 +31,8 @@ export {
   type PlanChapter,
 } from "./plan";
 export {
-  applyTalkOutline,
-  buildTalkOutline,
+  applyRetellOutline,
+  buildRetellOutline,
   citableWithOutline,
   entriesFor,
   outlinePlanSystemPrompt,
@@ -41,7 +41,7 @@ export {
   SLIDES_OUTLINE_PLAN_SYSTEM_PROMPT,
   type OutlineCut,
   type OutlineEntry,
-  type TalkOutline,
+  type RetellOutline,
 } from "./outline";
 export { contentSystemPrompt, contentUserMessage, sanitizeFragment } from "./content";
 export { estimateOverflow, overflowNotice, type OverflowEstimate } from "./overflow";
@@ -71,10 +71,10 @@ export {
   getCurrentDeck,
   listDecks,
   listDeckStates,
-  listDeckTalks,
+  listDeckRetells,
   openDeck,
   readDeckOutline,
   startDeck,
-  type DeckTalk,
+  type DeckRetell,
 } from "./live";
-export { deckFile, loadTalks, readDeckHtml, revealDeckFile, SLIDES_DIR } from "./store";
+export { deckFile, loadRetells, readDeckHtml, revealDeckFile, SLIDES_DIR } from "./store";

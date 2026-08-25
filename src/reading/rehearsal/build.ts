@@ -20,7 +20,7 @@ import type { RehearsalEvent, RehearsalPage, RehearsalRun } from "./types";
 export interface BuildRunInput {
   id: string;
   ordinal: number;
-  talkId: string;
+  retellId: string;
   deckFile: string | null;
   startedAt: number;
   events: readonly RehearsalEvent[];
@@ -105,7 +105,7 @@ export function buildRun(input: BuildRunInput): RehearsalRun {
   return {
     id: input.id,
     ordinal: input.ordinal,
-    talkId: input.talkId,
+    talkId: input.retellId,
     deckFile: input.deckFile,
     startedAt: input.startedAt,
     endedAt,

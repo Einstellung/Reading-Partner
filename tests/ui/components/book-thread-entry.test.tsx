@@ -52,7 +52,7 @@ test("the top bar's book entry wears the lesson path and says what it opens", ()
   // The label is a constant: while the button is dim its title is the line that
   // says why instead, and both readings are rendered in pen-rack-gate.test.tsx.
   expect(topBar).toContain('const BOOK_THREAD = "Learn this book with AI"');
-  expect(topBar).not.toContain("Talk about this book");
+  expect(topBar).not.toContain("Retell about this book");
 });
 
 test("the pen rack wears the ask-here bubble for the passage-level pen", () => {

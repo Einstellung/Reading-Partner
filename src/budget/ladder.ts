@@ -6,7 +6,7 @@
 // not what a retell can, and both lists are written in the reader's own
 // words, so each domain declares its own ladder (src/reading/ladder.ts,
 // src/reading/retell/ladder.ts) and hands it in. This file knows nothing about
-// books, notes or talks.
+// books, notes or retells.
 //
 // The rule an order is expected to encode: touch evidence and you say so, drop
 // redundancy and you keep quiet, and when neither is enough you refuse rather

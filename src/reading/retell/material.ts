@@ -1,4 +1,4 @@
-// A talk's materials, assembled from disk.
+// A retell's materials, assembled from disk.
 //
 // This is the difference between a retell and every other conversation in the
 // app: it happens in the topic, with no book open, no reader mounted and no
@@ -20,12 +20,12 @@ import type { Skeleton } from "./types";
 import { getFigures } from "../figures/store";
 import type { Figure } from "../figures/types";
 import { loadChapterSpineState } from "../prep/chapters/store";
-import type { TalkMaterial } from "./types";
+import type { RetellMaterial } from "./types";
 
-// One material of a talk with everything the retell reads about it.
+// One material of a retell with everything the retell reads about it.
 export interface LoadedMaterial {
   bookId: string;
-  // The library's title, falling back to the one stored on the talk.
+  // The library's title, falling back to the one stored on the retell.
   title: string;
   fulltext: Fulltext | null;
   annotations: AnnotationLite[];
@@ -33,11 +33,11 @@ export interface LoadedMaterial {
   figures: Figure[];
 }
 
-// Everything a talk needs about one book, read from disk. Every read is
+// Everything a retell needs about one book, read from disk. Every read is
 // optional: a book with no text layer, no marks, no notes and no figures still
 // produces a material (a one-chapter skeleton), because the reader put it in the
-// talk and being told "this book contributes nothing" is more use than an error.
-export async function loadMaterial(material: TalkMaterial): Promise<LoadedMaterial> {
+// retell and being told "this book contributes nothing" is more use than an error.
+export async function loadMaterial(material: RetellMaterial): Promise<LoadedMaterial> {
   const { bookId } = material;
   const [entry, fulltext, anns, spineState, figures] = await Promise.all([
     getLibraryEntry(bookId).catch(() => null),
@@ -63,7 +63,7 @@ export async function loadMaterial(material: TalkMaterial): Promise<LoadedMateri
   };
 }
 
-export function loadMaterials(materials: readonly TalkMaterial[]): Promise<LoadedMaterial[]> {
+export function loadMaterials(materials: readonly RetellMaterial[]): Promise<LoadedMaterial[]> {
   return Promise.all(materials.map(loadMaterial));
 }
 
@@ -76,7 +76,7 @@ export async function readMaterialBytes(bookId: string): Promise<ArrayBuffer | n
     const bytes = await readLibraryBook(bookId);
     return bytes.slice().buffer as ArrayBuffer;
   } catch (e) {
-    console.warn("failed to read a talk material from the library", bookId, e);
+    console.warn("failed to read a retell material from the library", bookId, e);
     return null;
   }
 }

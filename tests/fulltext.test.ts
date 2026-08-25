@@ -256,7 +256,7 @@ test("formatSearch ranks across materials with a text layer, cites book + page",
 
 // --- annotations flattened for the prompt (toAnnotationLite) ---
 
-// Both callers of this — a reading turn and a talk's materials — hand the model
+// Both callers of this — a reading turn and a retell's materials — hand the model
 // the reader's marks as evidence, so a mark that is neither a quote nor a note
 // is evidence of nothing and must not arrive as an empty line.
 test("a mark with neither text nor comment flattens to null", () => {

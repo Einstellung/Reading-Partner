@@ -4,7 +4,7 @@
 // Sync range (docs/13): the user's own data — reading position, marks, AI
 // threads, topics, per-topic AI observations, a document's prep material of
 // either kind (docs/09 — paper notes and chapter spines both live under
-// prep-<hash>/), talks and what their retell settled plus the record of each
+// prep-<hash>/), retells and what each of them settled plus the record of each
 // time one was given (docs/31), the cross-scenario user profile and
 // info feedback log (docs/16), and app settings. Book PDFs travel the separate books channel
 // (content-addressed blobs), never the data channel. Excluded: derived caches
@@ -90,15 +90,15 @@ export function inSyncRange(path: string): boolean {
     if (ROOT_FILES.has(top)) return true;
     return (
       /^annotations-.+\.json$/.test(top) ||
-      // A talk's conversation is threads-talk-<talkId>.json, so it is already
+      // A retell's conversation is threads-talk-<retellId>.json, so it is already
       // covered by the line above.
       /^threads-.+\.json$/.test(top) ||
-      // Talks (docs/31): the materials, the outline the retell settled and the
+      // Retells (docs/31): the materials, the outline the retell settled and the
       // order the reader put it in. Nothing can rebuild it from the books, so it
       // travels like marks and threads rather than like a cache. The deck it
       // produces (slides/**) stays out: that is a build output.
       /^talk-.+\.json$/.test(top) ||
-      // What the reader left behind giving that talk against its deck
+      // What the reader left behind giving that retell against its deck
       // (docs/31): which page was up when, and what was said to it. A trace,
       // not a derivation — no deck and no book rebuilds it. The .bad copy a
       // failed parse leaves beside it is deliberately not matched.

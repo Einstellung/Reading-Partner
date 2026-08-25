@@ -1,5 +1,5 @@
 // What a hangup hands to distillation (docs/02, docs/03). Which conversation the
-// talk belongs to, which page, and what it was marked on are decided nowhere
+// retell belongs to, which page, and what it was marked on are decided nowhere
 // else, so they sit here, out of the hook, where they can be read and tested.
 
 import { annotationPage, type Annotation } from "../../platform/app/reader-contract";
@@ -29,9 +29,9 @@ export interface HangupContext {
   pageIndex: number | null;
 }
 
-// A talk as the thread file holds it. Only the three fields a transcript is made
+// A retell as the thread file holds it. Only the three fields a transcript is made
 // of go to distillation: a display row's trace, images and notices are not the
-// talk.
+// retell.
 export interface HangupMessage {
   role: "user" | "ai";
   text: string;

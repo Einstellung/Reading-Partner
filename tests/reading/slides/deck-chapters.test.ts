@@ -2,7 +2,7 @@
 // planMaterial), and that it is the same list the retell walked
 // (src/reading/retell/skeleton.ts buildSkeleton).
 //
-// A talk qualifies for a deck when *any* of its materials has notes, but the
+// A retell qualifies for a deck when *any* of its materials has notes, but the
 // plan stage reads every material. A second book with no notes therefore
 // reached the planner with an empty chapter table, which then became the
 // citable set validateDeckPlan checks the model's sourceChapters against — so
@@ -86,7 +86,7 @@ test("a book with notes is planned against its notes chapters", async () => {
   expect(book.chapters[0].digest).toContain("seeing is inference");
 });
 
-// The bug: the second book of a talk. It has a text layer and a table of
+// The bug: the second book of a retell. It has a text layer and a table of
 // contents, so the retell walked two real chapters of it; the planner used to
 // see none, because it only ever looked at the notes state.
 test("a book with no notes is planned against the same chapters the retell walked", async () => {
@@ -116,7 +116,7 @@ test("a book with no notes is planned against the same chapters the retell walke
 
 // What the empty table cost: with nothing citable, every sourceChapters the
 // model returned for that book was a chapter that does not exist.
-test("the citable set for a talk's second book is not empty", async () => {
+test("the citable set for a retell's second book is not empty", async () => {
   putFulltext(WITH_NOTES);
   putNotes(WITH_NOTES);
   putFulltext(NO_NOTES);

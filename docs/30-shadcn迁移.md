@@ -174,7 +174,7 @@ className={cn(OVERLAY_SAFE.centered, "fixed top-[50%] left-[50%] ...", className
 - 一（基座）：preflight、token 映射，Button / Input / Textarea / Label / Switch / Separator 六个原语，`BTN` 系列常量全部调用点。视觉变化都是收敛（三套紫、两套 hover 灰合一，`SourcesPage` 开关圆点归位，坑 77），探针里低于 44px 的可点元素从 52 个降到 33 个。
 - 二（反馈类）：Toast 换 Radix Toast，`DeleteThreadButton` 的两步确认换 AlertDialog；浮层安全区（`ui/overlay.tsx`）和层级登记（`base/overlay-layer.ts`）在这版立起来，之后每版都靠它。
 - 三（菜单）：`MoreMenu` 换 DropdownMenu，速读的 Filtered 折叠换 Collapsible。Popover 没用上。
-- 四（对话框）：`SlidesDialog`（现在叫 `talk/DeckDialog.tsx`，宿主从 `NotesPanel` 换成了 `TalkView`）换居中 Dialog，`SettingsView` 换全屏 content 变体。风险最高，单独发一版。
+- 四（对话框）：`SlidesDialog`（现在叫 `retell/DeckDialog.tsx`，宿主从 `NotesPanel` 换成了 `RetellView`）换居中 Dialog，`SettingsView` 换全屏 content 变体。风险最高，单独发一版。
 - 五（收尾）：四个 `<select>` 换 Select，四个原生复选框换 Checkbox，紫底 chip 换 Badge，过渡期常量清干净。
 - 之后：设置页从一个弹窗堆九组改成账号/功能/可选三个 Tabs，`SettingsView.tsx` 只剩壳，三个面板拆进 `settings/AccountPanel.tsx` / `FeaturesPanel.tsx` / `OptionalPanel.tsx`；Tabs 是这时候引的。
 

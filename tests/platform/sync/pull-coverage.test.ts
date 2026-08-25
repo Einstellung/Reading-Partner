@@ -53,8 +53,8 @@ const NO_IN_MEMORY_STATE: Record<string, string> = {
   "info-profile.md": "the profile's old name, read the same way",
   "info-feedback.jsonl": "append-only, and read in full when it is read at all",
   "info-pool-marks.json": "read at the start of a collection run, not held between them",
-  "talk-": "a talk is read from disk when it is opened",
-  "rehearsal-": "a talk's rehearsals are read with the talk, when that talk is opened",
+  "talk-": "a retell is read from disk when it is opened",
+  "rehearsal-": "a retell's rehearsals are read with the retell, when that retell is opened",
   "memory-": "the observation store reads its entries per query",
   "prep-": "a document's prep material is read when the document it belongs to opens",
 };

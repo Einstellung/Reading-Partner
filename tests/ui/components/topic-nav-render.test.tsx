@@ -16,8 +16,8 @@ function render(open: boolean) {
 test("open, the three sections read as text in order", () => {
   const html = render(true);
   expect(html.indexOf(">Materials<")).toBeGreaterThan(-1);
-  expect(html.indexOf(">Talks<")).toBeGreaterThan(html.indexOf(">Materials<"));
-  expect(html.indexOf(">AI observations<")).toBeGreaterThan(html.indexOf(">Talks<"));
+  expect(html.indexOf(">Retell<")).toBeGreaterThan(html.indexOf(">Materials<"));
+  expect(html.indexOf(">AI observations<")).toBeGreaterThan(html.indexOf(">Retell<"));
 });
 
 // Collapsed it is an icon rail: the labels leave the flow, but the buttons keep
@@ -26,7 +26,7 @@ test("collapsed, the labels are gone but the names are not", () => {
   const html = render(false);
   expect(html).not.toContain(">Materials<");
   expect(html).toContain('aria-label="Materials"');
-  expect(html).toContain('title="Talks"');
+  expect(html).toContain('title="Retell"');
 });
 
 test("the open section is the current one", () => {

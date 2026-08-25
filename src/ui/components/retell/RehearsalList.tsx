@@ -1,6 +1,6 @@
-// The rehearsals of this talk, under the outline (docs/31). Data that is
+// The rehearsals of this retell, under the outline (docs/31). Data that is
 // recorded and never shown is data that was not recorded, so the pass leaves a
-// mark where the talk is: which pass it was, when, how far it got, how long it
+// mark where the retell is: which pass it was, when, how far it got, how long it
 // took, and — opened up — what was said on each page.
 //
 // Deliberately a strip at the foot of a pane rather than a panel of its own.

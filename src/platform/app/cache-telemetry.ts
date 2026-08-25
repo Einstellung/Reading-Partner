@@ -28,7 +28,8 @@ export type AiSurface =
   | "reading"
   // Classroom mode, carrying the prep notes (docs/09).
   | "classroom"
-  // Retelling a talk (docs/31).
+  // A retell (docs/31). The value keeps the old word: it is in every AI event
+  // already logged, and a renamed surface would break every comparison with them.
   | "talk"
   // The info companion.
   | "info"

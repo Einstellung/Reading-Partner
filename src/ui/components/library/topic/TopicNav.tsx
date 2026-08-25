@@ -1,4 +1,4 @@
-// The topic sidebar (docs/31, "界面"): Materials, Talks, AI observations down the
+// The topic sidebar (docs/31, "界面"): Materials, Retell, AI observations down the
 // left of a topic, above the shelf rather than inside a book.
 //
 // It is a column in the flow, not an overlay: it sits beside the content and the
@@ -10,13 +10,13 @@
 // Pure and controlled: which section is showing and whether it is open belong to
 // the host (LibraryScreen), which is also where they are remembered.
 
-import { IconBooks, IconObservations, IconSidebar, IconTalk } from "../../base/icons";
+import { IconBooks, IconObservations, IconSidebar, IconRetell } from "../../base/icons";
 import { Button } from "../../ui/button";
 import { TOPIC_SECTIONS, type TopicSection } from "../../base/topic-nav";
 
 const ICONS: Record<TopicSection, (p: { size?: number }) => JSX.Element> = {
   materials: IconBooks,
-  talks: IconTalk,
+  retell: IconRetell,
   observations: IconObservations,
 };
 

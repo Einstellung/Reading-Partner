@@ -1,21 +1,21 @@
-// What a topic's Talks list says before you open a talk
-// (src/reading/retell/list.ts), and which materials a new talk starts with
+// What a topic's Retells list says before you open a retell
+// (src/reading/retell/list.ts), and which materials a new retell starts with
 // ticked. Pure. Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
   defaultMaterialSelection,
-  talkRows,
-  talkSummary,
+  retellRows,
+  retellSummary,
   type MaterialCandidate,
 } from "../../../src/reading/retell/list";
-import type { Talk, TalkDecision } from "../../../src/reading/retell/types";
+import type { Retell, RetellDecision } from "../../../src/reading/retell/types";
 
-function talk(over: Partial<Talk> = {}): Talk {
+function retell(over: Partial<Retell> = {}): Retell {
   return {
     version: 1,
     id: "100",
-    name: "A talk",
+    name: "A retell",
     topicId: "topic-1",
     materials: [{ bookId: "b1", title: "Eye and Brain" }],
     createdAt: 100,
@@ -25,7 +25,7 @@ function talk(over: Partial<Talk> = {}): Talk {
   };
 }
 
-function decision(chapter: number): TalkDecision {
+function decision(chapter: number): RetellDecision {
   return {
     bookId: "b1",
     chapter,
@@ -38,42 +38,42 @@ function decision(chapter: number): TalkDecision {
 
 const NO_DECKS: ReadonlyMap<string, string> = new Map();
 
-// The two ends meet on the talk id: the talk file says how far the retell
+// The two ends meet on the retell id: the retell file says how far the retell
 // got, the deck the caller looked up says whether a deck came out of it.
-test("a talk with a deck says so and carries the file to open", () => {
-  const [row] = talkRows([talk()], new Map([["100", "slides/100-a-talk.html"]]));
+test("a retell with a deck says so and carries the file to open", () => {
+  const [row] = retellRows([retell()], new Map([["100", "slides/100-a-retell.html"]]));
   expect(row.stage).toBe("deck");
-  expect(row.deckFile).toBe("slides/100-a-talk.html");
-  expect(talkSummary(row)).toBe("1 material · deck ready");
+  expect(row.deckFile).toBe("slides/100-a-retell.html");
+  expect(retellSummary(row)).toBe("1 material · deck ready");
 });
 
-test("a talk with no deck is still being prepared", () => {
-  const [row] = talkRows([talk({ decisions: [decision(1), decision(2)] })], NO_DECKS);
+test("a retell with no deck is still being prepared", () => {
+  const [row] = retellRows([retell({ decisions: [decision(1), decision(2)] })], NO_DECKS);
   expect(row.stage).toBe("preparing");
   expect(row.deckFile).toBeNull();
-  expect(talkSummary(row)).toBe("1 material · 2 chapters settled");
+  expect(retellSummary(row)).toBe("1 material · 2 chapters settled");
 });
 
-test("a talk nothing has been settled in says that, not zero", () => {
-  const [row] = talkRows([talk()], NO_DECKS);
-  expect(talkSummary(row)).toBe("1 material · not started");
+test("a retell nothing has been settled in says that, not zero", () => {
+  const [row] = retellRows([retell()], NO_DECKS);
+  expect(retellSummary(row)).toBe("1 material · not started");
 });
 
-// A deck built before talks had ids belongs to no talk, so it never reaches the
-// map; another talk's deck must not be matched to this one either.
+// A deck built before retells had ids belongs to no retell, so it never reaches the
+// map; another retell's deck must not be matched to this one either.
 test("a deck under a different id claims nothing", () => {
-  const rows = talkRows([talk()], new Map([["999", "slides/999-other.html"]]));
+  const rows = retellRows([retell()], new Map([["999", "slides/999-other.html"]]));
   expect(rows[0].stage).toBe("preparing");
   expect(rows[0].deckFile).toBeNull();
 });
 
 // The one being prepared now is the one worked on last, not the one made first.
-test("the list is ordered by when each talk was last worked on", () => {
-  const rows = talkRows(
+test("the list is ordered by when each retell was last worked on", () => {
+  const rows = retellRows(
     [
-      talk({ id: "1", createdAt: 1, updatedAt: 5 }),
-      talk({ id: "2", createdAt: 2, updatedAt: 50 }),
-      talk({ id: "3", createdAt: 3, updatedAt: 9 }),
+      retell({ id: "1", createdAt: 1, updatedAt: 5 }),
+      retell({ id: "2", createdAt: 2, updatedAt: 50 }),
+      retell({ id: "3", createdAt: 3, updatedAt: 9 }),
     ],
     NO_DECKS,
   );
@@ -86,7 +86,7 @@ const candidate = (bookId: string, marks: number): MaterialCandidate => ({
   marks,
 });
 
-test("a new talk starts with the marked materials ticked", () => {
+test("a new retell starts with the marked materials ticked", () => {
   expect(
     defaultMaterialSelection([candidate("a", 12), candidate("b", 0), candidate("c", 3)]),
   ).toEqual(["a", "c"]);

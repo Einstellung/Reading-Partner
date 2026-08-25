@@ -3,7 +3,7 @@
 // component that renders it import the same definition and the dependency
 // direction stays components -> reading.
 
-import type { RetellDecision } from "./types";
+import type { PlanDecision } from "./types";
 
 // Shown when record_chapter_decision writes a chapter's decision. Durable: it is
 // the reader's receipt for a chapter, and a retell is spread over sittings,
@@ -12,7 +12,7 @@ import type { RetellDecision } from "./types";
 // Read-only by design. Correcting a decision is a sentence to the AI, not a
 // button on the card (the conversation is the correction UI); the card exists so
 // the reader can see what was written down without being asked to trust it.
-export interface RetellDecisionCardData extends Omit<RetellDecision, "updatedAt"> {
+export interface RetellDecisionCardData extends Omit<PlanDecision, "updatedAt"> {
   kind: "retell-decision";
 }
 

@@ -1,6 +1,6 @@
 // Overflow detection for a slide body (docs/29: ".slide has no overflow handling
 // while .stage is overflow:hidden, so extra bullets are silently clipped — at
-// generation time and during the talk").
+// generation time and during the retell").
 //
 // This does not lay the slide out; it estimates. Every size in template.ts is in
 // container units (cqh/cqw) against a 16:9 stage, so the geometry is known

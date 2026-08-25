@@ -1,30 +1,30 @@
-// A talk (docs/31): the object the second stage of reading produces — one
-// preparation of one talk, under a topic, with its own conversation, its own
-// outline and, at the end, its deck. Retell mode is the posture that produces
-// it: the AI questions and the reader answers, and the by-product is the
-// outline. The object and the process that fills it are the same subject, so
-// they live in one place.
+// A retell (docs/31): the object the second stage of reading produces — one pass
+// over what was read, under a topic, with its own conversation, its own outline
+// and, at the end, its deck. Retell mode is the posture that fills it: the AI
+// questions and the reader answers chapter by chapter, and the outline is the
+// by-product. The object and the process that produces it are the same subject,
+// so they live in one directory.
 
 export {
-  defaultTalkName,
-  newTalk,
-  newTalkId,
-  normalizeTalk,
+  defaultRetellName,
+  newRetell,
+  newRetellId,
+  normalizeRetell,
+  PLAN_VERSION,
   RETELL_VERSION,
-  TALK_VERSION,
   type Mark,
-  type NewTalkFields,
+  type NewRetellFields,
   type RetellChapter,
-  type RetellDecision,
+  type PlanDecision,
   type RetellPlan,
   type Skeleton,
   type SkeletonSource,
-  type Talk,
-  type TalkDecision,
-  type TalkMaterial,
+  type Retell,
+  type RetellDecision,
+  type RetellMaterial,
 } from "./types";
 export {
-  bucketTalkMarks,
+  bucketRetellMarks,
   combineChapters,
   combinedSource,
   moveDecision,
@@ -34,20 +34,20 @@ export {
   slotAt,
   slotFor,
   toRetellPlan,
-  toTalkDecision,
+  toRetellDecision,
   upsertDecision,
   type CombinedChapters,
   type OutlineRow,
-  type TalkSkeleton,
-  type TalkSlot,
+  type MaterialSkeleton,
+  type RetellSlot,
 } from "./outline";
 export {
   defaultMaterialSelection,
-  talkRows,
-  talkSummary,
+  retellRows,
+  retellSummary,
   type MaterialCandidate,
-  type TalkRow,
-  type TalkStage,
+  type RetellRow,
+  type RetellStage,
 } from "./list";
 export {
   loadMaterial,
@@ -56,24 +56,24 @@ export {
   type LoadedMaterial,
 } from "./material";
 export {
-  deleteTalk,
-  listAllTalks,
-  listTalksForTopic,
-  loadTalk,
-  recordTalkDecision,
-  saveTalk,
-  talkFile,
-  talkIdOf,
-  talkThreadKey,
-  updateTalk,
+  deleteRetell,
+  listAllRetells,
+  listRetellsForTopic,
+  loadRetell,
+  recordRetellDecision,
+  saveRetell,
+  retellFile,
+  retellIdOf,
+  retellThreadKey,
+  updateRetell,
 } from "./store";
 export {
-  buildTalkTurn,
-  type TalkTurn,
-  type TalkTurnInput,
-  type TalkTurnMessage,
+  buildRetellTurn,
+  type RetellTurn,
+  type RetellTurnInput,
+  type RetellTurnMessage,
 } from "./turn";
-export { createTalk, talkCandidates } from "./candidates";
+export { createRetell, retellCandidates } from "./candidates";
 export type { ReadingCard, RetellDecisionCardData } from "./cards";
 export { bucketMarks, formatMarks } from "./marks";
 export { formatOutline, formatPlan, nextChapter } from "./plan";

@@ -1,5 +1,5 @@
 // Unit tests for the pure state helpers behind the slides store
-// (src/reading/slides/types.ts): the talk registry, load-time recovery, and
+// (src/reading/slides/types.ts): the retell registry, load-time recovery, and
 // "is there anything left to run". The fs wrapper (store.ts) is exercised in the
 // app. Run: bun test.
 
@@ -7,13 +7,13 @@ import { expect, test } from "bun:test";
 import {
   hasUnrunSlides,
   normalizeSlidesOnLoad,
-  upsertTalk,
+  upsertRetell,
   type SlideRun,
   type SlidesState,
-  type TalkEntry,
+  type RetellEntry,
 } from "../../../src/reading/slides/types";
 
-const entry = (title: string, createdAt: number, talkId?: string): TalkEntry => ({
+const entry = (title: string, createdAt: number, talkId?: string): RetellEntry => ({
   talkId,
   title,
   file: `slides/${createdAt}-${title}.html`,
@@ -44,22 +44,22 @@ const state = (over: Partial<SlidesState> = {}): SlidesState => ({
   ...over,
 });
 
-test("upsertTalk appends newest last without mutating the input", () => {
+test("upsertRetell appends newest last without mutating the input", () => {
   const a = [entry("first", 1, "t1")];
-  const b = upsertTalk(a, entry("second", 2, "t2"));
+  const b = upsertRetell(a, entry("second", 2, "t2"));
   expect(b.map((t) => t.title)).toEqual(["first", "second"]);
   expect(a).toHaveLength(1); // input untouched
 });
 
-test("upsertTalk replaces the row for a talk that is reassembled", () => {
-  const talks = upsertTalk([entry("draft", 1, "t1")], entry("final", 1, "t1"));
-  expect(talks).toHaveLength(1);
-  expect(talks[0].title).toBe("final");
+test("upsertRetell replaces the row for a retell that is reassembled", () => {
+  const retells = upsertRetell([entry("draft", 1, "t1")], entry("final", 1, "t1"));
+  expect(retells).toHaveLength(1);
+  expect(retells[0].title).toBe("final");
 });
 
-test("upsertTalk appends rows that carry no talk id (decks from before per-talk state)", () => {
-  const talks = upsertTalk([entry("legacy", 1)], entry("also legacy", 2));
-  expect(talks.map((t) => t.title)).toEqual(["legacy", "also legacy"]);
+test("upsertRetell appends rows that carry no retell id (decks from before per-retell state)", () => {
+  const retells = upsertRetell([entry("legacy", 1)], entry("also legacy", 2));
+  expect(retells.map((t) => t.title)).toEqual(["legacy", "also legacy"]);
 });
 
 test("normalizeSlidesOnLoad requeues everything that was in flight", () => {

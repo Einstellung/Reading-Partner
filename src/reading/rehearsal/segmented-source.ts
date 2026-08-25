@@ -16,7 +16,7 @@
 //   - 60 seconds cuts anyway. A reader who stays on one page longer than that
 //     would otherwise hand STT a segment that keeps growing, and the desktop
 //     recorder has a ceiling of its own.
-//   - Segments go up as they are cut, not one after another. A ten-page talk
+//   - Segments go up as they are cut, not one after another. A ten-page retell
 //     spends one upload's wait at the end, not ten.
 //   - What comes back out is in the order it was recorded, whatever order the
 //     uploads finished in.

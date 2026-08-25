@@ -1,4 +1,4 @@
-// Giving the talk (docs/31, the third stage): the built deck, full screen, and a
+// Giving the retell (docs/31, the third stage): the built deck, full screen, and a
 // record of where the reader was and how long they stayed there.
 //
 // The deck is the file that already exists on disk — self-contained HTML, opens
@@ -14,7 +14,7 @@
 //
 // The run lands on disk on the way out, whichever way out that was — the End
 // button, the back button, or the view being unmounted from under it. A pass
-// through a talk is expensive to make and worthless to half-record.
+// through a retell is expensive to make and worthless to half-record.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { IconClose } from "../base/icons";
@@ -39,13 +39,13 @@ import {
 } from "./rehearsal";
 
 export interface RehearsalViewProps {
-  talkId: string;
-  talkName: string;
+  retellId: string;
+  retellName: string;
   // The deck to give, AppData-relative. The caller already knows it — that is
   // what enabled the button that got here.
   deckFile: string;
   // Speech, when there is any. The caller makes one before it mounts this view
-  // (TalkView) so that capture is already running when the deck reports its
+  // (RetellView) so that capture is already running when the deck reports its
   // first page; with no STT key configured there is none, and the run records
   // pages and no words, which is a run and not a failure.
   transcript?: TranscriptSource;
@@ -57,8 +57,8 @@ export interface RehearsalViewProps {
 }
 
 export default function RehearsalView({
-  talkId,
-  talkName,
+  retellId,
+  retellName,
   deckFile,
   transcript,
   onExit,
@@ -93,9 +93,9 @@ export default function RehearsalView({
     onSavedRef.current = onSaved;
   });
 
-  // Keep the screen on for the length of the talk (platform/app/wake-lock).
+  // Keep the screen on for the length of the retell (platform/app/wake-lock).
   // Tens of minutes go by with nobody touching the iPad, and a device that locks
-  // itself suspends the webview: the dictation session listening to the talk
+  // itself suspends the webview: the dictation session listening to the retell
   // goes down with it, and the rest of the pass is recorded as pages and no
   // words. Asked for here rather than after any await so the request still rides
   // the tap that opened the rehearsal — Safari wants a gesture for it — and
@@ -126,7 +126,7 @@ export default function RehearsalView({
       }
       // The page turn is the cut. Desktop STT hands back one block of text with
       // no timings inside it (docs/43), so a segment's only boundaries are the
-      // two page turns around it — without this the whole talk is one segment
+      // two page turns around it — without this the whole retell is one segment
       // and the transcript has no pages in it. A repeated report is the deck
       // redrawing the page that is already up, and cutting on that would put a
       // seam in the middle of a page.
@@ -199,7 +199,7 @@ export default function RehearsalView({
     // still uploading do not need the iPad awake.
     lockRef.current?.set(false);
     const saved = await finishRun({
-      talkId,
+      retellId,
       deckFile,
       id: crypto.randomUUID(),
       startedAt: startedAtRef.current,
@@ -209,7 +209,7 @@ export default function RehearsalView({
       save: appendRun,
     });
     if (saved) onSavedRef.current();
-  }, [talkId, deckFile]);
+  }, [retellId, deckFile]);
 
   // Unmounting is an exit like any other (a topic switch, a book opened from
   // elsewhere), so the save hangs off the cleanup rather than off the buttons.
@@ -225,7 +225,7 @@ export default function RehearsalView({
   );
 
   // Leaving does not wait for the run to be written. finish() carries on after
-  // this view is gone, and the reader is back in the talk in the meantime; the
+  // this view is gone, and the reader is back in the retell in the meantime; the
   // history there fills in when onSaved fires.
   const leave = () => {
     void finish();
@@ -254,7 +254,7 @@ export default function RehearsalView({
         >
           <IconClose size={18} />
         </Button>
-        <span className="min-w-0 flex-1 truncate text-[13px] text-white/70">{talkName}</span>
+        <span className="min-w-0 flex-1 truncate text-[13px] text-white/70">{retellName}</span>
         <span className="flex-none text-[13px] tabular-nums text-white/70">
           {positionLabel(current)}
         </span>
@@ -284,7 +284,7 @@ export default function RehearsalView({
         ) : (
           <iframe
             ref={frameRef}
-            title={`Deck for ${talkName}`}
+            title={`Deck for ${retellName}`}
             className="h-full w-full border-0 bg-[#0d0f14]"
           />
         )}

@@ -1,6 +1,6 @@
-// Delete confirmation for one talk, the same shape as the other two destructive
+// Delete confirmation for one retell, the same shape as the other two destructive
 // dialogs in the library: the act runs from an AlertDialog's action, and the
-// press that starts it is a row in the talk's menu, which is why the open state
+// press that starts it is a row in the retell's menu, which is why the open state
 // comes from outside instead of from a trigger of its own.
 
 import {
@@ -14,7 +14,7 @@ import {
   AlertDialogTitle,
 } from "../../ui/alert-dialog";
 
-export default function DeleteTalkButton(props: {
+export default function DeleteRetellButton(props: {
   name: string;
   open: boolean;
   onOpenChange(open: boolean): void;
@@ -26,7 +26,7 @@ export default function DeleteTalkButton(props: {
         <AlertDialogHeader>
           <AlertDialogTitle>Delete “{props.name}”?</AlertDialogTitle>
           <AlertDialogDescription>
-            The talk goes, and with it the outline you settled. The books, their marks and their
+            The retell goes, and with it the outline you settled. The books, their marks and their
             notes are untouched, and a deck already built stays where it was written.
           </AlertDialogDescription>
         </AlertDialogHeader>

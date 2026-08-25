@@ -1,8 +1,8 @@
 // Live wiring of the slides pipeline (docs/14, docs/29, docs/31): real deps
-// bound to the dep-injected SlidesPipeline. A deck is the product of one talk
-// (reading/retell) — its materials are the talk's, its spine is the outline the
-// talk settled — and it carries the talk's own id, so slides/<talkId>/ is where
-// that talk's deck keeps its state and its pages (store.ts). One id, one talk,
+// bound to the dep-injected SlidesPipeline. A deck is the product of one retell
+// (reading/retell) — its materials are the retell's, its spine is the outline the
+// retell settled — and it carries the retell's own id, so slides/<retellId>/ is where
+// that retell's deck keeps its state and its pages (store.ts). One id, one retell,
 // one deck, whichever end you come at it from.
 //
 // A single module-level pipeline holds the deck run in flight so the UI can
@@ -23,7 +23,7 @@ import { contentSystemPrompt, contentUserMessage, sanitizeFragment } from "./con
 import { generateImage, resolveImageGenConfig, type ImageGenDeps } from "./imageGen";
 import { cleanTauriFetch } from "../../platform/app/tauri-fetch";
 import { loadMaterial } from "../retell/material";
-import { listAllTalks, loadTalk } from "../retell/store";
+import { listAllRetells, loadRetell } from "../retell/store";
 import {
   parseSlidePlan,
   planUserMessage,
@@ -33,13 +33,13 @@ import {
   type PlanChapter,
 } from "./plan";
 import {
-  applyTalkOutline,
-  buildTalkOutline,
+  applyRetellOutline,
+  buildRetellOutline,
   citableWithOutline,
   outlinePlanSystemPrompt,
   outlinePlanUserMessage,
   readerPointsFor,
-  type TalkOutline,
+  type RetellOutline,
 } from "./outline";
 import {
   SlidesPipeline,
@@ -50,17 +50,17 @@ import {
 import {
   listSlidesStates,
   loadSlidesState,
-  loadTalks,
+  loadRetells,
   readAsset,
   readFragment,
-  recordTalk,
+  recordRetell,
   saveSlidesState,
   writeAsset,
   writeDeck,
   writeFragment,
 } from "./store";
 import { assembleDeck, slugify } from "./template";
-import type { SlideFigureRef, SlideRun, SlidesState, TalkEntry } from "./types";
+import type { SlideFigureRef, SlideRun, SlidesState, RetellEntry } from "./types";
 
 // A fixed deck-wide illustration style, prefixed to every slide illustration
 // prompt so the images read as one set. Text-free by instruction.
@@ -76,37 +76,37 @@ const SLIDE_NOTES_MAX_CHARS = 8_000;
 const first40Words = (text: string): string =>
   text.trim().split(/\s+/).slice(0, 40).join(" ");
 
-// Whether a book has usable notes for a talk: notes state exists with at least
+// Whether a book has usable notes for a retell: notes state exists with at least
 // one done chapter (docs/14).
 async function bookHasSpine(bookId: string): Promise<boolean> {
   const st = await loadChapterSpineState(bookId);
   return !!st && st.chapters.some((c) => c.status === "done");
 }
 
-// A talk that has something to build a deck out of.
-export interface DeckTalk {
-  talkId: string;
+// A retell that has something to build a deck out of.
+export interface DeckRetell {
+  retellId: string;
   name: string;
   topicId: string;
-  // How many of the talk's entries are in the talk. Zero means the deck falls
-  // back to planning from the materials' notes, the way it did before a talk was
+  // How many of the retell's entries are in the retell. Zero means the deck falls
+  // back to planning from the materials' notes, the way it did before a retell was
   // an object.
   settled: number;
 }
 
-// Every talk a deck can be built from (docs/31: the deck is a talk's product, so
-// what gets listed is talks, not books). A talk qualifies when its retell
+// Every retell a deck can be built from (docs/31: the deck is a retell's product, so
+// what gets listed is retells, not books). A retell qualifies when its retell
 // settled at least one entry as in — the decisions are the material, whether or
 // not a notes pass ever ran — or, failing that, when one of its materials has
 // notes for the old plan path to work from.
-export async function listDeckTalks(): Promise<DeckTalk[]> {
-  const talks = await listAllTalks();
-  const out: DeckTalk[] = [];
-  for (const talk of talks) {
-    const settled = talk.decisions.filter((d) => d.include).length;
+export async function listDeckRetells(): Promise<DeckRetell[]> {
+  const retells = await listAllRetells();
+  const out: DeckRetell[] = [];
+  for (const retell of retells) {
+    const settled = retell.decisions.filter((d) => d.include).length;
     if (settled === 0) {
       let usable = false;
-      for (const m of talk.materials) {
+      for (const m of retell.materials) {
         if (await bookHasSpine(m.bookId)) {
           usable = true;
           break;
@@ -114,7 +114,7 @@ export async function listDeckTalks(): Promise<DeckTalk[]> {
       }
       if (!usable) continue;
     }
-    out.push({ talkId: talk.id, name: talk.name, topicId: talk.topicId, settled });
+    out.push({ retellId: retell.id, name: retell.name, topicId: retell.topicId, settled });
   }
   return out;
 }
@@ -129,7 +129,7 @@ export async function listDeckTalks(): Promise<DeckTalk[]> {
 // (retell/material.ts, retell/skeleton.ts): the notes plan when there is one,
 // the PDF's table of contents when there is not, and the whole book as one
 // chapter when there is neither. Reading the notes state directly instead is
-// what left the second book of a talk with an empty chapter table — a talk is
+// what left the second book of a retell with an empty chapter table — a retell is
 // listed as deck-ready when *any* of its materials has notes, but every material
 // is planned, and an empty table becomes the citable set validateDeckPlan checks
 // the model's citations against.
@@ -152,17 +152,17 @@ export async function planMaterial(bookId: string): Promise<PlanBook> {
   return { bookId, title: material.title, overview, chapters, figures };
 }
 
-// This talk's settled outline: the one place the deck pipeline reads it, and the
-// only place that knows where a talk lives. Everything downstream works on the
-// TalkOutline shape, where each entry already says which material and which
-// chapter it came from and the order is the talk's.
+// This retell's settled outline: the one place the deck pipeline reads it, and the
+// only place that knows where a retell lives. Everything downstream works on the
+// RetellOutline shape, where each entry already says which material and which
+// chapter it came from and the order is the retell's.
 //
-// Null means the talk has settled nothing, which is what puts the plan stage
+// Null means the retell has settled nothing, which is what puts the plan stage
 // back on its old path. Read fresh per run rather than cached across the deck's
 // lifetime: the reader goes back into the retell and changes their mind, and
 // the next re-run has to see that.
-export async function readDeckOutline(talkId: string): Promise<TalkOutline | null> {
-  return buildTalkOutline(await loadTalk(talkId));
+export async function readDeckOutline(retellId: string): Promise<RetellOutline | null> {
+  return buildRetellOutline(await loadRetell(retellId));
 }
 
 interface GatheredNotes {
@@ -253,17 +253,17 @@ function imageDeps(signal: AbortSignal): ImageGenDeps {
   };
 }
 
-function makeDeps(talkId: string, bookIds: string[], instruction: string): SlidesDeps {
-  // One read of the talk per pipeline instance, shared by the plan and content
+function makeDeps(retellId: string, bookIds: string[], instruction: string): SlidesDeps {
+  // One read of the retell per pipeline instance, shared by the plan and content
   // stages of that run.
-  let outlineOnce: Promise<TalkOutline | null> | null = null;
-  const outline = () => (outlineOnce ??= readDeckOutline(talkId));
+  let outlineOnce: Promise<RetellOutline | null> | null = null;
+  const outline = () => (outlineOnce ??= readDeckOutline(retellId));
 
   return {
     async buildPlan(opts) {
       const model = await resolveModel("prep");
       const books = await Promise.all(bookIds.map(planMaterial));
-      // The talk's outline is the deck's skeleton (docs/31). The plan call then
+      // The retell's outline is the deck's skeleton (docs/31). The plan call then
       // only pages it out; with nothing settled, the model designs the outline
       // from the chapter list as before.
       const settled = await outline();
@@ -283,7 +283,7 @@ function makeDeps(talkId: string, bookIds: string[], instruction: string): Slide
       const checked = validateDeckPlan(plan, citableWithOutline(books, settled));
       // Then against the decisions: a cut chapter gets no page, a kept chapter
       // that the plan skipped gets one back.
-      return settled ? applyTalkOutline(checked, settled) : checked;
+      return settled ? applyRetellOutline(checked, settled) : checked;
     },
 
     async generateContent({ slide, instruction: steer }, opts) {
@@ -354,10 +354,10 @@ function makeDeps(talkId: string, bookIds: string[], instruction: string): Slide
     },
 
     saveState: (state) => saveSlidesState(state),
-    writeFragment: (index, html) => writeFragment(talkId, index, html),
-    readFragment: (index) => readFragment(talkId, index),
-    writeAsset: (index, dataUrl) => writeAsset(talkId, index, dataUrl),
-    readAsset: (index) => readAsset(talkId, index),
+    writeFragment: (index, html) => writeFragment(retellId, index, html),
+    readFragment: (index) => readFragment(retellId, index),
+    writeAsset: (index, dataUrl) => writeAsset(retellId, index, dataUrl),
+    readAsset: (index) => readAsset(retellId, index),
 
     async assemble(input: AssembleInput) {
       const html = assembleDeck({
@@ -365,7 +365,7 @@ function makeDeps(talkId: string, bookIds: string[], instruction: string): Slide
         slides: input.slides.map((s) => ({ kind: s.kind, fragment: s.fragment, asset: s.asset })),
       });
       const file = await writeDeck(input.id, slugify(input.title), html);
-      const entry: TalkEntry = {
+      const entry: RetellEntry = {
         talkId: input.id,
         title: input.title,
         file,
@@ -373,9 +373,9 @@ function makeDeps(talkId: string, bookIds: string[], instruction: string): Slide
         bookIds: input.bookIds,
         instruction: input.instruction,
       };
-      // Recorded after the deck is on disk; re-assembling replaces this talk's
-      // row instead of adding a second one for the same talk.
-      await recordTalk(entry);
+      // Recorded after the deck is on disk; re-assembling replaces this retell's
+      // row instead of adding a second one for the same retell.
+      await recordRetell(entry);
       return file;
     },
 
@@ -385,24 +385,24 @@ function makeDeps(talkId: string, bookIds: string[], instruction: string): Slide
 
 let current: SlidesPipeline | null = null;
 
-// Build this talk's deck: a fresh pipeline over the talk's materials, under the
-// talk's own id. The instruction is a steer on top of the settled outline
-// (theme, audience, length), not the description of the talk — the talk already
+// Build this retell's deck: a fresh pipeline over the retell's materials, under the
+// retell's own id. The instruction is a steer on top of the settled outline
+// (theme, audience, length), not the description of the retell — the retell already
 // says what it is.
 //
-// Starting again on a talk that already has a deck re-plans it from scratch,
+// Starting again on a retell that already has a deck re-plans it from scratch,
 // which is what the reader asked for by pressing it; the finer-grained re-runs
 // (one page, one image, re-assemble) are on the pipeline itself. Null when the
-// talk is gone.
+// retell is gone.
 export async function startDeck(
-  talkId: string,
+  retellId: string,
   instruction: string,
 ): Promise<SlidesPipeline | null> {
-  const talk = await loadTalk(talkId);
-  if (!talk) return null;
-  const bookIds = talk.materials.map((m) => m.bookId);
-  const pipeline = SlidesPipeline.create(makeDeps(talkId, bookIds, instruction), {
-    talkId,
+  const retell = await loadRetell(retellId);
+  if (!retell) return null;
+  const bookIds = retell.materials.map((m) => m.bookId);
+  const pipeline = SlidesPipeline.create(makeDeps(retellId, bookIds, instruction), {
+    retellId,
     createdAt: Date.now(),
     instruction,
     bookIds,
@@ -415,9 +415,9 @@ export async function startDeck(
 // Re-attach to a deck that is already on disk: a run a restart interrupted, or a
 // finished deck whose pages the reader wants to re-run. The caller decides what
 // to run (resume, one page, re-assemble) — reopening by itself spends nothing.
-export async function openDeck(talkId: string): Promise<SlidesPipeline | null> {
-  if (current?.snapshot().state.id === talkId) return current;
-  const state = await loadSlidesState(talkId);
+export async function openDeck(retellId: string): Promise<SlidesPipeline | null> {
+  if (current?.snapshot().state.id === retellId) return current;
+  const state = await loadSlidesState(retellId);
   if (!state) return null;
   const pipeline = new SlidesPipeline(
     makeDeps(state.id, state.bookIds, state.instruction),
@@ -447,6 +447,6 @@ export function listDeckStates(): Promise<SlidesState[]> {
 }
 
 // The generated-deck registry, newest first, for the UI list.
-export async function listDecks(): Promise<TalkEntry[]> {
-  return (await loadTalks()).slice().reverse();
+export async function listDecks(): Promise<RetellEntry[]> {
+  return (await loadRetells()).slice().reverse();
 }

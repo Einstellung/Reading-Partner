@@ -908,7 +908,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   // closing the reader, Esc): the view goes away, the thread stays on its mark
   // (docs/03). An answer still being written is not interrupted — it finishes
   // into the thread file, and the mark shows it whole when it is next opened.
-  // Images pasted but not sent stay on the thread, like the talk itself: this is
+  // Images pasted but not sent stay on the thread, like the retell itself: this is
   // a way out of the view, not a way to throw the conversation away.
   const hangUp = useCallback(() => {
     captureHangup();
@@ -1026,7 +1026,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   // Where the reader lands when the conversation on screen has been deleted: back
   // in the one it came off, if it was a side conversation and that one survived —
   // that one was never what they threw away — and otherwise out of the call. No
-  // receipt: the talk is being discarded, and there is nothing left to report.
+  // receipt: the retell is being discarded, and there is nothing left to report.
   const closeAfterDelete = useCallback(
     (c: CallState<M>) => {
       if (c.aside && openParent(c)) return;
@@ -1043,7 +1043,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   // does. Marks drawn on the replies stay: they are the reader's on the book,
   // not the conversation's (reading/chat-marks.ts: hostMarkIds). Both
   // removals are in-file rewrites, so per-file LWW sync carries them to other
-  // devices. Unlike a hangup this does not distill — the talk is being thrown
+  // devices. Unlike a hangup this does not distill — the retell is being thrown
   // away — and anything already distilled from it stays.
   const deleteOpenThread = useCallback(() => {
     const c = callRef.current;

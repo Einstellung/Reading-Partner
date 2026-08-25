@@ -1,4 +1,4 @@
-// Starting a talk: which of the topic's materials it is about.
+// Starting a retell: which of the topic's materials it is about.
 //
 // It opens with the marked ones already ticked (docs/31: 新建时不从零勾选) so the
 // common case is one press. A material with no book id yet — added to the topic
@@ -17,7 +17,7 @@ import {
 } from "../../ui/dialog";
 import { defaultMaterialSelection, type MaterialCandidate } from "../../../../reading/retell";
 
-export default function NewTalkDialog(props: {
+export default function NewRetellDialog(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   candidates: MaterialCandidate[];
@@ -35,9 +35,9 @@ export default function NewTalkDialog(props: {
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent className="w-[min(30rem,100%)]">
         <DialogHeader>
-          <DialogTitle className="leading-normal">New talk</DialogTitle>
+          <DialogTitle className="leading-normal">New retell</DialogTitle>
           <DialogDescription>
-            A talk is prepared by going through what you read, chapter by chapter, and settling what
+            A retell is prepared by going through what you read, chapter by chapter, and settling what
             it contributes. Pick what it is about.
           </DialogDescription>
         </DialogHeader>

@@ -35,7 +35,7 @@ function ctx(over: Partial<RetellContext> = {}): RetellContext {
 
 // Every one of these is a step in the slide the mode exists to prevent: the AI
 // summarises the chapter, asks whether that sounds right, accepts "yes", and the
-// reader has heard a good talk instead of given one.
+// reader has heard a good retell instead of given one.
 test("the instructions forbid the moves that would make the mode useless", () => {
   expect(RETELL_INSTRUCTIONS).toContain("never say for them");
   expect(RETELL_INSTRUCTIONS).toContain("No summary of a chapter before they have spoken");
@@ -147,7 +147,7 @@ test("a recorded decision moves the prompt on to the next chapter", () => {
     ],
   };
   const text = buildRetellSystemPrompt(ctx({ plan }));
-  expect(text).toContain("Chapter 1. Openings — in the talk");
+  expect(text).toContain("Chapter 1. Openings — in the retell");
   expect(text).toContain("Next up: chapter 2");
 });
 

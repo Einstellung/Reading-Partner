@@ -6,10 +6,10 @@
 import { expect, test } from "bun:test";
 import { buildRetellTools } from "../../../src/reading/retell/tools";
 import type { RetellDecisionCardData } from "../../../src/reading/retell/cards";
-import { RETELL_VERSION } from "../../../src/reading/retell/types";
+import { PLAN_VERSION } from "../../../src/reading/retell/types";
 import type {
   RetellChapter,
-  RetellDecision,
+  PlanDecision,
   RetellPlan,
 } from "../../../src/reading/retell/types";
 
@@ -19,18 +19,18 @@ const chapters: RetellChapter[] = [
 ];
 
 function harness(notes: Record<number, string> = {}) {
-  const recorded: RetellDecision[] = [];
+  const recorded: PlanDecision[] = [];
   const cards: RetellDecisionCardData[] = [];
-  // Stands in for the talk: what record writes is what readPlan hands back, so
-  // read_talk_outline is tested against decisions made in the same run. Appended
-  // rather than sorted, because the talk keeps the order it recorded in.
+  // Stands in for the retell: what record writes is what readPlan hands back, so
+  // read_retell_outline is tested against decisions made in the same run. Appended
+  // rather than sorted, because the retell keeps the order it recorded in.
   let plan: RetellPlan | null = null;
   const tools = buildRetellTools({
     chapters,
     record: async (d) => {
       recorded.push(d);
       plan = {
-        version: RETELL_VERSION,
+        version: PLAN_VERSION,
         createdAt: plan?.createdAt ?? d.updatedAt,
         updatedAt: d.updatedAt,
         decisions: [...(plan?.decisions ?? []).filter((x) => x.chapter !== d.chapter), d],
@@ -124,8 +124,8 @@ test("the reply says which way the decision went", async () => {
   const h = harness();
   const kept = await h.byName("record_chapter_decision").execute({ chapter: 1, include: true, points: ["a"] });
   const cut = await h.byName("record_chapter_decision").execute({ chapter: 2, include: false, points: [] });
-  expect(String(kept)).toContain("going in the talk");
-  expect(String(cut)).toContain("cut from the talk");
+  expect(String(kept)).toContain("going in the retell");
+  expect(String(cut)).toContain("cut from the retell");
 });
 
 test("read_chapter_note returns the note, or says there is none", async () => {
@@ -139,10 +139,10 @@ test("read_chapter_note returns the note, or says there is none", async () => {
   );
 });
 
-test("read_talk_outline reads the outline back, including the chapter just recorded", async () => {
+test("read_retell_outline reads the outline back, including the chapter just recorded", async () => {
   const h = harness();
   // Before anything is settled there is no outline, and saying so is the answer.
-  expect(String(await h.byName("read_talk_outline").execute({}))).toContain(
+  expect(String(await h.byName("read_retell_outline").execute({}))).toContain(
     "No chapter has been settled yet",
   );
 
@@ -159,7 +159,7 @@ test("read_talk_outline reads the outline back, including the chapter just recor
     note: "could not say anything about it",
   });
 
-  const out = String(await h.byName("read_talk_outline").execute({}));
+  const out = String(await h.byName("read_retell_outline").execute({}));
   expect(out).toContain("1. Openings");
   expect(out).toContain("the 1962 data does the work");
   expect(out).toContain("figure: fig:2");
@@ -167,11 +167,11 @@ test("read_talk_outline reads the outline back, including the chapter just recor
   expect(out).toContain("could not say anything about it");
 });
 
-test("read_talk_outline is read-only: it records nothing and raises no card", async () => {
+test("read_retell_outline is read-only: it records nothing and raises no card", async () => {
   const h = harness();
   await h.byName("record_chapter_decision").execute({ chapter: 1, include: true, points: ["a"] });
   const before = h.recorded.length;
-  await h.byName("read_talk_outline").execute({});
+  await h.byName("read_retell_outline").execute({});
   expect(h.recorded.length).toBe(before);
   expect(h.cards.length).toBe(1);
 });

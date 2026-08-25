@@ -1,4 +1,4 @@
-// Turn assembly for a talk's retell (src/reading/retell/turn.ts): which tools
+// Turn assembly for a retell's retell (src/reading/retell/turn.ts): which tools
 // are mounted with no book open, that the reader's marks arrive under the right
 // chapters, that a recorded decision comes back as a book's chapter, and that a
 // whole book of highlights is fitted to the window rather than sent over it.
@@ -16,7 +16,7 @@ import type { ObservationIndexEntry, ObservationType } from "../../../src/observ
 // with no Tauri host under it they all miss, which is exactly the case being
 // assembled for. Mocking the fs plugin here would swap it out for every other
 // test file in the run as well.
-const { buildTalkTurn, OBSERVATION_ORDER_TIGHT } = await import(
+const { buildRetellTurn, OBSERVATION_ORDER_TIGHT } = await import(
   "../../../src/reading/retell/turn",
 );
 // The replay cap is the reading turn's; a retell borrows it rather than
@@ -24,7 +24,7 @@ const { buildTalkTurn, OBSERVATION_ORDER_TIGHT } = await import(
 const { HISTORY_KEEP } = await import("../../../src/reading/turn");
 const { combineChapters } = await import("../../../src/reading/retell/outline");
 import type { LoadedMaterial } from "../../../src/reading/retell/material";
-import type { Talk, TalkDecision } from "../../../src/reading/retell/types";
+import type { Retell, RetellDecision } from "../../../src/reading/retell/types";
 
 const settings: Settings = {
   ...DEFAULT_SETTINGS,
@@ -67,11 +67,11 @@ function material(over: Partial<LoadedMaterial> = {}): LoadedMaterial {
   };
 }
 
-function talk(over: Partial<Talk> = {}): Talk {
+function retell(over: Partial<Retell> = {}): Retell {
   return {
     version: 1,
     id: "t1",
-    name: "A talk",
+    name: "A retell",
     topicId: "topic-1",
     materials: [{ bookId: "b1", title: "Eye and Brain" }],
     createdAt: 1,
@@ -83,9 +83,9 @@ function talk(over: Partial<Talk> = {}): Talk {
 
 const names = (t: { name: string }[]) => t.map((x) => x.name).sort();
 
-function input(over: Partial<Parameters<typeof buildTalkTurn>[0]> = {}) {
+function input(over: Partial<Parameters<typeof buildRetellTurn>[0]> = {}) {
   return {
-    talk: talk(),
+    retell: retell(),
     materials: [material()],
     topicName: "Vision",
     settings,
@@ -96,7 +96,7 @@ function input(over: Partial<Parameters<typeof buildTalkTurn>[0]> = {}) {
 }
 
 test("the retell prompt and its own tools, with no book open", async () => {
-  const turn = await buildTalkTurn(input());
+  const turn = await buildRetellTurn(input());
   expect(turn.systemPrompt).toContain("You are sitting in on a retell");
   expect(turn.systemPrompt).toContain("nothing recorded yet");
   expect(names(turn.tools)).toEqual([
@@ -105,7 +105,7 @@ test("the retell prompt and its own tools, with no book open", async () => {
     "observation_update",
     "read_chapter_note",
     "read_pages",
-    "read_talk_outline",
+    "read_retell_outline",
     "record_chapter_decision",
     "search_topic",
   ]);
@@ -116,9 +116,9 @@ test("the retell prompt and its own tools, with no book open", async () => {
 // is no such book, so it goes and search_topic (which tags every hit with its
 // book) is the way in.
 test("several materials drop read_pages and keep the topic search", async () => {
-  const turn = await buildTalkTurn(
+  const turn = await buildRetellTurn(
     input({
-      talk: talk({
+      retell: retell({
         materials: [
           { bookId: "b1", title: "Eye and Brain" },
           { bookId: "b2", title: "Vision" },
@@ -133,7 +133,7 @@ test("several materials drop read_pages and keep the topic search", async () => 
 });
 
 test("the reader's marks arrive bucketed under the chapters they fall in", async () => {
-  const turn = await buildTalkTurn(
+  const turn = await buildRetellTurn(
     input({
       materials: [
         material({
@@ -155,9 +155,9 @@ test("the reader's marks arrive bucketed under the chapters they fall in", async
 // The decision is what the whole mode exists to produce; it has to land on the
 // right book's chapter, not on a bare number.
 test("record_chapter_decision writes a decision filed under its book", async () => {
-  const written: TalkDecision[] = [];
+  const written: RetellDecision[] = [];
   const cards: unknown[] = [];
-  const turn = await buildTalkTurn(
+  const turn = await buildRetellTurn(
     input({
       record: async (d) => {
         written.push(d);
@@ -173,7 +173,7 @@ test("record_chapter_decision writes a decision filed under its book", async () 
     points: ["the ganglion density argument"],
     figure: "[fig:3]",
   });
-  expect(String(result)).toContain("going in the talk");
+  expect(String(result)).toContain("going in the retell");
   expect(written).toEqual([
     {
       bookId: "b1",
@@ -188,9 +188,9 @@ test("record_chapter_decision writes a decision filed under its book", async () 
   expect(cards).toHaveLength(1);
 });
 
-test("a chapter number that is not in the talk is refused, not written", async () => {
-  const written: TalkDecision[] = [];
-  const turn = await buildTalkTurn(input({ record: async (d) => void written.push(d) }));
+test("a chapter number that is not in the retell is refused, not written", async () => {
+  const written: RetellDecision[] = [];
+  const turn = await buildRetellTurn(input({ record: async (d) => void written.push(d) }));
   const tool = turn.tools.find((t) => t.name === "record_chapter_decision");
   expect(String(await tool!.execute({ chapter: 9, include: true, points: [] }))).toContain(
     "No chapter 9",
@@ -199,9 +199,9 @@ test("a chapter number that is not in the talk is refused, not written", async (
 });
 
 test("what is already settled is read back, and the next chapter named", async () => {
-  const turn = await buildTalkTurn(
+  const turn = await buildRetellTurn(
     input({
-      talk: talk({
+      retell: retell({
         decisions: [
           {
             bookId: "b1",
@@ -215,26 +215,26 @@ test("what is already settled is read back, and the next chapter named", async (
       }),
     }),
   );
-  expect(turn.systemPrompt).toContain("Chapter 1. One — in the talk");
+  expect(turn.systemPrompt).toContain("Chapter 1. One — in the retell");
   expect(turn.systemPrompt).toContain("Next up: chapter 2");
 });
 
-// The record the prompt carries is a snapshot; read_talk_outline is the live
-// one, so "what does my talk look like now" has to include the chapter settled a
+// The record the prompt carries is a snapshot; read_retell_outline is the live
+// one, so "what does my retell look like now" has to include the chapter settled a
 // moment ago in this same turn.
-test("read_talk_outline answers from the talk as it stands, not the turn's snapshot", async () => {
-  let current = talk();
-  const turn = await buildTalkTurn(
+test("read_retell_outline answers from the retell as it stands, not the turn's snapshot", async () => {
+  let current = retell();
+  const turn = await buildRetellTurn(
     input({
-      talk: current,
+      retell: current,
       record: async (d) => {
         current = { ...current, decisions: [...current.decisions, d] };
       },
-      readTalk: () => current,
+      readRetell: () => current,
       now: () => 5,
     }),
   );
-  const outline = turn.tools.find((t) => t.name === "read_talk_outline")!;
+  const outline = turn.tools.find((t) => t.name === "read_retell_outline")!;
   expect(String(await outline.execute({}))).toContain("No chapter has been settled yet");
 
   await turn.tools.find((t) => t.name === "record_chapter_decision")!.execute({
@@ -248,23 +248,23 @@ test("read_talk_outline answers from the talk as it stands, not the turn's snaps
   expect(text).toContain("Not settled yet: 1. One.");
 });
 
-// A talk over two materials numbers its chapters end to end, and the outline has
+// A retell over two materials numbers its chapters end to end, and the outline has
 // to read back in those numbers or the model cannot cite what it just heard.
-test("read_talk_outline reads back in the talk's combined numbering", async () => {
-  let current = talk({
+test("read_retell_outline reads back in the retell's combined numbering", async () => {
+  let current = retell({
     materials: [
       { bookId: "b1", title: "Eye and Brain" },
       { bookId: "b2", title: "Vision" },
     ],
   });
-  const turn = await buildTalkTurn(
+  const turn = await buildRetellTurn(
     input({
-      talk: current,
+      retell: current,
       materials: [material(), material({ bookId: "b2", title: "Vision" })],
       record: async (d) => {
         current = { ...current, decisions: [...current.decisions, d] };
       },
-      readTalk: () => current,
+      readRetell: () => current,
       now: () => 5,
     }),
   );
@@ -275,7 +275,7 @@ test("read_talk_outline reads back in the talk's combined numbering", async () =
     points: ["theirs"],
   });
   expect(current.decisions[0]).toMatchObject({ bookId: "b2", chapter: 1 });
-  expect(String(await turn.tools.find((t) => t.name === "read_talk_outline")!.execute({}))).toContain(
+  expect(String(await turn.tools.find((t) => t.name === "read_retell_outline")!.execute({}))).toContain(
     "3. One",
   );
 });
@@ -288,7 +288,7 @@ test("view_figure is mounted and crops from the library copy of the book", async
     { id: "3", page: 2, caption: "Ganglion density against eccentricity", bbox: null } as Figure,
   ];
   let readFor = "";
-  const turn = await buildTalkTurn(
+  const turn = await buildRetellTurn(
     input({
       materials: [material({ figures })],
       readBytes: async (bookId) => {
@@ -317,9 +317,9 @@ test("view_figure is mounted and crops from the library copy of the book", async
 test("each material's figures are listed under its own name", async () => {
   const fig = (id: string): Figure =>
     ({ id, page: 1, caption: `Figure ${id}`, bbox: null }) as Figure;
-  const turn = await buildTalkTurn(
+  const turn = await buildRetellTurn(
     input({
-      talk: talk({
+      retell: retell({
         materials: [
           { bookId: "b1", title: "Eye and Brain" },
           { bookId: "b2", title: "Vision" },
@@ -340,7 +340,7 @@ test("history is replayed after the kickoff and trimmed to the cap", async () =>
     role: (i % 2 === 0 ? "user" : "ai") as "user" | "ai",
     text: `m${i}`,
   }));
-  const turn = await buildTalkTurn(input({ history }));
+  const turn = await buildRetellTurn(input({ history }));
   expect(turn.messages.length).toBe(HISTORY_KEEP + 1);
   expect(turn.messages[1].text).toBe("m5");
 });
@@ -353,7 +353,7 @@ test("marks too large for the window are shortened, and the reader is told", asy
     text: "编译器内联缓存".repeat(200),
     comment: "",
   }));
-  const turn = await buildTalkTurn(
+  const turn = await buildRetellTurn(
     input({ materials: [material({ annotations })], settings: small }),
   );
   expect(turn.refusal).toBe("");
@@ -367,7 +367,7 @@ test("marks too large for the window are shortened, and the reader is told", asy
 // the table. The figure catalog is redundancy and goes silently; the reader's
 // own marks are the material of a retell, so shortening them is said out
 // loud; the conversation is below both.
-test("the talk ladder drops the catalog, then shortens the marks, and leaves the conversation whole", async () => {
+test("the retell ladder drops the catalog, then shortens the marks, and leaves the conversation whole", async () => {
   const annotations = Array.from({ length: 1_200 }, (_, i) => ({
     page: (i % 4) + 1,
     text: "编译器内联缓存".repeat(200),
@@ -378,7 +378,7 @@ test("the talk ladder drops the catalog, then shortens the marks, and leaves the
     text: `m${i}`,
   }));
   const figures: Figure[] = [{ id: "1", page: 1, caption: "内联缓存布局", bbox: null } as Figure];
-  const turn = await buildTalkTurn(
+  const turn = await buildRetellTurn(
     input({ materials: [material({ annotations, figures })], history, settings: small }),
   );
   expect(turn.refusal).toBe("");
@@ -395,9 +395,9 @@ test("the talk ladder drops the catalog, then shortens the marks, and leaves the
 // The combined numbering is what the model is given, so a note it asks for has
 // to be fetched from the right book.
 test("read_chapter_note answers in combined chapter numbers", async () => {
-  const turn = await buildTalkTurn(
+  const turn = await buildRetellTurn(
     input({
-      talk: talk({
+      retell: retell({
         materials: [
           { bookId: "b1", title: "Eye and Brain" },
           { bookId: "b2", title: "Vision" },
@@ -413,7 +413,7 @@ test("read_chapter_note answers in combined chapter numbers", async () => {
   expect(combined.chapters).toHaveLength(4);
   const tool = turn.tools.find((t) => t.name === "read_chapter_note");
   // No note on disk (the fs mock says nothing exists), and chapter 9 is not a
-  // chapter of this talk at all.
+  // chapter of this retell at all.
   expect(String(await tool!.execute({ chapter: 4 }))).toContain("No note on file");
   expect(String(await tool!.execute({ chapter: 9 }))).toContain("No chapter 9");
 });

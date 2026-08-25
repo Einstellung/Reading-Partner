@@ -141,13 +141,13 @@ export function withSlideEvent(
 
 // Whether anything of a run was actually recorded. A view that failed to load a
 // deck, or one the reader backed out of before the first page arrived, is not a
-// pass through the talk and does not become a row in its history.
+// pass through the retell and does not become a row in its history.
 export function hasRecordedPages(events: readonly RehearsalEvent[]): boolean {
   return events.some((e) => e.kind === "slide");
 }
 
 export interface FinishRunInput {
-  talkId: string;
+  retellId: string;
   deckFile: string;
   // Stamped by the caller at the moment the reader finished, not after the wait
   // below: the rehearsal ended when they stopped talking, not when the last
@@ -168,7 +168,7 @@ export interface FinishRunInput {
 
 // End a rehearsal: close the speech, build the run out of everything that
 // arrived, write it. True when a run reached the store, which is the only case
-// in which the talk's history has changed and has to be read again — a pass
+// in which the retell's history has changed and has to be read again — a pass
 // that recorded no page was never a pass, and a write that failed did not
 // happen (docs/43).
 //
@@ -184,7 +184,7 @@ export async function finishRun(input: FinishRunInput): Promise<boolean> {
   const run = buildRun({
     id: input.id,
     ordinal: 0, // the store assigns it
-    talkId: input.talkId,
+    retellId: input.retellId,
     deckFile: input.deckFile,
     startedAt: input.startedAt,
     events,
@@ -198,7 +198,7 @@ export async function finishRun(input: FinishRunInput): Promise<boolean> {
   return true;
 }
 
-// m:ss under an hour, h:mm:ss over it. Elapsed time in a talk is read at a
+// m:ss under an hour, h:mm:ss over it. Elapsed time in a retell is read at a
 // glance and compared against "I have fifteen minutes", so the minutes are the
 // number that has to be legible.
 export function formatElapsed(ms: number): string {
@@ -241,7 +241,7 @@ export interface RehearsalReadiness {
   title: string;
 }
 
-// Whether this talk can be given from the top, and what the button says about it.
+// Whether this retell can be given from the top, and what the button says about it.
 export function rehearsalReadiness(input: {
   deckFile: string | null;
   loading: boolean;
@@ -252,11 +252,11 @@ export function rehearsalReadiness(input: {
   preparing?: boolean;
 }): RehearsalReadiness {
   if (input.preparing) return { ok: false, title: "Starting this rehearsal…" };
-  if (input.loading) return { ok: false, title: "Looking for this talk's deck…" };
+  if (input.loading) return { ok: false, title: "Looking for this retell's deck…" };
   if (!input.deckFile) {
     return {
       ok: false,
-      title: "There is no deck for this talk yet. Generate one first (Deck).",
+      title: "There is no deck for this retell yet. Generate one first (Deck).",
     };
   }
   return { ok: true, title: "Give this talk from the deck, from the top" };

@@ -31,7 +31,7 @@ interface FakeOptions {
   timers?: Partial<Pick<SlidesDeps, "now" | "sleep" | "setTimer">>;
 }
 
-// A fake talk directory: state.json plus the per-slide body and asset files.
+// A fake retell directory: state.json plus the per-slide body and asset files.
 function makeFakes(opts: FakeOptions = {}) {
   const disk = {
     state: null as SlidesState | null,
@@ -44,7 +44,7 @@ function makeFakes(opts: FakeOptions = {}) {
   const steers: (string | undefined)[] = [];
 
   const deps: SlidesDeps = {
-    buildPlan: opts.plan ?? (async () => ({ title: "A Talk", slides: OUTLINE.map((s) => ({ ...s })) })),
+    buildPlan: opts.plan ?? (async () => ({ title: "A Retell", slides: OUTLINE.map((s) => ({ ...s })) })),
     generateContent: async ({ slide, instruction }) => {
       steers.push(instruction);
       const html = opts.content
@@ -78,7 +78,7 @@ function makeFakes(opts: FakeOptions = {}) {
       assembled = input;
       assembleCount++;
       if (opts.assemble) return opts.assemble();
-      return `slides/${input.id}-a-talk.html`;
+      return `slides/${input.id}-a-retell.html`;
     },
     now: opts.timers?.now ?? (() => Date.now()),
     sleep: opts.timers?.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))),
@@ -103,7 +103,7 @@ function make(opts: FakeOptions = {}) {
   const f = makeFakes(opts);
   const p = SlidesPipeline.create(
     f.deps,
-    { talkId: "1000", createdAt: 1000, instruction: "for engineers", bookIds: ["b1"] },
+    { retellId: "1000", createdAt: 1000, instruction: "for engineers", bookIds: ["b1"] },
     TEST_CONFIG,
   );
   return { p, ...f };
@@ -119,9 +119,9 @@ test("full run: plan, content, assets, assemble", async () => {
   const st = p.snapshot().state;
   expect(st.planStatus).toBe("done");
   expect(st.runStatus).toBe("done");
-  expect(st.title).toBe("A Talk");
-  expect(st.id).toBe("1000"); // the talk id is its directory, fixed at creation
-  expect(st.outputFile).toBe("slides/1000-a-talk.html");
+  expect(st.title).toBe("A Retell");
+  expect(st.id).toBe("1000"); // the retell id is its directory, fixed at creation
+  expect(st.outputFile).toBe("slides/1000-a-retell.html");
   expect(st.slides.every((s) => s.contentStatus === "done")).toBe(true);
 
   const asm = getAssembled()!;
@@ -243,7 +243,7 @@ test("stop aborts an in-flight content call and marks the run stopped", async ()
 
 // --- resume across a restart -------------------------------------------------
 
-test("a talk resumed from disk re-runs only what was left", async () => {
+test("a retell resumed from disk re-runs only what was left", async () => {
   // First session: stopped after two slide bodies, with the third in flight.
   const first = make();
   await first.p.start();

@@ -2,13 +2,13 @@
 //
 // The shape mirrors classroom.ts — a stable instruction block, then the
 // variable material — but the posture is the opposite one. Classroom is the AI
-// talking and the reader listening; here the reader talks and the AI is the
+// talking and the reader listening; here the reader retells and the AI is the
 // audience that finds out what they cannot yet say.
 //
 // Everything in the instructions exists to stop one specific failure. An AI
 // asked to "quiz the user" politely summarises the chapter, asks whether that
 // sounds right, accepts "yes", and moves on — at the end of which the reader has
-// heard a good talk instead of given one. The rules about not summarising, about
+// heard a good retell instead of given one. The rules about not summarising, about
 // answering thin answers with the text rather than with a hint, and about not
 // walking the highlights one by one are each aimed at one step of that slide.
 //
@@ -93,11 +93,11 @@ export const RETELL_INSTRUCTIONS = [
   "  never the observations read out as a list. Then lay out the skeleton you read",
   "  in this book — the spine of its argument in a handful of lines, not the table",
   "  of contents read back — and ask two things. Is this the spine, or have you got",
-  "  it wrong? And which thread of it do they want this talk to be about? Their",
+  "  it wrong? And which thread of it do they want this retell to be about? Their",
   "  answer decides what you press on for the rest of the retell.",
   "- Stage two: chapter by chapter, in order. One question, two at most, then",
   "  stop and listen. When the chapter is done, settle what it contributes to the",
-  "  talk and record it. Then the next chapter.",
+  "  retell and record it. Then the next chapter.",
   "- One chapter per stretch of conversation. Do not run three chapters in one",
   "  reply to be efficient; the reader cannot answer three chapters at once.",
   "",
@@ -143,15 +143,15 @@ export const RETELL_INSTRUCTIONS = [
   "  touching any of it. Then ask once, about the whole chapter rather than any",
   "  line — what were they marking all of that for?",
   "",
-  "Recording what the talk will hold",
+  "Recording what the retell will hold",
   "- After a chapter's exchange, and only after, call record_chapter_decision:",
-  "  whether it goes in the talk, the points it contributes in the reader's own",
+  "  whether it goes in the retell, the points it contributes in the reader's own",
   "  framing rather than yours, and the figure that carries it if one does.",
   "- Propose it in a sentence, let them correct it, record what they land on. Do",
   "  not decide for them, and do not record before they have spoken — the record",
   "  is the outcome of the exchange, not a plan for it.",
   "- A chapter they could not say anything about is a chapter that probably does",
-  "  not belong in the talk. Say so; recording it as cut is a real result.",
+  "  not belong in the retell. Say so; recording it as cut is a real result.",
   "- Recording ends the exchange about that chapter, not the conversation. Go on",
   "  to the next one in the same reply.",
   "",
@@ -209,14 +209,14 @@ export function buildRetellSystemPrompt(ctx: RetellContext): string {
   }
 
   const tools = [
-    "record_chapter_decision(...) writes a chapter's decision to the talk's outline.",
+    "record_chapter_decision(...) writes a chapter's decision to the retell's outline.",
     // Always offered, not only when nothing was inlined: only the chapter coming
     // up is inlined, so every other chapter's note is behind this tool.
     "read_chapter_note(chapter) returns a chapter note the reader already wrote.",
     // The record below is this turn's; after recording a chapter the reader often
     // asks what the whole thing adds up to now, and that answer has to be read
     // back rather than remembered.
-    "read_talk_outline() reads the whole outline back — what is in, what was cut,",
+    "read_retell_outline() reads the whole outline back — what is in, what was cut,",
     "what is not settled yet.",
   ];
   if (ctx.hasReadingTools) {

@@ -20,7 +20,7 @@ export interface AnnotationLite {
 
 // One stored annotation flattened into the shape above. Skips annotations with
 // neither text nor comment (legacy image regions), which are evidence of
-// nothing. Here rather than in either caller because a reading turn and a talk's
+// nothing. Here rather than in either caller because a reading turn and a retell's
 // materials both need it and both need the same answer.
 export function toAnnotationLite(ann: Annotation): AnnotationLite | null {
   const text = typeof ann.text === "string" ? ann.text.trim() : "";

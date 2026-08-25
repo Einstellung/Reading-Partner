@@ -1193,7 +1193,7 @@ export default function App() {
   // turn, the staging and the event line are all keyed by thread id and none of
   // them is this file's. The mark goes through removeAnnotation like every other
   // deletion, so the annotations file, the in-memory map and sync stay in
-  // agreement. What was distilled from the talk stays.
+  // agreement. What was distilled from the retell stays.
   const deleteTraceAnnotation = useCallback(
     (id: string) => {
       dropThread(id, annsRef.current.get(id)?.aiThreadId as string | undefined);

@@ -1,10 +1,10 @@
-// The talk's two disk paths against one in-memory AppData; they share a file, so
+// The retell's two disk paths against one in-memory AppData; they share a file, so
 // they share the disk.
 //
-//   store.ts    — the talk file: the round trip, the listing that is the
+//   store.ts    — the retell file: the round trip, the listing that is the
 //                 directory rather than a registry, the read-modify-write that
 //                 merges one decision in, and what an unreadable file does.
-//   material.ts — a talk's materials, assembled from what is already on disk
+//   material.ts — a retell's materials, assembled from what is already on disk
 //                 under each book's content hash, with no reader and no engine.
 //
 // Run: bun test.
@@ -18,15 +18,15 @@ import {
   readMaterialBytes,
 } from "../../../src/reading/retell/material";
 import {
-  deleteTalk,
-  listTalksForTopic,
-  loadTalk,
-  recordTalkDecision,
-  startTalk,
-  talkFile,
-  talkIdOf,
-  talkThreadKey,
-  updateTalk,
+  deleteRetell,
+  listRetellsForTopic,
+  loadRetell,
+  recordRetellDecision,
+  startRetell,
+  retellFile,
+  retellIdOf,
+  retellThreadKey,
+  updateRetell,
 } from "../../../src/reading/retell/store";
 import { installAppData, type FakeDisk } from "../../support/appdata-fake";
 
@@ -62,96 +62,96 @@ function library(entries: Record<string, string>) {
   );
 }
 
-test("a talk id that has never been started reads as absent, not as an error", async () => {
-  expect(await loadTalk("nope")).toBeNull();
+test("a retell id that has never been started reads as absent, not as an error", async () => {
+  expect(await loadRetell("nope")).toBeNull();
 });
 
-test("starting a talk writes it under its own id and names it after its material", async () => {
-  const talk = await startTalk({ topicId: "topic-1", materials: MATERIALS, now: 1_700 });
-  expect(talk.id).toBe("1700");
-  expect(talk.name).toBe("Eye and Brain");
-  expect(disk.files.has(talkFile("1700"))).toBe(true);
-  expect((await loadTalk("1700"))?.topicId).toBe("topic-1");
+test("starting a retell writes it under its own id and names it after its material", async () => {
+  const retell = await startRetell({ topicId: "topic-1", materials: MATERIALS, now: 1_700 });
+  expect(retell.id).toBe("1700");
+  expect(retell.name).toBe("Eye and Brain");
+  expect(disk.files.has(retellFile("1700"))).toBe(true);
+  expect((await loadRetell("1700"))?.topicId).toBe("topic-1");
 });
 
-// The id is also the deck's directory name (slides/<talkId>/), so two talks
+// The id is also the deck's directory name (slides/<retellId>/), so two retells
 // cannot share one.
-test("two talks started in the same millisecond get different ids", async () => {
-  const first = await startTalk({ topicId: "t", materials: MATERIALS, now: 1_700 });
-  const second = await startTalk({ topicId: "t", materials: MATERIALS, now: 1_700 });
+test("two retells started in the same millisecond get different ids", async () => {
+  const first = await startRetell({ topicId: "t", materials: MATERIALS, now: 1_700 });
+  const second = await startRetell({ topicId: "t", materials: MATERIALS, now: 1_700 });
   expect(second.id).not.toBe(first.id);
 });
 
 test("the list is the directory, newest first, and scoped to one topic", async () => {
-  await startTalk({ topicId: "topic-1", materials: MATERIALS, now: 100 });
-  await startTalk({ topicId: "topic-2", materials: MATERIALS, now: 200 });
-  await startTalk({ topicId: "topic-1", materials: MATERIALS, now: 300 });
-  expect((await listTalksForTopic("topic-1")).map((t) => t.id)).toEqual(["300", "100"]);
+  await startRetell({ topicId: "topic-1", materials: MATERIALS, now: 100 });
+  await startRetell({ topicId: "topic-2", materials: MATERIALS, now: 200 });
+  await startRetell({ topicId: "topic-1", materials: MATERIALS, now: 300 });
+  expect((await listRetellsForTopic("topic-1")).map((t) => t.id)).toEqual(["300", "100"]);
 });
 
-// The conversation is a thread file keyed by the talk; its name must not be
-// mistaken for a talk file by the listing.
-test("the conversation file is not mistaken for a talk", async () => {
-  await startTalk({ topicId: "topic-1", materials: MATERIALS, now: 100 });
-  disk.files.set(`threads-${talkThreadKey("100")}.json`, "{}");
-  expect((await listTalksForTopic("topic-1")).map((t) => t.id)).toEqual(["100"]);
-  expect(talkIdOf("threads-talk-100.json")).toBeNull();
-  expect(talkIdOf("talk-100.json")).toBe("100");
-  expect(talkIdOf("talks.json")).toBeNull();
+// The conversation is a thread file keyed by the retell; its name must not be
+// mistaken for a retell file by the listing.
+test("the conversation file is not mistaken for a retell", async () => {
+  await startRetell({ topicId: "topic-1", materials: MATERIALS, now: 100 });
+  disk.files.set(`threads-${retellThreadKey("100")}.json`, "{}");
+  expect((await listRetellsForTopic("topic-1")).map((t) => t.id)).toEqual(["100"]);
+  expect(retellIdOf("threads-talk-100.json")).toBeNull();
+  expect(retellIdOf("talk-100.json")).toBe("100");
+  expect(retellIdOf("talks.json")).toBeNull();
 });
 
-test("a decision is merged into the talk and the file says so", async () => {
-  const talk = await startTalk({ topicId: "topic-1", materials: MATERIALS, now: 10 });
-  await recordTalkDecision(talk.id, decision(2, ["b"], 20));
-  await recordTalkDecision(talk.id, decision(1, ["a"], 30));
-  const stored = await loadTalk(talk.id);
+test("a decision is merged into the retell and the file says so", async () => {
+  const retell = await startRetell({ topicId: "topic-1", materials: MATERIALS, now: 10 });
+  await recordRetellDecision(retell.id, decision(2, ["b"], 20));
+  await recordRetellDecision(retell.id, decision(1, ["a"], 30));
+  const stored = await loadRetell(retell.id);
   expect(stored?.decisions.map((d) => d.chapter)).toEqual([2, 1]);
   expect(stored?.updatedAt).toBe(30);
 });
 
 test("recording a chapter twice replaces its decision, in place", async () => {
-  const talk = await startTalk({ topicId: "topic-1", materials: MATERIALS, now: 10 });
-  await recordTalkDecision(talk.id, decision(1, ["first take"], 20));
-  await recordTalkDecision(talk.id, decision(2, ["other chapter"], 21));
-  await recordTalkDecision(talk.id, decision(1, ["second take"], 22));
-  const stored = await loadTalk(talk.id);
+  const retell = await startRetell({ topicId: "topic-1", materials: MATERIALS, now: 10 });
+  await recordRetellDecision(retell.id, decision(1, ["first take"], 20));
+  await recordRetellDecision(retell.id, decision(2, ["other chapter"], 21));
+  await recordRetellDecision(retell.id, decision(1, ["second take"], 22));
+  const stored = await loadRetell(retell.id);
   expect(stored?.decisions).toHaveLength(2);
   expect(stored?.decisions[0].points).toEqual(["second take"]);
 });
 
-// A turn still running when the talk is deleted must not write the file back.
-test("a decision for a talk that is gone is dropped, not resurrected", async () => {
-  const talk = await startTalk({ topicId: "topic-1", materials: MATERIALS, now: 10 });
-  await deleteTalk(talk.id);
-  expect(await recordTalkDecision(talk.id, decision(1, ["a"], 20))).toBeNull();
-  expect(disk.files.has(talkFile(talk.id))).toBe(false);
+// A turn still running when the retell is deleted must not write the file back.
+test("a decision for a retell that is gone is dropped, not resurrected", async () => {
+  const retell = await startRetell({ topicId: "topic-1", materials: MATERIALS, now: 10 });
+  await deleteRetell(retell.id);
+  expect(await recordRetellDecision(retell.id, decision(1, ["a"], 20))).toBeNull();
+  expect(disk.files.has(retellFile(retell.id))).toBe(false);
 });
 
 test("an edit reads, patches and writes back", async () => {
-  const talk = await startTalk({ topicId: "topic-1", materials: MATERIALS, now: 10 });
-  await updateTalk(talk.id, (t) => ({ ...t, name: "Renamed" }), 99);
-  const stored = await loadTalk(talk.id);
+  const retell = await startRetell({ topicId: "topic-1", materials: MATERIALS, now: 10 });
+  await updateRetell(retell.id, (t) => ({ ...t, name: "Renamed" }), 99);
+  const stored = await loadRetell(retell.id);
   expect(stored?.name).toBe("Renamed");
   expect(stored?.updatedAt).toBe(99);
 });
 
 test("a file this build cannot read is absent, not a crash", async () => {
-  disk.files.set(talkFile("x"), JSON.stringify({ version: 99, id: "x" }));
-  expect(await loadTalk("x")).toBeNull();
-  disk.files.set(talkFile("x"), "{not json");
-  expect(await loadTalk("x")).toBeNull();
+  disk.files.set(retellFile("x"), JSON.stringify({ version: 99, id: "x" }));
+  expect(await loadRetell("x")).toBeNull();
+  disk.files.set(retellFile("x"), "{not json");
+  expect(await loadRetell("x")).toBeNull();
 });
 
 // A file this build's version knows may still hold an entry written by a shorter
-// lived shape. The entry goes, the talk stays: a lost decision is re-made in one
-// exchange, an unopenable talk is not.
+// lived shape. The entry goes, the retell stays: a lost decision is re-made in one
+// exchange, an unopenable retell is not.
 test("a decision the file cannot use is dropped, not thrown", async () => {
   disk.files.set(
-    talkFile("x"),
+    retellFile("x"),
     JSON.stringify({
       version: 1,
       id: "x",
-      name: "A talk",
+      name: "A retell",
       topicId: "topic-1",
       materials: MATERIALS,
       createdAt: 1,
@@ -165,27 +165,27 @@ test("a decision the file cannot use is dropped, not thrown", async () => {
       ],
     }),
   );
-  const talk = await loadTalk("x");
-  expect(talk?.decisions.map((d) => d.chapter)).toEqual([2, 1]);
-  expect(talk?.decisions[0].points).toEqual(["a"]);
-  expect(talk?.decisions[0].title).toBe("Two");
+  const retell = await loadRetell("x");
+  expect(retell?.decisions.map((d) => d.chapter)).toEqual([2, 1]);
+  expect(retell?.decisions[0].points).toEqual(["a"]);
+  expect(retell?.decisions[0].title).toBe("Two");
 });
 
 // The rehearsal-<bookId>.json this replaced was written for hours; a leftover
 // must not take the topic's list down with it.
 test("one unreadable file does not stop the rest of the list", async () => {
-  await startTalk({ topicId: "topic-1", materials: MATERIALS, now: 100 });
-  disk.files.set(talkFile("broken"), "{not json");
+  await startRetell({ topicId: "topic-1", materials: MATERIALS, now: 100 });
+  disk.files.set(retellFile("broken"), "{not json");
   disk.files.set("rehearsal-book-hash.json", JSON.stringify({ version: 1, decisions: [] }));
-  expect((await listTalksForTopic("topic-1")).map((t) => t.id)).toEqual(["100"]);
+  expect((await listRetellsForTopic("topic-1")).map((t) => t.id)).toEqual(["100"]);
 });
 
-// --- a talk's materials, read off disk (material.ts) ---
+// --- a retell's materials, read off disk (material.ts) ---
 
 test("a book with nothing on disk still becomes a material", async () => {
-  const m = await loadMaterial({ bookId: "unknown", title: "From the talk file" });
+  const m = await loadMaterial({ bookId: "unknown", title: "From the retell file" });
   // The stored title is the fallback when the library has no entry.
-  expect(m.title).toBe("From the talk file");
+  expect(m.title).toBe("From the retell file");
   expect(m.fulltext).toBeNull();
   expect(m.annotations).toEqual([]);
   expect(m.figures).toEqual([]);

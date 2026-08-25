@@ -1,4 +1,4 @@
-// A rehearsal (docs/31, the third stage): the reader puts the talk's deck on
+// A rehearsal (docs/31, the third stage): the reader puts the retell's deck on
 // screen and gives the whole thing once, start to finish, with the AI silent.
 // What that leaves behind is this record — which page was up when, and what was
 // said while it was.
@@ -6,11 +6,11 @@
 // Not the same thing as reading/retell, which is the AI questioning the
 // reader chapter by chapter before there is a deck at all. This is after: one
 // pass over the finished deck, no interruptions, no grading. Feedback and
-// distillation are not part of it — nothing can be said about how a talk went
-// until the talk has been recorded, so recording is what this layer does and all
+// distillation are not part of it — nothing can be said about how a retell went
+// until the retell has been recorded, so recording is what this layer does and all
 // it does.
 //
-// A talk is given many times. Every run is kept, oldest first, so the second
+// A retell is given many times. Every run is kept, oldest first, so the second
 // pass can be held against the first.
 
 export const REHEARSAL_VERSION = 1 as const;
@@ -32,7 +32,10 @@ export interface RehearsalPage {
 // when the caller did not have one to name.
 export interface RehearsalRun {
   id: string;
-  ordinal: number; // 1 for this talk's first rehearsal
+  ordinal: number; // 1 for this retell's first rehearsal
+  // The old word, on purpose: this key is in every rehearsal log already on
+  // disk and on the reader's other device. Renaming it would make normalizeLog
+  // reject those files, which is every run they have ever given.
   talkId: string;
   deckFile: string | null;
   startedAt: number;
@@ -42,6 +45,7 @@ export interface RehearsalRun {
 
 export interface RehearsalLog {
   version: typeof REHEARSAL_VERSION;
+  // Same as RehearsalRun.talkId: the key on disk keeps the old word.
   talkId: string;
   runs: RehearsalRun[]; // oldest first
 }
@@ -55,10 +59,10 @@ export type RehearsalEvent =
   | { kind: "utterance"; at: number; endedAt: number; text: string }
   | { kind: "end"; at: number };
 
-// A load-time repair, in the same posture as normalizeTalk: a file this build
+// A load-time repair, in the same posture as normalizeRetell: a file this build
 // cannot use at all reads as null (the store then moves it aside), while one
 // odd run inside a usable file is dropped rather than losing the rest. A lost
-// run is one talk given again; a lost log is every run there ever was.
+// run is one retell given again; a lost log is every run there ever was.
 export function normalizeLog(raw: unknown): RehearsalLog | null {
   const log = raw as RehearsalLog | null;
   if (!log || typeof log !== "object") return null;
@@ -76,7 +80,7 @@ export function normalizeLog(raw: unknown): RehearsalLog | null {
   return { version: REHEARSAL_VERSION, talkId: log.talkId, runs };
 }
 
-function normalizeRun(raw: unknown, talkId: string): RehearsalRun | null {
+function normalizeRun(raw: unknown, retellId: string): RehearsalRun | null {
   const run = raw as RehearsalRun | null;
   if (!run || typeof run !== "object") return null;
   if (typeof run.id !== "string" || !run.id) return null;
@@ -99,7 +103,7 @@ function normalizeRun(raw: unknown, talkId: string): RehearsalRun | null {
   return {
     id: run.id,
     ordinal: Number.isFinite(run.ordinal) && run.ordinal > 0 ? Math.round(run.ordinal) : 1,
-    talkId: typeof run.talkId === "string" && run.talkId ? run.talkId : talkId,
+    talkId: typeof run.talkId === "string" && run.talkId ? run.talkId : retellId,
     deckFile: typeof run.deckFile === "string" && run.deckFile ? run.deckFile : null,
     startedAt: run.startedAt,
     endedAt: Number.isFinite(run.endedAt as number) ? (run.endedAt as number) : null,
@@ -107,6 +111,6 @@ function normalizeRun(raw: unknown, talkId: string): RehearsalRun | null {
   };
 }
 
-export function emptyLog(talkId: string): RehearsalLog {
-  return { version: REHEARSAL_VERSION, talkId, runs: [] };
+export function emptyLog(retellId: string): RehearsalLog {
+  return { version: REHEARSAL_VERSION, talkId: retellId, runs: [] };
 }

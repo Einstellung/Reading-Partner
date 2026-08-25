@@ -24,7 +24,7 @@ bbox 这一半：图注在图上方时 `pairFiguresOnPage`（`extract.ts:505`）
 
 ### 论文与书用同一套假设，两边都不合身
 
-已修／整合 2026-08：管线搬到 `src/reading/prep/chapters/`。论文侧的引用摘要现在是完全独立的一条管线 `src/reading/prep/papers/`（消化一篇文档引用的参考文献），不再和书共用同一套 outline／plan 假设。但两条管线都不进 slides：`src/reading/slides/` 与 `src/reading/talks/` 对 `prep/papers/` 零 import。这个缺口留在 [31](./31-读完之后的梳理与讲.md)「前提与缺口」，这里不重复。
+已修／整合 2026-08：管线搬到 `src/reading/prep/chapters/`。论文侧的引用摘要现在是完全独立的一条管线 `src/reading/prep/papers/`（消化一篇文档引用的参考文献），不再和书共用同一套 outline／plan 假设。但两条管线都不进 slides：`src/reading/slides/` 与 `src/reading/retell/` 对 `prep/papers/` 零 import。这个缺口留在 [31](./31-读完之后的梳理与讲.md)「前提与缺口」，这里不重复。
 
 ### 一键全书不覆盖 skipped 章
 
@@ -48,7 +48,7 @@ bbox 这一半：图注在图上方时 `pairFiguresOnPage`（`extract.ts:505`）
 
 图索引失败不再永久为空：`FIGURES_RETRY_AFTER_MS`（`src/reading/figures/store.ts:35`）24 小时后重试，`figuresCacheFresh`（:46）区分 failed 与空。生成中途退出已能续跑：`state.json` 是恢复点（docs/31「已解决」，`0d4acc6`），不再是"能重跑不能续跑"。
 
-以下两条仍未修：`talks.json` 解析失败仍返回空数组（`loadTalks`，`src/reading/slides/store.ts:159`），下一次 `recordTalk`（:172）即以这份空数组覆写整个文件——所有已生成的 deck 从界面永久消失，HTML 仍在盘上。`rehearsal/store.ts` 吸取了这个教训（读不出时把坏文件挪开，见 `tests/reading/rehearsal/store.test.ts` 的注释），但 `slides/store.ts` 本身没有照做。解法现成：改走 `platform/app/atomic-fs` 的 `readGuardedJson`，同 `saved-articles.ts`。写盘成功但登记失败仍留孤儿文件：`live.ts:362` 先 `writeDeck` 再 `recordTalk`（:373），后者抛错时 HTML 已经在盘上，登记没跟上。
+以下两条仍未修：`talks.json` 解析失败仍返回空数组（`loadRetells`，`src/reading/slides/store.ts:159`），下一次 `recordRetell`（:172）即以这份空数组覆写整个文件——所有已生成的 deck 从界面永久消失，HTML 仍在盘上。`rehearsal/store.ts` 吸取了这个教训（读不出时把坏文件挪开，见 `tests/reading/rehearsal/store.test.ts` 的注释），但 `slides/store.ts` 本身没有照做。解法现成：改走 `platform/app/atomic-fs` 的 `readGuardedJson`，同 `saved-articles.ts`。写盘成功但登记失败仍留孤儿文件：`live.ts:362` 先 `writeDeck` 再 `recordRetell`（:373），后者抛错时 HTML 已经在盘上，登记没跟上。
 
 ## 缺失
 

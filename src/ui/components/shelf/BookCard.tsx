@@ -17,7 +17,7 @@ export default function BookCard(props: {
   file: FileRef;
   meta: BookMeta | undefined;
   onOpen: () => void;
-  // Start a talk about this book (docs/31). Absent for a file that has never
+  // Start a retell of this book (docs/31). Absent for a file that has never
   // been opened: it has no book id yet, so there is nothing on disk to retell.
   onRetell?: () => void;
   onRemove: () => void;

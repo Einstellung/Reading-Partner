@@ -56,7 +56,7 @@ test("the card shows what was written down", () => {
   const joined = shown.join(" ");
   expect(joined).toContain("Endings");
   expect(joined).toContain("3");
-  expect(joined).toContain("In the talk");
+  expect(joined).toContain("In the retell");
   expect(joined).toContain("the 1962 data does the work");
   expect(joined).toContain("[fig:7]");
   expect(joined).toContain("the reader wants to open with this");
@@ -72,7 +72,7 @@ test("a cut chapter says so, and shows no points it does not have", () => {
   };
   const joined = texts(RetellDecisionCard({ payload: cut, surface: "call", dispatch: () => {} })).join(" ");
   expect(joined).toContain("Cut");
-  expect(joined).not.toContain("In the talk");
+  expect(joined).not.toContain("In the retell");
 });
 
 // Correcting a decision is a sentence to the AI, which re-records it and raises a

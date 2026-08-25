@@ -1,8 +1,8 @@
-// Assembly of one turn of a talk's retell conversation (docs/31).
+// Assembly of one turn of a retell's conversation (docs/31).
 //
 // The counterpart of reading/turn.ts, and deliberately not a branch of it: that
 // one assembles a conversation about the page the reader is on, out of the book
-// the reader has open. This one assembles a conversation about a talk, out of
+// the reader has open. This one assembles a conversation about a retell, out of
 // materials read from disk, with no reader mounted. The two share the pieces
 // that are the same (the reading tools, observations, the budget ladder) and
 // nothing else.
@@ -15,7 +15,7 @@ import { modelSupportsImages, type ProviderId } from "../../ai";
 import { toPiMessages } from "../../ai/providers";
 import { fitToBudget } from "../../budget";
 import { configuredModel, HISTORY_KEEP, HISTORY_KEEP_TIGHT } from "../turn";
-import { TALK_LADDER, type TalkReductionId } from "./ladder";
+import { RETELL_LADDER, type RetellReductionId } from "./ladder";
 import { languageInstruction, type Settings } from "../../platform/app/settings";
 import type { TopicMaterial } from "../../fulltext/format";
 import {
@@ -38,18 +38,18 @@ import { buildRetellSystemPrompt, RETELL_KICKOFF, type RetellNote } from "./prom
 import { buildRetellTools } from "./tools";
 import { nextChapter } from "./plan";
 import type { RetellDecisionCardData } from "./cards";
-import type { RetellDecision } from "./types";
+import type { PlanDecision } from "./types";
 import { readMaterialBytes, type LoadedMaterial } from "./material";
 import {
-  bucketTalkMarks,
+  bucketRetellMarks,
   combineChapters,
   combinedSource,
   slotAt,
   toRetellPlan,
-  toTalkDecision,
-  type TalkSlot,
+  toRetellDecision,
+  type RetellSlot,
 } from "./outline";
-import type { Talk, TalkDecision } from "./types";
+import type { Retell, RetellDecision } from "./types";
 
 // The replay cap and its tight form come from the reading turn, not a second
 // pair of constants: a retell is the same kind of conversation, and two
@@ -74,29 +74,29 @@ export const OBSERVATION_ORDER_TIGHT: ObservationType[] = [
   "reading-position",
 ];
 
-export interface TalkTurnMessage {
+export interface RetellTurnMessage {
   role: "user" | "ai";
   text: string;
   images?: { data: string; mediaType: string }[];
 }
 
-export interface TalkTurnInput {
-  talk: Talk;
-  // The talk's materials, already read from disk (material.ts).
+export interface RetellTurnInput {
+  retell: Retell;
+  // The retell's materials, already read from disk (material.ts).
   materials: LoadedMaterial[];
   topicName: string;
   settings: Settings;
   // The conversation so far, oldest first.
-  history: TalkTurnMessage[];
-  // Write one decision to the talk. The tool calls this; the caller owns the
+  history: RetellTurnMessage[];
+  // Write one decision to the retell. The tool calls this; the caller owns the
   // file and the outline the reader is looking at, so it also owns the write.
-  record(decision: TalkDecision): Promise<void>;
-  // The talk as it stands right now, asked for rather than closed over:
-  // read_talk_outline has to answer "what does my talk look like now" including
+  record(decision: RetellDecision): Promise<void>;
+  // The retell as it stands right now, asked for rather than closed over:
+  // read_retell_outline has to answer "what does my retell look like now" including
   // the entry recorded a moment ago in this same turn and the one the reader
   // just moved in the outline pane. Defaults to the snapshot this turn was built
   // from, which is only right in a test that records nothing.
-  readTalk?(): Talk | null | Promise<Talk | null>;
+  readRetell?(): Retell | null | Promise<Retell | null>;
   // Raised when a decision is recorded, so the shell can put the card in the
   // conversation. Absent = the decision is still written, it just is not shown.
   onDecisionCard?(card: RetellDecisionCardData): void;
@@ -106,10 +106,10 @@ export interface TalkTurnInput {
   render?: typeof renderFigure;
 }
 
-export interface TalkTurn {
+export interface RetellTurn {
   systemPrompt: string;
   tools: AgentTool[];
-  messages: TalkTurnMessage[];
+  messages: RetellTurnMessage[];
   // What this turn had to leave out, or "" when nothing the reader has a stake
   // in was dropped.
   notice: string;
@@ -118,7 +118,7 @@ export interface TalkTurn {
   refusal: string;
 }
 
-// The talk's materials named in one phrase, for the line the prompt opens with.
+// The retell's materials named in one phrase, for the line the prompt opens with.
 function materialsLabel(materials: readonly LoadedMaterial[]): string {
   const titles = materials.map((m) => m.title);
   if (titles.length === 0) return "(no materials)";
@@ -126,9 +126,9 @@ function materialsLabel(materials: readonly LoadedMaterial[]): string {
   return `${titles.slice(0, -1).join(", ")} and ${titles[titles.length - 1]}`;
 }
 
-// The figure catalog for a talk. One book's catalog is the book's; several get a
+// The figure catalog for a retell. One book's catalog is the book's; several get a
 // heading each, because "[fig:3]" means a different picture in each of them.
-function talkFigureCatalog(materials: readonly LoadedMaterial[]): string {
+function retellFigureCatalog(materials: readonly LoadedMaterial[]): string {
   const withFigures = materials.filter((m) => m.figures.length > 0);
   if (withFigures.length === 0) return "";
   if (withFigures.length === 1) return buildFigureCatalog(withFigures[0].figures);
@@ -153,15 +153,15 @@ function figureOwners(materials: readonly LoadedMaterial[]): {
   return { figures, owner };
 }
 
-export async function buildTalkTurn(input: TalkTurnInput): Promise<TalkTurn> {
+export async function buildRetellTurn(input: RetellTurnInput): Promise<RetellTurn> {
   const {
-    talk,
+    retell,
     materials,
     topicName,
     settings: s,
     history,
     record,
-    readTalk = () => talk,
+    readRetell = () => retell,
     onDecisionCard,
     now = () => Date.now(),
     readBytes = readMaterialBytes,
@@ -170,13 +170,13 @@ export async function buildTalkTurn(input: TalkTurnInput): Promise<TalkTurn> {
 
   const { chapters, slots } = combineChapters(materials);
   const skeleton = { source: combinedSource(materials), chapters };
-  const marks = bucketTalkMarks(materials, slots);
-  const plan = toRetellPlan(talk, slots);
+  const marks = bucketRetellMarks(materials, slots);
+  const plan = toRetellPlan(retell, slots);
 
-  // The reading tools, over the talk's materials rather than the topic's: a talk
+  // The reading tools, over the retell's materials rather than the topic's: a retell
   // is a chosen set, and searching a book the reader left out would answer with
-  // material the talk is not about. read_pages names "the book the user is
-  // currently in", so it is only mounted when the talk has exactly one material;
+  // material the retell is not about. read_pages names "the book the user is
+  // currently in", so it is only mounted when the retell has exactly one material;
   // with several, search_topic is the way in and it tags every hit with its book.
   const topicMaterials: TopicMaterial[] = materials.map((m) => ({
     label: m.title,
@@ -194,13 +194,13 @@ export async function buildTalkTurn(input: TalkTurnInput): Promise<TalkTurn> {
   // the reader their own trail back).
   let observationSection = "";
   let observationSectionTight = "";
-  if (talk.topicId) {
-    const observationsAdapter = getObservationAdapter(talk.topicId);
+  if (retell.topicId) {
+    const observationsAdapter = getObservationAdapter(retell.topicId);
     const observations = await observationsAdapter.listObservations().catch((): Observation[] => []);
     tools = [
       ...tools,
       ...buildObservationTools(observationsAdapter, {
-        onWrite: () => notifyObservationChange(talk.topicId),
+        onWrite: () => notifyObservationChange(retell.topicId),
       }),
     ];
     observationSection = observationPromptSection(buildObservationSnapshot(observations), true);
@@ -214,7 +214,7 @@ export async function buildTalkTurn(input: TalkTurnInput): Promise<TalkTurn> {
   // from the library copy of the book, read only when the tool is actually
   // called (figures/render.ts uses pdf.js, so no reader and no engine).
   const { figures, owner } = figureOwners(materials);
-  const figureCatalog = talkFigureCatalog(materials);
+  const figureCatalog = retellFigureCatalog(materials);
   if (figures.length > 0) {
     tools = [
       ...tools,
@@ -256,21 +256,21 @@ export async function buildTalkTurn(input: TalkTurnInput): Promise<TalkTurn> {
     ...tools,
     ...buildRetellTools({
       chapters,
-      record: async (decision: RetellDecision) => {
-        const entry = toTalkDecision(slots, decision);
+      record: async (decision: PlanDecision) => {
+        const entry = toRetellDecision(slots, decision);
         if (entry) await record(entry);
       },
       readNote: noteFor,
-      // Re-projected from the talk as it stands, not from the copy above: the
+      // Re-projected from the retell as it stands, not from the copy above: the
       // combined numbering is this turn's, but what it is applied to has to be
       // current.
-      readPlan: async () => toRetellPlan((await readTalk()) ?? talk, slots),
+      readPlan: async () => toRetellPlan((await readRetell()) ?? retell, slots),
       onCard: onDecisionCard,
       now,
     }),
   ];
 
-  function composePrompt(dropped: ReadonlySet<TalkReductionId>): string {
+  function composePrompt(dropped: ReadonlySet<RetellReductionId>): string {
     let prompt = buildRetellSystemPrompt({
       topicName,
       bookName: materialsLabel(materials),
@@ -292,7 +292,7 @@ export async function buildTalkTurn(input: TalkTurnInput): Promise<TalkTurn> {
     return prompt;
   }
 
-  function composeMessages(dropped: ReadonlySet<TalkReductionId>): TalkTurnMessage[] {
+  function composeMessages(dropped: ReadonlySet<RetellReductionId>): RetellTurnMessage[] {
     const keep = dropped.has("history-trim") ? HISTORY_KEEP_TIGHT : HISTORY_KEEP;
     const tail = history.length > keep ? history.slice(history.length - keep) : history;
     return [{ role: "user" as const, text: RETELL_KICKOFF }, ...tail];
@@ -314,16 +314,16 @@ export async function buildTalkTurn(input: TalkTurnInput): Promise<TalkTurn> {
   }
   // Dropping the catalog while a [fig:N] is in play would leave the reference
   // dangling.
-  const skip = new Set<TalkReductionId>();
+  const skip = new Set<RetellReductionId>();
   if (composeMessages(new Set()).some((m) => m.text.includes("[fig:"))) skip.add("figure-catalog");
 
-  const fitted = fitToBudget<TalkReductionId, TalkTurnMessage>({
+  const fitted = fitToBudget<RetellReductionId, RetellTurnMessage>({
     model,
     tools,
     composePrompt,
     composeMessages,
     toPi: toPiMessages,
-    rungs: TALK_LADDER,
+    rungs: RETELL_LADDER,
     purpose: "chat",
     skip,
   });
@@ -337,4 +337,4 @@ export async function buildTalkTurn(input: TalkTurnInput): Promise<TalkTurn> {
 }
 
 
-export type { TalkSlot };
+export type { RetellSlot };

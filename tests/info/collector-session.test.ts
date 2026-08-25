@@ -30,7 +30,7 @@ function aRoundTrip(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-// Everything the session talks to, in memory. The claim files are a map keyed by
+// Everything the session retells to, in memory. The claim files are a map keyed by
 // device id, because that is what the folder is: one file per device, written
 // whole by its owner.
 class Harness {

@@ -22,7 +22,7 @@ test("slidesPlanSystemPrompt appends the output-language instruction only when s
 test("parseSlidePlan reads title, kinds, provenance, and asset slots", () => {
   const deck = parseSlidePlan(
     JSON.stringify({
-      title: "My Talk",
+      title: "My Retell",
       slides: [
         { title: "Opening", kind: "title" },
         { title: "The core idea", kind: "content", bookId: "b1", sourceChapters: [1, 2] },
@@ -32,7 +32,7 @@ test("parseSlidePlan reads title, kinds, provenance, and asset slots", () => {
       ],
     }),
   );
-  expect(deck.title).toBe("My Talk");
+  expect(deck.title).toBe("My Retell");
   expect(deck.slides.map((s) => s.kind)).toEqual(["title", "content", "content", "content", "closing"]);
   expect(deck.slides[1]).toMatchObject({ bookId: "b1", sourceChapters: [1, 2] });
   expect(deck.slides[2].illustration).toEqual({ prompt: "a bridge" });
@@ -108,20 +108,20 @@ const BOOK: PlanBook = {
 };
 
 test("planUserMessage gives the planner the chapter list, not just the overview", () => {
-  const msg = planUserMessage([BOOK], "a talk for engineers");
+  const msg = planUserMessage([BOOK], "a retell for engineers");
   expect(msg).toContain("Book One");
   expect(msg).toContain("bookId: b1");
   expect(msg).toContain("the overview");
   expect(msg).toContain("1. Beginnings (pp.1-20) [note]");
   expect(msg).toContain("3. Unread (pp.41-60) [no note]");
   expect(msg).toContain("1: Fig 1: a plot");
-  expect(msg).toContain("a talk for engineers");
+  expect(msg).toContain("a retell for engineers");
 });
 
 test("planUserMessage works for a book with no overview yet", () => {
   const msg = planUserMessage([{ ...BOOK, overview: "" }], "");
   expect(msg).toContain("1. Beginnings");
-  expect(msg).toContain("No specific talk instruction");
+  expect(msg).toContain("No specific deck instruction");
 });
 
 test("validateDeckPlan keeps citations that exist and reports the ones that do not", () => {

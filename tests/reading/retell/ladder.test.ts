@@ -1,4 +1,4 @@
-// The retell's compression ladder (src/reading/retell/ladder.ts): what a talk
+// The retell's compression ladder (src/reading/retell/ladder.ts): what a retell
 // turn gives up when it does not fit the window, in what order, and what the
 // reader is told for it. Same contract as the reading ladder, different
 // material. Run: bun test.
@@ -6,12 +6,12 @@
 import { expect, test } from "bun:test";
 import { PI_CONTEXT_SAFETY_TOKENS } from "../../../src/budget/estimate";
 import { planReductions } from "../../../src/budget";
-import { TALK_LADDER, type TalkReductionId } from "../../../src/reading/retell/ladder";
+import { RETELL_LADDER, type RetellReductionId } from "../../../src/reading/retell/ladder";
 
 const WINDOW = 200_000;
 const FITS_AT = WINDOW - PI_CONTEXT_SAFETY_TOKENS - 4096;
 
-const EVEN: Record<TalkReductionId, number> = {
+const EVEN: Record<RetellReductionId, number> = {
   "figure-catalog": 5_000,
   "observation-trim": 5_000,
   "retell-notes": 5_000,
@@ -21,8 +21,8 @@ const EVEN: Record<TalkReductionId, number> = {
 };
 
 function plan(used: number) {
-  return planReductions<TalkReductionId>({
-    rungs: TALK_LADDER,
+  return planReductions<RetellReductionId>({
+    rungs: RETELL_LADDER,
     contextWindow: WINDOW,
     purpose: "chat",
     used,
@@ -31,8 +31,8 @@ function plan(used: number) {
   });
 }
 
-test("the talk ladder's order and its wording are pinned", () => {
-  expect(TALK_LADDER.map((r) => [r.id, r.notice ?? ""])).toEqual([
+test("the retell ladder's order and its wording are pinned", () => {
+  expect(RETELL_LADDER.map((r) => [r.id, r.notice ?? ""])).toEqual([
     ["figure-catalog", ""],
     ["observation-trim", ""],
     ["retell-notes", ""],
@@ -78,7 +78,7 @@ test("history is the last thing given up here too", () => {
 // Both the marks and the inlined note are large enough to distort the pricing of
 // the small rungs above them, so both are held out of the baseline.
 test("the rungs that are not priced like the rest say so on the table", () => {
-  const priced = Object.fromEntries(TALK_LADDER.map((r) => [r.id, r.price ?? "prompt"]));
+  const priced = Object.fromEntries(RETELL_LADDER.map((r) => [r.id, r.price ?? "prompt"]));
   expect(priced).toEqual({
     "figure-catalog": "prompt",
     "observation-trim": "prompt",
