@@ -8,6 +8,7 @@ import { expect, test } from "bun:test";
 import {
   DATA_CONCURRENCY,
   MAX_CONSECUTIVE_FAILURES,
+  PULL_INTERVAL_MS,
   RESUME_MIN_INTERVAL_MS,
   SyncEngine,
   type EngineDeps,
@@ -98,13 +99,22 @@ function makeBackend(seedRemote: RemoteState = {}, seedData: Record<string, stri
   };
 }
 
-function makeFs(seed: Record<string, { text: string; mtime: number }> = {}) {
+// `announce` is what the real SyncFs.write does on a device without saying so:
+// it goes through the atomic writer, which broadcasts the path to every
+// listener (platform/app/atomic-fs.ts). Passing a watch's emit here is what
+// makes a fake pull indistinguishable from a store's own save.
+function makeFs(
+  seed: Record<string, { text: string; mtime: number }> = {},
+  announce?: (path: string) => void,
+) {
   const files = new Map<string, { bytes: Uint8Array; mtime: number }>();
   for (const [k, v] of Object.entries(seed)) files.set(k, { bytes: enc(v.text), mtime: v.mtime });
   let writeClock = 1000;
   let reads = 0;
+  let lists = 0;
   const fs: SyncFs = {
     async list(): Promise<ScannedFile[]> {
+      lists += 1;
       return [...files.entries()].map(([path, f]) => ({
         path,
         mtime: f.mtime,
@@ -119,13 +129,32 @@ function makeFs(seed: Record<string, { text: string; mtime: number }> = {}) {
     },
     async write(path, bytes) {
       files.set(path, { bytes, mtime: (writeClock += 1) });
+      announce?.(path);
     },
     async stat(path) {
       const f = files.get(path);
       return f ? { mtime: f.mtime, size: f.bytes.length } : null;
     },
   };
-  return { fs, files, reads: () => reads };
+  return { fs, files, reads: () => reads, lists: () => lists };
+}
+
+// The app telling the engine it changed a file, as platform/app does: one
+// broadcast per write through the atomic writer and per removal through the
+// AppData door. `watchLocal` is what the engine is handed; `emit` is a store
+// saving something, or a delete landing.
+function makeWatch() {
+  const listeners = new Set<(path: string) => void>();
+  return {
+    watchLocal: (l: (path: string) => void) => {
+      listeners.add(l);
+      return () => listeners.delete(l);
+    },
+    emit: (path: string) => {
+      for (const l of [...listeners]) l(path);
+    },
+    listening: () => listeners.size,
+  };
 }
 
 function makeBooks(localHashes: Record<string, string> = {}, listed?: string[]) {
@@ -257,12 +286,12 @@ function fakeMerge(out: {
   });
 }
 
-function bothChanged(localText: string, remoteText: string) {
+function bothChanged(localText: string, remoteText: string, announce?: (path: string) => void) {
   const be = makeBackend(
     { "reading-state.json": { rev: 4, mtime: 900, size: remoteText.length, hash: "remote" } },
     { "reading-state.json": remoteText },
   );
-  const { fs, files } = makeFs({ "reading-state.json": { text: localText, mtime: 800 } });
+  const { fs, files } = makeFs({ "reading-state.json": { text: localText, mtime: 800 } }, announce);
   const snapshot: Snapshot = {
     "reading-state.json": { rev: 2, mtime: 50, size: 3, hash: "base" },
   };
@@ -787,8 +816,15 @@ test("switching back and forth inside the floor costs one pass, not one each", a
 
 test("going away pushes what has not been sent yet", async () => {
   const be = makeBackend();
+  const w = makeWatch();
   const { fs } = makeFs({ "settings.json": { text: "EDITED", mtime: 500 } });
-  const { engine } = makeEngine({ backend: be.backend, fs, snapshot: {} });
+  const { engine } = makeEngine({
+    backend: be.backend,
+    fs,
+    snapshot: {},
+    watchLocal: w.watchLocal,
+  });
+  w.emit("settings.json");
 
   await engine.onBackground();
 
@@ -799,17 +835,291 @@ test("going away pushes what has not been sent yet", async () => {
 
 test("going away with nothing to send makes no requests", async () => {
   const be = makeBackend();
-  const { fs } = makeFs({ "settings.json": { text: "S", mtime: 500 } });
+  const w = makeWatch();
+  const { fs, lists } = makeFs({ "settings.json": { text: "S", mtime: 500 } });
   const snapshot: Snapshot = {
     "settings.json": { rev: 1, mtime: 500, size: 1, hash: await h("S") },
   };
-  const { engine } = makeEngine({ backend: be.backend, fs, snapshot });
+  const { engine } = makeEngine({
+    backend: be.backend,
+    fs,
+    snapshot,
+    watchLocal: w.watchLocal,
+  });
 
   await engine.onBackground();
 
-  // Leaving the app is frequent and mostly uneventful; the check that says so
-  // reads the disk, not the network.
+  // Leaving the app is frequent and mostly uneventful (a desktop window says it
+  // every time it loses focus to a dialog), so the check that says so touches
+  // neither the network nor the disk.
   expect(be.ensureLayoutCalls()).toBe(0);
+  expect(lists()).toBe(0);
+});
+
+// --- what wakes a pass ------------------------------------------------------
+//
+// The tick used to answer "has anything changed?" by stat-ing all 273 data
+// files, four times a minute, to conclude almost every time that nothing had.
+// It asks the app instead: every write through the atomic writer and every
+// removal through the AppData door announces its path, and the in-range ones go
+// into a set. What that set cannot see — a process that died with it, a rename
+// nobody calls a write — is what the sweep is for, and the sweep is a pass,
+// which lists the whole range anyway.
+
+test("a tick with nothing announced touches neither the disk nor the network", async () => {
+  const be = makeBackend();
+  const w = makeWatch();
+  // A local file the snapshot has never heard of: the old tick would have found
+  // it by scanning, which is exactly the scan being removed.
+  const { fs, lists } = makeFs({ "settings.json": { text: "S", mtime: 500 } });
+  const { engine } = makeEngine({
+    backend: be.backend,
+    fs,
+    snapshot: {},
+    watchLocal: w.watchLocal,
+    // Well inside the pull window, so no sweep is due either.
+    now: () => 1000,
+  });
+
+  await engine.tick();
+  await engine.tick();
+
+  expect(lists()).toBe(0);
+  expect(be.ensureLayoutCalls()).toBe(0);
+});
+
+test("a write the app announced makes the next tick run a pass", async () => {
+  const be = makeBackend();
+  const w = makeWatch();
+  const { fs } = makeFs({ "settings.json": { text: "EDITED", mtime: 500 } });
+  const { engine } = makeEngine({
+    backend: be.backend,
+    fs,
+    snapshot: {},
+    watchLocal: w.watchLocal,
+    now: () => 1000,
+  });
+
+  w.emit("settings.json");
+  await engine.tick();
+
+  expect(dec(be.data.get("settings.json")!)).toBe("EDITED");
+});
+
+test("a path outside the sync range is not a reason to run a pass", async () => {
+  const be = makeBackend();
+  const w = makeWatch();
+  const { fs } = makeFs();
+  const { engine } = makeEngine({
+    backend: be.backend,
+    fs,
+    snapshot: {},
+    watchLocal: w.watchLocal,
+    now: () => 1000,
+  });
+
+  // The event log and a pasted image are written often and travel no channel at
+  // all; waking a pass for them would put the poll back with extra steps.
+  w.emit("events-topic.jsonl");
+  w.emit("images/threads/t1/a.png");
+  await engine.tick();
+
+  expect(be.ensureLayoutCalls()).toBe(0);
+});
+
+test("a removal is announced too, and does not stay dirty after it is answered", async () => {
+  const be = makeBackend();
+  const w = makeWatch();
+  const { fs } = makeFs();
+  const bs = makeBase({ "annotations-gone.json": "OLD" });
+  const snapshot: Snapshot = {
+    "annotations-gone.json": { rev: 1, mtime: 500, size: 3, hash: await h("OLD") },
+  };
+  const { engine } = makeEngine({
+    backend: be.backend,
+    fs,
+    base: bs.base,
+    snapshot,
+    watchLocal: w.watchLocal,
+    now: () => 1000,
+  });
+
+  w.emit("annotations-gone.json");
+  await engine.tick();
+
+  expect(be.ensureLayoutCalls()).toBe(1);
+  // Gone from both sides, so there is nothing left for the base to be the base
+  // of. No file deletion is propagated either way (docs/13).
+  expect(bs.store.has("annotations-gone.json")).toBe(false);
+
+  // A deleted path is never moved by any plan, so a pass that dropped it would
+  // be repeated for as long as the app ran if the set held on to it.
+  await engine.tick();
+
+  expect(be.ensureLayoutCalls()).toBe(1);
+});
+
+test("an edit made during a pass is not cleared by that pass", async () => {
+  const be = makeBackend();
+  const w = makeWatch();
+  const { fs, files } = makeFs({ "settings.json": { text: "v1", mtime: 500 } });
+  const upload = be.backend.upload;
+  let onTheWire!: () => void;
+  let release!: () => void;
+  const started = new Promise<void>((r) => {
+    onTheWire = r;
+  });
+  const stalled = new Promise<void>((r) => {
+    release = r;
+  });
+  be.backend.upload = async (name, bytes, meta) => {
+    onTheWire();
+    await stalled;
+    return upload(name, bytes, meta);
+  };
+  const { engine } = makeEngine({
+    backend: be.backend,
+    fs,
+    snapshot: {},
+    watchLocal: w.watchLocal,
+    now: () => 1000,
+  });
+
+  w.emit("settings.json");
+  const first = engine.tick();
+  await started;
+
+  // The reader edits the same file while its previous content is on the wire.
+  files.set("settings.json", { bytes: enc("v2"), mtime: 600 });
+  w.emit("settings.json");
+  release();
+  await first;
+
+  // That pass sent what it had read, which was v1: it never saw the edit.
+  expect(dec(be.data.get("settings.json")!)).toBe("v1");
+
+  await engine.tick();
+
+  // If the pass had cleared the whole set on its way out, this edit would wait
+  // for the five-minute sweep — and on a phone that never comes back to the
+  // front, for good.
+  expect(dec(be.data.get("settings.json")!)).toBe("v2");
+});
+
+test("a file this pass pulled is not a local edit, and costs no second pass", async () => {
+  const be = makeBackend(
+    { "topics.json": { rev: 4, mtime: 200, size: 6 } },
+    { "topics.json": "REMOTE" },
+  );
+  const w = makeWatch();
+  // The fake fs announces its writes the way the real one does: a pull lands
+  // through the same atomic writer every store saves through, so on the wire it
+  // is indistinguishable from somebody's edit.
+  const { fs, files } = makeFs({}, w.emit);
+  const { engine } = makeEngine({
+    backend: be.backend,
+    fs,
+    snapshot: {},
+    watchLocal: w.watchLocal,
+    now: () => 1000,
+  });
+
+  await engine.syncNow();
+
+  expect(dec(files.get("topics.json")!.bytes)).toBe("REMOTE");
+  expect(be.ensureLayoutCalls()).toBe(1);
+
+  await engine.tick();
+
+  expect(be.ensureLayoutCalls()).toBe(1);
+});
+
+test("a merge's own write does not count as an edit either", async () => {
+  const w = makeWatch();
+  const { be, fs, files, snapshot } = bothChanged("LOCAL", "REMOTE", w.emit);
+  const { engine } = makeEngine({
+    backend: be.backend,
+    fs,
+    base: makeBase({ "reading-state.json": "BASE" }).base,
+    merge: fakeMerge({ merged: "MERGED" }),
+    snapshot,
+    watchLocal: w.watchLocal,
+    now: () => 1000,
+  });
+
+  await engine.syncNow();
+
+  expect(dec(files.get("reading-state.json")!.bytes)).toBe("MERGED");
+  expect(be.ensureLayoutCalls()).toBe(1);
+
+  await engine.tick();
+
+  expect(be.ensureLayoutCalls()).toBe(1);
+});
+
+test("the sweep still finds a change nothing announced", async () => {
+  const be = makeBackend();
+  const w = makeWatch();
+  // On disk with nobody told: the key migration renames annotations-<key>.json
+  // into place, and a rename's destination is not a write.
+  const { fs } = makeFs({ "annotations-new.json": { text: "MOVED", mtime: 500 } });
+  let clock = 1000;
+  const { engine } = makeEngine({
+    backend: be.backend,
+    fs,
+    snapshot: {},
+    watchLocal: w.watchLocal,
+    now: () => clock,
+  });
+
+  await engine.tick();
+
+  expect(be.ensureLayoutCalls()).toBe(0);
+
+  // The next pull is due; a pass lists the whole range whatever woke it.
+  clock += PULL_INTERVAL_MS;
+  await engine.tick();
+
+  expect(dec(be.data.get("annotations-new.json")!)).toBe("MOVED");
+});
+
+test("a failed pass keeps what it claimed, so the next tick tries again", async () => {
+  const be = makeBackend();
+  const listRemote = be.backend.listRemote;
+  be.backend.listRemote = async () => {
+    throw new Error("network down");
+  };
+  const w = makeWatch();
+  const { fs } = makeFs({ "settings.json": { text: "EDITED", mtime: 500 } });
+  const { engine } = makeEngine({
+    backend: be.backend,
+    fs,
+    snapshot: {},
+    watchLocal: w.watchLocal,
+    now: () => 1000,
+  });
+
+  w.emit("settings.json");
+  await engine.tick();
+
+  expect(be.ensureLayoutCalls()).toBe(1);
+  expect(be.data.has("settings.json")).toBe(false);
+
+  be.backend.listRemote = listRemote;
+  await engine.tick();
+
+  expect(dec(be.data.get("settings.json")!)).toBe("EDITED");
+});
+
+test("a stopped engine gives the subscription back", () => {
+  const w = makeWatch();
+  const { engine } = makeEngine({ snapshot: {}, watchLocal: w.watchLocal });
+
+  expect(w.listening()).toBe(1);
+
+  engine.stop();
+
+  expect(w.listening()).toBe(0);
 });
 
 test("single-flight: overlapping passes run only once", async () => {

@@ -37,9 +37,11 @@ export interface LocalFile extends ScannedFile {
 }
 
 export interface SyncFs {
-  // Every in-range file with its mtime/size. Deliberately does not hash: the
-  // 15s tick calls this, and reading every file each tick to learn nothing is
-  // not a pre-filter. The pass hashes what the pre-filter flags.
+  // Every in-range file with its mtime/size. A readDir of the range plus one
+  // stat per file — two hundred-odd round trips through the IPC, which is why
+  // nothing but a pass calls it any more (engine.ts). Deliberately does not
+  // hash: mtime and size rule a file out without reading it, and the pass
+  // hashes only what they flag.
   list(): Promise<ScannedFile[]>;
   read(path: string): Promise<Uint8Array>;
   // Writes bytes, creating any parent directory first.

@@ -6,7 +6,7 @@
 //
 // What counts as changed is the file's content hash, never its mtime
 // (content.ts). mtime and size stay in the snapshot as the pre-filter that
-// keeps the 15s tick from reading every file: they can rule a file out, and
+// keeps a pass from reading every file it lists: they can rule a file out, and
 // only what they flag is hashed.
 //
 // A file both sides changed is merged, not won: the three inputs are the base
@@ -42,6 +42,29 @@
 // backgrounded. All of them funnel through runPass(), so no two passes ever
 // overlap; the concurrency inside one is the transfer pool and nothing else.
 //
+// What tells a tick that local files changed is the app saying so, not a scan.
+// This app is the only writer of everything in the sync range, so it already
+// knows: every text file lands through the atomic writer and every removal
+// through the AppData door, and both announce the path (platform/app). The
+// in-range ones go in a dirty set, and a tick with an empty set is over without
+// touching the disk. What that replaces read a stat for each of the 273 data
+// files four times a minute to conclude, almost always, that nothing had
+// happened.
+//
+// The set is in memory and incomplete by construction: a process that dies
+// loses it, a rename announces a destination nothing calls a write (migrate.ts
+// moves annotations-<key>.json exactly that way), a directory removed whole
+// names the directory and not the files under it, and the next way to write a
+// file without saying so has not been invented yet. Missing one change is not a
+// slow sync but a file that never syncs, so the full scan stays — as the sweep
+// rather than as the schedule. A pass always lists the range and hashes what
+// moved, and a pass runs on start, on every return to the foreground, and
+// whenever PULL_INTERVAL_MS has elapsed since the last one that got through.
+// A change no broadcast covered is therefore late by at most PULL_INTERVAL_MS +
+// TICK_MS while the app is open, by the resume floor on a phone that was away,
+// and by nothing at all across a restart — but never lost, which is the one
+// property the poll had that this must not give up.
+//
 // Everything the pass touches (backend, fs, books) is injected; the Tauri wiring
 // lives in index.ts. reconcile() (reconcile.ts) is the pure decision core.
 
@@ -52,7 +75,7 @@ import type { BaseStore, TrashJournal } from "./localStore";
 import type { MergeFile } from "./merge/contract";
 import { mergeFile } from "./merge";
 import { cachedHash, reconcile, type Merge, type Snapshot, type Upload } from "./reconcile";
-import type { LocalFile, ScannedFile, SyncFs } from "./syncFs";
+import { inSyncRange, type LocalFile, type ScannedFile, type SyncFs } from "./syncFs";
 
 export const TICK_MS = 15_000;
 export const PULL_INTERVAL_MS = 5 * 60_000;
@@ -168,6 +191,17 @@ export interface EngineDeps {
   onStatus?: (status: PassResult) => void;
   // Signed-out signal (a dead refresh token surfaced mid-pass).
   onSignedOut?: () => void;
+  // Every local file the app writes or takes away, by AppData-relative path,
+  // for as long as the returned undo has not been called. Bound while the
+  // engine ticks; the paths it hands over are unfiltered, and which of them are
+  // this engine's business is decided here (inSyncRange).
+  //
+  // Injected rather than imported because the broadcasts are module-level
+  // registries in platform/app: an engine that subscribed to them itself could
+  // not be run headless, and two engines in one process would hear each other's
+  // pulls. Left out entirely, the engine still works — every pass is then a
+  // sweep, which is what a test that drives syncNow() directly wants.
+  watchLocal?: (listener: (path: string) => void) => () => void;
 }
 
 export interface PassResult {
@@ -246,16 +280,36 @@ export class SyncEngine {
   // last asked the remote anything, not when it last got a clean answer.
   private lastPassAt = 0;
   private tickTimer: ReturnType<typeof setInterval> | null = null;
+  // In-range paths the app has changed since the running pass started. Empty is
+  // the whole of "there is nothing to send"; see the top of this file for why
+  // that is allowed to be wrong and what catches it when it is.
+  private dirty = new Set<string>();
+  // Writes this engine has on the wire right now, by path. A pull and a merge
+  // land through the same atomic writer every store uses, so they announce
+  // themselves exactly like a user's edit; this is what tells the two apart.
+  private readonly selfWrites = new Map<string, number>();
+  private unwatch: (() => void) | null = null;
 
   constructor(deps: EngineDeps) {
     this.d = deps;
     this.now = deps.now ?? Date.now;
     this.snapshot = deps.snapshot;
     this.lastSyncAt = deps.restoredLastSyncAt ?? null;
+    // From construction rather than from start(): there is no window in which
+    // this engine exists and is not keeping the record, and listening costs one
+    // string test per write whether or not anything ticks. stop() gives it back,
+    // which is what keeps a signed-out engine from outliving itself in the
+    // registry (index.ts drops the object right after).
+    this.unwatch = deps.watchLocal?.((path) => this.noteLocalChange(path)) ?? null;
   }
 
   start(): void {
     if (this.tickTimer) return;
+    // For an engine that was stopped and started again — a fresh one has been
+    // listening since it was constructed. Before the first pass either way: a
+    // file written while that pass runs has to land in the set rather than in
+    // the gap in front of it.
+    this.unwatch ??= this.d.watchLocal?.((path) => this.noteLocalChange(path)) ?? null;
     void this.runPass();
     this.tickTimer = setInterval(() => void this.tick(), TICK_MS);
   }
@@ -263,6 +317,50 @@ export class SyncEngine {
   stop(): void {
     if (this.tickTimer) clearInterval(this.tickTimer);
     this.tickTimer = null;
+    // Nothing runs passes any more, so a set that kept filling would only be a
+    // record of edits nobody asked this engine to send. What is already in it
+    // stays: a restart begins with a pass over everything regardless.
+    this.unwatch?.();
+    this.unwatch = null;
+  }
+
+  // The app wrote or removed a file. Out-of-range paths are the common case
+  // (book blobs, thumbnails, the event log, sync's own state) and cost one
+  // string test each.
+  private noteLocalChange(path: string): void {
+    if (!inSyncRange(path)) return;
+    // This engine's own pull or merge landing, not somebody's edit. The test is
+    // not "the path is in this pass's plan" — a path stays in the plan for the
+    // whole pass, so an edit made anywhere in those seconds would be thrown
+    // away with it. It is whether a write of ours to that exact path is on the
+    // wire at the instant the broadcast arrives, which is one IPC wide.
+    //
+    // The credit is consumed rather than merely read, so that a user's write
+    // that happens to land inside that window is not lost: it takes the credit,
+    // our own write finds none left, and the path ends up dirty either way. Who
+    // gets attributed to which is not knowable and does not matter — the count
+    // of unexplained writes is what decides.
+    const mine = this.selfWrites.get(path) ?? 0;
+    if (mine > 0) {
+      this.selfWrites.set(path, mine - 1);
+      return;
+    }
+    this.dirty.add(path);
+  }
+
+  // Write a file the pass itself produced (a download, a merge, a merge's
+  // copy). The credit is handed back in a finally, so a write that throws — or
+  // one that lands through a route that announces nothing — cannot leave a path
+  // permanently deaf to the user's next edit.
+  private async writeLocal(path: string, bytes: Uint8Array): Promise<void> {
+    this.selfWrites.set(path, (this.selfWrites.get(path) ?? 0) + 1);
+    try {
+      await this.d.fs.write(path, bytes);
+    } finally {
+      const left = (this.selfWrites.get(path) ?? 0) - 1;
+      if (left > 0) this.selfWrites.set(path, left);
+      else this.selfWrites.delete(path);
+    }
   }
 
   status(): PassResult {
@@ -301,49 +399,31 @@ export class SyncEngine {
   //
   // A whole pass rather than the uploads alone: publishing needs the rev the
   // remote is at, and a file the other device also changed has to be merged
-  // rather than overwritten. Nothing changed locally means nothing to send, and
-  // finding that out costs no requests. A pass that the platform freezes
-  // half-way is the case the per-item design already covers — only what landed
-  // is claimed.
+  // rather than overwritten. A pass that the platform freezes half-way is the
+  // case the per-item design already covers — only what landed is claimed.
+  //
+  // Leaving is the one edge that has to stay cheap (docs/pitfall/69 — a desktop
+  // window reports it every time it loses focus to a dialog), so what says there
+  // is nothing to send is the dirty set and nothing else. Deliberately not a
+  // sweep point: an edit no broadcast covered waits for the next return to the
+  // front, which is the earliest moment its absence could be noticed anyway.
   async onBackground(): Promise<void> {
     if (this.running) return;
-    if (!(await this.hasLocalChange())) return;
+    if (this.dirty.size === 0) return;
     await this.runPass();
   }
 
   // Periodic wake-up: pass only when there is something to do — local edits, or
-  // it has been long enough since the last remote pull.
-  private async tick(): Promise<void> {
+  // it has been long enough since the last remote pull. Free in the steady
+  // state, which is what it is in nearly every one of the four times a minute
+  // it fires: an empty set is answered without a stat, a read or a request.
+  //
+  // Public so a test can drive the schedule without waiting on a real timer.
+  async tick(): Promise<void> {
     if (this.running) return;
     const due = this.now() - this.lastPullAt >= PULL_INTERVAL_MS;
-    if (!due && !(await this.hasLocalChange())) return;
+    if (!due && this.dirty.size === 0) return;
     await this.runPass();
-  }
-
-  // Cheap on purpose: this runs every TICK_MS. mtime/size rule a file out
-  // without reading it, and only what they flag is hashed — which is what keeps
-  // a rewrite that changed nothing from waking a pass every 15 seconds.
-  private async hasLocalChange(): Promise<boolean> {
-    let scanned: ScannedFile[];
-    try {
-      scanned = await this.d.fs.list();
-    } catch {
-      return false;
-    }
-    for (const f of scanned) {
-      const snap = this.snapshot[f.path];
-      if (!snap) return true;
-      if (snap.mtime === f.mtime && snap.size === f.size) continue;
-      // Moved, and no hash to compare it against (a snapshot from before
-      // hashing): let a pass look properly.
-      if (snap.hash === undefined) return true;
-      try {
-        if ((await hashBytes(await this.d.fs.read(f.path))) !== snap.hash) return true;
-      } catch {
-        // Unreadable right now; a pass could not move it either.
-      }
-    }
-    return false;
   }
 
   // Fill in the content hash of every scanned file. The snapshot supplies it
@@ -408,13 +488,13 @@ export class SyncEngine {
     const base = await this.d.base.read(mg.path);
     const out = (this.d.merge ?? mergeFile)({ path: mg.path, base, local, remote });
 
-    await this.d.fs.write(mg.path, out.merged);
+    await this.writeLocal(mg.path, out.merged);
     for (const copy of out.copies) {
       // Never overwrite: a copy is named from its own content, so a path that
       // already exists holds those exact bytes — and if it somehow does not, it
       // is someone's file and this is not the code that gets to replace it.
       if ((await this.d.fs.stat(copy.path)) !== null) continue;
-      await this.d.fs.write(copy.path, copy.bytes);
+      await this.writeLocal(copy.path, copy.bytes);
     }
     if (out.dropped.length > 0) {
       // Record-level deletes do propagate, so the only thing standing between
@@ -492,6 +572,16 @@ export class SyncEngine {
     this.running = true;
     this.lastPassAt = this.now();
     this.emitStatus();
+    // Take what is dirty now and start a fresh set in the same breath. Every
+    // write from here on lands in the new one and survives this pass however
+    // long it runs — which is the whole point: a file edited while the pass is
+    // uploading its previous content would otherwise be cleared by a pass that
+    // never saw the edit, and that edit would sit on the device until the next
+    // sweep. Everything claimed here was on disk before the pass listed the
+    // range, so this pass is the one that answers for it.
+    const claimed = [...this.dirty];
+    this.dirty.clear();
+    let clean = false;
     const failures = new PassFailures();
     try {
       // The layout and the remote listing are what the rest of the pass stands
@@ -528,7 +618,7 @@ export class SyncEngine {
       await runPool(plan.downloads, DATA_CONCURRENCY, () => failures.halted(), async (dl) => {
         try {
           const bytes = await this.d.backend.download(dl.path);
-          await this.d.fs.write(dl.path, bytes);
+          await this.writeLocal(dl.path, bytes);
           const st = await this.d.fs.stat(dl.path);
           this.snapshot[dl.path] = {
             rev: dl.rev,
@@ -619,13 +709,22 @@ export class SyncEngine {
       this.lastPullAt = this.now();
       // Only a clean pass counts as a sync: health's staleness check reads
       // lastSyncAt as "everything this device holds is mirrored".
-      if (failures.count === 0) this.lastSyncAt = this.now();
+      clean = failures.count === 0;
+      if (clean) this.lastSyncAt = this.now();
       this.lastError = failures.message();
       if (changed.length > 0) this.d.onPulled?.(changed);
     } catch (e) {
       this.lastError = messageOf(e);
       if (isAuthFailure(e)) this.d.onSignedOut?.();
     } finally {
+      // Anything less than a clean pass has not answered for what it claimed:
+      // the pool stops dispatching on a dead link, and a file whose upload
+      // failed is exactly the file the next tick has to come back for. Put them
+      // back rather than leave them to the sweep. A clean pass reconciled every
+      // one of them against a listing taken after the swap, so it is done with
+      // them — including a path that was claimed because it was deleted, which
+      // no plan ever moves and which would otherwise stay dirty forever.
+      if (!clean) for (const path of claimed) this.dirty.add(path);
       this.running = false;
       this.emitStatus();
     }
