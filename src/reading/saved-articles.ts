@@ -274,17 +274,19 @@ export const savedArticlesIo: SavedArticlesIo = {
   reportCorrupt: (report) => reportStoreError("corrupt-file", report),
 };
 
-// The records read, plus whether it is safe to write the result back and
-// whether what came off disk had to be repaired. The kept articles cannot be
-// rebuilt from anywhere — the briefing they came from is a day old and gone — so
-// a file that could not be read must never be replaced by "the one article being
-// kept", or by "everything except the one being un-kept". Content that does not
-// parse is quarantined by readGuardedJson and a fresh list takes over; a file
-// that could not be read at all is left alone and writing is refused until a
-// later read succeeds.
+// The records read, and whether what came off disk had to be repaired. An empty
+// list is the answer for a file that is not there yet, and for one whose bad
+// content has just been moved aside. It is not the answer for a file that is
+// sitting there unread: the kept articles cannot be rebuilt from anywhere — the
+// briefing they came from is a day old and gone — so the reader would be shown
+// an empty shelf, and the next keep would write "the one article being kept"
+// over it. Raising is also what keeps the file from being overwritten: both
+// writers below read before they save.
+//
+// Content that does not parse is quarantined by readGuardedJson and a fresh list
+// takes over.
 async function readSavedArticles(io: SavedArticlesIo): Promise<{
   list: SavedArticle[];
-  writable: boolean;
   repaired: boolean;
 }> {
   let repaired = false;
@@ -294,9 +296,10 @@ async function readSavedArticles(io: SavedArticlesIo): Promise<{
     repaired = parsed.repaired;
     return parsed.articles;
   });
-  if (read.status === "ok") return { list: read.value, writable: true, repaired };
-  if (read.status === "missing") return { list: [], writable: true, repaired: false };
-  return { list: [], writable: read.savedAs !== null, repaired: false };
+  if (read.status === "ok") return { list: read.value, repaired };
+  if (read.status === "missing") return { list: [], repaired: false };
+  if (read.savedAs === null) throw new Error(`${SAVED_ARTICLES_FILE} could not be read`);
+  return { list: [], repaired: false };
 }
 
 export async function loadSavedArticles(
@@ -353,8 +356,9 @@ async function save(io: SavedArticlesIo, list: SavedArticle[], repaired: boolean
 }
 
 // Save one article under a topic. Returns the record written, or null when the
-// article has no identity (no URL and no title) and so cannot be de-duplicated,
-// or when the records file could not be read and must not be written over.
+// article has no identity (no URL and no title) and so cannot be de-duplicated.
+// Raises when the records file is there and could not be read: every other kept
+// article is in it.
 export async function saveArticle(
   input: SavedArticleInput,
   io: SavedArticlesIo = savedArticlesIo,
@@ -362,18 +366,15 @@ export async function saveArticle(
   const article = buildSavedArticle(input, Date.now());
   if (article.id === "") return null;
   const read = await readSavedArticles(io);
-  if (!read.writable) return null;
   const wrote = await save(io, upsertSavedArticle(read.list, article), read.repaired);
   return wrote ? article : null;
 }
 
-// Un-save an article: a real removal, not an archive (docs/21). A file that
-// could not be read is left alone — every other kept article is in it.
+// Un-save an article: a real removal, not an archive (docs/21).
 export async function removeSavedArticle(
   id: string,
   io: SavedArticlesIo = savedArticlesIo,
 ): Promise<void> {
   const read = await readSavedArticles(io);
-  if (!read.writable) return;
   await save(io, removeSavedArticleById(read.list, id), read.repaired);
 }
