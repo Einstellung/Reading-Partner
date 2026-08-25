@@ -34,10 +34,12 @@ import { buildFigureTools } from "../figures/tools";
 import { renderFigure } from "../figures/render";
 import type { Figure } from "../figures/types";
 import { readChapterSpine } from "../prep/chapters/store";
+import type { TalkOutline } from "../talk";
 import { buildRetellSystemPrompt, RETELL_KICKOFF, type RetellNote } from "./prompt";
 import { buildRetellTools } from "./tools";
+import { buildArrangeTools, isArranging } from "./arrange";
 import { nextChapter } from "./plan";
-import type { RetellDecisionCardData } from "./cards";
+import type { RetellDecisionCardData, TalkArrangementCardData } from "./cards";
 import type { PlanDecision } from "./types";
 import { readMaterialBytes, type LoadedMaterial } from "./material";
 import {
@@ -80,6 +82,17 @@ export interface RetellTurnMessage {
   images?: { data: string; mediaType: string }[];
 }
 
+// How a turn reaches the talk outline. Two calls rather than the outline itself:
+// the arrangement writes during the turn, so what the tools work on has to be
+// the file as it stands and not a snapshot taken when the turn was assembled —
+// the same reason readRetell is a call. `edit` makes the outline on first write;
+// `read` does not, so a retell that reaches the arrangement and is never
+// arranged leaves no empty talk behind.
+export interface RetellTalkAccess {
+  read(): Promise<TalkOutline | null>;
+  edit(change: (outline: TalkOutline) => TalkOutline): Promise<TalkOutline | null>;
+}
+
 export interface RetellTurnInput {
   retell: Retell;
   // The retell's materials, already read from disk (material.ts).
@@ -97,9 +110,15 @@ export interface RetellTurnInput {
   // just moved in the outline pane. Defaults to the snapshot this turn was built
   // from, which is only right in a test that records nothing.
   readRetell?(): Retell | null | Promise<Retell | null>;
+  // The talk this retell arranges once every chapter is settled (docs/44).
+  // Required rather than optional: a retell that reached the arrangement with
+  // nowhere to write it would hold the whole conversation and keep none of it.
+  talk: RetellTalkAccess;
   // Raised when a decision is recorded, so the shell can put the card in the
   // conversation. Absent = the decision is still written, it just is not shown.
   onDecisionCard?(card: RetellDecisionCardData): void;
+  // The same, for a write to the talk outline.
+  onArrangeCard?(card: TalkArrangementCardData): void;
   now?(): number;
   // Injected for tests: the book's bytes and the figure rasterizer.
   readBytes?: (bookId: string) => Promise<ArrayBuffer | null>;
@@ -162,7 +181,9 @@ export async function buildRetellTurn(input: RetellTurnInput): Promise<RetellTur
     history,
     record,
     readRetell = () => retell,
+    talk,
     onDecisionCard,
+    onArrangeCard,
     now = () => Date.now(),
     readBytes = readMaterialBytes,
     render = renderFigure,
@@ -270,6 +291,26 @@ export async function buildRetellTurn(input: RetellTurnInput): Promise<RetellTur
     }),
   ];
 
+  // The arrangement (docs/44). Its tools are mounted only once every chapter has
+  // a decision, so the model cannot start writing segments while chapters are
+  // still being settled — the arrangement is the retell's last stretch, not a
+  // thing to do in parallel with it. The outline is read once here rather than
+  // inside composePrompt, which the budget ladder calls several times.
+  const arranging = isArranging(chapters, plan);
+  let talkOutline: TalkOutline | null = null;
+  if (arranging) {
+    talkOutline = await talk.read();
+    tools = [
+      ...tools,
+      ...buildArrangeTools({
+        readOutline: () => talk.read(),
+        editOutline: (change) => talk.edit(change),
+        onCard: onArrangeCard,
+        now,
+      }),
+    ];
+  }
+
   function composePrompt(dropped: ReadonlySet<RetellReductionId>): string {
     let prompt = buildRetellSystemPrompt({
       topicName,
@@ -281,6 +322,8 @@ export async function buildRetellTurn(input: RetellTurnInput): Promise<RetellTur
       marks,
       notes: dropped.has("retell-notes") ? [] : notes,
       plan,
+      arranging,
+      talkOutline,
       figureCatalog: dropped.has("figure-catalog") ? "" : figureCatalog,
       hasReadingTools,
       fullMarks: !dropped.has("retell-marks"),

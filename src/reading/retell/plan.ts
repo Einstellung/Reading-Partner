@@ -98,7 +98,7 @@ export function formatPlan(
   lines.push(
     "",
     next === null
-      ? "Every chapter has a decision. Do not re-walk them: ask what the reader wants to revisit, or go over the shape of the retell as a whole."
+      ? "Every chapter has a decision, so the retell itself is done. Do not re-walk them. What is left is arranging these decisions into the talk — see \"Arranging the talk\" below — unless the reader asks to reopen a chapter."
       : `Next up: chapter ${next}. Pick up there — the chapters above are settled unless the reader reopens one.`,
   );
   return lines.join("\n");

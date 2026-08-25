@@ -25,6 +25,9 @@ const { HISTORY_KEEP } = await import("../../../src/reading/turn");
 const { combineChapters } = await import("../../../src/reading/retell/outline");
 import type { LoadedMaterial } from "../../../src/reading/retell/material";
 import type { Retell, RetellDecision } from "../../../src/reading/retell/types";
+import { newTalkOutline, type TalkOutline } from "../../../src/reading/talk/types";
+import { putSegment } from "../../../src/reading/talk/edit";
+import type { TalkArrangementCardData } from "../../../src/reading/retell/cards";
 
 const settings: Settings = {
   ...DEFAULT_SETTINGS,
@@ -83,6 +86,41 @@ function retell(over: Partial<Retell> = {}): Retell {
 
 const names = (t: { name: string }[]) => t.map((x) => x.name).sort();
 
+// The talk outline in memory. `read` answers null until the first write, the way
+// the store does: the file is made by the first write and not by reaching the
+// arrangement.
+function talkStub() {
+  let outline: TalkOutline | null = null;
+  return {
+    get current() {
+      return outline;
+    },
+    access: {
+      read: async () => outline,
+      edit: async (change: (o: TalkOutline) => TalkOutline) => {
+        outline = change(
+          outline ?? newTalkOutline({ id: "o1", topicId: "topic-1", retellId: "t1", now: 1 }),
+        );
+        return outline;
+      },
+    },
+  };
+}
+
+// Every chapter settled, which is the signal that the arrangement begins.
+function settled(): Retell {
+  return retell({
+    decisions: [1, 2].map((chapter) => ({
+      bookId: "b1",
+      chapter,
+      title: chapter === 1 ? "One" : "Two",
+      include: true,
+      points: ["a point"],
+      updatedAt: 5,
+    })),
+  });
+}
+
 function input(over: Partial<Parameters<typeof buildRetellTurn>[0]> = {}) {
   return {
     retell: retell(),
@@ -91,6 +129,7 @@ function input(over: Partial<Parameters<typeof buildRetellTurn>[0]> = {}) {
     settings,
     history: [],
     record: async () => {},
+    talk: talkStub().access,
     ...over,
   };
 }
@@ -441,4 +480,65 @@ test("the tight observation order keeps what the retell asks its next question f
     "m-n1",
     "m-b1",
   ]);
+});
+
+// The arrangement (docs/44) is the retell's last stretch, not something to do in
+// parallel with it: its tools appear only once every chapter has a decision, so
+// the model cannot start writing segments while chapters are still open.
+test("the arrangement's tools stay off while a chapter is unsettled", async () => {
+  const turn = await buildRetellTurn(input());
+  expect(names(turn.tools)).not.toContain("write_talk_segment");
+  expect(turn.systemPrompt).not.toContain("Arranging the talk");
+});
+
+test("every chapter settled mounts the arrangement and says the talk is empty", async () => {
+  const turn = await buildRetellTurn(input({ retell: settled() }));
+  expect(names(turn.tools)).toContain("write_talk_segment");
+  expect(names(turn.tools)).toContain("set_talk_spine");
+  expect(names(turn.tools)).toContain("move_talk_segment");
+  expect(names(turn.tools)).toContain("remove_talk_segment");
+  expect(names(turn.tools)).toContain("read_talk_outline");
+  expect(turn.systemPrompt).toContain("Arranging the talk");
+  expect(turn.systemPrompt).toContain("A segment is not a chapter");
+  expect(turn.systemPrompt).toContain("nothing arranged yet");
+});
+
+test("a segment written in the arrangement lands in the talk and raises a card", async () => {
+  const talk = talkStub();
+  const cards: TalkArrangementCardData[] = [];
+  const turn = await buildRetellTurn(
+    input({
+      retell: settled(),
+      talk: talk.access,
+      onArrangeCard: (c) => cards.push(c),
+      now: () => 99,
+    }),
+  );
+  const out = String(
+    await turn.tools.find((t) => t.name === "write_talk_segment")!.execute({
+      title: "Why the eye is not a camera",
+      cues: ["the retina throws most of it away"],
+      material: [{ kind: "figure", ref: "[fig:3] the ganglion map" }],
+    }),
+  );
+  expect(out).toContain("Added segment 1 of 1");
+  expect(talk.current?.segments).toHaveLength(1);
+  expect(talk.current?.segments[0].title).toBe("Why the eye is not a camera");
+  // Drafted, not given: shallow is what a new segment gets.
+  expect(talk.current?.segments[0].status).toBe("shallow");
+  expect(talk.current?.segments[0].material).toEqual([
+    { kind: "figure", figId: "3", description: "the ganglion map" },
+  ]);
+  expect(cards).toHaveLength(1);
+  expect(cards[0].change).toBe("segment");
+});
+
+// The prompt inlines the talk as it stands, so the second turn of an arrangement
+// does not have to read it back before it can add to it.
+test("the talk already arranged is in the prompt with its segment ids", async () => {
+  const talk = talkStub();
+  await talk.access.edit((o) => putSegment(o, { id: "s1", title: "The opening" }, 7));
+  const turn = await buildRetellTurn(input({ retell: settled(), talk: talk.access }));
+  expect(turn.systemPrompt).toContain("The opening");
+  expect(turn.systemPrompt).toContain("id: s1");
 });

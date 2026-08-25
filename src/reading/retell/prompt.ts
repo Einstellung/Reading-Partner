@@ -20,6 +20,8 @@
 // where a chapter's first question comes from — rather than collected into a
 // section about observations, which would sit too far from the move it governs.
 
+import type { TalkOutline } from "../talk";
+import { formatTalkOutline } from "./arrange";
 import { formatMarks } from "./marks";
 import { formatPlan } from "./plan";
 import { formatSkeleton } from "./skeleton";
@@ -43,6 +45,13 @@ export interface RetellContext {
   // dropped them (read_chapter_note fetches one back).
   notes: RetellNote[];
   plan: RetellPlan | null;
+  // The arrangement (docs/44): every chapter has a decision, so the retell's
+  // last stretch turns those decisions into a talk. Off until then, and off when
+  // this turn has no outline to write to.
+  arranging?: boolean;
+  // The talk as it stands, inlined while arranging so the model does not have to
+  // read it back before every write.
+  talkOutline?: TalkOutline | null;
   // Compact figure catalog for the book (M9), or "" when none were detected.
   figureCatalog?: string;
   // Whether the book's reading tools (read_pages / search_topic /
@@ -173,6 +182,75 @@ export const RETELL_INSTRUCTIONS = [
   "Your replies render as Markdown: math as $...$ / $$...$$, code fenced.",
 ].join("\n");
 
+// The arrangement block, added once every chapter has a decision (docs/44). It
+// is a stage of the same conversation, not a second prompt, so it says only what
+// changes: what is being made now, and the one habit that would wreck it.
+//
+// That habit is a segment per chapter in chapter order. A model handed twelve
+// chapter decisions and a tool that writes segments will write twelve segments,
+// and the reader ends up rehearsing the table of contents — which is the thing
+// the arrangement exists to break. Hence the paragraph that says a segment is
+// not a chapter, twice, in both directions.
+//
+// The second habit is writing before agreeing. record_chapter_decision earns its
+// silent write by coming after an exchange about that chapter; a segment has had
+// no such exchange unless this stage holds one, so "propose it in words first" is
+// what makes the write bounded here.
+export const ARRANGE_INSTRUCTIONS = [
+  "Arranging the talk",
+  "",
+  "Every chapter now has a decision, so the retell is done. Do not re-walk the",
+  "chapters and do not start over. What is left is the last stretch of this same",
+  "conversation: arranging what was settled into a talk the reader can stand up",
+  "and give. That arrangement is the product — the slides, if there ever are any,",
+  "are made outside this app and are not your concern.",
+  "",
+  "- Propose, then write. Say how you would arrange it and why, in a few lines,",
+  "  and let the reader push back before you touch a tool. Their corrections are",
+  "  the arrangement; what you propose is a first draft of it. Once they have",
+  "  landed on something, write it without asking again.",
+  "- What is up for discussion: the through-line in one sentence, who is",
+  "  listening, which chapter breaks into several segments, which chapters fuse",
+  "  into one, what order they go in, what opens the talk and what closes it.",
+  "- Start with the spine, because the audience decides everything under it. Then",
+  "  the segments, a few at a time, in the order they will be given.",
+  "",
+  "A segment is not a chapter",
+  "- The opening and the closing belong to no chapter. A chapter with one hard",
+  "  idea and four consequences is five or six segments. Two chapters that make",
+  "  one point together are one segment. A segment carries no chapter number, and",
+  "  the chapter decisions are its material, not its structure.",
+  "- If your arrangement comes out as one segment per chapter in chapter order,",
+  "  you have not arranged anything — you have renamed the table of contents. Say",
+  "  out loud where the talk should not follow the book, and follow the book only",
+  "  where the reader says it is genuinely the right order.",
+  "- A chapter recorded as cut is out. Do not quietly bring it back as a segment.",
+  "",
+  "What goes on a segment",
+  "- Fewer words than a slide would carry. The audience will hear whole",
+  "  sentences; the speaker needs only enough to pull the sentence out. A handful",
+  "  of cues, short. Do not write the sentences for them — that is the same rule",
+  "  as never saying the thing they are about to have to say.",
+  "- One screenful, and that is the limit. A segment that will not fit is a",
+  "  segment that wants splitting.",
+  "- Material is the figures and the formulas, kept whole. In a technical talk",
+  "  the formula on the screen is the thing being explained, so send the TeX",
+  "  verbatim and never an abridged version of it. Figures the retell already",
+  "  identified go in as [fig:N].",
+  '- Status: a segment you have just drafted is "shallow" — the words are right',
+  "  and nobody has said them out loud yet. It becomes ready by being given, not",
+  '  by being written well, so do not write "ready" for a segment the reader has',
+  '  never spoken. "no-material" is for a segment whose figure or number does not',
+  "  exist yet.",
+  "- The audience line is the measure: for every segment, ask whether the person",
+  "  described there would still be with you at the end of it. If not, the",
+  "  segment is wrong, not the audience.",
+  "",
+  "The order of the segments is the order of the talk; nothing else says it. Give",
+  "`position` when a new segment belongs somewhere other than the end, and",
+  "move_talk_segment when the order turns out wrong.",
+].join("\n");
+
 export function buildRetellSystemPrompt(ctx: RetellContext): string {
   const counts = new Map<number, number>();
   for (const c of ctx.skeleton.chapters) counts.set(c.index, (ctx.marks.get(c.index) ?? []).length);
@@ -191,6 +269,9 @@ export function buildRetellSystemPrompt(ctx: RetellContext): string {
 
   lines.push("", formatSkeleton(ctx.skeleton, counts));
   lines.push("", formatPlan(ctx.skeleton.chapters, ctx.plan));
+  if (ctx.arranging) {
+    lines.push("", ARRANGE_INSTRUCTIONS, "", formatTalkOutline(ctx.talkOutline ?? null));
+  }
   lines.push("", formatMarks(ctx.skeleton.chapters, ctx.marks, { tight: ctx.fullMarks === false }));
 
   if (ctx.notes.length > 0) {
@@ -220,6 +301,16 @@ export function buildRetellSystemPrompt(ctx: RetellContext): string {
     "read_retell_outline() reads the whole outline back — what is in, what was cut,",
     "what is not settled yet.",
   ];
+  if (ctx.arranging) {
+    tools.push(
+      "set_talk_spine(...) writes the talk's through-line, backbone, audience,",
+      "conventions and exclusions.",
+      "write_talk_segment(...) adds or rewrites one segment of the talk.",
+      "move_talk_segment(id, position) changes where a segment sits in the talk.",
+      "remove_talk_segment(id) drops a segment.",
+      "read_talk_outline() reads the talk back with every segment's id.",
+    );
+  }
   if (ctx.hasReadingTools) {
     tools.push(
       "read_pages(from, to) reads the book; search_topic(query) keyword-searches the",

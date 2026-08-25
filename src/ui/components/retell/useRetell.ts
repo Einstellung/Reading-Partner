@@ -19,7 +19,12 @@ import {
 import { loadSettings, toReasoning, type Settings } from "../../../platform/app/settings";
 import { runAgentTurn, type ProviderId } from "../../../ai";
 import { toolStatusLabel } from "../../../reading/context";
-import type { RetellDecisionCardData } from "../../../reading/retell";
+import type { RetellDecisionCardData, TalkArrangementCardData } from "../../../reading/retell";
+import {
+  editTalkOutline,
+  talkOutlineForRetell,
+  talkOutlineOfRetell,
+} from "../../../reading/talk";
 import {
   buildRetellTurn,
   loadMaterials,
@@ -251,8 +256,12 @@ export function useRetell(retellId: string, topicName: string): RetellController
       settleExit();
     };
 
-    const onDecisionCard = (payload: RetellDecisionCardData) => {
-      const cardId = nextCardId("retell");
+    // A receipt for something the AI just wrote: shown above the reply being
+    // written and persisted with it, so a reopened retell still shows what was
+    // settled. The same for a chapter decision and for a write to the talk
+    // outline — only the id prefix differs.
+    const raiseCard = (prefix: string, payload: RetellDecisionCardData | TalkArrangementCardData) => {
+      const cardId = nextCardId(prefix);
       const cardTs = Date.now();
       setMessages((rows) => insertBeforeLast(rows, cardRow(cardId, payload, cardTs)));
       appendMessage(key, threadId, {
@@ -287,7 +296,24 @@ export function useRetell(retellId: string, topicName: string): RetellController
         // has to answer with the entry recorded a moment ago in this same turn,
         // and with the one the reader just moved in the outline pane.
         readRetell: () => retellRef.current,
-        onDecisionCard,
+        // The talk this retell arranges at the end (docs/44). `read` does not
+        // make one, so a retell that never gets arranged leaves no empty talk
+        // behind; the first write makes it, through the same find-or-create the
+        // rehearsal uses, so the two doors cannot leave two outlines.
+        talk: {
+          read: () => talkOutlineOfRetell(retellId),
+          edit: async (change) => {
+            const owner = retellRef.current ?? current;
+            const outline = await talkOutlineForRetell({
+              topicId: owner.topicId,
+              retellId,
+              name: owner.name,
+            });
+            return editTalkOutline(outline.id, change);
+          },
+        },
+        onDecisionCard: (payload) => raiseCard("retell", payload),
+        onArrangeCard: (payload) => raiseCard("talk", payload),
       });
       if (controller.signal.aborted) return;
       // Declined before sending: the same inputs assemble the same call, so

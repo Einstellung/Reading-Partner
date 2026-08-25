@@ -10,6 +10,7 @@ import type { RetellDecisionCardData } from "../../../reading/retell/cards";
 import type { CardComponentProps, CardRegistryFor } from "../chat/chatParts";
 import type { ReadingCard } from "../../../reading/retell/cards";
 import { Badge } from "../ui/badge";
+import { TalkArrangementCard } from "./TalkArrangementCard";
 
 export function RetellDecisionCard({ payload }: CardComponentProps<RetellDecisionCardData>) {
   const kept = payload.include;
@@ -45,4 +46,5 @@ export function RetellDecisionCard({ payload }: CardComponentProps<RetellDecisio
 
 export const READING_CARD_REGISTRY: CardRegistryFor<ReadingCard["kind"]> = {
   "retell-decision": RetellDecisionCard,
+  "talk-arrangement": TalkArrangementCard,
 };

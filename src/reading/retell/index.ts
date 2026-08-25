@@ -69,15 +69,27 @@ export {
 } from "./store";
 export {
   buildRetellTurn,
+  type RetellTalkAccess,
   type RetellTurn,
   type RetellTurnInput,
   type RetellTurnMessage,
 } from "./turn";
 export { createRetell, retellCandidates } from "./candidates";
-export type { ReadingCard, RetellDecisionCardData } from "./cards";
+export type { ReadingCard, RetellDecisionCardData, TalkArrangementCardData } from "./cards";
+export {
+  buildArrangeTools,
+  formatTalkOutline,
+  isArranging,
+  materialLabel,
+  segmentCard,
+  segmentStatusLabel,
+  toTalkMaterial,
+  type ArrangeToolDeps,
+} from "./arrange";
 export { bucketMarks, formatMarks } from "./marks";
 export { formatOutline, formatPlan, nextChapter } from "./plan";
 export {
+  ARRANGE_INSTRUCTIONS,
   buildRetellSystemPrompt,
   RETELL_INSTRUCTIONS,
   RETELL_KICKOFF,
