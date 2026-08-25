@@ -6,6 +6,10 @@
 // subscription the reader had. The same shape as the emptied conversation file
 // in docs/13, and no race is needed for it.
 //
+// The read raises now, which refuses the write and stops the empty list reaching
+// a screen in the first place: `[]` is what puts a subscribed reader back in
+// onboarding.
+//
 // The real store runs here against an in-memory AppData handed in as its io
 // (tests/support/guarded-appdata.ts), which answers with the same GuardedRead
 // contract readGuardedJson does.
@@ -41,12 +45,23 @@ beforeEach(() => {
 
 // --- the read that fails ----------------------------------------------------
 
-test("turning one source off after a failed read leaves every source on disk", async () => {
+// "No subscriptions" is the answer onboarding is built on, so it has to mean a
+// reader who really has none. A file that is there and will not open is a
+// different thing, and both readers say so.
+test("a read off an unreadable file raises rather than answering with no subscriptions", async () => {
+  io.files.set(FILE, JSON.stringify(SUBSCRIBED));
+  io.readFails = true;
+
+  await expect(loadSources(io)).rejects.toThrow(/could not be read/);
+  await expect(hasSources(io)).rejects.toThrow(/could not be read/);
+});
+
+test("turning one source off after a failed read is refused, and the file is untouched", async () => {
   const bytes = JSON.stringify(SUBSCRIBED);
   io.files.set(FILE, bytes);
   io.readFails = true;
 
-  await setSourceEnabled(B.id, false, io);
+  await expect(setSourceEnabled(B.id, false, io)).rejects.toThrow(/could not be read/);
 
   // Nothing written, nothing moved aside: the bytes are fine, this process is
   // the one that could not read them.
@@ -59,7 +74,7 @@ test("removing a source after a failed read writes nothing", async () => {
   io.files.set(FILE, bytes);
   io.readFails = true;
 
-  expect(await removeSource(B.id, io)).toEqual([]);
+  await expect(removeSource(B.id, io)).rejects.toThrow(/could not be read/);
   expect(io.files.get(FILE)).toBe(bytes);
 });
 
@@ -68,7 +83,7 @@ test("adding a source after a failed read does not replace the list with it", as
   io.files.set(FILE, bytes);
   io.readFails = true;
 
-  await addSource({ ...A, id: "new-one" }, io);
+  await expect(addSource({ ...A, id: "new-one" }, io)).rejects.toThrow(/could not be read/);
 
   expect(io.files.get(FILE)).toBe(bytes);
 });

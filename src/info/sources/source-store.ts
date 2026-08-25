@@ -121,13 +121,17 @@ export const sourcesIo: SourcesIo = {
   reportCorrupt: (report) => reportStoreError("corrupt-file", report),
 };
 
-// The subscriptions read, plus whether it is safe to write the result back. The
-// list cannot be rebuilt from anywhere — a source is a descriptor the reader (or
-// the AI, with the reader watching) authored — so one failed read must not turn
-// the next toggle into "one source, the one being written". Content that does
-// not parse is quarantined and a fresh list takes over; a file that could not be
-// read at all is left alone and writing is refused until a later read succeeds.
-async function readSources(io: SourcesIo): Promise<{ file: ParsedSources; writable: boolean }> {
+// The subscriptions read. An empty list is the answer for a file that is not
+// there yet, and for one whose bad content has just been moved aside. It is not
+// the answer for a file that is sitting there unread: nothing rebuilds a source
+// — a descriptor is authored by the reader, or by the AI with the reader
+// watching — so "no sources" would send a subscribed reader back to onboarding,
+// and the toggle they reached for next would write that one source over every
+// subscription they had. Raising is also what keeps the file from being
+// overwritten: every mutation below reads before it saves.
+//
+// Content that does not parse is quarantined and a fresh list takes over.
+async function readSources(io: SourcesIo): Promise<ParsedSources> {
   let parsed: ParsedSources = { sources: [], foreign: [], repaired: false };
   const read = await io.read(SOURCES_FILE, (raw) => {
     const res = parseSources(raw);
@@ -135,22 +139,25 @@ async function readSources(io: SourcesIo): Promise<{ file: ParsedSources; writab
     parsed = res;
     return res.sources;
   });
-  if (read.status === "ok") return { file: parsed, writable: true };
+  if (read.status === "ok") return parsed;
   const empty: ParsedSources = { sources: [], foreign: [], repaired: false };
-  if (read.status === "missing") return { file: empty, writable: true };
-  return { file: empty, writable: read.savedAs !== null };
+  if (read.status === "missing") return empty;
+  if (read.savedAs === null) throw new Error(`${SOURCES_FILE} could not be read`);
+  return empty;
 }
 
 // Load the source list. No file is an empty list and stays one: onboarding owns
-// first-source creation, so nothing here writes on a reader's behalf. A file
-// that could not be read also reads as empty — the caller is showing a list, and
-// the write paths below are the ones that must not act on it.
+// first-source creation, so nothing here writes on a reader's behalf.
 export async function loadSources(io: SourcesIo = sourcesIo): Promise<SourceDescriptor[]> {
-  return (await readSources(io)).file.sources;
+  return (await readSources(io)).sources;
 }
 
 // Whether the user has any source configured. Drives the onboarding trigger
-// (docs/17): false means show first-run source setup.
+// (docs/17): false means show first-run source setup. It has to be false only
+// for a reader who really has none, which is why an unreadable file raises out
+// of here rather than answering — the two call sites decide for themselves
+// (info/companion/card-actions.ts assumes some exist, use-info-home.ts leaves
+// the card on its loading state).
 export async function hasSources(io: SourcesIo = sourcesIo): Promise<boolean> {
   return (await loadSources(io)).length > 0;
 }
@@ -168,8 +175,7 @@ async function mutate(
   change: (list: SourceDescriptor[]) => SourceDescriptor[],
   removedId?: string,
 ): Promise<SourceDescriptor[]> {
-  const { file, writable } = await readSources(io);
-  if (!writable) return file.sources;
+  const file = await readSources(io);
   const next = change(file.sources);
   const taken = new Set(next.map((s) => s.id));
   const foreign = file.foreign.filter((e) => {
