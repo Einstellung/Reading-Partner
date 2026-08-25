@@ -3,7 +3,7 @@
 //
 // A talk's decisions say what the talk contains: which chapter of which material
 // goes in, what it contributes, which figure carries it, and — because the array
-// is the outline the reader arranged (reading/talks/outline.ts) — in what order.
+// is the outline the reader arranged (reading/retell/outline.ts) — in what order.
 // The plan stage's job shrinks to laying that out as pages: how many pages an
 // entry needs, what to call them, how the deck opens and closes. It no longer
 // decides what is in the talk.
@@ -16,7 +16,7 @@
 // works on the talk as a value; loading it is live.ts's readDeckOutline.
 
 import { languageInstruction, type AiLanguage } from "../../platform/app/settings";
-import type { Talk } from "../talks/types";
+import type { Talk } from "../retell/types";
 import { bookBlock, type DeckPlan, type PlanBook } from "./plan";
 import type { SlideOutline } from "./types";
 

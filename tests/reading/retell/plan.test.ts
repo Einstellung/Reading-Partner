@@ -1,6 +1,6 @@
 // How the record of a retell reads to the model at the top of a turn
 // (src/reading/retell/plan.ts). Where the record is kept and in what order is
-// the talk's (tests/reading/talks/outline.test.ts); this is the read-back.
+// the talk's (tests/reading/retell/outline.test.ts); this is the read-back.
 // Run: bun test.
 
 import { expect, test } from "bun:test";

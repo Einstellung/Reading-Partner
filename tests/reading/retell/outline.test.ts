@@ -1,4 +1,4 @@
-// The talk's outline (src/reading/talks/outline.ts): laying several materials'
+// The talk's outline (src/reading/retell/outline.ts): laying several materials'
 // chapters into the one numbered list the retell walks, translating a
 // decision back to the book it is about, and the reader's edits to the order.
 // Pure. Run: bun test.
@@ -18,8 +18,8 @@ import {
   toTalkDecision,
   upsertDecision,
   type TalkSkeleton,
-} from "../../../src/reading/talks/outline";
-import type { Talk, TalkDecision } from "../../../src/reading/talks/types";
+} from "../../../src/reading/retell/outline";
+import type { Talk, TalkDecision } from "../../../src/reading/retell/types";
 import type { RetellDecision, Skeleton } from "../../../src/reading/retell/types";
 
 function skeleton(titles: string[], source: Skeleton["source"] = "notes-plan"): Skeleton {

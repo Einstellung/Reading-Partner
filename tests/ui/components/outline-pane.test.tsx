@@ -1,12 +1,12 @@
 // The outline beside the retell, pinned by a static render: the running
 // order is numbered, a cut entry stays visible without a number, and the ends of
 // the list cannot be moved further out. What the rows mean is decided in
-// src/reading/talks/outline.ts and tested there. Run: bun test.
+// src/reading/retell/outline.ts and tested there. Run: bun test.
 
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import OutlinePane from "../../../src/ui/components/talk/OutlinePane";
-import type { OutlineRow } from "../../../src/reading/talks";
+import OutlinePane from "../../../src/ui/components/retell/OutlinePane";
+import type { OutlineRow } from "../../../src/reading/retell";
 
 const rows: OutlineRow[] = [
   {

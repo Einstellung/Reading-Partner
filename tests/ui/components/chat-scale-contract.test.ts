@@ -27,7 +27,7 @@ const scope = read("ui/components/base/ChatScaleScope.tsx");
 const keys = read("ui/components/base/chat-scale-keys.ts");
 const chat = read("ui/components/chat/chat.tsx");
 const callView = read("ui/components/chat/CallView.tsx");
-const talkView = read("ui/components/talk/TalkView.tsx");
+const talkView = read("ui/components/retell/TalkView.tsx");
 const infoCall = read("ui/components/info/InfoCall.tsx");
 const markdown = read("ui/components/markdown/MarkdownRenderer.tsx");
 

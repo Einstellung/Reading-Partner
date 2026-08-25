@@ -4,7 +4,7 @@
 // It replaces the topic's sections while it is open, the way the saved-article
 // reader does, so entering a talk needs no route and leaving it puts the topic
 // back exactly as it was. There is no reader under it and no engine running —
-// the materials come off disk (reading/talks/material.ts).
+// the materials come off disk (reading/retell/material.ts).
 //
 // Citations render as text here. [p.12] can be clicked in the reader because
 // there is a page to jump to; there is none here, and a chip that answers a tap
@@ -24,7 +24,7 @@ import NameDialog from "../common/NameDialog";
 import { Button } from "../ui/button";
 import { cutSession, startSession, stopSession } from "../../../ai/voice";
 import { createTranscriptSource, type TranscriptSource } from "../../../reading/rehearsal";
-import { outlineRows, type Talk } from "../../../reading/talks";
+import { outlineRows, type Talk } from "../../../reading/retell";
 import { defaultNavOpen, readNavEnv } from "../base/topic-nav";
 import DeckDialog from "./DeckDialog";
 import OutlinePane from "./OutlinePane";

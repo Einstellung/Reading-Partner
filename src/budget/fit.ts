@@ -3,7 +3,7 @@
 // reader about it.
 //
 // This is the shape both turn assemblies had written out longhand and in
-// duplicate (reading/turn.ts, reading/talks/turn.ts). What differs between them
+// duplicate (reading/turn.ts, reading/retell/turn.ts). What differs between them
 // is the ladder and how the two halves of the call are composed, so those come
 // in: the ladder as a table, the composition as two closures. Nothing under src/
 // is imported here — budget stays a leaf, and the domains keep their own prompt

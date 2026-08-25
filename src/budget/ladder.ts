@@ -5,7 +5,7 @@
 // The mechanism is here; the rungs are not. What a reading turn can give up is
 // not what a retell can, and both lists are written in the reader's own
 // words, so each domain declares its own ladder (src/reading/ladder.ts,
-// src/reading/talks/ladder.ts) and hands it in. This file knows nothing about
+// src/reading/retell/ladder.ts) and hands it in. This file knows nothing about
 // books, notes or talks.
 //
 // The rule an order is expected to encode: touch evidence and you say so, drop

@@ -1,7 +1,7 @@
 // The open talk's live state: its file, its materials, its conversation and the
 // turn currently streaming (docs/31).
 //
-// It sits in the ui layer rather than in reading/talks because it is where the
+// It sits in the ui layer rather than in reading/retell because it is where the
 // domain meets the chat rendering (chatParts): the decision the AI records is
 // both a write to the talk file and a card in the conversation, and one of those
 // two is a render concern. Everything decidable without React — the outline
@@ -32,7 +32,7 @@ import {
   updateTalk,
   type LoadedMaterial,
   type Talk,
-} from "../../../reading/talks";
+} from "../../../reading/retell";
 import { distillRetell } from "../../../observation";
 import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
 import type { ThreadMessage } from "../chat/types";

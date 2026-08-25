@@ -15,8 +15,8 @@ import {
 } from "../../../src/reading/slides/outline";
 import { planUserMessage, validateDeckPlan, type PlanBook } from "../../../src/reading/slides/plan";
 import type { DeckPlan } from "../../../src/reading/slides/plan";
-import { newTalk } from "../../../src/reading/talks/types";
-import type { Talk, TalkDecision } from "../../../src/reading/talks/types";
+import { newTalk } from "../../../src/reading/retell/types";
+import type { Talk, TalkDecision } from "../../../src/reading/retell/types";
 import { languageInstruction } from "../../../src/platform/app/settings";
 
 function talk(decisions: Partial<TalkDecision>[]): Talk {

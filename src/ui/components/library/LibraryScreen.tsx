@@ -35,8 +35,8 @@ import {
   savedArticlesForTopic,
   type SavedArticle,
 } from "../../../reading/saved-articles";
-import { createTalk } from "../../../reading/talks";
-import TalkView from "../talk/TalkView";
+import { createTalk } from "../../../reading/retell";
+import TalkView from "../retell/TalkView";
 import { Button } from "../ui/button";
 import BookCard from "../shelf/BookCard";
 import { ADD_CARD, ADD_CARD_BOX, CARD_LABEL, LIBRARY_GRID, LIBRARY_PAGE } from "../shelf/cardStyles";

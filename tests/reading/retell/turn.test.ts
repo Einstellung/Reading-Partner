@@ -1,4 +1,4 @@
-// Turn assembly for a talk's retell (src/reading/talks/turn.ts): which tools
+// Turn assembly for a talk's retell (src/reading/retell/turn.ts): which tools
 // are mounted with no book open, that the reader's marks arrive under the right
 // chapters, that a recorded decision comes back as a book's chapter, and that a
 // whole book of highlights is fitted to the window rather than sent over it.
@@ -17,14 +17,14 @@ import type { ObservationIndexEntry, ObservationType } from "../../../src/observ
 // assembled for. Mocking the fs plugin here would swap it out for every other
 // test file in the run as well.
 const { buildTalkTurn, OBSERVATION_ORDER_TIGHT } = await import(
-  "../../../src/reading/talks/turn",
+  "../../../src/reading/retell/turn",
 );
 // The replay cap is the reading turn's; a retell borrows it rather than
 // declaring a second one.
 const { HISTORY_KEEP } = await import("../../../src/reading/turn");
-const { combineChapters } = await import("../../../src/reading/talks/outline");
-import type { LoadedMaterial } from "../../../src/reading/talks/material";
-import type { Talk, TalkDecision } from "../../../src/reading/talks/types";
+const { combineChapters } = await import("../../../src/reading/retell/outline");
+import type { LoadedMaterial } from "../../../src/reading/retell/material";
+import type { Talk, TalkDecision } from "../../../src/reading/retell/types";
 
 const settings: Settings = {
   ...DEFAULT_SETTINGS,

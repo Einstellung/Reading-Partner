@@ -1,4 +1,4 @@
-// Starting a talk from a topic (src/reading/talks/candidates.ts): which of a
+// Starting a talk from a topic (src/reading/retell/candidates.ts): which of a
 // topic's files are offered as material, and what a start records.
 //
 // Runs against one in-memory AppData, so the marks a candidate carries are read
@@ -11,7 +11,7 @@
 import { beforeEach, expect, test } from "bun:test";
 import type { EventPayload, EventType } from "../../../src/platform/app/events";
 import type { FileRef, Topic } from "../../../src/platform/app/topics";
-import { createTalk, talkCandidates } from "../../../src/reading/talks/candidates";
+import { createTalk, talkCandidates } from "../../../src/reading/retell/candidates";
 import { installAppData, type FakeDisk } from "../../support/appdata-fake";
 
 let disk: FakeDisk;

@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../ui/dialog";
-import { defaultMaterialSelection, type MaterialCandidate } from "../../../../reading/talks";
+import { defaultMaterialSelection, type MaterialCandidate } from "../../../../reading/retell";
 
 export default function NewTalkDialog(props: {
   open: boolean;

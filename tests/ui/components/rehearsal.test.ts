@@ -1,5 +1,5 @@
 // What the host makes of a deck's messages, and what it puts on the bar
-// (src/ui/components/talk/rehearsal.ts). The view around it is an iframe and a
+// (src/ui/components/retell/rehearsal.ts). The view around it is an iframe and a
 // listener; everything that can be wrong is in here. Run: bun test.
 
 import { expect, test } from "bun:test";
@@ -18,7 +18,7 @@ import {
   slideEvent,
   utteranceEvent,
   withSlideEvent,
-} from "../../../src/ui/components/talk/rehearsal";
+} from "../../../src/ui/components/retell/rehearsal";
 import type {
   RehearsalEvent,
   RehearsalRun,

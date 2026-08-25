@@ -1,5 +1,5 @@
 // What a topic's Talks list says before you open a talk
-// (src/reading/talks/list.ts), and which materials a new talk starts with
+// (src/reading/retell/list.ts), and which materials a new talk starts with
 // ticked. Pure. Run: bun test.
 
 import { expect, test } from "bun:test";
@@ -8,8 +8,8 @@ import {
   talkRows,
   talkSummary,
   type MaterialCandidate,
-} from "../../../src/reading/talks/list";
-import type { Talk, TalkDecision } from "../../../src/reading/talks/types";
+} from "../../../src/reading/retell/list";
+import type { Talk, TalkDecision } from "../../../src/reading/retell/types";
 
 function talk(over: Partial<Talk> = {}): Talk {
   return {

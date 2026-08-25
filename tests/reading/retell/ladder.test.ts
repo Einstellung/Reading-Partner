@@ -1,4 +1,4 @@
-// The retell's compression ladder (src/reading/talks/ladder.ts): what a talk
+// The retell's compression ladder (src/reading/retell/ladder.ts): what a talk
 // turn gives up when it does not fit the window, in what order, and what the
 // reader is told for it. Same contract as the reading ladder, different
 // material. Run: bun test.
@@ -6,7 +6,7 @@
 import { expect, test } from "bun:test";
 import { PI_CONTEXT_SAFETY_TOKENS } from "../../../src/budget/estimate";
 import { planReductions } from "../../../src/budget";
-import { TALK_LADDER, type TalkReductionId } from "../../../src/reading/talks/ladder";
+import { TALK_LADDER, type TalkReductionId } from "../../../src/reading/retell/ladder";
 
 const WINDOW = 200_000;
 const FITS_AT = WINDOW - PI_CONTEXT_SAFETY_TOKENS - 4096;

@@ -19,7 +19,7 @@ import {
   talkSummary,
   type MaterialCandidate,
   type TalkRow,
-} from "../../../../reading/talks";
+} from "../../../../reading/retell";
 import { Button } from "../../ui/button";
 import CardMenu from "../../shelf/CardMenu";
 import { displayFileTitle } from "../../shelf/file-title";

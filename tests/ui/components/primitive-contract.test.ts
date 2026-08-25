@@ -78,7 +78,7 @@ test("a menu row is a 44px touch target, in the primitive and nowhere else", () 
   // And no call site carries it back. A row that re-declares the minimum is a
   // row that will drift from the other two.
   const COMPONENTS = join(dirname(fileURLToPath(import.meta.url)), "../../../src/ui/components");
-  for (const file of ["shelf/CardMenu.tsx", "talk/OutlinePane.tsx", "reader/MoreMenu.tsx"]) {
+  for (const file of ["shelf/CardMenu.tsx", "retell/OutlinePane.tsx", "reader/MoreMenu.tsx"]) {
     expect(readFileSync(join(COMPONENTS, file), "utf8")).not.toContain("coarse:min-h-[44px]");
   }
 });

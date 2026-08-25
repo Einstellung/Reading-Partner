@@ -13,7 +13,7 @@
 // walking the highlights one by one are each aimed at one step of that slide.
 //
 // The observations of this reader (src/observation, appended to the end of this
-// prompt by talks/turn.ts) are the shortest way in: knowing where they got stuck
+// prompt by retell/turn.ts) are the shortest way in: knowing where they got stuck
 // reads as an invitation to explain it again, which lays the answer out before
 // the question is asked. The rules for using them are therefore spread into the
 // paragraphs they bear on — the opening, the top rule, who you are talking to,

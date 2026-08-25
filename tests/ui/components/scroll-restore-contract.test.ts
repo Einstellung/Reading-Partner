@@ -112,7 +112,7 @@ test("the surfaces that are not remembered pass no key", () => {
   // spike harness have no swap at all.
   for (const path of [
     "ui/components/chat/CallBubble.tsx",
-    "ui/components/talk/TalkView.tsx",
+    "ui/components/retell/TalkView.tsx",
     "ui/components/chat/aside-spike-harness.tsx",
   ]) {
     expect(read(path)).not.toContain("stickKey");

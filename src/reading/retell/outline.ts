@@ -12,6 +12,7 @@
 // AI's writes go through the same functions onto the same array, so the outline
 // beside the conversation and the record the AI reads cannot drift apart.
 
+import { bucketMarks } from "./marks";
 import type {
   Mark,
   RetellChapter,
@@ -19,9 +20,10 @@ import type {
   RetellPlan,
   Skeleton,
   SkeletonSource,
-} from "../retell";
-import { bucketMarks, RETELL_VERSION } from "../retell";
-import type { Talk, TalkDecision } from "./types";
+  Talk,
+  TalkDecision,
+} from "./types";
+import { RETELL_VERSION } from "./types";
 
 // One chapter of one material, as the retell numbers it for this talk.
 export interface TalkSlot {

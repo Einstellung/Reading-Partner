@@ -34,15 +34,11 @@ import { buildFigureTools } from "../figures/tools";
 import { renderFigure } from "../figures/render";
 import type { Figure } from "../figures/types";
 import { readChapterSpine } from "../prep/chapters/store";
-import {
-  buildRetellSystemPrompt,
-  buildRetellTools,
-  nextChapter,
-  RETELL_KICKOFF,
-  type RetellDecision,
-  type RetellDecisionCardData,
-  type RetellNote,
-} from "../retell";
+import { buildRetellSystemPrompt, RETELL_KICKOFF, type RetellNote } from "./prompt";
+import { buildRetellTools } from "./tools";
+import { nextChapter } from "./plan";
+import type { RetellDecisionCardData } from "./cards";
+import type { RetellDecision } from "./types";
 import { readMaterialBytes, type LoadedMaterial } from "./material";
 import {
   bucketTalkMarks,

@@ -11,7 +11,7 @@
 // message shape, the result type.
 //
 // It never imports the talks domain: everything about the talk arrives as input
-// (the trigger point is on the talk's side, in ui/components/talk/useTalk.ts).
+// (the trigger point is on the talk's side, in ui/components/retell/useTalk.ts).
 
 import type { AgentTool } from "../../ai/agent";
 import { runSubagent, type SubagentDefinition, type SubagentModel } from "../../ai/subagent";
@@ -57,7 +57,7 @@ export interface RetellDistillInput {
 
 // The conversation this pass has not seen yet, and the cursor to store if it
 // finishes. Messages with no text of their own are dropped first: a talk's
-// thread holds decision cards as empty rows (ui/components/talk/useTalk.ts), and
+// thread holds decision cards as empty rows (ui/components/retell/useTalk.ts), and
 // counting them would move the cursor past conversation that was never read.
 // Pure — unit-tested.
 export function selectNewMessages(

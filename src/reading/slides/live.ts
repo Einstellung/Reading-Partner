@@ -1,6 +1,6 @@
 // Live wiring of the slides pipeline (docs/14, docs/29, docs/31): real deps
 // bound to the dep-injected SlidesPipeline. A deck is the product of one talk
-// (reading/talks) — its materials are the talk's, its spine is the outline the
+// (reading/retell) — its materials are the talk's, its spine is the outline the
 // talk settled — and it carries the talk's own id, so slides/<talkId>/ is where
 // that talk's deck keeps its state and its pages (store.ts). One id, one talk,
 // one deck, whichever end you come at it from.
@@ -22,8 +22,8 @@ import { recordParse } from "../../platform/app/structured-output";
 import { contentSystemPrompt, contentUserMessage, sanitizeFragment } from "./content";
 import { generateImage, resolveImageGenConfig, type ImageGenDeps } from "./imageGen";
 import { cleanTauriFetch } from "../../platform/app/tauri-fetch";
-import { loadMaterial } from "../talks/material";
-import { listAllTalks, loadTalk } from "../talks/store";
+import { loadMaterial } from "../retell/material";
+import { listAllTalks, loadTalk } from "../retell/store";
 import {
   parseSlidePlan,
   planUserMessage,
@@ -126,7 +126,7 @@ export async function listDeckTalks(): Promise<DeckTalk[]> {
 // alone can only guess at sourceChapters (docs/29).
 //
 // The chapters come from the same projection the retell walked
-// (talks/material.ts, retell/skeleton.ts): the notes plan when there is one,
+// (retell/material.ts, retell/skeleton.ts): the notes plan when there is one,
 // the PDF's table of contents when there is not, and the whole book as one
 // chapter when there is neither. Reading the notes state directly instead is
 // what left the second book of a talk with an empty chapter table — a talk is

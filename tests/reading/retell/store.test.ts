@@ -16,7 +16,7 @@ import {
   loadMaterial,
   loadMaterials,
   readMaterialBytes,
-} from "../../../src/reading/talks/material";
+} from "../../../src/reading/retell/material";
 import {
   deleteTalk,
   listTalksForTopic,
@@ -27,7 +27,7 @@ import {
   talkIdOf,
   talkThreadKey,
   updateTalk,
-} from "../../../src/reading/talks/store";
+} from "../../../src/reading/retell/store";
 import { installAppData, type FakeDisk } from "../../support/appdata-fake";
 
 let disk: FakeDisk;

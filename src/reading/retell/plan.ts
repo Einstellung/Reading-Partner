@@ -4,7 +4,7 @@
 // talk has a life, it is prepared over several goes and returned to). It is also
 // the deck's outline later, which is why a decision names points and a figure
 // rather than prose. Where it lives, and in what order, belongs to the talk
-// (reading/talks/outline.ts); this file only reads it back.
+// (reading/retell/outline.ts); this file only reads it back.
 
 import type { RetellChapter, RetellPlan } from "./types";
 

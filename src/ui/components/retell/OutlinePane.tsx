@@ -16,7 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
-import type { OutlineRow } from "../../../reading/talks";
+import type { OutlineRow } from "../../../reading/retell";
 import type { RehearsalRun } from "../../../reading/rehearsal";
 import RehearsalList from "./RehearsalList";
 

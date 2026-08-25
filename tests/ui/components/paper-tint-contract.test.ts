@@ -158,7 +158,7 @@ test("the tint is applied before React mounts", () => {
 // it; a palette token would put a cream fill there. Kept as the full class
 // string rather than the file name so a plain `bg-white` added to the same file
 // still fails.
-const WHITE_ALLOWED = new Map([["ui/components/talk/RehearsalView.tsx", ["bg-white/10"]]]);
+const WHITE_ALLOWED = new Map([["ui/components/retell/RehearsalView.tsx", ["bg-white/10"]]]);
 
 test("nothing in the UI paints itself white outside the palette", () => {
   const offenders: string[] = [];
