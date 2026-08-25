@@ -97,7 +97,6 @@ export default function RetellView(props: {
         topicId: target.topicId,
         retellId: target.id,
         name: target.name,
-        deckFile: deck.file,
       }),
       // Which retell is being given is known before a word of it is said, so its
       // proper names go in as the recognizer's hot words.
@@ -244,6 +243,7 @@ export default function RetellView(props: {
         {rehearsing && (
           <RehearsalView
             rehearsal={rehearsing}
+            deckFile={deck.file}
             backLabel="Back to the retell"
             transcript={transcript ?? undefined}
             onExit={() => {

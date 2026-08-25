@@ -39,7 +39,8 @@ test("the deck is copied into AppData and the rehearsal points at the copy", asy
     now: 42,
   });
   expect(made.name).toBe("智能简史");
-  expect(made.deckFile).toBe("rehearsals/42.html");
+  // The outline the import started for it, under the same moment's id.
+  expect(made.outlineId).toBe("42");
   expect(made.retellId).toBeNull();
   // The copy, not the path: a path outside AppData means nothing on the iPad.
   expect(disk.blobs.has("rehearsals/42.html")).toBe(true);

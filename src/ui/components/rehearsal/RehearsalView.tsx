@@ -46,10 +46,15 @@ import {
 } from "./rehearsal";
 
 export interface RehearsalViewProps {
-  // The object this pass is recorded against, deck and all. Created or found by
-  // the caller before it mounts this view, so both doors (docs/43) arrive here
-  // holding the same thing.
+  // The object this pass is recorded against. Created or found by the caller
+  // before it mounts this view, so both doors (docs/43) arrive here holding the
+  // same thing.
   rehearsal: Rehearsal;
+  // The deck on screen, AppData-relative, or null when there is none. A prop and
+  // no longer a field of the rehearsal: docs/44 gives the pass against an
+  // outline, and what is still shown here is the deck the caller happens to have
+  // — the retell's own build, or nothing.
+  deckFile: string | null;
   // Where the close button goes, in words: the retell for one door, the topic's
   // list for the other.
   backLabel: string;
@@ -67,12 +72,13 @@ export interface RehearsalViewProps {
 
 export default function RehearsalView({
   rehearsal,
+  deckFile,
   backLabel,
   transcript,
   onExit,
   onSaved,
 }: RehearsalViewProps) {
-  const { html, error } = useDeckHtml(rehearsal.deckFile);
+  const { html, error } = useDeckHtml(deckFile);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
 
   const eventsRef = useRef<RehearsalEvent[]>([]);
@@ -208,7 +214,7 @@ export default function RehearsalView({
     lockRef.current?.set(false);
     const saved = await finishRun({
       rehearsalId: rehearsal.id,
-      deckFile: rehearsal.deckFile,
+      deckFile,
       id: crypto.randomUUID(),
       startedAt: startedAtRef.current,
       endedAt: Date.now(),
@@ -217,7 +223,7 @@ export default function RehearsalView({
       save: appendRun,
     });
     if (saved) onSavedRef.current();
-  }, [rehearsal.id, rehearsal.deckFile]);
+  }, [rehearsal.id, deckFile]);
 
   // Unmounting is an exit like any other (a topic switch, a book opened from
   // elsewhere), so the save hangs off the cleanup rather than off the buttons.

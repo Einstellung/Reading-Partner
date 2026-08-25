@@ -1,18 +1,18 @@
-// A rehearsal (docs/43): a deck the reader gives out loud, over and over, and
+// A rehearsal (docs/44): a talk the reader gives out loud, over and over, and
 // the record of every pass. It is an object of the topic, level with a retell
-// rather than owned by one — a retell that produced a deck gets one, and so does
-// a deck that was made outside the app and brought in, and the two are the same
-// kind of thing with the same history under them.
+// rather than owned by one, and it is given against an outline (reading/talk) —
+// not against a deck. The slides are made outside the app and the app never
+// sees that file.
 //
 // Not the same thing as reading/retell, which is the AI questioning the reader
-// chapter by chapter before there is a deck at all. This is after: passes over a
-// finished deck. What the AI eventually says about a pass is not part of this
-// layer — nothing can be said about a rehearsal until one has been recorded, so
-// recording is what this layer does and all it does.
+// chapter by chapter before there is an arrangement at all. This is after:
+// passes over the outline that came out of it. What the AI eventually says about
+// a pass is not part of this layer — nothing can be said about a rehearsal until
+// one has been recorded, so recording is what this layer does and all it does.
 
 export const REHEARSAL_VERSION = 1 as const;
 
-// The rehearsal itself: which topic it belongs to, and which deck it is given
+// The rehearsal itself: which topic it belongs to, and which outline it is given
 // against. Small and rarely rewritten, which is why the runs are a file of their
 // own (store.ts) — a rehearsal renamed must not rewrite every word ever spoken
 // to it.
@@ -21,14 +21,15 @@ export interface Rehearsal {
   id: string;
   topicId: string;
   name: string;
-  // The deck, AppData-relative. Either a deck the slides pipeline built
-  // (slides/<retellId>-<slug>.html) or a copy of one brought in from outside
-  // (rehearsals/<id>.html).
-  deckFile: string;
-  // The retell whose deck this is, or null when the deck came from outside.
-  // docs/43: the Rehearse button on a retell and the topic's Rehearsal section
-  // are two doors into one object, and this is the only thing that tells them
-  // apart afterwards.
+  // The outline being given (reading/talk/store.ts, outline-<id>.json).
+  // Required, where the deck it replaced was optional in everything but name:
+  // there is nothing to rehearse without one, and docs/44 makes it the object the
+  // whole loop turns on — the pass is given against it and the conversation
+  // afterwards edits it.
+  outlineId: string;
+  // The retell this came out of, or null. Kept beside the outline's own retellId
+  // rather than read through it: deleting a retell has to find the rehearsals to
+  // delete without opening every outline on disk.
   retellId: string | null;
   createdAt: number;
   updatedAt: number;
@@ -42,7 +43,7 @@ export interface NewRehearsalFields {
   id: string;
   topicId: string;
   name: string;
-  deckFile: string;
+  outlineId: string;
   retellId?: string | null;
   now: number;
 }
@@ -52,8 +53,8 @@ export function newRehearsal(fields: NewRehearsalFields): Rehearsal {
     version: REHEARSAL_VERSION,
     id: fields.id,
     topicId: fields.topicId,
-    name: fields.name.trim() || "Untitled deck",
-    deckFile: fields.deckFile,
+    name: fields.name.trim() || "Untitled talk",
+    outlineId: fields.outlineId,
     retellId: fields.retellId ?? null,
     createdAt: fields.now,
     updatedAt: fields.now,
@@ -66,20 +67,28 @@ export function newRehearsal(fields: NewRehearsalFields): Rehearsal {
 // existed, when the name held a retell id and the contents were a run log — they
 // are left on disk, unread and unmigrated, the same way the talk-<id>.json files
 // are (reading/retell/store.ts).
+//
+// It now also covers the rehearsals written against a deck, which carry a
+// deckFile and no outlineId (docs/43). Same treatment: unread, unmigrated, left
+// where they are, and so are their runs — nothing here writes over them, and
+// REHEARSAL_VERSION is deliberately unchanged (docs/43) so a device still on the
+// old build goes on reading them and sync goes on carrying them rather than
+// quarantining them. The alternative was inventing an outline to hang them on,
+// which is a talk nobody wrote under a history that really happened.
 export function normalizeRehearsal(raw: unknown): Rehearsal | null {
   const r = raw as Rehearsal | null;
   if (!r || typeof r !== "object") return null;
   if (r.version !== REHEARSAL_VERSION) return null;
   if (typeof r.id !== "string" || !r.id) return null;
   if (typeof r.topicId !== "string" || !r.topicId) return null;
-  if (typeof r.deckFile !== "string" || !r.deckFile) return null;
+  if (typeof r.outlineId !== "string" || !r.outlineId) return null;
   if (!Number.isFinite(r.createdAt)) return null;
   return {
     version: REHEARSAL_VERSION,
     id: r.id,
     topicId: r.topicId,
-    name: typeof r.name === "string" && r.name.trim() ? r.name : "Untitled deck",
-    deckFile: r.deckFile,
+    name: typeof r.name === "string" && r.name.trim() ? r.name : "Untitled talk",
+    outlineId: r.outlineId,
     retellId: typeof r.retellId === "string" && r.retellId ? r.retellId : null,
     createdAt: r.createdAt,
     updatedAt: Number.isFinite(r.updatedAt) ? r.updatedAt : r.createdAt,

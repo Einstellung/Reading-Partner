@@ -35,6 +35,9 @@ test("core user-data files are in range", () => {
     // deck they were given against does not.
     "rehearsal-1754400000000.json",
     "runs-rehearsal-1754400000000.json",
+    // The outline of a talk (docs/44): the thing a rehearsal is given against,
+    // written on whichever device the reader is holding.
+    "outline-1754400000000.json",
     "runs/1754400000000/8f1c0a52-3b7d-4c1e-9a2f-0d5e6b7c8a90.json",
     // The cross-scenario user profile and the info feedback log are the user's
     // data (docs/16); info-profile.md is the profile's old name, kept in range

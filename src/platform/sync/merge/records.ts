@@ -22,6 +22,7 @@ import {
 //   topics.json                { topics: Topic[] }, `id`       (platform/app/topics.ts)
 //   threads-<key>.json         { threads: Record<id, Thread> } (platform/app/threads.ts)
 //   runs-rehearsal-<id>.json   { runs: RehearsalRunEntry[] }, `id` (reading/rehearsal/store.ts)
+//   outline-<id>.json          { segments: TalkSegment[] }, `id` (reading/talk/store.ts)
 //   library.json               { books: Record<hash, Entry> }  (platform/app/library.ts)
 //   reading-state.json         { states: Record<bookId, ViewState> } (platform/app/storage.ts)
 //   info-feedback.jsonl        one JSON object per line        (observation/profile/feedback.ts)
@@ -49,6 +50,13 @@ export function recordShape(path: string): RecordShape | null {
   // and readCollection keeps it.
   if (name === "info-pool-marks.json") return { kind: "map", container: "marks", idField: null };
   if (/^annotations-.+\.json$/.test(name)) return { kind: "array", container: null, idField: "id" };
+  // A talk's segments, in the order the talk is given, each under an id minted
+  // where it was written (reading/talk/edit.ts). Everything else in the file —
+  // `spine` above all — is a wrapper key, and writeCollection merges those as
+  // fields, recursing into the spine's own keys.
+  if (/^outline-.+\.json$/.test(name)) {
+    return { kind: "array", container: "segments", idField: "id" };
+  }
   if (/^threads-.+\.json$/.test(name)) return { kind: "map", container: "threads", idField: null };
   // A rehearsal's passes, one row each, keyed by the run id the device that
   // recorded the pass minted (reading/rehearsal/store.ts). `version` and

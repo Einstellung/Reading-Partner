@@ -52,6 +52,7 @@ export {
   loadRunPages,
   readRehearsalDeck,
   rehearsalFile,
+  rehearsalForOutline,
   rehearsalForRetell,
   rehearsalRunsFile,
   REHEARSAL_DECK_DIR,

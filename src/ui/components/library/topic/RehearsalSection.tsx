@@ -17,7 +17,6 @@ import type { Topic } from "../../../../platform/app/topics";
 import {
   deleteRehearsal,
   importRehearsalDeck,
-  isImportedDeck,
   listRehearsalsForTopic,
   listAllRehearsals,
   loadRehearsalRuns,
@@ -29,7 +28,7 @@ import {
   type RehearsalRow,
   type RunCount,
 } from "../../../../reading/rehearsal";
-import { listDecks, type RetellEntry } from "../../../../reading/slides";
+import { listTalkOutlinesForTopic } from "../../../../reading/talk";
 import { listRetellsForTopic } from "../../../../reading/retell";
 import { Button } from "../../ui/button";
 import CardMenu from "../../shelf/CardMenu";
@@ -52,17 +51,20 @@ export default function RehearsalSection(props: {
   const [deleting, setDeleting] = useState<RehearsalRow | null>(null);
 
   const refresh = useCallback(async () => {
-    const [rehearsals, retells, decks] = await Promise.all([
+    const [rehearsals, retells, outlines] = await Promise.all([
       listRehearsalsForTopic(topic.id),
       listRetellsForTopic(topic.id),
-      listDecks().catch((): RetellEntry[] => []),
+      listTalkOutlinesForTopic(topic.id),
     ]);
-    const built = new Map<string, string>();
-    for (const d of decks) if (d.retellId) built.set(d.retellId, d.file);
+    // A retell is listed once it has arranged its talk (docs/44), which is what
+    // an outline of its own says. The deck it may also have built is nothing to
+    // this list any more.
+    const arranged = new Map<string, string>();
+    for (const o of outlines) if (o.retellId) arranged.set(o.retellId, o.id);
     const decked: DeckedRetell[] = [];
     for (const t of retells) {
-      const file = built.get(t.id);
-      if (file) decked.push({ retellId: t.id, name: t.name, deckFile: file });
+      const outlineId = arranged.get(t.id);
+      if (outlineId) decked.push({ retellId: t.id, name: t.name, outlineId });
     }
     // One read per rehearsal, of the index alone: what a pass said is a file of
     // its own (reading/rehearsal/store.ts), so a count here costs a few hundred
@@ -105,13 +107,12 @@ export default function RehearsalSection(props: {
           onStart(rehearsal);
           return;
         }
-        if (!row.retellId) throw new Error("That deck has nothing to rehearse against");
+        if (!row.retellId) throw new Error("That talk has nothing to rehearse against");
         onStart(
           await rehearsalForRetell({
             topicId: topic.id,
             retellId: row.retellId,
             name: row.name,
-            deckFile: row.deckFile,
           }),
         );
       } catch (e) {
@@ -202,7 +203,11 @@ export default function RehearsalSection(props: {
       {deleting?.id && (
         <DeleteRehearsalButton
           name={deleting.name}
-          imported={isImportedDeck(deleting.deckFile)}
+          // A rehearsal with no retell behind it is one a deck was brought in
+          // for, which is the only kind that has a copy of a file to lose. The
+          // path is no longer on the object (docs/44), so the row's own shape is
+          // what answers it.
+          imported={!deleting.retellId}
           open
           onOpenChange={(open) => !open && setDeleting(null)}
           onDelete={() => {

@@ -1,13 +1,13 @@
-// What the topic's Rehearsal section lists (docs/43, "入口"): every deck under
-// this topic that can be given, whether it was brought in from outside or came
-// out of a retell.
+// What the topic's Rehearsal section lists (docs/43, "入口"): every talk under
+// this topic that can be given, whether its outline came out of a retell or was
+// started on its own.
 //
-// A retell that has produced a deck belongs here before anyone has ever pressed
-// Rehearse on it — otherwise the section is empty for exactly the reader who has
-// already done the work, and the only door to the deck stays the retell's own
-// header. So the list is a join, and a row without an id is a rehearsal that has
-// not been created yet: pressing it creates one (store.ts's rehearsalForRetell),
-// which is how the two doors end at one object.
+// A retell that has produced an outline belongs here before anyone has ever
+// pressed Rehearse on it — otherwise the section is empty for exactly the reader
+// who has already done the work, and the only door to the talk stays the retell's
+// own header. So the list is a join, and a row without an id is a rehearsal that
+// has not been created yet: pressing it creates one (store.ts's
+// rehearsalForRetell), which is how the two doors end at one object.
 //
 // Pure. The reads are the section's, and the join is here so it can be tested.
 
@@ -19,7 +19,7 @@ import type { Rehearsal } from "./types";
 export interface DeckedRetell {
   retellId: string;
   name: string;
-  deckFile: string;
+  outlineId: string;
 }
 
 export interface RehearsalRow {
@@ -29,7 +29,7 @@ export interface RehearsalRow {
   id: string | null;
   retellId: string | null;
   name: string;
-  deckFile: string;
+  outlineId: string;
   runs: number;
   // When the last pass started, or null when there has not been one.
   lastRunAt: number | null;
@@ -62,7 +62,7 @@ export function rehearsalRows(
         id: r.id,
         retellId: r.retellId,
         name: r.name,
-        deckFile: r.deckFile,
+        outlineId: r.outlineId,
         runs: count?.runs ?? 0,
         lastRunAt: count?.lastRunAt ?? null,
       },
@@ -77,7 +77,7 @@ export function rehearsalRows(
         id: null,
         retellId: t.retellId,
         name: t.name,
-        deckFile: t.deckFile,
+        outlineId: t.outlineId,
         runs: 0,
         lastRunAt: null,
       },

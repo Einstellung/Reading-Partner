@@ -86,6 +86,12 @@ export function strategyFor(path: string): MergeStrategy {
   if (RECORD_FILES.has(name)) return "records";
   if (name === "settings.json" || name === "state.json") return "fields";
   if (/^annotations-.+\.json$/.test(name)) return "records";
+  // A talk's outline (docs/44). The segments are identified records — two
+  // devices working on different parts of the same talk must keep both, and
+  // opaque would park one whole file in a conflict copy nobody opens. The spine
+  // beside them is fields, which is what a record file's wrapper keys already
+  // get (writeCollection, records.ts), so one file covers both layers.
+  if (/^outline-.+\.json$/.test(name)) return "records";
   if (/^threads-.+\.json$/.test(name)) return "records";
   // A rehearsal's index of passes (docs/43): identified rows in a `runs` array,
   // and a row is a pass that happened — nothing ever edits one. Records, so two

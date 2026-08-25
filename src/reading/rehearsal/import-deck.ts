@@ -7,8 +7,15 @@
 // path outside AppData is a path that means nothing on the iPad, and on iOS the
 // picked file is handed over in a temporary inbox the system empties behind you
 // — so a reference would be a rehearsal that works once.
+//
+// Frozen (docs/44): the deck left the main line, the talk is rehearsed against an
+// outline and the slides are made outside the app. Kept and not deleted, and the
+// only thing changed here is what the rehearsal it makes hangs on — an empty
+// outline under the deck's own name, because a rehearsal without one is not a
+// thing this build has.
 
 import { appData } from "../../platform/app/appdata";
+import { startTalkOutline } from "../talk/store";
 import { importedDeckFile, REHEARSAL_DECK_DIR, reserveRehearsalId, saveRehearsal } from "./store";
 import { newRehearsal, type Rehearsal } from "./types";
 
@@ -57,7 +64,14 @@ export async function importRehearsalDeck(input: ImportDeckInput): Promise<Rehea
   // crash leaves no object behind to point at it, because the object is written
   // after this line.
   await appData.writeBytes(deckFile, bytes);
-  const rehearsal = newRehearsal({ id, topicId: input.topicId, name, deckFile, now: at });
+  const outline = await startTalkOutline({ topicId: input.topicId, name, now: at });
+  const rehearsal = newRehearsal({
+    id,
+    topicId: input.topicId,
+    name,
+    outlineId: outline.id,
+    now: at,
+  });
   await saveRehearsal(rehearsal);
   return rehearsal;
 }

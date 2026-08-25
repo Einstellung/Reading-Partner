@@ -71,6 +71,11 @@ test("the files the app writes are classified by what they hold", () => {
     "opaque",
   );
   expect(strategyFor("runs/1754400000000/state.json")).toBe("opaque");
+  // A talk's outline (docs/44). Records, not opaque and not fields: the segments
+  // are what two devices edit at once, and a name neither this nor syncFs.ts
+  // recognises would land in opaque, where one device's whole file wins and
+  // every segment the other wrote is only in a conflict copy.
+  expect(strategyFor("outline-1754400000000.json")).toBe("records");
   expect(strategyFor("notes-abc/state.json")).toBe("fields");
   expect(strategyFor("prep-abc/state.json")).toBe("fields");
   expect(strategyFor("notes-abc/chapter-01.md")).toBe("prose");
@@ -137,6 +142,56 @@ test("two devices that each recorded a pass keep both of them", () => {
   expect(merged.version).toBe(1);
   expect(out.copies).toEqual([]);
   expect(out.dropped).toEqual([]);
+});
+
+// A talk's outline is the one file the two layers of docs/44 share: the segments
+// merge as records, and the spine beside them as fields, recursing into its own
+// keys. One file can only have one strategy, and this is the pair that makes
+// records the right one to pick.
+test("two devices that each worked on a different part of the talk keep both", () => {
+  const segment = (id: string, title: string) => ({
+    id,
+    title,
+    cues: [],
+    material: [],
+    status: "shallow",
+    updatedAt: 1,
+  });
+  const outline = (spine: object, ...segments: object[]) =>
+    json({
+      version: 1,
+      id: "1754400000000",
+      topicId: "t",
+      retellId: null,
+      name: "A Brief History of Intelligence",
+      spine,
+      segments,
+      createdAt: 1,
+      updatedAt: 1,
+    });
+  const base = { thesis: "", backbone: [], audience: "", conventions: [], excluded: [] };
+  const out = merge(
+    "outline-1754400000000.json",
+    outline(base, segment("a", "Opening")),
+    outline(
+      { ...base, thesis: "Intelligence is a body problem" },
+      segment("a", "Opening, sharpened"),
+    ),
+    outline({ ...base, audience: "nobody here trains models" }, segment("a", "Opening"), segment("b", "The loop")),
+  );
+  const got = JSON.parse(text(out.merged)) as {
+    spine: { thesis: string; audience: string };
+    segments: { id: string; title: string }[];
+  };
+  // The segment one side edited and the other left alone, and the segment only
+  // one side has: both, as records.
+  expect(got.segments.map((s) => s.id).sort()).toEqual(["a", "b"]);
+  expect(got.segments.find((s) => s.id === "a")?.title).toBe("Opening, sharpened");
+  // The spine is beside the collection, so its keys merge one at a time.
+  expect(got.spine.thesis).toBe("Intelligence is a body problem");
+  expect(got.spine.audience).toBe("nobody here trains models");
+  expect(out.copies).toEqual([]);
+  expect(out.contested).toBe(false);
 });
 
 test("a record one side deleted and the other left alone is dropped", () => {

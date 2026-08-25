@@ -148,7 +148,10 @@ export function hasRecordedPages(events: readonly RehearsalEvent[]): boolean {
 
 export interface FinishRunInput {
   rehearsalId: string;
-  deckFile: string;
+  // What the pass was given against, when the caller had a file to name. Null
+  // where a rehearsal used to always carry one (docs/44), and already what
+  // BuiltRun holds.
+  deckFile: string | null;
   // Stamped by the caller at the moment the reader finished, not after the wait
   // below: the rehearsal ended when they stopped talking, not when the last
   // upload came back.

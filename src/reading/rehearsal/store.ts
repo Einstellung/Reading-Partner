@@ -3,9 +3,13 @@
 //   runs-rehearsal-<rehearsalId>.json    — the index of its passes, oldest first
 //   runs/<rehearsalId>/<runId>.json      — one pass's transcript
 //
+// The talk itself is not here: the outline is one file of its own
+// (reading/talk/store.ts) and this object points at it, because a talk outlives
+// any one history of passes over it.
+//
 // Three files rather than one because they are written at different rates and
 // cost different things to lose. The object is a few fields, rewritten when the
-// deck is rebuilt or the name changes. The index is appended to after every
+// name changes. The index is appended to after every
 // pass, and holds nothing that grows with how long the pass was. The transcript
 // is the only copy of what the reader actually said, and is written once.
 //
@@ -44,6 +48,7 @@
 
 import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
+import { talkOutlineForRetell } from "../talk/store";
 import { runEntryOf } from "./summary";
 import {
   emptyLog,
@@ -157,7 +162,7 @@ export async function listRehearsalsForTopic(topicId: string): Promise<Rehearsal
 export interface StartRehearsalInput {
   topicId: string;
   name: string;
-  deckFile: string;
+  outlineId: string;
   retellId?: string | null;
   now?: number;
 }
@@ -185,7 +190,7 @@ export async function startRehearsal(input: StartRehearsalInput): Promise<Rehear
     id,
     topicId: input.topicId,
     name: input.name,
-    deckFile: input.deckFile,
+    outlineId: input.outlineId,
     retellId: input.retellId ?? null,
     now: at,
   });
@@ -194,42 +199,68 @@ export async function startRehearsal(input: StartRehearsalInput): Promise<Rehear
 }
 
 /**
- * The rehearsal of a retell's deck, made if this is the first time. Both doors
+ * The rehearsal of one outline, made if this is the first time. One outline has
+ * one rehearsal: docs/44 makes a run "which segments were given this time" and
+ * not "the nth pass", so every pass over a talk belongs to one history and a
+ * second object would split it.
+ */
+export async function rehearsalForOutline(input: {
+  topicId: string;
+  outlineId: string;
+  name: string;
+  retellId?: string | null;
+  now?: number;
+}): Promise<Rehearsal> {
+  const now = input.now ?? Date.now();
+  const existing = (await listAllRehearsals()).find((r) => r.outlineId === input.outlineId);
+  if (!existing) {
+    return startRehearsal({
+      topicId: input.topicId,
+      name: input.name,
+      outlineId: input.outlineId,
+      retellId: input.retellId ?? null,
+      now,
+    });
+  }
+  if (existing.name === input.name) return existing;
+  const next: Rehearsal = { ...existing, name: input.name, updatedAt: now };
+  await saveRehearsal(next);
+  return next;
+}
+
+/**
+ * The rehearsal of a retell's talk, made if this is the first time. Both doors
  * into a rehearsal end here (docs/43): the Rehearse button on the retell's
  * header and the topic's Rehearsal section are asking for the same object, and
  * pressing Rehearse twice must not leave two histories behind.
  *
- * The name and the deck are refreshed on the way through, because both follow
- * the retell: renaming it changes the deck's slug, and the file the last pass
- * was given against is then gone.
+ * The outline goes through the same find-or-create (reading/talk/store.ts), so a
+ * retell whose conversation has not arranged anything yet gets an empty outline
+ * rather than a second one. Whether that door should be open before there is
+ * anything on the outline is the screen's question, not this one's.
+ *
+ * The name is refreshed on the way through, because it follows the retell.
  */
 export async function rehearsalForRetell(input: {
   topicId: string;
   retellId: string;
   name: string;
-  deckFile: string;
   now?: number;
 }): Promise<Rehearsal> {
   const now = input.now ?? Date.now();
-  const existing = (await listAllRehearsals()).find((r) => r.retellId === input.retellId);
-  if (!existing) {
-    return startRehearsal({
-      topicId: input.topicId,
-      name: input.name,
-      deckFile: input.deckFile,
-      retellId: input.retellId,
-      now,
-    });
-  }
-  if (existing.name === input.name && existing.deckFile === input.deckFile) return existing;
-  const next: Rehearsal = {
-    ...existing,
+  const outline = await talkOutlineForRetell({
+    topicId: input.topicId,
+    retellId: input.retellId,
     name: input.name,
-    deckFile: input.deckFile,
-    updatedAt: now,
-  };
-  await saveRehearsal(next);
-  return next;
+    now,
+  });
+  return rehearsalForOutline({
+    topicId: input.topicId,
+    outlineId: outline.id,
+    name: input.name,
+    retellId: input.retellId,
+    now,
+  });
 }
 
 export async function renameRehearsal(
@@ -471,14 +502,22 @@ export function splitRehearsalRunPagesOnce(): Promise<number> {
 
 /**
  * Drop a rehearsal: the object, the index of its passes, every transcript under
- * it, the rescue copy if there is one, and the deck when the deck is this
- * rehearsal's own copy. A deck the slides pipeline built stays where it is — the
- * retell owns that one.
+ * it, the rescue copy if there is one, and the deck this rehearsal has a copy of
+ * its own. Not the outline — a talk outlives the history of one set of passes
+ * over it — and not a deck the slides pipeline built, which the retell owns.
+ *
+ * The imported copy is named from the rehearsal's own id (importedDeckFile), so
+ * it is removed by name rather than by reading the object for a path: the deck
+ * left the rehearsal (docs/44) and the object no longer carries one, and a
+ * remove of a name nothing put there is a file that is not found.
  */
 export async function deleteRehearsal(rehearsalId: string): Promise<void> {
-  const rehearsal = await loadRehearsal(rehearsalId);
-  const files = [rehearsalFile(rehearsalId), rehearsalRunsFile(rehearsalId), badFile(rehearsalId)];
-  if (rehearsal && isImportedDeck(rehearsal.deckFile)) files.push(rehearsal.deckFile);
+  const files = [
+    rehearsalFile(rehearsalId),
+    rehearsalRunsFile(rehearsalId),
+    badFile(rehearsalId),
+    importedDeckFile(rehearsalId),
+  ];
   for (const file of files) {
     try {
       if (await appData.exists(file)) await appData.remove(file);

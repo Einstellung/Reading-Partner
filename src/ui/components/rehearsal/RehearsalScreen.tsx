@@ -6,7 +6,7 @@
 // full-screen cover mounted there would be clipped by it.
 
 import { useEffect, useState } from "react";
-import type { Rehearsal, TranscriptSource } from "../../../reading/rehearsal";
+import { importedDeckFile, type Rehearsal, type TranscriptSource } from "../../../reading/rehearsal";
 import RehearsalView from "./RehearsalView";
 import { openTranscriptSource } from "./start";
 
@@ -50,6 +50,11 @@ export default function RehearsalScreen(props: {
   return (
     <RehearsalView
       rehearsal={props.rehearsal}
+      // The one deck a rehearsal can still name by itself: the copy an import
+      // made under its own id. A retell's build is not reachable from here any
+      // more (docs/44 — the deck left the object), and a rehearsal that has none
+      // shows the view's "no deck" line until the outline pane replaces it.
+      deckFile={importedDeckFile(props.rehearsal.id)}
       backLabel="Back to the topic"
       transcript={transcript ?? undefined}
       onExit={props.onBack}

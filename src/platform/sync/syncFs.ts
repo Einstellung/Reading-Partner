@@ -100,6 +100,13 @@ export function inSyncRange(path: string): boolean {
       // travels like marks and threads rather than like a cache. The deck it
       // produces (slides/**) stays out: that is a build output.
       /^retell-.+\.json$/.test(top) ||
+      // The outline of a talk (docs/44): the spine and the segments the reader
+      // rehearses against. Written on whichever device the reader is holding and
+      // edited a segment at a time, so it is one of the few files two devices
+      // genuinely change at once — which is what the records strategy is for
+      // (platform/sync/merge/contract.ts). Nothing rebuilds it: the retell's
+      // chapter decisions are its material, not its structure.
+      /^outline-.+\.json$/.test(top) ||
       // A rehearsal and the index of its passes (docs/43): the deck the reader
       // gives over and over, and one row per time they gave it. A trace, not a
       // derivation — no deck and no book rebuilds it. The transcripts are one

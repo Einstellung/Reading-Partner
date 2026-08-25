@@ -62,12 +62,12 @@ test("a rehearsal written comes back the way it went in", async () => {
   const made = await startRehearsal({
     topicId: "topic-1",
     name: "A Brief History of Intelligence",
-    deckFile: "rehearsals/1.html",
+    outlineId: "o-1",
     now: 1,
   });
   const read = await loadRehearsal(made.id);
   expect(read?.name).toBe("A Brief History of Intelligence");
-  expect(read?.deckFile).toBe("rehearsals/1.html");
+  expect(read?.outlineId).toBe("o-1");
   expect(read?.retellId).toBeNull();
   expect((await listRehearsalsForTopic("topic-1")).map((r) => r.id)).toEqual([made.id]);
   expect(await listRehearsalsForTopic("topic-2")).toEqual([]);
@@ -77,7 +77,7 @@ test("the runs file is not seen by the listing", async () => {
   const made = await startRehearsal({
     topicId: "topic-1",
     name: "Deck",
-    deckFile: "rehearsals/1.html",
+    outlineId: "o-1",
     now: 5,
   });
   await appendRun(aRun("r1", { rehearsalId: made.id }));
@@ -88,12 +88,11 @@ test("the runs file is not seen by the listing", async () => {
 
 // docs/43: the Rehearse button on a retell and the topic's Rehearsal section are
 // two doors into one object.
-test("both doors into a retell's deck reach the same rehearsal", async () => {
+test("both doors into a retell's talk reach the same rehearsal", async () => {
   const input = {
     topicId: "topic-1",
     retellId: "900",
     name: "Eye and Brain",
-    deckFile: "slides/900-eye-and-brain.html",
   };
   const first = await rehearsalForRetell({ ...input, now: 10 });
   const second = await rehearsalForRetell({ ...input, now: 20 });
@@ -102,34 +101,32 @@ test("both doors into a retell's deck reach the same rehearsal", async () => {
   expect(first.retellId).toBe("900");
 });
 
-// The deck's file name carries the retell's slug, so renaming the retell and
-// rebuilding moves the file the last pass was given against.
-test("a retell that was renamed and rebuilt updates its rehearsal in place", async () => {
+// The name follows the retell, and one retell keeps one outline however often
+// it is renamed.
+test("a retell that was renamed updates its rehearsal in place", async () => {
   const first = await rehearsalForRetell({
     topicId: "topic-1",
     retellId: "900",
     name: "Eye and Brain",
-    deckFile: "slides/900-eye-and-brain.html",
     now: 10,
   });
   const second = await rehearsalForRetell({
     topicId: "topic-1",
     retellId: "900",
     name: "Seeing",
-    deckFile: "slides/900-seeing.html",
     now: 20,
   });
   expect(second.id).toBe(first.id);
   expect(second.name).toBe("Seeing");
-  expect(second.deckFile).toBe("slides/900-seeing.html");
-  expect((await loadRehearsal(first.id))?.deckFile).toBe("slides/900-seeing.html");
+  expect(second.outlineId).toBe(first.outlineId);
+  expect((await loadRehearsal(first.id))?.name).toBe("Seeing");
 });
 
 test("renaming keeps the runs", async () => {
   const made = await startRehearsal({
     topicId: "topic-1",
     name: "Deck",
-    deckFile: "rehearsals/1.html",
+    outlineId: "o-1",
     now: 3,
   });
   await appendRun(aRun("r1", { rehearsalId: made.id }));
@@ -163,7 +160,7 @@ test("a new rehearsal steps over a file left under the id it wanted", async () =
   const made = await startRehearsal({
     topicId: "topic-1",
     name: "Deck",
-    deckFile: "rehearsals/x.html",
+    outlineId: "o-x",
     now: 5,
   });
   expect(made.id).toBe("6");
@@ -477,8 +474,8 @@ test("an empty inlined transcript drops its key and writes no file", async () =>
 });
 
 test("the split covers every rehearsal on the device, and one bad log is its own", async () => {
-  const a = await startRehearsal({ topicId: "t", name: "A", deckFile: "rehearsals/a.html", now: 1 });
-  const b = await startRehearsal({ topicId: "t", name: "B", deckFile: "rehearsals/b.html", now: 2 });
+  const a = await startRehearsal({ topicId: "t", name: "A", outlineId: "o-a", now: 1 });
+  const b = await startRehearsal({ topicId: "t", name: "B", outlineId: "o-b", now: 2 });
   disk.files.set(rehearsalRunsFile(a.id), inlinedLog(a.id, ["r1"]));
   disk.files.set(rehearsalRunsFile(b.id), inlinedLog(b.id, ["r2"]));
   disk.unreadable.add(rehearsalRunsFile(a.id));
@@ -493,7 +490,7 @@ test("deleting takes the object, the runs, the rescue copy and an imported deck"
   const made = await startRehearsal({
     topicId: "topic-1",
     name: "Deck",
-    deckFile: "rehearsals/7.html",
+    outlineId: "o-7",
     now: 7,
   });
   disk.files.set("rehearsals/7.html", "<html></html>");
@@ -509,13 +506,13 @@ test("deleting takes the object, the runs, the rescue copy and an imported deck"
   expect(disk.files.has(runPagesFile(made.id, "r1")!)).toBe(false);
 });
 
-// A deck the slides pipeline built belongs to its retell, not to the rehearsal.
+// A deck the slides pipeline built belongs to its retell, not to the rehearsal:
+// the delete only ever takes the copy named after the rehearsal's own id.
 test("deleting a rehearsal leaves a built deck where it is", async () => {
   const made = await rehearsalForRetell({
     topicId: "topic-1",
     retellId: "900",
     name: "Eye and Brain",
-    deckFile: "slides/900-eye-and-brain.html",
     now: 10,
   });
   disk.files.set("slides/900-eye-and-brain.html", "<html></html>");
@@ -528,13 +525,12 @@ test("deleting a retell takes the rehearsal of its deck and nobody else's", asyn
     topicId: "topic-1",
     retellId: "900",
     name: "Mine",
-    deckFile: "slides/900-mine.html",
     now: 10,
   });
   const other = await startRehearsal({
     topicId: "topic-1",
     name: "Brought in",
-    deckFile: "rehearsals/11.html",
+    outlineId: "o-11",
     now: 11,
   });
   await deleteRehearsalsForRetell("900");
