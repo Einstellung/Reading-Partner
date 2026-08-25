@@ -12,9 +12,15 @@
 //             sentences printed for the audience to read; loaded as cues they
 //             would be exactly the script docs/44 says rehearsing must not be
 //             done against. The hooks come out of talking to the coach.
-//   images    TalkMaterial's figure has no path field and the picture files
-//             stay outside the app. The alt text comes across instead, which is
-//             specific enough to say what the reader points at.
+//   pictures  TalkMaterial's figure has no path field and neither the picture
+//             files nor the deck's hand-drawn SVGs come across. What does is
+//             what each of them already says about itself — an <img>'s alt, an
+//             <svg>'s aria-label — which is specific enough to say what the
+//             reader is pointing at while he talks.
+//   symbols    A `<span class="tex">` is one symbol inside a sentence, and the
+//             sentences are not carried. Out of context `Z` and `d_k` are not
+//             material, they are 267 stacked one-letter formulas. Only the
+//             display formulas, `.tex-block`, come across.
 //   status    Everything is `shallow`: drafted, never said out loud.
 //
 // Usage:
@@ -86,9 +92,10 @@ function classes(attrs: string): Set<string> {
 
 // The three class names are one thing branched by page type (the deck's own
 // bridge reads them the same way): a cover, a part divider and a content page
-// each name themselves differently. A pull-quote page is the whole quote and has
-// none of them — its title is the empty string, and the quote is not promoted
-// into it.
+// each name themselves differently. A page that is one question or one
+// quotation has none of them, and is handled below — the bridge reports an
+// empty title for those because it is telling a host which page is up, and an
+// outline segment with no title is a different matter.
 const TITLE_CLASSES = ["slide-title", "cover-title", "part-name"];
 
 export interface ParsedSlide {
@@ -111,15 +118,21 @@ export function parseSlide(html: string): ParsedSlide {
   for (let m = OPEN_TAG.exec(html); m; m = OPEN_TAG.exec(html)) {
     const [whole, tag, attrs] = m;
     const cls = classes(attrs);
-    if (tag.toLowerCase() === "img") {
-      // A figure with nothing said about it carries nothing: the cover's
+    const lower = tag.toLowerCase();
+    if (lower === "img" || lower === "svg") {
+      // The two kinds of picture, read the same way: each already carries a
+      // sentence saying what it shows, for a reader who cannot see it. A
+      // picture with nothing said about it carries nothing — the cover's
       // decorative band has alt="" and would be dropped by normalizeSegment on
-      // the way back in anyway.
-      const description = textOf(attr(attrs, "alt") ?? "");
+      // the way back in anyway — so it is skipped rather than guessed at.
+      const said = lower === "img" ? attr(attrs, "alt") : attr(attrs, "aria-label");
+      const description = textOf(said ?? "");
       if (description) material.push({ kind: "figure", description });
       continue;
     }
-    const isTex = cls.has("tex") || cls.has("tex-block");
+    // `.tex-block` only. The class list is read as tokens, so `tex-block
+    // claim-tex` is one of these and an inline `tex` is not.
+    const isTex = cls.has("tex-block");
     if (!isTex && !cls.has("kicker") && !TITLE_CLASSES.some((c) => cls.has(c))) continue;
     // Every element of interest in this deck is a leaf holding plain text, so
     // the first matching close tag is its own.
@@ -136,7 +149,23 @@ export function parseSlide(html: string): ParsedSlide {
       title = textOf(inner);
     }
   }
+  // A page that is one question, or one quotation, has no title element at all.
+  // An outline segment with no title is a row carrying nothing but its number,
+  // so the question is the title: it is what the segment is, not a sentence the
+  // audience reads off a slide.
+  if (!title) title = quoteTitle(html);
   return { act, title, material };
+}
+
+/** The quotation on a page that is nothing but one, or "". */
+function quoteTitle(html: string): string {
+  const block = /<blockquote\b[^>]*>([\s\S]*?)<\/blockquote>/i.exec(html);
+  if (!block) return "";
+  // The footer is the "why this is not obvious" line under the question — the
+  // body of the page rather than its name, and it goes nowhere.
+  const body = block[1].replace(/<footer\b[\s\S]*?<\/footer>/gi, "");
+  const p = /<p\b[^>]*>([\s\S]*?)<\/p>/i.exec(body);
+  return textOf(p ? p[1] : body);
 }
 
 // ---------------------------------------------------------------- NOTES.md

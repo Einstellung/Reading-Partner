@@ -40,10 +40,12 @@ const NOTES = `# 从零训练一个 miniGPT · 分享用 deck
 **整场不出现任何代码。** 描述改动一律用数学语言。写页面的规矩全在 \`AGENTS.md\`。
 `;
 
-// A cover (cover-title, and a band whose alt is empty), a pull-quote-shaped ask
-// page (a kicker and no title element at all), a derivation (inline TeX beside
-// block TeX, and one of the three characters the deck writes as a control
-// sequence), and a plate (an img with real alt text).
+// A cover (cover-title, and a band whose alt is empty), an ask page (a kicker,
+// no title element at all, and the question that has to become one), a
+// derivation (inline TeX beside block TeX, one of the characters the deck
+// writes as a control sequence, and two hand-drawn figures of which only the
+// one that says what it shows can come across), and a plate (an img with real
+// alt text).
 const SLIDES: SlideFile[] = [
   {
     name: "01-cover.html",
@@ -56,7 +58,10 @@ const SLIDES: SlideFile[] = [
     name: "02-ask.html",
     html: `<div class="slide slide--ask">
   <header class="slide-head"><p class="kicker">二 · 模型结构</p></header>
-  <blockquote class="ask"><p>内积为何可以作为接近程度的度量</p></blockquote>
+  <blockquote class="ask">
+    <p>内积为何可以作为接近程度的度量</p>
+    <footer>向量的分量由训练得到，单个分量并不对应可命名的属性</footer>
+  </blockquote>
 </div>`,
   },
   {
@@ -66,8 +71,12 @@ const SLIDES: SlideFile[] = [
     <p class="kicker">二 · 模型结构</p>
     <h2 class="slide-title">缩放因子的<em>来源</em></h2>
   </header>
-  <p class="step-why">记为 <span class="tex">Z</span>，且 <span class="tex">s\\lt 1</span></p>
-  <div class="tex-block claim-tex">\\alpha_i=\\frac{e^{s_i}}{Z}</div>
+  <p class="step-why">记为 <span class="tex">Z</span>，且 <span class="tex">d_k</span></p>
+  <div class="tex-block claim-tex">\\alpha_i=\\frac{e^{s_i}}{Z},\\quad s\\lt 1</div>
+  <svg class="diagram" viewBox="0 0 10 10" role="img" aria-label="α(1−α) 的曲线，两端取零">
+    <text class="dg-num" x="1" y="1">0.25</text>
+  </svg>
+  <svg class="rule" viewBox="0 0 10 1"><line x1="0" y1="0" x2="10" y2="0" /></svg>
 </div>`,
   },
   {
@@ -102,20 +111,27 @@ test("a slide gives up its act, its title and its material in page order", () =>
   // alt="" is a figure with nothing said about it, and is not carried.
   expect(cover.material).toEqual([]);
 
-  // A page that is one quote has no title element, and the quote is not
-  // promoted into the title.
+  // A page that is one question has no title element, so the question becomes
+  // the title — a segment with no title is a row with nothing on it but its
+  // number. The footer under the question is the body of the page and stays
+  // where it is.
   const ask = parseSlide(SLIDES[1].html);
   expect(ask.act).toBe("二 · 模型结构");
-  expect(ask.title).toBe("");
+  expect(ask.title).toBe("内积为何可以作为接近程度的度量");
+  expect(ask.material).toEqual([]);
 
   const derive = parseSlide(SLIDES[2].html);
   expect(derive.title).toBe("缩放因子的来源");
   expect(derive.material).toEqual([
-    { kind: "tex", tex: "Z" },
-    // The deck writes `\lt` rather than `<` and does not escape its TeX: the
-    // source has to arrive exactly as written.
-    { kind: "tex", tex: "s\\lt 1" },
-    { kind: "tex", tex: "\\alpha_i=\\frac{e^{s_i}}{Z}" },
+    // Only the display formula. The two inline `tex` spans are symbols inside a
+    // sentence, and the sentence is not carried, so out of context they are
+    // nothing. The deck writes `\lt` rather than `<` and does not escape its
+    // TeX: the source has to arrive exactly as written.
+    { kind: "tex", tex: "\\alpha_i=\\frac{e^{s_i}}{Z},\\quad s\\lt 1" },
+    // A hand-drawn figure reads like a photographed one: what it says about
+    // itself is the description. The rule below it says nothing and is skipped
+    // rather than described.
+    { kind: "figure", description: "α(1−α) 的曲线，两端取零" },
   ]);
 
   const plate = parseSlide(SLIDES[3].html);
@@ -148,7 +164,7 @@ test("what is written comes back through the app's own read path", async () => {
   expect(read?.segments.length).toBe(SLIDES.length);
   expect(read?.segments.map((s) => s.title)).toEqual([
     "从零训练一个 miniGPT",
-    "",
+    "内积为何可以作为接近程度的度量",
     "缩放因子的来源",
     "词元嵌入",
   ]);
@@ -201,6 +217,12 @@ test.if(haveDeck)("the miniGPT deck imports as 47 segments the app can read", as
   // Left empty on purpose: the deck's notes are the audience's sentences, and
   // the hooks are what talking to the coach produces.
   expect(segments.every((s) => s.cues.length === 0)).toBe(true);
+  // Every segment says what it is. The three question pages carry no title
+  // element, and their question is now their name.
+  expect(segments.every((s) => s.title !== "")).toBe(true);
+  expect(segments[13].title).toBe("内积为何可以作为两个词元表示接近程度的度量");
+  expect(segments[21].title).toBe("特征维度既已固定，多头注意力为何是切分而非增维");
+  expect(segments[29].title).toBe("层数增加为何会使训练难以进行");
 
   expect(read?.spine.thesis).toBe("三个约束怎么把一个式子逼成 Transformer");
   expect(read?.spine.audience).toBe("有算法背景但没手写过 attention 的同事");
@@ -213,8 +235,14 @@ test.if(haveDeck)("the miniGPT deck imports as 47 segments the app can read", as
   expect(segments.slice(0, 5).every((s) => s.act === undefined)).toBe(true);
   expect(segments[5].act).toBe("一 · 问题与目标");
 
+  // The display formulas and nothing else: 66 `.tex-block`s across the deck,
+  // where the 201 inline spans beside them are symbols in sentences that are
+  // not carried.
   const tex = segments.flatMap((s) => s.material.filter((m) => m.kind === "tex"));
-  expect(tex.length).toBeGreaterThan(200);
+  expect(tex.length).toBe(66);
+  // A screenful is the limit a segment is meant to hold (docs/44), so nothing
+  // here may arrive as a stack of one-letter formulas.
+  expect(Math.max(...segments.map((s) => s.material.length))).toBeLessThanOrEqual(6);
   // Unescaped TeX survived the round trip through JSON and the load-time
   // repair. `\lt` is the deck's way of writing `<`, and no raw angle bracket
   // may appear — one would have ended the element early and cut the formula.
@@ -235,8 +263,10 @@ test.if(haveDeck)("the miniGPT deck imports as 47 segments the app can read", as
     ),
   ).toBe(true);
 
+  // Eight photographed figures with alt text, plus the sixteen hand-drawn SVGs
+  // with an aria-label. The cover's decorative band has alt="" and is not one.
   const figures = segments.flatMap((s) => s.material.filter((m) => m.kind === "figure"));
-  expect(figures.length).toBe(8);
+  expect(figures.length).toBe(24);
   // No path and no figId: the picture files stay outside the app, and an id
   // nothing minted would be one invented here.
   expect(figures.every((m) => m.kind === "figure" && !m.figId && m.description)).toBe(true);
