@@ -36,7 +36,7 @@ import { rehearsalReadiness } from "../rehearsal/rehearsal";
 import { openTranscriptSource } from "../rehearsal/start";
 import {
   useRehearsalRuns,
-  useRetellDeckFile,
+  useRetellOutline,
   useRetellRehearsal,
 } from "../rehearsal/useRehearsal";
 import { useRetell } from "./useRetell";
@@ -90,7 +90,7 @@ export default function RetellView(props: {
   const [preparing, setPreparing] = useState(false);
   const rehearse = () => {
     const target = retell.retell;
-    if (!target || !deck.file) return;
+    if (!target || !talk.outline) return;
     setPreparing(true);
     void Promise.all([
       rehearsalForRetell({
@@ -113,11 +113,15 @@ export default function RetellView(props: {
       })
       .finally(() => setPreparing(false));
   };
-  // Bumped when the deck dialog closes: a deck generated in this sitting has to
-  // turn Rehearse on in this sitting.
-  const [deckKey, setDeckKey] = useState(0);
-  const deck = useRetellDeckFile(props.retellId, deckKey);
-  const readiness = rehearsalReadiness({ deckFile: deck.file, loading: deck.loading, preparing });
+  // The talk this retell has arranged, re-read as the conversation grows: the
+  // arrangement comes out of the last exchange of the retell (docs/44), so the
+  // outline that turns Rehearse on is written mid-sitting, by the turn that has
+  // just finished.
+  const talk = useRetellOutline(props.retellId, retell.messages.length);
+  const readiness = rehearsalReadiness({
+    segments: talk.loading ? null : (talk.outline?.segments.length ?? 0),
+    preparing,
+  });
   // Bumped when a run reaches the disk, not when the rehearsal is left: the two
   // are seconds apart, because the run waits for the last of the speech to come
   // back from STT (docs/43). It is the only moment this device changes the
@@ -240,10 +244,10 @@ export default function RetellView(props: {
           )}
         </div>
 
-        {rehearsing && (
+        {rehearsing && talk.outline && (
           <RehearsalView
             rehearsal={rehearsing}
-            deckFile={deck.file}
+            outline={talk.outline}
             backLabel="Back to the retell"
             transcript={transcript ?? undefined}
             onExit={() => {
@@ -258,10 +262,7 @@ export default function RetellView(props: {
           <DeckDialog
             retellId={retell.retell.id}
             retellName={retell.retell.name}
-            onClose={() => {
-              setDeckOpen(false);
-              setDeckKey((n) => n + 1);
-            }}
+            onClose={() => setDeckOpen(false)}
           />
         )}
 

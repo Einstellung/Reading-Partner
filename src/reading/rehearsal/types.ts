@@ -97,12 +97,21 @@ export function normalizeRehearsal(raw: unknown): Rehearsal | null {
 
 export const RUN_LOG_VERSION = 1 as const;
 
-// One slide, for as long as the rehearsal was on it. A page the reader came
+// One segment, for as long as the rehearsal was on it. A segment the reader came
 // back to is still one entry: `enteredAt` is the first arrival, `leftAt` the
 // last departure, and `transcript` holds both visits.
+//
+// Still called a page because that is what buildRun calls the stretch of a run
+// spent on one thing, and buildRun is untouched (docs/44): only the signal
+// changed, from a deck reporting a page turn to the Next button on the outline
+// panel.
 export interface RehearsalPage {
-  index: number; // 0-based slide index
-  kind: string; // as reported by the deck
+  index: number; // 0-based position in the outline
+  // The id of the outline segment that was up (reading/talk/types.ts), carried
+  // through the event's `slideKind`. A pass recorded against a deck has the
+  // deck's own slide kind here instead; those passes belong to rehearsals this
+  // build no longer opens (normalizeRehearsal), so nothing reads one as an id.
+  kind: string;
   title: string;
   enteredAt: number; // host clock, ms
   leftAt: number | null; // null for the page that was up when the run ended
@@ -119,6 +128,9 @@ export interface BuiltRun {
   id: string;
   ordinal: number; // 1 for this rehearsal's first pass; the store assigns it
   rehearsalId: string;
+  // Frozen at null since the pass is given against an outline (docs/44). Still
+  // on the shape because buildRun copies it across and buildRun is not being
+  // touched; nothing reads it back.
   deckFile: string | null;
   startedAt: number;
   endedAt: number | null;
@@ -142,10 +154,25 @@ export interface RehearsalRunEntry {
   // the number a list shows, and the pages that used to answer it are no longer
   // in this file.
   lastMomentAt: number;
-  // What a row says about the pages, counted once, when the run was written.
-  // Same reason: drawing ten rows must not open ten transcripts.
-  pagesTotal: number;
-  pagesSpoken: number;
+  // Which segments this pass covered, in the order they were first reached, and
+  // which of those anything was actually said to. Written once, when the run
+  // was written, for the same reason the counts were: drawing ten rows must not
+  // open ten transcripts.
+  //
+  // Ids and not counts, because a run is "the segments given this time" and no
+  // longer "the nth time through" (docs/44). Going over one segment five times
+  // is five runs of one segment each, and a whole pass is only the run that
+  // happens to cover them all — neither of which a total could say. Ids rather
+  // than positions for the same reason a segment carries one: the outline is
+  // reordered between passes and a position stops meaning what it meant.
+  //
+  // Empty on a pass recorded against a deck, which had pages and no segments.
+  // That is tolerated rather than migrated: RUN_LOG_VERSION is deliberately
+  // unchanged (docs/43 — a version bump makes an older build quarantine every
+  // file it syncs and then write its own empty history over the top), and the
+  // rehearsals those passes belong to are not ones this build opens.
+  segmentIds: string[];
+  spokenSegmentIds: string[];
   wordsSpoken: number;
   // Where the transcript used to sit, before it moved into a file of its own.
   // Still read: a log written by a build that predates the split carries it, and
@@ -180,6 +207,11 @@ export interface RehearsalLog {
 // build step (build.ts) turns a list of these into a run; nothing accumulates
 // state during the run itself, so a run that ends badly still yields whatever
 // was collected before it did.
+//
+// The segment event kept the shape the deck's page turn had (docs/44): the
+// signal now comes from the Next button on the outline panel, `index` is the
+// segment's position in the outline and `slideKind` carries its id, and
+// buildRun goes on hanging each utterance on whatever was up when it started.
 export type RehearsalEvent =
   | { kind: "slide"; at: number; index: number; slideKind: string; title: string }
   | { kind: "utterance"; at: number; endedAt: number; text: string }
@@ -266,6 +298,20 @@ function count(value: unknown): number {
   return Number.isFinite(value) && (value as number) >= 0 ? Math.round(value as number) : 0;
 }
 
+// A stored list of segment ids. Anything that is not a list of distinct
+// non-empty strings reads as the empty list, which is also what a pass given
+// against a deck reads as.
+function segmentIds(raw: unknown): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const id of Array.isArray(raw) ? raw : []) {
+    if (typeof id !== "string" || !id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
 function normalizeRunEntry(raw: unknown, rehearsalId: string): RehearsalRunEntry | null {
   const run = raw as RehearsalRunEntry | null;
   if (!run || typeof run !== "object") return null;
@@ -287,8 +333,8 @@ function normalizeRunEntry(raw: unknown, rehearsalId: string): RehearsalRunEntry
     lastMomentAt: Number.isFinite(run.lastMomentAt)
       ? run.lastMomentAt
       : lastMomentFrom(run.startedAt, endedAt, inlined ?? []),
-    pagesTotal: count(run.pagesTotal),
-    pagesSpoken: count(run.pagesSpoken),
+    segmentIds: segmentIds(run.segmentIds),
+    spokenSegmentIds: segmentIds(run.spokenSegmentIds),
     wordsSpoken: count(run.wordsSpoken),
   };
   if (inlined !== null) entry.pages = inlined;

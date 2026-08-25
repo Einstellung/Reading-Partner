@@ -17,9 +17,38 @@ export interface RunSummary {
   // the run itself for anything that needs them; this is the number a list
   // shows and the number two runs are compared on.
   minutes: number;
-  pagesTotal: number;
-  pagesSpoken: number;
+  // How many segments this pass covered, and how many of those were spoken to.
+  // Not "of how many the talk has": the outline is not open here, it changes
+  // between passes, and covering three of twelve on purpose is a run and not a
+  // shortfall (docs/44).
+  segments: number;
+  segmentsSpoken: number;
   wordsSpoken: number;
+}
+
+// The segment a stretch of a run belongs to. The id rides in on the event's
+// `slideKind` and buildRun copies it to the page's `kind` (types.ts); reading it
+// through a name is what keeps that one indirection in one place.
+export function segmentIdOf(page: RehearsalPage): string {
+  return page.kind;
+}
+
+// Which segments a pass covered, and which of them were spoken to, in the order
+// buildRun left them. A page with no id belongs to no segment and is left out of
+// both — that is a pass recorded against a deck, whose pages were never segments.
+export function coverageOf(pages: readonly RehearsalPage[]): {
+  segmentIds: string[];
+  spokenSegmentIds: string[];
+} {
+  const segmentIds: string[] = [];
+  const spokenSegmentIds: string[] = [];
+  for (const page of pages) {
+    const id = segmentIdOf(page);
+    if (!id || segmentIds.includes(id)) continue;
+    segmentIds.push(id);
+    if (spoken(page)) spokenSegmentIds.push(id);
+  }
+  return { segmentIds, spokenSegmentIds };
 }
 
 // A run cut short — the app was closed, the process died — has no endedAt. The
@@ -38,6 +67,7 @@ function lastMoment(run: { startedAt: number; endedAt: number | null; pages: Reh
 // with the pages left out because they are about to become a file of their own.
 export function runEntryOf(run: BuiltRun): RehearsalRunEntry {
   const counts = countPages(run.pages);
+  const covered = coverageOf(run.pages);
   return {
     id: run.id,
     ordinal: run.ordinal,
@@ -46,8 +76,8 @@ export function runEntryOf(run: BuiltRun): RehearsalRunEntry {
     startedAt: run.startedAt,
     endedAt: run.endedAt,
     lastMomentAt: lastMoment(run),
-    pagesTotal: run.pages.length,
-    pagesSpoken: counts.pagesSpoken,
+    segmentIds: covered.segmentIds,
+    spokenSegmentIds: covered.spokenSegmentIds,
     wordsSpoken: counts.wordsSpoken,
   };
 }
@@ -69,12 +99,13 @@ export function runSummary(entry: RehearsalRunEntry): RunSummary {
   // keeps a list draw free of writes; the split (store.ts) is what settles it.
   if (entry.pages) {
     const counts = countPages(entry.pages);
+    const covered = coverageOf(entry.pages);
     return {
       ordinal: entry.ordinal,
       startedAt: entry.startedAt,
       minutes: minutes(entry.startedAt, lastMoment({ ...entry, pages: entry.pages })),
-      pagesTotal: entry.pages.length,
-      pagesSpoken: counts.pagesSpoken,
+      segments: covered.segmentIds.length,
+      segmentsSpoken: covered.spokenSegmentIds.length,
       wordsSpoken: counts.wordsSpoken,
     };
   }
@@ -82,8 +113,8 @@ export function runSummary(entry: RehearsalRunEntry): RunSummary {
     ordinal: entry.ordinal,
     startedAt: entry.startedAt,
     minutes: minutes(entry.startedAt, entry.lastMomentAt),
-    pagesTotal: entry.pagesTotal,
-    pagesSpoken: entry.pagesSpoken,
+    segments: entry.segmentIds.length,
+    segmentsSpoken: entry.spokenSegmentIds.length,
     wordsSpoken: entry.wordsSpoken,
   };
 }

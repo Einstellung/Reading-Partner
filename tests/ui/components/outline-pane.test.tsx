@@ -108,8 +108,8 @@ test("the passes through the retell are counted at the foot", () => {
     startedAt: Date.now(),
     endedAt: null,
     lastMomentAt: Date.now(),
-    pagesTotal: 0,
-    pagesSpoken: 0,
+    segmentIds: [],
+    spokenSegmentIds: [],
     wordsSpoken: 0,
   };
   const withRuns = renderToStaticMarkup(

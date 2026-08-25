@@ -47,7 +47,7 @@ function aRun(id: string, over: Partial<BuiltRun> = {}): BuiltRun {
     pages: [
       {
         index: 0,
-        kind: "title",
+        kind: "seg-open",
         title: "Eye and Brain",
         enteredAt: 1_000,
         leftAt: 61_000,
@@ -188,8 +188,8 @@ test("the log holds what a row shows and no transcript", async () => {
   await appendRun(aRun("r1"));
   const entry = (await loadRehearsalRuns(ID)).runs[0];
   expect(entry.pages).toBeUndefined();
-  expect(entry.pagesTotal).toBe(1);
-  expect(entry.pagesSpoken).toBe(1);
+  expect(entry.segmentIds).toEqual(["seg-open"]);
+  expect(entry.spokenSegmentIds).toEqual(["seg-open"]);
   expect(entry.wordsSpoken).toBe(2);
   expect(entry.lastMomentAt).toBe(601_000);
   expect(disk.files.get(RUNS)).not.toContain("Good evening.");
@@ -388,7 +388,7 @@ function inlinedLog(rehearsalId: string, ids: string[]): string {
         pages: [
           {
             index: 0,
-            kind: "title",
+            kind: "seg-open",
             title: "Eye and Brain",
             enteredAt: 1_000,
             leftAt: 61_000,
@@ -413,7 +413,7 @@ test("the split lifts every transcript out and leaves the rows behind", async ()
   expect(log.runs.every((r) => r.pages === undefined)).toBe(true);
   // The counts the rows were drawn from are written down now, so drawing them
   // never opens a transcript again.
-  expect(log.runs[0].pagesTotal).toBe(1);
+  expect(log.runs[0].segmentIds).toEqual(["seg-open"]);
   expect(log.runs[0].wordsSpoken).toBe(2);
   expect(log.runs[0].lastMomentAt).toBe(601_000);
   expect(disk.files.get(RUNS)).not.toContain("Good evening.");

@@ -1,42 +1,51 @@
-// Loading for a rehearsal (docs/43): the deck a retell has built, the rehearsal
-// object that deck is given through, that deck's HTML, and the passes already
-// recorded against it.
+// Loading for a rehearsal (docs/44): the outline a talk is given against, the
+// rehearsal object it is given through, and the passes already recorded against
+// it.
 //
-// Small hooks rather than one: the retell header only needs to know whether a
-// deck exists, the rehearsal needs the megabytes, and the list beside the
-// outline needs the history. Keeping them apart is what stops opening a retell
-// from reading a 20 MB file to decide whether a button is enabled.
+// Small hooks rather than one: the retell's header only needs to know whether
+// there is anything on the outline to give, the panel needs the segments
+// themselves, and the strip beside the conversation needs the history.
 
 import { useEffect, useState } from "react";
-import { listDecks } from "../../../reading/slides";
 import {
   listAllRehearsals,
   loadRehearsalRuns,
   loadRunPages,
-  readRehearsalDeck,
   type Rehearsal,
   type RehearsalPage,
   type RehearsalRunEntry,
 } from "../../../reading/rehearsal";
+import {
+  loadTalkOutline,
+  talkOutlineOfRetell,
+  type TalkOutline,
+} from "../../../reading/talk";
 
-// The deck registered for this retell, or null when it has none yet. `reloadKey`
-// is bumped by the caller when the deck dialog closes: a deck generated in this
-// sitting has to enable the button in this sitting.
-export function useRetellDeckFile(
+// The outline of this retell's talk, or null when the conversation has not
+// arranged one yet. Read and never created: opening a retell must not put an
+// outline on disk for a talk nobody has arranged. `reloadKey` is bumped by the
+// caller when something that could have written one is done with.
+//
+// It is what the Rehearse button is gated on (rehearsal.ts): a talk with no
+// segments has nothing to put on the panel.
+export function useRetellOutline(
   retellId: string,
   reloadKey: number,
-): { file: string | null; loading: boolean } {
-  const [file, setFile] = useState<string | null>(null);
+): { outline: TalkOutline | null; loading: boolean } {
+  const [outline, setOutline] = useState<TalkOutline | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    void listDecks()
-      .catch(() => [])
-      .then((decks) => {
+    void talkOutlineOfRetell(retellId)
+      .catch((e: unknown) => {
+        console.warn("failed to look for the outline of", retellId, e);
+        return null;
+      })
+      .then((found) => {
         if (cancelled) return;
-        setFile(decks.find((d) => d.retellId === retellId)?.file ?? null);
+        setOutline(found);
         setLoading(false);
       });
     return () => {
@@ -44,7 +53,7 @@ export function useRetellDeckFile(
     };
   }, [retellId, reloadKey]);
 
-  return { file, loading };
+  return { outline, loading };
 }
 
 // The rehearsal this retell's deck is given through, or null before the first
@@ -68,37 +77,36 @@ export function useRetellRehearsal(retellId: string, reloadKey: number): Rehears
   return rehearsal;
 }
 
-// The deck itself. Null html with a null error means it is still being read.
-export function useDeckHtml(file: string | null): { html: string | null; error: string | null } {
-  const [html, setHtml] = useState<string | null>(null);
+// The talk a rehearsal is given against. Null with a null error means it is
+// still being read; an error is an outline this build cannot open, which is the
+// one case where the panel has nothing to show and says so instead of showing an
+// empty talk.
+export function useTalkOutline(outlineId: string): {
+  outline: TalkOutline | null;
+  error: string | null;
+} {
+  const [outline, setOutline] = useState<TalkOutline | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setHtml(null);
+    setOutline(null);
     setError(null);
-    if (!file) {
-      setError("There is no deck for this rehearsal.");
-      return;
-    }
-    void readRehearsalDeck(file)
-      .then((text) => {
+    void loadTalkOutline(outlineId)
+      .then((read) => {
         if (cancelled) return;
-        // The one case that is not a fault: the rehearsal came from another
-        // device and the deck did not (the deck is out of the sync range, see
-        // reading/rehearsal/store.ts), so the file named here was never here.
-        if (text === null) setError(`The deck file is not on this device: ${file}`);
-        else setHtml(text);
+        if (read) setOutline(read);
+        else setError("The outline for this talk is not on this device.");
       })
       .catch((e: unknown) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Could not read the deck");
+        if (!cancelled) setError(e instanceof Error ? e.message : "Could not read the outline");
       });
     return () => {
       cancelled = true;
     };
-  }, [file]);
+  }, [outlineId]);
 
-  return { html, error };
+  return { outline, error };
 }
 
 // This rehearsal's passes, newest first — the rows only. The transcripts are a

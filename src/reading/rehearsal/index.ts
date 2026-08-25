@@ -1,7 +1,7 @@
-// A rehearsal (docs/43): a deck the reader gives out loud, again and again, and
-// the record of every pass — which page was up when, and what was said to it.
-// An object of the topic, level with a retell: a retell's deck gets one, and so
-// does a deck brought in from outside. Recording only — no feedback, no AI, no UI.
+// A rehearsal (docs/44): a talk the reader gives out loud, again and again,
+// against an outline (reading/talk), and the record of every pass — which
+// segment was up when, and what was said to it. An object of the topic, level
+// with a retell. Recording only — no feedback, no AI, no UI.
 
 export { buildRun, type BuildRunInput } from "./build";
 export { createDesktopTranscriptSource } from "./desktop-source";
@@ -66,7 +66,14 @@ export {
   startRehearsal,
   type StartRehearsalInput,
 } from "./store";
-export { countWords, runEntryOf, runSummary, type RunSummary } from "./summary";
+export {
+  countWords,
+  coverageOf,
+  runEntryOf,
+  runSummary,
+  segmentIdOf,
+  type RunSummary,
+} from "./summary";
 export {
   emptyLog,
   newRehearsal,

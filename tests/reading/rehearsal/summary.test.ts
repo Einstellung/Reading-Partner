@@ -9,11 +9,13 @@ import type {
   RehearsalRunEntry,
 } from "../../../src/reading/rehearsal/types";
 
+// `kind` is the outline segment's id (src/reading/rehearsal/types.ts): one per
+// position, which is what a pass over an outline produces.
 function page(index: number, transcript: string, enteredAt = index * 1000): RehearsalPage {
   return {
     index,
-    kind: "content",
-    title: `Page ${index}`,
+    kind: `seg-${index}`,
+    title: `Segment ${index}`,
     enteredAt,
     leftAt: enteredAt + 1000,
     transcript,
@@ -34,17 +36,32 @@ function entry(pages: RehearsalPage[], over: Partial<BuiltRun> = {}): RehearsalR
   });
 }
 
-test("the summary counts the pages that were reached and the ones spoken to", () => {
+test("the summary counts the segments that were reached and the ones spoken to", () => {
   const s = runSummary(entry([page(0, "opening"), page(1, ""), page(2, "the argument")]));
   expect(s.ordinal).toBe(2);
   expect(s.startedAt).toBe(0);
-  expect(s.pagesTotal).toBe(3);
-  expect(s.pagesSpoken).toBe(2);
+  expect(s.segments).toBe(3);
+  expect(s.segmentsSpoken).toBe(2);
   expect(s.wordsSpoken).toBe(3);
 });
 
-test("a page of whitespace counts as silence", () => {
-  expect(runSummary(entry([page(0, "   \n  ")])).pagesSpoken).toBe(0);
+// The record is which segments, not how many: five passes over one segment are
+// five runs naming that segment, and a pass that skipped the middle of the talk
+// says which parts it skipped (docs/44).
+test("the entry names the segments covered, and the ones spoken to", () => {
+  const e = entry([page(0, "opening"), page(1, ""), page(2, "the argument")]);
+  expect(e.segmentIds).toEqual(["seg-0", "seg-1", "seg-2"]);
+  expect(e.spokenSegmentIds).toEqual(["seg-0", "seg-2"]);
+});
+
+// One segment given five times over is one segment covered, not five.
+test("a segment gone back to is named once", () => {
+  const e = entry([page(0, "again and again")]);
+  expect(e.segmentIds).toEqual(["seg-0"]);
+});
+
+test("a segment of whitespace counts as silence", () => {
+  expect(runSummary(entry([page(0, "   \n  ")])).segmentsSpoken).toBe(0);
 });
 
 test("the length is wall clock, rounded to whole minutes", () => {
@@ -89,8 +106,8 @@ test("a row is drawn from the counts in the entry, not from any pages", () => {
   const counted = entry([page(0, "两个字"), page(1, "two words here")]);
   expect(counted.pages).toBeUndefined();
   const s = runSummary(counted);
-  expect(s.pagesTotal).toBe(2);
-  expect(s.pagesSpoken).toBe(2);
+  expect(s.segments).toBe(2);
+  expect(s.segmentsSpoken).toBe(2);
   expect(s.wordsSpoken).toBe(6);
   expect(s.minutes).toBe(10);
 });
@@ -107,18 +124,18 @@ test("an entry that still carries its pages is counted off them", () => {
     startedAt: 0,
     endedAt: 600_000,
     lastMomentAt: 0,
-    pagesTotal: 0,
-    pagesSpoken: 0,
+    segmentIds: [],
+    spokenSegmentIds: [],
     wordsSpoken: 0,
     pages: [page(0, "opening"), page(1, ""), page(2, "the argument")],
   });
-  expect(s.pagesTotal).toBe(3);
-  expect(s.pagesSpoken).toBe(2);
+  expect(s.segments).toBe(3);
+  expect(s.segmentsSpoken).toBe(2);
   expect(s.wordsSpoken).toBe(3);
   expect(s.minutes).toBe(10);
 });
 
-test("a whole run's words are the sum of its pages", () => {
+test("a whole run's words are the sum of its segments", () => {
   const s = runSummary(entry([page(0, "两个字"), page(1, "two words here")]));
   expect(s.wordsSpoken).toBe(6);
 });
