@@ -1,14 +1,18 @@
 // The one card for every provider that takes a pasted key: pick the provider,
-// paste, save. The model is not chosen here — the Default conversation card
-// below lists the models of whichever provider ends up connected.
+// paste, save. All 26 are on the card at once, as chips, rather than behind a
+// dropdown — a list this long is scrolled past rather than read, and the
+// regional variants (Moonshot AI / Moonshot AI CN, the three Xiaomi token plans)
+// are exactly the rows that need to be seen next to each other.
+//
+// The model is not chosen here — the Default conversation card below lists the
+// catalog of whichever provider ends up connected.
 
 import { useState } from "react";
 import { setApiKey, type ApiKeyProviderId, type ProviderInfo } from "../../../ai";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { CARD } from "./cardStyles";
-import { ChoiceField, FieldGrid } from "./ChoiceField";
-import { initialKeyProviderId, keyProviderChoices } from "./key-card-choices";
+import { initialKeyProviderId, keyProviderChips } from "./key-card-choices";
 
 export default function KeyCard({
   providers,
@@ -47,15 +51,20 @@ export default function KeyCard({
         <span className="font-medium">API key</span>
         {isConnected && <span className="text-xs text-[#5fb236]">Connected</span>}
       </div>
-      <FieldGrid>
-        <ChoiceField
-          label="Provider"
-          placeholder="Select…"
-          value={selected}
-          choices={keyProviderChoices()}
-          onChange={(id) => setPicked(id as ApiKeyProviderId)}
-        />
-      </FieldGrid>
+      <div className="flex flex-wrap gap-2">
+        {keyProviderChips().map((chip) => (
+          <Button
+            key={chip.id}
+            type="button"
+            size="chip"
+            variant={chip.id === selected ? "default" : "outline"}
+            aria-pressed={chip.id === selected}
+            onClick={() => setPicked(chip.id)}
+          >
+            {chip.label}
+          </Button>
+        ))}
+      </div>
       <div className="flex gap-2">
         <Input
           type="password"
