@@ -83,26 +83,18 @@ export interface RehearsalViewProps {
 // one number that decides how big the note is on an iPhone and on an iPad is the
 // font size on the column below.
 //
-// The renderer this sits over is the app's, and the app's is drawn for a light
-// bubble: its own rules colour code, quotes, rules and links for ink on paper.
-// Those are the ones repeated here with `!` — at equal specificity the winner
-// would otherwise be whichever Tailwind emitted last, which is not a thing to
-// hang a talk on.
+// Nothing here is a colour. The renderer underneath draws ink on paper and the
+// note is paper, so its code, quotes, rules and links are already right;
+// repainting them was only ever the price of standing the note on a dark ground.
+// What is left is where reading a page differs from reading a chat reply.
 const NOTE = [
   // Headings are the reader's landmarks — the thing the eye lands on coming back
-  // from the audience — so they are brighter than the prose and carry the space.
-  "[&_h1]:text-white [&_h1]:text-[1.15em] [&_h2]:text-white [&_h2]:text-[1.1em]",
-  "[&_h3]:text-white [&_h4]:text-white [&_h5]:text-white [&_h6]:!text-white/55",
+  // from the audience — so they carry the space rather than the size.
+  "[&_h1]:text-[1.15em] [&_h2]:text-[1.1em]",
   // Prose and list items, opened up. A line found by eye rather than by reading
   // from the top needs the space between lines to be wider than the space
   // between words.
   "[&_p]:leading-[1.8] [&_li]:leading-[1.8] [&_li]:my-[0.35em]",
-  "[&_a]:!text-sky-300",
-  "[&_code]:!bg-white/10",
-  "[&_pre]:!border-white/10 [&_pre]:!bg-black/40",
-  "[&_blockquote]:!border-white/25 [&_blockquote]:!text-white/65",
-  "[&_hr]:!border-white/15",
-  "[&_th]:!border-white/20 [&_th]:!bg-white/10 [&_td]:!border-white/20",
   // A formula wider than the measure scrolls inside its own box. The alternative
   // is one long equation making the whole note scroll sideways, which loses the
   // reader's place in every block at once.
@@ -285,18 +277,12 @@ export default function RehearsalView({
   };
 
   return (
-    // The one screen that is not on the app's palette and is not tinted with
-    // it: a rehearsal is what a room looks at, and the chrome around it is dark.
-    // The paper tint (styles.css) has nothing to say here — it lightens a
-    // reading surface, and there is none.
-    <div className="absolute inset-0 flex flex-col bg-[#0d0f14]">
-      <div
-        className="flex flex-none items-center gap-3 pb-2 pl-safe-3 pr-safe-3 pt-safe-2 text-white"
-      >
-        {/* The app's one surviving `bg-white`, and the reason it survives: a
-            tenth of white is how a control lights up on a near-black bar, and a
-            palette token would put a cream fill on it. The contract test names
-            this line (tests/ui/components/paper-tint-contract.test.ts). */}
+    // A reading surface like the reader and the retell, so it is on the app's
+    // ground and the paper tint reaches it (styles.css). The room looks at the
+    // person talking, not at this: what is on screen is the note in their hand,
+    // and a note is the surface the tint exists for.
+    <div className="absolute inset-0 flex flex-col bg-background">
+      <div className="flex flex-none items-center gap-3 pb-2 pl-safe-3 pr-safe-3 pt-safe-2">
         <Button
           type="button"
           variant="ghost"
@@ -304,15 +290,17 @@ export default function RehearsalView({
           title={backLabel}
           aria-label={backLabel}
           onClick={leave}
-          className="h-9 w-9 text-white/70 can-hover:hover:bg-white/10 can-hover:hover:text-white"
+          className="h-9 w-9 text-muted-foreground"
         >
           <IconClose size={18} />
         </Button>
-        <span className="min-w-0 flex-1 truncate text-[13px] text-white/70">{outline.name}</span>
+        <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">
+          {outline.name}
+        </span>
         {phase === "giving" ? (
           <>
             <span
-              className="flex-none text-[13px] tabular-nums text-white/70"
+              className="flex-none text-[13px] tabular-nums text-muted-foreground"
               title="How long this rehearsal has been going"
             >
               {formatElapsed(elapsed)}
@@ -330,11 +318,11 @@ export default function RehearsalView({
 
       {/* The through-line, on screen for the whole pass. Small on purpose: it is
           not said out loud, it is the one thing a reader talking off the top of
-          their head can check themselves against (docs/44). */}
+          their head can check themselves against (docs/44). Quiet by size and
+          not by ink: the palette has one muted foreground, and thinning it
+          against the note would put grey-on-cream under the tint. */}
       {outline.spine.thesis && (
-        <p
-          className="m-0 flex-none truncate border-b border-white/10 py-1.5 pl-safe-4 pr-safe-4 text-[11px] text-white/40"
-        >
+        <p className="m-0 flex-none truncate border-b border-border-subtle py-1.5 pl-safe-4 pr-safe-4 text-[11px] text-muted-foreground">
           {outline.spine.thesis}
         </p>
       )}
@@ -342,21 +330,19 @@ export default function RehearsalView({
       {/* The whole note in one column, and the only thing in this view that
           scrolls. `overscroll-contain` so a flick at the end of the last block
           does not hand the gesture to whatever is behind this screen. */}
-      <div
-        className="min-h-0 flex-1 overflow-y-auto overscroll-contain pt-6 pb-safe-16 pl-safe-6 pr-safe-6"
-      >
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pt-6 pb-safe-16 pl-safe-6 pr-safe-6">
         {segments.length === 0 ? (
-          <p className="m-0 text-sm text-white/70">
+          <p className="m-0 text-sm text-muted-foreground">
             This talk has no segments yet. Arrange it at the end of the retell, then rehearse.
           </p>
         ) : (
           // A measure, not a column of the iPad's width: a line the eye has to
           // track back across is a line the reader loses. Blocks are told apart
           // by the space between them and nothing else — no frame, no number, no
-          // status — because it is one note and it is read as one.
-          <div
-            className="mx-auto flex max-w-[36rem] flex-col gap-10 text-[19px] leading-[1.8] text-white/90 sm:text-[21px]"
-          >
+          // status — because it is one note and it is read as one. No text
+          // colour: body ink is what the app sets on <body>, and the note is
+          // body text.
+          <div className="mx-auto flex max-w-[36rem] flex-col gap-10 text-[19px] leading-[1.8] sm:text-[21px]">
             {segments.map((segment) => (
               <div key={segment.id} className={NOTE}>
                 <Markdown text={segment.body} />

@@ -20,11 +20,11 @@ export default function RehearsalScreen(props: {
 
   if (error) {
     return (
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#0d0f14]">
-        <p className="m-0 text-sm text-white/70">{error}</p>
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background">
+        <p className="m-0 text-sm text-muted-foreground">{error}</p>
         <button
           type="button"
-          className="text-sm text-white/50 underline"
+          className="text-sm text-muted-foreground underline"
           onClick={() => props.onBack(false)}
         >
           Back to the topic
@@ -35,8 +35,8 @@ export default function RehearsalScreen(props: {
 
   if (!outline) {
     return (
-      <div className="absolute inset-0 flex items-center justify-center bg-[#0d0f14]">
-        <p className="m-0 text-sm text-white/70">Opening the note…</p>
+      <div className="absolute inset-0 flex items-center justify-center bg-background">
+        <p className="m-0 text-sm text-muted-foreground">Opening the note…</p>
       </div>
     );
   }

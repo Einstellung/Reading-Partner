@@ -153,12 +153,14 @@ test("the tint is applied before React mounts", () => {
   expect(applied).toBeLessThan(mounted);
 });
 
-// The one exemption, by file and by exact class. A rehearsal is a projected
-// deck on near-black chrome, and a tenth of white is how a control lights up on
-// it; a palette token would put a cream fill there. Kept as the full class
-// string rather than the file name so a plain `bg-white` added to the same file
-// still fails.
-const WHITE_ALLOWED = new Map([["ui/components/rehearsal/RehearsalView.tsx", ["bg-white/10"]]]);
+// No exemptions. The last one was the rehearsal's near-black bar, which was
+// there for a projected deck; the screen now holds the note the reader reads
+// from, so it is on the palette like every other reading surface and a tenth of
+// white on it would be the one cold patch in a warm app. Kept as a map with no
+// entries rather than deleted, because the shape of an exemption — by file and
+// by exact class, so a plain `bg-white` in the same file still fails — is the
+// part that took an argument to settle.
+const WHITE_ALLOWED = new Map<string, string[]>();
 
 test("nothing in the UI paints itself white outside the palette", () => {
   const offenders: string[] = [];
