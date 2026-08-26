@@ -4,18 +4,14 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import {
-  formatOutline,
-  formatPlan,
-  isArranging,
-  nextChapter,
-} from "../../../src/reading/retell/plan";
-import { PLAN_VERSION } from "../../../src/reading/retell/types";
+import { formatOutline, formatPlan, nextChapter } from "../../../src/reading/retell/plan";
 import type {
   RetellChapter,
   PlanDecision,
   RetellPlan,
 } from "../../../src/reading/retell/types";
+import { putSegment, setSpine } from "../../../src/reading/talk/edit";
+import { newTalkOutline, type TalkOutline } from "../../../src/reading/talk/types";
 
 const chapters: RetellChapter[] = [
   { index: 1, title: "Openings", startPage: 1, endPage: 10, hasNote: false },
@@ -38,8 +34,13 @@ function plan(...decisions: PlanDecision[]): RetellPlan {
   return { version: 1, createdAt: 1, updatedAt: 100, decisions };
 }
 
+function talk(): TalkOutline {
+  return newTalkOutline({ id: "o1", topicId: "topic-1", retellId: "t1", now: 1 });
+}
+
 // Not "the last one plus one": the reader may jump around, and the gap is what
-// is actually left to do.
+// is actually still unconsumed. Not a queue either — nothing is handed this to
+// the model; the turn uses it to pick which chapter note to inline.
 test("the next chapter is the lowest one with no decision", () => {
   expect(nextChapter(chapters, null)).toBe(1);
   expect(nextChapter(chapters, plan(decision({ chapter: 2, title: "Middlegame" })))).toBe(1);
@@ -58,33 +59,50 @@ test("the next chapter is the lowest one with no decision", () => {
   ).toBeNull();
 });
 
-test("an empty record tells the model this is the opening, not chapter one", () => {
-  const text = formatPlan(chapters, null);
-  expect(text).toContain("nothing recorded yet");
-  expect(text).toContain("skeleton");
-  expect(text).toContain("thread they want the retell to follow");
+// The stage is read off the talk, not off the chapters: a talk with no
+// through-line is a retell whose reader has not yet given the whole thing back.
+test("a talk with no through-line reads as a retell still at its opening", () => {
+  const text = formatPlan(chapters, null, null);
+  expect(text).toContain("no through-line yet");
+  expect(text).toContain("this is the opening");
+  expect(text).toContain("from memory");
 });
 
-// The record only knows about recorded chapters, so the turn right after the
-// opening still reads as empty; without this the skeleton is laid out twice.
-test("an empty record also says not to redo an opening that already happened", () => {
-  expect(formatPlan(chapters, null)).toContain("do not do it");
+// The record only knows what was written, so the turn right after the opening
+// still has no spine; without this the model asks for the one-minute version
+// twice.
+test("an empty talk also says not to redo an opening that already happened", () => {
+  expect(formatPlan(chapters, null, null)).toContain("do not do it again");
 });
 
-test("the record names what was settled and where to pick up", () => {
+// The whole reason the record was rewritten: a "next up" line marched the reader
+// through the chapters whatever they had just asked for.
+test("the record never tells the model which chapter is next", () => {
+  const text = formatPlan(
+    chapters,
+    plan(decision(), decision({ chapter: 2, title: "Middlegame", include: false, points: [] })),
+    null,
+  );
+  expect(text.toLowerCase()).not.toContain("next");
+  expect(text.toLowerCase()).not.toContain("pick up");
+  expect(text).toContain("Not a queue");
+});
+
+test("the chapters read as an audit: what the talk took, what was cut, what is untouched", () => {
   const text = formatPlan(
     chapters,
     plan(
       decision({ figure: "[fig:3]", note: "thin on evidence" }),
       decision({ chapter: 2, title: "Middlegame", include: false, points: [] }),
     ),
+    null,
   );
-  expect(text).toContain("Chapter 1. Openings — in the retell");
+  expect(text).toContain("1. Openings — in the talk");
   expect(text).toContain("the argument rests on the 1962 data");
   expect(text).toContain("figure: [fig:3]");
   expect(text).toContain("note: thin on evidence");
-  expect(text).toContain("Chapter 2. Middlegame — cut");
-  expect(text).toContain("Next up: chapter 3");
+  expect(text).toContain("2. Middlegame — cut");
+  expect(text).toContain("Untouched: 3. Endings.");
 });
 
 // The record is read in the order the retell holds it, not sorted back into
@@ -94,18 +112,50 @@ test("the record keeps the order it was given in", () => {
   const text = formatPlan(
     chapters,
     plan(decision({ chapter: 3, title: "Endings" }), decision({ chapter: 1 })),
+    null,
   );
-  expect(text.indexOf("Chapter 3.")).toBeLessThan(text.indexOf("Chapter 1."));
+  expect(text.indexOf("3. Endings —")).toBeLessThan(text.indexOf("1. Openings —"));
 });
 
-test("a finished retell is told not to walk the chapters again", () => {
-  const text = formatPlan(chapters, plan(...chapters.map((c) => decision({ chapter: c.index, title: c.title }))));
-  expect(text).toContain("Every chapter has a decision");
-  expect(text).not.toContain("Next up");
+test("a through-line on the talk takes the retell past its opening", () => {
+  const outline = setSpine(
+    talk(),
+    { thesis: "Vision is inference, not measurement", audience: "second-year students" },
+    2,
+  );
+  const text = formatPlan(chapters, null, outline);
+  expect(text).not.toContain("no through-line yet");
+  expect(text).toContain("Through-line: Vision is inference, not measurement");
+  expect(text).toContain("Audience: second-year students");
+  expect(text).toContain("No block of the note is written yet.");
+});
+
+// A block exists for a rib exactly when the reader has given that rib, so the
+// note is the progress record and nothing else has to be tracked.
+test("a rib with a block reads as given, one without as not given yet", () => {
+  let outline = setSpine(
+    talk(),
+    {
+      thesis: "Vision is inference",
+      backbone: ["The retina throws most of it away", "Depth is a guess two eyes make"],
+    },
+    2,
+  );
+  outline = putSegment(
+    outline,
+    { body: "## The retina throws most of it away\n\nblind spot, filled in" },
+    3,
+  );
+  const text = formatPlan(chapters, null, outline);
+  expect(text).toContain("1. The retina throws most of it away — given (block 1)");
+  expect(text).toContain("2. Depth is a guess two eyes make — not given yet");
+  expect(text).toContain("The note — 1 block(s)");
+  expect(text).toContain("1. The retina throws most of it away");
 });
 
 // formatOutline is what read_retell_outline reads back to the reader, so unlike
-// formatPlan it carries no instruction about what the model should do next.
+// formatPlan it is the chapter view and carries no instruction about what to do
+// next.
 test("formatOutline lists what is in, what was cut, and what is not settled", () => {
   const text = formatOutline(
     chapters,
@@ -141,21 +191,4 @@ test("formatOutline keeps the order the retell holds", () => {
     plan(decision({ chapter: 3, title: "Endings" }), decision({ chapter: 1 })),
   );
   expect(text.indexOf("3. Endings")).toBeLessThan(text.indexOf("1. Openings"));
-});
-
-// docs/44: the arrangement is the last exchange of the retell, and it opens when
-// every chapter has been settled.
-test("the arrangement opens only when every chapter has a decision", () => {
-  const two = chapters.slice(0, 2);
-  const settled = (...only: number[]): RetellPlan => ({
-    version: PLAN_VERSION,
-    createdAt: 1,
-    updatedAt: 1,
-    decisions: only.map((chapter) => decision({ chapter, title: `Chapter ${chapter}` })),
-  });
-  expect(isArranging(two, null)).toBe(false);
-  expect(isArranging(two, settled(1))).toBe(false);
-  expect(isArranging(two, settled(1, 2))).toBe(true);
-  // Not "all settled" — a retell that has not started.
-  expect(isArranging([], null)).toBe(false);
 });

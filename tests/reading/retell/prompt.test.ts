@@ -5,11 +5,15 @@
 import { expect, test } from "bun:test";
 import {
   buildRetellSystemPrompt,
+  MACRO_INSTRUCTIONS,
   RETELL_INSTRUCTIONS,
+  RIB_INSTRUCTIONS,
   type RetellContext,
 } from "../../../src/reading/retell/prompt";
 import { bucketMarks } from "../../../src/reading/retell/marks";
 import type { RetellPlan, Skeleton } from "../../../src/reading/retell/types";
+import { putSegment, setSpine } from "../../../src/reading/talk/edit";
+import { newTalkOutline } from "../../../src/reading/talk/types";
 
 const skeleton: Skeleton = {
   source: "notes-plan",
@@ -59,13 +63,13 @@ test("the citation rule says a quote stands alone, and what it costs when it doe
 // the strongest pull there is towards teaching the chapter instead of examining
 // it. The four rules that put them to work are each checked here.
 test("the opening hands the reader their trail back rather than reading it out", () => {
-  expect(RETELL_INSTRUCTIONS).toContain("handing the reader their own trail");
+  expect(RETELL_INSTRUCTIONS).toContain("hand the reader their own trail");
   expect(RETELL_INSTRUCTIONS).toContain("where they got stuck, whether");
   expect(RETELL_INSTRUCTIONS).toContain("never the observations read out as a list");
 });
 
 test("a stuck-point outranks a question invented from the chapter", () => {
-  expect(RETELL_INSTRUCTIONS).toContain("Where the chapter's first question comes from");
+  expect(RETELL_INSTRUCTIONS).toContain("Where the first question of a stretch comes from");
   expect(RETELL_INSTRUCTIONS).toContain("never heard them use it afterwards");
   expect(RETELL_INSTRUCTIONS).toContain("An understanding that was never");
 });
@@ -74,7 +78,7 @@ test("a stuck-point outranks a question invented from the chapter", () => {
 // reading — and naming the failure back to them is how a retell turns into an
 // apology instead of a question.
 test("a cannot-explain outranks the stuck-point, and is not read back to the reader", () => {
-  expect(RETELL_INSTRUCTIONS).toContain("A cannot-explain observation about this chapter");
+  expect(RETELL_INSTRUCTIONS).toContain("A cannot-explain observation covering that stretch");
   expect(RETELL_INSTRUCTIONS).toContain("Do not tell them it happened");
 });
 
@@ -106,19 +110,105 @@ test("the one time the highlights may be raised is the whole-chapter one", () =>
   expect(RETELL_INSTRUCTIONS).toContain("about the whole chapter rather than any");
 });
 
-test("recording comes after the exchange, not before it", () => {
-  expect(RETELL_INSTRUCTIONS).toContain("After a chapter's exchange, and only after");
-  expect(RETELL_INSTRUCTIONS).toContain("do not record before they have spoken");
+// The reader gives the whole thing before the AI does: a spine they nodded at is
+// a spine they never had to produce.
+test("the opening asks for the whole thing and withholds the spine", () => {
+  expect(RETELL_INSTRUCTIONS).toContain("end to end, in their own words, from memory");
+  expect(RETELL_INSTRUCTIONS).toContain("may not give the");
+  expect(RETELL_INSTRUCTIONS).toContain("may not name the parts");
+  expect(RETELL_INSTRUCTIONS).toContain("nodding at your spine");
+});
+
+// Which stage the retell is in comes off the talk, not off how many chapters
+// have been dispositioned.
+test("the stage is read off the talk's through-line, and there are three of them", () => {
+  expect(RETELL_INSTRUCTIONS).toContain("Three stages");
+  expect(RETELL_INSTRUCTIONS).toContain("the talk's state, not any");
+  expect(RETELL_INSTRUCTIONS).toContain("No through-line written: the opening, or the macro");
+  expect(RETELL_INSTRUCTIONS).toContain("through-line written: the ribs");
+});
+
+// The chapter march is what the record used to force. The instructions have to
+// say the chapters are not the order of the work, and that a run of them can be
+// closed at once.
+test("chapters are an index and an audit, and a run of them closes in one go", () => {
+  expect(RETELL_INSTRUCTIONS).toContain("The chapters are an index and an audit, not a queue");
+  expect(RETELL_INSTRUCTIONS).toContain("Never walk them in order");
+  expect(RETELL_INSTRUCTIONS).toContain("is closed in one go");
+  expect(RETELL_INSTRUCTIONS).toContain("are you dropping fine-tuning?");
+  expect(RETELL_INSTRUCTIONS).toContain("when a rib has consumed a chapter");
+  // A decision is still the outcome of an exchange, never a plan for one.
+  expect(RETELL_INSTRUCTIONS).toContain("the outcome of an exchange, not a plan for one");
+});
+
+// The macro stage writes the spine and nothing else, and only once the reader
+// can give the parts back unaided.
+test("the macro stage ends with the reader naming the parts, then writes the spine", () => {
+  expect(MACRO_INSTRUCTIONS).toContain("name the parts in order, unaided");
+  expect(MACRO_INSTRUCTIONS).toContain("they have to give it back");
+  expect(MACRO_INSTRUCTIONS).toContain("set_talk_spine");
+  expect(MACRO_INSTRUCTIONS).toContain("reader's words rather than yours");
+  expect(MACRO_INSTRUCTIONS).toContain("no block of the note goes in here");
+});
+
+// A block written for a rib the reader never gave breaks the one thing the note
+// is: the record of how far the retell has got.
+test("a block is written only after the reader has given that rib", () => {
+  expect(RIB_INSTRUCTIONS).toContain("The reader speaks first, every time");
+  expect(RIB_INSTRUCTIONS).toContain("Only then write the block");
+  expect(RIB_INSTRUCTIONS).toContain("Never write a block for a rib the reader has not given");
+  expect(RIB_INSTRUCTIONS).toContain("Head the block with the rib it gives");
+  expect(RIB_INSTRUCTIONS).toContain("A block is not a chapter");
+});
+
+test("the rib order comes from where the macro pass showed holes", () => {
+  expect(RIB_INSTRUCTIONS).toContain("wherever the macro pass showed a hole");
+  expect(RIB_INSTRUCTIONS).toContain("not chapter order");
 });
 
 test("the prompt carries the skeleton, the record and the marks", () => {
   const text = buildRetellSystemPrompt(ctx());
   expect(text).toContain("1. Openings — pp.1-10, 1 highlight, chapter note on file");
-  expect(text).toContain("nothing recorded yet");
+  expect(text).toContain("no through-line yet");
   expect(text).toContain('"the 1962 data"');
   expect(text).toContain("record_chapter_decision");
   expect(text).toContain("read_chapter_note(chapter)");
   expect(text).toContain("read_pages(from, to)");
+});
+
+// The talk's tools are mounted from the first turn, so the prompt has to name
+// them from the first turn too.
+test("the talk's tools are listed whether or not there is a spine yet", () => {
+  const text = buildRetellSystemPrompt(ctx());
+  expect(text).toContain("set_talk_spine");
+  expect(text).toContain("write_talk_segment");
+  expect(text).toContain("move_talk_segment");
+  expect(text).toContain("remove_talk_segment");
+  expect(text).toContain("read_talk_outline()");
+});
+
+// Nothing written means nothing to inline: the record already says the talk is
+// empty, and a second paragraph saying so is prompt spent for nothing.
+test("an empty talk is not inlined a second time", () => {
+  const empty = newTalkOutline({ id: "o1", topicId: "t", now: 1 });
+  expect(buildRetellSystemPrompt(ctx({ talkOutline: empty }))).not.toContain(
+    "The talk: nothing arranged yet",
+  );
+});
+
+// Once there is a note, the bodies and the ids go in whole: a rewrite has to
+// send the block back, and the id is the only handle for one.
+test("a talk with blocks is inlined whole, with its ids", () => {
+  let outline = setSpine(
+    newTalkOutline({ id: "o1", topicId: "t", now: 1 }),
+    { thesis: "Vision is inference", backbone: ["The retina throws most of it away"] },
+    2,
+  );
+  outline = putSegment(outline, { id: "s1", body: "## The retina throws most of it away" }, 3);
+  const text = buildRetellSystemPrompt(ctx({ talkOutline: outline }));
+  expect(text).toContain("Through-line: Vision is inference");
+  expect(text).toContain("given (block 1)");
+  expect(text).toContain("id: s1");
 });
 
 // The reading position is where they stopped reading, not where the retell
@@ -131,7 +221,9 @@ test("the reading position is labelled as not being the retell's position", () =
   expect(buildRetellSystemPrompt(ctx({ pageLabel: null }))).not.toContain("open at page");
 });
 
-test("a recorded decision moves the prompt on to the next chapter", () => {
+// A recorded decision is an audit line. It used to be a pointer, and the pointer
+// marched the reader through the chapters whatever they had asked for.
+test("a recorded decision reads as an audit line, not as where to go next", () => {
   const plan: RetellPlan = {
     version: 1,
     createdAt: 1,
@@ -147,8 +239,9 @@ test("a recorded decision moves the prompt on to the next chapter", () => {
     ],
   };
   const text = buildRetellSystemPrompt(ctx({ plan }));
-  expect(text).toContain("Chapter 1. Openings — in the retell");
-  expect(text).toContain("Next up: chapter 2");
+  expect(text).toContain("1. Openings — in the talk");
+  expect(text).toContain("Untouched: 2. Middlegame.");
+  expect(text).not.toContain("Next up");
 });
 
 test("a chapter note is inlined as background, flagged as not being their answer", () => {

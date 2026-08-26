@@ -26,7 +26,7 @@ const { combineChapters } = await import("../../../src/reading/retell/outline");
 import type { LoadedMaterial } from "../../../src/reading/retell/material";
 import type { Retell, RetellDecision } from "../../../src/reading/retell/types";
 import { newTalkOutline, type TalkOutline } from "../../../src/reading/talk/types";
-import { putSegment } from "../../../src/reading/talk/edit";
+import { putSegment, setSpine } from "../../../src/reading/talk/edit";
 import type { TalkArrangementCardData } from "../../../src/reading/retell/cards";
 
 const settings: Settings = {
@@ -107,20 +107,6 @@ function talkStub() {
   };
 }
 
-// Every chapter settled, which is the signal that the arrangement begins.
-function settled(): Retell {
-  return retell({
-    decisions: [1, 2].map((chapter) => ({
-      bookId: "b1",
-      chapter,
-      title: chapter === 1 ? "One" : "Two",
-      include: true,
-      points: ["a point"],
-      updatedAt: 5,
-    })),
-  });
-}
-
 function input(over: Partial<Parameters<typeof buildRetellTurn>[0]> = {}) {
   return {
     retell: retell(),
@@ -137,16 +123,21 @@ function input(over: Partial<Parameters<typeof buildRetellTurn>[0]> = {}) {
 test("the retell prompt and its own tools, with no book open", async () => {
   const turn = await buildRetellTurn(input());
   expect(turn.systemPrompt).toContain("You are sitting in on a retell");
-  expect(turn.systemPrompt).toContain("nothing recorded yet");
+  expect(turn.systemPrompt).toContain("no through-line yet");
   expect(names(turn.tools)).toEqual([
+    "move_talk_segment",
     "observation_read",
     "observation_search",
     "observation_update",
     "read_chapter_note",
     "read_pages",
     "read_retell_outline",
+    "read_talk_outline",
     "record_chapter_decision",
+    "remove_talk_segment",
     "search_topic",
+    "set_talk_spine",
+    "write_talk_segment",
   ]);
   expect(turn.messages[0].text).toContain("retell");
 });
@@ -237,7 +228,7 @@ test("a chapter number that is not in the retell is refused, not written", async
   expect(written).toEqual([]);
 });
 
-test("what is already settled is read back, and the next chapter named", async () => {
+test("what is already settled is read back as an audit line", async () => {
   const turn = await buildRetellTurn(
     input({
       retell: retell({
@@ -254,8 +245,9 @@ test("what is already settled is read back, and the next chapter named", async (
       }),
     }),
   );
-  expect(turn.systemPrompt).toContain("Chapter 1. One — in the retell");
-  expect(turn.systemPrompt).toContain("Next up: chapter 2");
+  expect(turn.systemPrompt).toContain("1. One — in the talk");
+  expect(turn.systemPrompt).toContain("Untouched: 2. Two.");
+  expect(turn.systemPrompt).not.toContain("Next up");
 });
 
 // The record the prompt carries is a snapshot; read_retell_outline is the live
@@ -482,33 +474,26 @@ test("the tight observation order keeps what the retell asks its next question f
   ]);
 });
 
-// The arrangement (docs/44) is the retell's last stretch, not something to do in
-// parallel with it: its tools appear only once every chapter has a decision, so
-// the model cannot start writing segments while chapters are still open.
-test("the arrangement's tools stay off while a chapter is unsettled", async () => {
+// The talk's tools used to wait until every chapter had a decision, which put
+// seventeen chapter dispositions in front of the through-line. They are mounted
+// from the first turn; what stops a premature write is the prompt.
+test("the talk's tools are mounted on turn one, with nothing settled", async () => {
   const turn = await buildRetellTurn(input());
-  expect(names(turn.tools)).not.toContain("write_talk_segment");
-  expect(turn.systemPrompt).not.toContain("Arranging the talk");
-});
-
-test("every chapter settled mounts the arrangement and says the talk is empty", async () => {
-  const turn = await buildRetellTurn(input({ retell: settled() }));
-  expect(names(turn.tools)).toContain("write_talk_segment");
   expect(names(turn.tools)).toContain("set_talk_spine");
+  expect(names(turn.tools)).toContain("write_talk_segment");
   expect(names(turn.tools)).toContain("move_talk_segment");
   expect(names(turn.tools)).toContain("remove_talk_segment");
   expect(names(turn.tools)).toContain("read_talk_outline");
-  expect(turn.systemPrompt).toContain("Arranging the talk");
-  expect(turn.systemPrompt).toContain("A segment is not a chapter");
-  expect(turn.systemPrompt).toContain("nothing arranged yet");
+  expect(turn.systemPrompt).toContain("Getting the backbone");
+  expect(turn.systemPrompt).toContain("Writing the note");
+  expect(turn.systemPrompt).toContain("A block is not a chapter");
 });
 
-test("a block written in the arrangement lands in the talk and raises a card", async () => {
+test("a block written into the note lands in the talk and raises a card", async () => {
   const talk = talkStub();
   const cards: TalkArrangementCardData[] = [];
   const turn = await buildRetellTurn(
     input({
-      retell: settled(),
       talk: talk.access,
       onArrangeCard: (c) => cards.push(c),
       now: () => 99,
@@ -531,12 +516,25 @@ test("a block written in the arrangement lands in the talk and raises a card", a
   expect(cards[0].change).toBe("segment");
 });
 
-// The prompt inlines the talk as it stands, so the second turn of an arrangement
-// does not have to read it back before it can add to it.
-test("the talk already arranged is in the prompt with its segment ids", async () => {
+// The prompt inlines the talk as it stands, so the next turn does not have to
+// read it back before it can add to it.
+test("a note already started is in the prompt with its segment ids", async () => {
   const talk = talkStub();
   await talk.access.edit((o) => putSegment(o, { id: "s1", body: "The opening" }, 7));
-  const turn = await buildRetellTurn(input({ retell: settled(), talk: talk.access }));
+  const turn = await buildRetellTurn(input({ talk: talk.access }));
   expect(turn.systemPrompt).toContain("The opening");
   expect(turn.systemPrompt).toContain("id: s1");
+});
+
+// The stage comes off the talk, not off the chapters: a spine written means the
+// macro pass is over, and every chapter settled means nothing on its own.
+test("a spine on the talk takes the record past its opening", async () => {
+  const talk = talkStub();
+  await talk.access.edit((o) =>
+    setSpine(o, { thesis: "The eye is not a camera", backbone: ["The retina discards"] }, 7),
+  );
+  const turn = await buildRetellTurn(input({ talk: talk.access }));
+  expect(turn.systemPrompt).not.toContain("no through-line yet");
+  expect(turn.systemPrompt).toContain("Through-line: The eye is not a camera");
+  expect(turn.systemPrompt).toContain("1. The retina discards — not given yet");
 });

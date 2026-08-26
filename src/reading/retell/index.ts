@@ -77,12 +77,13 @@ export {
 export { createRetell, retellCandidates } from "./candidates";
 export type { ReadingCard, RetellDecisionCardData, TalkArrangementCardData } from "./cards";
 export { bucketMarks, formatMarks } from "./marks";
-export { formatOutline, formatPlan, isArranging, nextChapter } from "./plan";
+export { formatOutline, formatPlan, nextChapter } from "./plan";
 export {
-  ARRANGE_INSTRUCTIONS,
   buildRetellSystemPrompt,
+  MACRO_INSTRUCTIONS,
   RETELL_INSTRUCTIONS,
   RETELL_KICKOFF,
+  RIB_INSTRUCTIONS,
   type RetellContext,
   type RetellNote,
 } from "./prompt";
