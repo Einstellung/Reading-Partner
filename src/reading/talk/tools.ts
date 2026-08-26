@@ -20,67 +20,11 @@ import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../ai/agent";
 import { moveSegment, putSegment, removeSegment, setSpine, type SegmentEdit } from "./edit";
 import type { TalkArrangementCardData } from "./cards";
-import type {
-  SegmentStatus,
-  TalkMaterial,
-  TalkOutline,
-  TalkSegment,
-  TalkSpine,
-} from "./types";
-
-const STATUS_LABEL: Record<SegmentStatus, string> = {
-  ready: "Ready",
-  shallow: "Needs depth",
-  "no-material": "No material",
-};
-
-/** How a segment's status reads to the reader. */
-export function segmentStatusLabel(status: SegmentStatus): string {
-  return STATUS_LABEL[status] ?? status;
-}
-
-/** One piece of material as one line: the figure it points at, or the formula. */
-export function materialLabel(material: TalkMaterial): string {
-  if (material.kind === "tex") return material.tex;
-  const id = material.figId ? `[fig:${material.figId}]` : "";
-  return [id, material.description].filter(Boolean).join(" ") || "(a figure)";
-}
-
-// A figure reference the way the retell already writes one: `[fig:3]`, words, or
-// the tag followed by words. Same spelling as record_chapter_decision's `figure`
-// and as the catalog in the prompt, so the model has one form to remember.
-const FIG_TAG = /^\s*\[fig:([^\]\s]+)\]\s*(.*)$/i;
-
-export function toTalkMaterial(kind: unknown, ref: unknown): TalkMaterial | null {
-  const text = typeof ref === "string" ? ref.trim() : "";
-  if (!text) return null;
-  if (String(kind).toLowerCase() === "tex") return { kind: "tex", tex: text };
-  const tagged = FIG_TAG.exec(text);
-  if (!tagged) return { kind: "figure", description: text };
-  return { kind: "figure", figId: tagged[1].toLowerCase(), description: tagged[2].trim() };
-}
-
-function materialList(raw: unknown): TalkMaterial[] {
-  if (!Array.isArray(raw)) return [];
-  const out: TalkMaterial[] = [];
-  for (const one of raw) {
-    if (!one || typeof one !== "object") continue;
-    const m = one as { kind?: unknown; ref?: unknown };
-    const material = toTalkMaterial(m.kind, m.ref);
-    if (material) out.push(material);
-  }
-  return out;
-}
+import { segmentLabel, type TalkOutline, type TalkSegment, type TalkSpine } from "./types";
 
 function strings(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
   return raw.map((s) => String(s).trim()).filter(Boolean);
-}
-
-function toStatus(raw: unknown): SegmentStatus | undefined {
-  const s = String(raw ?? "").trim().toLowerCase();
-  if (s === "ready" || s === "shallow" || s === "no-material") return s;
-  return undefined;
 }
 
 // The place in the talk, as the model and the card both count it: 1-based, the
@@ -91,35 +35,28 @@ function toIndex(raw: unknown): number | undefined {
   return Math.max(0, Math.round(n) - 1);
 }
 
-/** The card a segment write raises: the segment as it now stands, and its place. */
+/** The card a segment write raises: the block as it now stands, and its place. */
 export function segmentCard(outline: TalkOutline, id: string): TalkArrangementCardData | null {
   const at = outline.segments.findIndex((s) => s.id === id);
   if (at < 0) return null;
-  const { updatedAt, ...segment } = outline.segments[at];
-  void updatedAt;
-  // The callback is an id, and an id on a card is nothing the reader can read.
-  // Resolved here, where the rest of the talk is still in hand.
-  const callback = segment.callback
-    ? outline.segments.find((s) => s.id === segment.callback)?.title
-    : undefined;
   return {
     kind: "talk-arrangement",
     change: "segment",
-    segment,
-    ...(callback ? { callbackTitle: callback } : {}),
+    body: outline.segments[at].body,
     position: at + 1,
     total: outline.segments.length,
   };
 }
 
 /**
- * The whole outline read back: what read_talk_outline answers and what the
- * prompt inlines during the arrangement. Segment ids are printed because they
- * are the only handle the model has for rewriting, moving or dropping one.
+ * The whole note read back: what read_talk_outline answers and what the prompt
+ * inlines during the arrangement. Every block whole, headed by its place and its
+ * id — the place is how the reader and the model talk about a block, the id is
+ * the only handle for rewriting, moving or dropping one.
  */
 export function formatTalkOutline(outline: TalkOutline | null): string {
   if (!outline || (!outline.spine.thesis && outline.segments.length === 0)) {
-    return "The talk: nothing arranged yet. It starts with the spine — the through-line in one sentence and who is listening — and then the segments.";
+    return "The talk: nothing arranged yet. It starts with the spine — the through-line in one sentence and who is listening — and then the note.";
   }
   const lines = ["The talk as it stands."];
   const s = outline.spine;
@@ -133,19 +70,12 @@ export function formatTalkOutline(outline: TalkOutline | null): string {
   if (s.excluded.length) lines.push(`Not going into: ${s.excluded.join("; ")}`);
 
   if (outline.segments.length === 0) {
-    lines.push("", "No segments yet.");
+    lines.push("", "No blocks yet.");
     return lines.join("\n");
   }
-  const titleOf = new Map(outline.segments.map((seg) => [seg.id, seg.title]));
-  lines.push("", `Segments — ${outline.segments.length}, in the order they are given:`);
+  lines.push("", `The note — ${outline.segments.length} block(s), in the order they are given:`);
   for (const [i, seg] of outline.segments.entries()) {
-    const act = seg.act ? `[${seg.act}] ` : "";
-    lines.push("", `${i + 1}. ${act}${seg.title || "(untitled)"} — ${segmentStatusLabel(seg.status)} (id: ${seg.id})`);
-    for (const cue of seg.cues) lines.push(`  - ${cue}`);
-    for (const m of seg.material) lines.push(`  ${m.kind === "tex" ? "formula" : "figure"}: ${materialLabel(m)}`);
-    if (seg.callback) {
-      lines.push(`  pays back: ${titleOf.get(seg.callback) ?? "a segment that is no longer there"}`);
-    }
+    lines.push("", `--- ${i + 1} (id: ${seg.id}) ---`, seg.body);
   }
   return lines.join("\n");
 }
@@ -223,82 +153,43 @@ export function buildArrangeTools(deps: ArrangeToolDeps): AgentTool[] {
     {
       name: "write_talk_segment",
       description:
-        "Write one segment of the talk — one screenful, one thing said. Omit `id` to " +
-        "add a segment, give it to rewrite one (only the fields you send change). " +
-        "A segment is not a chapter: an opening and a closing belong to none, one " +
-        "chapter can break into several, several can fuse into one. Call it after the " +
-        "reader has agreed to that segment, one call per segment.",
+        "Write one block of the note — one stretch of the talk, as the reader will see " +
+        "it while saying it. Omit `id` to add a block, give it to rewrite one; a " +
+        "rewrite replaces the block whole, so send all of it. A block is not a " +
+        "chapter: an opening and a closing belong to none, one chapter can break into " +
+        "several, several can fuse into one. Call it after the reader has agreed to " +
+        "that block, one call per block.",
       parameters: Type.Object({
         id: Type.Optional(
           Type.String({
             description:
-              "The segment to rewrite, as read_talk_outline prints it. Omit to add a new one.",
+              "The block to rewrite, as read_talk_outline prints it. Omit to add a new one.",
           }),
         ),
-        title: Type.Optional(Type.String({ description: "What this segment is, a few words." })),
-        act: Type.Optional(
-          Type.String({
-            description:
-              "The act this belongs to, when the talk has acts. Free text, and the same " +
-              "text for every segment of one act.",
-          }),
-        ),
-        cues: Type.Optional(
-          Type.Array(Type.String(), {
-            description:
-              "The hooks the speaker pulls the sentence out of — fewer words than a " +
-              "slide would carry, not the sentences themselves. A handful is enough.",
-          }),
-        ),
-        material: Type.Optional(
-          Type.Array(
-            Type.Object({
-              kind: Type.String({ description: 'Either "figure" or "tex".' }),
-              ref: Type.String({
-                description:
-                  'For a figure: "[fig:3]", or a description in words when the book has ' +
-                  "no such figure. For tex: the formula, verbatim and unabridged — it is " +
-                  "the thing the speaker points at.",
-              }),
-            }),
-            { description: "The figures and formulas on this segment, in the order shown." },
-          ),
-        ),
-        callback: Type.Optional(
-          Type.String({ description: "The id of an earlier segment this one pays back." }),
-        ),
-        status: Type.Optional(
-          Type.String({
-            description:
-              '"ready" (the reader can give it now), "shallow" (the words are right and ' +
-              'not yet theirs) or "no-material" (the figure or the number does not exist ' +
-              'yet). A segment you have just drafted is "shallow"; leave it out and that ' +
-              "is what it gets.",
-          }),
-        ),
+        body: Type.String({
+          description:
+            "The block, as markdown. Fragments and hooks the speaker glances at, not " +
+            "sentences for an audience to read. A heading names it if it wants naming. " +
+            "Formulas go in whole, as $$...$$; a figure the retell identified goes in " +
+            "as [fig:3] followed by what it shows.",
+        }),
         position: Type.Optional(
           Type.Number({
             description:
-              "Where a new segment goes, counting from 1. Omit to put it at the end. " +
-              "Ignored for a segment that already exists — move_talk_segment does that.",
+              "Where a new block goes, counting from 1. Omit to put it at the end. " +
+              "Ignored for a block that already exists — move_talk_segment does that.",
           }),
         ),
       }),
       execute: async (args) => {
         const edit: SegmentEdit = {};
         if (typeof args.id === "string" && args.id.trim()) edit.id = args.id.trim();
-        if (typeof args.title === "string") edit.title = args.title.trim();
-        if (typeof args.act === "string") edit.act = args.act.trim() || null;
-        if (Array.isArray(args.cues)) edit.cues = strings(args.cues);
-        if (Array.isArray(args.material)) edit.material = materialList(args.material);
-        if (typeof args.callback === "string") edit.callback = args.callback.trim() || null;
-        const status = toStatus(args.status);
-        if (status) edit.status = status;
+        if (typeof args.body === "string") edit.body = args.body.trim();
         const at = toIndex(args.position);
         if (at !== undefined) edit.at = at;
 
-        if (Object.keys(edit).length === 0) {
-          return "No field was given, so no segment was written. A segment needs at least a title.";
+        if (!edit.body) {
+          return "No block was given, so nothing was written. `body` is the block itself.";
         }
 
         // What was written is read out of the outline that came back rather than
@@ -320,16 +211,16 @@ export function buildArrangeTools(deps: ArrangeToolDeps): AgentTool[] {
         const card = segmentCard(next, seg.id);
         if (card) deps.onCard?.(card);
         const place = next.segments.findIndex((s) => s.id === seg.id) + 1;
-        return `${known ? "Rewrote" : "Added"} segment ${place} of ${next.segments.length} (id: ${seg.id}), status ${seg.status}. The reader can see the entry.`;
+        return `${known ? "Rewrote" : "Added"} block ${place} of ${next.segments.length} (id: ${seg.id}). The reader can see the entry.`;
       },
     },
     {
       name: "move_talk_segment",
       description:
-        "Move a segment to another place in the talk. The order of the segments is the " +
+        "Move a block to another place in the note. The order of the blocks is the " +
         "order the talk is given in; nothing else says it.",
       parameters: Type.Object({
-        id: Type.String({ description: "The segment to move." }),
+        id: Type.String({ description: "The block to move." }),
         position: Type.Number({
           description: "Where it should sit afterwards, counting from 1.",
         }),
@@ -337,15 +228,16 @@ export function buildArrangeTools(deps: ArrangeToolDeps): AgentTool[] {
       execute: async (args) => {
         const id = String(args.id ?? "").trim();
         const to = toIndex(args.position);
-        if (!id || to === undefined) return "A segment id and a position are both needed.";
+        if (!id || to === undefined) return "A block id and a position are both needed.";
         let title = "";
         const next = await deps.editOutline((o) => {
-          title = o.segments.find((s) => s.id === id)?.title ?? "";
+          const seg = o.segments.find((s) => s.id === id);
+          title = seg ? segmentLabel(seg) : "";
           return moveSegment(o, id, to, now());
         });
         if (!next) return NO_OUTLINE;
         const place = next.segments.findIndex((s) => s.id === id) + 1;
-        if (place === 0) return `There is no segment ${id} in the talk. Read it back first.`;
+        if (place === 0) return `There is no block ${id} in the talk. Read it back first.`;
         deps.onCard?.({
           kind: "talk-arrangement",
           change: "moved",
@@ -353,43 +245,43 @@ export function buildArrangeTools(deps: ArrangeToolDeps): AgentTool[] {
           position: place,
           total: next.segments.length,
         });
-        return `"${title}" is now segment ${place} of ${next.segments.length}. The reader can see the entry.`;
+        return `"${title}" is now block ${place} of ${next.segments.length}. The reader can see the entry.`;
       },
     },
     {
       name: "remove_talk_segment",
       description:
-        "Drop a segment from the talk. For a segment the reader has decided against — " +
+        "Drop a block from the note. For a block the reader has decided against — " +
         "rewriting one is write_talk_segment with its id.",
       parameters: Type.Object({
-        id: Type.String({ description: "The segment to drop." }),
+        id: Type.String({ description: "The block to drop." }),
       }),
       execute: async (args) => {
         const id = String(args.id ?? "").trim();
-        if (!id) return "A segment id is needed.";
+        if (!id) return "A block id is needed.";
         let dropped: TalkSegment | undefined;
         const next = await deps.editOutline((o) => {
           dropped = o.segments.find((s) => s.id === id);
           return removeSegment(o, id, now());
         });
         if (!next) return NO_OUTLINE;
-        if (!dropped) return `There is no segment ${id} in the talk. Read it back first.`;
+        if (!dropped) return `There is no block ${id} in the talk. Read it back first.`;
+        const title = segmentLabel(dropped);
         deps.onCard?.({
           kind: "talk-arrangement",
           change: "removed",
-          title: dropped.title,
+          title,
           total: next.segments.length,
         });
-        return `Dropped "${dropped.title}". The talk now has ${next.segments.length} segment(s). The reader can see the entry.`;
+        return `Dropped "${title}". The note now has ${next.segments.length} block(s). The reader can see the entry.`;
       },
     },
     {
       name: "read_talk_outline",
       description:
-        "Read the talk back as it now stands: the spine, and every segment in order " +
-        "with its id, its cues, its material and its status. Read-only. Use it before " +
-        "moving or rewriting a segment, and when the reader asks what the talk looks " +
-        "like now.",
+        "Read the talk back as it now stands: the spine, and every block of the note " +
+        "in order, whole, with its id. Read-only. Use it before moving or rewriting a " +
+        "block, and when the reader asks what the talk looks like now.",
       parameters: Type.Object({}),
       execute: async () => formatTalkOutline(await deps.readOutline()),
     },

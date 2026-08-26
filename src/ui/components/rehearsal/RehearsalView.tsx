@@ -1,26 +1,18 @@
-// Giving the talk (docs/44): one segment of the outline on screen, and a record
+// Giving the talk (docs/44): one block of the note on screen, and a record
 // of which segment the reader was on and how long they stayed there. Reached
 // from the topic's Rehearsal section or from the Rehearse button on a retell —
 // one object either way, so one view.
 //
 // Not a deck. The slides are made outside the app and the app never sees that
-// file; what is on screen is the outline the reader wrote, one segment at a
-// time, in the sizes that say what to do with each part: the through-line small
-// and always there because it is the only thing a reader can check themselves
-// against, the cues largest because they are what has to be said out loud, the
-// figures and formulas whole because in a technical talk the formula is the
-// thing being pointed at.
-//
-// One segment is one screen and the screen does not scroll. A segment that does
-// not fit is a segment that wants splitting, and the panel says so rather than
-// stepping the type down — which is the whole reason the panel is what holds the
-// outline's grain.
+// file; what is on screen is the note the reader wrote, one block at a time,
+// with the through-line small and always there because it is the only thing a
+// reader talking off the top of their head can check themselves against.
 //
 // The run lands on disk on the way out, whichever way out that was — the End
 // button, the back button, or the view being unmounted from under it. A pass is
 // expensive to make and worthless to half-record.
 
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { IconClose, IconChevronDown, IconChevronUp } from "../base/icons";
 import { Button } from "../ui/button";
 import {
@@ -29,22 +21,17 @@ import {
   type RehearsalEvent,
   type TranscriptSource,
 } from "../../../reading/rehearsal";
-import type { TalkMaterial, TalkOutline, TalkSegment } from "../../../reading/talk";
+import type { TalkOutline, TalkSegment } from "../../../reading/talk";
 import {
   browserWakeLockTarget,
   createScreenWakeLock,
   type ScreenWakeLock,
 } from "../../../platform/app/wake-lock";
-import { FigureContext } from "../markdown/Markdown";
 import { Markdown } from "../markdown/Markdown";
-import FigureCard from "../markdown/FigureCard";
 import {
-  callbackLabel,
-  displayMath,
   isSegmentChange,
   nextSegmentIndex,
   nextTitle,
-  overflowNotice,
   segmentTitle,
   withSegmentEvent,
 } from "./outline-run";
@@ -78,53 +65,11 @@ export interface RehearsalViewProps {
   onSaved(recorded: boolean): void;
 }
 
-// A formula, through the renderer the rest of the app already reads maths with
-// (KaTeX behind react-markdown). No second maths path, and no second copy of the
-// fonts: the renderer is lazily loaded and shows the TeX as written until its
-// chunk arrives, which on a panel that is about to be talked at for ten minutes
-// costs nothing.
-function Formula({ tex }: { tex: string }) {
-  return (
-    <div className="overflow-x-auto text-center text-white [&_.katex]:text-[1.15em]">
-      <Markdown text={displayMath(tex)} />
-    </div>
-  );
-}
-
-// A figure, whole. The crop is the app's own figure card, which needs the book
-// the figure came out of to be resolvable here — it is when a book is open under
-// this screen and not otherwise, and an outline's figure names an id without
-// saying which book's (docs/44 leaves the field's grain open). So the picture is
-// drawn when the host can find it and the description is what is left when it
-// cannot, rather than a card that would go and fetch some other book's figure 3.
-function FigureMaterial({ material }: { material: Extract<TalkMaterial, { kind: "figure" }> }) {
-  const host = useContext(FigureContext);
-  const figure = material.figId && host ? host.getFigure(material.figId) : null;
-  if (figure && host && material.figId) {
-    return (
-      <div className="flex flex-col items-center gap-1">
-        <FigureCard host={host} id={material.figId} />
-        {material.description && (
-          <span className="text-[13px] text-white/50">{material.description}</span>
-        )}
-      </div>
-    );
-  }
-  return (
-    <p className="m-0 text-[15px] leading-relaxed text-white/70">
-      {material.figId && (
-        <span className="mr-1.5 rounded bg-white/10 px-1.5 py-0.5 text-[12px] text-white/60">
-          Fig. {material.figId}
-        </span>
-      )}
-      {material.description || "A figure that is not on this device."}
-    </p>
-  );
-}
-
-// One segment, one screen. Nothing here scrolls: `overflow-hidden` is what makes
-// a segment that does not fit visibly not fit, which is the signal the notice
-// above it explains.
+// One block of the note. Through the renderer the rest of the app reads markdown
+// with, so the formulas and the [fig:N] citations written into the block are set
+// the way they are set everywhere else — the figure host comes from the context
+// a book open under this screen provides, and a citation with no host behind it
+// stays as the reader typed it.
 function SegmentPanel({
   segments,
   index,
@@ -133,40 +78,15 @@ function SegmentPanel({
   index: number;
 }) {
   const segment = segments[index];
-  const callback = callbackLabel(segments, segment);
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-6 py-5 sm:px-10">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 py-5 sm:px-10">
       <p className="m-0 flex items-baseline gap-2 text-[15px] text-white/60">
         <span className="tabular-nums text-white/40">{index + 1}.</span>
         <span className="min-w-0">{segmentTitle(segment)}</span>
       </p>
-
-      {/* The cues, in the largest type on the screen. They are the only thing
-          here that has to come out of the reader's mouth; everything else is
-          there to be pointed at or checked against. */}
-      <ul className="m-0 flex list-none flex-col gap-3 p-0">
-        {segment.cues.map((cue, i) => (
-          <li key={i} className="text-2xl leading-snug text-white sm:text-3xl">
-            {cue}
-          </li>
-        ))}
-      </ul>
-
-      {segment.material.length > 0 && (
-        <div className="flex flex-col gap-3">
-          {segment.material.map((m, i) =>
-            m.kind === "tex" ? (
-              <Formula key={i} tex={m.tex} />
-            ) : (
-              <FigureMaterial key={i} material={m} />
-            ),
-          )}
-        </div>
-      )}
-
-      {callback && (
-        <p className="m-0 mt-auto text-[11px] text-white/30">Pays back {callback}</p>
-      )}
+      <div className="text-white [&_*]:text-inherit">
+        <Markdown text={segment.body} />
+      </div>
     </div>
   );
 }
@@ -375,7 +295,6 @@ export default function RehearsalView({
   };
 
   const segment = segments[current] ?? null;
-  const notice = useMemo(() => (segment ? overflowNotice(segment) : null), [segment]);
   const upNext = nextTitle(segments, current);
   const goNext = nextSegmentIndex(current, segments.length);
 
@@ -432,15 +351,6 @@ export default function RehearsalView({
       {outline.spine.thesis && (
         <p className="m-0 flex-none truncate border-b border-white/10 px-4 py-1.5 text-[11px] text-white/40">
           {outline.spine.thesis}
-        </p>
-      )}
-
-      {notice && (
-        <p
-          role="status"
-          className="m-0 flex-none border-b border-amber-400/30 bg-amber-400/10 px-4 py-2 text-[13px] text-amber-200"
-        >
-          {notice}
         </p>
       )}
 

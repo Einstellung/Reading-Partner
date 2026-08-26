@@ -11,8 +11,12 @@
 // into six segments, two chapters can fuse into one. So a segment carries no
 // chapter number — the retell's decisions are the material, not the structure.
 //
-// Not a deck. The slides are made outside the app (docs/44) and the app never
-// sees that file; what it holds is the thing the reader rehearses against.
+// Not a deck, and not a form either. What this holds is the note the reader
+// talks from, and the end state of a talk may be no slides at all — just the
+// note. So a segment is a block of markdown rather than a record of a title,
+// hooks and typed material: what belongs in a block, and in what proportion, is
+// settled by giving the talk and rewriting what did not come out, and a schema
+// can only stand in the way of that.
 
 export const TALK_OUTLINE_VERSION = 1 as const;
 
@@ -38,51 +42,19 @@ export function emptySpine(): TalkSpine {
   return { thesis: "", backbone: [], audience: "", conventions: [], excluded: [] };
 }
 
-// Where a segment stands, per segment and not per pass (docs/44). Taken from the
-// page list the reader already keeps by hand.
-//   ready        can be given now
-//   shallow      the words are right and are not yet the reader's own, so the
-//                delivery will stall
-//   no-material  the figure or the number does not exist yet, and what is
-//                written is the expectation rather than the result
-export type SegmentStatus = "ready" | "shallow" | "no-material";
-
-const STATUSES: readonly string[] = ["ready", "shallow", "no-material"];
-
-// A freshly written segment is shallow, not ready: something has been drafted
-// and nobody has yet said it out loud.
-export const DEFAULT_SEGMENT_STATUS: SegmentStatus = "shallow";
-
-// What the reader points at while talking. Kept whole and never abridged — in a
-// technical talk the formula on the screen is the thing being explained
-// (docs/44). A figure is either one the retell already identified ([fig:N],
-// carried in `figId`) or one described in words.
-export type TalkMaterial =
-  | { kind: "figure"; figId?: string; description: string }
-  | { kind: "tex"; tex: string };
-
-// One segment: one screenful, which is also the limit (docs/44 — a segment that
-// does not fit is a segment that wants splitting). Fewer words than a slide
-// would carry: the audience reads whole sentences, the speaker needs only enough
-// to pull the sentence out.
+// One block of the note. Markdown, because a formula and a figure have to sit in
+// among the words rather than beside them — in a technical talk the formula is
+// the thing being pointed at — and because a block that has been talked through
+// twice stops looking like whatever shape it started in.
 export interface TalkSegment {
   // Minted per segment and never reused. Random rather than positional: two
   // devices adding a segment in the same place must not mint the same id, or the
   // record merge would fuse two different segments into one
   // (platform/sync/merge/records.ts).
   id: string;
-  // The act this belongs to, when the talk has acts. Free text, not an index —
-  // acts get renamed and merged while the segments under them stay put.
-  act?: string;
-  title: string;
-  // The hooks. How many, and how long, is deliberately not fixed: it is the kind
-  // of thing only giving the talk settles (docs/44).
-  cues: string[];
-  // Figures and formulas, verbatim.
-  material: TalkMaterial[];
-  // The id of an earlier segment this one pays back.
-  callback?: string;
-  status: SegmentStatus;
+  // The block, as markdown. Never empty — a block with nothing in it is not a
+  // block, and normalizeSegment drops one.
+  body: string;
   updatedAt: number;
 }
 
@@ -152,19 +124,58 @@ export function normalizeSpine(raw: unknown): TalkSpine {
   };
 }
 
-function normalizeMaterial(raw: unknown): TalkMaterial | null {
-  if (!raw || typeof raw !== "object") return null;
-  const m = raw as { kind?: unknown; tex?: unknown; figId?: unknown; description?: unknown };
-  if (m.kind === "tex") {
-    return typeof m.tex === "string" && m.tex ? { kind: "tex", tex: m.tex } : null;
+/**
+ * One formula as markdown the app's renderer will set as display maths.
+ *
+ * The fences go on their own lines because that is the only shape remark reads
+ * as a block (docs/pitfall — see ui/components/markdown/mathFences.ts): a `$$`
+ * with anything after it on the same line opens a block that loses its first
+ * line and never closes. A formula that already carries its own fences is
+ * unwrapped first rather than fenced twice, since the same formula is written by
+ * hand and by the AI and both write it both ways.
+ */
+export function displayMath(tex: string): string {
+  let body = tex.trim();
+  while (body.startsWith("$$")) body = body.slice(2).trim();
+  while (body.endsWith("$$")) body = body.slice(0, -2).trim();
+  return `$$\n${body}\n$$`;
+}
+
+// What a segment used to be: a title, hooks, and material as a typed list. Read
+// on the way in and never written again — see foldLegacy.
+interface LegacySegment {
+  title?: unknown;
+  cues?: unknown;
+  material?: unknown;
+}
+
+// The old shape as one block of markdown, in the order the panel used to draw
+// the fields in: the title as a heading, each hook as its own paragraph, then
+// the material whole. `act`, `status` and `callback` go — an act is a heading
+// the reader writes if they want one, a status is what giving the talk tells
+// them, and a callback was an id nobody could read.
+function foldLegacy(s: LegacySegment): string {
+  const blocks: string[] = [];
+  const title = typeof s.title === "string" ? s.title.trim() : "";
+  if (title) blocks.push(`## ${title}`);
+  for (const cue of strings(s.cues)) blocks.push(cue.trim());
+  for (const raw of Array.isArray(s.material) ? s.material : []) {
+    if (!raw || typeof raw !== "object") continue;
+    const m = raw as { kind?: unknown; tex?: unknown; figId?: unknown; description?: unknown };
+    if (m.kind === "tex") {
+      if (typeof m.tex === "string" && m.tex.trim()) blocks.push(displayMath(m.tex));
+      continue;
+    }
+    if (m.kind !== "figure") continue;
+    const figId = typeof m.figId === "string" ? m.figId.trim() : "";
+    const description = typeof m.description === "string" ? m.description.trim() : "";
+    // The citation the markdown renderer already draws a figure card for
+    // (ui/components/markdown/FigureCard.tsx), so a figure the retell had
+    // identified keeps its picture. One that was only ever words stays words.
+    if (figId) blocks.push([`[fig:${figId}]`, description].filter(Boolean).join(" "));
+    else if (description) blocks.push(description);
   }
-  if (m.kind === "figure") {
-    const figId = typeof m.figId === "string" && m.figId ? m.figId : undefined;
-    const description = typeof m.description === "string" ? m.description : "";
-    if (!figId && !description) return null;
-    return figId ? { kind: "figure", figId, description } : { kind: "figure", description };
-  }
-  return null;
+  return blocks.join("\n\n");
 }
 
 // A segment odd enough to be unusable is dropped rather than read as null for
@@ -176,31 +187,71 @@ function normalizeMaterial(raw: unknown): TalkMaterial | null {
 // path is built from it (none is). It is the identity the record merge keys on:
 // a file the merge cannot read that way falls through to opaque, where one
 // device's segments silently replace the other's (platform/sync/merge/index.ts).
+//
+// It is also where a talk arranged under the old shape becomes a note. The fold
+// runs on every read and is never written back, so it has to land on the same
+// bytes every time — which is what lets the file stay at version 1 and stay
+// readable to a device that has not been updated.
 export function normalizeSegment(raw: unknown, seen?: Set<string>): TalkSegment | null {
   if (!raw || typeof raw !== "object") return null;
-  const s = raw as Partial<TalkSegment>;
+  const s = raw as Partial<TalkSegment> & LegacySegment;
   if (typeof s.id !== "string" || !s.id) return null;
   if (seen?.has(s.id)) return null;
+  const body = (typeof s.body === "string" ? s.body.trim() : "") || foldLegacy(s);
+  if (!body) return null;
   seen?.add(s.id);
-  const material: TalkMaterial[] = [];
-  for (const m of Array.isArray(s.material) ? s.material : []) {
-    const one = normalizeMaterial(m);
-    if (one) material.push(one);
-  }
-  const segment: TalkSegment = {
+  return {
     id: s.id,
-    title: typeof s.title === "string" ? s.title : "",
-    cues: strings(s.cues),
-    material,
-    status:
-      typeof s.status === "string" && STATUSES.includes(s.status)
-        ? (s.status as SegmentStatus)
-        : DEFAULT_SEGMENT_STATUS,
+    body,
     updatedAt: Number.isFinite(s.updatedAt) ? (s.updatedAt as number) : 0,
   };
-  if (typeof s.act === "string" && s.act.trim()) segment.act = s.act;
-  if (typeof s.callback === "string" && s.callback) segment.callback = s.callback;
-  return segment;
+}
+
+// How wide a run of text is, in columns. An ideograph, a kana and a hangul
+// syllable are drawn about twice as wide as a Latin letter at the same size, so
+// counting characters would cut a Chinese label at half the width it reads as.
+// Same character ranges the word count uses (reading/rehearsal/summary.ts),
+// written as code points rather than pasted as glyphs (docs/pitfall/170).
+const WIDE_CHAR = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7a3]/gu;
+
+function columns(text: string): number {
+  const wide = text.match(WIDE_CHAR)?.length ?? 0;
+  return [...text].length + wide;
+}
+
+// What a first line carries as markdown and does not carry as a name.
+const LEADING_MARKERS = /^[\s#>-]+/;
+
+// About as much as a row in a list holds before it has to be cut.
+const LABEL_COLUMNS = 60;
+
+function truncate(text: string, max: number): string {
+  if (columns(text) <= max) return text;
+  let out = "";
+  let width = 0;
+  for (const ch of text) {
+    const next = width + columns(ch);
+    if (next > max) break;
+    out += ch;
+    width = next;
+  }
+  return `${out.trimEnd()}…`;
+}
+
+/**
+ * The block's one-line name: what a list, a receipt and the pass handoff call
+ * it. Read off the block rather than stored beside it — a note has no title
+ * field, and the line the reader wrote first is the line they will recognise.
+ *
+ * Here rather than beside the panel that draws the list, because
+ * reading/rehearsal/handoff.ts needs it too and a domain file cannot import ui.
+ */
+export function segmentLabel(segment: TalkSegment): string {
+  for (const line of segment.body.split("\n")) {
+    const text = line.replace(LEADING_MARKERS, "").trim();
+    if (text) return truncate(text, LABEL_COLUMNS);
+  }
+  return "Untitled segment";
 }
 
 // A load-time repair. A file this build cannot use at all reads as null and the

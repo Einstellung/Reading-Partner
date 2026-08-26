@@ -12,7 +12,7 @@
 // judged the talk on a pass covering three of twelve would be marking the reader
 // down for the nine they deliberately skipped.
 
-import type { TalkOutline } from "../talk";
+import { segmentLabel, type TalkOutline } from "../talk";
 import { runSummary } from "./summary";
 import type { RehearsalPage, RehearsalRunEntry } from "./types";
 
@@ -51,7 +51,8 @@ export function passMessage(input: PassHandoff): string {
   const summary = runSummary(entry);
   const label = (page: RehearsalPage): string => {
     const at = place.get(page.kind);
-    const title = outline.segments.find((s) => s.id === page.kind)?.title || page.title;
+    const found = outline.segments.find((s) => s.id === page.kind);
+    const title = found ? segmentLabel(found) : page.title;
     // A segment dropped from the talk between passes has no place in it any
     // more, and saying so is better than printing a number that now belongs to
     // somebody else.

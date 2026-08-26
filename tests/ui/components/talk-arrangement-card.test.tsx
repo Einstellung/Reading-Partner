@@ -68,35 +68,33 @@ test("a spine write shows the through-line and who it is for", () => {
   expect(joined).toContain("the psychophysics");
 });
 
-test("a segment write shows its place, its cues, its material and its status", () => {
+test("a block write shows its place and the head of what was written", () => {
   const joined = shown({
     kind: "talk-arrangement",
     change: "segment",
-    segment: {
-      id: "s1",
-      act: "Act one",
-      title: "Why the eye is not a camera",
-      cues: ["ask what they think the retina sends"],
-      material: [
-        { kind: "figure", figId: "3", description: "the ganglion map" },
-        { kind: "tex", tex: "x^2 + y^2" },
-      ],
-      status: "shallow",
-    },
-    callbackTitle: "The promise",
+    body: [
+      "## Why the eye is not a camera",
+      "",
+      "ask what they think the retina sends",
+      "",
+      "[fig:3] the ganglion map",
+      "",
+      "$$",
+      "x^2 + y^2",
+      "$$",
+      "",
+      "and the line that pays it back",
+    ].join("\n"),
     position: 2,
     total: 5,
   });
-  expect(joined).toContain("Segment 2 of 5");
-  expect(joined).toContain("Act one");
+  expect(joined).toContain("Block 2 of 5");
   expect(joined).toContain("Why the eye is not a camera");
   expect(joined).toContain("ask what they think the retina sends");
-  expect(joined).toContain("[fig:3] the ganglion map");
-  expect(joined).toContain("x^2 + y^2");
-  expect(joined).toContain("Needs depth");
-  expect(joined).toContain("The promise");
-  // The segment's own id is a handle for the model, not something to show.
-  expect(joined).not.toContain("s1");
+  // A receipt, not a second place to read the note: past a few lines it is cut,
+  // and it is never handed to the markdown renderer.
+  expect(joined).toContain("…");
+  expect(joined).not.toContain("and the line that pays it back");
 });
 
 test("a dropped segment and a moved one each say what happened", () => {
@@ -128,7 +126,7 @@ test("the card carries no controls", () => {
   const payload: TalkArrangementCardData = {
     kind: "talk-arrangement",
     change: "segment",
-    segment: { id: "s1", title: "A", cues: [], material: [], status: "ready" },
+    body: "## A",
     position: 1,
     total: 1,
   };

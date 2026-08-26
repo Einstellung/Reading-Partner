@@ -23,7 +23,11 @@ import {
 } from "../../scripts/import-minigpt-outline";
 import { loadRehearsal, rehearsalFile } from "../../src/reading/rehearsal/store";
 import { loadTalkOutline, talkOutlineFile } from "../../src/reading/talk/store";
-import type { TalkOutline } from "../../src/reading/talk/types";
+import {
+  normalizeSegment,
+  segmentLabel,
+  type TalkOutline,
+} from "../../src/reading/talk/types";
 import { installAppData, type FakeDisk } from "../support/appdata-fake";
 
 let disk: FakeDisk;
@@ -151,6 +155,41 @@ test("the backbone is the acts the pages carry, in the order they appear", () =>
   expect(build().spine.backbone).toEqual(["二 · 模型结构", "三 · 训练目标与优化"]);
 });
 
+// The one-off does not format its own markdown: it mints the segments in the
+// shape the outline used to store and lets the load-time repair fold them. An
+// imported page and a segment synced from a build that predates the note then
+// land on the same bytes rather than on two spellings of the same slide.
+test("a block is what the migration makes of the old record, and nothing else", () => {
+  const outline = build();
+  for (const [i, segment] of outline.segments.entries()) {
+    const p = parseSlide(SLIDES[i].html);
+    expect(segment).toEqual(
+      normalizeSegment({
+        id: segment.id,
+        act: p.act,
+        title: p.title,
+        cues: [],
+        material: p.material,
+        status: "shallow",
+        updatedAt: segment.updatedAt,
+      })!,
+    );
+  }
+  // What that comes out as, for the page carrying both kinds of material. The
+  // act is gone — it is in the backbone, and the fold has nowhere to put it.
+  expect(outline.segments[2].body).toBe(
+    [
+      "## 缩放因子的来源",
+      "",
+      "$$",
+      "\\alpha_i=\\frac{e^{s_i}}{Z},\\quad s\\lt 1",
+      "$$",
+      "",
+      "α(1−α) 的曲线，两端取零",
+    ].join("\n"),
+  );
+});
+
 test("what is written comes back through the app's own read path", async () => {
   const outline = build();
   const rehearsal = buildRehearsal(outline, "1700000000001");
@@ -162,7 +201,7 @@ test("what is written comes back through the app's own read path", async () => {
   // Nothing was dropped on the way in: normalizeSegment discards a segment it
   // cannot key, and a silently shorter outline is the failure this pins.
   expect(read?.segments.length).toBe(SLIDES.length);
-  expect(read?.segments.map((s) => s.title)).toEqual([
+  expect(read?.segments.map((s) => segmentLabel(s))).toEqual([
     "从零训练一个 miniGPT",
     "内积为何可以作为接近程度的度量",
     "缩放因子的来源",
@@ -170,7 +209,7 @@ test("what is written comes back through the app's own read path", async () => {
   ]);
   expect(read?.spine).toEqual(outline.spine);
   expect(read?.retellId).toBeNull();
-  expect(read?.segments[2].material).toEqual(outline.segments[2].material);
+  expect(read?.segments[2].body).toBe(outline.segments[2].body);
 
   // The outline alone has no door: the topic's list joins rehearsals with
   // retells that arranged a talk, and this one is neither.
@@ -210,19 +249,15 @@ test.if(haveDeck)("the miniGPT deck imports as 47 segments the app can read", as
   expect(segments.length).toBe(names.length);
 
   // The file order is the running order, and nothing else says it.
-  expect(segments[0].title).toBe("从零训练一个 miniGPT");
-  expect(segments[46].title).toBe("因果性与实时性约束");
+  expect(segmentLabel(segments[0])).toBe("从零训练一个 miniGPT");
+  expect(segmentLabel(segments[46])).toBe("因果性与实时性约束");
   expect(new Set(segments.map((s) => s.id)).size).toBe(47);
-  expect(segments.every((s) => s.status === "shallow")).toBe(true);
-  // Left empty on purpose: the deck's notes are the audience's sentences, and
-  // the hooks are what talking to the coach produces.
-  expect(segments.every((s) => s.cues.length === 0)).toBe(true);
-  // Every segment says what it is. The three question pages carry no title
-  // element, and their question is now their name.
-  expect(segments.every((s) => s.title !== "")).toBe(true);
-  expect(segments[13].title).toBe("内积为何可以作为两个词元表示接近程度的度量");
-  expect(segments[21].title).toBe("特征维度既已固定，多头注意力为何是切分而非增维");
-  expect(segments[29].title).toBe("层数增加为何会使训练难以进行");
+  // Every block says what it is, as a heading. The three question pages carry no
+  // title element, and their question is now their heading.
+  expect(segments.every((s) => s.body.startsWith("## "))).toBe(true);
+  expect(segmentLabel(segments[13])).toBe("内积为何可以作为两个词元表示接近程度的度量");
+  expect(segmentLabel(segments[21])).toBe("特征维度既已固定，多头注意力为何是切分而非增维");
+  expect(segmentLabel(segments[29])).toBe("层数增加为何会使训练难以进行");
 
   expect(read?.spine.thesis).toBe("三个约束怎么把一个式子逼成 Transformer");
   expect(read?.spine.audience).toBe("有算法背景但没手写过 attention 的同事");
@@ -231,43 +266,57 @@ test.if(haveDeck)("the miniGPT deck imports as 47 segments the app can read", as
   expect(read?.spine.backbone[6]).toBe("七 · 动作序列");
   expect(read?.spine.excluded).toEqual([]);
 
-  // The five opening pages are before the ribs start, so they carry no act.
-  expect(segments.slice(0, 5).every((s) => s.act === undefined)).toBe(true);
-  expect(segments[5].act).toBe("一 · 问题与目标");
-
   // The display formulas and nothing else: 66 `.tex-block`s across the deck,
   // where the 201 inline spans beside them are symbols in sentences that are
-  // not carried.
-  const tex = segments.flatMap((s) => s.material.filter((m) => m.kind === "tex"));
+  // not carried. Read back out of the blocks, so this is the round trip through
+  // JSON and the load-time repair and not what the parser handed over.
+  const tex = segments.flatMap((s) => texBlocks(s.body));
   expect(tex.length).toBe(66);
-  // A screenful is the limit a segment is meant to hold (docs/44), so nothing
-  // here may arrive as a stack of one-letter formulas.
-  expect(Math.max(...segments.map((s) => s.material.length))).toBeLessThanOrEqual(6);
-  // Unescaped TeX survived the round trip through JSON and the load-time
-  // repair. `\lt` is the deck's way of writing `<`, and no raw angle bracket
-  // may appear — one would have ended the element early and cut the formula.
-  expect(tex.some((m) => m.kind === "tex" && m.tex.includes("\\lt"))).toBe(true);
-  expect(tex.some((m) => m.kind === "tex" && /[<>]/.test(m.tex))).toBe(false);
+  // Unescaped TeX survived. `\lt` is the deck's way of writing `<`, and no raw
+  // angle bracket may appear — one would have ended the element early and cut
+  // the formula.
+  expect(tex.some((t) => t.includes("\\lt"))).toBe(true);
+  expect(tex.some((t) => /[<>]/.test(t))).toBe(false);
   // An `&` is a different matter: the loss table writes its column separators
   // raw, and nothing here may turn one into `&amp;`.
-  expect(tex.some((m) => m.kind === "tex" && m.tex.includes("\\text{train} & 4.283"))).toBe(true);
-  expect(tex.some((m) => m.kind === "tex" && m.tex.includes("&amp;"))).toBe(false);
+  expect(tex.some((t) => t.includes("\\text{train} & 4.283"))).toBe(true);
+  expect(tex.some((t) => t.includes("&amp;"))).toBe(false);
   // A long block arrives whole rather than cut at the first relation symbol.
-  expect(
-    tex.some(
-      (m) =>
-        m.kind === "tex" &&
-        m.tex ===
-          "\\frac{\\partial\\alpha_i}{\\partial s_j}=\\alpha_i(\\delta_{ij}-\\alpha_j)" +
-            "\\qquad\\Longrightarrow\\qquad J=\\operatorname{diag}(\\alpha)-\\alpha\\alpha^{\\top}",
-    ),
-  ).toBe(true);
+  expect(tex).toContain(
+    "\\frac{\\partial\\alpha_i}{\\partial s_j}=\\alpha_i(\\delta_{ij}-\\alpha_j)" +
+      "\\qquad\\Longrightarrow\\qquad J=\\operatorname{diag}(\\alpha)-\\alpha\\alpha^{\\top}",
+  );
 
   // Eight photographed figures with alt text, plus the sixteen hand-drawn SVGs
   // with an aria-label. The cover's decorative band has alt="" and is not one.
-  const figures = segments.flatMap((s) => s.material.filter((m) => m.kind === "figure"));
-  expect(figures.length).toBe(24);
-  // No path and no figId: the picture files stay outside the app, and an id
-  // nothing minted would be one invented here.
-  expect(figures.every((m) => m.kind === "figure" && !m.figId && m.description)).toBe(true);
+  const parsed = slides.map((s) => parseSlide(s.html));
+  expect(parsed.flatMap((p) => p.material).filter((m) => m.kind === "figure").length).toBe(24);
+  // No path and no [fig:N]: the picture files stay outside the app, and an id
+  // nothing minted would be one invented here. So a figure arrives as the
+  // sentence it says about itself, on a line of its own.
+  expect(segments.some((s) => s.body.includes("[fig:"))).toBe(false);
+  for (const [i, p] of parsed.entries()) {
+    for (const m of p.material) {
+      if (m.kind === "figure") expect(segments[i].body).toContain(m.description);
+    }
+    // A heading and the material, and nothing between them: the deck's notes
+    // are the audience's sentences, and the hooks are what talking to the coach
+    // produces.
+    expect(segments[i].body.split("\n\n").length).toBe(1 + p.material.length);
+  }
 });
+
+// The display blocks in one body, unfenced. A block is `$$` alone on its line,
+// the source, then `$$` alone on its line (reading/talk/types.ts).
+function texBlocks(body: string): string[] {
+  const lines = body.split("\n");
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    if (lines[i] !== "$$") continue;
+    const close = lines.indexOf("$$", i + 1);
+    if (close < 0) break;
+    out.push(lines.slice(i + 1, close).join("\n"));
+    i = close;
+  }
+  return out;
+}

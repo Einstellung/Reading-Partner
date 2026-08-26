@@ -12,49 +12,56 @@ import {
 } from "../../../src/reading/talk/edit";
 import { newTalkOutline, type TalkOutline } from "../../../src/reading/talk/types";
 
-function outlineWith(...titles: string[]): TalkOutline {
+function outlineWith(...bodies: string[]): TalkOutline {
   let outline = newTalkOutline({ id: "1", topicId: "t", now: 1 });
-  for (const title of titles) {
-    outline = putSegment(outline, { title }, 1, () => `s-${title}`);
+  for (const body of bodies) {
+    outline = putSegment(outline, { body }, 1, () => `s-${body}`);
   }
   return outline;
 }
 
 test("a new segment lands where it was asked for, and appends by default", () => {
   const outline = outlineWith("one", "two");
-  expect(outline.segments.map((s) => s.title)).toEqual(["one", "two"]);
-  const withOpening = putSegment(outline, { title: "opening", at: 0 }, 2, () => "s-opening");
-  expect(withOpening.segments.map((s) => s.title)).toEqual(["opening", "one", "two"]);
+  expect(outline.segments.map((s) => s.body)).toEqual(["one", "two"]);
+  const withOpening = putSegment(outline, { body: "opening", at: 0 }, 2, () => "s-opening");
+  expect(withOpening.segments.map((s) => s.body)).toEqual(["opening", "one", "two"]);
   // Past the end is the end, not a hole.
-  const withClose = putSegment(withOpening, { title: "close", at: 99 }, 3, () => "s-close");
-  expect(withClose.segments.map((s) => s.title)).toEqual(["opening", "one", "two", "close"]);
+  const withClose = putSegment(withOpening, { body: "close", at: 99 }, 3, () => "s-close");
+  expect(withClose.segments.map((s) => s.body)).toEqual(["opening", "one", "two", "close"]);
 });
 
-// The AI writes one line of a segment at a time (docs/44), so an edit that names
-// a title must not blank the cues that were already under it.
-test("an edit touches the keys it names and leaves the rest alone", () => {
-  const outline = putSegment(outlineWith("one"), { id: "s-one", cues: ["a", "b"] }, 2);
-  const edited = putSegment(outline, { id: "s-one", title: "one, sharpened" }, 3);
-  expect(edited.segments[0].cues).toEqual(["a", "b"]);
-  expect(edited.segments[0].title).toBe("one, sharpened");
+// A block is one piece of prose, so a rewrite replaces it whole. There is no
+// field in it to name and nothing under it to leave alone.
+test("a rewrite replaces the block and moves the clock", () => {
+  const outline = outlineWith("one");
+  const edited = putSegment(outline, { id: "s-one", body: "one, sharpened" }, 3);
+  expect(edited.segments[0].body).toBe("one, sharpened");
   expect(edited.segments[0].updatedAt).toBe(3);
+  // `at` is ignored for a segment that is already there: an edit of the words
+  // must not silently reorder the talk.
+  const two = putSegment(edited, { id: "s-one", body: "again", at: 0 }, 4);
+  expect(two.segments.map((s) => s.id)).toEqual(["s-one"]);
 });
 
-test("an act and a callback can be taken back off", () => {
-  const outline = putSegment(outlineWith("one"), { id: "s-one", act: "Act I", callback: "s-x" }, 2);
-  expect(outline.segments[0].act).toBe("Act I");
-  const bare = putSegment(outline, { id: "s-one", act: null, callback: null }, 3);
-  expect("act" in bare.segments[0]).toBe(false);
-  expect("callback" in bare.segments[0]).toBe(false);
+// The repair a load goes through is the same one an edit goes through, so a
+// segment cannot reach disk in a shape the next read would drop.
+test("an add carrying no block is not an add", () => {
+  const outline = outlineWith("one");
+  expect(putSegment(outline, { at: 0 }, 2, () => "minted")).toBe(outline);
+  expect(putSegment(outline, { body: "   " }, 2, () => "minted")).toBe(outline);
+  // Emptying an existing block is not how a block is removed either.
+  expect(putSegment(outline, { id: "s-one", body: "" }, 2)).toBe(outline);
 });
 
 // The store writes only what came back different, so a no-op must come back
 // identical rather than merely equal: an identical rewrite is a sync revision
 // and a merge for nothing (pitfall 53).
 test("a change that is not a change is the same object", () => {
-  const outline = putSegment(outlineWith("one"), { id: "s-one", cues: ["a"] }, 2);
-  expect(putSegment(outline, { id: "s-one", cues: ["a"] }, 9)).toBe(outline);
-  expect(putSegment(outline, { id: "s-one", title: "one" }, 9)).toBe(outline);
+  const outline = outlineWith("one");
+  expect(putSegment(outline, { id: "s-one", body: "one" }, 9)).toBe(outline);
+  // The stored block is trimmed, so a rewrite that only adds whitespace is not
+  // a change either.
+  expect(putSegment(outline, { id: "s-one", body: "  one\n" }, 9)).toBe(outline);
   expect(removeSegment(outline, "nobody", 9)).toBe(outline);
   expect(moveSegment(outline, "s-one", 0, 9)).toBe(outline);
   expect(moveSegment(outline, "nobody", 1, 9)).toBe(outline);
@@ -65,12 +72,12 @@ test("a change that is not a change is the same object", () => {
 
 test("moving reads as the position in the list that comes out", () => {
   const outline = outlineWith("one", "two", "three");
-  expect(moveSegment(outline, "s-three", 0, 2).segments.map((s) => s.title)).toEqual([
+  expect(moveSegment(outline, "s-three", 0, 2).segments.map((s) => s.body)).toEqual([
     "three",
     "one",
     "two",
   ]);
-  expect(moveSegment(outline, "s-one", 99, 2).segments.map((s) => s.title)).toEqual([
+  expect(moveSegment(outline, "s-one", 99, 2).segments.map((s) => s.body)).toEqual([
     "two",
     "three",
     "one",
@@ -79,7 +86,7 @@ test("moving reads as the position in the list that comes out", () => {
 
 test("removing takes one segment and leaves the order of the others", () => {
   const outline = removeSegment(outlineWith("one", "two", "three"), "s-two", 5);
-  expect(outline.segments.map((s) => s.title)).toEqual(["one", "three"]);
+  expect(outline.segments.map((s) => s.body)).toEqual(["one", "three"]);
   expect(outline.updatedAt).toBe(5);
 });
 
@@ -96,8 +103,8 @@ test("the spine is patched key by key", () => {
 // An id is what the record merge keys on, so two segments must never share one.
 test("a new segment cannot take an id another segment already has", () => {
   const outline = outlineWith("one");
-  const second = putSegment(outline, { id: "s-one", at: 0, title: "two" }, 2, () => "minted");
+  const second = putSegment(outline, { id: "s-one", at: 0, body: "two" }, 2, () => "minted");
   // The id was taken, so it edited that segment rather than making a twin.
   expect(second.segments.map((s) => s.id)).toEqual(["s-one"]);
-  expect(second.segments[0].title).toBe("two");
+  expect(second.segments[0].body).toBe("two");
 });

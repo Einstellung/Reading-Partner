@@ -9,7 +9,6 @@
 // no-op out of the sync revision it would otherwise cost.
 
 import {
-  DEFAULT_SEGMENT_STATUS,
   normalizeSegment,
   normalizeSpine,
   type TalkOutline,
@@ -27,19 +26,14 @@ export function newSegmentId(): string {
   return crypto.randomUUID();
 }
 
-// What a writer hands in. Everything is optional: an edit that names a title and
-// nothing else leaves the cues where they were, which is what lets the AI fix one
-// line of a segment without restating the rest of it.
+// What a writer hands in. A block is rewritten whole rather than patched line by
+// line — it is one piece of prose, and there is no field in it to name.
 export interface SegmentEdit {
   // The segment to change. Absent, or naming one that is not there, adds a new
   // one.
   id?: string;
-  act?: string | null;
-  title?: string;
-  cues?: readonly string[];
-  material?: readonly TalkSegment["material"][number][];
-  callback?: string | null;
-  status?: TalkSegment["status"];
+  // The block, as markdown.
+  body?: string;
   // Where a new segment goes, 0-based. Absent, or past the end, appends. Ignored
   // for a segment that is already there — moving one is moveSegment's job, so an
   // edit of the words cannot silently reorder the talk.
@@ -48,18 +42,7 @@ export interface SegmentEdit {
 
 function applyEdit(base: TalkSegment, edit: SegmentEdit, now: number): TalkSegment {
   const next: TalkSegment = { ...base, updatedAt: now };
-  if (edit.title !== undefined) next.title = edit.title;
-  if (edit.cues !== undefined) next.cues = [...edit.cues];
-  if (edit.material !== undefined) next.material = [...edit.material];
-  if (edit.status !== undefined) next.status = edit.status;
-  if (edit.act !== undefined) {
-    if (edit.act === null || !edit.act.trim()) delete next.act;
-    else next.act = edit.act;
-  }
-  if (edit.callback !== undefined) {
-    if (edit.callback === null || !edit.callback) delete next.callback;
-    else next.callback = edit.callback;
-  }
+  if (edit.body !== undefined) next.body = edit.body;
   // Through the same repair a load goes through, so a segment written by the AI
   // cannot reach disk in a shape a reload would drop.
   return normalizeSegment(next) ?? base;
@@ -85,15 +68,17 @@ export function putSegment(
   }
   const blank: TalkSegment = {
     id: edit.id && !outline.segments.some((s) => s.id === edit.id) ? edit.id : mintId(),
-    title: "",
-    cues: [],
-    material: [],
-    status: DEFAULT_SEGMENT_STATUS,
+    body: "",
     updatedAt: now,
   };
+  const written = applyEdit(blank, edit, now);
+  // An add carrying no block is not an add. applyEdit answers the blank when the
+  // repair rejects what it was given, and splicing that in would put a segment on
+  // disk that the next read drops.
+  if (!written.body) return outline;
   const segments = [...outline.segments];
   const at = edit.at === undefined ? segments.length : clamp(edit.at, segments.length);
-  segments.splice(at, 0, applyEdit(blank, edit, now));
+  segments.splice(at, 0, written);
   return { ...outline, segments, updatedAt: now };
 }
 

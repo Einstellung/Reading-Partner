@@ -67,19 +67,19 @@ test("a read that failed stops the edit rather than starting over", async () => 
   const before = disk.files.get(talkOutlineFile(made.id));
   disk.unreadable.add(talkOutlineFile(made.id));
   await expect(
-    editTalkOutline(made.id, (o) => putSegment(o, { title: "one" }, 2)),
+    editTalkOutline(made.id, (o) => putSegment(o, { body: "one" }, 2)),
   ).rejects.toThrow();
   expect(disk.files.get(talkOutlineFile(made.id))).toBe(before as string);
 });
 
 test("an edit writes, and an edit that changes nothing does not", async () => {
   const made = await startTalkOutline({ topicId: "t", now: 1 });
-  await editTalkOutline(made.id, (o) => putSegment(o, { id: "a", title: "Opening" }, 2));
+  await editTalkOutline(made.id, (o) => putSegment(o, { id: "a", body: "Opening" }, 2));
   const read = await loadTalkOutline(made.id);
-  expect(read?.segments.map((s) => s.title)).toEqual(["Opening"]);
+  expect(read?.segments.map((s) => s.body)).toEqual(["Opening"]);
 
   const writes = disk.writes.length;
-  await editTalkOutline(made.id, (o) => putSegment(o, { id: "a", title: "Opening" }, 3));
+  await editTalkOutline(made.id, (o) => putSegment(o, { id: "a", body: "Opening" }, 3));
   expect(disk.writes.length).toBe(writes);
   await editTalkOutline(made.id, (o) => setSpine(o, { thesis: "the body is the point" }, 4));
   expect(disk.writes.length).toBe(writes + 1);

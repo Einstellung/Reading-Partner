@@ -7,7 +7,7 @@
 // the direction that works — reading/talk imports neither of the domains that
 // use it.
 
-import type { TalkSegment, TalkSpine } from "./types";
+import type { TalkSpine } from "./types";
 
 // Shown when the arrangement writes to the talk outline (docs/44). One card per
 // write, and a write is bounded to one thing, so the reader reads the card and
@@ -23,12 +23,9 @@ export type TalkArrangementCardData =
   | {
       kind: "talk-arrangement";
       change: "segment";
-      // The segment as it now stands, without updatedAt: the card is what was
-      // written, and the clock is not part of that.
-      segment: Omit<TalkSegment, "updatedAt">;
-      // The title of the segment this one pays back. The segment itself carries
-      // only that segment's id, which is nothing the reader can read.
-      callbackTitle?: string;
+      // The block as it now stands, markdown as written. The card says which
+      // block landed; the note itself is read where the note is.
+      body: string;
       // 1-based, the way the talk is counted out loud.
       position: number;
       total: number;

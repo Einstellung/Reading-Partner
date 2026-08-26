@@ -25,7 +25,12 @@ function talk(): TalkOutline {
     { thesis: "The eye throws most of it away", audience: "people with no vision course" },
     1,
   );
-  outline = putSegment(outline, { title: "Opening", cues: ["ask what they see"] }, 1, () => "s1");
+  outline = putSegment(
+    outline,
+    { body: "## Opening\n\nask what they see" },
+    1,
+    () => "s1",
+  );
   return outline;
 }
 
@@ -50,9 +55,9 @@ test("the instructions separate the coach from the retell's examiner", () => {
   expect(COACH_INSTRUCTIONS).toContain("not a blank sheet");
   // Only what was given this pass.
   expect(COACH_INSTRUCTIONS).toContain("say nothing about the others");
-  // The product is a change to the talk, and "ready" is earned by giving it.
+  // The product is a change to the talk, and the talk is a note it edits.
   expect(COACH_INSTRUCTIONS).toContain("a change to the talk, not a review");
-  expect(COACH_INSTRUCTIONS).toContain("by being given and not by being written well");
+  expect(COACH_INSTRUCTIONS).toContain("one block of markdown per segment");
   expect(COACH_INSTRUCTIONS).toContain("Never rewrite a segment into your own words");
 });
 
@@ -83,11 +88,11 @@ test("the turn mounts the five tools that write a talk, over the live outline", 
   expect(turn.messages).toHaveLength(1);
   expect(turn.refusal).toBe("");
 
-  // Marking a segment ready is the coach's one silent write: it heard the
-  // segment given (docs/44), and the write lands in the file the panel reads.
+  // Editing the note is the coach's one silent write: it heard the segment
+  // given (docs/44), and the write lands in the file the panel reads.
   const write = turn.tools.find((t) => t.name === "write_talk_segment")!;
-  await write.execute({ id: "s1", status: "ready" });
-  expect(outline.segments[0].status).toBe("ready");
+  await write.execute({ id: "s1", body: "## Opening\n\nask what they see, then wait" });
+  expect(outline.segments[0].body).toBe("## Opening\n\nask what they see, then wait");
 });
 
 // A conversation anchored on the outline collects every pass ever given, and a

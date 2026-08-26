@@ -3,12 +3,10 @@
 // see which thing: the spine, one segment, a segment dropped, a segment moved.
 //
 // Read-only, like the decision card next to it. The talk is corrected by saying
-// so to the AI, which rewrites the segment and raises a fresh card.
-// Presentational, Tailwind-only; the labels come from reading/talk/tools.ts
-// so the model's read-back and this card call a status the same thing.
+// so to the AI, which rewrites the block and raises a fresh card. Presentational,
+// Tailwind-only.
 
 import type { ReactNode } from "react";
-import { materialLabel, segmentStatusLabel } from "../../../reading/talk";
 import type { TalkArrangementCardData } from "../../../reading/retell/cards";
 import type { CardComponentProps } from "../chat/chatParts";
 import { Badge } from "../ui/badge";
@@ -57,6 +55,16 @@ function Bullets({ items }: { items: readonly string[] }) {
   );
 }
 
+// How much of a block the receipt shows. Enough to recognise which one it is;
+// the block itself is read where the note is read.
+const PREVIEW_LINES = 4;
+
+function preview(body: string): string {
+  const lines = body.split("\n").map((line) => line.trim()).filter(Boolean);
+  const head = lines.slice(0, PREVIEW_LINES).join("\n");
+  return lines.length > PREVIEW_LINES ? `${head}\n…` : head;
+}
+
 export function TalkArrangementCard({ payload }: CardComponentProps<TalkArrangementCardData>) {
   if (payload.change === "spine") {
     const s = payload.spine;
@@ -97,22 +105,14 @@ export function TalkArrangementCard({ payload }: CardComponentProps<TalkArrangem
     );
   }
 
-  const seg = payload.segment;
   return (
-    <Shell
-      eyebrow={`Segment ${payload.position} of ${payload.total}`}
-      badge={segmentStatusLabel(seg.status)}
-      badgeVariant={seg.status === "ready" ? "source" : "aside"}
-    >
-      {seg.act && <div className="mt-1 text-[12px] text-[#999]">{seg.act}</div>}
-      <div className="mt-1 text-[15px] font-medium leading-snug text-[#1b1b1b]">
-        {seg.title || "Untitled segment"}
+    <Shell eyebrow={`Block ${payload.position} of ${payload.total}`} badge="Written">
+      {/* The head of the block, as it was written — markdown source and not
+          rendered markdown. This is a receipt saying which block landed, and a
+          second place to read the note would be a second note. */}
+      <div className="mt-1.5 whitespace-pre-line text-[13px] leading-snug text-[#333]">
+        {preview(payload.body)}
       </div>
-      {seg.cues.length > 0 && <Bullets items={seg.cues} />}
-      {seg.material.map((m, i) => (
-        <Line key={i} label={m.kind === "tex" ? "Formula" : "Figure"} value={materialLabel(m)} />
-      ))}
-      {payload.callbackTitle && <Line label="Pays back" value={payload.callbackTitle} />}
     </Shell>
   );
 }

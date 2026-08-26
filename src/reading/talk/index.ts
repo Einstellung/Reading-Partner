@@ -30,17 +30,16 @@ export {
   type StartTalkOutlineInput,
 } from "./store";
 export {
-  DEFAULT_SEGMENT_STATUS,
+  displayMath,
   emptySpine,
   newTalkOutline,
   newTalkOutlineId,
   normalizeSegment,
   normalizeSpine,
   normalizeTalkOutline,
+  segmentLabel,
   TALK_OUTLINE_VERSION,
   type NewTalkOutlineFields,
-  type SegmentStatus,
-  type TalkMaterial,
   type TalkOutline,
   type TalkSegment,
   type TalkSpine,
@@ -48,9 +47,6 @@ export {
 export {
   buildArrangeTools,
   formatTalkOutline,
-  materialLabel,
   segmentCard,
-  segmentStatusLabel,
-  toTalkMaterial,
   type ArrangeToolDeps,
 } from "./tools";

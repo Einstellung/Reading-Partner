@@ -7,21 +7,23 @@
 // hand and this file is never wanted again. It is deliberately not an import
 // feature in the app: there is no second legacy deck.
 //
+// A block comes out as the page's title as a heading and its material under it.
 // What it does NOT carry:
-//   cues      Left empty, every segment. The deck's figure-notes are whole
-//             sentences printed for the audience to read; loaded as cues they
-//             would be exactly the script docs/44 says rehearsing must not be
-//             done against. The hooks come out of talking to the coach.
-//   pictures  TalkMaterial's figure has no path field and neither the picture
-//             files nor the deck's hand-drawn SVGs come across. What does is
-//             what each of them already says about itself — an <img>'s alt, an
-//             <svg>'s aria-label — which is specific enough to say what the
-//             reader is pointing at while he talks.
+//   hooks     Nothing between the heading and the material. The deck's
+//             figure-notes are whole sentences printed for the audience to
+//             read; written into the note they would be exactly the script
+//             docs/44 says rehearsing must not be done against. The hooks come
+//             out of talking to the coach.
+//   pictures  Neither the picture files nor the deck's hand-drawn SVGs come
+//             across, and nothing here mints a [fig:N] the app could resolve.
+//             What does come across is what each picture already says about
+//             itself — an <img>'s alt, an <svg>'s aria-label — which is
+//             specific enough to say what the reader is pointing at while he
+//             talks.
 //   symbols    A `<span class="tex">` is one symbol inside a sentence, and the
 //             sentences are not carried. Out of context `Z` and `d_k` are not
 //             material, they are 267 stacked one-letter formulas. Only the
 //             display formulas, `.tex-block`, come across.
-//   status    Everything is `shallow`: drafted, never said out loud.
 //
 // Usage:
 //   bun scripts/import-minigpt-outline.ts <deck-dir> <out-dir> [--topic <id>]
@@ -36,9 +38,8 @@ import { readdirSync } from "node:fs";
 import { basename, join } from "node:path";
 import { newSegmentId } from "../src/reading/talk/edit";
 import {
-  DEFAULT_SEGMENT_STATUS,
+  normalizeSegment,
   TALK_OUTLINE_VERSION,
-  type TalkMaterial,
   type TalkOutline,
   type TalkSegment,
   type TalkSpine,
@@ -98,11 +99,22 @@ function classes(attrs: string): Set<string> {
 // outline segment with no title is a different matter.
 const TITLE_CLASSES = ["slide-title", "cover-title", "part-name"];
 
+/**
+ * The two kinds of material a page carries, in the shape the outline stored
+ * before a segment became a block of markdown. Kept because the segments are
+ * minted in that shape and folded to markdown by normalizeSegment: this import
+ * and a talk arranged before the note existed then land on the same bytes,
+ * rather than on two spellings of the same page.
+ */
+export type SlideMaterial =
+  | { kind: "figure"; description: string }
+  | { kind: "tex"; tex: string };
+
 export interface ParsedSlide {
   /** The `.kicker` line, or "" on the pages that carry none. */
   act: string;
   title: string;
-  material: TalkMaterial[];
+  material: SlideMaterial[];
 }
 
 /**
@@ -113,7 +125,7 @@ export interface ParsedSlide {
 export function parseSlide(html: string): ParsedSlide {
   let act = "";
   let title = "";
-  const material: TalkMaterial[] = [];
+  const material: SlideMaterial[] = [];
   OPEN_TAG.lastIndex = 0;
   for (let m = OPEN_TAG.exec(html); m; m = OPEN_TAG.exec(html)) {
     const [whole, tag, attrs] = m;
@@ -225,18 +237,20 @@ export function buildOutline(input: BuildInput): TalkOutline {
   // and a segment with no act is one the talk gets to before the ribs start.
   const backbone: string[] = [];
   for (const p of parsed) if (p.act && !backbone.includes(p.act)) backbone.push(p.act);
-  const segments: TalkSegment[] = parsed.map((p) => {
-    const segment: TalkSegment = {
+  // Through the load-time repair rather than formatted here, so the markdown is
+  // the migration's markdown and not a second version of it. The act goes: it is
+  // in the backbone above, and the fold has nowhere to put it.
+  const segments: TalkSegment[] = [];
+  for (const p of parsed) {
+    const segment = normalizeSegment({
       id: mint(),
       title: p.title,
       cues: [],
       material: p.material,
-      status: DEFAULT_SEGMENT_STATUS,
       updatedAt: input.now,
-    };
-    if (p.act) segment.act = p.act;
-    return segment;
-  });
+    });
+    if (segment) segments.push(segment);
+  }
   return {
     version: TALK_OUTLINE_VERSION,
     id: input.outlineId,
@@ -300,12 +314,13 @@ async function main(): Promise<void> {
   }
 
   const now = Date.now();
+  const parsed = slides.map((s) => parseSlide(s.html));
   const outline = buildOutline({
     notes,
     slides,
     topicId,
     outlineId: `${now}`,
-    name: parseSlide(slides[0]?.html ?? "").title || FALLBACK_NAME,
+    name: parsed[0]?.title || FALLBACK_NAME,
     now,
   });
   // One millisecond apart, which is what reserveRehearsalId would have done:
@@ -318,9 +333,9 @@ async function main(): Promise<void> {
   await Bun.write(outlineFile, JSON.stringify(outline, null, 2));
   await Bun.write(rehearsalFile, JSON.stringify(rehearsal, null, 2));
 
-  const tex = outline.segments.filter((s) => s.material.some((m) => m.kind === "tex")).length;
-  const fig = outline.segments.filter((s) => s.material.some((m) => m.kind === "figure")).length;
-  const untitled = outline.segments.filter((s) => !s.title).length;
+  const tex = parsed.filter((p) => p.material.some((m) => m.kind === "tex")).length;
+  const fig = parsed.filter((p) => p.material.some((m) => m.kind === "figure")).length;
+  const untitled = parsed.filter((p) => !p.title).length;
   console.log(`${outline.segments.length} segments from ${basename(slidesDir)}/`);
   console.log(`  acts:      ${outline.spine.backbone.length}`);
   console.log(`  with TeX:  ${tex}`);

@@ -13,7 +13,7 @@ import { newTalkOutline, type TalkOutline } from "../../../src/reading/talk/type
 function outlineOf(...titles: string[]): TalkOutline {
   let outline = newTalkOutline({ id: "o1", topicId: "t1", name: "The eye", now: 1 });
   for (const [i, title] of titles.entries()) {
-    outline = putSegment(outline, { title }, 1, () => `s${i + 1}`);
+    outline = putSegment(outline, { body: title }, 1, () => `s${i + 1}`);
   }
   return outline;
 }

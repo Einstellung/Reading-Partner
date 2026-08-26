@@ -503,7 +503,7 @@ test("every chapter settled mounts the arrangement and says the talk is empty", 
   expect(turn.systemPrompt).toContain("nothing arranged yet");
 });
 
-test("a segment written in the arrangement lands in the talk and raises a card", async () => {
+test("a block written in the arrangement lands in the talk and raises a card", async () => {
   const talk = talkStub();
   const cards: TalkArrangementCardData[] = [];
   const turn = await buildRetellTurn(
@@ -514,21 +514,19 @@ test("a segment written in the arrangement lands in the talk and raises a card",
       now: () => 99,
     }),
   );
+  const body = [
+    "## Why the eye is not a camera",
+    "",
+    "the retina throws most of it away",
+    "",
+    "[fig:3] the ganglion map",
+  ].join("\n");
   const out = String(
-    await turn.tools.find((t) => t.name === "write_talk_segment")!.execute({
-      title: "Why the eye is not a camera",
-      cues: ["the retina throws most of it away"],
-      material: [{ kind: "figure", ref: "[fig:3] the ganglion map" }],
-    }),
+    await turn.tools.find((t) => t.name === "write_talk_segment")!.execute({ body }),
   );
-  expect(out).toContain("Added segment 1 of 1");
+  expect(out).toContain("Added block 1 of 1");
   expect(talk.current?.segments).toHaveLength(1);
-  expect(talk.current?.segments[0].title).toBe("Why the eye is not a camera");
-  // Drafted, not given: shallow is what a new segment gets.
-  expect(talk.current?.segments[0].status).toBe("shallow");
-  expect(talk.current?.segments[0].material).toEqual([
-    { kind: "figure", figId: "3", description: "the ganglion map" },
-  ]);
+  expect(talk.current?.segments[0].body).toBe(body);
   expect(cards).toHaveLength(1);
   expect(cards[0].change).toBe("segment");
 });
@@ -537,7 +535,7 @@ test("a segment written in the arrangement lands in the talk and raises a card",
 // does not have to read it back before it can add to it.
 test("the talk already arranged is in the prompt with its segment ids", async () => {
   const talk = talkStub();
-  await talk.access.edit((o) => putSegment(o, { id: "s1", title: "The opening" }, 7));
+  await talk.access.edit((o) => putSegment(o, { id: "s1", body: "The opening" }, 7));
   const turn = await buildRetellTurn(input({ retell: settled(), talk: talk.access }));
   expect(turn.systemPrompt).toContain("The opening");
   expect(turn.systemPrompt).toContain("id: s1");
