@@ -67,18 +67,18 @@ test("the select trigger and its rows keep the 44px minimum", () => {
 });
 
 test("a menu row is a 44px touch target, in the primitive and nowhere else", () => {
-  // The generated item is `px-2 py-1.5 text-sm`, a 32px row. The three menus in
-  // this app each used to re-add the same geometry in their own file; it lives
-  // in ITEM_BASE now, which is what Item and CheckboxItem both take, so both
+  // The generated item is `px-2 py-1.5 text-sm`, a 32px row. The menus in this
+  // app each used to re-add the same geometry in their own file; it lives in
+  // ITEM_BASE now, which is what Item and CheckboxItem both take, so both
   // shapes of row are covered by the one string.
   expect(dropdown).toMatch(/const ITEM_BASE =\s*\n?\s*"[^"]*coarse:min-h-\[44px\][^"]*"/);
   expect(dropdown).toContain("min-h-[36px]");
   expect(dropdown).not.toContain("py-1.5 text-sm outline-hidden");
 
   // And no call site carries it back. A row that re-declares the minimum is a
-  // row that will drift from the other two.
+  // row that will drift from the others.
   const COMPONENTS = join(dirname(fileURLToPath(import.meta.url)), "../../../src/ui/components");
-  for (const file of ["shelf/CardMenu.tsx", "retell/OutlinePane.tsx", "reader/MoreMenu.tsx"]) {
+  for (const file of ["shelf/CardMenu.tsx", "reader/MoreMenu.tsx"]) {
     expect(readFileSync(join(COMPONENTS, file), "utf8")).not.toContain("coarse:min-h-[44px]");
   }
 });

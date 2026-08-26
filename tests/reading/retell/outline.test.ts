@@ -9,7 +9,6 @@ import {
   combineChapters,
   combinedSource,
   moveDecision,
-  outlineRows,
   removeDecision,
   setIncluded,
   slotAt,
@@ -186,24 +185,4 @@ test("cutting keeps the entry, removing takes it away", () => {
 test("cutting a chapter that has no entry changes nothing", () => {
   const list = [decision()];
   expect(setIncluded(list, "b1", 9, false, 500)).toEqual(list);
-});
-
-test("the outline numbers what is in the retell and leaves the cut ones unnumbered", () => {
-  const t = retell({
-    decisions: [
-      decision(),
-      decision({ chapter: 2, title: "Middlegame", include: false }),
-      decision({ bookId: "b2", chapter: 1, title: "Retina" }),
-    ],
-  });
-  const rows = outlineRows(t, combineChapters(twoBooks).slots);
-  expect(rows.map((r) => r.position)).toEqual([1, null, 2]);
-  // Two materials, so each row says which book it is from.
-  expect(rows[2].bookLabel).toBe("Vision");
-  expect(rows[2].title).toBe("Retina");
-});
-
-test("one material means no book label on the rows", () => {
-  const t = retell({ materials: [{ bookId: "b1", title: "Eye and Brain" }], decisions: [decision()] });
-  expect(outlineRows(t, combineChapters(oneBook).slots)[0].bookLabel).toBeNull();
 });

@@ -8,9 +8,9 @@
 // which is the only form that still means something when a material is added or
 // dropped.
 //
-// Everything here is pure. The reader's edits (move an entry, remove it) and the
-// AI's writes go through the same functions onto the same array, so the outline
-// beside the conversation and the record the AI reads cannot drift apart.
+// Everything here is pure. The decisions are an audit of which chapters have
+// been settled, not a running order the reader edits: the retell's product is
+// the talk note (docs/44), and it is corrected by talking.
 
 import { bucketMarks } from "./marks";
 import type {
@@ -232,44 +232,4 @@ export function setIncluded(
       ? { ...d, include, updatedAt: now }
       : d,
   );
-}
-
-// One row of the outline pane. The book label is only worth showing when the
-// retell has more than one material.
-export interface OutlineRow {
-  key: string;
-  bookId: string;
-  chapter: number;
-  title: string;
-  bookLabel: string | null;
-  include: boolean;
-  points: string[];
-  figure?: string;
-  note?: string;
-  // 1-based position among the entries that are actually in the retell, or null
-  // for a cut one — a cut chapter has no number in the running order.
-  position: number | null;
-}
-
-export function outlineRows(retell: Retell, slots: readonly RetellSlot[] = []): OutlineRow[] {
-  const many = retell.materials.length > 1;
-  const titleOf = (bookId: string) =>
-    retell.materials.find((m) => m.bookId === bookId)?.title ?? bookId;
-  let position = 0;
-  return retell.decisions.map((d) => {
-    if (d.include) position += 1;
-    const slot = slotFor(slots, d.bookId, d.chapter);
-    return {
-      key: `${d.bookId}#${d.chapter}`,
-      bookId: d.bookId,
-      chapter: d.chapter,
-      title: d.title || slot?.title || `Chapter ${d.chapter}`,
-      bookLabel: many ? titleOf(d.bookId) : null,
-      include: d.include,
-      points: d.points,
-      ...(d.figure ? { figure: d.figure } : {}),
-      ...(d.note ? { note: d.note } : {}),
-      position: d.include ? position : null,
-    };
-  });
 }

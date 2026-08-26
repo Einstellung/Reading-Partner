@@ -28,7 +28,6 @@ export {
   combineChapters,
   combinedSource,
   moveDecision,
-  outlineRows,
   removeDecision,
   setIncluded,
   slotAt,
@@ -37,7 +36,6 @@ export {
   toRetellDecision,
   upsertDecision,
   type CombinedChapters,
-  type OutlineRow,
   type MaterialSkeleton,
   type RetellSlot,
 } from "./outline";

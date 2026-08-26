@@ -1,5 +1,6 @@
-// One retell, opened (docs/31, "界面"): the conversation in the main
-// area and the outline it is growing beside it.
+// One retell, opened (docs/31, "界面"): the conversation, and nothing beside it.
+// The retell's product is the talk note (docs/44), which is read and corrected
+// by talking, so there is no second column here to keep in step with it.
 //
 // It replaces the topic's sections while it is open, the way the saved-article
 // reader does, so entering a retell needs no route and leaving it puts the topic
@@ -21,28 +22,22 @@
 // The conversation column is a ChatScaleScope, on the same value as the reader's
 // call window.
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import ChatScaleScope from "../base/ChatScaleScope";
 import { CitationContext } from "../markdown/Markdown";
-import { IconClose, IconOutline } from "../base/icons";
+import { IconClose } from "../base/icons";
 import { Composer, MessageList } from "../chat/chat";
 import MaterialFigureScope from "../common/MaterialFigureScope";
 import NameDialog from "../common/NameDialog";
 import { Button } from "../ui/button";
 import { rehearsalForRetell, type Rehearsal } from "../../../reading/rehearsal";
-import { outlineRows, type Retell } from "../../../reading/retell";
-import { defaultNavOpen, readNavEnv } from "../base/topic-nav";
+import type { Retell } from "../../../reading/retell";
 import DeckDialog from "./DeckDialog";
-import OutlinePane from "./OutlinePane";
 import CoachView from "../rehearsal/CoachView";
 import RehearsalView from "../rehearsal/RehearsalView";
 import { rehearsalReadiness } from "../rehearsal/rehearsal";
 import { openTranscriptSource } from "../rehearsal/start";
-import {
-  useRehearsalRuns,
-  useRetellOutline,
-  useRetellRehearsal,
-} from "../rehearsal/useRehearsal";
+import { useRetellOutline } from "../rehearsal/useRehearsal";
 import { useRetell } from "./useRetell";
 
 // The line under the retell's name: what it is being prepared from.
@@ -58,13 +53,8 @@ export default function RetellView(props: {
   onBack(): void;
 }) {
   const retell = useRetell(props.retellId, props.topicName);
-  // Desktop opens with the outline showing; a portrait iPad starts collapsed and
-  // the button is right there (docs/31). Read once at mount, like the topic
-  // sidebar: following a rotation would reopen a pane the reader closed.
-  const [outlineOpen, setOutlineOpen] = useState(() => defaultNavOpen(readNavEnv(window)));
   const [renaming, setRenaming] = useState(false);
   const [deckOpen, setDeckOpen] = useState(false);
-  const rows = useMemo(() => (retell.retell ? outlineRows(retell.retell) : []), [retell.retell]);
 
   // Giving the retell covers this view rather than replacing it: no route, and
   // leaving it puts the retell back exactly as it was. Covering rather than
@@ -114,14 +104,6 @@ export default function RetellView(props: {
     segments: talk.loading ? null : (talk.outline?.segments.length ?? 0),
     preparing,
   });
-  // Bumped when a run reaches the disk, not when the rehearsal is left: the two
-  // are seconds apart, because the run waits for the last of the speech to come
-  // back from STT (docs/43). It is the only moment this device changes the
-  // history (a pull can too, and useRehearsalRuns says why it does not follow
-  // that).
-  const [runsKey, setRunsKey] = useState(0);
-  const rehearsal = useRetellRehearsal(props.retellId, runsKey);
-  const runs = useRehearsalRuns(rehearsal?.id ?? null, runsKey);
 
   return (
     <MaterialFigureScope retellId={props.retellId}>
@@ -155,18 +137,6 @@ export default function RetellView(props: {
                 </span>
               )}
             </button>
-            {!outlineOpen && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setOutlineOpen(true)}
-                className="gap-1.5"
-              >
-                <IconOutline size={16} />
-                The retell so far
-              </Button>
-            )}
             {/* The deck is this retell's product and the last step of the loop
                 (docs/31), so it starts here, from this retell's outline — there is
                 no second place to generate one from. */}
@@ -194,48 +164,35 @@ export default function RetellView(props: {
             </Button>
           </div>
 
-          <div className="flex min-h-0 flex-1">
-            <ChatScaleScope className="flex min-w-0 flex-1 flex-col">
-              {retell.error && (
-                <p className="m-0 border-b border-border bg-muted/40 px-4 py-2 text-sm text-destructive">
-                  {retell.error}
-                </p>
-              )}
-              {retell.loading ? (
-                <p className="m-0 px-4 py-3 text-sm text-muted-foreground">Loading the retell…</p>
-              ) : (
-                <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-4">
-                  <MessageList
-                    messages={retell.messages}
-                    size="lg"
-                    className="mx-auto max-w-[calc(48rem*var(--chat-scale,1))] pb-6"
-                  />
-                </div>
-              )}
-              <div className="px-4 pb-6">
-                <div className="mx-auto w-full max-w-[calc(48rem*var(--chat-scale,1))]">
-                  <Composer
-                    onSend={retell.send}
-                    placeholder="Say it in your own words…"
-                    pill
-                    streaming={retell.streaming}
-                    onStop={retell.stop}
-                  />
-                </div>
-              </div>
-            </ChatScaleScope>
-
-            {outlineOpen && (
-              <OutlinePane
-                rows={rows}
-                runs={runs}
-                onMove={retell.moveEntry}
-                onSetIncluded={retell.cutEntry}
-                onRemove={retell.removeEntry}
-                onClose={() => setOutlineOpen(false)}
-              />
+          <ChatScaleScope className="flex min-h-0 min-w-0 flex-1 flex-col">
+            {retell.error && (
+              <p className="m-0 border-b border-border bg-muted/40 px-4 py-2 text-sm text-destructive">
+                {retell.error}
+              </p>
             )}
-          </div>
+            {retell.loading ? (
+              <p className="m-0 px-4 py-3 text-sm text-muted-foreground">Loading the retell…</p>
+            ) : (
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-4">
+                <MessageList
+                  messages={retell.messages}
+                  size="lg"
+                  className="mx-auto max-w-[calc(48rem*var(--chat-scale,1))] pb-6"
+                />
+              </div>
+            )}
+            <div className="px-4 pb-6">
+              <div className="mx-auto w-full max-w-[calc(48rem*var(--chat-scale,1))]">
+                <Composer
+                  onSend={retell.send}
+                  placeholder="Say it in your own words…"
+                  pill
+                  streaming={retell.streaming}
+                  onStop={retell.stop}
+                />
+              </div>
+            </div>
+          </ChatScaleScope>
 
           {rehearsing && talk.outline && (
             <RehearsalView
@@ -243,11 +200,15 @@ export default function RetellView(props: {
               outline={talk.outline}
               backLabel="Back to the retell"
               // Which retell is being given is known before a word of it is said,
-              // so its proper names go in as the recognizer's hot words.
+              // so its proper names go in as the recognizer's hot words: the
+              // materials' titles and the chapter titles the retell has settled.
               openSource={() =>
                 openTranscriptSource({
                   title: rehearsing.name,
-                  outline: [...(retell.retell?.materials ?? []), ...rows],
+                  outline: [
+                    ...(retell.retell?.materials ?? []),
+                    ...(retell.retell?.decisions ?? []),
+                  ],
                 })
               }
               // A pass hands itself in (docs/44), so it lands in the talk's
@@ -264,7 +225,6 @@ export default function RetellView(props: {
               onSaved={(recorded) => {
                 setPassPending(false);
                 if (!recorded) return;
-                setRunsKey((n) => n + 1);
                 setPassKey((n) => n + 1);
               }}
             />
