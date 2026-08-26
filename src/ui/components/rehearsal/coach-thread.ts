@@ -43,8 +43,10 @@ export async function openCoachThread(outlineId: string): Promise<StoredMessage[
 }
 
 export interface HandOffPassInput {
+  // Only for the conversation this goes into: the message itself says nothing
+  // about the talk, because the coach's prompt already carries the whole note.
   outline: TalkOutline;
-  // The pass as the store recorded it, and what was said on each segment.
+  // The pass as the store recorded it, and what was said during it.
   entry: RehearsalRunEntry;
   pages: readonly RehearsalPage[];
   now?: number;
@@ -61,11 +63,7 @@ export interface HandOffPassInput {
  * later.
  */
 export async function handOffPass(input: HandOffPassInput): Promise<boolean> {
-  const text = passMessage({
-    entry: input.entry,
-    pages: input.pages,
-    outline: input.outline,
-  });
+  const text = passMessage({ entry: input.entry, pages: input.pages });
   if (!text) return false;
   await openCoachThread(input.outline.id);
   appendMessage(talkThreadKey(input.outline.id), coachThreadId(input.outline.id), {

@@ -36,12 +36,14 @@ function entry(pages: RehearsalPage[], over: Partial<BuiltRun> = {}): RehearsalR
   });
 }
 
-test("the summary counts the segments that were reached and the ones spoken to", () => {
+// What a row shows: which pass it was, when, how long it ran and how much was
+// said. Not how much of the talk it covered — the note does not say which block
+// is up, so nothing knows (docs/44).
+test("the summary is the pass, the clock and the words", () => {
   const s = runSummary(entry([page(0, "opening"), page(1, ""), page(2, "the argument")]));
   expect(s.ordinal).toBe(2);
   expect(s.startedAt).toBe(0);
-  expect(s.segments).toBe(3);
-  expect(s.segmentsSpoken).toBe(2);
+  expect(s.elapsedMs).toBe(600_000);
   expect(s.wordsSpoken).toBe(3);
 });
 
@@ -61,7 +63,17 @@ test("a segment gone back to is named once", () => {
 });
 
 test("a segment of whitespace counts as silence", () => {
-  expect(runSummary(entry([page(0, "   \n  ")])).segmentsSpoken).toBe(0);
+  expect(entry([page(0, "   \n  ")]).spokenSegmentIds).toEqual([]);
+  expect(runSummary(entry([page(0, "   \n  ")])).wordsSpoken).toBe(0);
+});
+
+// A pass given from the note is one stretch with no segment id on it, so there
+// is no coverage to write down and the entry says so (docs/44).
+test("a pass given from the note covers no segments", () => {
+  const whole = entry([{ ...page(0, "the whole talk, in one go"), kind: "", title: "" }]);
+  expect(whole.segmentIds).toEqual([]);
+  expect(whole.spokenSegmentIds).toEqual([]);
+  expect(whole.wordsSpoken).toBe(6);
 });
 
 test("the length is wall clock, rounded to whole minutes", () => {
@@ -106,10 +118,9 @@ test("a row is drawn from the counts in the entry, not from any pages", () => {
   const counted = entry([page(0, "两个字"), page(1, "two words here")]);
   expect(counted.pages).toBeUndefined();
   const s = runSummary(counted);
-  expect(s.segments).toBe(2);
-  expect(s.segmentsSpoken).toBe(2);
   expect(s.wordsSpoken).toBe(6);
   expect(s.minutes).toBe(10);
+  expect(s.elapsedMs).toBe(600_000);
 });
 
 // An entry written before the split still carries its transcript and has no
@@ -129,8 +140,6 @@ test("an entry that still carries its pages is counted off them", () => {
     wordsSpoken: 0,
     pages: [page(0, "opening"), page(1, ""), page(2, "the argument")],
   });
-  expect(s.segments).toBe(3);
-  expect(s.segmentsSpoken).toBe(2);
   expect(s.wordsSpoken).toBe(3);
   expect(s.minutes).toBe(10);
 });

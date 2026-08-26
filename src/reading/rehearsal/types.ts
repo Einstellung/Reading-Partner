@@ -97,20 +97,19 @@ export function normalizeRehearsal(raw: unknown): Rehearsal | null {
 
 export const RUN_LOG_VERSION = 1 as const;
 
-// One segment, for as long as the rehearsal was on it. A segment the reader came
-// back to is still one entry: `enteredAt` is the first arrival, `leftAt` the
-// last departure, and `transcript` holds both visits.
+// One stretch of a rehearsal. For a pass given from the note that is the whole
+// pass (docs/44); for one recorded a segment at a time it is one segment, and a
+// segment the reader came back to is still one entry — `enteredAt` is the first
+// arrival, `leftAt` the last departure, and `transcript` holds both visits.
 //
-// Still called a page because that is what buildRun calls the stretch of a run
-// spent on one thing, and buildRun is untouched (docs/44): only the signal
-// changed, from a deck reporting a page turn to the Next button on the outline
-// panel.
+// Still called a page because that is what buildRun calls it, and buildRun is
+// untouched: every run ever recorded is in this shape and has to keep reading.
 export interface RehearsalPage {
-  index: number; // 0-based position in the outline
-  // The id of the outline segment that was up (reading/talk/types.ts), carried
-  // through the event's `slideKind`. A pass recorded against a deck has the
-  // deck's own slide kind here instead; those passes belong to rehearsals this
-  // build no longer opens (normalizeRehearsal), so nothing reads one as an id.
+  index: number; // 0-based; 0 for a pass given from the note
+  // Empty for a pass given from the note, which is not a segment of anything.
+  // A pass recorded a block at a time carries that block's id (the event's
+  // `slideKind`, reading/talk/types.ts), and one recorded against a deck has the
+  // deck's own slide kind; nothing reads either back any more.
   kind: string;
   title: string;
   enteredAt: number; // host clock, ms
@@ -154,23 +153,16 @@ export interface RehearsalRunEntry {
   // the number a list shows, and the pages that used to answer it are no longer
   // in this file.
   lastMomentAt: number;
-  // Which segments this pass covered, in the order they were first reached, and
-  // which of those anything was actually said to. Written once, when the run
-  // was written, for the same reason the counts were: drawing ten rows must not
-  // open ten transcripts.
+  // Which segments a pass covered, in the order they were first reached, and
+  // which of those anything was actually said to.
   //
-  // Ids and not counts, because a run is "the segments given this time" and no
-  // longer "the nth time through" (docs/44). Going over one segment five times
-  // is five runs of one segment each, and a whole pass is only the run that
-  // happens to cover them all — neither of which a total could say. Ids rather
-  // than positions for the same reason a segment carries one: the outline is
-  // reordered between passes and a position stops meaning what it meant.
-  //
-  // Empty on a pass recorded against a deck, which had pages and no segments.
-  // That is tolerated rather than migrated: RUN_LOG_VERSION is deliberately
-  // unchanged (docs/43 — a version bump makes an older build quarantine every
-  // file it syncs and then write its own empty history over the top), and the
-  // rehearsals those passes belong to are not ones this build opens.
+  // Empty on every pass this build records: the note says nothing about which
+  // block is up (docs/44), so there is nothing to write down, and nothing reads
+  // these back. They stay on the entry for the passes that filled them in — one
+  // given a block at a time, or against a deck — because those are on disk and
+  // on other devices, and RUN_LOG_VERSION is deliberately unchanged (docs/43: a
+  // version bump makes an older build quarantine every file it syncs and then
+  // write its own empty history over the top).
   segmentIds: string[];
   spokenSegmentIds: string[];
   wordsSpoken: number;
@@ -208,10 +200,11 @@ export interface RehearsalLog {
 // state during the run itself, so a run that ends badly still yields whatever
 // was collected before it did.
 //
-// The segment event kept the shape the deck's page turn had (docs/44): the
-// signal now comes from the Next button on the outline panel, `index` is the
-// segment's position in the outline and `slideKind` carries its id, and
-// buildRun goes on hanging each utterance on whatever was up when it started.
+// The "slide" event kept the shape the deck's page turn had (docs/44), through
+// a Next button on an outline panel and then through the note that replaced it.
+// A note turns no pages, so a pass now sends exactly one of these — the pass
+// itself, with no id on it (rehearsal.ts, passEvent) — and buildRun goes on
+// hanging each utterance on whatever was up when it started.
 export type RehearsalEvent =
   | { kind: "slide"; at: number; index: number; slideKind: string; title: string }
   | { kind: "utterance"; at: number; endedAt: number; text: string }

@@ -1,7 +1,7 @@
 // The rehearsals of this retell, under the outline (docs/31). Data that is
 // recorded and never shown is data that was not recorded, so the pass leaves a
-// mark where the retell is: which pass it was, when, how many segments it
-// covered, how long it took, and — opened up — what was said to each of them.
+// mark where the retell is: which pass it was, when, how long it ran, how much
+// was said, and — opened up — the words.
 //
 // Deliberately a strip at the foot of a pane rather than a panel of its own.
 // There is nothing to do here yet; the AI reading these runs back is the next
@@ -19,26 +19,32 @@ import {
 import { formatElapsed, formatRunDate } from "./rehearsal";
 import { useRunPages } from "./useRehearsal";
 
-// One segment of one pass. `page` is what the run calls the stretch it spent on
-// one segment (reading/rehearsal/types.ts); the index is the segment's position
-// in the outline as it stood that day.
+// One stretch of one pass. `page` is what the run calls it
+// (reading/rehearsal/types.ts). A pass given from the note is one stretch and
+// carries no title, so it is just the words; a pass from the days of a block at
+// a time is one titled stretch per segment, and those keep their heading and
+// their share of the clock.
 function PageRow({ page }: { page: RehearsalPage }) {
   const spent = page.leftAt === null ? null : page.leftAt - page.enteredAt;
   return (
     <li className="flex flex-col gap-0.5 border-t border-border py-1.5 first:border-t-0">
-      <div className="flex items-baseline gap-1.5">
-        <span className="w-5 flex-none text-[11px] tabular-nums text-muted-foreground">
-          {page.index + 1}
-        </span>
-        <span className="min-w-0 flex-1 truncate text-[12px] leading-snug">
-          {page.title || <span className="text-muted-foreground">Untitled segment</span>}
-        </span>
-        <span className="flex-none text-[11px] tabular-nums text-muted-foreground">
-          {spent === null ? "—" : formatElapsed(spent)}
-        </span>
-      </div>
+      {page.title && (
+        <div className="flex items-baseline gap-1.5">
+          <span className="w-5 flex-none text-[11px] tabular-nums text-muted-foreground">
+            {page.index + 1}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[12px] leading-snug">{page.title}</span>
+          <span className="flex-none text-[11px] tabular-nums text-muted-foreground">
+            {spent === null ? "—" : formatElapsed(spent)}
+          </span>
+        </div>
+      )}
       {page.transcript && (
-        <p className="m-0 pl-6 text-[11px] leading-relaxed text-muted-foreground">
+        <p
+          className={`m-0 text-[11px] leading-relaxed text-muted-foreground ${
+            page.title ? "pl-6" : ""
+          }`}
+        >
           {page.transcript}
         </p>
       )}
@@ -51,16 +57,17 @@ function PageRow({ page }: { page: RehearsalPage }) {
 // own for exactly that reason (reading/rehearsal/store.ts).
 function RunPages({ run }: { run: RehearsalRunEntry }) {
   const pages = useRunPages(run);
+  // A pass given in silence is one stretch with nothing in it — no STT key, no
+  // dictation — and an empty row would show as a rule and a gap.
+  const rows = pages?.filter((p) => p.title || p.transcript.trim()) ?? null;
   return (
     <ul className="m-0 list-none px-2 pb-2 pl-2">
-      {pages === null ? (
+      {rows === null ? (
         <li className="py-1.5 text-[11px] text-muted-foreground">Reading…</li>
-      ) : pages.length === 0 ? (
-        <li className="py-1.5 text-[11px] text-muted-foreground">
-          No segments were recorded.
-        </li>
+      ) : rows.length === 0 ? (
+        <li className="py-1.5 text-[11px] text-muted-foreground">Nothing was recorded.</li>
       ) : (
-        pages.map((p, i) => <PageRow key={`${p.index}-${i}`} page={p} />)
+        rows.map((p, i) => <PageRow key={`${p.index}-${i}`} page={p} />)
       )}
     </ul>
   );
@@ -82,8 +89,7 @@ function RunRow({ run }: { run: RehearsalRunEntry }) {
               Run {s.ordinal} · {formatRunDate(s.startedAt)}
             </span>
             <span className="block text-[11px] font-normal text-muted-foreground">
-              {s.segmentsSpoken} of {s.segments} segments · {s.minutes} min
-              {s.wordsSpoken > 0 ? ` · ${s.wordsSpoken} words` : ""}
+              {formatElapsed(s.elapsedMs)} · {s.wordsSpoken} words
             </span>
           </span>
           <span className="flex-none text-muted-foreground">

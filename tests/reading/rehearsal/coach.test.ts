@@ -53,8 +53,11 @@ test("the prompt holds both measures and the talk it is about", () => {
 test("the instructions separate the coach from the retell's examiner", () => {
   expect(COACH_INSTRUCTIONS).toContain("not the examiner from the retell");
   expect(COACH_INSTRUCTIONS).toContain("not a blank sheet");
-  // Only what was given this pass.
-  expect(COACH_INSTRUCTIONS).toContain("say nothing about the others");
+  // Only what was given this pass — and, since nothing records where the reader
+  // was, only what the coach can hear them having said (docs/44).
+  expect(COACH_INSTRUCTIONS).toContain("Say nothing about what you cannot hear");
+  expect(COACH_INSTRUCTIONS).toContain("work out");
+  expect(COACH_INSTRUCTIONS).toContain("where they were from what they said");
   // The product is a change to the talk, and the talk is a note it edits.
   expect(COACH_INSTRUCTIONS).toContain("a change to the talk, not a review");
   expect(COACH_INSTRUCTIONS).toContain("one block of markdown per segment");

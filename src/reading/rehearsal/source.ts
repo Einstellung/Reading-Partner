@@ -19,15 +19,20 @@ export interface Utterance {
 
 export interface TranscriptSource {
   start(onUtterance: (u: Utterance) => void): Promise<void>;
-  // The deck turned the page. A source that records and uploads (the desktop,
-  // segmented-source.ts) closes the current segment here, which is the only way
-  // its transcript ever gets a page boundary: what comes back from STT is one
-  // block of text with no timings inside it (docs/43). A source that transcribes
-  // as the speech happens — iOS on-device, where every final already carries its
-  // own host timestamp — has nothing to cut, and does nothing.
+  // Close the segment being recorded and send it. A source that records and
+  // uploads (the desktop, segmented-source.ts) has to break the recording up
+  // somewhere: what comes back from STT is one block of text with no timings
+  // inside it (docs/43), so an hour recorded in one piece is an hour of upload
+  // waited for at the end. A source that transcribes as the speech happens —
+  // iOS on-device, where every final already carries its own host timestamp —
+  // has nothing to cut, and does nothing.
   //
-  // Void and never rejects, so a page turn does not have to be awaited by the
-  // deck listener that reports it.
+  // Nothing outside a source calls this any more. A deck's page turn used to,
+  // and so did the Next button that replaced it; the note the reader talks from
+  // turns no pages (docs/44), which leaves segmented-source.ts cutting on its
+  // own ceiling and nothing else.
+  //
+  // Void and never rejects, so a caller does not have to await a cut.
   cut(): void;
   stop(): Promise<void>;
 }

@@ -81,6 +81,35 @@ test("anything said before the first slide leaves no trace", () => {
   expect(built.pages[0].enteredAt).toBe(10);
 });
 
+// The same rule with nothing to soften it, and the reason finishRun opens every
+// pass with one page of its own (rehearsal.ts, passEvent): the note the reader
+// talks from turns no pages, and a run built straight off its utterances would
+// come out empty — not a short run, no run at all.
+test("a run with no page event at all keeps nothing", () => {
+  const built = run([said(1, "Good evening."), said(2, "So that is it."), { kind: "end", at: 20 }]);
+  expect(built.pages).toEqual([]);
+});
+
+// So a pass from the note builds as one page, entered when it started and left
+// when the reader stopped, holding everything that was said in between.
+test("one page and a pass's worth of speech is one stretch", () => {
+  const built = run([
+    { kind: "slide", at: 0, index: 0, slideKind: "", title: "" },
+    said(1_000, "Good evening."),
+    said(120_000, "So that is it."),
+    { kind: "end", at: 130_000 },
+  ]);
+  expect(built.pages).toHaveLength(1);
+  expect(built.pages[0]).toMatchObject({
+    index: 0,
+    kind: "",
+    title: "",
+    enteredAt: 0,
+    leftAt: 130_000,
+    transcript: "Good evening.\nSo that is it.",
+  });
+});
+
 test("a page the reader came back to is one page, with both visits in it", () => {
   const built = run([
     slide(10, 0),

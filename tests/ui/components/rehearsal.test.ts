@@ -1,6 +1,7 @@
-// What the host makes of a deck's messages, and what it puts on the bar
-// (src/ui/components/rehearsal/rehearsal.ts). The view around it is an iframe and a
-// listener; everything that can be wrong is in here. Run: bun test.
+// The rehearsal's logic without React (src/ui/components/rehearsal/rehearsal.ts):
+// what it puts on the bar, how a pass ends, and the deck bridge that is frozen
+// there for the decks still on disk. The view is a scrolling note and a
+// microphone; everything that can be wrong is in here. Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
@@ -10,9 +11,7 @@ import {
   finishRun,
   formatElapsed,
   formatRunDate,
-  hasRecordedPages,
   isPageTurn,
-  positionLabel,
   readDeckSignal,
   rehearsalReadiness,
   slideEvent,
@@ -160,13 +159,6 @@ test("an utterance between two reports of the same page does not split it", () =
   expect(events).toHaveLength(2);
 });
 
-test("a run with no page ever reported is not a pass through the retell", () => {
-  expect(hasRecordedPages([])).toBe(false);
-  expect(hasRecordedPages([endEvent(1)])).toBe(false);
-  expect(hasRecordedPages([utteranceEvent({ text: "hm", startedAt: 1, endedAt: 2 })])).toBe(false);
-  expect(hasRecordedPages(withSlideEvent([], readDeckSignal(slide(0)) as never, 1))).toBe(true);
-});
-
 test("elapsed time reads in minutes until it needs hours", () => {
   expect(formatElapsed(0)).toBe("0:00");
   expect(formatElapsed(9_000)).toBe("0:09");
@@ -200,21 +192,7 @@ test("a rehearsal being started holds the button, outline or no outline", () => 
   expect(rehearsalReadiness({ segments: 3, preparing: false }).ok).toBe(true);
 });
 
-test("the counter is 1-based, and says nothing before a segment is up", () => {
-  expect(positionLabel(null)).toBe("—");
-  expect(positionLabel({ index: 0, total: 12 })).toBe("1 / 12");
-  expect(positionLabel({ index: 11, total: 12 })).toBe("12 / 12");
-});
-
 // --- ending a rehearsal ------------------------------------------------------
-
-const onPage = (index: number, at: number): RehearsalEvent => ({
-  kind: "slide",
-  at,
-  index,
-  slideKind: "content",
-  title: `Slide ${index}`,
-});
 
 // A source whose last words only arrive while it is being stopped, which is what
 // the desktop one does: stop() sends the final segment and waits for every
@@ -229,9 +207,11 @@ function lateSource(events: RehearsalEvent[], said: string): TranscriptSource {
   };
 }
 
+const said = (text: string, at: number): RehearsalEvent =>
+  utteranceEvent({ text, startedAt: at, endedAt: at + 500 });
+
 const finishInput = (events: RehearsalEvent[], save: (run: RehearsalRun) => Promise<unknown>) => ({
   rehearsalId: "t-1",
-  deckFile: "slides/t-1.html",
   id: "run-1",
   startedAt: 1_000,
   endedAt: 4_000,
@@ -239,8 +219,30 @@ const finishInput = (events: RehearsalEvent[], save: (run: RehearsalRun) => Prom
   save,
 });
 
+// The claim the whole surface rests on (docs/44): the reader talks from a note
+// that turns no pages, nothing records where they were, and the pass comes out
+// as one stretch holding everything they said. buildRun is untouched and drops
+// anything said before the first page event, so finishRun opens the pass with
+// one — without it a run would be no pages and no words at all.
+test("a pass is one page holding the whole transcript", async () => {
+  const written: RehearsalRun[] = [];
+  const saved = await finishRun(
+    finishInput(
+      [said("Good evening.", 1_500), said("So that is it.", 3_000)],
+      async (run) => void written.push(run),
+    ),
+  );
+  expect(saved).toBe(true);
+  expect(written[0].pages).toHaveLength(1);
+  expect(written[0].pages[0].transcript).toBe("Good evening.\nSo that is it.");
+  // No id on it, so the entry written off this run covers no segments.
+  expect(written[0].pages[0].kind).toBe("");
+  expect(written[0].pages[0].enteredAt).toBe(1_000);
+  expect(written[0].pages[0].leftAt).toBe(4_000);
+});
+
 test("the run is built out of what arrived while the source was stopping", async () => {
-  const events: RehearsalEvent[] = [onPage(0, 1_500)];
+  const events: RehearsalEvent[] = [];
   const written: RehearsalRun[] = [];
   const saved = await finishRun({
     ...finishInput(events, async (run) => void written.push(run)),
@@ -253,11 +255,16 @@ test("the run is built out of what arrived while the source was stopping", async
   expect(written[0].endedAt).toBe(4_000);
 });
 
-test("a pass that recorded no page is not written and is not news", async () => {
+// No STT key on the desktop and no dictation on the host record a pass with no
+// words in it, and that is the ordinary case rather than a failure. Nothing is
+// left to tell it apart from a rehearsal the reader turned round in, so every
+// pass is written.
+test("a pass given in silence is still written", async () => {
   const written: RehearsalRun[] = [];
   const saved = await finishRun(finishInput([], async (run) => void written.push(run)));
-  expect(saved).toBe(false);
-  expect(written).toHaveLength(0);
+  expect(saved).toBe(true);
+  expect(written).toHaveLength(1);
+  expect(written[0].pages[0].transcript).toBe("");
 });
 
 test("a write that failed is not reported as a run", async () => {
@@ -265,7 +272,7 @@ test("a write that failed is not reported as a run", async () => {
   console.warn = () => {};
   try {
     const saved = await finishRun(
-      finishInput([onPage(0, 1_500)], () => Promise.reject(new Error("disk full"))),
+      finishInput([said("Good evening.", 1_500)], () => Promise.reject(new Error("disk full"))),
     );
     expect(saved).toBe(false);
   } finally {
@@ -277,9 +284,8 @@ test("a write that failed is not reported as a run", async () => {
 // the write, so what the coach is told about is a pass the reader can open.
 test("a written run is handed to the conversation, after the write", async () => {
   const order: string[] = [];
-  const events: RehearsalEvent[] = [onPage(0, 1_500)];
   const saved = await finishRun({
-    ...finishInput(events, async () => {
+    ...finishInput([said("Good evening.", 1_500)], async () => {
       order.push("save");
       return "entry-1";
     }),
@@ -292,13 +298,19 @@ test("a written run is handed to the conversation, after the write", async () =>
 });
 
 test("a pass that was never written is not handed over", async () => {
-  const handed: string[] = [];
-  const saved = await finishRun({
-    ...finishInput([], async () => "entry-1"),
-    handoff: async () => void handed.push("handed"),
-  });
-  expect(saved).toBe(false);
-  expect(handed).toEqual([]);
+  const realWarn = console.warn;
+  console.warn = () => {};
+  try {
+    const handed: string[] = [];
+    const saved = await finishRun({
+      ...finishInput([said("Good evening.", 1_500)], () => Promise.reject(new Error("disk full"))),
+      handoff: async () => void handed.push("handed"),
+    });
+    expect(saved).toBe(false);
+    expect(handed).toEqual([]);
+  } finally {
+    console.warn = realWarn;
+  }
 });
 
 // The pass happened whatever the conversation did with it: a handoff that threw
@@ -308,7 +320,7 @@ test("a handoff that fails still leaves the pass recorded", async () => {
   console.warn = () => {};
   try {
     const saved = await finishRun({
-      ...finishInput([onPage(0, 1_500)], async () => "entry-1"),
+      ...finishInput([said("Good evening.", 1_500)], async () => "entry-1"),
       handoff: () => Promise.reject(new Error("no thread")),
     });
     expect(saved).toBe(true);
@@ -321,10 +333,9 @@ test("a source that will not stop still costs only its own words", async () => {
   const realWarn = console.warn;
   console.warn = () => {};
   try {
-    const events: RehearsalEvent[] = [onPage(0, 1_500)];
     const written: RehearsalRun[] = [];
     const saved = await finishRun({
-      ...finishInput(events, async (run) => void written.push(run)),
+      ...finishInput([], async (run) => void written.push(run)),
       source: {
         start: async () => {},
         cut: () => {},
